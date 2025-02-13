@@ -1,0 +1,9 @@
+GSD7229748:s81,172.18.0.201,control-network
+GSD7180923:s82,172.18.0.202,control-network
+GSE0001013:s83,172.18.0.203,control-network
+:s701,172.18.0.1,compute
+AKS0161499:s702,172.18.0.2,compute
+AKS0161493:s703,172.18.0.3,compute
+KSE0212971:s704,172.18.0.4,compute
+KSE0252973:s705,172.18.0.5,compute
+KSE0252334:s706,172.18.0.6,compute

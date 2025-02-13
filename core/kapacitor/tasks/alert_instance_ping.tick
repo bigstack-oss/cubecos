@@ -1,0 +1,27 @@
+dbrp "telegraf"."def"
+
+var data = stream
+  |from()
+    .measurement('vm.health')
+    .groupBy('id')
+  |eval(lambda: unixNano(now()))
+    .as('ts')
+    .keep()
+
+data
+  |alert()
+    .info(lambda: int("resp") >= 0)
+    .message('system,category=NET,severity=I,key=NET00003I,id={{ .Tags.id }},ip={{ .Tags.ip }} message="instance "{{ .Tags.id }}" at {{ .Tags.ip }} is reachable",metadata="{ "category": "net", "id": "{{ .Tags.id }}", "ip": "{{ .Tags.ip }}" }" {{ .Fields.ts }}')
+    .stateChangesOnly()
+    .noRecoveries()
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .warn(lambda: int("resp") < 0)
+    .message('system,category=NET,severity=W,key=NET00004W,id={{ .Tags.id }},ip={{ .Tags.ip }} message="instance "{{ .Tags.id }}" at {{ .Tags.ip }} is unreachable",metadata="{ "category": "net", "id": "{{ .Tags.id }}", "ip": "{{ .Tags.ip }}" }" {{ .Fields.ts }}')
+    .stateChangesOnly()
+    .noRecoveries()
+    .post()
+      .endpoint('events')

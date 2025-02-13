@@ -1,0 +1,22 @@
+Listen @BIND_ADDR@9311
+
+TraceEnable off
+
+<VirtualHost *:9311>
+    ## Logging
+    ErrorLog "/var/log/httpd/barbican_wsgi_main_error_ssl.log"
+    LogLevel info
+    ServerSignature Off
+    CustomLog "/var/log/httpd/barbican_wsgi_main_access_ssl.log" combined
+
+    WSGIApplicationGroup %{GLOBAL}
+    WSGIDaemonProcess barbican-api display-name=barbican-api group=barbican processes=2 threads=8 user=barbican
+    WSGIProcessGroup barbican-api
+    WSGIScriptAlias / "/usr/lib/python3.9/site-packages/barbican/api/app.wsgi"
+    WSGIPassAuthorization On
+
+    <Directory usr/lib/python3.9/site-packages/barbican>
+        Require all granted
+    </Directory>
+
+</VirtualHost>

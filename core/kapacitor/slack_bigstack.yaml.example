@@ -1,0 +1,18 @@
+// add the following lines in /etc/kapacitor/kapacitor.conf
+//[[slack]]
+//  enabled = true
+//  default = true
+//  workspace = "slack-bigstack"
+//  url = "https://hooks.slack.com/services/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"
+//  username = "CubeAlertBot"
+//  channel = "#cube-test-alert-priv"
+//  global = false
+//  state-changes-only = false
+
+id: slack-bigstack
+topic: events
+kind: slack
+match: "\"key\" == 'CPU00001W' OR \"key\" == 'CPU00002C'"
+options:
+  workspace: 'slack-bigstack'
+  icon-emoji: ':fire:'

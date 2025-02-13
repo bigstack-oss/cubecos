@@ -1,0 +1,81 @@
+init_config: null
+instances:
+- built_by: Neutron
+  dimensions:
+    service: networking
+  match_pattern: .*v2.0.*
+  name: networking-api
+  timeout: 10
+  url: http://@CUBE_SHARED_ID@:9696
+  use_keystone: true
+  disable_ssl_validation: false
+- built_by: Glance
+  dimensions:
+    service: image-service
+  match_pattern: .*v2.0.*
+  name: image-service-api
+  timeout: 10
+  url: http://@CUBE_SHARED_ID@:9292
+  use_keystone: true
+  disable_ssl_validation: false
+- built_by: InfluxDB
+  dimensions:
+    component: influxdb
+    service: influxdb
+  name: influxdb
+  url: http://@CUBE_SHARED_ID@:8086/ping
+  disable_ssl_validation: false
+- built_by: Heat
+  dimensions:
+    service: orchestration
+  match_pattern: .*versions.*
+  name: orchestration-api
+  timeout: 10
+  url: http://@CUBE_SHARED_ID@:8004
+  use_keystone: true
+  disable_ssl_validation: false
+- built_by: Nova
+  dimensions:
+    service: compute
+  match_pattern: .*version=2.*
+  name: compute-api
+  timeout: 10
+  url: http://@CUBE_SHARED_ID@:8774/v2.0
+  use_keystone: true
+  disable_ssl_validation: false
+- built_by: Cinder
+  dimensions:
+    service: block-storage
+  match_pattern: .*versions.*
+  name: block-storage-api
+  timeout: 10
+  url: http://@CUBE_SHARED_ID@:8776/v3
+  use_keystone: true
+  disable_ssl_validation: false
+- built_by: Octavia
+  dimensions:
+    service: octavia
+  match_pattern: .*v2.0.*
+  name: octavia-api
+  timeout: 10
+  url: http://@CUBE_SHARED_ID@:9876
+  use_keystone: true
+  disable_ssl_validation: false
+- built_by: Designate
+  dimensions:
+    service: dns
+  match_pattern: .*versions.*
+  name: dns-api
+  timeout: 10
+  url: http://@CUBE_SHARED_ID@:9001
+  use_keystone: true
+  disable_ssl_validation: false
+- built_by: Barbican
+  dimensions:
+    service: key-manager
+  match_pattern: .*v1.*
+  name: key-manager-api
+  timeout: 10
+  url: http://@CUBE_SHARED_ID@:9311
+  use_keystone: true
+  disable_ssl_validation: false

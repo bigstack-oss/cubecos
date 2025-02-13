@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cube-theme
+  # annotations:
+  #   "helm.sh/hook": pre-install
+binaryData:
+  cube.tar.gz: |-
+    {{ .Files.Get "data/cube.tar.gz" | b64enc | indent 4 }}

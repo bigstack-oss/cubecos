@@ -1,0 +1,4 @@
+---
+# ceph/ceph1_0.yml
+name: ceph
+version: 1.0

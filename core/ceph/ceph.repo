@@ -1,0 +1,37 @@
+[ceph]
+name=Ceph packages for $basearch
+baseurl=https://download.ceph.com/rpm-17.2.4/el9/$basearch
+enabled=1
+priority=2
+gpgcheck=1
+gpgkey=https://download.ceph.com/keys/release.asc
+
+[ceph-noarch]
+name=Ceph noarch packages
+baseurl=https://download.ceph.com/rpm-17.2.4/el9/noarch
+enabled=1
+priority=2
+gpgcheck=1
+gpgkey=https://download.ceph.com/keys/release.asc
+
+#[ceph-iscsi]
+#name=ceph-iscsi noarch packages
+#baseurl=http://download.ceph.com/ceph-iscsi/3/rpm/el8/noarch
+#enabled=1
+#gpgcheck=1
+#gpgkey=https://download.ceph.com/keys/release.asc
+#type=rpm-md
+
+#[tcmu-runner]
+#name=tcmu-runner packages for $basearch
+#baseurl=https://4.chacra.ceph.com/r/tcmu-runner/main/245914c1446dddf07d5b58b0a7b2060b50fde4d7/centos/8/flavors/default/$basearch
+#enabled=1
+#gpgcheck=0
+#type=rpm-md
+
+#[tcmu-runner-noarch]
+#name=tcmu-runner noarch packages
+#baseurl=https://4.chacra.ceph.com/r/tcmu-runner/main/245914c1446dddf07d5b58b0a7b2060b50fde4d7/centos/8/flavors/default/$basearch
+#enabled=1
+#gpgcheck=0
+#type=rpm-md

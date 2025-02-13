@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenStack Octavia Health-Manager service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=octavia
+ExecCondition=/usr/sbin/hex_sdk is_first_three_compute_node
+ExecStart=/usr/bin/octavia-health-manager --config-file /usr/share/octavia/octavia-dist.conf --config-file /etc/octavia/octavia.conf --config-dir /etc/octavia/conf.d/common --config-dir /etc/octavia/conf.d/octavia-health-manager --log-file /var/log/octavia/health-manager.log
+PrivateTmp=false
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

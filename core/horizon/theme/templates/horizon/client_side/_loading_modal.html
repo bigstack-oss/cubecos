@@ -1,0 +1,29 @@
+<!--this is the example to overwrite existing material theme's page
+modal spinner. You can observe the page modal spinner by clicking
+a panel page.
+
+To try this modal spinner:
+* make a copy of this file and call it _loading_modal.html
+* rm -rf static
+* run command "tox -e manage collectstatic"
+* restart horizon
+* reload horizon page in web browser
+-->
+
+{% extends "horizon/client_side/template.html" %}
+{% load i18n horizon %}
+
+{% block id %}loader-modal{% endblock %}
+
+{% block template %}{% spaceless %}{% jstemplate %}
+  <div class="modal spin-modal loading">
+    <div class="spin">
+      <div>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+  </div>
+{% endjstemplate %}{% endspaceless %}{% endblock %}

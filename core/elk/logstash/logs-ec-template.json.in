@@ -1,0 +1,62 @@
+{
+  "index_patterns": [
+    "logs-*"
+  ],
+  "settings": {
+    "number_of_shards": @EC_SHARDS@,
+    "number_of_replicas": @EC_REPLICAS@,
+    "codec": "best_compression"
+  },
+  "mappings": {
+    "_source": {
+      "enabled": true
+    },
+    "properties": {
+      "es-index": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "host": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "path": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "component": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "program": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "module": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "message": {
+        "type": "keyword",
+        "ignore_above": 4096
+      },
+      "log_level": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "format": {
+        "type": "keyword",
+        "ignore_above": 256
+      },
+      "pid": {
+        "type": "integer"
+      },
+      "occurred_at": {
+        "type": "date"
+      },
+      "created_at": {
+        "type": "date"
+      }
+    }
+  }
+}

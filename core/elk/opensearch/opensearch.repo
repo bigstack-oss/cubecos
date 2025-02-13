@@ -1,0 +1,9 @@
+[opensearch-2.x]
+name=OpenSearch 2.x
+baseurl=https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/yum
+enabled=1
+repo_gpgcheck=1
+gpgcheck=1
+gpgkey=https://artifacts.opensearch.org/publickeys/opensearch.pgp
+autorefresh=1
+type=rpm-md

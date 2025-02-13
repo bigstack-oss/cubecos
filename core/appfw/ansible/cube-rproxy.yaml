@@ -1,0 +1,69 @@
+---
+  - name: Create a new instance and attaches it to a network, and passes the metadata to the instance
+    hosts: localhost
+    connection: local
+    tasks:
+      - name: Fetch app-framework project
+        openstack.cloud.project_info:
+          name: app-framework
+        register: projects
+      - name: Create a cube-rproxy security group
+        openstack.cloud.security_group:
+          project: app-framework
+          name: cube-rproxy
+      - name: Create security group rules for cube-rproxy
+        openstack.cloud.security_group_rule:
+          project: app-framework
+          security_group: cube-rproxy
+          protocol: tcp
+          port_range_min: "{{ item }}"
+          port_range_max: "{{ item }}"
+        loop:
+          - 22
+          - 443
+          - 6080
+      - name: Gather information about a network by name
+        openstack.cloud.networks_info:
+          auth:
+            project_name: app-framework
+          name:  private-k8s
+          filters:
+            tenant_id: "{{ projects.openstack_projects[0].id }}"
+        register: result
+      - name: Create the server
+        openstack.cloud.server:
+          state: present
+          auth:
+            project_name: app-framework
+          name: cube-rproxy
+          image: rancher-cluster-image
+          timeout: 200
+          flavor: t2.small
+          # nics:
+          #   - net-name: private-k8s
+          network: "{{ result.openstack_networks[0].id }}"
+          floating_ip_pools:
+            - public
+          security_groups:
+            - default
+            - cube-rproxy
+          boot_from_volume: yes
+          volume_size: 20
+          userdata: |
+            #cloud-config
+            password: ubuntu
+            chpasswd: { expire: False }
+            ssh_pwauth: True
+        register: result
+      - name: Output the ip address
+        debug:
+          msg: "{{ result.server.public_v4 }}"
+      # - name: get ip address of created serverserver
+      #   openstack.cloud.server_info:
+      #     auth:
+      #       project_name: app-framework
+      #     server: test-proxy
+      #   register: result
+      # - name: Output the ip address
+      #   debug:
+      #     msg: "{{ result.openstack_servers[0].public_v4 }}"

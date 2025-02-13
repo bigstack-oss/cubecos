@@ -1,0 +1,36 @@
+dbrp "ceph"."def"
+
+var period = 3m
+var every = 1m
+
+var latency_r = batch
+    |query('SELECT value FROM "ceph"."def".ceph_daemon_stats WHERE type_instance = \'osd.op_r_latency\'')
+        .period(period)
+        .every(every)
+        .groupBy('ceph_daemon', 'fsid', 'host')
+
+var latency_w = batch
+    |query('SELECT value FROM "ceph"."def".ceph_daemon_stats WHERE type_instance = \'osd.op_w_latency\'')
+        .period(period)
+        .every(every)
+        .groupBy('ceph_daemon', 'fsid', 'host')
+
+var op_r = batch
+    |query('SELECT value FROM "ceph"."def".ceph_daemon_stats WHERE type_instance = \'osd.op_r\'')
+        .period(period)
+        .every(every)
+        .groupBy('ceph_daemon', 'fsid', 'host')
+
+var op_w = batch
+    |query('SELECT value FROM "ceph"."def".ceph_daemon_stats WHERE type_instance = \'osd.op_w\'')
+        .period(period)
+        .every(every)
+        .groupBy('ceph_daemon', 'fsid', 'host')
+
+latency_r
+    |join(latency_w, op_r, op_w)
+        .as('latency_r', 'latency_w', 'op_r', 'op_w')
+        .tolerance(1s)
+    |influxDBOut()
+        .database('ceph')
+        .measurement('ceph_daemon_stats_join')

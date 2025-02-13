@@ -1,0 +1,5 @@
+---
+# file: rproxy.yml
+- hosts: cube
+  roles:
+    - role: rproxy

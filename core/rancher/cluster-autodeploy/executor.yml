@@ -1,0 +1,10 @@
+---
+# Listen on this <IP|all>:<TCP port>
+listen_address: ":80"
+# Display more output
+verbose: false
+# Uncomment these settings to use TLS
+# tls_key: "certs/key.pem"
+# tls_crt: "certs/cert.pem"
+commands:
+  - cmd: ./cluster_kubectl.sh

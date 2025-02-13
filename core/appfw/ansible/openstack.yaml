@@ -1,0 +1,159 @@
+---
+- name: openstack
+  hosts: localhost
+  vars_prompt:
+  - name: project
+    prompt: Please input project name
+    private: no
+  - name: password
+    prompt: Please input project password
+  - name: mgmt_net
+    prompt: Please input management network name
+    private: no
+  - name: pub_net
+    prompt: Please input public network name
+    private: no
+
+  tasks:
+  - name: Gather information about management network
+    openstack.cloud.networks_info:
+      name: "{{ mgmt_net }}"
+    register: result
+  - name: Gather information about management subnet
+    openstack.cloud.subnets_info:
+      name: "{{ result.openstack_networks[0].subnets[0] }}"
+    register: result
+  - name: Show management subnet CIDR
+    debug:
+      msg: "{{ result.openstack_subnets[0].cidr }}"
+
+  - openstack.cloud.project:
+      name: "{{ project }}"
+      description: "Cube {{ project }} project"
+      domain_id: default
+      enabled: True
+  - openstack.cloud.quota:
+      name: "{{ project }}"
+      cores: 200
+      ram: 102400
+      instances: 100
+      volumes: 100
+      security_group: 100
+      snapshots: 100
+      gigabytes: 4096
+      key_pairs: 512
+  - openstack.cloud.identity_user:
+      name: "{{ project }}"
+      password: "{{ password }}"
+      domain: default
+      default_project: "{{ project }}"
+  - openstack.cloud.role_assignment:
+      user: "{{ project }}"
+      role: admin
+      project: "{{ project }}"
+  - openstack.cloud.role_assignment:
+      user: admin_cli
+      role: admin
+      project: "{{ project }}"
+
+  # VM network
+  - openstack.cloud.network:
+      project: "{{ project }}"
+      name: private
+  - openstack.cloud.subnet:
+      project: "{{ project }}"
+      network_name: private
+      name: private_subnet
+      cidr: 192.168.0.0/24
+      allocation_pool_start: 192.168.0.2
+      allocation_pool_end: 192.168.0.253
+      # dns_nameservers:
+
+  # k8s network
+  - openstack.cloud.network:
+      project: "{{ project }}"
+      name: private-k8s
+    register: private_k8s
+  - openstack.cloud.subnet:
+      project: "{{ project }}"
+      network_name: private-k8s
+      name: private-k8s_subnet
+      cidr: 192.168.1.0/24
+      allocation_pool_start: 192.168.1.2
+      allocation_pool_end: 192.168.1.253
+    when: pub_net == mgmt_net
+  - openstack.cloud.subnet:
+      project: "{{ project }}"
+      network_name: private-k8s
+      name: private-k8s_subnet
+      cidr: 192.168.1.0/24
+      allocation_pool_start: 192.168.1.2
+      allocation_pool_end: 192.168.1.253
+      # dns_nameservers:
+      host_routes:
+        - destination: "{{ result.openstack_subnets[0].cidr }}"
+          nexthop: 192.168.1.254
+    when: pub_net != mgmt_net
+      # host_routes: >- 
+      #   {{ 
+      #     [{
+      #       - destination: "{{ result.openstack_subnets[0].cidr }}"
+      #         nexthop: 192.168.1.254
+      #     }]
+      #     if pub_net != mgmt_net 
+      #   }}
+
+  - openstack.cloud.router:
+      project: "{{ project }}"
+      name: "{{ pub_net }}"
+      network: "{{ pub_net }}"
+      interfaces:
+        - private_subnet
+        - private-k8s_subnet
+  - openstack.cloud.router:
+      project: "{{ project }}"
+      name: "{{ mgmt_net }}"
+      network: "{{ mgmt_net }}"
+      interfaces:
+        - net: "{{ private_k8s.id }}"
+          subnet: private-k8s_subnet
+          portip: 192.168.1.254
+    when: pub_net != mgmt_net
+
+
+  # Security group for k8s
+  - openstack.cloud.security_group:
+      project: "{{ project }}"
+      name: default-k8s
+      description: Default security group for kubernetes nodes
+    register: default_k8s
+
+  - openstack.cloud.security_group_rule:
+      project: "{{ project }}"
+      security_group: default-k8s
+      ethertype: IPv4
+      protocol: any
+      remote_ip_prefix: "{{ result.openstack_subnets[0].cidr }}"
+
+  # Rules for rancher server and service expose
+  - openstack.cloud.security_group_rule:
+      project: "{{ project }}"
+      security_group: default-k8s
+      protocol: tcp
+      port_range_min: "{{ item }}"
+      port_range_max: "{{ item }}"
+    loop:
+      - 22
+      - 80
+      - 443
+      - 2376
+      - 6443
+  - openstack.cloud.security_group_rule:
+      project: "{{ project }}"
+      security_group: default-k8s
+      protocol: "{{ item }}"
+      port_range_min: 30000
+      port_range_max: 32767
+    loop:
+      - tcp
+      - udp

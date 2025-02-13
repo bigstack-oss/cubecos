@@ -1,0 +1,3 @@
+Defaults:designate !requiretty
+
+designate ALL = (root) NOPASSWD: /usr/bin/designate-rootwrap /etc/designate/rootwrap.conf *

@@ -1,0 +1,78 @@
+# image:
+#   repository: localhost:5080/bigstack/keycloak
+
+# replicas: 1
+
+ingress:
+  enabled: true
+  rules:
+    - host: ""
+      paths:
+        - path: /auth
+          pathType: Prefix
+
+# postgresql:
+#   enabled: false
+
+extraEnv: |
+  - name: KEYCLOAK_USER
+    value: admin
+  - name: KEYCLOAK_PASSWORD
+    value: admin
+  - name: PROXY_ADDRESS_FORWARDING
+    value: "true"
+  - name: KEYCLOAK_DEFAULT_THEME
+    value: cube
+# - name: JGROUPS_DISCOVERY_PROTOCOL
+#   value: kubernetes.KUBE_PING
+# - name: KUBERNETES_NAMESPACE
+#   valueFrom:
+#     fieldRef:
+#       apiVersion: v1
+#       fieldPath: metadata.namespace
+# - name: CACHE_OWNERS_COUNT
+#   value: "3"
+# - name: CACHE_OWNERS_AUTH_SESSIONS_COUNT
+#   value: "3"
+# - name: KEYCLOAK_WELCOME_THEME
+#   value: cube
+
+# rbac:
+#   create: true
+#   rules:
+#     - apiGroups:
+#         - ""
+#       resources:
+#         - pods
+#       verbs:
+#         - get
+#         - list
+
+extraInitContainers: |
+  - name: theme-provider
+    image: busybox
+    imagePullPolicy: IfNotPresent
+    command:
+      - sh
+    args:
+      - -c
+      - |
+        echo "Copying theme..."
+        tar -xf /tmp/cube.tar.gz --strip-components=2 -C /theme
+    volumeMounts:
+      - name: theme
+        mountPath: /theme
+      - name: cube-theme-volume
+        mountPath: /tmp/cube.tar.gz
+        subPath: cube.tar.gz
+
+extraVolumeMounts: |
+  - name: theme
+    mountPath: /opt/jboss/keycloak/themes/cube
+
+extraVolumes: |
+  - name: theme
+    emptyDir: {}
+  - name: cube-theme-volume
+    configMap:
+      name: cube-theme

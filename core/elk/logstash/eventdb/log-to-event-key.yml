@@ -1,0 +1,11 @@
+"identity.project.created": KSN00001I
+"identity.project.deleted": KSN00002I
+
+"port.create.end": SDN00001I
+"port.delete.end": SDN00002I
+
+"connection refused": CEP00001I
+"OSD_DOWN" : CEP00002W
+
+"nic link is up": ETH00001I
+"nic link is down": ETH00002W

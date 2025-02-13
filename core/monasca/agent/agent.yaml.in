@@ -1,0 +1,39 @@
+Api:
+  amplifier: 0
+  backlog_send_rate: 1000
+  ca_file: null
+  endpoint_type: null
+  insecure: false
+  keystone_url: http://@CUBE_SHARED_ID@:5000/v3/
+  max_batch_size: 0
+  max_buffer_size: 1000
+  max_measurement_buffer_size: -1
+  password: @MONASCA_PASS@
+  project_domain_id: null
+  project_domain_name: default
+  project_id: null
+  project_name: service
+  region_name: @MONASCA_REGION@
+  service_type: monitoring
+  url: http://@CUBE_SHARED_ID@:8070/v2.0
+  user_domain_id: null
+  user_domain_name: default
+  username: monasca
+Logging:
+  collector_log_file: /var/log/monasca/agent/collector.log
+  enable_logrotate: true
+  forwarder_log_file: /var/log/monasca/agent/forwarder.log
+  log_level: INFO
+  statsd_log_file: /var/log/monasca/agent/statsd.log
+Main:
+  check_freq: 30
+  collector_restart_interval: 24
+  dimensions:
+    service: monitoring
+  hostname: @CUBE_HOST@
+  num_collector_threads: 1
+  pool_full_max_retries: 4
+  sub_collection_warn: 6
+Statsd:
+  monasca_statsd_interval: 20
+  monasca_statsd_port: 8125

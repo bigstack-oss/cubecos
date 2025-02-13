@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenStack Designate DNSaaS API
+After=syslog.target network.target
+
+[Service]
+User=designate
+Group=designate
+Type=simple
+WorkingDirectory=/var/lib/designate
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /var/lock/designate /var/log/designate /var/lib/designate
+ExecStartPre=/bin/chown designate:designate /var/lock/designate /var/lib/designate
+ExecStartPre=/bin/chown designate:adm /var/log/designate
+ExecStart=/usr/local/bin/designate-api --config-file=/etc/designate/designate.conf --log-file=/var/log/designate/designate-api.log
+Restart=on-failure
+LimitNOFILE=65535
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

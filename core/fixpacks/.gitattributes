@@ -1,0 +1,2 @@
+advantech_ahg/rootfs/root/server_imanager_v0.14.bin filter=lfs diff=lfs merge=lfs -text
+logrotate_fix/rootfs/usr/sbin/hex_config filter=lfs diff=lfs merge=lfs -text

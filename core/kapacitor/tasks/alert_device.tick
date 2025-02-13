@@ -1,0 +1,27 @@
+dbrp "telegraf"."def"
+
+var data = stream
+  |from()
+    .measurement('ipmi_sensor')
+    .groupBy('hostname')
+  |eval(lambda: unixNano(now()))
+    .as('ts')
+    .keep()
+
+data
+  |alert()
+    .info(lambda: "name" == 'ping_checker' AND int("resp") >= 0)
+    .message('host,category=DEV,severity=I,key=DEV00001I,hostname={{ .Tags.hostname }},ip={{ .Tags.ip }} message="device "{{ .Tags.hostname }}" at {{ .Tags.ip }} is reachable",metadata="{ "category": "dev", "hostname": "{{ .Tags.hostname }}", "ip": "{{ .Tags.ip }}" }" {{ .Fields.ts }}')
+    .stateChangesOnly()
+    .noRecoveries()
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .warn(lambda: "name" == 'ping_checker' AND int("resp") < 0)
+    .message('host,category=DEV,severity=W,key=DEV00002W,hostname={{ .Tags.hostname }},ip={{ .Tags.ip }} message="device "{{ .Tags.hostname }}" at {{ .Tags.ip }} is unreachable",metadata="{ "category": "dev", "hostname": "{{ .Tags.hostname }}", "ip": "{{ .Tags.ip }}" }" {{ .Fields.ts }}')
+    .stateChangesOnly()
+    .noRecoveries()
+    .post()
+      .endpoint('events')

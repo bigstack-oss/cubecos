@@ -1,0 +1,42 @@
+dbrp "telegraf"."def"
+
+var data = stream
+  |from()
+    .measurement('vrouter.stats')
+    .groupBy('router')
+  |eval(lambda: unixNano(now()))
+    .as('ts')
+    .keep()
+  |eval(lambda: int("sess_pcnt"))
+    .as('pcnt')
+    .keep()
+
+data
+  |alert()
+    .info(lambda: int("pcnt") <= 85 AND int("pcnt") > 75)
+    .infoReset(lambda: int("pcnt") <= 75)
+    .stateChangesOnly()
+    .noRecoveries()
+    .message('system,category=VRT,severity=I,key=VRT00001I,router={{ .Tags.router }} message="router "{{ .Tags.router }}" session usage {{ .Fields.pcnt }}% exceeds threshold 75%",metadata="{ "category": "vrouter", "router": "{{ .Tags.router }}" }" {{ .Fields.ts }}')
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .warn(lambda: int("pcnt") <= 95 AND int("pcnt") > 85)
+    .warnReset(lambda: int("pcnt") <= 85)
+    .stateChangesOnly()
+    .noRecoveries()
+    .message('system,category=VRT,severity=W,key=VRT00002W,router={{ .Tags.router }} message="router "{{ .Tags.router }}" session usage {{ .Fields.pcnt }}% exceeds threshold 85%",metadata="{ "category": "vrouter", "router": "{{ .Tags.router }}" }" {{ .Fields.ts }}')
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .crit(lambda: int("pcnt") > 95)
+    .critReset(lambda: int("pcnt") <= 95)
+    .stateChangesOnly()
+    .noRecoveries()
+    .message('system,category=VRT,severity=C,key=VRT00003C,router={{ .Tags.router }} message="router "{{ .Tags.router }}" session usage {{ .Fields.pcnt }}% exceeds threshold 95%",metadata="{ "category": "vrouter", "router": "{{ .Tags.router }}" }" {{ .Fields.ts }}')
+    .post()
+      .endpoint('events')

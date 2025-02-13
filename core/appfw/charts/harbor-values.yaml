@@ -1,0 +1,5 @@
+---
+trivy:
+  enabled: false
+notary:
+  enabled: false

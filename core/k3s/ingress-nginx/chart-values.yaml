@@ -1,0 +1,21 @@
+controller:
+  kind: DaemonSet
+  hostPort:
+    enabled: true
+    ports:
+      http: 1080
+      https: 10443
+  ingressClassResource:
+    default: true
+  extraArgs:
+    default-ssl-certificate: "ingress-nginx/tls-private"
+  service:
+    enabled: false
+  admissionWebhooks:
+    enabled: false
+  tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists

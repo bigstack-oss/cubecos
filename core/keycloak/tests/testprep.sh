@@ -1,0 +1,1 @@
+export SRCDIR=$(dirname ${BASH_SOURCE[0]})

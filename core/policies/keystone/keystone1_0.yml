@@ -1,0 +1,6 @@
+---
+# keystone/keystone1_0.yml
+name: keystone
+version: 1.0
+
+admin-pass: admin

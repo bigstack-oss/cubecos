@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenStack Acceleration agent service
+After=mysql.service rabbitmq-server.service ntp.service
+
+[Service]
+User=cyborg
+Group=cyborg
+Type=simple
+WorkingDirectory=/var/lib/cyborg
+PermissionsStartOnly=true
+ExecStart=/usr/local/bin/cyborg-agent --config-file /etc/cyborg/cyborg.conf
+Restart=on-failure
+LimitNOFILE=65535
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

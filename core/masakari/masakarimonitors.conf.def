@@ -1,0 +1,463 @@
+[DEFAULT]
+
+#
+# From masakarimonitors.conf
+#
+
+# Explicitly specify the temporary working directory. (string value)
+#tempdir = <None>
+
+#
+# Determine if monkey patching should be applied.
+#
+# Related options:
+#
+#   * ``monkey_patch_modules``: This must have values set for this option to
+# have
+#   any effect
+#  (boolean value)
+#monkey_patch = false
+
+#
+# List of modules/decorators to monkey patch.
+#
+# This option allows you to patch a decorator for all functions in specified
+# modules.
+#
+# Related options:
+#
+#   * ``monkey_patch``: This must be set to ``True`` for this option to
+#     have any effect
+#  (list value)
+#monkey_patch_modules =
+
+#
+# Hostname, FQDN or IP address of this host. Must be valid within AMQP key.
+#
+# Possible values:
+#
+# * String with hostname, FQDN or IP address. Default is hostname of this host.
+#  (string value)
+#host = hostname
+
+# Full class name for the Manager for instancemonitor. (string value)
+#instancemonitor_manager = masakarimonitors.instancemonitor.instance.InstancemonitorManager
+
+# Full class name for the Manager for processmonitor. (string value)
+#processmonitor_manager = masakarimonitors.processmonitor.process.ProcessmonitorManager
+
+# Full class name for the Manager for hostmonitor. (string value)
+#hostmonitor_manager = masakarimonitors.hostmonitor.host.HostmonitorManager
+
+#
+# From oslo.log
+#
+
+# If set to true, the logging level will be set to DEBUG instead of the default
+# INFO level. (boolean value)
+# Note: This option can be changed without restarting.
+#debug = false
+
+# The name of a logging configuration file. This file is appended to any
+# existing logging configuration files. For details about logging configuration
+# files, see the Python logging module documentation. Note that when logging
+# configuration files are used then all logging configuration is set in the
+# configuration file and other logging configuration options are ignored (for
+# example, log-date-format). (string value)
+# Note: This option can be changed without restarting.
+# Deprecated group/name - [DEFAULT]/log_config
+#log_config_append = <None>
+
+# Defines the format string for %%(asctime)s in log records. Default:
+# %(default)s . This option is ignored if log_config_append is set. (string
+# value)
+#log_date_format = %Y-%m-%d %H:%M:%S
+
+# (Optional) Name of log file to send logging output to. If no default is set,
+# logging will go to stderr as defined by use_stderr. This option is ignored if
+# log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logfile
+#log_file = <None>
+
+# (Optional) The base directory used for relative log_file  paths. This option
+# is ignored if log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logdir
+#log_dir = <None>
+
+# Uses logging handler designed to watch file system. When log file is moved or
+# removed this handler will open a new log file with specified path
+# instantaneously. It makes sense only if log_file option is specified and Linux
+# platform is used. This option is ignored if log_config_append is set. (boolean
+# value)
+#watch_log_file = false
+
+# Use syslog for logging. Existing syslog format is DEPRECATED and will be
+# changed later to honor RFC5424. This option is ignored if log_config_append is
+# set. (boolean value)
+#use_syslog = false
+
+# Enable journald for logging. If running in a systemd environment you may wish
+# to enable journal support. Doing so will use the journal native protocol which
+# includes structured metadata in addition to log messages.This option is
+# ignored if log_config_append is set. (boolean value)
+#use_journal = false
+
+# Syslog facility to receive log lines. This option is ignored if
+# log_config_append is set. (string value)
+#syslog_log_facility = LOG_USER
+
+# Use JSON formatting for logging. This option is ignored if log_config_append
+# is set. (boolean value)
+#use_json = false
+
+# Log output to standard error. This option is ignored if log_config_append is
+# set. (boolean value)
+#use_stderr = false
+
+# Log output to Windows Event Log. (boolean value)
+#use_eventlog = false
+
+# The amount of time before the log files are rotated. This option is ignored
+# unless log_rotation_type is setto "interval". (integer value)
+#log_rotate_interval = 1
+
+# Rotation interval type. The time of the last file change (or the time when the
+# service was started) is used when scheduling the next rotation. (string value)
+# Possible values:
+# Seconds - <No description provided>
+# Minutes - <No description provided>
+# Hours - <No description provided>
+# Days - <No description provided>
+# Weekday - <No description provided>
+# Midnight - <No description provided>
+#log_rotate_interval_type = days
+
+# Maximum number of rotated log files. (integer value)
+#max_logfile_count = 30
+
+# Log file maximum size in MB. This option is ignored if "log_rotation_type" is
+# not set to "size". (integer value)
+#max_logfile_size_mb = 200
+
+# Log rotation type. (string value)
+# Possible values:
+# interval - Rotate logs at predefined time intervals.
+# size - Rotate logs once they reach a predefined size.
+# none - Do not rotate log files.
+#log_rotation_type = none
+
+# Format string to use for log messages with context. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user_identity)s] %(instance)s%(message)s
+
+# Format string to use for log messages when context is undefined. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_default_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s
+
+# Additional data to append to log message when logging level for the message is
+# DEBUG. Used by oslo_log.formatters.ContextFormatter (string value)
+#logging_debug_format_suffix = %(funcName)s %(pathname)s:%(lineno)d
+
+# Prefix each line of exception output with this format. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_exception_prefix = %(asctime)s.%(msecs)03d %(process)d ERROR %(name)s %(instance)s
+
+# Defines the format string for %(user_identity)s that is used in
+# logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
+# (string value)
+#logging_user_identity_format = %(user)s %(tenant)s %(domain)s %(user_domain)s %(project_domain)s
+
+# List of package logging levels in logger=LEVEL pairs. This option is ignored
+# if log_config_append is set. (list value)
+#default_log_levels = amqp=WARN,amqplib=WARN,boto=WARN,qpid=WARN,sqlalchemy=WARN,suds=INFO,oslo.messaging=INFO,oslo_messaging=INFO,iso8601=WARN,requests.packages.urllib3.connectionpool=WARN,urllib3.connectionpool=WARN,websocket=WARN,requests.packages.urllib3.util.retry=WARN,urllib3.util.retry=WARN,keystonemiddleware=WARN,routes.middleware=WARN,stevedore=WARN,taskflow=WARN,keystoneauth=WARN,oslo.cache=INFO,oslo_policy=INFO,dogpile.core.dogpile=INFO
+
+# Enables or disables publication of error events. (boolean value)
+#publish_errors = false
+
+# The format for an instance that is passed with the log message. (string value)
+#instance_format = "[instance: %(uuid)s] "
+
+# The format for an instance UUID that is passed with the log message. (string
+# value)
+#instance_uuid_format = "[instance: %(uuid)s] "
+
+# Interval, number of seconds, of log rate limiting. (integer value)
+#rate_limit_interval = 0
+
+# Maximum number of logged messages per rate_limit_interval. (integer value)
+#rate_limit_burst = 0
+
+# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG or
+# empty string. Logs with level greater or equal to rate_limit_except_level are
+# not filtered. An empty string means that all levels are filtered. (string
+# value)
+#rate_limit_except_level = CRITICAL
+
+# Enables or disables fatal status of deprecations. (boolean value)
+#fatal_deprecations = false
+
+
+[api]
+#
+# Configration options for sending notifications.
+
+#
+# From masakarimonitors.conf
+#
+
+# Region name. (string value)
+#region = RegionOne
+
+# Masakari API Version. (string value)
+#api_version = v1
+
+# Interface of endpoint. (string value)
+#api_interface = public
+
+# Authentication URL (string value)
+#auth_url = <None>
+
+# Scope for system operations (string value)
+#system_scope = <None>
+
+# Domain ID to scope to (string value)
+#domain_id = <None>
+
+# Domain name to scope to (string value)
+#domain_name = <None>
+
+# Project ID to scope to (string value)
+# Deprecated group/name - [api]/tenant_id
+#project_id = <None>
+
+# Project name to scope to (string value)
+# Deprecated group/name - [api]/tenant_name
+#project_name = <None>
+
+# Domain ID containing project (string value)
+#project_domain_id = <None>
+
+# Domain name containing project (string value)
+#project_domain_name = <None>
+
+# Trust ID (string value)
+#trust_id = <None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will be used for both
+# the user and project domain in v3 and ignored in v2 authentication. (string
+# value)
+#default_domain_id = <None>
+
+# Optional domain name to use with v3 API and v2 parameters. It will be used for
+# both the user and project domain in v3 and ignored in v2 authentication.
+# (string value)
+#default_domain_name = <None>
+
+# User id (string value)
+#user_id = <None>
+
+# Username (string value)
+# Deprecated group/name - [api]/user_name
+#username = <None>
+
+# User's domain id (string value)
+#user_domain_id = <None>
+
+# User's domain name (string value)
+#user_domain_name = <None>
+
+# User's password (string value)
+#password = <None>
+
+
+[callback]
+
+#
+# From masakarimonitors.conf
+#
+
+# Number of retries when the notification processing is error. (integer value)
+#retry_max = 12
+
+# Trial interval of time of the notification processing is error(in seconds).
+# (integer value)
+#retry_interval = 10
+
+
+[cors]
+
+#
+# From oslo.middleware
+#
+
+# Indicate whether this resource may be shared with the domain received in the
+# requests "origin" header. Format: "<protocol>://<host>[:<port>]", no trailing
+# slash. Example: https://horizon.example.com (list value)
+#allowed_origin = <None>
+
+# Indicate that the actual request can include user credentials (boolean value)
+#allow_credentials = true
+
+# Indicate which headers are safe to expose to the API. Defaults to HTTP Simple
+# Headers. (list value)
+#expose_headers =
+
+# Maximum cache age of CORS preflight requests. (integer value)
+#max_age = 3600
+
+# Indicate which methods can be used during the actual request. (list value)
+#allow_methods = OPTIONS,GET,HEAD,POST,PUT,DELETE,TRACE,PATCH
+
+# Indicate which header field names may be used during the actual request. (list
+# value)
+#allow_headers =
+
+
+[healthcheck]
+
+#
+# From oslo.middleware
+#
+
+# DEPRECATED: The path to respond to healtcheck requests on. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+#path = /healthcheck
+
+# Show more detailed information as part of the response. Security note:
+# Enabling this option may expose sensitive details about the service being
+# monitored. Be sure to verify that it will not violate your security policies.
+# (boolean value)
+#detailed = false
+
+# Additional backends that can perform health checks and report that information
+# back as part of a request. (list value)
+#backends =
+
+# Check the presence of a file to determine if an application is running on a
+# port. Used by DisableByFileHealthcheck plugin. (string value)
+#disable_by_file_path = <None>
+
+# Check the presence of a file based on a port to determine if an application is
+# running on a port. Expects a "port:path" list of strings. Used by
+# DisableByFilesPortsHealthcheck plugin. (list value)
+#disable_by_file_paths =
+
+
+[host]
+
+#
+# From masakarimonitors.conf
+#
+
+# Driver that hostmonitor uses for monitoring hosts. (string value)
+#monitoring_driver = default
+
+# Monitoring interval(in seconds) of node status. (integer value)
+#monitoring_interval = 60
+
+# Number of retries for send a notification in processmonitor. (integer value)
+#api_retry_max = 12
+
+# Trial interval of time of the notification processing is error(in seconds).
+# (integer value)
+#api_retry_interval = 10
+
+#
+# Do not check whether the host is completely down.
+#
+# Possible values:
+#
+# * True: Do not check whether the host is completely down.
+# * False: Do check whether the host is completely down.
+#
+# If ipmi RA is not set in pacemaker, this value should be set True.
+#  (boolean value)
+#disable_ipmi_check = false
+
+# Timeout value(in seconds) of the ipmitool command. (integer value)
+#ipmi_timeout = 5
+
+# Number of ipmitool command retries. (integer value)
+#ipmi_retry_max = 3
+
+# Retry interval(in seconds) of the ipmitool command. (integer value)
+#ipmi_retry_interval = 10
+
+# Standby time(in seconds) until activate STONITH. (integer value)
+#stonith_wait = 30
+
+# Timeout value(in seconds) of the tcpdump command when monitors the corosync
+# communication. (integer value)
+#tcpdump_timeout = 5
+
+#
+# The name of interface that corosync is using for mutual communication
+# between hosts.
+# If there are multiple interfaces, specify them in comma-separated
+# like 'enp0s3,enp0s8'.
+# The number of interfaces you specify must be equal to the number of
+# corosync_multicast_ports values and must be in correct order with relevant
+# ports in corosync_multicast_ports.
+#  (string value)
+#corosync_multicast_interfaces = <None>
+
+#
+# The port numbers that corosync is using for mutual communication
+# between hosts.
+# If there are multiple port numbers, specify them in comma-separated
+# like '5405,5406'.
+# The number of port numbers you specify must be equal to the number of
+# corosync_multicast_interfaces values and must be in correct order with
+# relevant interfaces in corosync_multicast_interfaces.
+#  (string value)
+#corosync_multicast_ports = <None>
+
+
+[oslo_middleware]
+
+#
+# From oslo.middleware
+#
+
+# The maximum body size for each  request, in bytes. (integer value)
+# Deprecated group/name - [DEFAULT]/osapi_max_request_body_size
+# Deprecated group/name - [DEFAULT]/max_request_body_size
+#max_request_body_size = 114688
+
+# DEPRECATED: The HTTP Header that will be used to determine what the original
+# request protocol scheme was, even if it was hidden by a SSL termination proxy.
+# (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+#secure_proxy_ssl_header = X-Forwarded-Proto
+
+# Whether the application is behind a proxy or not. This determines if the
+# middleware should parse the headers or not. (boolean value)
+#enable_proxy_headers_parsing = false
+
+
+[process]
+
+#
+# From masakarimonitors.conf
+#
+
+# Interval in seconds for checking a process. (integer value)
+#check_interval = 5
+
+# Number of retries when the failure of restarting a process. (integer value)
+#restart_retries = 3
+
+# Interval in seconds for restarting a process. (integer value)
+#restart_interval = 5
+
+# Number of retries for send a notification in processmonitor. (integer value)
+#api_retry_max = 12
+
+# Interval between re-sending a notification in processmonitor(in seconds).
+# (integer value)
+#api_retry_interval = 10
+
+# The file path of process list. (string value)
+#process_list_path = /etc/masakarimonitors/process_list.yaml

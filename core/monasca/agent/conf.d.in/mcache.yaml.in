@@ -1,0 +1,4 @@
+init_config:
+
+instances:
+  - url: @CUBE_CTRL_IP@

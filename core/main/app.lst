@@ -1,0 +1,8 @@
+group=cube-admins,name=google2,link=https://www.google.com,image=google.png
+group=cube-admins,name=gitlab2,link=https://about.gitlab.com,image=gitlab.png
+group=cube-admins,name=test2,link=https://about.gitlab.com,image=gitlab.png
+group=all,name=gitlab,link=https://about.gitlab.com,image=gitlab.png
+group=all,name=google,link=https://www.google.com,image=google.png
+group=cube-users,name=google3,link=https://www.google.com,image=google.png
+group=all,name=google2,link=https://www.google.com,image=google.png
+

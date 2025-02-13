@@ -1,0 +1,21 @@
+# Persist telegraf line protocol string to influxdb
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "telegraf-metrics"
+    group_id => "telegraf_persister"
+    client_id => "telegraf_persister_@CUBE_HOST@"
+    consumer_threads => "2"
+  }
+}
+
+output {
+  http {
+    url => "http://@CUBE_SHARED_ID@:9092/write?db=telegraf&precision=ns&rp=def"
+    format => "message"
+    content_type => "application/json"
+    http_method => "post"
+    message => "%{message}"
+  }
+}

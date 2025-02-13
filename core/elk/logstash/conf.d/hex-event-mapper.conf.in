@@ -1,0 +1,87 @@
+# convert message to event and persist to influxdb
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "transformed-logs"
+    group_id => "hex_event_mapper"
+    client_id => "hex_event_mapper_@CUBE_HOST@"
+    consumer_threads => "2"
+    codec => json
+  }
+}
+
+filter {
+  if [path] != "/var/log/messages" {
+    drop {
+    }
+  }
+
+  grok {
+    match => { "message" => "%{NOTSPACE:eventid}:: \|%{GREEDYDATA:attrs}\|" }
+  }
+
+  if ![eventid] {
+    drop {
+    }
+  }
+
+  mutate {
+    rename => { "eventid" => "[event][key]" }
+  }
+  if [attrs] {
+    kv {
+      field_split => ","
+      source => "attrs"
+      target => "attrs_obj"
+    }
+    ruby {
+      code => "event.set('[event][metadata]', event.get('attrs_obj').to_json)"
+    }
+  }
+
+  translate {
+    field => "[event][key]"
+    destination => "[event][message]"
+    dictionary_path => "/etc/logstash/eventdb/event-key-to-msg.yml"
+  }
+  grok {
+    patterns_dir => ["/etc/logstash/patterns.txt"]
+    match => { "[event][key]" => "%{EVENT_CAT:category}%{EVENT_ID:id}%{EVENT_SEVERITY:severity}" }
+    add_field => {
+      "[event][category]" => "%{category}"
+      "[event][severity]" => "%{severity}"
+    }
+  }
+  ruby {
+    code => "event.set('[event][timestamp]', event.get('@timestamp').to_i * 1000)"
+  }
+  if [event][metadata] {
+    mutate {
+      add_field => {
+        "eventlog" => 'system,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]},%{[attrs]} message="%{[event][message]}",metadata="%{[event][metadata]}" %{[event][timestamp]}'
+      }
+    }
+  }
+  else {
+    mutate {
+      add_field => {
+        "eventlog" => 'system,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]} message="%{[event][message]}" %{[event][timestamp]}'
+      }
+    }
+  }
+}
+
+output {
+  #file {
+  #  path => "/var/log/logstash/debug-hex-event-mapper.log"
+  #  codec => rubydebug
+  #}
+  http {
+    url => "http://@CUBE_SHARED_ID@:9092/write?db=events&precision=ms&rp=def"
+    format => "message"
+    content_type => "application/json"
+    http_method => "post"
+    message => "%{eventlog}"
+  }
+}

@@ -1,0 +1,154 @@
+dbrp "events"."def"
+
+stream
+  |from()
+    .measurement('system')
+  |sideload()
+    .source('file:///etc/kapacitor/')
+    .order('alert_extra/configs.yml')
+    .tag('msgPrefix', 'Cube')
+  |alert()
+    .info(lambda: "severity" == 'I')
+    .warn(lambda: "severity" == 'W')
+    .crit(lambda: "severity" == 'E' OR "severity" == 'C')
+    .message('({{ .Tags.msgPrefix }}) [{{ .Level }}] {{ .Fields.message }}')
+    .details('''
+<table align="left" border="1" cellpadding="4" cellspacing="0" style="border-color:#f8f8f8">
+<tbody>
+<tr>
+<td colspan="2" style="background-color:#36518d; text-align:center; width:120px"><span style="color:#ffffff">Cube Notification</span></td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Level</td>
+<td style="background-color:#f0f4f6">System</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Event ID</td>
+<td style="background-color:#f0f4f6">{{ .Tags.key }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Severity</td>
+<td style="background-color:#f0f4f6">{{ .Level }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Occurred Time</td>
+<td style="background-color:#f0f4f6">{{ .Time }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Message</td>
+<td style="background-color:#f0f4f6">{{ .Fields.message }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:100px">Metadata</td>
+<td style="background-color:#f0f4f6">{{ .Fields.metadata }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:100px">Reporter</td>
+<td style="background-color:#f0f4f6">{{ .Tags.host }}</td>
+</tr>
+</tbody>
+</table>
+''')
+    .topic('events')
+
+stream
+  |from()
+    .measurement('host')
+  |sideload()
+    .source('file:///etc/kapacitor/')
+    .order('alert_extra/configs.yml')
+    .tag('msgPrefix', 'Cube')
+  |alert()
+    .info(lambda: "severity" == 'I')
+    .warn(lambda: "severity" == 'W')
+    .crit(lambda: "severity" == 'E' OR "severity" == 'C')
+    .message('({{ .Tags.msgPrefix }}) [{{ .Level }}] {{ .Fields.message }}')
+    .details('''
+<table align="left" border="1" cellpadding="4" cellspacing="0" style="border-color:#f8f8f8">
+<tbody>
+<tr>
+<td colspan="2" style="background-color:#36518d; text-align:center; width:120px"><span style="color:#ffffff">Cube Notification</span></td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Level</td>
+<td style="background-color:#f0f4f6">Host</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Event ID</td>
+<td style="background-color:#f0f4f6">{{ .Tags.key }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Severity</td>
+<td style="background-color:#f0f4f6">{{ .Level }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Occurred Time</td>
+<td style="background-color:#f0f4f6">{{ .Time }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Message</td>
+<td style="background-color:#f0f4f6">{{ .Fields.message }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:100px">Metadata</td>
+<td style="background-color:#f0f4f6">{{ .Fields.metadata }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:100px">Reporter</td>
+<td style="background-color:#f0f4f6">{{ .Tags.host }}</td>
+</tr>
+</tbody>
+</table>
+''')
+    .topic('events')
+
+stream
+  |from()
+    .measurement('instance')
+  |sideload()
+    .source('file:///etc/kapacitor/')
+    .order('alert_extra/configs.yml')
+    .tag('msgPrefix', 'Cube')
+  |alert()
+    .info(lambda: "severity" == 'I')
+    .warn(lambda: "severity" == 'W')
+    .crit(lambda: "severity" == 'E' OR "severity" == 'C')
+    .message('({{ .Tags.msgPrefix }}) [{{ .Level }}] {{ .Tags.msgPrefix }} {{ .Fields.message }}')
+    .details('''
+<table align="left" border="1" cellpadding="4" cellspacing="0" style="border-color:#f8f8f8">
+<tbody>
+<tr>
+<td colspan="2" style="background-color:#36518d; text-align:center; width:120px"><span style="color:#ffffff">Cube Notification</span></td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Level</td>
+<td style="background-color:#f0f4f6">Instance</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Event ID</td>
+<td style="background-color:#f0f4f6">{{ .Tags.key }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Severity</td>
+<td style="background-color:#f0f4f6">{{ .Level }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Occurred Time</td>
+<td style="background-color:#f0f4f6">{{ .Time }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:120px">Message</td>
+<td style="background-color:#f0f4f6">{{ .Fields.message }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:100px">Metadata</td>
+<td style="background-color:#f0f4f6">{{ .Fields.metadata }}</td>
+</tr>
+<tr>
+<td style="background-color:#cfddf5; text-align:left; width:100px">Reporter</td>
+<td style="background-color:#f0f4f6">{{ .Tags.host }}</td>
+</tr>
+</tbody>
+</table>
+''')
+    .topic('instance-events')

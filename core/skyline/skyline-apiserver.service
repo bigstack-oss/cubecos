@@ -1,0 +1,10 @@
+[Unit]
+Description=Skyline APIServer
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/gunicorn -c /etc/skyline/gunicorn.py skyline_apiserver.main:app
+LimitNOFILE=32768
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,41 @@
+# Care only about disk drivers in switchroot_init
+if [ -n "$MINI_INIT" ]; then
+    # HP Smart Array SCSI driver
+    modprobe hpsa
+
+    # megaraid driver
+    modprobe megaraid_sas
+
+    # adaptec raid driver
+    modprobe aacraid
+
+    # smartpqi raid driver
+    modprobe smartpqi
+
+    # ahci support
+    modprobe ahci
+
+    # nvme support
+    modprobe nvme
+
+    # sata support
+    modprobe sd_mod
+
+    # mpt3sas support
+    modprobe mpt3sas
+
+    # fc support
+    modprobe lpfc
+
+else
+    touch /etc/appliance/state/dell_poweredge_xr_detected >/dev/null 2>&1
+    /usr/sbin/dmidecode -s system-manufacturer | awk '{print tolower($1)}' > /etc/appliance/state/ipmi_detected
+    modprobe ipmi_devintf
+    if /usr/sbin/dmidecode | grep -q IPMI ; then
+        touch /etc/appliance/state/ipmi_detected >/dev/null 2>&1
+        /usr/sbin/dmidecode -s system-manufacturer | awk '{print tolower($1)}' > /etc/appliance/state/ipmi_detected
+        modprobe ipmi_devintf
+    fi
+fi
+
+# Rely on drivers loaded by udev

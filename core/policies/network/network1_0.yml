@@ -1,0 +1,23 @@
+---
+# network/network1_0.yml
+name: network
+version: 1.0
+
+hostname: unconfigured
+default-interface: IF.1
+
+dns:
+  auto: true
+
+interfaces:
+  - enabled: true
+    label: IF.1
+    speed-duplex: auto 
+    ipv4: 
+      dhcp: false
+      ipaddr: 0.0.0.0
+      netmask: 0.0.0.0
+      gateway: 0.0.0.0
+    ipv6: 
+      enabled: true
+      dhcp: true

@@ -1,0 +1,15 @@
+# Generic Hardware
+
+# Should be overridden in project specific generic_settings.sys with product name
+sys.model.name = DellPowerEdgeXR
+
+# Live/Installer CDROM device
+sys.live.iso = /dev/cdrom
+
+# Installer settings
+sys.install.serial_console = 1
+
+# Network interfaces
+sys.net.if.businfo.eth0 = 0000:00:03.0
+sys.net.if.label.eth0 = IF.1
+sys.net.if.description.eth0 = Interface 1

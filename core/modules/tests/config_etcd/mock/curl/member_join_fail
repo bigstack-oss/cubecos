@@ -1,0 +1,8 @@
+#!/bin/bash
+
+cat << EndOfMessage
+{
+  "code": 400,
+  "message": "Failed to get member_id or cluster info"
+}
+EndOfMessage

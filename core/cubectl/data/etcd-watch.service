@@ -1,0 +1,11 @@
+[Unit]
+Description=etcd watcher for cluster changes
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cubectl tuning watch
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

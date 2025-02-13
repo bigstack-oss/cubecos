@@ -1,0 +1,10 @@
+docker.io/rancher/fleet-agent:v0.8.0
+docker.io/rancher/fleet:v0.8.0
+docker.io/rancher/gitjob:v0.1.76
+docker.io/rancher/rancher-webhook:v0.3.6
+docker.io/rancher/rancher:v2.7.9
+docker.io/rancher/shell:v0.1.21
+docker.io/rancher/system-upgrade-controller:v0.11.0
+docker.io/rancher/kubectl:v1.20.2
+docker.io/rancher/k3s-upgrade:v1.26.6-k3s1
+docker.io/rancher/mirrored-cluster-api-controller:v1.4.4

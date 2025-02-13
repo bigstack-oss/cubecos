@@ -1,0 +1,50 @@
+dn: ou=users,dc=example,dc=org
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=example,dc=org
+objectClass: organizationalUnit
+ou: groups
+
+dn: cn=ldapuser1,ou=users,dc=example,dc=org
+objectClass: person
+objectClass: posixAccount
+cn: ldapuser1
+sn: ldapuser1
+uid: ldapuser1
+userPassword: ldapuser1
+gidNumber: 10001
+uidNumber: 10001
+loginShell: /bin/bash
+homeDirectory: /home/ldapuser1
+
+dn: cn=ldapuser2,ou=users,dc=example,dc=org
+objectClass: person
+objectClass: posixAccount
+cn: ldapuser2
+sn: ldapuser2
+uid: ldapuser2
+userPassword: ldapuser2
+gidNumber: 10002
+uidNumber: 10002
+loginShell: /bin/bash
+homeDirectory: /home/ldapuser2
+
+dn: cn=ldapgroup1,ou=groups,dc=example,dc=org
+objectClass: posixGroup
+cn: ldapgroup1
+gidNumber: 12780
+memberUid: ldapuser1
+
+
+dn: cn=ldapgroup2,ou=groups,dc=example,dc=org
+objectClass: posixGroup
+cn: ldapgroup2
+gidNumber: 12781
+memberUid: ldapuser2
+
+
+dn: cn=ldapgroup3,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+cn: ldapgroup3
+member: cn=ldapuser1,ou=users,dc=example,dc=org

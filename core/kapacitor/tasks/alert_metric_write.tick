@@ -1,0 +1,13 @@
+dbrp "_internal"."monitor"
+
+batch
+  |query('select max("writeReq") - min("writeReq") from "_internal"."monitor"."httpd"')
+    .period(10m)
+    .every(1d)
+    .groupBy('hostname')
+  |log()
+  |alert()
+    .crit(lambda: int("max_min") < 20)
+    .message('system,category=SRV,severity=C,key=SRV00003C,host={{ .Tags.hostname }} message="low metrics throughput. please check telemetry components",metadata="{ "category": "service", "host": "{{ .Tags.hostname }}" }"')
+    .post()
+      .endpoint('events')

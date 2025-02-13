@@ -1,0 +1,27 @@
+dbrp "telegraf"."def"
+
+var data = stream
+  |from()
+    .measurement('system.services')
+    .groupBy('service')
+  |eval(lambda: unixNano(now()))
+    .as('ts')
+    .keep()
+      
+data
+  |alert()
+    .info(lambda: "status" == 0)
+    .message('system,category=SRV,severity=I,key=SRV00001I,host={{ .Tags.host }},service={{ .Tags.service }} message="{{ .Tags.host }} detects service "{{ .Tags.service }}" healthy",metadata="{ "category": "service", "service": "{{ .Tags.service }}" }" {{ .Fields.ts }}')
+    .stateChangesOnly()
+    .noRecoveries()
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .warn(lambda: "status" != 0)
+    .message('system,category=SRV,severity=W,key=SRV00002W,host={{ .Tags.host }},service={{ .Tags.service }} message="{{ .Tags.host }} detects service "{{ .Tags.service }}" degraded with status {{ .Fields.status }} ({{ .Tags.description }})",metadata="{ "category": "service", "service": "{{ .Tags.service }}" }" {{ .Fields.ts }}')
+    .stateChangesOnly()
+    .noRecoveries()
+    .post()
+      .endpoint('events')

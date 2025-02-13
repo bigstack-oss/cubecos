@@ -1,0 +1,4 @@
+[safe]
+	directory = /home/jenkins/workspace/centos9_cube_prod/cube
+	directory = /home/jenkins/workspace/centos9_cube_accept/cube
+	directory = /home/jenkins/workspace/centos9_cube_private_200.13/cube

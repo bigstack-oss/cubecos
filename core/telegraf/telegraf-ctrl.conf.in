@@ -1,0 +1,40 @@
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk check_service_stats" ]
+interval = "10m"
+timeout = "10m"
+name_override = "system.services"
+data_format = "json"
+tag_keys = [ "service", "host", "description" ]
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk -f line os_nova_instance_ping arping" ]
+interval = "5m"
+timeout = "5m"
+data_format = "influx"
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk stats_ceph_osd_cmd" ]
+interval = "1m"
+timeout = "1m"
+data_format = "influx"
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk security_flow_abnormal_detection @BASE@ @UNIT@ @THRESHOLD@" ]
+interval = "@UNIT@"
+timeout = "@UNIT@"
+data_format = "influx"
+
+[[inputs.ceph]]
+interval = '1m'
+ceph_binary = "/usr/bin/ceph"
+socket_dir = "/var/run/ceph"
+mon_prefix = "ceph-mon"
+osd_prefix = "ceph-osd"
+socket_suffix = "asok"
+ceph_user = "client.admin"
+ceph_config = "/etc/ceph/ceph.conf"
+gather_admin_socket_stats = false
+gather_cluster_stats = true
+
+[[inputs.sflow]]
+service_address = "udp://:6343"

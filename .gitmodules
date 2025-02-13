@@ -1,0 +1,3 @@
+[submodule "hex"]
+	path = hex
+	url = git@github.com:bigstack-oss/hex.git

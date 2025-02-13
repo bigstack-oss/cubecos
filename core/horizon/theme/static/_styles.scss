@@ -1,0 +1,11 @@
+@import "bootstrap/styles";
+@import "horizon/styles";
+@import "components/loader";
+@import "cube";
+
+// $img-path is export from cube/_variables.scss. So define the background-image for .spin div here.
+.spin {
+    div{
+        background-image: url("#{$img-path}/cube-icon.png");
+    }
+}

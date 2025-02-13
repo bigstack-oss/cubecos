@@ -1,0 +1,14 @@
+---
+# cubesys/cubesys1_0.yml
+name: cubesys
+version: 1.0
+
+# [standalone|control|network|compute|storage|undef]
+role: undef
+
+domain: default
+region: RegionOne
+
+management: IF.1
+ha: false
+saltkey: true

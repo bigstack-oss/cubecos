@@ -1,0 +1,6 @@
+---
+# qos/qos1_0.yml
+name: qos
+version: 1.0
+
+enabled: true

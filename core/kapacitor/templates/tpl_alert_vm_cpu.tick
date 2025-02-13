@@ -1,0 +1,55 @@
+dbrp "monasca"."def"
+
+var where_filter = lambda: TRUE
+
+var data = stream
+  |from()
+    .measurement('vm.cpu.utilization_norm_perc')
+    .where(where_filter)
+    .groupBy('resource_id')
+  |eval(lambda: unixNano(now()))
+    .as('ts')
+    .keep()
+  |eval(lambda: int("value"))
+    .as('used')
+    .keep()
+
+data
+  |alert()
+    .info(lambda: int("used") <= 85 AND int("used") > 75)
+    .infoReset(lambda: int("used") <= 65)
+    .stateChangesOnly()
+    .noRecoveries()
+    .message('instance,category=CPU,severity=I,key=CPU00004I,tenant={{ .Tags.tenant_id }},instance={{ .Tags.resource_id }},vm_name={{ .Tags.vm_name }} message="project "{{ .Tags.tenant_name }}" instance "{{ .Tags.vm_name }}" cpu usage {{ .Fields.used }}% exceeds threshold 75%",metadata="{ "category": "cpu", "tenant": "{{ .Tags.tenant_id }}", "instance": "{{ .Tags.resource_id }}" }" {{ .Fields.ts }}')
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .warn(lambda: int("used") <= 95 AND int("used") > 85)
+    .warnReset(lambda: int("used") <= 75)
+    .stateChangesOnly()
+    .noRecoveries()
+    .message('instance,category=CPU,severity=W,key=CPU00005W,tenant={{ .Tags.tenant_id }},instance={{ .Tags.resource_id }},vm_name={{ .Tags.vm_name }} message="project "{{ .Tags.tenant_name }}" instance "{{ .Tags.vm_name }}" cpu usage {{ .Fields.used }}% exceeds threshold 85%",metadata="{ "category": "cpu", "tenant": "{{ .Tags.tenant_id }}", "instance": "{{ .Tags.resource_id }}" }" {{ .Fields.ts }}')
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .crit(lambda: int("used") > 95)
+    .critReset(lambda: int("used") <= 85)
+    .stateChangesOnly()
+    .noRecoveries()
+    .message('instance,category=CPU,severity=C,key=CPU00006C,tenant={{ .Tags.tenant_id }},instance={{ .Tags.resource_id }},vm_name={{ .Tags.vm_name }} message="project "{{ .Tags.tenant_name }}" instance "{{ .Tags.vm_name }}" cpu usage {{ .Fields.used }}% exceeds threshold 95%",metadata="{ "category": "cpu", "tenant": "{{ .Tags.tenant_id }}", "instance": "{{ .Tags.resource_id }}" }" {{ .Fields.ts }}')
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .info(lambda: int("used") < 50)
+    .infoReset(lambda: int("used") > 75)
+    .stateChangesOnly()
+    .noRecoveries()
+    .message('instance,category=CPU,severity=I,key=CPU00007I,tenant={{ .Tags.tenant_id }},instance={{ .Tags.resource_id }},vm_name={{ .Tags.vm_name }} message="project "{{ .Tags.tenant_name }}" instance "{{ .Tags.vm_name }}" cpu usage {{ .Fields.used }}% is normal",metadata="{ "category": "cpu", "tenant": "{{ .Tags.tenant_id }}", "instance": "{{ .Tags.resource_id }}" }" {{ .Fields.ts }}')
+    .post()
+      .endpoint('events')

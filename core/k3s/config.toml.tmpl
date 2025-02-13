@@ -1,0 +1,37 @@
+version = 2
+
+[plugins."io.containerd.internal.v1.opt"]
+  path = "/var/lib/rancher/k3s/agent/containerd"
+[plugins."io.containerd.grpc.v1.cri"]
+  stream_server_address = "127.0.0.1"
+  stream_server_port = "10010"
+  enable_selinux = false
+  enable_unprivileged_ports = true
+  enable_unprivileged_icmp = true
+  sandbox_image = "rancher/mirrored-pause:3.6"
+
+[plugins."io.containerd.grpc.v1.cri".containerd]
+  snapshotter = "overlayfs"
+  disable_snapshot_annotations = true
+
+
+[plugins."io.containerd.grpc.v1.cri".cni]
+  bin_dir = "/var/lib/rancher/k3s/data/0e6681f4002cdce946827bee7229eb1641dde5036b17cc7dcec1241294a3c52a/bin"
+  conf_dir = "/var/lib/rancher/k3s/agent/etc/cni/net.d"
+
+
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+  runtime_type = "io.containerd.runc.v2"
+
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+  SystemdCgroup = false
+
+
+
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors]
+
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+  endpoint = ["http://localhost:5080"]
+
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]
+  endpoint = ["http://localhost:5080"]

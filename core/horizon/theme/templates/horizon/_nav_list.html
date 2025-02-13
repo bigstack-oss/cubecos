@@ -1,0 +1,13 @@
+{% load horizon i18n %}
+
+<ul class="nav nav-tabs">
+  {% for component in components %}
+    {% if component.slug != 'settings' %}
+      {% if user|has_permissions:component %}
+        <li{% if current.slug == component.slug %} class="active"{% endif %}>
+          <a target="_self" href="{{ component.get_absolute_url }}" tabindex='1'>{{ component.name }}</a>
+        </li>
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+</ul>

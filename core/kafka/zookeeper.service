@@ -1,0 +1,31 @@
+[Unit]
+Description=High-available, distributed coordinator
+After=network.target
+
+[Service]
+User=zookeeper
+Group=zookeeper
+Type=simple
+
+StandardOutput=append:/var/log/zookeeper/zookeeper.log
+StandardError=append:/var/log/zookeeper/zookeeper.log
+
+ExecStart=/opt/kafka/bin/zookeeper-server-start.sh /opt/kafka/config/zookeeper.properties
+ExecStop=/opt/kafka/bin/zookeeper-server-stop.sh
+
+# Give a reasonable amount of time for the server to start up/shut down
+TimeoutSec=120
+Restart=on-failure
+RestartSec=60
+
+# check with `systemd-cgtop` command.
+Slice=zookeeper.slice
+CPUAccounting=true
+BlockIOAccounting=true
+MemoryAccounting=true
+TasksAccounting=true
+
+Environment=LOG_DIR=/var/log/zookeeper
+
+[Install]
+WantedBy=multi-user.target

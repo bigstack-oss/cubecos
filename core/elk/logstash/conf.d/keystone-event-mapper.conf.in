@@ -1,0 +1,105 @@
+# convert keystone message to event and persist to influxdb
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "transformed-logs"
+    group_id => "keystone_event_mapper"
+    client_id => "keystone_event_mapper_@CUBE_HOST@"
+    consumer_threads => "2"
+    codec => json
+  }
+}
+
+filter {
+  if [path] != "/var/log/httpd/keystone_access.log" {
+    drop {
+    }
+  }
+
+  grok {
+    patterns_dir => ["/etc/logstash/patterns.txt"]
+    match => { "server_response" => "%{HTTP_STATUS_TYPE:http_type}%{HTTP_STATUS_CODE:http_code}" }
+  }
+
+  # about creation
+  if [method] == "POST" {
+    grok {
+      match => { "request_page" => "/v3/%{NOTSPACE:family}" }
+    }
+    mutate {
+      add_field => {
+        "event_msg" => "%{[method]} %{[request_page]} %{[http_type]}"
+      }
+    }
+  }
+
+  # about deletion
+  if [method] == "DELETE" {
+    grok {
+      match => { "request_page" => "/v3/%{NOTSPACE:family}/%{NOTSPACE:target}" }
+    }
+    mutate {
+      add_field => {
+        "event_msg" => "%{[method]} /v3/%{[family]} %{[http_type]}"
+      }
+    }
+  }
+
+  translate {
+    field => "[event_msg]"
+    destination => "[event][key]"
+    dictionary_path => "/etc/logstash/eventdb/log-to-event-key.yml"
+  }
+
+  if ![event][key] {
+    drop {
+    }
+  }
+
+  translate {
+    field => "[event][key]"
+    destination => "[event][message]"
+    dictionary_path => "/etc/logstash/eventdb/event-key-to-msg.yml"
+  }
+  grok {
+    patterns_dir => ["/etc/logstash/patterns.txt"]
+    match => { "[event][key]" => "%{EVENT_CAT:category}%{EVENT_ID:id}%{EVENT_SEVERITY:severity}" }
+    add_field => {
+      "[event][category]" => "%{category}"
+      "[event][severity]" => "%{severity}"
+    }
+  }
+  ruby {
+    code => "event.set('[event][timestamp]', event.get('@timestamp').to_i * 1000)"
+  }
+
+  if [target] {
+    mutate {
+      add_field => {
+        "eventlog" => 'system,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]},family=%{[family]},target=%{[target]} message="%{[event][message]}",metadata="{ "category": "keystone", "family": "%{[family]}", "target": "%{[target]}" }" %{[event][timestamp]}'
+      }
+    }
+  }
+  else {
+    mutate {
+      add_field => {
+        "eventlog" => 'system,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]},family=%{[family]} message="%{[event][message]}",metadata="{ "category": "keystone", "family": "%{[family]}" }" %{[event][timestamp]}'
+      }
+    }
+  }
+}
+
+output {
+  #file {
+  #  path => "/var/log/logstash/debug-keystone-event-mapper.log"
+  #  codec => rubydebug
+  #}
+  http {
+    url => "http://@CUBE_SHARED_ID@:9092/write?db=events&precision=ms&rp=def"
+    format => "message"
+    content_type => "application/json"
+    http_method => "post"
+    message => "%{eventlog}"
+  }
+}

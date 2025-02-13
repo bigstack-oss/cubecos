@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chartmuseum-nodeport
+  namespace: chartmuseum
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: http
+  selector:
+    app.kubernetes.io/instance: chartmuseum
+    app.kubernetes.io/name: chartmuseum
+  type: NodePort

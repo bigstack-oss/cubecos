@@ -1,0 +1,3 @@
+Defaults:masakari !requiretty
+
+masakari ALL = (root) NOPASSWD: /bin/privsep-helper 

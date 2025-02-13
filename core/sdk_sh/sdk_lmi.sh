@@ -1,0 +1,13 @@
+# CUBE SDK
+
+# PROG must be set before sourcing this file
+if [ -z "$PROG" ]; then
+    echo "Error: PROG not set" >&2
+    exit 1
+fi
+
+lmi_idp_config()
+{
+    local SHARED_ID=$1
+    terraform-cube.sh apply -auto-approve -target=module.keycloak_lmi -var cube_controller=$SHARED_ID >/dev/null
+}

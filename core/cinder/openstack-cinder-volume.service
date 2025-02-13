@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenStack Cinder Volume Server
+After=syslog.target network.target
+
+[Service]
+LimitNOFILE=131072
+LimitNPROC=131072
+Type=simple
+User=cinder
+Environment="MALLOC_ARENA_MAX=1"
+Environment="MALLOC_MMAP_THRESHOLD_=131072"
+Environment="MALLOC_TRIM_THRESHOLD_=262144"
+ExecStart=/usr/bin/cinder-volume --config-file /usr/share/cinder/cinder-dist.conf --config-file /etc/cinder/cinder.conf --config-dir /etc/cinder/cinder.d --logfile /var/log/cinder/volume.log
+Restart=on-failure
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

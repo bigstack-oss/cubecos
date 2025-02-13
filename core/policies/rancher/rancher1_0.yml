@@ -1,0 +1,6 @@
+---
+# rancher/rancher1_0.yml
+name: rancher
+version: 1.0
+
+enabled: true

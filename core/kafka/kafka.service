@@ -1,0 +1,31 @@
+[Unit]
+Description=High-available, distributed message broker
+After=network.target
+
+[Service]
+User=kafka
+Group=kafka
+Type=simple
+
+StandardOutput=append:/var/log/kafka/kafka.log
+StandardError=append:/var/log/kafka/kafka.log
+
+ExecStart=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/server.properties
+ExecStop=/opt/kafka/bin/kafka-server-stop.sh
+
+# Give a reasonable amount of time for the server to start up/shut down
+TimeoutSec=120
+Restart=on-failure
+RestartSec=60
+
+# check with `systemd-cgtop` command.
+Slice=kafka.slice
+CPUAccounting=true
+BlockIOAccounting=true
+MemoryAccounting=true
+TasksAccounting=true
+
+Environment=LOG_DIR=/var/log/kafka
+
+[Install]
+WantedBy=multi-user.target

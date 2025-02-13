@@ -1,0 +1,7 @@
+---
+# ntp/ntp1_0.yml
+name: qos
+version: 1.0
+
+enabled: true
+server: pool.ntp.org

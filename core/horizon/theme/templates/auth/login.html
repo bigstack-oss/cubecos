@@ -1,0 +1,34 @@
+{% load i18n branding %}
+<!DOCTYPE html>
+<html lang="en" xml:lang="en" class="login-cube">
+  <head>
+    <meta content='text/html; charset=utf-8' http-equiv='Content-Type' />
+    <title>{% trans "Login" %} - {% site_branding %}</title>
+    {% include "_stylesheets.html" %}
+
+    {% include "horizon/_conf.html" %}
+    {% include "horizon/client_side/_script_loader.html" %}
+    {% include "horizon/_custom_head_js.html" %}
+
+  </head>
+  <body id="splash" ng-app='horizon.app' class="login-cube">
+    <a href="http://www.bigstack.co/" id="bigstack">
+      <img src="../../static/themes/cube/images/bigstack-logo.png" alt="Bigstack" />
+    </a>
+    <div class="container">
+      <div class="row-fluid">
+        <div class="span12">
+          <div id="brand">
+            <img src="../../static/themes/cube/images/cube-logo.png" width="250" height="83" style="margin:0" fetchpriority="high" >
+          </div><!--/#brand-->
+        </div><!--/.span*-->
+        {% include 'auth/_login.html' %}
+      </div><!--/.row-fluid-->
+    </div><!--/.container-->
+
+    {% block js %}
+      {% include "horizon/_scripts.html" %}
+    {% endblock %}
+
+  </body>
+</html>

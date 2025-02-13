@@ -1,0 +1,18 @@
+{
+  "presets": [
+    "next/babel"
+  ],
+  "plugins": [
+    ["transform-define", "./env-config.js"],
+    ["import", {
+      "libraryName": "antd"
+    }],
+    [
+      "inline-import",
+      {
+        "extensions": [".css", ".scss", ".png", ".jpg"]
+      }
+    ],
+    ["styled-components", { "ssr": true, "displayName": true, "preprocess": false } ]
+  ]
+}

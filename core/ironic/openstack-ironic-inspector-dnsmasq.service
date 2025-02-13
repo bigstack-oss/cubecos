@@ -1,0 +1,12 @@
+[Unit]
+Description=PXE boot dnsmasq service for Ironic Inspector
+After=openvswitch.service network.target
+
+[Service]
+Type=forking
+ExecStart=/sbin/dnsmasq --conf-file=/etc/ironic-inspector/dnsmasq.conf
+ExecReload=/usr/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
+Alias=openstack-ironic-inspector-dnsmasq.service

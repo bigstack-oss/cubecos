@@ -1,0 +1,102 @@
+[DEFAULT]
+enabled_share_protocols = NFS,CIFS
+enabled_share_backends = generic
+default_share_type = tenant_share_type
+share_name_template = share-%s
+rootwrap_config = /etc/manila/rootwrap.conf
+api_paste_config = /etc/manila/api-paste.ini
+auth_strategy = keystone
+#my_ip = <CONTROLLER>
+#transport_url = rabbit://openstack:<RABBIT_PASS>@<CONTROLLER>
+
+[database]
+#connection = mysql+pymysql://manila:<MANILA_DBPASS>@<CONTROLLER>/manila
+
+[keystone_authtoken]
+service_token_roles_required = true
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+project_name = service
+username = manila
+#password = <MANILA_PASS>
+#memcached_servers = <CONTROLLER>:11211
+#www_authenticate_uri = http://<CONTROLLER>:5000
+#auth_url = http://<CONTROLLER>:5000
+
+[oslo_concurrency]
+lock_path = /var/lock/manila
+
+[glance]
+url = http://<CONTROLLER>:9696
+www_authenticate_uri = http://<CONTROLLER>:5000
+auth_url = http://<CONTROLLER>:5000
+memcached_servers = <CONTROLLER>:11211
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+region_name = <REGION_NAME>
+project_name = admin
+username = admin_cli
+password = <ADMIN_CLI_PASS>
+
+[neutron]
+url = http://<CONTROLLER>:9696
+www_authenticate_uri = http://<CONTROLLER>:5000
+auth_url = http://<CONTROLLER>:5000
+memcached_servers = <CONTROLLER>:11211
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+region_name = <REGION_NAME>
+project_name = admin
+username = admin_cli
+password = <ADMIN_CLI_PASS>
+
+[nova]
+www_authenticate_uri = http://<CONTROLLER>:5000
+auth_url = http://<CONTROLLER>:5000
+memcached_servers = <CONTROLLER>:11211
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+region_name = <REGION_NAME>
+project_name = admin
+username = admin_cli
+password = <ADMIN_CLI_PASS>
+
+[cinder]
+www_authenticate_uri = http://<CONTROLLER>:5000
+auth_url = http://<CONTROLLER>:5000
+memcached_servers = <CONTROLLER>:11211
+auth_type = password
+project_domain_name = default
+user_domain_name = default
+region_name = <REGION_NAME>
+project_name = admin
+username = admin_cli
+password = <ADMIN_CLI_PASS>
+
+[cephfsnative]
+driver_handles_share_servers = false
+share_backend_name = CEPHFSNATIVE
+share_driver = manila.share.drivers.cephfs.driver.CephFSDriver
+cephfs_conf_path = /etc/ceph/ceph.conf
+cephfs_protocol_helper_type = CEPHFS
+cephfs_auth_id = manila
+cephfs_cluster_name = ceph
+cephfs_enable_snapshots = true
+
+[generic]
+share_backend_name = GENERIC
+share_driver = manila.share.drivers.generic.GenericShareDriver
+driver_handles_share_servers = true
+connect_share_server_to_tenant_network = true
+service_instance_flavor_id = 653443
+service_image_name = manila-service-image
+service_instance_user = manila
+service_instance_password = manila
+# manila_service_keypair_name = manila_ssh_key
+# path_to_private_key = /etc/manila/manila_ssh_key
+# path_to_public_key = /etc/manila/manila_ssh_key.pub
+interface_driver = manila.network.linux.interface.OVSInterfaceDriver

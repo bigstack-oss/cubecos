@@ -1,0 +1,3 @@
+Defaults:manila !requiretty
+
+manila ALL = (root) NOPASSWD: /usr/local/bin/manila-rootwrap /etc/manila/rootwrap.conf *

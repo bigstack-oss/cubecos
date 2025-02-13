@@ -1,0 +1,79 @@
+@import "cube/variables";
+@import "cube/icons";
+@import "cube/fonts";
+@import "cube/navbar";
+@import "cube/login";
+
+b, strong {
+  font-weight: 600;
+}
+
+body {
+  font-family: $font-family-base;
+  &:not(#splash) {
+    background-image: none;
+  }
+}
+
+h2 {
+  color: inherit;
+  font-size: 26px;
+  font-weight: 300;
+}
+
+#main_content {
+  padding: 0;
+  width: 100%;
+}
+
+#content_body {
+  left: 0;
+  max-width: none;
+  position: absolute;
+  right: 0;
+  top: 102px;
+  padding-left: 0;
+}
+
+#monitoring {
+  font-family: $font-family-base;
+}
+
+.page-header {
+  font-family: $font-family-base;
+  font-weight: 300;
+}
+
+p {
+  font-family: $font-family-base;
+}
+
+.table_title, .table_header {
+  h3 {
+    font-family: $font-family-base;
+  }
+}
+
+.rhlogin .form-control {
+    border: 0;
+    height: 26px;
+    border-radius: 0px;
+}
+
+.rhlogin .modal-dialog {
+    width: 390px;
+}
+
+
+.topbar {
+  background: transparent;
+  border-bottom: 0;
+  padding: 0;
+  margin: 20px 0;
+  min-width: 0;
+}
+
+.breadcrumb {
+  margin-left: -15px;
+  margin-right: -15px;
+}

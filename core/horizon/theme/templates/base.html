@@ -1,0 +1,62 @@
+{% load branding i18n %}
+{% load context_selection %}
+{% load breadcrumb_nav %}
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content='IE=edge' http-equiv='X-UA-Compatible' />
+    <meta content='text/html; charset=utf-8' http-equiv='Content-Type' />
+    {% include "horizon/_custom_meta.html" %}
+    <title>{% block title %}{% endblock %} - {% site_branding %}</title>
+    {% comment %} Load CSS sheets before Javascript  {% endcomment %}
+    {% block css %}
+      {% include "_stylesheets.html" %}
+    {% endblock %}
+    {% iframe_embed_settings %}
+    {% include "horizon/_conf.html" %}
+    {% include "horizon/client_side/_script_loader.html" %}
+    {% include "horizon/_custom_head_js.html" %}
+    {% block ng_route_base %} {% endblock %}
+  </head>
+  <body id="{% block body_id %}{% endblock %}" ng-app='horizon.app' ng-strict-di>
+    <noscript>
+      <div class="alert alert-danger text-center javascript-disabled">
+        {% trans "This application requires JavaScript to be enabled in your web browser." %}
+      </div>
+    </noscript>
+    {% block content %}
+      <div id='main_content'>
+        {% include "horizon/_messages.html" %}
+        {% block sidebar %}
+          {% include 'horizon/common/_sidebar.html' %}
+        {% endblock %}
+        <div id='content_body'>
+          <div class='container-fluid'>
+            <div class="row">
+              <div class="col-xs-12">
+                {% block breadcrumb_nav %}
+                  {% breadcrumb_nav %}
+                {% endblock %}
+
+                {% block page_header %}
+                  {% include "horizon/common/_page_header.html" with title=page_title %}
+                {% endblock %}
+                {% block main %}{% endblock %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endblock %}
+    <div id="footer">
+      {% block footer %}
+        {% include "_footer.html" %}
+      {% endblock %}
+    </div>
+    {% block js %}
+      {% include "horizon/_scripts.html" %}
+    {% endblock %}
+    <div id="modal_wrapper"></div>
+  </body>
+</html>

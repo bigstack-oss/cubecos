@@ -1,0 +1,64 @@
+default:
+  access_token_expire: 3600
+  access_token_renew: 1800
+  cafile: ''
+  cors_allow_origins: []
+  database_url: mysql://skyline:@SKYLINE_DB_PASSWORD@@@SHARED_ID@:3306/skyline
+  debug: @DEBUG@
+  log_dir: /var/log/skyline
+  log_file: skyline.log
+  policy_file_path: /etc/skyline/policy
+  policy_file_suffix: policy.yaml
+  prometheus_basic_auth_password: ''
+  prometheus_basic_auth_user: ''
+  prometheus_enable_basic_auth: false
+  prometheus_endpoint: http://localhost:9091
+  secret_key: aCtmgbcUqYUy_HNVg5BDXCaeJgJQzHJXwqbXr0Nmb2o
+  session_name: session
+  ssl_enabled: true
+openstack:
+  base_domains:
+  - default
+  default_region: RegionOne
+  enforce_new_defaults: true
+  extension_mapping:
+    vpnaas: neutron_vpn
+  interface_type: public
+  keystone_url: http://@SHARED_ID@:5000/v3/
+  nginx_prefix: /api/openstack
+  reclaim_instance_interval: 604800
+  service_mapping:
+    compute: nova
+    dns: designate
+    identity: keystone
+    image: glance
+    ha: masakari
+    key-manager: barbican
+    load-balancer: octavia
+    network: neutron
+    object-store: swift
+    orchestration: heat
+    placement: placement
+    sharev2: manilav2
+    volumev3: cinder
+  sso_enabled: true
+  sso_protocols:
+  - mapped
+  sso_region: RegionOne
+  system_admin_roles:
+  - admin
+  system_project: service
+  system_project_domain: @DOMAIN@
+  system_reader_roles:
+  - _member_
+  system_user_domain: @DOMAIN@
+  system_user_name: skyline
+  system_user_password: @SKYLINE_SERVICE_PASSWORD@
+setting:
+  base_settings:
+  - flavor_families
+  flavor_families:
+  - architecture: x86_architecture
+    categories:
+    - name: general_purpose
+      properties: []

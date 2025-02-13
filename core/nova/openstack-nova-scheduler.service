@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenStack Nova Scheduler Server
+After=syslog.target network.target
+
+[Service]
+Type=notify
+NotifyAccess=all
+Restart=always
+User=nova
+ExecStart=/usr/bin/nova-scheduler --config-file /etc/nova/nova.conf --config-dir /etc/nova/nova.d
+
+[Install]
+WantedBy=multi-user.target

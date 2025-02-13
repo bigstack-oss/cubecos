@@ -1,0 +1,13 @@
+<li class="dropdown">
+<ul class="dropdown-menu">
+    {% if domain_supported %}
+    <li>{{ domain_name }}</li>
+    <li>&middot;</li>
+    {% endif %}
+    <li>{{ project_name }}</li>
+    {% if multi_region %}
+    <strong>&middot;</strong>
+    <span>{{ region_name }}</span>
+    {% endif %}
+  </ul>
+</li>

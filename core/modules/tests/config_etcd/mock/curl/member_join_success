@@ -1,0 +1,11 @@
+#!/bin/bash
+
+cat << EndOfMessage
+{
+  "code": 200,
+  "data": {
+    "member_id": "9e825bdb4a1d0167",
+    "cluster_info": "ETCD_NAME=\"node4\"\nETCD_INITIAL_CLUSTER=\"demo-etcd-1=http://10.240.0.1:2380,demo-etcd-2=http://10.240.0.2:2380,demo-etcd-3=http://10.240.0.3:2380,node4=http://10.240.0.4:2380\"\nETCD_INITIAL_CLUSTER_STATE=\"existing\""
+  }
+}
+EndOfMessage

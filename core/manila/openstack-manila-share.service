@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenStack Manila Share Service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=manila
+ExecCondition=/usr/sbin/hex_sdk is_first_three_compute_node
+ExecStart=/usr/bin/manila-share --config-file /usr/share/manila/manila-dist.conf --config-file /etc/manila/manila.conf --logfile /var/log/manila/share.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+kind: Service
+apiVersion: v1
+metadata:
+ name: cube-controller
+spec:
+ clusterIP: None
+---
+kind: Endpoints
+apiVersion: v1
+metadata:
+ name: cube-controller
+subsets:
+ - addresses:
+     - ip: 172.17.0.2

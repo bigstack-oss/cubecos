@@ -1,0 +1,62 @@
+# Define the monitoring processes as follows:
+#    process_name: [Name of the process as it in 'ps -ef'.]
+#    start_command: [Start command of the process.]
+#    pre_start_command: [Command which is executed before start_command.]
+#    post_start_command: [Command which is executed after start_command.]
+#    restart_command: [Restart command of the process.]
+#    pre_restart_command: [Command which is executed before restart_command.]
+#    post_restart_command: [Command which is executed after restart_command.]
+#    run_as_root: [Bool value whether to execute commands as root authority.]
+#
+# These definitions need to be set according to the environment to use.
+# Sample of definitions is shown below.
+#-
+#    # libvirt-bin
+#    process_name: /usr/sbin/libvirtd
+#    start_command: systemctl start libvirtd
+#    pre_start_command:
+#    post_start_command:
+#    restart_command: systemctl restart libvirtd
+#    pre_restart_command:
+#    post_restart_command:
+#    run_as_root: True
+-
+    # nova-compute
+    process_name: /usr/bin/nova-compute
+    start_command: systemctl start openstack-nova-compute
+    pre_start_command:
+    post_start_command:
+    restart_command: systemctl restart openstack-nova-compute
+    pre_restart_command:
+    post_restart_command:
+    run_as_root: True
+-
+    # instancemonitor
+    process_name: /usr/bin/python3 /usr/local/bin/masakari-instancemonitor
+    start_command: systemctl start masakari-instancemonitor
+    pre_start_command:
+    post_start_command:
+    restart_command: systemctl restart masakari-instancemonitor
+    pre_restart_command:
+    post_restart_command:
+    run_as_root: True
+-
+    # hostmonitor
+    process_name: /usr/bin/python3 /usr/local/bin/masakari-hostmonitor
+    start_command: systemctl start masakari-hostmonitor
+    pre_start_command:
+    post_start_command:
+    restart_command: systemctl restart masakari-hostmonitor
+    pre_restart_command:
+    post_restart_command:
+    run_as_root: True
+-
+    # sshd
+    process_name: /usr/sbin/sshd
+    start_command: systemctl start sshd
+    pre_start_command:
+    post_start_command:
+    restart_command: systemctl restart sshd
+    pre_restart_command:
+    post_restart_command:
+    run_as_root: True

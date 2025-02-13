@@ -1,0 +1,8 @@
+# Dell PowerEdge XRxxxxx (ex: XR4510c, XR4520c)
+
+if /usr/sbin/dmidecode -s system-product-name | grep -q -i "poweredge xr"; then
+    echo "Dell PowerEdge XR series detected"
+    exit 0
+else
+    exit 1
+fi

@@ -1,0 +1,4 @@
+[program:fluxbox]
+command=fluxbox
+priority=30
+autorestart=true

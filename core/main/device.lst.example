@@ -1,0 +1,5 @@
+vendor=dell,proto=lanplus,ip=10.32.10.11,user=admin,pass=bigstackcoltd
+vendor=dell,proto=lanplus,ip=10.32.10.15,user=admin,pass=bigstackcoltd,hostname=dell-eufi,ping=10.32.10.115
+vendor=hp,proto=lanplus,ip=10.32.10.2,ping=10.32.20.221,user=admin,pass=admin
+vendor=dell,proto=lanplus,ip=10.32.10.14,user=admin,pass=bigstackcoltd
+hostname=DESKTOP-ENMHMJG

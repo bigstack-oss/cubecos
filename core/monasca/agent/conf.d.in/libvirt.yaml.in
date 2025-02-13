@@ -1,0 +1,30 @@
+init_config:
+  username: "nova"
+  password: "@NOVA_PASS@"
+  project_name: "service"
+  user_domain_name: "default"
+  project_domain_name: "default"
+  auth_url: "http://@CUBE_SHARED_ID@:5000"
+  region_name: "@CUBE_REGION@"
+  endpoint_type: "admin"
+  cache_dir: "/dev/shm"
+  nova_refresh: 14400
+  metadata:
+    - scale_group
+    - vm_name
+    - tenant_name
+  customer_metadata:
+    - scale_group
+  disk_collection_period: 0
+  max_ping_concurrency: 8
+  vm_probation: 300
+  alive_only: false
+  network_use_bits: false
+  vm_cpu_check_enable: true
+  vm_disks_check_enable: true
+  vm_network_check_enable: true
+  vm_extended_disks_check_enable: false
+  vm_ping_check_enable: false
+  vnic_collection_period: 0
+
+instances: []

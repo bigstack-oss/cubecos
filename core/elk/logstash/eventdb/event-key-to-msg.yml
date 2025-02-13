@@ -1,0 +1,25 @@
+SYS00001I: system info alert
+SYS00002W: system warning alert
+SYS00003E: system error alert
+SYS00004C: system critical alert
+
+KSN00001I: created a keystone tenant
+KSN00002I: deleted a keystone tenant
+
+SDN00001I: created virtual port
+SDN00002I: deleted virtual port
+
+CEP00001I: has failed
+CEP00002W: osd is down
+
+CMP01001I: live host evacuation is performed (pre-failure)
+CMP01002I: host evacuation is performed (post-failure)
+CMP02001I: instance HA segment is created
+CMP02002I: instance HA segment is deleted
+CMP02003I: a compute node in maintenance mode is back to be in production
+
+PLC00001I: cube node policy is successfully applied
+PLC00002I: cube cluster policy is successfully applied
+
+SRV01001I: service restart due to memory usage exceeds defined threshold
+SRV01002I: identified and fixed a stale API service

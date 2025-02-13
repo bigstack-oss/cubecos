@@ -1,0 +1,12 @@
+--- ovn-23.03.0/northd/northd.c.orig	2023-03-03 19:37:48.000000000 +0100
++++ ovn-23.03.0/northd/northd.c	2023-08-03 08:00:25.907692205 +0200
+@@ -13886,9 +13886,6 @@
+                 ds_put_format(match, " && is_chassis_resident(\"%s\")",
+                               nat->logical_port);
+             } else {
+-                /* Flows for NAT rules that are centralized are only
+-                * programmed on the gateway chassis. */
+-                priority += 128;
+                 ds_put_format(match, " && is_chassis_resident(%s)",
+                               l3dgw_port->cr_port->json_key);
+             }

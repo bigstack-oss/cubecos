@@ -1,0 +1,32 @@
+# Persist telegraf line protocol string to influxdb high cardinality rp
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "telegraf-events-metrics"
+    group_id => "telegraf_events_persister"
+    client_id => "telegraf_events_persister_@CUBE_HOST@"
+    consumer_threads => "2"
+  }
+}
+
+filter {
+  # Remove leading and trailing whitspaces (including newline etc. etc.)
+  mutate {
+    strip => "message"
+  }
+}
+
+output {
+  #file {
+  #  path => "/var/log/logstash/debug-telegraf-event-persister.log"
+  #  codec => rubydebug
+  #}
+  http {
+    url => "http://@CUBE_SHARED_ID@:9092/write?db=events&precision=ns&rp=def"
+    format => "message"
+    content_type => "application/json"
+    http_method => "post"
+    message => "%{message}"
+  }
+}

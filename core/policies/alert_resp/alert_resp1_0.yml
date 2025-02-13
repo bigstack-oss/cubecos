@@ -1,0 +1,6 @@
+---
+# alert_resp/alert_resp1_0.yml
+name: alert_resp
+version: 1.0
+
+enabled: true

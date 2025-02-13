@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenStack Senlin Conductor
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=senlin
+ExecStart=/usr/bin/senlin-conductor --config-file /usr/share/senlin/senlin-dist.conf --config-file /etc/senlin/senlin.conf --logfile /var/log/senlin/senlin-conductor.log
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

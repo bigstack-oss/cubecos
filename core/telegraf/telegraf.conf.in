@@ -1,0 +1,120 @@
+[agent]
+interval = "60s"
+
+[[inputs.cpu]]
+percpu = false
+totalcpu = true
+collect_cpu_time = false
+report_active = false
+[inputs.cpu.tags]
+  role = "cube"
+
+[[inputs.disk]]
+ignore_fs = ["tmpfs", "devtmpfs", "devfs"]
+mount_points = ["/"]
+[inputs.disk.tags]
+  role = "cube"
+
+[[inputs.diskio]]
+[inputs.diskio.tags]
+  role = "cube"
+
+[[inputs.kernel]]
+[inputs.kernel.tags]
+  role = "cube"
+
+[[inputs.mem]]
+[inputs.mem.tags]
+  role = "cube"
+
+[[inputs.processes]]
+[inputs.processes.tags]
+  role = "cube"
+
+[[inputs.swap]]
+[inputs.swap.tags]
+  role = "cube"
+
+[[inputs.system]]
+[inputs.system.tags]
+  role = "cube"
+
+[[inputs.net]]
+interfaces = ["eth*"]
+[inputs.net.tags]
+  role = "cube"
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk -f json cube_stats" ]
+data_format = "json"
+interval = "5m"
+name_override = "system.usage"
+tag_keys = [ "program", "host" ]
+timeout = "30s"
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk -f json cube_disk_stats /var/lib /var/log" ]
+timeout = "30s"
+interval = "30m"
+name_override = "system.disk.usage"
+data_format = "json"
+tag_keys = [ "host", "path", "unit" ]
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk -f line network_virtual_router_stats" ]
+interval = "5m"
+timeout = "1m"
+data_format = "influx"
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk check_host_stats" ]
+timeout = "5m"
+interval = "5m"
+name_override = "node.health"
+data_format = "json"
+tag_keys = [ "node" ]
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk -f line gpu_host_stats" ]
+interval = "5m"
+timeout = "1m"
+data_format = "influx"
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk -f line gpu_vm_stats" ]
+interval = "5m"
+timeout = "1m"
+data_format = "influx"
+
+[[inputs.exec]]
+commands = [ "sudo /usr/sbin/hex_sdk network_host_ping" ]
+interval = "5m"
+timeout = "1m"
+data_format = "influx"
+
+[[outputs.kafka]]
+brokers = [ @KAFKA_HOSTS@ ]
+compression_codec = 1
+data_format = "influx"
+max_retry = 3
+required_acks = -1
+topic = "telegraf-hc-metrics"
+namepass = [ "vrouter.top", "sflow" ]
+
+[[outputs.kafka]]
+brokers = [ @KAFKA_HOSTS@ ]
+compression_codec = 1
+data_format = "influx"
+max_retry = 3
+required_acks = -1
+topic = "telegraf-events-metrics"
+namepass = [ "instance" ]
+
+[[outputs.kafka]]
+brokers = [ @KAFKA_HOSTS@ ]
+compression_codec = 1
+data_format = "influx"
+max_retry = 3
+required_acks = -1
+topic = "telegraf-metrics"
+namedrop = [ "vrouter.top", "sflow", "instance" ]

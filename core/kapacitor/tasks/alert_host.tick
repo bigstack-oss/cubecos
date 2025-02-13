@@ -1,0 +1,27 @@
+dbrp "telegraf"."def"
+
+var data = stream
+  |from()
+    .measurement('node.health')
+    .groupBy('node')
+  |eval(lambda: unixNano(now()))
+    .as('ts')
+    .keep()
+
+data
+  |alert()
+    .info(lambda: int("status") == 1)
+    .message('system,category=NET,severity=I,key=NET00001I,node={{ .Tags.node }} message="node "{{ .Tags.node }}" is reachable",metadata="{ "category": "net", "node": "{{ .Tags.node }}" }" {{ .Fields.ts }}')
+    .stateChangesOnly()
+    .noRecoveries()
+    .post()
+      .endpoint('events')
+
+data
+  |alert()
+    .warn(lambda: int("status") == 0)
+    .message('system,category=NET,severity=W,key=NET00002W,node={{ .Tags.node }} message="node "{{ .Tags.node }}" is unreachable",metadata="{ "category": "net", "node": "{{ .Tags.node }}" }" {{ .Fields.ts }}')
+    .stateChangesOnly()
+    .noRecoveries()
+    .post()
+      .endpoint('events')

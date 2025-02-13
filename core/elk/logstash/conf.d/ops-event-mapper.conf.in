@@ -1,0 +1,143 @@
+# convert openstack messagev2 notifications to event and persist to influxdb
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "notifications.info"
+    group_id => "ops_event_mapper"
+    client_id => "ops_event_mapper_@CUBE_HOST@"
+    consumer_threads => "2"
+    codec => json
+  }
+}
+
+filter {
+  json {
+    source => "oslo.message"
+  }
+  mutate {
+    remove_field => [ "oslo.message", "[payload][launched_at]" ]
+  }
+  if ![event_type] {
+    drop {
+    }
+  }
+  date {
+    match => [
+      "[_context][timestamp]",
+      "yyyy-MM-dd HH:mm:ss.SSSSSS"
+    ]
+    target => "[_context][timestamp]"
+  }
+  date {
+    match => [
+      "[payload][audit_period_beginning]",
+      "yyyy-MM-dd HH:mm:ss"
+    ]
+    target => "[payload][audit_period_beginning]"
+  }
+  date {
+    match => [
+      "[payload][audit_period_ending]",
+      "yyyy-MM-dd HH:mm:ss"
+    ]
+    target => "[payload][audit_period_ending]"
+  }
+
+  translate {
+    field => "[event_type]"
+    destination => "[event][key]"
+    dictionary_path => "/etc/logstash/eventdb/log-to-event-key.yml"
+  }
+
+  if [event][key] {
+    translate {
+      field => "[event][key]"
+      destination => "[event][message]"
+      dictionary_path => "/etc/logstash/eventdb/event-key-to-msg.yml"
+    }
+    grok {
+      patterns_dir => ["/etc/logstash/patterns.txt"]
+      match => { "[event][key]" => "%{EVENT_CAT:category}%{EVENT_ID:id}%{EVENT_SEVERITY:severity}" }
+      add_field => {
+        "[event][category]" => "%{category}"
+        "[event][severity]" => "%{severity}"
+        "[event][shared_tags]" => "category=%{category},severity=%{severity},key=%{[event][key]}"
+      }
+    }
+    mutate {
+      remove_field => [ "category", "id", "severity" ]
+    }
+    ruby {
+      code => "event.set('[event][timestamp]', event.get('@timestamp').to_i * 1000)"
+    }
+    if ("KSN" in [event][category]) {
+      mutate {
+        add_field => {
+          "[event][tags]" => 'user_id=%{[payload][initiator][user_id]}'
+          "[event][fields]" => 'message="%{[payload][initiator][username]} %{[event][message]}",project_id="%{[payload][resource_info]}"'
+          "[event][metadata]" => 'metadata="{ "category": "keystone", "project_id": "%{[payload][resource_info]}" }"'
+        }
+      }
+    }
+    else if ("SDN" in [event][category] and [_context][user_name] != "admin_cli" and [_context][project_name] != "admin") {
+      if [payload][port][device_id] {
+        mutate {
+          add_field => {
+            "[event][tags]" => 'network_id=%{[payload][port][network_id]},project_id=%{[payload][port][project_id]},user_id=%{[_context][user_id]},device_id=%{[payload][port][device_id]}'
+            "[event][metadata]" => 'metadata="{ "category": "sdn", "network_id": "%{[payload][port][network_id]}", "device_id": "%{[payload][port][device_id]}", "port_id": "%{[payload][port][id]}" }"'
+          }
+        }
+      }
+      else {
+        mutate {
+          add_field => {
+            "[event][tags]" => 'network_id=%{[payload][port][network_id]},project_id=%{[payload][port][project_id]},user_id=%{[_context][user_id]}'
+            "[event][metadata]" => 'metadata="{ "category": "sdn", "network_id": "%{[payload][port][network_id]}", "port_id": "%{[payload][port][id]}" }"'
+          }
+        }
+      }
+      if [payload][port][fixed_ips][0][ip_address] {
+        mutate {
+          add_field => {
+            "[event][fields]" => 'message="%{[_context][user_name]} %{[event][message]} %{[payload][port][fixed_ips][0][ip_address]} (%{[payload][port][mac_address]})",port_id="%{[payload][port][id]}",mac_address="%{[payload][port][mac_address]}",ip_address="%{[payload][port][fixed_ips][0][ip_address]}"'
+          }
+        }
+      }
+      else {
+        mutate {
+          add_field => {
+            "[event][fields]" => 'message="%{[_context][user_name]} %{[event][message]} %{[payload][port][mac_address]}",port_id="%{[payload][port][id]}",mac_address="%{[payload][port][mac_address]}"'
+          }
+        }
+      }
+    }
+    mutate {
+      add_field => {
+        "eventlog" => 'system,%{[event][shared_tags]},%{[event][tags]} %{[event][fields]},%{[event][metadata]} %{[event][timestamp]}'
+      }
+    }
+  }
+}
+
+output {
+  file {
+    path => "/var/log/logstash/debug-ops-event-mapper.log"
+    codec => rubydebug
+  }
+  opensearch {
+    index => "ops-%{+YYYYMMdd}-notify"
+    hosts => [ "@CUBE_SHARED_ID@" ]
+    template_name => "default"
+    template => "/etc/logstash/default-ec-template.json"
+  }
+  if [event][key] {
+    http {
+      url => "http://@CUBE_SHARED_ID@:9092/write?db=events&precision=ms&rp=def"
+      format => "message"
+      content_type => "application/json"
+      http_method => "post"
+      message => "%{eventlog}"
+    }
+  }
+}

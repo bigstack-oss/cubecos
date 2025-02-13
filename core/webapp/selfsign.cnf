@@ -1,0 +1,37 @@
+# Reference: http://pki-tutorial.readthedocs.org/en/latest/simple/server.conf.html
+# TLS server certificate request
+
+# This file is used by the openssl req command. The subjectAltName cannot be
+# prompted for and must be specified in the SAN environment variable.
+
+[ default ]
+S_C                     = TW
+subject_country         = ${ENV::S_C}
+S_ST                    = Taiwan
+subject_state           = ${ENV::S_ST}
+S_CN                    = bigstack.co
+subject_common_name     = ${ENV::S_CN}
+
+[ req ]
+default_bits            = 2048                  # RSA key size
+encrypt_key             = no                    # Protect private key
+default_md              = sha256                # MD to use
+utf8                    = yes                   # Input is UTF-8
+string_mask             = utf8only              # Emit UTF-8 strings
+prompt                  = no                    # No prompt for DN
+distinguished_name      = server_dn             # DN template
+x509_extensions         = server_ext            # Desired extensions
+
+[ server_dn ]
+C=$subject_country
+ST=$subject_state
+L=Taipei
+O=Bigstack Ltd
+OU=CubeOS
+CN=$subject_common_name
+emailAddress=hello@bigstack.co
+
+[ server_ext ]
+keyUsage                = digitalSignature,keyEncipherment
+extendedKeyUsage        = serverAuth
+subjectKeyIdentifier    = hash

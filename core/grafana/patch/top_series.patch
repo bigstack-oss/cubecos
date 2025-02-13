@@ -1,0 +1,111 @@
+diff --git a/public/app/plugins/panel/graph/graph.ts b/public/app/plugins/panel/graph/graph.ts
+index 4033e4b..49a6603 100755
+--- a/public/app/plugins/panel/graph/graph.ts
++++ b/public/app/plugins/panel/graph/graph.ts
+@@ -38,6 +38,7 @@ class GraphElement {
+   panel: any;
+   plot: any;
+   sortedSeries: any[];
++  originData: any[];
+   data: any[];
+   panelWidth: number;
+   eventManager: EventManager;
+@@ -76,7 +77,9 @@ class GraphElement {
+   }
+ 
+   onRender(renderData) {
+-    this.data = renderData || this.data;
++    this.originData = renderData || this.originData;
++    // data could be altered for displaying top series. Keep originData unaltered
++    this.data = this.originData;
+     if (!this.data) {
+       return;
+     }
+@@ -86,6 +89,20 @@ class GraphElement {
+     const graphHeight = this.elem.height();
+     updateLegendValues(this.data, this.panel, graphHeight);
+ 
++    // Top series order
++    // 0: original, 1: ascending, -1: descending
++    if (this.panel.topSeries.order !== 0) {
++      const order = this.panel.topSeries.order;
++      const orderBy = this.panel.topSeries.orderBy;
++
++      this.data = _.sortBy(this.data, s => s.stats[orderBy] * order);
++    }
++
++    // Top series limit
++    if (this.panel.topSeries.limit > 0) {
++      this.data = this.data.slice(0, this.panel.topSeries.limit);
++    }
++
+     if (!this.panel.legend.show) {
+       if (this.legendElem.hasChildNodes()) {
+         ReactDOM.unmountComponentAtNode(this.legendElem);
+diff --git a/public/app/plugins/panel/graph/module.ts b/public/app/plugins/panel/graph/module.ts
+index 3919c4f..328e5ca 100644
+--- a/public/app/plugins/panel/graph/module.ts
++++ b/public/app/plugins/panel/graph/module.ts
+@@ -104,6 +104,11 @@ class GraphCtrl extends MetricsPanelCtrl {
+       shared: true,
+       sort: 0,
+     },
++    // top series
++    topSeries: {
++      order: 0,
++      orderBy: 'avg',
++    },
+     // time overrides
+     timeFrom: null,
+     timeShift: null,
+@@ -125,6 +130,7 @@ class GraphCtrl extends MetricsPanelCtrl {
+     _.defaults(this.panel.tooltip, this.panelDefaults.tooltip);
+     _.defaults(this.panel.legend, this.panelDefaults.legend);
+     _.defaults(this.panel.xaxis, this.panelDefaults.xaxis);
++    _.defaults(this.panel.topSeries, this.panelDefaults.topSeries);
+ 
+     this.processor = new DataProcessor(this.panel);
+ 
+diff --git a/public/app/plugins/panel/graph/tab_display.html b/public/app/plugins/panel/graph/tab_display.html
+index e6f5b59..1a3a509 100644
+--- a/public/app/plugins/panel/graph/tab_display.html
++++ b/public/app/plugins/panel/graph/tab_display.html
+@@ -138,6 +138,38 @@
+       </div>
+     </div>
+   </div>
++
++  <div class="section gf-form-group">
++    <h5 class="section-heading">Top Series</h5>
++    <div class="gf-form-inline">
++      <div class="gf-form">
++        <label class="gf-form-label width-4">Order</label>
++        <div class="gf-form-select-wrapper max-width-8">
++          <select
++            class="gf-form-input"
++            ng-model="ctrl.panel.topSeries.order"
++            ng-options="f.value as f.text for f in [{text: 'Original', value: 0}, {text: 'Ascending', value: 1}, {text: 'Descending', value: -1}]"
++            ng-change="ctrl.render()"
++          ></select>
++        </div>
++      </div>
++      <div class="gf-form">
++        <label class="gf-form-label width-3">By</label>
++        <div class="gf-form-select-wrapper max-width-8">
++          <select
++            class="gf-form-input"
++            ng-model="ctrl.panel.topSeries.orderBy"
++            ng-options="f for f in ['min', 'max', 'avg', 'current', 'total']"
++            ng-change="ctrl.render()"
++          ></select>
++        </div>
++      </div>
++    </div>
++    <div class="gf-form">
++      <label class="gf-form-label width-4">Limit</label>
++      <input type="number" class="gf-form-input width-8" placeholder="value" bs-tooltip="'Limit number of series for displaying top series'" data-placement="right" ng-model="ctrl.panel.topSeries.limit" ng-change="ctrl.render()" ng-model-onblur>
++    </div>
++  </div>
+ </div>
+ 
+ <div>

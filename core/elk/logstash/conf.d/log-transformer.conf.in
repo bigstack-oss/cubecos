@@ -1,0 +1,155 @@
+# transform logs for opensearch indexing or event processing
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "logs"
+    group_id => "log_transformer"
+    client_id => "log_transformer_@CUBE_HOST@"
+    consumer_threads => "2"
+    codec => json
+  }
+}
+
+filter {
+  # common fields
+  mutate {
+    rename => { "message" => "rawlog" }
+    add_field => {
+      "path" => "%{[log][file][path]}"
+      "agent_host" => "%{[agent][name]}"
+      "created_at" => "%{@timestamp}"
+    }
+  }
+
+  if [path] == "/var/log/messages" {
+    # syslog format
+    grok {
+      match => { "rawlog" => "%{SYSLOGTIMESTAMP:occurred_at} %{SYSLOGPROG}: %{GREEDYDATA:message}" }
+      add_field => {
+        "format" => "syslog"
+      }
+    }
+    syslog_pri {
+      severity_labels => [ "ERROR", "ERROR", "ERROR", "ERROR", "WARNING", "INFO", "INFO", "DEBUG" ]
+      add_field => { "log_level" => "%{syslog_severity}" }
+      remove_field => [ "syslog_facility", "syslog_facility_code", "syslog_severity", "syslog_severity_code" ]
+    }
+  }
+  else if [path] =~ /\/var\/log\/(keystone|nova|glance|cinder|neutron|manila|heat|octavia|ironic|ironic-inspector|masakari)\/\S+\.log/ {
+    # openstack log format (oslofmt)
+    grok {
+      patterns_dir => ["/etc/logstash/patterns.txt"]
+      match => { "rawlog" => "(?m)^%{TIMESTAMP_ISO8601:occurred_at}%{SPACE}%{NUMBER:pid}?%{SPACE}?%{OS_LOGLEVEL:log_level}?%{SPACE}?\[?\b%{NOTSPACE:module}\b\]?%{SPACE}?%{GREEDYDATA:message}?" }
+      add_field => {
+        "format" => "oslofmt"
+      }
+    }
+    grok {
+      match => { "path" => "/var/log/%{NOTSPACE:component}/%{NOTSPACE:program}.log" }
+    }
+  }
+  else if [log][file][path] =~ /\/var\/log\/(monasca\/agent)\/\S+\.log/ {
+    # monasca agent log format
+    grok {
+      patterns_dir => ["/etc/logstash/patterns.txt"]
+      match => { "rawlog" => "^%{TS_MONASCA_AGENT:occurred_at} \| %{OS_LOGLEVEL:log_level} \| %{NOTSPACE:program} \| %{NOTSPACE:module} \| %{GREEDYDATA:message}" }
+      add_field => {
+        "format" => "monasca-agent"
+      }
+    }
+  }
+  else if [path] == "/var/log/httpd/\S+\.log" {
+    # httpd access log format
+    grok {
+      patterns_dir => ["/etc/logstash/patterns.txt"]
+      match => { "rawlog" => "%{IP:client_ip} %{USER:ident} %{USER:auth} \[%{HTTPDATE:occurred_at}\] \"%{WORD:method} %{NOTSPACE:request_page} HTTP/%{NUMBER:http_version}\" %{NUMBER:server_response} " }
+      add_field => {
+        "format" => "apapche2-access"
+      }
+    }
+    grok {
+      match => { "path" => "/var/log/httpd/%{NOTSPACE:program}.log" }
+    }
+  }
+  else if [path] == "/var/log/ceph/ceph.log" {
+    # ceph log format
+    grok {
+      match => { "rawlog" => "%{TIMESTAMP_ISO8601:occurred_at} %{NOTSPACE:service}\.%{HOSTNAME:hostname} \(%{NOTSPACE:service_name}\) %{INT:seq_no} \: cluster \[%{WORD:alert}\] %{GREEDYDATA:message}" }
+      add_field => {
+        "format" => "ceph"
+      }
+    }
+    grok {
+      match => { "path" => "/var/log/ceph/%{NOTSPACE:program}.log" }
+    }
+  }
+
+  # unify formats
+  if [log_level] {
+    mutate {
+      lowercase => [ "[log_level]" ]
+    }
+  }
+  date {
+    match => [
+      "occurred_at",
+      "ISO8601",
+      "MMM d HH:mm:ss",
+      "MMM  d HH:mm:ss",
+      "yyyy-MM-dd HH:mm:ss.SSSSSS",
+      "yyyy-MM-dd HH:mm:ss +0000",
+      "yyyy-MM-dd HH:mm:ss zzz",
+      "dd/MMM/yyyy:HH:mm:ss Z"
+    ]
+    target => "occurred_at"
+  }
+  mutate {
+    lowercase => [ "program" ]
+    add_field => {
+      "es-index" => "%{+YYYYMMdd}-%{program}"
+    }
+    remove_field => [ "@version", "@timestamp", "ecs", "agent", "host", "input", "log" ]
+  }
+  mutate {
+    gsub => [
+      # replace all forward slashes with underscore
+      "es-index", "/", "_",
+      # replace backslashes, question marks, and hashes
+      # with a dot "."
+      "es-index", "[\\?#]", "."
+    ]
+  }
+  if "_grokparsefailure" not in [tags] {
+    mutate {
+      remove_field => [ "rawlog", "tags" ]
+    }
+  }
+}
+
+output {
+  if "_grokparsefailure" in [tags] {
+    file {
+      path => "/var/log/logstash/logstash-grok-parsefailure.log"
+      codec => rubydebug
+    }
+  }
+  else {
+    kafka {
+      bootstrap_servers => "@KAFKA_HOSTS@"
+      topic_id => "transformed-logs"
+      client_id => "log_transformer_@CUBE_HOST@"
+      codec => json
+    }
+    opensearch {
+      index => "logs-%{es-index}"
+      hosts => ["@CUBE_SHARED_ID@"]
+      template_name => "logs"
+      template => "/etc/logstash/logs-ec-template.json"
+    }
+    #file {
+    #  path => "/var/log/logstash/logstash-grok-parseok.log"
+    #  codec => rubydebug
+    #}
+  }
+}

@@ -1,0 +1,66 @@
+image:
+  repository: localhost:5080/bigstack/keycloak
+
+replicas: 1
+
+ingress:
+  enabled: true
+  rules:
+    - host: ""
+      paths:
+        - path: /auth
+          pathType: Prefix
+
+postgresql:
+  enabled: false
+
+extraEnv: |
+  - name: DB_VENDOR
+    value: mariadb
+  - name: DB_ADDR
+    value: cube-controller.default
+  - name: DB_PORT
+    value: "3306"
+  - name: DB_DATABASE
+    value: keycloak
+  - name: DB_USER
+    value: keycloak
+  - name: DB_PASSWORD
+    value: password
+  - name: KEYCLOAK_USER
+    value: admin
+  - name: KEYCLOAK_PASSWORD
+    value: admin
+  - name: KEYCLOAK_DEFAULT_THEME
+    value: cube
+  - name: PROXY_ADDRESS_FORWARDING
+    value: "true"
+  - name: JGROUPS_DISCOVERY_PROTOCOL
+    value: kubernetes.KUBE_PING
+  - name: KUBERNETES_NAMESPACE
+    valueFrom:
+      fieldRef:
+        apiVersion: v1
+        fieldPath: metadata.namespace
+  - name: CACHE_OWNERS_COUNT
+    value: "3"
+  - name: CACHE_OWNERS_AUTH_SESSIONS_COUNT
+    value: "3"
+
+rbac:
+  create: true
+  rules:
+    - apiGroups:
+        - ""
+      resources:
+        - pods
+      verbs:
+        - get
+        - list
+
+tolerations:
+- key: CriticalAddonsOnly
+  operator: Exists
+- effect: NoSchedule
+  key: node-role.kubernetes.io/control-plane
+  operator: Exists

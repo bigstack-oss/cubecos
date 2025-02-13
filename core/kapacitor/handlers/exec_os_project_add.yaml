@@ -1,0 +1,7 @@
+id: exec-os-project-add
+topic: events
+kind: exec
+match: "\"key\" == 'KSN00001I'"
+options:
+    prog: /usr/sbin/hex_config
+    args: ['sdk_run', 'alert_cluster_sync_tenant']

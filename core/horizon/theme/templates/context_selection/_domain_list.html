@@ -1,0 +1,10 @@
+{% load i18n %}
+{% if domain_supported %}
+  <li class="dropdown-header">{% trans "Domains:" %}</li>
+  <li>
+    <a class="disabled">
+      {{ domain_name }}
+      <span class="fa fa-check"></span>
+    </a>
+  </li>
+{% endif %}

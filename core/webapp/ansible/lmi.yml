@@ -1,0 +1,5 @@
+---
+# file: lmi.yml
+- hosts: cube
+  roles:
+    - role: lmi

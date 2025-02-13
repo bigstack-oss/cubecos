@@ -1,0 +1,10 @@
+init_config:
+
+instances:
+  - username: admin
+    password: Cube0s!
+    url: http://@CUBE_CTRL_IP@:9100/haproxy_stats
+    status_check: true
+    collect_service_stats_only: true
+    collect_aggregates_only: true
+    collect_status_metrics: true

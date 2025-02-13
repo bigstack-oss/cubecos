@@ -1,0 +1,24 @@
+Listen @BIND_ADDR@8070
+
+TraceEnable off
+
+<VirtualHost *:8070>
+    WSGIDaemonProcess monasca-api processes=5 threads=1 user=monasca display-name=%{GROUP}
+    WSGIProcessGroup monasca-api
+    WSGIApplicationGroup monasca-api
+    WSGIScriptAlias / /usr/local/lib/python3.9/site-packages/monasca_api/api/wsgi.py
+    WSGIApplicationGroup %{GLOBAL}
+
+    WSGIPassAuthorization On
+
+    LogLevel info
+    ErrorLog /var/log/httpd/monasca-api_error.log
+    CustomLog /var/log/httpd/monasca-api.log combined
+
+    <Directory /usr/local/lib/python3.9/site-packages/monasca_api>
+      Require all granted
+    </Directory>
+
+    SetEnv no-gzip 1
+
+</VirtualHost>

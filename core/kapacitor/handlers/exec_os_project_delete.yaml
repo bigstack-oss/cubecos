@@ -1,0 +1,7 @@
+id: exec-os-project-delete
+topic: events
+kind: exec
+match: "\"key\" == 'KSN00002I'"
+options:
+    prog: /usr/sbin/hex_config
+    args: ['sdk_run', 'alert_cluster_unsync_tenant']

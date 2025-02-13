@@ -1,0 +1,11 @@
+[Unit]
+Description=compact ceph osd metadata
+After=systemd-hexctl-user.service
+Wants=ceph-osd-compact.timer
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/hex_sdk -v ceph_osd_compact
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,50 @@
+[
+  {
+    "local": [
+      {
+        "user": {
+          "name": "{0} (IAM)"
+        },
+        "group": {
+          "domain": {
+            "id": "default"
+          },
+          "name": "cube_admins"
+        }
+      }
+    ],
+    "remote": [
+        {
+          "type": "MELLON_username"
+        },
+        {
+          "type": "MELLON_groups",
+          "any_one_of": ["cube-admins"]
+        }
+    ]
+  },
+  {
+    "local": [
+      {
+        "user": {
+          "name": "{0} (IAM)"
+        },
+        "group": {
+          "domain": {
+            "id": "default"
+          },
+          "name": "cube_users"
+        }
+      }
+    ],
+    "remote": [
+        {
+          "type": "MELLON_username"
+        },
+        {
+          "type": "MELLON_groups",
+          "any_one_of": ["cube-users"]
+        }
+    ]
+  }
+]

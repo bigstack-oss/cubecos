@@ -1,0 +1,8 @@
+registry.k8s.io/provider-os/openstack-cloud-controller-manager:v1.28.1
+registry.k8s.io/provider-os/cinder-csi-plugin:v1.28.1
+registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
+registry.k8s.io/sig-storage/livenessprobe:v2.9.0
+registry.k8s.io/sig-storage/csi-attacher:v4.2.0
+registry.k8s.io/sig-storage/csi-provisioner:v3.4.1
+registry.k8s.io/sig-storage/csi-snapshotter:v6.2.1
+registry.k8s.io/sig-storage/csi-resizer:v1.8.0

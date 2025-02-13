@@ -1,0 +1,9 @@
+---
+persistence:
+  enabled: true
+service:
+  # type: LoadBalancer
+  clusterIP: 10.43.1.2
+env:
+  open:
+    DISABLE_API: false

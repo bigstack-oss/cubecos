@@ -1,0 +1,28 @@
+<Location /v3>
+    MellonEnable info
+    MellonEndpointPath /v3/mellon/
+    MellonSPMetadataFile /etc/httpd/federation/v3.xml
+    MellonSPPrivateKeyFile /etc/httpd/federation/v3.key
+    MellonSPCertFile /etc/httpd/federation/v3.cert
+    MellonIdPMetadataFile /etc/keycloak/saml-metadata.xml
+    MellonIdP IDP
+    MellonMergeEnvVars On ";"
+</Location>
+
+<Location /v3/auth/OS-FEDERATION/websso/mapped>
+    AuthType Mellon
+    MellonEnable auth
+    Require valid-user
+</Location>
+
+<Location /v3/auth/OS-FEDERATION/identity_providers/cube_idp/protocols/mapped/websso>
+    AuthType Mellon
+    MellonEnable auth
+    Require valid-user
+</Location>
+
+<Location /v3/OS-FEDERATION/identity_providers/cube_idp/protocols/mapped/auth>
+    AuthType Mellon
+    MellonEnable auth
+    Require valid-user
+</Location>

@@ -1,0 +1,11 @@
+[Unit]
+Description=http file cache service for Ironic
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/tftpboot/images
+ExecStart=/usr/bin/python3 -m http.server 8484
+
+[Install]
+WantedBy=multi-user.target

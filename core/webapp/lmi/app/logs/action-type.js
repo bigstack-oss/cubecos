@@ -1,0 +1,27 @@
+// logs/action-type.js
+
+export const FETCH_ALERT_SUMMARY = 'logs/FETCH_ALERT_SUMMARY';
+export const ALERT_SUMMARY_SAVE = 'logs/ALERT_SUMMARY_SAVE';
+
+export const FETCH_SYSTEM_ALERT = 'logs/FETCH_SYSTEM_ALERT';
+export const SYSTEM_ALERT_SAVE = 'logs/SYSTEM_ALERT_SAVE';
+
+export const FETCH_HOST_ALERT = 'logs/FETCH_HOST_ALERT';
+export const HOST_ALERT_SAVE = 'logs/HOST_ALERT_SAVE';
+
+export const FETCH_INSTANCE_ALERT = 'logs/FETCH_INSTANCE_ALERT';
+export const INSTANCE_ALERT_SAVE = 'logs/INSTANCE_ALERT_SAVE';
+
+export const FETCH_ADMIN_RESP = 'logs/FETCH_ADMIN_RESP';
+export const ADMIN_RESP_SAVE = 'logs/ADMIN_RESP_SAVE';
+export const ADMIN_RESP_TYPE_SET = 'logs/ADMIN_RESP_TYPE_SET';
+
+export const FETCH_INSTANCE_RESP = 'logs/FETCH_INSTANCE_RESP';
+export const INSTANCE_RESP_SAVE = 'logs/INSTANCE_RESP_SAVE';
+export const INSTANCE_RESP_TYPE_SET = 'logs/INSTANCE_RESP_TYPE_SET';
+
+export const UPDATE_ADMIN_RESP = 'logs/UPDATE_ADMIN_RESP';
+export const ADMIN_RESP_SET = 'logs/ADMIN_RESP_SET';
+
+export const UPDATE_INSTANCE_RESP = 'logs/UPDATE_INSTANCE_RESP';
+export const INSTANCE_RESP_SET = 'logs/INSTANCE_RESP_SET';

@@ -1,0 +1,11 @@
+[Unit]
+Description=compact ceph osd metadata periodically
+Requires=ceph-osd-compact.service
+
+[Timer]
+Unit=ceph-osd-compact.service
+OnBootSec=120min
+OnUnitActiveSec=1d
+
+[Install]
+WantedBy=timers.target

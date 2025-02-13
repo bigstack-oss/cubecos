@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenStack Neutron OVN VPN Agent
+After=syslog.target network.target openvswitch.service
+Requires=openvswitch.service
+
+[Service]
+Type=simple
+User=neutron
+PermissionsStartOnly=true
+ExecStart=/usr/local/bin/neutron-ovn-vpn-agent --config-file /etc/neutron/vpn_agent.ini --log-file /var/log/neutron/neutron-ovn-vpn-agent.log
+PrivateTmp=false
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

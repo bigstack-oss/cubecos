@@ -1,0 +1,12 @@
+cluster: localhost:5900
+node00: localhost:5999
+node01: localhost:5901
+node02: localhost:5902
+node03: localhost:5903
+node04: localhost:5904
+node05: localhost:5905
+node06: localhost:5906
+node07: localhost:5907
+node08: localhost:5908
+node09: localhost:5909
+node10: localhost:5910

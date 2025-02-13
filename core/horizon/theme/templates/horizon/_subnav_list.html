@@ -1,0 +1,20 @@
+{% load horizon %}
+
+{% for heading, panels in components.items %}
+  {% with panels|has_permissions_on_list:user as filtered_panels %}
+    {% if filtered_panels %}
+      {% if heading %}
+        <li class="{% if request.horizon.panel in filtered_panels %}active{% else %}dropdown{% endif %}">
+          <a href="#" class="dropdown-toggle" data-toggle="dropdown">{{ heading }} <b class="caret"></b></a>
+          <ul class="{% if request.horizon.panel in filtered_panels %}persistent{% else %}dropdown-menu{% endif %}">
+          {% for panel in filtered_panels %}
+            <li {% if current == panel.slug %}class="active"{% endif %}>
+              <a target="_self" href="{{ panel.get_absolute_url }}" tabindex='1'>{{ panel.name }}</a>
+            </li>
+          {% endfor %}
+          </ul>
+        </li>
+      {% endif %}
+    {% endif %}
+  {% endwith %}
+{% endfor %}

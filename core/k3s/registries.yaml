@@ -1,0 +1,10 @@
+mirrors:
+  docker.io:
+    endpoint:
+      - "http://localhost:5080"
+  registry.k8s.io:
+    endpoint:
+      - "http://localhost:5080"
+  quay.io:
+    endpoint:
+      - "http://localhost:5080"

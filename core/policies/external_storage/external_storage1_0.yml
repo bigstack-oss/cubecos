@@ -1,0 +1,6 @@
+---
+# external_storage/external_storage1_0.yml
+name: external_storage
+version: 1.0
+
+enabled: true

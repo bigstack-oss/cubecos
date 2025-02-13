@@ -1,0 +1,6 @@
+*/kernel/net/netfilter/*.ko.xz
+*/kernel/net/ipv4/netfilter/*.ko.xz
+*/kernel/net/ipv6/netfilter/*.ko.xz
+*/libcrc32c.ko.xz
+*/openvswitch.ko.xz
+*/veth.ko.xz

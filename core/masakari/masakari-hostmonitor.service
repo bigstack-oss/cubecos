@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenStack Masakari Host Monitor service
+After=ntp.service
+
+[Service]
+User=masakari
+Group=masakari
+Type=simple
+WorkingDirectory=/var/lib/masakari
+PermissionsStartOnly=true
+ExecStart=/usr/local/bin/masakari-hostmonitor --config-file /etc/masakarimonitors/masakarimonitors.conf
+Restart=on-failure
+LimitNOFILE=65535
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

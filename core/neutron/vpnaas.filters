@@ -1,0 +1,22 @@
+# neutron-rootwrap command filters for nodes on which neutron is
+# expected to control network
+#
+# This file should be owned by (and only-writable by) the root user
+
+# format seems to be
+# cmd-name: filter-name, raw-command, user, args
+
+[Filters]
+
+cp: RegExpFilter, cp, root, cp, -a, .*, .*/strongswan.d
+ip: IpFilter, ip, root
+ip_exec: IpNetnsExecFilter, ip, root
+ipsec: CommandFilter, ipsec, root
+sysctl_ip4_forward: RegExpFilter, sysctl, root, sysctl, -w, net.ipv4.ip_forward=1
+sysctl_ip6_forward: RegExpFilter, sysctl, root, sysctl, -w, net.ipv6.conf.all.forwarding=1
+rm: RegExpFilter, rm, root, rm, -rf, (.*/strongswan.d|.*/ipsec/[0-9a-z-]+)
+rm_file: RegExpFilter, rm, root, rm, -f, .*/ipsec.secrets
+strongswan: CommandFilter, strongswan, root
+neutron_netns_wrapper: CommandFilter, neutron-vpn-netns-wrapper, root
+neutron_netns_wrapper_local: CommandFilter, /usr/local/bin/neutron-vpn-netns-wrapper, root
+chown: RegExpFilter, chown, root, chown, --from=.*, root.root, .*/(ipsec.secrets|ipsec/[0-9a-z-]+/log)

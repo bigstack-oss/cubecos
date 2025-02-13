@@ -1,0 +1,14 @@
+#rancherImage: localhost:5080/bigstack/rancher
+
+replicas: 1
+
+ingress:
+  enabled: true
+  tls:
+    source: secret
+
+tls: external
+privateCA: true
+useBundledSystemChart: true
+antiAffinity: required
+bootstrapPassword: admin

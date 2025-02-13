@@ -1,0 +1,127 @@
+# convert kerenel message to event and persist to influxdb
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "transformed-logs"
+    group_id => "kernel_event_mapper"
+    client_id => "kernel_event_mapper_@CUBE_HOST@"
+    consumer_threads => "2"
+    codec => json
+  }
+}
+
+filter {
+  if [path] != "/var/log/messages" {
+    drop {
+    }
+  }
+  if [program] != "kernel" {
+      drop {
+    }
+  }
+
+  grok {
+    match => { "message" => "%{GREEDYDATA:msg}" }
+  }
+
+  if [msg] =~ /NIC Link is/ {
+    grok {
+      patterns_dir => ["/etc/logstash/patterns.txt"]
+      match => { "msg" => "%{NOTSPACE:driver}: %{NOTSPACE:ifname} NIC Link is %{LINK_STATE:state}" }
+    }
+    grok {
+      patterns_dir => ["/etc/logstash/patterns.txt"]
+      match => { "msg" => "%{NOTSPACE:driver} %{NOTSPACE:busid} %{NOTSPACE:ifname}: NIC Link is %{LINK_STATE:state}" }
+    }
+    mutate {
+      lowercase => [ "state" ]
+    }
+    translate {
+      field => "ifname"
+      destination => "ifkey"
+      dictionary_path => "/etc/logstash/eventdb/ifname-to-ifkey.yml"
+    }
+    mutate {
+      add_field => {
+        "event_msg" => "nic link is %{[state]}"
+        "[event][message]" => "the link of a network interface card %{[ifkey]} of host %{[agent_host]} is %{[state]}"
+        "attrs" => "host=%{[agent_host]},nic=%{[ifname]},driver=%{[driver]}"
+      }
+    }
+  }
+
+  # Mellanox
+  if [msg] =~ /: Link / {
+    grok {
+      patterns_dir => ["/etc/logstash/patterns.txt"]
+      match => { "msg" => "%{NOTSPACE:driver} %{NOTSPACE:busid} %{NOTSPACE:ifname}: Link %{LINK_STATE:state}" }
+    }
+    mutate {
+      lowercase => [ "state" ]
+    }
+    translate {
+      field => "ifname"
+      destination => "ifkey"
+      dictionary_path => "/etc/logstash/eventdb/ifname-to-ifkey.yml"
+    }
+    mutate {
+      add_field => {
+        "event_msg" => "nic link is %{[state]}"
+        "[event][message]" => "the link of a network interface card %{[ifkey]} of host %{[agent_host]} is %{[state]}"
+        "attrs" => "host=%{[agent_host]},nic=%{[ifname]},driver=%{[driver]}"
+      }
+    }
+  }
+
+  translate {
+    field => "event_msg"
+    destination => "[event][key]"
+    dictionary_path => "/etc/logstash/eventdb/log-to-event-key.yml"
+  }
+  if ![event][key] {
+    drop {
+    }
+  }
+
+  if [attrs] {
+    kv {
+      field_split => ","
+      source => "attrs"
+      target => "attrs_obj"
+    }
+    ruby {
+      code => "event.set('[event][metadata]', event.get('attrs_obj').to_json)"
+    }
+  }
+  grok {
+    patterns_dir => ["/etc/logstash/patterns.txt"]
+    match => { "[event][key]" => "%{EVENT_CAT:category}%{EVENT_ID:id}%{EVENT_SEVERITY:severity}" }
+    add_field => {
+      "[event][category]" => "%{category}"
+      "[event][severity]" => "%{severity}"
+    }
+  }
+  ruby {
+    code => "event.set('[event][timestamp]', event.get('@timestamp').to_i * 1000)"
+  }
+  mutate {
+    add_field => {
+      "eventlog" => 'host,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]},%{[attrs]} message="%{[event][message]}",metadata="%{[event][metadata]}" %{[event][timestamp]}'
+    }
+  }
+}
+
+output {
+  #file {
+  #  path => "/var/log/logstash/debug-kernel-mapper.log"
+  #  codec => rubydebug
+  #}
+  http {
+    url => "http://@CUBE_SHARED_ID@:9092/write?db=events&precision=ms&rp=def"
+    format => "message"
+    content_type => "application/json"
+    http_method => "post"
+    message => "%{eventlog}"
+  }
+}

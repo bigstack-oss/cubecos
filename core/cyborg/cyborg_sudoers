@@ -1,0 +1,3 @@
+Defaults:cyborg !requiretty
+
+cyborg ALL = (root) NOPASSWD: /usr/bin/privsep-helper *

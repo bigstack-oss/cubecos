@@ -1,0 +1,93 @@
+# convert ceph message to event and persist to influxdb
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "transformed-logs"
+    group_id => "ceph_event_mapper"
+    client_id => "ceph_event_mapper_@CUBE_HOST@"
+    consumer_threads => "2"
+    codec => json
+  }
+}
+
+filter {
+  if [path] != "/var/log/ceph/ceph.log" {
+    drop {
+    }
+  }
+
+  if [alert] == "WRN" {
+    grok {
+      match => { "message" => "Health check %{WORD:action}\: %{INT:action_id} osds down \(%{WORD:state}\)" }
+    }
+  } else if [alert] == "INF" {
+    grok {
+      match => { "message" => "%{NOTSPACE:disk} %{WORD:status} \(root=%{NOTSPACE:domain}\,host=%{NOTSPACE:host}\) \(%{GREEDYDATA:state} reported by %{NOTSPACE:node}\)" }
+    }
+  } else {
+    drop {
+      }
+  }
+
+  mutate {
+    add_field => {
+      "event_msg" => "%{[state]}"
+    }
+  }
+
+  translate {
+    field => "event_msg"
+    destination => "[event][key]"
+    dictionary_path => "/etc/logstash/eventdb/log-to-event-key.yml"
+  }
+
+  if ![event][key] {
+    drop {
+    }
+  }
+
+  ruby {
+    code => "event.set('[event][timestamp]', event.get('@timestamp').to_i * 1000)"
+  }
+  translate {
+    field => "[event][key]"
+    destination => "[event][message]"
+    dictionary_path => "/etc/logstash/eventdb/event-key-to-msg.yml"
+  }
+  grok {
+    patterns_dir => ["/etc/logstash/patterns.txt"]
+    match => { "[event][key]" => "%{EVENT_CAT:category}%{EVENT_ID:id}%{EVENT_SEVERITY:severity}" }
+    add_field => {
+      "[event][category]" => "%{category}"
+      "[event][severity]" => "%{severity}"
+    }
+  }
+  if [alert] == "INF" {
+    mutate {
+      add_field => {
+        "eventlog" => 'system,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]} message="%{[hostname]} %{[disk]} %{[event][message]}",metadata="{ "category": "%{[event][category]}", "host": "%{[hostname]}" }" %{[event][timestamp]}'
+      }
+    }
+  } else {
+    mutate {
+      add_field => {
+        "eventlog" => 'system,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]} message="%{[event][message]} (reported by %{[hostname]})",metadata="{ "category": "%{[event][category]}", "host": "%{[hostname]}" }" %{[event][timestamp]}'
+      }
+    }
+  }
+}
+
+output {
+  #file {
+  #  path => "/var/log/logstash/debug-ceph-event-mapper.log"
+  #  codec => rubydebug
+  #}
+  http {
+    url => "http://@CUBE_SHARED_ID@:9092/write?db=events&precision=ms&rp=def"
+    format => "message"
+    content_type => "application/json"
+    http_method => "post"
+    message => "%{eventlog}"
+  }
+}

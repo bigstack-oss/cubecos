@@ -1,0 +1,16 @@
+#!/usr/bin/python3
+# PBR Generated from 'console_scripts'
+
+import sys
+
+from designate.cmd.manage import main
+
+import warnings
+
+from sqlalchemy import exc as sa_exc
+
+warnings.filterwarnings(action="ignore", category=sa_exc.SAWarning)
+warnings.filterwarnings(action="ignore", category=UserWarning)
+
+if __name__ == "__main__":
+    sys.exit(main())

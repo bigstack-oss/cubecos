@@ -1,0 +1,312 @@
+# service error codes
+
+declare -A ERR_CODE
+
+SRV="link"
+eval "ERR_DESC_$SRV[1]='ping fail'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="dns"
+eval "ERR_DESC_$SRV[1]='lookup timeout'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="clock"
+eval "ERR_DESC_$SRV[1]='time unsync'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="bootstrap"
+eval "ERR_DESC_$SRV[1]='service unready'"
+eval "ERR_DESC_$SRV[2]='settings misconfigured'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="license"
+eval "ERR_DESC_$SRV[1]='check fail'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="etcd"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='status offline'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="hacluster"
+eval "ERR_DESC_$SRV[1]='control corosync down'"
+eval "ERR_DESC_$SRV[2]='control pacemaker down'"
+eval "ERR_DESC_$SRV[3]='control pcsd down'"
+eval "ERR_DESC_$SRV[4]='control not all online'"
+eval "ERR_DESC_$SRV[5]='control offline'"
+eval "ERR_DESC_$SRV[6]='cinder-volume down'"
+eval "ERR_DESC_$SRV[7]='ovndb_servers fail'"
+eval "ERR_DESC_$SRV[8]='compute pcsd down'"
+eval "ERR_DESC_$SRV[9]='compute pacemaker_remote down'"
+eval "ERR_DESC_$SRV[10]='compute not all online'"
+eval "ERR_DESC_$SRV[11]='compute offline'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="rabbitmq"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='not all online'"
+eval "ERR_DESC_$SRV[3]='partitions exist'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="mysql"
+eval "ERR_DESC_$SRV[1]='disconnected'"
+eval "ERR_DESC_$SRV[2]='not all online'"
+eval "ERR_DESC_$SRV[3]='state unsync'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="vip"
+eval "ERR_DESC_$SRV[1]='active control IP down'"
+eval "ERR_DESC_$SRV[2]='inactive control IP active'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="haproxy_ha"
+eval "ERR_DESC_$SRV[1]='active control haproxy-ha down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="haproxy"
+eval "ERR_DESC_$SRV[1]='control haproxy down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="httpd"
+eval "ERR_DESC_$SRV[1]='control httpd down'"
+eval "ERR_DESC_$SRV[2]='port not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="lmi"
+eval "ERR_DESC_$SRV[1]='service down'"
+eval "ERR_DESC_$SRV[2]='service not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="memcache"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="keycloak"
+eval "ERR_DESC_$SRV[1]='pods fewer than expected'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="ceph"
+eval "ERR_DESC_$SRV[1]='health warning'"
+eval "ERR_DESC_$SRV[2]='health error'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="ceph_mon"
+eval "ERR_DESC_$SRV[1]='msgr2 not enabled'"
+eval "ERR_DESC_$SRV[2]='not all online'"
+eval "ERR_DESC_$SRV[3]='ops slow'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="ceph_mgr"
+eval "ERR_DESC_$SRV[1]='not all online'"
+eval "ERR_DESC_$SRV[2]='InfluxDB list/create fail'"
+eval "ERR_DESC_$SRV[3]='InfluxDB fail'"
+eval "ERR_DESC_$SRV[4]='module devicehealth fail'"
+eval "ERR_DESC_$SRV[5]='dashboard unavailable'"
+eval "ERR_DESC_$SRV[6]='mem high'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="ceph_mds"
+eval "ERR_DESC_$SRV[1]='not all online'"
+eval "ERR_DESC_$SRV[2]='cephfs not all mounted'"
+eval "ERR_DESC_$SRV[3]='nfs-ganesha fail to mount'"
+eval "ERR_DESC_$SRV[4]='nfs-ganesha fail to write'"
+eval "ERR_DESC_$SRV[5]='nfs-ganesha not all up'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="ceph_osd"
+eval "ERR_DESC_$SRV[1]='not all up'"
+eval "ERR_DESC_$SRV[2]='not all in'"
+eval "ERR_DESC_$SRV[3]='disk failing'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="ceph_rgw"
+eval "ERR_DESC_$SRV[1]='not all online'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="rbd_target"
+eval "ERR_DESC_$SRV[1]='api down'"
+eval "ERR_DESC_$SRV[2]='gw down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="nova"
+eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='scheduler down'"
+eval "ERR_DESC_$SRV[4]='conductor down'"
+eval "ERR_DESC_$SRV[5]='compute down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="ironic"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='api down'"
+eval "ERR_DESC_$SRV[4]='conductor down'"
+eval "ERR_DESC_$SRV[5]='inspector down'"
+eval "ERR_DESC_$SRV[6]='not all online'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="cyborg"
+eval "ERR_DESC_$SRV[3]='api down'"
+eval "ERR_DESC_$SRV[4]='conductor down'"
+eval "ERR_DESC_$SRV[5]='agent down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="neutron"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='metadata not all up'"
+eval "ERR_DESC_$SRV[4]='vpn not all up'"
+eval "ERR_DESC_$SRV[5]='control not all up'"
+eval "ERR_DESC_$SRV[6]='port create fail'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="glance"
+eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
+eval "ERR_DESC_$SRV[3]='api down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="cinder"
+eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='scheduler down'"
+eval "ERR_DESC_$SRV[4]='volume down'"
+eval "ERR_DESC_$SRV[5]='backup down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="manila"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='scheduler down'"
+eval "ERR_DESC_$SRV[4]='share down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="swift"
+eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='objects missing'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="heat"
+eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='engine down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="octavia"
+eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
+eval "ERR_DESC_$SRV[3]='api down'"
+eval "ERR_DESC_$SRV[4]='housekeeping down'"
+eval "ERR_DESC_$SRV[5]='octavia-hm0 port missing'"
+eval "ERR_DESC_$SRV[6]='octavia-hm0 link missng'"
+eval "ERR_DESC_$SRV[7]='octavia-hm0 route missing'"
+eval "ERR_DESC_$SRV[8]='worker down'"
+eval "ERR_DESC_$SRV[9]='health-manager down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="designate"
+eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='api down'"
+eval "ERR_DESC_$SRV[4]='central down'"
+eval "ERR_DESC_$SRV[5]='worker down'"
+eval "ERR_DESC_$SRV[6]='producer down'"
+eval "ERR_DESC_$SRV[7]='mdns down'"
+eval "ERR_DESC_$SRV[8]='named down'"
+eval "ERR_DESC_$SRV[9]='api not all up'"
+eval "ERR_DESC_$SRV[10]='central not all up'"
+eval "ERR_DESC_$SRV[11]='worker not all up'"
+eval "ERR_DESC_$SRV[12]='producer not all up'"
+eval "ERR_DESC_$SRV[13]='mdns not all up'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="masakari"
+eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
+eval "ERR_DESC_$SRV[3]='api down'"
+eval "ERR_DESC_$SRV[4]='engine down'"
+eval "ERR_DESC_$SRV[5]='processmonitor down'"
+eval "ERR_DESC_$SRV[6]='hostmonitor down'"
+eval "ERR_DESC_$SRV[7]='instancemonitor down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="monasca"
+eval "ERR_DESC_$SRV[3]='persister down'"
+eval "ERR_DESC_$SRV[4]='collector down'"
+eval "ERR_DESC_$SRV[5]='forwarder down'"
+eval "ERR_DESC_$SRV[6]='statsd down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="senlin"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='engine down'"
+eval "ERR_DESC_$SRV[4]='conductor down'"
+eval "ERR_DESC_$SRV[5]='health-manager down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="watcher"
+eval "ERR_DESC_$SRV[2]='api timeout'"
+eval "ERR_DESC_$SRV[3]='applier down'"
+eval "ERR_DESC_$SRV[4]='engine down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="k3s"
+eval "ERR_DESC_$SRV[1]='pods fewer than expected'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="rancher"
+eval "ERR_DESC_$SRV[1]='pods fewer than expected'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="opensearch"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='not all online'"
+eval "ERR_DESC_$SRV[3]='status not green'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="opensearch_dashboards"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='port not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="zookeeper"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='not all online'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="kafka"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='failed to get sys/host metrics'"
+eval "ERR_DESC_$SRV[3]='failed to get instance metrics'"
+eval "ERR_DESC_$SRV[4]='queue has no leader'"
+eval "ERR_DESC_$SRV[5]='queue has no coordinator'"
+eval "ERR_DESC_$SRV[6]='built-in queues missing'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="telegraf"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="influxdb"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='port not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="kapacitor"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='port not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="grafana"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='port not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="filebeat"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="auditbeat"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="logstash"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+unset SRV

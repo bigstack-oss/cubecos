@@ -1,0 +1,30 @@
+{% load horizon %}
+{% load i18n %}
+{% load context_selection %}
+<ul class="nav pull-right" id="user_info">
+  <li class="dropdown " >
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown"><span class="cubeicon cubeicon-list"></span>{% trans "Project" %}{{ project_name }}<b class="caret"></b></a>
+  <ul class="dropdown-menu">
+  {% if domain_supported %}
+  {% show_domain_list %}
+  {% endif %}
+  {% show_project_list %}
+  {% if multi_region %}
+  {% show_region_list %}
+  {% endif %}
+  </ul>
+  </li>
+  {% if HORIZON_CONFIG.help_url %}
+  <li><a href="{{ HORIZON_CONFIG.help_url }}" target="_new">{% trans "Help" %}</a></li>
+  {% endif %}
+  <li class="dropdown {% if request.horizon.dashboard.slug == "settings" %}active{% endif %}">
+    <a href="#" class="dropdown-toggle" data-toggle="dropdown"><span class="cubeicon cubeicon-user"></span> {% blocktrans with username=request.user.username %}{{ username }}{% endblocktrans %}<b class="caret"></b></a>
+    <ul class="dropdown-menu">
+      <li{% if request.horizon.dashboard.slug == "settings" and request.horizon.panel.slug == "user" %} class="active"{% endif %}><a href="{% url 'horizon:settings:user:index' %}" target="_self">{% trans "Settings" %}</a></li>
+      <li{% if request.horizon.dashboard.slug == "settings" and request.horizon.panel.slug == "password" %} class="active"{% endif %}><a href="{% url 'horizon:settings:password:index' %}" target="_self">{% trans "Change Password" %}</a></li>
+      <li class="divider"></li>
+      <li><a href="{% url 'logout' %}" target="_self">{% trans "Sign Out" %}</a></li>
+    </ul>
+  </li>
+  {% include "horizon/common/_region_selector.html" %}
+</ul>

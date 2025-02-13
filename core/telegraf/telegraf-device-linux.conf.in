@@ -1,0 +1,36 @@
+# cat /etc/telegraf/telegraf.conf
+[agent]
+interval = "60s"
+
+[[inputs.cpu]]
+percpu = false
+totalcpu = true
+collect_cpu_time = false
+report_active = false
+
+[[inputs.disk]]
+ignore_fs = ["tmpfs", "devtmpfs", "devfs"]
+mount_points = ["/"]
+
+[[inputs.diskio]]
+
+[[inputs.kernel]]
+
+[[inputs.mem]]
+
+[[inputs.processes]]
+
+[[inputs.swap]]
+
+[[inputs.system]]
+
+[[inputs.net]]
+interfaces = ["eth*"]
+
+[[outputs.kafka]]
+brokers = [ @KAFKA_HOSTS@ ]
+compression_codec = 1
+data_format = "influx"
+max_retry = 3
+required_acks = -1
+topic = "telegraf-metrics"

@@ -1,0 +1,13 @@
+[Unit]
+Description=Un-mount cephfs mount point /mnt/cephfs
+PartOf=ceph.target
+After=ceph.target
+Requires=ceph.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStop=/bin/umount -l /mnt/cephfs
+
+[Install]
+WantedBy=multi-user.target

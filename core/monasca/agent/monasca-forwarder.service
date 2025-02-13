@@ -1,0 +1,19 @@
+[Unit]
+Description=Monasca Agent - Forwarder
+PartOf=monasca-agent.target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mon-agent
+Group=mon-agent
+Restart=always
+
+StandardOutput=append:/var/log/monasca/monasca-forwarder.log
+StandardError=append:/var/log/monasca/monasca-forwarder.log
+
+ExecStart=/usr/local/bin/monasca-forwarder
+
+[Install]
+WantedBy=multi-user.target

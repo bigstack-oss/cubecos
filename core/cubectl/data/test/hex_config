@@ -1,0 +1,19 @@
+#!/bin/bash
+
+if [ "$2" == "ip" ]
+then
+    sed -i "/^net.if.addr.eth0=/c\net.if.addr.eth0=$3" /etc/settings.txt
+    ifconfig eth0 "$3"/16
+fi
+
+
+if [ "$1" == "apply" ]
+then
+# Executed by hex_config 
+/usr/local/bin/cubectl config -d commit cluster host
+
+# Post script
+#
+fi
+
+exit 0

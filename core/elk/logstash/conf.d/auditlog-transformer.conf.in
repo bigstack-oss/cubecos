@@ -1,0 +1,21 @@
+# transform audit logs for opensearch indexing or event processing
+
+input {
+  kafka {
+    bootstrap_servers => "@KAFKA_HOSTS@"
+    topics => "audit-logs"
+    group_id => "auditlog_transformer"
+    client_id => "auditlog_transformer_@CUBE_HOST@"
+    consumer_threads => "2"
+    codec => json
+  }
+}
+
+output {
+  opensearch {
+    index => "audit-%{+YYYYMMdd}-logs"
+    hosts => ["@CUBE_SHARED_ID@"]
+    template_name => "default"
+    template => "/etc/logstash/default-ec-template.json"
+  }
+}

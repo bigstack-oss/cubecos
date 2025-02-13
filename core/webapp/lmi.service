@@ -1,0 +1,24 @@
+[Unit]
+Description=Cube LMI
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/lmi/
+ExecStart=/bin/sh -c 'OPENSSL_CONF=/dev/null /usr/local/bin/node /var/www/lmi/server.js >> /var/www/lmi/access.log 2>&1'
+RestartSec=30
+Restart=always
+
+# This creates a specific slice which all services will operate from
+#  The accounting options give us the ability to see resource usage through
+#  the `systemd-cgtop` command.
+Slice=lmi.slice
+CPUAccounting=true
+BlockIOAccounting=true
+MemoryAccounting=true
+TasksAccounting=true
+
+[Install]
+WantedBy=multi-user.target

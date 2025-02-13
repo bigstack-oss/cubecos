@@ -1,0 +1,29 @@
+[Unit]
+Description=monasca-persister openstack service
+
+[Service]
+Type=simple
+User=monasca
+Group=monasca
+
+StandardOutput=append:/var/log/monasca/monasca-persister.log
+StandardError=append:/var/log/monasca/monasca-persister.log
+
+ExecStart=/usr/local/bin/monasca-persister --config-file /etc/monasca/persister.conf --log-file /var/log/monasca/persister.log
+
+# Give a reasonable amount of time for the server to start up/shut down
+TimeoutSec=120
+Restart=on-failure
+RestartSec=60
+
+# This creates a specific slice which all services will operate from
+#  The accounting options give us the ability to see resource usage through
+#  the `systemd-cgtop` command.
+Slice=monasca.slice
+CPUAccounting=true
+BlockIOAccounting=true
+MemoryAccounting=false
+TasksAccounting=true
+
+[Install]
+WantedBy=multi-user.target

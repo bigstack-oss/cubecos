@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenStack Masakari Engine service
+After=mysql.service rabbitmq-server.service ntp.service
+
+[Service]
+User=masakari
+Group=masakari
+Type=simple
+WorkingDirectory=/var/lib/masakari
+PermissionsStartOnly=true
+ExecStart=/usr/local/bin/masakari-engine --config-file /etc/masakari/masakari.conf
+Restart=on-failure
+LimitNOFILE=65535
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
