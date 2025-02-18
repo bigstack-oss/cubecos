@@ -5,7 +5,9 @@
             <!-- HEADER BEGIN -->
             <div class="form__header flex flex-col items-center mb-4">
                 <img src="${url.resourcesPath}/img/${properties.imageName}" alt="cmp-login-logo" style="${properties.customImgStyle}">
-                <p class="text-white-70 font-semibold text text-lg mt-4">${properties.loginDescription}</p>
+                <#if properties.loginGreeting != "">
+                    <p class="text-white-70 font-semibold text text-lg mt-4">${properties.loginGreeting}</p>
+                </#if>
             </div>
             <!-- HEADER END -->
             <!-- PASSWORD SIGNIN START -->

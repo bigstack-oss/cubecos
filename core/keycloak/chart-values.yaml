@@ -46,6 +46,8 @@ extraEnv: |
     value: "3"
   - name: CACHE_OWNERS_AUTH_SESSIONS_COUNT
     value: "3"
+  - name: LOGIN_GREETING
+    value:
 
 rbac:
   create: true
