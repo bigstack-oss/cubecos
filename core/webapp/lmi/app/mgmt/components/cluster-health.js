@@ -60,6 +60,7 @@ const CORE_COMPS = [
   'filebeat',
   'auditbeat',
   'logstash',
+  'mongodb',
 ];
 
 const CTRL_COMPS = [
@@ -74,7 +75,7 @@ const CTRL_COMPS = [
 
 const EDGE_SERVICES = {
   'Cluster Link': [ 'link', 'clock', 'dns' ],
-  'Cluster Settings': [ 'etcd' ],
+  'Cluster Settings': [ 'etcd', 'mongodb' ],
   'HA Cluster': [ 'hacluster' ],
   'Message Queue': [ 'rabbitmq' ],
   'IaaS Database': [ 'mysql' ],
@@ -99,7 +100,7 @@ const EDGE_SERVICES = {
 
 const CTRL_SERVICES = {
   'Cluster Link': [ 'link', 'clock', 'dns' ],
-  'Cluster Settings': [ 'etcd' ],
+  'Cluster Settings': [ 'etcd', 'mongodb' ],
   'HA Cluster': [ 'hacluster' ],
   'Message Queue': [ 'rabbitmq' ],
   'IaaS Database': [ 'mysql' ],

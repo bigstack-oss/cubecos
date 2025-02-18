@@ -1,0 +1,28 @@
+[Unit]
+Description=MongoDB
+After=network.target
+
+[Service]
+User=mongod
+Group=mongod
+Type=simple
+ExecStart=/usr/bin/mongod --dbpath /var/lib/mongo --logpath /var/log/mongodb/mongodb.log --replSet cube-cos-rs --bind_ip_all
+
+# Give a reasonable amount of time for the server to start up/shut down
+TimeoutSec=120
+Restart=on-failure
+RestartSec=60
+
+# check with `systemd-cgtop` command.
+Slice=mongodb.slice
+CPUAccounting=true
+BlockIOAccounting=true
+MemoryAccounting=true
+TasksAccounting=true
+
+Environment=LOG_DIR=/var/log/mongodb
+StandardOutput=null
+StandardError=syslog
+
+[Install]
+WantedBy=multi-user.target

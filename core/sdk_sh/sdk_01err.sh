@@ -309,4 +309,11 @@ SRV="logstash"
 eval "ERR_DESC_$SRV[1]='daemon down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
+SRV="mongodb"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='quorum lost'"
+eval "ERR_DESC_$SRV[3]='orphan control node observed'"
+eval "ERR_DESC_$SRV[4]='unhealthy node observed'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
 unset SRV

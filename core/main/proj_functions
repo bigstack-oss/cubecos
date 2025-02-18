@@ -713,7 +713,7 @@ check_service_stats()
     echo "["
 
     # base services
-    local service_array=(link dns clock bootstrap license etcd hacluster rabbitmq mysql vip haproxy_ha haproxy httpd skyline lmi memcache ceph ceph_mon ceph_mgr ceph_mds ceph_osd ceph_rgw rbd_target)
+    local service_array=(link dns clock bootstrap license etcd hacluster rabbitmq mysql mongodb vip haproxy_ha haproxy httpd skyline lmi memcache ceph ceph_mon ceph_mgr ceph_mds ceph_osd ceph_rgw rbd_target)
     for service in "${service_array[@]}"
     do
         check_service $service

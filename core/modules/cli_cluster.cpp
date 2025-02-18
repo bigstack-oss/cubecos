@@ -148,7 +148,8 @@ CompMap s_comps = {
     { "logstash", { 0, Q } },
     { "opensearch", { 0, Q, R_CTRL_NOT_EDGE } },
     { "opensearch-dashboards", { 0, Q, R_CTRL_NOT_EDGE } },
-    { "node", { NO_REPAIR | NO_CHECK, 0 } }
+    { "node", { NO_REPAIR | NO_CHECK, 0 } },
+    { "mongodb", { 0, Q } }
 };
 
 #define HAS_REPORT(c)   !(s_comps[c].cap & NO_REPORT)
@@ -166,7 +167,7 @@ struct CheckRepairItem {
 CheckRepairItem s_services[] = {
     { S[ClusterLink], "link,clock,dns", false, R_ALL, BLVL_STD },
     { S[ClusterSys], "bootstrap,license", false, R_ALL, BLVL_STD },
-    { S[ClusterSettings], "etcd,nodelist", false },
+    { S[ClusterSettings], "etcd,nodelist,mongodb", false },
     { S[HaCluster], "hacluster", false },
     { S[MsgQueue], "rabbitmq", false },
     { S[IaasDb], "mysql", false },
