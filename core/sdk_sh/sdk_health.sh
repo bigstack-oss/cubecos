@@ -219,6 +219,11 @@ memcache_stats()
     echo stats | nc $(netstat -lntp | grep memcached | awk '{print $4}' | awk -F: '{print $1}') 11211
 }
 
+mongodb_stats()
+{
+    mongosh --quiet --eval 'rs.status()'
+}
+
 pacemaker_remote_add()
 {
     local node=$1
@@ -3783,6 +3788,108 @@ health_nodelist_check()
 health_nodelist_report()
 {
     cubectl node list
+}
+
+health_mongodb_check()
+{
+    local err_code=0
+    local err_msg=
+
+    # check the mongodb ping-pong
+    local is_connected="$(mongosh --quiet --eval 'db.adminCommand("ping").ok' 2>/dev/null)"
+    if [ $? -ne 0 -o -z "$is_connected" ]; then
+      err_code=1
+      err_msg="${err_msg}mongodb is not running\n"
+      health_fail_log "mongodb" $err_code "$err_msg"
+      local r=$?
+      health_mongodb_auto_repair $err_code $r
+      return $r
+    fi
+    if [ "$is_connected" -ne 1 ]; then
+      err_code=1
+      err_msg="${err_msg}mongodb can be accessed, but basic functions are not working properly\n"
+      health_fail_log "mongodb" $err_code "$err_msg"
+      local r=$?
+      health_mongodb_auto_repair $err_code $r
+      return $r
+    fi
+
+    # check the mongodb quorum status which will impact the read/write operation
+    local primary_count="$(mongosh --quiet --eval 'rs.status().members.filter(member => member.stateStr === "PRIMARY").length')"
+    if [ "$primary_count" -eq 0 ]; then
+      err_code=2
+      err_msg="${err_msg}mongodb quorum is lost, writes are blocked\n"
+    fi
+
+    # check the overall node status between the registered nodes and the actual nodes
+    local node_total="$(cubectl node list -r control | wc -l)"
+    local registered_node_count="$(mongosh --quiet --eval 'rs.status().members.length')"
+    if [ "$node_total" -ne "$registered_node_count" ]; then
+      err_code=3
+      err_msg="${err_msg}$registered_node_count/$node_total nodes are online\n"
+    fi
+
+    # check if any node is unavailable
+    # the case here usually means the read/write is fine for whole cluster,
+    # just some nodes are not reachable but which will not impact the cluster quorum
+    local unavailable_count="$(mongosh --quiet --eval 'rs.status().members.filter(member => member.stateStr === "(not reachable/healthy)").length')"
+    if [ "$unavailable_count" -gt 0 ]; then
+      err_code=4
+      err_msg="${err_msg}$unavailable_count nodes are unavailable\n"
+    fi
+
+    health_fail_log "mongodb" $err_code "$err_msg"
+    local r=$?
+    health_mongodb_auto_repair $err_code $r
+    return $r
+}
+
+health_mongodb_auto_repair()
+{
+    # notice:
+    # code 3:     it's not repairable automatically because the case might be caused by multiple reasons
+    #             during cube.cos installation or migration, so the repair process is not deterministic
+    #
+    # true_fail:  when this value is not zero, it means the previous repair process was continuously unsuccessful.
+    #             therefore, it is better not to perform any auto-repair until the issue is investigated and fixed manually.
+    local err_code=$1
+    local true_fail=$2
+    if [ "$true_fail" -ne 0 ]; then
+        return 0
+    fi
+
+    # auto repair for the cases like:
+    # code 1: mongodb is not running well
+    # code 2: mongodb quorum is lost, but the database can still be read
+    if [ "$err_code" -eq 1 -o "$err_code" -eq 2 ]; then
+        health_mongodb_repair
+        return 0
+    fi
+
+    # code 4: mongodb quorum is fine, but some nodes are not reachable
+    if [ "$err_code" -eq 4 ]; then
+        result="$(mongosh --quiet --eval 'rs.status().members.filter(member => member.stateStr === "(not reachable/healthy)").map(member => member.name).join(" ")')"
+        IFS=' ' read -r -a unavailable_nodes <<< "$result"
+        for node in "${unavailable_nodes[@]}"; do
+            hostname="$(echo "$node" | sed 's/:.*//')"
+            remote_systemd_restart $hostname mongodb
+        done
+
+        return 0
+    fi
+
+    return 0
+}
+
+health_mongodb_repair()
+{
+    cubectl node exec -p /usr/sbin/hex_config restart_mongodb >/dev/null 2>&1
+    return 0
+}
+
+health_mongodb_report()
+{
+    mongosh --quiet --eval 'rs.status().members.map(member => ({name: member.name, health: member.health, stateStr: member.stateStr, lastHeartbeatMessage: member.lastHeartbeatMessage, syncSourceHost: member.syncSourceHost, uptime: member.uptime}))'
 }
 
 health_check_toggle()

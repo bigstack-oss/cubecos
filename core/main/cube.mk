@@ -131,6 +131,7 @@ hex_config_MODULES += config_opensearch_dashboards.o
 hex_config_MODULES += config_logstash.o
 hex_config_MODULES += config_kafka.o
 hex_config_MODULES += config_prometheus.o
+hex_config_MODULES += config_mongodb.o
 
 PROGRAMS += hex_config
 

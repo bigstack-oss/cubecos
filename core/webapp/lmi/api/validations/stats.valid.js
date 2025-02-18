@@ -137,7 +137,8 @@ module.exports = {
             'auditbeat',
             'opensearch',
             'logstash',
-            'opensearch-dashboards'])
+            'opensearch-dashboards',
+            'mongodb'])
          .required(),
     },
   },
