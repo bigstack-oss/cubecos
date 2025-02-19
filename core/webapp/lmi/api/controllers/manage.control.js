@@ -66,7 +66,7 @@ exports.imageAdd = async (req, res, next) => {
         // On finish of the upload
         fstream.on('close', () => {
             logger.info(`Upload of '${filename}' finished and starts importing to ${req.query.project} as ${req.query.name} in the background`);
-            spawn('/usr/sbin/hex_sdk', ['os_image_import_with_attrs', 'scsi', uploadPath, filename, req.query.name, 'default', req.query.project, 'private' ], {
+            spawn('/usr/sbin/hex_sdk', ['os_image_import_with_attrs', 'scsi', uploadPath, filename, req.query.name, 'default', req.query.project, 'glance-images', 'private' ], {
                 detached: true
             });
             res.redirect('back');

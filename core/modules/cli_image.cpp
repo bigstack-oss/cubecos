@@ -114,14 +114,17 @@ ImageImportMain(int argc, const char** argv)
             return CLI_INVALID_ARGS;
         }
 
-        if (CliMatchCmdHelper(argc, argv, 6, "echo 'public\nprivate'", &index, &visibility, "Visibility: ") != CLI_SUCCESS) {
-            CliPrintf("Unknown visibility");
+        if (CliMatchCmdHelper(argc, argv, 6, "echo 'glance-images\ncinder-volumes'", &index, &pool, "Bootable image or volume: ") != CLI_SUCCESS) {
+            CliPrintf("Invalid option");
             return CLI_INVALID_ARGS;
         }
 
-        if (CliMatchCmdHelper(argc, argv, 7, "echo 'glance-images\ncinder-volumes'", &index, &pool, "Bootable image or volume: ") != CLI_SUCCESS) {
-            CliPrintf("Unknown visibility");
-            return CLI_INVALID_ARGS;
+        if (strcmp(pool.c_str(), "glance-images") == 0) {
+            // Only glance-images has the public/private visibility setting.
+            if (CliMatchCmdHelper(argc, argv, 7, "echo 'public\nprivate'", &index, &visibility, "Visibility: ") != CLI_SUCCESS) {
+                CliPrintf("Unknown visibility");
+                return CLI_INVALID_ARGS;
+            }
         }
     }
 
@@ -147,7 +150,7 @@ ImageImportMain(int argc, const char** argv)
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
                             HEX_SDK, "os_image_import_with_attrs",
                             attrsType.c_str(), dir.c_str(), file.c_str(), name.c_str(),
-                            domain.c_str(), tenant.c_str(), visibility.c_str(), pool.c_str(), NULL);
+                            domain.c_str(), tenant.c_str(), pool.c_str(), visibility.c_str(), NULL);
 
 
     if (type == 0 /* usb */) {
