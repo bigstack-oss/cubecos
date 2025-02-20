@@ -12,4 +12,4 @@ core/webapp/lmi/static/env.js
 # emacs temp file
 *~
 TAGS
-jail/ubi9.tar.gz
+jail/*.tar.gz
