@@ -782,8 +782,8 @@ os_image_import_with_attrs()
     local NAME=$4
     local DOMAIN=$5
     local TENANT=$6
-    local VISIBILITY=$7
-    local POOL=$8
+    local POOL=$7
+    local VISIBILITY=${8:-public}
 
     local FLAGS="--project-domain $DOMAIN --project $TENANT --$VISIBILITY"
 
@@ -840,7 +840,7 @@ os_image_import()
     else
         rbd --id cinder import $IMG_NAME ${BUILTIN_BACKPOOL}/$NAME
         openstack role add --user admin_cli --project $(echo $FLAGS | grep -o "[-][-]project .* " | cut -d" " -f2) admin
-        local VOL_ID=$(cinder $(echo $FLAGS | sed -e "s/--project-domain/--os-project-domain-name/" -e "s/--project/--os-project-name/" -e "s/--public//") manage --bootable --name $NAME cube@ceph#ceph $NAME 2>/dev/null | grep " id" | cut -d"|" -f3)
+        local VOL_ID=$(cinder $(echo $FLAGS | sed -e "s/--project-domain/--os-project-domain-name/" -e "s/--project/--os-project-name/" -e "s/--public//" -e "s/--private//") manage --bootable --name $NAME cube@ceph#ceph $NAME 2>/dev/null | grep " id" | cut -d"|" -f3)
         openstack volume set $(echo $PROPERTIES | sed "s/--property/--image-property/g") ${VOL_ID:-NOSUCHVOLID}
     fi
     echo "[$(date +"%T")] Finished creating image $NAME"
@@ -898,7 +898,7 @@ os_extpack_image_import()
                 if [ -n "$olds" ]; then
                     openstack image delete $olds 2>/dev/null
                 fi
-                os_image_import_with_attrs default $DIR/${EXT_FOLDER} $IMG ${IMG%.*} default admin public
+                os_image_import_with_attrs default $DIR/${EXT_FOLDER} $IMG ${IMG%.*} default admin glance-images public
                 ;;
             appfw-)
                 local appfw_dir=/opt/appfw/images/
@@ -963,6 +963,7 @@ os_image_import_list()
     local PREFIX=$2
 
     cd $DIR
+    # ls -la 9th field: dir/file name
     ls -la ${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel} 2>/dev/null | awk '{print $9}'
     ls -la */${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel} 2>/dev/null | awk '{print $9}'
 }
