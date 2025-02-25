@@ -7,6 +7,7 @@
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/dryrun.h>
+#include <hex/logrotate.h>
 
 #include <cube/systemd_util.h>
 
@@ -31,6 +32,9 @@ PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+
+// rotate daily and enable copytruncate
+static LogRotateConf log_conf("cube-cos-ui", "/var/log/cube-cos-ui/*.log", DAILY, 128, 0, true);
 
 static bool
 ParseCube(const char *name, const char *value, bool isNew)

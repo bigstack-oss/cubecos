@@ -32,6 +32,8 @@ http {
                     '"$upstream_response_time" "$request" '
                     '$status $body_bytes_sent "$http_referer" '
                     '"$http_user_agent" "$http_x_forwarded_for"';
+    log_format ui '$remote_addr - $remote_user [$time_local] "$request_time" '
+                    '"$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';
 
     ##
     # SSL Settings
@@ -258,6 +260,19 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_set_header X-Forwarded-Host $host;
             proxy_set_header Host @SHARED_ID@:15868;
+        }
+    }
+
+    server {
+        listen @MGMT_ADDR@:8083 ssl;
+        root /usr/share/cube/ui;
+        access_log /var/log/cube-cos-ui/cube-cos-ui-nginx-access.log ui;
+        error_log /var/log/cube-cos-ui/cube-cos-ui-nginx-error.log;
+
+        location / {
+            # First attempt to serve request as file, then
+            # as directory, then fall back to displaying a 404.
+            try_files $uri $uri/ /index.html;
         }
     }
 }
