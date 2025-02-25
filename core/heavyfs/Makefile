@@ -136,7 +136,7 @@ rootfs_install::
 	$(Q)echo "install usb_storage /bin/true" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 
 # note: install skyline pkgs first since it doesn't follow yoga constraint
-HEAVY_COMPONENTS += skyline
+HEAVY_COMPONENTS += nginx skyline
 HEAVY_COMPONENTS += webapp mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
 HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift
 HEAVY_COMPONENTS += heat horizon octavia barbican manila designate masakari monasca senlin watcher cyborg

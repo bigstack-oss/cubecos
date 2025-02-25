@@ -25,14 +25,10 @@ static const char USER[] = "skyline";
 static const char DBPASS[] = "HXzkHNeeG6ReDojn";
 static const char USERPASS[] = "b7qfAoijy1LOZ8Fw";
 
-static const char NGINX_CONF_IN[] = "/etc/nginx/nginx.conf.in";
-static const char NGINX_CONF[] = "/etc/nginx/nginx.conf";
-
 static const char SKYLINE_CONF_IN[] = "/etc/skyline/skyline.yaml.in";
 static const char SKYLINE_CONF[] = "/etc/skyline/skyline.yaml";
 
 // skyline services
-static const char NGINX_NAME[] = "nginx";
 static const char API_NAME[] = "skyline-apiserver";
 
 static bool s_bSetup = true;
@@ -118,17 +114,6 @@ SetupService(std::string domain, std::string userPass)
 }
 
 static bool
-WriteNginxConf(const char* myip, const char* sharedId)
-{
-    if (HexSystemF(0, "sed -e \"s/@MGMT_ADDR@/%s/\" -e \"s/@SHARED_ID@/%s/\" %s > %s", myip, sharedId, NGINX_CONF_IN, NGINX_CONF) != 0) {
-        HexLogError("failed to update %s", NGINX_CONF);
-        return false;
-    }
-
-    return true;
-}
-
-static bool
 WriteSkylineConf(bool debug, const char* domain, const char* sharedId, const char* userpass, const char* dbpass)
 {
     if (HexSystemF(0, "sed -e \"s/@SHARED_ID@/%s/\" -e \"s/@SKYLINE_SERVICE_PASSWORD@/%s/\" -e \"s/@SKYLINE_DB_PASSWORD@/%s/\" "
@@ -145,7 +130,6 @@ static bool
 CommitService(bool enabled)
 {
     if (IsControl(s_eCubeRole)) {
-        SystemdCommitService(enabled, NGINX_NAME, true);     // nginx
         SystemdCommitService(enabled, API_NAME, true);       // skyline-apiserver
     }
 
@@ -192,7 +176,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bCubeModified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
+    s_bConfigChanged = modified | s_bCubeModified;
 
     return s_bDbPassChanged | s_bConfigChanged;
 }
@@ -221,7 +205,6 @@ Commit(bool modified, int dryLevel)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
     if (s_bConfigChanged) {
-        WriteNginxConf(myip.c_str(), sharedId.c_str());
         WriteSkylineConf(s_debug, s_cubeDomain.c_str(), sharedId.c_str(), userPass.c_str(), dbPass.c_str());
     }
 

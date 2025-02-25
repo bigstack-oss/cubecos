@@ -1,14 +1,10 @@
 # Cube SDK
 # openstack skyline installation
 
-NGINX_CONF_DIR := /etc/nginx
-
 SKYLINE_CONF_DIR := /etc/skyline
 SKYLINE_POLICY_DIR := $(SKYLINE_CONF_DIR)/policy
 SKYLINE_APP_DIR := /var/lib/skyline
 SKYLINE_LOG_DIR := /var/log/skyline
-
-ROOTFS_DNF += nginx
 
 # refer to skyline-apiserver/requirements.txt, need to be installed before openstack deps
 ROOTFS_PIP_NC += gunicorn
@@ -24,7 +20,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c "cd /skyline-apiserver && pip3 install -r requirements.txt && python3 setup.py install"
 	$(Q)cp ${ROOTDIR}/skyline-apiserver/etc/gunicorn.py ${ROOTDIR}/etc/skyline/gunicorn.py
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/skyline/skyline-apiserver.service ./lib/systemd/system
-	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/skyline/nginx.conf.in .$(NGINX_CONF_DIR)/nginx.conf.in
 	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/skyline/skyline.yaml.in .$(SKYLINE_CONF_DIR)/skyline.yaml.in
 	$(Q)rm -rf $(ROOTDIR)/skyline-apiserver
 
