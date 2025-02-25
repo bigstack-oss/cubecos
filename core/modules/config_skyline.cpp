@@ -176,7 +176,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bCubeModified;
+    s_bConfigChanged = modified | s_bCubeModified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
 
     return s_bDbPassChanged | s_bConfigChanged;
 }
