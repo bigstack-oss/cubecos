@@ -62,16 +62,6 @@ WriteNginxConf(const char* myip, const char* sharedId)
 }
 
 static bool
-CommitService(bool enabled)
-{
-    if (IsControl(s_eCubeRole)) {
-        SystemdCommitService(enabled, NGINX_NAME, true);     // nginx
-    }
-
-    return true;
-}
-
-static bool
 CommitCheck(bool modified, int dryLevel)
 {
     if (IsBootstrap()) {
@@ -102,7 +92,9 @@ Commit(bool modified, int dryLevel)
         WriteNginxConf(myip.c_str(), sharedId.c_str());
     }
 
-    CommitService(enabled);
+    if (enabled) {
+        SystemdCommitService(enabled, NGINX_NAME, true);
+    }
 
     return true;
 }
