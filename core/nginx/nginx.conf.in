@@ -264,7 +264,7 @@ http {
     }
 
     server {
-        listen @MGMT_ADDR@:8083 ssl;
+        listen @MGMT_ADDR@:8083;
         root /usr/share/cube/ui;
         index index.html;
         access_log /var/log/cube-cos-ui/cube-cos-ui-nginx-access.log ui;

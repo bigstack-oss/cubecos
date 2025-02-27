@@ -201,6 +201,34 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  server localhost %s:8888 check\n", myip.c_str());
     fprintf(fout, "  \n");
 
+    fprintf(fout, "frontend cube_cos_https\n");
+    fprintf(fout, "  bind :4443 ssl crt /var/www/certs/server.pem\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  option http-server-close\n");
+    fprintf(fout, "  http-request add-header X-Forwarded-Proto https\n");
+    fprintf(fout, "  acl api_path path_beg /api/\n");
+    fprintf(fout, "  acl saml_path path_beg /saml/\n");
+    fprintf(fout, "  use_backend cube_cos_api if api_path or saml_path\n");
+    fprintf(fout, "  default_backend cube_cos_ui\n");
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "backend cube_cos_api\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  option http-server-close\n");
+    fprintf(fout, "  redirect scheme https if !{ ssl_fc }\n");
+    fprintf(fout, "  server localhost %s:8082 check\n", myip.c_str());
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "backend cube_cos_ui\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  option http-server-close\n");
+    fprintf(fout, "  redirect scheme https if !{ ssl_fc }\n");
+    fprintf(fout, "  server localhost %s:8083 check\n", myip.c_str());
+    fprintf(fout, "  \n");
+
     fclose(fout);
 
     return true;
@@ -302,6 +330,8 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         { "kafka", "9095", "tcp", "" },
         { "mellon", "5443", "tcp", "" },
         { "skyline", "9999", "http", "" },
+        { "cube_cos_api", "8082", "http", "" },
+        { "cube_cos_ui", "8083", "http", "" },
         { "ceph_restful_api", "8005,8003", "tcp", "" },
         { "ceph_prometheus_ep", "9285,9283", "httpchk,strf", "  option  httpchk GET /metrics\n  http-check expect rstring .*ceph.*" },
         { "ceph_dashboard", "7443,7442", "httpschk", "  option  httpchk GET /ceph/\n  http-check expect status 200" },
