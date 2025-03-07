@@ -18,11 +18,11 @@ include hex/make/devtools_definitions.mk
 
 centos9-jail: $(TOP_JAILDIR)/jail.ubi9.dockerfile ubi9-base
 	$(Q)$(DOCKER_BIN) rm -vf $${PROJECT:-$@} $(IGNORE_ERR)
-	$(Q)sudo rm -rf $(PWD)/../$${PROJECT:-$(@F)}
+	$(Q)sudo rm -rf $(TOP_SRCDIR)/../$${PROJECT:-$(@F)}
 	$(Q)cp $(TOP_SRCDIR)/core/horizon/theme/static/images/cube-icon.png $(TOP_JAILDIR)/vnc/
-	$(Q)DOCKER_BUILDKIT=1 $(DOCKER_BIN) build $(DOCKER_BLD_FLG) --progress=plain --build-arg BLDDIR=$${BLDDIR:-/root/workspace/$(@F)} --build-arg PASSPHRASE=$(PASSPHRASE) --build-arg PRIVATE_PEM=$(PRIVATE_PEM) --build-arg PUBLIC_PEM=$(PUBLIC_PEM) --build-arg DIST=$(subst -jail,,$@) --build-arg WEAK_DEP=$(WEAK_DEP) --build-arg IPT_LEGACY=$(IPT_LEGACY) -t $(DOCKER_REG)/$(@F) -f $< $(TOP_JAILDIR) # --target tier1
+	$(Q)DOCKER_BUILDKIT=1 $(DOCKER_BIN) build $(DOCKER_BLD_FLG) --progress=plain --build-arg BLDDIR=$${BLDDIR:-/root/workspace/$${PROJECT:-$(@F)}} --build-arg PASSPHRASE=$(PASSPHRASE) --build-arg PRIVATE_PEM=$(PRIVATE_PEM) --build-arg PUBLIC_PEM=$(PUBLIC_PEM) --build-arg DIST=$(subst -jail,,$@) --build-arg WEAK_DEP=$(WEAK_DEP) --build-arg IPT_LEGACY=$(IPT_LEGACY) -t $(DOCKER_REG)/$(@F) -f $< $(TOP_JAILDIR) # --target tier1
 	$(Q)$(DOCKER_BIN) run -P $(DOCKER_FLG) -h $@ --name $${PROJECT:-$@} -e PROJECT=$${PROJECT:-$@} -v $(TOP_DIR):$(TOP_WORKDIR) -v /usr/lib/modules/$$(uname -r):/usr/lib/modules/$$(uname -r) $(DOCKER_EXTRA) $(DOCKER_REG)/$@
-	$(Q)$(DOCKER_BIN) exec $${PROJECT:-$(filter centos%-jail,$(MAKECMDGOALS))} bash -c "git config --global --add safe.directory \$${PWD%/*}/cube"
+	$(Q)$(DOCKER_BIN) exec $${PROJECT:-$(filter centos%-jail,$(MAKECMDGOALS))} bash -c "git config --global --add safe.directory \$${PWD%/*}/cubecos"
 	$(Q)rm -f $(TOP_JAILDIR)/vnc/cube-icon.png
 
 ubi9-base: _ubi9_base jail/ubi9.tar.gz
@@ -65,4 +65,4 @@ clean-dangling-img:
 .PHONY: enter
 enter:
 	$(Q)$(DOCKER_BIN) start $(PROJECT) $(IGNORE_ERR)
-	$(Q)$(DOCKER_BIN) exec -ti $(PROJECT) bash -c "../cube/hex/configure; bash"
+	$(Q)$(DOCKER_BIN) exec -ti $(PROJECT) bash -c "../cubecos/hex/configure; bash"
