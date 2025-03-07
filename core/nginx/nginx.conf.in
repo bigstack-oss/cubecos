@@ -269,5 +269,11 @@ http {
         index index.html;
         access_log /var/log/cube-cos-ui/cube-cos-ui-nginx-access.log ui;
         error_log /var/log/cube-cos-ui/cube-cos-ui-nginx-error.log;
+
+        location / {
+            # First attempt to serve request as file, then
+            # as directory, then fall back to the index page.
+            try_files $uri $uri/ /index.html;
+        }
     }
 }
