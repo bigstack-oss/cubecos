@@ -100,7 +100,8 @@ Commit(bool modified, int dryLevel)
 }
 
 CONFIG_MODULE(nginx, 0, 0, 0, 0, Commit);
+CONFIG_REQUIRES(nginx, cube_scan);
 CONFIG_REQUIRES(nginx, skyline);
 
 // extra tunings
-CONFIG_OBSERVES(skyline, cubesys, ParseCube, NotifyCube);
+CONFIG_OBSERVES(nginx, cubesys, ParseCube, NotifyCube);

@@ -241,6 +241,7 @@ RestartMain(int argc, char* argv[])
 CONFIG_COMMAND_WITH_SETTINGS(restart_skyline, RestartMain, RestartUsage);
 
 CONFIG_MODULE(skyline, 0, Parse, 0, 0, Commit);
+CONFIG_REQUIRES(skyline, cube_scan);
 CONFIG_REQUIRES(skyline, memcache);
 
 // extra tunings
