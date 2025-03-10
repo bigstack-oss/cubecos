@@ -1,0 +1,23 @@
+name: Fast Forward Merge
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+
+jobs:
+  merge:
+    if: ${{ github.event.label.name == 'done' && github.event.pull_request.mergeable == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Out PR Target Branch
+        uses: actions/checkout@v4
+      - name: Merge
+        run: |
+          TOPIC_BRANCH=${{ github.head_ref }}
+          git pull origin $TOPIC_BRANCH
+          git checkout $TOPIC_BRANCH
+          git checkout @{-1}
+          git branch
+          git merge --ff-only $TOPIC_BRANCH
+          git push
