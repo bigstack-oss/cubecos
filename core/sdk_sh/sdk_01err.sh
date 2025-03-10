@@ -69,12 +69,26 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 
 SRV="httpd"
 eval "ERR_DESC_$SRV[1]='control httpd down'"
-eval "ERR_DESC_$SRV[2]='port not responding'"
+eval "ERR_DESC_$SRV[2]='monasca port not responding'"
+eval "ERR_DESC_$SRV[3]='keystone port not responding'"
+eval "ERR_DESC_$SRV[4]='placement port not responding'"
+eval "ERR_DESC_$SRV[5]='mellon port not responding'"
+eval "ERR_DESC_$SRV[6]='barbican port not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="nginx"
+eval "ERR_DESC_$SRV[1]='control nginx down'"
+eval "ERR_DESC_$SRV[2]='ui port not responding'"
+eval "ERR_DESC_$SRV[3]='skyline port not responding'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="lmi"
 eval "ERR_DESC_$SRV[1]='service down'"
 eval "ERR_DESC_$SRV[2]='service not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="skyline"
+eval "ERR_DESC_$SRV[1]='api down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="memcache"

@@ -1250,14 +1250,14 @@ health_httpd_repair()
     done
 }
 
-# skyline
+# nginx
 
-health_skyline_report()
+health_nginx_report()
 {
     health_report ${FUNCNAME[0]}
 }
 
-health_skyline_check()
+health_nginx_check()
 {
     local err_code=0
     local err_msg=
@@ -1271,16 +1271,84 @@ health_skyline_check()
             err_code=1
             err_msg="${err_msg}nginx of $ctrl is not running\n"
         fi
-        if ! is_remote_running $ctrl skyline-apiserver >/dev/null 2>&1; then
-            err_code=2
-            err_msg="${err_msg}skyline-apiserver of $ctrl is not running\n"
-        fi
+
+        local i=2
+        # ui(8083)
+        # skyline(9999)
+        for port in 8083 9999
+        do
+            $CURL -sf http://$ctrl:$port >/dev/null
+            # 0: ok, 22: http error (page not found)
+            if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+                err_code=$i
+                err_msg="${err_msg}http port $port of $ctrl doesn't respond\n"
+            fi
+            let "i = $i + 1"
+        done
     done
 
-    health_fail_log "skyline" $err_code "$err_msg"
+    health_fail_log "nginx" $err_code "$err_msg"
+    local r=$?
+    health_nginx_auto_repair $err_code $r
+    return $r
 }
 
-health_skyline_repair()
+health_nginx_auto_repair()
+{
+    # true_fail:
+    # when this value is not zero, it means the previous repair process was continuously unsuccessful.
+    # therefore, it is better not to perform any auto-repair until the issue is investigated and fixed manually.
+    local err_code=$1
+    local true_fail=$2
+    if [ "$true_fail" -ne 0 ]; then
+        return 0
+    fi
+
+    if [ "$err_code" -eq 1 ]; then
+        readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
+        declare -p ctrl_array > /dev/null
+        for ctrl_entry in "${ctrl_array[@]}"
+        do
+            local ctrl=$(echo $ctrl_entry | head -c -1)
+            if ! is_remote_running $ctrl nginx >/dev/null 2>&1; then
+                remote_systemd_restart $ctrl nginx
+            fi
+        done
+        return 0
+    fi
+
+    if [ "$err_code" -eq 2 ]; then
+        readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
+        declare -p ctrl_array > /dev/null
+        for ctrl_entry in "${ctrl_array[@]}"
+        do
+            $CURL -sf http://$ctrl:8083 >/dev/null
+            # 0: ok, 22: http error (page not found)
+            if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+                remote_systemd_restart $ctrl nginx
+            fi
+        done
+        return 0
+    fi
+
+    if [ "$err_code" -eq 3 ]; then
+        readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
+        declare -p ctrl_array > /dev/null
+        for ctrl_entry in "${ctrl_array[@]}"
+        do
+            $CURL -sf http://$ctrl:9999 >/dev/null
+            # 0: ok, 22: http error (page not found)
+            if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+                remote_systemd_restart $ctrl nginx
+            fi
+        done
+        return 0
+    fi
+
+    return 0
+}
+
+health_nginx_repair()
 {
     readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
     declare -p ctrl_array > /dev/null
@@ -1290,9 +1358,17 @@ health_skyline_repair()
         if ! is_remote_running $ctrl nginx >/dev/null 2>&1; then
             remote_systemd_restart $ctrl nginx
         fi
-        if ! is_remote_running $ctrl skyline-apiserver >/dev/null 2>&1; then
-            remote_systemd_restart $ctrl skyline-apiserver
-        fi
+
+        # ui(8083)
+        # skyline(9999)
+        for port in 8083 9999
+        do
+            $CURL -sf http://$ctrl:$port >/dev/null
+            # 0: ok, 22: http error (page not found)
+            if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+                remote_systemd_restart $ctrl nginx
+            fi
+        done
     done
 }
 
@@ -1340,6 +1416,75 @@ health_lmi_repair()
         $CURL -sf http://$ctrl:8081 >/dev/null
         if [ $? -eq 7 ] ; then
             remote_systemd_restart $ctrl lmi
+        fi
+    done
+}
+
+# skyline
+
+health_skyline_report()
+{
+    health_report ${FUNCNAME[0]}
+}
+
+health_skyline_check()
+{
+    local err_code=0
+    local err_msg=
+
+    readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
+    declare -p ctrl_array > /dev/null
+    for ctrl_entry in "${ctrl_array[@]}"
+    do
+        local ctrl=$(echo $ctrl_entry | head -c -1)
+        if ! is_remote_running $ctrl skyline-apiserver >/dev/null 2>&1; then
+            err_code=1
+            err_msg="${err_msg}skyline-apiserver of $ctrl is not running\n"
+        fi
+    done
+
+    health_fail_log "skyline" $err_code "$err_msg"
+    local r=$?
+    health_skyline_auto_repair $err_code $r
+    return $r
+}
+
+health_skyline_auto_repair()
+{
+    # true_fail:
+    # when this value is not zero, it means the previous repair process was continuously unsuccessful.
+    # therefore, it is better not to perform any auto-repair until the issue is investigated and fixed manually.
+    local err_code=$1
+    local true_fail=$2
+    if [ "$true_fail" -ne 0 ]; then
+        return 0
+    fi
+
+    if [ "$err_code" -eq 1 ]; then
+        readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
+        declare -p ctrl_array > /dev/null
+        for ctrl_entry in "${ctrl_array[@]}"
+        do
+            local ctrl=$(echo $ctrl_entry | head -c -1)
+            if ! is_remote_running $ctrl skyline-apiserver >/dev/null 2>&1; then
+                remote_systemd_restart $ctrl skyline-apiserver
+            fi
+        done
+        return 0
+    fi
+
+    return 0
+}
+
+health_skyline_repair()
+{
+    readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
+    declare -p ctrl_array > /dev/null
+    for ctrl_entry in "${ctrl_array[@]}"
+    do
+        local ctrl=$(echo $ctrl_entry | head -c -1)
+        if ! is_remote_running $ctrl skyline-apiserver >/dev/null 2>&1; then
+            remote_systemd_restart $ctrl skyline-apiserver
         fi
     done
 }
