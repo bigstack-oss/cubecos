@@ -19,12 +19,6 @@ module "keycloak" {
   #cube_controller = var.cube_controller
 }
 
-module "keycloak_lmi" {
-  source = "./keycloak/lmi_client/"
-
-  cube_controller = var.cube_controller
-}
-
 module "keycloak_keystone" {
   source = "./keycloak/keystone_client/"
 
@@ -39,6 +33,18 @@ module "keycloak_rancher" {
 
 module "keycloak_ceph_dashboard" {
   source = "./keycloak/ceph_dashboard_client/"
+
+  cube_controller = var.cube_controller
+}
+
+module "keycloak_lmi" {
+  source = "./keycloak/lmi_client/"
+
+  cube_controller = var.cube_controller
+}
+
+module "keycloak_api" {
+  source = "./keycloak/api_client/"
 
   cube_controller = var.cube_controller
 }
