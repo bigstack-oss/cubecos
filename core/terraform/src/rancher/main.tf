@@ -127,4 +127,3 @@ resource "rancher2_global_role_binding" "cube_users" {
 # output "token" {
 #     value = rancher2_bootstrap.admin.token
 # }
-

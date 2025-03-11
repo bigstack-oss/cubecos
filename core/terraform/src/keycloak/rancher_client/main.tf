@@ -18,7 +18,7 @@ provider "keycloak" {
 }
 
 data "keycloak_realm" "master" {
-    realm   = "master"
+  realm   = "master"
 }
 
 resource "keycloak_saml_client" "rancher_client" {

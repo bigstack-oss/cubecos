@@ -32,8 +32,8 @@ resource "keycloak_group" "cube_users" {
 }
 
 resource "keycloak_group" "ops_domain_default" {
-    realm_id = data.keycloak_realm.master.id
-    name     = "ops-domain:default"
+  realm_id = data.keycloak_realm.master.id
+  name     = "ops-domain:default"
 }
 
 resource "keycloak_default_groups" "default" {
@@ -143,4 +143,3 @@ resource "keycloak_group_memberships" "group_admins" {
 # output "saml_idp_descriptor" {
 #   value = data.local_file.saml_idp_descriptor.content
 # }
-

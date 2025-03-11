@@ -56,5 +56,5 @@ module "rancher" {
 }
 
 output "rancher" {
-    value = module.rancher
+  value = module.rancher
 }
