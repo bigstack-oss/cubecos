@@ -1,5 +1,13 @@
 # Core Rootfs
 
+## Install /usr/sbin/hex_sdk modules.pre
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_01-var-static.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_02-var-runtime.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_cmd.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_is.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_remote.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_stale.sh
+
 ## Install /usr/sbin/hex_sdk modules
 hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_firmware.sh
 hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_snapshot.sh
@@ -7,29 +15,48 @@ hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_update.sh
 hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_banner.sh
 hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_preset.sh
 hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_util.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_00var.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_01err.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_openstack.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_ceph.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_stats.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_alert.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_logs.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_support.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_network.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_hwdetect.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_migrate.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_health.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_ovn.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_gpu.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_license.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_lmi.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_security.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_diagnostics.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_wrapper.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_gcp.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_app.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_k3s.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/sdk_git.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/errcodes
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_alert.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_app.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_banner.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ceph.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_diagnostics.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_firmware.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_gcp.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_git.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_gpu.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_haproxy.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_health.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_hwdetect.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_k3s.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_kafka.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_license.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_lmi.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_logs.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_memcache.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_migrate.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_mongodb.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_mysql.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_network.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ntp.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_opensearch.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_os.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ovn.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_pacemaker.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_preset.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_rabbitmq.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_security.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_snapshot.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_stats.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_support.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_toggle.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_update.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_util.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_zookeeper.sh
+
+## Install /usr/sbin/hex_sdk modules.post
+hex_shell_MODULES_POST += $(PROJ_SHMODDIR)/modules.post/sdk_99wrapper.sh
+
 ## Build/Install hex binaries
 
 hex_firsttime_MODULES += firsttime_welcome.o

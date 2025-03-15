@@ -51,11 +51,6 @@ rootfs_install::
 	$(Q)chmod 0755 hdsentinel*
 	$(Q)mv -f hdsentinel* $(ROOTDIR)/usr/sbin/hdsentinel
 
-# /usr/local/lib64/python3.9/site-packages/xmlsec from pip conflicts with that from dnf install python3-xmlsec
-# As a result, ceph mgr module enable dashboard failed with errors: lxml & xmlsec libxml2 library version mismatch
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) pip uninstall -y xmlsec
-
 # remove unused k8sevents which anyway errors when ceph-mgr starts
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf remove -y ceph-mgr-k8sevents ceph-mgr-rook ceph-mgr-cephadm ceph-mgr-diskprediction-local

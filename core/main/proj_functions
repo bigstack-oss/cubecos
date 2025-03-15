@@ -1,7 +1,7 @@
 # CUBE SDK
 
 # PROG must be set before sourcing this file
-if [ -z "$PROG" ]; then
+if [ -z "$PROG" ] ; then
     echo "Error: PROG not set" >&2
     exit 1
 fi
@@ -9,77 +9,70 @@ fi
 HEX_DONE=/run/bootstrap_done
 CUBE_DONE=/run/cube_commit_done
 CLUSTER_SYNC=/run/cube_cluster_synced
-CLUSTER_REPAIR=/run/cube_cluster_repairing
+CLUSTER_REPAIRING=/run/cube_cluster_repairing
 HORIZON_APP_DIR=/usr/share/openstack-dashboard/openstack_dashboard/local/enabled
 
-is_centos()
+_hex_exec_abort()
 {
-    grep -q "CentOS Linux" /etc/system-release
+    Quiet -n pkill -P $(cat $CLUSTER_REPAIRING 2>/dev/null)
+    rm -f $CLUSTER_REPAIRING
 }
 
-is_rhel()
+_hex_exec()
 {
-    grep -q "Red Hat Enterprise Linux" /etc/system-release
-}
-
-# source hex_tuning /etc/settings.txt doesn't work in a cron job, we use
-# T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-
-is_undef_node()
-{
-    T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-    [ "$T_cubesys_role" == "undef" ]
-}
-
-is_control_node()
-{
-    T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-    [ "$T_cubesys_role" == "control" ] || [ "$T_cubesys_role" == "control-network" ] || [ "$T_cubesys_role" == "control-converged" ] || [ "$T_cubesys_role" == "edge-core" ] || [ "$T_cubesys_role" == "moderator" ]
-}
-
-is_compute_node()
-{
-    T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-    [ "$T_cubesys_role" == "compute" ] || [ "$T_cubesys_role" == "control-converged" ] || [ "$T_cubesys_role" == "edge-core" ]
-}
-
-is_pure_compute_node()
-{
-    T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-    [ "$T_cubesys_role" == "compute" ]
-}
-
-is_storage_node()
-{
-    T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-    [ "$T_cubesys_role" == "storage" ] || [ "$T_cubesys_role" == "control-converged" ] || [ "$T_cubesys_role" == "edge-core" ]
-}
-
-is_edge_node()
-{
-    T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-    [ "$T_cubesys_role" == "edge-core" ] || [ "$T_cubesys_role" == "moderator" ]
-}
-
-is_core_node()
-{
-    T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-    [ "$T_cubesys_role" == "edge-core" ]
-}
-
-is_moderator_node()
-{
-    T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
-    [ "$T_cubesys_role" == "moderator" ]
-}
-
-is_first_three_compute_node()
-{
-    if cubectl node list -r compute -j | jq -r .[].hostname | head -3 | grep -q $(hostname); then
-        return 0
+    local cmd="${1:-BADCMD}"
+    shift 1
+    local runtime=/run/$cmd
+    if echo "$cmd" | grep -q "health_.*_check$" ; then
+        if [ -e $HEX_STATE_DIR/${cmd}_disabled ] ; then
+            local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"disabled\""
+            $INFLUX -database events -execute "${query},detail=\"$cmd\""
+        else
+            if [ "x$1" = "x-l" -o "x$1" = "x-last" ] ; then
+                shift 1
+                local last_chk="true"
+            fi
+            if [ -e $runtime -a "x$last_chk" = "xtrue" ] ; then
+                ret=$(cat $runtime | jq -r .ERROR_CODE)
+                $cmd $@ &
+                return ${ret:-0}
+            else
+                $cmd $@
+            fi
+        fi
+    elif echo "$cmd" | grep -q "health_.*_repair$" ; then
+        if $HEX_SDK is_repairing ; then
+            return 1
+        else
+            trap _hex_exec_abort INT EXIT
+            $cmd $@ &
+            echo $! > $runtime
+            ln -sf $runtime $CLUSTER_REPAIRING
+            local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_repair$//")
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
+            $INFLUX -database events -execute "${query},detail=\"$cmd\""
+            wait $(cat $runtime) && rm -f $runtime $CLUSTER_REPAIRING
+        fi
     else
-        return 1
+        $cmd $@
     fi
+}
+
+shared_id()
+{
+    local shared_id=$(cat /run/shared_id 2>/dev/null)
+    if [ "x$shared_id" = "x" -o "x$shared_id" = "xunconfigured" ] ; then
+        source hex_tuning /etc/settings.txt cubesys.control.vip
+        local shared_id=$T_cubesys_control_vip
+        if [ -z "$shared_id" ] ; then
+            shared_id=$(hostname)
+        fi
+
+        echo -n $shared_id > /run/shared_id
+    fi
+
+    cat /run/shared_id
 }
 
 cube_control_strf_addrs()
@@ -91,12 +84,11 @@ cube_control_strf_addrs()
 
 cube_edge_cfg()
 {
-    if ! is_core_node; then
+    if ! is_core_node ; then
         return 0
     fi
 
-    for ctrl_entry in $(cubectl node list -r control -j | jq -r .[].ip.management)
-    do
+    for ctrl_entry in $(cubectl node list -r control -j | jq -r .[].ip.management) ; do
         local ctrl=$(echo $ctrl_entry | head -c -1)
         remote_run $ctrl mkdir -p $HORIZON_APP_DIR/bak
         # designate
@@ -116,10 +108,9 @@ cube_edge_cfg()
 
 cube_cluster_ready()
 {
-    for node_entry in $(cubectl node list -j | jq -r .[].ip.management)
-    do
+    for node_entry in $(cubectl node list -j | jq -r .[].ip.management) ; do
         local node=$(echo $node_entry | head -c -1)
-        if ! remote_run $node timeout 15 /usr/sbin/hex_sdk cube_node_ready >/dev/null; then
+        if ! remote_run $node timeout 15 $HEX_SDK cube_node_ready >/dev/null ; then
             return -1
         fi
     done
@@ -129,7 +120,7 @@ cube_cluster_ready()
 
 cube_node_ready()
 {
-    if [ -f $HEX_DONE -a -f $CUBE_DONE -a -f $CLUSTER_SYNC ]; then
+    if [ -f $HEX_DONE -a -f $CUBE_DONE -a -f $CLUSTER_SYNC ] ; then
         return 0
     fi
 
@@ -143,9 +134,9 @@ cube_commit_done()
 
 cube_cluster_start()
 {
-    Quiet ip neigh flush all
-    Quiet ceph_leave_maintenance # ensure storage is working (healing itself if necessary) before other actions
-    if [ "$VERBOSE" == "1" ]; then
+    Quiet -n ip neigh flush all
+    Quiet -n $HEX_SDK ceph_leave_maintenance # ensure storage is working (healing itself if necessary) before other actions
+    if [ "$VERBOSE" == "1" ] ; then
         /usr/sbin/hex_config -p trigger cluster_start
     else
         /usr/sbin/hex_config trigger cluster_start
@@ -153,12 +144,14 @@ cube_cluster_start()
 
     touch /run/cube_cluster_synced
 
-    Quiet cubectl node exec -p "hex_sdk network_ipt_serviceint" # customized iptables
-    Quiet ceph_osd_set_bucket_host # assign osds to customized ceph buckets
-    Quiet git_server_init          # fw upgrade needs to track the new filesystem
-    Quiet git_client_init          # for new nodes, joining cluster
-    Quiet os_resume_hypervisor     # resume hypervisors disabled due to ins-ha
-    Quiet killall /usr/sbin/hex_banner # refresh console banner to display up-to-date cluster info.
+    Quiet -n cubectl node exec -p "$HEX_SDK network_ipt_serviceint" # customized iptables
+    Quiet -n $HEX_SDK ceph_osd_set_bucket_host # assign osds to customized ceph buckets
+    Quiet -n $HEX_SDK git_server_init          # fw upgrade needs to track the new filesystem
+    Quiet -n $HEX_SDK git_client_init          # for new nodes, joining cluster
+    Quiet -n $HEX_SDK os_resume_hypervisor     # resume hypervisors disabled due to ins-ha
+    Quiet -n killall /usr/sbin/hex_banner # refresh console banner to display up-to-date cluster info.
+    # by default disable ceph_osd which in case of disk failures cannot be handled by software
+    [ $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ] || Quiet -n $HEX_SDK toggle_health_check ceph_osd
 }
 
 cube_cluster_stop()
@@ -184,32 +177,32 @@ cube_cluster_power()
     esac
 
     source /usr/sbin/hex_tuning /etc/settings.txt
-    if [ "x$T_cubesys_control_hosts" = "x" ]; then
+    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
         export MASTER_CONTROL=$T_cubesys_controller
         [ -n "$MASTER_CONTROL" ] || MASTER_CONTROL=$T_net_hostname
     else
         export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
     fi
 
-    if [ "x${MASTER_CONTROL:-NOMASTER}" != "x$(hostname)" ]; then
-        remote_run ${MASTER_CONTROL:-NOMASTER} "hex_sdk cube_cluster_power $1"
+    if [ "x${MASTER_CONTROL:-NOMASTER}" != "x$(hostname)" ] ; then
+        remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_cluster_power $1"
     else
         Quiet timeout 15 cubectl node exec -p "timeout 10 umount $CEPHFS_STORE_DIR" || true
         for N in $(cubectl node list -j | jq -r .[].hostname | tac) ; do
-            timeout 3 hex_sdk remote_run $N "$PWRCMD" || true
+            timeout 3 $HEX_SDK remote_run $N "$PWRCMD" || true
         done
     fi
 }
 
 cube_node_repair()
 {
-    REPAIR_PID=$(cat $CLUSTER_REPAIR 2>/dev/null)
-    if ps -p ${REPAIR_PID:-NOPID} >/dev/null 2>&1 ; then
-        ps $REPAIR_PID
-        ps -o etime $REPAIR_PID
+    repair_pid=$(cat $CLUSTER_REPAIR 2>/dev/null)
+    if ps -p ${repair_pid:-NOPID} >/dev/null 2>&1 ; then
+        ps $repair_pid
+        ps -o etime $repair_pid
         return 1
     else
-        hex_cli -c cluster check_repair &
+        $HEX_CLI -c cluster check_repair &
         echo $! >$CLUSTER_REPAIR
         wait $! && rm -f $CLUSTER_REPAIR
     fi
@@ -218,13 +211,13 @@ cube_node_repair()
 cube_cluster_repair()
 {
     source /usr/sbin/hex_tuning /etc/settings.txt
-    if [ "x$T_cubesys_control_hosts" = "x" ]; then
+    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
         export MASTER_CONTROL=$T_cubesys_controller
         [ -n "$MASTER_CONTROL" ] || MASTER_CONTROL=$T_net_hostname
     else
         export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
     fi
-    remote_run ${MASTER_CONTROL:-NOMASTER} "hex_sdk cube_node_repair"
+    remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_node_repair"
 }
 
 cube_remote_cluster_check()
@@ -234,11 +227,11 @@ cube_remote_cluster_check()
         return 1
     fi
 
-    for N in $(cubectl node list -r control -j | jq -r .[].hostname); do
-        if remote_run $N "hex_sdk is_moderator_node" ; then
+    for N in $(cubectl node list -r control -j | jq -r .[].hostname) ; do
+        if remote_run $N "$HEX_SDK is_moderator_node" ; then
             continue
-        elif [ "x$(remote_run $N "hex_sdk hostname")" = "x$N" ]; then
-            remote_run $N "hex_cli -c cluster check"
+        elif [ "x$(remote_run $N "$HEX_SDK hostname")" = "x$N" ] ; then
+            remote_run $N "$HEX_CLI -c cluster check"
             break
         fi
     done
@@ -251,17 +244,17 @@ cube_node_remove()
     local role=$(cubectl node list | grep "$host," | awk -F',' '{print $3}' | tr -d '\n')
 
     # remove a compute node
-    if [ "$role" == "compute" ]; then
-        os_nova_service_remove $host "nova-compute"
-        os_manila_service_remove $host "manila-share"
-        os_neutron_agent_remove $host "ovn-controller"
-        os_neutron_agent_remove $host "networking-ovn-metadata-agent"
-        os_neutron_agent_remove $host "neutron-ovn-vpn-agent"
+    if [ "$role" == "compute" ] ; then
+        Quiet -n $HEX_SDK os_nova_service_remove $host "nova-compute"
+        Quiet -n $HEX_SDK os_manila_service_remove $host "manila-share"
+        Quiet -n $HEX_SDK os_neutron_agent_remove $host "ovn-controller"
+        Quiet -n $HEX_SDK os_neutron_agent_remove $host "networking-ovn-metadata-agent"
+        Quiet -n $HEX_SDK os_neutron_agent_remove $host "neutron-ovn-vpn-agent"
         pcs resource delete $host >/dev/null 2>&1
     fi
 
-    if [ -n "$host" ]; then
-        ceph_osd_host_remove $host >/dev/null 2>&1
+    if [ -n "$host" ] ; then
+        Quiet -n $HEX_SDK ceph_osd_host_remove $host >/dev/null 2>&1
         crm_node --force --remove $host >/dev/null 2>&1
     fi
 
@@ -270,14 +263,14 @@ cube_node_remove()
 
 cube_cluster_setting_clear()
 {
-    ceph_dashboard_iscsi_gw_rm
+    Quiet -n $HEX_SDK ceph_dashboard_iscsi_gw_rm
 }
 
 cube_cluster_recreate()
 {
     #systemctl stop rbd-target-gw rbd-target-api
 
-    if is_control_node; then
+    if is_control_node ; then
         systemctl stop logstash monasca-persister
         systemctl stop opensearch influxdb kafka zookeeper
         systemctl stop mariadb rabbitmq-server
@@ -346,7 +339,7 @@ cube_stats()
 {
     INPUT=$1
     BIFS=$IFS
-    if [ -z "$INPUT" ]; then
+    if [ -z "$INPUT" ] ; then
         STATS=$(top -b -n 1)
         ITEMS=$(top -b -n 1 | awk '{print $2}' | grep -v "USER\|Swap:\|Mem" | sort | uniq | tail -n +8)
     else
@@ -354,7 +347,7 @@ cube_stats()
         ITEMS=$(cat $INPUT | awk '{print $2}' | grep -v "USER\|Swap:\|Mem" | sort | uniq | tail -n +8)
     fi
 
-    if [ "$FORMAT" != "json" ]; then
+    if [ "$FORMAT" != "json" ] ; then
         echo $(hostname)
     else
         echo "["
@@ -362,7 +355,7 @@ cube_stats()
 
     cube_k3s_stats
 
-    if [ "$FORMAT" != "json" ]; then
+    if [ "$FORMAT" != "json" ] ; then
         printf "%-25s %6s %20s\n" "PROCESS" "CPU%" "MEM(%/MB)"
         echo "--------------------------------------------------------"
     fi
@@ -370,21 +363,20 @@ cube_stats()
     SYS_CPT=0
     SYS_MPT=0
     SYS_MT=0
-    for proc in $ITEMS
-    do
-        if $(echo $STATS | grep -q $proc); then
+    for proc in $ITEMS ; do
+        [ "$proc" != "root" ] || continue
+        if $(echo $STATS | grep -q $proc) ; then
             BYTES=0
             IFS=
             LIST=$(echo $STATS | grep $proc | awk '{print $6}' | tr '\n' ' ')
-            if $(echo $LIST | grep -q 'm\|g\|t'); then
+            if $(echo $LIST | grep -q 'm\|g\|t') ; then
                 IFS=$" "
-                for M in $LIST
-                do
-                    if $(echo $M | grep -q m); then
+                for M in $LIST ; do
+                    if $(echo $M | grep -q m) ; then
                         BYTES=$(echo "${M%?} * 1024 + $BYTES" | bc)
-                    elif $(echo $M | grep -q g); then
+                    elif $(echo $M | grep -q g) ; then
                         BYTES=$(echo "${M%?} * 1048576 + $BYTES" | bc)
-                    elif $(echo $M | grep -q t); then
+                    elif $(echo $M | grep -q t) ; then
                         BYTES=$(echo "${M%?} * 1073741824 + $BYTES" | bc)
                     else
                         BYTES=$(echo "$BYTES + $M" | bc)
@@ -405,13 +397,13 @@ cube_stats()
             CPU_PCNT=$(echo "scale=2 ; x=$CPU_PCNT/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
             MEM_PCNT=$(echo "scale=2 ; x=$MEM_PCNT/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
 
-            if [ "$proc" == "root" ]; then
+            if [ "$proc" == "root" ] ; then
                 CPU_PCNT=$(echo "scale=2 ; x=$CPU_PCNT - $K3S_CPT ; if(x < 0) 0 else x" | bc | awk '{printf "%.2f", $0}')
                 MEM_PCNT=$(echo "scale=2 ; x=$MEM_PCNT - $K3S_MPT ; if(x < 0) 0 else x" | bc | awk '{printf "%.2f", $0}')
                 MBYTES=$(echo "x=$MBYTES - $K3S_MT ; if(x < 0) 0 else x" | bc | awk '{printf "%.2f", $0}')
             fi
 
-            if [ "$FORMAT" != "json" ]; then
+            if [ "$FORMAT" != "json" ] ; then
                 printf "%-25s %5s%% %15s%%/%s\n" "$proc" "$CPU_PCNT" "$MEM_PCNT" "$MBYTES"
             else
                 echo "  { \"program\": \"$proc\", \"host\": \"$HOSTNAME\", \"cpu_util\": $CPU_PCNT, \"mem_util\": $MEM_PCNT, \"mb\": $MBYTES },"
@@ -420,14 +412,14 @@ cube_stats()
         IFS=$BIFS
     done
 
-    if [ "$FORMAT" != "json" ]; then
+    if [ "$FORMAT" != "json" ] ; then
         SYS_CPT=$(echo "scale=2 ; x=$SYS_CPT/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
         SYS_MPT=$(echo "scale=2 ; x=$SYS_MPT/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
         echo "---------------------------------------------------------"
         printf "%-25s %5s%% %15s%%/%s\n\n" "TOTAL" "$SYS_CPT" "$SYS_MPT" "$SYS_MT"
     fi
 
-    if [ "$FORMAT" == "json" ]; then
+    if [ "$FORMAT" == "json" ] ; then
         echo "  {}"
         echo "]"
     fi
@@ -435,126 +427,122 @@ cube_stats()
 
 cube_k3s_stats()
 {
-    K3S_CPT=0
-    K3S_MPT=0
-    K3S_MT=0
+    local k3s_cpt=0
+    local k3s_mpt=0
+    local k3s_mt=0
 
-    if ! is_running k3s; then
+    if ! is_running k3s ; then
         return 0
     fi
 
-    local K3S_STATS_FILE=$1
+    local k3s_stats_file=$1
 
-    if [ -z "$K3S_STATS_FILE" ]; then
+    if [ -z "$k3s_stats_file" ] ; then
         kubectl top pod -A --no-headers > /run/k3s.stats
-        K3S_STATS_FILE=/run/k3s.stats
+        k3s_stats_file=/run/k3s.stats
     fi
 
-    if [ "$FORMAT" != "json" ]; then
+    if [ "$FORMAT" != "json" ] ; then
         printf "%-25s %6s %20s\n" "K3S NAMESPACE" "CPU%" "MEM(%/MB)"
         echo "--------------------------------------------------------"
     fi
 
-    VCPU_TOTAL_IN_MILLI=$(echo "$(lscpu | grep "^CPU(s):" | awk '{print $2}' | tr -d '\n') * 1000" | bc)
-    MEM_TOTAL_IN_MB=$(echo "$(grep MemTotal /proc/meminfo | awk '{print $2}' | tr -d '\n') / 1000" | bc)
-    HOST_POD_LIST=$(kubectl get pods --all-namespaces -o wide --field-selector spec.nodeName=$(hostname) --no-headers | awk '{print $2}' | tr '\n' ' ')
-    K3S_STATS=$(cat $K3S_STATS_FILE)
+    local vcpu_total_in_milli=$(echo "$(lscpu | grep "^CPU(s):" | awk '{print $2}' | tr -d '\n') * 1000" | bc)
+    local mem_total_in_mb=$(echo "$(grep MemTotal /proc/meminfo | awk '{print $2}' | tr -d '\n') / 1000" | bc)
+    local host_pod_list=$(kubectl get pods --all-namespaces -o wide --field-selector spec.nodeName=$(hostname) --no-headers | awk '{print $2}' | tr '\n' ' ')
+    local k3s_stats=$(cat $k3s_stats_file)
 
-    NS=$(echo "$K3S_STATS" | awk '{print $1}' | sort | uniq)
-    for n in $NS
-    do
-        MVCPU=0
-        MBYTES=0
+    local ns=$(echo "$k3s_stats" | awk '{print $1}' | sort | uniq)
+    for n in $ns ; do
+        mvcpu=0
+        mbytes=0
 
-        PLIST=$(echo "$K3S_STATS" | grep $n | awk '{print $2}' | tr '\n' ' ')
-        for p in $PLIST
-        do
-            if echo $HOST_POD_LIST | grep -q $p; then
-                C=$(echo "$K3S_STATS" | grep $p | awk '{print $3}')
-                MVCPU=$(echo "$MVCPU + $(echo $C | awk -F'm' '{print $1}')" | bc)
+        plist=$(echo "$k3s_stats" | grep $n | awk '{print $2}' | tr '\n' ' ')
+        for p in $plist ; do
+            if echo $host_pod_list | grep -q $p ; then
+                c=$(echo "$k3s_stats" | grep $p | awk '{print $3}')
+                mvcpu=$(echo "$mvcpu + $(echo $c | awk -F'm' '{print $1}')" | bc)
 
-                M=$(echo "$K3S_STATS" | grep $p | awk '{print $4}')
-                MBYTES=$(echo "$MBYTES + $(echo $M | awk -F'M' '{print $1}')" | bc)
+                m=$(echo "$k3s_stats" | grep $p | awk '{print $4}')
+                mbytes=$(echo "$mbytes + $(echo $m | awk -F'M' '{print $1}')" | bc)
             fi
         done
 
-        CPU_PCNT=$(echo "scale=5 ; $MVCPU / $VCPU_TOTAL_IN_MILLI * 100" | bc)
-        K3S_CPT=$(echo "scale=5 ; $K3S_CPT + $CPU_PCNT" | bc)
-        MEM_PCNT=$(echo "scale=5 ; $MBYTES / $MEM_TOTAL_IN_MB * 100" | bc)
-        K3S_MPT=$(echo "scale=5 ; $K3S_MPT + $MEM_PCNT" | bc)
-        K3S_MT=$((K3S_MT + MBYTES))
+        cpu_pcnt=$(echo "scale=5 ; $mvcpu / $vcpu_total_in_milli * 100" | bc)
+        k3s_cpt=$(echo "scale=5 ; $k3s_cpt + $cpu_pcnt" | bc)
+        mem_pcnt=$(echo "scale=5 ; $mbytes / $mem_total_in_mb * 100" | bc)
+        k3s_mpt=$(echo "scale=5 ; $k3s_mpt + $mem_pcnt" | bc)
+        k3s_mt=$((k3s_mt + mbytes))
 
-        CPU_PCNT=$(echo "scale=2 ; x=$CPU_PCNT/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
-        MEM_PCNT=$(echo "scale=2 ; x=$MEM_PCNT/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
+        cpu_pcnt=$(echo "scale=2 ; x=$cpu_pcnt/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
+        mem_pcnt=$(echo "scale=2 ; x=$mem_pcnt/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
 
-        if [ "$FORMAT" != "json" ]; then
-            printf "%-25s %5s%% %15s%%/%s\n" "$n" "$CPU_PCNT" "$MEM_PCNT" "$MBYTES"
+        if [ "$FORMAT" != "json" ] ; then
+            printf "%-25s %5s%% %15s%%/%s\n" "$n" "$cpu_pcnt" "$mem_pcnt" "$mbytes"
         else
-            echo "  { \"program\": \"$n\", \"host\": \"$HOSTNAME\", \"cpu_util\": $CPU_PCNT, \"mem_util\": $MEM_PCNT, \"mb\": $MBYTES },"
+            echo "  { \"program\": \"$n\", \"host\": \"$HOSTNAME\", \"cpu_util\": $cpu_pcnt, \"mem_util\": $mem_pcnt, \"mb\": $mbytes },"
         fi
     done
 
-    if [ "$FORMAT" != "json" ]; then
-        K3S_CPT=$(echo "scale=2 ; x=$K3S_CPT/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
-        K3S_MPT=$(echo "scale=2 ; x=$K3S_MPT/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
+    if [ "$FORMAT" != "json" ] ; then
+        k3s_cpt=$(echo "scale=2 ; x=$k3s_cpt/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
+        k3s_mpt=$(echo "scale=2 ; x=$k3s_mpt/1 ; if(x < 1 && x != 0) print 0 ; x" | bc)
         echo "---------------------------------------------------------"
-        printf "%-25s %5s%% %15s%%/%s\n\n" "TOTAL" "$K3S_CPT" "$K3S_MPT" "$K3S_MT"
+        printf "%-25s %5s%% %15s%%/%s\n\n" "TOTAL" "$k3s_cpt" "$k3s_mpt" "$k3s_mt"
     fi
 }
 
 cube_oom_stats()
 {
-    local OOMLOG=$1
+    local oomlog=$1
 
-    if [ ! -f "$OOMLOG" ]; then
+    if [ ! -f "$oomlog" ] ; then
         dmesg | sed -n '/total_vm/,/Out of memory/{//b;p}' > /run/oomlog
-        OOMLOG=/run/oomlog
+        oomlog=/run/oomlog
     fi
 
-    BIFS=$IFS
-    STATS=$(cat $OOMLOG | awk -F']' '{print $NF}')
-    ITEMS=$(cat $OOMLOG | awk -F']' '{print $NF}' | awk '{print $8}' | sort | uniq | tail -n +8)
+    local bifs=$IFS
+    local stats=$(cat $oomlog | awk -F']' '{print $NF}')
+    local items=$(cat $oomlog | awk -F']' '{print $NF}' | awk '{print $8}' | sort | uniq | tail -n +8)
 
     echo $(hostname)
     printf "%-15s %15s\n" "PROCESS" "MEM(MB)"
     echo "-----------------------------------"
 
-    TOTAL=0
-    for proc in $ITEMS
-    do
-        if $(echo $STATS | grep -q $proc); then
-            BYTES=0
+    local total=0
+    for proc in $items ; do
+        if $(echo $stats | grep -q $proc) ; then
+            bytes=0
             IFS=
             # get rss (resident set size)
-            LIST=$(echo $STATS | grep $proc | awk '{print $4}' | tr '\n' ' ')
-            if $(echo $LIST | grep -q 'm\|g\|t'); then
+            LIST=$(echo $stats | grep $proc | awk '{print $4}' | tr '\n' ' ')
+            if $(echo $LIST | grep -q 'm\|g\|t') ; then
                 IFS=$" "
-                for M in $LIST
-                do
-                    if $(echo $M | grep -q m); then
-                        BYTES=$(echo "${M%?} * 1024 + $BYTES" | bc)
-                    elif $(echo $M | grep -q g); then
-                        BYTES=$(echo "${M%?} * 1048576 + $BYTES" | bc)
-                    elif $(echo $M | grep -q t); then
-                        BYTES=$(echo "${M%?} * 1073741824 + $BYTES" | bc)
+                for M in $LIST ; do
+                    if $(echo $M | grep -q m) ; then
+                        bytes=$(echo "${M%?} * 1024 + $bytes" | bc)
+                    elif $(echo $M | grep -q g) ; then
+                        bytes=$(echo "${M%?} * 1048576 + $bytes" | bc)
+                    elif $(echo $M | grep -q t) ; then
+                        bytes=$(echo "${M%?} * 1073741824 + $bytes" | bc)
                     else
-                        BYTES=$(echo "$BYTES + $M" | bc)
+                        bytes=$(echo "$bytes + $M" | bc)
                     fi
                 done
             else
-                BYTES=$(echo $STATS | grep " $proc" | awk '{print $4}' | paste -sd+ - | bc)
+                bytes=$(echo $stats | grep " $proc" | awk '{print $4}' | paste -sd+ - | bc)
             fi
 
-            MBYTES=$(echo "$BYTES / 1024" | bc)
+            mbytes=$(echo "$bytes / 1024" | bc)
             # 4kB page
-            MBYTES=$((MBYTES * 4))
-            printf "%-15s %15s\n" "$proc" "$MBYTES"
-            TOTAL=$((TOTAL + MBYTES))
+            mbytes=$((mbytes * 4))
+            printf "%-15s %15s\n" "$proc" "$mbytes"
+            total=$((total + mbytes))
         fi
-        IFS=$BIFS
+        IFS=$bifs
     done
     echo "-----------------------------------"
-    printf "%-15s %15s\n" "TOTAL" "$TOTAL"
+    printf "%-15s %15s\n" "TOTAL" "$total"
 }
 
 cube_disk_stats()
@@ -579,14 +567,13 @@ cube_cluster_run()
     local roleOpt=
     local cmd=$@
 
-    if [ "$role" != "all" ]; then
+    if [ "$role" != "all" ] ; then
         roleOpt="-r $role"
     fi
 
     readarray ip_array <<<"$(cubectl node list $roleOpt -j | jq -r .[].ip.management | sort)"
     declare -p ip_array > /dev/null
-    for ip_entry in "${ip_array[@]}"
-    do
+    for ip_entry in "${ip_array[@]}" ; do
         local ip=$(echo $ip_entry | head -c -1)
         echo "Running '$cmd' on server $ip"
         ssh root@$ip $cmd 2>/dev/null
@@ -595,31 +582,31 @@ cube_cluster_run()
 
 wait_for_netdev()
 {
-    local NETDEV=$1
-    local TIMEOUT=$2
+    local netdev=$1
+    local timeout=$2
 
     local i=0
-    while [ $i -lt $TIMEOUT ]; do
-        if ip link show $NETDEV >/dev/null 2>&1; then
+    while [ $i -lt $timeout ] ; do
+        if ip link show $netdev >/dev/null 2>&1 ; then
             break
         else
             sleep 1
         fi
         i=$(expr $i + 1)
     done
-    [ $i -lt $TIMEOUT ]
+    [ $i -lt $timeout ]
 }
 
 wait_for_zookeeper()
 {
-    local BIND_HOST=$1
-    local PORT=$2
-    local TIMEOUT=$3
+    local bind_host=$1
+    local port=$2
+    local timeout=$3
 
     local i=0
-    while [ $i -lt $TIMEOUT ]; do
-        readiness=$(echo stat | nc $BIND_HOST $PORT | wc -l)
-        if [ $readiness -gt 0 ]; then
+    while [ $i -lt $timeout ] ; do
+        readiness=$(echo stat | nc $bind_host $port | wc -l)
+        if [ $readiness -gt 0 ] ; then
             break
         else
             sleep 1
@@ -630,11 +617,11 @@ wait_for_zookeeper()
 
 wait_for_pacemaker()
 {
-    local TIMEOUT=$1
+    local timeout=$1
 
     local i=0
-    while [ $i -lt $TIMEOUT ]; do
-        if [ -f /var/lib/pacemaker/cib/cib.xml ]; then
+    while [ $i -lt $timeout ] ; do
+        if [ -f /var/lib/pacemaker/cib/cib.xml ] ; then
             break
         else
             sleep 1
@@ -645,50 +632,50 @@ wait_for_pacemaker()
 
 wait_for_service()
 {
-    local BIND_HOST=$1
-    local PORT=$2
-    local TIMEOUT=$3
+    local bind_host=$1
+    local port=$2
+    local timeout=$3
 
     local i=0
-    while [ $i -lt $TIMEOUT ]; do
-        if $(netstat -lntu | grep -q $BIND_HOST:$PORT); then
+    while [ $i -lt $timeout ] ; do
+        if $(netstat -lntu | grep -q $bind_host:$port) ; then
             break
         else
             sleep 1
         fi
         i=$(expr $i + 1)
     done
-    [ $i -lt $TIMEOUT ]
+    [ $i -lt $timeout ]
 }
 
 wait_for_http_endpoint()
 {
-    local ENDPOINT=$1
-    local PORT=$2
-    local TIMEOUT=$3
+    local endpoint=$1
+    local port=$2
+    local timeout=$3
 
     local i=0
-    while [ $i -lt $TIMEOUT ]; do
-        if curl -sf http://$ENDPOINT:$PORT > /dev/null; then
+    while [ $i -lt $timeout ] ; do
+        if curl -sf http://$endpoint:$port > /dev/null ; then
             break
         else
             sleep 1
         fi
         i=$(expr $i + 1)
     done
-    [ $i -lt $TIMEOUT ]
+    [ $i -lt $timeout ]
 }
 
 check_service_memory_and_run()
 {
-    local SERVICE=$1
-    local THRESHOLD=$2
+    local service=$1
+    local threshold=$2
     shift 2
-    local CMD="'$*'"
-    local PCNT=$(top -n 1 -b | grep $SERVICE | awk '{print $10}' | paste -sd+ - | bc)
+    local cmd="'$*'"
+    local pcnt=$(top -n 1 -b | grep $service | awk '{print $10}' | paste -sd+ - | bc)
     # floating to integer
-    if [ ${PCNT%.*} -gt $THRESHOLD ]; then
-        /usr/sbin/hex_log_event -e "SRV01001I" "host=$HOSTNAME,service=$SERVICE,threshold=$THRESHOLD"
+    if [ ${pcnt%.*} -gt $threshold ] ; then
+        /usr/sbin/hex_log_event -e "SRV01001I" "host=$HOSTNAME,service=$service,threshold=$threshold"
         eval "$@"
     fi
 }
@@ -697,68 +684,61 @@ check_service()
 {
     local service=$1
 
-    $(health_${service}_check)
+    $HEX_SDK $(health_${service}_check)
     local r=$?
-    local desc=$(health_errcode_lookup $service $r)
+    local desc=$($HEX_SDK health_errcode_lookup $service $r)
 
     echo "  { \"host\": \"$HOSTNAME\", \"service\": \"$service\", \"status\": $r, \"description\": \"$desc\" },"
 }
 
 check_service_stats()
 {
-    if ! is_control_node; then
+    if ! is_control_node ; then
         return 0
     fi
 
     echo "["
 
     # base services
-    local service_array=(link dns clock bootstrap license etcd hacluster rabbitmq mysql mongodb vip haproxy_ha haproxy httpd nginx lmi skyline memcache ceph ceph_mon ceph_mgr ceph_mds ceph_osd ceph_rgw rbd_target)
-    for service in "${service_array[@]}"
-    do
+    local service_array=(link dns clock bootstrap license etcd hacluster rabbitmq mysql mongodb vip haproxy_ha haproxy httpd skyline lmi memcache ceph ceph_mon ceph_mgr ceph_mds ceph_osd ceph_rgw rbd_target)
+    for service in "${service_array[@]}" ; do
         check_service $service
     done
 
     # openstack core services
     local service_array=(nova cyborg neutron glance cinder manila swift heat octavia masakari monasca)
-    for service in "${service_array[@]}"
-    do
+    for service in "${service_array[@]}" ; do
         check_service $service
     done
 
     # k3s services
     local service_array=(k3s keycloak)
-    for service in "${service_array[@]}"
-    do
+    for service in "${service_array[@]}" ; do
         check_service $service
     done
 
     # monitoring core services
     local service_array=(zookeeper kafka telegraf influxdb kapacitor grafana filebeat auditbeat logstash)
-    for service in "${service_array[@]}"
-    do
+    for service in "${service_array[@]}" ; do
         check_service $service
     done
 
-    if ! is_edge_node; then
+    if ! is_edge_node ; then
         # openstack services
         local service_array=(ironic designate senlin watcher)
-        for service in "${service_array[@]}"
-        do
+        for service in "${service_array[@]}" ; do
             check_service $service
         done
 
         # k3s services
         local service_array=(rancher)
-        for service in "${service_array[@]}"
-        do
+        for service in "${service_array[@]}" ; do
             check_service $service
         done
 
         # monitoring services
         local service_array=(opensearch opensearch-dashboards)
-        for service in "${service_array[@]}"
-        do
+        for service in "${service_array[@]}" ; do
             check_service $service
         done
     fi
@@ -768,19 +748,18 @@ check_service_stats()
 
 check_host_stats()
 {
-    if ! is_control_node; then
+    if ! is_control_node ; then
         return 0
     fi
     readarray ip_array <<<"$(cubectl node list -j | jq -r .[].hostname | sort)"
     declare -p ip_array > /dev/null
     echo "["
-    for ip_entry in "${ip_array[@]}"
-    do
+    for ip_entry in "${ip_array[@]}" ; do
         local ip=$(echo $ip_entry | head -c -1)
         local stats=1
         # report failed if all three pings are failed
         ping -c 1 -w 1 $ip >/dev/null || ping -c 1 -w 1 $ip >/dev/null || ping -c 1 -w 1 $ip >/dev/null || stats=0
-        if [ $ip_entry == ${ip_array[-1]} ]; then
+        if [ $ip_entry == ${ip_array[-1]} ] ; then
             echo "  { \"node\": \"$ip\", \"status\": $stats }"
         else
             echo "  { \"node\": \"$ip\", \"status\": $stats },"
@@ -796,52 +775,52 @@ cube_data_node_list()
 
 cube_cluster_ppu()
 {
-    if hex_cli -c cluster check | grep -q NG ; then
-        hex_cli -c cluster check_repair
+    if $HEX_CLI -c cluster check | grep -q NG ; then
+        $HEX_CLI -c cluster check_repair
     fi
-    if hex_cli -c cluster check | grep -q NG ; then
+    if $HEX_CLI -c cluster check | grep -q NG ; then
         Error "PPU upgrade aborted: fix NG services before continuing"
     fi
 
-    local ACCESSIBLE_PKGS=$(timeout 30 cubectl node exec /usr/sbin/hex_install list | wc -l)
-    local CLUSTER_NODES=$(cubectl node list | wc -l)
-    if [ $ACCESSIBLE_PKGS -lt $CLUSTER_NODES ]; then
+    local accessible_pkgs=$(timeout 30 cubectl node exec /usr/sbin/hex_install list | wc -l)
+    local cluster_nodes=$(cubectl node list | wc -l)
+    if [ $accessible_pkgs -lt $cluster_nodes ] ; then
         cubectl node exec -p /usr/sbin/hex_install list
         Error "Not every node in the cluster has access to firmware package"
-    elif [ $ACCESSIBLE_PKGS -gt $CLUSTER_NODES ]; then
+    elif [ $accessible_pkgs -gt $cluster_nodes ] ; then
         cubectl node exec -p /usr/sbin/hex_install list
         Error "Make sure only one firmware package exists in /var/update/"
     else
         echo "All cluster nodes have proper access to Cube firmware package: $(/usr/sbin/hex_install list)"
-        for PKG in $(ls -1 /var/update/*.pkg); do
-            if [ ! -e "$PKG" ]; then
+        for PKG in $(ls -1 /var/update/*.pkg) ; do
+            if [ ! -e "$PKG" ] ; then
                 Error "$PKG does not come with its corresponding md5 file: ${PKG}.md5"
             else
-                EXPECTED_CHECKSUM=$(cat ${PKG}.md5 | awk '{ print $1 }')
-                ACTUAL_CHECKSUM=$(/usr/bin/md5sum -z $PKG | awk '{ print $1 }')
-                if [ "x$EXPECTED_CHECKSUM" != "x$ACTUAL_CHECKSUM" ]; then
-                    Error "Failed to verify checksum : ${PKG}.md5 $EXPECTED_CHECKSUM, $PKG $ACTUAL_CHECKSUM"
+                expected_checksum=$(cat ${PKG}.md5 | awk '{ print $1 }')
+                actual_checksum=$(/usr/bin/md5sum -z $PKG | awk '{ print $1 }')
+                if [ "x$expected_checksum" != "x$actual_checksum" ] ; then
+                    Error "Failed to verify checksum : ${PKG}.md5 $expected_checksum, $PKG $actual_checksum"
                 else
                     echo "Successfully verified checksum"
                     echo "Cluster nodes to be upgraded: "
                     cubectl node list
                     echo "WARNING: upgrade in progress. DO NOT INTERRUPT PROGRAM"
-                    cubectl node exec -p "(sleep 1 && echo 1 && sleep 1 && echo 1 && sleep 1 && echo YES) | hex_cli -c update update ; sync"
+                    cubectl node exec -p "(sleep 1 && echo 1 && sleep 1 && echo 1 && sleep 1 && echo YES) | $HEX_CLI -c update update ; sync"
                     echo "Successfully completed firmware package upgrade"
-                    MASTER_CONTROL=$(cubectl node list -j | jq -r .[].hostname | head -1)
+                    master_control=$(cubectl node list -j | jq -r .[].hostname | head -1)
                     echo "Please monitor Cube login console (Blue/Black login banner) of individual node until the last node on list finishes"
-                    if hex_sdk remote_run $MASTER_CONTROL "hex_sdk is_compute_node" && [ $(cubectl node list -r compute | wc -l) -gt 1 ] ; then
-                        if hex_sdk remote_run $MASTER_CONTROL "pgrep qemu-kvm >/dev/null" ; then
-                            echo "Enter YES to AUTOMATICALLY evacuate live VMs on $MASTER_CONTROL"
-                            hex_sdk remote_run $MASTER_CONTROL "echo YES | hex_cli -c iaas compute pre_failure_host_evacuation $MASTER_CONTROL"
-                            hex_sdk remote_run $MASTER_CONTROL "for i in {1..60} ; do sleep 10 ; pgrep qemu-kvm >/dev/null || break ; done"
+                    if $HEX_SDK remote_run $master_control "$HEX_SDK is_compute_node" && [ $(cubectl node list -r compute | wc -l) -gt 1 ] ; then
+                        if $HEX_SDK remote_run $master_control "pgrep qemu-kvm >/dev/null" ; then
+                            echo "Enter YES to AUTOMATICALLY evacuate live VMs on $master_control"
+                            $HEX_SDK remote_run $master_control "echo YES | $HEX_CLI -c iaas compute pre_failure_host_evacuation $master_control"
+                            $HEX_SDK remote_run $master_control "for i in {1..60} ; do sleep 10 ; pgrep qemu-kvm >/dev/null || break ; done"
                         fi
                     fi
-                    if hex_sdk remote_run $MASTER_CONTROL "pgrep qemu-kvm >/dev/null" ; then
-                        Error "some VMs on $MASTER_CONTROL are still running (Please evacuate or shut them off and then continue with rebooting $MASTER_CONTROL manually)"
+                    if $HEX_SDK remote_run $master_control "pgrep qemu-kvm >/dev/null" ; then
+                        Error "some VMs on $master_control are still running (Please evacuate or shut them off and then continue with rebooting $master_control manually)"
                     else
-                        echo "Enter YES to AUTOMATICALLY reboot each node in above sequence, starting with $MASTER_CONTROL"
-                        hex_sdk remote_run $MASTER_CONTROL "hex_cli -c reboot"
+                        echo "Enter YES to AUTOMATICALLY reboot each node in above sequence, starting with $master_control"
+                        $HEX_SDK remote_run $master_control "$HEX_CLI -c reboot"
                     fi
                 fi
             fi
