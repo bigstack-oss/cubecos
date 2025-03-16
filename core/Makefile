@@ -16,6 +16,7 @@ SUBDIRS += rancher
 SUBDIRS += cubectl
 SUBDIRS += appfw
 SUBDIRS += api
+SUBDIRS += ui
 SUBDIRS += webapp
 
 # Building heavy filesystem

@@ -6,7 +6,8 @@ FROM quay.io/centos/centos:stream9 AS tier1
 ENV LANG=C.UTF-8
 ENV HEX_VER=hex2.0
 ENV GOLANG_VER=1.24.0
-ENV NODE_VER=v12.22.12
+ENV UI_NODE_VER=22.14.0
+ENV LMI_NODE_VER=12.22.12
 ENV HEX_ARCH=x86_64
 ENV DEVOPS_ENV=__JAIL__
 ENV TZ=Asia/Taipei
@@ -135,9 +136,18 @@ RUN pip3 install --ignore-installed tox diskimage-builder
 # install go and update PATH
 RUN wget -qO- --no-check-certificate https://dl.google.com/go/go${GOLANG_VER}.linux-amd64.tar.gz | tar -zx  -C /usr/local/
 
-# install node, npm, yarn, and wheel
-RUN wget -qO- --no-check-certificate https://nodejs.org/download/release/${NODE_VER}/node-${NODE_VER}-linux-x64.tar.xz | tar -xJ --strip-components=1 -C /usr/local/
-RUN npm install -g yarn
+# install nvm
+# create a script file sourced by both interactive and non-interactive bash shells for installing nvm
+ENV BASH_ENV /root/.bash_env
+RUN touch "${BASH_ENV}"
+RUN echo '. "${BASH_ENV}"' >> /root/.bashrc
+# download and install nvm
+RUN wget -qO- --no-check-certificate https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | PROFILE="${BASH_ENV}" bash
+# install node, npm, yarn, pnpm, and wheel
+RUN /bin/bash -c "nvm install $UI_NODE_VER"
+RUN /bin/bash -c "nvm install $LMI_NODE_VER"
+RUN /bin/bash -c "nvm use $LMI_NODE_VER && npm install -g yarn"
+RUN /bin/bash -c "nvm use $UI_NODE_VER && npm install -g pnpm@latest-10"
 RUN pip3 install --ignore-installed wheel
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
@@ -182,7 +192,8 @@ RUN echo "_HEX_VER=$HEX_VER" >> /etc/hex.manifest
 RUN echo "_HEX_DIST=$DIST" >> /etc/hex.manifest
 RUN echo "_WEAK_DEP=$WEAK_DEP" >> /etc/hex.manifest
 RUN echo "_GOLANG_VERSION=$GOLANG_VER" >> /etc/hex.manifest
-RUN echo "_NODE_VERSION=$NODE_VER" >> /etc/hex.manifest
+RUN echo "_UI_NODE_VERSION=$UI_NODE_VER" >> /etc/hex.manifest
+RUN echo "_LMI_NODE_VERSION=$LMI_NODE_VER" >> /etc/hex.manifest
 
 # generate private key for dev licence
 ARG PASSPHRASE

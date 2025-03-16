@@ -4,7 +4,7 @@
 #$(PROJ_HEAVYFS): $(CORE_WEBAPPDIR)/gencerts.sh $(CORE_WEBAPPDIR)/selfsign.cnf
 
 rootfs_install::
-	$(Q)wget -qO- --no-check-certificate https://nodejs.org/download/release/$(NODE_VERSION)/node-$(NODE_VERSION)-linux-x64.tar.xz | tar -xJ --strip-components=1 -C $(ROOTDIR)/usr/local/
+	$(Q)wget -qO- --no-check-certificate https://nodejs.org/download/release/v$(LMI_NODE_VERSION)/node-v$(LMI_NODE_VERSION)-linux-x64.tar.xz | tar -xJ --strip-components=1 -C $(ROOTDIR)/usr/local/
 #	$(Q)cp -r $(CORE_WEBAPPDIR)/gencerts.sh $(ROOTDIR)/var/www
 #	$(Q)cp -r $(CORE_WEBAPPDIR)/selfsign.cnf $(ROOTDIR)/var/www
 
