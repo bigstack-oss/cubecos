@@ -13,7 +13,9 @@ SUBDIRS += docker
 SUBDIRS += k3s
 SUBDIRS += keycloak
 SUBDIRS += rancher
+SUBDIRS += cubectl
 SUBDIRS += appfw
+SUBDIRS += api
 SUBDIRS += webapp
 
 # Building heavy filesystem
@@ -28,9 +30,6 @@ SUBDIRS += $(LIB_SUBDIRS)
 SUBDIRS += mysql
 
 SUBDIRS += modules
-
-# cubectl util
-SUBDIRS += cubectl
 
 # Building images
 SUBDIRS += main

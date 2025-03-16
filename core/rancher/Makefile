@@ -97,7 +97,6 @@ clean:: testclean
 
 BUILD += $(CLI_BIN) $(CHART) nodedrivers/docker-machine-driver-cube
 BUILDCLEAN += $(CLI_BIN) $(CHART) nodedrivers $(RANCHER_DIR)
-DISTCLEAN +=
 
 SUBDIRS += cpo
 

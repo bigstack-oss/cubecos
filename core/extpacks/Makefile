@@ -29,7 +29,7 @@ $(NAS)/standard/rocky9.qcow2
 
 $(NAS):
 	$(Q)[ -d $@ ] || mkdir -p $@
-	$(Q)mount -o ro 10.32.0.200:/volume1/openstack-images/ $@
+	$(Q)mount -o ro $(PROJ_NFS_SERVER):$(PROJ_NFS_OPENSTACK_PATH)/ $@
 
 $(AMPHORA): $(NAS)
 	$(Q)cp $</yoga/amphora-x64-haproxy-yoga.qcow2 $@

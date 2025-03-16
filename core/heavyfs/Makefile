@@ -57,7 +57,6 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf install -y 'dnf-command(versionlock)'
 
-
 LOCKED_DNF += kernel-lt-$(KERNEL_VERS) kernel-lt-core-$(KERNEL_VERS) kernel-lt-devel-$(KERNEL_VERS) kernel-lt-modules-$(KERNEL_VERS)
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
@@ -144,7 +143,7 @@ rootfs_install::
 	$(Q)echo "install usb_storage /bin/true" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 
 # note: install skyline pkgs first since it doesn't follow yoga constraint
-HEAVY_COMPONENTS += nginx ui skyline
+HEAVY_COMPONENTS += api ui skyline nginx
 HEAVY_COMPONENTS += webapp mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
 HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift
 HEAVY_COMPONENTS += heat horizon octavia barbican manila designate masakari monasca senlin watcher cyborg
@@ -164,7 +163,7 @@ heavyfs_install::
 
 rootfs.cgz:
 	$(Q)rm -f *.pkg
-	$(Q)mount -o ro 10.32.0.200:/volume1/bigstack/cube-images/$(FW_VER) /mnt
+	$(Q)mount -o ro $(PROJ_NFS_SERVER):$(PROJ_NFS_CUBECOS_PATH)/$(FW_VER) /mnt
 	$(Q)cp -f $$(ls -1 /mnt/$(RC)/CUBE/*.pkg | grep -v "_[0-9][.]pkg") ./
 	$(Q)umount /mnt
 	$(Q)mkdir -p pkg
@@ -190,6 +189,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c "mkdir -p /mnt/cephfs/update"
 	$(Q)chroot $(ROOTDIR) sh -c "rm -rf /var/update ; ln -sf /mnt/cephfs/update /var/update"
 
-PKGCLEAN += $(HEAVYFS) $(RPMS_DIR)  $(PIPS_DIR) $(ARCS_DIR)
+PKGCLEAN += $(HEAVYFS) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

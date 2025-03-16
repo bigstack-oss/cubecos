@@ -16,7 +16,7 @@ $(PKG):: $(CLONEDIR)
 	$(call RUN_CMD_TIMED, cd $(CLONEDIR) && make $(PKGNAME),"  GEN     $(PKGNAME)")
 
 $(BIN):: $(CLONEDIR)
-	$(call RUN_CMD_TIMED, cd $(CLONEDIR) && make,"  BLD     $(BINNAME)")
+	$(call RUN_CMD_TIMED, cd $(CLONEDIR) && make,"  BUILD   $(BINNAME)")
 
 BUILD += $(BIN)
 BUILDCLEAN += $(CLONEDIR)

@@ -5,7 +5,6 @@ include ../../build.mk
 APP := cubectl
 SRCS := $(shell find $(SRCDIR)/app/ -name "*.go")
 
-
 ifneq ($(V),)
 GOVERBOSE := -v
 endif
@@ -15,17 +14,13 @@ ifeq ($(TAGS),itest)
 TIMEOUT := 30m
 endif
 
-
 $(APP): $(SRCS)
-	@# $(Q)(cd $(SRCDIR) && go get -t $(GOVERBOSE) ./...)
-	@# $(call RUN_CMD_TIMED, go build $(GOVERBOSE) -o $(APP) $(SRCDIR)/main.go,"  GEN     $@")
-	$(call RUN_CMD_TIMED,(cd $(SRCDIR)/app/ && go build $(GOVERBOSE) -o $(BLDDIR)/$(APP) && go mod tidy),"  GEN     $@")
+	$(call RUN_CMD_TIMED, cd $(SRCDIR)/app && go mod tidy && go build $(GOVERBOSE) -o $(BLDDIR)/$(APP),"  GEN     $@")
 
 install: $(APP)
 	$(Q)cp -f $(APP) $(SRCDIR)/scripts/* /usr/local/bin/
 	@# $(Q)podman image inspect localhost/cube >/dev/null 2>&1 || podman build -t cube -f $(SRCDIR)/data/cube.dockerfile
 	$(Q)podman image inspect localhost/cube >/dev/null 2>&1 || TOP_SRCDIR=$(TOP_SRCDIR) TOP_BLDDIR=$(TOP_BLDDIR) sh $(SRCDIR)/build-cube-container.sh
-
 
 test:: $(SRCS)
 	$(Q)make install
@@ -51,6 +46,5 @@ clean:: testclean
 
 BUILD += $(APP)
 BUILDCLEAN += $(APP)
-DISTCLEAN +=
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

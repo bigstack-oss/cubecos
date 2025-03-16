@@ -16,7 +16,7 @@ driver/${OS_TAG}/Dockerfile.orig:
 
 driver/${OS_TAG}/Dockerfile: driver/${OS_TAG}/Dockerfile.orig
 	$(call RUN_CMD_TIMED, \
-                sed $< > $@ \
+		sed $< > $@ \
 		-e 's/^ARG GOLANG_VERSION.*/ENV GOLANG_VERSION=$(GOLANG_VERSION)/' \
 		-e 's/^RUN OS_ARCH=.* &&/RUN /' \
 		-e 's/OS_ARCH/TARGETARCH/' \

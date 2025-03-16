@@ -32,6 +32,5 @@ clean::
 
 BUILD += terraform
 BUILDCLEAN += terraform
-DISTCLEAN +=
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
