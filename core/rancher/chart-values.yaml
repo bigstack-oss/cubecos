@@ -11,4 +11,4 @@ tls: external
 privateCA: true
 useBundledSystemChart: true
 antiAffinity: required
-bootstrapPassword: admin
+bootstrapPassword: default-admin

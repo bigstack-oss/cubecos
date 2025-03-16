@@ -18,7 +18,7 @@ provider "rancher2" {
 resource "rancher2_bootstrap" "admin" {
   provider = rancher2.bootstrap
 
-  initial_password = "admin"
+  initial_password = "default-admin"
   password = "default-admin"
   telemetry = false
 }
@@ -40,7 +40,7 @@ resource "rancher2_auth_config_keycloak" "keycloak" {
   groups_field = "member"
   rancher_api_host = "https://${var.cube_controller}:10443"
   sp_cert = file("/var/www/certs/server.cert")
-  sp_key = file("//var/www/certs/server.key")
+  sp_key = file("/var/www/certs/server.key")
   idp_metadata_content = file("/etc/keycloak/saml-metadata.xml")
   #idp_metadata_content = var.idp_metadata_content
   access_mode           = "required"
