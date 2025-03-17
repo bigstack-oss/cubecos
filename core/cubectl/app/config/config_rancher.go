@@ -752,7 +752,6 @@ func resetRancher() error {
 		zap.S().Warn(errors.WithStack(err))
 	}
 
-	// FIXME: bootstramp admin token issue after reset
 	if err := terraformExec("destroy", "rancher", "cube_controller="+cubeSettings.GetControllerIp()); err != nil {
 		zap.S().Warn(errors.WithStack(err))
 	}
