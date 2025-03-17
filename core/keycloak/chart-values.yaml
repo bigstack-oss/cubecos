@@ -32,7 +32,7 @@ extraEnv: |
   - name: KEYCLOAK_PASSWORD
     value: admin
   - name: KEYCLOAK_DEFAULT_THEME
-    value: cube
+    value: cos-ui
   - name: PROXY_ADDRESS_FORWARDING
     value: "true"
   - name: JGROUPS_DISCOVERY_PROTOCOL

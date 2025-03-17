@@ -1,5 +1,6 @@
 # Cube SDK
 # keycloak installation
+
 KEYCLOAK_DIR := /opt/keycloak/
 
 rootfs_install::

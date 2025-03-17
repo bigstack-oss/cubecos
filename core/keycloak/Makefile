@@ -1,26 +1,127 @@
 # CUBE SDK
 
 include ../../build.mk
-include $(SRCDIR)/keycloak.mk
 
-APP_VERSION := 17.0.1-legacy
+# login keycloak helm chart
 CHART_VERSION := 18.1.1
 CHART := keycloak-$(CHART_VERSION).tgz
-IMG_BUILD := localhost:5080/bigstack/keycloak:$(APP_VERSION)
 
 $(CHART):
 	$(Q)helm repo add codecentric https://codecentric.github.io/helm-charts $(QEND)
 	$(Q)helm pull codecentric/keycloak --version $(CHART_VERSION)
 
+# login rpm
+LOGIN_VERSION :=
+LOGIN_BUILD_NUMBER :=
+KEYCLOAK_VERSION :=
 
-.build-img:
+LOGIN_GIT_DIR := /root/login
+LOGIN_TARBALL = $(RPMBUILD_DIR)/SOURCES/cube-cos-login-$(LOGIN_VERSION).tar.gz
+LOGIN_SPEC_FILE := $(RPMBUILD_DIR)/SPECS/cube-cos-login.spec
+LOGIN_RPM_BUILD = $(RPMBUILD_DIR)/RPMS/x86_64/cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm
+LOGIN_RPM = $(TOP_BLDDIR)/core/keycloak/login.rpm
+IMG_BUILD = localhost:5080/bigstack/keycloak:$(KEYCLOAK_VERSION)
+
+KEYCLOAK_DIR := /opt/keycloak/
+
+# clean up the environment
+.PHONY: login_build_prep
+login_build_prep:
+	$(Q)rm -rf $(LOGIN_GIT_DIR)
+	$(Q)rm -rf $(RPMBUILD_DIR)
+
+# prepare the login source code, being pulled from GitHub using the default branch
+$(LOGIN_GIT_DIR):
+	$(Q)mkdir $(LOGIN_GIT_DIR)
 	$(call RUN_CMD_TIMED, \
-		SRCDIR=$(SRCDIR) sh -x $(SRCDIR)/build/buildah-image.sh $(APP_VERSION) \
-		,"  BUILD   keycloak image")
-	$(Q)touch $@
+		for i in {1..10} ; do \
+		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(LOGIN_GIT_DIR) && break ; \
+		done,\
+		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
+	$(Q)$(eval LOGIN_VERSION=`cd $(LOGIN_GIT_DIR) && node -p "require('./packages/cube-frontend-keycloak-login/package.json').version"`)
+	$(Q)$(eval LOGIN_BUILD_NUMBER=`cd $(LOGIN_GIT_DIR) && git rev-parse --short HEAD`)
+	$(Q)$(eval KEYCLOAK_VERSION=`cd $(LOGIN_GIT_DIR) && head -n 1 ./packages/cube-frontend-keycloak-login/KEYCLOAK_VERSION`)
 
-.push-img: .build-img
+# prepare the rpm build directory
+$(RPMBUILD_DIR):
+	$(Q)mkdir /root/rpmbuild
+	$(Q)cd /root/rpmbuild && mkdir BUILD RPMS SOURCES SPECS SRPMS
+
+# make the source tarball
+$(LOGIN_TARBALL): $(RPMBUILD_DIR) $(LOGIN_GIT_DIR)
+	$(Q)mkdir /root/source
+	$(Q)mkdir -p /root/source/packages/cube-frontend-ui-library
+	$(Q)cp -r \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/src \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/package.json \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/postcss.config.js \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/tailwind.config.js \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/tsconfig.json \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/vite.config.ts \
+		/root/source/packages/cube-frontend-ui-library
+	$(Q)mkdir -p /root/source/packages/cube-frontend-ui-theme
+	$(Q)cp -r \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-theme/src \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-theme/package.json \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-theme/tsconfig.json \
+		/root/source/packages/cube-frontend-ui-theme
+	$(Q)mkdir -p /root/source/packages/cube-frontend-utils
+	$(Q)cp -r \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-utils/src \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-utils/package.json \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-utils/tsconfig.json \
+		/root/source/packages/cube-frontend-utils
+	$(Q)mkdir -p /root/source/packages/cube-frontend-keycloak-login
+	$(Q)cp -r \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/public \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/rollup-plugins \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/src \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/index.html \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/package.json \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/postcss.config.js \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/tailwind.config.js \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/tsconfig.app.json \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/tsconfig.json \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/tsconfig.node.json \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/vite.config.ts \
+		/root/source/packages/cube-frontend-keycloak-login
+	$(Q)mkdir -p /root/source/packages/cube-frontend-keycloak-login/keycloak
+	$(Q)cp -r \
+		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/keycloak/themes \
+		/root/source/packages/cube-frontend-keycloak-login/keycloak
+	$(Q)cp -r \
+		$(LOGIN_GIT_DIR)/LICENSE \
+		$(LOGIN_GIT_DIR)/package.json \
+		$(LOGIN_GIT_DIR)/pnpm-lock.yaml \
+		$(LOGIN_GIT_DIR)/pnpm-workspace.yaml \
+		$(LOGIN_GIT_DIR)/tsconfig.json \
+		/root/source
+	$(Q)cd /root && tar -cvzf "cube-cos-login-$(LOGIN_VERSION).tar.gz" source 2>&1 > /dev/null
+	$(Q)mv "/root/cube-cos-login-$(LOGIN_VERSION).tar.gz" $(RPMBUILD_DIR)/SOURCES
+	$(Q)rm -r /root/source
+
+# prepare the rpm spec file
+$(LOGIN_SPEC_FILE): $(RPMBUILD_DIR) $(LOGIN_GIT_DIR)
+	$(Q)cp $(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/cube-cos-login.spec $(RPMBUILD_DIR)/SPECS
+
+# build the login rpm package
+$(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
+	$(call RUN_CMD_TIMED, \
+		nvm use $(UI_NODE_VERSION) && \
+		rpmbuild -bb --nodeps --define "version $(LOGIN_VERSION)" --define "build_number $(LOGIN_BUILD_NUMBER)" --define "keycloak_version $(KEYCLOAK_VERSION)" $(LOGIN_SPEC_FILE), \
+		"  BUILD   cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm")
+
+# move the built rpm back to the local directory, and clean up the build environment
+$(LOGIN_RPM): login_build_prep $(LOGIN_RPM_BUILD)
+	$(Q)cp -f $(LOGIN_RPM_BUILD) ./login.rpm
+	$(Q)rm -rf $(RPMBUILD_DIR)
+	$(Q)rm -rf $(LOGIN_GIT_DIR)
+
+.push-img: $(LOGIN_RPM)
+	$(Q)dnf install -y ./login.rpm
+	$(Q)podman load -i /usr/share/cube/login/keycloak-image.tar
 	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(IMG_BUILD)
+	$(Q)dnf remove -y cube-cos-login
 	$(Q)touch $@
 
 .PHONY: copy-image
@@ -55,7 +156,6 @@ test-podman:: .build-img
 		$(IMG_BUILD)
 	$(Q)echo Accessing keycloak on http://$(shell cat /etc/hosts | grep $$(cat /etc/hostname) | awk '{print $$1}')/auth/
 
-
 testclean::
 ifeq ($(DEP),1)
 	$(Q)make testclean -C $(TOP_BLDDIR)/core/k3s
@@ -69,6 +169,6 @@ clean:: testclean
 	$(Q)podman image rm -f $(IMG_BUILD) 2>/dev/null || true
 
 BUILD += $(CHART) .push-img
-BUILDCLEAN += $(CHART) .build-img .push-img $(KEYCLOAK_DIR)
+BUILDCLEAN += $(CHART) $(LOGIN_RPM) .push-img $(KEYCLOAK_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
