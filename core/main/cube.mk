@@ -143,7 +143,9 @@ hex_config_MODULES += config_designate.o
 hex_config_MODULES += config_senlin.o
 hex_config_MODULES += config_watcher.o
 hex_config_MODULES += config_cyborg.o
+hex_config_MODULES += config_api.o
 hex_config_MODULES += config_skyline.o
+hex_config_MODULES += config_nginx.o
 hex_config_MODULES += config_corosync.o
 hex_config_MODULES += config_pacemaker.o
 hex_config_MODULES += config_haproxy.o
@@ -159,7 +161,6 @@ hex_config_MODULES += config_logstash.o
 hex_config_MODULES += config_kafka.o
 hex_config_MODULES += config_prometheus.o
 hex_config_MODULES += config_mongodb.o
-hex_config_MODULES += config_nginx.o
 
 PROGRAMS += hex_config
 
