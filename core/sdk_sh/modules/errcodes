@@ -84,6 +84,11 @@ eval "ERR_DESC_$SRV[1]='control httpd down'"
 eval "ERR_DESC_$SRV[2]='port not responding'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
+SRV="api"
+eval "ERR_DESC_$SRV[1]='control api down'"
+eval "ERR_DESC_$SRV[2]='api port not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
 SRV="lmi"
 eval "ERR_DESC_$SRV[1]='service down'"
 eval "ERR_DESC_$SRV[2]='service not responding'"

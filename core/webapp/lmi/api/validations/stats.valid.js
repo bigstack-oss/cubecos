@@ -99,6 +99,7 @@ module.exports = {
             'haproxy',
             'httpd',
             'nginx',
+            'api',
             'lmi',
             'skyline',
             'memcache',

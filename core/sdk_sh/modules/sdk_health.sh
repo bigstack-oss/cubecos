@@ -897,6 +897,66 @@ health_nginx_repair()
     done
 }
 
+health_api_report()
+{
+    health_report ${FUNCNAME[0]}
+}
+
+health_api_check()
+{
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node cube-cos-api >/dev/null 2>&1 ; then
+            ERR_CODE=1
+            ERR_MSG+="cube-cos-api on $node is not running\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u cube-cos-api"
+        fi
+        
+        $CURL -sf http://$node:8082 >/dev/null
+        # 0: ok, 22: http error (page not found)
+        if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+            ERR_CODE=2
+            ERR_MSG+="http port $port on $node doesn't respond\n"
+            ERR_LOG="netstat -tunpl | grep $port"
+        fi
+    done
+
+    _health_fail_log
+}
+
+health_api_auto_repair()
+{
+    if [ "$ERR_CODE" == "1" ] ; then
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            if ! is_remote_running $node cube-cos-api >/dev/null 2>&1 ; then
+                remote_systemd_restart $node cube-cos-api
+            fi
+        done
+    elif [ "$ERR_CODE" == "2" ] ; then
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            $CURL -sf http://$node:8082 >/dev/null
+            # 0: ok, 22: http error (page not found)
+            if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+                remote_systemd_restart $node cube-cos-api
+            fi
+        done
+    fi
+}
+
+health_api_repair()
+{
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node cube-cos-api >/dev/null 2>&1 ; then
+            remote_systemd_restart $node cube-cos-api
+        fi
+        
+        $CURL -sf http://$node:8082 >/dev/null
+        # 0: ok, 22: http error (page not found)
+        if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+            remote_systemd_restart $node cube-cos-api
+        fi
+    done
+}
+
 health_skyline_report()
 {
     health_report ${FUNCNAME[0]}
