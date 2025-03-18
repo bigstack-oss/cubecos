@@ -21,9 +21,9 @@ ovn-northd:
 	$(Q)cp -f $(OVN_PATCHDIR)/$(OVN_PREFIX).spec $(RPMBUILD_DIR)/SPECS
 	$(call RUN_CMD_TIMED,cd $(RPMBUILD_DIR) && rpmbuild -ba SPECS/$(OVN_PREFIX).spec || /bin/true,"  BUILD   $(OVN_PREFIX)")
 	$(Q)cp -f $(RPMBUILD_DIR)/BUILD/$(OVN_DST)/northd/ovn-northd ./
-	$(Q)rm -rf $(RPMBUILD_DIR)
 
 FULL += ovn-northd
 PKGCLEAN += ovn-northd
+BUILDCLEAN += $(RPMBUILD_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

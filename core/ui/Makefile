@@ -10,7 +10,7 @@ UI_GIT_DIR := /root/ui
 UI_TARBALL = $(RPMBUILD_DIR)/SOURCES/cube-cos-ui-$(UI_VERSION).tar.gz
 UI_SPEC_FILE := $(RPMBUILD_DIR)/SPECS/cube-cos-ui.spec
 UI_RPM_BUILD = $(RPMBUILD_DIR)/RPMS/x86_64/cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm
-UI_RPM = $(TOP_BLDDIR)/core/ui/ui.rpm
+UI_RPM := $(TOP_BLDDIR)/core/ui/ui.rpm
 
 # clean up the environment
 .PHONY: ui_build_prep
@@ -109,10 +109,8 @@ $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)
 # move the built rpm back to the local directory, and clean up the build environment
 $(UI_RPM): ui_build_prep $(UI_RPM_BUILD)
 	$(Q)cp -f $(UI_RPM_BUILD) ./ui.rpm
-	$(Q)rm -rf $(RPMBUILD_DIR)
-	$(Q)rm -rf $(UI_GIT_DIR)
 
 BUILD += $(UI_RPM)
-BUILDCLEAN += $(UI_RPM)
+BUILDCLEAN += $(UI_RPM) $(RPMBUILD_DIR) $(UI_GIT_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

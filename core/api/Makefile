@@ -10,7 +10,7 @@ API_GIT_DIR := /root/api
 API_TARBALL = $(RPMBUILD_DIR)/SOURCES/cube-cos-api-$(API_VERSION).tar.gz
 API_SPEC_FILE := $(RPMBUILD_DIR)/SPECS/cube-cos-api.spec
 API_RPM_BUILD = $(RPMBUILD_DIR)/RPMS/x86_64/cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm
-API_RPM = $(TOP_BLDDIR)/core/api/api.rpm
+API_RPM := $(TOP_BLDDIR)/core/api/api.rpm
 
 # clean up the environment
 .PHONY: api_build_prep
@@ -64,10 +64,8 @@ $(API_RPM_BUILD): $(API_TARBALL) $(API_SPEC_FILE)
 # move the built rpm back to the local directory, and clean up the build environment
 $(API_RPM): api_build_prep $(API_RPM_BUILD)
 	$(Q)cp -f $(API_RPM_BUILD) ./api.rpm
-	$(Q)rm -rf $(RPMBUILD_DIR)
-	$(Q)rm -rf $(API_GIT_DIR)
 
 BUILD += $(API_RPM)
-BUILDCLEAN += $(API_RPM)
+BUILDCLEAN += $(API_RPM) $(RPMBUILD_DIR) $(API_GIT_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

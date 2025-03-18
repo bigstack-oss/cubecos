@@ -19,7 +19,7 @@ LOGIN_GIT_DIR := /root/login
 LOGIN_TARBALL = $(RPMBUILD_DIR)/SOURCES/cube-cos-login-$(LOGIN_VERSION).tar.gz
 LOGIN_SPEC_FILE := $(RPMBUILD_DIR)/SPECS/cube-cos-login.spec
 LOGIN_RPM_BUILD = $(RPMBUILD_DIR)/RPMS/x86_64/cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm
-LOGIN_RPM = $(TOP_BLDDIR)/core/keycloak/login.rpm
+LOGIN_RPM := $(TOP_BLDDIR)/core/keycloak/login.rpm
 IMG_BUILD = localhost:5080/bigstack/keycloak:$(KEYCLOAK_VERSION)
 
 KEYCLOAK_DIR := /opt/keycloak/
@@ -114,23 +114,21 @@ $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
 # move the built rpm back to the local directory, and clean up the build environment
 $(LOGIN_RPM): login_build_prep $(LOGIN_RPM_BUILD)
 	$(Q)cp -f $(LOGIN_RPM_BUILD) ./login.rpm
-	$(Q)rm -rf $(RPMBUILD_DIR)
-	$(Q)rm -rf $(LOGIN_GIT_DIR)
 
 .load-img: $(LOGIN_RPM)
 	$(Q)dnf install -y ./login.rpm
 	$(Q)podman load -i /usr/share/cube/login/keycloak-image.tar
-	$(Q)touch $@
+	$(Q)echo $(IMG_BUILD) > $@
 
 .push-img: .load-img
-	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(IMG_BUILD)
+	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(shell cat .load-img)
 	$(Q)dnf remove -y cube-cos-login
 	$(Q)touch $@
 
 .PHONY: copy-image
 copy-image: .load-img
 	$(call RUN_CMD_TIMED, \
-		sh -x $(TOP_SRCDIR)/core/docker/copy-images.sh containers-storage:$(IMG_BUILD) \
+		sh -x $(TOP_SRCDIR)/core/keycloak/copy-images.sh containers-storage:$(shell cat .load-img) \
 		,"  COPY    keycloak image")
 
 install:: $(CHART) .push-img
@@ -156,7 +154,7 @@ test-podman:: .load-img
 		-e KEYCLOAK_USER=admin \
 		-e KEYCLOAK_PASSWORD=admin \
 		-e KEYCLOAK_DEFAULT_THEME=cube \
-		$(IMG_BUILD)
+		$(shell cat .load-img)
 	$(Q)echo Accessing keycloak on http://$(shell cat /etc/hosts | grep $$(cat /etc/hostname) | awk '{print $$1}')/auth/
 
 testclean::
@@ -169,9 +167,11 @@ endif
 	$(Q)podman rm -if mysql >/dev/null
 
 clean:: testclean
-	$(Q)podman image rm -f $(IMG_BUILD) 2>/dev/null || true
+	$(Q)podman image rm -f $(shell cat .load-img) 2>/dev/null || true
+	$(Q)rm -rf $(RPMBUILD_DIR)
+	$(Q)rm -rf $(LOGIN_GIT_DIR)
 
 BUILD += $(CHART) .push-img
-BUILDCLEAN += $(CHART) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
+BUILDCLEAN += $(CHART) $(RPMBUILD_DIR) $(LOGIN_GIT_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
