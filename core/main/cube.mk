@@ -31,6 +31,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_hwdetect.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_k3s.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_kafka.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_license.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_api.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_lmi.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_logs.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_memcache.sh
