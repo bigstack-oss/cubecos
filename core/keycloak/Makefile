@@ -117,15 +117,18 @@ $(LOGIN_RPM): login_build_prep $(LOGIN_RPM_BUILD)
 	$(Q)rm -rf $(RPMBUILD_DIR)
 	$(Q)rm -rf $(LOGIN_GIT_DIR)
 
-.push-img: $(LOGIN_RPM)
+.load-img: $(LOGIN_RPM)
 	$(Q)dnf install -y ./login.rpm
 	$(Q)podman load -i /usr/share/cube/login/keycloak-image.tar
+	$(Q)touch $@
+
+.push-img: .load-img
 	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(IMG_BUILD)
 	$(Q)dnf remove -y cube-cos-login
 	$(Q)touch $@
 
 .PHONY: copy-image
-copy-image: .build-img
+copy-image: .load-img
 	$(call RUN_CMD_TIMED, \
 		sh -x $(TOP_SRCDIR)/core/docker/copy-images.sh containers-storage:$(IMG_BUILD) \
 		,"  COPY    keycloak image")
@@ -148,7 +151,7 @@ endif
 	$(Q)helm --kubeconfig /etc/rancher/k3s/k3s.yaml upgrade --install keycloak $(KEYCLOAK_DIR)/$(CHART) \
 		-n keycloak --create-namespace --wait --wait-for-jobs -f $(KEYCLOAK_DIR)/chart-values.yaml
 
-test-podman:: .build-img
+test-podman:: .load-img
 	$(Q)podman run -d -p 80:8080 -p 443:8443 --name=keycloak \
 		-e KEYCLOAK_USER=admin \
 		-e KEYCLOAK_PASSWORD=admin \
@@ -169,6 +172,6 @@ clean:: testclean
 	$(Q)podman image rm -f $(IMG_BUILD) 2>/dev/null || true
 
 BUILD += $(CHART) .push-img
-BUILDCLEAN += $(CHART) $(LOGIN_RPM) .push-img $(KEYCLOAK_DIR)
+BUILDCLEAN += $(CHART) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
