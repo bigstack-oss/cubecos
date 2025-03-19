@@ -202,7 +202,7 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  \n");
 
     fprintf(fout, "frontend cube_cos_https\n");
-    fprintf(fout, "  bind :4443 ssl crt /var/www/certs/server.pem\n");
+    fprintf(fout, "  bind :4443 ssl crt %s\n", KEYFILE);
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
     fprintf(fout, "  option http-server-close\n");
