@@ -4,7 +4,7 @@
 COREDIR := $(TOP_SRCDIR)/core
 CORE_MAINDIR  := $(COREDIR)/main
 
-# Core deliverables
+# core deliverables
 CORE_SHIPDIR  := $(TOP_BLDDIR)/core/main/ship
 CORE_USB      := $(CORE_SHIPDIR)/../proj.img
 CORE_LIVE_USB := $(CORE_SHIPDIR)/../live_proj.img
@@ -19,6 +19,16 @@ CORE_POLICYDIR := $(COREDIR)/policies
 
 # web source tree
 CORE_WEBAPPDIR := $(COREDIR)/webapp
+
+# cubecos shared build envs
+RPMBUILD_DIR := /root/rpmbuild
+GOLANG_VERSION := 1.24.0
+UI_NODE_VERSION := 22.14.0
+LMI_NODE_VERSION := 12.22.12
+PROJ_NFS_SERVER := 10.32.0.200
+PROJ_NFS_CUBECOS_PATH := /volume1/bigstack/cube-images
+PROJ_NFS_OPENSTACK_PATH := /volume1/openstack-images
+PROJ_NFS_PATH := /volume1/pxe-server
 
 PROJ_TEST_EXPORTS := "PS4=+[\\t]"
 

@@ -12,8 +12,6 @@ FULL += ext
 PROJ_EXT := $(MAIN_DIR)/proj.ext
 PKGCLEAN += $(PROJ_EXT)
 NAS := $(TOP_BLDDIR)/nas
-PROJ_NFS_SERVER := 10.32.0.200
-PROJ_NFS_OPENSTACK_PATH := /volume1/openstack-images
 
 AMPHORA := $(TOP_BLDDIR)/../amphora-x64-haproxy-yoga.qcow2
 MANILA  := $(TOP_BLDDIR)/../manila-service-image-yoga.qcow2
