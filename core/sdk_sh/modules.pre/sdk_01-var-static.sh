@@ -6,7 +6,9 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
-source /etc/admin-openrc.sh
+if [ -f /etc/admin-openrc.sh ] ; then
+    source /etc/admin-openrc.sh
+fi
 
 # service status request timeout
 SRVTO=60
