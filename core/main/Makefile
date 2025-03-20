@@ -52,6 +52,10 @@ PROJ_HARDWARE_DIR := $(SRCDIR)/../hardware
 PROJ_HARDWARE += vmware
 PROJ_HARDWARE += dell_poweredge_xr
 
+PROJ_NFS_SERVER := 10.32.0.200
+PROJ_NFS_CUBECOS_PATH := /volume1/bigstack/cube-images
+PROJ_NFS_PATH := /volume1/pxe-server
+
 # Generic Cube
 # NOTE: THIS MUST BE THE LAST!
 PROJ_HARDWARE += generic

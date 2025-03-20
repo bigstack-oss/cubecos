@@ -2,6 +2,11 @@
 
 include ../build.mk
 
+RPMBUILD_DIR := /root/rpmbuild
+GOLANG_VERSION := 1.24.0
+UI_NODE_VERSION := 22.14.0
+LMI_NODE_VERSION := 12.22.12
+
 # Additional fakeroot build tools required by this project
 # SUBDIRS += fakeroot
 

@@ -191,9 +191,6 @@ RUN echo "_HEX_ARCH=$HEX_ARCH" >> /etc/hex.manifest
 RUN echo "_HEX_VER=$HEX_VER" >> /etc/hex.manifest
 RUN echo "_HEX_DIST=$DIST" >> /etc/hex.manifest
 RUN echo "_WEAK_DEP=$WEAK_DEP" >> /etc/hex.manifest
-RUN echo "_GOLANG_VERSION=$GOLANG_VER" >> /etc/hex.manifest
-RUN echo "_UI_NODE_VERSION=$UI_NODE_VER" >> /etc/hex.manifest
-RUN echo "_LMI_NODE_VERSION=$LMI_NODE_VER" >> /etc/hex.manifest
 
 # generate private key for dev licence
 ARG PASSPHRASE
