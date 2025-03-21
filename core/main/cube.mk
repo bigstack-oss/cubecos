@@ -5,6 +5,7 @@ hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_01-var-static.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_02-var-runtime.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_cmd.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_is.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_license.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_remote.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_stale.sh
 
@@ -30,7 +31,6 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_health.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_hwdetect.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_k3s.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_kafka.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_license.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_api.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_lmi.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_logs.sh
