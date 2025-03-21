@@ -172,6 +172,6 @@ clean:: testclean
 	$(Q)rm -rf $(LOGIN_GIT_DIR)
 
 BUILD += $(CHART) .push-img
-BUILDCLEAN += $(CHART) $(RPMBUILD_DIR) $(LOGIN_GIT_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
+BUILDCLEAN += $(CHART) $(LOGIN_GIT_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

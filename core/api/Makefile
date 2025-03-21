@@ -66,6 +66,6 @@ $(API_RPM): api_build_prep $(API_RPM_BUILD)
 	$(Q)cp -f $(API_RPM_BUILD) ./api.rpm
 
 BUILD += $(API_RPM)
-BUILDCLEAN += $(API_RPM) $(RPMBUILD_DIR) $(API_GIT_DIR)
+BUILDCLEAN += $(API_RPM) $(API_GIT_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

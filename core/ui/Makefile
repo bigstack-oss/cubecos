@@ -111,6 +111,6 @@ $(UI_RPM): ui_build_prep $(UI_RPM_BUILD)
 	$(Q)cp -f $(UI_RPM_BUILD) ./ui.rpm
 
 BUILD += $(UI_RPM)
-BUILDCLEAN += $(UI_RPM) $(RPMBUILD_DIR) $(UI_GIT_DIR)
+BUILDCLEAN += $(UI_RPM) $(UI_GIT_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
