@@ -21,7 +21,6 @@ CORE_POLICYDIR := $(COREDIR)/policies
 CORE_WEBAPPDIR := $(COREDIR)/webapp
 
 # cubecos shared build envs
-RPMBUILD_DIR := /root/rpmbuild
 GOLANG_VERSION := 1.24.0
 UI_NODE_VERSION := 22.14.0
 LMI_NODE_VERSION := 12.22.12

@@ -7,6 +7,7 @@ OVN_PREFIX := ovn23.03
 OVN_DST := ovn-23.03.0
 OVN_SRPM := https://cbs.centos.org/kojifiles/packages/ovn23.03/23.03.0/69.el9s/src/ovn23.03-23.03.0-69.el9s.src.rpm
 
+RPMBUILD_DIR := /root/rpmbuild
 OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)
 
 # http://bradthemad.org/tech/notes/patching_rpms.php
