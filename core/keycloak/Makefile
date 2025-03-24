@@ -118,7 +118,11 @@ $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
 
 # move the built rpm back to the local directory, and clean up the build environment
 $(LOGIN_RPM): login_build_prep $(LOGIN_RPM_BUILD)
+	$(Q)# enable nvm
+	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cp -f $(LOGIN_RPM_BUILD) ./login.rpm
+	$(Q)# disable nvm
+	$(Q)sed -i 's/^/#/g' $$BASH_ENV
 
 .load-img: $(LOGIN_RPM)
 	$(Q)dnf install -y ./login.rpm
