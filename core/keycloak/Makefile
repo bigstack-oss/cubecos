@@ -25,12 +25,6 @@ IMG_BUILD = localhost:5080/bigstack/keycloak:$(LOGIN_VERSION)
 
 KEYCLOAK_DIR := /opt/keycloak/
 
-# clean up the environment
-.PHONY: login_build_prep
-login_build_prep:
-	$(Q)rm -rf $(LOGIN_GIT_DIR)
-	$(Q)rm -rf $(LOGIN_RPMBUILD_DIR)
-
 # prepare the login source code, being pulled from GitHub using the default branch
 $(LOGIN_GIT_DIR):
 	$(Q)mkdir $(LOGIN_GIT_DIR)
@@ -117,7 +111,7 @@ $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
 	$(Q)sed -i 's/^/#/g' $$BASH_ENV
 
 # move the built rpm back to the local directory, and clean up the build environment
-$(LOGIN_RPM): login_build_prep $(LOGIN_RPM_BUILD)
+$(LOGIN_RPM): $(LOGIN_RPM_BUILD)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cp -f $(LOGIN_RPM_BUILD) ./login.rpm

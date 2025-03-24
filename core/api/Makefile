@@ -13,12 +13,6 @@ API_SPEC_FILE := $(API_RPMBUILD_DIR)/SPECS/cube-cos-api.spec
 API_RPM_BUILD = $(API_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm
 API_RPM := $(TOP_BLDDIR)/core/api/api.rpm
 
-# clean up the environment
-.PHONY: api_build_prep
-api_build_prep:
-	$(Q)rm -rf $(API_GIT_DIR)
-	$(Q)rm -rf $(API_RPMBUILD_DIR)
-
 # prepare the api source code, being pulled from GitHub using the default branch
 $(API_GIT_DIR):
 	$(Q)mkdir $(API_GIT_DIR)
@@ -63,7 +57,7 @@ $(API_RPM_BUILD): $(API_TARBALL) $(API_SPEC_FILE)
 		"  BUILD   cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm")
 
 # move the built rpm back to the local directory, and clean up the build environment
-$(API_RPM): api_build_prep $(API_RPM_BUILD)
+$(API_RPM): $(API_RPM_BUILD)
 	$(Q)cp -f $(API_RPM_BUILD) ./api.rpm
 
 BUILD += $(API_RPM)

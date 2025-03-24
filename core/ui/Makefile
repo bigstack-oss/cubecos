@@ -13,12 +13,6 @@ UI_SPEC_FILE := $(UI_RPMBUILD_DIR)/SPECS/cube-cos-ui.spec
 UI_RPM_BUILD = $(UI_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm
 UI_RPM := $(TOP_BLDDIR)/core/ui/ui.rpm
 
-# clean up the environment
-.PHONY: ui_build_prep
-ui_build_prep:
-	$(Q)rm -rf $(UI_GIT_DIR)
-	$(Q)rm -rf $(UI_RPMBUILD_DIR)
-
 # prepare the ui source code, being pulled from GitHub using the default branch
 $(UI_GIT_DIR):
 	$(Q)mkdir $(UI_GIT_DIR)
@@ -112,7 +106,7 @@ $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)
 	$(Q)sed -i 's/^/#/g' $$BASH_ENV
 
 # move the built rpm back to the local directory, and clean up the build environment
-$(UI_RPM): ui_build_prep $(UI_RPM_BUILD)
+$(UI_RPM): $(UI_RPM_BUILD)
 	$(Q)cp -f $(UI_RPM_BUILD) ./ui.rpm
 
 BUILD += $(UI_RPM)
