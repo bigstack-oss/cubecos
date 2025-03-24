@@ -21,7 +21,7 @@ LOGIN_TARBALL = $(LOGIN_RPMBUILD_DIR)/SOURCES/cube-cos-login-$(LOGIN_VERSION).ta
 LOGIN_SPEC_FILE := $(LOGIN_RPMBUILD_DIR)/SPECS/cube-cos-login.spec
 LOGIN_RPM_BUILD = $(LOGIN_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm
 LOGIN_RPM := $(TOP_BLDDIR)/core/keycloak/login.rpm
-IMG_BUILD = localhost:5080/bigstack/keycloak:$(KEYCLOAK_VERSION)
+IMG_BUILD = localhost:5080/bigstack/keycloak:$(LOGIN_VERSION)
 
 KEYCLOAK_DIR := /opt/keycloak/
 
