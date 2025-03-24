@@ -102,10 +102,14 @@ $(UI_SPEC_FILE): $(UI_RPMBUILD_DIR) $(UI_GIT_DIR)
 
 # build the ui rpm package
 $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)
+	# enable nvm
+	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(call RUN_CMD_TIMED, \
 		nvm use $(UI_NODE_VERSION) && \
 		rpmbuild -bb --nodeps --define "_topdir $(UI_RPMBUILD_DIR)" --define "version $(UI_VERSION)" --define "build_number $(UI_BUILD_NUMBER)" $(UI_SPEC_FILE), \
 		"  BUILD   cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm")
+	# disable nvm
+	$(Q)sed -i 's/^/#/g' $$BASH_ENV
 
 # move the built rpm back to the local directory, and clean up the build environment
 $(UI_RPM): ui_build_prep $(UI_RPM_BUILD)

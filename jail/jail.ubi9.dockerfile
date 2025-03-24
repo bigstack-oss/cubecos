@@ -143,11 +143,14 @@ RUN touch "${BASH_ENV}"
 RUN echo '. "${BASH_ENV}"' >> /root/.bashrc
 # download and install nvm
 RUN wget -qO- --no-check-certificate https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | PROFILE="${BASH_ENV}" bash
-# install node, npm, yarn, pnpm, and wheel
+# install node, npm, yarn, and pnpm
 RUN /bin/bash -c "nvm install $UI_NODE_VER"
 RUN /bin/bash -c "nvm install $LMI_NODE_VER"
 RUN /bin/bash -c "nvm use $LMI_NODE_VER && npm install -g yarn"
 RUN /bin/bash -c "nvm use $UI_NODE_VER && npm install -g pnpm@latest-10"
+# disable nvm to stop it from slowing down bash
+RUN sed -i 's/^/#/g' $BASH_ENV
+# install wheel
 RUN pip3 install --ignore-installed wheel
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
