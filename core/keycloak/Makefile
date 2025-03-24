@@ -107,13 +107,13 @@ $(LOGIN_SPEC_FILE): $(LOGIN_RPMBUILD_DIR) $(LOGIN_GIT_DIR)
 
 # build the login rpm package
 $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
-	# enable nvm
+	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(call RUN_CMD_TIMED, \
 		nvm use $(UI_NODE_VERSION) && \
 		rpmbuild -bb --nodeps --define "_topdir $(LOGIN_RPMBUILD_DIR)" --define "version $(LOGIN_VERSION)" --define "build_number $(LOGIN_BUILD_NUMBER)" --define "keycloak_version $(KEYCLOAK_VERSION)" $(LOGIN_SPEC_FILE), \
 		"  BUILD   cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm")
-	# disable nvm
+	$(Q)# disable nvm
 	$(Q)sed -i 's/^/#/g' $$BASH_ENV
 
 # move the built rpm back to the local directory, and clean up the build environment
