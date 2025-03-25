@@ -1,0 +1,76 @@
+kind: http
+metadata:
+  name: cube-cos-api
+  version: v1.0.0
+spec:
+  listen:
+    port: 8082
+    address:
+      local: @MGMT_ADDR@
+  identity:
+    os:
+      policy: /etc/settings.txt
+      system: /etc/settings.sys
+    logoutRedirect: "/api/v1/datacenters"
+    keycloak:
+      host:
+        scheme: "https"
+        ip: ""
+        port: 10443
+        path: "auth"
+        tlsInsecureSkipVerify: true
+      auth:
+        realm: master
+        username: admin
+        password: admin
+    saml:
+      identityProvider:
+        metadataPath: "/auth/realms/master/protocol/saml/descriptor"
+        host:
+          scheme: "https"
+          port: 10443
+          tlsInsecureSkipVerify: true
+      serviceProvider:
+        metadataPath: "/saml/metadata"
+        host:
+          scheme: "https"
+          port: 4443
+          auth:
+            key: "/var/www/certs/server.key"
+            cert: "/var/www/certs/server.cert"
+  resourceControl:
+    k3s:
+      auth: /etc/rancher/k3s/k3s.yaml
+    openstack:
+      auth:
+        source: "file"
+        file: /etc/admin-openrc.sh
+        enableAutoRenew: true
+    aws:
+      region: auto
+      accessKey: ""
+      secretKey: ""
+      enableStaticCreds: true
+      enableCustomURL: true
+      insecureSkipVerify: true
+  store:
+    mongodb:
+      uri: mongodb://0.0.0.0:27017
+      database: cube-cos
+      replicaSet: cube-cos-rs
+      auth:
+        enabled: true
+        username: admin
+        password: admin
+    influxdb:
+      url: http://0.0.0.0:8086
+  observability:
+    log:
+      file: /var/log/cube-cos-api/cube-cos-api.log
+      level: 2
+      rotation:
+        backups: 3
+        size: 20
+        ttl: 30
+        compress: true
+  
