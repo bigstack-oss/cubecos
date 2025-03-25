@@ -137,6 +137,12 @@ $(LOGIN_RPM): $(LOGIN_RPM_BUILD)
 	$(Q)dnf remove -y cube-cos-login
 	$(Q)touch $@
 
+.PHONY: copy-image
+copy-image: .load-img
+	$(call RUN_CMD_TIMED, \
+		sh -x $(TOP_SRCDIR)/core/keycloak/copy-images.sh containers-storage:$(shell cat .load-img) \
+		,"  COPY    keycloak image")
+
 install:: $(CHART) .push-img
 	$(Q)mkdir -p $(KEYCLOAK_DIR)
 	$(Q)cp -f $(SRCDIR)/chart-values.yaml $(KEYCLOAK_DIR)
