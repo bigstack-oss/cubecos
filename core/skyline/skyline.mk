@@ -32,6 +32,6 @@ rootfs_install::
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)nvm use $(LMI_NODE_VERSION) && make -C $(ROOTDIR)/skyline-console package
 	$(Q)# disable nvm
-	$(Q)sed -i 's/^/#/g' $$BASH_ENV
+	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 	$(Q)chroot $(ROOTDIR) sh -c "cd /skyline-console && pip3 install dist/skyline_console-*.whl"
 	$(Q)rm -rf $(ROOTDIR)/skyline-console

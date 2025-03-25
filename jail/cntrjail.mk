@@ -65,4 +65,5 @@ clean-dangling-img:
 .PHONY: enter
 enter:
 	$(Q)$(DOCKER_BIN) start $(PROJECT) $(IGNORE_ERR)
+	$(Q)$(DOCKER_BIN) exec $(PROJECT) sed -i '/^#/! s/^/#/' /root/.bash_env
 	$(Q)$(DOCKER_BIN) exec -ti $(PROJECT) bash -c "../cubecos/hex/configure; bash"

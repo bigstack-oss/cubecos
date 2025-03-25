@@ -26,7 +26,7 @@ version: $(UI_GIT_DIR)
 	$(Q)cd $(UI_GIT_DIR) && \
 		sed -i 's/^#//g' $$BASH_ENV && \
 		node -p "require('./packages/cube-frontend-web-app/package.json').version" >> ../version && \
-		sed -i 's/^/#/g' $$BASH_ENV
+		sed -i '/^#/! s/^/#/' $$BASH_ENV
 
 build_number: $(UI_GIT_DIR)
 	$(Q)echo -n "UI_BUILD_NUMBER := " > build_number
@@ -112,7 +112,7 @@ $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)
 		rpmbuild -bb --nodeps --define "_topdir $(UI_RPMBUILD_DIR)" --define "version $(UI_VERSION)" --define "build_number $(UI_BUILD_NUMBER)" $(UI_SPEC_FILE), \
 		"  BUILD   cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm")
 	$(Q)# disable nvm
-	$(Q)sed -i 's/^/#/g' $$BASH_ENV
+	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 
 # move the built rpm back to the local directory
 $(UI_RPM): $(UI_RPM_BUILD)
