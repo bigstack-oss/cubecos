@@ -24,7 +24,7 @@ cmd()
 * files in sdk_sh/modules.post/ are sourced after those in sdk_sh/module/
 * functions inside files in sdk_sh/modules.pre/ are common (reusable) to others
 * functions in general are located in a file whose name contains the beginning of the function name
-ex: **health**_link_report() exists in sdk_sh/module/sdk_**health**.sh
+ex: **health**\_link\_report() exists in sdk\_sh/module/sdk\_**health**.sh
 * if
 ```
 if [ "x$ERR_CODE" = "x0" ] ; then
