@@ -9,11 +9,13 @@ REGISTRY_TAR := registry@2.tar
 $(REGISTRY_TAR):
 	$(Q)skopeo copy docker://registry:2 docker-archive:$(REGISTRY_TAR):registry:2 >/dev/null
 
-registry: $(REGISTRY_TAR)
+registry: $(REGISTRY_TAR) ../keycloak/.load-img
 	$(Q)make build-image -C ../k3s
 	$(call RUN_CMD_TIMED, make run-registry,"  RUN     docker registry")
 	$(Q)make copy-image -C ../k3s
-	$(Q)make copy-image -C ../keycloak
+	$(call RUN_CMD_TIMED, \
+		sh -x $(TOP_SRCDIR)/core/keycloak/copy-images.sh containers-storage:$(shell cat ../keycloak/.load-img), \
+		"  COPY    keycloak image")
 	$(Q)make copy-image -C ../rancher FULL=$(FULL)
 	$(Q)make copy-image -C ../nvidia
 	$(Q)make rm-registry
