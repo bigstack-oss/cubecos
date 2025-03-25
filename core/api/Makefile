@@ -1,16 +1,15 @@
 # Cube SDK
 
 include ../../build.mk
+include version
+include build_number
 
 # api binary
-API_VERSION :=
-API_BUILD_NUMBER :=
-
 API_GIT_DIR := ./git
 API_RPMBUILD_DIR := $(TOP_BLDDIR)/core/api/rpmbuild
-API_TARBALL = $(API_RPMBUILD_DIR)/SOURCES/cube-cos-api-$(API_VERSION).tar.gz
+API_TARBALL := $(API_RPMBUILD_DIR)/SOURCES/cube-cos-api-$(API_VERSION).tar.gz
 API_SPEC_FILE := $(API_RPMBUILD_DIR)/SPECS/cube-cos-api.spec
-API_RPM_BUILD = $(API_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm
+API_RPM_BUILD := $(API_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm
 API_RPM := $(TOP_BLDDIR)/core/api/api.rpm
 
 # prepare the api source code, being pulled from GitHub using the default branch
@@ -21,8 +20,15 @@ $(API_GIT_DIR):
 		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-api.git $(API_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-api.git")
-	$(Q)$(eval API_VERSION=`head -n 1 $(API_GIT_DIR)/VERSION`)
-	$(Q)$(eval API_BUILD_NUMBER=`cd $(API_GIT_DIR) && git rev-parse --short HEAD`)
+
+version: $(API_GIT_DIR)
+	$(Q)echo -n "API_VERSION := " > version
+	$(Q)head -n 1 $(API_GIT_DIR)/VERSION >> version
+
+build_number: $(API_GIT_DIR)
+	$(Q)echo -n "API_BUILD_NUMBER := " > build_number
+	$(Q)cd $(API_GIT_DIR) && \
+		git rev-parse --short HEAD >> ../build_number
 
 # prepare the rpm build directory
 $(API_RPMBUILD_DIR):
@@ -56,11 +62,11 @@ $(API_RPM_BUILD): $(API_TARBALL) $(API_SPEC_FILE)
 		rpmbuild -bb --nodeps --define "_topdir $(API_RPMBUILD_DIR)" --define "version $(API_VERSION)" --define "build_number $(API_BUILD_NUMBER)" $(API_SPEC_FILE),\
 		"  BUILD   cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm")
 
-# move the built rpm back to the local directory, and clean up the build environment
+# move the built rpm back to the local directory
 $(API_RPM): $(API_RPM_BUILD)
 	$(Q)cp -f $(API_RPM_BUILD) ./api.rpm
 
 BUILD += $(API_RPM)
-BUILDCLEAN += $(API_RPM) $(API_RPMBUILD_DIR) $(API_GIT_DIR)
+BUILDCLEAN += $(API_RPM) $(API_RPMBUILD_DIR) $(API_GIT_DIR) version build_number
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

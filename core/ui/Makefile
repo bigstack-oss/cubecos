@@ -1,16 +1,15 @@
 # Cube SDK
 
 include ../../build.mk
+include version
+include build_number
 
 # ui artifacts
-UI_VERSION :=
-UI_BUILD_NUMBER :=
-
 UI_GIT_DIR := ./git
 UI_RPMBUILD_DIR := $(TOP_BLDDIR)/core/ui/rpmbuild
-UI_TARBALL = $(UI_RPMBUILD_DIR)/SOURCES/cube-cos-ui-$(UI_VERSION).tar.gz
+UI_TARBALL := $(UI_RPMBUILD_DIR)/SOURCES/cube-cos-ui-$(UI_VERSION).tar.gz
 UI_SPEC_FILE := $(UI_RPMBUILD_DIR)/SPECS/cube-cos-ui.spec
-UI_RPM_BUILD = $(UI_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm
+UI_RPM_BUILD := $(UI_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm
 UI_RPM := $(TOP_BLDDIR)/core/ui/ui.rpm
 
 # prepare the ui source code, being pulled from GitHub using the default branch
@@ -21,8 +20,18 @@ $(UI_GIT_DIR):
 		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(UI_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
-	$(Q)$(eval UI_VERSION=`cd $(UI_GIT_DIR) && node -p "require('./packages/cube-frontend-web-app/package.json').version"`)
-	$(Q)$(eval UI_BUILD_NUMBER=`cd $(UI_GIT_DIR) && git rev-parse --short HEAD`)
+
+version: $(UI_GIT_DIR)
+	$(Q)echo -n "UI_VERSION := " > version
+	$(Q)cd $(UI_GIT_DIR) && \
+		sed -i 's/^#//g' $$BASH_ENV && \
+		node -p "require('./packages/cube-frontend-web-app/package.json').version" >> ../version && \
+		sed -i 's/^/#/g' $$BASH_ENV
+
+build_number: $(UI_GIT_DIR)
+	$(Q)echo -n "UI_BUILD_NUMBER := " > build_number
+	$(Q)cd $(UI_GIT_DIR) && \
+		git rev-parse --short HEAD >> ../build_number
 
 # prepare the rpm build directory
 $(UI_RPMBUILD_DIR):
@@ -105,11 +114,11 @@ $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)
 	$(Q)# disable nvm
 	$(Q)sed -i 's/^/#/g' $$BASH_ENV
 
-# move the built rpm back to the local directory, and clean up the build environment
+# move the built rpm back to the local directory
 $(UI_RPM): $(UI_RPM_BUILD)
 	$(Q)cp -f $(UI_RPM_BUILD) ./ui.rpm
 
 BUILD += $(UI_RPM)
-BUILDCLEAN += $(UI_RPM) $(UI_RPMBUILD_DIR) $(UI_GIT_DIR)
+BUILDCLEAN += $(UI_RPM) $(UI_RPMBUILD_DIR) $(UI_GIT_DIR) version build_number
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

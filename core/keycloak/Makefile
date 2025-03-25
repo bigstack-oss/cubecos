@@ -1,6 +1,9 @@
 # CUBE SDK
 
 include ../../build.mk
+include version
+include build_number
+include keycloak_version
 
 # login keycloak helm chart
 CHART_VERSION := 18.1.1
@@ -11,17 +14,13 @@ $(CHART):
 	$(Q)helm pull codecentric/keycloak --version $(CHART_VERSION)
 
 # login rpm
-LOGIN_VERSION :=
-LOGIN_BUILD_NUMBER :=
-KEYCLOAK_VERSION :=
-
 LOGIN_GIT_DIR := ./git
 LOGIN_RPMBUILD_DIR := $(TOP_BLDDIR)/core/keycloak/rpmbuild
-LOGIN_TARBALL = $(LOGIN_RPMBUILD_DIR)/SOURCES/cube-cos-login-$(LOGIN_VERSION).tar.gz
+LOGIN_TARBALL := $(LOGIN_RPMBUILD_DIR)/SOURCES/cube-cos-login-$(LOGIN_VERSION).tar.gz
 LOGIN_SPEC_FILE := $(LOGIN_RPMBUILD_DIR)/SPECS/cube-cos-login.spec
-LOGIN_RPM_BUILD = $(LOGIN_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm
+LOGIN_RPM_BUILD := $(LOGIN_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm
 LOGIN_RPM := $(TOP_BLDDIR)/core/keycloak/login.rpm
-IMG_BUILD = localhost:5080/bigstack/keycloak:$(LOGIN_VERSION)
+IMG_BUILD := localhost:5080/bigstack/keycloak:$(LOGIN_VERSION)
 
 KEYCLOAK_DIR := /opt/keycloak/
 
@@ -33,9 +32,23 @@ $(LOGIN_GIT_DIR):
 		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(LOGIN_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
-	$(Q)$(eval LOGIN_VERSION=`cd $(LOGIN_GIT_DIR) && node -p "require('./packages/cube-frontend-keycloak-login/package.json').version"`)
-	$(Q)$(eval LOGIN_BUILD_NUMBER=`cd $(LOGIN_GIT_DIR) && git rev-parse --short HEAD`)
-	$(Q)$(eval KEYCLOAK_VERSION=`cd $(LOGIN_GIT_DIR) && head -n 1 ./packages/cube-frontend-keycloak-login/KEYCLOAK_VERSION`)
+
+version: $(LOGIN_GIT_DIR)
+	$(Q)echo -n "LOGIN_VERSION := " > version
+	$(Q)cd $(LOGIN_GIT_DIR) && \
+		sed -i 's/^#//g' $$BASH_ENV && \
+		node -p "require('./packages/cube-frontend-keycloak-login/package.json').version" >> ../version && \
+		sed -i 's/^/#/g' $$BASH_ENV
+
+build_number: $(LOGIN_GIT_DIR)
+	$(Q)echo -n "LOGIN_BUILD_NUMBER := " > build_number
+	$(Q)cd $(LOGIN_GIT_DIR) && \
+		git rev-parse --short HEAD >> ../build_number
+
+keycloak_version: $(LOGIN_GIT_DIR)
+	$(Q)echo -n "KEYCLOAK_VERSION := " > keycloak_version
+	$(Q)cd $(LOGIN_GIT_DIR) && \
+		head -n 1 ./packages/cube-frontend-keycloak-login/KEYCLOAK_VERSION >> ../keycloak_version
 
 # prepare the rpm build directory
 $(LOGIN_RPMBUILD_DIR):
@@ -110,13 +123,9 @@ $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
 	$(Q)# disable nvm
 	$(Q)sed -i 's/^/#/g' $$BASH_ENV
 
-# move the built rpm back to the local directory, and clean up the build environment
+# move the built rpm back to the local directory
 $(LOGIN_RPM): $(LOGIN_RPM_BUILD)
-	$(Q)# enable nvm
-	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cp -f $(LOGIN_RPM_BUILD) ./login.rpm
-	$(Q)# disable nvm
-	$(Q)sed -i 's/^/#/g' $$BASH_ENV
 
 .load-img: $(LOGIN_RPM)
 	$(Q)dnf install -y ./login.rpm
@@ -175,6 +184,6 @@ clean:: testclean
 	$(Q)rm -rf $(LOGIN_GIT_DIR)
 
 BUILD += $(CHART) .push-img
-BUILDCLEAN += $(CHART) $(LOGIN_GIT_DIR) $(LOGIN_RPMBUILD_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
+BUILDCLEAN += $(CHART) $(LOGIN_GIT_DIR) version build_number keycloak_version $(LOGIN_RPMBUILD_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
