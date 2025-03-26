@@ -8,7 +8,7 @@ SENLIN_LOG_DIR := /var/log/senlin
 ROOTFS_DNF_NOARCH += openstack-senlin-api openstack-senlin-engine
 
 # https://releases.openstack.org/teams/senlin.html
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/senlin-dashboard.git
+ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED += https://github.com/openstack/senlin-dashboard.git
 
 rootfs_install::
 	$(Q)cp -f $(PIPS_DIR)/senlin-dashboard.git/senlin_dashboard/enabled/_50_senlin.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/

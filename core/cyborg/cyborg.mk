@@ -10,10 +10,10 @@ CYBORG_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages/cyborg
 CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(OPENSTACK_RELEASE)_patch
 
 # cyborg
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/cyborg.git
+ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED += https://github.com/openstack/cyborg.git
 
 # cyborg command line plugin
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/python-cyborgclient.git
+ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED += https://github.com/openstack/python-cyborgclient.git
 
 rootfs_install::
 	$(Q)[ -d $(CYBORG_PATCHDIR) ] && cp -rf $(CYBORG_PATCHDIR)/* $(CYBORG_SRCDIR)/ || /bin/true

@@ -13,7 +13,7 @@ ROOTFS_PIP_NC += gunicorn
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(SKYLINE_CONF_DIR) $(SKYLINE_POLICY_DIR) $(SKYLINE_APP_DIR) $(SKYLINE_LOG_DIR)
 
-# note: ROOTFS_PIP_DL_FROM is not used since we clone source from master branch instead of targeted openstack branch (stable/yoga)
+# note: ROOTFS_PIP_DL_FROM_* is not used since we clone source from master branch instead of targeted openstack branch (stable/yoga)
 # skyline-apiserver installation
 rootfs_install::
 	$(Q)for i in {1..10} ; do timeout 30 git clone --depth 1 https://github.com/bigstack-oss/skyline-apiserver.git $(ROOTDIR)/skyline-apiserver && break ; done

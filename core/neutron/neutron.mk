@@ -15,8 +15,8 @@ NEUTRON_CONFDIR := $(ROOTDIR)/etc/neutron
 
 OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)
 
-ROOTFS_PIP_DL_FROM += https://github.com/bigstack-oss/neutron-vpnaas.git
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/neutron-vpnaas-dashboard.git
+ROOTFS_PIP_DL_FROM_BRANCH_YOGA_STABLE += https://github.com/bigstack-oss/neutron-vpnaas.git
+ROOTFS_PIP_DL_FROM_TAG_YOGA += https://github.com/openstack/neutron-vpnaas-dashboard.git
 
 NEUTRON_PATCHDIR := $(COREDIR)/neutron/$(OPENSTACK_RELEASE)_patch
 
