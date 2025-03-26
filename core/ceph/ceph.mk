@@ -46,10 +46,11 @@ rootfs_install::
 
 # install hdsentinel to assist osd disk life predictions
 rootfs_install::
-	$(Q)wget $$(curl https://www.hdsentinel.com/download.php 2>/dev/null | grep -o "file=https://www.*.gz" | cut -d"=" -f2)
-	$(Q)gunzip hdsentinel*.gz
-	$(Q)chmod 0755 hdsentinel*
-	$(Q)mv -f hdsentinel* $(ROOTDIR)/usr/sbin/hdsentinel
+	$(Q)wget https://www.hdsentinel.com/hdslin/hdsentinel-020c-x64.zip
+	$(Q)unzip hdsentinel*.zip
+	$(Q)mv HDSentinel hdsentinel
+	$(Q)chmod 0755 hdsentinel
+	$(Q)mv -f hdsentinel $(ROOTDIR)/usr/sbin/
 
 # remove unused k8sevents which anyway errors when ceph-mgr starts
 rootfs_install::
