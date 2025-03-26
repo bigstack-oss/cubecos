@@ -1,5 +1,6 @@
 image:
   repository: localhost:5080/bigstack/keycloak
+  tag: 17.1.0
 
 replicas: 1
 
