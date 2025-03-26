@@ -34,9 +34,8 @@ PROJ_TEST_EXPORTS := "PS4=+[\\t]"
 # openstack version
 OPENSTACK_RELEASE := yoga
 RHOSP_RELEASE := 19
-OPS_GITHUB_BRANCH_YOGA_STABLE := stable/yoga
-OPS_GITHUB_BRANCH_YOGA_UNMAINTAINED := unmaintained/yoga
-OPS_GITHUB_TAG_YOGA := yoga-eol
+OPS_GITHUB_BRANCH := stable/yoga
+OPS_GITHUB_TAG := yoga-eol
 PYTHON_VER := 3.9
 
 # pip contraints file

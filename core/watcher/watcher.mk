@@ -8,7 +8,7 @@ WATCHER_LOG_DIR := /var/log/watcher
 ROOTFS_DNF_NOARCH += openstack-watcher-api openstack-watcher-applier openstack-watcher-decision-engine
 
 # https://releases.openstack.org/teams/watcher.html
-ROOTFS_PIP_DL_FROM_TAG_YOGA += https://github.com/openstack/watcher-dashboard.git
+ROOTFS_PIP_DL_FROM += https://github.com/openstack/watcher-dashboard.git
 
 WATCHER_SRCDIR := $(ROOTDIR)/usr/lib/python3.9/site-packages
 WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch

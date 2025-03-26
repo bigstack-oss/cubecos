@@ -18,9 +18,9 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c "chown named:named $(NAMED_CONF_FILES) $(NAMED_APP_DIR)"
 
 # https://releases.openstack.org/teams/designate.html
-ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED += https://github.com/openstack/designate.git
-ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED += https://github.com/openstack/python-designateclient.git
-ROOTFS_PIP_DL_FROM_TAG_YOGA += https://github.com/openstack/designate-dashboard.git
+ROOTFS_PIP_DL_FROM += https://github.com/openstack/designate.git
+ROOTFS_PIP_DL_FROM += https://github.com/openstack/python-designateclient.git
+ROOTFS_PIP_DL_FROM += https://github.com/openstack/designate-dashboard.git
 
 rootfs_install::
 	$(Q)cp -f $(PIPS_DIR)/designate-dashboard.git/designatedashboard/enabled/_17*.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/

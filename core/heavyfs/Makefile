@@ -116,9 +116,7 @@ rootfs_install::
 
 # install no constraint packages first
 $(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
-$(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_YOGA_STABLE)" -d "$(ROOTFS_PIP_DL_FROM_BRANCH_YOGA_STABLE)",$(ROOTFS_PIP))
-$(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_YOGA_UNMAINTAINED)" -d "$(ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED)",$(ROOTFS_PIP))
-$(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_TAG_YOGA)" -d "$(ROOTFS_PIP_DL_FROM_TAG_YOGA)",$(ROOTFS_PIP))
+$(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
 
 # cannot install both python3-google-auth-1:2.28.0-1.el9.noarch from @commandline and python3-google-auth-1:1.30.0-1.el9s.noarch from centos-openstack-yoga
 LOCKED_DNF += python3-google-auth-1.30.0-1.el9s
@@ -179,18 +177,7 @@ $(HEAVYFS): rootfs.cgz $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/
 	$(Q)cp -f /etc/resolv.conf $@/etc/resolv.conf
 else
 $(HEAVYFS): $(HEX_FULL_ROOTFS) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
-	$(call RUN_CMD_TIMED, \
-		$(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) \
-			ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" \
-			ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" \
-			ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" \
-			ROOTFS_PIP="$(ROOTFS_PIP)" \
-			ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" \
-			ROOTFS_PIP_DL_FROM_BRANCH_YOGA_STABLE="$(ROOTFS_PIP_DL_FROM_BRANCH_YOGA_STABLE)" \
-			ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED="$(ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED)" \
-			ROOTFS_PIP_DL_FROM_TAG_YOGA="$(ROOTFS_PIP_DL_FROM_TAG_YOGA)" \
-			ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, \
-		"  GEN     $@") || mv -f $@ /tmp/
+	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@") || mv -f $@ /tmp/
 endif
 
 rootfs_install::

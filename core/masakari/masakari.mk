@@ -17,7 +17,7 @@ rootfs_install::
 
 
 # masakari-api and masakari-engine
-ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED += https://github.com/openstack/masakari.git
+ROOTFS_PIP_DL_FROM += https://github.com/openstack/masakari.git
 
 rootfs_install::
 	$(Q)cp -f $(PIPS_DIR)/masakari.git/etc/masakari/api-paste.ini $(ROOTDIR)$(MASAKARI_CONF_DIR)/api-paste.ini
@@ -28,7 +28,7 @@ rootfs_install::
 
 
 # masakari-monitors process/instance/host
-ROOTFS_PIP_DL_FROM_TAG_YOGA += https://github.com/openstack/masakari-monitors.git
+ROOTFS_PIP_DL_FROM += https://github.com/openstack/masakari-monitors.git
 
 rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/masakari/masakarimonitors.conf.def $(MASAKARI_MONITORS_CONF_DIR)
@@ -39,10 +39,10 @@ rootfs_install::
 
 
 # masakari command line plugin
-ROOTFS_PIP_DL_FROM_BRANCH_YOGA_UNMAINTAINED += https://github.com/openstack/python-masakariclient.git
+ROOTFS_PIP_DL_FROM += https://github.com/openstack/python-masakariclient.git
 
 # masakari web ui plugin
-ROOTFS_PIP_DL_FROM_TAG_YOGA += https://github.com/openstack/masakari-dashboard.git
+ROOTFS_PIP_DL_FROM += https://github.com/openstack/masakari-dashboard.git
 
 rootfs_install::
 	$(Q)cp -f $(PIPS_DIR)/masakari-dashboard.git/masakaridashboard/local/enabled/_50_masakaridashboard.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled
