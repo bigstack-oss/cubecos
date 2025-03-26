@@ -17,7 +17,7 @@ static const char* MSG_INVALID_GROUP = "Hostname and Ip Address number mis-match
 // Labels
 static const char* HA_LABEL_YES = "Yes";
 static const char* HA_LABEL_NO = "No";
-static const char* LABEL_CONFIG_HA = "High Availabile Cube: ";
+static const char* LABEL_CONFIG_HA = "High Available Cube: ";
 static const char* LABEL_CONFIG_CONTROL_VHN = "Specify control virtual Hostname: ";
 static const char* LABEL_CONFIG_CONTROL_VIP = "Specify control virtual IP: ";
 static const char* LABEL_CONFIG_CONTROL_HOSTS = "Specify control group hostname [HOST,HOST,...]: ";
