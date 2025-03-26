@@ -35,10 +35,13 @@ $(LOGIN_GIT_DIR):
 
 version: $(LOGIN_GIT_DIR)
 	$(Q)echo -n "LOGIN_VERSION := " > version
+	$(Q)# enable nvm
+	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(LOGIN_GIT_DIR) && \
-		sed -i 's/^#//g' $$BASH_ENV && \
-		node -p "require('./packages/cube-frontend-keycloak-login/package.json').version" >> ../version && \
-		sed -i '/^#/! s/^/#/' $$BASH_ENV
+		nvm use $(UI_NODE_VERSION) && \
+		node -p "require('./packages/cube-frontend-keycloak-login/package.json').version" >> ../version
+	$(Q)# disable nvm
+	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 
 build_number: $(LOGIN_GIT_DIR)
 	$(Q)echo -n "LOGIN_BUILD_NUMBER := " > build_number
@@ -130,11 +133,11 @@ $(LOGIN_RPM): $(LOGIN_RPM_BUILD)
 .load-img: $(LOGIN_RPM)
 	$(Q)dnf install -y ./login.rpm
 	$(Q)podman load -i /usr/share/cube/login/keycloak-image.tar
+	$(Q)dnf remove -y cube-cos-login
 	$(Q)echo $(IMG_BUILD) > $@
 
 .push-img: .load-img
 	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(shell cat .load-img)
-	$(Q)dnf remove -y cube-cos-login
 	$(Q)touch $@
 
 .PHONY: copy-image

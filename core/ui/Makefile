@@ -23,10 +23,13 @@ $(UI_GIT_DIR):
 
 version: $(UI_GIT_DIR)
 	$(Q)echo -n "UI_VERSION := " > version
+	$(Q)# enable nvm
+	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(UI_GIT_DIR) && \
-		sed -i 's/^#//g' $$BASH_ENV && \
-		node -p "require('./packages/cube-frontend-web-app/package.json').version" >> ../version && \
-		sed -i '/^#/! s/^/#/' $$BASH_ENV
+		nvm use $(UI_NODE_VERSION) && \
+		node -p "require('./packages/cube-frontend-web-app/package.json').version" >> ../version
+	$(Q)# disable nvm
+	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 
 build_number: $(UI_GIT_DIR)
 	$(Q)echo -n "UI_BUILD_NUMBER := " > build_number
