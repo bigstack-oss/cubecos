@@ -17,7 +17,7 @@ $(UI_GIT_DIR):
 	$(Q)mkdir $(UI_GIT_DIR)
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone -b jim.lin/ci/use-rpm-topdir --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(UI_GIT_DIR) && break ; \
+		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(UI_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
 
