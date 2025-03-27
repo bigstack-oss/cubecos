@@ -53,10 +53,24 @@ EscapeQuote(const std::string &str)
 }
 
 static bool
+CommitCheck(bool modified, int dryLevel)
+{
+    if (IsBootstrap()) {
+        return true;
+    }
+
+    return modified || s_bApplianceModified;
+}
+
+static bool
 Commit(bool modified, int dryLevel)
 {
     // TODO: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
+
+    if (!CommitCheck(modified, dryLevel)) {
+        return true;
+    }
 
     if (s_bApplianceModified) {
         if (access(KEYCLOAK_VALUES_CHART, F_OK) != 0) {
@@ -72,15 +86,14 @@ Commit(bool modified, int dryLevel)
             HexUtilSystemF(0, 0, "sed -i '/LOGIN_GREETING/{n;s/value:.*/value: \"%s\"/}' %s", EscapeQuote(s_loginGreeting).c_str(), KEYCLOAK_VALUES_CHART);
         }
 
-        // destroy the running keycloak
-        HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
+        
     }
 
-    // restart keycloak
-    // placed here for bootstrapping, if one is already running, this is a no-op
-    HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace");
+    // destroy the running keycloak
+    HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
 
-    return true;
+    // restart keycloak
+    return HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0;
 }
 
 CONFIG_MODULE(keycloak, 0, 0, 0, 0, Commit);
