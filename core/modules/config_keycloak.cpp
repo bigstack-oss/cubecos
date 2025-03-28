@@ -3,6 +3,7 @@
 #include <hex/log.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
+#include <hex/config_global.h>
 #include <hex/process_util.h>
 #include <hex/dryrun.h>
 
@@ -11,6 +12,8 @@
 static const char KEYCLOAK_VALUES_CHART[] = "/opt/keycloak/chart-values.yaml";
 
 static bool s_bApplianceModified = false;
+
+CONFIG_GLOBAL_BOOL_REF(IS_MASTER);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(APPLIANCE_LOGIN_GREETING);
@@ -58,6 +61,14 @@ Commit(bool modified, int dryLevel)
     // TODO: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
+    bool isMaster = G(IS_MASTER);
+    if (!isMaster) {
+        // only the master node is allowed to modify keycloak
+        // to prevent nodes from tripping over each others'
+        // keycloak bootstrap process during bootstrapping
+        return true;
+    }
+
     if (IsBootstrap()) {
         // destroy the running keycloak
         HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
@@ -89,6 +100,7 @@ Commit(bool modified, int dryLevel)
 CONFIG_MODULE(keycloak, 0, 0, 0, 0, Commit);
 
 // startup sequence
+CONFIG_REQUIRES(keycloak, cube_scan);
 CONFIG_REQUIRES(keycloak, k3s);
 CONFIG_REQUIRES(keycloak, mysql);
 
