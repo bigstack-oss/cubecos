@@ -61,53 +61,10 @@ $(LOGIN_RPMBUILD_DIR):
 # make the source tarball
 $(LOGIN_TARBALL): $(LOGIN_RPMBUILD_DIR) $(LOGIN_GIT_DIR)
 	$(Q)mkdir ./source
-	$(Q)mkdir -p ./source/packages/cube-frontend-ui-library
-	$(Q)cp -r \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/src \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/package.json \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/postcss.config.js \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/tailwind.config.js \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/tsconfig.json \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-library/vite.config.ts \
-		./source/packages/cube-frontend-ui-library
-	$(Q)mkdir -p ./source/packages/cube-frontend-ui-theme
-	$(Q)cp -r \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-theme/src \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-theme/package.json \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-ui-theme/tsconfig.json \
-		./source/packages/cube-frontend-ui-theme
-	$(Q)mkdir -p ./source/packages/cube-frontend-utils
-	$(Q)cp -r \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-utils/src \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-utils/package.json \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-utils/tsconfig.json \
-		./source/packages/cube-frontend-utils
-	$(Q)mkdir -p ./source/packages/cube-frontend-keycloak-login
-	$(Q)cp -r \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/public \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/rollup-plugins \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/src \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/index.html \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/package.json \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/postcss.config.js \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/tailwind.config.js \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/tsconfig.app.json \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/tsconfig.json \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/tsconfig.node.json \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/vite.config.ts \
-		./source/packages/cube-frontend-keycloak-login
-	$(Q)mkdir -p ./source/packages/cube-frontend-keycloak-login/keycloak
-	$(Q)cp -r \
-		$(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/keycloak/themes \
-		./source/packages/cube-frontend-keycloak-login/keycloak
-	$(Q)cp -r \
-		$(LOGIN_GIT_DIR)/LICENSE \
-		$(LOGIN_GIT_DIR)/package.json \
-		$(LOGIN_GIT_DIR)/pnpm-lock.yaml \
-		$(LOGIN_GIT_DIR)/pnpm-workspace.yaml \
-		$(LOGIN_GIT_DIR)/tsconfig.json \
-		./source
-	$(Q)tar -cvzf "cube-cos-login-$(LOGIN_VERSION).tar.gz" source 2>&1 > /dev/null
+	$(Q)cp -r $(LOGIN_GIT_DIR)/.git/ ./source/
+	$(Q)cd ./source && git checkout . $(QEND)
+	$(Q)sudo rm -r ./source/.git/
+	$(Q)tar -cvzf "cube-cos-login-$(LOGIN_VERSION).tar.gz" source $(QEND)
 	$(Q)mv ./cube-cos-login-$(LOGIN_VERSION).tar.gz $(LOGIN_RPMBUILD_DIR)/SOURCES
 	$(Q)rm -r ./source
 

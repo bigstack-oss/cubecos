@@ -38,17 +38,10 @@ $(API_RPMBUILD_DIR):
 # make the source tarball
 $(API_TARBALL): $(API_RPMBUILD_DIR) $(API_GIT_DIR)
 	$(Q)mkdir ./source
-	$(Q)cp -r \
-		$(API_GIT_DIR)/api \
-		$(API_GIT_DIR)/cmd \
-		$(API_GIT_DIR)/internal \
-		$(API_GIT_DIR)/configs \
-		$(API_GIT_DIR)/init \
-		$(API_GIT_DIR)/go.mod \
-		$(API_GIT_DIR)/go.sum \
-		$(API_GIT_DIR)/LICENSE \
-		./source
-	$(Q)tar -cvzf "cube-cos-api-$(API_VERSION).tar.gz" source 2>&1 > /dev/null
+	$(Q)cp -r $(API_GIT_DIR)/.git/ ./source/
+	$(Q)cd ./source && git checkout . $(QEND)
+	$(Q)sudo rm -r ./source/.git/ ./source/.github/ ./source/.gitignore
+	$(Q)tar -cvzf "cube-cos-api-$(API_VERSION).tar.gz" source $(QEND)
 	$(Q)mv ./cube-cos-api-$(API_VERSION).tar.gz $(API_RPMBUILD_DIR)/SOURCES
 	$(Q)rm -r ./source
 

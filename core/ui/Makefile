@@ -44,61 +44,10 @@ $(UI_RPMBUILD_DIR):
 # make the source tarball
 $(UI_TARBALL): $(UI_RPMBUILD_DIR) $(UI_GIT_DIR)
 	$(Q)mkdir ./source
-	$(Q)mkdir -p ./source/packages/cube-frontend-api
-	$(Q)cp -r \
-		$(UI_GIT_DIR)/packages/cube-frontend-api/package.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-api/tsconfig.json \
-		./source/packages/cube-frontend-api
-	$(Q)mkdir -p ./source/packages/cube-frontend-api/sdk
-	$(Q)cp \
-		$(UI_GIT_DIR)/packages/cube-frontend-api/sdk/api.ts \
-		$(UI_GIT_DIR)/packages/cube-frontend-api/sdk/base.ts \
-		$(UI_GIT_DIR)/packages/cube-frontend-api/sdk/common.ts \
-		$(UI_GIT_DIR)/packages/cube-frontend-api/sdk/configuration.ts \
-		$(UI_GIT_DIR)/packages/cube-frontend-api/sdk/index.ts \
-		./source/packages/cube-frontend-api/sdk
-	$(Q)mkdir -p ./source/packages/cube-frontend-ui-library
-	$(Q)cp -r \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-library/src \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-library/package.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-library/postcss.config.js \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-library/tailwind.config.js \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-library/tsconfig.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-library/vite.config.ts \
-		./source/packages/cube-frontend-ui-library
-	$(Q)mkdir -p ./source/packages/cube-frontend-ui-theme
-	$(Q)cp -r \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-theme/src \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-theme/package.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-ui-theme/tsconfig.json \
-		./source/packages/cube-frontend-ui-theme
-	$(Q)mkdir -p ./source/packages/cube-frontend-utils
-	$(Q)cp -r \
-		$(UI_GIT_DIR)/packages/cube-frontend-utils/src \
-		$(UI_GIT_DIR)/packages/cube-frontend-utils/package.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-utils/tsconfig.json \
-		./source/packages/cube-frontend-utils
-	$(Q)mkdir -p ./source/packages/cube-frontend-web-app
-	$(Q)cp -r \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/public \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/src \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/index.html \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/package.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/postcss.config.js \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/tailwind.config.js \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/tsconfig.app.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/tsconfig.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/tsconfig.node.json \
-		$(UI_GIT_DIR)/packages/cube-frontend-web-app/vite.config.ts \
-		./source/packages/cube-frontend-web-app
-	$(Q)cp -r \
-		$(UI_GIT_DIR)/LICENSE \
-		$(UI_GIT_DIR)/package.json \
-		$(UI_GIT_DIR)/pnpm-lock.yaml \
-		$(UI_GIT_DIR)/pnpm-workspace.yaml \
-		$(UI_GIT_DIR)/tsconfig.json \
-		./source
-	$(Q)tar -cvzf "cube-cos-ui-$(UI_VERSION).tar.gz" source 2>&1 > /dev/null
+	$(Q)cp -r $(UI_GIT_DIR)/.git/ ./source/
+	$(Q)cd ./source && git checkout . $(QEND)
+	$(Q)sudo rm -r ./source/.git/
+	$(Q)tar -cvzf "cube-cos-ui-$(UI_VERSION).tar.gz" source $(QEND)
 	$(Q)mv ./cube-cos-ui-$(UI_VERSION).tar.gz $(UI_RPMBUILD_DIR)/SOURCES
 	$(Q)rm -r ./source
 
