@@ -61,12 +61,13 @@ Commit(bool modified, int dryLevel)
     // TODO: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
+    // only the master node is allowed to modify keycloak
+    // to prevent nodes from tripping over each others'
+    // keycloak bootstrap process during bootstrapping
     bool isMaster = G(IS_MASTER);
     if (!isMaster) {
-        // only the master node is allowed to modify keycloak
-        // to prevent nodes from tripping over each others'
-        // keycloak bootstrap process during bootstrapping
-        return true;
+        // to get saml-metadata.xml
+        return HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0;
     }
 
     if (IsBootstrap()) {
@@ -93,7 +94,6 @@ Commit(bool modified, int dryLevel)
     }
 
     // restart keycloak
-    // placed here for bootstrapping, if one is already running, this is a no-op
     return HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0;
 }
 
