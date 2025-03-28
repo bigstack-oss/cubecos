@@ -63,7 +63,7 @@ $(LOGIN_TARBALL): $(LOGIN_RPMBUILD_DIR) $(LOGIN_GIT_DIR)
 	$(Q)mkdir ./source
 	$(Q)cp -r $(LOGIN_GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)
-	$(Q)sudo rm -r ./source/.git/
+	$(Q)sudo rm -r ./source/.git/ ./source/.github/ ./source/.husky/ ./source/.vscode/
 	$(Q)tar -cvzf "cube-cos-login-$(LOGIN_VERSION).tar.gz" source $(QEND)
 	$(Q)mv ./cube-cos-login-$(LOGIN_VERSION).tar.gz $(LOGIN_RPMBUILD_DIR)/SOURCES
 	$(Q)rm -r ./source

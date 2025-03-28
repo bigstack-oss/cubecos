@@ -46,7 +46,7 @@ $(UI_TARBALL): $(UI_RPMBUILD_DIR) $(UI_GIT_DIR)
 	$(Q)mkdir ./source
 	$(Q)cp -r $(UI_GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)
-	$(Q)sudo rm -r ./source/.git/
+	$(Q)sudo rm -r ./source/.git/ ./source/.github/ ./source/.husky/ ./source/.vscode/
 	$(Q)tar -cvzf "cube-cos-ui-$(UI_VERSION).tar.gz" source $(QEND)
 	$(Q)mv ./cube-cos-ui-$(UI_VERSION).tar.gz $(UI_RPMBUILD_DIR)/SOURCES
 	$(Q)rm -r ./source
