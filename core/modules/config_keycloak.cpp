@@ -3,7 +3,6 @@
 #include <hex/log.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
-#include <hex/config_global.h>
 #include <hex/process_util.h>
 #include <hex/dryrun.h>
 
@@ -12,8 +11,6 @@
 static const char KEYCLOAK_VALUES_CHART[] = "/opt/keycloak/chart-values.yaml";
 
 static bool s_bApplianceModified = false;
-
-CONFIG_GLOBAL_BOOL_REF(IS_MASTER);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(APPLIANCE_LOGIN_GREETING);
@@ -61,20 +58,6 @@ Commit(bool modified, int dryLevel)
     // TODO: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
-    // only the master node is allowed to modify keycloak
-    // to prevent nodes from tripping over each others'
-    // keycloak bootstrap process during bootstrapping
-    bool isMaster = G(IS_MASTER);
-    if (!isMaster) {
-        // to get saml-metadata.xml
-        return HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0;
-    }
-
-    if (IsBootstrap()) {
-        // destroy the running keycloak
-        HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
-    }
-
     if (s_bApplianceModified) {
         if (access(KEYCLOAK_VALUES_CHART, F_OK) != 0) {
             HexLogError("Unable to write the login greeting message to %s", KEYCLOAK_VALUES_CHART);
@@ -97,6 +80,20 @@ Commit(bool modified, int dryLevel)
     return HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0;
 }
 
+static int
+ClusterStartMain(int argc, char **argv)
+{
+    if (argc != 1) {
+        return EXIT_FAILURE;
+    }
+
+    // destroy the running keycloak
+    HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
+    // restart keycloak
+    HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace");
+    return EXIT_SUCCESS;
+}
+
 CONFIG_MODULE(keycloak, 0, 0, 0, 0, Commit);
 
 // startup sequence
@@ -108,3 +105,7 @@ CONFIG_REQUIRES(keycloak, mysql);
 CONFIG_OBSERVES(keycloak, appliance, ParseAppliance, NotifyAppliance);
 
 CONFIG_MIGRATE(keycloak, "/etc/keycloak");
+
+CONFIG_MODULE(keycloak_last, 0, 0, 0, 0, 0);
+CONFIG_REQUIRES(keycloak_last, k3s_last);
+CONFIG_TRIGGER_WITH_SETTINGS(keycloak_last, "cluster_start", ClusterStartMain);
