@@ -77,7 +77,8 @@ Commit(bool modified, int dryLevel)
     }
 
     // restart keycloak
-    return HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0;
+    HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace");
+    return true;
 }
 
 static int
@@ -106,6 +107,4 @@ CONFIG_OBSERVES(keycloak, appliance, ParseAppliance, NotifyAppliance);
 
 CONFIG_MIGRATE(keycloak, "/etc/keycloak");
 
-CONFIG_MODULE(keycloak_last, 0, 0, 0, 0, 0);
-CONFIG_REQUIRES(keycloak_last, k3s_last);
-CONFIG_TRIGGER_WITH_SETTINGS(keycloak_last, "cluster_start", ClusterStartMain);
+CONFIG_TRIGGER_WITH_SETTINGS(keycloak, "cluster_start", ClusterStartMain);

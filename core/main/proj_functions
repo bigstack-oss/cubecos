@@ -151,7 +151,7 @@ cube_cluster_start()
     Quiet -n $HEX_SDK os_resume_hypervisor     # resume hypervisors disabled due to ins-ha
     Quiet -n killall /usr/sbin/hex_banner # refresh console banner to display up-to-date cluster info.
     # by default disable ceph_osd which in case of disk failures cannot be handled by software
-    [ $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ] || Quiet -n $HEX_SDK toggle_health_check ceph_osd
+    ( $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ) || Quiet -n $HEX_SDK toggle_health_check ceph_osd
 }
 
 cube_cluster_stop()

@@ -146,7 +146,7 @@ EOF
         fi
         # Only when there're valid keys would we be able to save logs
         if [ "x$keys" != "x" ] ; then
-            timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG 2>/devnull ; fi" > /tmp/$log
+            timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG 2>/dev/null ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
                 keys=$keys $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1
                 log_url="s3://$log_pth"

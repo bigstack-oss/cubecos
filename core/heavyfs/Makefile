@@ -57,11 +57,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf install -y 'dnf-command(versionlock)'
 
-LOCKED_DNF += kernel-lt-$(KERNEL_VERS) kernel-lt-core-$(KERNEL_VERS) kernel-lt-devel-$(KERNEL_VERS) kernel-lt-modules-$(KERNEL_VERS)
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
-
-# FIrst try to download kernel-lt from elrepo mirror which has better availabilities
+# First try to download kernel-lt from elrepo mirror which has better availabilities
 rootfs_install::
 	$(Q)cp /etc/yum.repos.d/elrepo-kernel-mirror.repo $(ROOTDIR)/etc/yum.repos.d/
 
@@ -72,10 +68,11 @@ rootfs_install::
 # 	$(Q)chroot $(ROOTDIR) dnf install -y https://www.elrepo.org/elrepo-release-9.el9.elrepo.noarch.rpm
 # 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled elrepo-kernel
 
-$(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
-
+LOCKED_DNF += kernel-lt-$(KERNEL_VERS) kernel-lt-core-$(KERNEL_VERS) kernel-lt-devel-$(KERNEL_VERS) kernel-lt-modules-$(KERNEL_VERS)
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
+
+$(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
 # python3-xmlsec
 PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel python-xmlsec

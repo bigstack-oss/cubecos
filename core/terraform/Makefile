@@ -28,6 +28,7 @@ clean-etcd:
 clean::
 	$(Q)rm -rf /var/lib/terraform/
 	$(Q)rm -f /usr/local/bin/terraform-cube.sh
+	$(Q)rm -f /usr/local/bin/terraform-action.sh
 	$(Q)make clean-etcd
 
 BUILD += terraform
