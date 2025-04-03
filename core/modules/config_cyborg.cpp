@@ -64,8 +64,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(CYBORG_ENABLED, "cyborg.enabled", TUNING_UNPUB, "Set to true to enable cyborg.", true);
-CONFIG_TUNING_STR(CYBORG_USERPASS, "cyborg.user.password", TUNING_UNPUB, "Set cyborg user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(CYBORG_DBPASS, "cyborg.db.password", TUNING_UNPUB, "Set cyborg db password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(CYBORG_USERPASS, "cyborg.user.password", TUNING_UNPUB, "Set cyborg user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CYBORG_DBPASS, "cyborg.db.password", TUNING_UNPUB, "Set cyborg db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(CYBORG_DEBUG, "cyborg.debug.enabled", TUNING_PUB, "Set to true to enable cyborg verbose log.", false);

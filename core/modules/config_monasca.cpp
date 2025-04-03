@@ -101,8 +101,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(MONASCA_ENABLED, "monasca.enabled", TUNING_UNPUB, "Set to true to enable monasca.", true);
-CONFIG_TUNING_STR(MONASCA_USERPASS, "monasca.user.password", TUNING_UNPUB, "Set monasca user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(MONASCA_DBPASS, "monasca.db.password", TUNING_UNPUB, "Set monasca database password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(MONASCA_USERPASS, "monasca.user.password", TUNING_UNPUB, "Set monasca user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MONASCA_DBPASS, "monasca.db.password", TUNING_UNPUB, "Set monasca database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunings
 CONFIG_TUNING_BOOL(MONASCA_DEBUG, "monasca.debug.enabled", TUNING_PUB, "Set to true to enable monasca verbose log.", false);

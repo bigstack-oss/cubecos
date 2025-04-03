@@ -63,8 +63,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(WATCHER_ENABLED, "watcher.enabled", TUNING_UNPUB, "Set to true to enable watcher.", true);
-CONFIG_TUNING_STR(WATCHER_USERPASS, "watcher.user.password", TUNING_UNPUB, "Set watcher user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(WATCHER_DBPASS, "watcher.db.password", TUNING_UNPUB, "Set watcher db password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(WATCHER_USERPASS, "watcher.user.password", TUNING_UNPUB, "Set watcher user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(WATCHER_DBPASS, "watcher.db.password", TUNING_UNPUB, "Set watcher db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(WATCHER_DEBUG, "watcher.debug.enabled", TUNING_PUB, "Set to true to enable watcher verbose log.", false);

@@ -78,8 +78,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(MASAKARI_ENABLED, "masakari.enabled", TUNING_UNPUB, "Set to true to enable masakari.", true);
-CONFIG_TUNING_STR(MASAKARI_USERPASS, "masakari.user.password", TUNING_UNPUB, "Set masakari user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(MASAKARI_DBPASS, "masakari.db.password", TUNING_UNPUB, "Set masakari database password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(MASAKARI_USERPASS, "masakari.user.password", TUNING_UNPUB, "Set masakari user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MASAKARI_DBPASS, "masakari.db.password", TUNING_UNPUB, "Set masakari database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(MASAKARI_DEBUG, "masakari.debug.enabled", TUNING_UNPUB, "Set to true to enable masakari verbose log.", false);
 
 // public tunings

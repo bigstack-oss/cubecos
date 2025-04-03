@@ -108,7 +108,7 @@ security_flow_abnormal_detection()
         return 0;
     fi
 
-    local active_host=$(/usr/sbin/hex_config status_pacemaker | awk '/IPaddr2/{print $5}')
+    local active_host=$($HEX_CFG status_pacemaker | awk '/IPaddr2/{print $5}')
     if [ -n "$active_host" -a "$active_host" != "$(hostname)" ] ; then
         return 0;
     fi

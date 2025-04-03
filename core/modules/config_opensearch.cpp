@@ -43,7 +43,7 @@ CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 // private tunings
 CONFIG_TUNING_INT(OPENSEARCH_CURATOR_RP, "opensearch.curator.rp", TUNING_PUB, "opensearch curator retention policy in days.", 7, 0, 365);
 CONFIG_TUNING_BOOL(OPENSEARCH_ENABLED, "opensearch.enabled", TUNING_UNPUB, "Set to true to enable opensearch.", true);
-CONFIG_TUNING_STR(OPENSEARCH_CLUSTER_ID, "opensearch.cluster.id", TUNING_UNPUB, "opensearch cluster id.", CLUSTER_ID, ValidateNone);
+CONFIG_TUNING_STR(OPENSEARCH_CLUSTER_ID, "opensearch.cluster.id", TUNING_UNPUB, "opensearch cluster id.", CLUSTER_ID, ValidateRegex, DFT_REGEX_STR);
 
 // public tunings
 CONFIG_TUNING_INT(OPENSEARCH_HEAP_SIZE, "opensearch.heap.size", TUNING_PUB, "opensearch heap size in GB.", 2, 1, 1024);

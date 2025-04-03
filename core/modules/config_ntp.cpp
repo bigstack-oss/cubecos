@@ -30,7 +30,7 @@ CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 // public tunings
 CONFIG_TUNING_BOOL(NTP_ENABLED, "ntp.enabled", TUNING_UNPUB, "Set to true to enable ntp service.", true);
 CONFIG_TUNING_BOOL(NTP_DEBUG_ENABLED, "ntp.debug.enabled", TUNING_PUB, "Set to true to enable ntp debug logs.", false);
-CONFIG_TUNING_STR(NTP_SERVER, "ntp.server", TUNING_UNPUB, "Set NTP server.", SERVER, ValidateNone);
+CONFIG_TUNING_STR(NTP_SERVER, "ntp.server", TUNING_UNPUB, "Set NTP server.", SERVER, ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);

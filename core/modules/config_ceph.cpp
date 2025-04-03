@@ -118,14 +118,14 @@ CONFIG_TUNING_BOOL(CEPH_MIRROR_META_SYNC, "ceph.mirror.meta.sync", TUNING_PUB, "
 CONFIG_TUNING_BOOL(CEPH_ENABLED, "ceph.enabled", TUNING_UNPUB, "Set to true to enable ceph service.", true);
 CONFIG_TUNING_BOOL(CEPH_MON_ENABLED, "ceph.mon.enabled", TUNING_UNPUB, "Enable ceph monitor on this host.", false);
 CONFIG_TUNING_BOOL(CEPH_PERF_TUNED, "ceph.perf.tuned", TUNING_UNPUB, "Enable ceph performance tuning on this host.", true);
-CONFIG_TUNING_STR(CEPH_FSID, "ceph.fsid", TUNING_UNPUB, "Set to true to enable ceph service.", FSID, ValidateNone);
+CONFIG_TUNING_STR(CEPH_FSID, "ceph.fsid", TUNING_UNPUB, "Set to true to enable ceph service.", FSID, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(CEPH_MIRROR_ENABLED, "ceph.mirror.enabled", TUNING_UNPUB, "Enable ceph rbd mirror.", false);
-CONFIG_TUNING_STR(CEPH_MIRROR_NAME, "ceph.mirror.name", TUNING_UNPUB, "Set local site name.", "", ValidateNone);
-CONFIG_TUNING_STR(CEPH_MIRROR_PEER_NAME, "ceph.mirror.peer.%d.name", TUNING_UNPUB, "Set peer site name.", "", ValidateNone);
-CONFIG_TUNING_STR(CEPH_MIRROR_PEER_IP, "ceph.mirror.peer.%d.ipaddr", TUNING_UNPUB, "Set peer IP address.", "", ValidateNone);
-CONFIG_TUNING_STR(CEPH_MIRROR_PEER_SECRET, "ceph.mirror.peer.%d.secret", TUNING_UNPUB, "Set peer secret (root account password).", "", ValidateNone);
-CONFIG_TUNING_STR(CEPH_MIRROR_RULE_VOLUME, "ceph.mirror.rule.%d.volume", TUNING_UNPUB, "Set mirrored volume.", "", ValidateNone);
-CONFIG_TUNING_STR(CEPH_GWAPIPASS, "ceph.iscsi.gwapi.password", TUNING_UNPUB, "Set iSCSI Gateway API password.", GWAPIPASS, ValidateNone);
+CONFIG_TUNING_STR(CEPH_MIRROR_NAME, "ceph.mirror.name", TUNING_UNPUB, "Set local site name.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CEPH_MIRROR_PEER_NAME, "ceph.mirror.peer.%d.name", TUNING_UNPUB, "Set peer site name.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CEPH_MIRROR_PEER_IP, "ceph.mirror.peer.%d.ipaddr", TUNING_UNPUB, "Set peer IP address.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CEPH_MIRROR_PEER_SECRET, "ceph.mirror.peer.%d.secret", TUNING_UNPUB, "Set peer secret (root account password).", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CEPH_MIRROR_RULE_VOLUME, "ceph.mirror.rule.%d.volume", TUNING_UNPUB, "Set mirrored volume.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CEPH_GWAPIPASS, "ceph.iscsi.gwapi.password", TUNING_UNPUB, "Set iSCSI Gateway API password.", GWAPIPASS, ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);

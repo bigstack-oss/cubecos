@@ -89,8 +89,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(DESIGNATE_ENABLED, "designate.enabled", TUNING_UNPUB, "Set to true to enable designate.", true);
-CONFIG_TUNING_STR(DESIGNATE_USERPASS, "designate.user.password", TUNING_UNPUB, "Set designate user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(DESIGNATE_DBPASS, "designate.db.password", TUNING_UNPUB, "Set designate db password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(DESIGNATE_USERPASS, "designate.user.password", TUNING_UNPUB, "Set designate user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(DESIGNATE_DBPASS, "designate.db.password", TUNING_UNPUB, "Set designate db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(DESIGNATE_DEBUG, "designate.debug.enabled", TUNING_PUB, "Set to true to enable designate verbose log.", false);

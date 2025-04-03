@@ -685,7 +685,7 @@ check_service()
 {
     local service=$1
 
-    $HEX_SDK $(health_${service}_check)
+    $HEX_SDK health_${service}_check
     local r=$?
     local desc=$($HEX_SDK health_errcode_lookup $service $r)
 

@@ -34,7 +34,7 @@ static CubeRole_e s_eCubeRole;
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // private tunings
-CONFIG_TUNING_STR(HORIZON_DBPASS, "horizon.db.password", TUNING_UNPUB, "Set horizon db password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(HORIZON_DBPASS, "horizon.db.password", TUNING_UNPUB, "Set horizon db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(TIME_TZ);

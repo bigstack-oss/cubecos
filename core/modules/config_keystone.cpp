@@ -63,9 +63,9 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(KEYSTONE_ENABLED, "keystone.enabled", TUNING_UNPUB, "Set to true to enable keystone.", true);
-CONFIG_TUNING_STR(KEYSTONE_ADMIN_CLI_PASS, "keystone.admin.cli.password", TUNING_UNPUB, "Set keystone admin cli password.", ADMINCLIPASS, ValidateNone);
-CONFIG_TUNING_STR(KEYSTONE_DBPASS, "keystone.db.password", TUNING_UNPUB, "Set keystone database password.", DBPASS, ValidateNone);
-CONFIG_TUNING_STR(KEYSTONE_ADMIN_PASS, "keystone.admin.password", TUNING_UNPUB, "Set keystone admin token.", ADMINPASS, ValidateNone);
+CONFIG_TUNING_STR(KEYSTONE_ADMIN_CLI_PASS, "keystone.admin.cli.password", TUNING_UNPUB, "Set keystone admin cli password.", ADMINCLIPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KEYSTONE_DBPASS, "keystone.db.password", TUNING_UNPUB, "Set keystone database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KEYSTONE_ADMIN_PASS, "keystone.admin.password", TUNING_UNPUB, "Set keystone admin token.", ADMINPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(KEYSTONE_DEBUG, "keystone.debug.enabled", TUNING_PUB, "Set to true to enable keystone verbose log.", false);

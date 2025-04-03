@@ -27,8 +27,8 @@ health_errcode_dump()
 
 health_errcode_lookup()
 {
-    local srv=$1
-    local err=$2
+    local srv=${1:-NOSUCHSRV}
+    local err=${2:-0}
 
     if [ $err -eq 0 ] ; then
         echo -n ok
@@ -37,7 +37,7 @@ health_errcode_lookup()
     fi
 }
 
-health_report()
+_health_report()
 {
     local tmp=${1%_report}
     local srv=${tmp#health_}
@@ -168,7 +168,7 @@ EOF
 
 health_link_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_link_check()
@@ -189,7 +189,7 @@ health_link_check()
 
 health_mtu_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_mtu_check()
@@ -212,7 +212,7 @@ health_mtu_check()
 
 health_dns_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_dns_check()
@@ -231,7 +231,7 @@ health_dns_check()
 
 health_clock_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_clock_check()
@@ -259,7 +259,7 @@ health_clock_repair()
 
 health_settings_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_settings_check()
@@ -300,7 +300,7 @@ health_settings_check()
 
 health_bootstrap_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_bootstrap_check()
@@ -320,7 +320,7 @@ health_bootstrap_check()
 health_license_report()
 {
     ERR_MSG+="$(hex_cli -c license show)\n"
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_license_check()
@@ -342,7 +342,7 @@ health_license_check()
 health_etcd_report()
 {
     ERR_MSG+="$($ETCDCTL endpoint health --cluster 2>&1)\n"
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_etcd_check()
@@ -378,7 +378,7 @@ health_etcd_repair()
 health_hacluster_report()
 {
     ERR_MSG+="$(pcs status)\n"
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_hacluster_check()
@@ -518,7 +518,7 @@ health_rabbitmq_report()
         printf "queue\n"
         rabbitmqctl list_unresponsive_queues | sed '1,2d'
     fi
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_rabbitmq_check()
@@ -573,7 +573,7 @@ health_mysql_report()
         $MYSQL -u root -e "show global status like 'wsrep_cluster_size'" | grep wsrep_cluster_size
         $MYSQL -u root -e "show global status like 'wsrep_local_state_comment'" | grep wsrep_local_state_comment
     fi
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_mysql_check()
@@ -628,7 +628,7 @@ health_vip_report()
     else
         DESCRIPTION="non-HA"
     fi
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_vip_check()
@@ -687,7 +687,7 @@ health_haproxy_ha_report()
     else
         DESCRIPTION="non-HA"
     fi
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_haproxy_ha_check()
@@ -728,7 +728,7 @@ health_haproxy_report()
         ERR_MSG+="($node)\n"
         ERR_MSG+="`remote_run $node $HEX_SDK haproxy_stats /run/haproxy/admin-local.sock`\n"
     done
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_haproxy_check()
@@ -755,7 +755,7 @@ health_haproxy_repair()
 
 health_httpd_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_httpd_check()
@@ -822,7 +822,7 @@ health_httpd_repair()
 
 health_nginx_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_nginx_check()
@@ -959,7 +959,7 @@ health_api_repair()
 
 health_skyline_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_skyline_check()
@@ -994,7 +994,7 @@ health_skyline_repair()
 
 health_lmi_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_lmi_check()
@@ -1031,7 +1031,7 @@ health_lmi_repair()
 
 health_memcache_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_memcache_check()
@@ -1057,7 +1057,7 @@ health_memcache_repair()
 health_keycloak_report()
 {
     ERR_MSG+="`cubectl config status keycloak`\n"
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_keycloak_check()
@@ -1077,7 +1077,7 @@ health_keycloak_repair()
 health_ceph_report()
 {
     ERR_MSG+="`$CEPH -s`\n"
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_ceph_check()
@@ -1098,7 +1098,7 @@ health_ceph_check()
 
 health_ceph_mon_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_ceph_mon_check()
@@ -1146,7 +1146,7 @@ health_ceph_mon_repair()
 
 health_ceph_mgr_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_ceph_mgr_check()
@@ -1226,7 +1226,7 @@ health_ceph_mgr_repair()
 
 health_ceph_mds_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_ceph_mds_check()
@@ -1298,7 +1298,7 @@ health_ceph_mds_repair()
 
 health_ceph_osd_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_ceph_osd_check()
@@ -1335,7 +1335,7 @@ health_ceph_osd_repair()
 
 health_ceph_rgw_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_ceph_rgw_check()
@@ -1364,7 +1364,7 @@ health_ceph_rgw_repair()
 
 health_rbd_target_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_rbd_target_check()
@@ -1406,7 +1406,7 @@ health_rbd_target_repair()
 health_nova_report()
 {
     [ "$VERBOSE" != "1" ] || $OPENSTACK compute service list
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_nova_check()
@@ -1465,7 +1465,7 @@ health_nova_repair()
 
 health_ironic_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_ironic_check()
@@ -1548,7 +1548,7 @@ health_cyborg_report()
     ERR_MSG+="`$OPENSTACK accelerator arq list 2>/dev/null`\n"
     ERR_MSG+="Accelerator Device Profile:\n"
     ERR_MSG+="`$OPENSTACK accelerator device profile list 2>/dev/null`\n"
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_cyborg_check()
@@ -1601,7 +1601,7 @@ health_cyborg_repair()
 
 health_neutron_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_neutron_check()
@@ -1689,7 +1689,7 @@ health_neutron_repair()
 health_glance_report()
 {
     DESCRIPTION+="images: $($OPENSTACK image list -f value -c ID | wc -l )"
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_glance_check()
@@ -1729,7 +1729,7 @@ health_glance_repair()
 health_cinder_report()
 {
     [ "$VERBOSE" != "1" ] || $OPENSTACK volume service list
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_cinder_check()
@@ -1796,7 +1796,7 @@ health_cinder_repair()
 
 health_manila_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_manila_check()
@@ -1857,7 +1857,7 @@ health_manila_repair()
 
 health_swift_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_swift_check()
@@ -1886,7 +1886,7 @@ health_swift_check()
 
 health_heat_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_heat_check()
@@ -1942,7 +1942,7 @@ health_heat_repair()
 
 health_octavia_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_octavia_check()
@@ -2018,7 +2018,7 @@ health_octavia_repair()
 health_designate_report()
 {
     [ "$VERBOSE" != "1" ] || $OPENSTACK dns service list
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_designate_check()
@@ -2120,7 +2120,7 @@ _health_designate_repair()
 
 health_masakari_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_masakari_check()
@@ -2189,7 +2189,7 @@ health_masakari_repair()
 
 health_monasca_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_monasca_check()
@@ -2246,7 +2246,7 @@ health_monasca_repair()
 health_senlin_report()
 {
     [ "$VERBOSE" != "1" ] || $OPENSTACK cluster service list
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_senlin_check()
@@ -2300,7 +2300,7 @@ health_senlin_repair()
 health_watcher_report()
 {
     [ "$VERBOSE" != "1" ] || $OPENSTACK optimize service list
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_watcher_check()
@@ -2347,7 +2347,7 @@ health_watcher_repair()
 
 health_k3s_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_k3s_check()
@@ -2368,7 +2368,7 @@ health_k3s_repair()
 
 health_rancher_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_rancher_check()
@@ -2400,7 +2400,7 @@ health_rancher_rebuild()
 
 health_opensearch_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_opensearch_check()
@@ -2437,7 +2437,7 @@ health_opensearch_repair()
 
 health_zookeeper_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_zookeeper_check()
@@ -2467,7 +2467,7 @@ health_zookeeper_repair()
 
 health_kafka_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_kafka_check()
@@ -2546,7 +2546,7 @@ health_kafka_repair()
 
 health_telegraf_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_telegraf_check()
@@ -2573,7 +2573,7 @@ health_telegraf_repair()
 
 health_influxdb_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_influxdb_check()
@@ -2617,7 +2617,7 @@ health_influxdb_repair()
 
 health_kapacitor_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_kapacitor_check()
@@ -2654,7 +2654,7 @@ health_kapacitor_repair()
 
 health_grafana_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_grafana_check()
@@ -2692,7 +2692,7 @@ health_grafana_repair()
 
 health_filebeat_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_filebeat_check()
@@ -2719,7 +2719,7 @@ health_filebeat_repair()
 
 health_auditbeat_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_auditbeat_check()
@@ -2747,7 +2747,7 @@ health_auditbeat_repair()
 
 health_logstash_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_logstash_check()
@@ -2780,7 +2780,7 @@ health_logstash_repair()
 
 health_opensearch-dashboards_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_opensearch-dashboards_check()
@@ -2892,7 +2892,7 @@ health_hypervisor_check()
 
 health_nodelist_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_nodelist_check()
@@ -2914,7 +2914,7 @@ health_nodelist_check()
 health_mongodb_report()
 {
     ERR_MSG+="`mongosh --quiet --eval 'rs.status().members.map(member => ({name: member.name, health: member.health, stateStr: member.stateStr, lastHeartbeatMessage: member.lastHeartbeatMessage, syncSourceHost: member.syncSourceHost, uptime: member.uptime}))'`\n"
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_mongodb_check()

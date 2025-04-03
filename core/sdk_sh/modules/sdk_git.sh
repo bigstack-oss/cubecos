@@ -80,7 +80,7 @@ _git_server_init()
 
 git_server_init()
 {
-    source /usr/sbin/hex_tuning /etc/settings.txt
+    source $HEX_TUN /etc/settings.txt
     if [ "x$T_cubesys_control_hosts" = "x" ] ; then
         export master_control=$T_cubesys_controller
         [ -n "$master_control" ] || master_control=$T_net_hostname

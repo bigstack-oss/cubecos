@@ -94,10 +94,10 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(NOVA_ENABLED, "nova.enabled", TUNING_UNPUB, "Set to true to enable nova.", true);
-CONFIG_TUNING_STR(NOVA_USERPASS, "nova.user.password", TUNING_UNPUB, "Set nova user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(NOVA_PLACEPASS, "nova.placement.password", TUNING_UNPUB, "Set placement user password.", PLACEPASS, ValidateNone);
-CONFIG_TUNING_STR(NOVA_DBPASS, "nova.db.password", TUNING_UNPUB, "Set nova database password.", DBPASS, ValidateNone);
-CONFIG_TUNING_STR(NOVA_PLA_DBPASS, "nova.placement.db.password", TUNING_UNPUB, "Set placement database password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(NOVA_USERPASS, "nova.user.password", TUNING_UNPUB, "Set nova user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NOVA_PLACEPASS, "nova.placement.password", TUNING_UNPUB, "Set placement user password.", PLACEPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NOVA_DBPASS, "nova.db.password", TUNING_UNPUB, "Set nova database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NOVA_PLA_DBPASS, "nova.placement.db.password", TUNING_UNPUB, "Set placement database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(NOVA_DEBUG, "nova.debug.enabled", TUNING_PUB, "Set to true to enable nova verbose log.", false);
@@ -105,11 +105,11 @@ CONFIG_TUNING_UINT(NOVA_RESV_HOST_VCPU, "nova.control.host.vcpu", TUNING_PUB, "A
                    0, 0, 128);
 CONFIG_TUNING_UINT(NOVA_RESV_HOST_MEM, "nova.control.host.memory", TUNING_PUB, "Amount of memory in MB to reserve for the control host.",
                    0, 0, 524288);
-CONFIG_TUNING_STR(NOVA_GPU_TYPE, "nova.gpu.type", TUNING_PUB, "Specifiy a supported gpu type instances would get.", "", ValidateNone);
-CONFIG_TUNING_STR(NOVA_OC_CPU_RATIO, "nova.overcommit.cpu.ratio", TUNING_PUB, "Specifiy an allowed CPU overcommitted ratio.", "16.0", ValidateNone);
-CONFIG_TUNING_STR(NOVA_OC_RAM_RATIO, "nova.overcommit.ram.ratio", TUNING_PUB, "Specifiy an allowed RAM overcommitted ratio.", "1.0", ValidateNone);
-CONFIG_TUNING_STR(NOVA_OC_DISK_RATIO, "nova.overcommit.disk.ratio", TUNING_PUB, "Specifiy an allowed DISK overcommitted ratio.", "1.5", ValidateNone);
-CONFIG_TUNING_STR(NOVA_HW_TYPE, "nova.hardware.type", TUNING_PUB, "Set default hardware type for hypervisor.", "q35", ValidateNone);
+CONFIG_TUNING_STR(NOVA_GPU_TYPE, "nova.gpu.type", TUNING_PUB, "Specifiy a supported gpu type instances would get.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NOVA_OC_CPU_RATIO, "nova.overcommit.cpu.ratio", TUNING_PUB, "Specifiy an allowed CPU overcommitted ratio.", "16.0", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NOVA_OC_RAM_RATIO, "nova.overcommit.ram.ratio", TUNING_PUB, "Specifiy an allowed RAM overcommitted ratio.", "1.0", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NOVA_OC_DISK_RATIO, "nova.overcommit.disk.ratio", TUNING_PUB, "Specifiy an allowed DISK overcommitted ratio.", "1.5", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NOVA_HW_TYPE, "nova.hardware.type", TUNING_PUB, "Set default hardware type for hypervisor.", "q35", ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);

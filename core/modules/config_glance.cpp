@@ -56,8 +56,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(GLANCE_ENABLED, "glance.enabled", TUNING_UNPUB, "Set to true to enable glance.", true);
-CONFIG_TUNING_STR(GLANCE_USERPASS, "glance.user.password", TUNING_UNPUB, "Set glance user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(GLANCE_DBPASS, "glance.db.password", TUNING_UNPUB, "Set glance database password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(GLANCE_USERPASS, "glance.user.password", TUNING_UNPUB, "Set glance user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(GLANCE_DBPASS, "glance.db.password", TUNING_UNPUB, "Set glance database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(GLANCE_DEBUG, "glance.debug.enabled", TUNING_PUB, "Set to true to enable glance verbose log.", false);

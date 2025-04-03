@@ -94,9 +94,9 @@ CONFIG_GLOBAL_STR_REF(OVERLAY_IF);
 
 // private tunings
 CONFIG_TUNING_BOOL(NEUTRON_ENABLED, "neutron.enabled", TUNING_UNPUB, "Set to true to enable neutron.", true);
-CONFIG_TUNING_STR(NEUTRON_USERPASS, "neutron.user.password", TUNING_UNPUB, "Set neutron user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(NEUTRON_METAPASS, "neutron.metadata.password", TUNING_UNPUB, "Set neutron metadata password.", METAPASS, ValidateNone);
-CONFIG_TUNING_STR(NEUTRON_DBPASS, "neutron.db.password", TUNING_UNPUB, "Set neutron database password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(NEUTRON_USERPASS, "neutron.user.password", TUNING_UNPUB, "Set neutron user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NEUTRON_METAPASS, "neutron.metadata.password", TUNING_UNPUB, "Set neutron metadata password.", METAPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(NEUTRON_DBPASS, "neutron.db.password", TUNING_UNPUB, "Set neutron database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(NEUTRON_HA_ENABLED, "neutron.ha.enabled", TUNING_UNPUB, "Set to true to enable router and dhcp agent HA.", true);
 
 // public tunigns

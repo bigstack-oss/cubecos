@@ -32,7 +32,7 @@ CONFIG_GLOBAL_STR_REF(STORAGE_F_CIDR);
 
 // private tunings
 CONFIG_TUNING_BOOL(COROSYNC_ENABLED, "corosync.enabled", TUNING_UNPUB, "Set to true to enable corosync.", true);
-CONFIG_TUNING_STR(COROSYNC_CLUSTER_KEY, "corosync.cluster.key", TUNING_UNPUB, "Set corosync cluster key.", CLUSTER_KEY, ValidateNone);
+CONFIG_TUNING_STR(COROSYNC_CLUSTER_KEY, "corosync.cluster.key", TUNING_UNPUB, "Set corosync cluster key.", CLUSTER_KEY, ValidateRegex, DFT_REGEX_STR);
 
 // external tunings
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);

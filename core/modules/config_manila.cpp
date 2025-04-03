@@ -65,12 +65,12 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(MANILA_ENABLED, "manila.enabled", TUNING_UNPUB, "Set to true to enable manila.", true);
-CONFIG_TUNING_STR(MANILA_USERPASS, "manila.user.password", TUNING_UNPUB, "Set manila user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(MANILA_DBPASS, "manila.db.password", TUNING_UNPUB, "Set manila database password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(MANILA_USERPASS, "manila.user.password", TUNING_UNPUB, "Set manila user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MANILA_DBPASS, "manila.db.password", TUNING_UNPUB, "Set manila database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunings
 CONFIG_TUNING_BOOL(MANILA_DEBUG, "manila.debug.enabled", TUNING_PUB, "Set to true to enable manila verbose log.", false);
-CONFIG_TUNING_STR(MANILA_VOLUME_TYPE, "manila.volume.type", TUNING_PUB, "Set manila backend volume type.", "CubeStorage", ValidateNone);
+CONFIG_TUNING_STR(MANILA_VOLUME_TYPE, "manila.volume.type", TUNING_PUB, "Set manila backend volume type.", "CubeStorage", ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);

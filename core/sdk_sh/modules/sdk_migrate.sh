@@ -11,6 +11,12 @@ migrate_prepare()
     if is_control_node ; then
         # During rolling upgrade, maria times out to start on control 2 and 3
         touch /etc/appliance/state/mysql_new_cluster
+
+        # saml-metadata.xml is needed by multiple services: keycloak, ceph-dashboard, etc.
+        if [ ! -e /etc/keycloak/saml-metadata.xml ] ; then
+            mkdir -p /etc/keycloak
+            cp -f /etc/keycloak/saml-metadata.xml /etc/keycloak/
+        fi
     fi
     touch /run/cube_migration
 }
@@ -189,9 +195,7 @@ migrate_nova_db_post()
         mkdir -p ${CEPHFS_NOVA_DIR}/instances
         chown -R nova:nova ${CEPHFS_NOVA_DIR}
         chmod -R 0755 ${CEPHFS_NOVA_DIR}
-        MountOtherPartition
         find /mnt/target/var/lib/nova/instances/* -maxdepth 1 -type d | grep -v -e locks -e compute_nodes -e _base | xargs -i cp -rpf {} /mnt/cephfs/nova/instances/
-        umount /mnt/target
     fi
 
     if [ -f $STATE_DIR/nova_db_post_migrated ] ; then

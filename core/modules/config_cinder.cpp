@@ -74,23 +74,23 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(CINDER_ENABLED, "cinder.enabled", TUNING_UNPUB, "Set to true to enable cinder.", true);
-CONFIG_TUNING_STR(CINDER_USERPASS, "cinder.user.password", TUNING_UNPUB, "Set cinder user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(CINDER_DBPASS, "cinder.db.password", TUNING_UNPUB, "Set cinder database password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(CINDER_USERPASS, "cinder.user.password", TUNING_UNPUB, "Set cinder user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_DBPASS, "cinder.db.password", TUNING_UNPUB, "Set cinder database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(CINDER_DEBUG, "cinder.debug.enabled", TUNING_PUB, "Set to true to enable cinder verbose log.", false);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_NAME, "cinder.external.%d.name", TUNING_PUB, "Set cinder external storage rule name.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_DRIVER, "cinder.external.%d.driver", TUNING_PUB, "Set cinder external storage type name <cube|purestorage>.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_ENDPOINT, "cinder.external.%d.endpoint", TUNING_PUB, "Set cinder external storage endpoint.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_POOL, "cinder.external.%d.pool", TUNING_PUB, "Set cinder external storage pool.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_ACCOUNT, "cinder.external.%d.account", TUNING_PUB, "Set cinder external storage account.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_SECRET, "cinder.external.%d.secret", TUNING_PUB, "Set cinder external storage account secret.", "", ValidateNone);
+CONFIG_TUNING_STR(CINDER_EXTERNAL_NAME, "cinder.external.%d.name", TUNING_PUB, "Set cinder external storage rule name.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_EXTERNAL_DRIVER, "cinder.external.%d.driver", TUNING_PUB, "Set cinder external storage type name <cube|purestorage>.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_EXTERNAL_ENDPOINT, "cinder.external.%d.endpoint", TUNING_PUB, "Set cinder external storage endpoint.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_EXTERNAL_POOL, "cinder.external.%d.pool", TUNING_PUB, "Set cinder external storage pool.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_EXTERNAL_ACCOUNT, "cinder.external.%d.account", TUNING_PUB, "Set cinder external storage account.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_EXTERNAL_SECRET, "cinder.external.%d.secret", TUNING_PUB, "Set cinder external storage account secret.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(CINDER_BACKUP_OVERRIDE, "cinder.backup.override", TUNING_PUB, "Enable override cinder backup configurations.", false);
-CONFIG_TUNING_STR(CINDER_BACKUP_TYPE, "cinder.backup.type", TUNING_PUB, "Set cinder backup storage type <cube-storage|cube-swift>.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_BACKUP_ENDPOINT, "cinder.backup.endpoint", TUNING_PUB, "Set cinder backup storage endpoint.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_BACKUP_ACCOUNT, "cinder.backup.account", TUNING_PUB, "Set cinder backup storage account.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_BACKUP_SECRET, "cinder.backup.secret", TUNING_PUB, "Set cinder backup storage account secret.", "", ValidateNone);
-CONFIG_TUNING_STR(CINDER_BACKUP_POOL, "cinder.backup.pool", TUNING_PUB, "Set cinder backup storage pool.", "", ValidateNone);
+CONFIG_TUNING_STR(CINDER_BACKUP_TYPE, "cinder.backup.type", TUNING_PUB, "Set cinder backup storage type <cube-storage|cube-swift>.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_BACKUP_ENDPOINT, "cinder.backup.endpoint", TUNING_PUB, "Set cinder backup storage endpoint.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_BACKUP_ACCOUNT, "cinder.backup.account", TUNING_PUB, "Set cinder backup storage account.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_BACKUP_SECRET, "cinder.backup.secret", TUNING_PUB, "Set cinder backup storage account secret.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_BACKUP_POOL, "cinder.backup.pool", TUNING_PUB, "Set cinder backup storage pool.", "", ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);

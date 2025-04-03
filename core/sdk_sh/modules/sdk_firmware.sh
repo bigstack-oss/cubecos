@@ -47,9 +47,9 @@ firmware_swap_active()
 
     echo "System is rebooting for partition $next in $delay seconds"
     if (( "$delay" > 0 )) ; then
-        /usr/sbin/hex_config reboot $delay
+        $HEX_CFG reboot $delay
     else
-        /usr/sbin/hex_config reboot
+        $HEX_CFG reboot
     fi
 }
 
@@ -66,9 +66,9 @@ firmware_backup()
 
     echo "System is rebooting for backup partition $current in $delay seconds"
     if (( "$delay" > 0 )) ; then
-        /usr/sbin/hex_config reboot $delay
+        $HEX_CFG reboot $delay
     else
-        /usr/sbin/hex_config reboot
+        $HEX_CFG reboot
     fi
 }
 

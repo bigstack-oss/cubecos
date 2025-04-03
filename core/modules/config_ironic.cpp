@@ -80,10 +80,10 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(IRONIC_ENABLED, "ironic.enabled", TUNING_UNPUB, "Set to true to enable ironic.", false);
-CONFIG_TUNING_STR(IRONIC_USERPASS, "ironic.user.password", TUNING_UNPUB, "Set ironic user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(IRONIC_INSPPASS, "ironic.inspector.user.password", TUNING_UNPUB, "Set ironic user password.", INSPPASS, ValidateNone);
-CONFIG_TUNING_STR(IRONIC_DBPASS, "ironic.db.password", TUNING_UNPUB, "Set ironic database password.", DBPASS, ValidateNone);
-CONFIG_TUNING_STR(IRONIC_INSPDBPASS, "ironic.inspector.db.password", TUNING_UNPUB, "Set ironic inspector database password.", INSPDBPASS, ValidateNone);
+CONFIG_TUNING_STR(IRONIC_USERPASS, "ironic.user.password", TUNING_UNPUB, "Set ironic user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(IRONIC_INSPPASS, "ironic.inspector.user.password", TUNING_UNPUB, "Set ironic user password.", INSPPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(IRONIC_DBPASS, "ironic.db.password", TUNING_UNPUB, "Set ironic database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(IRONIC_INSPDBPASS, "ironic.inspector.db.password", TUNING_UNPUB, "Set ironic inspector database password.", INSPDBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunings
 CONFIG_TUNING_BOOL(IRONIC_DEBUG, "ironic.debug.enabled", TUNING_PUB, "Set to true to enable ironic verbose log.", false);

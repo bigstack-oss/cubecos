@@ -1314,7 +1314,7 @@ os_pre_failure_host_evacuation()
 
     if [ "$env" == "upgrade" ] ; then
         # os_evac_upgrade_prepare
-        /usr/sbin/hex_cli -c cluster check_repair MsgQueue >/tmp/upgrade_rabbitmq.log 2>&1
+        $HEX_CLI -c cluster check_repair MsgQueue >/tmp/upgrade_rabbitmq.log 2>&1
 
         if $HEX_SDK health_rabbitmq_check ; then
             # clear stale api for nova, neutron, and cinder
@@ -2082,7 +2082,7 @@ os_ironic_config_sync()
         local subnet=$(echo $flat | jq -r .[0].Subnets[0])
         if [ -n "$subnet" -a "$subnet" != "null" ] ; then
             cp -f $dhcp $dhcp.prev
-            /usr/sbin/hex_config init_ironic_dhcp_config;
+            $HEX_CFG init_ironic_dhcp_config;
             local range=$($OPENSTACK subnet show $subnet | awk '/ allocation_pools /{print $4}' | tr '-' ',')
             echo "dhcp-range=$range" >> $dhcp
             local info=$($OPENSTACK subnet show $subnet -f json)
@@ -2409,7 +2409,7 @@ os_nova_instance_ping()
         return 0;
     fi
 
-    local active_host=$(/usr/sbin/hex_config status_pacemaker | awk '/IPaddr2/{print $5}')
+    local active_host=$($HEX_CFG status_pacemaker | awk '/IPaddr2/{print $5}')
     if [ -n "$active_host" ] ; then
         # HA
         if [ "$active_host" != "$(hostname)" ] ; then

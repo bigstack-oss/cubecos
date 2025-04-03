@@ -61,9 +61,9 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(HEAT_ENABLED, "heat.enabled", TUNING_UNPUB, "Set to true to enable heat.", true);
-CONFIG_TUNING_STR(HEAT_USERPASS, "heat.user.password", TUNING_UNPUB, "Set heat user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(HEAT_ADMINPASS, "heat.admin.password", TUNING_UNPUB, "Set heat domain admin password.", ADMPASS, ValidateNone);
-CONFIG_TUNING_STR(HEAT_DBPASS, "heat.db.password", TUNING_UNPUB, "Set heat database password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(HEAT_USERPASS, "heat.user.password", TUNING_UNPUB, "Set heat user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(HEAT_ADMINPASS, "heat.admin.password", TUNING_UNPUB, "Set heat domain admin password.", ADMPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(HEAT_DBPASS, "heat.db.password", TUNING_UNPUB, "Set heat database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(HEAT_DEBUG, "heat.debug.enabled", TUNING_PUB, "Set to true to enable heat verbose log.", false);

@@ -755,7 +755,7 @@ ceph_osd_add_disk_raw()
         [ -n "$(readlink -e $dev)" ] || continue
         PrepareDataDisk $dev
     done
-    Quiet -n /usr/sbin/hex_config refresh_ceph_osd
+    Quiet -n $HEX_CFG refresh_ceph_osd
     Quiet -n ceph_adjust_cache_flush_bytes
 }
 

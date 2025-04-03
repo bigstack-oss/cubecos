@@ -71,30 +71,30 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // public tunigns
 CONFIG_TUNING_BOOL(KAPACITOR_ALERT_CHK_ENABLED, "kapacitor.alert.check.enabled", TUNING_PUB, "Set true to enable kapacitor alert check.", false);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_CHK_EID, "kapacitor.alert.check.eventid", TUNING_PUB, "Set kapacitor alert check eventid.", "SYS00002W", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_CHK_INTERVAL, "kapacitor.alert.check.interval", TUNING_PUB, "Set kapacitor alert check interval (default to 60m).", "60m", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_FLOW_BASE, "kapacitor.alert.flow.base", TUNING_PUB, "Set kapacitor alert base for abnormal flow.", "7d", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_FLOW_UNIT, "kapacitor.alert.flow.unit", TUNING_PUB, "Set kapacitor alert unit for abnormal flow.", "5m", ValidateNone);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_CHK_EID, "kapacitor.alert.check.eventid", TUNING_PUB, "Set kapacitor alert check eventid.", "SYS00002W", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_CHK_INTERVAL, "kapacitor.alert.check.interval", TUNING_PUB, "Set kapacitor alert check interval (default to 60m).", "60m", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_FLOW_BASE, "kapacitor.alert.flow.base", TUNING_PUB, "Set kapacitor alert base for abnormal flow.", "7d", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_FLOW_UNIT, "kapacitor.alert.flow.unit", TUNING_PUB, "Set kapacitor alert unit for abnormal flow.", "5m", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_INT(KAPACITOR_ALERT_FLOW_THRESHOLD, "kapacitor.alert.flow.threshold", TUNING_PUB, "Set kapacitor alert threshold for abnormal flow.", 30, 0, 65535);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EXTRA_PREFIX, "kapacitor.alert.extra.prefix", TUNING_PUB, "Set kapacitor alert message prefix.", "Cube", ValidateNone);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_EXTRA_PREFIX, "kapacitor.alert.extra.prefix", TUNING_PUB, "Set kapacitor alert message prefix.", "Cube", ValidateRegex, DFT_REGEX_STR);
 
 // private tunigns
 CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_CRIT, "kapacitor.alert.default.crit", TUNING_UNPUB, "Set kapacitor alert default critical threshold.", 95 , 0, 100);
 CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_WARN, "kapacitor.alert.default.warn", TUNING_UNPUB, "Set kapacitor alert default warning threshold.", 85 , 0, 100);
 CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_INFO, "kapacitor.alert.default.info", TUNING_UNPUB, "Set kapacitor alert default info threshold.", 75 , 0, 100);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_ID, "kapacitor.alert.resp.%d.name", TUNING_UNPUB, "Set kapacitor alert response id.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_TOPIC, "kapacitor.alert.resp.%d.topic", TUNING_UNPUB, "Set kapacitor alert response topic.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_MATCH, "kapacitor.alert.resp.%d.match", TUNING_UNPUB, "Set kapacitor alert response match.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_TYPE, "kapacitor.alert.resp.%d.type", TUNING_UNPUB, "Set kapacitor alert response type 'slack', 'email', 'exec'.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_SLACK_URL, "kapacitor.alert.resp.%d.slack.url", TUNING_UNPUB, "Set kapacitor slack alert url.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_SLACK_CHANNEL, "kapacitor.alert.resp.%d.slack.channel", TUNING_UNPUB, "Set kapacitor slack alert channel.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_HOST, "kapacitor.alert.resp.%d.email.host", TUNING_UNPUB, "Set kapacitor email alert host.", "", ValidateNone);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_ID, "kapacitor.alert.resp.%d.name", TUNING_UNPUB, "Set kapacitor alert response id.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_TOPIC, "kapacitor.alert.resp.%d.topic", TUNING_UNPUB, "Set kapacitor alert response topic.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_MATCH, "kapacitor.alert.resp.%d.match", TUNING_UNPUB, "Set kapacitor alert response match.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_TYPE, "kapacitor.alert.resp.%d.type", TUNING_UNPUB, "Set kapacitor alert response type 'slack', 'email', 'exec'.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SLACK_URL, "kapacitor.alert.resp.%d.slack.url", TUNING_UNPUB, "Set kapacitor slack alert url.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SLACK_CHANNEL, "kapacitor.alert.resp.%d.slack.channel", TUNING_UNPUB, "Set kapacitor slack alert channel.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_HOST, "kapacitor.alert.resp.%d.email.host", TUNING_UNPUB, "Set kapacitor email alert host.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_UINT(KAPACITOR_ALERT_EMAIL_PORT, "kapacitor.alert.resp.%d.email.port", TUNING_UNPUB, "Set kapacitor email alert port.", 0, 0, 65535);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_USER, "kapacitor.alert.resp.%d.email.username", TUNING_UNPUB, "Set kapacitor email alert username.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_PASS, "kapacitor.alert.resp.%d.email.password", TUNING_UNPUB, "Set kapacitor email alert password.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_FROM, "kapacitor.alert.resp.%d.email.from", TUNING_UNPUB, "Set kapacitor email alert from.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_TO, "kapacitor.alert.resp.%d.email.to", TUNING_UNPUB, "Set kapacitor email alert to.", "", ValidateNone);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EXEC_TYPE, "kapacitor.alert.resp.%d.exec.type", TUNING_UNPUB, "Set kapacitor executable alert type 'shell', 'bin'.", "", ValidateNone);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_USER, "kapacitor.alert.resp.%d.email.username", TUNING_UNPUB, "Set kapacitor email alert username.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_PASS, "kapacitor.alert.resp.%d.email.password", TUNING_UNPUB, "Set kapacitor email alert password.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_FROM, "kapacitor.alert.resp.%d.email.from", TUNING_UNPUB, "Set kapacitor email alert from.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_TO, "kapacitor.alert.resp.%d.email.to", TUNING_UNPUB, "Set kapacitor email alert to.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_EXEC_TYPE, "kapacitor.alert.resp.%d.exec.type", TUNING_UNPUB, "Set kapacitor executable alert type 'shell', 'bin'.", "", ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);

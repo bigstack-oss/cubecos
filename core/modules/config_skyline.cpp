@@ -49,8 +49,8 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // private tunings
 CONFIG_TUNING_BOOL(SKYLINE_ENABLED, "skyline.enabled", TUNING_UNPUB, "Set to true to enable skyline.", true);
-CONFIG_TUNING_STR(SKYLINE_USERPASS, "skyline.user.password", TUNING_UNPUB, "Set skyline user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(SKYLINE_DBPASS, "skyline.db.password", TUNING_UNPUB, "Set skyline db password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(SKYLINE_USERPASS, "skyline.user.password", TUNING_UNPUB, "Set skyline user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(SKYLINE_DBPASS, "skyline.db.password", TUNING_UNPUB, "Set skyline db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(SKYLINE_DEBUG, "skyline.debug.enabled", TUNING_PUB, "Set to true to enable skyline verbose log.", false);

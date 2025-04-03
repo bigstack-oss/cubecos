@@ -46,9 +46,9 @@ CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 
 // private tunings
 CONFIG_TUNING_BOOL(RABBITMQ_ENABLED, "rabbitmq.enabled", TUNING_UNPUB, "Set to true to enable rabbitmq.", true);
-CONFIG_TUNING_STR(RABBITMQ_GUEST_PASSWD, "rabbitmq.guest.password", TUNING_UNPUB, "Set rabbitmq guest password.", GUEST_PASS, ValidateNone);
-CONFIG_TUNING_STR(RABBITMQ_OPENSTACK_PASSWD, "rabbitmq.openstack.password", TUNING_UNPUB, "Set rabbitmq openstack password.", OPENSTACK_PASS, ValidateNone);
-CONFIG_TUNING_STR(RABBITMQ_COOKIE, "rabbitmq.cookie", TUNING_UNPUB, "Set rabbitmq erlang cookie.", ERLANG_COOKIE, ValidateNone);
+CONFIG_TUNING_STR(RABBITMQ_GUEST_PASSWD, "rabbitmq.guest.password", TUNING_UNPUB, "Set rabbitmq guest password.", GUEST_PASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(RABBITMQ_OPENSTACK_PASSWD, "rabbitmq.openstack.password", TUNING_UNPUB, "Set rabbitmq openstack password.", OPENSTACK_PASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(RABBITMQ_COOKIE, "rabbitmq.cookie", TUNING_UNPUB, "Set rabbitmq erlang cookie.", ERLANG_COOKIE, ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);

@@ -79,8 +79,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(OCTAVIA_ENABLED, "octavia.enabled", TUNING_UNPUB, "Set to true to enable octavia.", true);
-CONFIG_TUNING_STR(OCTAVIA_USERPASS, "octavia.user.password", TUNING_UNPUB, "Set octavia user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(OCTAVIA_DBPASS, "octavia.db.password", TUNING_UNPUB, "Set octavia db password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(OCTAVIA_USERPASS, "octavia.user.password", TUNING_UNPUB, "Set octavia user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(OCTAVIA_DBPASS, "octavia.db.password", TUNING_UNPUB, "Set octavia db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(OCTAVIA_DEBUG, "octavia.debug.enabled", TUNING_PUB, "Set to true to enable octavia verbose log.", false);

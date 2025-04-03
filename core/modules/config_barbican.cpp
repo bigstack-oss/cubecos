@@ -61,9 +61,9 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(BARBICAN_ENABLED, "barbican.enabled", TUNING_UNPUB, "Set to true to enable barbican.", true);
-CONFIG_TUNING_STR(BARBICAN_USERPASS, "barbican.user.password", TUNING_UNPUB, "Set barbican user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(BARBICAN_DBPASS, "barbican.db.password", TUNING_UNPUB, "Set barbican database password.", DBPASS, ValidateNone);
-CONFIG_TUNING_STR(BARBICAN_CRYPTOPASS, "barbican.crypto.password", TUNING_UNPUB, "Set barbican crypto password.", CRYPTOPASS, ValidateNone);
+CONFIG_TUNING_STR(BARBICAN_USERPASS, "barbican.user.password", TUNING_UNPUB, "Set barbican user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(BARBICAN_DBPASS, "barbican.db.password", TUNING_UNPUB, "Set barbican database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(BARBICAN_CRYPTOPASS, "barbican.crypto.password", TUNING_UNPUB, "Set barbican crypto password.", CRYPTOPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunings
 CONFIG_TUNING_BOOL(BARBICAN_DEBUG, "barbican.debug.enabled", TUNING_PUB, "Set to true to enable barbican verbose log.", false);

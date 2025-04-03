@@ -64,8 +64,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 
 // private tunings
 CONFIG_TUNING_BOOL(SENLIN_ENABLED, "senlin.enabled", TUNING_UNPUB, "Set to true to enable senlin.", true);
-CONFIG_TUNING_STR(SENLIN_USERPASS, "senlin.user.password", TUNING_UNPUB, "Set senlin user password.", USERPASS, ValidateNone);
-CONFIG_TUNING_STR(SENLIN_DBPASS, "senlin.db.password", TUNING_UNPUB, "Set senlin db password.", DBPASS, ValidateNone);
+CONFIG_TUNING_STR(SENLIN_USERPASS, "senlin.user.password", TUNING_UNPUB, "Set senlin user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(SENLIN_DBPASS, "senlin.db.password", TUNING_UNPUB, "Set senlin db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(SENLIN_DEBUG, "senlin.debug.enabled", TUNING_PUB, "Set to true to enable senlin verbose log.", false);

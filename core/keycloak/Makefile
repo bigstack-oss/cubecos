@@ -76,7 +76,7 @@ $(LOGIN_SPEC_FILE): $(LOGIN_RPMBUILD_DIR) $(LOGIN_GIT_DIR)
 $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
-	$(call RUN_CMD_TIMED, \
+	$(call RUN_CMD_SILENT, \
 		nvm use $(UI_NODE_VERSION) && \
 		rpmbuild -bb --nodeps --define "_topdir $(LOGIN_RPMBUILD_DIR)" --define "version $(LOGIN_VERSION)" --define "build_number $(LOGIN_BUILD_NUMBER)" --define "keycloak_version $(KEYCLOAK_VERSION)" $(LOGIN_SPEC_FILE), \
 		"  BUILD   cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm")
@@ -88,13 +88,13 @@ $(LOGIN_RPM): $(LOGIN_RPM_BUILD)
 	$(Q)cp -f $(LOGIN_RPM_BUILD) ./login.rpm
 
 .load-img: $(LOGIN_RPM)
-	$(Q)dnf install -y ./login.rpm
-	$(Q)podman load -i /usr/share/cube/login/keycloak-image.tar
-	$(Q)dnf remove -y cube-cos-login
+	$(Q)dnf install -y ./login.rpm $(QEND)
+	$(Q)podman load -i /usr/share/cube/login/keycloak-image.tar $(QEND)
+	$(Q)dnf remove -y cube-cos-login $(QEND)
 	$(Q)echo $(IMG_BUILD) > $@
 
 .push-img: .load-img
-	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(shell cat .load-img)
+	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(shell cat .load-img) $(QEND)
 	$(Q)touch $@
 
 .PHONY: copy-image
@@ -133,13 +133,13 @@ testclean::
 ifeq ($(DEP),1)
 	$(Q)make testclean -C $(TOP_BLDDIR)/core/k3s
 endif
-	$(Q)helm --kubeconfig /etc/rancher/k3s/k3s.yaml uninstall keycloak -n keycloak 2>/dev/null || true
-	$(Q)k3s kubectl delete ns keycloak 2>/dev/null || true
-	$(Q)podman rm -if keycloak >/dev/null
-	$(Q)podman rm -if mysql >/dev/null
+	$(Q)helm --kubeconfig /etc/rancher/k3s/k3s.yaml uninstall keycloak -n keycloak $(QEND) || true
+	$(Q)k3s kubectl delete ns keycloak $(QEND) || true
+	$(Q)podman rm -if keycloak $(QEND)
+	$(Q)podman rm -if mysql $(QEND)
 
 clean:: testclean
-	$(Q)podman image rm -f $(shell cat .load-img) 2>/dev/null || true
+	$(Q)podman image rm -f $(shell cat .load-img) $(QEND) || true
 	$(Q)rm -rf $(LOGIN_RPMBUILD_DIR)
 	$(Q)rm -rf $(LOGIN_GIT_DIR)
 

@@ -51,6 +51,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_snapshot.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_stats.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_support.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_toggle.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_tuning.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_update.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_util.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_zookeeper.sh
