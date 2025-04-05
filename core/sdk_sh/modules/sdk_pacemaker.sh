@@ -9,7 +9,7 @@ fi
 pacemaker_remote_add()
 {
     local node=$1
-    local timeout=${2:-120}
+    local timeout=${2:-480}
 
     # wait for remote pcsd started by remote node
     # check "hex_config -d" for startup order cluster -> pacemaker

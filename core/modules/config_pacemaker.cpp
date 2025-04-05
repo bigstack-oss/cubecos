@@ -295,11 +295,11 @@ ClusterUpdateMain(int argc, char **argv)
     if (IsControl(s_eCubeRole)) {
         if (action == "add" && role == "compute") {
             HexLogInfo("add %s host %s@%s to pacemaker cluster", role.c_str(), hostname.c_str(), mgmtip.c_str());
-            HexUtilSystemF(0, 0, HEX_SDK " pacemaker_remote_add %s", argv[2]);
+            HexUtilSystemF(0, 0, HEX_SDK " pacemaker_remote_add %s", hostname.c_str());
         }
         else if (action == "remove" && role == "compute") {
             HexLogInfo("remove %s host %s@%s from pacemaker cluster", role.c_str(), hostname.c_str(), mgmtip.c_str());
-            HexUtilSystemF(0, 0, HEX_SDK " pacemaker_remote_remove %s", argv[2]);
+            HexUtilSystemF(0, 0, HEX_SDK " pacemaker_remote_remove %s", hostname.c_str());
         }
     }
 
