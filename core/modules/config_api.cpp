@@ -85,4 +85,8 @@ Commit(bool modified, int dryLevel)
 
 CONFIG_MODULE(api, 0, 0, 0, 0, Commit);
 CONFIG_REQUIRES(api, cube_scan);
+CONFIG_REQUIRES(api, mongodb);
 CONFIG_REQUIRES(api, keycloak);
+CONFIG_REQUIRES(api, influxdb);
+CONFIG_REQUIRES(api, cyborg);
+CONFIG_REQUIRES(api, apache2);
