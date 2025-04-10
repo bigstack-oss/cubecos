@@ -11,12 +11,6 @@ migrate_prepare()
     if is_control_node ; then
         # During rolling upgrade, maria times out to start on control 2 and 3
         touch /etc/appliance/state/mysql_new_cluster
-
-        # saml-metadata.xml is needed by multiple services: keycloak, ceph-dashboard, etc.
-        if [ ! -e /etc/keycloak/saml-metadata.xml ] ; then
-            mkdir -p /etc/keycloak
-            cp -f /etc/keycloak/saml-metadata.xml /etc/keycloak/
-        fi
     fi
     touch /run/cube_migration
 }
