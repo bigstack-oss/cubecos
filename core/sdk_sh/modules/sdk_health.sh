@@ -1096,6 +1096,15 @@ health_ceph_check()
     _health_fail_log
 }
 
+_health_ceph_auto_repair()
+{
+    if [ "$ERR_CODE" == "1" ] ; then
+        if $CEPH health detail | grep "application not enabled on pool '.mgr'" ; then
+            Quiet -n $CEPH osd pool application enable .mgr mgr
+        fi
+    fi
+}
+
 health_ceph_mon_report()
 {
     _health_report ${FUNCNAME[0]}
