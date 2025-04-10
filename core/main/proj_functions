@@ -657,7 +657,7 @@ wait_for_http_endpoint()
 
     local i=0
     while [ $i -lt $timeout ] ; do
-        if curl -sf http://$endpoint:$port > /dev/null ; then
+        if $CURL -sf http://$endpoint:$port > /dev/null ; then
             break
         else
             sleep 1
