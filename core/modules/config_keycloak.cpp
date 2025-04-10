@@ -79,8 +79,12 @@ Commit(bool modified, int dryLevel)
             HexUtilSystemF(0, 0, "sed -i '/LOGIN_GREETING/{n;s/value:.*/value: \"%s\"/}' %s", EscapeQuote(s_loginGreeting).c_str(), KEYCLOAK_VALUES_CHART);
         }
 
-        // destroy the running keycloak
-        HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
+        // should not destroy keycloak during node level bootstrapping
+        // since we could not get keycloak back on the master node when etcd quorum is not ready
+        if (!IsBootstrap()) {
+            // destroy the running keycloak
+            HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
+        }
     }
 
     // restart keycloak
