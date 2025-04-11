@@ -49,13 +49,13 @@ CONFIG_TUNING_STR(CUBESYS_ROLE, "cubesys.role", TUNING_UNPUB, "Set the role of c
 CONFIG_TUNING_STR(CUBESYS_DOMAIN, "cubesys.domain", TUNING_UNPUB, "Set the domain of cube appliance.", DOMAIN_DEF, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_REGION, "cubesys.region", TUNING_UNPUB, "Set the region of cube appliance.", REGION_DEF, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_CONTROLLER, "cubesys.controller", TUNING_UNPUB, "Set controller.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CUBESYS_CONTROLLER_IP, "cubesys.controller.ip", TUNING_UNPUB, "Set controller IP address.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CUBESYS_CONTROLLER_IP, "cubesys.controller.ip", TUNING_UNPUB, "Set controller IP address.", "", ValidateIpRange, "");
 CONFIG_TUNING_STR(CUBESYS_MGMT, "cubesys.management", TUNING_UNPUB, "Set management interface.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_PROVIDER, "cubesys.provider", TUNING_UNPUB, "Set provider interface.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_OVERLAY, "cubesys.overlay", TUNING_UNPUB, "Set overlay network interface.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_STORAGE, "cubesys.storage", TUNING_UNPUB, "Set storage network interface.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_SEED, "cubesys.seed", TUNING_UNPUB, "Set Cube cluster secret seed.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CUBESYS_MGMT_CIDR, "cubesys.mgmt.cidr", TUNING_UNPUB, "Set Cube cluster management CIDR.", MGMT_CIDR_DEF, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CUBESYS_MGMT_CIDR, "cubesys.mgmt.cidr", TUNING_UNPUB, "Set Cube cluster management CIDR.", MGMT_CIDR_DEF, ValidateIpRange, "");
 CONFIG_TUNING_STR(CUBESYS_CONTROL_VIP, "cubesys.control.vip", TUNING_UNPUB, "Set cluster virtual ip.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_CONTROL_HOSTS, "cubesys.control.hosts", TUNING_UNPUB, "Set control group hostname [hostname,hostname,...].", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_CONTROL_ADDRS, "cubesys.control.addrs", TUNING_UNPUB, "Set control group address [ip,ip,...].", "", ValidateRegex, DFT_REGEX_STR);
@@ -64,13 +64,13 @@ CONFIG_TUNING_STR(CUBESYS_STORAGE_ADDRS, "cubesys.storage.addrs", TUNING_UNPUB, 
 CONFIG_TUNING_BOOL(CUBESYS_HA, "cubesys.ha", TUNING_UNPUB, "Set true for indicate a HA setup.", false);
 CONFIG_TUNING_BOOL(CUBESYS_SALTKEY, "cubesys.saltkey", TUNING_UNPUB, "Set true for enabling key scrambling.", false);
 CONFIG_TUNING_STR(CUBESYS_EXTERNAL, "cubesys.external", TUNING_UNPUB, "Set external IP/Domain.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_INT(CUBESYS_ALERT_LEVEL_SERVICE, "cubesys.alert.level.%s", TUNING_UNPUB, "Set health alert sensible level for service %s. (0: default, 1: highly sensitive)", 0, 0, INT_MAX);
 
 // public tunings
 CONFIG_TUNING_STR(CUBESYS_PROVIDER_EXTRA, "cubesys.provider.extra", TUNING_PUB, "Set extra provider interfaces ('pvd-' prefix and <= 15 chars) [IF.2:pvd-xxx,eth2:pvd-yyy,...].", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_INT(CUBESYS_LOG_DEFAULT_RP, "cubesys.log.default.retention", TUNING_PUB, "Set log file retention policy in days.", 14, 0, 365);
 CONFIG_TUNING_INT(CUBESYS_CONNTABLE_MAX, "cubesys.conntable.max", TUNING_PUB, "Set max connection table size.", 262144, 0, INT_MAX);
 CONFIG_TUNING_INT(CUBESYS_ALERT_LEVEL, "cubesys.alert.level", TUNING_PUB, "Set health alert sensible level. (0: default, 1: highly sensitive)", 0, 0, INT_MAX);
-CONFIG_TUNING_INT(CUBESYS_ALERT_LEVEL_SERVICE, "cubesys.alert.level.%s", TUNING_PUB, "Set health alert sensible level for service %s. (0: default, 1: highly sensitive)", 0, 0, INT_MAX);
 CONFIG_TUNING_BOOL(CUBESYS_PROBEUSB, "cubesys.probeusb", TUNING_PUB, "Set true to allow loading USB drivers.", false);
 
 // using external tunings

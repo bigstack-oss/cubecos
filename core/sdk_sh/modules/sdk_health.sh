@@ -146,7 +146,7 @@ EOF
         fi
         # Only when there're valid keys would we be able to save logs
         if [ "x$keys" != "x" ] ; then
-            timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG 2>/dev/null ; fi" > /tmp/$log
+            timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
                 keys=$keys $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1
                 log_url="s3://$log_pth"
@@ -904,19 +904,21 @@ health_api_report()
 
 health_api_check()
 {
+    local port=8082
+
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node cube-cos-api >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="cube-cos-api on $node is not running\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u cube-cos-api"
-        fi
-        
-        $CURL -sf http://$node:8082 >/dev/null
-        # 0: ok, 22: http error (page not found)
-        if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
-            ERR_CODE=2
-            ERR_MSG+="http port $port on $node doesn't respond\n"
-            ERR_LOG="netstat -tunpl | grep $port"
+        else
+            $CURL -sf http://$node:$port >/dev/null
+            # 0: ok, 22: http error (page not found)
+            if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+                ERR_CODE=2
+                ERR_MSG+="http port $port on $node doesn't respond\n"
+                ERR_LOG="netstat -tunpl | grep $port"
+            fi
         fi
     done
 
@@ -3030,5 +3032,16 @@ health_db_select()
     else
         $INFLUX -database events -execute "select $tagfield from health where component='$component' order by desc limit $limit"
     fi
+}
 
+health_log_dump()
+{
+    local component=$1
+    local s3_log=$(health_db_select ${component:-NOSUCHCOMPONENT} 2>/dev/null | grep s3 | head -1 | grep -o "s3://log/.*")
+
+    if [ "x$s3_log" != "x" ] ; then
+        $HEX_SDK os_s3_object_get admin $s3_log /tmp/$s3_log
+        cat /tmp/$s3_log
+        rm -f /tmp/$s3_log
+    fi
 }
