@@ -825,7 +825,7 @@ CephMaintenanceMain(int argc, const char** argv)
     options.push_back("off");
     options.push_back("status");
 
-    if(CliMatchListHelper(argc, argv, 1, options, &index, &value) != CLI_SUCCESS) {
+    if(CliMatchListHelper(argc, argv, 1, options, &index, &value) != 0) {
         CliPrintf("Unknown command");
         return CLI_INVALID_ARGS;
     }
@@ -1198,7 +1198,7 @@ CephMirrorPromote(int argc, const char** argv)
     type.push_back("normal");
     type.push_back("force");
 
-    if(CliMatchListHelper(argc, argv, 1, type, &typeIdx, &typeVal) != CLI_SUCCESS) {
+    if(CliMatchListHelper(argc, argv, 1, type, &typeIdx, &typeVal) != 0) {
         CliPrintf("Unknown type");
         return CLI_INVALID_ARGS;
     }
@@ -1206,7 +1206,7 @@ CephMirrorPromote(int argc, const char** argv)
     mode.push_back("site");
     mode.push_back("volume");
 
-    if(CliMatchListHelper(argc, argv, 2, mode, &modeIdx, &modeVal) != CLI_SUCCESS) {
+    if(CliMatchListHelper(argc, argv, 2, mode, &modeIdx, &modeVal) != 0) {
         CliPrintf("Unknown mode");
         return CLI_INVALID_ARGS;
     }
@@ -1245,7 +1245,7 @@ CephMirrorInstance(int argc, const char** argv)
     choice.push_back("all");
     choice.push_back("single");
 
-    if(CliMatchListHelper(argc, argv, 1, choice, &choiceIdx, &choiceVal) != CLI_SUCCESS) {
+    if(CliMatchListHelper(argc, argv, 1, choice, &choiceIdx, &choiceVal) != 0) {
         CliPrintf("Unknown choice");
         return CLI_INVALID_ARGS;
     }

@@ -231,7 +231,7 @@ InstanceHaConfigureMain(int argc, const char** argv)
     actions.push_back("add");
     actions.push_back("delete");
 
-    if(CliMatchListHelper(argc, argv, 1, actions, &actIdx, &action) != CLI_SUCCESS) {
+    if(CliMatchListHelper(argc, argv, 1, actions, &actIdx, &action) != 0) {
         CliPrint("action type <add|delete> is missing or invalid");
         return false;
     }

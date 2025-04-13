@@ -53,7 +53,7 @@ private:
         actions.push_back("delete");
         actions.push_back("update");
 
-        if(CliMatchListHelper(argc, argv, 1, actions, &actIdx, &action) != CLI_SUCCESS) {
+        if(CliMatchListHelper(argc, argv, 1, actions, &actIdx, &action) != 0) {
             CliPrint("action type <add|delete|update> is missing or invalid");
             return false;
         }
@@ -68,7 +68,7 @@ private:
             for (auto& b : cfg.backends)
                 backendList.push_back(b.name);
 
-            if(CliMatchListHelper(argc, argv, 2, backendList, &backendIdx, &backend.name) != CLI_SUCCESS) {
+            if(CliMatchListHelper(argc, argv, 2, backendList, &backendIdx, &backend.name) != 0) {
                 CliPrint("backend name is missing or not found");
                 return false;
             }
@@ -95,7 +95,7 @@ private:
                 drivers.push_back("cube");
                 drivers.push_back("purestorage");
 
-                if(CliMatchListHelper(argc, argv, 3, drivers, &drvIdx, &backend.driver) != CLI_SUCCESS) {
+                if(CliMatchListHelper(argc, argv, 3, drivers, &drvIdx, &backend.driver) != 0) {
                     CliPrint("invalid driver");
                     return false;
                 }
@@ -123,7 +123,7 @@ private:
                     pools.push_back("cinder-volumes");
                     pools.push_back("volume-backups");
                     CliPrint(LABEL_BACKEND_POOL);
-                    if(CliMatchListHelper(argc, argv, 7, pools, &pIdx, &backend.pool) != CLI_SUCCESS) {
+                    if(CliMatchListHelper(argc, argv, 7, pools, &pIdx, &backend.pool) != 0) {
                         CliPrint("invalid pool");
                         return false;
                     }

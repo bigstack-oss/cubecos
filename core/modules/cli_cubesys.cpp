@@ -110,7 +110,7 @@ getInterface(int argc, const char** argv,
     getIfList(bcfg, vcfg, &iflist);
 
     int selected;
-    if(CliMatchListHelper(argc, argv, 1, iflist, &selected, ifLabel) != CLI_SUCCESS) {
+    if(CliMatchListHelper(argc, argv, 1, iflist, &selected, ifLabel) != 0) {
         CliPrint("invalid interface");
         return false;
     }

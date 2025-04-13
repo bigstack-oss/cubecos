@@ -60,7 +60,7 @@ private:
         actions.push_back("delete");
         actions.push_back("update");
 
-        if(CliMatchListHelper(argc, argv, 1, actions, &actIdx, &action) != CLI_SUCCESS) {
+        if(CliMatchListHelper(argc, argv, 1, actions, &actIdx, &action) != 0) {
             CliPrint("action type <add|delete|update> is missing or invalid");
             return false;
         }
@@ -75,7 +75,7 @@ private:
             for (auto& r : cfg.resps)
                 respList.push_back(r.name);
 
-            if(CliMatchListHelper(argc, argv, 2, respList, &respIdx, &resp.name) != CLI_SUCCESS) {
+            if(CliMatchListHelper(argc, argv, 2, respList, &respIdx, &resp.name) != 0) {
                 CliPrint("notification name is missing or not found");
                 return false;
             }
@@ -103,7 +103,7 @@ private:
                 enabled.push_back("enabled");
                 enabled.push_back("disabled");
 
-                if(CliMatchListHelper(argc, argv, argIdx++, enabled, &selected, &enStr) != CLI_SUCCESS) {
+                if(CliMatchListHelper(argc, argv, argIdx++, enabled, &selected, &enStr) != 0) {
                     CliPrint("invalid selection");
                     return false;
                 }
@@ -117,7 +117,7 @@ private:
                 types.push_back("email");
                 types.push_back("exec");
 
-                if(CliMatchListHelper(argc, argv, argIdx++, types, &selected, &resp.type) != CLI_SUCCESS) {
+                if(CliMatchListHelper(argc, argv, argIdx++, types, &selected, &resp.type) != 0) {
                     CliPrint("invalid type");
                     return false;
                 }
@@ -125,7 +125,7 @@ private:
                 topics.push_back("events");
                 topics.push_back("instance-events");
 
-                if(CliMatchListHelper(argc, argv, argIdx++, topics, &selected, &resp.topic) != CLI_SUCCESS) {
+                if(CliMatchListHelper(argc, argv, argIdx++, topics, &selected, &resp.topic) != 0) {
                     CliPrint("invalid topic");
                     return false;
                 }
@@ -186,7 +186,7 @@ private:
                     exts.push_back("shell");
                     exts.push_back("bin");
 
-                    if(CliMatchListHelper(argc, argv, argIdx++, exts, &selected, &resp.execType, LABEL_RESP_EXEC_TYPE) != CLI_SUCCESS) {
+                    if(CliMatchListHelper(argc, argv, argIdx++, exts, &selected, &resp.execType, LABEL_RESP_EXEC_TYPE) != 0) {
                         CliPrint("invalid executable type [shell|bin]");
                         return false;
                     }

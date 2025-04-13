@@ -483,7 +483,7 @@ ClusterRepairMain(int argc, const char** argv)
         options.push_back(c.first);
     }
 
-    if (CliMatchListHelper(argc, argv, 1, options, &index, &comp, "Select a component:")) {
+    if (CliMatchListHelper(argc, argv, 1, options, &index, &comp, "Select a component:") != 0) {
         CliPrintf("invalid component %s", comp.c_str());
         return CLI_INVALID_ARGS;
     }
@@ -855,7 +855,7 @@ ClusterSetRolePasswordMain(int argc, const char** argv)
     options.push_back("compute");
     options.push_back("storage");
 
-    if (CliMatchListHelper(argc, argv, 1, options, &index, &role) != CLI_SUCCESS) {
+    if (CliMatchListHelper(argc, argv, 1, options, &index, &role) != 0) {
         CliPrintf("unknown role");
         return CLI_INVALID_ARGS;
     }
