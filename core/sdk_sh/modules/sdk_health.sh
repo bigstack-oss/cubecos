@@ -932,6 +932,7 @@ health_api_auto_repair()
             fi
         done
     elif [ "$ERR_CODE" == "2" ] ; then
+        $HEX_SDK api_idp_config $(shared_id)
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             $CURL -sf http://$node:8082 >/dev/null
             # 0: ok, 22: http error (page not found)
@@ -944,6 +945,7 @@ health_api_auto_repair()
 
 health_api_repair()
 {
+    $HEX_SDK api_idp_config $(shared_id)
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node cube-cos-api >/dev/null 2>&1 ; then
             remote_systemd_restart $node cube-cos-api
