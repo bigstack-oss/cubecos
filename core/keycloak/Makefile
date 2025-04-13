@@ -143,7 +143,7 @@ clean:: testclean
 	$(Q)rm -rf $(LOGIN_RPMBUILD_DIR)
 	$(Q)rm -rf $(LOGIN_GIT_DIR)
 
-BUILD += $(CHART) .push-img
+BUILD += $(CHART)
 BUILDCLEAN += $(CHART) $(LOGIN_GIT_DIR) version build_number keycloak_version $(LOGIN_RPMBUILD_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
