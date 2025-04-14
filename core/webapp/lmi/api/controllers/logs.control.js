@@ -203,7 +203,7 @@ exports.responseUpdate = async (req, res, next) => {
     const cfgEsc = shellEsc.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
     // escape for ssh leveraged by cube_cluster_run
     const sshEsc = cfgEsc.replace(/'/g, '\\\'').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-    const cli = `/usr/sbin/hex_cli -c notifications configure ${req.body.action} ${req.body.name} ${enabled} ${req.body.type} ${req.body.topic} ${sshEsc}`;
+    const cli = `/usr/sbin/hex_cli -c notifications configure_old ${req.body.action} ${req.body.name} ${enabled} ${req.body.type} ${req.body.topic} ${sshEsc}`;
     if (req.body.type == 'email') {
       sub = `${req.body.host} ${req.body.port} ${req.body.username} ${req.body.password} ${req.body.from} ${req.body.to}`;
     }

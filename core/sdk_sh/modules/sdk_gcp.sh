@@ -9032,6 +9032,6 @@ $gcloud compute instances create ${lo_vm_name}-auto-$(date +%Y-%m-%d-%H-%M) \
 EOF
 
     echo "Creating GCP auto scaling policy"
-    $HEX_CLI -c notifications configure add $name exec instance-events "\"key\" == '$event_id' AND \"vm_name\" == '$lo_vm_name' AND \"tenant\" == '$lo_proj_id'" shell local exec_gcp_auto_$name.shell
+    $HEX_CLI -c notifications configure_old add $name exec instance-events "\"key\" == '$event_id' AND \"vm_name\" == '$lo_vm_name' AND \"tenant\" == '$lo_proj_id'" shell local exec_gcp_auto_$name.shell
     rm -f /var/response/exec_gcp_auto_$name.shell
 }
