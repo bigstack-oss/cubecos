@@ -332,8 +332,8 @@ NotifySettingMain(int argc, const char** argv)
     int actionIndex;
     enum {
         ACTION_ADD = 0,
-        ACTION_DELETE,
-        ACTION_UPDATE
+        ACTION_UPDATE,
+        ACTION_DELETE
     };
 
     std::string action;
