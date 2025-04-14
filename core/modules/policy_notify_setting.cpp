@@ -270,10 +270,12 @@ NotifySettingPolicy::deleteReceiverEmail(std::string address)
         return isSuccessful;
     }
 
-    for (std::vector<NotifySettingReceiverEmail>::const_iterator it = emails->begin(); it != emails->end(); it++) {
+    for (std::vector<NotifySettingReceiverEmail>::iterator it = emails->begin(); it != emails->end();) {
         if (it->address == address) {
-            emails->erase(it);
+            it = emails->erase(it);
             isSuccessful = true;
+        } else {
+            it++;
         }
     }
 
@@ -290,10 +292,12 @@ NotifySettingPolicy::deleteReceiverSlack(std::string url)
         return isSuccessful;
     }
 
-    for (std::vector<NotifySettingReceiverSlack>::const_iterator it = slacks->begin(); it != slacks->end(); it++) {
+    for (std::vector<NotifySettingReceiverSlack>::iterator it = slacks->begin(); it != slacks->end();) {
         if (it->url == url) {
-            slacks->erase(it);
+            it = slacks->erase(it);
             isSuccessful = true;
+        } else {
+            it++;
         }
     }
 
