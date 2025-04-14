@@ -6,6 +6,8 @@ NotifySettingPolicy::NotifySettingPolicy():
     isInitialized(false),
     ymlRoot(nullptr)
 {
+    this->config.titlePrefix = "";
+
     NotifySettingSenderEmail se;
     se.host = "";
     se.port = "";
@@ -14,12 +16,11 @@ NotifySettingPolicy::NotifySettingPolicy():
     se.from = "";
     NotifySettingSender s;
     s.email = se;
+    this->config.sender = s;
 
     NotifySettingReceiver r;
     r.emails = std::vector<NotifySettingReceiverEmail>();
     r.slacks = std::vector<NotifySettingReceiverSlack>();
-
-    this->config.sender = s;
     this->config.receiver = r;
 }
 
@@ -60,6 +61,9 @@ NotifySettingPolicy::load(const char* policyFile)
         FiniYml(this->ymlRoot);
         return false;
     }
+
+    // title prefix
+    HexYmlParseString(this->config.titlePrefix, this->ymlRoot, "titlePrefix");
 
     // sender email
     HexYmlParseString(this->config.sender.email.host, this->ymlRoot, "sender.email.host");
@@ -150,6 +154,11 @@ NotifySettingPolicy::load(const char* policyFile)
 bool
 NotifySettingPolicy::save(const char* policyFile)
 {
+    // title prefix
+    if (UpdateYmlValue(this->ymlRoot, "titlePrefix", this->config.titlePrefix.c_str()) != 0) {
+        return false;
+    }
+
     // sender email
     if (UpdateYmlValue(this->ymlRoot, "sender.email.host", this->config.sender.email.host.c_str()) != 0) {
         return false;

@@ -58,6 +58,7 @@ struct NotifySettingReceiver {
  * Setting configurations.
  */
 struct NotifySettingConfig {
+    std::string titlePrefix;
     NotifySettingSender sender;
     NotifySettingReceiver receiver;
 };

@@ -22,6 +22,9 @@ Translate(const char *policy, FILE *settings)
     HexLogDebug("Processing Alert Notification Setting Config");
     fprintf(settings, "\n# Alert Notification Settings\n");
 
+    // title prefix
+    fprintf(settings, "kapacitor.alert.setting.titlePrefix = %s\n", config.titlePrefix);
+
     // sender email
     fprintf(settings, "kapacitor.alert.setting.sender.email.host = %s\n", config.sender.email.host);
     fprintf(settings, "kapacitor.alert.setting.sender.email.port = %s\n", config.sender.email.port);
