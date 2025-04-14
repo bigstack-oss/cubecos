@@ -52,6 +52,9 @@ bool
 NotifySettingPolicy::load(const char* policyFile)
 {
     this->isInitialized = false;
+    if (this->ymlRoot != nullptr) {
+        FiniYml(this->ymlRoot);
+    }
     this->ymlRoot = InitYml(policyFile);
     if (ReadYml(policyFile, this->ymlRoot) < 0) {
         FiniYml(this->ymlRoot);
@@ -65,25 +68,79 @@ NotifySettingPolicy::load(const char* policyFile)
     HexYmlParseString(this->config.sender.email.password, this->ymlRoot, "sender.email.password");
     HexYmlParseString(this->config.sender.email.from, this->ymlRoot, "sender.email.from");
 
+    if ((
+        this->config.sender.email.host != "" ||
+        this->config.sender.email.port != "" ||
+        this->config.sender.email.username != "" ||
+        this->config.sender.email.password != "" ||
+        this->config.sender.email.from != ""
+    ) && (
+        this->config.sender.email.host == "" ||
+        this->config.sender.email.port == "" ||
+        this->config.sender.email.from == ""
+    )) {
+        // we only allow username and password to be blank
+        // otherwise, reset the values
+        this->config.sender.email.host = "";
+        this->config.sender.email.port = "";
+        this->config.sender.email.username = "";
+        this->config.sender.email.password = "";
+        this->config.sender.email.from = "";
+    }
+
     // receiver email
+    std::set<std::string> receiverEmailAddressSet;
     std::size_t receiverEmailCount = SizeOfYmlSeq(this->ymlRoot, "receiver.emails");
-    for (std::size_t i = 1; i <= receiverEmailCount; i++) {
+    for (std::size_t i = 0; i < receiverEmailCount; i++) {
+        std::size_t ymlIndex = i + 1;
+
         NotifySettingReceiverEmail e;
-        HexYmlParseString(e.address, this->ymlRoot, "receiver.emails.%d.address", i);
-        HexYmlParseString(e.note, this->ymlRoot, "receiver.emails.%d.note", i);
+        HexYmlParseString(e.address, this->ymlRoot, "receiver.emails.%d.address", ymlIndex);
+        HexYmlParseString(e.note, this->ymlRoot, "receiver.emails.%d.note", ymlIndex);
+
+        if (e.address == "") {
+            // we do not allow receiver email with a blank address
+            // since this field is used as an id for the receiver email
+            continue;
+        }
+
+        if (receiverEmailAddressSet.count(e.address) > 0) {
+            // receiver email address should be unique
+            // since it is an id
+            continue;
+        }
+
         this->config.receiver.emails.push_back(e);
+        receiverEmailAddressSet.insert(e.address);
     }
 
     // receiver slack
+    std::set<std::string> receiverSlackUrlSet;
     std::size_t receiverSlackCount = SizeOfYmlSeq(this->ymlRoot, "receiver.slacks");
-    for (std::size_t i = 1; i <= receiverSlackCount; i++) {
+    for (std::size_t i = 0; i < receiverSlackCount; i++) {
+        std::size_t ymlIndex = i + 1;
+
         NotifySettingReceiverSlack s;
-        HexYmlParseString(s.url, this->ymlRoot, "receiver.slacks.%d.url");
-        HexYmlParseString(s.username, this->ymlRoot, "receiver.slacks.%d.username");
-        HexYmlParseString(s.description, this->ymlRoot, "receiver.slacks.%d.description");
-        HexYmlParseString(s.workspace, this->ymlRoot, "receiver.slacks.%d.workspace");
-        HexYmlParseString(s.channel, this->ymlRoot, "receiver.slacks.%d.channel");
+        HexYmlParseString(s.url, this->ymlRoot, "receiver.slacks.%d.url", ymlIndex);
+        HexYmlParseString(s.username, this->ymlRoot, "receiver.slacks.%d.username", ymlIndex);
+        HexYmlParseString(s.description, this->ymlRoot, "receiver.slacks.%d.description", ymlIndex);
+        HexYmlParseString(s.workspace, this->ymlRoot, "receiver.slacks.%d.workspace", ymlIndex);
+        HexYmlParseString(s.channel, this->ymlRoot, "receiver.slacks.%d.channel", ymlIndex);
+
+        if (s.url == "") {
+            // we do not allow receiver slack with a blank url
+            // since this field is used as an id for the receiver slack
+            continue;
+        }
+
+        if (receiverSlackUrlSet.count(s.url) > 0) {
+            // receiver slack url should be unique
+            // since it is an id
+            continue;
+        }
+
         this->config.receiver.slacks.push_back(s);
+        receiverSlackUrlSet.insert(s.url);
     }
 
     this->isInitialized = true;

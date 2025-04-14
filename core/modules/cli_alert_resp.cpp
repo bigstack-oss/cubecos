@@ -18,8 +18,8 @@
 
 #define LABEL_SENDER_EMAIL_HOST "Enter email sender host: "
 #define LABEL_SENDER_EMAIL_PORT "Enter email sender port: "
-#define LABEL_SENDER_EMAIL_USERNAME "Enter email sender username: "
-#define LABEL_SENDER_EMAIL_PASSWORD "Enter email sender password: "
+#define LABEL_SENDER_EMAIL_USERNAME "Enter email sender username [optional]: "
+#define LABEL_SENDER_EMAIL_PASSWORD "Enter email sender password [optional]: "
 #define LABEL_SENDER_EMAIL_FROM "Enter email sender from email address: "
 
 #define LABEL_RECEIVER_EMAIL_ADDRESS "Enter email receiver to email address: "
@@ -401,7 +401,8 @@ NotifySettingMain(int argc, const char** argv)
                 return CLI_INVALID_ARGS;
             }
 
-            if (!CliReadInputStr(argc, argv, 6, LABEL_SENDER_EMAIL_USERNAME, &username) || username.length() == 0) {
+            // we allow username to be blank here
+            if (!CliReadInputStr(argc, argv, 6, LABEL_SENDER_EMAIL_USERNAME, &username)) {
                 CliPrint("email sender username is missing");
                 return CLI_INVALID_ARGS;
             }

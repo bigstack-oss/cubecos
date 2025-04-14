@@ -4,6 +4,7 @@
 #define POLICY_NOTIFY_SETTING_H
 
 #include <vector>
+#include <set>
 
 #include <hex/cli_util.h>
 #include <hex/yml_util.h>
