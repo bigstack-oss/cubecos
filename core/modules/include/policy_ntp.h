@@ -76,6 +76,9 @@ private:
 
     bool parsePolicy(const char* policyFile)
     {
+        if (m_yml != nullptr) {
+            FiniYml(m_yml);
+        }
         m_yml = InitYml(policyFile);
 
         if (ReadYml(policyFile, m_yml) < 0) {
