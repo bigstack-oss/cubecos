@@ -36,7 +36,7 @@ is_rhel()
     grep -q "Red Hat Enterprise Linux" /etc/system-release
 }
 
-# source hex_tuning /etc/settings.txt doesn't work in a cron job, we use
+# source hex_tuning $SETTINGS_TXT doesn't work in a cron job, we use
 # T_cubesys_role=$(awk '/role:/{print $2}' /etc/policies/cubesys/cubesys1_0.yml | tr -d '\n')
 
 is_undef_node()

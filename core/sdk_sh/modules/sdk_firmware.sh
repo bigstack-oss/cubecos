@@ -13,7 +13,7 @@ firmware_list()
     if [ ! -f /boot/grub2/grub.cfg ] ; then
         Error "Firmware listing not found"
     fi
-    source hex_tuning /etc/settings.sys sys.vendor
+    source hex_tuning $SETTINGS_SYS sys.vendor
     /bin/grep $T_sys_vendor_name'_' /boot/grub2/grub.cfg 2>/dev/null | /usr/bin/head -2 | /usr/bin/awk '{print $2}' | /usr/bin/tr -d "\'"
 }
 

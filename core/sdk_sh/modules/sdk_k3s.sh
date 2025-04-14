@@ -8,7 +8,7 @@ fi
 
 k3s_take_leader()
 {
-    source hex_tuning /etc/settings.txt cubesys.control.addrs
+    source hex_tuning $SETTINGS_TXT cubesys.control.addrs
     if [ -z "$T_cubesys_control_addrs" ] ; then
         exit 0
     fi

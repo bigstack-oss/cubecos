@@ -53,9 +53,9 @@ snapshot_load_network_config()
 {
     local ignore=$(cd $POLICY_DIR && ls -l | grep -v "network\|total" | awk '{print $9}' | tr '\n' ',')
 
-    cp -f /etc/settings.txt /tmp/settings.txt.before
-    echo "snapshot.apply.action = load" >> /etc/settings.txt
-    echo "snapshot.apply.policy.ignore = ${ignore::-1}" >> /etc/settings.txt
+    cp -f $SETTINGS_TXT /tmp/settings.txt.before
+    echo "snapshot.apply.action = load" >> $SETTINGS_TXT
+    echo "snapshot.apply.policy.ignore = ${ignore::-1}" >> $SETTINGS_TXT
 
     if [ ! -f /etc/appliance/state/configured -o ! -f /etc/appliance/state/sla_accepted ] ; then
         touch /tmp/unconfigured
@@ -64,7 +64,7 @@ snapshot_load_network_config()
 
 snapshot_load_network_undo()
 {
-    mv /tmp/settings.txt.before /etc/settings.txt
+    mv /tmp/settings.txt.before $SETTINGS_TXT
 
     if [ -f /tmp/unconfigured ] ; then
         rm -f /tmp/unconfigured /etc/appliance/state/configured /etc/appliance/state/sla_accepted

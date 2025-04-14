@@ -71,15 +71,15 @@ banner_login()
 {
     local space=22
     _${FUNCNAME[0]}
-    local role=$(cat /etc/settings.txt | grep "cubesys.role" | cut -d'=' -f2 | xargs)
+    local role=$(cat $SETTINGS_TXT | grep "cubesys.role" | cut -d'=' -f2 | xargs)
     local srv_st="services ready"
     [ -e /run/cube_commit_done ] || srv_st="services n/a"
     printf "%${space}s | %s\n\n" "$role" "$srv_st"
     echo "----------"
-    if grep -q '[.]controller =' /etc/settings.txt ; then
-        printf "%${space}s" "$(grep '[.]controller =' /etc/settings.txt | cut -d'=' -f2 | xargs)"
-        if grep -q 'controller[.]ip' /etc/settings.txt ; then
-            printf " | %s\n\n" "$(grep 'controller[.]ip' /etc/settings.txt | cut -d'=' -f2 | xargs)"
+    if grep -q '[.]controller =' $SETTINGS_TXT ; then
+        printf "%${space}s" "$(grep '[.]controller =' $SETTINGS_TXT | cut -d'=' -f2 | xargs)"
+        if grep -q 'controller[.]ip' $SETTINGS_TXT ; then
+            printf " | %s\n\n" "$(grep 'controller[.]ip' $SETTINGS_TXT | cut -d'=' -f2 | xargs)"
         else
             printf " | %s\n\n" "$($HEX_SDK -f json health_vip_report | jq -r .description)"
         fi

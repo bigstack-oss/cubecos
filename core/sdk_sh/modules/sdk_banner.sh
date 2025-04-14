@@ -31,7 +31,7 @@ banner_login()
 
 banner_login_greeting()
 {
-    source hex_tuning /etc/settings.txt appliance.login.greeting
+    source hex_tuning $SETTINGS_TXT appliance.login.greeting
     if [ -n "$T_appliance_login_greeting" ] ; then
         echo $T_appliance_login_greeting
     fi

@@ -2711,7 +2711,7 @@ ceph_mirror_pair()
 
     local self_vip=$($HEX_SDK -f json health_vip_report | jq -r .description | cut -d"/" -f1)
     [ "$self_vip" != "non-HA" ] || self_vip=$(cat /etc/settings.cluster.json | jq -r ".[].ip.management")
-    local self_ctlr=$(grep cubesys.controller /etc/settings.txt | cut -d"=" -f2 | xargs 2>/dev/null)-$self_vip
+    local self_ctlr=$(grep cubesys.controller $SETTINGS_TXT | cut -d"=" -f2 | xargs 2>/dev/null)-$self_vip
     if [ -z "$(echo $self_ctlr | cut -d"-" -f1)" ] ; then
         self_ctlr=$(hostname)${self_ctlr}
     fi
@@ -2719,7 +2719,7 @@ ceph_mirror_pair()
     Quiet cubectl node exec -r control "systemctl enable ceph-rbd-mirror@${self_ctlr}-site.service >/dev/null 2>&1"
     Quiet cubectl node exec -r control "systemctl restart ceph-rbd-mirror@${self_ctlr}-site.service >/dev/null 2>&1"
 
-    local peer_ctlr=$($sshcmd root@$vip "grep cubesys.controller /etc/settings.txt | cut -d'=' -f2 | xargs" 2>/dev/null)-$vip
+    local peer_ctlr=$($sshcmd root@$vip "grep cubesys.controller $SETTINGS_TXT | cut -d'=' -f2 | xargs" 2>/dev/null)-$vip
     if [ -z "$(echo $peer_ctlr | cut -d"-" -f1)" ] ; then
         peer_ctlr=$($sshcmd root@$vip hostname 2>/dev/null)${peer_ctlr}
     fi

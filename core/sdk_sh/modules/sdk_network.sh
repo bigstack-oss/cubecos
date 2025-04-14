@@ -323,10 +323,10 @@ network_ipt_serviceint()
     iptables $table -n --list $chain >/dev/null 2>&1 || iptables -N $chain
     iptables -F $chain
 
-    source hex_tuning /etc/settings.txt cubesys.controller.ip
+    source hex_tuning $SETTINGS_TXT cubesys.controller.ip
     [ "x$T_cubesys_controller_ip" = "x" ] || iptables -A $chain -s $T_cubesys_controller_ip -j ACCEPT
 
-    source hex_tuning /etc/settings.txt cubesys.control.vip
+    source hex_tuning $SETTINGS_TXT cubesys.control.vip
     [ "x$T_cubesys_control_vip" = "x" ] || iptables -A $chain -s $T_cubesys_control_vip -j ACCEPT
 
     for A in $(cubectl node list -j | jq -r .[].ip.management | sort -u) ; do
