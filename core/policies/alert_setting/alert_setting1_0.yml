@@ -1,0 +1,16 @@
+---
+# alert_setting/alert_setting1_0.yml
+name: alert_setting
+version: 1.0
+
+titlePrefix:
+sender:
+  email:
+    host:
+    port:
+    username:
+    password:
+    from:
+receiver:
+  emails:
+  slacks:

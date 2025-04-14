@@ -71,6 +71,7 @@ public:
     ~NotifySettingPolicy();
     const char* policyName() const;
     const char* policyVersion() const;
+    const NotifySettingConfig getConfig() const;
     /**
      * Load the policy.
      */

@@ -105,4 +105,3 @@ Translate(const char *policy, FILE *settings)
 }
 
 TRANSLATE_MODULE(alert_resp/alert_resp1_0, 0, 0, Translate, 0);
-

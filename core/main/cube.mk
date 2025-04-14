@@ -60,7 +60,6 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_zookeeper.sh
 hex_shell_MODULES_POST += $(PROJ_SHMODDIR)/modules.post/sdk_99wrapper.sh
 
 ## Build/Install hex binaries
-
 hex_firsttime_MODULES += firsttime_welcome.o
 hex_firsttime_MODULES += firsttime_sla.o
 hex_firsttime_MODULES += firsttime_password.o
@@ -83,6 +82,8 @@ hex_translate_MODULES += translate_keystone.o
 hex_translate_MODULES += translate_ntp.o
 hex_translate_MODULES += translate_ext_storage.o
 hex_translate_MODULES += translate_alert_resp.o
+hex_translate_MODULES += policy_notify_setting.o
+hex_translate_MODULES += translate_alert_setting.o
 hex_translate_MODULES += translate_rancher.o
 
 PROGRAMS += hex_translate

@@ -42,6 +42,12 @@ NotifySettingPolicy::policyVersion() const
     return "1.0";
 }
 
+const NotifySettingConfig
+NotifySettingPolicy::getConfig() const
+{
+    return this->config;
+}
+
 bool
 NotifySettingPolicy::load(const char* policyFile)
 {
