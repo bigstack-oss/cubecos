@@ -23,28 +23,28 @@ Translate(const char *policy, FILE *settings)
     fprintf(settings, "\n# Alert Notification Settings\n");
 
     // title prefix
-    fprintf(settings, "kapacitor.alert.setting.titlePrefix = %s\n", config.titlePrefix);
+    fprintf(settings, "kapacitor.alert.setting.titlePrefix = %s\n", config.titlePrefix.c_str());
 
     // sender email
-    fprintf(settings, "kapacitor.alert.setting.sender.email.host = %s\n", config.sender.email.host);
-    fprintf(settings, "kapacitor.alert.setting.sender.email.port = %s\n", config.sender.email.port);
-    fprintf(settings, "kapacitor.alert.setting.sender.email.username = %s\n", config.sender.email.username);
-    fprintf(settings, "kapacitor.alert.setting.sender.email.password = %s\n", config.sender.email.password);
-    fprintf(settings, "kapacitor.alert.setting.sender.email.from = %s\n", config.sender.email.from);
+    fprintf(settings, "kapacitor.alert.setting.sender.email.host = %s\n", config.sender.email.host.c_str());
+    fprintf(settings, "kapacitor.alert.setting.sender.email.port = %s\n", config.sender.email.port.c_str());
+    fprintf(settings, "kapacitor.alert.setting.sender.email.username = %s\n", config.sender.email.username.c_str());
+    fprintf(settings, "kapacitor.alert.setting.sender.email.password = %s\n", config.sender.email.password.c_str());
+    fprintf(settings, "kapacitor.alert.setting.sender.email.from = %s\n", config.sender.email.from.c_str());
 
     // receiver email
     for (std::size_t i = 0; i < config.receiver.emails.size(); i++) {
-        fprintf(settings, "kapacitor.alert.setting.receiver.emails.%d.address = %s\n", i, config.receiver.emails[i].address);
-        fprintf(settings, "kapacitor.alert.setting.receiver.emails.%d.note = %s\n", i, config.receiver.emails[i].note);
+        fprintf(settings, "kapacitor.alert.setting.receiver.emails.%zu.address = %s\n", i, config.receiver.emails[i].address.c_str());
+        fprintf(settings, "kapacitor.alert.setting.receiver.emails.%zu.note = %s\n", i, config.receiver.emails[i].note.c_str());
     }
 
     // receiver slack
     for (std::size_t i = 0; i < config.receiver.slacks.size(); i++) {
-        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%d.url = %s\n", i, config.receiver.slacks[i].url);
-        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%d.username = %s\n", i, config.receiver.slacks[i].username);
-        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%d.description = %s\n", i, config.receiver.slacks[i].description);
-        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%d.workspace = %s\n", i, config.receiver.slacks[i].workspace);
-        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%d.channel = %s\n", i, config.receiver.slacks[i].channel);
+        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%zu.url = %s\n", i, config.receiver.slacks[i].url.c_str());
+        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%zu.username = %s\n", i, config.receiver.slacks[i].username.c_str());
+        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%zu.description = %s\n", i, config.receiver.slacks[i].description.c_str());
+        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%zu.workspace = %s\n", i, config.receiver.slacks[i].workspace.c_str());
+        fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%zu.channel = %s\n", i, config.receiver.slacks[i].channel.c_str());
     }
 
     return true;
