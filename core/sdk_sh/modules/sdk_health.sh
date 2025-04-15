@@ -547,7 +547,7 @@ health_rabbitmq_check()
         ERR_LOG="$HEX_CFG status_rabbitmq"
     fi
 
-    $HEX_SDK rabbitmq_unhealthy_queue_clear
+    Quiet -n $HEX_SDK rabbitmq_unhealthy_queue_clear
 
     _health_fail_log
 }
@@ -899,7 +899,7 @@ health_nginx_repair()
 
 health_api_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_api_check()
@@ -1068,6 +1068,8 @@ health_keycloak_check()
 {
     if ! cubectl config check keycloak 2>/dev/null ; then
         ERR_CODE=1
+        ERR_MSG+="`cubectl config status keycloak`\n"
+        ERR_LOG+="k3s kubectl describe node $HOSTNAME"
     fi
 
     _health_fail_log
@@ -2124,7 +2126,7 @@ _health_designate_auto_repair()
     done
 }
 
-_health_designate_repair()
+health_designate_repair()
 {
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
     Quiet -n remote_run $master /usr/local/bin/cubectl node rsync -r control /etc/designate/rndc.key

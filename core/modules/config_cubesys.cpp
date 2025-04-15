@@ -391,9 +391,7 @@ SdkRunMain(int argc, char* argv[])
 
     args.push_back(NULL);
 
-    HexSpawnV(0, (char *const *)&args[0]);
-
-    return EXIT_SUCCESS;
+    return HexExitStatus(HexSpawnV(0, (char *const *)&args[0]));
 }
 
 static void

@@ -89,13 +89,13 @@ if [ -e /etc/appliance/state/configured ] ; then
         echo -n "Please bootstrap Cube manually" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
     else
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
-            if [ $(timeout 60 hex_sdk health_bootstrap_report | grep ready | wc -l) -lt $(($CLUSTER_SIZE - 1)) ] ; then
+            if [ $(timeout 60 hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -lt $(($CLUSTER_SIZE - 1)) ] ; then
                 echo "YES" | hex_cli -c cluster stop
             fi
             BootstrapAndClusterstart
             RollingEvacuateAndReboot
         elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" -o $CLUSTER_SIZE -eq 0 ] ; then
-            if [ $(timeout 60 hex_sdk health_bootstrap_report | grep ready | wc -l) -lt $(($CLUSTER_SIZE - 1)) ] ; then
+            if [ $(timeout 60 hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -lt $(($CLUSTER_SIZE - 1)) ] ; then
                 echo "YES" | hex_cli -c cluster stop
             fi
             (

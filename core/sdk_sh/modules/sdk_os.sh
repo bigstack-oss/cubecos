@@ -767,10 +767,10 @@ os_image_import_with_attrs()
     local dir=$2
     local file=$3
     local name=$4
-    local domain=$5
-    local tenant=$6
-    local visibility=$7
-    local pool=$8
+    local domain=${5:-default}
+    local tenant=${6:-admin}
+    local pool=${7:-glance-images}
+    local visibility=${8:-public}
 
     local flags="--project-domain $domain --project $tenant --$visibility"
 
@@ -885,7 +885,7 @@ os_extpack_image_import()
                 if [ -n "$olds" ] ; then
                     $OPENSTACK image delete $olds 2>/dev/null
                 fi
-                os_image_import_with_attrs default $dir/${ext_folder} $img ${img%.*} default admin public
+                os_image_import_with_attrs default $dir/${ext_folder} $img ${img%.*}
                 ;;
             appfw-)
                 local appfw_dir=/opt/appfw/images/

@@ -13,6 +13,7 @@ CMP_LICENSE_DAT=$LICENSE_DIR/license-cmp.dat
 CMP_LICENSE_SIG=$LICENSE_DIR/license-cmp.sig
 
 # license error codes
+LICENSE_BADSOURCE=2
 LICENSE_VALID=1
 LICENSE_BADSYS=255
 LICENSE_BADSIG=254
@@ -264,6 +265,7 @@ license_cluster_import()
 {
     local dir=$1
     local name=$2
+    local ret=$LICENSE_VALID
 
     if [ -f $dir/$name.license ] ; then
         unzip -o -q $dir/$name.license -d /var/support
@@ -285,10 +287,12 @@ license_cluster_import()
             if [ "$node" == "$(hostname)" ] ; then
                 mkdir -p $LICENSE_DIR
                 $HEX_CFG license_check $app /var/support/$name >/dev/null
-                if [ $? -eq $LICENSE_VALID ] ; then
+                ret=$?
+                if [ $ret -eq $LICENSE_VALID ] ; then
                     cp -f /var/support/$name.dat $LICENSE_DIR/license$suffix.dat 2>/dev/null
                     cp -f /var/support/$name.sig $LICENSE_DIR/license$suffix.sig 2>/dev/null
                     echo "Imported $product license files for $node"
+                    ret=0
                 else
                     echo "Not a valid $product license for $node"
                 fi
@@ -297,10 +301,12 @@ license_cluster_import()
                 scp /var/support/$name.dat root@$node:/var/support/$name.dat 2>/dev/null
                 scp /var/support/$name.sig root@$node:/var/support/$name.sig 2>/dev/null
                 host_remote_run $node $HEX_CFG license_check $app /var/support/$name >/dev/null
-                if [ $? -eq $LICENSE_VALID ] ; then
+                ret=$?
+                if [ $ret -eq $LICENSE_VALID ] ; then
                     scp /var/support/$name.dat root@$node:$LICENSE_DIR/license$suffix.dat 2>/dev/null
                     scp /var/support/$name.sig root@$node:$LICENSE_DIR/license$suffix.sig 2>/dev/null
                     echo "Imported $product license files for $node"
+                    ret=0
                 else
                     echo "Not a valid $product license for $node"
                 fi
@@ -309,7 +315,9 @@ license_cluster_import()
         rm -f /var/support/$name.dat /var/support/$name.sig 2>/dev/null
     else
         echo "license files .license is missing"
+        ret=$LICENSE_BADSOURCE
     fi
+    return $ret
 }
 
 license_cluster_serial_get()
