@@ -180,6 +180,14 @@ NotifySettingPolicy::save(const char* policyFile)
     if (DeleteYmlChildren(this->ymlRoot, "receiver.emails") != 0) {
         return false;
     }
+    if (this->config.receiver.emails.size() == 0) {
+        // the yml parser needs to set at least one blank child
+        // we would create a blank child if we do not have any
+        NotifySettingReceiverEmail blankReceiverEmail;
+        blankReceiverEmail.address = "";
+        blankReceiverEmail.note = "";
+        this->config.receiver.emails.push_back(blankReceiverEmail);
+    }
     for (std::size_t i = 0; i < this->config.receiver.emails.size(); i++) {
         // yml index starts from 1
         std::string ymlIndex = std::to_string(i + 1);
@@ -198,6 +206,17 @@ NotifySettingPolicy::save(const char* policyFile)
     // receiver slack
     if (DeleteYmlChildren(this->ymlRoot, "receiver.slacks") != 0) {
         return false;
+    }
+    if (this->config.receiver.slacks.size() == 0) {
+        // the yml parser needs to set at least one blank child
+        // we would create a blank child if we do not have any
+        NotifySettingReceiverSlack blankReceiverSlack;
+        blankReceiverSlack.url = "";
+        blankReceiverSlack.username = "";
+        blankReceiverSlack.description = "";
+        blankReceiverSlack.workspace = "";
+        blankReceiverSlack.channel = "";
+        this->config.receiver.slacks.push_back(blankReceiverSlack);
     }
     for (std::size_t i = 0; i < this->config.receiver.slacks.size(); i++) {
         // yml index starts from 1
