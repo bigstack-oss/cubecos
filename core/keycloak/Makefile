@@ -38,7 +38,7 @@ version: $(LOGIN_GIT_DIR)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(LOGIN_GIT_DIR) && \
-		nvm use $(UI_NODE_VERSION) && \
+		nvm use $(UI_NODE_VERSION) $(QEND) && \
 		node -p "require('./packages/cube-frontend-keycloak-login/package.json').version" >> ../version
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
@@ -77,7 +77,7 @@ $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(call RUN_CMD_SILENT, \
-		nvm use $(UI_NODE_VERSION) && \
+		nvm use $(UI_NODE_VERSION) $(QEND) && \
 		rpmbuild -bb --nodeps --define "_topdir $(LOGIN_RPMBUILD_DIR)" --define "version $(LOGIN_VERSION)" --define "build_number $(LOGIN_BUILD_NUMBER)" --define "keycloak_version $(KEYCLOAK_VERSION)" $(LOGIN_SPEC_FILE), \
 		"  BUILD   cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm")
 	$(Q)# disable nvm

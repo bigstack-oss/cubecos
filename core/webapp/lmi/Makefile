@@ -12,7 +12,7 @@ $(SRC_LKDIR): $(APP_DEP)
 		rm -rf $(SRC_LKDIR) && \
 		cp -rf $(SRCDIR) $(SRC_LKDIR) && \
 		cd $(SRC_LKDIR) && \
-		nvm use $(LMI_NODE_VERSION) && \
+		nvm use $(LMI_NODE_VERSION) $(QEND) && \
 		npm install && \
 		npm run build, \
 		"  GEN     $@")
@@ -25,7 +25,7 @@ $(SRCDIR)/node_modules:
 	$(call RUN_CMD_TIMED, \
 		chown root:root $(SRCDIR) && \
 		cd $(SRCDIR) && \
-		nvm use $(LMI_NODE_VERSION) && \
+		nvm use $(LMI_NODE_VERSION) $(QEND) && \
 		npm install, \
 		"  GEN     node_modules")
 	$(Q)# disable nvm
@@ -35,7 +35,7 @@ dev-run: $(SRCDIR)/node_modules
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	cd $(SRCDIR) && \
-		nvm use $(LMI_NODE_VERSION) && \
+		nvm use $(LMI_NODE_VERSION) $(QEND) && \
 		npm run build && \
 		npm run start
 	$(Q)# disable nvm
@@ -44,7 +44,7 @@ dev-run: $(SRCDIR)/node_modules
 dev-deploy: $(SRC_LKDIR)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
-	$(call RUN_CMD_TIMED, cd $(SRC_LKDIR) && nvm use $(LMI_NODE_VERSION) && npm run build,"  GEN     .next")
+	$(call RUN_CMD_TIMED, cd $(SRC_LKDIR) && nvm use $(LMI_NODE_VERSION) $(QEND) && npm run build,"  GEN     .next")
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 	$(call RUN_CMD_TIMED, cd $(SRC_LKDIR) && tar -cf - .next api config-server server.js | pigz -9 > lmi.tgz,"  GEN     lmi.tgz")
@@ -57,7 +57,7 @@ dev-deploy: $(SRC_LKDIR)
 dev-redeploy: $(SRC_LKDIR)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
-	$(call RUN_CMD_TIMED, cd $(SRC_LKDIR) && nvm use $(LMI_NODE_VERSION) && npm run build,"  GEN     .next")
+	$(call RUN_CMD_TIMED, cd $(SRC_LKDIR) && nvm use $(LMI_NODE_VERSION) $(QEND) && npm run build,"  GEN     .next")
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 	$(call RUN_CMD_TIMED, cd $(SRC_LKDIR) && tar -cf - .next api config-server server.js node_modules | pigz -9 > lmi_full.tgz,"  GEN     lmi_full.tgz")
