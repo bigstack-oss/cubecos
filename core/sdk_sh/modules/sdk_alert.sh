@@ -164,10 +164,92 @@ alert_cluster_unsync_tenant()
     cubectl node exec -r control -p $HEX_SDK alert_unsync_tenant
 }
 
-
 alert_extra_update()
 {
     local msgPrefix=$1
     cubectl node exec -r control -p "echo \"msgPrefix: $msgPrefix\" > $ALERT_EXTRA" >/dev/null
     cubectl node exec -r control -p kapacitor define alert_events -tick /etc/kapacitor/tasks/alert_events.tick >/dev/null
+}
+
+alert_get_setting()
+{
+    # load the tunings into the env
+    # title prefix
+    source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.titlePrefix
+    # sender email
+    source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.host
+    source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.port
+    source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.username
+    source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.password
+    source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.from
+    # receiver email
+    local receiver_email_count_minus_one=$(($(grep -E "kapacitor.alert.setting.receiver.emails.[0-9]+.address" $SETTINGS_TXT | wc -l) - 1))
+    for i in $(seq 0 "$receiver_email_count_minus_one") ; do
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.emails.$i.address"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.emails.$i.note"
+    done
+    # receiver slack
+    local receiver_slack_count_minus_one=$(($(grep -E "kapacitor.alert.setting.receiver.slacks.[0-9]+.url" $SETTINGS_TXT | wc -l) - 1))
+    for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.slacks.$i.url"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.slacks.$i.username"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.slacks.$i.description"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.slacks.$i.workspace"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.slacks.$i.channel"
+    done
+
+    # format the JSON string
+    # title prefix
+    local title_prefix=$T_kapacitor_alert_setting_titlePrefix
+    # sender email
+    local se=$(jq -c -n \
+        --arg host "$T_kapacitor_alert_setting_sender_email_host" \
+        --arg port "$T_kapacitor_alert_setting_sender_email_port" \
+        --arg username "$T_kapacitor_alert_setting_sender_email_username" \
+        --arg password "$T_kapacitor_alert_setting_sender_email_password" \
+        --arg from "$T_kapacitor_alert_setting_sender_email_from" \
+        '{host: $host, port: $port, username: $username, password: $password, from: $from}')
+    # receiver email
+    local re="["
+    for i in $(seq 0 "$receiver_email_count_minus_one") ; do
+        if [[ "$i" -gt 0 ]] ; then
+            re+=","
+        fi
+
+        local addressKey="T_kapacitor_alert_setting_receiver_emails_${i}_address"
+        local noteKey="T_kapacitor_alert_setting_receiver_emails_${i}_note"
+        re+=$(jq -c -n \
+            --arg address "${!addressKey}" \
+            --arg note "${!noteKey}" \
+            '{address: $address, note: $note}')
+    done
+    re+="]"
+    # receiver slack
+    local rs="["
+    for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
+        if [[ "$i" -gt 0 ]] ; then
+            rs+=","
+        fi
+
+        local urlKey="T_kapacitor_alert_setting_receiver_slacks_${i}_url"
+        local usernameKey="T_kapacitor_alert_setting_receiver_slacks_${i}_username"
+        local descriptionKey="T_kapacitor_alert_setting_receiver_slacks_${i}_description"
+        local workspaceKey="T_kapacitor_alert_setting_receiver_slacks_${i}_workspace"
+        local channelKey="T_kapacitor_alert_setting_receiver_slacks_${i}_channel"
+        rs+=$(jq -c -n \
+            --arg url "${!urlKey}" \
+            --arg username "${!usernameKey}" \
+            --arg description "${!descriptionKey}" \
+            --arg workspace "${!workspaceKey}" \
+            --arg channel "${!channelKey}" \
+            '{url: $url, username: $username, description: $description, workspace: $workspace, channel: $channel}')
+    done
+    rs+="]"
+    # output
+    echo $(jq -c -n \
+        --arg titlePrefix "$title_prefix" \
+        --argjson senderEmail "$se" \
+        --argjson receiverEmail "$re" \
+        --argjson receiverSlack "$rs" \
+        '{titlePrefix: $titlePrefix, sender: {email: $senderEmail}, receiver: {emails: $receiverEmail, slacks: $receiverSlack}}')
 }
