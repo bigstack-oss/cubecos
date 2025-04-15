@@ -104,6 +104,10 @@ LOCKED_DNF += $(PYTHON3-NUMPY-F2PY)
 $(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-openstackclient python3-lasso sos emacs-nox expect $(PYTHON3_SAML_REQUIRE) perf arp-scan")
 
 rootfs_install::
+	$(Q)wget -qO /usr/local/bin/yq --no-check-certificate "https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64"
+	$(Q)chmod +x /usr/local/bin/yq
+
+rootfs_install::
 	$(Q)chroot $(ROOTDIR) python3 -m pip install -U pip
 	$(Q)chroot $(ROOTDIR) dnf install -y liburing
 

@@ -216,11 +216,11 @@ alert_get_setting()
             re+=","
         fi
 
-        local addressKey="T_kapacitor_alert_setting_receiver_emails_${i}_address"
-        local noteKey="T_kapacitor_alert_setting_receiver_emails_${i}_note"
+        local address_key="T_kapacitor_alert_setting_receiver_emails_${i}_address"
+        local note_key="T_kapacitor_alert_setting_receiver_emails_${i}_note"
         re+=$(jq -c -n \
-            --arg address "${!addressKey}" \
-            --arg note "${!noteKey}" \
+            --arg address "${!address_key}" \
+            --arg note "${!note_key}" \
             '{address: $address, note: $note}')
     done
     re+="]"
@@ -231,25 +231,284 @@ alert_get_setting()
             rs+=","
         fi
 
-        local urlKey="T_kapacitor_alert_setting_receiver_slacks_${i}_url"
-        local usernameKey="T_kapacitor_alert_setting_receiver_slacks_${i}_username"
-        local descriptionKey="T_kapacitor_alert_setting_receiver_slacks_${i}_description"
-        local workspaceKey="T_kapacitor_alert_setting_receiver_slacks_${i}_workspace"
-        local channelKey="T_kapacitor_alert_setting_receiver_slacks_${i}_channel"
+        local url_key="T_kapacitor_alert_setting_receiver_slacks_${i}_url"
+        local username_key="T_kapacitor_alert_setting_receiver_slacks_${i}_username"
+        local description_key="T_kapacitor_alert_setting_receiver_slacks_${i}_description"
+        local workspace_key="T_kapacitor_alert_setting_receiver_slacks_${i}_workspace"
+        local channel_key="T_kapacitor_alert_setting_receiver_slacks_${i}_channel"
         rs+=$(jq -c -n \
-            --arg url "${!urlKey}" \
-            --arg username "${!usernameKey}" \
-            --arg description "${!descriptionKey}" \
-            --arg workspace "${!workspaceKey}" \
-            --arg channel "${!channelKey}" \
+            --arg url "${!url_key}" \
+            --arg username "${!username_key}" \
+            --arg description "${!description_key}" \
+            --arg workspace "${!workspace_key}" \
+            --arg channel "${!channel_key}" \
             '{url: $url, username: $username, description: $description, workspace: $workspace, channel: $channel}')
     done
     rs+="]"
+
     # output
-    echo $(jq -c -n \
+    jq -c -n \
         --arg titlePrefix "$title_prefix" \
         --argjson senderEmail "$se" \
         --argjson receiverEmail "$re" \
         --argjson receiverSlack "$rs" \
-        '{titlePrefix: $titlePrefix, sender: {email: $senderEmail}, receiver: {emails: $receiverEmail, slacks: $receiverSlack}}')
+        '{titlePrefix: $titlePrefix, sender: {email: $senderEmail}, receiver: {emails: $receiverEmail, slacks: $receiverSlack}}'
+}
+
+alert_set_setting_title_prefix()
+{
+    # input format: {
+    #   titlePrefix: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local title_prefix=$(echo $input | jq -r '.titlePrefix')
+
+    # prepare the environment
+    local input_dir="/tmp/hex_policy_input"
+    if [ -e $input_dir ] ; then
+        rm -rf $input_dir
+    fi
+    mkdir -p $input_dir
+
+    # prepare the policy file
+    mkdir -p "$input_dir/alert_setting"
+    cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
+    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    yq_input_title_prefix="$title_prefix" yq -i '.titlePrefix = strenv(yq_input_title_prefix)' $policy_file
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    exit $?
+}
+
+alert_set_setting_sender_email()
+{
+    # input format: {
+    #   host: "",
+    #   port: "",
+    #   username: "",
+    #   password: "",
+    #   from: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local host=$(echo $input | jq -r '.host')
+    local port=$(echo $input | jq -r '.port')
+    local username=$(echo $input | jq -r '.username')
+    local password=$(echo $input | jq -r '.password')
+    local from=$(echo $input | jq -r '.from')
+
+    # prepare the environment
+    local input_dir="/tmp/hex_policy_input"
+    if [ -e $input_dir ] ; then
+        rm -rf $input_dir
+    fi
+    mkdir -p $input_dir
+
+    # prepare the policy file
+    mkdir -p "$input_dir/alert_setting"
+    cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
+    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    yq_input_host="$host" yq -i '.sender.email.host = strenv(yq_input_host)' $policy_file
+    yq_input_port="$port" yq -i '.sender.email.port = strenv(yq_input_port)' $policy_file
+    yq_input_username="$username" yq -i '.sender.email.username = strenv(yq_input_username)' $policy_file
+    yq_input_password="$password" yq -i '.sender.email.password = strenv(yq_input_password)' $policy_file
+    yq_input_from="$from" yq -i '.sender.email.from = strenv(yq_input_from)' $policy_file
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    exit $?
+}
+
+alert_put_setting_receiver_email()
+{
+    # input format: {
+    #   address: "",
+    #   note: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local address=$(echo $input | jq -r '.address')
+    local note=$(echo $input | jq -r '.note')
+
+    # prepare the environment
+    local input_dir="/tmp/hex_policy_input"
+    if [ -e $input_dir ] ; then
+        rm -rf $input_dir
+    fi
+    mkdir -p $input_dir
+
+    # prepare the policy file
+    mkdir -p "$input_dir/alert_setting"
+    cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
+    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    local receiver_email_count_minus_one=$(($(yq '.receiver.emails | length' $policy_file) - 1))
+    local is_update="false"
+    # update
+    for i in $(seq 0 "$receiver_email_count_minus_one") ; do
+        if [[ "$address" == "$(yq_input_index="$i" yq '.receiver.emails[strenv(yq_input_index)].address' $policy_file)" ]] ; then
+            yq_input_index="$i" yq_input_address="$address" yq -i '.receiver.emails[strenv(yq_input_index)].address = strenv(yq_input_address)' $policy_file
+            yq_input_index="$i" yq_input_note="$note" yq -i '.receiver.emails[strenv(yq_input_index)].note = strenv(yq_input_note)' $policy_file
+            is_update="true"
+        fi
+    done
+    # add
+    if [[ "$is_update" == "false" ]] ; then
+        yq_input_index="$(($receiver_email_count_minus_one + 1))" yq_input_address="$address" yq -i '.receiver.emails[strenv(yq_input_index)].address = strenv(yq_input_address)' $policy_file
+        yq_input_index="$(($receiver_email_count_minus_one + 1))" yq_input_note="$note" yq -i '.receiver.emails[strenv(yq_input_index)].note = strenv(yq_input_note)' $policy_file
+    fi
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    exit $?
+}
+
+alert_put_setting_receiver_slack()
+{
+    # input format: {
+    #   url: "",
+    #   username: "",
+    #   description: "",
+    #   workspace: "",
+    #   channel: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local url=$(echo $input | jq -r '.url')
+    local username=$(echo $input | jq -r '.username')
+    local description=$(echo $input | jq -r '.description')
+    local workspace=$(echo $input | jq -r '.workspace')
+    local channel=$(echo $input | jq -r '.channel')
+
+    # prepare the environment
+    local input_dir="/tmp/hex_policy_input"
+    if [ -e $input_dir ] ; then
+        rm -rf $input_dir
+    fi
+    mkdir -p $input_dir
+
+    # prepare the policy file
+    mkdir -p "$input_dir/alert_setting"
+    cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
+    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    local receiver_slack_count_minus_one=$(($(yq '.receiver.slacks | length' $policy_file) - 1))
+    local is_update="false"
+    # update
+    for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
+        if [[ "$url" == "$(yq_input_index="$i" yq '.receiver.slacks[strenv(yq_input_index)].url' $policy_file)" ]] ; then
+            yq_input_index="$i" yq_input_url="$url" yq -i '.receiver.slacks[strenv(yq_input_index)].url = strenv(yq_input_url)' $policy_file
+            yq_input_index="$i" yq_input_username="$username" yq -i '.receiver.slacks[strenv(yq_input_index)].username = strenv(yq_input_username)' $policy_file
+            yq_input_index="$i" yq_input_description="$description" yq -i '.receiver.slacks[strenv(yq_input_index)].description = strenv(yq_input_description)' $policy_file
+            yq_input_index="$i" yq_input_workspace="$workspace" yq -i '.receiver.slacks[strenv(yq_input_index)].workspace = strenv(yq_input_workspace)' $policy_file
+            yq_input_index="$i" yq_input_channel="$channel" yq -i '.receiver.slacks[strenv(yq_input_index)].channel = strenv(yq_input_channel)' $policy_file
+            is_update="true"
+        fi
+    done
+    # add
+    if [[ "$is_update" == "false" ]] ; then
+        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_url="$url" yq -i '.receiver.slacks[strenv(yq_input_index)].url = strenv(yq_input_url)' $policy_file
+        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_username="$username" yq -i '.receiver.slacks[strenv(yq_input_index)].username = strenv(yq_input_username)' $policy_file
+        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_description="$description" yq -i '.receiver.slacks[strenv(yq_input_index)].description = strenv(yq_input_description)' $policy_file
+        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_workspace="$workspace" yq -i '.receiver.slacks[strenv(yq_input_index)].workspace = strenv(yq_input_workspace)' $policy_file
+        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_channel="$channel" yq -i '.receiver.slacks[strenv(yq_input_index)].channel = strenv(yq_input_channel)' $policy_file
+    fi
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    exit $?
+}
+
+alert_delete_setting_sender_email()
+{
+    # prepare the environment
+    local input_dir="/tmp/hex_policy_input"
+    if [ -e $input_dir ] ; then
+        rm -rf $input_dir
+    fi
+    mkdir -p $input_dir
+
+    # prepare the policy file
+    mkdir -p "$input_dir/alert_setting"
+    cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
+    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    yq -i '.sender.email.host = ""' $policy_file
+    yq -i '.sender.email.port = ""' $policy_file
+    yq -i '.sender.email.username = ""' $policy_file
+    yq -i '.sender.email.password = ""' $policy_file
+    yq -i '.sender.email.from = ""' $policy_file
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    exit $?
+}
+
+alert_delete_setting_receiver_email()
+{
+    # input format: {
+    #   address: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local address=$(echo $input | jq -r '.address')
+
+    # prepare the environment
+    local input_dir="/tmp/hex_policy_input"
+    if [ -e $input_dir ] ; then
+        rm -rf $input_dir
+    fi
+    mkdir -p $input_dir
+
+    # prepare the policy file
+    mkdir -p "$input_dir/alert_setting"
+    cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
+    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    local receiver_email_count_minus_one=$(($(yq '.receiver.emails | length' $policy_file) - 1))
+    for i in $(seq 0 "$receiver_email_count_minus_one") ; do
+        if [[ "$address" == "$(yq_input_index="$i" yq '.receiver.emails[strenv(yq_input_index)].address' $policy_file)" ]] ; then
+            yq_input_index="$i" yq -i 'del(.receiver.emails[strenv(yq_input_index)])' $policy_file
+        fi
+    done
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    exit $?
+}
+
+alert_delete_setting_receiver_slack()
+{
+    # input format: {
+    #   url: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local url=$(echo $input | jq -r '.url')
+
+    # prepare the environment
+    local input_dir="/tmp/hex_policy_input"
+    if [ -e $input_dir ] ; then
+        rm -rf $input_dir
+    fi
+    mkdir -p $input_dir
+
+    # prepare the policy file
+    mkdir -p "$input_dir/alert_setting"
+    cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
+    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    local receiver_slack_count_minus_one=$(($(yq '.receiver.slacks | length' $policy_file) - 1))
+    for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
+        if [[ "$url" == "$(yq_input_index="$i" yq '.receiver.slacks[strenv(yq_input_index)].url' $policy_file)" ]] ; then
+            yq_input_index="$i" yq -i 'del(.receiver.slacks[strenv(yq_input_index)])' $policy_file
+        fi
+    done
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    exit $?
 }
