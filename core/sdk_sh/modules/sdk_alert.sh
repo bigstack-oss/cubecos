@@ -210,14 +210,21 @@ alert_get_setting()
         --arg from "$T_kapacitor_alert_setting_sender_email_from" \
         '{host: $host, port: $port, username: $username, password: $password, from: $from}')
     # receiver email
+    local re_count=0
     local re="["
     for i in $(seq 0 "$receiver_email_count_minus_one") ; do
-        if [[ "$i" -gt 0 ]] ; then
+        local address_key="T_kapacitor_alert_setting_receiver_emails_${i}_address"
+        local note_key="T_kapacitor_alert_setting_receiver_emails_${i}_note"
+
+        if [[ "${!address_key}" == "" ]] ; then
+            continue
+        fi
+
+        if [[ "$re_count" -gt 0 ]] ; then
             re+=","
         fi
 
-        local address_key="T_kapacitor_alert_setting_receiver_emails_${i}_address"
-        local note_key="T_kapacitor_alert_setting_receiver_emails_${i}_note"
+        ((re_count++))
         re+=$(jq -c -n \
             --arg address "${!address_key}" \
             --arg note "${!note_key}" \
@@ -225,17 +232,24 @@ alert_get_setting()
     done
     re+="]"
     # receiver slack
+    local rs_count=0
     local rs="["
     for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
-        if [[ "$i" -gt 0 ]] ; then
-            rs+=","
-        fi
-
         local url_key="T_kapacitor_alert_setting_receiver_slacks_${i}_url"
         local username_key="T_kapacitor_alert_setting_receiver_slacks_${i}_username"
         local description_key="T_kapacitor_alert_setting_receiver_slacks_${i}_description"
         local workspace_key="T_kapacitor_alert_setting_receiver_slacks_${i}_workspace"
         local channel_key="T_kapacitor_alert_setting_receiver_slacks_${i}_channel"
+
+        if [[ "${!url_key}" == "" ]] ; then
+            continue
+        fi
+
+        if [[ "$rs_count" -gt 0 ]] ; then
+            rs+=","
+        fi
+
+        ((rs_count++))
         rs+=$(jq -c -n \
             --arg url "${!url_key}" \
             --arg username "${!username_key}" \
