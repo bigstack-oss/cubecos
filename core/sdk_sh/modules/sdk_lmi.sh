@@ -9,5 +9,5 @@ fi
 lmi_idp_config()
 {
     local shared_id=$1
-    Quiet -n terraform-cube.sh apply -auto-approve -target=module.keycloak_lmi -var cube_controller=$shared_id
+    Quiet -n /usr/local/bin/terraform-cube.sh apply -auto-approve -target=module.keycloak_lmi -var cube_controller=$shared_id
 }

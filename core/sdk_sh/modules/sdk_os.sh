@@ -1035,7 +1035,7 @@ os_keystone_idp_config()
     mv $fed_dir/https_${shared_id}_5443_v3_mellon_metadata.xml $fed_dir/v3.xml
     cat $fed_dir/v3.xml | xmllint --format - > /etc/keycloak/keystone_sp_metadata.xml
     cp -f /etc/httpd/conf.d/v3_mellon_keycloak_master.conf.def /etc/httpd/conf.d/v3_mellon_keycloak_master.conf
-    terraform-cube.sh apply -auto-approve -target=module.keycloak_keystone -var cube_controller=$shared_id >/dev/null
+    /usr/local/bin/terraform-cube.sh apply -auto-approve -target=module.keycloak_keystone -var cube_controller=$shared_id >/dev/null
 }
 
 os_endpoint_url_set()
