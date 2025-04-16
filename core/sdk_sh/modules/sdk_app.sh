@@ -134,7 +134,7 @@ app_framework_install()
     export PUB_NETWORK=${2:-public}
     export LOADBALANCER_IP=$3
     export PROJECT_PASSWORD=$(echo -n $PROJECT_NAME | openssl dgst -sha1 -hmac cube2022 | awk '{print $2}')
-    export RANCHER_TOKEN=$(/usr/local/bin/terraform-cube.sh state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
+    export RANCHER_TOKEN=$($TERRAFORM_CUBE state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
     export CUBE_CONTROLLER=$(kubectl get endpoints | grep '^cube-controller' | awk '{print $2}')
     local appfw_pth=/opt/appfw
 
@@ -188,7 +188,7 @@ app_project_create()
     export MGMT_NETWORK=${2:-public}
     export PUB_NETWORK=${3:-public}
     export PROJECT_PASSWORD=$(echo -n $PROJECT_NAME | openssl dgst -sha1 -hmac cube2022 | awk '{print $2}')
-    export RANCHER_TOKEN=$(/usr/local/bin/terraform-cube.sh state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
+    export RANCHER_TOKEN=$($TERRAFORM_CUBE state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
     local appfw_pth=/opt/appfw
 
     sudo $HEX_SDK os_create_project $PROJECT_NAME $MGMT_NETWORK $PUB_NETWORK
@@ -202,7 +202,7 @@ app_project_create()
 app_project_delete()
 {
     export PROJECT_NAME=$1
-    export RANCHER_TOKEN=$(/usr/local/bin/terraform-cube.sh state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
+    export RANCHER_TOKEN=$($TERRAFORM_CUBE state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
     local appfw_pth=/opt/appfw
 
     # FIXME: delete all clusters in the project

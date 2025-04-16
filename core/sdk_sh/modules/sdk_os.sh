@@ -1035,7 +1035,7 @@ os_keystone_idp_config()
     mv $fed_dir/https_${shared_id}_5443_v3_mellon_metadata.xml $fed_dir/v3.xml
     cat $fed_dir/v3.xml | xmllint --format - > /etc/keycloak/keystone_sp_metadata.xml
     cp -f /etc/httpd/conf.d/v3_mellon_keycloak_master.conf.def /etc/httpd/conf.d/v3_mellon_keycloak_master.conf
-    /usr/local/bin/terraform-cube.sh apply -auto-approve -target=module.keycloak_keystone -var cube_controller=$shared_id >/dev/null
+    $TERRAFORM_CUBE apply -auto-approve -target=module.keycloak_keystone -var cube_controller=$shared_id >/dev/null
 }
 
 os_endpoint_url_set()
@@ -2550,7 +2550,7 @@ os_create_project()
     export MGMT_NETWORK=${2:-public}
     export PUB_NETWORK=${3:-public}
     export PROJECT_PASSWORD=$(echo -n $PROJECT_NAME | openssl dgst -sha1 -hmac cube2022 | awk '{print $2}')
-    export RANCHER_TOKEN=$(/usr/local/bin/terraform-cube.sh state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
+    export RANCHER_TOKEN=$($TERRAFORM_CUBE state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
     local appfw_pth=/opt/appfw
 
     ansible-playbook $appfw_pth/ansible/openstack.yaml -e project=$PROJECT_NAME -e password=$PROJECT_PASSWORD -e mgmt_net=$MGMT_NETWORK -e pub_net=$PUB_NETWORK

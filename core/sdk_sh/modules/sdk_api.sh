@@ -9,5 +9,5 @@ fi
 api_idp_config()
 {
     local SHARED_ID=$1
-    /usr/local/bin/terraform-cube.sh apply -auto-approve -target=module.keycloak_api -var cube_controller=$SHARED_ID >/dev/null
+    $TERRAFORM_CUBE apply -auto-approve -target=module.keycloak_api -var cube_controller=$SHARED_ID >/dev/null
 }

@@ -46,6 +46,7 @@ BUILTIN_CACHEPOOL=cachepool
 BUILTIN_EPHEMERAL=ephemeral-vms
 
 ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
+TERRAFORM_CUBE="/usr/local/bin/terraform-cube.sh"
 CURL="timeout $SRVTO /usr/bin/curl"
 MYSQL="timeout $SRVTO /usr/bin/mysql"
 
