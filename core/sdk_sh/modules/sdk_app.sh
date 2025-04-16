@@ -100,7 +100,7 @@ EOF
 
     # Deploy app-framework core services
     tar -xzf /opt/appfw/appfw.tgz -C $tmpdir
-    (cd $tmpdir && kubeconfig=$kubeconfig ./deploy.sh install)
+    (cd $tmpdir && KUBECONFIG=$kubeconfig ./deploy.sh install)
 
     # FIXME: deploy ingress LoadBalancer service
     # kubectl --insecure-skip-tls-verify --kubeconfig $kubeconfig apply -f /opt/appfw/yaml/ingress-nginx.yaml
