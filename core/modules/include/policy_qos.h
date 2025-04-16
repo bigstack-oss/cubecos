@@ -232,7 +232,7 @@ private:
     // Method to read the role policy and populate the role member variables
     bool parsePolicy(const char* policyFile)
     {
-        if (m_yml != nullptr) {
+        if (m_yml) {
             FiniYml(m_yml);
         }
         m_yml = InitYml(policyFile);

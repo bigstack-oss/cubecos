@@ -4,7 +4,7 @@
 
 NotifySettingPolicy::NotifySettingPolicy():
     isInitialized(false),
-    ymlRoot(nullptr)
+    ymlRoot(NULL)
 {
     this->config.titlePrefix = "";
 
@@ -26,7 +26,7 @@ NotifySettingPolicy::NotifySettingPolicy():
 
 NotifySettingPolicy::~NotifySettingPolicy()
 {
-    if (this->ymlRoot != nullptr) {
+    if (this->ymlRoot) {
         FiniYml(this->ymlRoot);
     }
 }
@@ -53,7 +53,7 @@ bool
 NotifySettingPolicy::load(const char* policyFile)
 {
     this->isInitialized = false;
-    if (this->ymlRoot != nullptr) {
+    if (this->ymlRoot) {
         FiniYml(this->ymlRoot);
     }
     this->ymlRoot = InitYml(policyFile);
