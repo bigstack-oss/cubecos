@@ -20,6 +20,7 @@ Translate(const char *policy, FILE *settings)
 
     if (ReadYml(policy, yml) < 0) {
         FiniYml(yml);
+        yml = NULL;
         HexLogError("Failed to parse policy file %s", policy);
         return false;
     }
@@ -30,6 +31,7 @@ Translate(const char *policy, FILE *settings)
     fprintf(settings, "rancher.enabled = %s\n", enabled ? "true" : "false");
 
     FiniYml(yml);
+    yml = NULL;
 
     return status;
 

@@ -28,6 +28,7 @@ NotifySettingPolicy::~NotifySettingPolicy()
 {
     if (this->ymlRoot) {
         FiniYml(this->ymlRoot);
+        this->ymlRoot = NULL;
     }
 }
 
@@ -55,10 +56,12 @@ NotifySettingPolicy::load(const char* policyFile)
     this->isInitialized = false;
     if (this->ymlRoot) {
         FiniYml(this->ymlRoot);
+        this->ymlRoot = NULL;
     }
     this->ymlRoot = InitYml(policyFile);
     if (ReadYml(policyFile, this->ymlRoot) < 0) {
         FiniYml(this->ymlRoot);
+        this->ymlRoot = NULL;
         return false;
     }
 

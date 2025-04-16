@@ -20,8 +20,10 @@ public:
 
     ~NtpPolicy()
     {
-        if (m_yml)
+        if (m_yml) {
             FiniYml(m_yml);
+            m_yml = NULL;
+        }
     }
 
     const char* policyName() const { return "ntp"; }
@@ -78,11 +80,13 @@ private:
     {
         if (m_yml) {
             FiniYml(m_yml);
+            m_yml = NULL;
         }
         m_yml = InitYml(policyFile);
 
         if (ReadYml(policyFile, m_yml) < 0) {
             FiniYml(m_yml);
+            m_yml = NULL;
             return false;
         }
 

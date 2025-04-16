@@ -44,6 +44,7 @@ Translate(const char *policy, FILE *settings)
 
     if (ReadYml(policy, yml) < 0) {
         FiniYml(yml);
+        yml = NULL;
         HexLogError("Failed to parse policy file %s", policy);
         return false;
     }
@@ -69,6 +70,7 @@ Translate(const char *policy, FILE *settings)
     ProcessExtStorage(cfg, settings);
 
     FiniYml(yml);
+    yml = NULL;
 
     return status;
 }

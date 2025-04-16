@@ -18,6 +18,7 @@ Translate(const char *policy, FILE *settings)
 
     if (ReadYml(policy, yml) < 0) {
         FiniYml(yml);
+        yml = NULL;
         HexLogError("Failed to parse policy file %s", policy);
         return false;
     }
@@ -32,6 +33,7 @@ Translate(const char *policy, FILE *settings)
     fprintf(settings, "ntp.server = %s\n", cfg.server.c_str());
 
     FiniYml(yml);
+    yml = NULL;
 
     return status;
 }
