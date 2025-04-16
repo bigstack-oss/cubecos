@@ -1,0 +1,10 @@
+---
+persistence:
+  enabled: true
+service:
+  type: NodePort
+  nodePort: 30001
+  externalTrafficPolicy: Cluster
+env:
+  open:
+    DISABLE_API: false

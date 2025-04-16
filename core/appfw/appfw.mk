@@ -11,7 +11,7 @@ rootfs_install::
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)mkdir -p $(ROOTDIR)/opt/appfw
 	$(Q)cp -r $(TOP_SRCDIR)/core/appfw/{ansible,bin} $(ROOTDIR)/opt/appfw/
-	$(Q)cp -r $(TOP_SRCDIR)/core/appfw/appfw.tgz $(ROOTDIR)/opt/appfw/
+	$(Q)cp -r $(TOP_BLDDIR)/core/appfw/appfw.tgz $(ROOTDIR)/opt/appfw/
 
 #	$(Q)mkdir -p $(ROOTDIR)/opt/appfw/charts/{chartmuseum,docker-registry,keycloak}
 #	$(Q)cp $(TOP_SRCDIR)/core/appfw/charts/chartmuseum/*.yaml $(ROOTDIR)/opt/appfw/charts/chartmuseum/

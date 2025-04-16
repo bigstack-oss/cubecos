@@ -6,7 +6,7 @@ CHART=chartmuseum-$(VERSION).tgz
 IMGS += ghcr.io/helm/chartmuseum:v0.14.0
 
 $(CHART):
-	$(Q)helm repo add chartmuseum https://chartmuseum.github.io/charts >/dev/null
+	$(Q)helm repo add chartmuseum https://chartmuseum.github.io/charts $(QEND)
 	$(Q)helm fetch chartmuseum/chartmuseum --version $(VERSION)
 
 BUILD += $(CHART)

@@ -1,0 +1,11 @@
+---
+harborAdminPassword: "admin"
+trivy:
+  enabled: false
+notary:
+  enabled: false
+expose:
+  ingress:
+    className: "nginx"
+    hosts:
+      core: ""

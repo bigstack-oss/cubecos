@@ -1,0 +1,7 @@
+enabled: true
+controller:
+  ingressClassResource:
+    name: "nginx"
+    controllerValue: k8s.io/ingress-nginx
+  admissionWebhooks:
+    enabled: false
