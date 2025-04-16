@@ -18,12 +18,11 @@ static const char NGINX_CONF_IN[] = "/etc/nginx/nginx.conf.in";
 static const char NGINX_CONF[] = "/etc/nginx/nginx.conf";
 
 static bool s_bCubeModified = false;
-
 static bool s_bConfigChanged = false;
 
 static CubeRole_e s_eCubeRole;
 
-// using external tunings
+// use external tunings
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
 
 // parse tunings
