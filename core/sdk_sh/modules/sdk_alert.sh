@@ -290,7 +290,7 @@ alert_set_setting_title_prefix()
     mkdir -p "$input_dir/alert_setting"
     cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
     local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
-    yq_input_title_prefix="$title_prefix" yq -i '.titlePrefix = strenv(yq_input_title_prefix)' $policy_file
+    yq -i ".titlePrefix = \"$title_prefix\"" $policy_file
 
     # apply the changes
     $HEX_CFG apply $input_dir
@@ -326,11 +326,11 @@ alert_set_setting_sender_email()
     mkdir -p "$input_dir/alert_setting"
     cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
     local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
-    yq_input_host="$host" yq -i '.sender.email.host = strenv(yq_input_host)' $policy_file
-    yq_input_port="$port" yq -i '.sender.email.port = strenv(yq_input_port)' $policy_file
-    yq_input_username="$username" yq -i '.sender.email.username = strenv(yq_input_username)' $policy_file
-    yq_input_password="$password" yq -i '.sender.email.password = strenv(yq_input_password)' $policy_file
-    yq_input_from="$from" yq -i '.sender.email.from = strenv(yq_input_from)' $policy_file
+    yq -i ".sender.email.host = \"$host\"" $policy_file
+    yq -i ".sender.email.port = \"$port\"" $policy_file
+    yq -i ".sender.email.username = \"$username\"" $policy_file
+    yq -i ".sender.email.password = \"$password\"" $policy_file
+    yq -i ".sender.email.from = \"$from\"" $policy_file
 
     # apply the changes
     $HEX_CFG apply $input_dir
@@ -364,16 +364,16 @@ alert_put_setting_receiver_email()
     local is_update="false"
     # update
     for i in $(seq 0 "$receiver_email_count_minus_one") ; do
-        if [[ "$address" == "$(yq_input_index="$i" yq '.receiver.emails[strenv(yq_input_index)].address' $policy_file)" ]] ; then
-            yq_input_index="$i" yq_input_address="$address" yq -i '.receiver.emails[strenv(yq_input_index)].address = strenv(yq_input_address)' $policy_file
-            yq_input_index="$i" yq_input_note="$note" yq -i '.receiver.emails[strenv(yq_input_index)].note = strenv(yq_input_note)' $policy_file
+        if [[ "$address" == "$(yq ".receiver.emails[$i].address" $policy_file)" ]] ; then
+            yq -i ".receiver.emails[$i].address = \"$address\"" $policy_file
+            yq -i ".receiver.emails[$i].note = \"$note\"" $policy_file
             is_update="true"
         fi
     done
     # add
     if [[ "$is_update" == "false" ]] ; then
-        yq_input_index="$(($receiver_email_count_minus_one + 1))" yq_input_address="$address" yq -i '.receiver.emails[strenv(yq_input_index)].address = strenv(yq_input_address)' $policy_file
-        yq_input_index="$(($receiver_email_count_minus_one + 1))" yq_input_note="$note" yq -i '.receiver.emails[strenv(yq_input_index)].note = strenv(yq_input_note)' $policy_file
+        yq -i ".receiver.emails[$(($receiver_email_count_minus_one + 1))].address = \"$address\"" $policy_file
+        yq -i ".receiver.emails[$(($receiver_email_count_minus_one + 1))].note = \"$note\"" $policy_file
     fi
 
     # apply the changes
@@ -414,22 +414,22 @@ alert_put_setting_receiver_slack()
     local is_update="false"
     # update
     for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
-        if [[ "$url" == "$(yq_input_index="$i" yq '.receiver.slacks[strenv(yq_input_index)].url' $policy_file)" ]] ; then
-            yq_input_index="$i" yq_input_url="$url" yq -i '.receiver.slacks[strenv(yq_input_index)].url = strenv(yq_input_url)' $policy_file
-            yq_input_index="$i" yq_input_username="$username" yq -i '.receiver.slacks[strenv(yq_input_index)].username = strenv(yq_input_username)' $policy_file
-            yq_input_index="$i" yq_input_description="$description" yq -i '.receiver.slacks[strenv(yq_input_index)].description = strenv(yq_input_description)' $policy_file
-            yq_input_index="$i" yq_input_workspace="$workspace" yq -i '.receiver.slacks[strenv(yq_input_index)].workspace = strenv(yq_input_workspace)' $policy_file
-            yq_input_index="$i" yq_input_channel="$channel" yq -i '.receiver.slacks[strenv(yq_input_index)].channel = strenv(yq_input_channel)' $policy_file
+        if [[ "$url" == "$(yq ".receiver.slacks[$i].url' $policy_file)" ]] ; then
+            yq -i ".receiver.slacks[$i].url = \"$url\"" $policy_file
+            yq -i ".receiver.slacks[$i].username = \"$username\"" $policy_file
+            yq -i ".receiver.slacks[$i].description = \"$description\"" $policy_file
+            yq -i ".receiver.slacks[$i].workspace = \"$workspace\"" $policy_file
+            yq -i ".receiver.slacks[$i].channel = \"$channel\"" $policy_file
             is_update="true"
         fi
     done
     # add
     if [[ "$is_update" == "false" ]] ; then
-        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_url="$url" yq -i '.receiver.slacks[strenv(yq_input_index)].url = strenv(yq_input_url)' $policy_file
-        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_username="$username" yq -i '.receiver.slacks[strenv(yq_input_index)].username = strenv(yq_input_username)' $policy_file
-        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_description="$description" yq -i '.receiver.slacks[strenv(yq_input_index)].description = strenv(yq_input_description)' $policy_file
-        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_workspace="$workspace" yq -i '.receiver.slacks[strenv(yq_input_index)].workspace = strenv(yq_input_workspace)' $policy_file
-        yq_input_index="$(($receiver_slack_count_minus_one + 1))" yq_input_channel="$channel" yq -i '.receiver.slacks[strenv(yq_input_index)].channel = strenv(yq_input_channel)' $policy_file
+        yq -i ".receiver.slacks[$(($receiver_slack_count_minus_one + 1))].url = \"$url\"" $policy_file
+        yq -i ".receiver.slacks[$(($receiver_slack_count_minus_one + 1))].username = \"$username\"" $policy_file
+        yq -i ".receiver.slacks[$(($receiver_slack_count_minus_one + 1))].description = \"$description\"" $policy_file
+        yq -i ".receiver.slacks[$(($receiver_slack_count_minus_one + 1))].workspace = \"$workspace\"" $policy_file
+        yq -i ".receiver.slacks[$(($receiver_slack_count_minus_one + 1))].channel = \"$channel\"" $policy_file
     fi
 
     # apply the changes
@@ -484,8 +484,8 @@ alert_delete_setting_receiver_email()
     local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
     local receiver_email_count_minus_one=$(($(yq '.receiver.emails | length' $policy_file) - 1))
     for i in $(seq 0 "$receiver_email_count_minus_one") ; do
-        if [[ "$address" == "$(yq_input_index="$i" yq '.receiver.emails[strenv(yq_input_index)].address' $policy_file)" ]] ; then
-            yq_input_index="$i" yq -i 'del(.receiver.emails[strenv(yq_input_index)])' $policy_file
+        if [[ "$address" == "$(yq ".receiver.emails[$i].address" $policy_file)" ]] ; then
+            yq -i "del(.receiver.emails[$i])" $policy_file
         fi
     done
 
@@ -517,8 +517,8 @@ alert_delete_setting_receiver_slack()
     local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
     local receiver_slack_count_minus_one=$(($(yq '.receiver.slacks | length' $policy_file) - 1))
     for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
-        if [[ "$url" == "$(yq_input_index="$i" yq '.receiver.slacks[strenv(yq_input_index)].url' $policy_file)" ]] ; then
-            yq_input_index="$i" yq -i 'del(.receiver.slacks[strenv(yq_input_index)])' $policy_file
+        if [[ "$url" == "$(yq ".receiver.slacks[$i].url" $policy_file)" ]] ; then
+            yq -i "del(.receiver.slacks[$i])" $policy_file
         fi
     done
 
