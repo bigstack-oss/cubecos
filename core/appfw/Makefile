@@ -5,7 +5,7 @@ include ../../build.mk
 appfw.tgz:
 	$(Q)$(call RUN_CMD_TIMED, \
 		tar -cvzf appfw.tgz -C $(COREDIR)/appfw/core . $(QEND), \
-		"  BUILD   appfw.tgz")
+		"  GEN     appfw.tgz")
 
 BUILD += appfw.tgz
 BUILDCLEAN += appfw.tgz
