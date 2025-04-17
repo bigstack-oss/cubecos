@@ -245,7 +245,7 @@ NotifySettingPolicy::save(const char* policyFile)
         }
     }
 
-    return WriteYml(policyFile, this->ymlRoot) == 0;
+    return (WriteYml(policyFile, this->ymlRoot) == 0);
 }
 
 void
