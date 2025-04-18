@@ -47,11 +47,34 @@ struct NotifySettingReceiverSlack {
 };
 
 /**
+ * Shell exec receiver configurations.
+ */
+struct NotifySettingReceiverExecShell {
+    std::string name;
+};
+
+/**
+ * Binary exec receiver configurations.
+ */
+struct NotifySettingReceiverExecBin {
+    std::string name;
+};
+
+/**
+ * Exec receiver configurations.
+ */
+struct NotifySettingReceiverExec {
+    std::vector<NotifySettingReceiverExecShell> shells;
+    std::vector<NotifySettingReceiverExecBin> bins;
+};
+
+/**
  * Receiver configurations.
  */
 struct NotifySettingReceiver {
     std::vector<NotifySettingReceiverEmail> emails;
     std::vector<NotifySettingReceiverSlack> slacks;
+    NotifySettingReceiverExec execs;
 };
 
 /**
@@ -83,7 +106,7 @@ public:
      */
     bool save(const char* policyFile);
     /**
-     * Add or update the email sender configurations.
+     * Add or update the email sender's configurations.
      */
     void updateSenderEmail(
         std::string host,
@@ -93,11 +116,11 @@ public:
         std::string from
     );
     /**
-     * Add or update an email receiver configurations.
+     * Add or update an email receiver's configurations.
      */
     void addOrUpdateReceiverEmail(std::string address, std::string note);
     /**
-     * Add or update a slack receiver configurations.
+     * Add or update a slack receiver's configurations.
      */
     void addOrUpdateReceiverSlack(
         std::string url,
@@ -106,6 +129,14 @@ public:
         std::string workspace,
         std::string channel
     );
+    /**
+     * Add an exec shell's configurations.
+     */
+    void addReceiverExecShell(std::string name);
+    /**
+     * Add an exec bin's configurations.
+     */
+    void addReceiverExecBin(std::string name);
     /**
      * Delete the email sender.
      */
@@ -118,6 +149,14 @@ public:
      * Delete the slack receiver.
      */
     bool deleteReceiverSlack(std::string url);
+    /**
+     * Delete the exec shell receiver.
+     */
+    bool deleteReceiverExecShell(std::string name);
+    /**
+     * Delete the exec bin receiver.
+     */
+    bool deleteReceiverExecBin(std::string name);
 private:
     /**
      * Initialization flag

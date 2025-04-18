@@ -234,6 +234,58 @@ putSettingReceiverSlack(
 }
 
 bool
+putSettingReceiverExecShell(std::string name)
+{
+    HexPolicyManager policyManager;
+    NotifySettingPolicy policy;
+
+    // load the existing policy file into policy
+    if (!policyManager.load(policy)) {
+        return false;
+    }
+
+    // update policy with input values
+    policy.addReceiverExecShell(name);
+
+    // save the updated policy into a policy file
+    if (!policyManager.save(policy)) {
+        return false;
+    }
+
+    // apply the udpated policy file
+    if (!policyManager.apply()) {
+        return false;
+    }
+    return true;
+}
+
+bool
+putSettingReceiverExecBin(std::string name)
+{
+    HexPolicyManager policyManager;
+    NotifySettingPolicy policy;
+
+    // load the existing policy file into policy
+    if (!policyManager.load(policy)) {
+        return false;
+    }
+
+    // update policy with input values
+    policy.addReceiverExecBin(name);
+
+    // save the updated policy into a policy file
+    if (!policyManager.save(policy)) {
+        return false;
+    }
+
+    // apply the udpated policy file
+    if (!policyManager.apply()) {
+        return false;
+    }
+    return true;
+}
+
+bool
 deleteSettingSenderEmail()
 {
     HexPolicyManager policyManager;
@@ -300,6 +352,62 @@ deleteSettingReceiverSlack(std::string url)
 
     // update policy with input values
     if (!policy.deleteReceiverSlack(url)) {
+        return false;
+    }
+
+    // save the updated policy into a policy file
+    if (!policyManager.save(policy)) {
+        return false;
+    }
+
+    // apply the udpated policy file
+    if (!policyManager.apply()) {
+        return false;
+    }
+    return true;
+}
+
+bool
+deleteSettingReceiverExecShell(std::string name)
+{
+    HexPolicyManager policyManager;
+    NotifySettingPolicy policy;
+
+    // load the existing policy file into policy
+    if (!policyManager.load(policy)) {
+        return false;
+    }
+
+    // update policy with input values
+    if (!policy.deleteReceiverExecShell(name)) {
+        return false;
+    }
+
+    // save the updated policy into a policy file
+    if (!policyManager.save(policy)) {
+        return false;
+    }
+
+    // apply the udpated policy file
+    if (!policyManager.apply()) {
+        return false;
+    }
+    return true;
+}
+
+bool
+deleteSettingReceiverExecBin(std::string name)
+{
+    HexPolicyManager policyManager;
+    NotifySettingPolicy policy;
+
+    // load the existing policy file into policy
+    if (!policyManager.load(policy)) {
+        return false;
+    }
+
+    // update policy with input values
+    if (!policy.deleteReceiverExecBin(name)) {
         return false;
     }
 
@@ -423,17 +531,19 @@ NotifySettingMain(int argc, const char** argv)
             }
         } else {
             /**
-             * argv[3]=<email|slack>
+             * argv[3]=<email|slack|exec>
              */
 
             CliList receiverTypes;
             receiverTypes.push_back("email");
             receiverTypes.push_back("slack");
+            receiverTypes.push_back("exec");
 
             int receiverTypeIndex;
             enum {
                 RECEIVER_TYPE_EMAIL = 0,
-                RECEIVER_TYPE_SLACK
+                RECEIVER_TYPE_SLACK,
+                RECEIVER_TYPE_EXEC
             };
 
             std::string receiverType;
@@ -462,7 +572,7 @@ NotifySettingMain(int argc, const char** argv)
                 if (!putSettingReceiverEmail(address, note)) {
                     return CLI_UNEXPECTED_ERROR;
                 }
-            } else {
+            } else if (receiverTypeIndex == RECEIVER_TYPE_SLACK) {
                 /**
                  * argv[4]=<url>
                  * argv[5]=<username>
@@ -494,6 +604,93 @@ NotifySettingMain(int argc, const char** argv)
                 if (!putSettingReceiverSlack(url, username, description, workspace, channel)) {
                     return CLI_UNEXPECTED_ERROR;
                 }
+            } else {
+                /**
+                 * argv[4]=<shell|bin>
+                 * argv[5]=<usb|local>
+                 * argv[6]=<file>
+                 */
+
+                CliList execTypes;
+                execTypes.push_back("shell");
+                execTypes.push_back("bin");
+
+                int execTypeIndex;
+                enum {
+                    EXEC_TYPE_SHELL = 0,
+                    EXEC_TYPE_BIN
+                };
+
+                std::string execType;
+
+                if (CliMatchListHelper(argc, argv, 4, execTypes, &execTypeIndex, &execType) != 0) {
+                    CliPrint("exec type is missing or invalid");
+                    return CLI_INVALID_ARGS;
+                }
+
+                CliList execFileDirectories;
+                execFileDirectories.push_back("usb");
+                execFileDirectories.push_back("local");
+
+                int execFileDirectoryIndex;
+                enum {
+                    FILE_DIRECTORY_USB = 1,
+                    FILE_DIRECTORY_LOCAL
+                };
+
+                std::string execFileDirectory;
+
+                if(CliMatchListHelper(argc, argv, 5, execFileDirectories, &execFileDirectoryIndex, &execFileDirectory) != 0) {
+                    CliPrint("file directory is missing or invalid");
+                    return CLI_INVALID_ARGS;
+                }
+
+                std::string dir;
+                if (execFileDirectoryIndex == FILE_DIRECTORY_USB) {
+                    dir = "/mnt/usb";
+                    CliPrintf("Insert a USB drive into the USB port on the appliance.");
+                    if (!CliReadConfirmation()) {
+                        return CLI_SUCCESS;
+                    }
+
+                    AutoSignalHandlerMgt autoSignalHandlerMgt(UnInterruptibleHdr);
+                    if (HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0, HEX_CFG, "mount_usb", NULL) != 0) {
+                        CliPrintf("Could not access the USB drive. Please check the USB drive and retry the command.\n");
+                        return CLI_UNEXPECTED_ERROR;
+                    }
+                } else {
+                    dir = "/var/response";
+                }
+
+                // list files not directory
+                std::string cmd = "ls -p " + dir + " | grep -v /";
+                int execFileIndex;
+                std::string execFile;
+                if (CliMatchCmdHelper(argc, argv, 6, cmd, &execFileIndex, &execFile) != 0) {
+                    CliPrintf("no such file");
+                    return CLI_UNEXPECTED_ERROR;
+                }
+
+                std::string fullPath = dir + "/" + execFile;
+                std::string execName = fullPath;
+                std::size_t dotPosition = execName.find_first_of('.');
+                if (dotPosition != std::string::npos) {
+                    // remove the file extension, e.g., aaa.bbb => aaa
+                    execName.erase(dotPosition);
+                }
+                HexSystemF(0, "cp -f %s /var/alert_resp/exec_%s.%s", fullPath.c_str(), execName.c_str(), execType.c_str());
+
+                if (execTypeIndex == EXEC_TYPE_SHELL) {
+                    if (!putSettingReceiverExecShell(execName)) {
+                        return CLI_UNEXPECTED_ERROR;
+                    }
+                } else if (execTypeIndex == EXEC_TYPE_BIN) {
+                    if (!putSettingReceiverExecBin(execName)) {
+                        return CLI_UNEXPECTED_ERROR;
+                    }
+                } else {
+                    return CLI_INVALID_ARGS;
+                }
             }
         }
     } else {
@@ -521,17 +718,19 @@ NotifySettingMain(int argc, const char** argv)
             }
         } else {
             /**
-             * argv[3]=<email|slack>
+             * argv[3]=<email|slack|exec>
              */
             
             CliList receiverTypes;
             receiverTypes.push_back("email");
             receiverTypes.push_back("slack");
+            receiverTypes.push_back("exec");
 
             int receiverTypeIndex;
             enum {
                 RECEIVER_TYPE_EMAIL = 0,
-                RECEIVER_TYPE_SLACK
+                RECEIVER_TYPE_SLACK,
+                RECEIVER_TYPE_EXEC
             };
 
             std::string receiverType;
@@ -556,7 +755,7 @@ NotifySettingMain(int argc, const char** argv)
                 if (!deleteSettingReceiverEmail(address)) {
                     return CLI_UNEXPECTED_ERROR;
                 }
-            } else {
+            } else if (receiverTypeIndex == RECEIVER_TYPE_SLACK) {
                 /**
                  * argv[4]=<url>
                  */
@@ -570,6 +769,51 @@ NotifySettingMain(int argc, const char** argv)
 
                 if (!deleteSettingReceiverSlack(url)) {
                     return CLI_UNEXPECTED_ERROR;
+                }
+            } else {
+                /**
+                 * argv[4]=<file>
+                 */
+                
+                 // list files (/var/alert_resp/exec_*)
+                std::string cmd = "ls -p /var/alert_resp/ | grep -v / | grep exec_ | sed 's/^exec_//'";
+                int execFileIndex;
+                std::string execFile;
+                if (CliMatchCmdHelper(argc, argv, 4, cmd, &execFileIndex, &execFile) != 0) {
+                    CliPrintf("no such file");
+                    return CLI_UNEXPECTED_ERROR;
+                }
+
+                std::string execName = "";
+                std::string execType = "";
+                std::size_t dotPositionOne = execFile.find_first_of('.');
+                if (dotPositionOne != std::string::npos) {
+                    execName = execFile.substr(0, dotPositionOne);
+
+                    std::size_t dotPositionTwo = execFile.find_last_of('.');
+                    if (dotPositionTwo != std::string::npos) {
+                        if (dotPositionOne != dotPositionTwo) {
+                            return CLI_UNEXPECTED_ERROR;
+                        }
+
+                        if ((dotPositionTwo + 1) < execFile.length()) {
+                            execType = execFile.substr(dotPositionTwo + 1);
+                        }
+                    }
+                } else {
+                    execName = execFile;
+                }
+
+                if (execType == "shell") {
+                    if (!deleteSettingReceiverExecShell(execName)) {
+                        return CLI_UNEXPECTED_ERROR;
+                    }
+                } else if (execType == "bin") {
+                    if (!deleteSettingReceiverExecBin(execName)) {
+                        return CLI_UNEXPECTED_ERROR;
+                    }
+                } else {
+                    return CLI_INVALID_ARGS;
                 }
             }
         }
@@ -599,11 +843,14 @@ CLI_MODE_COMMAND("notifications", "configure", NotifySettingMain, NULL,
     "configure <add|update|delete>\n"
     "    <add|update>: <sender|receiver>\n"
     "        sender: email <host> <port> <username> <password> <from>\n"
-    "        receiver: <email|slack>\n"
+    "        receiver: <email|slack|exec>\n"
     "            email: <address> [<note>]\n"
     "            slack: <url> <username> [<description>] [<workspace>] [<channel>]\n"
-    "    delete: <sender|receiver>\n"
+    "            exec: <shell|bin> <usb|local> <file>\n"
+    "The file needs to be in either the usb or /var/response (local) for exec.\n"
+    "    delete: <sender|receiver|exec>\n"
     "        sender: email\n"
     "        receiver: <email|slack>\n"
     "            email: <address>\n"
-    "            slack: <url>");
+    "            slack: <url>\n"
+    "            exec: <file>");

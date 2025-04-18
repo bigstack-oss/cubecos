@@ -14,3 +14,6 @@ sender:
 receiver:
   emails:
   slacks:
+  execs:
+    shells:
+    bins:

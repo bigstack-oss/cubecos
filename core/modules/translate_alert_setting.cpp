@@ -47,6 +47,16 @@ Translate(const char *policy, FILE *settings)
         fprintf(settings, "kapacitor.alert.setting.receiver.slacks.%zu.channel = %s\n", i, config.receiver.slacks[i].channel.c_str());
     }
 
+    // receiver exec shell
+    for (std::size_t i = 0; i < config.receiver.execs.shells.size(); i++) {
+        fprintf(settings, "kapacitor.alert.setting.receiver.execs.shells.%zu.name = %s\n", i, config.receiver.execs.shells[i].name.c_str());
+    }
+
+    // receiver exec bin
+    for (std::size_t i = 0; i < config.receiver.execs.bins.size(); i++) {
+        fprintf(settings, "kapacitor.alert.setting.receiver.execs.bins.%zu.name = %s\n", i, config.receiver.execs.bins[i].name.c_str());
+    }
+
     return true;
 }
 

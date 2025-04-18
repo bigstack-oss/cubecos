@@ -197,6 +197,16 @@ alert_get_setting()
         source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.slacks.$i.workspace"
         source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.slacks.$i.channel"
     done
+    # receiver exec shell
+    local receiver_exec_shell_count_minus_one=$(($(grep -E "kapacitor.alert.setting.receiver.execs.shells.[0-9]+.name" $SETTINGS_TXT | wc -l) - 1))
+    for i in $(seq 0 "$receiver_exec_shell_count_minus_one") ; do
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.execs.shells.$i.name"
+    done
+    # receiver exec bin
+    local receiver_exec_bin_count_minus_one=$(($(grep -E "kapacitor.alert.setting.receiver.execs.bins.[0-9]+.name" $SETTINGS_TXT | wc -l) - 1))
+    for i in $(seq 0 "$receiver_exec_bin_count_minus_one") ; do
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.setting.receiver.execs.bins.$i.name"
+    done
 
     # format the JSON string
     # title prefix
@@ -259,6 +269,46 @@ alert_get_setting()
             '{url: $url, username: $username, description: $description, workspace: $workspace, channel: $channel}')
     done
     rs+="]"
+    # receiver exec shell
+    local res_count=0
+    local res="["
+    for i in $(seq 0 "$receiver_exec_shell_count_minus_one") ; do
+        local name_key="T_kapacitor_alert_setting_receiver_execs_shells_${i}_name"
+
+        if [[ "${!name_key}" == "" ]] ; then
+            continue
+        fi
+
+        if [[ "$res_count" -gt 0 ]] ; then
+            res+=","
+        fi
+
+        ((res_count++))
+        res+=$(jq -c -n \
+            --arg name "${!name_key}" \
+            '{name: $name}')
+    done
+    res+="]"
+    # receiver exec bin
+    local reb_count=0
+    local reb="["
+    for i in $(seq 0 "$receiver_exec_bin_count_minus_one") ; do
+        local name_key="T_kapacitor_alert_setting_receiver_execs_bins_${i}_name"
+
+        if [[ "${!name_key}" == "" ]] ; then
+            continue
+        fi
+
+        if [[ "$reb_count" -gt 0 ]] ; then
+            reb+=","
+        fi
+
+        ((reb_count++))
+        reb+=$(jq -c -n \
+            --arg name "${!name_key}" \
+            '{name: $name}')
+    done
+    reb+="]"
 
     # output
     jq -c -n \
@@ -266,7 +316,9 @@ alert_get_setting()
         --argjson senderEmail "$se" \
         --argjson receiverEmail "$re" \
         --argjson receiverSlack "$rs" \
-        '{titlePrefix: $titlePrefix, sender: {email: $senderEmail}, receiver: {emails: $receiverEmail, slacks: $receiverSlack}}'
+        --argjson receiverExecShell "$res" \
+        --argjson receiverExecBin "$reb" \
+        '{titlePrefix: $titlePrefix, sender: {email: $senderEmail}, receiver: {emails: $receiverEmail, slacks: $receiverSlack, execs: {shells: $receiverExecShell, bins: $receiverExecBin}}}'
 }
 
 alert_set_setting_title_prefix()

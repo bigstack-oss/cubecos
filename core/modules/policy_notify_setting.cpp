@@ -18,9 +18,13 @@ NotifySettingPolicy::NotifySettingPolicy():
     s.email = se;
     this->config.sender = s;
 
+    NotifySettingReceiverExec re;
+    re.shells = std::vector<NotifySettingReceiverExecShell>();
+    re.bins = std::vector<NotifySettingReceiverExecBin>();
     NotifySettingReceiver r;
     r.emails = std::vector<NotifySettingReceiverEmail>();
     r.slacks = std::vector<NotifySettingReceiverSlack>();
+    r.execs = re;
     this->config.receiver = r;
 }
 
@@ -150,6 +154,56 @@ NotifySettingPolicy::load(const char* policyFile)
         receiverSlackUrlSet.insert(s.url);
     }
 
+    // receiver exec shell
+    std::set<std::string> receiverExecShellNameSet;
+    std::size_t receiverExecShellCount = SizeOfYmlSeq(this->ymlRoot, "receiver.execs.shells");
+    for (std::size_t i = 0; i < receiverExecShellCount; i++) {
+        std::size_t ymlIndex = i + 1;
+
+        NotifySettingReceiverExecShell es;
+        HexYmlParseString(es.name, this->ymlRoot, "receiver.execs.shells.%d.name", ymlIndex);
+
+        if (es.name == "") {
+            // we do not allow receiver exec shell with a blank name
+            // since this field is used as an id for the receiver exec shell
+            continue;
+        }
+
+        if (receiverExecShellNameSet.count(es.name) > 0) {
+            // receiver exec shell name should be unique
+            // since it is an id
+            continue;
+        }
+
+        this->config.receiver.execs.shells.push_back(es);
+        receiverExecShellNameSet.insert(es.name);
+    }
+
+    // receiver exec bin
+    std::set<std::string> receiverExecBinNameSet;
+    std::size_t receiverExecBinCount = SizeOfYmlSeq(this->ymlRoot, "receiver.execs.bins");
+    for (std::size_t i = 0; i < receiverExecBinCount; i++) {
+        std::size_t ymlIndex = i + 1;
+
+        NotifySettingReceiverExecBin eb;
+        HexYmlParseString(eb.name, this->ymlRoot, "receiver.execs.bins.%d.name", ymlIndex);
+
+        if (eb.name == "") {
+            // we do not allow receiver exec bin with a blank name
+            // since this field is used as an id for the receiver exec bin
+            continue;
+        }
+
+        if (receiverExecBinNameSet.count(eb.name) > 0) {
+            // receiver exec bin name should be unique
+            // since it is an id
+            continue;
+        }
+
+        this->config.receiver.execs.bins.push_back(eb);
+        receiverExecBinNameSet.insert(eb.name);
+    }
+
     this->isInitialized = true;
     return this->isInitialized;
 }
@@ -241,6 +295,52 @@ NotifySettingPolicy::save(const char* policyFile)
             return false;
         }
         if (AddYmlNode(this->ymlRoot, prefix.c_str(), "channel", this->config.receiver.slacks[i].channel.c_str()) != 0) {
+            return false;
+        }
+    }
+
+    // receiver exec shell
+    if (DeleteYmlChildren(this->ymlRoot, "receiver.execs.shells") != 0) {
+        return false;
+    }
+    if (this->config.receiver.execs.shells.size() == 0) {
+        // the yml parser needs to set at least one blank child
+        // we would create a blank child if we do not have any
+        NotifySettingReceiverExecShell blankReceiverExecShell;
+        blankReceiverExecShell.name = "";
+        this->config.receiver.execs.shells.push_back(blankReceiverExecShell);
+    }
+    for (std::size_t i = 0; i < this->config.receiver.execs.shells.size(); i++) {
+        // yml index starts from 1
+        std::string ymlIndex = std::to_string(i + 1);
+        if (AddYmlKey(this->ymlRoot, "receiver.execs.shells", ymlIndex.c_str()) != 0) {
+            return false;
+        }
+        std::string prefix = std::string("receiver.execs.shells.").append(ymlIndex);
+        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "name", this->config.receiver.execs.shells[i].name.c_str()) != 0) {
+            return false;
+        }
+    }
+
+    // receiver exec bin
+    if (DeleteYmlChildren(this->ymlRoot, "receiver.execs.bins") != 0) {
+        return false;
+    }
+    if (this->config.receiver.execs.bins.size() == 0) {
+        // the yml parser needs to set at least one blank child
+        // we would create a blank child if we do not have any
+        NotifySettingReceiverExecBin blankReceiverExecBin;
+        blankReceiverExecBin.name = "";
+        this->config.receiver.execs.bins.push_back(blankReceiverExecBin);
+    }
+    for (std::size_t i = 0; i < this->config.receiver.execs.bins.size(); i++) {
+        // yml index starts from 1
+        std::string ymlIndex = std::to_string(i + 1);
+        if (AddYmlKey(this->ymlRoot, "receiver.execs.bins", ymlIndex.c_str()) != 0) {
+            return false;
+        }
+        std::string prefix = std::string("receiver.execs.bins.").append(ymlIndex);
+        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "name", this->config.receiver.execs.bins[i].name.c_str()) != 0) {
             return false;
         }
     }
@@ -340,6 +440,52 @@ NotifySettingPolicy::addOrUpdateReceiverSlack(
 }
 
 void
+NotifySettingPolicy::addReceiverExecShell(std::string name)
+{
+    // check if the email receiver exists or not
+    std::vector<NotifySettingReceiverExecShell>* shells = &(this->config.receiver.execs.shells);
+    if (shells == nullptr) {
+        return;
+    }
+    NotifySettingReceiverExecShell* es = nullptr;
+    for (std::vector<NotifySettingReceiverExecShell>::iterator it = shells->begin(); it != shells->end(); it++) {
+        if (it->name == name) {
+            es = &(*it);
+        }
+    }
+
+    // add
+    if (es == nullptr) {
+        NotifySettingReceiverExecShell newShell;
+        newShell.name = name;
+        shells->push_back(newShell);
+    }
+}
+
+void
+NotifySettingPolicy::addReceiverExecBin(std::string name)
+{
+    // check if the email receiver exists or not
+    std::vector<NotifySettingReceiverExecBin>* bins = &(this->config.receiver.execs.bins);
+    if (bins == nullptr) {
+        return;
+    }
+    NotifySettingReceiverExecBin* eb = nullptr;
+    for (std::vector<NotifySettingReceiverExecBin>::iterator it = bins->begin(); it != bins->end(); it++) {
+        if (it->name == name) {
+            eb = &(*it);
+        }
+    }
+
+    // add
+    if (eb == nullptr) {
+        NotifySettingReceiverExecBin newBin;
+        newBin.name = name;
+        bins->push_back(newBin);
+    }
+}
+
+void
 NotifySettingPolicy::deleteSenderEmail()
 {
     NotifySettingSenderEmail* email = &(this->config.sender.email);
@@ -389,6 +535,50 @@ NotifySettingPolicy::deleteReceiverSlack(std::string url)
     for (std::vector<NotifySettingReceiverSlack>::iterator it = slacks->begin(); it != slacks->end();) {
         if (it->url == url) {
             it = slacks->erase(it);
+            isSuccessful = true;
+        } else {
+            it++;
+        }
+    }
+
+    return isSuccessful;
+}
+
+bool
+NotifySettingPolicy::deleteReceiverExecShell(std::string name)
+{
+    bool isSuccessful = false;
+
+    std::vector<NotifySettingReceiverExecShell>* shells = &(this->config.receiver.execs.shells);
+    if (shells == nullptr) {
+        return isSuccessful;
+    }
+
+    for (std::vector<NotifySettingReceiverExecShell>::iterator it = shells->begin(); it != shells->end();) {
+        if (it->name == name) {
+            it = shells->erase(it);
+            isSuccessful = true;
+        } else {
+            it++;
+        }
+    }
+
+    return isSuccessful;
+}
+
+bool
+NotifySettingPolicy::deleteReceiverExecBin(std::string name)
+{
+    bool isSuccessful = false;
+
+    std::vector<NotifySettingReceiverExecBin>* bins = &(this->config.receiver.execs.bins);
+    if (bins == nullptr) {
+        return isSuccessful;
+    }
+
+    for (std::vector<NotifySettingReceiverExecBin>::iterator it = bins->begin(); it != bins->end();) {
+        if (it->name == name) {
+            it = bins->erase(it);
             isSuccessful = true;
         } else {
             it++;
