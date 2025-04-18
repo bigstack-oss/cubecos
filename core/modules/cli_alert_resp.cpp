@@ -8,6 +8,7 @@
 #include <hex/log.h>
 #include <hex/strict.h>
 #include <hex/process.h>
+#include <hex/string_util.h>
 #include <hex/cli_module.h>
 
 #include <cube/cubesys.h>
@@ -30,6 +31,16 @@
 #define LABEL_RECEIVER_SLACK_DESCRIPTION "Enter slack receiver description [optional]: "
 #define LABEL_RECEIVER_SLACK_WORKSPACE "Enter slack receiver workspace [optional]: "
 #define LABEL_RECEIVER_SLACK_CHANNEL "Enter slack receiver channel [optional]: "
+
+#define LABEL_RESP_NAME_CURRENT_OPTION_ONE "admin-notify"
+#define LABEL_RESP_NAME_CURRENT_OPTION_TWO "instance-notify"
+#define LABEL_RESP_NAME_CURRENT_LIMITATION "Currently, only \"" LABEL_RESP_NAME_CURRENT_OPTION_ONE "\" and \"" LABEL_RESP_NAME_CURRENT_OPTION_TWO "\" are supported.\n"
+#define LABEL_RESP_NAME "Enter notification name: "
+#define LABEL_RESP_EMAIL "Enter the email list (comma separated) [optional]: "
+#define LABEL_RESP_SLACK "Enter the slack list (comma separated) [optional]: "
+#define LABEL_RESP_EXEC_SHELL "Enter the exec shell list (comma separated) [optional]: "
+#define LABEL_RESP_EXEC_BIN "Enter the exec bin list (comma separated) [optional]: "
+#define LABEL_RESP_DESCRIPTION "Enter the notification description [optional]: "
 
 static bool
 listBackends(const NotifyPolicy& policy)
@@ -822,6 +833,123 @@ NotifySettingMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+static int
+NotifyTriggerMain(int argc, const char** argv)
+{
+    /**
+     * argv[0]="set_trigger"
+     * argv[1]=<add|update|delete>
+     */
+
+    CliList actions;
+    actions.push_back("add");
+    actions.push_back("update");
+    actions.push_back("delete");
+
+    int actionIndex;
+    enum {
+        ACTION_ADD = 0,
+        ACTION_UPDATE,
+        ACTION_DELETE
+    };
+
+    std::string action;
+
+    if (CliMatchListHelper(argc, argv, 1, actions, &actionIndex, &action) != 0) {
+        CliPrint("action type <add|update|delete> is missing or invalid");
+        return CLI_INVALID_ARGS;
+    }
+
+    if (actionIndex == ACTION_ADD || actionIndex == ACTION_UPDATE) {
+        /**
+         * argv[2]=<name>
+         */
+
+        CliPrint(LABEL_RESP_NAME_CURRENT_LIMITATION);
+
+        std::string name;
+        if (!CliReadInputStr(argc, argv, 2, LABEL_RESP_NAME, &name) || name.length() == 0) {
+            CliPrint("alert response name is missing");
+            return CLI_INVALID_ARGS;
+        }
+
+        if (
+            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_ONE) != 0 &&
+            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) != 0
+        ) {
+            CliPrint("the name is not supported");
+            return CLI_INVALID_ARGS;
+        }
+
+        /**
+         * argv[3]=<enable|disable>
+         * argv[4]=[<email address 1, email address 2>]
+         * argv[5]=[<slack url 1, slack url 2>]
+         * argv[6]=[<exec shell 1, exec shell 2>]
+         * argv[7]=[<exec bin 1, exec bin 2>]
+         * argv[8]=[<description>]
+         */
+
+        CliList enables;
+        enables.push_back("enable");
+        enables.push_back("disable");
+
+        int enableIndex;
+        enum {
+            ENABLE_TRUE = 0,
+            ENABLE_FALSE
+        };
+
+        std::string enable;
+
+        if (CliMatchListHelper(argc, argv, 3, enables, &enableIndex, &enable) != 0) {
+            CliPrint("<enable|disable> is missing or invalid");
+            return CLI_INVALID_ARGS;
+        }
+
+        std::string emailInput;
+        std::string slackInput;
+        std::string execShellInput;
+        std::string execBinInput;
+        std::string description;
+
+        CliReadInputStr(argc, argv, 4, LABEL_RESP_EMAIL, &emailInput);
+        CliReadInputStr(argc, argv, 5, LABEL_RESP_SLACK, &slackInput);
+        CliReadInputStr(argc, argv, 6, LABEL_RESP_EXEC_SHELL, &execShellInput);
+        CliReadInputStr(argc, argv, 7, LABEL_RESP_EXEC_BIN, &execBinInput);
+        CliReadInputStr(argc, argv, 8, LABEL_RESP_DESCRIPTION, &description);
+
+        std::vector<std::string> emails = hex_string_util::split(emailInput, ',');
+        std::vector<std::string> slacks = hex_string_util::split(slackInput, ',');
+        std::vector<std::string> execShells = hex_string_util::split(execShellInput, ',');
+        std::vector<std::string> execBins = hex_string_util::split(execBinInput, ',');            
+
+        // TODO policy
+    } else {
+        /**
+         * argv[2]=<name>
+         */
+        
+        CliPrint(LABEL_RESP_NAME_CURRENT_LIMITATION);
+
+        std::string name;
+        if (!CliReadInputStr(argc, argv, 2, LABEL_RESP_NAME, &name) || name.length() == 0) {
+            CliPrint("alert response name is missing");
+            return CLI_INVALID_ARGS;
+        }
+
+        if (
+            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_ONE) != 0 &&
+            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) != 0
+        ) {
+            CliPrint("the name is not supported");
+            return CLI_INVALID_ARGS;
+        }
+
+        // TODO policy
+    }
+}
+
 // This mode is not available in STRICT error state
 CLI_MODE(CLI_TOP_MODE, "notifications",
     "Work with notification settings.",
@@ -854,3 +982,11 @@ CLI_MODE_COMMAND("notifications", "configure", NotifySettingMain, NULL,
     "            email: <address>\n"
     "            slack: <url>\n"
     "            exec: <file>");
+
+CLI_MODE_COMMAND("notifications", "set_trigger", NotifyTriggerMain, NULL,
+    "Configure notifications triggers.",
+    "set_trigger <add|update|delete>\n"
+    "    <add|update>: <name>\n"
+    "        admin-notify: <enable|disable> [<email address 1, email address 2>] [<slack url 1, slack url 2>] [<exec shell 1, exec shell 2>] [<exec bin 1, exec bin 2>] [<description>]\n"
+    "        instance-notify: <enable|disable> [<email address 1, email address 2>] [<slack url 1, slack url 2>] [<exec shell 1, exec shell 2>] [<exec bin 1, exec bin 2>] [<description>]\n"
+    "    delete: <name>");

@@ -5,7 +5,7 @@
 
 #include "include/policy_notify.h"
 
-static const char* LABEL_RESP_NAME = "Enter notification name (required): ";
+static const char* LABEL_RESP_NAME_OLD = "Enter notification name (required): ";
 static const char* LABEL_RESP_MATCH = "e.g. \"key\" == 'SYS00001I' OR \"severity\" == 'I'\nEnter notification match condition: ";
 static const char* LABEL_RESP_SLACK_URL = "Enter slack URL: ";
 static const char* LABEL_RESP_SLACK_CHANNEL = "Enter slack channel (optional): ";
@@ -81,7 +81,7 @@ private:
             }
         }
         else if (actIdx == ACTION_ADD) {
-            if (!CliReadInputStr(argc, argv, 2, LABEL_RESP_NAME, &resp.name) ||
+            if (!CliReadInputStr(argc, argv, 2, LABEL_RESP_NAME_OLD, &resp.name) ||
                 !checkResponseName(cfg, resp.name)) {
                 return false;
             }
