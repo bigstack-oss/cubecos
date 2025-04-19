@@ -899,7 +899,7 @@ health_nginx_repair()
 
 health_api_report()
 {
-    _health_report ${FUNCNAME[0]}
+    health_report ${FUNCNAME[0]}
 }
 
 health_api_check()
@@ -1068,7 +1068,7 @@ health_keycloak_check()
 {
     if ! cubectl config check keycloak 2>/dev/null ; then
         ERR_CODE=1
-        ERR_MSG+="`cubectl config status keycloak`\n"
+        ERR_MSG+="`cubectl config status keycloak ; k3s kubectl get events -n keycloak | grep -v -i normal | head`\n"
         ERR_LOG+="k3s kubectl describe node $HOSTNAME"
     fi
 
@@ -3024,26 +3024,47 @@ health_db_select()
     local component=$1
     local limit=${2:-10}
     local tagfield="component,code,description,node,log"
+    local flag=
 
+    if [ "$FORMAT" = "json" ] ; then
+        flag="-format json -pretty"
+    fi
     [ "$VERBOSE" != "1" ] || tagfield+=",detail"
 
     if [ "x$1" = "x" ] ; then
         for component in $($HEX_SDK toggle_health_check | cut -d":" -f1) ; do
-            $INFLUX -database events -execute "select $tagfield from health where component='$component' order by desc limit $limit"
+            $INFLUX $flag -database events -execute "select $tagfield from health where component='$component' order by desc limit $limit"
         done
     else
-        $INFLUX -database events -execute "select $tagfield from health where component='$component' order by desc limit $limit"
+        $INFLUX $flag -database events -execute "select $tagfield from health where component='$component' order by desc limit $limit"
     fi
 }
 
 health_log_dump()
 {
     local component=$1
-    local s3_log=$(health_db_select ${component:-NOSUCHCOMPONENT} 2>/dev/null | grep s3 | head -1 | grep -o "s3://log/.*")
+    local n_from_last=${2:-1}
+    local s3_log=$(health_db_select ${component:-NOSUCHCOMPONENT} 2>/dev/null | grep s3 | sed -n ${n_from_last}p | grep -o "s3://log/.*")
 
     if [ "x$s3_log" != "x" ] ; then
         $HEX_SDK os_s3_object_get admin $s3_log /tmp/$s3_log
         cat /tmp/$s3_log
         rm -f /tmp/$s3_log
+    fi
+}
+
+health_log_detail()
+{
+    local component=$1
+    local n_from_last=${2:-1}
+    local flag="-format json"
+
+    [ $n_from_last -ge 1 ] || Error "invalid index $n_from_last"
+    local timestamp=$(VERBOSE=1 FORMAT= health_db_select $component $n_from_last | tail -1 | awk '{print $1}')
+    if [ "$FORMAT" = "json" ] ; then
+	$INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)"
+    else
+	echo -n "$(date -d @${timestamp:0:10}) - "
+	$INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)" | jq -r .results[].series[].values[][] | tr ";" "\n"
     fi
 }

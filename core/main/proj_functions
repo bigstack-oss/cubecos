@@ -29,7 +29,7 @@ _hex_exec()
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"disabled\""
             $INFLUX -database events -execute "${query},detail=\"$cmd\""
         else
-            if [ "x$1" = "x-l" -o "x$1" = "x-last" ] ; then
+            if [ "x$1" = "x-l" -o "x$1" = "x-last" -o "x${HEX_HEALTH_LAST:=0}" != "x0" ] ; then
                 shift 1
                 local last_chk="true"
             fi
@@ -827,4 +827,14 @@ cube_cluster_ppu()
             fi
         done
     fi
+}
+
+cluster_check()
+{
+    HEX_HEALTH_LAST=1 hex_cli -c cluster check
+}
+
+cluster_check_repair()
+{
+    HEX_HEALTH_LAST=1 hex_cli -c cluster check_repair
 }
