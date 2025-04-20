@@ -3,6 +3,7 @@
 #ifndef POLICY_NOTIFY_H
 #define POLICY_NOTIFY_H
 
+#include <assert.h>
 #include <list>
 
 #include <hex/parse.h>
