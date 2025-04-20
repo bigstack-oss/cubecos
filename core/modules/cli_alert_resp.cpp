@@ -188,7 +188,7 @@ loadNotifyPolicy(HexPolicyManager& policyManager)
     policy->triggerPolicy = triggerPolicy;
 
     // load the existing policy file into policy
-    // the trigger policy must be loaded after setting the setting policy into the trigger policy
+    // the trigger policy could only be loaded after setting the setting policy into the trigger policy
     if (!policyManager.load(*settingPolicy)) {
         freeNotifyPolicy(policy);
         return nullptr;
