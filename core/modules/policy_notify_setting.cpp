@@ -102,12 +102,9 @@ NotifySettingPolicy::load(const char* policyFile)
     // receiver email
     std::set<std::string> receiverEmailAddressSet;
     std::size_t receiverEmailCount = SizeOfYmlSeq(this->ymlRoot, "receiver.emails");
-    for (std::size_t i = 0; i < receiverEmailCount; i++) {
-        std::size_t ymlIndex = i + 1;
-
+    for (std::size_t i = 1; i <= receiverEmailCount; i++) {
         NotifySettingReceiverEmail e;
-        HexYmlParseString(e.address, this->ymlRoot, "receiver.emails.%d.address", ymlIndex);
-        HexYmlParseString(e.note, this->ymlRoot, "receiver.emails.%d.note", ymlIndex);
+        HexYmlParseString(e.address, this->ymlRoot, "receiver.emails.%zu.address", i);
 
         if (e.address == "") {
             // we do not allow receiver email with a blank address
@@ -121,6 +118,8 @@ NotifySettingPolicy::load(const char* policyFile)
             continue;
         }
 
+        HexYmlParseString(e.note, this->ymlRoot, "receiver.emails.%zu.note", i);
+
         this->config.receiver.emails.push_back(e);
         receiverEmailAddressSet.insert(e.address);
     }
@@ -128,15 +127,9 @@ NotifySettingPolicy::load(const char* policyFile)
     // receiver slack
     std::set<std::string> receiverSlackUrlSet;
     std::size_t receiverSlackCount = SizeOfYmlSeq(this->ymlRoot, "receiver.slacks");
-    for (std::size_t i = 0; i < receiverSlackCount; i++) {
-        std::size_t ymlIndex = i + 1;
-
+    for (std::size_t i = 1; i <= receiverSlackCount; i++) {
         NotifySettingReceiverSlack s;
-        HexYmlParseString(s.url, this->ymlRoot, "receiver.slacks.%d.url", ymlIndex);
-        HexYmlParseString(s.username, this->ymlRoot, "receiver.slacks.%d.username", ymlIndex);
-        HexYmlParseString(s.description, this->ymlRoot, "receiver.slacks.%d.description", ymlIndex);
-        HexYmlParseString(s.workspace, this->ymlRoot, "receiver.slacks.%d.workspace", ymlIndex);
-        HexYmlParseString(s.channel, this->ymlRoot, "receiver.slacks.%d.channel", ymlIndex);
+        HexYmlParseString(s.url, this->ymlRoot, "receiver.slacks.%zu.url", i);
 
         if (s.url == "") {
             // we do not allow receiver slack with a blank url
@@ -150,6 +143,11 @@ NotifySettingPolicy::load(const char* policyFile)
             continue;
         }
 
+        HexYmlParseString(s.username, this->ymlRoot, "receiver.slacks.%zu.username", i);
+        HexYmlParseString(s.description, this->ymlRoot, "receiver.slacks.%zu.description", i);
+        HexYmlParseString(s.workspace, this->ymlRoot, "receiver.slacks.%zu.workspace", i);
+        HexYmlParseString(s.channel, this->ymlRoot, "receiver.slacks.%zu.channel", i);
+
         this->config.receiver.slacks.push_back(s);
         receiverSlackUrlSet.insert(s.url);
     }
@@ -157,11 +155,9 @@ NotifySettingPolicy::load(const char* policyFile)
     // receiver exec shell
     std::set<std::string> receiverExecShellNameSet;
     std::size_t receiverExecShellCount = SizeOfYmlSeq(this->ymlRoot, "receiver.execs.shells");
-    for (std::size_t i = 0; i < receiverExecShellCount; i++) {
-        std::size_t ymlIndex = i + 1;
-
+    for (std::size_t i = 1; i <= receiverExecShellCount; i++) {
         NotifySettingReceiverExecShell es;
-        HexYmlParseString(es.name, this->ymlRoot, "receiver.execs.shells.%d.name", ymlIndex);
+        HexYmlParseString(es.name, this->ymlRoot, "receiver.execs.shells.%zu.name", i);
 
         if (es.name == "") {
             // we do not allow receiver exec shell with a blank name
@@ -182,11 +178,9 @@ NotifySettingPolicy::load(const char* policyFile)
     // receiver exec bin
     std::set<std::string> receiverExecBinNameSet;
     std::size_t receiverExecBinCount = SizeOfYmlSeq(this->ymlRoot, "receiver.execs.bins");
-    for (std::size_t i = 0; i < receiverExecBinCount; i++) {
-        std::size_t ymlIndex = i + 1;
-
+    for (std::size_t i = 1; i <= receiverExecBinCount; i++) {
         NotifySettingReceiverExecBin eb;
-        HexYmlParseString(eb.name, this->ymlRoot, "receiver.execs.bins.%d.name", ymlIndex);
+        HexYmlParseString(eb.name, this->ymlRoot, "receiver.execs.bins.%zu.name", i);
 
         if (eb.name == "") {
             // we do not allow receiver exec bin with a blank name

@@ -189,6 +189,7 @@ hex_cli_MODULES += cli_boot_mode.o
 hex_cli_MODULES += cli_cluster.o
 hex_cli_MODULES += cli_ext_storage.o
 hex_cli_MODULES += policy_notify_setting.o
+hex_cli_MODULES += policy_notify_trigger.o
 hex_cli_MODULES += cli_alert_resp.o
 hex_cli_MODULES += cli_s3.o
 hex_cli_MODULES += cli_gpu.o

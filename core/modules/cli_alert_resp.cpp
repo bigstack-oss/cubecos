@@ -16,6 +16,7 @@
 #include "include/policy_notify.h"
 #include "include/cli_notify_changer.h"
 #include "include/policy_notify_setting.h"
+#include "include/policy_notify_trigger.h"
 
 #define LABEL_SENDER_EMAIL_HOST "Enter email sender host: "
 #define LABEL_SENDER_EMAIL_PORT "Enter email sender port: "
@@ -33,7 +34,11 @@
 #define LABEL_RECEIVER_SLACK_CHANNEL "Enter slack receiver channel [optional]: "
 
 #define LABEL_RESP_NAME_CURRENT_OPTION_ONE "admin-notify"
+#define LABEL_RESP_TOPIC_CURRENT_OPTION_ONE "events"
+#define LABEL_RESP_MATCH_CURRENT_OPTION_ONE "\"severity\" == 'W' OR \"severity\" == 'E' OR \"severity\" == 'C'"
 #define LABEL_RESP_NAME_CURRENT_OPTION_TWO "instance-notify"
+#define LABEL_RESP_TOPIC_CURRENT_OPTION_TWO "instance-events"
+#define LABEL_RESP_MATCH_CURRENT_OPTION_TWO "\"severity\" == 'W' OR \"severity\" == 'C'"
 #define LABEL_RESP_NAME_CURRENT_LIMITATION "Currently, only \"" LABEL_RESP_NAME_CURRENT_OPTION_ONE "\" and \"" LABEL_RESP_NAME_CURRENT_OPTION_TWO "\" are supported.\n"
 #define LABEL_RESP_NAME "Enter notification name: "
 #define LABEL_RESP_EMAIL "Enter the email list (comma separated) [optional]: "
@@ -833,6 +838,107 @@ NotifySettingMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+bool
+putTrigger(
+    std::string name,
+    bool enabled,
+    std::string topic,
+    std::string match,
+    std::string description,
+    const std::vector<std::string>& emails,
+    const std::vector<std::string>& slacks,
+    const std::vector<std::string>& execShells,
+    const std::vector<std::string>& execBins
+)
+{
+    HexPolicyManager policyManager;
+    NotifyTriggerPolicy policy;
+
+    // load the existing policy file into policy
+    if (!policyManager.load(policy)) {
+        return false;
+    }
+
+    // update policy with input values
+    policy.addOrUpdateTrigger(
+        name,
+        enabled,
+        topic,
+        match,
+        description,
+        emails,
+        slacks,
+        execShells,
+        execBins
+    );
+
+    // save the updated policy into a policy file
+    if (!policyManager.save(policy)) {
+        return false;
+    }
+
+    // apply the udpated policy file
+    if (!policyManager.apply()) {
+        return false;
+    }
+    return true;
+}
+
+bool
+deleteTrigger(std::string name)
+{
+    HexPolicyManager policyManager;
+    NotifyTriggerPolicy policy;
+
+    // load the existing policy file into policy
+    if (!policyManager.load(policy)) {
+        return false;
+    }
+
+    // update policy with input values
+    // should not delete admin-notify and instance-notify, reset them instead
+    if (name.compare(LABEL_RESP_NAME_CURRENT_OPTION_ONE) == 0) {
+        policy.addOrUpdateTrigger(
+            name,
+            false,
+            LABEL_RESP_TOPIC_CURRENT_OPTION_ONE,
+            LABEL_RESP_MATCH_CURRENT_OPTION_ONE,
+            "",
+            std::vector<std::string>(),
+            std::vector<std::string>(),
+            std::vector<std::string>(),
+            std::vector<std::string>()
+        );
+    } else if (name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) == 0) {
+        policy.addOrUpdateTrigger(
+            name,
+            false,
+            LABEL_RESP_TOPIC_CURRENT_OPTION_TWO,
+            LABEL_RESP_MATCH_CURRENT_OPTION_TWO,
+            "",
+            std::vector<std::string>(),
+            std::vector<std::string>(),
+            std::vector<std::string>(),
+            std::vector<std::string>()
+        );
+    } else {
+        if (!policy.deleteTrigger(name)) {
+            return false;
+        }
+    }
+
+    // save the updated policy into a policy file
+    if (!policyManager.save(policy)) {
+        return false;
+    }
+
+    // apply the udpated policy file
+    if (!policyManager.apply()) {
+        return false;
+    }
+    return true;
+}
+
 static int
 NotifyTriggerMain(int argc, const char** argv)
 {
@@ -881,6 +987,16 @@ NotifyTriggerMain(int argc, const char** argv)
             return CLI_INVALID_ARGS;
         }
 
+        std::string topic = "";
+        std::string match = "";
+        if (name.compare(LABEL_RESP_NAME_CURRENT_OPTION_ONE) == 0) {
+            topic = LABEL_RESP_TOPIC_CURRENT_OPTION_ONE;
+            match = LABEL_RESP_MATCH_CURRENT_OPTION_ONE;
+        } else if (name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) == 0) {
+            topic = LABEL_RESP_TOPIC_CURRENT_OPTION_TWO;
+            match = LABEL_RESP_MATCH_CURRENT_OPTION_TWO;
+        }
+
         /**
          * argv[3]=<enable|disable>
          * argv[4]=[<email address 1, email address 2>]
@@ -907,24 +1023,28 @@ NotifyTriggerMain(int argc, const char** argv)
             return CLI_INVALID_ARGS;
         }
 
+        bool enabled = (enable == "enable");
         std::string emailInput;
         std::string slackInput;
         std::string execShellInput;
         std::string execBinInput;
-        std::string description;
 
         CliReadInputStr(argc, argv, 4, LABEL_RESP_EMAIL, &emailInput);
         CliReadInputStr(argc, argv, 5, LABEL_RESP_SLACK, &slackInput);
         CliReadInputStr(argc, argv, 6, LABEL_RESP_EXEC_SHELL, &execShellInput);
         CliReadInputStr(argc, argv, 7, LABEL_RESP_EXEC_BIN, &execBinInput);
-        CliReadInputStr(argc, argv, 8, LABEL_RESP_DESCRIPTION, &description);
 
         std::vector<std::string> emails = hex_string_util::split(emailInput, ',');
         std::vector<std::string> slacks = hex_string_util::split(slackInput, ',');
         std::vector<std::string> execShells = hex_string_util::split(execShellInput, ',');
-        std::vector<std::string> execBins = hex_string_util::split(execBinInput, ',');            
+        std::vector<std::string> execBins = hex_string_util::split(execBinInput, ',');
 
-        // TODO policy
+        std::string description;
+        CliReadInputStr(argc, argv, 8, LABEL_RESP_DESCRIPTION, &description);
+
+        if (!putTrigger(name, enabled, topic, match, description, emails, slacks, execShells, execBins)) {
+            return CLI_UNEXPECTED_ERROR;
+        }
     } else {
         /**
          * argv[2]=<name>
@@ -946,8 +1066,12 @@ NotifyTriggerMain(int argc, const char** argv)
             return CLI_INVALID_ARGS;
         }
 
-        // TODO policy
+        if (!deleteTrigger(name)) {
+            return CLI_UNEXPECTED_ERROR;
+        }
     }
+
+    return CLI_SUCCESS;
 }
 
 // This mode is not available in STRICT error state

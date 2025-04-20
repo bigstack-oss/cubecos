@@ -12,7 +12,8 @@
 /**
  * Email sender configurations.
  */
-struct NotifySettingSenderEmail {
+struct NotifySettingSenderEmail
+{
     std::string host;
     std::string port;
     std::string username;
@@ -23,14 +24,16 @@ struct NotifySettingSenderEmail {
 /**
  * Sender configurations.
  */
-struct NotifySettingSender {
+struct NotifySettingSender
+{
     NotifySettingSenderEmail email;
 };
 
 /**
  * Email receiver configurations.
  */
-struct NotifySettingReceiverEmail {
+struct NotifySettingReceiverEmail
+{
     std::string address;
     std::string note;
 };
@@ -38,7 +41,8 @@ struct NotifySettingReceiverEmail {
 /**
  * Slack receiver configurations.
  */
-struct NotifySettingReceiverSlack {
+struct NotifySettingReceiverSlack
+{
     std::string url;
     std::string username;
     std::string description;
@@ -49,21 +53,24 @@ struct NotifySettingReceiverSlack {
 /**
  * Shell exec receiver configurations.
  */
-struct NotifySettingReceiverExecShell {
+struct NotifySettingReceiverExecShell
+{
     std::string name;
 };
 
 /**
  * Binary exec receiver configurations.
  */
-struct NotifySettingReceiverExecBin {
+struct NotifySettingReceiverExecBin
+{
     std::string name;
 };
 
 /**
  * Exec receiver configurations.
  */
-struct NotifySettingReceiverExec {
+struct NotifySettingReceiverExec
+{
     std::vector<NotifySettingReceiverExecShell> shells;
     std::vector<NotifySettingReceiverExecBin> bins;
 };
@@ -71,7 +78,8 @@ struct NotifySettingReceiverExec {
 /**
  * Receiver configurations.
  */
-struct NotifySettingReceiver {
+struct NotifySettingReceiver
+{
     std::vector<NotifySettingReceiverEmail> emails;
     std::vector<NotifySettingReceiverSlack> slacks;
     NotifySettingReceiverExec execs;
@@ -80,7 +88,8 @@ struct NotifySettingReceiver {
 /**
  * Setting configurations.
  */
-struct NotifySettingConfig {
+struct NotifySettingConfig
+{
     std::string titlePrefix;
     NotifySettingSender sender;
     NotifySettingReceiver receiver;

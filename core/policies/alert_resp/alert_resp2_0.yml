@@ -1,0 +1,28 @@
+---
+# alert_resp/alert_resp2_0.yml
+name: alert_resp
+version: 2.0
+
+triggers:
+  - name: admin-notify
+    enabled: false
+    topic: events
+    match: "\"severity\" == 'W' OR \"severity\" == 'E' OR \"severity\" == 'C'"
+    description:
+    responses:
+      emails:
+      slacks:
+      execs:
+        shells:
+        bins:
+  - name: instance-notify
+    enabled: false
+    topic: instance-events
+    match: "\"severity\" == 'W' OR \"severity\" == 'C'"
+    description:
+    responses:
+      emails:
+      slacks:
+      execs:
+        shells:
+        bins:
