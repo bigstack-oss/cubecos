@@ -21,7 +21,7 @@ static const char* LABEL_RESP_EXEC_MEDIA = "Select a media to upload executable:
 class CliNotifyChanger
 {
 public:
-    bool configure(NotifyPolicy *policy, int argc, const char** argv)
+    bool configure(OldNotifyPolicy *policy, int argc, const char** argv)
     {
         return construct(policy, argc, argv);
     }
@@ -44,7 +44,7 @@ private:
         return true;
     }
 
-    bool construct(NotifyPolicy *policy, int argc, const char** argv)
+    bool construct(OldNotifyPolicy *policy, int argc, const char** argv)
     {
         CliList actions;
         int actIdx;

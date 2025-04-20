@@ -1,10 +1,12 @@
 // CUBE SDK
 
+#include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"
 
 NotifyTriggerPolicy::NotifyTriggerPolicy():
     isInitialized(false),
-    ymlRoot(NULL)
+    ymlRoot(NULL),
+    settingPolicy(nullptr)
 {
     this->config.triggers = std::vector<NotifyTrigger>();
 }
@@ -15,6 +17,7 @@ NotifyTriggerPolicy::~NotifyTriggerPolicy()
         FiniYml(this->ymlRoot);
         this->ymlRoot = NULL;
     }
+    this->settingPolicy = nullptr;
 }
 
 const char*
@@ -27,6 +30,20 @@ const char*
 NotifyTriggerPolicy::policyVersion() const
 {
     return "2.0";
+}
+
+bool
+NotifyTriggerPolicy::isReady() const
+{
+    return this->isInitialized;
+}
+
+void
+NotifyTriggerPolicy::setSettingPolicy(const NotifySettingPolicy* settingPolicy)
+{
+    if (settingPolicy->isReady()) {
+        this->settingPolicy = settingPolicy;
+    }
 }
 
 bool
@@ -75,6 +92,11 @@ NotifyTriggerPolicy::load(const char* policyFile)
                 continue;
             }
 
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverEmail(e.address))) {
+                // the email address should also be in the setting policy
+                continue;
+            }
+
             t.responses.emails.push_back(e);
             emailAddressSet.insert(e.address);
         }
@@ -91,6 +113,11 @@ NotifyTriggerPolicy::load(const char* policyFile)
             if (s.url == "" || slackUrlSet.count(s.url) > 0) {
                 // the slack url should not be blank
                 // the slack url should be unique
+                continue;
+            }
+
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverSlack(s.url))) {
+                // the slack url should also be in the setting policy
                 continue;
             }
 
@@ -113,6 +140,11 @@ NotifyTriggerPolicy::load(const char* policyFile)
                 continue;
             }
 
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverExecShell(es.name))) {
+                // the exec shell name should also be in the setting policy
+                continue;
+            }
+
             t.responses.execs.shells.push_back(es);
             execShellNameSet.insert(es.name);
         }
@@ -129,6 +161,11 @@ NotifyTriggerPolicy::load(const char* policyFile)
             if (eb.name == "" || execBinNameSet.count(eb.name) > 0) {
                 // the exec bin name should not be blank
                 // the exec bin name should be unique
+                continue;
+            }
+
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverExecBin(eb.name))) {
+                // the exec bin name should also be in the setting policy
                 continue;
             }
 
@@ -297,24 +334,44 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
         newTrigger.description = description;
         // email
         for (std::vector<std::string>::const_iterator it = emails.begin(); it != emails.end(); it++) {
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverEmail(*it))) {
+                // the email address should also be in the setting policy
+                continue;
+            }
+
             NotifyTriggerResponseEmail newEmail;
             newEmail.address = *it;
             newTrigger.responses.emails.push_back(newEmail);
         }
         // slack
         for (std::vector<std::string>::const_iterator it = slacks.begin(); it != slacks.end(); it++) {
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverSlack(*it))) {
+                // the slack url should also be in the setting policy
+                continue;
+            }
+
             NotifyTriggerResponseSlack newSlack;
             newSlack.url = *it;
             newTrigger.responses.slacks.push_back(newSlack);
         }
         // exec shell
         for (std::vector<std::string>::const_iterator it = execShells.begin(); it != execShells.end(); it++) {
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverExecShell(*it))) {
+                // the exec shell name should also be in the setting policy
+                continue;
+            }
+
             NotifyTriggerResponseExecShell newExecShell;
             newExecShell.name = *it;
             newTrigger.responses.execs.shells.push_back(newExecShell);
         }
         // exec bin
         for (std::vector<std::string>::const_iterator it = execBins.begin(); it != execBins.end(); it++) {
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverExecBin(*it))) {
+                // the exec bin name should also be in the setting policy
+                continue;
+            }
+
             NotifyTriggerResponseExecBin newExecBin;
             newExecBin.name = *it;
             newTrigger.responses.execs.bins.push_back(newExecBin);
@@ -330,6 +387,11 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
         // email
         t->responses.emails.clear();
         for (std::vector<std::string>::const_iterator it = emails.begin(); it != emails.end(); it++) {
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverEmail(*it))) {
+                // the email address should also be in the setting policy
+                continue;
+            }
+
             NotifyTriggerResponseEmail newEmail;
             newEmail.address = *it;
             t->responses.emails.push_back(newEmail);
@@ -337,6 +399,11 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
         // slack
         t->responses.slacks.clear();
         for (std::vector<std::string>::const_iterator it = slacks.begin(); it != slacks.end(); it++) {
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverSlack(*it))) {
+                // the slack url should also be in the setting policy
+                continue;
+            }
+
             NotifyTriggerResponseSlack newSlack;
             newSlack.url = *it;
             t->responses.slacks.push_back(newSlack);
@@ -344,6 +411,11 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
         // exec shell
         t->responses.execs.shells.clear();
         for (std::vector<std::string>::const_iterator it = execShells.begin(); it != execShells.end(); it++) {
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverExecShell(*it))) {
+                // the exec shell name should also be in the setting policy
+                continue;
+            }
+
             NotifyTriggerResponseExecShell newExecShell;
             newExecShell.name = *it;
             t->responses.execs.shells.push_back(newExecShell);
@@ -351,6 +423,11 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
         // exec bin
         t->responses.execs.bins.clear();
         for (std::vector<std::string>::const_iterator it = execBins.begin(); it != execBins.end(); it++) {
+            if (this->settingPolicy && !(this->settingPolicy->hasReceiverExecBin(*it))) {
+                // the exec bin name should also be in the setting policy
+                continue;
+            }
+
             NotifyTriggerResponseExecBin newExecBin;
             newExecBin.name = *it;
             t->responses.execs.bins.push_back(newExecBin);
@@ -378,4 +455,60 @@ NotifyTriggerPolicy::deleteTrigger(std::string name)
     }
 
     return isSuccessful;
+}
+
+void
+NotifyTriggerPolicy::deleteEmail(std::string address)
+{
+    for (std::vector<NotifyTrigger>::iterator it = this->config.triggers.begin(); it != this->config.triggers.end(); it++) {
+        for (std::vector<NotifyTriggerResponseEmail>::iterator jt = it->responses.emails.begin(); jt != it->responses.emails.end();) {
+            if (jt->address == address) {
+                jt = it->responses.emails.erase(jt);
+            } else {
+                jt++;
+            }
+        }
+    }
+}
+
+void
+NotifyTriggerPolicy::deleteSlack(std::string url)
+{
+    for (std::vector<NotifyTrigger>::iterator it = this->config.triggers.begin(); it != this->config.triggers.end(); it++) {
+        for (std::vector<NotifyTriggerResponseSlack>::iterator jt = it->responses.slacks.begin(); jt != it->responses.slacks.end();) {
+            if (jt->url == url) {
+                jt = it->responses.slacks.erase(jt);
+            } else {
+                jt++;
+            }
+        }
+    }
+}
+
+void
+NotifyTriggerPolicy::deleteExecShell(std::string name)
+{
+    for (std::vector<NotifyTrigger>::iterator it = this->config.triggers.begin(); it != this->config.triggers.end(); it++) {
+        for (std::vector<NotifyTriggerResponseExecShell>::iterator jt = it->responses.execs.shells.begin(); jt != it->responses.execs.shells.end();) {
+            if (jt->name == name) {
+                jt = it->responses.execs.shells.erase(jt);
+            } else {
+                jt++;
+            }
+        }
+    }
+}
+
+void
+NotifyTriggerPolicy::deleteExecBin(std::string name)
+{
+    for (std::vector<NotifyTrigger>::iterator it = this->config.triggers.begin(); it != this->config.triggers.end(); it++) {
+        for (std::vector<NotifyTriggerResponseExecBin>::iterator jt = it->responses.execs.bins.begin(); jt != it->responses.execs.bins.end();) {
+            if (jt->name == name) {
+                jt = it->responses.execs.bins.erase(jt);
+            } else {
+                jt++;
+            }
+        }
+    }
 }

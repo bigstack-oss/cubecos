@@ -1,10 +1,12 @@
 // CUBE SDK
 
 #include "include/policy_notify_setting.h"
+#include "include/policy_notify_trigger.h"
 
 NotifySettingPolicy::NotifySettingPolicy():
     isInitialized(false),
-    ymlRoot(NULL)
+    ymlRoot(NULL),
+    triggerPolicy(nullptr)
 {
     this->config.titlePrefix = "";
 
@@ -34,6 +36,7 @@ NotifySettingPolicy::~NotifySettingPolicy()
         FiniYml(this->ymlRoot);
         this->ymlRoot = NULL;
     }
+    this->triggerPolicy = nullptr;
 }
 
 const char*
@@ -48,10 +51,24 @@ NotifySettingPolicy::policyVersion() const
     return "1.0";
 }
 
+bool
+NotifySettingPolicy::isReady() const
+{
+    return this->isInitialized;
+}
+
 const NotifySettingConfig
 NotifySettingPolicy::getConfig() const
 {
     return this->config;
+}
+
+void
+NotifySettingPolicy::setTriggerPolicy(NotifyTriggerPolicy* triggerPolicy)
+{
+    if (triggerPolicy->isReady()) {
+        this->triggerPolicy = triggerPolicy;
+    }
 }
 
 bool
@@ -342,6 +359,74 @@ NotifySettingPolicy::save(const char* policyFile)
     return (WriteYml(policyFile, this->ymlRoot) == 0);
 }
 
+bool
+NotifySettingPolicy::hasReceiverEmail(std::string address) const
+{
+    const std::vector<NotifySettingReceiverEmail>* emails = &(this->config.receiver.emails);
+    if (emails == nullptr) {
+        return false;
+    }
+
+    for (std::vector<NotifySettingReceiverEmail>::const_iterator it = emails->begin(); it != emails->end(); it++) {
+        if (it->address == address) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool
+NotifySettingPolicy::hasReceiverSlack(std::string url) const
+{
+    const std::vector<NotifySettingReceiverSlack>* slacks = &(this->config.receiver.slacks);
+    if (slacks == nullptr) {
+        return false;
+    }
+
+    for (std::vector<NotifySettingReceiverSlack>::const_iterator it = slacks->begin(); it != slacks->end(); it++) {
+        if (it->url == url) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool
+NotifySettingPolicy::hasReceiverExecShell(std::string name) const
+{
+    const std::vector<NotifySettingReceiverExecShell>* shells = &(this->config.receiver.execs.shells);
+    if (shells == nullptr) {
+        return false;
+    }
+
+    for (std::vector<NotifySettingReceiverExecShell>::const_iterator it = shells->begin(); it != shells->end(); it++) {
+        if (it->name == name) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool
+NotifySettingPolicy::hasReceiverExecBin(std::string name) const
+{
+    const std::vector<NotifySettingReceiverExecBin>* bins = &(this->config.receiver.execs.bins);
+    if (bins == nullptr) {
+        return false;
+    }
+
+    for (std::vector<NotifySettingReceiverExecBin>::const_iterator it = bins->begin(); it != bins->end(); it++) {
+        if (it->name == name) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void
 NotifySettingPolicy::updateSenderEmail(
     std::string host,
@@ -513,6 +598,11 @@ NotifySettingPolicy::deleteReceiverEmail(std::string address)
         }
     }
 
+    // delete on cascade for emails in trigger config
+    if (isSuccessful && this->triggerPolicy) {
+        this->triggerPolicy->deleteEmail(address);
+    }
+
     return isSuccessful;
 }
 
@@ -533,6 +623,11 @@ NotifySettingPolicy::deleteReceiverSlack(std::string url)
         } else {
             it++;
         }
+    }
+
+    // delete on cascade for slacks in trigger config
+    if (isSuccessful && this->triggerPolicy) {
+        this->triggerPolicy->deleteSlack(url);
     }
 
     return isSuccessful;
@@ -557,6 +652,11 @@ NotifySettingPolicy::deleteReceiverExecShell(std::string name)
         }
     }
 
+    // delete on cascade for exec shells in trigger config
+    if (isSuccessful && this->triggerPolicy) {
+        this->triggerPolicy->deleteExecShell(name);
+    }
+
     return isSuccessful;
 }
 
@@ -577,6 +677,11 @@ NotifySettingPolicy::deleteReceiverExecBin(std::string name)
         } else {
             it++;
         }
+    }
+
+    // delete on cascade for exec bins in trigger config
+    if (isSuccessful && this->triggerPolicy) {
+        this->triggerPolicy->deleteExecBin(name);
     }
 
     return isSuccessful;

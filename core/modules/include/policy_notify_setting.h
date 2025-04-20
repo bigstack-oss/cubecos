@@ -9,6 +9,8 @@
 #include <hex/cli_util.h>
 #include <hex/yml_util.h>
 
+#include "include/policy_notify.h"
+
 /**
  * Email sender configurations.
  */
@@ -105,7 +107,12 @@ public:
     ~NotifySettingPolicy();
     const char* policyName() const;
     const char* policyVersion() const;
+    bool isReady() const;
     const NotifySettingConfig getConfig() const;
+    /**
+     * Set the trigger policy.
+     */
+    void setTriggerPolicy(NotifyTriggerPolicy* triggerPolicy);
     /**
      * Load the policy.
      */
@@ -114,6 +121,22 @@ public:
      * Save the policy.
      */
     bool save(const char* policyFile);
+    /**
+     * Check if the email address matches one of the email receiver.
+     */
+    bool hasReceiverEmail(std::string address) const;
+    /**
+     * Check if the slack url matches one of the slack receiver.
+     */
+    bool hasReceiverSlack(std::string url) const;
+    /**
+     * Check if the exec shell name matches one of the exec shell receiver.
+     */
+    bool hasReceiverExecShell(std::string name) const;
+    /**
+     * Check if the exec bin name matches one of the exec bin receiver.
+     */
+    bool hasReceiverExecBin(std::string name) const;
     /**
      * Add or update the email sender's configurations.
      */
@@ -179,7 +202,10 @@ private:
      * Configurations
      */
     NotifySettingConfig config;
+    /**
+     * Trigger policy.
+     */
+    NotifyTriggerPolicy* triggerPolicy;
 };
-
 
 #endif /* endif POLICY_NOTIFY_SETTING_H */

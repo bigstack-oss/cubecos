@@ -48,7 +48,7 @@
 #define LABEL_RESP_DESCRIPTION "Enter the notification description [optional]: "
 
 static bool
-listBackends(const NotifyPolicy& policy)
+listBackends(const OldNotifyPolicy& policy)
 {
     char line[105];
     memset(line, '-', sizeof(line));
@@ -111,7 +111,7 @@ NotifyListMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
 
     HexPolicyManager policyManager;
-    NotifyPolicy policy;
+    OldNotifyPolicy policy;
     if (!policyManager.load(policy)) {
         return CLI_UNEXPECTED_ERROR;
     }
@@ -132,7 +132,7 @@ NotifyCfgMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
 
     HexPolicyManager policyManager;
-    NotifyPolicy policy;
+    OldNotifyPolicy policy;
     if (!policyManager.load(policy)) {
         return CLI_UNEXPECTED_ERROR;
     }
@@ -157,6 +157,72 @@ NotifyCfgMain(int argc, const char** argv)
     // should identify real user name
     //TODO: HexLogEvent("[user] modified external storage policy via cli");
     return CLI_SUCCESS;
+}
+
+void
+freeNotifyPolicy(NotifyPolicy* policy)
+{
+    if (policy) {
+        if (policy->settingPolicy) {
+            delete policy->settingPolicy;
+            policy->settingPolicy = nullptr;
+        }
+
+        if (policy->triggerPolicy) {
+            delete policy->triggerPolicy;
+            policy->triggerPolicy = nullptr;
+        }
+
+        delete policy;
+        policy = nullptr;
+    }
+}
+
+NotifyPolicy*
+loadNotifyPolicy(HexPolicyManager& policyManager)
+{
+    NotifySettingPolicy* settingPolicy = new NotifySettingPolicy();
+    NotifyTriggerPolicy* triggerPolicy = new NotifyTriggerPolicy();
+    NotifyPolicy* policy = new NotifyPolicy();
+    policy->settingPolicy = settingPolicy;
+    policy->triggerPolicy = triggerPolicy;
+
+    // load the existing policy file into policy
+    // the trigger policy must be loaded after setting the setting policy into the trigger policy
+    if (!policyManager.load(*settingPolicy)) {
+        freeNotifyPolicy(policy);
+        return nullptr;
+    }
+    triggerPolicy->setSettingPolicy(settingPolicy);
+    if (!policyManager.load(*triggerPolicy)) {
+        freeNotifyPolicy(policy);
+        return nullptr;
+    }
+    settingPolicy->setTriggerPolicy(triggerPolicy);
+    return policy;
+}
+
+bool
+commitNotifyPolicy(HexPolicyManager& policyManager, NotifyPolicy* policy)
+{
+    // save the updated policy into a policy file
+    if (!policyManager.save(*(policy->settingPolicy))) {
+        freeNotifyPolicy(policy);
+        return false;
+    }
+    if (!policyManager.save(*(policy->triggerPolicy))) {
+        freeNotifyPolicy(policy);
+        return false;
+    }
+
+    // apply the udpated policy file
+    if (!policyManager.apply()) {
+        freeNotifyPolicy(policy);
+        return false;
+    }
+
+    freeNotifyPolicy(policy);
+    return true;
 }
 
 bool
@@ -331,27 +397,20 @@ bool
 deleteSettingReceiverEmail(std::string address)
 {
     HexPolicyManager policyManager;
-    NotifySettingPolicy policy;
-
-    // load the existing policy file into policy
-    if (!policyManager.load(policy)) {
+    NotifyPolicy* policy = loadNotifyPolicy(policyManager);
+    if (policy == nullptr) {
         return false;
     }
 
     // update policy with input values
-    if (!policy.deleteReceiverEmail(address)) {
+    if (!policy->settingPolicy->deleteReceiverEmail(address)) {
         return false;
     }
 
-    // save the updated policy into a policy file
-    if (!policyManager.save(policy)) {
+    if (!commitNotifyPolicy(policyManager, policy)) {
         return false;
     }
 
-    // apply the udpated policy file
-    if (!policyManager.apply()) {
-        return false;
-    }
     return true;
 }
 
@@ -359,27 +418,20 @@ bool
 deleteSettingReceiverSlack(std::string url)
 {
     HexPolicyManager policyManager;
-    NotifySettingPolicy policy;
-
-    // load the existing policy file into policy
-    if (!policyManager.load(policy)) {
+    NotifyPolicy* policy = loadNotifyPolicy(policyManager);
+    if (policy == nullptr) {
         return false;
     }
 
     // update policy with input values
-    if (!policy.deleteReceiverSlack(url)) {
+    if (!policy->settingPolicy->deleteReceiverSlack(url)) {
         return false;
     }
 
-    // save the updated policy into a policy file
-    if (!policyManager.save(policy)) {
+    if (!commitNotifyPolicy(policyManager, policy)) {
         return false;
     }
 
-    // apply the udpated policy file
-    if (!policyManager.apply()) {
-        return false;
-    }
     return true;
 }
 
@@ -387,27 +439,20 @@ bool
 deleteSettingReceiverExecShell(std::string name)
 {
     HexPolicyManager policyManager;
-    NotifySettingPolicy policy;
-
-    // load the existing policy file into policy
-    if (!policyManager.load(policy)) {
+    NotifyPolicy* policy = loadNotifyPolicy(policyManager);
+    if (policy == nullptr) {
         return false;
     }
 
     // update policy with input values
-    if (!policy.deleteReceiverExecShell(name)) {
+    if (!policy->settingPolicy->deleteReceiverExecShell(name)) {
         return false;
     }
 
-    // save the updated policy into a policy file
-    if (!policyManager.save(policy)) {
+    if (!commitNotifyPolicy(policyManager, policy)) {
         return false;
     }
 
-    // apply the udpated policy file
-    if (!policyManager.apply()) {
-        return false;
-    }
     return true;
 }
 
@@ -415,27 +460,20 @@ bool
 deleteSettingReceiverExecBin(std::string name)
 {
     HexPolicyManager policyManager;
-    NotifySettingPolicy policy;
-
-    // load the existing policy file into policy
-    if (!policyManager.load(policy)) {
+    NotifyPolicy* policy = loadNotifyPolicy(policyManager);
+    if (policy == nullptr) {
         return false;
     }
 
     // update policy with input values
-    if (!policy.deleteReceiverExecBin(name)) {
+    if (!policy->settingPolicy->deleteReceiverExecBin(name)) {
         return false;
     }
 
-    // save the updated policy into a policy file
-    if (!policyManager.save(policy)) {
+    if (!commitNotifyPolicy(policyManager, policy)) {
         return false;
     }
 
-    // apply the udpated policy file
-    if (!policyManager.apply()) {
-        return false;
-    }
     return true;
 }
 

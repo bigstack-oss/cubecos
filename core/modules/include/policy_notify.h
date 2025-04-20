@@ -10,6 +10,14 @@
 #include <hex/cli_util.h>
 #include <hex/yml_util.h>
 
+class NotifySettingPolicy;
+class NotifyTriggerPolicy;
+
+struct NotifyPolicy {
+    NotifySettingPolicy* settingPolicy;
+    NotifyTriggerPolicy* triggerPolicy;
+};
+
 struct NotifyResponse
 {
     bool enabled;
@@ -39,12 +47,12 @@ struct NotifyConfig
     std::list<NotifyResponse> resps;
 };
 
-class NotifyPolicy : public HexPolicy
+class OldNotifyPolicy : public HexPolicy
 {
 public:
-    NotifyPolicy() : m_initialized(false), m_yml(NULL) {}
+    OldNotifyPolicy() : m_initialized(false), m_yml(NULL) {}
 
-    ~NotifyPolicy()
+    ~OldNotifyPolicy()
     {
         if (m_yml) {
             FiniYml(m_yml);
@@ -294,4 +302,3 @@ private:
 };
 
 #endif /* endif POLICY_NOTIFY_H */
-
