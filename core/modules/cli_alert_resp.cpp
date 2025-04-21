@@ -688,7 +688,7 @@ NotifySettingMain(int argc, const char** argv)
 
                 int execFileDirectoryIndex;
                 enum {
-                    FILE_DIRECTORY_USB = 1,
+                    FILE_DIRECTORY_USB = 0,
                     FILE_DIRECTORY_LOCAL
                 };
 
