@@ -3,7 +3,7 @@
 
 # Unknown system variable 'innodb_version' since MariaDB 10.10
 # ROOTFS_DNF += mariadb-server mariadb-server-galera rsync
-MARIADB_VER := 10.5.22-1.el9
+MARIADB_VER := 10.5.27-1.el9
 MARIADB_URL := https://rpmfind.net/linux/centos-stream/9-stream/AppStream/x86_64/os/Packages
 MARIADB_LOCKED_RPMS := mariadb-$(MARIADB_VER) mariadb-backup-$(MARIADB_VER) mariadb-common-$(MARIADB_VER) mariadb-errmsg-$(MARIADB_VER)
 MARIADB_LOCKED_RPMS += mariadb-gssapi-server-$(MARIADB_VER) mariadb-server-$(MARIADB_VER) mariadb-server-galera-$(MARIADB_VER) mariadb-server-utils-$(MARIADB_VER)

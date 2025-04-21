@@ -26,7 +26,7 @@ UI_NODE_VERSION := 22.14.0
 LMI_NODE_VERSION := 12.22.12
 PROJ_NFS_SERVER := 10.32.0.200
 PROJ_NFS_CUBECOS_PATH := /volume1/bigstack/cube-images
-PROJ_NFS_OPENSTACK_PATH := /volume1/openstack-images
+PROJ_NFS_OPENSTACK_PATH := /volume1/docker/minio/downloads
 PROJ_NFS_PATH := /volume1/pxe-server
 
 PROJ_TEST_EXPORTS := "PS4=+[\\t]"

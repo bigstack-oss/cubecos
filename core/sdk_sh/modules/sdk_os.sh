@@ -783,6 +783,27 @@ os_image_import_with_attrs()
     fi
 }
 
+_os_image_distro_ver()
+{
+    local img=${1:-NOSUCHIMAGE}
+    local distro=other
+    local ver=22.04
+
+    if echo $img | grep -q -i -e rancher-cluster-image -e amphora -e manila ; then
+        ver=$(echo ${img%.*} | cut -d "_" -f2)
+    else
+        for d in centos ubuntu windows debian rocky fedora freebsd coreos arch ; do
+            if echo $img | grep -q -i "$d" ; then
+                distro=$d
+                ver=$(echo ${img%.*} | cut -d "_" -f2)
+                break
+            fi
+        done
+    fi
+
+    echo "${distro}:${ver}"
+}
+
 # params:
 # $1: file dir (required)
 # $2: file name  (required)
@@ -798,6 +819,13 @@ os_image_import()
     local properties=${6:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"
+
+    local distro_ver=$(_os_image_distro_ver $file)
+    local distro=$(echo $distro_ver | cut -d ":" -f1)
+    local ver=$(echo $distro_ver | cut -d ":" -f2)
+    properties+=" --property os_distro=$distro"
+    properties+=" --property os_admin_user=$distro"
+    properties+=" --property os_vers=$ver"
 
     if [[ $(qemu-img info $IMG | grep "file format") =~ raw ]] ; then
         local img_name=$IMG
@@ -881,11 +909,11 @@ os_extpack_image_import()
                 os_ironic_deploy_initramfs_import ${dir}/${ext_folder} $img
                 ;;
             k8s-|rancher-cluster-)
-                local olds=$($OPENSTACK image list -f value --property name=${img%.*} -c ID)
+                local olds=$($OPENSTACK image list -f value --property name=${img%_*.*} -c ID)
                 if [ -n "$olds" ] ; then
                     $OPENSTACK image delete $olds 2>/dev/null
                 fi
-                os_image_import_with_attrs default $dir/${ext_folder} $img ${img%.*}
+                os_image_import_with_attrs default $dir/${ext_folder} $img ${img%_*.*}
                 ;;
             appfw-)
                 local appfw_dir=/opt/appfw/images/
