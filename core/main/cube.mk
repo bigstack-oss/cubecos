@@ -83,6 +83,7 @@ hex_translate_MODULES += translate_ntp.o
 hex_translate_MODULES += translate_ext_storage.o
 hex_translate_MODULES += translate_alert_resp.o
 hex_translate_MODULES += policy_notify_setting.o
+hex_translate_MODULES += policy_notify_trigger.o
 hex_translate_MODULES += translate_alert_setting.o
 hex_translate_MODULES += translate_rancher.o
 
