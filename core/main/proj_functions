@@ -25,7 +25,7 @@ _hex_exec()
     local runtime=/run/$cmd
     if echo "$cmd" | grep -q "health_.*_check$" ; then
         if [ -e $HEX_STATE_DIR/${cmd}_disabled ] ; then
-            local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
+            local srv=$(echo "$cmd" | sed -e "s/^health_//" -e "s/_check$//")
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"disabled\""
             $INFLUX -database events -execute "${query},detail=\"$cmd\""
         else
@@ -35,10 +35,10 @@ _hex_exec()
             fi
             if [ -e $runtime -a "x$last_chk" = "xtrue" ] ; then
                 ret=$(cat $runtime | jq -r .ERROR_CODE)
-                $cmd $@ &
+                "$cmd" "$@" &
                 return ${ret:-0}
             else
-                $cmd $@
+                "$cmd" "$@"
             fi
         fi
     elif echo "$cmd" | grep -q "health_.*_repair$" ; then
@@ -46,7 +46,7 @@ _hex_exec()
             return 1
         else
             trap _hex_exec_abort INT EXIT
-            $cmd $@ &
+            "$cmd" "$@" &
             echo $! > $runtime
             ln -sf $runtime $CLUSTER_REPAIRING
             local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_repair$//")
@@ -55,7 +55,7 @@ _hex_exec()
             wait $(cat $runtime) && rm -f $runtime $CLUSTER_REPAIRING
         fi
     else
-        $cmd $@
+        "$cmd" "$@"
     fi
 }
 

@@ -346,7 +346,7 @@ alert_set_setting_title_prefix()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    exit $?
+    return $?
 }
 
 alert_set_setting_sender_email()
@@ -386,7 +386,7 @@ alert_set_setting_sender_email()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    exit $?
+    return $?
 }
 
 alert_put_setting_receiver_email()
@@ -430,7 +430,7 @@ alert_put_setting_receiver_email()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    exit $?
+    return $?
 }
 
 alert_put_setting_receiver_slack()
@@ -466,7 +466,7 @@ alert_put_setting_receiver_slack()
     local is_update="false"
     # update
     for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
-        if [[ "$url" == "$(yq ".receiver.slacks[$i].url' $policy_file)" ]] ; then
+        if [[ "$url" == "$(yq ".receiver.slacks[$i].url" $policy_file)" ]] ; then
             yq -i ".receiver.slacks[$i].url = \"$url\"" $policy_file
             yq -i ".receiver.slacks[$i].username = \"$username\"" $policy_file
             yq -i ".receiver.slacks[$i].description = \"$description\"" $policy_file
@@ -486,7 +486,7 @@ alert_put_setting_receiver_slack()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    exit $?
+    return $?
 }
 
 alert_delete_setting_sender_email()
@@ -510,7 +510,7 @@ alert_delete_setting_sender_email()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    exit $?
+    return $?
 }
 
 alert_delete_setting_receiver_email()
@@ -543,7 +543,7 @@ alert_delete_setting_receiver_email()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    exit $?
+    return $?
 }
 
 alert_delete_setting_receiver_slack()
@@ -576,5 +576,5 @@ alert_delete_setting_receiver_slack()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    exit $?
+    return $?
 }
