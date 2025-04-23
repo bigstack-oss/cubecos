@@ -3,6 +3,21 @@
 #include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"
 
+std::string escapeDoubleQuote(const std::string& str)
+{
+    // Escape each single quoat(") to '\"'
+    std::stringstream out;
+    for (std::string::const_iterator it = str.begin(); it != str.end(); it++) {
+        if (*it == '"') {
+            out << "\\\"";
+        } else {
+            out << *it;
+        }
+    }
+
+    return out.str();
+}
+
 NotifyTriggerPolicy::NotifyTriggerPolicy():
     isInitialized(false),
     ymlRoot(NULL),
@@ -41,7 +56,7 @@ NotifyTriggerPolicy::isReady() const
 void
 NotifyTriggerPolicy::setSettingPolicy(const NotifySettingPolicy* settingPolicy)
 {
-    if (settingPolicy->isReady()) {
+    if (settingPolicy && settingPolicy->isReady()) {
         this->settingPolicy = settingPolicy;
     }
 }
@@ -227,7 +242,7 @@ NotifyTriggerPolicy::save(const char* policyFile)
         if (AddYmlNode(this->ymlRoot, prefix.c_str(), "topic", this->config.triggers[i].topic.c_str()) != 0) {
             return false;
         }
-        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "match", this->config.triggers[i].match.c_str()) != 0) {
+        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "match", (std::string("\"") + escapeDoubleQuote(this->config.triggers[i].match) + std::string("\"")).c_str()) != 0) {
             return false;
         }
         if (AddYmlNode(this->ymlRoot, prefix.c_str(), "description", this->config.triggers[i].description.c_str()) != 0) {
@@ -236,62 +251,106 @@ NotifyTriggerPolicy::save(const char* policyFile)
         if (AddYmlKey(this->ymlRoot, prefix.c_str(), "responses") != 0) {
             return false;
         }
+        std::string responsePath = prefix + std::string(".responses");
 
-        std::string responsePath = prefix.append(".responses");
+        // response email
         if (AddYmlKey(this->ymlRoot, responsePath.c_str(), "emails") != 0) {
             return false;
         }
-        if (AddYmlKey(this->ymlRoot, responsePath.c_str(), "slacks") != 0) {
-            return false;
+        std::string emailPath = responsePath + std::string(".emails");
+        if (this->config.triggers[i].responses.emails.size() == 0) {
+            // the yml parser needs to set at least one blank child
+            // we would create a blank child if we do not have any
+            NotifyTriggerResponseEmail blankEmail;
+            blankEmail.address = "";
+            this->config.triggers[i].responses.emails.push_back(blankEmail);
         }
-        if (AddYmlKey(this->ymlRoot, responsePath.c_str(), "execs") != 0) {
-            return false;
-        }
-
-        std::string execPath = responsePath.append(".execs");
-        if (AddYmlKey(this->ymlRoot, execPath.c_str(), "shells") != 0) {
-            return false;
-        }
-        if (AddYmlKey(this->ymlRoot, execPath.c_str(), "bins") != 0) {
-            return false;
-        }
-
-        // response email
         for (std::size_t j = 0; j < this->config.triggers[i].responses.emails.size(); j++) {
             // yml index starts from 1
             std::string emailYmlIndex = std::to_string(j + 1);
-            std::string emailPath = responsePath.append(".emails").append(emailYmlIndex);
-            if (AddYmlNode(this->ymlRoot, emailPath.c_str(), "address", this->config.triggers[i].responses.emails[j].address.c_str()) != 0) {
+            if (AddYmlKey(this->ymlRoot, emailPath.c_str(), emailYmlIndex.c_str()) != 0) {
+                return false;
+            }
+            std::string emailPrefix = emailPath + std::string(".") + std::string(emailYmlIndex);
+            if (AddYmlNode(this->ymlRoot, emailPrefix.c_str(), "address", this->config.triggers[i].responses.emails[j].address.c_str()) != 0) {
                 return false;
             }
         }
 
         // response slack
+        if (AddYmlKey(this->ymlRoot, responsePath.c_str(), "slacks") != 0) {
+            return false;
+        }
+        std::string slackPath = responsePath + std::string(".slacks");
+        if (this->config.triggers[i].responses.slacks.size() == 0) {
+            // the yml parser needs to set at least one blank child
+            // we would create a blank child if we do not have any
+            NotifyTriggerResponseSlack blankSlack;
+            blankSlack.url = "";
+            this->config.triggers[i].responses.slacks.push_back(blankSlack);
+        }
         for (std::size_t j = 0; j < this->config.triggers[i].responses.slacks.size(); j++) {
             // yml index starts from 1
             std::string slackYmlIndex = std::to_string(j + 1);
-            std::string slackPath = responsePath.append(".slacks").append(slackYmlIndex);
-            if (AddYmlNode(this->ymlRoot, slackPath.c_str(), "url", this->config.triggers[i].responses.slacks[j].url.c_str()) != 0) {
+            if (AddYmlKey(this->ymlRoot, slackPath.c_str(), slackYmlIndex.c_str()) != 0) {
+                return false;
+            }
+            std::string slackPrefix = slackPath + std::string(".") + std::string(slackYmlIndex);
+            if (AddYmlNode(this->ymlRoot, slackPrefix.c_str(), "url", this->config.triggers[i].responses.slacks[j].url.c_str()) != 0) {
                 return false;
             }
         }
 
+        // response exec
+        if (AddYmlKey(this->ymlRoot, responsePath.c_str(), "execs") != 0) {
+            return false;
+        }
+        std::string execPath = responsePath + std::string(".execs");
+
         // response exec shell
+        if (AddYmlKey(this->ymlRoot, execPath.c_str(), "shells") != 0) {
+            return false;
+        }
+        std::string execShellPath = execPath + std::string(".shells");
+        if (this->config.triggers[i].responses.execs.shells.size() == 0) {
+            // the yml parser needs to set at least one blank child
+            // we would create a blank child if we do not have any
+            NotifyTriggerResponseExecShell blankExecShell;
+            blankExecShell.name = "";
+            this->config.triggers[i].responses.execs.shells.push_back(blankExecShell);
+        }
         for (std::size_t j = 0; j < this->config.triggers[i].responses.execs.shells.size(); j++) {
             // yml index starts from 1
             std::string execShellYmlIndex = std::to_string(j + 1);
-            std::string execShellPath = execPath.append(".shells").append(execShellYmlIndex);
-            if (AddYmlNode(this->ymlRoot, execShellPath.c_str(), "name", this->config.triggers[i].responses.execs.shells[j].name.c_str()) != 0) {
+            if (AddYmlKey(this->ymlRoot, execShellPath.c_str(), execShellYmlIndex.c_str()) != 0) {
+                return false;
+            }
+            std::string execShellPrefix = execShellPath + std::string(".") + std::string(execShellYmlIndex);
+            if (AddYmlNode(this->ymlRoot, execShellPrefix.c_str(), "name", this->config.triggers[i].responses.execs.shells[j].name.c_str()) != 0) {
                 return false;
             }
         }
 
         // response exec bin
+        if (AddYmlKey(this->ymlRoot, execPath.c_str(), "bins") != 0) {
+            return false;
+        }
+        std::string execBinPath = execPath + std::string(".bins");
+        if (this->config.triggers[i].responses.execs.bins.size() == 0) {
+            // the yml parser needs to set at least one blank child
+            // we would create a blank child if we do not have any
+            NotifyTriggerResponseExecBin blankExecBin;
+            blankExecBin.name = "";
+            this->config.triggers[i].responses.execs.bins.push_back(blankExecBin);
+        }
         for (std::size_t j = 0; j < this->config.triggers[i].responses.execs.bins.size(); j++) {
             // yml index starts from 1
             std::string execBinYmlIndex = std::to_string(j + 1);
-            std::string execBinPath = execPath.append(".bins").append(execBinYmlIndex);
-            if (AddYmlNode(this->ymlRoot, execBinPath.c_str(), "name", this->config.triggers[i].responses.execs.bins[j].name.c_str()) != 0) {
+            if (AddYmlKey(this->ymlRoot, execBinPath.c_str(), execBinYmlIndex.c_str()) != 0) {
+                return false;
+            }
+            std::string execBinPrefix = execBinPath + std::string(".") + std::string(execBinYmlIndex);
+            if (AddYmlNode(this->ymlRoot, execBinPrefix.c_str(), "name", this->config.triggers[i].responses.execs.bins[j].name.c_str()) != 0) {
                 return false;
             }
         }
@@ -313,6 +372,10 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
     const std::vector<std::string>& execBins
 )
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     // check if the trigger exists or not
     std::vector<NotifyTrigger>* triggers = &(this->config.triggers);
     if (triggers == nullptr) {
@@ -440,6 +503,10 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
 bool
 NotifyTriggerPolicy::deleteTrigger(std::string name)
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     bool isSuccessful = false;
 
     std::vector<NotifyTrigger>* triggers = &(this->config.triggers);
@@ -462,6 +529,10 @@ NotifyTriggerPolicy::deleteTrigger(std::string name)
 void
 NotifyTriggerPolicy::deleteEmail(std::string address)
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     for (std::vector<NotifyTrigger>::iterator it = this->config.triggers.begin(); it != this->config.triggers.end(); it++) {
         for (std::vector<NotifyTriggerResponseEmail>::iterator jt = it->responses.emails.begin(); jt != it->responses.emails.end();) {
             if (jt->address == address) {
@@ -476,6 +547,10 @@ NotifyTriggerPolicy::deleteEmail(std::string address)
 void
 NotifyTriggerPolicy::deleteSlack(std::string url)
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     for (std::vector<NotifyTrigger>::iterator it = this->config.triggers.begin(); it != this->config.triggers.end(); it++) {
         for (std::vector<NotifyTriggerResponseSlack>::iterator jt = it->responses.slacks.begin(); jt != it->responses.slacks.end();) {
             if (jt->url == url) {
@@ -490,6 +565,10 @@ NotifyTriggerPolicy::deleteSlack(std::string url)
 void
 NotifyTriggerPolicy::deleteExecShell(std::string name)
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     for (std::vector<NotifyTrigger>::iterator it = this->config.triggers.begin(); it != this->config.triggers.end(); it++) {
         for (std::vector<NotifyTriggerResponseExecShell>::iterator jt = it->responses.execs.shells.begin(); jt != it->responses.execs.shells.end();) {
             if (jt->name == name) {
@@ -504,6 +583,10 @@ NotifyTriggerPolicy::deleteExecShell(std::string name)
 void
 NotifyTriggerPolicy::deleteExecBin(std::string name)
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     for (std::vector<NotifyTrigger>::iterator it = this->config.triggers.begin(); it != this->config.triggers.end(); it++) {
         for (std::vector<NotifyTriggerResponseExecBin>::iterator jt = it->responses.execs.bins.begin(); jt != it->responses.execs.bins.end();) {
             if (jt->name == name) {

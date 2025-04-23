@@ -66,7 +66,7 @@ NotifySettingPolicy::getConfig() const
 void
 NotifySettingPolicy::setTriggerPolicy(NotifyTriggerPolicy* triggerPolicy)
 {
-    if (triggerPolicy->isReady()) {
+    if (triggerPolicy && triggerPolicy->isReady()) {
         this->triggerPolicy = triggerPolicy;
     }
 }
@@ -362,6 +362,10 @@ NotifySettingPolicy::save(const char* policyFile)
 bool
 NotifySettingPolicy::hasReceiverEmail(std::string address) const
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     const std::vector<NotifySettingReceiverEmail>* emails = &(this->config.receiver.emails);
     if (emails == nullptr) {
         return false;
@@ -379,6 +383,10 @@ NotifySettingPolicy::hasReceiverEmail(std::string address) const
 bool
 NotifySettingPolicy::hasReceiverSlack(std::string url) const
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     const std::vector<NotifySettingReceiverSlack>* slacks = &(this->config.receiver.slacks);
     if (slacks == nullptr) {
         return false;
@@ -396,6 +404,10 @@ NotifySettingPolicy::hasReceiverSlack(std::string url) const
 bool
 NotifySettingPolicy::hasReceiverExecShell(std::string name) const
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     const std::vector<NotifySettingReceiverExecShell>* shells = &(this->config.receiver.execs.shells);
     if (shells == nullptr) {
         return false;
@@ -413,6 +425,10 @@ NotifySettingPolicy::hasReceiverExecShell(std::string name) const
 bool
 NotifySettingPolicy::hasReceiverExecBin(std::string name) const
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     const std::vector<NotifySettingReceiverExecBin>* bins = &(this->config.receiver.execs.bins);
     if (bins == nullptr) {
         return false;
@@ -436,6 +452,10 @@ NotifySettingPolicy::updateSenderEmail(
     std::string from
 )
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     NotifySettingSenderEmail* email = &(this->config.sender.email);
     if (email == nullptr) {
         return;
@@ -451,6 +471,10 @@ NotifySettingPolicy::updateSenderEmail(
 void
 NotifySettingPolicy::addOrUpdateReceiverEmail(std::string address, std::string note)
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     // check if the email receiver exists or not
     std::vector<NotifySettingReceiverEmail>* emails = &(this->config.receiver.emails);
     if (emails == nullptr) {
@@ -486,6 +510,10 @@ NotifySettingPolicy::addOrUpdateReceiverSlack(
     std::string channel
 )
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     // check if the slack receiver exists or not
     std::vector<NotifySettingReceiverSlack>* slacks = &(this->config.receiver.slacks);
     if (slacks == nullptr) {
@@ -521,6 +549,10 @@ NotifySettingPolicy::addOrUpdateReceiverSlack(
 void
 NotifySettingPolicy::addReceiverExecShell(std::string name)
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     // check if the email receiver exists or not
     std::vector<NotifySettingReceiverExecShell>* shells = &(this->config.receiver.execs.shells);
     if (shells == nullptr) {
@@ -544,6 +576,10 @@ NotifySettingPolicy::addReceiverExecShell(std::string name)
 void
 NotifySettingPolicy::addReceiverExecBin(std::string name)
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     // check if the email receiver exists or not
     std::vector<NotifySettingReceiverExecBin>* bins = &(this->config.receiver.execs.bins);
     if (bins == nullptr) {
@@ -567,6 +603,10 @@ NotifySettingPolicy::addReceiverExecBin(std::string name)
 void
 NotifySettingPolicy::deleteSenderEmail()
 {
+    if (!this->isInitialized) {
+        return;
+    }
+
     NotifySettingSenderEmail* email = &(this->config.sender.email);
     if (email == nullptr) {
         return;
@@ -582,6 +622,10 @@ NotifySettingPolicy::deleteSenderEmail()
 bool
 NotifySettingPolicy::deleteReceiverEmail(std::string address)
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     bool isSuccessful = false;
 
     std::vector<NotifySettingReceiverEmail>* emails = &(this->config.receiver.emails);
@@ -609,6 +653,10 @@ NotifySettingPolicy::deleteReceiverEmail(std::string address)
 bool
 NotifySettingPolicy::deleteReceiverSlack(std::string url)
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     bool isSuccessful = false;
     
     std::vector<NotifySettingReceiverSlack>* slacks = &(this->config.receiver.slacks);
@@ -636,6 +684,10 @@ NotifySettingPolicy::deleteReceiverSlack(std::string url)
 bool
 NotifySettingPolicy::deleteReceiverExecShell(std::string name)
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     bool isSuccessful = false;
 
     std::vector<NotifySettingReceiverExecShell>* shells = &(this->config.receiver.execs.shells);
@@ -663,6 +715,10 @@ NotifySettingPolicy::deleteReceiverExecShell(std::string name)
 bool
 NotifySettingPolicy::deleteReceiverExecBin(std::string name)
 {
+    if (!this->isInitialized) {
+        return false;
+    }
+
     bool isSuccessful = false;
 
     std::vector<NotifySettingReceiverExecBin>* bins = &(this->config.receiver.execs.bins);

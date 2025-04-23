@@ -48,7 +48,7 @@
 #define LABEL_RESP_DESCRIPTION "Enter the notification description [optional]: "
 
 static bool
-listBackends(const OldNotifyPolicy& policy)
+listBackends(const NotifyPolicy& policy)
 {
     char line[105];
     memset(line, '-', sizeof(line));
@@ -111,7 +111,7 @@ NotifyListMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
 
     HexPolicyManager policyManager;
-    OldNotifyPolicy policy;
+    NotifyPolicy policy;
     if (!policyManager.load(policy)) {
         return CLI_UNEXPECTED_ERROR;
     }
@@ -132,7 +132,7 @@ NotifyCfgMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
 
     HexPolicyManager policyManager;
-    OldNotifyPolicy policy;
+    NotifyPolicy policy;
     if (!policyManager.load(policy)) {
         return CLI_UNEXPECTED_ERROR;
     }
@@ -159,69 +159,38 @@ NotifyCfgMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-void
-freeNotifyPolicy(NotifyPolicy* policy)
+bool
+loadNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& settingPolicy, NotifyTriggerPolicy& triggerPolicy)
 {
-    if (policy) {
-        if (policy->settingPolicy) {
-            delete policy->settingPolicy;
-            policy->settingPolicy = nullptr;
-        }
-
-        if (policy->triggerPolicy) {
-            delete policy->triggerPolicy;
-            policy->triggerPolicy = nullptr;
-        }
-
-        delete policy;
-        policy = nullptr;
-    }
-}
-
-NotifyPolicy*
-loadNotifyPolicy(HexPolicyManager& policyManager)
-{
-    NotifySettingPolicy* settingPolicy = new NotifySettingPolicy();
-    NotifyTriggerPolicy* triggerPolicy = new NotifyTriggerPolicy();
-    NotifyPolicy* policy = new NotifyPolicy();
-    policy->settingPolicy = settingPolicy;
-    policy->triggerPolicy = triggerPolicy;
-
     // load the existing policy file into policy
     // the trigger policy could only be loaded after setting the setting policy into the trigger policy
-    if (!policyManager.load(*settingPolicy)) {
-        freeNotifyPolicy(policy);
-        return nullptr;
+    if (!policyManager.load(settingPolicy)) {
+        return false;
     }
-    triggerPolicy->setSettingPolicy(settingPolicy);
-    if (!policyManager.load(*triggerPolicy)) {
-        freeNotifyPolicy(policy);
-        return nullptr;
+    triggerPolicy.setSettingPolicy(&settingPolicy);
+    if (!policyManager.load(triggerPolicy)) {
+        return false;
     }
-    settingPolicy->setTriggerPolicy(triggerPolicy);
-    return policy;
+    settingPolicy.setTriggerPolicy(&triggerPolicy);
+    return true;
 }
 
 bool
-commitNotifyPolicy(HexPolicyManager& policyManager, NotifyPolicy* policy)
+commitNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& settingPolicy, NotifyTriggerPolicy& triggerPolicy)
 {
     // save the updated policy into a policy file
-    if (!policyManager.save(*(policy->settingPolicy))) {
-        freeNotifyPolicy(policy);
+    if (!policyManager.save(settingPolicy)) {
         return false;
     }
-    if (!policyManager.save(*(policy->triggerPolicy))) {
-        freeNotifyPolicy(policy);
+    if (!policyManager.save(triggerPolicy)) {
         return false;
     }
 
     // apply the udpated policy file
     if (!policyManager.apply()) {
-        freeNotifyPolicy(policy);
         return false;
     }
 
-    freeNotifyPolicy(policy);
     return true;
 }
 
@@ -397,17 +366,18 @@ bool
 deleteSettingReceiverEmail(std::string address)
 {
     HexPolicyManager policyManager;
-    NotifyPolicy* policy = loadNotifyPolicy(policyManager);
-    if (policy == nullptr) {
+    NotifySettingPolicy settingPolicy;
+    NotifyTriggerPolicy triggerPolicy;
+    if (!loadNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
     // update policy with input values
-    if (!policy->settingPolicy->deleteReceiverEmail(address)) {
+    if (!settingPolicy.deleteReceiverEmail(address)) {
         return false;
     }
 
-    if (!commitNotifyPolicy(policyManager, policy)) {
+    if (!commitNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
@@ -418,17 +388,18 @@ bool
 deleteSettingReceiverSlack(std::string url)
 {
     HexPolicyManager policyManager;
-    NotifyPolicy* policy = loadNotifyPolicy(policyManager);
-    if (policy == nullptr) {
+    NotifySettingPolicy settingPolicy;
+    NotifyTriggerPolicy triggerPolicy;
+    if (!loadNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
     // update policy with input values
-    if (!policy->settingPolicy->deleteReceiverSlack(url)) {
+    if (!settingPolicy.deleteReceiverSlack(url)) {
         return false;
     }
 
-    if (!commitNotifyPolicy(policyManager, policy)) {
+    if (!commitNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
@@ -439,17 +410,18 @@ bool
 deleteSettingReceiverExecShell(std::string name)
 {
     HexPolicyManager policyManager;
-    NotifyPolicy* policy = loadNotifyPolicy(policyManager);
-    if (policy == nullptr) {
+    NotifySettingPolicy settingPolicy;
+    NotifyTriggerPolicy triggerPolicy;
+    if (!loadNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
     // update policy with input values
-    if (!policy->settingPolicy->deleteReceiverExecShell(name)) {
+    if (!settingPolicy.deleteReceiverExecShell(name)) {
         return false;
     }
 
-    if (!commitNotifyPolicy(policyManager, policy)) {
+    if (!commitNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
@@ -460,17 +432,18 @@ bool
 deleteSettingReceiverExecBin(std::string name)
 {
     HexPolicyManager policyManager;
-    NotifyPolicy* policy = loadNotifyPolicy(policyManager);
-    if (policy == nullptr) {
+    NotifySettingPolicy settingPolicy;
+    NotifyTriggerPolicy triggerPolicy;
+    if (!loadNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
     // update policy with input values
-    if (!policy->settingPolicy->deleteReceiverExecBin(name)) {
+    if (!settingPolicy.deleteReceiverExecBin(name)) {
         return false;
     }
 
-    if (!commitNotifyPolicy(policyManager, policy)) {
+    if (!commitNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
@@ -726,13 +699,16 @@ NotifySettingMain(int argc, const char** argv)
                 }
 
                 std::string fullPath = dir + "/" + execFile;
-                std::string execName = fullPath;
+                std::string execName = execFile;
                 std::size_t dotPosition = execName.find_first_of('.');
                 if (dotPosition != std::string::npos) {
                     // remove the file extension, e.g., aaa.bbb => aaa
                     execName.erase(dotPosition);
                 }
                 HexSystemF(0, "cp -f %s /var/alert_resp/exec_%s.%s", fullPath.c_str(), execName.c_str(), execType.c_str());
+                if (execFileDirectoryIndex == FILE_DIRECTORY_USB) {
+                    HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0, HEX_CFG, "umount_usb", NULL);
+                }
 
                 if (execTypeIndex == EXEC_TYPE_SHELL) {
                     if (!putSettingReceiverExecShell(execName)) {

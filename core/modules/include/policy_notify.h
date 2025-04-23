@@ -14,11 +14,6 @@
 class NotifySettingPolicy;
 class NotifyTriggerPolicy;
 
-struct NotifyPolicy {
-    NotifySettingPolicy* settingPolicy;
-    NotifyTriggerPolicy* triggerPolicy;
-};
-
 struct NotifyResponse
 {
     bool enabled;
@@ -48,12 +43,12 @@ struct NotifyConfig
     std::list<NotifyResponse> resps;
 };
 
-class OldNotifyPolicy : public HexPolicy
+class NotifyPolicy : public HexPolicy
 {
 public:
-    OldNotifyPolicy() : m_initialized(false), m_yml(NULL) {}
+    NotifyPolicy() : m_initialized(false), m_yml(NULL) {}
 
-    ~OldNotifyPolicy()
+    ~NotifyPolicy()
     {
         if (m_yml) {
             FiniYml(m_yml);
