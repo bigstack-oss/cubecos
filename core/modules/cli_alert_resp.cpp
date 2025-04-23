@@ -866,15 +866,14 @@ putTrigger(
 )
 {
     HexPolicyManager policyManager;
-    NotifyTriggerPolicy policy;
-
-    // load the existing policy file into policy
-    if (!policyManager.load(policy)) {
+    NotifySettingPolicy settingPolicy;
+    NotifyTriggerPolicy triggerPolicy;
+    if (!loadNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
     // update policy with input values
-    policy.addOrUpdateTrigger(
+    triggerPolicy.addOrUpdateTrigger(
         name,
         enabled,
         topic,
@@ -886,15 +885,10 @@ putTrigger(
         execBins
     );
 
-    // save the updated policy into a policy file
-    if (!policyManager.save(policy)) {
+    if (!commitNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
     }
 
-    // apply the udpated policy file
-    if (!policyManager.apply()) {
-        return false;
-    }
     return true;
 }
 
