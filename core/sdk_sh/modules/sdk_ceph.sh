@@ -2355,7 +2355,7 @@ ceph_node_group_list()
             printf %.1s ={1..60} $'\n'
             printf "%.60s\n" "GROUP: $bucket"
 
-            Quiet -n $CEPH osd tree-from $bucket
+            $CEPH osd tree-from $bucket
         done
     fi
 }
