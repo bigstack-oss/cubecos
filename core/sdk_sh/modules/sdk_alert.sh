@@ -564,3 +564,180 @@ alert_delete_setting_receiver_slack()
     RemoveTempFiles
     return $ret
 }
+
+alert_put_trigger()
+{
+    # input format: {
+    #   name: "",
+    #   enabled: "",
+    #   topic: "",
+    #   match: "",
+    #   description: "",
+    #   responses: {
+    #     emails: ["", ""],
+    #     slacks: ["", ""],
+    #   },
+    # }
+    #
+    # output format: {
+    #   success: true,
+    #   message: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local name=$(echo $input | jq -r '.name')
+    local enabled=$(echo $input | jq -r '.enabled')
+    if [[ "x$enabled" == "xtrue" ]] ; then
+        enabled="true"
+    else
+        enabled="false"
+    fi
+    local topic=$(echo $input | jq -r '.topic')
+    local match=$(echo $input | jq -r '.match')
+    local description=$(echo $input | jq -r '.description')
+
+    # some limitations on name
+    if [[ "$name" == "admin-notify" ]] ; then
+        topic="events"
+        match="\"severity\" == 'W' OR \"severity\" == 'E' OR \"severity\" == 'C'"
+    elif [[ "$name" == "instance-notify" ]] ; then
+        topic="instance-events"
+        match="\"severity\" == 'W' OR \"severity\" == 'C'"
+    else
+        jq -c -n \
+            '{success: false, message: "the trigger name is not supported"}'
+        return 1
+    fi
+
+    # prepare the environment
+    local input_dir=$(MakeTempDir)
+
+    # prepare the policy file
+    local setting_policy_file="/etc/policies/alert_setting/alert_setting1_0.yml"
+    mkdir -p "$input_dir/alert_resp"
+    cp -f "/etc/policies/alert_resp/alert_resp2_0.yml" "$input_dir/alert_resp/"
+    local trigger_policy_file="$input_dir/alert_resp/alert_resp2_0.yml"
+    local trigger_count_minus_one=$(($(yq '.triggers | length' $trigger_policy_file) - 1))
+    local is_update="false"
+    # update
+    for i in $(seq 0 "$trigger_count_minus_one") ; do
+        if [[ "$name" == "$(yq ".triggers[$i].name" $trigger_policy_file)" ]] ; then
+            yq -i ".triggers[$i].name = \"$name\"" $trigger_policy_file
+            yq -i ".triggers[$i].enabled = \"$enabled\"" $trigger_policy_file
+            yq -i ".triggers[$i].topic = \"$topic\"" $trigger_policy_file
+            yq -i ".triggers[$i].match = \"${match//\"/\\\"}\"" $trigger_policy_file
+            yq -i ".triggers[$i].description = \"$description\"" $trigger_policy_file
+
+            # email
+            yq -i "del(.triggers[$i].responses.emails)" $trigger_policy_file
+            local email_count_minus_one=$(($(echo $input | jq -r '.responses.emails | length') - 1))
+            local new_email_index="0"
+            for j in $(seq 0 "$email_count_minus_one") ; do
+                local email=$(echo $input | jq -r ".responses.emails[$j]")
+
+                # check if the email is in the alert_setting policy
+                local setting_email_count_minus_one=$(($(yq '.receiver.emails | length' $setting_policy_file) - 1))
+                local does_exist="false"
+                for k in $(seq 0 "$setting_email_count_minus_one") ; do
+                    if [[ "$email" == "$(yq ".receiver.emails[$k].address" $setting_policy_file)" ]] ; then
+                        does_exist="true"
+                    fi
+                done
+                if [[ "$does_exist" == "false" ]] ; then
+                    continue
+                fi
+
+                yq -i ".triggers[$i].responses.emails[$new_email_index].address = \"$email\"" $trigger_policy_file
+                ((new_email_index++))
+            done
+
+            # slack
+            yq -i "del(.triggers[$i].responses.slacks)" $trigger_policy_file
+            local slack_count_minus_one=$(($(echo $input | jq -r '.responses.slacks | length') - 1))
+            local new_slack_index="0"
+            for j in $(seq 0 "$slack_count_minus_one") ; do
+                local slack=$(echo $input | jq -r ".responses.slacks[$j]")
+
+                # check if the slack is in the alert_setting policy
+                local setting_slack_count_minus_one=$(($(yq '.receiver.slacks | length' $setting_policy_file) - 1))
+                local does_exist="false"
+                for k in $(seq 0 "$setting_slack_count_minus_one") ; do
+                    if [[ "$slack" == "$(yq ".receiver.slacks[$k].url" $setting_policy_file)" ]] ; then
+                        does_exist="true"
+                    fi
+                done
+                if [[ "$does_exist" == "false" ]] ; then
+                    continue
+                fi
+
+                yq -i ".triggers[$i].responses.slacks[$new_slack_index].url = \"$slack\"" $trigger_policy_file
+                ((new_slack_index++))
+            done
+
+            is_update="true"
+        fi
+    done
+    # add
+    if [[ "$is_update" == "false" ]] ; then
+        yq -i ".triggers[$(($trigger_count_minus_one + 1))].name = \"$name\"" $trigger_policy_file
+        yq -i ".triggers[$(($trigger_count_minus_one + 1))].enabled = \"$enabled\"" $trigger_policy_file
+        yq -i ".triggers[$(($trigger_count_minus_one + 1))].topic = \"$topic\"" $trigger_policy_file
+        yq -i ".triggers[$(($trigger_count_minus_one + 1))].match = \"$match\"" $trigger_policy_file
+        yq -i ".triggers[$(($trigger_count_minus_one + 1))].description = \"$description\"" $trigger_policy_file
+
+        # email
+        yq -i "del(.triggers[$(($trigger_count_minus_one + 1))].responses.emails)" $trigger_policy_file
+        local email_count_minus_one=$(($(echo $input | jq -r '.responses.emails | length') - 1))
+        local new_email_index="0"
+        for j in $(seq 0 "$email_count_minus_one") ; do
+            local email=$(echo $input | jq -r ".responses.emails[$j]")
+
+            # check if the email is in the alert_setting policy
+            local setting_email_count_minus_one=$(($(yq '.receiver.emails | length' $setting_policy_file) - 1))
+            local does_exist="false"
+            for k in $(seq 0 "$setting_email_count_minus_one") ; do
+                if [[ "$email" == "$(yq ".receiver.emails[$k].address" $setting_policy_file)" ]] ; then
+                    does_exist="true"
+                fi
+            done
+            if [[ "$does_exist" == "false" ]] ; then
+                continue
+            fi
+
+            yq -i ".triggers[$(($trigger_count_minus_one + 1))].responses.emails[$new_email_index].address = \"$email\"" $trigger_policy_file
+            ((new_email_index++))
+        done
+
+        # slack
+        yq -i "del(.triggers[$(($trigger_count_minus_one + 1))].responses.slacks)" $trigger_policy_file
+        local slack_count_minus_one=$(($(echo $input | jq -r '.responses.slacks | length') - 1))
+        local new_slack_index="0"
+        for j in $(seq 0 "$slack_count_minus_one") ; do
+            local slack=$(echo $input | jq -r ".responses.slacks[$j]")
+
+            # check if the slack is in the alert_setting policy
+            local setting_slack_count_minus_one=$(($(yq '.receiver.slacks | length' $setting_policy_file) - 1))
+            local does_exist="false"
+            for k in $(seq 0 "$setting_slack_count_minus_one") ; do
+                if [[ "$slack" == "$(yq ".receiver.slacks[$k].url" $setting_policy_file)" ]] ; then
+                    does_exist="true"
+                fi
+            done
+            if [[ "$does_exist" == "false" ]] ; then
+                continue
+            fi
+
+            yq -i ".triggers[$(($trigger_count_minus_one + 1))].responses.slacks[$new_slack_index].url = \"$slack\"" $trigger_policy_file
+            ((new_slack_index++))
+        done
+    fi
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    local ret=$?
+    RemoveTempFiles
+    jq -c -n \
+        '{success: true, message: ""}'
+    return $ret
+}
