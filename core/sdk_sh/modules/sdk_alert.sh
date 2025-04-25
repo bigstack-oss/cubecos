@@ -597,7 +597,7 @@ alert_put_trigger()
 {
     # input format: {
     #   name: "",
-    #   enabled: "",
+    #   enabled: true, // boolean
     #   topic: "",
     #   match: "",
     #   description: "",
