@@ -332,11 +332,7 @@ alert_set_setting_title_prefix()
     local title_prefix=$(echo $input | jq -r '.titlePrefix')
 
     # prepare the environment
-    local input_dir="/tmp/hex_policy_input"
-    if [ -e $input_dir ] ; then
-        rm -rf $input_dir
-    fi
-    mkdir -p $input_dir
+    local input_dir=$(MakeTempDir)
 
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
@@ -346,7 +342,9 @@ alert_set_setting_title_prefix()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    return $?
+    local ret=$?
+    RemoveTempFiles
+    return $ret
 }
 
 alert_set_setting_sender_email()
@@ -368,11 +366,7 @@ alert_set_setting_sender_email()
     local from=$(echo $input | jq -r '.from')
 
     # prepare the environment
-    local input_dir="/tmp/hex_policy_input"
-    if [ -e $input_dir ] ; then
-        rm -rf $input_dir
-    fi
-    mkdir -p $input_dir
+    local input_dir=$(MakeTempDir)
 
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
@@ -386,7 +380,9 @@ alert_set_setting_sender_email()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    return $?
+    local ret=$?
+    RemoveTempFiles
+    return $ret
 }
 
 alert_put_setting_receiver_email()
@@ -402,11 +398,7 @@ alert_put_setting_receiver_email()
     local note=$(echo $input | jq -r '.note')
 
     # prepare the environment
-    local input_dir="/tmp/hex_policy_input"
-    if [ -e $input_dir ] ; then
-        rm -rf $input_dir
-    fi
-    mkdir -p $input_dir
+    local input_dir=$(MakeTempDir)
 
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
@@ -430,7 +422,9 @@ alert_put_setting_receiver_email()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    return $?
+    local ret=$?
+    RemoveTempFiles
+    return $ret
 }
 
 alert_put_setting_receiver_slack()
@@ -452,11 +446,7 @@ alert_put_setting_receiver_slack()
     local channel=$(echo $input | jq -r '.channel')
 
     # prepare the environment
-    local input_dir="/tmp/hex_policy_input"
-    if [ -e $input_dir ] ; then
-        rm -rf $input_dir
-    fi
-    mkdir -p $input_dir
+    local input_dir=$(MakeTempDir)
 
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
@@ -486,17 +476,15 @@ alert_put_setting_receiver_slack()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    return $?
+    local ret=$?
+    RemoveTempFiles
+    return $ret
 }
 
 alert_delete_setting_sender_email()
 {
     # prepare the environment
-    local input_dir="/tmp/hex_policy_input"
-    if [ -e $input_dir ] ; then
-        rm -rf $input_dir
-    fi
-    mkdir -p $input_dir
+    local input_dir=$(MakeTempDir)
 
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
@@ -510,7 +498,9 @@ alert_delete_setting_sender_email()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    return $?
+    local ret=$?
+    RemoveTempFiles
+    return $ret
 }
 
 alert_delete_setting_receiver_email()
@@ -524,11 +514,7 @@ alert_delete_setting_receiver_email()
     local address=$(echo $input | jq -r '.address')
 
     # prepare the environment
-    local input_dir="/tmp/hex_policy_input"
-    if [ -e $input_dir ] ; then
-        rm -rf $input_dir
-    fi
-    mkdir -p $input_dir
+    local input_dir=$(MakeTempDir)
 
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
@@ -543,7 +529,9 @@ alert_delete_setting_receiver_email()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    return $?
+    local ret=$?
+    RemoveTempFiles
+    return $ret
 }
 
 alert_delete_setting_receiver_slack()
@@ -557,11 +545,7 @@ alert_delete_setting_receiver_slack()
     local url=$(echo $input | jq -r '.url')
 
     # prepare the environment
-    local input_dir="/tmp/hex_policy_input"
-    if [ -e $input_dir ] ; then
-        rm -rf $input_dir
-    fi
-    mkdir -p $input_dir
+    local input_dir=$(MakeTempDir)
 
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
@@ -576,5 +560,7 @@ alert_delete_setting_receiver_slack()
 
     # apply the changes
     $HEX_CFG apply $input_dir
-    return $?
+    local ret=$?
+    RemoveTempFiles
+    return $ret
 }
