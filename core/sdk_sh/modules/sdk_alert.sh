@@ -519,12 +519,26 @@ alert_delete_setting_receiver_email()
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
     cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
-    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
-    local receiver_email_count_minus_one=$(($(yq '.receiver.emails | length' $policy_file) - 1))
+    local setting_policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    local receiver_email_count_minus_one=$(($(yq '.receiver.emails | length' $setting_policy_file) - 1))
     for i in $(seq 0 "$receiver_email_count_minus_one") ; do
-        if [[ "$address" == "$(yq ".receiver.emails[$i].address" $policy_file)" ]] ; then
-            yq -i "del(.receiver.emails[$i])" $policy_file
+        if [[ "$address" == "$(yq ".receiver.emails[$i].address" $setting_policy_file)" ]] ; then
+            yq -i "del(.receiver.emails[$i])" $setting_policy_file
         fi
+    done
+
+    # delete on cascade
+    mkdir -p "$input_dir/alert_resp"
+    cp -f "/etc/policies/alert_resp/alert_resp2_0.yml" "$input_dir/alert_resp/"
+    local trigger_policy_file="$input_dir/alert_resp/alert_resp2_0.yml"
+    local trigger_count_minus_one=$(($(yq '.triggers | length' $trigger_policy_file) - 1))
+    for i in $(seq 0 "$trigger_count_minus_one") ; do
+        local email_count_minus_one=$(($(yq ".triggers[$i].responses.emails | length" $trigger_policy_file) - 1))
+        for j in $(seq 0 "$email_count_minus_one") ; do
+            if [[ "$address" == "$(yq ".triggers[$i].responses.emails[$j].address" $trigger_policy_file)" ]] ; then
+                yq -i "del(.triggers[$i].responses.emails[$j])" $trigger_policy_file
+            fi
+        done
     done
 
     # apply the changes
@@ -550,12 +564,26 @@ alert_delete_setting_receiver_slack()
     # prepare the policy file
     mkdir -p "$input_dir/alert_setting"
     cp -f "/etc/policies/alert_setting/alert_setting1_0.yml" "$input_dir/alert_setting/"
-    local policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
-    local receiver_slack_count_minus_one=$(($(yq '.receiver.slacks | length' $policy_file) - 1))
+    local setting_policy_file="$input_dir/alert_setting/alert_setting1_0.yml"
+    local receiver_slack_count_minus_one=$(($(yq '.receiver.slacks | length' $setting_policy_file) - 1))
     for i in $(seq 0 "$receiver_slack_count_minus_one") ; do
-        if [[ "$url" == "$(yq ".receiver.slacks[$i].url" $policy_file)" ]] ; then
-            yq -i "del(.receiver.slacks[$i])" $policy_file
+        if [[ "$url" == "$(yq ".receiver.slacks[$i].url" $setting_policy_file)" ]] ; then
+            yq -i "del(.receiver.slacks[$i])" $setting_policy_file
         fi
+    done
+
+    # delete on cascade
+    mkdir -p "$input_dir/alert_resp"
+    cp -f "/etc/policies/alert_resp/alert_resp2_0.yml" "$input_dir/alert_resp/"
+    local trigger_policy_file="$input_dir/alert_resp/alert_resp2_0.yml"
+    local trigger_count_minus_one=$(($(yq '.triggers | length' $trigger_policy_file) - 1))
+    for i in $(seq 0 "$trigger_count_minus_one") ; do
+        local slack_count_minus_one=$(($(yq ".triggers[$i].responses.slacks | length" $trigger_policy_file) - 1))
+        for j in $(seq 0 "$slack_count_minus_one") ; do
+            if [[ "$url" == "$(yq ".triggers[$i].responses.slacks[$j].url" $trigger_policy_file)" ]] ; then
+                yq -i "del(.triggers[$i].responses.slacks[$j])" $trigger_policy_file
+            fi
+        done
     done
 
     # apply the changes
