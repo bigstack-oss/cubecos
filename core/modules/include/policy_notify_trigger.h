@@ -95,6 +95,7 @@ public:
     const char* policyName() const;
     const char* policyVersion() const;
     bool isReady() const;
+    const NotifyTriggerConfig getConfig() const;
     /**
      * Set the setting policy.
      */

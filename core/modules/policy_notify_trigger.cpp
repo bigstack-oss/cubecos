@@ -53,6 +53,12 @@ NotifyTriggerPolicy::isReady() const
     return this->isInitialized;
 }
 
+const NotifyTriggerConfig
+NotifyTriggerPolicy::getConfig() const
+{
+    return this->config;
+}
+
 void
 NotifyTriggerPolicy::setSettingPolicy(const NotifySettingPolicy* settingPolicy)
 {
