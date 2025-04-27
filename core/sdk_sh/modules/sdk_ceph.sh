@@ -2904,7 +2904,7 @@ ceph_osd_list()
     if [ "x$osd_ids" = "x" ] ; then
         osd_ids=$($CEPH osd ls-tree $HOSTNAME 2>/dev/null)
     else
-        $CEPH osd ls-tree $HOSTNAME 2>/dev/null | grep -q "^${osd_id}$" || return 0
+        $CEPH osd ls-tree $HOSTNAME 2>/dev/null | grep -q "^${osd_id}$" || osd_ids=$(ceph_get_ids_by_dev $osd_id)
     fi
     local hw_ls=$(lshw -class disk -json 2>/dev/null)
     local blkdevs=$(lsblk -J | jq -r .blockdevices[])
@@ -2919,6 +2919,10 @@ ceph_osd_list()
     chk_attrs+="Offline_Uncorrect "
     chk_attrs+="CRC_Error_Count"
 
+    if [ "x$FORMAT" = "xjson" ] ; then
+        local cnt=0
+        printf "[ "
+    fi
     for osd_id in $osd_ids ; do
         dev=$(ceph_get_dev_by_id $osd_id)
         parent_dev=/dev/$(echo $blkdevs | jq -r ". | select(.children[].name == \"${dev#/dev/}\").name" 2>/dev/null)
@@ -2941,7 +2945,7 @@ ceph_osd_list()
             smart_log=$(smartctl $smart_flg $parent_dev)
         fi
 
-        if [ "$VERBOSE" = "1" ] ; then
+        if [ "$VERBOSE" = "1" -a "$FORMAT" != "json" ] ; then
             [ "x$encrypted" != "x1" ] || cryptsetup luksDump $(echo $lvm | jq -r ".[][] | select(.devices[] == \"$parent_dev\").lv_path")
             if echo $smart_log | grep -i -P -o "$valid_output .*? " ; then
                 smartctl $smart_flg $parent_dev | grep 'ID.*RAW_VALUE' -A 100 | egrep 'prefailure warning|^$' -m1 -B100
@@ -2979,6 +2983,23 @@ ceph_osd_list()
 
         power_on=$(hdsentinel -dev $parent_dev | grep -i "power on time" | cut -d":" -f2 | cut -d "," -f1 | head -1 | xargs)
         use=$(ceph osd df tree osd.$osd_id -f json | jq -r .summary.average_utilization)
-        printf "%8s %8s %16s %10s %18s %10s %6s %s\n" $osd_id $state ${HOSTNAME%,} ${dev#/dev/} ${sn%,} "${power_on}" "${use%.*}%" "${remark%,}"
+        if [ "x$FORMAT" = "xjson" ] ; then
+            [ $((cnt++)) -eq 0 ] || printf ","
+            printf "{ "
+            printf "\"osd\": \"%s\"," $osd_id
+            printf "\"state\": \"%s\"," $state
+            printf "\"host\": \"%s\"," ${HOSTNAME%,}
+            printf "\"dev\": \"%s\"," ${dev#/dev/}
+            printf "\"serial\": \"%s\"," ${sn%,}
+            printf "\"poweron\": \"%s\"," "${power_on}"
+            printf "\"remark\": \"%s\"" "${remark%,}"
+            printf " }"
+        else
+            printf "%8s %8s %16s %10s %18s %10s %6s %s\n" $osd_id $state ${HOSTNAME%,} ${dev#/dev/} ${sn%,} "${power_on}" "${use%.*}%" "${remark%,}"
+        fi
     done
+    if [ "x$FORMAT" = "xjson" ] ; then
+        printf " ]\n"
+    fi
+
 }

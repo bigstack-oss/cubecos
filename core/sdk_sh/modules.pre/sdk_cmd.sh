@@ -9,6 +9,5 @@ fi
 cmd()
 {
     cmd=$1
-    shift 1
-    eval "\$$cmd $*"
+    eval "$@"
 }

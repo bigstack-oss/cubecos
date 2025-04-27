@@ -75,7 +75,7 @@ Commit(bool modified, int dryLevel)
 
     bool enabled = IsControl(s_eCubeRole);
     if (enabled)
-        HexUtilSystemF(0, 0, HEX_SDK " opensearch-dashboards_ops_reqid_search");
+        HexUtilSystemF(0, 0, HEX_SDK " opensearch_ops_reqid_search");
 
     WriteConfig();
     SystemdCommitService(enabled, NAME);
@@ -91,7 +91,7 @@ ClusterReadyMain(int argc, char **argv)
     bool enabled = IsControl(s_eCubeRole);
 
     if (enabled)
-        HexUtilSystemF(0, 0, HEX_SDK " opensearch-dashboards_ops_reqid_search");
+        HexUtilSystemF(0, 0, HEX_SDK " opensearch_ops_reqid_search");
 
     return EXIT_SUCCESS;
 }

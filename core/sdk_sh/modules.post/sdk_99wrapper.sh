@@ -12,10 +12,10 @@ appliance_shutdown()
 {
     if $CEPH -s >/dev/null ; then
         timeout 10 umount $CEPHFS_STORE_DIR
-        Quiet ceph_osd_compact || true
+        Quiet -n $HEX_SDK ceph_osd_compact
         if is_control_node ; then
             systemctl stop nfs-ganesha
-            Quiet $CEPH mds fail $HOSTNAME || true
+            Quiet -n $CEPH mds fail $HOSTNAME
         fi
     fi
     _${FUNCNAME[0]} $@
@@ -27,10 +27,10 @@ appliance_reboot()
 {
     if $CEPH -s >/dev/null ; then
         timeout 10 umount $CEPHFS_STORE_DIR
-        Quiet ceph_osd_compact || true
+        Quiet -n $HEX_SDK ceph_osd_compact
         if is_control_node ; then
             systemctl stop nfs-ganesha
-            Quiet $CEPH mds fail $HOSTNAME || true
+            Quiet -n $CEPH mds fail $HOSTNAME
         fi
     fi
     _${FUNCNAME[0]} $@
@@ -42,10 +42,10 @@ firmware_swap_active()
 {
     if $CEPH -s >/dev/null ; then
         timeout 10 umount $CEPHFS_STORE_DIR
-        Quiet ceph_osd_compact || true
+        Quiet -n $HEX_SDK ceph_osd_compact
         if is_control_node ; then
             systemctl stop nfs-ganesha
-            Quiet $CEPH mds fail $HOSTNAME || true
+            Quiet -n $CEPH mds fail $HOSTNAME
         fi
     fi
     _${FUNCNAME[0]} $@
@@ -57,10 +57,10 @@ firmware_backup()
 {
     if $CEPH -s >/dev/null ; then
         timeout 10 umount $CEPHFS_STORE_DIR
-        Quiet ceph_osd_compact || true
+        Quiet -n $HEX_SDK ceph_osd_compact
         if is_control_node ; then
             systemctl stop nfs-ganesha
-            Quiet $CEPH mds fail $HOSTNAME || true
+            Quiet -n $CEPH mds fail $HOSTNAME
         fi
     fi
     _${FUNCNAME[0]} $@

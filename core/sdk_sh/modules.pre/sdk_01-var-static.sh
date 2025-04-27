@@ -10,6 +10,8 @@ if [ -f /etc/admin-openrc.sh ] ; then
     source /etc/admin-openrc.sh
 fi
 
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+
 # service status request timeout
 SRVTO=60
 SRVLTO=120
