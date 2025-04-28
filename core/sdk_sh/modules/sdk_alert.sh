@@ -173,6 +173,36 @@ alert_extra_update()
 
 alert_get_setting()
 {
+    # output format: {
+    #   titlePrefix: "",
+    #   sender: {
+    #     email: {
+    #       host: "",
+    #       port: "",
+    #       username: "",
+    #       password: "",
+    #       from: ""
+    #     }
+    #   },
+    #   receiver: {
+    #     emails: [
+    #       {
+    #         address: "",
+    #         note: ""
+    #       }
+    #     ],
+    #     slacks: [
+    #       {
+    #         url: "",
+    #         username: "",
+    #         description: "",
+    #         workspace: "",
+    #         channel: ""
+    #       }
+    #     ]
+    #   }
+    # }
+
     # load the tunings into the env
     # title prefix
     source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.titlePrefix
@@ -595,6 +625,38 @@ alert_delete_setting_receiver_slack()
 
 alert_get_trigger()
 {
+    # output format: [
+    #   {
+    #     name: "",
+    #     enabled: true,
+    #     topic: "",
+    #     match: "",
+    #     description: "",
+    #     emails: [
+    #       {
+    #         address: ""
+    #       }
+    #     ],
+    #     slacks: [
+    #       {
+    #         url: ""
+    #       }
+    #     ],
+    #     execs: {
+    #       shells: [
+    #         {
+    #           name: ""
+    #         }
+    #       ],
+    #       bins: [
+    #         {
+    #           name: ""
+    #         }
+    #       ]
+    #     }
+    #   }
+    # ]
+
     # load the tunings into the env
     local trigger_count_minus_one=$(($(grep -E "kapacitor.alert.resp.[0-9]+.name" $SETTINGS_TXT | wc -l) - 1))
     for i in $(seq 0 "$trigger_count_minus_one") ; do
@@ -927,4 +989,122 @@ alert_put_trigger()
     jq -c -n \
         '{success: true, message: ""}'
     return $ret
+}
+
+alert_get_full_trigger()
+{
+    # output format: {
+    #   setting: {
+    #     titlePrefix: "",
+    #     sender: {
+    #       email: {
+    #         host: "",
+    #         port: "",
+    #         username: "",
+    #         password: "",
+    #         from: ""
+    #       }
+    #     },
+    #     receiver: {
+    #       emails: [
+    #         {
+    #           address: "",
+    #           note: ""
+    #         }
+    #       ],
+    #       slacks: [
+    #         {
+    #           url: "",
+    #           username: "",
+    #           description: "",
+    #           workspace: "",
+    #           channel: ""
+    #         }
+    #       ]
+    #     }
+    #   },
+    #   triggers: [
+    #     {
+    #       name: "",
+    #       enabled: true,
+    #       topic: "",
+    #       match: "",
+    #       description: "",
+    #       emails: [
+    #         {
+    #           address: "",
+    #           note: ""
+    #         }
+    #       ],
+    #       slacks: [
+    #         {
+    #           url: "",
+    #           username: "",
+    #           description: "",
+    #           workspace: "",
+    #           channel: ""
+    #         }
+    #       ],
+    #       execs: {
+    #         shells: [
+    #           {
+    #             name: ""
+    #           }
+    #         ],
+    #         bins: [
+    #           {
+    #             name: ""
+    #           }
+    #         ]
+    #       }
+    #     }
+    #   ]
+    # }
+
+    # join
+    local setting=$(alert_get_setting)
+    local triggers=$(alert_get_trigger)
+    local full_triggers="$triggers"
+    local trigger_count_minus_one=$(($(echo $triggers | jq -r 'length') - 1))
+    for i in $(seq 0 "$trigger_count_minus_one") ; do
+        # email
+        local email_count_minus_one=$(($(echo $triggers | jq -r ".[$i].emails | length") - 1))
+        for j in $(seq 0 "$email_count_minus_one") ; do
+            local setting_email_count_minus_one=$(($(echo $setting | jq -r ".receiver.emails | length") - 1))
+            for k in $(seq 0 "$setting_email_count_minus_one") ; do
+                local email=$(echo $triggers | jq -r ".[$i].emails[$j].address")
+                local setting_email=$(echo $setting | jq -r ".receiver.emails[$k].address")
+                if [[ "$email" == "$setting_email" ]] ; then
+                    local note=$(echo $setting | jq -r ".receiver.emails[$k].note")
+                    full_triggers=$(echo $full_triggers | jq ".[$i].emails[$j].note = \"$note\"")
+                fi
+            done
+        done
+
+        # slack
+        local slack_count_minus_one=$(($(echo $triggers | jq -r ".[$i].slacks | length") - 1))
+        for j in $(seq 0 "$slack_count_minus_one") ; do
+            local setting_slack_count_minus_one=$(($(echo $setting | jq -r ".receiver.slacks | length") - 1))
+            for k in $(seq 0 "$setting_slack_count_minus_one") ; do
+                local slack=$(echo $triggers | jq -r ".[$i].slacks[$j].url")
+                local setting_slack=$(echo $setting | jq -r ".receiver.slacks[$k].url")
+                if [[ "$slack" == "$setting_slack" ]] ; then
+                    local username=$(echo $setting | jq -r ".receiver.slacks[$k].username")
+                    full_triggers=$(echo $full_triggers | jq ".[$i].slacks[$j].username = \"$username\"")
+                    local description=$(echo $setting | jq -r ".receiver.slacks[$k].description")
+                    full_triggers=$(echo $full_triggers | jq ".[$i].slacks[$j].description = \"$description\"")
+                    local workspace=$(echo $setting | jq -r ".receiver.slacks[$k].workspace")
+                    full_triggers=$(echo $full_triggers | jq ".[$i].slacks[$j].workspace = \"$workspace\"")
+                    local channel=$(echo $setting | jq -r ".receiver.slacks[$k].channel")
+                    full_triggers=$(echo $full_triggers | jq ".[$i].slacks[$j].channel = \"$channel\"")
+                fi
+            done
+        done
+    done
+
+    # output
+    jq -c -n \
+        --argjson setting "$setting" \
+        --argjson triggers "$full_triggers" \
+        '{setting: $setting, triggers: $triggers}'
 }
