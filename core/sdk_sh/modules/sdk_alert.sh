@@ -593,6 +593,165 @@ alert_delete_setting_receiver_slack()
     return $ret
 }
 
+alert_get_trigger()
+{
+    # load the tunings into the env
+    local trigger_count_minus_one=$(($(grep -E "kapacitor.alert.resp.[0-9]+.name" $SETTINGS_TXT | wc -l) - 1))
+    for i in $(seq 0 "$trigger_count_minus_one") ; do
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.name"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.enabled"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.topic"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.match"
+        source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.description"
+
+        # email
+        local email_count_minus_one=$(($(grep -E "kapacitor.alert.resp.$i.responses.emails.[0-9]+.address" $SETTINGS_TXT | wc -l) - 1))
+        for j in $(seq 0 "$email_count_minus_one") ; do
+            source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.responses.emails.$j.address"
+        done
+
+        # slack
+        local slack_count_minus_one=$(($(grep -E "kapacitor.alert.resp.$i.responses.slacks.[0-9]+.url" $SETTINGS_TXT | wc -l) - 1))
+        for j in $(seq 0 "$slack_count_minus_one") ; do
+            source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.responses.slacks.$j.url"
+        done
+
+        # exec shell
+        local exec_shell_count_minus_one=$(($(grep -E "kapacitor.alert.resp.$i.responses.execs.shells.[0-9]+.name" $SETTINGS_TXT | wc -l) - 1))
+        for j in $(seq 0 "$exec_shell_count_minus_one") ; do
+            source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.responses.execs.shells.$j.name"
+        done
+
+        # exec bin
+        local exec_bin_count_minus_one=$(($(grep -E "kapacitor.alert.resp.$i.responses.execs.bins.[0-9]+.name" $SETTINGS_TXT | wc -l) - 1))
+        for j in $(seq 0 "$exec_bin_count_minus_one") ; do
+            source hex_tuning $SETTINGS_TXT "kapacitor.alert.resp.$i.responses.execs.bins.$j.name"
+        done
+    done
+
+    # format the JSON string
+    local output_count=0
+    local output="["
+    for i in $(seq 0 "$trigger_count_minus_one") ; do
+        local name_key="T_kapacitor_alert_resp_${i}_name"
+        local enabled_key="T_kapacitor_alert_resp_${i}_enabled"
+        local topic_key="T_kapacitor_alert_resp_${i}_topic"
+        local match_key="T_kapacitor_alert_resp_${i}_match"
+        local description_key="T_kapacitor_alert_resp_${i}_description"
+
+        local enabled="false"
+        if [[ "${!enabled_key}" == "true" ]] ; then
+            enabled="true"
+        fi
+        local match=${!match_key//_/\"}
+
+        # email
+        local e_count=0
+        local e="["
+        local email_count_minus_one=$(($(grep -E "kapacitor.alert.resp.$i.responses.emails.[0-9]+.address" $SETTINGS_TXT | wc -l) - 1))
+        for j in $(seq 0 "$email_count_minus_one") ; do
+            local address_key="T_kapacitor_alert_resp_${i}_responses_emails_${j}_address"
+            if [[ "${!address_key}" == "" ]] ; then
+                continue
+            fi
+
+            if [[ "$e_count" -gt 0 ]] ; then
+                e+=","
+            fi
+
+            ((e_count++))
+            e+=$(jq -c -n \
+                --arg address "${!address_key}" \
+                '{address: $address}')
+        done
+        e+="]"
+
+        # slack
+        local s_count=0
+        local s="["
+        local slack_count_minus_one=$(($(grep -E "kapacitor.alert.resp.$i.responses.slacks.[0-9]+.url" $SETTINGS_TXT | wc -l) - 1))
+        for j in $(seq 0 "$slack_count_minus_one") ; do
+            local url_key="T_kapacitor_alert_resp_${i}_responses_slacks_${j}_url"
+            if [[ "${!url_key}" == "" ]] ; then
+                continue
+            fi
+
+            if [[ "$s_count" -gt 0 ]] ; then
+                s+=","
+            fi
+
+            ((s_count++))
+            s+=$(jq -c -n \
+                --arg url "${!url_key}" \
+                '{url: $url}')
+        done
+        s+="]"
+
+        # exec shell
+        local es_count=0
+        local es="["
+        local exec_shell_count_minus_one=$(($(grep -E "kapacitor.alert.resp.$i.responses.execs.shells.[0-9]+.name" $SETTINGS_TXT | wc -l) - 1))
+        for j in $(seq 0 "$exec_shell_count_minus_one") ; do
+            local es_name_key="T_kapacitor_alert_resp_${i}_responses_execs_shells_${j}_name"
+            if [[ "${!es_name_key}" == "" ]] ; then
+                continue
+            fi
+
+            if [[ "$es_count" -gt 0 ]] ; then
+                es+=","
+            fi
+
+            ((es_count++))
+            es+=$(jq -c -n \
+                --arg name "${!es_name_key}" \
+                '{name: $name}')
+        done
+        es+="]"
+
+        # exec bin
+        local eb_count=0
+        local eb="["
+        local exec_bin_count_minus_one=$(($(grep -E "kapacitor.alert.resp.$i.responses.execs.bins.[0-9]+.name" $SETTINGS_TXT | wc -l) - 1))
+        for j in $(seq 0 "$exec_bin_count_minus_one") ; do
+            local eb_name_key="T_kapacitor_alert_resp_${i}_responses_execs_bins_${j}_name"
+            if [[ "${!eb_name_key}" == "" ]] ; then
+                continue
+            fi
+
+            if [[ "$eb_count" -gt 0 ]] ; then
+                eb+=","
+            fi
+
+            ((eb_count++))
+            eb+=$(jq -c -n \
+                --arg name "${!eb_name_key}" \
+                '{name: $name}')
+        done
+        eb+="]"
+
+        if [[ "$output_count" -gt 0 ]] ; then
+            output+=","
+        fi
+
+        ((output_count++))
+        output+=$(jq -c -n \
+            --arg name "${!name_key}" \
+            --arg enabled "$enabled" \
+            --arg topic "${!topic_key}" \
+            --arg match "$match" \
+            --arg description "${!description_key}" \
+            --argjson emails "$e" \
+            --argjson slacks "$s" \
+            --argjson execShells "$es" \
+            --argjson execBins "$eb" \
+            '{name: $name, enabled: $enabled | test("true"), topic: $topic, match: $match, description: $description, emails: $emails, slacks: $slacks, execs: {shells: $execShells, bins: $execBins}}')
+    done
+    output+="]"
+
+    # output
+    jq -c -n "$output"
+}
+
 alert_put_trigger()
 {
     # input format: {
