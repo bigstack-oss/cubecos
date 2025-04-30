@@ -696,7 +696,26 @@ Commit(bool modified, int dryLevel)
         WriteRelayTask(MONASCA_DB, HC_TSDB_RP, peerNames);
         WriteRelayTask(EVENTS_DB, TSDB_RP, peerNames);
         WriteRelayTask(EVENTS_DB, HC_TSDB_RP, peerNames);
-        WriteAlertExtra(s_alertExtraPrefix);
+
+        std::string prefix = "Cube";
+        std::string tuningPrefix = s_alertExtraPrefix.newValue();
+        std::string titlePrefix = s_alertSettingTitlePrefix.newValue();
+        if (tuningPrefix == "Cube") {
+            if (titlePrefix.length() > 0) {
+                prefix = titlePrefix;
+            } else {
+                prefix = tuningPrefix;
+            }
+        } else if (tuningPrefix.length() > 0) {
+            if (titlePrefix.length() > 0) {
+                prefix = tuningPrefix + " - " + titlePrefix;
+            } else {
+                prefix = tuningPrefix;
+            }
+        } else if (titlePrefix.length() > 0) {
+            prefix = titlePrefix;
+        }
+        WriteAlertExtra(prefix);
 
         HexLogInfo("kapacitor refresh tasks/templates/handlers");
         DefineTasks();
