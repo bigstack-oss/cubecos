@@ -1,7 +1,9 @@
 // CUBE
 
 #include <unistd.h>
+#include <functional>
 #include <sstream>
+#include <set>
 
 #include <hex/log.h>
 #include <hex/config_module.h>
@@ -55,7 +57,6 @@ static std::vector<std::string> s_cephTasks = {
     "ceph_pool_stats",
 };
 
-
 static bool s_bNetModified = false;
 static bool s_bCubeModified = false;
 
@@ -82,19 +83,24 @@ CONFIG_TUNING_STR(KAPACITOR_ALERT_EXTRA_PREFIX, "kapacitor.alert.extra.prefix", 
 CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_CRIT, "kapacitor.alert.default.crit", TUNING_UNPUB, "Set kapacitor alert default critical threshold.", 95 , 0, 100);
 CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_WARN, "kapacitor.alert.default.warn", TUNING_UNPUB, "Set kapacitor alert default warning threshold.", 85 , 0, 100);
 CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_INFO, "kapacitor.alert.default.info", TUNING_UNPUB, "Set kapacitor alert default info threshold.", 75 , 0, 100);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_ID, "kapacitor.alert.resp.%d.name", TUNING_UNPUB, "Set kapacitor alert response id.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_TITLE_PREFIX, "kapacitor.alert.setting.titlePrefix", TUNING_UNPUB, "Set kapacitor alert setting title prefix.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_HOST, "kapacitor.alert.setting.sender.email.host", TUNING_UNPUB, "Set kapacitor alert setting email sender host.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_PORT, "kapacitor.alert.setting.sender.email.port", TUNING_UNPUB, "Set kapacitor alert setting email sender port.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_USERNAME, "kapacitor.alert.setting.sender.email.username", TUNING_UNPUB, "Set kapacitor alert setting email sender username.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_PASSWORD, "kapacitor.alert.setting.sender.email.password", TUNING_UNPUB, "Set kapacitor alert setting email sender password.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_FROM, "kapacitor.alert.setting.sender.email.from", TUNING_UNPUB, "Set kapacitor alert setting email sender from address.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_URL, "kapacitor.alert.setting.receiver.slacks.%d.url", TUNING_UNPUB, "Set kapacitor alert setting slack receiver url.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_USERNAME, "kapacitor.alert.setting.receiver.slacks.%d.username", TUNING_UNPUB, "Set kapacitor alert setting slack receiver username.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_WORKSPACE, "kapacitor.alert.setting.receiver.slacks.%d.workspace", TUNING_UNPUB, "Set kapacitor alert setting slack receiver workspace.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_CHANNEL, "kapacitor.alert.setting.receiver.slacks.%d.channel", TUNING_UNPUB, "Set kapacitor alert setting slack receiver channel.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_NAME, "kapacitor.alert.resp.%d.name", TUNING_UNPUB, "Set kapacitor alert response name.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_BOOL(KAPACITOR_ALERT_RESP_ENABLED, "kapacitor.alert.resp.%d.enabled", TUNING_UNPUB, "Set kapacitor alert response enabled status.", false);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_TOPIC, "kapacitor.alert.resp.%d.topic", TUNING_UNPUB, "Set kapacitor alert response topic.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_MATCH, "kapacitor.alert.resp.%d.match", TUNING_UNPUB, "Set kapacitor alert response match.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_TYPE, "kapacitor.alert.resp.%d.type", TUNING_UNPUB, "Set kapacitor alert response type 'slack', 'email', 'exec'.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_SLACK_URL, "kapacitor.alert.resp.%d.slack.url", TUNING_UNPUB, "Set kapacitor slack alert url.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_SLACK_CHANNEL, "kapacitor.alert.resp.%d.slack.channel", TUNING_UNPUB, "Set kapacitor slack alert channel.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_HOST, "kapacitor.alert.resp.%d.email.host", TUNING_UNPUB, "Set kapacitor email alert host.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_UINT(KAPACITOR_ALERT_EMAIL_PORT, "kapacitor.alert.resp.%d.email.port", TUNING_UNPUB, "Set kapacitor email alert port.", 0, 0, 65535);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_USER, "kapacitor.alert.resp.%d.email.username", TUNING_UNPUB, "Set kapacitor email alert username.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_PASS, "kapacitor.alert.resp.%d.email.password", TUNING_UNPUB, "Set kapacitor email alert password.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_FROM, "kapacitor.alert.resp.%d.email.from", TUNING_UNPUB, "Set kapacitor email alert from.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EMAIL_TO, "kapacitor.alert.resp.%d.email.to", TUNING_UNPUB, "Set kapacitor email alert to.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_EXEC_TYPE, "kapacitor.alert.resp.%d.exec.type", TUNING_UNPUB, "Set kapacitor executable alert type 'shell', 'bin'.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_EMAIL_ADDRESS, "kapacitor.alert.resp.%d.responses.emails.%d.address", TUNING_UNPUB, "Set kapacitor alert response email address.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_SLACK_URL, "kapacitor.alert.resp.%d.responses.slacks.%d.url", TUNING_UNPUB, "Set kapacitor alert response slack url.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_EXEC_SHELL_NAME, "kapacitor.alert.resp.%d.responses.execs.shells.%d.name", TUNING_UNPUB, "Set kapacitor alert response exec shell name.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_RESP_EXEC_BIN_NAME, "kapacitor.alert.resp.%d.responses.execs.bins.%d.name", TUNING_UNPUB, "Set kapacitor alert response exec bin name.", "", ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
@@ -111,19 +117,24 @@ PARSE_TUNING_STR(s_alertExtraPrefix, KAPACITOR_ALERT_EXTRA_PREFIX);
 PARSE_TUNING_UINT(s_alertDefCrit, KAPACITOR_ALERT_DEF_CRIT);
 PARSE_TUNING_UINT(s_alertDefWarn, KAPACITOR_ALERT_DEF_WARN);
 PARSE_TUNING_UINT(s_alertDefInfo, KAPACITOR_ALERT_DEF_INFO);
-PARSE_TUNING_STR_ARRAY(s_respIdArr, KAPACITOR_ALERT_RESP_ID);
-PARSE_TUNING_STR_ARRAY(s_respTopicArr, KAPACITOR_ALERT_RESP_TOPIC);
-PARSE_TUNING_STR_ARRAY(s_respMatchArr, KAPACITOR_ALERT_RESP_MATCH);
-PARSE_TUNING_STR_ARRAY(s_respTypeArr, KAPACITOR_ALERT_RESP_TYPE);
-PARSE_TUNING_STR_ARRAY(s_slackUrlArr, KAPACITOR_ALERT_SLACK_URL);
-PARSE_TUNING_STR_ARRAY(s_slackChannelArr, KAPACITOR_ALERT_SLACK_CHANNEL);
-PARSE_TUNING_STR_ARRAY(s_emailHostArr, KAPACITOR_ALERT_EMAIL_HOST);
-PARSE_TUNING_UINT_ARRAY(s_emailPortArr, KAPACITOR_ALERT_EMAIL_PORT);
-PARSE_TUNING_STR_ARRAY(s_emailUserArr, KAPACITOR_ALERT_EMAIL_USER);
-PARSE_TUNING_STR_ARRAY(s_emailPassArr, KAPACITOR_ALERT_EMAIL_PASS);
-PARSE_TUNING_STR_ARRAY(s_emailFromArr, KAPACITOR_ALERT_EMAIL_FROM);
-PARSE_TUNING_STR_ARRAY(s_emailToArr, KAPACITOR_ALERT_EMAIL_TO);
-PARSE_TUNING_STR_ARRAY(s_execTypeArr, KAPACITOR_ALERT_EXEC_TYPE);
+PARSE_TUNING_STR(s_alertSettingTitlePrefix, KAPACITOR_ALERT_SETTING_TITLE_PREFIX);
+PARSE_TUNING_STR(s_alertSettingSenderEmailHost, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_HOST);
+PARSE_TUNING_STR(s_alertSettingSenderEmailPort, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_PORT);
+PARSE_TUNING_STR(s_alertSettingSenderEmailUsername, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_USERNAME);
+PARSE_TUNING_STR(s_alertSettingSenderEmailPassword, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_PASSWORD);
+PARSE_TUNING_STR(s_alertSettingSenderEmailFrom, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_FROM);
+PARSE_TUNING_STR_ARRAY(s_alertSettingReceiverSlackUrlArray, KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_URL);
+PARSE_TUNING_STR_ARRAY(s_alertSettingReceiverSlackUsernameArray, KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_USERNAME);
+PARSE_TUNING_STR_ARRAY(s_alertSettingReceiverSlackWorkspaceArray, KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_WORKSPACE);
+PARSE_TUNING_STR_ARRAY(s_alertSettingReceiverSlackChannelArray, KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_CHANNEL);
+PARSE_TUNING_STR_ARRAY(s_respNameArray, KAPACITOR_ALERT_RESP_NAME);
+PARSE_TUNING_BOOL_ARRAY(s_respEnabledArray, KAPACITOR_ALERT_RESP_ENABLED);
+PARSE_TUNING_STR_ARRAY(s_respTopicArray, KAPACITOR_ALERT_RESP_TOPIC);
+PARSE_TUNING_STR_ARRAY(s_respMatchArray, KAPACITOR_ALERT_RESP_MATCH);
+PARSE_TUNING_STR_MATRIX(s_respEmailAddressMatrix, KAPACITOR_ALERT_RESP_EMAIL_ADDRESS);
+PARSE_TUNING_STR_MATRIX(s_respSlackUrlMatrix, KAPACITOR_ALERT_RESP_SLACK_URL);
+PARSE_TUNING_STR_MATRIX(s_respExecShellNameMatrix, KAPACITOR_ALERT_RESP_EXEC_SHELL_NAME);
+PARSE_TUNING_STR_MATRIX(s_respExecBinNameMatrix, KAPACITOR_ALERT_RESP_EXEC_BIN_NAME);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 PARSE_TUNING_X_STR(s_ctrlHosts, CUBESYS_CONTROL_HOSTS, 1);
 PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
@@ -206,45 +217,49 @@ CronAlertCheck(bool enabled, const std::string& eventid,
 }
 
 std::string
-AddQuote(const std::string& list)
+AddQuote(const std::vector<std::string>& list)
 {
-    auto group = hex_string_util::split(list, ',');
-    std::string output = "";
-    for (size_t i = 0 ; i < group.size() ; i++) {
-        output += "\"" + group[i] + "\"";
-        if (i + 1 < group.size())
-            output += ", ";
+    std::stringstream out;
+    for (std::size_t i = 0 ; i < list.size() ; i++) {
+        out << "\"" << list[i] << "\"";
+        if (i + 1 < list.size()) {
+            out << ", ";
+        }
     }
 
-    return output;
+    return out.str();
 }
 
 static const std::string
 EscapeDoubleQuote(const std::string &str)
 {
-    // 1. Escape each single quoat(") to '\"'
+    // Escape each single quoat(") to '\"'
     std::stringstream out;
     for (std::string::const_iterator it = str.begin(); it != str.end(); it++) {
-        if (*it == '"')
+        if (*it == '"') {
             out << "\\\"";
-        else
+        } else {
             out << *it;
+        }
     }
     return out.str();
 }
 
 static bool
-WriteEmailEventHandler(const std::string& name, const std::string& topic, const std::string& match, const std::string& to)
+WriteEmailEventHandler(const std::string& name, const std::string& topic, const std::string& match, const std::vector<std::string>& toList)
 {
-    std::string fname = CFGHDR_DIR "email_" + name + ".yaml";
+    if (name.length() == 0 || toList.size() == 0) {
+        return false;
+    }
 
+    std::string fname = CFGHDR_DIR "email_" + name + ".yaml";
     FILE *fout = fopen(fname.c_str(), "w");
     if (!fout) {
         HexLogError("Unable to write email event handler : %s", fname.c_str());
         return false;
     }
 
-    fprintf(fout, "id: %s\n", name.c_str());
+    fprintf(fout, "id: email-%s\n", name.c_str());
     fprintf(fout, "topic: %s\n", topic.c_str());
     fprintf(fout, "kind: smtp\n");
     if (match.length()) {
@@ -254,28 +269,60 @@ WriteEmailEventHandler(const std::string& name, const std::string& topic, const 
     fprintf(fout, "options:\n");
     fprintf(fout, "  to:\n");
 
-    auto group = hex_string_util::split(to, ',');
-    for (size_t i = 0 ; i < group.size() ; i++) {
-        fprintf(fout, "    - %s\n", group[i].c_str());
+    for (std::vector<std::string>::const_iterator it = toList.begin(); it != toList.end(); it++) {
+        fprintf(fout, "    - %s\n", (*it).c_str());
     }
 
     fclose(fout);
-
     return true;
 }
 
-static bool
-WriteSlackEventHandler(const std::string& name, const std::string& topic, const std::string& match)
-{
-    std::string fname = CFGHDR_DIR "slack_" + name + ".yaml";
+struct SlackInfo {
+    std::string url;
+    std::string username;
+    std::string workspace;
+    std::string channel;
+};
 
+SlackInfo
+findSlack(std::string url)
+{
+    SlackInfo s;
+    s.url = "";
+    s.username = "";
+    s.workspace = "";
+    s.channel = "";
+
+    std::size_t index = 0;
+    for (std::vector<ConfigString>::const_iterator it = s_alertSettingReceiverSlackUrlArray.begin(); it != s_alertSettingReceiverSlackUrlArray.end(); it++) {
+        if (it->newValue().compare(url) == 0) {
+            s.url = url;
+            s.username = s_alertSettingReceiverSlackUsernameArray.newValue(index);
+            s.workspace = s_alertSettingReceiverSlackWorkspaceArray.newValue(index);
+            s.channel = s_alertSettingReceiverSlackChannelArray.newValue(index);
+            return s;
+        }
+        index++;
+    }
+
+    return s;
+}
+
+static bool
+WriteSlackEventHandler(const std::string& name, const std::string& id, const std::string& topic, const std::string& match)
+{
+    if (name.length() == 0 || id.length() == 0) {
+        return false;
+    }
+
+    std::string fname = CFGHDR_DIR "slack_" + name + "_" + id + ".yaml";
     FILE *fout = fopen(fname.c_str(), "w");
     if (!fout) {
         HexLogError("Unable to write slack event handler : %s", fname.c_str());
         return false;
     }
 
-    fprintf(fout, "id: %s\n", name.c_str());
+    fprintf(fout, "id: slack-%s-%s\n", name.c_str(), id.c_str());
     fprintf(fout, "topic: %s\n", topic.c_str());
     fprintf(fout, "kind: slack\n");
     if (match.length()) {
@@ -283,7 +330,7 @@ WriteSlackEventHandler(const std::string& name, const std::string& topic, const 
         fprintf(fout, "match: \"%s\"\n", EscapeDoubleQuote(match).c_str());
     }
     fprintf(fout, "options:\n");
-    fprintf(fout, "  workspace: '%s'\n", name.c_str());
+    fprintf(fout, "  workspace: '%s'\n", id.c_str());
 
     fclose(fout);
 
@@ -291,17 +338,20 @@ WriteSlackEventHandler(const std::string& name, const std::string& topic, const 
 }
 
 static bool
-WriteExecEventHandler(const std::string& name, const std::string& topic, const std::string& match, const std::string& type)
+WriteExecEventHandler(const std::string& name, const std::string& type, const std::string& execName, const std::string& topic, const std::string& match)
 {
-    std::string fname = CFGHDR_DIR "exec_" + name + ".yaml";
+    if (name.length() == 0 || type.length() == 0 || execName.length() == 0) {
+        return false;
+    }
 
+    std::string fname = CFGHDR_DIR "exec_" + name + "_" + type + "_" + execName + ".yaml";
     FILE *fout = fopen(fname.c_str(), "w");
     if (!fout) {
         HexLogError("Unable to write executable event handler : %s", fname.c_str());
         return false;
     }
 
-    fprintf(fout, "id: exec-%s-%s\n", name.c_str(), type.c_str());
+    fprintf(fout, "id: exec-%s-%s-%s\n", name.c_str(), type.c_str(), execName.c_str());
     fprintf(fout, "topic: %s\n", topic.c_str());
     fprintf(fout, "kind: exec\n");
     if (match.length()) {
@@ -310,7 +360,7 @@ WriteExecEventHandler(const std::string& name, const std::string& topic, const s
     }
     fprintf(fout, "options:\n");
     fprintf(fout, "  prog: '/usr/sbin/hex_config'\n");
-    fprintf(fout, "  args: ['sdk_run', 'alert_resp_runner', '%s', '%s']\n", name.c_str(), type.c_str());
+    fprintf(fout, "  args: ['sdk_run', 'alert_resp_runner', '%s', '%s']\n", execName.c_str(), type.c_str());
 
     fclose(fout);
 
@@ -349,68 +399,98 @@ WriteConfig(const std::vector<std::string>& peerNames, const std::vector<std::st
     }
 
     HexSystemF(0, "rm -f " CFGHDR_DIR "*");
-    bool emailSet = false;
-    for (unsigned i = 0 ; i < s_respIdArr.size() ; i++) {
-        if (s_respIdArr.newValue(i).length() == 0)
+    std::vector<std::string> defaultEmailAddressList;
+    bool isFirstSlack = true;
+    std::set<std::string> slackIdSet;
+    for (std::size_t i = 0 ; i < s_respNameArray.size() ; i++) {
+        std::string name = s_respNameArray.newValue(i);
+        if (name.length() == 0) {
             continue;
-
-        std::string name = s_respIdArr.newValue(i);
-        std::string match = s_respMatchArr.newValue(i);
-        std::string type = s_respTypeArr.newValue(i);
-        std::string topic = s_respTopicArr.newValue(i);
-
-        if (type == "slack") {
-            std::string url = s_slackUrlArr.newValue(i);
-            std::string channel = s_slackChannelArr.newValue(i);
-            std::string def = (topic == "events") ? "true" : "false";
-
-            ofsConf << std::endl;
-            ofsConf << "[[slack]]" << std::endl;
-            ofsConf << "  enabled = true" << std::endl;
-            ofsConf << "  default = " << def << std::endl;
-            ofsConf << "  workspace = \"" << name << "\"" << std::endl;
-            ofsConf << "  url = \"" << url << "\"" << std::endl;
-            ofsConf << "  username = \"CubeAlertBot\"" << std::endl;
-            if (channel.length() && channel != "null") {
-                ofsConf << "  channel = \"#" << channel << "\"" << std::endl;
-            }
-            ofsConf << "  global = false" << std::endl;
-            ofsConf << "  state-changes-only = false" << std::endl;
-
-            WriteSlackEventHandler(name, topic, match);
         }
-        else if (type == "email") {
-            std::string to = s_emailToArr.newValue(i);
 
-            if (!emailSet) {
-                std::string host = s_emailHostArr.newValue(i);
-                int64_t port = s_emailPortArr.newValue(i);
-                std::string username = s_emailUserArr.newValue(i);
-                std::string password = s_emailPassArr.newValue(i);
-                std::string from = s_emailFromArr.newValue(i);
+        bool enabled = (i < s_respEnabledArray.size() ? s_respEnabledArray.newValue(i) : false);
+        if (!enabled) {
+            continue;
+        }
 
+        std::string topic = (i < s_respTopicArray.size() ? s_respTopicArray.newValue(i) : "");
+        std::string match = (i < s_respMatchArray.size() ? s_respMatchArray.newValue(i) : "");
+
+        // email
+        std::vector<std::string> toEmailAddressList = s_respEmailAddressMatrix.newValue(i);
+        WriteEmailEventHandler(name, topic, match, toEmailAddressList);
+        if (topic == "events") {
+            defaultEmailAddressList = toEmailAddressList;
+        }
+
+        // slack
+        std::vector<std::string> toSlackUrlList = s_respSlackUrlMatrix.newValue(i);
+        for (std::vector<std::string>::const_iterator it = toSlackUrlList.begin(); it != toSlackUrlList.end(); it++) {
+            SlackInfo s = findSlack(*it);
+            if (s.url == "") {
+                continue;
+            }
+
+            std::string def = "false";
+            if (topic == "events" && isFirstSlack) {
+                def = "true";
+                isFirstSlack = false;
+            }
+            std::hash<std::string> stringHash;
+            std::string id = std::to_string(stringHash(s.url + s.workspace));
+            std::string username = (s.username.length() > 0) ? s.username : "CubeAlertBot";
+
+            if (slackIdSet.count(id) == 0) {
                 ofsConf << std::endl;
-                ofsConf << "[smtp]" << std::endl;
+                ofsConf << "[[slack]]" << std::endl;
                 ofsConf << "  enabled = true" << std::endl;
-                ofsConf << "  host = \"" << host << "\"" << std::endl;
-                ofsConf << "  port = " << std::to_string(port) << std::endl;
+                ofsConf << "  default = " << def << std::endl;
+                ofsConf << "  workspace = \"" << id << "\"" << std::endl;
+                ofsConf << "  url = \"" << s.url << "\"" << std::endl;
                 ofsConf << "  username = \"" << username << "\"" << std::endl;
-                ofsConf << "  password = \"" << password << "\"" << std::endl;
-                ofsConf << "  from = \"" << from << "\"" << std::endl;
-                ofsConf << "  to = [ " << AddQuote(to) << " ]" << std::endl;
-                ofsConf << "  no-verify = true" << std::endl;
-                ofsConf << "  idle-timeout = \"180s\"" << std::endl;
+                if (s.channel.length() > 0 && s.channel != "null") {
+                    ofsConf << "  channel = \"#" << s.channel << "\"" << std::endl;
+                }
                 ofsConf << "  global = false" << std::endl;
                 ofsConf << "  state-changes-only = false" << std::endl;
-                emailSet = true;
+
+                slackIdSet.insert(id);
             }
 
-            WriteEmailEventHandler(name, topic, match, to);
+            WriteSlackEventHandler(name, id, topic, match);
         }
-        else if (type == "exec") {
-            std::string t = s_execTypeArr.newValue(i);
-            WriteExecEventHandler(name, topic, match, t);
+
+        // exec
+        std::vector<std::string> execShellNameList = s_respExecShellNameMatrix.newValue(i);
+        for (std::vector<std::string>::const_iterator it = execShellNameList.begin(); it != execShellNameList.end(); it++) {
+            WriteExecEventHandler(name, std::string("shell"), *it, topic, match);
         }
+        std::vector<std::string> execBinNameList = s_respExecBinNameMatrix.newValue(i);
+        for (std::vector<std::string>::const_iterator it = execBinNameList.begin(); it != execBinNameList.end(); it++) {
+            WriteExecEventHandler(name, std::string("bin"), *it, topic, match);
+        }
+    }
+
+    // email sender
+    std::string emailSenderHost = s_alertSettingSenderEmailHost.newValue();
+    std::string emailSenderPort = s_alertSettingSenderEmailPort.newValue();
+    std::string emailSenderUsername = s_alertSettingSenderEmailUsername.newValue();
+    std::string emailSenderPassword = s_alertSettingSenderEmailPassword.newValue();
+    std::string emailSenderFrom = s_alertSettingSenderEmailFrom.newValue();
+    if (emailSenderHost.length() > 0 && emailSenderPort.length() > 0 && emailSenderFrom.length() > 0) {
+        ofsConf << std::endl;
+        ofsConf << "[smtp]" << std::endl;
+        ofsConf << "  enabled = true" << std::endl;
+        ofsConf << "  host = \"" << emailSenderHost << "\"" << std::endl;
+        ofsConf << "  port = " << emailSenderPort << std::endl;
+        ofsConf << "  username = \"" << emailSenderUsername << "\"" << std::endl;
+        ofsConf << "  password = \"" << emailSenderPassword << "\"" << std::endl;
+        ofsConf << "  from = \"" << emailSenderFrom << "\"" << std::endl;
+        ofsConf << "  to = [ " << AddQuote(defaultEmailAddressList) << " ]" << std::endl;
+        ofsConf << "  no-verify = true" << std::endl;
+        ofsConf << "  idle-timeout = \"180s\"" << std::endl;
+        ofsConf << "  global = false" << std::endl;
+        ofsConf << "  state-changes-only = false" << std::endl;
     }
 
     ofsConf.close();
@@ -557,8 +637,7 @@ Parse(const char *name, const char *value, bool isNew)
     TuneStatus s = ParseTune(name, value, isNew);
     if (s == TUNE_INVALID_NAME) {
         HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
-    }
-    else if (s == TUNE_INVALID_VALUE) {
+    } else if (s == TUNE_INVALID_VALUE) {
         HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
         r = false;
     }
@@ -573,7 +652,7 @@ CommitCheck(bool modified, int dryLevel)
     }
 
     return modified | s_bCubeModified | s_bNetModified |
-                     G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
+        G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
 }
 
 static bool
@@ -582,8 +661,9 @@ Commit(bool modified, int dryLevel)
     // todo: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
-    if (IsUndef(s_eCubeRole) || !CommitCheck(modified, dryLevel))
+    if (IsUndef(s_eCubeRole) || !CommitCheck(modified, dryLevel)) {
         return true;
+    }
 
     bool enabled = IsControl(s_eCubeRole);
     std::string myip = G(MGMT_ADDR);
@@ -628,9 +708,9 @@ Commit(bool modified, int dryLevel)
         HexUtilSystemF(0, 0, HEX_SDK " alert_sync_tenant");
 
         CronAlertCheck(s_alertChkEnabled, s_alertChkEventId, s_hostname, s_alertChkInterval);
-    }
-    else
+    } else {
         SystemdCommitService(enabled, NAME);
+    }
 
     return true;
 }
