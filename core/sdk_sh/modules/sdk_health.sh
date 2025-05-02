@@ -899,23 +899,31 @@ health_nginx_repair()
 
 health_api_report()
 {
-    health_report ${FUNCNAME[0]}
+    _health_report ${FUNCNAME[0]}
 }
 
 health_api_check()
 {
     local port=8082
+    local api_log="/var/log/cube-cos-api/cube-cos-api.log"
 
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node cube-cos-api >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="cube-cos-api on $node is not running\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u cube-cos-api"
+        elif [ -e $api_log ] ; then
+            tail -n 10 $api_log | grep -q "saml client not found"
+            if [ "$?" -eq 0 ] ; then
+                ERR_CODE=2
+                ERR_MSG+="saml client is not ready for cube-cos-api\n"
+                ERR_LOG=$(tail -n 10 $api_log)
+            fi
         else
             $CURL -sf http://$node:$port >/dev/null
             # 0: ok, 22: http error (page not found)
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
-                ERR_CODE=2
+                ERR_CODE=3
                 ERR_MSG+="http port $port on $node doesn't respond\n"
                 ERR_LOG="netstat -tunpl | grep $port"
             fi
@@ -933,8 +941,8 @@ health_api_auto_repair()
                 remote_systemd_restart $node cube-cos-api
             fi
         done
-    elif [ "$ERR_CODE" == "2" ] ; then
-        $HEX_SDK api_idp_config $(shared_id)
+    elif [ "$ERR_CODE" == "2" ] || [ "$ERR_CODE" == "3" ] ; then
+        $HEX_SDK api_idp_config $(shared_ip)
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             $CURL -sf http://$node:8082 >/dev/null
             # 0: ok, 22: http error (page not found)
@@ -947,7 +955,7 @@ health_api_auto_repair()
 
 health_api_repair()
 {
-    $HEX_SDK api_idp_config $(shared_id)
+    $HEX_SDK api_idp_config $(shared_ip)
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node cube-cos-api >/dev/null 2>&1 ; then
             remote_systemd_restart $node cube-cos-api
