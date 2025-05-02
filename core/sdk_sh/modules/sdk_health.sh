@@ -912,21 +912,25 @@ health_api_check()
             ERR_CODE=1
             ERR_MSG+="cube-cos-api on $node is not running\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u cube-cos-api"
-        elif [ -e $api_log ] ; then
+            continue
+        fi
+
+        if [ -e $api_log ] ; then
             tail -n 10 $api_log | grep -q "saml client not found"
             if [ "$?" -eq 0 ] ; then
                 ERR_CODE=2
                 ERR_MSG+="saml client is not ready for cube-cos-api\n"
                 ERR_LOG=$(tail -n 10 $api_log)
+                continue
             fi
-        else
-            $CURL -sf http://$node:$port >/dev/null
-            # 0: ok, 22: http error (page not found)
-            if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
-                ERR_CODE=3
-                ERR_MSG+="http port $port on $node doesn't respond\n"
-                ERR_LOG="netstat -tunpl | grep $port"
-            fi
+        fi
+
+        $CURL -sf http://$node:$port >/dev/null
+        # 0: ok, 22: http error (page not found)
+        if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+            ERR_CODE=3
+            ERR_MSG+="http port $port on $node doesn't respond\n"
+            ERR_LOG="netstat -tunpl | grep $port"
         fi
     done
 
