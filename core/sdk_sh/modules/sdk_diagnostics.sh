@@ -14,7 +14,7 @@ _diagProjCreate()
         printf "%s: %s (%s)\n" "Reuse project" $project_name $project_id
     else
         project_id=$($OPENSTACK project create $project_name -f value -c id)
-        $OPENSTACK role add --user 'admin (IAM)' --project $project_name _member_ >/dev/null 2>&1 || true
+        $OPENSTACK role add --user 'admin (IAM)' --project $project_name admin >/dev/null 2>&1 || true
         printf "%s: %s (%s)\n" "Created project" $project_name $project_id
     fi
 }
