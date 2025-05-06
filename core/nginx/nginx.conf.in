@@ -61,7 +61,7 @@ http {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
     upstream skyline {
-        server unix:/var/lib/skyline/skyline.sock fail_timeout=0;
+        server 127.0.0.1:9998 fail_timeout=0;
     }
 
     ##
