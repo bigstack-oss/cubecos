@@ -812,7 +812,7 @@ os_image_import()
 {
     local dir=$1
     local file=$2
-    local IMG=$dir/$file
+    local IMG="$dir/$file"
     local name=$3
     local flags=${4:---public}
     local pool=${5:-glance-images}
@@ -827,40 +827,40 @@ os_image_import()
     properties+=" --property os_admin_user=$distro"
     properties+=" --property os_vers=$ver"
 
-    if [[ $(qemu-img info $IMG | grep "file format") =~ raw ]] ; then
+    if [[ $(qemu-img info "$IMG" | grep "file format") =~ raw ]] ; then
         local img_name=$IMG
     else
-        local img_siz=$(qemu-img info $IMG | grep "^virtual size: " | grep -o "(.*bytes)" | grep -Eo "[0-9]+")
+        local img_siz=$(qemu-img info "$IMG" | grep "^virtual size: " | grep -o "(.*bytes)" | grep -Eo "[0-9]+")
         local tmp_free=$(df /tmp | awk 'NR==2 {print $4}')
-        local spc_free=$(df $dir | awk 'NR==2 {print $4}')
+        local spc_free=$(df "$dir" | awk 'NR==2 {print $4}')
 
         if [ $tmp_free -gt $((img_siz / 1024)) ] ; then
-            local img_raw=$(mktemp -u /tmp/${file##*/}_XXXX.raw)
+            local img_raw=$(mktemp -u "/tmp/${file##*/}_XXXX.raw")
         elif mount | grep $dir | grep -q 'ro,' ; then
-            local img_raw=$(mktemp -u $CEPHFS_GLANCE_DIR/${file##*/}_XXXX.raw)
+            local img_raw=$(mktemp -u "$CEPHFS_GLANCE_DIR/${file##*/}_XXXX.raw")
         elif [ $spc_free -gt $((img_siz / 1024)) ] ; then
-            local img_raw=$(mktemp -u $dir/${file##*/}_XXXX.raw)
+            local img_raw=$(mktemp -u "$dir/${file##*/}_XXXX.raw")
         else
-            local img_raw=$(mktemp -u $CEPHFS_GLANCE_DIR/${file##*/}_XXXX.raw)
+            local img_raw=$(mktemp -u "$CEPHFS_GLANCE_DIR/${file##*/}_XXXX.raw")
         fi
 
         echo "[$(date +"%T")] Converting image to RAW format ... "
-        qemu-img convert -p -O raw $IMG $img_raw
+        qemu-img convert -p -O raw "$IMG" "$img_raw"
         local img_name=$img_raw
     fi
 
     echo "[$(date +"%T")] Creating image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
-        openstack image create --disk-format raw --container-format bare $flags --file $img_name $properties --progress $name -f value -c id
+        openstack image create --disk-format raw --container-format bare $flags --file "$img_name" $properties --progress "$name" -f value -c id
     else
-        rbd --id cinder import $img_name ${BUILTIN_BACKPOOL}/$name
+        rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$name"
         $OPENSTACK role add --user admin_cli --project $(echo $flags | grep -o "[-][-]project .* " | cut -d" " -f2) admin
-        local vol_id=$(cinder $(echo $flags | sed -e "s/--project-domain/--os-project-domain-name/" -e "s/--project/--os-project-name/" -e "s/--public//") manage --bootable --name $name cube@ceph#ceph $name 2>/dev/null | grep " id" | cut -d"|" -f3)
+        local vol_id=$(cinder $(echo $flags | sed -e "s/--project-domain/--os-project-domain-name/" -e "s/--project/--os-project-name/" -e "s/--public//") manage --bootable --name "$name" cube@ceph#ceph "$name" 2>/dev/null | grep " id" | cut -d"|" -f3)
         $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
     fi
     echo "[$(date +"%T")] Finished creating image $name"
 
-    [ -z $img_raw ] || rm -f $img_raw
+    [ -z "$img_raw" ] || rm -f "$img_raw"
 }
 
 os_extpack_image_mount()
