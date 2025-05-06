@@ -80,6 +80,10 @@ shared_ip()
     source hex_tuning /etc/settings.txt cubesys.control.vip
     local vip=$T_cubesys_control_vip
     if [[ "$vip" == "" ]] ; then
+        source hex_tuning /etc/settings.txt cubesys.controller.ip
+        vip=$T_cubesys_controller_vip
+    fi
+    if [[ "$vip" == "" ]] ; then
         source hex_tuning /etc/settings.txt cubesys.management
         local mgmt_if=$T_cubesys_management
         source hex_tuning /etc/settings.txt "net.if.addr.$mgmt_if"
