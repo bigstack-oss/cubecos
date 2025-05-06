@@ -153,6 +153,7 @@ license_show()
     if [ "$FORMAT" == "json" ] ; then
         printf "{ \"hostname\": \"$HOSTNAME\", \"serial\": \"$serial\", \"check\": $r "
         if [ $r -eq $LICENSE_VALID -o $r -eq $LICENSE_BADHW -o $r -eq $LICENSE_EXPIRED ] ; then
+            local name=$(license_value_get "license.name" $license)
             local type=$(license_value_get "license.type" $license)
             local issueby=$(license_value_get "issue.by" $license)
             local issueto=$(license_value_get "issue.to" $license)
@@ -160,10 +161,10 @@ license_show()
             local product=$(license_value_get "product" $license)
             local feature=$(license_value_get "feature" $license)
             local quantity=$(license_value_get "quantity" $license)
-            local sla=$(license_value_get "sla" $license)
+            local supportplan=$(license_value_get "support.plan" $license)
             local date=$(license_value_get "issue.date" $license)
             local expiry=$(license_value_get "expiry.date" $license)
-            printf ", \"type\": \"$type\", \"issueby\": \"$issueby\", \"issueto\": \"$issueto\", \"hardware\": \"$hardware\", \"product\": \"$product\", \"feature\": \"$feature\", \"quantity\": \"$quantity\", \"sla\": \"$sla\", \"date\": \"$date\", \"expiry\": \"$expiry\" "
+            printf ", \"name\": \"$name\", \"type\": \"$type\", \"issueby\": \"$issueby\", \"issueto\": \"$issueto\", \"hardware\": \"$hardware\", \"product\": \"$product\", \"feature\": \"$feature\", \"quantity\": \"$quantity\", \"supportplan\": \"$supportplan\", \"date\": \"$date\", \"expiry\": \"$expiry\" "
             if [ $r -eq $LICENSE_VALID ] ; then
                 printf ", \"days\": $days "
             fi
