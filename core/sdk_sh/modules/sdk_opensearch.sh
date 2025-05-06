@@ -50,7 +50,7 @@ opensearch_ops_reqid_url()
     local message="req-"
     local template_ndjson=/etc/opensearch-dashboards/export.ndjson
     local new_ndjson=/tmp/${reqid}.ndjson
-    local vip=$($HEX_SDK -f json health_vip_report | jq -r .description)
+    local vip=$($HEX_SDK -f json health_vip_report | jq -r .description | cut -d"/" -f1)
     [ "x$vip" != "xnon-HA" ] || vip=$(echo -e "$CUBE_NODE_MANAGEMENT_IP" | head -1)
     local ops_url="http://${vip}:5601/opensearch-dashboards"
 
