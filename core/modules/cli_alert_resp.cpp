@@ -47,80 +47,6 @@
 #define LABEL_RESP_EXEC_BIN "Enter the exec bin list (comma separated) [optional]: "
 #define LABEL_RESP_DESCRIPTION "Enter the notification description [optional]: "
 
-static bool
-listBackends(const NotifyPolicy& policy)
-{
-    char line[105];
-    memset(line, '-', sizeof(line));
-    line[sizeof(line) - 1] = 0;
-
-    NotifyConfig cfg;
-    policy.getNotifyConfig(&cfg);
-
-#define HEADER_SLACK_FMT " %7s  %15s  %15s  %32s\n"
-#define SLACK_FMT " %7s  %15s  %15s  %32s\n"
-
-    printf("\nSLACK:\n");
-    printf(HEADER_SLACK_FMT, "enabled", "name", "topic", "channel");
-    printf("%s\n", line);
-    for (auto& r : cfg.resps)
-        if (r.type == "slack") {
-            printf(SLACK_FMT, CLI_ENABLE_STR(r.enabled), r.name.c_str(), r.topic.c_str(), r.slackChannel.c_str());
-            printf("          %15s: %s\n", "match", r.match.c_str());
-            printf("          %15s: %s\n", "url", r.slackUrl.c_str());
-        }
-
-#define HEADER_EMAIL_FMT " %7s  %15s  %15s  %15s  %5s  %25s  %25s\n"
-#define EMAIL_FMT " %7s  %15s  %15s  %15s  %5lu  %25s  %25s\n"
-
-    printf("\nE-mail:\n");
-    printf(HEADER_EMAIL_FMT, "enabled", "name", "topic", "host", "port", "username", "from");
-    printf("%s\n", line);
-    for (auto& r : cfg.resps)
-        if (r.type == "email") {
-            printf(EMAIL_FMT, CLI_ENABLE_STR(r.enabled), r.name.c_str(), r.topic.c_str(),
-                              r.emailHost.c_str(), r.emailPort, r.emailUser.c_str(),
-                              r.emailFrom.c_str());
-            printf("          %15s: %s\n", "match", r.match.c_str());
-            printf("          %15s: %s\n", "to", r.emailTo.c_str());
-        }
-
-    printf("\n");
-
-#define HEADER_SLACK_FMT " %7s  %15s  %15s  %32s\n"
-#define SLACK_FMT " %7s  %15s  %15s  %32s\n"
-
-    printf("\nExecutable:\n");
-    printf(HEADER_SLACK_FMT, "enabled", "name", "topic", "type");
-    printf("%s\n", line);
-    for (auto& r : cfg.resps)
-        if (r.type == "exec") {
-            printf(SLACK_FMT, CLI_ENABLE_STR(r.enabled), r.name.c_str(), r.topic.c_str(), r.execType.c_str());
-            printf("          %15s: %s\n", "match", r.match.c_str());
-        }
-
-    printf("\n");
-
-    return true;
-}
-
-static int
-NotifyListMain(int argc, const char** argv)
-{
-    if (argc > 2 /* [0]="list" */)
-        return CLI_INVALID_ARGS;
-
-    HexPolicyManager policyManager;
-    NotifyPolicy policy;
-    if (!policyManager.load(policy)) {
-        return CLI_UNEXPECTED_ERROR;
-    }
-
-    listBackends(policy);
-
-    return CLI_SUCCESS;
-}
-
 static int
 NotifyCfgMain(int argc, const char** argv)
 {
@@ -136,8 +62,6 @@ NotifyCfgMain(int argc, const char** argv)
     if (!policyManager.load(policy)) {
         return CLI_UNEXPECTED_ERROR;
     }
-
-    // listBackends(policy);
 
     CliNotifyChanger changer;
 
@@ -192,6 +116,119 @@ commitNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& setting
     }
 
     return true;
+}
+
+static int
+NotifyListMain(int argc, const char** argv)
+{
+    /**
+     * [0]="list"
+     */
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    HexPolicyManager policyManager;
+    NotifySettingPolicy settingPolicy;
+    NotifyTriggerPolicy triggerPolicy;
+    if (!loadNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
+        return CLI_UNEXPECTED_ERROR;
+    }
+    const NotifySettingConfig settingConfig = settingPolicy.getConfig();
+    const NotifyTriggerConfig triggerConfig = triggerPolicy.getConfig();
+
+    printf("\n[Alert Setting]\n");
+    printf("Title prefix: %s\n", settingConfig.titlePrefix.c_str());
+    printf("Email sender:\n");
+    printf("  Host: %s\n", settingConfig.sender.email.host.c_str());
+    printf("  Port: %s\n", settingConfig.sender.email.port.c_str());
+    printf("  Username: %s\n", settingConfig.sender.email.username.c_str());
+    printf("  Password: *\n");
+    printf("  From address: %s\n", settingConfig.sender.email.from.c_str());
+
+    printf("Email receiver:\n");
+    int index = 0;
+    for (std::vector<NotifySettingReceiverEmail>::const_iterator it = settingConfig.receiver.emails.begin(); it != settingConfig.receiver.emails.end(); it++) {
+        printf("  [%d]\n", index);
+        printf("    Address: %s\n", it->address.c_str());
+        printf("    Note: %s\n", it->note.c_str());
+        index++;
+    }
+
+    printf("Slack receiver:\n");
+    index = 0;
+    for (std::vector<NotifySettingReceiverSlack>::const_iterator it = settingConfig.receiver.slacks.begin(); it != settingConfig.receiver.slacks.end(); it++) {
+        printf("  [%d]\n", index);
+        printf("    Url: %s\n", it->url.c_str());
+        printf("    Username: %s\n", it->username.c_str());
+        printf("    Description: %s\n", it->description.c_str());
+        printf("    Workspace: %s\n", it->workspace.c_str());
+        printf("    Channel: %s\n", it->channel.c_str());
+        index++;
+    }
+
+    printf("Exec shell receiver:\n");
+    index = 0;
+    for (std::vector<NotifySettingReceiverExecShell>::const_iterator it = settingConfig.receiver.execs.shells.begin(); it != settingConfig.receiver.execs.shells.end(); it++) {
+        printf("  [%d]\n", index);
+        printf("    Name: %s\n", it->name.c_str());
+        index++;
+    }
+
+    printf("Exec bin receiver:\n");
+    index = 0;
+    for (std::vector<NotifySettingReceiverExecBin>::const_iterator it = settingConfig.receiver.execs.bins.begin(); it != settingConfig.receiver.execs.bins.end(); it++) {
+        printf("  [%d]\n", index);
+        printf("    Name: %s\n", it->name.c_str());
+        index++;
+    }
+
+    printf("\n[Alert Trigger]\n");
+    index = 0;
+    for (std::vector<NotifyTrigger>::const_iterator it = triggerConfig.triggers.begin(); it != triggerConfig.triggers.end(); it++) {
+        printf("[%d]\n", index);
+        printf("  Name: %s\n", it->name.c_str());
+        printf("  Enabled: %s\n", (it->enabled ? "true" : "false"));
+        printf("  Topic: %s\n", it->topic.c_str());
+        printf("  Match: %s\n", it->match.c_str());
+        printf("  Description: %s\n", it->description.c_str());
+
+        int j = 0;
+        printf("  Email response:\n");
+        for (std::vector<NotifyTriggerResponseEmail>::const_iterator jt = it->responses.emails.begin(); jt != it->responses.emails.end(); jt++) {
+            printf("    [%d]\n", j);
+            printf("      Address: %s\n", jt->address.c_str());
+            j++;
+        }
+
+        j = 0;
+        printf("  Slack response:\n");
+        for (std::vector<NotifyTriggerResponseSlack>::const_iterator jt = it->responses.slacks.begin(); jt != it->responses.slacks.end(); jt++) {
+            printf("    [%d]\n", j);
+            printf("      Url: %s\n", jt->url.c_str());
+            j++;
+        }
+
+        j = 0;
+        printf("  Exec shell response:\n");
+        for (std::vector<NotifyTriggerResponseExecShell>::const_iterator jt = it->responses.execs.shells.begin(); jt != it->responses.execs.shells.end(); jt++) {
+            printf("    [%d]\n", j);
+            printf("      Name: %s\n", jt->name.c_str());
+            j++;
+        }
+
+        j = 0;
+        printf("  Exec bin response:\n");
+        for (std::vector<NotifyTriggerResponseExecBin>::const_iterator jt = it->responses.execs.bins.begin(); jt != it->responses.execs.bins.end(); jt++) {
+            printf("    [%d]\n", j);
+            printf("      Name: %s\n", jt->name.c_str());
+            j++;
+        }
+
+        index++;
+    }
+
+    return CLI_SUCCESS;
 }
 
 bool
