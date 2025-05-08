@@ -87,6 +87,8 @@ static const char SRV_CRT[] = "/var/www/certs/server.cert";
 
 static const char GWAPIPASS[] = "Xv67nUJYFL5kravv";
 
+static const char CEPH_HOUSEKEEPER[] = "/etc/cron.d/ceph_housekeeper";
+
 static bool s_bNetModified = false;
 static bool s_bCubeModified = false;
 static bool s_bKeystoneModified = false;
@@ -1208,6 +1210,31 @@ CommitCheck(bool modified, int dryLevel)
 }
 
 static bool
+CronCephHousekeeper()
+{
+    if(IsControl(s_eCubeRole)) {
+        FILE *fout = fopen(CEPH_HOUSEKEEPER, "w");
+        if (!fout) {
+            HexLogError("Unable to write %s agent cache renew-er: %s", USER, CEPH_HOUSEKEEPER);
+            return false;
+        }
+
+        fprintf(fout, "0 3 * * SUN root " HEX_SDK " _health_log_purge\n");
+        fclose(fout);
+
+        if(HexSetFileMode(CEPH_HOUSEKEEPER, "root", "root", 0644) != 0) {
+            HexLogError("Unable to set file %s mode/permission", CEPH_HOUSEKEEPER);
+            return false;
+        }
+    }
+    else {
+        unlink(CEPH_HOUSEKEEPER);
+    }
+
+    return true;
+}
+
+static bool
 Commit(bool modified, int dryLevel)
 {
     // todo: remove this if support dry run
@@ -1310,6 +1337,8 @@ Commit(bool modified, int dryLevel)
                        s_peerIpAry, s_peerSecretAry,
                        s_peerNameAry, s_ruleVolumeAry);
     }
+
+    CronCephHousekeeper();
 
     return true;
 }

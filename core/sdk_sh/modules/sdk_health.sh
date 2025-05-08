@@ -1149,7 +1149,7 @@ health_ceph_mon_check()
 _health_ceph_mon_auto_repair()
 {
     if [ "$ERR_CODE" == "1" ] ; then # msgr2 not enabled
-        ceph_mon_msgr2_enable
+        $HEX_SDK ceph_mon_msgr2_enable
     elif [ "$ERR_CODE" == "2" ] ; then # not all online
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if ! echo $online | grep -q $node ; then
@@ -3080,4 +3080,21 @@ health_log_detail()
 	echo -n "$(date -d @${timestamp:0:10}) - "
 	$INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)" | jq -r .results[].series[].values[][] | tr ";" "\n"
     fi
+}
+
+_health_log_purge()
+{
+    local duration=$($INFLUX -format json -execute 'SHOW RETENTION POLICIES ON events' | jq -r .results[].series[].values[0][] | sed -n 2p)
+    local duration_days=$(echo "${duration%h*} / 24" | bc)
+    [ $duration_days -lt 365 ] || Error "duration_days: $duration_days"
+
+    $HEX_SDK os_s3_list admin log | while read -r line; do
+        createDate=$(echo $line | awk {'print $1" "$2'})
+        createDate=$(date -d"$createDate" +%s)
+        keepDate=$(date --date "${duration_days} days ago" +%s)
+        if [ $createDate -lt $keepDate ] ; then
+            fileName=$(echo $line | awk {'print $4'})
+            [ "x$fileName" = "x" ] || $HEX_SDK os_s3_object_delete admin $fileName
+        fi
+    done
 }
