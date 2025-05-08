@@ -4,7 +4,7 @@ const httpStatus = require('http-status');
 const yaml = require('js-yaml');
 const fs = require('fs');
 
-const { HexSdk, HexConfig } = require('../services/hex-cmds');
+const { HexSdk } = require('../services/hex-cmds');
 const logger = require('../../config-server/logger');
 
 const parseCount = (value) => {
@@ -195,15 +195,6 @@ exports.responses = async (req, res, next) => {
 exports.responseUpdate = async (req, res, next) => {
   try {
     let sub;
-    const enabled = (req.body.action == 'update') ? (req.body.enabled ? 'enabled' : 'disabled') : '';
-    const cmd = 'sdk_run cube_cluster_run control';
-    // escape for shell
-    const shellEsc = `"${req.body.match.replace(/"/g, '\\"')}"`;
-    // escape for hex_config
-    const cfgEsc = shellEsc.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    // escape for ssh leveraged by cube_cluster_run
-    const sshEsc = cfgEsc.replace(/'/g, '\\\'').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-    const cli = `/usr/sbin/hex_cli -c notifications configure_old ${req.body.action} ${req.body.name} ${enabled} ${req.body.type} ${req.body.topic} ${sshEsc}`;
     if (req.body.type == 'email') {
       sub = `${req.body.host} ${req.body.port} ${req.body.username} ${req.body.password} ${req.body.from} ${req.body.to}`;
     }
@@ -214,7 +205,7 @@ exports.responseUpdate = async (req, res, next) => {
 
       sub = `${req.body.url} ${channel}`;
     }
-    const info = await new HexConfig().run(`${cmd} ${cli} ${sub}`);
+    const info = "";
     if (info.indexOf('Policy changes were successfully applied') != -1)
       return res.status(200).json({ status: 'success' });
     else

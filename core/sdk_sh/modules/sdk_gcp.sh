@@ -8993,7 +8993,7 @@ gcp_auto_scaler_create()
     local gcloud=$run_dir/google-cloud-sdk/bin/gcloud
 
     echo "Generating GCP auto scaling script ..."
-    cat << EOF > /var/response/exec_gcp_auto_$name.shell
+    cat << EOF > /var/response/gcp_auto_$name.shell
 #! /bin/bash
 
 cat << KFEOF > $run_dir/$name.key
@@ -9032,6 +9032,7 @@ $gcloud compute instances create ${lo_vm_name}-auto-$(date +%Y-%m-%d-%H-%M) \
 EOF
 
     echo "Creating GCP auto scaling policy"
-    $HEX_CLI -c notifications configure_old add $name exec instance-events "\"key\" == '$event_id' AND \"vm_name\" == '$lo_vm_name' AND \"tenant\" == '$lo_proj_id'" shell local exec_gcp_auto_$name.shell
-    rm -f /var/response/exec_gcp_auto_$name.shell
+    $HEX_SDK alert_add_update_setting_receiver_exec_shell "gcp_auto_$name"
+    $HEX_SDK alert_add_update_trigger_exec $name "true" instance-events "\"key\" == '$event_id' AND \"vm_name\" == '$lo_vm_name' AND \"tenant\" == '$lo_proj_id'" "gcp_auto" "gcp_auto_$name" shell
+    rm -f /var/response/gcp_auto_$name.shell
 }

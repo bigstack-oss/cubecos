@@ -14,7 +14,6 @@
 #include <cube/cubesys.h>
 
 #include "include/policy_notify.h"
-#include "include/cli_notify_changer.h"
 #include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"
 
@@ -46,42 +45,6 @@
 #define LABEL_RESP_EXEC_SHELL "Enter the exec shell list (comma separated) [optional]: "
 #define LABEL_RESP_EXEC_BIN "Enter the exec bin list (comma separated) [optional]: "
 #define LABEL_RESP_DESCRIPTION "Enter the notification description [optional]: "
-
-static int
-NotifyCfgMain(int argc, const char** argv)
-{
-    /*
-     * [0]="configure_old", [1]=<add|delete|update>, [2]=<name>, [3]=[<enabled|disabled>],
-     * [3/4]=<type>, [4/5]=<topic>, [5/6]=<match>, [6/7~11/12]=<settings>
-     */
-    if (argc > 13)
-        return CLI_INVALID_ARGS;
-
-    HexPolicyManager policyManager;
-    NotifyPolicy policy;
-    if (!policyManager.load(policy)) {
-        return CLI_UNEXPECTED_ERROR;
-    }
-
-    CliNotifyChanger changer;
-
-    if (!changer.configure(&policy, argc, argv)) {
-        return CLI_FAILURE;
-    }
-
-    if (!policyManager.save(policy)) {
-        return CLI_UNEXPECTED_ERROR;
-    }
-
-    // hex_config apply (translate + commit)
-    if (!policyManager.apply()) {
-        return CLI_UNEXPECTED_ERROR;
-    }
-
-    // should identify real user name
-    //TODO: HexLogEvent("[user] modified external storage policy via cli");
-    return CLI_SUCCESS;
-}
 
 bool
 loadNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& settingPolicy, NotifyTriggerPolicy& triggerPolicy)
@@ -1127,13 +1090,6 @@ CLI_MODE(CLI_TOP_MODE, "notifications",
 CLI_MODE_COMMAND("notifications", "list", NotifyListMain, NULL,
     "List all notifications settings on the appliance.",
     "list");
-
-CLI_MODE_COMMAND("notifications", "configure_old", NotifyCfgMain, NULL,
-    "Configure notifications settings.",
-    "configure_old <add|delete|update> <name> [<enabled|disabled>] <slack|email|exec> <events|instance-events> <match>\n"
-    "    slack: <url> [<channel>]\n"
-    "    email: <host> <port> <username> <password> <from> <to>\n"
-    "     exec: <local|usb> <filename> (upload to /var/response)");
 
 CLI_MODE_COMMAND("notifications", "configure", NotifySettingMain, NULL,
     "Configure notifications settings.",
