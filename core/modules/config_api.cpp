@@ -18,8 +18,6 @@
 #define MARKER_API_IDP "/etc/appliance/state/api_idp_done"
 
 static const char API_NAME[] = "cube-cos-api";
-static const char API_CONF_IN[] = "/etc/cube/api/cube-cos-api.yaml.in";
-static const char API_CONF[] = "/etc/cube/api/cube-cos-api.yaml";
 
 static bool s_bCubeModified = false;
 
@@ -32,6 +30,7 @@ CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 
 // external global variables
+// we still need to listen to changes on MGMT_ADDR to restart cube-cos-api
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
@@ -50,17 +49,6 @@ NotifyCube(bool modified)
 {
     s_bCubeModified = IsModifiedTune(1);
     s_eCubeRole = GetCubeRole(s_cubeRole);
-}
-
-static bool
-WriteApiConf(const char* myip)
-{
-    if (HexSystemF(0, "sed -e \"s/@MGMT_ADDR@/%s/\" %s > %s", myip, API_CONF_IN, API_CONF) != 0) {
-        HexLogError("failed to update %s", API_CONF);
-        return false;
-    }
-
-    return true;
 }
 
 static bool
@@ -87,11 +75,6 @@ Commit(bool modified, int dryLevel)
     if (access(MARKER_API_IDP, F_OK) != 0) {
         HexUtilSystemF(0, 0, HEX_SDK " api_idp_config %s", sharedId.c_str());
         HexSystemF(0, "touch %s", MARKER_API_IDP);
-    }
-
-    std::string myip = G(MGMT_ADDR);
-    if (!WriteApiConf(myip.c_str())) {
-        return false;
     }
 
     // start cube-cos-api
