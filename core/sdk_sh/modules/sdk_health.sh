@@ -2862,6 +2862,7 @@ _health_datapipe_deep_repair()
 
     Quiet -n cubectl node -r control exec -pn $HEX_CFG bootstrap kafka
     Quiet -n cubectl node -r control exec -pn $HEX_CFG bootstrap logstash
+    Quiet -n cubectl node -r control exec -pn $HEX_CFG bootstrap kapacitor
     Quiet -n $HEX_CFG update_kafka_topics
     Quiet -n cubectl node -r control exec -pn systemctl reset-failed
     Quiet -n cubectl node -r control exec -pn systemctl start kapacitor influxdb monasca-forwarder monasca-persister telegraf
