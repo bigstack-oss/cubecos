@@ -1,5 +1,17 @@
 # CubeCOS (Cube Cloud Operating System)
 
+A software-defined private cloud platform that integrates storage, compute, and networking resources. CubeCOS is a comprehensive cloud solution that seamlessly integrates storage, computing, and networking into a single software package.
+
+Built for organizations seeking cloud flexibility with complete control, CubeCOS delivers:
+
+- Multi-tenancy with robust isolation between workloads
+- Self-service IT portal empowering teams to provision resources on demand
+- Cloud native architecture supporting modern application development
+
+Deploy your own private cloud infrastructure with the simplicity of public cloud.
+
+Join our community to help build the future of software-defined infrastructure!
+
 ## Prerequisites
 
 1. Install git and git-lfs
@@ -37,6 +49,10 @@ Other than git-lfs, make sure [hex](https://github.com/bigstack-oss/hex) (git su
 ```bash
 ls -lt cubecos/hex
 ```
+
+## Development
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and architecture documentation.
 
 ## License
 
