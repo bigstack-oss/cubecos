@@ -3,33 +3,39 @@
 ## Prerequisites
 
 1. Install git and git-lfs
+
 ```bash
-$ sudo apt-get install git git-lfs
-$ git lfs install
+sudo apt-get install git git-lfs
+git lfs install
 ```
 
-2. Clone repos
+2. Clone repos with the recursive flag to include sub-modules
+
 ```bash
-$ git clone --recursive git@github.com:bigstack-oss/cubecos.git
+git clone --recursive git@github.com:bigstack-oss/cubecos.git
 ```
 
 ## Build Images
 
 1. Create and enter jail (default PROJECT="centos9-jail")
+
 ```bash
-$ cd cubecos
-$ make [PROJECT=XXX] centos9-jail enter
+cd cubecos
+make [PROJECT=XXX] centos9-jail enter
 ```
 
-2. Build various Cube install media (iso, usb, pxe, full, etc.) where full is everything
+2. Build various Cube install media (ISO, USB, PXE, full, etc.) where full is everything
+
 ```bash
 [root@centos9-jail centos9-jail]# make usb
 ```
 
 ### Troubleshoot
-Other than git-lfs, make sure [hex](https://github.com/bigstack-oss/hex) (submodule) is properly cloned under your top source dir
+
+Other than git-lfs, make sure [hex](https://github.com/bigstack-oss/hex) (git sub-module) is properly cloned under your top source directory.
+
 ```bash
-$ ls -lt cubecos/hex
+ls -lt cubecos/hex
 ```
 
 ## License
