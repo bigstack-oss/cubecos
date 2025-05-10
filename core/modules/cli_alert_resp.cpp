@@ -13,7 +13,6 @@
 
 #include <cube/cubesys.h>
 
-#include "include/policy_notify.h"
 #include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"
 
@@ -40,10 +39,10 @@
 #define LABEL_RESP_MATCH_CURRENT_OPTION_TWO "\"severity\" == 'W' OR \"severity\" == 'C'"
 #define LABEL_RESP_NAME_CURRENT_LIMITATION "Currently, only \"" LABEL_RESP_NAME_CURRENT_OPTION_ONE "\" and \"" LABEL_RESP_NAME_CURRENT_OPTION_TWO "\" are supported.\n"
 #define LABEL_RESP_NAME "Enter notification name: "
-#define LABEL_RESP_EMAIL "Enter the email list (comma separated) [optional]: "
-#define LABEL_RESP_SLACK "Enter the slack list (comma separated) [optional]: "
-#define LABEL_RESP_EXEC_SHELL "Enter the exec shell list (comma separated) [optional]: "
-#define LABEL_RESP_EXEC_BIN "Enter the exec bin list (comma separated) [optional]: "
+#define LABEL_RESP_EMAIL "Enter the email address list (comma separated) [optional]: "
+#define LABEL_RESP_SLACK "Enter the slack url list (comma separated) [optional]: "
+#define LABEL_RESP_EXEC_SHELL "Enter the exec shell name list (comma separated) [optional]: "
+#define LABEL_RESP_EXEC_BIN "Enter the exec bin name list (comma separated) [optional]: "
 #define LABEL_RESP_DESCRIPTION "Enter the notification description [optional]: "
 
 bool

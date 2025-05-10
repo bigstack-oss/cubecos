@@ -78,5 +78,62 @@ Translate(const char *policy, FILE *settings)
     return true;
 }
 
-TRANSLATE_MODULE(alert_resp/alert_resp2_0, 0, 0, Translate, 0);
+static bool
+Migrate(const char* prevVersion, const char* prevPolicy, const char* policy)
+{
+    NotifyPolicy oldPolicy;
+    if (!oldPolicy.load(prevPolicy)) {
+        HexLogError("Failed to parse policy file %s", prevPolicy);
+        return false;
+    }
+    NotifyConfig oldConfig;
+    oldPolicy.getNotifyConfig(&oldConfig);
+
+    NotifyTriggerPolicy ntPolicy;
+    if (!ntPolicy.load(policy)) {
+        HexLogError("Failed to parse policy file %s", policy);
+        return false;
+    }
+
+    for (std::list<NotifyResponse>::const_iterator it = oldConfig.resps.begin(); it != oldConfig.resps.end(); it++) {
+        std::string name = it->name;
+        // the old response name, instance-{tenant}-notify
+        if (name == "instance--notify") {
+            name = "instance-notify";
+        }
+        std::vector<std::string> emailList;
+        if (it->emailTo != "") {
+            emailList.push_back(it->emailTo);
+        }
+        std::vector<std::string> slackList;
+        if (it->slackUrl != "") {
+            slackList.push_back(it->slackUrl);
+        }
+        std::vector<std::string> execShellList;
+        if (it->execType == "shell") {
+            execShellList.push_back(it->name);
+        }
+        std::vector<std::string> execBinList;
+        if (it->execType == "bin") {
+            execBinList.push_back(it->name);
+        }
+
+        ntPolicy.addOrUpdateTrigger(
+            name,
+            it->enabled,
+            it->topic,
+            it->match,
+            "",
+            emailList,
+            slackList,
+            execShellList,
+            execBinList
+        );
+    }
+
+    return ntPolicy.save(policy);
+}
+
+TRANSLATE_MODULE(alert_resp/alert_resp2_0, 0, 0, Translate, Migrate);
 TRANSLATE_REQUIRES(alert_resp/alert_resp2_0, alert_setting/alert_setting1_0);
+TRANSLATE_MIGRATE_PREVIOUS(alert_resp/alert_resp2_0, alert_resp/alert_resp1_0);

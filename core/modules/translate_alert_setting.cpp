@@ -60,4 +60,55 @@ Translate(const char *policy, FILE *settings)
     return true;
 }
 
-TRANSLATE_MODULE(alert_setting/alert_setting1_0, 0, 0, Translate, 0);
+static bool
+Migrate(const char* prevVersion, const char* prevPolicy, const char* policy)
+{
+    NotifyPolicy oldPolicy;
+    if (!oldPolicy.load(prevPolicy)) {
+        HexLogError("Failed to parse policy file %s", prevPolicy);
+        return false;
+    }
+    NotifyConfig oldConfig;
+    oldPolicy.getNotifyConfig(&oldConfig);
+
+    NotifySettingPolicy nsPolicy;
+    if (!nsPolicy.load(policy)) {
+        HexLogError("Failed to parse policy file %s", policy);
+        return false;
+    }
+
+    // sender email
+    for (std::list<NotifyResponse>::const_iterator it = oldConfig.resps.begin(); it != oldConfig.resps.end(); it++) {
+        if (it->emailHost != "") {
+            nsPolicy.updateSenderEmail(it->emailHost, std::to_string(it->emailPort), it->emailUser, it->emailPass, it->emailFrom);
+            break;
+        }
+    }
+    // receiver email
+    for (std::list<NotifyResponse>::const_iterator it = oldConfig.resps.begin(); it != oldConfig.resps.end(); it++) {
+        if (it->emailTo != "") {
+            nsPolicy.addOrUpdateReceiverEmail(it->emailTo, "");
+        }
+    }
+    // receiver slack
+    for (std::list<NotifyResponse>::const_iterator it = oldConfig.resps.begin(); it != oldConfig.resps.end(); it++) {
+        if (it->slackUrl != "") {
+            nsPolicy.addOrUpdateReceiverSlack(it->slackUrl, "", "", "", it->slackChannel);
+        }
+    }
+    // receiver exec
+    for (std::list<NotifyResponse>::const_iterator it = oldConfig.resps.begin(); it != oldConfig.resps.end(); it++) {
+        if (it->execType != "") {
+            if (it->execType == "shell") {
+                nsPolicy.addReceiverExecShell(it->name);
+            } else if (it->execType == "bin") {
+                nsPolicy.addReceiverExecBin(it->name);
+            }
+        }
+    }
+
+    return nsPolicy.save(policy);
+}
+
+TRANSLATE_MODULE(alert_setting/alert_setting1_0, 0, 0, Translate, Migrate);
+TRANSLATE_MIGRATE_PREVIOUS(alert_setting/alert_setting1_0, alert_resp/alert_resp1_0);
