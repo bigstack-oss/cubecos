@@ -45,6 +45,7 @@ opensearch_ops_reqid_search()
 opensearch_ops_reqid_url()
 {
     local reqid=${1:-NOSUCHREQID}
+    local last=${2:-7d}
     local title="ops-reqid-search"
     local id="7f32d630-0275-11ec-8ec6-0d4cf465bb19"
     local message="req-"
@@ -62,5 +63,9 @@ opensearch_ops_reqid_url()
         rm -f $new_ndjson
     fi
 
-    echo "${ops_url}/app/data-explorer/discover/#/view/${reqid}"
+    idx_id=$($CURL -X GET "${ops_url}/api/saved_objects/_find?type=search" 2>/dev/null | jq -r .saved_objects[].references[].id | sort -u | head -1)
+
+    local url="${ops_url}/app/data-explorer/discover/#/view/${reqid}"
+    url+="?_a=(discover:(columns:!(agent_host,path,message),isDirty:!f,savedSearch:${reqid},sort:!(!(occurred_at,asc))),metadata:(indexPattern:'${idx_id}',view:discover))&_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:now-${last},to:now))"
+    echo "$url"
 }
