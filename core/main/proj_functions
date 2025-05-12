@@ -220,7 +220,7 @@ cube_node_repair()
         ps -o etime $repair_pid
         return 1
     else
-        $HEX_CLI -c cluster check_repair &
+        $HEX_SDK check_repair &
         echo $! >$CLUSTER_REPAIR
         wait $! && rm -f $CLUSTER_REPAIR
     fi

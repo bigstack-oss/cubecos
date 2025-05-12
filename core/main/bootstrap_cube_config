@@ -73,6 +73,12 @@ RollingEvacuateAndReboot()
             echo -n "  cluster checking and repairing                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             if hex_sdk cube_cluster_repair ; then
                 echo -n "  cluster checked and repaired                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                non_active_servers="$(hex_sdk os_nova_non_active_server_list | tail -1)"
+                if [ "x$non_active_servers" != "x" ] ; then
+                    hex_sdk os_nova_instance_reset "$non_active_servers"
+                    hex_sdk os_nova_instance_hardreboot "$non_active_servers"
+                    echo -n "  reset and booted non-active servers                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                fi
             fi
         else
             echo -n "  cluster check and repair skipped because not all nodes are bootstrapped and synced                                           " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
