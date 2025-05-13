@@ -64,6 +64,10 @@ http {
         server 127.0.0.1:9998 fail_timeout=0;
     }
 
+    upstream cube-cos-api {
+        server @MGMT_ADDR@:8082 fail_timeout=0;
+    }
+
     ##
     # Virtual Host Configs (skyline-console)
     ##
@@ -85,6 +89,17 @@ http {
             try_files $uri $uri/ /index.html;
             expires 1d;
             add_header Cache-Control "public";
+        }
+
+        location /cos-api/ {
+            rewrite /cos-api/([^/]+) /api/$1 break;
+            proxy_pass http://cube-cos-api/;
+            proxy_redirect off;
+            proxy_buffering off;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header Host $http_host;
         }
 
         location /api/openstack/skyline/ {
