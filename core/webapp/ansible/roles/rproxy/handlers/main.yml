@@ -1,4 +1,0 @@
----
-# file: roles/rproxy/handlers/main.yml
-- name: restart rproxy
-  command: /usr/sbin/hex_config restart_rproxy

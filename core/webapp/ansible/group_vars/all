@@ -1,5 +1,0 @@
----
-# file: group_vars/all
-deploy_full: "{{ lookup('env','ANSIBLE_FULL') }}"
-srcdir: "{{ lookup('env','SRCDIR') }}"
-blddir: "{{ lookup('env','BLDDIR') }}"

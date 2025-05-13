@@ -23,7 +23,7 @@ data "keycloak_realm" "master" {
 
 resource "keycloak_saml_client" "api_client" {
   realm_id                = data.keycloak_realm.master.id
-  client_id               = "https://${var.cube_controller}:4443/saml/metadata"
+  client_id               = "https://${var.cube_controller}:443/saml/metadata"
   name                    = "api"
 
   signature_algorithm     = "RSA_SHA256"
@@ -34,9 +34,9 @@ resource "keycloak_saml_client" "api_client" {
   signing_certificate     = file("/var/www/certs/server.cert")
   encryption_certificate  = file("/var/www/certs/server.cert")
 
-  valid_redirect_uris = ["https://${var.cube_controller}:4443/saml/acs"]
-  assertion_consumer_post_url = "https://${var.cube_controller}:4443/saml/acs"
-  logout_service_post_binding_url = "https://${var.cube_controller}:4443/saml/slo"
+  valid_redirect_uris = ["https://${var.cube_controller}:443/saml/acs"]
+  assertion_consumer_post_url = "https://${var.cube_controller}:443/saml/acs"
+  logout_service_post_binding_url = "https://${var.cube_controller}:443/saml/slo"
 }
 
 resource "keycloak_saml_user_property_protocol_mapper" "api_username_mapper" {

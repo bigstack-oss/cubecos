@@ -90,11 +90,6 @@ eval "ERR_DESC_$SRV[2]='api saml client is missing'"
 eval "ERR_DESC_$SRV[3]='api port not responding'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
-SRV="lmi"
-eval "ERR_DESC_$SRV[1]='service down'"
-eval "ERR_DESC_$SRV[2]='service not responding'"
-eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
-
 SRV="memcache"
 eval "ERR_DESC_$SRV[1]='daemon down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done

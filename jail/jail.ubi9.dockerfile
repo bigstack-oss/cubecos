@@ -7,7 +7,6 @@ ENV LANG=C.UTF-8
 ENV HEX_VER=hex2.0
 ENV GOLANG_VER=1.24.0
 ENV UI_NODE_VER=22.14.0
-ENV LMI_NODE_VER=12.22.12
 ENV HEX_ARCH=x86_64
 ENV DEVOPS_ENV=__JAIL__
 ENV TZ=Asia/Taipei
@@ -149,8 +148,7 @@ RUN echo '. "${BASH_ENV}"' >> /root/.bashrc
 RUN wget -qO- --no-check-certificate https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | PROFILE="${BASH_ENV}" bash
 # install node, npm, yarn, and pnpm
 RUN /bin/bash -c "nvm install $UI_NODE_VER"
-RUN /bin/bash -c "nvm install $LMI_NODE_VER"
-RUN /bin/bash -c "nvm use $LMI_NODE_VER && npm install -g yarn"
+RUN /bin/bash -c "nvm use $UI_NODE_VER && npm install -g yarn"
 RUN /bin/bash -c "nvm use $UI_NODE_VER && npm install -g pnpm@latest-10"
 # disable nvm to stop it from slowing down bash
 RUN sed -i 's/^/#/g' $BASH_ENV

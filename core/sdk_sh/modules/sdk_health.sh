@@ -1008,43 +1008,6 @@ health_skyline_repair()
     done
 }
 
-health_lmi_report()
-{
-    _health_report ${FUNCNAME[0]}
-}
-
-health_lmi_check()
-{
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node lmi >/dev/null 2>&1 ; then
-            ERR_CODE=1
-            ERR_MSG+="lmi on $node is not running\n"
-            ERR_LOG="systemctl status lmi"
-        fi
-        $CURL -sf http://$node:8081 >/dev/null
-        if [ $? -eq 7 ] ; then
-            ERR_CODE=2
-            ERR_MSG+="lmi doesn't respond\n"
-            ERR_LOG="netstat -tunpl | grep 8081"
-        fi
-    done
-
-    _health_fail_log
-}
-
-health_lmi_repair()
-{
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node lmi >/dev/null 2>&1 ; then
-            remote_systemd_restart $node lmi
-        fi
-        $CURL -sf http://$node:8081 >/dev/null
-        if [ $? -eq 7 ] ; then
-            remote_systemd_restart $node lmi
-        fi
-    done
-}
-
 health_memcache_report()
 {
     _health_report ${FUNCNAME[0]}

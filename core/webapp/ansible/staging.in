@@ -1,4 +1,0 @@
-# file: staging
-
-[cube]
-CUBE ansible_ssh_host=@ANSIBLE_HOST@ ansible_connection=ssh ansible_ssh_user=root ansible_ssh_pass=admin

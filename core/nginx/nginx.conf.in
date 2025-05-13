@@ -65,7 +65,7 @@ http {
     }
 
     ##
-    # Virtual Host Configs
+    # Virtual Host Configs (skyline-console)
     ##
     server {
         server_name _;
@@ -263,8 +263,11 @@ http {
         }
     }
 
+    ##
+    # Virtual Host Configs (cube-cos-ui)
+    ##
     server {
-        listen @MGMT_ADDR@:8083;
+        listen @MGMT_ADDR@:8083 default_server;
         root /usr/share/cube/ui;
         index index.html;
         access_log /var/log/cube-cos-ui/cube-cos-ui-nginx-access.log ui;

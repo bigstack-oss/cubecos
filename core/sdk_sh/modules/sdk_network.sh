@@ -277,44 +277,6 @@ network_device_link()
     done
 }
 
-network_cluster_link()
-{
-    local file=$1
-
-    if [ ! -f $file ] ; then
-        return
-    fi
-
-    readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
-    declare -p ctrl_array > /dev/null
-    for ctrl_entry in "${ctrl_array[@]}" ; do
-        local ctrl=$(echo $ctrl_entry | head -c -1)
-        scp $file root@$ctrl:$CLS_LIST
-        remote_run $ctrl hex_config bootstrap lmi
-    done
-}
-
-network_app_link()
-{
-    local file=$1
-
-    if [ ! -f $file ] ; then
-        return
-    fi
-
-    readarray ctrl_array <<<"$(cubectl node list -r control -j | jq -r .[].hostname | sort)"
-    declare -p ctrl_array > /dev/null
-    for ctrl_entry in "${ctrl_array[@]}" ; do
-        local ctrl=$(echo $ctrl_entry | head -c -1)
-        scp $file root@$ctrl:$APP_BUNDLE
-        remote_run $ctrl mkdir -p $APP_IMG_DIR
-        remote_run $ctrl unzip -o -j $APP_BUNDLE -d $APP_IMG_DIR
-        remote_run $ctrl mv $APP_IMG_DIR/app.lst $APP_LIST
-        remote_run $ctrl chown -R www-data:www-data $APP_IMG_DIR
-        remote_run $ctrl hex_config bootstrap lmi
-    done
-}
-
 network_ipt_serviceint()
 {
     local policy=${1:-ACCEPT}

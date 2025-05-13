@@ -66,10 +66,6 @@ STATE_DIR=/etc/appliance/state
 OPS_MIGRATED=$STATE_DIR/ops_migrated
 
 DEV_LIST=/var/appliance-db/device.lst
-CLS_LIST=/var/appliance-db/cluster.lst
-APP_LIST=/var/appliance-db/app.lst
-APP_BUNDLE=/var/appliance-db/app.bundle
-APP_IMG_DIR=/var/www/lmi/static/image/app
 
 DB="\"hc\".\"sflow\""
 

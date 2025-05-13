@@ -50,42 +50,6 @@ PickUploadFile(int argc, const char** argv, std::string *name)
 }
 
 static int
-ClusterImportMain(int argc, const char** argv)
-{
-    if (argc > 3 /* [0]="cluster_import", [1]=<usb|local>, [2]=<file name> */)
-        return CLI_INVALID_ARGS;
-
-    std::string name;
-
-    int ret = PickUploadFile(argc, argv, &name);
-    if (ret != CLI_SUCCESS)
-        return ret;
-
-    CliPrintf("Importing...");
-    HexUtilSystemF(0, 0, HEX_SDK " network_cluster_link %s", name.c_str());
-
-    return CLI_SUCCESS;
-}
-
-static int
-AppImportMain(int argc, const char** argv)
-{
-    if (argc > 3 /* [0]="app_import", [1]=<usb|local>, [2]=<bundle name> */)
-        return CLI_INVALID_ARGS;
-
-    std::string name;
-
-    int ret = PickUploadFile(argc, argv, &name);
-    if (ret != CLI_SUCCESS)
-        return ret;
-
-    CliPrintf("Importing...");
-    HexUtilSystemF(0, 0, HEX_SDK " network_app_link %s", name.c_str());
-
-    return CLI_SUCCESS;
-}
-
-static int
 DeviceImportMain(int argc, const char** argv)
 {
     if (argc > 3 /* [0]="device_import", [1]=<usb|local>, [2]=<file name> */)
@@ -128,30 +92,6 @@ DevAgentCfgMain(int argc, const char** argv)
 CLI_MODE(CLI_TOP_MODE, "link",
          "Work with link settings.",
          !HexStrictIsErrorState() && !FirstTimeSetupRequired());
-
-CLI_MODE_COMMAND("link", "cluster_import", ClusterImportMain, NULL,
-    "Import cluster list from usb or local\n"
-    "please upload file to " STORE_DIR " for local import.",
-    "cluster_import <usb|local> <file_name>\n"
-    "line format: \n"
-    "  name=<NAME>,cluster=<IPADDR>\n"
-    "  (,iam_admin_url=<URL>)(,iam_user_url=<URL>)\n"
-    "  (,iaas_url=<URL>)(,k8s_url=<URL>)\n"
-    "  (,storage_url=<URL>)(,portal_url=<URL>)\n"
-    "  (,apigw_url=<URL>)(,local=<true|false>)");
-
-CLI_MODE_COMMAND("link", "app_import", AppImportMain, NULL,
-    "Import lmi app bundle file from usb or local\n"
-    "please upload bundle zip file to " STORE_DIR " for local import.",
-    "app_import <usb|local> <zip_bundle_file>\n"
-    "layout: \n"
-    "  app.bundle\n"
-    "    |-- app.lst\n"
-    "    |-- <app_image_name1>\n"
-    "    |-- <app_image_name2>\n"
-    "           :\n"
-    "app.lst line format: \n"
-    "  group=<GROUP>,name=<NAME>,link=<APP_LINK>,image=<IMAGE_NAME>");
 
 CLI_MODE_COMMAND("link", "device_import", DeviceImportMain, NULL,
     "Import device list from usb or local\n"

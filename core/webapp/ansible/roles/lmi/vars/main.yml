@@ -1,3 +1,0 @@
----
-# file: roles/lmi/vars/main.yml
-lmi_root: /var/www/lmi

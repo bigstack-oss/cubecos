@@ -102,42 +102,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  stats auth admin:Cube0s!\n");
     fprintf(fout, "  \n");
 
-    fprintf(fout, "frontend lmi_http\n");
-    fprintf(fout, "  bind :80\n");
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  option forwardfor\n");
-    fprintf(fout, "  option http-server-close\n");
-    fprintf(fout, "  http-request add-header X-Forwarded-Proto http\n");
-    fprintf(fout, "  acl path_root path /\n");
-    fprintf(fout, "  redirect location /dashboard if path_root\n");
-    fprintf(fout, "  use_backend openstack_horizon if { path_beg /horizon }\n");
-    fprintf(fout, "  use_backend grafana_backend if { path_beg /grafana } or { path_beg /grafana/ }\n");
-    if (!IsEdge(s_eCubeRole)) {
-        fprintf(fout, "  use_backend opensearch-dashboards_backend if { path_beg /opensearch-dashboards } or { path_beg /opensearch-dashboards/ }\n");
-    }
-    fprintf(fout, "  use_backend prometheus_backend if { path_beg /prometheus } or { path_beg /prometheus/ }\n");
-    fprintf(fout, "  use_backend ceph_dashboard_backend if { path_beg /ceph/ }\n");
-    fprintf(fout, "  default_backend cube_lmi\n");
-    fprintf(fout, "  \n");
-
-    fprintf(fout, "frontend lmi_https\n");
-    fprintf(fout, "  bind :443 ssl crt %s\n", KEYFILE);
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  option forwardfor\n");
-    fprintf(fout, "  option http-server-close\n");
-    fprintf(fout, "  http-request add-header X-Forwarded-Proto https\n");
-    fprintf(fout, "  acl path_root path /\n");
-    fprintf(fout, "  redirect location /dashboard if path_root\n");
-    fprintf(fout, "  use_backend openstack_horizon if { path_beg /horizon }\n");
-    fprintf(fout, "  use_backend grafana_backend if { path_beg /grafana } or { path_beg /grafana/ }\n");
-    if (!IsEdge(s_eCubeRole)) {
-        fprintf(fout, "  use_backend opensearch-dashboards_backend if { path_beg /opensearch-dashboards } or { path_beg /opensearch-dashboards/ }\n");
-    }
-    fprintf(fout, "  use_backend prometheus_backend if { path_beg /prometheus } or { path_beg /prometheus/ }\n");
-    fprintf(fout, "  use_backend ceph_dashboard_backend if { path_beg /ceph/ }\n");
-    fprintf(fout, "  default_backend cube_lmi\n");
-    fprintf(fout, "  \n");
-
     fprintf(fout, "backend openstack_horizon\n");
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
@@ -174,18 +138,11 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
     fprintf(fout, "  option http-server-close\n");
-    if (ha)
+    if (ha) {
         fprintf(fout, "  server localhost %s:7443 check ssl verify none\n", sharedId.c_str());
-    else
+    } else {
         fprintf(fout, "  server localhost 127.0.0.1:7443 check ssl verify none\n");
-    fprintf(fout, "  \n");
-
-    fprintf(fout, "backend cube_lmi\n");
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  option forwardfor\n");
-    fprintf(fout, "  option http-server-close\n");
-    fprintf(fout, "  redirect scheme https if !{ ssl_fc }\n");
-    fprintf(fout, "  server localhost 127.0.0.1:8081 check\n");
+    }
     fprintf(fout, "  \n");
 
     fprintf(fout, "frontend swift_api\n");
@@ -199,18 +156,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  option forwardfor\n");
     fprintf(fout, "  http-request replace-uri ([^/:]*://[^/]*)?(.*) \\1/swift\\2\n");
     fprintf(fout, "  server localhost %s:8888 check\n", myip.c_str());
-    fprintf(fout, "  \n");
-
-    fprintf(fout, "frontend cube_cos_https\n");
-    fprintf(fout, "  bind :4443 ssl crt %s\n", KEYFILE);
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  option forwardfor\n");
-    fprintf(fout, "  option http-server-close\n");
-    fprintf(fout, "  http-request add-header X-Forwarded-Proto https\n");
-    fprintf(fout, "  acl api_path path_beg /api/\n");
-    fprintf(fout, "  acl saml_path path_beg /saml/\n");
-    fprintf(fout, "  use_backend cube_cos_api if api_path or saml_path\n");
-    fprintf(fout, "  default_backend cube_cos_ui\n");
     fprintf(fout, "  \n");
 
     fprintf(fout, "backend cube_cos_api\n");
@@ -227,6 +172,44 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  option http-server-close\n");
     fprintf(fout, "  redirect scheme https if !{ ssl_fc }\n");
     fprintf(fout, "  server localhost %s:8083 check\n", myip.c_str());
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "frontend cube_cos_http\n");
+    fprintf(fout, "  bind :80\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  option http-server-close\n");
+    fprintf(fout, "  http-request add-header X-Forwarded-Proto http\n");
+    fprintf(fout, "  use_backend openstack_horizon if { path_beg /horizon }\n");
+    fprintf(fout, "  use_backend grafana_backend if { path_beg /grafana } or { path_beg /grafana/ }\n");
+    if (!IsEdge(s_eCubeRole)) {
+        fprintf(fout, "  use_backend opensearch-dashboards_backend if { path_beg /opensearch-dashboards } or { path_beg /opensearch-dashboards/ }\n");
+    }
+    fprintf(fout, "  use_backend prometheus_backend if { path_beg /prometheus } or { path_beg /prometheus/ }\n");
+    fprintf(fout, "  use_backend ceph_dashboard_backend if { path_beg /ceph/ }\n");
+    fprintf(fout, "  acl api_path path_beg /api/\n");
+    fprintf(fout, "  acl saml_path path_beg /saml/\n");
+    fprintf(fout, "  use_backend cube_cos_api if api_path or saml_path\n");
+    fprintf(fout, "  default_backend cube_cos_ui\n");
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "frontend cube_cos_https\n");
+    fprintf(fout, "  bind :443 ssl crt %s\n", KEYFILE);
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  option http-server-close\n");
+    fprintf(fout, "  http-request add-header X-Forwarded-Proto https\n");
+    fprintf(fout, "  use_backend openstack_horizon if { path_beg /horizon }\n");
+    fprintf(fout, "  use_backend grafana_backend if { path_beg /grafana } or { path_beg /grafana/ }\n");
+    if (!IsEdge(s_eCubeRole)) {
+        fprintf(fout, "  use_backend opensearch-dashboards_backend if { path_beg /opensearch-dashboards } or { path_beg /opensearch-dashboards/ }\n");
+    }
+    fprintf(fout, "  use_backend prometheus_backend if { path_beg /prometheus } or { path_beg /prometheus/ }\n");
+    fprintf(fout, "  use_backend ceph_dashboard_backend if { path_beg /ceph/ }\n");
+    fprintf(fout, "  acl api_path path_beg /api/\n");
+    fprintf(fout, "  acl saml_path path_beg /saml/\n");
+    fprintf(fout, "  use_backend cube_cos_api if api_path or saml_path\n");
+    fprintf(fout, "  default_backend cube_cos_ui\n");
     fprintf(fout, "  \n");
 
     fclose(fout);

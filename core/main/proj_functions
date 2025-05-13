@@ -297,7 +297,6 @@ cube_cluster_recreate()
         rm -rf /var/lib/rabbitmq/mnesia/*
         rm -f /etc/appliance/state/rabbitmq_cluster_done
         rm -f /etc/appliance/state/ceph_dashboard_idp_done
-        rm -f /etc/appliance/state/lmi_idp_done
         rm -f /etc/httpd/conf.d/v3_mellon_keycloak_master.conf
         touch /etc/appliance/state/mysql_new_cluster
         touch /etc/appliance/state/keystone_idp_update
@@ -719,7 +718,7 @@ check_service_stats()
     echo "["
 
     # base services
-    local service_array=(link dns clock bootstrap license etcd hacluster rabbitmq mysql mongodb vip haproxy_ha haproxy httpd nginx api lmi skyline memcache ceph ceph_mon ceph_mgr ceph_mds ceph_osd ceph_rgw rbd_target)
+    local service_array=(link dns clock bootstrap license etcd hacluster rabbitmq mysql mongodb vip haproxy_ha haproxy httpd nginx api skyline memcache ceph ceph_mon ceph_mgr ceph_mds ceph_osd ceph_rgw rbd_target)
     for service in "${service_array[@]}" ; do
         check_service $service
     done

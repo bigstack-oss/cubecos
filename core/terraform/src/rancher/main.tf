@@ -77,7 +77,7 @@ resource "rancher2_global_role_binding" "cube_users" {
 #   provider = rancher2.admin
 
 #   name = "cube"
-#   url = "https://${var.cube_controller}/static/nodedrivers/docker-machine-driver-cube"
+#   url = "http://${var.cube_controller}:8080/static/nodedrivers/docker-machine-driver-cube"
 #   active = true
 #   builtin = false
 #   description = "Cube node driver"

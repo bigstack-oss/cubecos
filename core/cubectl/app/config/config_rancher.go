@@ -246,7 +246,7 @@ func rancherConfigClusterNodeDrivers() error {
 	"active": true,
 	"builtin": false,
 	"name": "cube",
-	"url": "https://%s/static/nodedrivers/docker-machine-driver-cube"
+	"url": "http://%s:8080/static/nodedrivers/docker-machine-driver-cube"
 }
 `
 

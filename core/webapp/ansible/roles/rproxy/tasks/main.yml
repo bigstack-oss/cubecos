@@ -1,7 +1,0 @@
----
-# file: roles/rproxy/tasks/main.yml
-
-- name: Assure rproxy files are properly installed
-  copy: src=./server/ dest={{rproxy_root}}/ owner=www-data group=www-data mode=644
-  notify:
-    - restart rproxy

@@ -1,3 +1,0 @@
----
-# file: roles/rproxy/vars/main.yml
-rproxy_root: /var/www/rproxy

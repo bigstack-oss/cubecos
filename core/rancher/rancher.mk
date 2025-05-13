@@ -12,6 +12,7 @@ rootfs_install::
 	$(Q)cp -rf $(TOP_BLDDIR)/core/rancher/nodedrivers/ $(ROOTDIR)/$(RANCHER_DIR)
 	$(Q)chroot $(ROOTDIR) mkdir -p $(RANCHER_DIR)/cpo
 	$(Q)cp -f $(TOP_BLDDIR)/core/rancher/cpo/*.tgz $(ROOTDIR)/$(RANCHER_DIR)/cpo/
-# Create symbolic link to lmi directory
-	$(Q)mkdir -p $(ROOTDIR)/var/www/lmi/static/ && \
-		chroot $(ROOTDIR) ln -sf $(RANCHER_DIR)/nodedrivers/ /var/www/lmi/static/
+# Use apache2 (httpd) to serve the node drivers
+	$(Q)mkdir -p $(ROOTDIR)/var/www/html/static/ && \
+		chroot $(ROOTDIR) ln -sf $(RANCHER_DIR)/nodedrivers/ /var/www/html/static/ && \
+		chroot $(ROOTDIR) chown -R www-data:www-data /var/www/html

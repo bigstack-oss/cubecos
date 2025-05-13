@@ -1,11 +1,3 @@
-core/webapp/lmi/node_modules/
-core/webapp/lmi/package-lock.json
-core/webapp/lmi/.next
-core/webapp/lmi/.env
-core/webapp/lmi/error.log
-core/webapp/lmi/server.log
-core/webapp/lmi/static/env.js
-
 # Visual Studio Code IDE
 .vscode/
 

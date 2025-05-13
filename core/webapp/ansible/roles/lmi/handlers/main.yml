@@ -1,4 +1,0 @@
----
-# file: roles/lmi/handlers/main.yml
-- name: restart lmi
-  command: /usr/sbin/hex_config restart_lmi

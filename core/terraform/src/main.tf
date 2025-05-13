@@ -37,12 +37,6 @@ module "keycloak_ceph_dashboard" {
   cube_controller = var.cube_controller
 }
 
-module "keycloak_lmi" {
-  source = "./keycloak/lmi_client/"
-
-  cube_controller = var.cube_controller
-}
-
 module "keycloak_api" {
   source = "./keycloak/api_client/"
 
