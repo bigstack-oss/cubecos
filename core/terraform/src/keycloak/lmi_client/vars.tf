@@ -1,0 +1,1 @@
+variable "cube_controller" {}

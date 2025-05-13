@@ -8,6 +8,9 @@ fi
 
 api_idp_config()
 {
-    local SHARED_ID=$1
-    $TERRAFORM_CUBE apply -auto-approve -target=module.keycloak_api -var cube_controller=$SHARED_ID >/dev/null
+    local shared_id=$1
+    # migrate LMI configurations on Keycloak
+    Quiet -n $TERRAFORM_CUBE apply -auto-approve -target=module.keycloak_lmi -var cube_controller=$shared_id
+    # add API configurations to Keycloak
+    Quiet -n $TERRAFORM_CUBE apply -auto-approve -target=module.keycloak_api -var cube_controller=$shared_id
 }
