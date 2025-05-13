@@ -672,6 +672,11 @@ wait_for_http_endpoint()
     local port=$2
     local timeout=$3
 
+    # clean up dirty arp records
+    if $(/usr/sbin/arp -a | grep -q $endpoint) ; then
+        /usr/sbin/arp -d $endpoint
+    fi
+
     local i=0
     while [ $i -lt $timeout ] ; do
         if $CURL -sf http://$endpoint:$port > /dev/null ; then
