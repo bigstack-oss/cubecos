@@ -29,7 +29,7 @@ rootfs_install::
 	$(Q)for i in {1..10} ; do timeout 30 git clone --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
-	$(Q)nvm use $(UI_NODE_VERSION) $(QEND) && make -C $(ROOTDIR)/skyline-console package
+	$(Q)nvm use $(SKYLINE_NODE_VERSION) $(QEND) && make -C $(ROOTDIR)/skyline-console package
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 	$(Q)chroot $(ROOTDIR) sh -c "cd /skyline-console && pip3 install dist/skyline_console-*.whl"
