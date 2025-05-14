@@ -1351,14 +1351,10 @@ ceph_mirror_image_disable()
         local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
         if rbd info $BUILTIN_BACKPOOL/$img_name >/dev/null 2>&1 ; then
-            if [ "$(rbd info $BUILTIN_BACKPOOL/$img_name --format json | jq -r .mirroring.primary)" = "true" ] ; then
-                echo "$BUILTIN_BACKPOOL/${img_name}"
-                Quiet -n rbd mirror image disable $BUILTIN_BACKPOOL/$img_name --force
-                local peer_vip=$(find /etc/ceph/ -type f -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//" | cut -d"-" -f2)
-                Quiet -n $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_image_meta_remove $img_id"
-            else
-                printf "%60s is not primary\n" $BUILTIN_BACKPOOL/${img_name} && continue
-            fi
+            echo "$BUILTIN_BACKPOOL/${img_name}"
+            Quiet -n rbd mirror image disable $BUILTIN_BACKPOOL/$img_name --force
+            local peer_vip=$(find /etc/ceph/ -type f -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//" | cut -d"-" -f2)
+            Quiet -n $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_image_meta_remove $img_id"
         else
             printf "%60s does not exist\n" $BUILTIN_BACKPOOL/${img_name} && continue
         fi
@@ -1396,7 +1392,7 @@ ceph_mirror_added_volume_list()
         local flag="-v"
     fi
 
-    local vols=$(HEX_SDK $flag os_list_volume_by_tenant_basic)
+    local vols=$($HEX_SDK $flag os_list_volume_by_tenant_basic)
     for img_name in $(rbd mirror pool status $BUILTIN_BACKPOOL --verbose --format json | jq -r .images[].name 2>/dev/null) ; do
         echo "$vols" | grep "${img_name#volume-}" 2>/dev/null
     done
@@ -2052,14 +2048,15 @@ ceph_osd_create_map()
             fi
             echo "${metapart:-metapart} ${osd_id:-osd_id} ${metapart_uuid:-metapart_uuid} ${datapart_partuuid:-datapart_partuuid}" >> $osdmap_new
         done
+        cat $osdmap_new | sort -k1 > ${osdmap_new}.sorted
+        unlink $osdmap_new
+        if cmp -s ${osdmap_new}.sorted $CEPH_OSD_MAP ; then
+            rm -f ${osdmap_new}.sorted
+        else
+            mv -f ${osdmap_new}.sorted $CEPH_OSD_MAP
+        fi
     fi
-    cat $osdmap_new | sort -k1 > ${osdmap_new}.sorted
-    unlink $osdmap_new
-    if cmp -s ${osdmap_new}.sorted $CEPH_OSD_MAP ; then
-        rm -f ${osdmap_new}.sorted
-    else
-        mv -f ${osdmap_new}.sorted $CEPH_OSD_MAP
-    fi
+
     # clean up broken ceph osd folders
     for osddir in $(ls -1d ${osdpth}/ceph-*) ; do
         if ! readlink -e ${osddir}/block ; then
