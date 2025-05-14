@@ -8,5 +8,5 @@ fi
 
 mongodb_stats()
 {
-    mongosh --quiet --eval 'rs.status()'
+    $MONGODB --quiet --eval 'rs.status()'
 }

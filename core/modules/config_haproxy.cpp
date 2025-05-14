@@ -291,6 +291,7 @@ WriteConfig(bool ha, const std::string& ctrlVip,
 
     std::string srvlist[][4] = {
         { "galera", "3306", "mysql", "ap" },
+        { "mongodb", "27017", "tcp", "ap" },
         { "keystone_api", "5000", "http", "" },
         { "glance_api", "9292", "http", "" },
         { "nova_compute_api", "8774", "http", "" },

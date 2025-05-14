@@ -52,6 +52,7 @@ ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
 TERRAFORM_CUBE="/usr/local/bin/terraform-cube.sh"
 CURL="timeout $SRVTO /usr/bin/curl"
 MYSQL="timeout $SRVTO /usr/bin/mysql"
+MONGODB="timeout $SRVTO /usr/bin/mongosh mongodb://$(mgmt_ip):27017"
 
 RESERVED_USERS="admin_cli\|masakari\|placement\|heat\|glance\|monasca\|heat_domain_admin\|neutron\|nova\|cyborg\|cinder\|barbican\|manila\|octavia\|designate\|ironic\|ironic-inspector\|senlin\|watcher"
 

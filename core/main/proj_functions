@@ -93,6 +93,15 @@ shared_ip()
     echo -n "$vip"
 }
 
+mgmt_ip()
+{
+    source hex_tuning /etc/settings.txt cubesys.management
+    local mgmt_if=$T_cubesys_management
+    source hex_tuning /etc/settings.txt "net.if.addr.$mgmt_if"
+    local mgmt_ip_key="T_net_if_addr_${mgmt_if}"
+    echo -n "${!mgmt_ip_key}"
+}
+
 cube_control_strf_addrs()
 {
     local strf=$(cubectl node list -r control -j | jq -r .[].ip.storage | tr '\n' ',')

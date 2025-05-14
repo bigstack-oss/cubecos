@@ -1,3 +1,5 @@
+// CUBE
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -20,6 +22,8 @@
 #include "include/role_cubesys.h"
 
 const static char SERVICE[] = "mongodb";
+static const char MONGOD_CONF_IN[] = "/etc/mongod.conf.in";
+static const char MONGOD_CONF[] = "/etc/mongod.conf";
 const static char DATA_DIR[] = "/var/lib/mongo";
 
 static const char USER[] = "mongod";
@@ -36,6 +40,9 @@ static LogRotateConf log_conf("mongodb", "/var/log/mongodb/*.log", DAILY, 128, 0
 
 // private tunings
 CONFIG_TUNING_BOOL(MONGODB_ENABLED, "mongodb.enabled", TUNING_UNPUB, "Set to true to enable mongodb.", true);
+
+// external global variables
+CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
@@ -75,13 +82,6 @@ ShouldCommit(bool modified)
 }
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
-{
-    ParseTune(name, value, isNew, 1);
-    return true;
-}
-
-static bool
 ParseNet(const char *name, const char *value, bool isNew)
 {
     if (strcmp(name, NET_HOSTNAME) == 0) {
@@ -97,11 +97,29 @@ NotifyNet(bool modified)
     s_bNetModified = s_hostname.modified();
 }
 
+static bool
+ParseCube(const char *name, const char *value, bool isNew)
+{
+    ParseTune(name, value, isNew, 1);
+    return true;
+}
+
 static void
 NotifyCube(bool modified)
 {
     s_bCubeModified = IsModifiedTune(1);
     s_eCubeRole = GetCubeRole(s_cubeRole);
+}
+
+static bool
+WriteMongodConf(const char* myip)
+{
+    if (HexSystemF(0, "sed -e \"s/@MGMT_ADDR@/%s/\" %s > %s", myip, MONGOD_CONF_IN, MONGOD_CONF) != 0) {
+        HexLogError("failed to update %s", MONGOD_CONF);
+        return false;
+    }
+
+    return true;
 }
 
 static int
@@ -211,6 +229,10 @@ Commit(bool modified, int dryLevel)
         return true;
     }
 
+    std::string myip = G(MGMT_ADDR);
+    if (G_MOD(MGMT_ADDR)) {
+        WriteMongodConf(myip.c_str());
+    }
     SystemdCommitService(s_enabled, SERVICE, true);
     int result = WaitActiveStatus();
     if (result != 0) {
