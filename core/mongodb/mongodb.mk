@@ -11,7 +11,9 @@ ROOTFS_DNF_DL_FROM += https://repo.mongodb.org/yum/redhat/9/mongodb-org/7.0/x86_
 ROOTFS_DNF_DL_FROM += https://downloads.mongodb.com/compass/$(MONGOSH_PKG)
 
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) rm -rf ./lib/systemd/system/mongod.service
 	$(Q)chroot $(ROOTDIR) mkdir -p $(MONGODB_LOG_DIR)
 	$(Q)chroot $(ROOTDIR) chown mongod:mongod $(MONGODB_BINARY) $(MONGODB_LOG_DIR)
+	$(Q)chroot $(ROOTDIR) rm -rf ./lib/systemd/system/mongod.service
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/mongodb/mongodb.service ./lib/systemd/system
+	$(Q)chroot $(ROOTDIR) mv /etc/mongod.conf /etc/mongod.conf.bak
+	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/mongodb/mongod.conf.in ./etc/mongod.conf.in
