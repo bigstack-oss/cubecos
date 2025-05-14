@@ -92,7 +92,7 @@ http {
         }
 
         location /cos-api/ {
-            rewrite /cos-api/([^/]+) /api/$1 break;
+            rewrite /cos-api/(.*) /api/$1 break;
             proxy_pass http://cube-cos-api/;
             proxy_redirect off;
             proxy_buffering off;
