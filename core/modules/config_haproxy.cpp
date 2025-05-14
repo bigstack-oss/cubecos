@@ -152,19 +152,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     }
     fprintf(fout, "  \n");
 
-    fprintf(fout, "frontend swift_api\n");
-    fprintf(fout, "  bind :8890\n");
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  use_backend swift_radosgw\n");
-    fprintf(fout, "  \n");
-
-    fprintf(fout, "backend swift_radosgw\n");
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  option forwardfor\n");
-    fprintf(fout, "  http-request replace-uri ([^/:]*://[^/]*)?(.*) \\1/swift\\2\n");
-    fprintf(fout, "  server localhost %s:8888 check\n", myip.c_str());
-    fprintf(fout, "  \n");
-
     fprintf(fout, "backend cube_cos_api\n");
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
@@ -219,6 +206,34 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  acl saml_path path_beg /saml/\n");
     fprintf(fout, "  use_backend cube_cos_api if api_path or saml_path\n");
     fprintf(fout, "  default_backend cube_cos_ui\n");
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "backend swift_radosgw\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  http-request replace-uri ([^/:]*://[^/]*)?(.*) \\1/swift\\2\n");
+    fprintf(fout, "  server localhost %s:8888 check\n", myip.c_str());
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "frontend swift_api\n");
+    fprintf(fout, "  bind :8890\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  use_backend swift_radosgw\n");
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "backend influxdb\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  option httpchk HEAD /ping\n");
+    fprintf(fout, "  http-check expect status 204\n");
+    fprintf(fout, "  server localhost 127.0.0.1:8086 check\n");
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "frontend influxdb_mgmt\n");
+    fprintf(fout, "  bind %s:8086\n", myip.c_str());
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  use_backend influxdb\n");
     fprintf(fout, "  \n");
 
     fclose(fout);
@@ -292,6 +307,7 @@ WriteConfig(bool ha, const std::string& ctrlVip,
     std::string srvlist[][4] = {
         { "galera", "3306", "mysql", "ap" },
         { "mongodb", "27017", "tcp", "ap" },
+        { "influxdb", "8086", "httpchk", "  option httpchk HEAD /ping\n  http-check expect status 204" },
         { "keystone_api", "5000", "http", "" },
         { "glance_api", "9292", "http", "" },
         { "nova_compute_api", "8774", "http", "" },
