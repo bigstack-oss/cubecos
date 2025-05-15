@@ -2969,7 +2969,6 @@ ceph_osd_list()
             state=fail
         elif echo $smart_log | grep -q -i "$smart_supported" ; then
             remark="SMART supported but no self-test results"
-            state=fail
         elif echo $smart_log | grep -q -i "$smart_unavailable" ; then
             remark="SMART not supported"
         else

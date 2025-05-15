@@ -27,6 +27,7 @@ SETTINGS_SYS=/etc/settings.sys
 
 IP="timeout $SRVTO /sbin/ip"
 OPENSTACK="timeout $SRVTO /usr/bin/openstack"
+NOVA="timeout $SRVSTO /usr/local/bin/nova"
 MANILA="timeout $SRVTO /usr/bin/manila"
 DNF="/usr/bin/dnf"
 WGET="timeout $SRVTO /usr/bin/wget"
@@ -40,7 +41,7 @@ ADMIN_KEYRING=/etc/ceph/ceph.client.admin.keyring
 CEPHFS_CLIENT_AUTHKEY=/etc/ceph/admin.key
 CEPH_OSD_MAP=/var/lib/ceph/osd/dev_osd.map
 CEPH="timeout $SRVSTO /usr/bin/ceph"
-GIT="timeout $SRVLTO /usr/bin/git"
+GIT="timeout 300 /usr/bin/git"
 MAPFILE=/tmp/monmap.sdk
 CRUSHMAPFILE=/tmp/crushmap.sdk
 BUILTIN_BACKPOOL=cinder-volumes

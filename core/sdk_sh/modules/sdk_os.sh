@@ -2777,3 +2777,31 @@ os_instance_pgpu_migrate()
 
     $OPENSTACK server show -c id -c hostname -c hypervisor_hostname -c addresses $instance_id
 }
+
+os_nova_list()
+{
+    for i in "$@" ; do
+        case $i in
+            id|ID|Id)
+                fields+='$2 ' ;;
+            name|NAME|Name)
+                fields+='$3 ' ;;
+            tenantid|TENANTID|TenantID|TenantId)
+                fields+='$4 ' ;;
+            state|STATE|State)
+                fields+='$5 ' ;;
+            taskstate|TASKSTATE|TaskState)
+                fields+='$6 ' ;;
+            powerstate|POWERSTATE|PowerState)
+                fields+='$7 ' ;;
+            networks|NETWORKS|Networks)
+                fields+='$8 ' ;;
+            *) ;;
+        esac
+    done
+    if [ "x$fields" = "x" ] ; then
+        $NOVA list --all-tenants
+    else
+        eval "$NOVA list --all-tenants | awk -F'|' '/\|/ && !/ID/ { print ${fields} }' | tr -s ' ' | sed -e \"s/^ //\" -e \"s/ $//\""
+    fi
+}

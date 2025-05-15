@@ -121,7 +121,11 @@ _health_fail_log()
             local auto_repair_func="_health_${srv}_auto_repair"
             if Quiet type $auto_repair_func 2>/dev/null ; then
                 query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
-                $INFLUX -database events -execute "${query},detail=\"auto repair ($count/$maxerr)\""
+                if ! $INFLUX -database events -execute "${query},detail=\"auto repair ($count/$maxerr)\"" ; then
+                    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+                        timeout $SRVSTO /usr/bin/influx -host $node -database events -execute "${query},detail=\"auto repair ($count/$maxerr)\""
+                    done
+                fi
                 $auto_repair_func
             fi
         fi
@@ -148,14 +152,14 @@ EOF
         if [ "x$keys" != "x" ] ; then
             timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
-                keys=$keys $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1
+                keys=$keys $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys $HEX_SDK os_s3_bucket_create admin log
                 log_url="s3://$log_pth"
                 rm -f /tmp/$log
             else
                 # In case collecting logs from remote fails, look for local log
                 if [ -e $ERR_LOG ] ; then
                     tail -n $ERR_LOGSIZE $ERR_LOG > /tmp/$log
-                    keys=$keys $HEX_SDK os_s3_object_put admin $ERR_LOG $log_pth >/dev/null 2>&1
+                    keys=$keys $HEX_SDK os_s3_object_put admin $ERR_LOG $log_pth >/dev/null 2>&1 || keys=$keys $HEX_SDK os_s3_bucket_create admin log
                     log_url="s3://$log_pth"
                 fi
             fi
@@ -621,32 +625,33 @@ health_mysql_repair()
 
 health_vip_report()
 {
-    local active_host=$($HEX_CFG status_pacemaker | awk '/IPaddr2/{print $5}')
-    if [ -n "$active_host" ] ; then
-        local ipaddr=$(remote_run $active_host ip addr list | awk '/ secondary /{print $2}')
-        DESCRIPTION="$ipaddr@$active_host"
-    else
-        DESCRIPTION="non-HA"
-    fi
     _health_report ${FUNCNAME[0]}
 }
 
 health_vip_check()
 {
     local active_host=$($HEX_CFG status_pacemaker | awk '/IPaddr2/{print $5}')
+    DESCRIPTION="non-HA"
+
     if [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            local ipaddr=$(remote_run $node ip addr list | awk '/ secondary /{print $2}')
+            local ipcidr=$(remote_run $node ip addr list | awk '/ secondary /{print $2}')
+            local ipaddr=$(echo $ipcidr | cut -d"/" -f1)
             if [ "$node" == "$active_host" ] ; then
+                DESCRIPTION="$ipaddr@$active_host"
                 if [ -z "$ipaddr" ] ; then
                     ERR_CODE=1
-                    ERR_MSG+="$ipaddr should be active on $node\n"
+                    ERR_MSG+="$ipcidr should be active on $node\n"
                     ERR_LOG="pcs status"
+                elif [ $(cubectl node exec -np "arping -c 1 -w 1 $ipaddr >/dev/null && arp -n $ipaddr" | grep "^${ipaddr}" | awk '{print $1, $3}' | sort -u | wc -l) -gt 1 ] ; then
+                    ERR_CODE=3
+                    ERR_MSG+="stale VIP in arp table\n"
+                    ERR_LOG="cubectl node exec -p arp -e -n $ipaddr"
                 fi
             else
-                if [ -n "$ipaddr" ] ; then
+                if [ -n "$ipcidr" ] ; then
                     ERR_CODE=2
-                    ERR_MSG+="$ipaddr shouldn't be active on $node\n"
+                    ERR_MSG+="$ipcidr shouldn't be active on $node\n"
                     ERR_LOG="pcs status"
                 fi
             fi
@@ -654,6 +659,13 @@ health_vip_check()
     fi
 
     _health_fail_log
+}
+
+_health_vip_auto_repair()
+{
+    if [ "$ERR_CODE" == "3" ] ; then
+        Quiet -n cubectl node exec -np "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
+    fi
 }
 
 health_vip_repair()
@@ -667,6 +679,7 @@ health_vip_repair()
                 if [ -z "$ipaddr" ] ; then
                     pcs resource disable vip
                     pcs resource enable vip
+                    Quiet -n cubectl node exec -np "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
                 fi
             else
                 if [ -n "$ipaddr" ] ; then
@@ -851,7 +864,7 @@ health_nginx_check()
     _health_fail_log
 }
 
-health_nginx_auto_repair()
+_health_nginx_auto_repair()
 {
     if [ "$ERR_CODE" == "1" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -937,7 +950,7 @@ health_api_check()
     _health_fail_log
 }
 
-health_api_auto_repair()
+_health_api_auto_repair()
 {
     if [ "$ERR_CODE" == "1" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -2317,7 +2330,7 @@ health_watcher_check()
     _health_fail_log
 }
 
-health_watcher_auto_repair()
+_health_watcher_auto_repair()
 {
     readarray entry_array <<<"$(echo "$ERR_MSG" | awk '/FAILED/{print $1" "$2}' | sort)"
     declare -p entry_array > /dev/null
@@ -3038,10 +3051,10 @@ health_log_detail()
     [ $n_from_last -ge 1 ] || Error "invalid index $n_from_last"
     local timestamp=$(VERBOSE=1 FORMAT= health_db_select $component $n_from_last | tail -1 | awk '{print $1}')
     if [ "$FORMAT" = "json" ] ; then
-	$INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)"
+        $INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)"
     else
-	echo -n "$(date -d @${timestamp:0:10}) - "
-	$INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)" | jq -r .results[].series[].values[][] | tr ";" "\n"
+        echo -n "$(date -d @${timestamp:0:10}) - "
+        $INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)" | jq -r .results[].series[].values[][] | tr ";" "\n"
     fi
 }
 

@@ -73,7 +73,7 @@ RollingEvacuateAndReboot()
             echo -n "  cluster checking and repairing                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             if hex_sdk cube_cluster_repair ; then
                 echo -n "  cluster checked and repaired                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-                non_active_servers="$(hex_sdk os_nova_non_active_server_list | tail -1)"
+                non_active_servers="$(cat /mnt/cephfs/nova/instances/active_running)"
                 if [ "x$non_active_servers" != "x" ] ; then
                     hex_sdk os_nova_instance_reset "$non_active_servers"
                     hex_sdk os_nova_instance_hardreboot "$non_active_servers"

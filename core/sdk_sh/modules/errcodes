@@ -69,6 +69,7 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 SRV="vip"
 eval "ERR_DESC_$SRV[1]='active control IP down'"
 eval "ERR_DESC_$SRV[2]='inactive control IP active'"
+eval "ERR_DESC_$SRV[3]='stale VIP in arp table'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="haproxy_ha"
