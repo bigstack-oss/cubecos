@@ -1,6 +1,14 @@
 # Cube SDK
 
 include ../../build.mk
+UI_RPM := $(TOP_BLDDIR)/core/ui/ui.rpm
+
+ifneq ($(RC),)
+$(UI_RPM):
+	$(call RUN_CMD_TIMED, \
+		wget -O ui.rpm https://github.com/bigstack-oss/cube-cos-ui/releases/download/cube-cos-ui-v3.0.0-rc1/cube-cos-ui-3.0.0-1.0c8080d.x86_64.rpm, \
+		"  PULL    $(UI_RPM)")
+else
 include version
 include build_number
 
@@ -10,14 +18,13 @@ UI_RPMBUILD_DIR := $(TOP_BLDDIR)/core/ui/rpmbuild
 UI_TARBALL := $(UI_RPMBUILD_DIR)/SOURCES/cube-cos-ui-$(UI_VERSION).tar.gz
 UI_SPEC_FILE := $(UI_RPMBUILD_DIR)/SPECS/cube-cos-ui.spec
 UI_RPM_BUILD := $(UI_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm
-UI_RPM := $(TOP_BLDDIR)/core/ui/ui.rpm
 
 # prepare the ui source code, being pulled from GitHub using the default branch
 $(UI_GIT_DIR):
 	$(Q)mkdir $(UI_GIT_DIR)
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(UI_GIT_DIR) && break ; \
+		timeout 30 git clone -b v3.0.0-rc1 --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(UI_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
 
@@ -69,6 +76,7 @@ $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)
 # move the built rpm back to the local directory
 $(UI_RPM): $(UI_RPM_BUILD)
 	$(Q)cp -f $(UI_RPM_BUILD) ./ui.rpm
+endif
 
 BUILD += $(UI_RPM)
 BUILDCLEAN += $(UI_RPM) $(UI_RPMBUILD_DIR) $(UI_GIT_DIR) version build_number

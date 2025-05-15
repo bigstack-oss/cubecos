@@ -1,9 +1,6 @@
 # CUBE SDK
 
 include ../../build.mk
-include version
-include build_number
-include keycloak_version
 
 # login keycloak helm chart
 CHART_VERSION := 18.1.1
@@ -14,22 +11,31 @@ $(CHART):
 	$(Q)helm pull codecentric/keycloak --version $(CHART_VERSION)
 
 # login rpm
+LOGIN_RPM := $(TOP_BLDDIR)/core/keycloak/login.rpm
+KEYCLOAK_DIR := /opt/keycloak/
+
+ifneq ($(RC),)
+$(LOGIN_RPM):
+	$(call RUN_CMD_TIMED, \
+		wget -O login.rpm https://github.com/bigstack-oss/cube-cos-ui/releases/download/cube-cos-login-v3.0.0-rc1/cube-cos-login-17.1.0-1.0c8080d.x86_64.rpm, \
+		"  PULL    $(LOGIN_RPM)")
+else
+include version
+include build_number
+include keycloak_version
+
 LOGIN_GIT_DIR := ./git
 LOGIN_RPMBUILD_DIR := $(TOP_BLDDIR)/core/keycloak/rpmbuild
 LOGIN_TARBALL := $(LOGIN_RPMBUILD_DIR)/SOURCES/cube-cos-login-$(LOGIN_VERSION).tar.gz
 LOGIN_SPEC_FILE := $(LOGIN_RPMBUILD_DIR)/SPECS/cube-cos-login.spec
 LOGIN_RPM_BUILD := $(LOGIN_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm
-LOGIN_RPM := $(TOP_BLDDIR)/core/keycloak/login.rpm
-IMG_BUILD := localhost:5080/bigstack/keycloak:$(LOGIN_VERSION)
-
-KEYCLOAK_DIR := /opt/keycloak/
 
 # prepare the login source code, being pulled from GitHub using the default branch
 $(LOGIN_GIT_DIR):
 	$(Q)mkdir $(LOGIN_GIT_DIR)
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(LOGIN_GIT_DIR) && break ; \
+		timeout 30 git clone -b v3.0.0-rc1 --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(LOGIN_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
 
@@ -86,6 +92,13 @@ $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
 # move the built rpm back to the local directory
 $(LOGIN_RPM): $(LOGIN_RPM_BUILD)
 	$(Q)cp -f $(LOGIN_RPM_BUILD) ./login.rpm
+endif
+
+ifneq ($(RC),)
+IMG_BUILD := localhost:5080/bigstack/keycloak:17.1.0
+else
+IMG_BUILD := localhost:5080/bigstack/keycloak:$(LOGIN_VERSION)
+endif
 
 .load-img: $(LOGIN_RPM)
 	$(Q)dnf install -y ./login.rpm $(QEND)
@@ -140,8 +153,10 @@ endif
 
 clean:: testclean
 	$(Q)podman image rm -f $(shell cat .load-img) $(QEND) || true
+ifeq ($(RC),)
 	$(Q)rm -rf $(LOGIN_RPMBUILD_DIR)
 	$(Q)rm -rf $(LOGIN_GIT_DIR)
+endif
 
 BUILD += $(CHART)
 BUILDCLEAN += $(CHART) $(LOGIN_GIT_DIR) version build_number keycloak_version $(LOGIN_RPMBUILD_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
