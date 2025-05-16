@@ -18,6 +18,6 @@ rootfs_install::
 # for RC builds
 heavyfs_install::
 	$(Q)cp -f $(UI_RPM) $(ROOTDIR)/tmp
-	$(Q)chroot $(ROOTDIR) dnf remove -y cube-cos-ui
-	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/ui.rpm
+	$(Q)chroot $(ROOTDIR) rpm -e cube-cos-ui
+	$(Q)chroot $(ROOTDIR) rpm -i /tmp/ui.rpm
 	$(Q)rm -rf /tmp/api.rpm
