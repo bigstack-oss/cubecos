@@ -69,7 +69,7 @@ shared_id()
             shared_id=$(hostname)
         fi
 
-        echo -n $shared_id > /run/shared_id
+        Quiet -n "echo -n $shared_id > /run/shared_id"
     fi
 
     cat /run/shared_id
@@ -174,6 +174,9 @@ cube_cluster_start()
 
 cube_cluster_stop()
 {
+    if timeout 30 $HEX_SDK health_ceph_mds_check ; then
+        $HEX_SDK os_nova_list id status powerstate | grep -i 'active running' | cut -d' ' -f1 > $CEPHFS_NOVA_DIR/instances/active_running
+    fi
     rm -f /var/lib/corosync/*
     rm -rf /var/lib/rabbitmq/mnesia/*
     rm -f /etc/appliance/state/rabbitmq_cluster_done

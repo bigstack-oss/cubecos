@@ -638,8 +638,8 @@ health_vip_check()
             local ipcidr=$(remote_run $node ip addr list | awk '/ secondary /{print $2}')
             local ipaddr=$(echo $ipcidr | cut -d"/" -f1)
             if [ "$node" == "$active_host" ] ; then
-                DESCRIPTION="$ipaddr@$active_host"
-                if [ -z "$ipaddr" ] ; then
+                DESCRIPTION="$ipcidr@$active_host"
+                if [ -z "$ipcidr" ] ; then
                     ERR_CODE=1
                     ERR_MSG+="$ipcidr should be active on $node\n"
                     ERR_LOG="pcs status"
@@ -1250,7 +1250,7 @@ health_ceph_mds_check()
     fi
     let "online = $active + $standbys + $hotstandbys"
 
-    ERR_LOG="$HEX_SDK cmd CEPH -s"
+    ERR_LOG="$HEX_SDK cmd ceph -s"
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
     elif [ $(cubectl node exec -pn -- "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then

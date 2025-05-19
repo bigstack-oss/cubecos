@@ -2788,7 +2788,7 @@ os_nova_list()
                 fields+='$3 ' ;;
             tenantid|TENANTID|TenantID|TenantId)
                 fields+='$4 ' ;;
-            state|STATE|State)
+            status|STATUS|Status)
                 fields+='$5 ' ;;
             taskstate|TASKSTATE|TaskState)
                 fields+='$6 ' ;;

@@ -584,13 +584,14 @@ ClusterStopMain(int argc, const char** argv)
     LoadMap(&cfg);
     GetIpList(cfg[GLOBAL_SEC]["control"], &iplist);
 
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_compact >/dev/null 2>&1");
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_enter_maintenance");
     // get stop from the last node
     for (auto& ip : reverse(iplist)) {
         CliPrintf("mark control host %s down", ip.c_str());
         HexSystemF(0, "ssh root@%s '%s cube_cluster_stop' 2>/dev/null", ip.c_str(), HEX_SDK);
     }
+
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_compact >/dev/null 2>&1");
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_enter_maintenance");
 
     return CLI_SUCCESS;
 }
@@ -615,14 +616,14 @@ ClusterPoweroffMain(int argc, const char** argv)
     GetIpList(cfg[GLOBAL_SEC]["control"], &iplist);
     masterctl = iplist[0];
 
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_compact >/dev/null 2>&1");
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_enter_maintenance");
-
     for (auto& ip : reverse(iplist)) {
         CliPrintf("mark control host %s down", ip.c_str());
         HexSystemF(0, "ssh root@%s '%s cube_cluster_stop' 2>/dev/null", ip.c_str(), HEX_SDK);
         HexSystemF(0, "ssh root@%s 'systemctl stop nfs-ganesha'", ip.c_str());
     }
+
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_compact >/dev/null 2>&1");
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_enter_maintenance");
 
     HexSystemF(0, "ssh root@%s '%s cube_cluster_power off' 2>/dev/null", masterctl.c_str(), HEX_SDK);
 
@@ -649,15 +650,15 @@ ClusterPowercycleMain(int argc, const char** argv)
     GetIpList(cfg[GLOBAL_SEC]["control"], &iplist);
     masterctl = iplist[0];
 
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_compact >/dev/null 2>&1");
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_enter_maintenance");
-    HexUtilSystemF(0, 0, HEX_SDK " os_maintain_segment_hosts"); // puts hosts in maintenance if ins-ha is enabled
-
     for (auto& ip : reverse(iplist)) {
         CliPrintf("mark control host %s down", ip.c_str());
         HexSystemF(0, "ssh root@%s '%s cube_cluster_stop' 2>/dev/null", ip.c_str(), HEX_SDK);
         HexSystemF(0, "ssh root@%s 'systemctl stop nfs-ganesha'", ip.c_str());
     }
+
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_compact >/dev/null 2>&1");
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_enter_maintenance");
+    HexUtilSystemF(0, 0, HEX_SDK " os_maintain_segment_hosts"); // puts hosts in maintenance if ins-ha is enabled
 
     HexSystemF(0, "ssh root@%s '%s cube_cluster_power cycle' 2>/dev/null", masterctl.c_str(), HEX_SDK);
 
