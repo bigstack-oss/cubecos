@@ -19,8 +19,8 @@ CONFIG_TUNING_STR(CUBESYS_STORAGE, "cubesys.storage", TUNING_UNPUB, "Set storage
 CONFIG_TUNING_STR(CUBESYS_COMPUTE_PREFIX, "cubesys.compute.prefix", TUNING_UNPUB, "Set compute node host prefix.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_COMPUTE_START, "cubesys.compute.start", TUNING_UNPUB, "Set compute node start IPv4 address.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_INT(CUBESYS_COMPUTE_NUMBER, "cubesys.compute.number", TUNING_UNPUB, "Set max compute node number.", 0, 1, 255);
-CONFIG_TUNING_STR(CUBESYS_SEED, "cubesys.seed", TUNING_UNPUB, "Set Cube cluster secret seed.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CUBESYS_MGMT_CIDR, "cubesys.mgmt.cidr", TUNING_UNPUB, "Set Cube cluster management CIDR.", MGMT_CIDR_DEF, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CUBESYS_SEED, "cubesys.seed", TUNING_UNPUB, "Set CubeCOS cluster secret seed.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CUBESYS_MGMT_CIDR, "cubesys.mgmt.cidr", TUNING_UNPUB, "Set CubeCOS cluster management CIDR.", MGMT_CIDR_DEF, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_CONTROL_VIP, "cubesys.control.vip", TUNING_UNPUB, "Set cluster virtual ip.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_CONTROL_HOSTS, "cubesys.control.hosts", TUNING_UNPUB, "Set control group hostname [hostname,hostname,...].", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_CONTROL_ADDRS, "cubesys.control.addrs", TUNING_UNPUB, "Set control group address [ip,ip,...].", "", ValidateRegex, DFT_REGEX_STR);

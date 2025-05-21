@@ -54,8 +54,8 @@ CONFIG_TUNING_STR(CUBESYS_MGMT, "cubesys.management", TUNING_UNPUB, "Set managem
 CONFIG_TUNING_STR(CUBESYS_PROVIDER, "cubesys.provider", TUNING_UNPUB, "Set provider interface.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_OVERLAY, "cubesys.overlay", TUNING_UNPUB, "Set overlay network interface.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_STORAGE, "cubesys.storage", TUNING_UNPUB, "Set storage network interface.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CUBESYS_SEED, "cubesys.seed", TUNING_UNPUB, "Set Cube cluster secret seed.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CUBESYS_MGMT_CIDR, "cubesys.mgmt.cidr", TUNING_UNPUB, "Set Cube cluster management CIDR.", MGMT_CIDR_DEF, ValidateIpRange, "");
+CONFIG_TUNING_STR(CUBESYS_SEED, "cubesys.seed", TUNING_UNPUB, "Set CubeCOS cluster secret seed.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CUBESYS_MGMT_CIDR, "cubesys.mgmt.cidr", TUNING_UNPUB, "Set CubeCOS cluster management CIDR.", MGMT_CIDR_DEF, ValidateIpRange, "");
 CONFIG_TUNING_STR(CUBESYS_CONTROL_VIP, "cubesys.control.vip", TUNING_UNPUB, "Set cluster virtual ip.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_CONTROL_HOSTS, "cubesys.control.hosts", TUNING_UNPUB, "Set control group hostname [hostname,hostname,...].", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CUBESYS_CONTROL_ADDRS, "cubesys.control.addrs", TUNING_UNPUB, "Set control group address [ip,ip,...].", "", ValidateRegex, DFT_REGEX_STR);

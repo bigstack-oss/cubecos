@@ -139,7 +139,7 @@ Translate(const char *policy, FILE *settings)
         return false;
     }
 
-    fprintf(settings, "\n# Cube System Tuning Params\n");
+    fprintf(settings, "\n# CubeCOS System Tuning Params\n");
 
     HexYmlParseString(cfg.role, yml, "role");
     HexYmlParseString(cfg.domain, yml, "domain");

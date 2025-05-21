@@ -39,7 +39,7 @@ static const char* LABEL_PROVIDER = "Provider: %s";
 static const char* LABEL_OVERLAY = "Overlay: %s";
 static const char* LABEL_STORAGE = "Storage: %s";
 static const char* LABEL_DOMAIN_REGION = "Domain/Region: %s/%s";
-static const char* LABEL_SECRET_SEED = "Cube Secret Seed: %s";
+static const char* LABEL_SECRET_SEED = "CubeCOS Secret Seed: %s";
 
 static const char* LABEL_HA = "High Availability: %s";
 static const char* LABEL_CONTROL_VIP = "Control Virtual IP: %s";
@@ -280,7 +280,7 @@ CubeNetworkMain(HexPolicyManager* policyManager, NetworkPolicy* netPolicy, bool 
 static void
 CubeSysShow(CubeSysPolicy& sysPolicy)
 {
-    CliPrintf("\n[Cube System Policy]");
+    CliPrintf("\n[CubeCOS System Policy]");
 
     // display cube sys config
     std::string role = sysPolicy.getRole();
@@ -332,7 +332,7 @@ CubeSysMain(HexPolicyManager* policyManager, CubeSysPolicy* sysPolicy, bool *cub
 static void
 CubeHaShow(CubeSysPolicy& sysPolicy)
 {
-    CliPrintf("\n[Cube HA Policy]");
+    CliPrintf("\n[CubeCOS HA Policy]");
 
     // display cube ha config
     CubeSysConfig sysCfg;

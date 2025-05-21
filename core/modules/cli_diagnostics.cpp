@@ -283,7 +283,7 @@ CLI_MODE(CLI_TOP_MODE, "diagnostics", "Cluster self-diagnosing utilities.",
 
 // diagnostics arp
 CLI_MODE_COMMAND("diagnostics", "arpscan", ArpScanMain, NULL,
-    "Scan arp tables of all Cube operational networks and report IP conflicts if any.",
+    "Scan arp tables of all CubeCOS operational networks and report IP conflicts if any.",
     "arpscan");
 
 // diagnostics testground

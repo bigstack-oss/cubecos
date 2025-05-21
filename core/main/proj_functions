@@ -817,7 +817,7 @@ cube_cluster_ppu()
         cubectl node exec -p /usr/sbin/hex_install list
         Error "Make sure only one firmware package exists in /var/update/"
     else
-        echo "All cluster nodes have proper access to Cube firmware package: $(/usr/sbin/hex_install list)"
+        echo "All cluster nodes have proper access to CubeCOS firmware package: $(/usr/sbin/hex_install list)"
         for PKG in $(ls -1 /var/update/*.pkg) ; do
             if [ ! -e "$PKG" ] ; then
                 Error "$PKG does not come with its corresponding md5 file: ${PKG}.md5"
@@ -834,7 +834,7 @@ cube_cluster_ppu()
                     cubectl node exec -p "(sleep 1 && echo 1 && sleep 1 && echo 1 && sleep 1 && echo YES) | $HEX_CLI -c update update ; sync"
                     echo "Successfully completed firmware package upgrade"
                     master_control=$(cubectl node list -j | jq -r .[].hostname | head -1)
-                    echo "Please monitor Cube login console (Blue/Black login banner) of individual node until the last node on list finishes"
+                    echo "Please monitor CubeCOS login console (Blue/Black login banner) of individual node until the last node on list finishes"
                     if $HEX_SDK remote_run $master_control "$HEX_SDK is_compute_node" && [ $(cubectl node list -r compute | wc -l) -gt 1 ] ; then
                         if $HEX_SDK remote_run $master_control "pgrep qemu-kvm >/dev/null" ; then
                             echo "Enter YES to AUTOMATICALLY evacuate live VMs on $master_control"

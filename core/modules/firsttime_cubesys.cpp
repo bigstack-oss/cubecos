@@ -18,7 +18,7 @@ using namespace hex_firsttime;
 /**
  * All the user visible strings
  */
-static const char* LABEL_ROLE_TITLE = "Cube Role";
+static const char* LABEL_ROLE_TITLE = "CubeCOS Role";
 static const char* LABEL_ROLE_CURRENT = "Current role: %s";
 static const char* LABEL_CONTROLLER_CURRENT = "Current Controller: %s(%s)";
 static const char* LABEL_EXTERNAL_CURRENT = "Current External IP/Domain: %s";
@@ -28,7 +28,7 @@ static const char* LABEL_OVERLAY_CURRENT = "Current Overlay: %s";
 static const char* LABEL_STORAGE_CURRENT = "Current Storage: %s";
 static const char* LABEL_DOMAIN_REGION_CURRENT = "Current Domain/Region: %s/%s";
 //static const char* LABEL_COMPUTE_MAP_CURRENT = "Current Compute Node Map: %s(%s[%lu])";
-static const char* LABEL_SECRET_SEED_CURRENT = "Current Cube Secret Seed: %s";
+static const char* LABEL_SECRET_SEED_CURRENT = "Current CubeCOS Secret Seed: %s";
 static const char* LABEL_MGMT_CIDR_CURRENT = "Current Management CIDR: %s";
 static const char* LABEL_ROLE_CHANGE_MENU    = "Change role";
 static const char* LABEL_ROLE_CHANGE_HEADING = "Change Role";
@@ -41,7 +41,7 @@ static const char* LABEL_OVERLAY = "Overlay: %s";
 static const char* LABEL_STORAGE = "Storage: %s";
 static const char* LABEL_DOMAIN_REGION = "Domain/Region: %s/%s";
 //static const char* LABEL_COMPUTE_MAP = "Compute Node Map: %s(%s[%lu])";
-static const char* LABEL_SECRET_SEED = "Cube Secret Seed: %s";
+static const char* LABEL_SECRET_SEED = "CubeCOS Secret Seed: %s";
 static const char* LABEL_MGMT_CIDR = "Management CIDR: %s";
 
 class CubeSysModule : public MenuModule {

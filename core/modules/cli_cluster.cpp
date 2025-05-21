@@ -374,7 +374,7 @@ ClusterHealthMain(int argc, const char** argv)
     }
 
     if (CubeBootLevel() != BLVL_DONE)
-        CliPrintf("Cube has yet to bootstrap!");
+        CliPrintf("CubeCOS has yet to bootstrap!");
 
     if (index >= 0) {
         ClusterReportItem(srv, false);
@@ -532,7 +532,7 @@ ClusterCheckRepairMain(int argc, const char** argv)
     }
 
     if (CubeBootLevel() != BLVL_DONE)
-        CliPrintf("Cube has not yet bootstrapped!");
+        CliPrintf("CubeCOS has not yet bootstrapped!");
 
     CheckRepairItem srv;
     for (auto& s: s_services) {

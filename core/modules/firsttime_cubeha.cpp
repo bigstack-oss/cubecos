@@ -17,7 +17,7 @@ using namespace hex_firsttime;
 /**
  * All the user visible strings
  */
-static const char* LABEL_HA_TITLE = "Cube High Availability";
+static const char* LABEL_HA_TITLE = "CubeCOS High Availability";
 static const char* LABEL_CURRENT_HA = "Current HA setting: %s";
 static const char* LABEL_CURRENT_CONTROL_VIP = "Current Control Virtual IP: %s";
 static const char* LABEL_CURRENT_CONTROL_VHN = "Current Control Virtual Hostname: %s";

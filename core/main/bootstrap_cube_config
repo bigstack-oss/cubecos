@@ -12,7 +12,7 @@ fi
 BootstrapAndClusterstart()
 {
     if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
-        echo -n "Bootstrapping Cube" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+        echo -n "Bootstrapping CubeCOS" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
         echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
         bash -c "hex_config -p bootstrap standalone-done | tee -a $(hex_sdk GetKernelConsoleDevices)"
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
@@ -98,7 +98,7 @@ export CLUSTER_SIZE=$(cubectl node list | wc -l)
 if [ -e /etc/appliance/state/configured ] ; then
     echo -n "                                                                    " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
     if grep -q manual $BOOTSTRAP_CUBE_MODE ; then
-        echo -n "Please bootstrap Cube manually" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+        echo -n "Please bootstrap CubeCOS manually" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
     else
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
             if [ $(timeout 60 hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -lt $(($CLUSTER_SIZE - 1)) ] ; then
