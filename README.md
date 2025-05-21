@@ -1,5 +1,7 @@
 # CubeCOS (Cube Cloud Operating System)
 
+[![License][License-Image]][License-Url] [![Slack][Slack-Image]][Slack-Url] [![Discord][Discord-Image]][Discord-Url] [![Docs][Docs-Image]][Docs-Url] [![Website][Website-Image]][Website-Url] [![Youtube][Youtube-Image]][Youtube-Url]
+
 A software-defined private cloud platform that integrates storage, compute, and networking resources. CubeCOS is a comprehensive cloud solution that seamlessly integrates storage, computing, and networking into a single software package.
 
 Built for organizations seeking cloud flexibility with complete control, CubeCOS delivers:
@@ -69,3 +71,16 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+[License-Url]: https://www.apache.org/licenses/LICENSE-2.0
+[License-Image]: https://img.shields.io/badge/License-Apache2-blue.svg?style=flat-square
+[Slack-Image]: https://img.shields.io/discord/1372094838089977887?style=flat-square&logo=Slack
+[Slack-Url]: https://join.slack.com/t/cubecos/shared_invite/zt-2yalb3gmr-rETnY7SBxlgmBw7Gxac9tA
+[Discord-Image]: https://img.shields.io/discord/1372094838089977887?style=flat-square&logo=discord
+[Discord-Url]: https://discord.gg/VuMX4UhEFG
+[Docs-Image]: https://img.shields.io/badge/docs-view-green.svg?style=flat-square&logo=docusaurus
+[Docs-Url]: https://docs.bigstack.co
+[Website-Image]: https://img.shields.io/badge/web-view-blue.svg?style=flat-square
+[Website-Url]: https://www.bigstack.co/
+[Youtube-Image]: https://img.shields.io/youtube/views/peTSzcAueEc?style=flat-square&logo=youtube
+[Youtube-Url]: https://www.youtube.com/@bigstacktech
