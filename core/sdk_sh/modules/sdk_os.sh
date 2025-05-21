@@ -2491,7 +2491,7 @@ os_nova_instance_ping()
             if [ -z "$resp_time" ] ; then
                 resp_time=-1
             fi
-            if [ "$format" == "line" ] ; then
+            if [ "$FORMAT" == "line" ] ; then
                 echo "vm.health,host=$HOSTNAME,proto=arping,id=$dev_id,ip=$ip resp=$resp_time"
             fi
         done
