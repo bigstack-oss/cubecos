@@ -1,6 +1,7 @@
 #include <hex/log.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
+#include <hex/process.h>
 #include <hex/process_util.h>
 #include <hex/dryrun.h>
 
@@ -36,10 +37,12 @@ Commit(bool modified, int dryLevel)
 
     bool enabled = s_enabled;
 
-    if (enabled)
+    if (enabled) {
         HexUtilSystemF(0, 0, "cubectl config commit rancher --stacktrace");
-    else
+        HexUtilSystemF(0, 0, HEX_SDK " migrate_rancher_node_driver");
+    } else {
         HexUtilSystemF(0, 0, "cubectl config reset rancher --stacktrace");
+    }
 
     return true;
 }

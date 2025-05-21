@@ -396,3 +396,50 @@ migrate_libvirt()
 
     touch /run/cube_libvirt
 }
+
+migrate_rancher_node_driver()
+{
+    local rancher_token=$(terraform-cube.sh state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token' | tr -d '\n')
+    if [ -z "$rancher_token" ] ; then
+        # rancher token not found
+        return 1
+    fi
+
+    $CURL -s -k \
+        -H "Accept: application/json" \
+        -H "Content-Type: application/json" \
+        -b "R_SESS=$rancher_token" \
+        "https://$(shared_ip):10443/v3/nodeDrivers" >/dev/null
+    if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+        # rancher is not ready
+        return 1
+    fi
+
+    local old_node_driver_setting=$(
+        $CURL -s -k \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -b "R_SESS=$rancher_token" \
+            "https://$(shared_ip):10443/v3/nodeDrivers" | \
+        jq -c '.data[] | select(.name == "cube")'
+    )
+    if [ -z "$old_node_driver_setting" ] ; then
+        # old node driver setting not found
+        # no migration needed
+        return 0
+    fi
+
+    local migrated_node_driver_setting=$(cat <<<"{
+\"active\": true,
+\"builtin\": false,
+\"name\": \"CubeCOS\",
+\"url\": \"http://$(shared_ip):8080/static/nodedrivers/docker-machine-driver-cube\"
+}")
+    $CURL -s -k \
+        -X POST \
+        -H "Accept: application/json" \
+        -H "Content-Type: application/json" \
+        -b "R_SESS=$rancher_token" \
+        -d "$migrated_node_driver_setting" \
+        "https://$(shared_ip):10443/v3/nodeDrivers" >/dev/null
+}
