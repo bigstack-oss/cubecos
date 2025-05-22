@@ -68,11 +68,6 @@ ImageImportMain(int argc, const char** argv)
         }
 
         HexUtilSystemF(0, 0, HEX_SDK " os_extpack_image_mount %s", USB_MNT_DIR);
-        if (CliMatchCmdHelper(argc, argv, 2,
-                HEX_SDK " os_image_import_list " USB_MNT_DIR, &index, &file) != CLI_SUCCESS) {
-            CliPrintf("no such file");
-            return CLI_INVALID_ARGS;
-        }
     }
     else if (type == 1 /* local */) {
         dir = CEPHFS_GLANCE_DIR;
