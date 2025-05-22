@@ -123,15 +123,25 @@ WriteMongodConf(const char* myip)
 }
 
 static int
-CheckAndInitAdminUser()
+CheckAndInitAdminUser(std::string myip)
 {
-    int result = HexUtilSystemF(FWD, 0, "mongosh --quiet --eval 'db.getSiblingDB(\"admin\").getUser(\"admin\")' | grep admin");
+    int result = HexUtilSystemF(
+        FWD,
+        0,
+        "mongosh mongodb://%s:27017 --quiet --eval 'db.getSiblingDB(\"admin\").getUser(\"admin\")' | grep admin",
+        myip.c_str()
+    );
     if (result == 0) {
         HexLogInfo("admin user is already created, skip creating");
         return 0;
     }
 
-    result = HexUtilSystemF(FWD, 0, "mongosh --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"admin\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"}]})'");
+    result = HexUtilSystemF(
+        FWD,
+        0,
+        "mongosh mongodb://%s:27017 --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"admin\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"}]})'",
+        myip.c_str()
+    );
     if (result != 0) {
         HexLogError("failed to create admin user");
         return result;
@@ -141,9 +151,15 @@ CheckAndInitAdminUser()
 }
 
 static bool
-IsHostRegistered(char* host)
+IsHostRegistered(char* host, std::string myip)
 {
-    int result = HexUtilSystemF(FWD, 0, "mongosh --quiet --eval 'rs.conf().members' | grep %s", host);
+    int result = HexUtilSystemF(
+        FWD,
+        0,
+        "mongosh mongodb://%s:27017 --quiet --eval 'rs.conf().members' | grep %s",
+        myip.c_str(),
+        host
+    );
     if (result == 0) {
         return true;
     }
@@ -162,15 +178,21 @@ AppendCtrlPeerHostsIfObserved(std::vector<std::string>& ctrlHosts)
 }
 
 static int
-SyncHostsToReplicaSet(std::vector<std::string>& ctrlHosts)
+SyncHostsToReplicaSet(std::vector<std::string>& ctrlHosts, std::string myip)
 {
     for (auto ctrlHost : ctrlHosts) {
-        if (IsHostRegistered(const_cast<char*>(ctrlHost.c_str()))) {
+        if (IsHostRegistered(const_cast<char*>(ctrlHost.c_str()), myip)) {
             HexLogInfo("%s is already added in replicaSet, skip adding", ctrlHost.c_str());
             continue;
         }
 
-        int result = HexUtilSystemF(FWD, 0, "mongosh --quiet --eval 'rs.add(\"%s\")'", ctrlHost.c_str());
+        int result = HexUtilSystemF(
+            FWD,
+            0,
+            "mongosh mongodb://%s:27017 --quiet --eval 'rs.add(\"%s\")'",
+            myip.c_str(),
+            ctrlHost.c_str()
+        );
         if (result != 0) {
             HexLogError("failed to add %s in replicaSet, stop all node registration", ctrlHost.c_str());
             return result;
@@ -183,21 +205,32 @@ SyncHostsToReplicaSet(std::vector<std::string>& ctrlHosts)
 }
 
 static int
-CheckAndInitReplicaSet(std::vector<std::string> ctrlHosts)
+CheckAndInitReplicaSet(std::vector<std::string> ctrlHosts, std::string myip)
 {
     for (auto ctrlHost : ctrlHosts) {
-        int result = HexUtilSystemF(FWD, 0, "mongosh --quiet mongodb://%s --eval \"db.hello().isWritablePrimary || db.hello().secondary\" | grep true", ctrlHost.c_str());
+        int result = HexUtilSystemF(
+            FWD,
+            0,
+            "mongosh mongodb://%s:27017 --quiet mongodb://%s --eval \"db.hello().isWritablePrimary || db.hello().secondary\" | grep true",
+            myip.c_str(),
+            ctrlHost.c_str()
+        );
         if (result == 0) {
             HexLogInfo("replicaSet already inited on %s, skip replicaSet initializing", ctrlHost.c_str());
             return 0;
         }
     }
 
-    return HexUtilSystemF(FWD, 0, "mongosh --quiet --eval 'rs.initiate()'");
+    return HexUtilSystemF(
+        FWD,
+        0,
+        "mongosh mongodb://%s:27017 --quiet --eval 'rs.initiate()'",
+        myip.c_str()
+    );
 }
 
 static int
-WaitActiveStatus()
+WaitActiveStatus(std::string myip)
 {
     int period = 2;
     int count = 0;
@@ -208,7 +241,12 @@ WaitActiveStatus()
             break;
         }
 
-        int result = HexUtilSystemF(FWD, 0, "mongosh --quiet --eval \"db.hello().ok\"");
+        int result = HexUtilSystemF(
+            FWD,
+            0,
+            "mongosh mongodb://%s:27017 --quiet --eval \"db.hello().ok\"",
+            myip.c_str()
+        );
         if (result == 0) {
             return 0;
         }
@@ -234,7 +272,7 @@ Commit(bool modified, int dryLevel)
         WriteMongodConf(myip.c_str());
     }
     SystemdCommitService(s_enabled, SERVICE, true);
-    int result = WaitActiveStatus();
+    int result = WaitActiveStatus(myip);
     if (result != 0) {
         HexLogError("failed to wait for the database to be active");
         return true;
@@ -243,19 +281,19 @@ Commit(bool modified, int dryLevel)
     std::vector<std::string> ctrlHosts = {s_hostname.c_str()};
     AppendCtrlPeerHostsIfObserved(ctrlHosts);
 
-    result = CheckAndInitReplicaSet(ctrlHosts);
+    result = CheckAndInitReplicaSet(ctrlHosts, myip);
     if (result != 0) {
         HexLogError("failed to init mongodb replicaSet on %s", s_hostname.c_str());
         return true;
     }
 
-    result = SyncHostsToReplicaSet(ctrlHosts);
+    result = SyncHostsToReplicaSet(ctrlHosts, myip);
     if (result != 0) {
         HexLogError("failed to add hosts to replicaSet");
         return true;
     }
 
-    result = CheckAndInitAdminUser();
+    result = CheckAndInitAdminUser(myip);
     if (result != 0) {
         HexLogError("failed to init mongodb users");
         return true;
