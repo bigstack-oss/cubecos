@@ -22,8 +22,9 @@ net:
   port: 27017
   bindIp: @MGMT_ADDR@ # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
 
-
-#security:
+security:
+  authorization: enabled
+  keyFile: /etc/mongodb/keyfile
 
 #operationProfiling:
 

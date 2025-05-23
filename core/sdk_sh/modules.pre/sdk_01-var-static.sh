@@ -10,6 +10,10 @@ if [ -f /etc/admin-openrc.sh ] ; then
     source /etc/admin-openrc.sh
 fi
 
+if [ -f /etc/mongodb/admin-access.sh ] ; then
+    source /etc/mongodb/admin-access.sh
+fi
+
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 
 # service status request timeout
@@ -52,7 +56,11 @@ ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
 TERRAFORM_CUBE="/usr/local/bin/terraform-cube.sh"
 CURL="timeout $SRVTO /usr/bin/curl"
 MYSQL="timeout $SRVTO /usr/bin/mysql"
-MONGODB="timeout $SRVTO /usr/bin/mongosh mongodb://$(mgmt_ip):27017"
+if [ -z "$MONGODB_ADMIN_ACCESS" ]; then
+    MONGODB="timeout $SRVTO /usr/bin/mongosh mongodb://$(mgmt_ip):27017"
+else
+    MONGODB="timeout $SRVTO /usr/bin/mongosh mongodb://admin:$MONGODB_ADMIN_ACCESS@$(mgmt_ip):27017"
+fi
 
 RESERVED_USERS="admin_cli\|masakari\|placement\|heat\|glance\|monasca\|heat_domain_admin\|neutron\|nova\|cyborg\|cinder\|barbican\|manila\|octavia\|designate\|ironic\|ironic-inspector\|senlin\|watcher"
 
