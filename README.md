@@ -1,10 +1,19 @@
 # CubeCOS (Cube Cloud Operating System)
 
+<div align="center">
+<br/>
+  <br/>
+<p align="center">
+  <img width="234" alt="cubecos logo full" src="doc/media/logo-blue.png"/>
+</p>
+
 [![License][License-Image]][License-Url] [![Slack][Slack-Image]][Slack-Url] [![Discord][Discord-Image]][Discord-Url] [![Docs][Docs-Image]][Docs-Url] [![Website][Website-Image]][Website-Url] [![Youtube][Youtube-Image]][Youtube-Url]
 
-A software-defined private cloud platform that integrates storage, compute, and networking resources. CubeCOS is a comprehensive cloud solution that seamlessly integrates storage, computing, and networking into a single software package.
+</div>
 
-Built for organizations seeking cloud flexibility with complete control, CubeCOS delivers:
+CubeCOS is a unified cloud operating system that integrates storage, compute, and networking into a single image. Deploy CubeCOS to deliver a public cloud–like experience within your own on-premise infrastructure.
+
+Designed for organizations that need cloud flexibility without compromising control, CubeCOS offers:
 
 - Multi-tenancy with robust isolation between workloads
 - Self-service IT portal empowering teams to provision resources on demand
@@ -12,7 +21,7 @@ Built for organizations seeking cloud flexibility with complete control, CubeCOS
 
 Deploy your own private cloud infrastructure with the simplicity of public cloud.
 
-Join our community to help build the future of software-defined infrastructure!
+Join us in building the future of software-defined infrastructure!
 
 ## Prerequisites
 
