@@ -398,9 +398,10 @@ Commit(bool modified, int dryLevel)
         return true;
     }
 
+    bool dbPassChanged = s_saltkey.modified() || s_dbPass.modified() || s_seed.modified();
     std::string adminAccess = GetAdminAccess();
     std::string myip = G(MGMT_ADDR);
-    if (G_MOD(MGMT_ADDR)) {
+    if (dbPassChanged || G_MOD(MGMT_ADDR)) {
         WriteMongodConf(adminAccess != "", myip.c_str());
     }
     if (s_saltkey.modified() || s_dbKey.modified() || s_seed.modified()) {
@@ -433,10 +434,20 @@ Commit(bool modified, int dryLevel)
     }
 
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
-    bool dbPassChanged = s_saltkey.modified() || s_dbPass.modified() || s_seed.modified();
     result = CheckAndInitUpdateAdminUser(adminAccess, myip, dbPass, dbPassChanged);
     if (result != 0) {
         HexLogError("failed to init or update mongodb users");
+        return true;
+    }
+
+    // update the mongodb configuration and restart mongodb if security authentication is set
+    if (dbPassChanged || G_MOD(MGMT_ADDR)) {
+        WriteMongodConf(adminAccess != "", myip.c_str());
+    }
+    SystemdCommitService(s_enabled, SERVICE, true);
+    result = WaitActiveStatus(adminAccess, myip);
+    if (result != 0) {
+        HexLogError("failed to wait for the database to be active");
         return true;
     }
 
