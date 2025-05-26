@@ -123,6 +123,7 @@ hex_config_MODULES += config_cubesys.o
 hex_config_MODULES += config_cube_scan.o
 hex_config_MODULES += config_rabbitmq.o
 hex_config_MODULES += config_mysql.o
+hex_config_MODULES += config_mongodb.o
 hex_config_MODULES += config_ntp.o
 hex_config_MODULES += config_memcache.o
 hex_config_MODULES += config_libvirtd.o
@@ -163,7 +164,6 @@ hex_config_MODULES += config_opensearch_dashboards.o
 hex_config_MODULES += config_logstash.o
 hex_config_MODULES += config_kafka.o
 hex_config_MODULES += config_prometheus.o
-hex_config_MODULES += config_mongodb.o
 
 PROGRAMS += hex_config
 
