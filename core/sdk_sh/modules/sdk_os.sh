@@ -282,10 +282,10 @@ os_instance_ha_helper()
     # Do not intervene bootstrap processes
     [ -e /run/cube_commit_done ] >/dev/null 2>&1 || return 0
     # Proceed only when instance_ha is enabled
-    [ $(timeout $SRVSTO $OPENSTACK segment list -f value -c name | wc -l) -ne 0 ] || return 0
+    [ $($OPENSTACK segment list -f value -c name | wc -l) -ne 0 ] || return 0
     # Do nothing if another node is taking actions
     local helping=/mnt/cephfs/nova/instance_ha.helping
-    local cmp_lst=$(timeout $SRVSTO $OPENSTACK compute service list -f json)
+    local cmp_lst=$($OPENSTACK compute service list -f json)
     local down_host=$(echo $cmp_lst | jq -r '.[] | select (.Binary == "nova-compute" and .Status == "disabled" and .State == "down").Host' | sort -u)
     if [ -e $helping ] ; then
         # Remove stale lock if it exceeds 60 min
@@ -317,17 +317,17 @@ os_instance_ha_helper()
         if [ "x$old_vip" != "x$new_vip" ] ; then
             echo "old_vip=$old_vip" >> $helping
             echo "new_vip=$new_vip" >> $helping
-            timeout $SRVTO $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
+            $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
             echo "removed non active network agent" >> $helping
             timeout $SRVTO cubectl node exec -r control -pn systemctl restart neutron-server
             echo "cubectl node exec -r control -pn systemctl restart neutron-server" >> $helping
-            timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'OVN Metadata .* :-)' || systemctl restart neutron-ovn-metadata-agent"e
+            timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'OVN Metadata .* :-)' || systemctl restart neutron-ovn-metadata-agent"
             echo "cubectl node exec -r compute -pn systemctl restart neutron-ovn-metadata-agent" >> $helping
             timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'VPN .* :-)' || systemctl restart neutron-ovn-vpn-agent"
-            echdo "cubectl node exec -r compute -pn systemctl restart neutron-ovn-vpn-agent" >> $helping
+            echo "cubectl node exec -r compute -pn systemctl restart neutron-ovn-vpn-agent" >> $helping
             echo $new_vip > $vip
         else
-            local NET_LST=$(timeout $SRVSTO $OPENSTACK network agent list -f json)
+            local NET_LST=$($OPENSTACK network agent list -f json)
             for node in $(echo $NET_LST | jq -r '.[] | select (.Alive == false and .State == true and ."Agent Type" == "VPN Agent").Host' | sort -u) ; do
                 if [ "x$node" != "x$down_host" ] ; then
                     timeout $SRVSTO $HEX_SDK remote_run $node systemctl restart neutron-ovn-vpn-agent
@@ -350,7 +350,7 @@ os_instance_ha_helper()
     done
 
     local notify_log=/mnt/cephfs/nova/notification.log
-    local new_notify=$(timeout $SRVTO $OPENSTACK notification list -f value | grep COMPUTE_HOST | head -1)
+    local new_notify=$($OPENSTACK notification list -f value | grep COMPUTE_HOST | head -1)
     if [ ! -e $notify_log ] ; then
         echo $new_notify > $notify_log
     else
@@ -377,8 +377,8 @@ os_instance_ha_helper()
             fi
             if [ $fix_cnt -lt 10 ] ; then
                 notify_id=$(echo $new_notify | cut -d" " -f1)
-                local notify_detail=$(timeout $SRVSTO $OPENSTACK notification show $notify_id -f json)
-                local srv_lst=$(timeout $SRVSTO $OPENSTACK server list --long --all-projects -f json)
+                local notify_detail=$($OPENSTACK notification show $notify_id -f json)
+                local srv_lst=$($OPENSTACK server list --long --all-projects -f json)
                 for ID in $(echo $srv_lst | jq -r .[].ID) ; do
                     local cur_status=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").\"Status\"")
                     local cur_host=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").Host")
@@ -499,7 +499,7 @@ os_neutron_quota_show()
 
 os_neutron_agent_cache_renew()
 {
-    timeout 30 $OPENSTACK network agent list 2>/dev/null > $NEUTRON_AGENT_CACHE
+    $OPENSTACK network agent list 2>/dev/null > $NEUTRON_AGENT_CACHE
 }
 
 os_neutron_agent_list()
@@ -1335,12 +1335,9 @@ os_evac_upgrade_prepare()
     fi
 }
 
-os_pre_failure_host_evacuation()
+_os_pre_failure_host_evacuation()
 {
-    local host=$1
-    local env=${2:-default}
-
-    if [ "$env" == "upgrade" ] ; then
+    if [ "$1" == "upgrade" ] ; then
         # os_evac_upgrade_prepare
         $HEX_CLI -c cluster check_repair MsgQueue >/tmp/upgrade_rabbitmq.log 2>&1
 
@@ -1349,33 +1346,56 @@ os_pre_failure_host_evacuation()
             cubectl node exec -r control -p $HEX_SDK stale_api_check_repair openstack-nova-api 8774 nova-api python3 0 >/dev/null 2>&1
             cubectl node exec -r control -p $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0 >/dev/null 2>&1
             cubectl node exec -r control -p $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0 >/dev/null 2>&1
-            #cubectl node exec -r control -p hex_config restart_nova >/dev/null 2>&1
-            cubectl node exec -r control -p systemctl restart openstack-nova-scheduler >/dev/null 2>&1
-            cubectl node exec -r control -p systemctl restart openstack-nova-conductor >/dev/null 2>&1
-            cubectl node exec -r compute -p systemctl restart openstack-nova-compute >/dev/null 2>&1
+
+            if [ $($OPENSTACK compute service list -f value -c Status -c State | grep -v -i "enabled up" | wc -l) -ge 1 ] ; then
+                cubectl node exec -r control -p systemctl restart openstack-nova-scheduler >/dev/null 2>&1
+                cubectl node exec -r control -p systemctl restart openstack-nova-conductor >/dev/null 2>&1
+                cubectl node exec -r compute -p systemctl restart openstack-nova-compute >/dev/null 2>&1
+            fi
+
+            for i in {1..5} ; do
+                if [ $($OPENSTACK network agent list -f value -c ID -c Alive | grep -v -i true | wc -l) -ge 1 ] ; then
+                    $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
+                    timeout $SRVTO cubectl node exec -r control -pn systemctl restart neutron-server
+                    timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'OVN Metadata .* :-)' || systemctl restart neutron-ovn-metadata-agent"
+                    timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'VPN .* :-)' || systemctl restart neutron-ovn-vpn-agent"
+                    break
+                fi
+            done
         else
             Error "rabbitmq is not Ok"
         fi
     fi
+}
+
+os_pre_failure_host_evacuation()
+{
+    local host=$1
+    local env=${2:-default}
+
+    _os_pre_failure_host_evacuation $env
     nova host-evacuate-live $host
 }
 
 os_pre_failure_host_evacuation_sequential()
 {
     local from_host=${1:-$HOSTNAME}
-    local server_list_json=$($OPENSTACK server list --host $from_host --all-projects --long -f json)
+    local env=${2:-default}
+    local server_list_array=( $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i 'active running' | cut -d' ' -f1) )
     local host_array=($(cubectl node -r compute list -j | jq -r .[].hostname | grep -v $from_host))
     local num_host=${#host_array[@]}
-    local srv_cnt=$(echo $server_list_json | jq -r .[].ID | wc -l)
+    local srv_cnt=${#server_list_array[@]}
     local cnt=0
 
-    for sid in $(echo $server_list_json | jq -r .[].ID) ; do
+    _os_pre_failure_host_evacuation $env
+    for sid in ${server_list_array[@]} ; do
         to_host=${host_array[$((cnt++ % $num_host))]}
         old_state_json=$($OPENSTACK server show $sid -f json)
         old_host=$(echo $old_state_json | jq -r .hypervisor_hostname)
         old_status=$(echo $old_state_json | jq -r .status)
         old_power=$(echo $old_state_json | jq -r .power_state)
         success=false
+        echo "migrating $sid($old_status) from $from_host to $to_host"
         nova live-migration $sid $to_host
         for i in {1..10} ; do
             sleep 5
@@ -1384,12 +1404,22 @@ os_pre_failure_host_evacuation_sequential()
             new_status=$(echo $new_state_json | jq -r .status)
             new_name=$(echo $new_state_json | jq -r .name)
             new_power=$(echo $new_state_json | jq -r .power_state)
-            if [ "$VERBOSE" == "1" ] ; then
-                echo "migrating $sid($old_status) from $from_host to $to_host: $new_name($new_status) on $new_host"
-            fi
-            if [ "x$new_host" = "x$to_host" -a "x$old_status" = "x$new_status" -a "x$old_power" = "x$new_power" ] ; then
-                success=true
-                break
+            if [ $i -lt 10 ] ; then
+                if [ "$VERBOSE" == "1" ] ; then
+                    echo " > $new_name($new_status) is on $new_host"
+                fi
+                if [ "x$new_host" = "x$to_host" -a "x$old_status" = "x$new_status" -a "x$old_power" = "x$new_power" ] ; then
+                    success=true
+                    break
+                fi
+            else
+                if [ "x$new_host" = "x$to_host" ] ; then
+                    if [ "x$old_status" != "x$new_status" -o "x$old_power" != "x$new_power" ] ; then
+                        os_nova_instance_reset $sid
+                        os_nova_instance_hardreboot $sid
+                        success=true
+                    fi
+                fi
             fi
         done
         [ "x$success" = "xtrue" ] || return 1
@@ -1489,94 +1519,94 @@ os_octavia_init()
         return 0
     else
         # sanitize dependent resources before re-creating Octavia
-        timeout 30 $OPENSTACK network list -f value | grep "lb-mgmt-net \[\]" 2>/dev/null | cut -d' ' -f1 | xargs -i $OPENSTACK network delete {} || true
+        $OPENSTACK network list -f value | grep "lb-mgmt-net \[\]" 2>/dev/null | cut -d' ' -f1 | xargs -i $OPENSTACK network delete {} || true
 
         # lb-hmgr-sec-grp, lb-mgmt-sec-grp
-        if [ $(timeout 30 $OPENSTACK security group list -f value | grep "lb[-]" | wc -l) -gt 2 ] ; then
-            timeout 30 $OPENSTACK security group list -f value | grep "lb[-]" | cut -d' ' -f1 | xargs -i $OPENSTACK security group delete {} || true
+        if [ $($OPENSTACK security group list -f value | grep "lb[-]" | wc -l) -gt 2 ] ; then
+            $OPENSTACK security group list -f value | grep "lb[-]" | cut -d' ' -f1 | xargs -i $OPENSTACK security group delete {} || true
         fi
     fi
 
     local net_cidr=$1
-    local net_id=$(timeout 30 $OPENSTACK network list | awk '/ lb-mgmt-net / {print $2}')
-    local sub_id=$(timeout 30 $OPENSTACK subnet list | awk ' / lb-mgmt-subnet / {print $2}')
-    local key=$(timeout 30 $OPENSTACK keypair list -f value -c Name | grep octavia_ssh_key)
-    local flavor_id_o=$(timeout 30 $OPENSTACK flavor list --all -f value -c ID | grep 16443)
-    local flavor_id_d=$(timeout 30 $OPENSTACK flavor list --all -f value -c ID | grep 16444)
-    local flavor_id_s=$(timeout 30 $OPENSTACK flavor list --all -f value -c ID | grep 16445)
-    local flavor_id_m=$(timeout 30 $OPENSTACK flavor list --all -f value -c ID | grep 16446)
-    local flavor_id_l=$(timeout 30 $OPENSTACK flavor list --all -f value -c ID | grep 16447)
-    local secgrp_id=$(timeout 30 $OPENSTACK security group list | awk ' / lb-mgmt-sec-grp / {print $2}')
-    local hmgr_secgrp_id=$(timeout 30 $OPENSTACK security group list | awk ' / lb-hmgr-sec-grp / {print $2}')
+    local net_id=$($OPENSTACK network list | awk '/ lb-mgmt-net / {print $2}')
+    local sub_id=$($OPENSTACK subnet list | awk ' / lb-mgmt-subnet / {print $2}')
+    local key=$($OPENSTACK keypair list -f value -c Name | grep octavia_ssh_key)
+    local flavor_id_o=$($OPENSTACK flavor list --all -f value -c ID | grep 16443)
+    local flavor_id_d=$($OPENSTACK flavor list --all -f value -c ID | grep 16444)
+    local flavor_id_s=$($OPENSTACK flavor list --all -f value -c ID | grep 16445)
+    local flavor_id_m=$($OPENSTACK flavor list --all -f value -c ID | grep 16446)
+    local flavor_id_l=$($OPENSTACK flavor list --all -f value -c ID | grep 16447)
+    local secgrp_id=$($OPENSTACK security group list | awk ' / lb-mgmt-sec-grp / {print $2}')
+    local hmgr_secgrp_id=$($OPENSTACK security group list | awk ' / lb-hmgr-sec-grp / {print $2}')
 
     # how many tasks has been done
     init_done=0
 
     if [ -z "$net_id" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK network create lb-mgmt-net
+        $OPENSTACK network create lb-mgmt-net
     fi
 
     if [ -z "$sub_id" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK subnet create --subnet-range $net_cidr --network lb-mgmt-net lb-mgmt-subnet
-        timeout 30 $OPENSTACK subnet set --gateway none lb-mgmt-subnet
+        $OPENSTACK subnet create --subnet-range $net_cidr --network lb-mgmt-net lb-mgmt-subnet
+        $OPENSTACK subnet set --gateway none lb-mgmt-subnet
     fi
 
     if [ -z "$key" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK keypair create --public-key /etc/octavia/octavia_ssh_key.pub octavia_ssh_key
+        $OPENSTACK keypair create --public-key /etc/octavia/octavia_ssh_key.pub octavia_ssh_key
     fi
 
     if [ -z "$flavor_id_o" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK flavor create --id 16443 --ram 1024 --disk 20 --vcpus 1 --private m1.amphora
+        $OPENSTACK flavor create --id 16443 --ram 1024 --disk 20 --vcpus 1 --private m1.amphora
     fi
 
     if [ -z "$flavor_id_d" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK flavor create --id 16444 --ram 1024 --disk 20 --vcpus 1 --private d2.amphora
-        timeout 30 $OPENSTACK loadbalancer flavorprofile create --name amphora-default --provider amphora --flavor-data '{"compute_flavor": "16444"}'
-        timeout 30 $OPENSTACK loadbalancer flavor create --name DEFAULT --flavorprofile amphora-default --description "pool less then 10 members." --enable
+        $OPENSTACK flavor create --id 16444 --ram 1024 --disk 20 --vcpus 1 --private d2.amphora
+        $OPENSTACK loadbalancer flavorprofile create --name amphora-default --provider amphora --flavor-data '{"compute_flavor": "16444"}'
+        $OPENSTACK loadbalancer flavor create --name DEFAULT --flavorprofile amphora-default --description "pool less then 10 members." --enable
     fi
 
     if [ -z "$flavor_id_s" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK flavor create --id 16445 --ram 2048 --disk 20 --vcpus 2 --private s2.amphora
-        timeout 30 $OPENSTACK loadbalancer flavorprofile create --name amphora-small --provider amphora --flavor-data '{"compute_flavor": "16445"}'
-        timeout 30 $OPENSTACK loadbalancer flavor create --name SMALL --flavorprofile amphora-small --description "pool less then 30 members." --enable
+        $OPENSTACK flavor create --id 16445 --ram 2048 --disk 20 --vcpus 2 --private s2.amphora
+        $OPENSTACK loadbalancer flavorprofile create --name amphora-small --provider amphora --flavor-data '{"compute_flavor": "16445"}'
+        $OPENSTACK loadbalancer flavor create --name SMALL --flavorprofile amphora-small --description "pool less then 30 members." --enable
     fi
 
     if [ -z "$flavor_id_m" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK flavor create --id 16446 --ram 4096 --disk 20 --vcpus 4 --property hw:cpu_sockets=1 --property hw:cpu_cores=2 --property hw:cpu_threads=2 --private m2.amphora
-        timeout 30 $OPENSTACK loadbalancer flavorprofile create --name amphora-medium --provider amphora --flavor-data '{"compute_flavor": "16446"}'
-        timeout 30 $OPENSTACK loadbalancer flavor create --name MEDIUM --flavorprofile amphora-medium --description "pool less then 300 members." --enable
+        $OPENSTACK flavor create --id 16446 --ram 4096 --disk 20 --vcpus 4 --property hw:cpu_sockets=1 --property hw:cpu_cores=2 --property hw:cpu_threads=2 --private m2.amphora
+        $OPENSTACK loadbalancer flavorprofile create --name amphora-medium --provider amphora --flavor-data '{"compute_flavor": "16446"}'
+        $OPENSTACK loadbalancer flavor create --name MEDIUM --flavorprofile amphora-medium --description "pool less then 300 members." --enable
     fi
 
     if [ -z "$flavor_id_l" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK flavor create --id 16447 --ram 8192 --disk 20 --vcpus 8 --property hw:cpu_sockets=2 --property hw:cpu_cores=2 --property hw:cpu_threads=2 --private l2.amphora
-        timeout 30 $OPENSTACK loadbalancer flavorprofile create --name amphora-large --provider amphora --flavor-data '{"compute_flavor": "16447"}'
-        timeout 30 $OPENSTACK loadbalancer flavor create --name LARGE --flavorprofile amphora-large --description "pool less then 3000 members." --enable
+        $OPENSTACK flavor create --id 16447 --ram 8192 --disk 20 --vcpus 8 --property hw:cpu_sockets=2 --property hw:cpu_cores=2 --property hw:cpu_threads=2 --private l2.amphora
+        $OPENSTACK loadbalancer flavorprofile create --name amphora-large --provider amphora --flavor-data '{"compute_flavor": "16447"}'
+        $OPENSTACK loadbalancer flavor create --name LARGE --flavorprofile amphora-large --description "pool less then 3000 members." --enable
     fi
 
     if [ -z "$secgrp_id" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK security group create lb-mgmt-sec-grp
-        timeout 30 $OPENSTACK security group rule create --protocol icmp lb-mgmt-sec-grp
-        timeout 30 $OPENSTACK security group rule create --protocol tcp --dst-port 22 lb-mgmt-sec-grp
-        timeout 30 $OPENSTACK security group rule create --protocol tcp --dst-port 9443 lb-mgmt-sec-grp
-        timeout 30 $OPENSTACK security group rule create --protocol icmpv6 --ethertype IPv6 --remote-ip ::/0 lb-mgmt-sec-grp
-        timeout 30 $OPENSTACK security group rule create --protocol tcp --dst-port 22 --ethertype IPv6 --remote-ip ::/0 lb-mgmt-sec-grp
-        timeout 30 $OPENSTACK security group rule create --protocol tcp --dst-port 9443 --ethertype IPv6 --remote-ip ::/0 lb-mgmt-sec-grp
+        $OPENSTACK security group create lb-mgmt-sec-grp
+        $OPENSTACK security group rule create --protocol icmp lb-mgmt-sec-grp
+        $OPENSTACK security group rule create --protocol tcp --dst-port 22 lb-mgmt-sec-grp
+        $OPENSTACK security group rule create --protocol tcp --dst-port 9443 lb-mgmt-sec-grp
+        $OPENSTACK security group rule create --protocol icmpv6 --ethertype IPv6 --remote-ip ::/0 lb-mgmt-sec-grp
+        $OPENSTACK security group rule create --protocol tcp --dst-port 22 --ethertype IPv6 --remote-ip ::/0 lb-mgmt-sec-grp
+        $OPENSTACK security group rule create --protocol tcp --dst-port 9443 --ethertype IPv6 --remote-ip ::/0 lb-mgmt-sec-grp
     fi
 
     if [ -z "$hmgr_secgrp_id" ] ; then
         init_done=$(( init_done + 1 ))
-        timeout 30 $OPENSTACK security group create lb-hmgr-sec-grp
-        timeout 30 $OPENSTACK security group rule create --protocol udp --dst-port 5555 lb-hmgr-sec-grp
-        timeout 30 $OPENSTACK security group rule create --protocol udp --dst-port 5555 --ethertype IPv6 --remote-ip ::/0 lb-hmgr-sec-grp
+        $OPENSTACK security group create lb-hmgr-sec-grp
+        $OPENSTACK security group rule create --protocol udp --dst-port 5555 lb-hmgr-sec-grp
+        $OPENSTACK security group rule create --protocol udp --dst-port 5555 --ethertype IPv6 --remote-ip ::/0 lb-hmgr-sec-grp
     fi
 
     if [ $init_done -eq 0 ] ; then
@@ -1596,26 +1626,26 @@ os_octavia_node_init()
     local subnet_id=
     local port_name="octavia-hmgr-port-$(hostname)"
 
-    local init=$(timeout 30 $OPENSTACK port list -f value | grep $port_name | grep ACTIVE | wc -l)
+    local init=$($OPENSTACK port list -f value | grep $port_name | grep ACTIVE | wc -l)
     if [ $init -eq 0 ] ; then
         # sanitize dependent resources before re-creating Octavia
-        timeout 30 $OPENSTACK port list -f value | grep $port_name | cut -d' ' -f1 | xargs -i $OPENSTACK port delete {} || true
+        $OPENSTACK port list -f value | grep $port_name | cut -d' ' -f1 | xargs -i $OPENSTACK port delete {} || true
         /usr/bin/ovs-vsctl del-port br-int octavia-hm0 || true
 
-        port_id=$(timeout 30 $OPENSTACK port create --security-group lb-hmgr-sec-grp --device-owner Octavia:health-mgr --host=$(hostname) -c id -f value --network lb-mgmt-net --fixed-ip subnet=lb-mgmt-subnet,ip-address=$port_ip $port_name 2>/dev/null)
+        port_id=$($OPENSTACK port create --security-group lb-hmgr-sec-grp --device-owner Octavia:health-mgr --host=$(hostname) -c id -f value --network lb-mgmt-net --fixed-ip subnet=lb-mgmt-subnet,ip-address=$port_ip $port_name 2>/dev/null)
     else
-        port_id=$(timeout 30 $OPENSTACK port list -f value | grep $port_name | awk '{print $1}')
+        port_id=$($OPENSTACK port list -f value | grep $port_name | awk '{print $1}')
         # if port exists, honor original settings because it could be an upgraded cluster
-        port_ip=$(timeout 30 $OPENSTACK port show $port_name | grep "fixed_ips.*ip_address" | awk -F"'" '{print $2}')
-        subnet_id=$(timeout 30 $OPENSTACK port show $port_name | grep "fixed_ips.*ip_address" | awk -F"'" '{print $4}')
-        cidr=$(timeout 30 $OPENSTACK subnet show $subnet_id | grep cidr | awk '{print $4}')
+        port_ip=$($OPENSTACK port show $port_name | grep "fixed_ips.*ip_address" | awk -F"'" '{print $2}')
+        subnet_id=$($OPENSTACK port show $port_name | grep "fixed_ips.*ip_address" | awk -F"'" '{print $4}')
+        cidr=$($OPENSTACK subnet show $subnet_id | grep cidr | awk '{print $4}')
     fi
 
     if [ -z "$port_id" ] ; then
         return 0
     fi
 
-    local port_mac=$(timeout 30 $OPENSTACK port show -c mac_address -f value $port_id)
+    local port_mac=$($OPENSTACK port show -c mac_address -f value $port_id)
 
     if ! /usr/bin/ovs-vsctl port-to-br octavia-hm0 >/dev/null 2>&1 ; then
         /usr/bin/ovs-vsctl -- --may-exist add-port br-int octavia-hm0 -- set Interface octavia-hm0 type=internal -- set Interface octavia-hm0 external-ids:iface-status=active -- set Interface octavia-hm0 external-ids:attached-mac=$port_mac -- set Interface octavia-hm0 external-ids:iface-id=$port_id -- set Interface octavia-hm0 external-ids:skip_cleanup=true
@@ -2160,12 +2190,12 @@ os_instance_id_list()
 
 os_instance_list_for_project_long_run()
 {
-    local projects=$(timeout 30 $OPENSTACK project list --domain default -f value | grep -v service)
+    local projects=$($OPENSTACK project list --domain default -f value | grep -v service)
 
     local o="{"
     for id in $(echo "$projects" | awk '{print $1}') ; do
         local name=$(echo "$projects" | grep $id | awk '{print $2}')
-        local list=$(timeout 30 $OPENSTACK server list --long -f json --project $name)
+        local list=$($OPENSTACK server list --long -f json --project $name)
         o="$o \"$name\": $list,"
     done
     o="$o \"service\": []}"

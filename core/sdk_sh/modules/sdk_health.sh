@@ -1677,7 +1677,7 @@ health_neutron_repair()
 
     local net_id=$($OPENSTACK subnet list | awk '/ lb-mgmt-subnet / {print $6}')
     if [ -n "$net_id" ] ; then
-        timeout 900 $OPENSTACK port delete $($OPENSTACK port list --network $net_id -f value -c ID -c Name 2>/dev/null | grep diag | awk '{print $1}') >/dev/null 2>&1
+        $OPENSTACK port delete $($OPENSTACK port list --network $net_id -f value -c ID -c Name 2>/dev/null | grep diag | awk '{print $1}') >/dev/null 2>&1
     fi
 
     local agent_list=$($OPENSTACK network agent list -f json -c ID -c Alive)

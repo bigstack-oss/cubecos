@@ -46,22 +46,18 @@ RollingEvacuateAndReboot()
                 n_lastboot="$(timeout 5 hex_sdk remote_run $n_ip hex_sdk firmware_get_info $n_nextactive | grep last_boot)"
                 n_fwver="$(timeout 5 hex_sdk remote_run $n_ip hex_sdk firmware_get_info $n_nextactive | grep firmware_version)"
                 fwver="$(hex_sdk firmware_get_info `hex_sdk firmware_get_active` | grep firmware_version)"
-                vm_to_migrate=false
                 if [ "x$n_lastboot" = "xlast_boot = Never" -a "x$n_fwver" = "x$fwver" ] ; then
                     upgrading=true
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
                         hex_cli -c cluster check_repair
                         echo -n "Auto rolling ppu upgrade: evacuating VMs on $N          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-                        hex_sdk remote_run $MASTER_CONTROL "hex_sdk os_pre_failure_host_evacuation_sequential $N" || vm_to_migrate=true
+                        if ! hex_sdk remote_run $MASTER_CONTROL "hex_sdk os_pre_failure_host_evacuation_sequential $N" upgrade ; then
+                            echo -n "Auto rolling ppu upgrade aborted since some VMs on $N failed to evacuate (Please fix it and contunue manually)          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                            break
+                        fi
                     fi
-                    if [ "x$vm_to_migrate" = "xtrue" ] ; then
-                        echo -n "Auto rolling ppu upgrade aborted since some VMs on $N failed to evacuate (Please fix it and contunue manually)          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-                    elif hex_sdk remote_run $n_ip virsh list | grep instance | grep -q running ; then
-                        echo -n "Auto rolling ppu upgrade aborted since some VMs on $N are still in running state (Please fix it and contunue manually)          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-                    else
-                        echo -n "Auto rolling ppu upgrade: rebooting $N                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-                        hex_sdk remote_run $n_ip "echo YES | hex_cli -c reboot"
-                    fi
+                    echo -n "Auto rolling ppu upgrade: rebooting $N                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                    hex_sdk remote_run $n_ip "echo YES | hex_cli -c reboot"
                     break
                 fi
             fi
@@ -81,7 +77,7 @@ RollingEvacuateAndReboot()
                         else
                             hex_sdk os_nova_instance_reset $i
                             hex_sdk os_nova_instance_hardreboot $i
-                            echo -n "  reset and booted non-active servers                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                            echo -n "  reset and booted non-active server: $i                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
                         fi
                     done
                 fi
