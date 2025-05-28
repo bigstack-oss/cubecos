@@ -6,6 +6,18 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+mongodb_check_rs_inited()
+{
+    $MONGODB --quiet --eval "db.hello().isWritablePrimary || db.hello().secondary" | grep -q true
+    return $?
+}
+
+mongodb_init_rs()
+{
+    $MONGODB --quiet --eval 'rs.initiate()'
+    return $?
+}
+
 mongodb_stats()
 {
     $MONGODB --quiet --eval 'rs.status()'
