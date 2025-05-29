@@ -2926,29 +2926,29 @@ health_mongodb_check()
     # check the mongodb ping-pong
     local is_connected="$($MONGODB --quiet --eval 'db.adminCommand("ping").ok' 2>/dev/null)"
     # check the mongodb quorum status which will impact the read/write operation
-    local primary_count="$($MONGODB --quiet --eval 'rs.status().members.filter(member => member.stateStr === "PRIMARY").length')"
+    local primary_count="$($MONGODB --quiet --eval 'rs.status().members.filter(member => member.stateStr === "PRIMARY").length' 2>/dev/null)"
     # check the overall node status between the registered nodes and the actual nodes
     local node_total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
-    local registered_node_count="$($MONGODB --quiet --eval 'rs.status().members.length')"
+    local registered_node_count="$($MONGODB --quiet --eval 'rs.status().members.length' 2>/dev/null)"
     # check if any node is unavailable
     # the case here usually means the read/write is fine for whole cluster,
     # just some nodes are not reachable but which will not impact the cluster quorum
-    local unavailable_count="$($MONGODB --quiet --eval 'rs.status().members.filter(member => member.stateStr === "(not reachable/healthy)").length')"
+    local unavailable_count="$($MONGODB --quiet --eval 'rs.status().members.filter(member => member.stateStr === "(not reachable/healthy)").length' 2>/dev/null)"
 
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u mongodb"
     if [ $? -ne 0 -o -z "$is_connected" ] ; then
         ERR_CODE=1
         ERR_MSG+="mongodb is not running\n"
-    elif [ "$is_connected" -ne 1 ] ; then
+    elif [ ${is_connected:-0} -ne 1 ] ; then
         ERR_CODE=1
         ERR_MSG+="mongodb can be accessed, but basic functions are not working properly\n"
-    elif [ "$primary_count" -eq 0 ] ; then
+    elif [ ${primary_count:-0} -eq 0 ] ; then
         ERR_CODE=2
         ERR_MSG+="mongodb quorum is lost, writes are blocked\n"
-    elif [ "$node_total" -ne "$registered_node_count" ] ; then
+    elif [ ${node_total:-0} -ne ${registered_node_count:-0} ] ; then
         ERR_CODE=3      
         ERR_MSG+="$registered_node_count/$node_total nodes are online\n"
-    elif [ "$unavailable_count" -gt 0 ] ; then
+    elif [ ${unavailable_count:-0} -gt 0 ] ; then
         ERR_CODE=4
         ERR_MSG+="$unavailable_count nodes are unavailable\n"
     fi
