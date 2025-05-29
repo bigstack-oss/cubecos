@@ -230,7 +230,7 @@ CheckAndInitUpdateAdminUser(std::string myip, std::string dbPass)
 {
     // check if admin user is created or not
     int result = HexUtilSystemF(
-        FWD,
+        0,
         0,
         "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").getUser(\"admin\")' | grep -q admin",
         myip.c_str()
@@ -310,7 +310,7 @@ static bool
 IsHostRegistered(char* host, std::string myip)
 {
     int result = HexUtilSystemF(
-        FWD,
+        0,
         0,
         "mongosh mongodb://%s --quiet --eval 'rs.conf().members' | grep -q %s",
         myip.c_str(),
