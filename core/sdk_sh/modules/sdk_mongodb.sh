@@ -14,7 +14,7 @@ mongodb_check_rs_inited()
 
 mongodb_init_rs()
 {
-    $MONGODB --quiet --eval 'rs.initiate()'
+    $MONGODB --quiet --eval "rs.initiate({_id:\"cube-cos-rs\",members:[{_id:0,host:\"$(hostname)\"}]})"
     return $?
 }
 
