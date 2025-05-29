@@ -69,6 +69,17 @@ PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 1);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 
 static bool
+Init()
+{
+    if (HexMakeDir(MONGODB_CONF_DIR, USER, GROUP, 0755) != 0) {
+        HexLogError("failed to create %s", MONGODB_CONF_DIR);
+        return false;
+    }
+
+    return true;
+}
+
+static bool
 Parse(const char *name, const char *value, bool isNew)
 {
     bool r = true;
@@ -203,11 +214,6 @@ WriteMongodConf(bool enableAuth, const char* myip, std::string dbPass)
 static bool
 WriteMongodKeyfile(std::string key)
 {
-    if (HexUtilSystemF(FWD, 0, "mkdir -p %s", MONGODB_CONF_DIR) != 0) {
-        HexLogError("failed to create %s", MONGODB_CONF_DIR);
-        return false;
-    }
-
     FILE *fout = fopen(MONGODB_KEYFILE, "w");
     if (!fout) {
         HexLogError("Unable to write mongodb keyfile: %s", MONGODB_KEYFILE);
@@ -216,12 +222,7 @@ WriteMongodKeyfile(std::string key)
     fprintf(fout, key.c_str());
     fclose(fout);
 
-    HexSetFileMode(MONGODB_KEYFILE, "root", "root", 0400);
-    if (HexUtilSystemF(FWD, 0, "chown mongod:mongod %s", MONGODB_KEYFILE) != 0) {
-        HexLogError("failed to modify the file ownership of %s", MONGODB_KEYFILE);
-        return false;
-    }
-
+    HexSetFileMode(MONGODB_KEYFILE, "mongod", "mongod", 0400);
     return true;
 }
 
@@ -258,7 +259,7 @@ CheckAndInitUpdateAdminUser(std::string myip, std::string dbPass)
     result = HexUtilSystemF(
         FWD,
         0,
-        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"%s\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"}]})'",
+        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"%s\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"},{role:\"clusterAdmin\",db:\"admin\"}]})'",
         myip.c_str(),
         dbPass.c_str()
     );
@@ -312,7 +313,7 @@ IsHostRegistered(char* host, std::string myip)
     int result = HexUtilSystemF(
         0,
         0,
-        "mongosh mongodb://%s --quiet --eval 'rs.conf().members' | grep -q %s",
+        "mongosh mongodb://%s --quiet --eval 'JSON.stringify(rs.conf().members)' | jq '([.[] | select(.host == \"%s:27017\")] | length) > 0' | grep -q true",
         myip.c_str(),
         host
     );
@@ -482,7 +483,7 @@ RestartMain(int argc, char* argv[])
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_mongodb, RestartMain, RestartUsage);
 
-CONFIG_MODULE(mongodb, 0, Parse, 0, 0, Commit);
+CONFIG_MODULE(mongodb, Init, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(mongodb, cube_scan);
 
 CONFIG_OBSERVES(mongodb, net, ParseNet, NotifyNet);
