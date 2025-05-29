@@ -375,7 +375,7 @@ func (d *Driver) SetClient(client Client) {
 
 // DriverName returns the name of the driver
 func (d *Driver) DriverName() string {
-	return "CubeCOS"
+	return "cube"
 }
 
 func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {

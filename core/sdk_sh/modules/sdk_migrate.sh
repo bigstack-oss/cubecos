@@ -432,7 +432,7 @@ migrate_rancher_node_driver()
     local migrated_node_driver_setting=$(cat <<<"{
 \"active\": true,
 \"builtin\": false,
-\"name\": \"CubeCOS\",
+\"name\": \"cube\",
 \"url\": \"http://$(shared_ip):8080/static/nodedrivers/docker-machine-driver-cube\"
 }")
     $CURL -s -k \
