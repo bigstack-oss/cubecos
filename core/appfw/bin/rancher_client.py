@@ -88,7 +88,7 @@ def create_nodeTemplate(name, flavor):
     template = client.create_nodeTemplate(
         name=name,
         description=project_name,
-        driver='CubeCOS',
+        driver='cube',
         cubeConfig={
             "00_username": project_name,
             "01_password": project_password,
@@ -112,7 +112,7 @@ def create_nodeTemplate(name, flavor):
     return template
 
 def delete_templates():
-    for n in [*(client.list_nodeTemplate(driver='cube').data), *(client.list_nodeTemplate(driver='CubeCOS').data)]:
+    for n in client.list_nodeTemplate(driver='cube').data:
         # Wait node pool to be deleted before deleting node template
         if re.match(project_name + ":.*", n.name):
             print("Deleting nodeTemplate: %s" % n.name )

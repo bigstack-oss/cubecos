@@ -215,10 +215,6 @@ func rancherConfigClusterNodeDrivers() error {
 			if key == "nodeDrivers" {
 				name := data.(map[string]interface{})["name"].(string)
 				if name == "cube" {
-					// Do not take action for default node driver
-					continue
-				}
-				if name == "CubeCOS" {
 					nodeDrvFound = true
 					// Do not take action for default node driver
 					continue
@@ -249,7 +245,7 @@ func rancherConfigClusterNodeDrivers() error {
 {
 	"active": true,
 	"builtin": false,
-	"name": "CubeCOS",
+	"name": "cube",
 	"url": "http://%s:8080/static/nodedrivers/docker-machine-driver-cube"
 }
 `
@@ -474,7 +470,7 @@ func rancherDeleteToken() error {
 		); err != nil {
 			zap.L().Warn("Failed to delete token", zap.String("id", id), zap.Error(err))
 		}
-		zap.L().Info("CubeCOS token deleted", zap.Any("id", id))
+		zap.L().Info("cube token deleted", zap.Any("id", id))
 
 		//}
 	}
