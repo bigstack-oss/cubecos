@@ -222,7 +222,7 @@ WriteMongodKeyfile(std::string key)
     fprintf(fout, key.c_str());
     fclose(fout);
 
-    HexSetFileMode(MONGODB_KEYFILE, "mongod", "mongod", 0400);
+    HexSetFileMode(MONGODB_KEYFILE, USER, GROUP, 0400);
     return true;
 }
 
