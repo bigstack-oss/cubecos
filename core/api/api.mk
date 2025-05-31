@@ -15,6 +15,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/api.rpm
 	$(Q)rm -rf /tmp/api.rpm
 	$(Q)chroot $(ROOTDIR) systemctl disable cube-cos-api
+	$(Q)cp -f $(COREDIR)/api/cube-cos-api.yaml.in $(ROOTDIR)/etc/cube/api
 
 # for RC builds
 heavyfs_install::
@@ -23,3 +24,4 @@ heavyfs_install::
 	$(Q)chroot $(ROOTDIR) rpm -i /tmp/api.rpm
 	$(Q)rm -rf /tmp/api.rpm
 	$(Q)chroot $(ROOTDIR) systemctl disable cube-cos-api
+	$(Q)cp -f $(COREDIR)/api/cube-cos-api.yaml.in $(ROOTDIR)/etc/cube/api

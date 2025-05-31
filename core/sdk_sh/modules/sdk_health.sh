@@ -2917,23 +2917,23 @@ health_nodelist_check()
 
 health_mongodb_report()
 {
-    ERR_MSG+="`mongosh --quiet --eval 'rs.status().members.map(member => ({name: member.name, health: member.health, stateStr: member.stateStr, lastHeartbeatMessage: member.lastHeartbeatMessage, syncSourceHost: member.syncSourceHost, uptime: member.uptime}))'`\n"
+    ERR_MSG+="`$MONGODB --quiet --eval 'rs.status().members.map(member => ({name: member.name, health: member.health, stateStr: member.stateStr, lastHeartbeatMessage: member.lastHeartbeatMessage, syncSourceHost: member.syncSourceHost, uptime: member.uptime}))'`\n"
     _health_report ${FUNCNAME[0]}
 }
 
 health_mongodb_check()
 {
     # check the mongodb ping-pong
-    local is_connected="$(mongosh --quiet --eval 'db.adminCommand("ping").ok' 2>/dev/null)"
+    local is_connected="$($MONGODB --quiet --eval 'db.adminCommand("ping").ok' 2>/dev/null)"
     # check the mongodb quorum status which will impact the read/write operation
-    local primary_count="$(mongosh --quiet --eval 'rs.status().members.filter(member => member.stateStr === "PRIMARY").length')"
+    local primary_count="$($MONGODB --quiet --eval 'rs.status().members.filter(member => member.stateStr === "PRIMARY").length')"
     # check the overall node status between the registered nodes and the actual nodes
     local node_total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
-    local registered_node_count="$(mongosh --quiet --eval 'rs.status().members.length')"
+    local registered_node_count="$($MONGODB --quiet --eval 'rs.status().members.length')"
     # check if any node is unavailable
     # the case here usually means the read/write is fine for whole cluster,
     # just some nodes are not reachable but which will not impact the cluster quorum
-    local unavailable_count="$(mongosh --quiet --eval 'rs.status().members.filter(member => member.stateStr === "(not reachable/healthy)").length')"
+    local unavailable_count="$($MONGODB --quiet --eval 'rs.status().members.filter(member => member.stateStr === "(not reachable/healthy)").length')"
 
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u mongodb"
     if [ $? -ne 0 -o -z "$is_connected" ] ; then
@@ -2972,7 +2972,7 @@ _health_mongodb_auto_repair()
         health_mongodb_repair
     elif [ "$ERR_CODE" == "4" ] ; then
         # code 4: mongodb quorum is fine, but some nodes are not reachable
-        result="$(mongosh --quiet --eval 'rs.status().members.filter(member => member.stateStr === "(not reachable/healthy)").map(member => member.name).join(" ")')"
+        result="$($MONGODB --quiet --eval 'rs.status().members.filter(member => member.stateStr === "(not reachable/healthy)").map(member => member.name).join(" ")')"
         IFS=' ' read -r -a unavailable_nodes <<< "$result"
         for node in "${unavailable_nodes[@]}"; do
             hostname="$(echo "$node" | sed 's/:.*//')"
