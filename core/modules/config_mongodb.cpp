@@ -552,6 +552,7 @@ CONFIG_REQUIRES(mongodb, cube_scan);
 CONFIG_OBSERVES(mongodb, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(mongodb, cubesys, ParseCube, NotifyCube);
 
+CONFIG_MIGRATE(mongodb, MARKER_MONGODB_RS_CREATED);
 CONFIG_MIGRATE(mongodb, DATA_DIR);
 
 CONFIG_SUPPORT_COMMAND(HEX_SDK " mongodb_stats");
