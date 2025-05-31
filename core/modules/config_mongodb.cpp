@@ -21,8 +21,8 @@
 
 #include "include/role_cubesys.h"
 
-const static char SERVICE[] = "mongodb";
-const static char MONGODB_REPLICA_SET_NAME[] = "cube-cos-rs";
+static const char SERVICE[] = "mongodb";
+static const char MONGODB_REPLICA_SET_NAME[] = "cube-cos-rs";
 static const char MONGOD_CONF_IN[] = "/etc/mongod.conf.in";
 static const char MONGOD_CONF[] = "/etc/mongod.conf";
 static const char MONGODB_CONF_DIR[] = "/etc/mongodb";
@@ -30,7 +30,8 @@ static const char MONGODB_KEYFILE[] = "/etc/mongodb/keyfile";
 static const int MONGODB_KEYFILE_MIN_LENGTH = 6;
 static const int MONGODB_KEYFILE_MAX_LENGTH = 1024;
 static const char MONGODB_ADMIN_ACCESS[] = "/etc/mongodb/admin-access.sh";
-const static char DATA_DIR[] = "/var/lib/mongo";
+static const char DATA_DIR[] = "/var/lib/mongo";
+static const char MARKER_MONGODB_RS_CREATED[] = "/etc/appliance/state/mongodb_rs_created";
 
 static const char USER[] = "mongod";
 static const char GROUP[] = "mongod";
@@ -392,6 +393,7 @@ Commit(bool modified, int dryLevel)
     }
 
     std::string myip = G(MGMT_ADDR);
+    bool dbPassChanged = s_saltkey.modified() || s_dbPass.modified() || s_seed.modified();
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
 
     // create the mongodb keyfile for the replica set
@@ -433,18 +435,23 @@ Commit(bool modified, int dryLevel)
         std::vector<std::string> ctrlHosts = {s_hostname.c_str()};
         AppendCtrlPeerHostsIfObserved(ctrlHosts);
 
-        // initiate the replica set
-        result = CheckAndInitReplicaSet(ctrlHosts, myip, s_hostname.c_str());
-        if (result != 0) {
-            HexLogError("failed to init mongodb replicaSet on %s", s_hostname.c_str());
-            return true;
-        }
+        if (access(MARKER_MONGODB_RS_CREATED, F_OK) != 0) {
+            // initiate the replica set
+            result = CheckAndInitReplicaSet(ctrlHosts, myip, s_hostname.c_str());
+            if (result != 0) {
+                HexLogError("failed to init mongodb replicaSet on %s", s_hostname.c_str());
+                return true;
+            }
 
-        // add self to the replica set
-        result = SyncHostsToReplicaSet(ctrlHosts, myip);
-        if (result != 0) {
-            HexLogError("failed to add hosts to replicaSet");
-            return true;
+            // add self to the replica set
+            result = SyncHostsToReplicaSet(ctrlHosts, myip);
+            if (result != 0) {
+                HexLogError("failed to add hosts to replicaSet");
+                return true;
+            }
+
+            // mark that mongodb replica set has been created
+            HexSystemF(0, "touch %s", MARKER_MONGODB_RS_CREATED);
         }
 
         // create mongodb uri with the replica set
@@ -465,7 +472,6 @@ Commit(bool modified, int dryLevel)
         if (CheckAdminUser(mongodbUriStr)) {
             HexLogInfo("admin user is already created, skip creating");
 
-            bool dbPassChanged = s_saltkey.modified() || s_dbPass.modified() || s_seed.modified();
             if (dbPassChanged) {
                 if (!UpdateAdminUser(mongodbUriStr, dbPass)) {
                     HexLogError("failed to update mongodb admin password");
@@ -480,6 +486,9 @@ Commit(bool modified, int dryLevel)
         }
     }
 
+    // write the dbPass as mongodb admin access
+    // preserve the old admin access for non-master nodes
+    std::string oldAdminAccess = GetAdminAccess();
     if (!WriteAdminAccess(dbPass)) {
         HexLogError("failed to write mongodb admin access");
         return true;
@@ -495,7 +504,16 @@ Commit(bool modified, int dryLevel)
     SystemdCommitService(s_enabled, SERVICE, true);
 
     // wait for mongodb to be ready
-    std::string adminAccess = GetAdminAccess();
+    std::string adminAccess = "";
+    if (isMaster) {
+        adminAccess = GetAdminAccess();
+    } else {
+        if (dbPassChanged && (oldAdminAccess != "")) {
+            adminAccess = oldAdminAccess;
+        } else {
+            adminAccess = GetAdminAccess();
+        }
+    }
     int result = WaitActiveStatus(adminAccess, myip);
     if (result != 0) {
         HexLogError("failed to wait for the database to be active");

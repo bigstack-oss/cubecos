@@ -322,6 +322,7 @@ cube_cluster_recreate()
     systemctl stop pcsd pacemaker corosync
     cubectl config reset all
     rm -f /etc/appliance/state/api_idp_done
+    rm -f /etc/appliance/state/mongodb_rs_created
     rm -f /var/lib/corosync/*
     rm -rf /var/lib/pacemaker/blackbox/*
     rm -rf /var/lib/pacemaker/cib/*
