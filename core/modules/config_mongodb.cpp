@@ -69,6 +69,36 @@ PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 1);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 
 static bool
+ParseNet(const char *name, const char *value, bool isNew)
+{
+    if (strcmp(name, NET_HOSTNAME) == 0) {
+        s_hostname.parse(value, isNew);
+    }
+
+    return true;
+}
+
+static void
+NotifyNet(bool modified)
+{
+    s_bNetModified = s_hostname.modified();
+}
+
+static bool
+ParseCube(const char *name, const char *value, bool isNew)
+{
+    ParseTune(name, value, isNew, 1);
+    return true;
+}
+
+static void
+NotifyCube(bool modified)
+{
+    s_bCubeModified = IsModifiedTune(1);
+    s_eCubeRole = GetCubeRole(s_cubeRole);
+}
+
+static bool
 Init()
 {
     if (HexMakeDir(MONGODB_CONF_DIR, USER, GROUP, 0755) != 0) {
@@ -107,33 +137,41 @@ ShouldCommit(bool modified)
 }
 
 static bool
-ParseNet(const char *name, const char *value, bool isNew)
+WriteMongodConf(bool enableAuth, const char* myip)
 {
-    if (strcmp(name, NET_HOSTNAME) == 0) {
-        s_hostname.parse(value, isNew);
+    if (access(MONGOD_CONF_IN, R_OK) != 0) {
+        return false;
+    }
+
+    if (enableAuth) {
+        if (HexUtilSystemF(0, 0, "sed -e \"s/@MGMT_ADDR@/%s/\" -e \"s/@SECURITY_START@//\" -e \"s/@SECURITY_END@//\" %s > %s", myip, MONGOD_CONF_IN, MONGOD_CONF) != 0) {
+            HexLogError("failed to update %s", MONGOD_CONF);
+            return false;
+        }
+    } else {
+        // remove the security configuration here to remove the authentication
+        if (HexUtilSystemF(0, 0, "sed -e \"s/@MGMT_ADDR@/%s/\" -e \"/@SECURITY_START@/,/@SECURITY_END@/d\" %s > %s", myip, MONGOD_CONF_IN, MONGOD_CONF) != 0) {
+            HexLogError("failed to update %s", MONGOD_CONF);
+            return false;
+        }
     }
 
     return true;
 }
 
-static void
-NotifyNet(bool modified)
-{
-    s_bNetModified = s_hostname.modified();
-}
-
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+WriteMongodKeyfile(std::string key)
 {
-    ParseTune(name, value, isNew, 1);
-    return true;
-}
+    FILE *fout = fopen(MONGODB_KEYFILE, "w");
+    if (!fout) {
+        HexLogError("Unable to write mongodb keyfile: %s", MONGODB_KEYFILE);
+        return false;
+    }
+    fprintf(fout, key.c_str());
+    fclose(fout);
 
-static void
-NotifyCube(bool modified)
-{
-    s_bCubeModified = IsModifiedTune(1);
-    s_eCubeRole = GetCubeRole(s_cubeRole);
+    HexSetFileMode(MONGODB_KEYFILE, USER, GROUP, 0400);
+    return true;
 }
 
 /**
@@ -177,98 +215,49 @@ GetAdminAccess()
 }
 
 static bool
-WriteMongodConf(bool enableAuth, const char* myip, std::string dbPass)
+WriteAdminAccess(std::string dbPass)
 {
-    if (access(MONGOD_CONF_IN, R_OK) != 0) {
-        return false;
-    }
-
-    if (enableAuth) {
-        if (HexUtilSystemF(0, 0, "sed -e \"s/@MGMT_ADDR@/%s/\" -e \"s/@SECURITY_START@//\" -e \"s/@SECURITY_END@//\" %s > %s", myip, MONGOD_CONF_IN, MONGOD_CONF) != 0) {
-            HexLogError("failed to update %s", MONGOD_CONF);
-            return false;
-        }
-
-        // update the mongodb admin access
-        FILE *fout = fopen(MONGODB_ADMIN_ACCESS, "w");
-        if (!fout) {
-            HexLogError("Unable to write mongodb admin access: %s", MONGODB_ADMIN_ACCESS);
-            return 1;
-        }
-        fprintf(fout, "export MONGODB_ADMIN_ACCESS=%s", dbPass.c_str());
-        fclose(fout);
-    } else {
-        // remove the security configuration here to remove the authentication
-        if (HexUtilSystemF(0, 0, "sed -e \"s/@MGMT_ADDR@/%s/\" -e \"/@SECURITY_START@/,/@SECURITY_END@/d\" %s > %s", myip, MONGOD_CONF_IN, MONGOD_CONF) != 0) {
-            HexLogError("failed to update %s", MONGOD_CONF);
-            return false;
-        }
-
-        // remove the mongodb admin access
-        HexUtilSystemF(0, 0, "rm -f %s", MONGODB_ADMIN_ACCESS);
-    }
-
-    return true;
-}
-
-static bool
-WriteMongodKeyfile(std::string key)
-{
-    FILE *fout = fopen(MONGODB_KEYFILE, "w");
+    // update the mongodb admin access
+    FILE *fout = fopen(MONGODB_ADMIN_ACCESS, "w");
     if (!fout) {
-        HexLogError("Unable to write mongodb keyfile: %s", MONGODB_KEYFILE);
-        return false;
+        HexLogError("Unable to write mongodb admin access: %s", MONGODB_ADMIN_ACCESS);
+        return 1;
     }
-    fprintf(fout, key.c_str());
+    fprintf(fout, "export MONGODB_ADMIN_ACCESS=%s", dbPass.c_str());
     fclose(fout);
 
-    HexSetFileMode(MONGODB_KEYFILE, USER, GROUP, 0400);
     return true;
 }
 
 static int
-CheckAndInitUpdateAdminUser(std::string myip, std::string dbPass)
+WaitActiveStatus(std::string adminAccess, std::string myip)
 {
-    // check if admin user is created or not
-    int result = HexUtilSystemF(
-        0,
-        0,
-        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").getUser(\"admin\")' | grep -q admin",
-        myip.c_str()
-    );
-    if (result == 0) {
-        HexLogInfo("admin user is already created, skip creating");
+    int period = 2;
+    int count = 0;
+    int limit = 60;
 
-        // update the mongodb admin password
-        int updatePasswordResult = HexUtilSystemF(
-            FWD,
-            0,
-            "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").changeUserPassword(\"admin\", \"%s\")'",
-            myip.c_str(),
-            dbPass.c_str()
-        );
-        if (updatePasswordResult != 0) {
-            HexLogError("failed to update mongodb admin password");
-            return 1;
+    while (true) {
+        if (count >= limit) {
+            break;
         }
 
-        return 0;
+        int result = HexUtilSystemF(
+            FWD,
+            0,
+            "mongosh mongodb://%s%s --quiet --eval \"db.hello().ok\"",
+            adminAccess.c_str(),
+            myip.c_str()
+        );
+        if (result == 0) {
+            return 0;
+        }
+
+        HexLogWarning("Mongodb is starting, waiting for active status");
+        sleep(period);
+        count++;
     }
 
-    // create the admin user
-    result = HexUtilSystemF(
-        FWD,
-        0,
-        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"%s\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"},{role:\"clusterAdmin\",db:\"admin\"}]})'",
-        myip.c_str(),
-        dbPass.c_str()
-    );
-    if (result != 0) {
-        HexLogError("failed to create admin user");
-        return result;
-    }
-
-    return 0;
+    return 1;
 }
 
 static void
@@ -351,35 +340,45 @@ SyncHostsToReplicaSet(std::vector<std::string>& ctrlHosts, std::string myip)
     return 0;
 }
 
-static int
-WaitActiveStatus(std::string adminAccess, std::string myip)
+static bool
+CheckAdminUser(std::string myip)
 {
-    int period = 2;
-    int count = 0;
-    int limit = 60;
+    // check if admin user is created or not
+    int result = HexUtilSystemF(
+        0,
+        0,
+        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").getUser(\"admin\")' | grep -q admin",
+        myip.c_str()
+    );
+    return (result == 0);
+}
 
-    while (true) {
-        if (count >= limit) {
-            break;
-        }
+static bool
+InitAdminUser(std::string myip, std::string dbPass)
+{
+    // create the admin user
+    int result = HexUtilSystemF(
+        FWD,
+        0,
+        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"%s\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"},{role:\"clusterAdmin\",db:\"admin\"}]})'",
+        myip.c_str(),
+        dbPass.c_str()
+    );
+    return (result == 0);
+}
 
-        int result = HexUtilSystemF(
-            FWD,
-            0,
-            "mongosh mongodb://%s%s --quiet --eval \"db.hello().ok\"",
-            adminAccess.c_str(),
-            myip.c_str()
-        );
-        if (result == 0) {
-            return 0;
-        }
-
-        HexLogWarning("Mongodb is starting, waiting for active status");
-        sleep(period);
-        count++;
-    }
-
-    return 1;
+static bool
+UpdateAdminUser(std::string myip, std::string dbPass)
+{
+    // update the mongodb admin password
+    int result = HexUtilSystemF(
+        FWD,
+        0,
+        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").changeUserPassword(\"admin\", \"%s\")'",
+        myip.c_str(),
+        dbPass.c_str()
+    );
+    return (result == 0);
 }
 
 static bool
@@ -392,7 +391,10 @@ Commit(bool modified, int dryLevel)
 
     // create the mongodb config without auth enabled
     std::string myip = G(MGMT_ADDR);
-    WriteMongodConf(false, myip.c_str(), "");
+    if (!WriteMongodConf(false, myip.c_str())) {
+        HexLogError("failed to set mongod config");
+        return true;
+    }
 
     // create the mongodb keyfile for the replica set
     bool dbKeyChanged = s_saltkey.modified() || s_dbKey.modified() || s_seed.modified();
@@ -404,7 +406,10 @@ Commit(bool modified, int dryLevel)
             dbKey.resize(MONGODB_KEYFILE_MAX_LENGTH);
         }
 
-        WriteMongodKeyfile(dbKey);
+        if (!WriteMongodKeyfile(dbKey)) {
+            HexLogError("failed to write mongodb key file");
+            return true;
+        }
     }
 
     // start mongodb
@@ -437,14 +442,32 @@ Commit(bool modified, int dryLevel)
 
     // create or update the admin user
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
-    result = CheckAndInitUpdateAdminUser(myip, dbPass);
-    if (result != 0) {
-        HexLogError("failed to init or update mongodb users");
+    if (CheckAdminUser(myip)) {
+        HexLogInfo("admin user is already created, skip creating");
+
+        bool dbPassChanged = s_saltkey.modified() || s_dbPass.modified() || s_seed.modified();
+        if (dbPassChanged) {
+            if (!UpdateAdminUser(myip, dbPass)) {
+                HexLogError("failed to update mongodb admin password");
+                return true;
+            }
+        }
+    } else {
+        if (!InitAdminUser(myip, dbPass)) {
+            HexLogError("failed to create admin user");
+            return true;
+        }
+    }
+    if (!WriteAdminAccess(dbPass)) {
+        HexLogError("failed to write mongodb admin access");
         return true;
     }
 
     // update the mongodb config with auth enabled
-    WriteMongodConf(true, myip.c_str(), dbPass);
+    if (!WriteMongodConf(true, myip.c_str())) {
+        HexLogError("failed to set mongod config");
+        return true;
+    }
 
     // restart mongodb
     SystemdCommitService(s_enabled, SERVICE, true);
