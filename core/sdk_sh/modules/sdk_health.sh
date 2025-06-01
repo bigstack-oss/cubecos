@@ -2984,6 +2984,7 @@ _health_mongodb_auto_repair()
 
 health_mongodb_repair()
 {
+    Quiet -n cubectl node exec -pn $HEX_SDK mongodb_repair_keyfile_ownership
     Quiet -n cubectl node exec -pn $HEX_CFG restart_mongodb
 }
 
