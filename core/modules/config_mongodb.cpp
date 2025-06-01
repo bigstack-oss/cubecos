@@ -233,7 +233,7 @@ WriteAdminAccess(std::string dbPass)
 }
 
 static int
-WaitActiveStatus(std::string adminAccess, std::string myip)
+WaitActiveStatus(std::string myip)
 {
     int period = 2;
     int count = 0;
@@ -247,8 +247,7 @@ WaitActiveStatus(std::string adminAccess, std::string myip)
         int result = HexUtilSystemF(
             FWD,
             0,
-            "mongosh mongodb://%s%s --quiet --eval \"db.hello().ok\"",
-            adminAccess.c_str(),
+            "mongosh mongodb://%s --quiet --eval \"db.hello().ok\"",
             myip.c_str()
         );
         if (result == 0) {
@@ -357,14 +356,14 @@ CheckAdminUser(std::string mongodbUri)
 }
 
 static bool
-InitAdminUser(std::string mongodbUri, std::string dbPass)
+InitAdminUser(std::string myip, std::string dbPass)
 {
     // create the admin user
     int result = HexUtilSystemF(
         FWD,
         0,
-        "mongosh %s --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"%s\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"},{role:\"clusterAdmin\",db:\"admin\"}]})'",
-        mongodbUri.c_str(),
+        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"%s\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"},{role:\"clusterAdmin\",db:\"admin\"}]})'",
+        myip.c_str(),
         dbPass.c_str()
     );
     return (result == 0);
@@ -412,9 +411,13 @@ Commit(bool modified, int dryLevel)
         }
     }
 
-    // only issue write operations on the master node
+    // get the control host list
+    std::vector<std::string> ctrlHosts = {s_hostname.c_str()};
+    AppendCtrlPeerHostsIfObserved(ctrlHosts);
+
+    // set up the replica set on the master node
     bool isMaster = G(IS_MASTER);
-    if (isMaster) {
+    if (isMaster && access(MARKER_MONGODB_RS_CREATED, F_OK) != 0) {
         // create the mongodb config without auth enabled
         if (!WriteMongodConf(false, myip.c_str())) {
             HexLogError("failed to set mongod config");
@@ -425,73 +428,33 @@ Commit(bool modified, int dryLevel)
         SystemdCommitService(s_enabled, SERVICE, true);
 
         // wait for mongodb to be ready
-        int result = WaitActiveStatus("", myip);
+        int result = WaitActiveStatus(myip);
         if (result != 0) {
             HexLogError("failed to wait for the database to be active");
             return true;
         }
 
-        // get the control host list
-        std::vector<std::string> ctrlHosts = {s_hostname.c_str()};
-        AppendCtrlPeerHostsIfObserved(ctrlHosts);
-
-        if (access(MARKER_MONGODB_RS_CREATED, F_OK) != 0) {
-            // initiate the replica set
-            result = CheckAndInitReplicaSet(ctrlHosts, myip, s_hostname.c_str());
-            if (result != 0) {
-                HexLogError("failed to init mongodb replicaSet on %s", s_hostname.c_str());
-                return true;
-            }
-
-            // add self to the replica set
-            result = SyncHostsToReplicaSet(ctrlHosts, myip);
-            if (result != 0) {
-                HexLogError("failed to add hosts to replicaSet");
-                return true;
-            }
-
-            // mark that mongodb replica set has been created
-            HexSystemF(0, "touch %s", MARKER_MONGODB_RS_CREATED);
+        // initiate the replica set
+        result = CheckAndInitReplicaSet(ctrlHosts, myip, s_hostname.c_str());
+        if (result != 0) {
+            HexLogError("failed to init mongodb replicaSet on %s", s_hostname.c_str());
+            return true;
         }
 
-        // create mongodb uri with the replica set
-        int index = 0;
-        std::stringstream mongodbUri;
-        mongodbUri << "mongodb://";
-        for (std::string c: ctrlHosts) {
-            if (index != 0) {
-                mongodbUri << ",";
-            }
-            mongodbUri << c;
-            index++;
+        // add self to the replica set
+        result = SyncHostsToReplicaSet(ctrlHosts, myip);
+        if (result != 0) {
+            HexLogError("failed to add hosts to replicaSet");
+            return true;
         }
-        mongodbUri << "/?replicaSet=" << MONGODB_REPLICA_SET_NAME;
-        std::string mongodbUriStr = mongodbUri.str();
 
-        // create or update the admin user
-        if (CheckAdminUser(mongodbUriStr)) {
-            HexLogInfo("admin user is already created, skip creating");
+        // mark that mongodb replica set has been created
+        HexSystemF(0, "touch %s", MARKER_MONGODB_RS_CREATED);
 
-            if (dbPassChanged) {
-                if (!UpdateAdminUser(mongodbUriStr, dbPass)) {
-                    HexLogError("failed to update mongodb admin password");
-                    return true;
-                }
-            }
-        } else {
-            if (!InitAdminUser(mongodbUriStr, dbPass)) {
-                HexLogError("failed to create admin user");
-                return true;
-            }
+        if (!InitAdminUser(myip, dbPass)) {
+            HexLogError("failed to create admin user");
+            return true;
         }
-    }
-
-    // write the dbPass as mongodb admin access
-    // preserve the old admin access for non-master nodes
-    std::string oldAdminAccess = GetAdminAccess();
-    if (!WriteAdminAccess(dbPass)) {
-        HexLogError("failed to write mongodb admin access");
-        return true;
     }
 
     // update the mongodb config with auth enabled
@@ -502,25 +465,55 @@ Commit(bool modified, int dryLevel)
 
     // restart mongodb
     SystemdCommitService(s_enabled, SERVICE, true);
+    WriteLogRotateConf(log_conf);
 
     // wait for mongodb to be ready
-    std::string adminAccess = "";
-    if (isMaster) {
-        adminAccess = GetAdminAccess();
-    } else {
-        if (dbPassChanged && (oldAdminAccess != "")) {
-            adminAccess = oldAdminAccess;
-        } else {
-            adminAccess = GetAdminAccess();
-        }
-    }
-    int result = WaitActiveStatus(adminAccess, myip);
+    int result = WaitActiveStatus(myip);
     if (result != 0) {
         HexLogError("failed to wait for the database to be active");
         return true;
     }
 
-    WriteLogRotateConf(log_conf);
+    // get the old admin access
+    std::string oldAdminAccess = GetAdminAccess();
+
+    // create mongodb uri with the replica set
+    int index = 0;
+    std::stringstream mongodbUri;
+    mongodbUri << "mongodb://";
+    if (oldAdminAccess != "") {
+        mongodbUri << oldAdminAccess;
+    } else {
+        mongodbUri << "admin:" << dbPass << "@";
+    }
+    for (std::string c: ctrlHosts) {
+        if (index != 0) {
+            mongodbUri << ",";
+        }
+        mongodbUri << c;
+        index++;
+    }
+    mongodbUri << "/?replicaSet=" << MONGODB_REPLICA_SET_NAME;
+    std::string mongodbUriStr = mongodbUri.str();
+
+    // update the admin user
+    if (dbPassChanged && CheckAdminUser(mongodbUriStr)) {
+        if (!UpdateAdminUser(mongodbUriStr, dbPass)) {
+            HexLogError("failed to update mongodb admin password");
+            return true;
+        }
+    }
+
+    // write the dbPass as mongodb admin access
+    if (!WriteAdminAccess(dbPass)) {
+        HexLogError("failed to write mongodb admin access");
+        return true;
+    }
+
+    // sync mongodb admin access across the cluster control nodes
+    if (GetAdminAccess() != "") {
+        HexUtilSystemF(0, 0, "cubectl node rsync --role=control %s", MONGODB_ADMIN_ACCESS);
+    }
 
     return true;
 }
