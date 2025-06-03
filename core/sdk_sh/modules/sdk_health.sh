@@ -2951,6 +2951,13 @@ health_mongodb_check()
     elif [ ${unavailable_count:-0} -gt 0 ] ; then
         ERR_CODE=4
         ERR_MSG+="$unavailable_count nodes are unavailable\n"
+    else
+        $MONGODB --quiet --eval 'JSON.stringify(db.getSiblingDB("admin").getUser("admin"))' 2>/dev/null | jq -r '.roles[].role' | grep -q "readWriteAnyDatabase"
+        local could_read_write_db=$?
+        if [ ${could_read_write_db:-0} -ne 0 ] ; then
+            ERR_CODE=5
+            ERR_MSG+="user admin could not read write mongodb"
+        fi
     fi
 
     _health_fail_log
@@ -2978,7 +2985,9 @@ _health_mongodb_auto_repair()
             hostname="$(echo "$node" | sed 's/:.*//')"
             remote_systemd_restart $hostname mongodb
         done
-
+    elif [ "$ERR_CODE" == "5" ] ; then
+        # code 5: user admin needs role readWriteAnyDatabase
+        $HEX_SDK mongodb_add_read_write_role
     fi
 }
 
@@ -2986,6 +2995,7 @@ health_mongodb_repair()
 {
     Quiet -n cubectl node exec -pn $HEX_SDK mongodb_repair_keyfile_ownership
     Quiet -n cubectl node exec -pn $HEX_CFG restart_mongodb
+    Quiet -n $HEX_SDK mongodb_add_read_write_role
 }
 
 health_node_report()

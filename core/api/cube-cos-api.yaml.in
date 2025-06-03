@@ -54,7 +54,8 @@ spec:
       database: cube-cos
       replicaSet: cube-cos-rs
       auth:
-        enabled: true
+        enable: true
+        source: admin
         username: admin
         password: @MONGODB_ADMIN_ACCESS@
     influxdb:

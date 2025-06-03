@@ -24,3 +24,12 @@ mongodb_repair_keyfile_ownership()
         fi
     fi
 }
+
+mongodb_add_read_write_role()
+{
+    $MONGODB --quiet --eval 'JSON.stringify(db.getSiblingDB("admin").getUser("admin"))' 2>/dev/null | jq -r '.roles[].role' | grep -q "readWriteAnyDatabase"
+    local could_read_write_db=$?
+    if [ ${could_read_write_db:-0} -ne 0 ] ; then
+        $MONGODB --quiet --eval 'db.getSiblingDB("admin").grantRolesToUser("admin",[{role:"readWriteAnyDatabase",db:"admin"}])'
+    fi
+}

@@ -362,7 +362,15 @@ InitAdminUser(std::string myip, std::string dbPass)
     int result = HexUtilSystemF(
         FWD,
         0,
-        "mongosh mongodb://%s --quiet --eval 'db.getSiblingDB(\"admin\").createUser({user:\"admin\",pwd:\"%s\",roles:[{role:\"userAdminAnyDatabase\",db:\"admin\"},{role:\"clusterAdmin\",db:\"admin\"}]})'",
+        "mongosh mongodb://%s --quiet --eval "
+        "'db.getSiblingDB(\"admin\").createUser({"
+        "user:\"admin\","
+        "pwd:\"%s\","
+        "roles:["
+        "{role:\"userAdminAnyDatabase\",db:\"admin\"},"
+        "{role:\"clusterAdmin\",db:\"admin\"},"
+        "{role:\"readWriteAnyDatabase\",db:\"admin\"}"
+        "]})'",
         myip.c_str(),
         dbPass.c_str()
     );
