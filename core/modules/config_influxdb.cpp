@@ -118,7 +118,7 @@ static bool
 CreateDBs()
 {
     // Re-creation is allowed
-    HexUtilSystemF(0, 0, HEX_SDK " wait_for_service 127.0.0.1 8086 90");
+    HexUtilSystemF(0, 0, HEX_SDK " wait_for_service :: 8086 90");
     HexLogInfo("updating influxdb polices");
 
     std::string dbs[] = {"telegraf", "ceph", "monasca", "events"};
