@@ -6,7 +6,7 @@ API_RPM := $(TOP_BLDDIR)/core/api/api.rpm
 ifneq ($(RC),)
 $(API_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O api.rpm https://github.com/bigstack-oss/cube-cos-api/releases/download/v3.0.0-rc2/cube-cos-api-v0.0.1-1.fc35.3ffc7b2.x86_64.rpm, \
+		wget -O api.rpm https://github.com/bigstack-oss/cube-cos-api/releases/download/v3.0.0-rc3/cube-cos-api-v0.0.1-1.fc35.89ac48b.x86_64.rpm, \
 		"  PULL    $(API_RPM)")
 else
 include version
@@ -24,7 +24,7 @@ $(API_GIT_DIR):
 	$(Q)mkdir $(API_GIT_DIR)
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone -b v3.0.0-rc2 --depth 1 https://github.com/bigstack-oss/cube-cos-api.git $(API_GIT_DIR) && break ; \
+		timeout 30 git clone -b v3.0.0-rc3 --depth 1 https://github.com/bigstack-oss/cube-cos-api.git $(API_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-api.git")
 

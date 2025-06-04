@@ -6,7 +6,7 @@ UI_RPM := $(TOP_BLDDIR)/core/ui/ui.rpm
 ifneq ($(RC),)
 $(UI_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O ui.rpm https://github.com/bigstack-oss/cube-cos-ui/releases/download/cube-cos-ui-v3.0.0-rc2/cube-cos-ui-3.0.0-1.131d623.x86_64.rpm, \
+		wget -O ui.rpm https://github.com/bigstack-oss/cube-cos-ui/releases/download/cube-cos-ui-v3.0.0-rc3/cube-cos-ui-3.0.0-1.a97f08c.x86_64.rpm, \
 		"  PULL    $(UI_RPM)")
 else
 include version
@@ -24,7 +24,7 @@ $(UI_GIT_DIR):
 	$(Q)mkdir $(UI_GIT_DIR)
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone -b v3.0.0-rc2 --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(UI_GIT_DIR) && break ; \
+		timeout 30 git clone -b v3.0.0-rc3 --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(UI_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
 
