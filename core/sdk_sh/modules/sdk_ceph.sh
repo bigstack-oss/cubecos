@@ -2334,7 +2334,7 @@ ceph_mount_cephfs()
 {
     if $CEPH -s >/dev/null ; then
         for i in {1..3} ; do
-            if [ $(mount | grep $CEPHFS_STORE_DIR | wc -l) -gt 1 ] ; then
+            if [ $(mount | grep $CEPHFS_STORE_DIR | wc -l) -gt 0 ] ; then
                 timeout $SRVSTO umount $CEPHFS_STORE_DIR 2>/dev/null || umount -l $CEPHFS_STORE_DIR 2>/dev/null
             fi
             if [ $(mount | grep $CEPHFS_STORE_DIR | wc -l) -lt 1 ] ; then

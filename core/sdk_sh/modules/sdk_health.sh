@@ -1079,7 +1079,7 @@ health_ceph_check()
     local stats=$($CEPH status -f json)
     local service_stats="$(echo $stats | jq -r .health.status)"
 
-    ERR_LOG="$HEX_SDK cmd CEPH -s"
+    ERR_LOG="$HEX_SDK cmd $CEPH -s"
     if [ "$service_stats" = "HEALTH_WARN" ] ; then
         ERR_CODE=1
     elif [ "$service_stats" = "HEALTH_ERR" ] ; then
@@ -1170,7 +1170,7 @@ health_ceph_mgr_check()
             online=1
         fi
     fi
-    ERR_LOG="$HEX_SDK cmd CEPH -s"
+    ERR_LOG="$HEX_SDK cmd $CEPH -s"
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
     elif echo $stats | jq -r .health | grep -q "Failed to list/create InfluxDB database" ; then
@@ -1347,7 +1347,7 @@ health_ceph_rgw_check()
     local online=$($CEPH -s | awk '/rgw:/{print $2}')
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
-        ERR_LOG="$HEX_SDK cmd CEPH -s"
+        ERR_LOG="$HEX_SDK cmd $CEPH -s"
     fi
 
     ERR_MSG+="$online/$total rgw are online\n"
