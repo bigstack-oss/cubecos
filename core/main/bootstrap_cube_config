@@ -21,6 +21,7 @@ BootstrapAndClusterstart()
             echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             echo -n "Starting cluster" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             bash -c "hex_sdk -v cube_cluster_start | tee -a $(hex_sdk GetKernelConsoleDevices)"
+            cubectl node exec -pn "rm -f /tmp/health_*error.count"
         fi
     fi
 }
@@ -63,6 +64,7 @@ RollingEvacuateAndReboot()
             fi
             prev_n=$N
         done
+        hex_sdk os_nova_instance_hardreboot $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i -e error -e nostate | cut -d" " -f1)
     fi
     if [ "x$upgrading" = "xfalse" ]; then
         if hex_sdk cube_cluster_ready ; then
