@@ -2046,7 +2046,9 @@ ceph_osd_create_map()
                 datapart=$(echo $osdmap_json | jq -r ".\"$metapart_uuid\".device")
                 datapart_partuuid=$(blkid -o value -s PARTUUID $datapart)
             fi
-            echo "${metapart:-metapart} ${osd_id:-osd_id} ${metapart_uuid:-metapart_uuid} ${datapart_partuuid:-datapart_partuuid}" >> $osdmap_new
+            if [ "${datapart_partuuid:-datapart_partuuid}" != "datapart_partuuid" ] ; then
+                echo "${metapart:-metapart} ${osd_id:-osd_id} ${metapart_uuid:-metapart_uuid} ${datapart_partuuid:-datapart_partuuid}" >> $osdmap_new
+            fi
         done
         cat $osdmap_new | sort -k1 > ${osdmap_new}.sorted
         unlink $osdmap_new

@@ -21,6 +21,7 @@ BootstrapAndClusterstart()
             echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             echo -n "Starting cluster" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             bash -c "hex_sdk -v cube_cluster_start | tee -a $(hex_sdk GetKernelConsoleDevices)"
+            cubectl node exec -pn "rm -f /tmp/health_*error.count"
         fi
     fi
 }
@@ -63,24 +64,24 @@ RollingEvacuateAndReboot()
             fi
             prev_n=$N
         done
+        hex_sdk os_nova_instance_hardreboot $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i -e error -e nostate | cut -d" " -f1)
     fi
     if [ "x$upgrading" = "xfalse" ]; then
         if hex_sdk cube_cluster_ready ; then
             echo -n "  cluster checking and repairing                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-            if hex_sdk cube_cluster_repair ; then
-                echo -n "  cluster checked and repaired                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-                need_be_active_servers="$(cat /mnt/cephfs/nova/instances/active_running 2>/dev/null)"
-                if [ "x$need_be_active_servers" != "x" ] ; then
-                    for i in $need_be_active_servers ; do
-                        if hex_sdk os_nova_list id status powerstate |  grep -i "$i active running" ; then
-                            continue
-                        else
-                            hex_sdk os_nova_instance_reset $i
-                            hex_sdk os_nova_instance_hardreboot $i
-                            echo -n "  reset and booted non-active server: $i                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-                        fi
-                    done
-                fi
+            hex_cli -c cluster check_repair
+            echo -n "  cluster checked and repaired                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+            need_be_active_servers="$(cat /mnt/cephfs/nova/instances/active_running 2>/dev/null)"
+            if [ "x$need_be_active_servers" != "x" ] ; then
+                for i in $need_be_active_servers ; do
+                    if hex_sdk os_nova_list id status powerstate |  grep -i "$i active running" ; then
+                        continue
+                    else
+                        hex_sdk os_nova_instance_reset $i
+                        hex_sdk os_nova_instance_hardreboot $i
+                        echo -n "  reset and booted non-active server: $i                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                    fi
+                done
             fi
         else
             echo -n "  cluster check and repair skipped because not all nodes are bootstrapped and synced                                           " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
