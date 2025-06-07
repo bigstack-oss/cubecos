@@ -1,9 +1,8 @@
 # Cube SDK
 # grafana installation
 
-# Grafana 10.1.5, 10.0.9, 9.5.13, and 9.4.17. These patch releases contain a fix for CVE-2023-4822, a medium severity security vulnerability in the role-based access control (RBAC) system
 # ROOTFS_DNF += grafana
-ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-10.1.5-1.x86_64.rpm
+ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-10.1.10-1.x86_64.rpm
 
 rootfs_install::
 	$(Q)mount -t proc proc $(ROOTDIR)/proc

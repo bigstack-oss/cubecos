@@ -11,7 +11,7 @@ import (
 )
 
 func InitDefaultSubVolumeGroup() error {
-	_, outErr, err := util.ExecCmd("ceph", "fs", "subvolumegroup", "create", "cephfs", DefaultFsSubVolumeGroup)
+       _, outErr, err := util.ExecCmd("timeout", "30", "ceph", "fs", "subvolumegroup", "create", "cephfs", DefaultFsSubVolumeGroup)
 	if err != nil {
 		return errors.Wrapf(err, "Failed to init default sub volume group(%s): %s", DefaultFsSubVolumeGroup, outErr)
 	}
