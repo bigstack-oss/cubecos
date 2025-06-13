@@ -159,6 +159,8 @@ To report bugs, please raise the issue through [Issue](https://github.com/bigsta
 
 To report security vulnerabilities, please follow [Security](./SECURITY.md).
 
+To join our Slack, Discord, and follow our GitHub, please check out [Community Channels](https://www.bigstack.co/community).
+
 ## License
 
 Copyright (c) 2025 [Bigstack co., ltd](https://bigstack.co/)
