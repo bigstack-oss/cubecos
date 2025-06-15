@@ -33,7 +33,7 @@ Join us in building the future of software-defined infrastructure!
 - Memory
   - At least 64 GiB
 - Disk
-  - At least 100 GiB free space
+  - At least 500 GiB free space
 - OS
   - CentOS 8
   - CentOS Stream 8
