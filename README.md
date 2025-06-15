@@ -35,6 +35,8 @@ Join us in building the future of software-defined infrastructure!
 - Disk
   - At least 100 GiB free space
 - OS
+  - CentOS 8
+  - CentOS Stream 8
   - CentOS Stream 9
 
 ### Dev Tools
