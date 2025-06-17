@@ -20,11 +20,12 @@ API_SPEC_FILE := $(API_RPMBUILD_DIR)/SPECS/cube-cos-api.spec
 API_RPM_BUILD := $(API_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm
 
 # prepare the api source code, being pulled from GitHub using the default branch
+# For RC: git clone -b v3.0.0-rc4
 $(API_GIT_DIR):
 	$(Q)mkdir $(API_GIT_DIR)
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone -b v3.0.0-rc4 --depth 1 https://github.com/bigstack-oss/cube-cos-api.git $(API_GIT_DIR) && break ; \
+		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-api.git $(API_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-api.git")
 
