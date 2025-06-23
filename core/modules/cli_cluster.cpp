@@ -827,7 +827,7 @@ ClusterReadyMain(int argc, const char** argv)
 
     CliPrintf("[7/7] Global Information Tracker");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run " HEX_SDK " git_server_init");
-    HexUtilSystemF(0, 0, HEX_SDK " host_local_run cubectl node exec -p " HEX_SDK " git_client_init");
+    HexUtilSystemF(0, 0, "nohup " HEX_SDK " host_local_run cubectl node exec -p " HEX_SDK " git_client_init &");
 
     CliPrintf("Done");
 

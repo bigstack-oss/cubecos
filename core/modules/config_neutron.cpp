@@ -870,7 +870,7 @@ CommitLast(bool modified, int dryLevel)
 
     // restart neutron-server since ovn-northd is now managed by pacemaker
     if (enabled && isHaMaster) {
-        SystemdCommitService(enabled , SRV_NAME, true);
+        SystemdCommitService(enabled, SRV_NAME, false);
     }
 
     if (access(SFLOW_ENABLED, F_OK) == 0) {

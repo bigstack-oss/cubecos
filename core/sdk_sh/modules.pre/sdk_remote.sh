@@ -30,8 +30,14 @@ remote_systemd_restart()
 }
 
 remote_run()
-{
+{   
+    local flag=
     local host=$1
     shift 1
-    ssh root@$host $@ 2>/dev/null
+    if [ "$VERBOSE" == "1" ] ; then
+        if test -t 0 ; then
+            flag="-t"
+        fi
+    fi
+    ssh $flag root@$host $@ 2>/dev/null
 }

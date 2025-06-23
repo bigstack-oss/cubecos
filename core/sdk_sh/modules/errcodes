@@ -67,9 +67,11 @@ eval "ERR_DESC_$SRV[3]='state unsync'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="vip"
-eval "ERR_DESC_$SRV[1]='active control IP down'"
-eval "ERR_DESC_$SRV[2]='inactive control IP active'"
+eval "ERR_DESC_$SRV[1]='active control misses VIP'"
+eval "ERR_DESC_$SRV[2]='inactive control has VIP'"
 eval "ERR_DESC_$SRV[3]='stale VIP in arp table'"
+eval "ERR_DESC_$SRV[4]='vip changed'"
+eval "ERR_DESC_$SRV[5]='no vip found'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="haproxy_ha"
@@ -165,6 +167,7 @@ eval "ERR_DESC_$SRV[5]='agent down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="neutron"
+eval "ERR_DESC_$SRV[1]=':( due to vip change'"
 eval "ERR_DESC_$SRV[2]='api timeout'"
 eval "ERR_DESC_$SRV[3]='metadata not all up'"
 eval "ERR_DESC_$SRV[4]='vpn not all up'"

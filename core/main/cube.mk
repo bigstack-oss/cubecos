@@ -4,6 +4,7 @@
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_01-var-static.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_02-var-runtime.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_cmd.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_influx.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_is.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_license.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_remote.sh

@@ -1,4 +1,4 @@
-
+#!/bin/sh
 export BOOTSTRAP_CUBE_MARKER=/run/cube_commit_done
 export BOOTSTRAP_CUBE_MODE=/etc/appliance/state/boot_mode
 source /usr/sbin/hex_tuning /etc/settings.txt
@@ -8,19 +8,24 @@ if [ "x$T_cubesys_control_hosts" = "x" ] ; then
 else
     export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
 fi
-
+query="insert system,category=BSP,key=BSP00001I,service=bootstrap"
+bootlog="/var/log/bootstrap.log"
 BootstrapAndClusterstart()
 {
     if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
-        echo -n "Bootstrapping CubeCOS" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+        echo -n "Bootstrapping CubeCOS" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+        hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
         echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-        bash -c "hex_config -p bootstrap standalone-done | tee -a $(hex_sdk GetKernelConsoleDevices)"
+        bash -c "hex_config -p bootstrap standalone-done | tee -a $(hex_sdk GetKernelConsoleDevices)" >> $bootlog
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
-            echo -n "Bootstrap failed (Please fix it and contunue manually)" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+            echo -n "Bootstrap failed (Please fix it and contunue manually)" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+            hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"W\" message=\"$(tail -5 $bootlog)\""
         else
             echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-            echo -n "Starting cluster" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-            bash -c "hex_sdk -v cube_cluster_start | tee -a $(hex_sdk GetKernelConsoleDevices)"
+            echo -n "Starting cluster" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+            hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
+            bash -c "hex_sdk -v cube_cluster_start | tee -a $(hex_sdk GetKernelConsoleDevices)" >> $bootlog
+            hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -5 $bootlog)\""
             cubectl node exec -pn "rm -f /tmp/health_*error.count"
         fi
     fi
@@ -33,6 +38,7 @@ RollingEvacuateAndReboot()
     local cluster_info=/store/ppu/cluster-info.json
     local upgrading=false
     local last_n=$(cat $cluster_info 2>/dev/null | jq -r .[].hostname | tail -1)
+    local query="insert system,category=RUG,key=RUG00001I,service=rolling_upgrade,metadata\"rolling upgrade to $(hex_cli -c firmware list | grep -i active | cut -d' ' -f2)\""
     if [ -e "$cluster_info" -a "x$inst_type" = "xPPU" ] ; then
         for N in $(cat $cluster_info | jq -r .[].hostname) ; do
             # Cube dashboard topN misses partial info after rolling upgrades
@@ -51,13 +57,16 @@ RollingEvacuateAndReboot()
                     upgrading=true
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
                         hex_cli -c cluster check_repair
-                        echo -n "Auto rolling ppu upgrade: evacuating VMs on $N          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                        echo -n "Auto rolling ppu upgrade: evacuating VMs on $N          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+                        hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
                         if ! hex_sdk remote_run $MASTER_CONTROL "hex_sdk os_pre_failure_host_evacuation_sequential $N" upgrade ; then
-                            echo -n "Auto rolling ppu upgrade aborted since some VMs on $N failed to evacuate (Please fix it and contunue manually)          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                            echo -n "Auto rolling ppu upgrade aborted due to evacuation failures on $N failed to evacuate (Please fix it and contunue manually)          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+                            hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"W\" message=\"$(tail -1 $bootlog)\""
                             break
                         fi
                     fi
-                    echo -n "Auto rolling ppu upgrade: rebooting $N                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                    echo -n "Auto rolling ppu upgrade: rebooting $N                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+                    hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
                     hex_sdk remote_run $n_ip "echo YES | hex_cli -c reboot"
                     break
                 fi
@@ -68,9 +77,11 @@ RollingEvacuateAndReboot()
     fi
     if [ "x$upgrading" = "xfalse" ]; then
         if hex_sdk cube_cluster_ready ; then
-            echo -n "  cluster checking and repairing                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+            echo -n "  cluster checking and repairing                                        " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+            hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
             hex_cli -c cluster check_repair
-            echo -n "  cluster checked and repaired                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+            echo -n "  cluster checked and repaired                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+            hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
             need_be_active_servers="$(cat /mnt/cephfs/nova/instances/active_running 2>/dev/null)"
             if [ "x$need_be_active_servers" != "x" ] ; then
                 for i in $need_be_active_servers ; do
@@ -79,12 +90,14 @@ RollingEvacuateAndReboot()
                     else
                         hex_sdk os_nova_instance_reset $i
                         hex_sdk os_nova_instance_hardreboot $i
-                        echo -n "  reset and booted non-active server: $i                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                        echo -n "  reset and booted non-active server: $i                                          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+                        hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
                     fi
                 done
             fi
         else
-            echo -n "  cluster check and repair skipped because not all nodes are bootstrapped and synced                                           " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+            echo -n "  cluster check and repair skipped as not all nodes are bootstrapped and synced                                           " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+            hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
         fi
     fi
 }
@@ -92,25 +105,27 @@ RollingEvacuateAndReboot()
 [ -e $BOOTSTRAP_CUBE_MODE ] || touch $BOOTSTRAP_CUBE_MODE
 export CLUSTER_SIZE=$(cubectl node list | wc -l)
 
-if [ -e /etc/appliance/state/configured ] ; then
+if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; then
     echo -n "                                                                    " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
     if grep -q manual $BOOTSTRAP_CUBE_MODE ; then
-        echo -n "Please bootstrap CubeCOS manually" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+        echo -n "Please bootstrap CubeCOS manually" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+        hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
     else
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
-            if [ $(timeout 60 hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -lt $(($CLUSTER_SIZE - 1)) ] ; then
+            if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop
             fi
             BootstrapAndClusterstart
             RollingEvacuateAndReboot
-        elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" -o $CLUSTER_SIZE -eq 0 ] ; then
-            if [ $(timeout 60 hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -lt $(($CLUSTER_SIZE - 1)) ] ; then
+        elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" ] ; then
+            if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop
             fi
             (
                 cnt=0
                 while ! hex_sdk remote_run ${MASTER_CONTROL:-NOMASTER} stat $BOOTSTRAP_CUBE_MARKER >/dev/null 2>&1 ; do
-                    echo -n "Waiting for master control to finish bootstrap_cube [$cnt min]          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                    echo -n "Waiting for master control to finish bootstrap_cube [$cnt min]          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+                    hex_sdk influx_event "${query},host=$HOSTNAME code=0,status=\"$(tail -1 $bootlog)\""
                     ((cnt++))
                     sleep 60
                 done
@@ -123,7 +138,8 @@ if [ -e /etc/appliance/state/configured ] ; then
             (
                 cnt=0
                 while ! cubectl node exec -r control stat $BOOTSTRAP_CUBE_MARKER >/dev/null 2>1 ; do
-                    echo -n "Waiting for control(s) to finish bootstrap_cube [$cnt min]          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                    echo -n "Waiting for control(s) to finish bootstrap_cube [$cnt min]          " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices) >> $bootlog
+                    hex_sdk influx_event "${query},host=$HOSTNAME,severity=\"I\" message=\"$(tail -1 $bootlog)\""
                     ((cnt++))
                     sleep 60
                 done

@@ -9,7 +9,7 @@ fi
 source ${SDK_DIR}/modules/errcodes
 # _check is invoked by lmi which lacks persmissions to run
 # ssh commands like is_remote_running. Wrap it with /usr/sbin/hex_config sdk_run
-ERR_CODE=0                      # health_check error code
+ERR_CODE=${ERR_CODE:-0}         # health_check error code
 ERR_MSG=                        # health_check error message
 ERR_LOG=                        # health_check log file
 ERR_LOGSIZE=100                 # health_check log size (number of lines)
@@ -80,7 +80,6 @@ _health_fail_log()
     local srv=$(caller 0 | cut -d" " -f2 | sed -e "s/^health_//" -e "s/_check$//")
 
     [ "$VERBOSE" != "1" ] || echo -e "$ERR_MSG"
-    [ `cubectl node exec -pn "[ -e $CUBE_DONE ] && echo 0" | wc -l` -eq ${#CUBE_NODE_LIST_HOSTNAMES[@]} ] || return $ERR_CODE
 
     local maxerr=6
     if [ -f /etc/alert.level ] ; then
@@ -118,15 +117,18 @@ _health_fail_log()
         echo -e "$ERR_MSG" $'\n' >> /var/log/health_${srv}_error.log
         echo $count > /tmp/health_${srv}_error.count
         if [ $count -lt $maxerr ] ; then
-            local auto_repair_func="_health_${srv}_auto_repair"
-            if Quiet type $auto_repair_func 2>/dev/null ; then
-                query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
-                if ! $INFLUX -database events -execute "${query},detail=\"auto repair ($count/$maxerr)\"" ; then
-                    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-                        timeout $SRVSTO /usr/bin/influx -host $node -database events -execute "${query},detail=\"auto repair ($count/$maxerr)\""
-                    done
+            if [ `cubectl node exec -pn "[ -e $CUBE_DONE ] && echo 0" | wc -l` -eq ${#CUBE_NODE_LIST_HOSTNAMES[@]} ] ; then
+                local auto_repair_func="_health_${srv}_auto_repair"
+                if Quiet type $auto_repair_func 2>/dev/null ; then
+                    query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
+                    influx_event "${query},detail=\"auto repair ($count/$maxerr)\""
+                    $auto_repair_func &
+                    echo $! > $runtime
+                    ln -sf $runtime $CLUSTER_REPAIRING
+                    wait $(cat $runtime) && rm -f $runtime $CLUSTER_REPAIRING
+                    query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixed\""
+                    influx_event "${query},detail=\"auto repair ($count/$maxerr)\""
                 fi
-                $auto_repair_func
             fi
         fi
     fi
@@ -152,20 +154,20 @@ EOF
         if [ "x$keys" != "x" ] ; then
             timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
-                keys=$keys $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys $HEX_SDK os_s3_bucket_create admin log
+                keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys $HEX_SDK os_s3_bucket_create admin log
                 log_url="s3://$log_pth"
                 rm -f /tmp/$log
             else
                 # In case collecting logs from remote fails, look for local log
                 if [ -e $ERR_LOG ] ; then
                     tail -n $ERR_LOGSIZE $ERR_LOG > /tmp/$log
-                    keys=$keys $HEX_SDK os_s3_object_put admin $ERR_LOG $log_pth >/dev/null 2>&1 || keys=$keys $HEX_SDK os_s3_bucket_create admin log
+                    keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin $ERR_LOG $log_pth >/dev/null 2>&1 || keys=$keys $HEX_SDK os_s3_bucket_create admin log
                     log_url="s3://$log_pth"
                 fi
             fi
         fi
     fi
-    $INFLUX -database events -execute "${query},log=\"${log_url}\",detail=\"${err_msg_oneline}\""
+    influx_event "${query},log=\"${log_url}\",detail=\"${err_msg_oneline}\""
 
     return $ERR_CODE
 }
@@ -632,6 +634,7 @@ health_vip_check()
 {
     local active_host=$($HEX_CFG status_pacemaker | awk '/IPaddr2/{print $5}')
     DESCRIPTION="non-HA"
+    ERR_LOG="pcs status"
 
     if [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -639,23 +642,28 @@ health_vip_check()
             local ipaddr=$(echo $ipcidr | cut -d"/" -f1)
             if [ "$node" == "$active_host" ] ; then
                 DESCRIPTION="$ipcidr@$active_host"
-                if [ -z "$ipcidr" ] ; then
-                    ERR_CODE=1
-                    ERR_MSG+="$ipcidr should be active on $node\n"
-                    ERR_LOG="pcs status"
-                elif [ $(cubectl node exec -np "arping -c 1 -w 1 $ipaddr >/dev/null && arp -n $ipaddr" | grep "^${ipaddr}" | awk '{print $1, $3}' | sort -u | wc -l) -gt 1 ] ; then
+                ERR_MSG=$DESCRIPTION
+                old_vip=$(FORMAT=json VERBOSE=1 influx_event_health vip | jq -r .results[].series[].values[][4] | grep "[0-9].*@" | head -1)
+                # fixing arp table first
+                if [ $(cubectl node exec -np "arping -c 1 -w 1 $ipaddr >/dev/null && arp -n $ipaddr" | grep "^${ipaddr}" | awk '{print $1, $3}' | sort -u | wc -l) -gt 1 ] ; then
                     ERR_CODE=3
-                    ERR_MSG+="stale VIP in arp table\n"
                     ERR_LOG="cubectl node exec -p arp -e -n $ipaddr"
+                elif [ "x$old_vip" != "x" -a "$old_vip" != "$DESCRIPTION" -a "$HOSTNAME" == "$active_host" ] ; then
+                    rm -f /tmp/health_vip_error.count
+                    ERR_CODE=4
+                elif [ -z "$ipcidr" ] ; then
+                    ERR_CODE=1
                 fi
             else
                 if [ -n "$ipcidr" ] ; then
                     ERR_CODE=2
-                    ERR_MSG+="$ipcidr shouldn't be active on $node\n"
-                    ERR_LOG="pcs status"
                 fi
             fi
         done
+    else
+        if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
+            ERR_CODE=5
+        fi
     fi
 
     _health_fail_log
@@ -663,8 +671,14 @@ health_vip_check()
 
 _health_vip_auto_repair()
 {
-    if [ "$ERR_CODE" == "3" ] ; then
+    if [ $ERR_CODE -eq 3 ] ; then # fixing arp table first
         Quiet -n cubectl node exec -np "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
+    elif [ $ERR_CODE -eq 4 ] ; then
+        rm -f /tmp/health_neutron_error.count
+        ERR_CODE=1 _health_neutron_auto_repair
+    elif [ $ERR_CODE -eq 5 ] ; then
+        unlink /run/cube_cluster_repairing # fixing vip has high priority
+        cubectl node exec -r control -p systemctl restart corosync
     fi
 }
 
@@ -687,6 +701,11 @@ health_vip_repair()
                 fi
             fi
         done
+    else
+        if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
+            unlink /run/cube_cluster_repairing # fixing vip has high priority
+            cubectl node exec -r control -p systemctl restart corosync
+        fi
     fi
 }
 
@@ -1620,7 +1639,9 @@ health_neutron_check()
     local control_down=$(echo "$service_stats" | grep ovn-controller | grep -i False | wc -l )
 
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u neutron-server"
-    if [ -z "$service_stats" ] ; then
+    if echo $(VERBOSE=1 influx_event_health vip) | grep -q "vip changed" ; then
+        ERR_CODE=1
+    elif [ -z "$service_stats" ] ; then
         ERR_CODE=2
     elif [ "$metadata_up" == "0" -o "$metadata_down" != "0" ] ; then
         ERR_CODE=3
@@ -1650,9 +1671,19 @@ health_neutron_check()
 
 _health_neutron_auto_repair()
 {
-    if [ "$ERR_CODE" != "0" ] ; then
+    if [ $ERR_CODE -ne 0 ] ; then
         $OPENSTACK port list -f value -c ID -c Name | grep "diag[-]" | cut -d " " -f1 | xargs -i $OPENSTACK port delete {}
-        if [ $ERR_CODE -eq 6 ] ; then
+        if [ $ERR_CODE -eq 1 ] ; then
+            # $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
+            cubectl node exec -r control -pn systemctl restart neutron-server
+            timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'OVN Metadata .* :-)' || systemctl restart neutron-ovn-metadata-agent"
+            timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'VPN .* :-)' || systemctl restart neutron-ovn-vpn-agent"
+
+            # Fail over Ceph dashboard which doesn't work automatically with new active ceph-mgr
+            # SDK auto repair cannot help because when inst-ha takes place, not all nodes complete bootstrap
+            $CEPH mgr module disable dashboard
+            $CEPH mgr module enable dashboard
+        elif [ $ERR_CODE -eq 6 ] ; then
             Quiet -n cubectl node exec -r control -pn -- $HEX_SDK os_neutron_worker_scale
         else
             $HEX_SDK ovn_neutron_db_sync
@@ -3019,32 +3050,11 @@ health_node_report()
     printf "+%12s+%7s+%7s+%7s+%7s+%7s+\n" | tr " " "-"
 }
 
-health_db_select()
-{
-    local component=$1
-    local limit=${2:-10}
-    local tagfield="component,code,description,node,log"
-    local flag=
-
-    if [ "$FORMAT" = "json" ] ; then
-        flag="-format json -pretty"
-    fi
-    [ "$VERBOSE" != "1" ] || tagfield+=",detail"
-
-    if [ "x$1" = "x" ] ; then
-        for component in $($HEX_SDK toggle_health_check | cut -d":" -f1) ; do
-            $INFLUX $flag -database events -execute "select $tagfield from health where component='$component' order by desc limit $limit"
-        done
-    else
-        $INFLUX $flag -database events -execute "select $tagfield from health where component='$component' order by desc limit $limit"
-    fi
-}
-
 health_log_dump()
 {
     local component=$1
     local n_from_last=${2:-1}
-    local s3_log=$(health_db_select ${component:-NOSUCHCOMPONENT} 2>/dev/null | grep s3 | sed -n ${n_from_last}p | grep -o "s3://log/.*")
+    local s3_log=$(influx_event_health ${component:-NOSUCHCOMPONENT} 2>/dev/null | grep s3 | sed -n ${n_from_last}p | grep -o "s3://log/.*")
 
     if [ "x$s3_log" != "x" ] ; then
         $HEX_SDK os_s3_object_get admin $s3_log /tmp/$s3_log
@@ -3057,15 +3067,14 @@ health_log_detail()
 {
     local component=$1
     local n_from_last=${2:-1}
-    local flag="-format json"
 
     [ $n_from_last -ge 1 ] || Error "invalid index $n_from_last"
-    local timestamp=$(VERBOSE=1 FORMAT= health_db_select $component $n_from_last | tail -1 | awk '{print $1}')
+    local timestamp=$(VERBOSE=1 FORMAT= influx_event_health $component $n_from_last | tail -1 | awk '{print $1}')
     if [ "$FORMAT" = "json" ] ; then
-        $INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)"
+        influx_event "select time,detail from health where (component='$component' and time=$timestamp)"
     else
         echo -n "$(date -d @${timestamp:0:10}) - "
-        $INFLUX $flag -database events -execute "select time,detail from health where (component='$component' and time=$timestamp)" | jq -r .results[].series[].values[][] | tr ";" "\n"
+        influx_event "select time,detail from health where (component='$component' and time=$timestamp)" | jq -r .results[].series[].values[][] | tr ";" "\n"
     fi
 }
 

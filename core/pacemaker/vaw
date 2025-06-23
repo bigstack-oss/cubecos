@@ -1,0 +1,19 @@
+#/bin/bash
+
+source /etc/admin-openrc.sh
+while true; do
+    hex_sdk health_vip_check
+    srv_lst=$(openstack server list --long --all-projects -f json)
+    for ID in $(echo $srv_lst | jq -r .[].ID) ; do
+        cur_status=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").\"Status\"")
+        cur_host=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").Host")
+        if [ "x$cur_status" = "xERROR" -o "x$cur_status" = "xREBUILD" ] ; then
+            timeout 10 hex_sdk os_nova_instance_reset $ID
+            if hex_sdk os_nova_list id powerstate | grep $ID | grep -q -i -e shutdown -e nostate ; then
+                timeout 10 hex_sdk os_nova_instance_hardreboot $ID
+            fi
+        fi
+    done
+
+    sleep 10
+done

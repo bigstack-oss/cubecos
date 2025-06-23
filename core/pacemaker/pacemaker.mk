@@ -10,3 +10,5 @@ ROOTFS_DNF += $(PACEMAKER_DNF) pcs fence-agents-all libqb
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable rpcbind nfs-convert || true
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/pacemaker/vaw.service ./lib/systemd/system
+	$(Q)$(INSTALL_SCRIPT) -f $(ROOTDIR) $(COREDIR)/pacemaker/vaw ./usr/sbin/vaw

@@ -49,8 +49,6 @@ static const char DBPASS[] = "GRmeqOmBcyus5cW0";
 
 static const char OSCMD[] = "/usr/bin/openstack";
 
-static const char INSTANCE_HA_HELPER[] = "/etc/cron.d/instance_ha_helper";
-
 static Configs cfg;
 static Configs monCfg;
 
@@ -435,26 +433,6 @@ CommitCheck(bool modified, int dryLevel)
 }
 
 static bool
-WriteCronInstanceHaHelper()
-{
-    FILE *fout = fopen(INSTANCE_HA_HELPER, "w");
-    if (!fout) {
-        HexLogError("Unable to write cron job: %s", INSTANCE_HA_HELPER);
-        return false;
-    }
-
-    fprintf(fout, "* * * * * root " HEX_SDK " os_instance_ha_helper\n");
-    fclose(fout);
-
-    if(HexSetFileMode(INSTANCE_HA_HELPER, "root", "root", 0644) != 0) {
-        HexLogError("Unable to set file %s mode/permission", INSTANCE_HA_HELPER);
-        return false;
-    }
-
-    return true;
-}
-
-static bool
 Commit(bool modified, int dryLevel)
 {
     // todo: remove this if support dry run
@@ -509,9 +487,6 @@ Commit(bool modified, int dryLevel)
     MasakariService(s_enabled);
 
     WriteLogRotateConf(log_conf);
-
-    if (IsControl(s_eCubeRole))
-        WriteCronInstanceHaHelper();
 
     return true;
 }
