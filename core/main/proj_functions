@@ -23,11 +23,28 @@ _hex_exec()
     local cmd="${1:-BADCMD}"
     shift 1
     local runtime=/run/$cmd
+    local pid=$$
+    local usr=$(ps -o user= -p $pid | xargs)
+    local pcmd=$(ps -o comm= $PPID | xargs)
+    local pusr=$(ps -o user= -p $PPID | xargs)
+    local gpid=$(ps -o ppid= -p $PPID | xargs)
+    local gcmd=$(ps -o comm= $gpid | xargs)
+    local gusr=$(ps -o user= -p $gpid | xargs)
+
+    [ "x$(type -t influx_event)" = "xfunction" ] || source /usr/lib/hex_sdk/modules.pre/sdk_influx.sh
+    if echo $pcmd | grep -i ssh ; then
+        pip=$(ss -tunpa | grep $PPID | awk '{print $6}')
+        [ "x$pip" = "x" ] || pcmd+="($pip)"
+        gip=$(ss -tunpa | grep $gpid | awk '{print $6}')
+        [ "x$gip" = "x" ] || gcmd+="($gip)"
+    fi
+    influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,gpid=$gpid,pusr=$pusr,pcmd=$pcmd,ppid=$PPID,usr=$usr,pid=$pid cmd=\"$cmd\""
+
     if echo "$cmd" | grep -q "health_.*_check$" ; then
+        local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
         if [ -e $HEX_STATE_DIR/${cmd}_disabled ] ; then
-            local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
-            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"disabled\""
-            $INFLUX -database events -execute "${query},detail=\"$cmd\""
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"check disabled\""
+            influx_event "${query},detail=\"$cmd\""
         else
             if [ "x$1" = "x-l" -o "x$1" = "x-last" -o "x${HEX_HEALTH_LAST:=0}" != "x0" ] ; then
                 shift 1
@@ -42,17 +59,27 @@ _hex_exec()
             fi
         fi
     elif echo "$cmd" | grep -q "health_.*_repair$" ; then
-        if $HEX_SDK is_repairing ; then
+        local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/^_health_//" -e "s/_auto_repair$//" -e "s/_repair$//")
+        [ "x$MANNER" != "xforce" ] || cubectl node exec -pn rm -f /run/cube_cluster_repairing
+        local repair_json="$(VERBOSE=1 is_repairing)"
+        if [ "x$repair_json" != "x" ] ; then
+            local node=$(echo $repair_json | jq -r .node)
+            local service=$(echo $repair_json | jq -r .service)
+            local elaps=$(echo $repair_json | jq -r .elaps)
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing skipped due to $service($elaps) by $node\""
+            influx_event "${query},detail=\"$cmd\""
             return 1
         else
             trap _hex_exec_abort INT EXIT
             $cmd "$@" &
             echo $! > $runtime
             ln -sf $runtime $CLUSTER_REPAIRING
-            local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_repair$//")
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
-            $INFLUX -database events -execute "${query},detail=\"$cmd\""
-            wait $(cat $runtime) && rm -f $runtime $CLUSTER_REPAIRING
+            influx_event "${query},detail=\"$cmd PID$(cat $runtime)\""
+            wait $(cat $runtime)
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixed\""
+            influx_event "${query},detail=\"$cmd PID$(cat $runtime)\""
+            rm -f $runtime $CLUSTER_REPAIRING
         fi
     else
         $cmd "$@"
@@ -869,10 +896,20 @@ cube_cluster_ppu()
 
 cluster_check()
 {
-    HEX_HEALTH_LAST=1 hex_cli -c cluster check
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if is_remote_running $node influxdb ; then
+            VERBOSE=1 remote_run $node "HEX_HEALTH_LAST=1 hex_cli -c cluster check"
+            break
+        fi
+    done
 }
 
 cluster_check_repair()
 {
-    HEX_HEALTH_LAST=1 hex_cli -c cluster check_repair
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if is_remote_running $node influxdb ; then
+            VERBOSE=1 remote_run $node "HEX_HEALTH_LAST=1 hex_cli -c cluster check_repair"
+            break
+        fi
+    done
 }

@@ -79,6 +79,9 @@ SetupCluster(const bool enabled, const bool ha, std::string sharedId, const std:
 
         HexUtilSystemF(0, 0, "pcs resource create vip ocf:heartbeat:IPaddr2 "
                              "ip=\"%s\" op monitor interval=\"30s\"", sharedId.c_str());
+        HexUtilSystemF(0, 0, "pcs resource create vaw systemd:vaw op monitor interval=\"30s\"");
+        HexUtilSystemF(0, 0, "pcs constraint colocation add vip with vaw score=INFINITY");
+        HexUtilSystemF(0, 0, "pcs constraint order vip then vaw");
         HexUtilSystemF(0, 0, "pcs resource create haproxy systemd:haproxy-ha op monitor interval=\"1s\"");
         HexUtilSystemF(0, 0, "pcs constraint colocation add vip with haproxy score=INFINITY");
         HexUtilSystemF(0, 0, "pcs constraint order vip then haproxy");
@@ -208,6 +211,9 @@ Commit(bool modified, int dryLevel)
     }
 
     WriteLogRotateConf(log_conf);
+
+    // vip could be misssing when corosync doesn't form quorum between system reboots
+    HexUtilSystemF(0, 0, HEX_SDK " health_vip_check || " HEX_SDK " health_vip_repair");
 
     return true;
 }

@@ -1,0 +1,7 @@
+#/bin/bash
+
+source /etc/admin-openrc.sh
+while true; do
+    hex_sdk health_vip_check
+    hex_sdk os_instance_ha_helper
+done

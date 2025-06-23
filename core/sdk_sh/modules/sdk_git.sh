@@ -66,7 +66,7 @@ _git_server_init()
             if [ -e "/.gitignore" ] ; then
                 Quiet -n git add -A
                 Quiet -n git commit -m "$(hex_cli -c firmware list | grep ACTIVE | awk '{print $2}')" -a
-                Quiet -n git push --set-upstream $project $branch
+                Quiet -n git push --set-upstream $project $branch && touch /etc/appliance/state/git_server_init
             else
                 Error "failed to generate /.gitignore"
             fi
@@ -133,4 +133,12 @@ git_push()
     local msg="${@:-n/a}"
     ( $GIT commit -m "$msg" -a && $GIT push -q && cubectl node exec "$GIT stash ; $GIT pull" ) >/dev/null || Error "nothing is pushed"
     Quiet -n $GIT -P log -3
+}
+
+git_init()
+{
+    git_server_init
+    if [ -e /etc/appliance/state/git_server_init ] ; then
+        host_local_run cubectl node exec -p "hex_sdk git_client_init"
+    fi
 }

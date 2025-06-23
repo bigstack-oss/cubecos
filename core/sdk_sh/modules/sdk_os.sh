@@ -281,127 +281,47 @@ os_instance_ha_helper()
 {
     # Do not intervene bootstrap processes
     [ -e /run/cube_commit_done ] >/dev/null 2>&1 || return 0
-    # Proceed only when instance_ha is enabled
-    [ $($OPENSTACK segment list -f value -c name | wc -l) -ne 0 ] || return 0
-    # Do nothing if another node is taking actions
-    local helping=/mnt/cephfs/nova/instance_ha.helping
-    local cmp_lst=$($OPENSTACK compute service list -f json)
-    local down_host=$(echo $cmp_lst | jq -r '.[] | select (.Binary == "nova-compute" and .Status == "disabled" and .State == "down").Host' | sort -u)
-    if [ -e $helping ] ; then
-        # Remove stale lock if it exceeds 60 min
-        duration=$(echo $(( ($(date +%s) - $(stat $helping -c %Y)) / 60 )))
-        [ ${duration:-60} -lt 60 ] || rm -f $helping
-        [ "x$down_host" != "x$(cat $helping)" ] || rm -f $helping
-        return 0
-    fi
 
-    hostname > $helping # mutex lock
+    # Proceed only when instance_ha is enabled
+    $OPENSTACK segment list -f value -c is_enabled | grep -q -i true || return 0
 
     # Fail over Ceph dashboard which doesn't work automatically with new active ceph-mgr
     # SDK auto repair cannot help because when inst-ha takes place, not all nodes complete bootstrap
     local active=$($CEPH mgr stat -f json | jq -r .active_name)
     if ! timeout $SRVSTO curl -I -k https://${active}:7442/ceph/ 2>/dev/null | grep -q "200 OK" ; then
         $CEPH mgr module disable dashboard
-        echo "ceph mgr module disable dashboard" >> $helping
         $CEPH mgr module enable dashboard
-        echo "ceph mgr module enable dashboard" >> $helping
     fi
     mountpoint -- $CEPHFS_STORE_DIR  | grep -q "is a mountpoint" || timeout $SRVTO cubectl node exec -pn "$HEX_SDK ceph_mount_cephfs"
 
-    local vip=/mnt/cephfs/nova/cluster.vip
-    if [ ! -e $vip ] ; then
-        timeout $SRVSTO $HEX_SDK -f json health_vip_report | jq -r .description > $vip
-    else
-        old_vip=$(cat $vip)
-        new_vip=$(timeout $SRVSTO $HEX_SDK -f json health_vip_report | jq -r .description)
-        if [ "x$old_vip" != "x$new_vip" ] ; then
-            echo "old_vip=$old_vip" >> $helping
-            echo "new_vip=$new_vip" >> $helping
-            $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
-            echo "removed non active network agent" >> $helping
-            timeout $SRVTO cubectl node exec -r control -pn systemctl restart neutron-server
-            echo "cubectl node exec -r control -pn systemctl restart neutron-server" >> $helping
-            timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'OVN Metadata .* :-)' || systemctl restart neutron-ovn-metadata-agent"
-            echo "cubectl node exec -r compute -pn systemctl restart neutron-ovn-metadata-agent" >> $helping
-            timeout $SRVTO cubectl node exec -r compute -pn "$OPENSTACK network agent list --host \$HOSTNAME | grep -q 'VPN .* :-)' || systemctl restart neutron-ovn-vpn-agent"
-            echo "cubectl node exec -r compute -pn systemctl restart neutron-ovn-vpn-agent" >> $helping
-            echo $new_vip > $vip
-        else
-            local NET_LST=$($OPENSTACK network agent list -f json)
-            for node in $(echo $NET_LST | jq -r '.[] | select (.Alive == false and .State == true and ."Agent Type" == "VPN Agent").Host' | sort -u) ; do
-                if [ "x$node" != "x$down_host" ] ; then
-                    timeout $SRVSTO $HEX_SDK remote_run $node systemctl restart neutron-ovn-vpn-agent
-                    echo "$HEX_SDK remote_run $node systemctl restart neutron-ovn-vpn-agent" >> $helping
-                fi
-            done
-            for node in $(echo $NET_LST | jq -r '.[] | select (.Alive == false and .State == true and ."Agent Type" == "OVN Metadata agent").Host' | sort -u) ; do
-                if [ "x$node" != "x$down_host" ] ; then
-                    timeout $SRVSTO $HEX_SDK remote_run $node systemctl restart neutron-ovn-metadata-agent
-                    echo "$HEX_SDK remote_run $node systemctl restart neutron-ovn-metadata-agent" >> $helping
-                fi
-            done
-        fi
-    fi
-
-    # Revive nova compute if it is enabled but service is down
-    for node in $(echo $cmp_lst | jq -r '.[] | select (.Binary == "nova-compute" and .Status == "enabled" and .State == "down").Host' | sort -u) ; do
-        timeout $SRVTO $HEX_SDK remote_run $node systemctl restart openstack-nova-compute
-        echo "$HEX_SDK remote_run $node systemctl restart openstack-nova-compute" >> $helping
-    done
-
-    local notify_log=/mnt/cephfs/nova/notification.log
     local new_notify=$($OPENSTACK notification list -f value | grep COMPUTE_HOST | head -1)
-    if [ ! -e $notify_log ] ; then
-        echo $new_notify > $notify_log
-    else
-        if echo $new_notify | grep -q "finished COMPUTE_HOST" ; then
-            echo $new_notify > $notify_log
-        elif echo $new_notify | grep -q -e "new COMPUTE_HOST" -e "running COMPUTE_HOST" ; then
-            :
-        else
-            local old_notify="$(head -1 $notify_log)"
-            if [ "x$new_notify" = "x$old_notify" ] ; then
-                fix_cnt="$(tail -1 $notify_log | cut -d":" -f1)"
-                case $fix_cnt in
-                    0|1|2|3|4|5|6|7|8|9)
-                        ((fix_cnt++))
-                        echo "${fix_cnt}:$HOSTNAME" >> $notify_log
-                        ;;
-                    *)
-                        ;;
-                esac
+    local old_notify=$(VERBOSE=1 FORMAT=json influx_event_health instanceha 1 | jq -r .results[].series[].values[][4])
+    local notify_id=$(echo $new_notify | cut -d" " -f1)
+    local query="insert health,component=instanceha,node=$HOSTNAME,code=0 description=\"checking\""
+    [ "x$old_notify" = "x$new_notify" ] || influx_event "${query},log=\"$($OPENSTACK notification show ${notify_id:-NOID} -f json)\",detail=\"$new_notify\""
+    if echo $new_notify | grep -q -e "failed COMPUTE_HOST" ; then
+        query="insert health,component=instanceha,node=$HOSTNAME,code=1 description=\"fixing\""
+        local srv_lst=$($OPENSTACK server list --long --all-projects -f json)
+        for ID in $(echo $srv_lst | jq -r .[].ID) ; do
+            local cur_status=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").\"Status\"")
+            local cur_host=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").Host")
+            if [ "x$cur_host" = "x$down_host" ] ; then
+                if [ "x$cur_status" = "xERROR" ] ; then
+                    timeout $SRVSTO $HEX_SDK os_nova_instance_reset $ID
+                    influx_event "${query},detail=\"os_nova_instance_reset $ID\""
+                fi
+                influx_event "${query},detail=\"nova evacuate $ID\""
+                timeout $SRVTO nova evacuate $ID
             else
-                echo $new_notify > $notify_log
-                fix_cnt=1
-                echo "${fix_cnt}:$HOSTNAME" >> $notify_log
+                if [ "x$cur_status" = "xERROR" -o "x$cur_status" = "xREBUILD" ] ; then
+                    influx_event "${query},detail=\"os_nova_instance_reset $ID\""
+                    timeout $SRVSTO $HEX_SDK os_nova_instance_reset $ID
+                    influx_event "${query},detail=\"os_nova_instance_hardreboot $ID\""
+                    timeout $SRVSTO $HEX_SDK os_nova_instance_hardreboot $ID
+                fi
             fi
-            if [ $fix_cnt -lt 10 ] ; then
-                notify_id=$(echo $new_notify | cut -d" " -f1)
-                local notify_detail=$($OPENSTACK notification show $notify_id -f json)
-                local srv_lst=$($OPENSTACK server list --long --all-projects -f json)
-                for ID in $(echo $srv_lst | jq -r .[].ID) ; do
-                    local cur_status=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").\"Status\"")
-                    local cur_host=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").Host")
-                    if [ "x$cur_host" = "x$down_host" ] ; then
-                        if [ "x$cur_status" = "xERROR" ] ; then
-                            timeout $SRVSTO $HEX_SDK os_nova_instance_reset $ID
-                            echo "$HEX_SDK os_nova_instance_reset $ID" >> $helping
-                        fi
-                        timeout $SRVTO nova evacuate $ID
-                        echo "nova evacuate $ID" >> $helping
-                    else
-                        if [ "x$cur_status" = "xERROR" -o "x$cur_status" = "xREBUILD" ] ; then
-                            timeout $SRVSTO $HEX_SDK os_nova_instance_reset $ID
-                            echo "$HEX_SDK os_nova_instance_reset $ID" >> $helping
-                            timeout $SRVSTO $HEX_SDK os_nova_instance_hardreboot $ID
-                            echo "$HEX_SDK os_nova_instance_hardreboot $ID" >> $helping
-                        fi
-                    fi
-                done
-            fi
-        fi
+        done
     fi
-    rm -f $helping              # mutex unlock
 }
 
 os_get_network_id_by_tenant_and_name()
@@ -2672,13 +2592,13 @@ os_device_profile_create()
 
     OLDIFS="$IFS"
     IFS=$'\n'
-    for d in $($OPENSTACK accelerator device list -f value -c vendor -c std_board_info | sort | uniq) ; do
+    for d in $(timeout $SRVTO openstack accelerator device list -f value -c vendor -c std_board_info | sort | uniq) ; do
         if echo $d | grep -q "^10de " ; then
             pid=$(echo $d | awk '{ s = "" ; for (i = 2 ; i <= NF ; i++) s = s $i " " ; print s }' | jq -r .product_id | tr '[:lower:]' '[:upper:]')
-            uuid=$($OPENSTACK accelerator device list -f value -c uuid -c vendor -c std_board_info | grep $d | head -1 | awk '{print $1}')
-            model=$($OPENSTACK accelerator device show -f json $uuid | jq -r .model)
+            uuid=$(timeout $SRVTO openstack accelerator device list -f value -c uuid -c vendor -c std_board_info | grep $d | head -1 | awk '{print $1}')
+            model=$(timeout $SRVTO openstack accelerator device show -f json $uuid | jq -r .model)
             name=$(echo $model | awk -F'[' '{print $2}' | awk -F']' '{print $1}' | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
-            if ! $OPENSTACK accelerator device profile list -f value -c name | grep -q "${name}_${units}" ; then
+            if ! timeout $SRVTO openstack accelerator device profile list -f value -c name | grep -q "${name}_${units}" ; then
                 echo "Creating device profile for $model (resource unit: $units)"
                 profile="["
                 for i in $(seq $units) ; do
@@ -2689,7 +2609,7 @@ os_device_profile_create()
                 done
                 profile="${profile}]"
 
-                $OPENSTACK accelerator device profile create ${name}_${units} "$profile"
+                timeout $SRVTO openstack accelerator device profile create ${name}_${units} "$profile"
             fi
         fi
     done

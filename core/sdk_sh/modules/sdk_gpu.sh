@@ -141,7 +141,7 @@ gpu_device_status()
     printf "+%14s+%36s\n" | tr " " "-"
     printf "\n"
 
-    health_cyborg_report
+    hex_sdk -v -f none health_cyborg_report
 
     printf "\n"
 }
