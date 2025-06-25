@@ -3,18 +3,13 @@
 include ../../build.mk
 include $(SRCDIR)/rancher.mk
 
-APP_VERSION := 2.7.9
-CLI_VERSION := 2.7.7
+APP_VERSION := 2.11.2
+CLI_VERSION := 2.11.2
 
-# IMG_LIST := containers-storage:localhost/bigstack/rancher:v$(APP_VERSION) $(shell cat $(SRCDIR)/images.txt)
 IMG_LIST := $(shell cat $(SRCDIR)/images.txt)
 ifeq ($(FULL),true)
 	IMG_LIST += $(shell cat $(SRCDIR)/rancher-images.txt)
 endif
-
-# IMGS := $(SRCDIR)/images.txt
-# IMGS_FULL := $(SRCDIR)/full-images.txt
-# IMGS_FULL_ARCHIVE := k8s-full-images_$(APP_VERSION).tgz
 
 CLI_BIN := rancher
 CHART := rancher-$(APP_VERSION).tgz
@@ -26,25 +21,6 @@ $(CLI_BIN):
 $(CHART):
 	$(Q)helm repo add rancher-stable https://releases.rancher.com/server-charts/stable $(QEND)
 	$(Q)helm pull rancher-stable/rancher --version $(APP_VERSION) $(QEND)
-#	$(Q)helm template rancher $(CHART) -n cattle-system -f $(SRCDIR)/chart-values.yaml --output-dir $@
-
-
-# images:
-# 	@# $(Q)mkdir -p images/
-# 	@# $(call RUN_CMD_TIMED, for i in $(IMG_LIST); do podman pull $$i; done,"  PULL    rancher images")
-# 	@# $(call RUN_CMD_TIMED, cd images/ && for i in $(IMG_LIST); do podman save $$i -o $$(echo $$(basename $$i) | cut -d: -f1).tar; done,"  SAVE    rancher images")
-# 	$(call RUN_CMD_TIMED, $(SRCDIR)/copy-images.sh pull $(IMGS),"  PULL    rancher images")
-
-# full-images:
-# 	@# $(Q)mkdir -p full-images/
-# 	@# $(Q)for i in $(FULL_IMG_LIST); do _bname=$$(basename $$i); name=$$(echo $$(basename $$i) | cut -d: -f1); tag=$$(echo $$(basename $$i) | cut -d: -f2); skopeo copy docker://$$i docker-archive:./full-images/$${name}~$${tag}.tar:$${name}:$${tag}; done
-# 	$(call RUN_CMD_TIMED, $(SRCDIR)/copy-images.sh pull $(IMGS_FULL),"  PULL    rancher full images")
-
-# $(IMGS_FULL_ARCHIVE): full-images
-# 	$(call RUN_CMD_TIMED, tar -C $< -czvf $@ .,"  GEN    rancher full images archive")
-
-# .PHONY: img_export
-# img_export: $(IMGS_FULL_ARCHIVE)
 
 nodedrivers/docker-machine-driver-cube:
 	$(Q)mkdir -p nodedrivers/
@@ -68,13 +44,6 @@ install: $(CLI_BIN) $(CHART)
 	$(Q)mkdir -p $(RANCHER_DIR)
 	$(Q)cp -f $(CHART) $(SRCDIR)/chart-values.yaml $(RANCHER_DIR)
 
-# test:: build-image
-# 	$(Q)podman run -d --name=rancher \
-# 		-p 443:443 \
-# 		--privileged \
-# 		localhost/bigstack/rancher:v$(APP_VERSION)
-# 	$(Q)echo Accessing rancher on https://$(shell cat /etc/hosts | grep $$(cat /etc/hostname) | awk '{print $$1}')/
-
 test:: install
 ifeq ($(DEP),1)
 	$(Q)make test -C ../k3s
@@ -86,7 +55,6 @@ endif
 
 testclean::
 	$(Q)helm --kubeconfig /etc/rancher/k3s/k3s.yaml uninstall rancher -n cattle-system || true
-#	$(Q)k3s kubectl delete ns cattle-system || true
 ifeq ($(DEP),1)
 	$(Q)make testclean -C ../k3s
 endif
