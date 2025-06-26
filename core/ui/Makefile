@@ -28,13 +28,19 @@ $(UI_GIT_DIR):
 		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(UI_GIT_DIR) && break ; \
 		done,\
 		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
+	$(Q)# enable nvm
+	$(Q)sed -i 's/^#//g' $$BASH_ENV
+	$(Q)cd $(UI_GIT_DIR) && nvm install $(QEND)
+	$(Q)cd $(UI_GIT_DIR) && nvm use $(QEND) && npm install -g pnpm@latest-10 $(QEND)
+	$(Q)# disable nvm
+	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 
 version: $(UI_GIT_DIR)
 	$(Q)echo -n "UI_VERSION := " > version
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(UI_GIT_DIR) && \
-		nvm use $(UI_NODE_VERSION) $(QEND) && \
+		nvm use $(QEND) && \
 		node -p "require('./packages/cube-frontend-web-app/package.json').version" >> ../version
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
@@ -68,7 +74,8 @@ $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(call RUN_CMD_TIMED, \
-		nvm use $(UI_NODE_VERSION) $(QEND) && \
+		cd $(UI_GIT_DIR) && \
+		nvm use $(QEND) && \
 		rpmbuild -bb --nodeps --define "_topdir $(UI_RPMBUILD_DIR)" --define "version $(UI_VERSION)" --define "build_number $(UI_BUILD_NUMBER)" $(UI_SPEC_FILE), \
 		"  BUILD   cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm")
 	$(Q)# disable nvm
