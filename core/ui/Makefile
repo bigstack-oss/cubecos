@@ -1,7 +1,7 @@
 # Cube SDK
 
 include ../../build.mk
-UI_RPM := $(TOP_BLDDIR)/core/ui/ui.rpm
+UI_RPM := ui.rpm
 
 ifneq ($(RC),)
 $(UI_RPM):
@@ -14,7 +14,7 @@ include build_number
 
 # ui artifacts
 UI_GIT_DIR := ./git
-UI_RPMBUILD_DIR := $(TOP_BLDDIR)/core/ui/rpmbuild
+UI_RPMBUILD_DIR := rpmbuild
 UI_TARBALL := $(UI_RPMBUILD_DIR)/SOURCES/cube-cos-ui-$(UI_VERSION).tar.gz
 UI_SPEC_FILE := $(UI_RPMBUILD_DIR)/SPECS/cube-cos-ui.spec
 UI_RPM_BUILD := $(UI_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm
@@ -76,7 +76,8 @@ $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)
 	$(call RUN_CMD_TIMED, \
 		cd $(UI_GIT_DIR) && \
 		nvm use $(QEND) && \
-		rpmbuild -bb --nodeps --define "_topdir $(UI_RPMBUILD_DIR)" --define "version $(UI_VERSION)" --define "build_number $(UI_BUILD_NUMBER)" $(UI_SPEC_FILE), \
+		cd - && \
+		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(UI_RPMBUILD_DIR)" --define "version $(UI_VERSION)" --define "build_number $(UI_BUILD_NUMBER)" $(UI_SPEC_FILE), \
 		"  BUILD   cube-cos-ui-$(UI_VERSION)-1.el9.$(UI_BUILD_NUMBER).x86_64.rpm")
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV

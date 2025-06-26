@@ -1,7 +1,7 @@
 # Cube SDK
 
 include ../../build.mk
-API_RPM := $(TOP_BLDDIR)/core/api/api.rpm
+API_RPM := api.rpm
 
 ifneq ($(RC),)
 $(API_RPM):
@@ -14,7 +14,7 @@ include build_number
 
 # api binary
 API_GIT_DIR := ./git
-API_RPMBUILD_DIR := $(TOP_BLDDIR)/core/api/rpmbuild
+API_RPMBUILD_DIR := rpmbuild
 API_TARBALL := $(API_RPMBUILD_DIR)/SOURCES/cube-cos-api-$(API_VERSION).tar.gz
 API_SPEC_FILE := $(API_RPMBUILD_DIR)/SPECS/cube-cos-api.spec
 API_RPM_BUILD := $(API_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm
@@ -60,7 +60,7 @@ $(API_SPEC_FILE): $(API_RPMBUILD_DIR) $(API_GIT_DIR)
 # build the api rpm package
 $(API_RPM_BUILD): $(API_TARBALL) $(API_SPEC_FILE)
 	$(call RUN_CMD_TIMED, \
-		rpmbuild -bb --nodeps --define "_topdir $(API_RPMBUILD_DIR)" --define "version $(API_VERSION)" --define "build_number $(API_BUILD_NUMBER)" $(API_SPEC_FILE),\
+		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(API_RPMBUILD_DIR)" --define "version $(API_VERSION)" --define "build_number $(API_BUILD_NUMBER)" $(API_SPEC_FILE),\
 		"  BUILD   cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm")
 
 # move the built rpm back to the local directory

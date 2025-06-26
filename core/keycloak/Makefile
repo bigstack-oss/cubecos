@@ -11,7 +11,7 @@ $(CHART):
 	$(Q)helm pull codecentric/keycloak --version $(CHART_VERSION)
 
 # login rpm
-LOGIN_RPM := $(TOP_BLDDIR)/core/keycloak/login.rpm
+LOGIN_RPM := login.rpm
 KEYCLOAK_DIR := /opt/keycloak/
 
 ifneq ($(RC),)
@@ -25,7 +25,7 @@ include build_number
 include keycloak_version
 
 LOGIN_GIT_DIR := ./git
-LOGIN_RPMBUILD_DIR := $(TOP_BLDDIR)/core/keycloak/rpmbuild
+LOGIN_RPMBUILD_DIR := rpmbuild
 LOGIN_TARBALL := $(LOGIN_RPMBUILD_DIR)/SOURCES/cube-cos-login-$(LOGIN_VERSION).tar.gz
 LOGIN_SPEC_FILE := $(LOGIN_RPMBUILD_DIR)/SPECS/cube-cos-login.spec
 LOGIN_RPM_BUILD := $(LOGIN_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm
@@ -92,7 +92,8 @@ $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
 	$(call RUN_CMD_SILENT, \
 		cd $(LOGIN_GIT_DIR) && \
 		nvm use $(QEND) && \
-		rpmbuild -bb --nodeps --define "_topdir $(LOGIN_RPMBUILD_DIR)" --define "version $(LOGIN_VERSION)" --define "build_number $(LOGIN_BUILD_NUMBER)" --define "keycloak_version $(KEYCLOAK_VERSION)" $(LOGIN_SPEC_FILE), \
+		cd - && \
+		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(LOGIN_RPMBUILD_DIR)" --define "version $(LOGIN_VERSION)" --define "build_number $(LOGIN_BUILD_NUMBER)" --define "keycloak_version $(KEYCLOAK_VERSION)" $(LOGIN_SPEC_FILE), \
 		"  BUILD   cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm")
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
