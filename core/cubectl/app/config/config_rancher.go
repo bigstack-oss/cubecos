@@ -698,6 +698,8 @@ func commitRancher() error {
 				); err != nil {
 					return errors.Wrap(err, outErr)
 				}
+
+				skipOrResyncRancherReplicaSet()
 				zap.L().Info("Rancher release upgraded")
 
 				return nil
@@ -739,6 +741,17 @@ func commitRancher() error {
 	}
 
 	return nil
+}
+
+func skipOrResyncRancherReplicaSet() {
+	if cubeSettings.IsHA() {
+		return
+	}
+
+	out, outErr, err := util.ExecCmd("/usr/local/bin/k3s", "kubectl", "delete", "rs", "-l", "app=rancher", "-n", rancherNamespace)
+	if err != nil {
+		zap.S().Errorf("Failed to delete rancher replica sets for force rolling(%v, %s, %s)", err, outErr, out)
+	}
 }
 
 func resetRancher() error {
