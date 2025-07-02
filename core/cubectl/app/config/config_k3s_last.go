@@ -63,7 +63,7 @@ func genK3sResourceConf(kube, system ReservedResource) k3sServiceConf {
 		KubeLetArg: []string{
 			fmt.Sprintf("kube-reserved=cpu=%d,memory=%dMi,ephemeral-storage=%dGi", kube.CPU, kube.Memory, kube.EphemeralStorage),
 			fmt.Sprintf("system-reserved=cpu=%d,memory=%dMi", system.CPU, system.Memory),
-			"eviction-hard=memory.available<15%,nodefs.available<10%",
+			"eviction-hard=memory.available<5%,nodefs.available<10%",
 		},
 	}
 }
