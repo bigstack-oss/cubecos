@@ -713,6 +713,11 @@ func commitRancher() error {
 			zap.S().Warn(errors.WithStack(err))
 		}
 
+		_, outErr, err := util.ExecCmd("/usr/local/bin/terraform", fmt.Sprintf("-chdir=%s", terraformWorkDir), "init", "-upgrade")
+		if err != nil {
+			zap.S().Warn(errors.Wrap(err, outErr))
+		}
+
 		// Create token and eanble keycloak auth
 		if err := terraformExec("apply", "rancher", "cube_controller="+cubeSettings.GetControllerIp()); err != nil {
 			zap.S().Warn(errors.WithStack(err))

@@ -2,7 +2,7 @@ terraform {
   required_providers {
     rancher2 = {
       source = "rancher/rancher2"
-      version = "1.24.0"
+      version = "7.0.0"
     }
   }
 }
@@ -20,7 +20,6 @@ resource "rancher2_bootstrap" "admin" {
 
   initial_password = "default-admin"
   password = "default-admin"
-  telemetry = false
 }
 
 provider "rancher2" {
@@ -51,18 +50,10 @@ resource "rancher2_auth_config_keycloak" "keycloak" {
   ]
 }
 
-# resource "rancher2_global_role_binding" "admin" {
-#   provider = rancher2.admin
-
-#   #name = "admin"
-#   global_role_id = "restricted-admin"
-#   group_principal_id = "keycloak_user://admin"
-# }
-
 resource "rancher2_global_role_binding" "cube_admins" {
   provider = rancher2.admin
 
-  global_role_id = "restricted-admin"
+  global_role_id = "admin"
   group_principal_id = "keycloak_group://cube-admins"
 }
 
@@ -72,58 +63,3 @@ resource "rancher2_global_role_binding" "cube_users" {
   global_role_id = "user"
   group_principal_id = "keycloak_group://cube-users"
 }
-
-# resource "rancher2_node_driver" "cube" {
-#   provider = rancher2.admin
-
-#   name = "cube"
-#   url = "http://${var.cube_controller}:8080/static/nodedrivers/docker-machine-driver-cube"
-#   active = true
-#   builtin = false
-#   description = "Cube node driver"
-
-#   timeouts {
-#     create = "5s"
-#     delete = "5s"
-#   }
-# }
-
-# data "rancher2_node_driver" "openstack" {
-#     provider = rancher2.admin
-
-#     name = "openstack"
-# }
-
-
-
-# data "rancher2_node_driver" "amazonec2" {
-#     provider = rancher2.admin
-
-#     name = "amazonec2"
-# }
-
-# resource "rancher2_node_driver" "openstack" {
-#     provider = rancher2.admin
-#     #id = data.rancher2_node_driver.openstack.id
-
-#     name = "openstack"
-#     #id = "openstack"
-#     active = true
-#     builtin = true
-#     url = "local://"
-# }
-
-# resource "rancher2_node_driver" "others" {
-#     provider = rancher2.admin
-
-#     for_each = toset( ["azure", "digitalocean"] )
-#     name     = each.key
-#     #id       = each.key
-#     active = false
-#     builtin = true
-#     url = "local://"
-# }
-
-# output "token" {
-#     value = rancher2_bootstrap.admin.token
-# }
