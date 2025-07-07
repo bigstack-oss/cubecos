@@ -3,6 +3,7 @@
 
 SKYLINE_CONF_DIR := /etc/skyline
 SKYLINE_POLICY_DIR := $(SKYLINE_CONF_DIR)/policy
+SKYLINE_APP_DIR := /var/lib/skyline
 SKYLINE_LOG_DIR := /var/log/skyline
 
 # refer to skyline-apiserver/requirements.txt, need to be installed before openstack deps
@@ -10,11 +11,11 @@ ROOTFS_PIP_NC += gunicorn
 
 # skyline user/group/directory
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p $(SKYLINE_CONF_DIR) $(SKYLINE_POLICY_DIR) $(SKYLINE_LOG_DIR)
+	$(Q)chroot $(ROOTDIR) mkdir -p $(SKYLINE_CONF_DIR) $(SKYLINE_POLICY_DIR) $(SKYLINE_APP_DIR) $(SKYLINE_LOG_DIR)
 
 # for RC builds
 heavyfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p $(SKYLINE_CONF_DIR) $(SKYLINE_POLICY_DIR) $(SKYLINE_LOG_DIR)
+	$(Q)chroot $(ROOTDIR) mkdir -p $(SKYLINE_CONF_DIR) $(SKYLINE_POLICY_DIR) $(SKYLINE_APP_DIR) $(SKYLINE_LOG_DIR)
 
 # note: ROOTFS_PIP_DL_FROM is not used since we clone source from master branch instead of targeted openstack branch (stable/yoga)
 # skyline-apiserver installation
