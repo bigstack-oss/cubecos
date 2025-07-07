@@ -493,12 +493,18 @@ health_hacluster_repair()
         sleep 5
     done
 
+    if [ -e /etc/pacemaker/authkey ] ; then
+        cubectl node rsync -r compute /etc/pacemaker/authkey
+    fi
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         remote_systemd_stop $node pcsd pacemaker_remote
     done
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        remote_systemd_start $node pacemaker_remote pcsd
+        remote_systemd_start $node pcsd
         sleep 5
+        Quiet -n hex_sdk pacemaker_remote_remove $node
+        Quiet -n hex_sdk pacemaker_remote_add $node
+        # remote_run $node hex_sdk pacemaker_remote_cleanup
     done
 }
 

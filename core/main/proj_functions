@@ -32,7 +32,7 @@ _hex_exec()
     local gusr=$(ps -o user= -p $gpid | xargs)
 
     [ "x$(type -t influx_event)" = "xfunction" ] || source /usr/lib/hex_sdk/modules.pre/sdk_influx.sh
-    if echo $pcmd | grep -i ssh ; then
+    if echo $pcmd | grep -q -i ssh ; then
         pip=$(ss -tunpa | grep $PPID | awk '{print $6}')
         [ "x$pip" = "x" ] || pcmd+="($pip)"
         gip=$(ss -tunpa | grep $gpid | awk '{print $6}')
@@ -50,6 +50,8 @@ _hex_exec()
                 shift 1
                 local last_chk="true"
             fi
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"checking\""
+            influx_event "${query},detail=\"$cmd\""
             if [ -e $runtime -a "x$last_chk" = "xtrue" ] ; then
                 ret=$(cat $runtime | jq -r .ERROR_CODE)
                 $cmd "$@" &
@@ -196,7 +198,7 @@ cube_cluster_start()
         /usr/sbin/hex_config trigger cluster_start
     fi
 
-    touch /run/cube_cluster_synced
+    touch $CLUSTER_SYNC
 
     Quiet -n cubectl node exec -p "$HEX_SDK network_ipt_serviceint" # customized iptables
     Quiet -n $HEX_SDK ceph_osd_set_bucket_host # assign osds to customized ceph buckets

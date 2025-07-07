@@ -407,7 +407,7 @@ ceph_convert_to_ec_pool()
 
         $CEPH osd erasure-code-profile set $profile k=$chunks m=$parity
         ceph_create_ec_pool $pool.new $profile
-        rados cppool $pool $pool.new 2>/dev/null
+        timeout 1800 rados cppool $pool $pool.new 2>/dev/null || true
         $CEPH osd pool rename $pool $pool.$profile.orig
         $CEPH osd pool rename $pool.new $pool
     fi

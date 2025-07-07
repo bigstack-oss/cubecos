@@ -96,6 +96,10 @@ rootfs_install::
 RUBY := ruby-3.0.4-161.el9
 LOCKED_DNF += $(RUBY)
 
+OPENSSL_VER := 3.5.1-1.el9
+OPENSSL += openssl-$(OPENSSL_VER) openssl-devel-$(OPENSSL_VER) openssl-libs-$(OPENSSL_VER)
+LOCKED_DNF += $(OPENSSL)
+
 # python3-numpy-1:1.23.5-1.el9.x86_64 from @commandline and python3-numpy-1:1.20.1-5.el9.x86_64 from appstream
 PYTHON3-NUMPY := python3-numpy-1:1.20.1-5.el9
 PYTHON3-NUMPY-F2PY := python3-numpy-f2py-1:1.20.1-5.el9
