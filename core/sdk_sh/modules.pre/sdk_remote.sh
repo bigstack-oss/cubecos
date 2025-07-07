@@ -30,7 +30,7 @@ remote_systemd_restart()
 }
 
 remote_run()
-{   
+{
     local flag=
     local host=$1
     shift 1
