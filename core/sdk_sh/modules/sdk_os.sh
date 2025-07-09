@@ -264,7 +264,7 @@ os_neutron_worker_scale()
 {
     is_control_node || return 0
 
-    for CPU in $(for P in `pgrep -f "neutron-server.*api worker"` ; do ! systemctl status neutron-server --no-pager | grep -q $P || ps --no-headers -p $P -o %cpu ; done) ; do
+    for CPU in $(for P in `pgrep -f "neutron-server.*api worker"` ; do ! systemctl status neutron-server --no-pager | grep -q $P || ps --no-headers -p $P -o %cpu 2>/dev/null ; done) ; do
         if [ -n $CPU -a ${CPU%.*} -ge 90 ] ; then
             eval $(grep api_workers /etc/neutron/neutron.conf | sed "s/ //g")
             local TH=$(echo "$(cat /proc/cpuinfo | grep processor | wc -l) / 2" | bc)

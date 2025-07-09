@@ -56,11 +56,6 @@ ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
 TERRAFORM_CUBE="/usr/local/bin/terraform-cube.sh"
 CURL="timeout $SRVTO /usr/bin/curl"
 MYSQL="timeout $SRVTO /usr/bin/mysql"
-if [ -z "$MONGODB_ADMIN_ACCESS" ]; then
-    MONGODB="timeout $SRVTO /usr/bin/mongosh mongodb://$(mgmt_ip)/?replicaSet=cube-cos-rs"
-else
-    MONGODB="timeout $SRVTO /usr/bin/mongosh mongodb://admin:$MONGODB_ADMIN_ACCESS@$(mgmt_ip)/?replicaSet=cube-cos-rs"
-fi
 
 RESERVED_USERS="admin_cli\|masakari\|placement\|heat\|glance\|monasca\|heat_domain_admin\|neutron\|nova\|cyborg\|cinder\|barbican\|manila\|octavia\|designate\|ironic\|ironic-inspector\|senlin\|watcher"
 

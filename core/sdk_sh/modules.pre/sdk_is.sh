@@ -106,7 +106,7 @@ is_node_repairing()
     if [ "$VERBOSE" = "1" ]; then
         local srv=$(echo $(basename $(readlink $CLUSTER_REPAIRING) 2>/dev/null) | sed -e "s/^health_//" -e "s/_repair$//")
         local pid=$(cat $CLUSTER_REPAIRING 2>/dev/null)
-        local eps=$(ps --no-headers -o etime ${pid:-NOPID} 2>/dev/null | xargs)
+        local eps=$(ps --no-headers -o etime ${pid:-0} 2>/dev/null | xargs)
         printf "{ \"node\" : \"$HOSTNAME\",\"fixing\" : \"$fixing\",\"service\" : \"$srv\",\"pid\" : \"$pid\",\"elaps\" : \"$eps\" }"
     fi
     if [ "$fixing" = "false" ]; then

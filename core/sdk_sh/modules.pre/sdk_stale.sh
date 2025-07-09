@@ -75,7 +75,6 @@ stale_repair_clear()
                 rm -f $(readlink $CLUSTER_REPAIRING) $CLUSTER_REPAIRING
             fi
         else
-            ps awwx | grep "${HEX_SDK}.*health_link_repair"
             for pid in $(ps awwx | grep "${HEX_SDK}.*health_link_repair" 2>/dev/null | awk '{print $1}'); do
                 ! Quiet ps -p $pid 2>/dev/null || Quiet -n pkill -9 -P $pid
             done

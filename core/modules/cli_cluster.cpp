@@ -826,7 +826,7 @@ ClusterReadyMain(int argc, const char** argv)
     HexSpawn(0, HEX_SDK, "host_local_run", "hex_cli", "-c", "cluster check_repair", ZEROCHAR_PTR);
 
     CliPrintf("[7/7] Global Information Tracker");
-    HexUtilSystemF(0, 0, "nohup " HEX_SDK " host_local_run " HEX_SDK " git_init &");
+    HexUtilSystemF(0, 0, "nohup " HEX_SDK " host_local_run " HEX_SDK " git_init 2>/dev/null &");
 
     CliPrintf("Done");
 

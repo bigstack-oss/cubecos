@@ -25,7 +25,7 @@ BootstrapAndClusterstart()
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
             msg="Bootstrap failed (manual fix required)"
             echo -n "$msg" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-            hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
+            hex_sdk influx_event "${query},severity=\"W\" message=\"$msg $(journalctl | grep hex | grep took | tail -1)\""
         else
             echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             msg="Starting cluster"

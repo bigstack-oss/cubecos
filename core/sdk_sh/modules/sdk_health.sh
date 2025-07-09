@@ -126,7 +126,7 @@ _health_fail_log()
                     influx_event "${query},detail=\"$auto_repair_func PID$(cat $runtime) ($count/$maxerr)\""
                     ln -sf $runtime $CLUSTER_REPAIRING
                     wait $(cat $runtime)
-                    query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixed\""
+                    query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing completed\""
                     influx_event "${query},detail=\"$auto_repair_func PID$(cat $runtime) ($count/$maxerr)\""
                     rm -f $runtime $CLUSTER_REPAIRING
                 fi
@@ -484,15 +484,6 @@ health_hacluster_repair()
 
     pcs resource cleanup >/dev/null 2>&1
 
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        remote_run $node rm /var/lib/corosync/*
-        remote_systemd_stop $node pcsd pacemaker corosync
-    done
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        remote_systemd_start $node corosync pacemaker pcsd
-        sleep 5
-    done
-
     if [ -e /etc/pacemaker/authkey ] ; then
         cubectl node rsync -r compute /etc/pacemaker/authkey
     fi
@@ -505,6 +496,14 @@ health_hacluster_repair()
         Quiet -n hex_sdk pacemaker_remote_remove $node
         Quiet -n hex_sdk pacemaker_remote_add $node
         # remote_run $node hex_sdk pacemaker_remote_cleanup
+    done
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        remote_run $node rm /var/lib/corosync/*
+        remote_systemd_stop $node pcsd pacemaker corosync
+    done
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        remote_systemd_start $node corosync pacemaker pcsd
+        sleep 5
     done
 }
 
@@ -639,7 +638,7 @@ health_vip_report()
 
 health_vip_check()
 {
-    local active_host=$($HEX_CFG status_pacemaker | awk '/IPaddr2/{print $5}')
+    local active_host=$($HEX_CFG status_pacemaker 2>/dev/null | awk '/IPaddr2/{print $5}')
     DESCRIPTION="non-HA"
     ERR_LOG="pcs status"
 
@@ -671,6 +670,8 @@ health_vip_check()
     else
         if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
             ERR_CODE=5
+        elif ! Quiet pcs status 2>/dev/null ; then
+            ERR_CODE=6
         fi
     fi
 
@@ -689,7 +690,7 @@ _health_vip_auto_repair()
 
 health_vip_repair()
 {
-    local active_host=$($HEX_CFG status_pacemaker | awk '/IPaddr2/{print $5}')
+    local active_host=$($HEX_CFG status_pacemaker 2>/dev/null | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             local ipaddr=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $2}')
@@ -707,7 +708,9 @@ health_vip_repair()
             fi
         done
     else
-        if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
+        if ! Quiet pcs status 2>/dev/null ; then
+            health_hacluster_repair
+        elif [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
             cubectl node exec -r control -p systemctl restart corosync
             pcs resource disable vip
             pcs resource enable vip
@@ -719,7 +722,7 @@ health_vip_repair()
                 fi
             done
 
-            pcs resource status vip | grep -q -i started || health_hacluster_repair
+            pcs resource status vip 2>/dev/null | grep -q -i started || health_hacluster_repair
             for i in {1..20} ; do
                 if pcs resource status vip | grep -q -i started ; then
                     break
@@ -2034,8 +2037,10 @@ health_octavia_check()
                 ERR_MSG+="no route from octavia-hm0 found on $node\n"
                 ERR_CODE=7
             elif ! is_remote_running $node octavia-worker ; then
-                ERR_MSG+="octavia-worker on $node is not running\n"
-                ERR_CODE=8
+                if remote_run $node hex_sdk is_first_three_compute_node ; then
+                    ERR_MSG+="octavia-worker on $node is not running\n"
+                    ERR_CODE=8
+                fi
             elif ! is_remote_running $node octavia-health-manager ; then
                 ERR_MSG+="octavia-health-manager on $node is not running\n"
                 ERR_CODE=9

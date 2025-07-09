@@ -24,21 +24,33 @@ _hex_exec()
     shift 1
     local runtime=/run/$cmd
     local pid=$$
-    local usr=$(ps -o user= -p $pid | xargs)
-    local pcmd=$(ps -o comm= $PPID | xargs)
-    local pusr=$(ps -o user= -p $PPID | xargs)
-    local gpid=$(ps -o ppid= -p $PPID | xargs)
-    local gcmd=$(ps -o comm= $gpid | xargs)
-    local gusr=$(ps -o user= -p $gpid | xargs)
+    local usr=$(ps -o user= -p $pid 2>/dev/null | xargs)
+    local pcmd=$(ps -o comm= $PPID 2>/dev/null | xargs)
+    local pusr=$(ps -o user= -p $PPID 2>/dev/null | xargs)
+    local gpid=$(ps -o ppid= -p $PPID 2>/dev/null | xargs)
+    local gcmd=$(ps -o comm= $gpid 2>/dev/null | xargs)
+    local gusr=$(ps -o user= -p $gpid 2>/dev/null | xargs)
 
     [ "x$(type -t influx_event)" = "xfunction" ] || source /usr/lib/hex_sdk/modules.pre/sdk_influx.sh
-    if echo $pcmd | grep -q -i ssh ; then
+    if echo "$pcmd $gcmd" | grep -q -i ssh ; then
         pip=$(ss -tunpa | grep $PPID | awk '{print $6}')
-        [ "x$pip" = "x" ] || pcmd+="($pip)"
+        if [ "x$pip" != "x" ] ; then
+            pcmd+="($pip)"
+        elif ps -p $PPID 2>/dev/null ; then
+            pcmd+="(localhost)"
+        else
+            pcmd+="(unknown)"
+        fi
         gip=$(ss -tunpa | grep $gpid | awk '{print $6}')
-        [ "x$gip" = "x" ] || gcmd+="($gip)"
+        if [ "x$gip" != "x" ] ; then
+            gcmd+="($gip)"
+        elif ps -p $pgid 2>/dev/null ; then
+            gcmd+="(localhost)"
+        else
+            gcmd+="(unknown)"
+        fi
     fi
-    influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,gpid=$gpid,pusr=$pusr,pcmd=$pcmd,ppid=$PPID,usr=$usr,pid=$pid cmd=\"$cmd\""
+    influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,gpid=$gpid,pusr=$pusr,pcmd=$pcmd,ppid=$PPID,usr=$usr,pid=$pid cmd=\"$cmd $@\""
 
     if echo "$cmd" | grep -q "health_.*_check$" ; then
         local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
@@ -79,7 +91,7 @@ _hex_exec()
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
             influx_event "${query},detail=\"$cmd PID$(cat $runtime)\""
             wait $(cat $runtime)
-            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixed\""
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing completed\""
             influx_event "${query},detail=\"$cmd PID$(cat $runtime)\""
             rm -f $runtime $CLUSTER_REPAIRING
         fi
@@ -116,7 +128,7 @@ shared_ip()
         source hex_tuning /etc/settings.txt cubesys.management
         local mgmt_if=$T_cubesys_management
         source hex_tuning /etc/settings.txt "net.if.addr.$mgmt_if"
-        local mgmt_ip_key="T_net_if_addr_${mgmt_if}"
+        local mgmt_ip_key="T_net_if_addr_${mgmt_if/./_}"
         vip=${!mgmt_ip_key}
     fi
     echo -n "$vip"
@@ -127,7 +139,7 @@ mgmt_ip()
     source hex_tuning /etc/settings.txt cubesys.management
     local mgmt_if=$T_cubesys_management
     source hex_tuning /etc/settings.txt "net.if.addr.$mgmt_if"
-    local mgmt_ip_key="T_net_if_addr_${mgmt_if}"
+    local mgmt_ip_key="T_net_if_addr_${mgmt_if/./_}"
     echo -n "${!mgmt_ip_key}"
 }
 
