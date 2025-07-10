@@ -1,11 +1,18 @@
 # Cube SDK
 # CubeCOS API installation
 
-# api log
+# api directories
 API_LOG_DIR := /var/log/cube-cos-api
+API_CONF_DIR := /etc/cube/api
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(API_LOG_DIR)
+	$(Q)chroot $(ROOTDIR) mkdir -p $(API_CONF_DIR)
+
+# for RC builds
+heavyfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p $(API_LOG_DIR)
+	$(Q)chroot $(ROOTDIR) mkdir -p $(API_CONF_DIR)
 
 # api installation
 API_RPM = $(TOP_BLDDIR)/core/api/api.rpm

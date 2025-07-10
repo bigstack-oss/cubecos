@@ -1,10 +1,14 @@
 # Cube SDK
 # CubeCOS UI installation
 
-# ui log
+# ui directories
 UI_LOG_DIR := /var/log/cube-cos-ui
 
 rootfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p $(UI_LOG_DIR)
+
+# for RC builds
+heavyfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(UI_LOG_DIR)
 
 # ui installation
