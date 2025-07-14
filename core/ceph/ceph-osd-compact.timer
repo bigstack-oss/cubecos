@@ -4,7 +4,7 @@ Requires=ceph-osd-compact.service
 
 [Timer]
 Unit=ceph-osd-compact.service
-OnBootSec=120min
+OnBootSec=2min
 OnUnitActiveSec=1d
 
 [Install]

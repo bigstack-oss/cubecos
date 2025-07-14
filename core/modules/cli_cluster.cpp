@@ -804,29 +804,26 @@ ClusterReadyMain(int argc, const char** argv)
         }
     }
 
-    CliPrintf("[1/7] Updating storage replication rule");
+    CliPrintf("[1/6] Updating storage replication rule");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run " HEX_SDK " ceph_pool_replicate_init");
 
-    CliPrintf("[2/7] Checking SDN services");
+    CliPrintf("[2/6] Checking SDN services");
     HexUtilSystemF(0, 0,  HEX_SDK " host_local_run " HEX_SDK " health_neutron_repair");
 
-    CliPrintf("[3/7] Configuring modules");
+    CliPrintf("[3/6] Configuring modules");
     if (cfgFlatExt)
         HexSpawn(0, HEX_CFG, "-p", "trigger", "cluster_ready", cidr.c_str(), gw.c_str(), iplist.c_str(), ZEROCHAR_PTR);
     else
         HexSpawn(0, HEX_CFG, "-p", "trigger", "cluster_ready", ZEROCHAR_PTR);
 
-    CliPrintf("[4/7] Starting cluster");
+    CliPrintf("[4/6] Starting cluster");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run cubectl node exec -p " HEX_SDK " cube_cluster_start");
 
-    CliPrintf("[5/7] Strengthening password");
+    CliPrintf("[5/6] Strengthening password");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run cubectl node exec -p " HEX_CFG " cube_password_init");
 
-    CliPrintf("[6/7] Cluster check and repair");
+    CliPrintf("[6/6] Cluster check and repair");
     HexSpawn(0, HEX_SDK, "host_local_run", "hex_cli", "-c", "cluster check_repair", ZEROCHAR_PTR);
-
-    CliPrintf("[7/7] Global Information Tracker");
-    HexUtilSystemF(0, 0, "nohup " HEX_SDK " host_local_run " HEX_SDK " git_init 2>/dev/null &");
 
     CliPrintf("Done");
 

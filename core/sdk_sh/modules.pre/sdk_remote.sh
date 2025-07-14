@@ -10,23 +10,27 @@ remote_systemd_stop()
 {
     local host=$1
     shift 1
-    timeout $SRVTO ssh root@$host systemctl stop $@ >/dev/null 2>&1
+    ! is_sshable $host || timeout $SRVTO ssh root@$host systemctl stop $@ >/dev/null 2>&1
 }
 
 remote_systemd_start()
 {
     local host=$1
     shift 1
-    timeout $SRVTO ssh root@$host systemctl reset-failed >/dev/null 2>&1
-    timeout $SRVLTO ssh root@$host systemctl start $@ >/dev/null 2>&1
+    if is_sshable $host ; then
+        timeout $SRVTO ssh root@$host systemctl reset-failed >/dev/null 2>&1
+        timeout $SRVLTO ssh root@$host systemctl start $@ >/dev/null 2>&1
+    fi
 }
 
 remote_systemd_restart()
 {
     local host=$1
     shift 1
-    timeout $SRVTO ssh root@$host systemctl reset-failed >/dev/null 2>&1
-    timeout $SRVLTO ssh root@$host systemctl restart $@ >/dev/null 2>&1
+    if is_sshable $host ; then
+        timeout $SRVTO ssh root@$host systemctl reset-failed >/dev/null 2>&1
+        timeout $SRVLTO ssh root@$host systemctl restart $@ >/dev/null 2>&1
+    fi
 }
 
 remote_run()
@@ -39,5 +43,5 @@ remote_run()
             flag="-t"
         fi
     fi
-    ssh $flag root@$host $@ 2>/dev/null
+    ! is_sshable $host || ssh $flag root@$host $@ 2>/dev/null
 }

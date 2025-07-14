@@ -22,6 +22,7 @@ BootstrapAndClusterstart()
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
         echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
         bash -c "hex_config -p bootstrap standalone-done | tee -a $(hex_sdk GetKernelConsoleDevices)"
+        [ -e "$BOOTSTRAP_CUBE_MARKER" ] || bash -c "hex_config -p bootstrap standalone-done | tee -a $(hex_sdk GetKernelConsoleDevices)"
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
             msg="Bootstrap failed (manual fix required)"
             echo -n "$msg" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)

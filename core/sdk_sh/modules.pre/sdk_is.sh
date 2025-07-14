@@ -125,3 +125,8 @@ is_repairing()
 
     return 1
 }
+
+is_sshable()
+{
+    timeout 3 ssh root@$1 exit >/dev/null 2>&1
+}

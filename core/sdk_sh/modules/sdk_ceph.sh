@@ -52,9 +52,9 @@ ceph_get_host_by_id()
 ceph_get_ids_by_dev()
 {
     local dev=$1
-    # cehp device ls doesn't always sho correct osds associated with devices
+    # ceph device ls doesn't always show correct osds associated with devices
     # local ids=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.location[].dev == \"${dev#/dev/}\").daemons[]" | sed "s/osd.//g" | sort -u)
-    local ids=$(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id")
+    local ids=$(for osdid in $(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id") ; do ceph osd ls | grep "^${osdid}$" ; done)
     ids+=$(ceph-volume lvm list --format json | jq -r ".[][] | select(.devices[] == \"$dev\").tags.\"ceph.osd_id\"")
 
     echo -n $ids
@@ -2896,15 +2896,10 @@ ceph_osd_set_bucket_host()
     fi
 }
 
-ceph_osd_list()
+_ceph_osd_list()
 {
     local osd_id=${1#osd.}
     local osd_ids=$osd_id
-    if [ "x$osd_ids" = "x" ] ; then
-        osd_ids=$($CEPH osd ls-tree $HOSTNAME 2>/dev/null)
-    else
-        $CEPH osd ls-tree $HOSTNAME 2>/dev/null | grep -q "^${osd_id}$" || osd_ids=$(ceph_get_ids_by_dev $osd_id)
-    fi
     local hw_ls=$(lshw -class disk -json 2>/dev/null)
     local blkdevs=$(lsblk -J | jq -r .blockdevices[])
     local lvm=$(ceph-volume lvm list --format json)
@@ -2918,10 +2913,6 @@ ceph_osd_list()
     chk_attrs+="Offline_Uncorrect "
     chk_attrs+="CRC_Error_Count"
 
-    if [ "x$FORMAT" = "xjson" ] ; then
-        local cnt=0
-        printf "[ "
-    fi
     for osd_id in $osd_ids ; do
         dev=$(ceph_get_dev_by_id $osd_id)
         parent_dev=/dev/$(echo $blkdevs | jq -r ". | select(.children[].name == \"${dev#/dev/}\").name" 2>/dev/null)
@@ -2982,7 +2973,7 @@ ceph_osd_list()
         power_on=$(hdsentinel -dev $parent_dev | grep -i "power on time" | cut -d":" -f2 | cut -d "," -f1 | head -1 | xargs)
         use=$(ceph osd df tree osd.$osd_id -f json | jq -r .summary.average_utilization)
         if [ "x$FORMAT" = "xjson" ] ; then
-            [ $((cnt++)) -eq 0 ] || printf ","
+	    [ $cnt -eq 1 ] || printf ","
             printf "{ "
             printf "\"osd\": \"%s\"," $osd_id
             printf "\"state\": \"%s\"," $state
@@ -2996,8 +2987,39 @@ ceph_osd_list()
             printf "%8s %8s %16s %10s %18s %10s %6s %s\n" $osd_id $state ${HOSTNAME%,} ${dev#/dev/} ${sn%,} "${power_on}" "${use%.*}%" "${remark%,}"
         fi
     done
+}
+
+ceph_osd_list()
+{
+    local osd_id=${1#osd.}
+    local osd_ids=$osd_id
+    local cnt=0
+    if [ "x$osd_ids" = "x" ] ; then
+        osd_ids=$($CEPH osd ls-tree $HOSTNAME 2>/dev/null)
+    else
+        $CEPH osd ls-tree $HOSTNAME 2>/dev/null | grep -q "^${osd_id}$" || osd_ids=$(ceph_get_ids_by_dev $osd_id)
+    fi
+
+    if [ "x$FORMAT" = "xjson" ] ; then
+        printf "[ "
+    fi
+
+    for osdid in $osd_ids ; do
+        ((cnt++))
+        _ceph_osd_list $osdid > /tmp/osd_${osdid}.${FUNCNAME[0]} 2>/dev/null &
+        osd_list_pids[$osdid]=$!
+        sleep 0.2
+    done
+    for osdid in ${!osd_list_pids[@]} ; do
+        wait ${osd_list_pids[$osdid]}
+    done
+    sync
+    for log in $(ls -1 /tmp/osd_*.${FUNCNAME[0]} 2>/dev/null | xargs -i basename {} | sort -Vt _ -k2,2) ; do
+        cat /tmp/$log && rm -f /tmp/$log
+        ((cnt++))
+        [ $cnt -ge ${#osd_list_pids[@]} ] || printf ","
+    done
     if [ "x$FORMAT" = "xjson" ] ; then
         printf " ]\n"
     fi
-
 }

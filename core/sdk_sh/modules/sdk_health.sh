@@ -123,11 +123,11 @@ _health_fail_log()
                     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
                     $auto_repair_func &
                     echo $! > $runtime
-                    influx_event "${query},detail=\"$auto_repair_func PID$(cat $runtime) ($count/$maxerr)\""
+                    influx_event "${query},detail=\"$auto_repair_func $(cat $runtime) ($count/$maxerr)\""
                     ln -sf $runtime $CLUSTER_REPAIRING
                     wait $(cat $runtime)
                     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing completed\""
-                    influx_event "${query},detail=\"$auto_repair_func PID$(cat $runtime) ($count/$maxerr)\""
+                    influx_event "${query},detail=\"$auto_repair_func $(cat $runtime) ($count/$maxerr)\""
                     rm -f $runtime $CLUSTER_REPAIRING
                 fi
             fi
@@ -155,14 +155,14 @@ EOF
         if [ "x$keys" != "x" ] ; then
             timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
-                keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log
+                keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
                 log_url="s3://$log_pth"
                 rm -f /tmp/$log
             else
                 # In case collecting logs from remote fails, look for local log
                 if [ -e $ERR_LOG ] ; then
                     tail -n $ERR_LOGSIZE $ERR_LOG > /tmp/$log
-                    keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin $ERR_LOG $log_pth >/dev/null 2>&1 || keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log
+                    keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin $ERR_LOG $log_pth >/dev/null 2>&1 || keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
                     log_url="s3://$log_pth"
                 fi
             fi
@@ -471,39 +471,50 @@ health_hacluster_check()
     _health_fail_log
 }
 
-health_hacluster_repair()
+_health_hacluster_auto_repair()
 {
-    health_hacluster_check
-    if [ $? -eq 6 ] ; then
+    if [ $ERR_CODE -eq 6 ] ; then
         health_ceph_mds_repair
         health_cinder_repair
         pcs resource cleanup cinder-volume >/dev/null 2>&1
         pcs resource enable cinder-volume >/dev/null 2>&1
         pcs resource restart cinder-volume >/dev/null 2>&1
     fi
+}
 
-    pcs resource cleanup >/dev/null 2>&1
+health_hacluster_repair()
+{   
+    local status=$(pcs status)
 
+    Quiet -n pcs resource cleanup
     if [ -e /etc/pacemaker/authkey ] ; then
-        cubectl node rsync -r compute /etc/pacemaker/authkey
+        Quiet -n timeout $SRVSTO node rsync -r compute /etc/pacemaker/authkey
     fi
-    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        remote_systemd_stop $node pcsd pacemaker_remote
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if [ "x$HOSTNAME" = "x$node" ] ; then
+            timeout $SRVTO systemctl stop pcsd || killall -9 pcsd
+            timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd
+            timeout $SRVTO systemctl stop corosync || killall -9 corosync
+            remote_run $node "systemctl reset-failed ; systemctl restart pcsd pacemaker corosync"
+        fi
+        echo "$status" | grep -i " online" | grep -q " $node " || remote_run $node "systemctl reset-failed ; systemctl restart corosync pacemaker"
+        is_remote_running $node pcsd || remote_run $node "systemctl reset-failed ; systemctl restart pcsd"
+        is_remote_running $node pacemaker || remote_run $node "systemctl reset-failed ; systemctl restart pacemaker"
+        is_remote_running $node corosync || remote_run $node "systemctl reset-failed ; systemctl restart corosync"
     done
+    cubectl node exec -pn -r compute systemctl restart pcsd
+
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        remote_systemd_start $node pcsd
-        sleep 5
         Quiet -n hex_sdk pacemaker_remote_remove $node
-        Quiet -n hex_sdk pacemaker_remote_add $node
-        # remote_run $node hex_sdk pacemaker_remote_cleanup
     done
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        remote_run $node rm /var/lib/corosync/*
-        remote_systemd_stop $node pcsd pacemaker corosync
+    cubectl node exec -pn -r compute systemctl stop pacemaker_remote
+
+    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+        ! is_sshable $node || Quiet -n hex_sdk pacemaker_remote_add $node
     done
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        remote_systemd_start $node corosync pacemaker pcsd
-        sleep 5
+    for rsc in vip vaw haproxy cinder-volume ovndb_servers-clone $(cubectl node list -r compute -j | jq -r .[].hostname) ; do
+        Quiet -n pcs resource disable $rsc
+        Quiet -n pcs resource enable $rsc
     done
 }
 
@@ -642,7 +653,9 @@ health_vip_check()
     DESCRIPTION="non-HA"
     ERR_LOG="pcs status"
 
-    if [ -n "$active_host" ] ; then
+    if ! is_control_node ; then
+        ERR_MSG="not control node"
+    elif [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             local ipcidr=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $2}')
             local ipaddr=$(echo $ipcidr | cut -d"/" -f1)
@@ -708,29 +721,15 @@ health_vip_repair()
             fi
         done
     else
-        if ! Quiet pcs status 2>/dev/null ; then
-            health_hacluster_repair
-        elif [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
-            cubectl node exec -r control -p systemctl restart corosync
-            pcs resource disable vip
-            pcs resource enable vip
-            for i in {1..20} ; do
-                if pcs resource status vip | grep -q -i started ; then
-                    break
-                else
-                    sleep 10
-                fi
-            done
-
-            pcs resource status vip 2>/dev/null | grep -q -i started || health_hacluster_repair
-            for i in {1..20} ; do
-                if pcs resource status vip | grep -q -i started ; then
-                    break
-                else
-                    sleep 10
-                fi
-            done
-        fi
+        health_hacluster_repair
+        pcs property set stonith-enabled=false
+        for i in {1..20} ; do
+            if pcs resource status vip | grep -q -i started ; then
+                break
+            else
+                sleep 10
+            fi
+        done
     fi
 }
 
@@ -2158,7 +2157,7 @@ _health_designate_auto_repair()
             remote_systemd_restart $node designate-mdns
         elif ! is_remote_running $node named ; then
             local master=$(cubectl node list -r control -j | jq -r .[].hostname | head -n 1)
-            remote_run $master /usr/local/bin/cubectl node rsync -r control /etc/designate/rndc.key
+            remote_run $master timeout $SRVSTO /usr/local/bin/cubectl node rsync -r control /etc/designate/rndc.key
             remote_systemd_restart $node named
         fi
     done
@@ -2177,7 +2176,7 @@ _health_designate_auto_repair()
 health_designate_repair()
 {
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
-    Quiet -n remote_run $master /usr/local/bin/cubectl node rsync -r control /etc/designate/rndc.key
+    Quiet -n remote_run $master timeout $SRVSTO /usr/local/bin/cubectl node rsync -r control /etc/designate/rndc.key
     Quiet -n cubectl node exec -r control -pn $HEX_CFG restart_designate
 }
 

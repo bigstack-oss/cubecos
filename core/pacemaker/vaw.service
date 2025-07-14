@@ -1,11 +1,12 @@
 [Unit]
 Description=vip xxx wiper that cleans up dirty side-effects when vip changes
 DefaultDependencies=no
-After=systemd-hexctl-user.service
+Wants=network-online.target
 
 [Service]
 ExecStart=bash -c "/usr/sbin/vaw 0<&- &> /var/log/vaw.log"
 Restart=on-failure
+KillMode=process
 
 [Install]
 WantedBy=multi-user.target

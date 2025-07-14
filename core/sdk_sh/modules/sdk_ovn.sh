@@ -28,12 +28,12 @@ ovn_db_check()
 
 ovn_nb_check()
 {
-    ovn_db_check nb /var/lib/openvswitch/ovnnb_db.db
+    ovn_db_check nb /var/lib/ovn/ovnnb_db.db
 }
 
 ovn_sb_check()
 {
-    ovn_db_check sb /var/lib/openvswitch/ovnsb_db.db
+    ovn_db_check sb /var/lib/ovn/ovnsb_db.db
 }
 
 ovn_run()
