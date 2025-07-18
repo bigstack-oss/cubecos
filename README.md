@@ -9,45 +9,76 @@
 
 [![License][License-Image]][License-Url] [![Slack][Slack-Image]][Slack-Url] [![Discord][Discord-Image]][Discord-Url] [![Docs][Docs-Image]][Docs-Url] [![Website][Website-Image]][Website-Url] [![Youtube][Youtube-Image]][Youtube-Url]
 
+<p align="center">
+  <img width="80%" alt="cubecos interface introduction video" src="doc/media/cubecos-intro.gif"/>
+</p>
+
 </div>
 
-CubeCOS is a unified cloud operating system that integrates storage, compute, and networking into a single image. Deploy CubeCOS to deliver a public cloud–like experience within your own on-premise infrastructure.
-
-Designed for organizations that need cloud flexibility without compromising control, CubeCOS offers:
-
-- Multi-tenancy with robust isolation between workloads
-- Self-service IT portal empowering teams to provision resources on demand
-- Cloud native architecture supporting modern application development
-
-Deploy your own private cloud infrastructure with the simplicity of public cloud.
+CubeCOS is built for you: an open-source, out-of-the-box virtualization platform with simple management and the flexibility to integrate with anything.
 
 Join us in building the future of software-defined infrastructure!
 
+## ⚡️ Installation
+
+Download CubeCOS from the [Release Page](https://github.com/bigstack-oss/cubecos/releases/tag/v3.0.0), and check out our [quick start installation](https://docs.bigstack.co/docs/cubecos/quick-start/overview) guide.
+
+## 📚 Documentation
+
+Get started by exploring our documentation at [CubeCOS documentation](https://docs.bigstack.co/docs/cubecos/getting-started/overview).
+
+## 🚀 Features
+
+- **Performant Virtualization**: A flexible hypervisor for virtual machines and containers based on QEMU/ KVM
+- **Multi-Tenant Architectur**: Create secure environments for every team, use case or experiments through network and workload isolation
+- **Intuitive Self-Service Portal**: Launch and manage VMs, containers, and networks instantly from a streamlined dashboard
+- **Out of the Box Cluster**: A fully functional virtualization and cloud platform with pre-integrated services ready to host your services
+- **Open Standards & RESTful APIs**: Standardized APIs that make it easy to connect, script, and scale infrastructure operations
+
+## 💭 Getting Help/ Community
+
+For any issues or questions during installation, connect with us via these community support channels::
+
+1. Slack (EN) [Community][Slack-Url]
+2. Discord (EN/ZH-Han) [Community][Discord-Url]
+3. GitHub [Discussion](https://github.com/bigstack-oss/cubecos/discussions)
+  
+Please **do not** open issues which are unrelated to bugs on the [Issues](https://github.com/bigstack-oss/cubecos/issues) page.
+
+For enterprise support, reach out to us through our [Contact Us](https://www.bigstack.co/contact-us).
+
+For business partnerships or opportunities, connect with us via [Partners](https://www.bigstack.co/contact-form/partner).
+
 ## Development
 
-### Hardware & OS Requirements
+The development environment runs CubeCOS in a containerized instance, which requires substantial memory resources to operate reliably. The following specifications apply only to the development environment’s software and hardware requirements.
+
+For production deployments and full CubeCOS setup details, refer to the [Installation](https://docs.bigstack.co/docs/cubecos/installation/overview) section of the CubeCOS documentation.
+
+### Hardware Requirements
 
 - CPU
   - Architecture: x86_64
-  - At least Intel(R) Xeon(R) Silver 4210
+  - 8C/16T cores, 2.0 GHz or higher
+  - Hardware virtualization support (Intel VT-x/ AMD-V support)
 - Memory
-  - At least 64 GiB
+  - Minimum: 64 GiB
 - Disk
-  - At least 500 GiB free space
-- OS
+  - Minimum: 500 GiB free space
+
+### Software Requirements
+
+- Host operating system
   - CentOS 8
   - CentOS Stream 8
   - CentOS Stream 9
-
-### Dev Tools
-
-- git
-- git lfs
-- docker (docker-ce)
+- Git
+- Git LFS
+- Docker (docker-ce)
 
 ### Source Code
 
-Clone repositories with the recursive flag to include sub-modules.
+Clone repositories with the recursive flag to include all sub-modules.
 
 ```bash
 git clone --recursive git@github.com:bigstack-oss/cubecos.git
@@ -57,73 +88,94 @@ git clone --recursive git@github.com:bigstack-oss/cubecos.git
 
 1. Create and enter jail
 
-default PROJECT="centos9-jail"
+    The default project name is `centos9-jail`, the build process will create a new folder with the default project name in the same path as CubeCOS repository.
 
-```bash
-cd cubecos
-make [PROJECT=XXX] centos9-jail enter
-```
+    To build with default project name and enter the built container, use:
 
-Without specifying the project name, `make centos9-jail` would create the build folder and the container with the default name "centos9-jail".
+    ```bash
+    cd cubecos
+    make centos9-jail enter
+    ```
 
-After creating the build jail, under the parent directory of folder cubecos, there would be two folders, one is the `cubecos`, and the other one would be the build folder, which is default to `centos9-jail`.
+    To build with a custom project name, useful for multiple deployment streams or testing scenarios:
 
-```bash
-cubecos> ls ..
-cubecos centos9-jail
-```
+    ```bash
+    cd cubecos
+    make PROJECT=your-project-name centos9-jail enter
+    ```
 
-`make PROJECT=example centos9-jail` would create another jail named `example`, and the build folder would be `example` under the parent directory of folder cubecos
+    If no `PROJECT` name is specified, the build will default to centos9-jail, creating both a build directory and container with that name.
 
-```bash
-cubecos> ls ..
-cubecos centos9-jail example
-```
+    Once the jail is created, you’ll see two directories under the parent path:
 
-We could use the command `make enter` to enter the default build jail `centos9-jail`. Alternatively, `make PROJECT=example enter` would bring us into the build jail `example`.
+    - `cubecos/` – The main source repository
+    - `centos9-jail/` (or your custom project name) – The isolated build environment
 
-2. Build various CubeCOS install media
+    ```bash
+    build-bench > ls ..
+    cubecos centos9-jail
+    ```
 
-Install media: ISO, USB, PXE, full, etc., where full is everything.
+    Running `make PROJECT=example centos9-jail` will create a new build jail named example. The corresponding build folder will also be named example and will be created in the parent directory of the cubecos folder.
 
-```bash
-[root@centos9-jail centos9-jail]# make usb
-```
+    `make PROJECT=example centos9-jail` would create another jail named `example`, and the build folder would be `example` under the parent directory of folder `cubecos`
 
-```bash
-# all
-make full
+    ```bash
+    cubecos> ls ..
+    cubecos centos9-jail example
+    ```
 
-# usb
-make usb
+    We could use the command `make enter` to enter the default build jail `centos9-jail`. Alternatively, `make PROJECT=example enter` would bring us into the build jail `example`.
 
-# iso
-make iso
-```
+2. Build various CubeCOS install media by specifying the build parameters.
+
+    The build command can only be executed in the CubeCOS build jail. Create and enter a jail or enter an existing jail before attempting to generate CubeCOS installation media. The build command can produce the following installation media types:
+
+   1. `full`: Builds all supported CubeCOS installation media (ISO, USB, PXE, and package files).
+   2. `pxe`: Produces network boot files for provisioning systems via PXE servers.  
+   3. `pxeserver`: Build a complete PXE server image for hosting network boot files.  
+   4. `pxeserveriso`: Build an ISO version of the PXE server image.  
+   5. `usb`: Creates a USB bootable image for physical installations via USB drives.
+   6. `iso`: Generates an ISO image for use as virtual media.
+   7. `liveusb`: Build a live USB image for running CubeCOS directly without installation.
+
+    ```bash
+    # all installation types
+    [root@centos9-jail centos9-jail]# make full
+
+    # network boot
+    [root@centos9-jail centos9-jail]# make pxe
+
+    # usb media
+    [root@centos9-jail centos9-jail]# make usb
+
+    # iso generation
+    [root@centos9-jail centos9-jail]# make iso
+    ```
 
 3. Locate artifacts
 
-Build artifacts could be located under `core/main/ship` inside the build folder.
+    Build artifacts could be located under `core/main/ship` inside the build folder.
 
-- CUBE_XXX.img: The USB installer
-  - Flash it to an USB stick using `dd bs=4M if=<img_file_path> of=<usb_device_name> status=progress oflag=sync`
-  - Boot a server using the USB stick
-  - Follow [Login and restore to setup CubeCOS](https://docs.bigstack.co/docs/cubecos/quick-start/single-node#login-and-restore-to-setup-cubecos) to flash the system partition.
-- CUBE_XXX.iso: CubeCOS ISO
-- CUBE_XXX.pkg: CubeCOS file system archive
-- CUBE_XXX.pxe.tgz: The archive containing components to set up a PXE server to install CubeCOS using PXE
+   - CUBE_XXX.img: The USB installer
+     - Flash it to an USB stick using `dd bs=4M if=<img_file_path> of=<usb_device_name> status=progress oflag=sync`
+     - Boot a server using the USB stick
+     - Follow [Login and restore to setup CubeCOS](https://docs.bigstack.co/docs/cubecos/quick-start/single-node#login-and-restore-to-setup-cubecos) to flash the system partition.
+   - CUBE_XXX.iso: CubeCOS ISO
+   - CUBE_XXX.pkg: CubeCOS file system archive
+   - CUBE_XXX.pxe.tgz: The archive containing components to set up a PXE server to install CubeCOS using PXE
 
-MD5 hashes are also provided to each artifacts under `core/main/ship`.
+    MD5 hashes are also provided to each artifacts under `core/main/ship`.
 
 4. To clean up builds
 
-```bash
-make distclean
-```
+    ```bash
+    make distclean
+    ```
 
-> Note
->
-> While re-entering the jail, or in any circumstances to clean up build remnants, it is recommended to use `make distclean` to clean up previous build artifacts.
+  > Note
+  >
+  > While re-entering the jail, or in any circumstances to clean up build remnants, it is recommended to use `make distclean` to clean up previous build artifacts.
 
 ### Troubleshoot
 
@@ -133,19 +185,9 @@ Other than git-lfs, make sure [hex](https://github.com/bigstack-oss/hex) (git su
 ls -lt cubecos/hex
 ```
 
-## Installation
-
-Please follow the guidelines presented on [Bigstack Documentation - CubeCOS - Quick Start - Overview](https://docs.bigstack.co/docs/cubecos/quick-start/overview) to install and set up CubeCOS.
-
-Official images could be found on [Releases](https://github.com/bigstack-oss/cubecos/releases).
-
-If any difficulty is encountered during the installation, please reach out to our [Discussion](https://github.com/bigstack-oss/cubecos/discussions). Please do not open issues which are unrelated to bugs on page [Issue](https://github.com/bigstack-oss/cubecos/issues).
-
-Further inquiries regarding the support, including operations and maintenances, please contact us through [Contact Us](https://www.bigstack.co/contact-us).
-
-For business collaborations, please contact us [Bigstack](https://www.bigstack.co/contact-form/sales) or our partners [Partners](https://www.bigstack.co/contact-form/partner).
-
 ## Community
+
+Have questions or want to discuss CubeCOS development? Connect with us, check out our [Community Channels](https://www.bigstack.co/community) or start a conversation in our [Discussion](https://github.com/bigstack-oss/cubecos/discussions).
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and architecture documentation.
 
@@ -155,13 +197,9 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for developmen
   - [Bash Convention](./doc/code_of_conduct_bash.md)
 - [Security](./SECURITY.md)
 
-If having any general questions, including questions related to developing CubeCOS, please reach out to our [Discussion](https://github.com/bigstack-oss/cubecos/discussions).
+To report bugs, please create an issue in our [GitHub Issues](https://github.com/bigstack-oss/cubecos/issues). Do not report security vulnerabilities via GitHub Issues.
 
-To report bugs, please raise the issue through [Issue](https://github.com/bigstack-oss/cubecos/issues). Please only open issues related to bugs. General questions and feature requests are recommended to be started on [Discussion](https://github.com/bigstack-oss/cubecos/discussions). Please do not open issues regarding security vulnerabilities on page [Issue](https://github.com/bigstack-oss/cubecos/issues).
-
-To report security vulnerabilities, please follow [Security](./SECURITY.md).
-
-To join our Slack, Discord, and follow our GitHub, please check out [Community Channels](https://www.bigstack.co/community).
+To report security vulnerabilities, follow the steps outlined in our [Security](./SECURITY.md) policy or through [GitHub Security Reporting](https://github.com/bigstack-oss/cubecos/security/advisories/new).
 
 ## License
 
