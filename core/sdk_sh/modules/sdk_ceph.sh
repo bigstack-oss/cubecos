@@ -2943,7 +2943,7 @@ _ceph_osd_list()
                 smartctl $smart_flg $parent_dev
             fi
             hdsentinel -dev $parent_dev 2>/dev/null | sed 1,4d | grep -v -i "No actions needed"
-            Quiet -n $CEPH osd df osd.$osd_id
+            Quiet -n $CEPH osd df osd.$osd_id 2>/dev/null
             printf "%8s %8s %16s %10s %18s %10s %6s %s\n" "OSD" "STATE" "HOST" "DEV" "SERIAL" "POWER_ON" "USE" "REMARK"
         fi
         if echo $smart_log | grep -q -i "$valid_output PASSED" ; then
@@ -2971,9 +2971,8 @@ _ceph_osd_list()
         fi
 
         power_on=$(hdsentinel -dev $parent_dev | grep -i "power on time" | cut -d":" -f2 | cut -d "," -f1 | head -1 | xargs)
-        use=$(ceph osd df tree osd.$osd_id -f json | jq -r .summary.average_utilization)
+        use=$(ceph osd df tree osd.$osd_id -f json 2>/dev/null | jq -r .summary.average_utilization)
         if [ "x$FORMAT" = "xjson" ] ; then
-	    [ $cnt -eq 1 ] || printf ","
             printf "{ "
             printf "\"osd\": \"%s\"," $osd_id
             printf "\"state\": \"%s\"," $state
@@ -3004,22 +3003,23 @@ ceph_osd_list()
         printf "[ "
     fi
 
+    local logpth=/tmp/${FUNCNAME[0]}.$$
+    mkdir $logpth
+
     for osdid in $osd_ids ; do
-        ((cnt++))
-        _ceph_osd_list $osdid > /tmp/osd_${osdid}.${FUNCNAME[0]} 2>/dev/null &
+        ( _ceph_osd_list $osdid > ${logpth}/osd_${osdid}.${FUNCNAME[0]} ) &
         osd_list_pids[$osdid]=$!
-        sleep 0.2
     done
     for osdid in ${!osd_list_pids[@]} ; do
         wait ${osd_list_pids[$osdid]}
     done
-    sync
-    for log in $(ls -1 /tmp/osd_*.${FUNCNAME[0]} 2>/dev/null | xargs -i basename {} | sort -Vt _ -k2,2) ; do
-        cat /tmp/$log && rm -f /tmp/$log
+    for osdid in ${!osd_list_pids[@]} ; do
+        cat ${logpth}/osd_${osdid}.${FUNCNAME[0]}
         ((cnt++))
         [ $cnt -ge ${#osd_list_pids[@]} ] || printf ","
     done
     if [ "x$FORMAT" = "xjson" ] ; then
         printf " ]\n"
     fi
+    rm -rf $logpth
 }

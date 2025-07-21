@@ -18,7 +18,23 @@ pacemaker_remote_add()
     Quiet -n timeout $SRVSTO /usr/sbin/pcs host auth $node -u hacluster -p Cube0s!
     Quiet -n timeout $SRVSTO /usr/sbin/pcs cluster node add-remote $node
     if hex_sdk remote_run $node hex_sdk is_control_node ; then
-        Quiet -n remote_run $node "systemctl reset-failed ; systemctl restart pacemaker corosync"
+        for i in 1 2 3 ; do
+            if is_remote_running $node corosync ; then
+                break
+            else
+                Quiet -n remote_run $node "systemctl restart corosync"
+            fi
+            sleep 15
+        done
+
+        for i in 1 2 3 ; do
+            if is_remote_running $node pacemaker ; then
+                break
+            else
+                Quiet -n remote_run $node "systemctl restart pacemaker"
+            fi
+            sleep 15
+        done
     fi
 }
 
