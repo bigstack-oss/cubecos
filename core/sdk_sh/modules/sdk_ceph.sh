@@ -2973,6 +2973,7 @@ _ceph_osd_list()
         power_on=$(hdsentinel -dev $parent_dev | grep -i "power on time" | cut -d":" -f2 | cut -d "," -f1 | head -1 | xargs)
         use=$(ceph osd df tree osd.$osd_id -f json 2>/dev/null | jq -r .summary.average_utilization)
         if [ "x$FORMAT" = "xjson" ] ; then
+            [ $cnt -ge ${#osd_list_pids[@]} ] || printf ","
             printf "{ "
             printf "\"osd\": \"%s\"," $osd_id
             printf "\"state\": \"%s\"," $state
@@ -3016,7 +3017,6 @@ ceph_osd_list()
     for osdid in ${!osd_list_pids[@]} ; do
         cat ${logpth}/osd_${osdid}.${FUNCNAME[0]}
         ((cnt++))
-        [ $cnt -ge ${#osd_list_pids[@]} ] || printf ","
     done
     if [ "x$FORMAT" = "xjson" ] ; then
         printf " ]\n"

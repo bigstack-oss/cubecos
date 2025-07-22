@@ -240,10 +240,12 @@ CommitLast(bool modified, int dryLevel)
 
     if (enabled) {
         if (isMaster) {
+            HexUtilSystemF(0, 0, "pcs resource disable vip");
             HexUtilSystemF(0, 0, "ip addr del %s/32 dev %s label %s",
-                                 sharedId.c_str(), pIf.c_str(), pIf.c_str());
+                           sharedId.c_str(), pIf.c_str(), pIf.c_str());
             SystemdCommitService(enabled, NAME);
             SystemdCommitService(enabled, PCSD);
+            HexUtilSystemF(0, 0, "pcs resource enable vip");
         }
 
         // is master or the only controller

@@ -502,11 +502,7 @@ health_hacluster_repair()
             timeout $SRVTO systemctl stop pcsd || killall -9 pcsd
             timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd
             timeout $SRVTO systemctl stop corosync || killall -9 corosync
-            # corosync has to be started before pacemaker
-            systemctl restart pcsd corosync
-            # allow some time for node to be online
-            sleep 15
-            systemctl restart pacemaker
+            systemctl restart pcsd corosync pacemaker
             status=$(pcs status)
         else
             echo "$status" | grep -i " online" | grep -q " $node " || remote_run $node "systemctl restart corosync pacemaker"
@@ -520,9 +516,11 @@ health_hacluster_repair()
         if  echo "$status" | grep -e "Promoted:" -e "Unromoted:" -e "Stopped:" | grep -q " $node " ; then
             :
         else
-            remote_run $node "systemctl restart pcsd"
-            Quiet -n hex_sdk pacemaker_remote_remove $node
-            remote_run $node "systemctl stop pacemaker_remote"
+            if ! remote_run $node hex_sdk is_control_node ; then
+                remote_run $node "systemctl restart pcsd"
+                Quiet -n hex_sdk pacemaker_remote_remove $node
+                remote_run $node "systemctl stop pacemaker_remote"
+            fi
         fi
     done
 
@@ -530,7 +528,9 @@ health_hacluster_repair()
         if  echo "$status" | grep -e "Promoted:" -e "Unromoted:" -e "Stopped:" | grep -q " $node " ; then
             :
         else
-            ! is_sshable $node || Quiet -n hex_sdk pacemaker_remote_add $node
+            if ! remote_run $node hex_sdk is_control_node ; then
+                ! is_sshable $node || Quiet -n hex_sdk pacemaker_remote_add $node
+            fi
         fi
     done
     for rsc in vip vaw haproxy cinder-volume ovndb_servers-clone $(cubectl node list -r compute -j | jq -r .[].hostname) ; do
@@ -725,6 +725,22 @@ _health_vip_auto_repair()
 
 health_vip_repair()
 {
+    # While bootstrapping, keep vip in master control
+    local master=$CUBE_NODE_CONTROL_HOSTNAMES
+    if ! cube_node_ready && [ "x$HOSTNAME" != "x$master" ] ; then
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            if pcs resource status vip | grep "Started ${master}$" ; then
+                break
+            else
+                if pcs status >/dev/null 2>&1 ; then
+                    pcs resource cleanup
+                    pcs resource move vip
+                    sleep 10
+                fi
+            fi
+        done
+        return 0
+    fi
     local active_host=$($HEX_CFG status_pacemaker 2>/dev/null | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -752,6 +768,20 @@ health_vip_repair()
                 sleep 10
             fi
         done
+    fi
+    if ! cube_node_ready ; then
+        if pcs resource status vip | grep -q Started ; then
+            local master=$CUBE_NODE_CONTROL_HOSTNAMES
+            for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+                if pcs resource status vip | grep "Started ${master}$" ; then
+                    break
+                else
+                    pcs resource cleanup
+                    pcs resource move vip
+                    sleep 10
+                fi
+            done
+        fi
     fi
 }
 
