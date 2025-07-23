@@ -277,6 +277,30 @@ os_neutron_worker_scale()
     done
 }
 
+_os_instance_ha_helper()
+{
+    local srv_lst=$($OPENSTACK server list --long --all-projects -f json)
+    for ID in $(echo $srv_lst | jq -r .[].ID) ; do
+        local cur_status=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").\"Status\"")
+        local cur_host=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").Host")
+        if [ "x$cur_host" = "x$down_host" ] ; then
+            if [ "x$cur_status" = "xERROR" ] ; then
+                timeout $SRVSTO $HEX_SDK os_nova_instance_reset $ID
+                influx_event "${query},detail=\"os_nova_instance_reset $ID\""
+            fi
+            influx_event "${query},detail=\"nova evacuate $ID\""
+            timeout $SRVTO nova evacuate $ID
+        else
+            if [ "x$cur_status" = "xERROR" -o "x$cur_status" = "xREBUILD" ] ; then
+                influx_event "${query},detail=\"os_nova_instance_reset $ID\""
+                timeout $SRVSTO $HEX_SDK os_nova_instance_reset $ID
+                influx_event "${query},detail=\"os_nova_instance_hardreboot $ID\""
+                timeout $SRVSTO $HEX_SDK os_nova_instance_hardreboot $ID
+            fi
+        fi
+    done
+}
+
 os_instance_ha_helper()
 {
     # Do not intervene bootstrap processes
@@ -301,26 +325,8 @@ os_instance_ha_helper()
     [ "x$old_notify" = "x$new_notify" ] || influx_event "${query},log=\"$($OPENSTACK notification show ${notify_id:-NOID} -f json)\",detail=\"$new_notify\""
     if echo $new_notify | grep -q -e "failed COMPUTE_HOST" ; then
         query="insert health,component=instanceha,node=$HOSTNAME,code=1 description=\"fixing\""
-        local srv_lst=$($OPENSTACK server list --long --all-projects -f json)
-        for ID in $(echo $srv_lst | jq -r .[].ID) ; do
-            local cur_status=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").\"Status\"")
-            local cur_host=$(echo $srv_lst | jq -r ".[] | select(.ID == \"${ID}\").Host")
-            if [ "x$cur_host" = "x$down_host" ] ; then
-                if [ "x$cur_status" = "xERROR" ] ; then
-                    timeout $SRVSTO $HEX_SDK os_nova_instance_reset $ID
-                    influx_event "${query},detail=\"os_nova_instance_reset $ID\""
-                fi
-                influx_event "${query},detail=\"nova evacuate $ID\""
-                timeout $SRVTO nova evacuate $ID
-            else
-                if [ "x$cur_status" = "xERROR" -o "x$cur_status" = "xREBUILD" ] ; then
-                    influx_event "${query},detail=\"os_nova_instance_reset $ID\""
-                    timeout $SRVSTO $HEX_SDK os_nova_instance_reset $ID
-                    influx_event "${query},detail=\"os_nova_instance_hardreboot $ID\""
-                    timeout $SRVSTO $HEX_SDK os_nova_instance_hardreboot $ID
-                fi
-            fi
-        done
+        _os_instance_ha_helper  # reset instances in error state
+        _os_instance_ha_helper  # reset instances in error state (2nd time if necessary)
     fi
 }
 
@@ -1085,7 +1091,7 @@ os_nova_instance_reset()
 {
     local instance_ids=$@
 
-    nova reset-state --active $instance_ids
+    Quiet -n nova reset-state --active $instance_ids --wait 2>/dev/null
 }
 
 os_nova_instance_hardreboot()
@@ -1093,7 +1099,7 @@ os_nova_instance_hardreboot()
     local instance_ids=$@
 
     for server_id in $instance_ids ; do
-        $OPENSTACK server reboot --hard $server_id
+        Quiet -n $OPENSTACK server reboot --hard $server_id --wait 2>/dev/null
         [ $? -eq 0 ] && echo "Hard rebooted instance: $server_id"
     done
 }

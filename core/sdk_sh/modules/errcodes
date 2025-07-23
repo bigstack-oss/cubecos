@@ -72,6 +72,7 @@ eval "ERR_DESC_$SRV[2]='inactive control has VIP'"
 eval "ERR_DESC_$SRV[3]='stale VIP in arp table'"
 eval "ERR_DESC_$SRV[4]='vip changed'"
 eval "ERR_DESC_$SRV[5]='vip missing'"
+eval "ERR_DESC_$SRV[6]='non-control booting'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="haproxy_ha"

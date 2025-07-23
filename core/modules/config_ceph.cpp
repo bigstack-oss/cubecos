@@ -859,7 +859,7 @@ CommitOsd(const char* name, bool restartAll = true)
     else {
         HexLogInfo("compact and stop %s-osd", name);
         for (auto& id : (restartAll ? s_osdIds : s_osdNewIds)) {
-            HexUtilSystemF(FWD, 0, "timeout 600 ceph tell osd.%lu compact ; systemctl stop ceph-osd@%lu", id, id);
+            HexUtilSystemF(FWD, 0, "timeout 60 ceph tell osd.%lu compact ; systemctl stop ceph-osd@%lu", id, id);
         }
 
         HexLogInfo("%s-osd has been stopped", name);

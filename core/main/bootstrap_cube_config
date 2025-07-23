@@ -1,6 +1,7 @@
 #!/bin/sh
 export BOOTSTRAP_CUBE_MARKER=/run/cube_commit_done
 export BOOTSTRAP_CUBE_MODE=/etc/appliance/state/boot_mode
+export BOOTSTRAP_CUBE_FAIL=/etc/appliance/state/bootstrap.log
 source /usr/sbin/hex_tuning /etc/settings.txt
 if [ "x$T_cubesys_control_hosts" = "x" ] ; then
     export MASTER_CONTROL=$T_cubesys_controller
@@ -22,18 +23,43 @@ BootstrapAndClusterstart()
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
         echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
         bash -c "hex_config -p bootstrap standalone-done | tee -a $(hex_sdk GetKernelConsoleDevices)"
-        [ -e "$BOOTSTRAP_CUBE_MARKER" ] || bash -c "hex_config -p bootstrap standalone-done | tee -a $(hex_sdk GetKernelConsoleDevices)"
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
-            msg="Bootstrap failed (manual fix required)"
-            echo -n "$msg" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
-            hex_sdk influx_event "${query},severity=\"W\" message=\"$msg $(journalctl | grep hex | grep took | tail -1)\""
+            if [ ! -e $BOOTSTRAP_CUBE_FAIL ] ; then
+                msg="THe first attempt to bootstrap failed. Rebooting to give it another shot"
+                echo -n "$msg" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                hex_sdk influx_event "${query},severity=\"W\" message=\"$msg $(journalctl | grep hex | grep took | tail -1)\""
+                journalctl | grep hex >$BOOTSTRAP_CUBE_FAIL 2>&1
+                local cluster_info=/store/ppu/cluster-info.json
+                if [ -e $cluster_info ] ; then
+                    nodes="$(cat $cluster_info | jq -r .[].hostname)"
+                else
+                    nodes="$(cubectl node list -j | jq -r .[].hostname)"
+                fi
+                for node in $nodes ; do
+                    if [ "x$node" != "x$HOSTNAME" ] ; then
+                        if hex_sdk is_sshable $node ; then
+                            scp -f $BOOTSTRAP_CUBE_FAIL $node:/tmp/
+                            hex_sdk remote_run $node "keys=\"\$(openstack ec2 credentials list --user admin -c Access -c Secret -f value | head -n 1)\" timeout 15 hex_sdk os_s3_object_put admin /tmp/bootstrap.log log/bootstrap-$(date +%s)-$(mktemp -u XXXX)"
+                            break
+                        fi
+                    fi
+                done
+                reboot
+            else
+                msg="Bootstrap failed (manual fix required)"
+                echo -n "$msg" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
+                hex_sdk influx_event "${query},severity=\"W\" message=\"$msg $(journalctl | grep hex | grep took | tail -1)\""
+                return 1
+            fi
         else
+            rm -f $BOOTSTRAP_CUBE_FAIL
             echo -n "                                                            " $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             msg="Starting cluster"
             echo -n "$msg" $'\r' | tee -a $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             bash -c "hex_sdk -v cube_cluster_start | tee -a $(hex_sdk GetKernelConsoleDevices)"
             cubectl node exec -pn "rm -f /tmp/health_*error.count"
+            return 0
         fi
     fi
 }
@@ -151,8 +177,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop
             fi
-            BootstrapAndClusterstart
-            RollingEvacuateAndReboot
+            BootstrapAndClusterstart && RollingEvacuateAndReboot
         elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" ] ; then
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop
@@ -166,8 +191,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                     ((cnt++))
                     sleep 60
                 done
-                BootstrapAndClusterstart
-                RollingEvacuateAndReboot
+                BootstrapAndClusterstart && RollingEvacuateAndReboot
                 :> $BOOTSTRAP_CUBE_MODE
             )&
             echo $! > $BOOTSTRAP_CUBE_MODE
@@ -181,8 +205,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                     ((cnt++))
                     sleep 60
                 done
-                BootstrapAndClusterstart
-                RollingEvacuateAndReboot
+                BootstrapAndClusterstart && RollingEvacuateAndReboot
                 :> $BOOTSTRAP_CUBE_MODE
             )&
             echo $! > $BOOTSTRAP_CUBE_MODE

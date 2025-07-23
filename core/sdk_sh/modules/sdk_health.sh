@@ -484,14 +484,15 @@ _health_hacluster_auto_repair()
 
 health_hacluster_repair()
 {
-    local status=$(pcs status)
+    local status=$(pcs status 2>/dev/null)
+    local master=$CUBE_NODE_CONTROL_HOSTNAMES
 
     if [ -e /etc/pacemaker/authkey ] ; then
         Quiet -n timeout $SRVSTO node rsync -r compute /etc/pacemaker/authkey
     fi
 
     # in case of split brains, stop the whole cluster and restart it all over agin
-    if [ $(cubectl node exec -r control -pn "pcs status 2>/dev/null | grep vip" | sort -u | wc -l) -gt 1 ] ; then
+    if [ "x$HOSTNAME" = "x$master" -o $(cubectl node exec -r control -pn "pcs status 2>/dev/null | grep vip" | sort -u | wc -l) -gt 1 ] ; then
         cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pcsd || killall -9 pcsd"
         cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd"
         cubectl node exec -r control -pn "timeout $SRVTO systemctl stop corosync || killall -9 corosync"
@@ -503,7 +504,7 @@ health_hacluster_repair()
             timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd
             timeout $SRVTO systemctl stop corosync || killall -9 corosync
             systemctl restart pcsd corosync pacemaker
-            status=$(pcs status)
+            status=$(pcs status 2>/dev/null)
         else
             echo "$status" | grep -i " online" | grep -q " $node " || remote_run $node "systemctl restart corosync pacemaker"
             is_remote_running $node pcsd || remote_run $node "systemctl restart pcsd"
@@ -513,10 +514,10 @@ health_hacluster_repair()
     done
 
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        if  echo "$status" | grep -e "Promoted:" -e "Unromoted:" -e "Stopped:" | grep -q " $node " ; then
-            :
-        else
-            if ! remote_run $node hex_sdk is_control_node ; then
+        if ! remote_run $node hex_sdk is_control_node ; then
+            if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
+                :
+            else
                 remote_run $node "systemctl restart pcsd"
                 Quiet -n hex_sdk pacemaker_remote_remove $node
                 remote_run $node "systemctl stop pacemaker_remote"
@@ -525,16 +526,15 @@ health_hacluster_repair()
     done
 
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        if  echo "$status" | grep -e "Promoted:" -e "Unromoted:" -e "Stopped:" | grep -q " $node " ; then
-            :
-        else
-            if ! remote_run $node hex_sdk is_control_node ; then
+        if ! remote_run $node hex_sdk is_control_node ; then
+            if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
+                :
+            else
                 ! is_sshable $node || Quiet -n hex_sdk pacemaker_remote_add $node
             fi
         fi
     done
     for rsc in vip vaw haproxy cinder-volume ovndb_servers-clone $(cubectl node list -r compute -j | jq -r .[].hostname) ; do
-        Quiet -n pcs resource disable $rsc
         Quiet -n pcs resource enable $rsc
     done
     Quiet -n pcs resource cleanup
@@ -675,7 +675,10 @@ health_vip_check()
     DESCRIPTION="non-HA"
     ERR_LOG="pcs status"
 
-    if ! is_control_node ; then
+    local master=$CUBE_NODE_CONTROL_HOSTNAMES
+    if ! cube_node_ready && [ "x$HOSTNAME" != "x$master" ] ; then
+        ERR_CODE=6
+    elif ! is_control_node ; then
         ERR_MSG="not control node"
     elif [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -740,6 +743,11 @@ health_vip_repair()
             fi
         done
         return 0
+    elif ! cube_node_ready && [ "x$HOSTNAME" = "x$master" ] ; then
+        # When master control is booting, stop all pcs to ensure vip running on it
+        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pcsd || killall -9 pcsd"
+        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd"
+        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop corosync || killall -9 corosync"
     fi
     local active_host=$($HEX_CFG status_pacemaker 2>/dev/null | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host}$" ; then
