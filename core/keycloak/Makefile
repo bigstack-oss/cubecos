@@ -12,7 +12,7 @@ $(CHART):
 
 # login rpm
 LOGIN_RPM := login.rpm
-KEYCLOAK_DIR := /opt/keycloak/
+KEYCLOAK_DIR := /opt/keycloak
 
 ifneq ($(RC),)
 $(LOGIN_RPM):
@@ -83,7 +83,7 @@ $(LOGIN_TARBALL): $(LOGIN_RPMBUILD_DIR) $(LOGIN_GIT_DIR)
 
 # prepare the rpm spec file
 $(LOGIN_SPEC_FILE): $(LOGIN_RPMBUILD_DIR) $(LOGIN_GIT_DIR)
-	$(Q)cp $(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/cube-cos-login.spec $(LOGIN_RPMBUILD_DIR)/SPECS
+	$(Q)cp $(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/cube-cos-login.spec $(LOGIN_RPMBUILD_DIR)/SPECS/
 
 # build the login rpm package
 $(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
@@ -122,13 +122,13 @@ endif
 .PHONY: copy-image
 copy-image: .load-img
 	$(call RUN_CMD_TIMED, \
-		sh -x $(TOP_SRCDIR)/core/keycloak/copy-images.sh containers-storage:$(shell cat .load-img) \
+		sh -x $(COREDIR)/keycloak/copy-images.sh containers-storage:$(shell cat .load-img) \
 		,"  COPY    keycloak image")
 
 install:: $(CHART) .push-img
 	$(Q)mkdir -p $(KEYCLOAK_DIR)
-	$(Q)cp -f $(SRCDIR)/chart-values.yaml $(KEYCLOAK_DIR)
-	$(Q)cp -f $(CHART) $(KEYCLOAK_DIR)
+	$(Q)cp -f $(SRCDIR)/chart-values.yaml $(KEYCLOAK_DIR)/
+	$(Q)cp -f $(CHART) $(KEYCLOAK_DIR)/
 
 test:: install
 ifeq ($(DEP),1)

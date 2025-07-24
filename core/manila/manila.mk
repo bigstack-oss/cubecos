@@ -15,6 +15,6 @@ rootfs_install::
 rootfs_install::
 	# configuration changes
 	$(Q)cp -f $(MANILA_CONFDIR)/manila.conf $(MANILA_CONFDIR)/manila.conf.org
-	$(Q)cp -f $(COREDIR)/manila/manila.conf.def $(MANILA_CONFDIR)
+	$(Q)cp -f $(COREDIR)/manila/manila.conf.def $(MANILA_CONFDIR)/
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/manila/openstack-manila-share.service ./lib/systemd/system
 	$(Q)cp -f $(COREDIR)/manila/local/local_settings.d/_90_manila_shares.py $(OPENSTACK_DASHBOARD)/local/local_settings.d/

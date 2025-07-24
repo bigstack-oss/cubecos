@@ -35,14 +35,14 @@ build-image:
 .PHONY: copy-image
 copy-image:
 	$(call RUN_CMD_TIMED, \
-		sh -x $(TOP_SRCDIR)/core/docker/copy-images.sh $(IMG_LIST); \
+		sh -x $(COREDIR)/docker/copy-images.sh $(IMG_LIST); \
 		for dir in $(SUBDIRS); do make copy-image -C $$dir/; done; \
 		,"  COPY    rancher image")
 
 install: $(CLI_BIN) $(CHART)
 	$(Q)cp -f $(CLI_BIN) /usr/local/bin/
 	$(Q)mkdir -p $(RANCHER_DIR)
-	$(Q)cp -f $(CHART) $(SRCDIR)/chart-values.yaml $(RANCHER_DIR)
+	$(Q)cp -f $(CHART) $(SRCDIR)/chart-values.yaml $(RANCHER_DIR)/
 
 test:: install
 ifeq ($(DEP),1)

@@ -45,8 +45,8 @@ ROOTFS_PIP_DL_FROM += https://github.com/openstack/python-masakariclient.git
 ROOTFS_PIP_DL_FROM += https://github.com/openstack/masakari-dashboard.git
 
 rootfs_install::
-	$(Q)cp -f $(PIPS_DIR)/masakari-dashboard.git/masakaridashboard/local/enabled/_50_masakaridashboard.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled
-	$(Q)cp -f $(PIPS_DIR)/masakari-dashboard.git/masakaridashboard/local/local_settings.d/_50_masakari.py $(ROOTDIR)/$(HORIZON_DIR)/local/local_settings.d
+	$(Q)cp -f $(PIPS_DIR)/masakari-dashboard.git/masakaridashboard/local/enabled/_50_masakaridashboard.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
+	$(Q)cp -f $(PIPS_DIR)/masakari-dashboard.git/masakaridashboard/local/local_settings.d/_50_masakari.py $(ROOTDIR)/$(HORIZON_DIR)/local/local_settings.d/
 	$(Q)chroot $(ROOTDIR) python3 /usr/share/openstack-dashboard/manage.py dump_default_policies --namespace masakari --output-file $(HORIZON_POLICY_DIR)/masakari.yaml 2>&1 > /dev/null
 
 rootfs_install::

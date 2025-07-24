@@ -18,8 +18,8 @@ ovn-northd:
 	$(call RUN_CMD_TIMED,wget $(OVN_SRPM),"  PULL    $(OVN_PREFIX).src.rpm")
 	$(Q)rm -rf $(RPMBUILD_DIR)
 	$(call RUN_CMD_TIMED,rpm -ivh *.src.rpm,"  INSTALL $(OVN_PREFIX).src.rpm")
-	$(Q)cp -f $(OVN_PATCHDIR)/0001-northd-remove-dr-snat-high-priority.patch $(RPMBUILD_DIR)/SOURCES
-	$(Q)cp -f $(OVN_PATCHDIR)/$(OVN_PREFIX).spec $(RPMBUILD_DIR)/SPECS
+	$(Q)cp -f $(OVN_PATCHDIR)/0001-northd-remove-dr-snat-high-priority.patch $(RPMBUILD_DIR)/SOURCES/
+	$(Q)cp -f $(OVN_PATCHDIR)/$(OVN_PREFIX).spec $(RPMBUILD_DIR)/SPECS/
 	$(call RUN_CMD_TIMED,cd $(RPMBUILD_DIR) && rpmbuild -ba SPECS/$(OVN_PREFIX).spec || /bin/true,"  BUILD   $(OVN_PREFIX)")
 	$(Q)cp -f $(RPMBUILD_DIR)/BUILD/$(OVN_DST)/northd/ovn-northd ./
 

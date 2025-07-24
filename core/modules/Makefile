@@ -10,7 +10,7 @@ LIB_SRCS := $(filter-out $(EXCLUDE_SRCS), $(shell cd $(SRCDIR) && ls *.c *.cpp 2
 SUBDIRS := tests
 
 # needed for mysql operations
-CPPFLAGS += -I$(TOP_SRCDIR)/hex/src/modules/ -I$(TOP_SRCDIR)/core/cube_sdk_library/include -I$(TOP_SRCDIR)/core/mysql
+CPPFLAGS += -I$(TOP_SRCDIR)/hex/src/modules/ -I$(COREDIR)/cube_sdk_library/include -I$(COREDIR)/mysql
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
 

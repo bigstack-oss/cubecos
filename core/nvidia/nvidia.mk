@@ -6,7 +6,7 @@ ROOTFS_DNF += make kernel-devel elfutils-libelf-devel
 NVIDIA_DRIVER := NVIDIA-Linux-x86_64-535.129.03-vgpu-kvm.run
 
 rootfs_install::
-	$(Q)cp -f $(COREDIR)/nvidia/$(NVIDIA_DRIVER) $(ROOTDIR)/root
+	$(Q)cp -f $(COREDIR)/nvidia/$(NVIDIA_DRIVER) $(ROOTDIR)/root/
 	$(Q)mount -t proc proc $(ROOTDIR)/proc || true
 	$(Q)mount -t sysfs sys $(ROOTDIR)/sys || true
 	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true

@@ -55,7 +55,7 @@ $(API_TARBALL): $(API_RPMBUILD_DIR) $(API_GIT_DIR)
 
 # prepare the rpm spec file
 $(API_SPEC_FILE): $(API_RPMBUILD_DIR) $(API_GIT_DIR)
-	$(Q)cp $(API_GIT_DIR)/init/cube-cos-api.spec $(API_RPMBUILD_DIR)/SPECS
+	$(Q)cp $(API_GIT_DIR)/init/cube-cos-api.spec $(API_RPMBUILD_DIR)/SPECS/
 
 # build the api rpm package
 $(API_RPM_BUILD): $(API_TARBALL) $(API_SPEC_FILE)

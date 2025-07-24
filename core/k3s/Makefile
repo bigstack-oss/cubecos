@@ -53,8 +53,8 @@ build-image:
 
 .PHONY: copy-image
 copy-image: build-image
-	$(call RUN_CMD_TIMED, sh -x $(TOP_SRCDIR)/core/docker/copy-images.sh $(shell cat $(SRCDIR)/images.txt),"  COPY    k3s image")
-	$(call RUN_CMD_TIMED, sh -x $(TOP_SRCDIR)/core/docker/copy-images.sh containers-storage:localhost/bigstack/shell,"  COPY    shell image")
+	$(call RUN_CMD_TIMED, sh -x $(COREDIR)/docker/copy-images.sh $(shell cat $(SRCDIR)/images.txt),"  COPY    k3s image")
+	$(call RUN_CMD_TIMED, sh -x $(COREDIR)/docker/copy-images.sh containers-storage:localhost/bigstack/shell,"  COPY    shell image")
 
 gw-off:
 	$(Q)ip route del default via 172.17.0.1 dev eth0

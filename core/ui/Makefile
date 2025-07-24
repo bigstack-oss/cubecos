@@ -67,7 +67,7 @@ $(UI_TARBALL): $(UI_RPMBUILD_DIR) $(UI_GIT_DIR)
 
 # prepare the rpm spec file
 $(UI_SPEC_FILE): $(UI_RPMBUILD_DIR) $(UI_GIT_DIR)
-	$(Q)cp $(UI_GIT_DIR)/packages/cube-frontend-web-app/cube-cos-ui.spec $(UI_RPMBUILD_DIR)/SPECS
+	$(Q)cp $(UI_GIT_DIR)/packages/cube-frontend-web-app/cube-cos-ui.spec $(UI_RPMBUILD_DIR)/SPECS/
 
 # build the ui rpm package
 $(UI_RPM_BUILD): $(UI_TARBALL) $(UI_SPEC_FILE)

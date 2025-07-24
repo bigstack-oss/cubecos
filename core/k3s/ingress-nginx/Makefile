@@ -2,7 +2,7 @@
 
 include ../../../build.mk
 
-INGRESS_NGINX_DIR := /opt/k3s/ingress-nginx/
+INGRESS_NGINX_DIR := /opt/k3s/ingress-nginx
 
 VERSION := 4.7.1
 CHART := ingress-nginx-$(VERSION).tgz
@@ -22,7 +22,7 @@ $(CHART):
 
 install: $(CHART) .copy-img
 	$(Q)mkdir -p $(INGRESS_NGINX_DIR)
-	$(Q)cp -f $(CHART) $(SRCDIR)/chart-values.yaml $(INGRESS_NGINX_DIR)
+	$(Q)cp -f $(CHART) $(SRCDIR)/chart-values.yaml $(INGRESS_NGINX_DIR)/
 
 test:: install
 	$(Q)helm --kubeconfig /etc/rancher/k3s/k3s.yaml upgrade --install ingress-nginx $(CHART) \

@@ -18,7 +18,7 @@ build-image: prometheus-am-executor
 .PHONY: copy-image
 copy-image:
 	$(call RUN_CMD_TIMED, \
-		sh -x $(TOP_SRCDIR)/core/docker/copy-images.sh containers-storage:$(IMG) \
+		sh -x $(COREDIR)/docker/copy-images.sh containers-storage:$(IMG) \
 		,"  COPY   cluster-autodeploy image")
 
 .PHONY: push-image

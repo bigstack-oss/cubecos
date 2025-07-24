@@ -664,6 +664,27 @@ alert_delete_setting_receiver_slack()
     return $ret
 }
 
+alert_get_event_list()
+{
+    # output format: [
+    #   {
+    #     id: "",
+    #     type: "",
+    #     category: "",
+    #     severity: "",
+    #     message: ""
+    #   }
+    # ]
+
+    local event_list="/usr/share/cube/cos/event.yaml"
+    if [ ! -f "$event_list" ]; then
+        jq -c -n "[]"
+        return 1
+    fi
+
+    yq -o=json "$event_list" | jq -c ".events"
+}
+
 alert_get_trigger()
 {
     # output format: [

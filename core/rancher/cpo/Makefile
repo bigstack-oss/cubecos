@@ -16,7 +16,7 @@ $(CHARTS):
 .PHONY: copy-image
 copy-image:
 	$(call RUN_CMD_TIMED, \
-		sh -x $(TOP_SRCDIR)/core/docker/copy-images.sh $(IMG_LIST) \
+		sh -x $(COREDIR)/docker/copy-images.sh $(IMG_LIST) \
 		,"  COPY    cpo image")
 
 clean::

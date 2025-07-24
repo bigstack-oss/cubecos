@@ -5,10 +5,6 @@
 include ../../build.mk
 
 PROJ_HEAVYFS_INSTALL := 1
-HORIZON_APP_DIR := /usr/share/openstack-dashboard
-HORIZON_DIR := $(HORIZON_APP_DIR)/openstack_dashboard
-HORIZON_ETCDIR := /etc/openstack-dashboard
-HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
 RPMS_DIR := $(CURDIR)/RPMS
 PIPS_DIR := $(CURDIR)/PIPS
 ARCS_DIR := $(CURDIR)/ARCS
@@ -17,6 +13,11 @@ HEAVYFS = $(CURDIR)/heavy_rootfs
 OSP_SRCDIR := $(ROOTDIR)/usr/lib/python3.9/site-packages/
 OSP_LOCAL_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages/
 OSP_PATCHDIR := $(SRCDIR)/$(OPENSTACK_RELEASE)_patch
+
+HORIZON_APP_DIR := /usr/share/openstack-dashboard
+HORIZON_DIR := $(HORIZON_APP_DIR)/openstack_dashboard
+HORIZON_ETCDIR := /etc/openstack-dashboard
+HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
 
 BLKLST_DNF += iptables-legacy iptables-legacy-libs python3-django3 ceph-mgr-k8sevents
 
@@ -35,6 +36,13 @@ rootfs_install::
 	$(Q)cp -f $(ROOTDIR)/etc/gshadow $(TOP_BLDDIR)/core/main/gshadow.before
 	$(Q)mkdir -p $(ROOTDIR)/etc/rc.d/init.d
 	$(Q)chroot $(ROOTDIR) ln -sf rc.d/init.d /etc/init.d
+
+# cube data
+rootfs_install::
+	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube
+	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube/cos
+	$(Q)cp -f $(TOP_SRCDIR)/LICENSE $(ROOTDIR)/usr/share/cube/cos/
+	$(Q)cp -f $(SRCDIR)/event.yaml $(ROOTDIR)/usr/share/cube/cos/
 
 # Preparation of repos should be done first
 rootfs_install::
@@ -68,21 +76,21 @@ rootfs_install::
 # 	$(Q)chroot $(ROOTDIR) dnf install -y https://www.elrepo.org/elrepo-release-9.el9.elrepo.noarch.rpm
 # 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled elrepo-kernel
 
+# DDoS-ed repo sites block IPs from offending source
+rootfs_install::
+	$(Q)[ ! -e $(ROOTDIR)/etc/yum.repos.d/elrepo.repo ] || sed -i 's/^mirrorlist=.*/#&/g' $(ROOTDIR)/etc/yum.repos.d/elrepo.repo
+
 LOCKED_DNF += kernel-lt-$(KERNEL_VERS) kernel-lt-core-$(KERNEL_VERS) kernel-lt-devel-$(KERNEL_VERS) kernel-lt-modules-$(KERNEL_VERS)
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
-# python3-xmlsec
-PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel python-xmlsec
-
-# DDoS-ed repo sites block IPs from offending source
-rootfs_install::
-	$(Q)[ ! -e $(ROOTDIR)/etc/yum.repos.d/elrepo.repo ] || sed -i 's/^mirrorlist=.*/#&/g' $(ROOTDIR)/etc/yum.repos.d/elrepo.repo
-
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf update -y systemd
+
+# python3-xmlsec
+PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel python-xmlsec
 
 # erlang 26.2.5-1.el9 doesn't work with rabbitmq
 ERLANG_VER := 24.3.4.2-1.el9s

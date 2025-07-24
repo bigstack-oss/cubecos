@@ -15,13 +15,13 @@ heavyfs_install::
 UI_RPM = $(TOP_BLDDIR)/core/ui/ui.rpm
 
 rootfs_install::
-	$(Q)cp -f $(UI_RPM) $(ROOTDIR)/tmp
+	$(Q)cp -f $(UI_RPM) $(ROOTDIR)/tmp/
 	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/ui.rpm
 	$(Q)rm -rf /tmp/api.rpm
 
 # for RC builds
 heavyfs_install::
-	$(Q)cp -f $(UI_RPM) $(ROOTDIR)/tmp
+	$(Q)cp -f $(UI_RPM) $(ROOTDIR)/tmp/
 	$(Q)chroot $(ROOTDIR) rpm -e cube-cos-ui
 	$(Q)chroot $(ROOTDIR) rpm -i /tmp/ui.rpm
 	$(Q)rm -rf /tmp/api.rpm
