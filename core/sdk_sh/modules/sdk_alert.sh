@@ -511,6 +511,28 @@ alert_put_setting_receiver_slack()
     return $ret
 }
 
+alert_put_setting_receiver_exec_shell()
+{
+    # the shell should be under /var/response
+    # the file name should be [name].shell
+    # input format: {
+    #   name: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local name="$(echo $input | jq -r '.name')"
+    name="${name%%.*}"
+    if [[ "$name" == "" ]] ; then
+        return 1
+    fi
+
+    alert_add_update_setting_receiver_exec_shell "$name.shell"
+
+    local ret=$?
+    return $ret
+}
+
 alert_add_update_setting_receiver_exec_shell()
 {
     # the shell should be under /var/response
@@ -525,6 +547,7 @@ alert_add_update_setting_receiver_exec_shell()
 
     # prepare the environment
     cp -f "/var/response/$name.shell" "/var/alert_resp/exec_$name.shell"
+    chmod +x "/var/alert_resp/exec_$name.shell"
     local input_dir=$(MakeTempDir)
 
     # prepare the policy file
@@ -677,7 +700,7 @@ alert_get_event_list()
     # ]
 
     local event_list="/usr/share/cube/cos/event.yaml"
-    if [ ! -f "$event_list" ]; then
+    if [ ! -f "$event_list" ] ; then
         jq -c -n "[]"
         return 1
     fi
