@@ -511,28 +511,6 @@ alert_put_setting_receiver_slack()
     return $ret
 }
 
-alert_put_setting_receiver_exec_shell()
-{
-    # the shell should be under /var/response
-    # the file name should be [name].shell
-    # input format: {
-    #   name: "",
-    # }
-
-    # process inputs
-    local input=${1:-""}
-    local name="$(echo $input | jq -r '.name')"
-    name="${name%%.*}"
-    if [[ "$name" == "" ]] ; then
-        return 1
-    fi
-
-    alert_add_update_setting_receiver_exec_shell "$name.shell"
-
-    local ret=$?
-    return $ret
-}
-
 alert_add_update_setting_receiver_exec_shell()
 {
     # the shell should be under /var/response
@@ -572,6 +550,27 @@ alert_add_update_setting_receiver_exec_shell()
     $HEX_CFG apply $input_dir
     local ret=$?
     RemoveTempFiles
+    return $ret
+}
+
+alert_put_setting_receiver_exec_shell()
+{
+    # the shell should be under /var/response
+    # the file name should be [name].shell
+    # input format: {
+    #   name: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local name="$(echo $input | jq -r '.name')"
+    name="${name%%.*}"
+    if [[ "$name" == "" ]] ; then
+        return 1
+    fi
+
+    alert_add_update_setting_receiver_exec_shell "$name.shell"
+    local ret=$?
     return $ret
 }
 
@@ -899,157 +898,6 @@ alert_get_trigger()
     jq -c -n "$output"
 }
 
-alert_add_update_trigger_exec()
-{
-    # $1: name
-    # $2: enabled (true/false)
-    # $3: topic
-    # $4: match
-    # $5: description
-    # $6: name
-    # $7: type
-
-    # process inputs
-    local name=${1:-""}
-    local enabled=${2:-""}
-    if [[ "x$enabled" == "xtrue" ]] ; then
-        enabled="true"
-    else
-        enabled="false"
-    fi
-    local topic=${3:-""}
-    local match=${4:-""}
-    local description=${5:-""}
-    local name=${6:-""}
-    local type=${7:-""}
-    if [[ "$type" != "shell" && "$type" != "bin" ]] ; then
-        return 1
-    fi
-
-    # prepare the environment
-    local input_dir=$(MakeTempDir)
-
-    # prepare the policy file
-    local setting_policy_file="/etc/policies/alert_setting/alert_setting1_0.yml"
-    mkdir -p "$input_dir/alert_resp"
-    cp -f "/etc/policies/alert_resp/alert_resp2_0.yml" "$input_dir/alert_resp/"
-    local trigger_policy_file="$input_dir/alert_resp/alert_resp2_0.yml"
-    local trigger_count_minus_one=$(($(yq '.triggers | length' $trigger_policy_file) - 1))
-    local is_update="false"
-    # update
-    for i in $(seq 0 "$trigger_count_minus_one") ; do
-        if [[ "$name" == "$(yq ".triggers[$i].name" $trigger_policy_file)" ]] ; then
-            yq -i ".triggers[$i].name = \"$name\"" $trigger_policy_file
-            yq -i ".triggers[$i].enabled = \"$enabled\"" $trigger_policy_file
-            yq -i ".triggers[$i].topic = \"$topic\"" $trigger_policy_file
-            yq -i ".triggers[$i].match = \"${match//\"/\\\"}\"" $trigger_policy_file
-            yq -i ".triggers[$i].description = \"$description\"" $trigger_policy_file
-
-            if [[ "$type" == "shell" ]] ; then
-                # exec shell
-                # check if the exec shell name is in the alert_setting policy
-                local setting_exec_shell_count_minus_one=$(($(yq '.receiver.execs.shells | length' $setting_policy_file) - 1))
-                local does_exist="false"
-                for j in $(seq 0 "$setting_exec_shell_count_minus_one") ; do
-                    if [[ "$name" == "$(yq ".receiver.execs.shells[$j].name" $setting_policy_file)" ]] ; then
-                        does_exist="true"
-                    fi
-                done
-                if [[ "$does_exist" == "false" ]] ; then
-                    continue
-                fi
-
-                # add exec shell to the trigger
-                local trigger_exec_shell_count_minus_one=$(($(yq ".triggers[$i].responses.execs.shells | length" $trigger_policy_file) - 1))
-                does_exist="false"
-                for j in $(seq 0 "$trigger_exec_shell_count_minus_one") ; do
-                    if [[ "$name" == "$(yq ".triggers[$i].responses.execs.shells[$j].name" $setting_policy_file)" ]] ; then
-                        does_exist="true"
-                    fi
-                done
-                if [[ "$does_exist" == "false" ]] ; then
-                    yq -i ".triggers[$i].responses.execs.shells[$(($trigger_exec_shell_count_minus_one + 1))].name = \"$name\"" $trigger_policy_file
-                fi
-            else
-                # exec bin
-                # check if the exec bin name is in the alert_setting policy
-                local setting_exec_bin_count_minus_one=$(($(yq '.receiver.execs.bins | length' $setting_policy_file) - 1))
-                local does_exist="false"
-                for j in $(seq 0 "$setting_exec_bin_count_minus_one") ; do
-                    if [[ "$name" == "$(yq ".receiver.execs.bins[$j].name" $setting_policy_file)" ]] ; then
-                        does_exist="true"
-                    fi
-                done
-                if [[ "$does_exist" == "false" ]] ; then
-                    continue
-                fi
-
-                # add exec shell to the trigger
-                local trigger_exec_bin_count_minus_one=$(($(yq ".triggers[$i].responses.execs.bins | length" $trigger_policy_file) - 1))
-                does_exist="false"
-                for j in $(seq 0 "$trigger_exec_bin_count_minus_one") ; do
-                    if [[ "$name" == "$(yq ".triggers[$i].responses.execs.bins[$j].name" $setting_policy_file)" ]] ; then
-                        does_exist="true"
-                    fi
-                done
-                if [[ "$does_exist" == "false" ]] ; then
-                    yq -i ".triggers[$i].responses.execs.bins[$(($trigger_exec_bin_count_minus_one + 1))].name = \"$name\"" $trigger_policy_file
-                fi
-            fi
-
-            is_update="true"
-        fi
-    done
-    # add
-    if [[ "$is_update" == "false" ]] ; then
-        yq -i ".triggers[$(($trigger_count_minus_one + 1))].name = \"$name\"" $trigger_policy_file
-        yq -i ".triggers[$(($trigger_count_minus_one + 1))].enabled = \"$enabled\"" $trigger_policy_file
-        yq -i ".triggers[$(($trigger_count_minus_one + 1))].topic = \"$topic\"" $trigger_policy_file
-        yq -i ".triggers[$(($trigger_count_minus_one + 1))].match = \"$match\"" $trigger_policy_file
-        yq -i ".triggers[$(($trigger_count_minus_one + 1))].description = \"$description\"" $trigger_policy_file
-
-        if [[ "$type" == "shell" ]] ; then
-            # exec shell
-            # check if the exec shell name is in the alert_setting policy
-            local setting_exec_shell_count_minus_one=$(($(yq '.receiver.execs.shells | length' $setting_policy_file) - 1))
-            local does_exist="false"
-            for i in $(seq 0 "$setting_exec_shell_count_minus_one") ; do
-                if [[ "$name" == "$(yq ".receiver.execs.shells[$i].name" $setting_policy_file)" ]] ; then
-                    does_exist="true"
-                fi
-            done
-            if [[ "$does_exist" == "false" ]] ; then
-                continue
-            fi
-
-            # add exec shell to the trigger
-            yq -i ".triggers[$(($trigger_count_minus_one + 1))].responses.execs.shells[0].name = \"$name\"" $trigger_policy_file
-        else
-            # exec bin
-            # check if the exec bin name is in the alert_setting policy
-            local setting_exec_bin_count_minus_one=$(($(yq '.receiver.execs.bins | length' $setting_policy_file) - 1))
-            local does_exist="false"
-            for i in $(seq 0 "$setting_exec_bin_count_minus_one") ; do
-                if [[ "$name" == "$(yq ".receiver.execs.bins[$i].name" $setting_policy_file)" ]] ; then
-                    does_exist="true"
-                fi
-            done
-            if [[ "$does_exist" == "false" ]] ; then
-                continue
-            fi
-
-            # add exec shell to the trigger
-            yq -i ".triggers[$(($trigger_count_minus_one + 1))].responses.execs.bins[0].name = \"$name\"" $trigger_policy_file
-        fi
-    fi
-
-    # apply the changes
-    $HEX_CFG apply $input_dir
-    local ret=$?
-    RemoveTempFiles
-    return $ret
-}
-
 alert_put_trigger()
 {
     # input format: {
@@ -1061,12 +909,11 @@ alert_put_trigger()
     #   responses: {
     #     emails: ["", ""],
     #     slacks: ["", ""],
+    #     execs: {
+    #       shells: ["", ""],
+    #       bins: ["", ""],
+    #     },
     #   },
-    # }
-    #
-    # output format: {
-    #   success: true,
-    #   message: "",
     # }
 
     # process inputs
@@ -1082,17 +929,13 @@ alert_put_trigger()
     local match=$(echo $input | jq -r '.match')
     local description=$(echo $input | jq -r '.description')
 
-    # some limitations on name
+    # some default values for triggers with specific names
     if [[ "$name" == "admin-notify" ]] ; then
         topic="events"
         match="\"severity\" == 'W' OR \"severity\" == 'E' OR \"severity\" == 'C'"
     elif [[ "$name" == "instance-notify" ]] ; then
         topic="instance-events"
         match="\"severity\" == 'W' OR \"severity\" == 'C'"
-    else
-        jq -c -n \
-            '{success: false, message: "the trigger name is not supported"}'
-        return 1
     fi
 
     # prepare the environment
@@ -1160,6 +1003,52 @@ alert_put_trigger()
                 ((new_slack_index++))
             done
 
+            # exec shell
+            yq -i "del(.triggers[$i].responses.execs.shells)" "$trigger_policy_file"
+            local exec_shell_count_minus_one=$(($(echo "$input" | jq -r '.responses.execs.shells | length') - 1))
+            local new_exec_shell_index="0"
+            for j in $(seq 0 "$exec_shell_count_minus_one") ; do
+                local shell=$(echo "$input" | jq -r ".responses.execs.shells[$j]")
+
+                # check if the exec shell is in the alert_setting policy
+                local setting_exec_shell_count_minus_one=$(($(yq '.receiver.execs.shells | length' "$setting_policy_file") - 1))
+                local does_exist="false"
+                for k in $(seq 0 "$setting_exec_shell_count_minus_one") ; do
+                    if [[ "$shell" == "$(yq ".receiver.execs.shells[$k].name" "$setting_policy_file")" ]] ; then
+                        does_exist="true"
+                    fi
+                done
+                if [[ "$does_exist" == "false" ]] ; then
+                    continue
+                fi
+
+                yq -i ".triggers[$i].responses.execs.shells[$new_exec_shell_index].name = \"$shell\"" "$trigger_policy_file"
+                ((new_exec_shell_index++))
+            done
+
+            # exec bin
+            yq -i "del(.triggers[$i].responses.execs.bins)" "$trigger_policy_file"
+            local exec_bin_count_minus_one=$(($(echo "$input" | jq -r '.responses.execs.bins | length') - 1))
+            local new_exec_bin_index="0"
+            for j in $(seq 0 "$exec_bin_count_minus_one") ; do
+                local bin=$(echo "$input" | jq -r ".responses.execs.bins[$j]")
+
+                # check if the exec bin is in the alert_setting policy
+                local setting_exec_bin_count_minus_one=$(($(yq '.receiver.execs.bins | length' "$setting_policy_file") - 1))
+                local does_exist="false"
+                for k in $(seq 0 "$setting_exec_bin_count_minus_one") ; do
+                    if [[ "$bin" == "$(yq ".receiver.execs.bins[$k].name" "$setting_policy_file")" ]] ; then
+                        does_exist="true"
+                    fi
+                done
+                if [[ "$does_exist" == "false" ]] ; then
+                    continue
+                fi
+
+                yq -i ".triggers[$i].responses.execs.bins[$new_exec_bin_index].name = \"$bin\"" "$trigger_policy_file"
+                ((new_exec_bin_index++))
+            done
+
             is_update="true"
         fi
     done
@@ -1168,7 +1057,7 @@ alert_put_trigger()
         yq -i ".triggers[$(($trigger_count_minus_one + 1))].name = \"$name\"" $trigger_policy_file
         yq -i ".triggers[$(($trigger_count_minus_one + 1))].enabled = \"$enabled\"" $trigger_policy_file
         yq -i ".triggers[$(($trigger_count_minus_one + 1))].topic = \"$topic\"" $trigger_policy_file
-        yq -i ".triggers[$(($trigger_count_minus_one + 1))].match = \"$match\"" $trigger_policy_file
+        yq -i ".triggers[$(($trigger_count_minus_one + 1))].match = \"${match//\"/\\\"}\"" $trigger_policy_file
         yq -i ".triggers[$(($trigger_count_minus_one + 1))].description = \"$description\"" $trigger_policy_file
 
         # email
@@ -1216,14 +1105,118 @@ alert_put_trigger()
             yq -i ".triggers[$(($trigger_count_minus_one + 1))].responses.slacks[$new_slack_index].url = \"$slack\"" $trigger_policy_file
             ((new_slack_index++))
         done
+
+        # exec shell
+        yq -i "del(.triggers[$(($trigger_count_minus_one + 1))].responses.execs.shells)" "$trigger_policy_file"
+        local exec_shell_count_minus_one=$(($(echo "$input" | jq -r '.responses.execs.shells | length') - 1))
+        local new_exec_shell_index="0"
+        for j in $(seq 0 "$exec_shell_count_minus_one") ; do
+            local shell=$(echo "$input" | jq -r ".responses.execs.shells[$j]")
+
+            # check if the exec shell is in the alert_setting policy
+            local setting_exec_shell_count_minus_one=$(($(yq '.receiver.execs.shells | length' "$setting_policy_file") - 1))
+            local does_exist="false"
+            for k in $(seq 0 "$setting_exec_shell_count_minus_one") ; do
+                if [[ "$shell" == "$(yq ".receiver.execs.shells[$k].name" "$setting_policy_file")" ]] ; then
+                    does_exist="true"
+                fi
+            done
+            if [[ "$does_exist" == "false" ]] ; then
+                continue
+            fi
+
+            yq -i ".triggers[$(($trigger_count_minus_one + 1))].responses.execs.shells[$new_exec_shell_index].name = \"$shell\"" "$trigger_policy_file"
+            ((new_exec_shell_index++))
+        done
+
+        # exec bin
+        yq -i "del(.triggers[$(($trigger_count_minus_one + 1))].responses.execs.bins)" "$trigger_policy_file"
+        local exec_bin_count_minus_one=$(($(echo "$input" | jq -r '.responses.execs.bins | length') - 1))
+        local new_exec_bin_index="0"
+        for j in $(seq 0 "$exec_bin_count_minus_one") ; do
+            local bin=$(echo "$input" | jq -r ".responses.execs.bins[$j]")
+
+            # check if the exec bin is in the alert_setting policy
+            local setting_exec_bin_count_minus_one=$(($(yq '.receiver.execs.bins | length' "$setting_policy_file") - 1))
+            local does_exist="false"
+            for k in $(seq 0 "$setting_exec_bin_count_minus_one") ; do
+                if [[ "$bin" == "$(yq ".receiver.execs.bins[$k].name" "$setting_policy_file")" ]] ; then
+                    does_exist="true"
+                fi
+            done
+            if [[ "$does_exist" == "false" ]] ; then
+                continue
+            fi
+
+            yq -i ".triggers[$(($trigger_count_minus_one + 1))].responses.execs.bins[$new_exec_bin_index].name = \"$bin\"" "$trigger_policy_file"
+            ((new_exec_bin_index++))
+        done
     fi
 
     # apply the changes
     $HEX_CFG apply $input_dir
     local ret=$?
     RemoveTempFiles
-    jq -c -n \
-        '{success: true, message: ""}'
+    return $ret
+}
+
+alert_add_update_trigger_exec()
+{
+    # $1: name
+    # $2: enabled (true/false)
+    # $3: topic
+    # $4: match
+    # $5: description
+    # $6: exec_name
+    # $7: exec_type
+
+    # process inputs
+    local name=${1:-""}
+    local enabled=${2:-""}
+    if [[ "x$enabled" == "xtrue" ]] ; then
+        enabled="true"
+    else
+        enabled="false"
+    fi
+    local topic=${3:-""}
+    local match=${4:-""}
+    local description=${5:-""}
+    local exec_name=${6:-""}
+    local exec_type=${7:-""}
+    if [[ "$exec_type" != "shell" && "$exec_type" != "bin" ]] ; then
+        return 1
+    fi
+
+    # create the payload
+    local payload="$(jq -c -n \
+        --arg name "$name" \
+        --arg enabled "$enabled" \
+        --arg topic "$topic" \
+        --arg match "$match" \
+        --arg description "$description" \
+        '{
+name: $name,
+enabled: $enabled | test("true"),
+topic: $topic,
+match: $match,
+description: $description,
+responses: {
+        emails: [],
+        slacks: [],
+        execs: {
+            shells: [],
+            bins: []
+        }
+    }
+}')"
+    if [[ "$exec_type" == "shell" ]] ; then
+        payload="$(echo "$payload" | jq -c ".responses.execs.shells[0] = \"$exec_name\"")"
+    else
+        payload="$(echo "$payload" | jq -c ".responses.execs.bins[0] = \"$exec_name\"")"
+    fi
+
+    alert_put_trigger "$payload"
+    local ret=$?
     return $ret
 }
 
