@@ -199,7 +199,19 @@ alert_get_setting()
     #         workspace: "",
     #         channel: ""
     #       }
-    #     ]
+    #     ],
+    #     execs: {
+    #       shells: [
+    #         {
+    #           name: ""
+    #         }
+    #       ],
+    #       bins: [
+    #         {
+    #           name: ""
+    #         }
+    #       ]
+    #     }
     #   }
     # }
 
@@ -1249,7 +1261,19 @@ alert_get_full_trigger()
     #           workspace: "",
     #           channel: ""
     #         }
-    #       ]
+    #       ],
+    #       execs: {
+    #         shells: [
+    #           {
+    #             name: ""
+    #           }
+    #         ],
+    #         bins: [
+    #           {
+    #             name: ""
+    #           }
+    #         ]
+    #       }
     #     }
     #   },
     #   triggers: [
