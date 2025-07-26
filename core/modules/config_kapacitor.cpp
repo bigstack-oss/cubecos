@@ -745,3 +745,4 @@ CONFIG_OBSERVES(kapacitor, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(kapacitor, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(kapacitor, "/var/lib/kapacitor");
+CONFIG_MIGRATE(kapacitor, "/var/alert_resp");
