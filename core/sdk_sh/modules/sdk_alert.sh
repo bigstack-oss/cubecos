@@ -6,6 +6,9 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+RESERVED_TRIGGER_ADMIN="admin-notify"
+RESERVED_TRIGGER_INSTANCE="instance-notify"
+
 alert_vm_event_list()
 {
     local cpu_crit=$(cat /etc/kapacitor/templates/tpl_alert_vm_cpu.tick | grep "crit(lambda" | awk -F' |)' '{print $9}')
@@ -536,8 +539,8 @@ alert_add_update_setting_receiver_exec_shell()
     fi
 
     # prepare the environment
-    cp -f "/var/response/$name.shell" "/var/alert_resp/exec_$name.shell"
-    chmod +x "/var/alert_resp/exec_$name.shell"
+    cp -f "/var/response/$name.shell" "$ALERT_RESP_DIR/exec_$name.shell"
+    chmod +x "$ALERT_RESP_DIR/exec_$name.shell"
     local input_dir=$(MakeTempDir)
 
     # prepare the policy file
@@ -942,10 +945,10 @@ alert_put_trigger()
     local description=$(echo $input | jq -r '.description')
 
     # some default values for triggers with specific names
-    if [[ "$name" == "admin-notify" ]] ; then
+    if [[ "$name" == "$RESERVED_TRIGGER_ADMIN" ]] ; then
         topic="events"
         match="\"severity\" == 'W' OR \"severity\" == 'E' OR \"severity\" == 'C'"
-    elif [[ "$name" == "instance-notify" ]] ; then
+    elif [[ "$name" == "$RESERVED_TRIGGER_INSTANCE" ]] ; then
         topic="instance-events"
         match="\"severity\" == 'W' OR \"severity\" == 'C'"
     fi
@@ -1229,6 +1232,54 @@ responses: {
 
     alert_put_trigger "$payload"
     local ret=$?
+    return $ret
+}
+
+alert_delete_trigger()
+{
+    # input format: {
+    #   name: "",
+    # }
+
+    # process inputs
+    local input=${1:-""}
+    local name="$(echo "$input" | jq -r '.name')"
+    local is_reserved="false"
+
+    if [[ "$name" == "$RESERVED_TRIGGER_ADMIN" || "$name" == "$RESERVED_TRIGGER_INSTANCE" ]] ; then
+        is_reserved="true"
+    fi
+
+    # prepare the environment
+    local input_dir=$(MakeTempDir)
+
+    # prepare the policy file
+    mkdir -p "$input_dir/alert_resp"
+    cp -f "/etc/policies/alert_resp/alert_resp2_0.yml" "$input_dir/alert_resp/"
+    local policy_file="$input_dir/alert_resp/alert_resp2_0.yml"
+
+    # delete the trigger
+    local trigger_count_minus_one=$(($(yq '.triggers | length' "$policy_file") - 1))
+    for i in $(seq 0 "$trigger_count_minus_one") ; do
+        if [[ "$name" == "$(yq ".triggers[$i].name" "$policy_file")" ]] ; then
+            if [[ "$is_reserved" == "true" ]] ; then
+                yq -i ".triggers[$i].enabled = \"false\"" "$policy_file"
+                yq -i ".triggers[$i].description = \"\"" "$policy_file"
+                yq -i "del(.triggers[$i].responses)" "$policy_file"
+                yq -i ".triggers[$i].responses.emails[0].address = \"\"" "$policy_file"
+                yq -i ".triggers[$i].responses.slacks[0].url = \"\"" "$policy_file"
+                yq -i ".triggers[$i].responses.execs.shells[0].name = \"\"" "$policy_file"
+                yq -i ".triggers[$i].responses.execs.bins[0].name = \"\"" "$policy_file"
+            else
+                yq -i "del(.triggers[$i])" "$policy_file"
+            fi
+        fi
+    done
+
+    # apply the changes
+    $HEX_CFG apply $input_dir
+    local ret=$?
+    RemoveTempFiles
     return $ret
 }
 
