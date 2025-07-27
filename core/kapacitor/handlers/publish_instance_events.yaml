@@ -1,0 +1,6 @@
+id: publish-instance-events
+topic: instance-events
+kind: publish
+options:
+  topics:
+    - events
