@@ -505,12 +505,6 @@ Commit(bool modified, int dryLevel)
 
     std::string cidrIp = GetMgmtCidrIp(s_mgmtCidr.newValue(), 0, octet4);
     std::string cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
-    // read mgmt cidr from vip if this is a compute-only node
-    if (!IsControl(s_eCubeRole) && IsCompute(s_eCubeRole)) {
-        cidrIp = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr_ip %s 2>/dev/null", sharedId.c_str(), octet4.c_str());
-        cidr = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr 2>/dev/null", sharedId.c_str());
-    }
-
     std::string userPass = GetSaltKey(s_saltkey, s_userPass, s_seed);
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass, s_seed);
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass, s_seed);
@@ -590,11 +584,16 @@ GetMgmtCidrIpMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    std::string cidr;
+    std::string cidrIp;
     if (IsControl(s_eCubeRole)) {
-        std::string cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
-        std::string cidrIp = GetMgmtCidrIp(s_mgmtCidr.newValue(), 0, std::string(argv[1]));
-        printf("%s", cidrIp.c_str());
+        cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
+        cidrIp = GetMgmtCidrIp(s_mgmtCidr.newValue(), 0, std::string(argv[1]));
+    } else {
+        std::string sharedId = G(SHARED_ID);
+        cidrIp = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr_ip %s 2>/dev/null", sharedId.c_str(), argv[1]);
     }
+    printf("%s", cidrIp.c_str());
 
     return EXIT_SUCCESS;
 }
@@ -613,10 +612,14 @@ GetMgmtCidrMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    std::string cidr;
     if (IsControl(s_eCubeRole)) {
-        std::string cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
-        printf("%s", cidr.c_str());
+        cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
+    } else {
+        std::string sharedId = G(SHARED_ID);
+        cidr = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr 2>/dev/null", sharedId.c_str());
     }
+    printf("%s", cidr.c_str());
 
     return EXIT_SUCCESS;
 }

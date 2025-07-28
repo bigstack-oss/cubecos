@@ -499,8 +499,8 @@ health_hacluster_repair()
         $HEX_SDK pacemaker_cluster_stop
         $HEX_SDK pacemaker_cluster_restart
     elif is_node_rolling_upgrade && [ "x$HOSTNAME" = "x$master" ] ; then
-        $HEX_SDK pacemaker_cluster_stop
         $HEX_SDK pacemaker_cluster_restart
+        $HEX_SDK pacemaker_node_stop
     else
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$HOSTNAME" = "x$node" ] ; then
@@ -514,33 +514,33 @@ health_hacluster_repair()
                 is_remote_running $node corosync || remote_run $node "systemctl restart corosync"
             fi
         done
+        for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+            if ! remote_run $node hex_sdk is_control_node ; then
+                if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
+                    :
+                else
+                    remote_run $node "systemctl restart pcsd"
+                    Quiet -n hex_sdk pacemaker_remote_remove $node
+                    remote_run $node "systemctl stop pacemaker_remote"
+                fi
+            fi
+        done
+
+        for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+            if ! remote_run $node hex_sdk is_control_node ; then
+                if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
+                    :
+                else
+                    ! is_sshable $node || Quiet -n hex_sdk pacemaker_remote_add $node
+                fi
+            fi
+        done
+        for rsc in vip vaw haproxy cinder-volume ovndb_servers-clone $(cubectl node list -r compute -j | jq -r .[].hostname) ; do
+            Quiet -n pcs resource enable $rsc
+        done
+        Quiet -n pcs resource cleanup
+        Quiet -n pcs resource clear vip
     fi
-
-    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        if ! remote_run $node hex_sdk is_control_node ; then
-            if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
-                :
-            else
-                remote_run $node "systemctl restart pcsd"
-                Quiet -n hex_sdk pacemaker_remote_remove $node
-                remote_run $node "systemctl stop pacemaker_remote"
-            fi
-        fi
-    done
-
-    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        if ! remote_run $node hex_sdk is_control_node ; then
-            if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
-                :
-            else
-                ! is_sshable $node || Quiet -n hex_sdk pacemaker_remote_add $node
-            fi
-        fi
-    done
-    for rsc in vip vaw haproxy cinder-volume ovndb_servers-clone $(cubectl node list -r compute -j | jq -r .[].hostname) ; do
-        Quiet -n pcs resource enable $rsc
-    done
-    Quiet -n pcs resource cleanup
 }
 
 health_rabbitmq_report()
@@ -752,15 +752,15 @@ health_vip_repair()
     else
         health_hacluster_repair
         pcs property set stonith-enabled=false
-        for i in {1..20} ; do
+        for i in {1..6} ; do
             if pcs resource status vip | grep -q -i started ; then
                 break
             else
-                sleep 10
+                sleep 5
             fi
         done
     fi
-    if ! cube_node_ready ; then
+    if ! cube_node_ready && is_node_rolling_upgrade && [ "x$HOSTNAME" != "x$master" ] ; then
         if pcs resource status vip | grep -q Started ; then
             local master=$CUBE_NODE_CONTROL_HOSTNAMES
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do

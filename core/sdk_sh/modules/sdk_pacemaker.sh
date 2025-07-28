@@ -52,11 +52,6 @@ pacemaker_remote_cleanup()
     Quiet -n timeout $SRVSTO /usr/sbin/pcs resource cleanup $(hostname)
 }
 
-pacemaker_cluster_stop()
-{
-    cubectl node exec -r control -pn "$HEX_SDK pacemaker_node_stop"
-}
-
 pacemaker_node_stop()
 {
     timeout $SRVTO systemctl stop pcsd || killall -9 pcsd
@@ -64,9 +59,11 @@ pacemaker_node_stop()
     timeout $SRVTO systemctl stop corosync || killall -9 corosync
 }
 
-pacemaker_cluster_restart()
+pacemaker_cluster_stop()
 {
-    cubectl node exec -r control -pn "$HEX_SDK pacemaker_node_restart"
+    cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pcsd || killall -9 pcsd"
+    cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd"
+    cubectl node exec -r control -pn "timeout $SRVTO systemctl stop corosync || killall -9 corosync"
 }
 
 pacemaker_node_restart()
@@ -76,4 +73,15 @@ pacemaker_node_restart()
     is_running pcsd || systemctl restart pcsd
     is_running pacemaker || systemctl restart pacemaker
     is_running corosync || systemctl restart corosync
+}
+
+pacemaker_cluster_restart()
+{
+    cubectl node exec -r control -pn "systemctl restart pcsd corosync pacemaker"
+    sleep 10
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        is_remote_running $node pcsd || remote_run $node "systemctl restart pcsd"
+        is_remote_running $node pacemaker || remote_run $node "systemctl restart pacemaker"
+        is_remote_running $node corosync || remote_run $node "systemctl restart corosync"
+    done
 }

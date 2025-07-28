@@ -89,8 +89,12 @@ _hex_exec()
             return 1
         else
             trap _hex_exec_abort INT EXIT
-            { set -x; } >/dev/null 2>&1
-            { $cmd "$@"; } >/tmp/$log 2>&1 &
+            if set -o | grep xtrace | awk '{print $2}' | grep -o "^on$" ; then
+                { $cmd "$@" 2>&1 | tee /tmp/$log; } &
+            else
+                { set -x; } >/dev/null 2>&1
+                { $cmd "$@" >/tmp/$log 2>&1; } &
+            fi
             echo $! >$runtime 2>/dev/null
             { set +x; } >/dev/null 2>&1
             ln -sf $runtime $CLUSTER_REPAIRING
