@@ -537,6 +537,9 @@ alert_add_update_setting_receiver_exec_shell()
     if [[ "$name" == "" ]] ; then
         return 1
     fi
+    if [ ! -f "/var/response/${name}.shell" ] ; then
+        return 1
+    fi
 
     # prepare the environment
     cp -f "/var/response/$name.shell" "$ALERT_RESP_DIR/exec_$name.shell"
@@ -583,8 +586,11 @@ alert_put_setting_receiver_exec_shell()
     if [[ "$name" == "" ]] ; then
         return 1
     fi
+    if [ ! -f "/var/response/${name}.shell" ] ; then
+        return 1
+    fi
 
-    alert_add_update_setting_receiver_exec_shell "$name.shell"
+    alert_add_update_setting_receiver_exec_shell "$name"
     local ret=$?
     return $ret
 }
