@@ -51,3 +51,29 @@ pacemaker_remote_cleanup()
 {   
     Quiet -n timeout $SRVSTO /usr/sbin/pcs resource cleanup $(hostname)
 }
+
+pacemaker_cluster_stop()
+{
+    cubectl node exec -r control -pn "$HEX_SDK pacemaker_node_stop"
+}
+
+pacemaker_node_stop()
+{
+    timeout $SRVTO systemctl stop pcsd || killall -9 pcsd
+    timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd
+    timeout $SRVTO systemctl stop corosync || killall -9 corosync
+}
+
+pacemaker_cluster_restart()
+{
+    cubectl node exec -r control -pn "$HEX_SDK pacemaker_node_restart"
+}
+
+pacemaker_node_restart()
+{
+    systemctl restart pcsd corosync pacemaker
+    sleep 10
+    is_running pcsd || systemctl restart pcsd
+    is_running pacemaker || systemctl restart pacemaker
+    is_running corosync || systemctl restart corosync
+}

@@ -23,6 +23,7 @@
 const static char NAME[] = "pacemaker";
 const static char PCSD[] = "pcsd";
 const static char FORCE_NEW_MARK[] = "/etc/appliance/state/pacemaker_new_setup";
+static const char CONFIGURED_FILE[] = "/etc/appliance/state/configured";
 
 static CubeRole_e s_eCubeRole;
 
@@ -194,8 +195,8 @@ Commit(bool modified, int dryLevel)
 
     if (enabled) {
         if (isMaster) {
-            HexUtilSystemF(0, 0, "ip addr add %s dev %s label %s",
-                                 sharedId.c_str(), mgmtIf.c_str(), mgmtIf.c_str());
+            if (access(CONFIGURED_FILE, F_OK) != 0)
+                HexUtilSystemF(0, 0, "ip addr add %s dev %s label %s", sharedId.c_str(), mgmtIf.c_str(), mgmtIf.c_str());
         }
         else {
             SystemdCommitService(enabled, NAME);

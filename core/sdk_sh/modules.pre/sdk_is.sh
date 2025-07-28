@@ -130,3 +130,23 @@ is_sshable()
 {
     timeout 3 ssh root@$1 exit >/dev/null 2>&1
 }
+
+is_cluster_rolling_upgrade()
+{
+    if [ $(cubectl node exec -pn hex_cli -c firmware list | grep -i active | sort -u | wc -l) -gt 1 ] ; then
+        if ! cube_cluster_ready ; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+is_node_rolling_upgrade()
+{
+    if [ $(cubectl node exec -pn hex_cli -c firmware list | grep -i active | sort -u | wc -l) -gt 1 ] ; then
+        if ! cube_node_ready ; then
+            return 0
+        fi
+    fi
+    return 1
+}

@@ -76,6 +76,10 @@ _hex_exec()
         local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/^_health_//" -e "s/_auto_repair$//" -e "s/_repair$//")
         [ "x$MANNER" != "xforce" ] || cubectl node exec -pn rm -f /run/cube_cluster_repairing
         local repair_json="$(VERBOSE=1 is_repairing)"
+        local log="${srv}-${HOSTNAME}-$(date +%s)-$(mktemp -u XXXX)"
+        local log_pth="log/$log"
+        local log_url=
+        rm -f /tmp/$log
         if [ "x$repair_json" != "x" ] ; then
             local node=$(echo $repair_json | jq -r .node)
             local service=$(echo $repair_json | jq -r .service)
@@ -85,15 +89,21 @@ _hex_exec()
             return 1
         else
             trap _hex_exec_abort INT EXIT
-            $cmd "$@" &
-            echo $! > $runtime
+            { set -x; } >/dev/null 2>&1
+            { $cmd "$@"; } >/tmp/$log 2>&1 &
+            echo $! >$runtime 2>/dev/null
+            { set +x; } >/dev/null 2>&1
             ln -sf $runtime $CLUSTER_REPAIRING
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
-            influx_event "${query},detail=\"$cmd PID$(cat $runtime)\""
+            influx_event "${query},detail=\"$cmd PID:$(cat $runtime)\""
             wait $(cat $runtime)
+            keys="$($OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value | head -n 1)"
+            keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
+            log_url="s3://$log_pth"
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing completed\""
-            influx_event "${query},detail=\"$cmd PID$(cat $runtime)\""
+            influx_event "${query},log=\"${log_url}\",detail=\"$cmd PID:$(cat $runtime)\""
             rm -f $runtime $CLUSTER_REPAIRING
+            rm -f /tmp/$log
         fi
     else
         $cmd "$@"
@@ -178,7 +188,7 @@ cube_cluster_ready()
 {
     for node_entry in $(cubectl node list -j | jq -r .[].ip.management) ; do
         local node=$(echo $node_entry | head -c -1)
-        if ! remote_run $node timeout 15 $HEX_SDK cube_node_ready >/dev/null ; then
+        if ! timeout 5 $HEX_SDK remote_run $node $HEX_SDK cube_node_ready >/dev/null 2>&1 ; then
             return -1
         fi
     done

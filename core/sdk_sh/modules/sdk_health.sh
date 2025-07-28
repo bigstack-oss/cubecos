@@ -139,7 +139,7 @@ _health_fail_log()
 EOF
 
     local err_msg_oneline=`echo -e "$ERR_MSG" | paste -s -d';' /dev/stdin`
-    local log="${srv}-${node}-$(date +%s)-$(mktemp -u XXXX)"
+    local log="${srv}-${HOSTNAME}-$(date +%s)-$(mktemp -u XXXX)"
     local log_pth="log/$log"
     local log_url=
     rm -f /tmp/$log
@@ -487,31 +487,34 @@ health_hacluster_repair()
     local status=$(pcs status 2>/dev/null)
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
 
-    if [ -e /etc/pacemaker/authkey ] ; then
-        Quiet -n timeout $SRVSTO node rsync -r compute /etc/pacemaker/authkey
-    fi
-
-    # in case of split brains, stop the whole cluster and restart it all over agin
-    if [ "x$HOSTNAME" = "x$master" -o $(cubectl node exec -r control -pn "pcs status 2>/dev/null | grep vip" | sort -u | wc -l) -gt 1 ] ; then
-        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pcsd || killall -9 pcsd"
-        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd"
-        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop corosync || killall -9 corosync"
-    fi
-
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if [ "x$HOSTNAME" = "x$node" ] ; then
-            timeout $SRVTO systemctl stop pcsd || killall -9 pcsd
-            timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd
-            timeout $SRVTO systemctl stop corosync || killall -9 corosync
-            systemctl restart pcsd corosync pacemaker
-            status=$(pcs status 2>/dev/null)
-        else
-            echo "$status" | grep -i " online" | grep -q " $node " || remote_run $node "systemctl restart corosync pacemaker"
-            is_remote_running $node pcsd || remote_run $node "systemctl restart pcsd"
-            is_remote_running $node pacemaker || remote_run $node "systemctl restart pacemaker"
-            is_remote_running $node corosync || remote_run $node "systemctl restart corosync"
+        if remote_run $node "[ -e /etc/pacemaker/authkey ]" ; then
+            Quiet -n remote_run $node "timeout $SRVSTO cubectl node rsync -r compute /etc/pacemaker/authkey"
+            break
         fi
     done
+
+    # split brains or master control in rolling-upgrade phase
+    if [ $(cubectl node exec -r control -pn "pcs status 2>/dev/null | grep vip" | sort -u | wc -l) -gt 1 ] ; then
+        $HEX_SDK pacemaker_cluster_stop
+        $HEX_SDK pacemaker_cluster_restart
+    elif is_node_rolling_upgrade && [ "x$HOSTNAME" = "x$master" ] ; then
+        $HEX_SDK pacemaker_cluster_stop
+        $HEX_SDK pacemaker_cluster_restart
+    else
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            if [ "x$HOSTNAME" = "x$node" ] ; then
+                $HEX_SDK pacemaker_node_stop
+                $HEX_SDK pacemaker_node_restart
+                status=$(pcs status 2>/dev/null)
+            else
+                echo "$status" | grep -i " online" | grep -q " $node " || remote_run $node "systemctl restart corosync pacemaker"
+                is_remote_running $node pcsd || remote_run $node "systemctl restart pcsd"
+                is_remote_running $node pacemaker || remote_run $node "systemctl restart pacemaker"
+                is_remote_running $node corosync || remote_run $node "systemctl restart corosync"
+            fi
+        done
+    fi
 
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         if ! remote_run $node hex_sdk is_control_node ; then
@@ -728,29 +731,9 @@ _health_vip_auto_repair()
 
 health_vip_repair()
 {
-    # While bootstrapping, keep vip in master control
-    local master=$CUBE_NODE_CONTROL_HOSTNAMES
-    if ! cube_node_ready && [ "x$HOSTNAME" != "x$master" ] ; then
-        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            if pcs resource status vip | grep "Started ${master}$" ; then
-                break
-            else
-                if pcs status >/dev/null 2>&1 ; then
-                    pcs resource cleanup
-                    pcs resource move vip
-                    sleep 10
-                fi
-            fi
-        done
-        return 0
-    elif ! cube_node_ready && [ "x$HOSTNAME" = "x$master" ] ; then
-        # When master control is booting, stop all pcs to ensure vip running on it
-        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pcsd || killall -9 pcsd"
-        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd"
-        cubectl node exec -r control -pn "timeout $SRVTO systemctl stop corosync || killall -9 corosync"
-    fi
     local active_host=$($HEX_CFG status_pacemaker 2>/dev/null | awk '/IPaddr2/{print $5}')
-    if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host}$" ; then
+    pcs resource cleanup
+    if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host:-NOVIP}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             local ipaddr=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $2}')
             local ifname=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $NF}')
@@ -784,7 +767,6 @@ health_vip_repair()
                 if pcs resource status vip | grep "Started ${master}$" ; then
                     break
                 else
-                    pcs resource cleanup
                     pcs resource move vip
                     sleep 10
                 fi
