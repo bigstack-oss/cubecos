@@ -690,20 +690,14 @@ NotifySettingMain(int argc, const char** argv)
 
                 // list files not directory
                 std::string cmd = "ls -p " + dir + " | grep -v /";
-                int execFileIndex;
-                std::string execFile;
-                if (CliMatchCmdHelper(argc, argv, 6, cmd, &execFileIndex, &execFile) != 0) {
+                int execNameIndex;
+                std::string execName;
+                if (CliMatchCmdHelper(argc, argv, 6, cmd, &execNameIndex, &execName) != 0) {
                     CliPrintf("no such file");
                     return CLI_UNEXPECTED_ERROR;
                 }
 
-                std::string fullPath = dir + "/" + execFile;
-                std::string execName = execFile;
-                std::size_t dotPosition = execName.find_first_of('.');
-                if (dotPosition != std::string::npos) {
-                    // remove the file extension, e.g., aaa.bbb => aaa
-                    execName.erase(dotPosition);
-                }
+                std::string fullPath = dir + "/" + execName;
                 HexSystemF(0, "cp -f %s /var/alert_resp/exec_%s.%s", fullPath.c_str(), execName.c_str(), execType.c_str());
                 if (execFileDirectoryIndex == FILE_DIRECTORY_USB) {
                     HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0, HEX_CFG, "umount_usb", NULL);
@@ -815,19 +809,12 @@ NotifySettingMain(int argc, const char** argv)
 
                 std::string execName = "";
                 std::string execType = "";
-                std::size_t dotPositionOne = execFile.find_first_of('.');
-                if (dotPositionOne != std::string::npos) {
-                    execName = execFile.substr(0, dotPositionOne);
+                std::size_t dotPosition = execFile.find_last_of('.');
+                if (dotPosition != std::string::npos) {
+                    execName = execFile.substr(0, dotPosition);
 
-                    std::size_t dotPositionTwo = execFile.find_last_of('.');
-                    if (dotPositionTwo != std::string::npos) {
-                        if (dotPositionOne != dotPositionTwo) {
-                            return CLI_UNEXPECTED_ERROR;
-                        }
-
-                        if ((dotPositionTwo + 1) < execFile.length()) {
-                            execType = execFile.substr(dotPositionTwo + 1);
-                        }
+                    if ((dotPosition + 1) < execFile.length()) {
+                        execType = execFile.substr(dotPosition + 1);
                     }
                 } else {
                     execName = execFile;

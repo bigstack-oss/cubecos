@@ -8993,7 +8993,7 @@ gcp_auto_scaler_create()
     local gcloud=$run_dir/google-cloud-sdk/bin/gcloud
 
     echo "Generating GCP auto scaling script ..."
-    cat << EOF > /var/response/gcp_auto_$name.shell
+    cat << EOF > /var/response/gcp_auto_$name
 #! /bin/bash
 
 cat << KFEOF > $run_dir/$name.key

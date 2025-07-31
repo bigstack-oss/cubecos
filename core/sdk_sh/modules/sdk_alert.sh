@@ -529,20 +529,19 @@ alert_put_setting_receiver_slack()
 alert_add_update_setting_receiver_exec_shell()
 {
     # the shell should be under /var/response
-    # the file name should be $1.shell
-    # $1: name
+    # $1: file name
 
     # process inputs
     local name=${1:-""}
     if [[ "$name" == "" ]] ; then
         return 1
     fi
-    if [ ! -f "/var/response/${name}.shell" ] ; then
+    if [ ! -f "/var/response/${name}" ] ; then
         return 1
     fi
 
     # prepare the environment
-    cp -f "/var/response/$name.shell" "$ALERT_RESP_DIR/exec_$name.shell"
+    cp -f "/var/response/$name" "$ALERT_RESP_DIR/exec_$name.shell"
     chmod +x "$ALERT_RESP_DIR/exec_$name.shell"
     local input_dir=$(MakeTempDir)
 
@@ -574,7 +573,6 @@ alert_add_update_setting_receiver_exec_shell()
 alert_put_setting_receiver_exec_shell()
 {
     # the shell should be under /var/response
-    # the file name should be [name].shell
     # input format: {
     #   name: "",
     # }
@@ -582,11 +580,10 @@ alert_put_setting_receiver_exec_shell()
     # process inputs
     local input=${1:-""}
     local name="$(echo $input | jq -r '.name')"
-    name="${name%%.*}"
     if [[ "$name" == "" ]] ; then
         return 1
     fi
-    if [ ! -f "/var/response/${name}.shell" ] ; then
+    if [ ! -f "/var/response/${name}" ] ; then
         return 1
     fi
 
