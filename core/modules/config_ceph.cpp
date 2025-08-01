@@ -775,10 +775,11 @@ CommitMon(bool enabled, const char* name, const char* hostname, const char* oldh
         HexUtilSystemF(0, 0, "systemctl start ceph-mon@%s", hostname);
         HexLogInfo("%s-mon is running", name);
 
+        HexUtilSystemF(0, 0, "timeout 10 ceph -s > /dev/null || hex_sdk health_ceph_mon_repair");
         bool isMaster = G(IS_MASTER);
         if (!isMaster) {
             HexLogInfo("waiting for response of %s-mon", name);
-            HexSystemF(0, "for i in 1 2 3 4 5 ; do ! timeout 60 ceph -s > /dev/null || break ; done");
+            HexSystemF(0, "for i in 1 2 3 ; do ! timeout 10 ceph -s > /dev/null || break ; done");
             HexLogInfo("%s-mon is responding", name);
         }
     }

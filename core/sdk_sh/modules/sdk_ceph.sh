@@ -54,7 +54,7 @@ ceph_get_ids_by_dev()
     local dev=$1
     # ceph device ls doesn't always show correct osds associated with devices
     # local ids=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.location[].dev == \"${dev#/dev/}\").daemons[]" | sed "s/osd.//g" | sort -u)
-    local ids=$(for osdid in $(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id") ; do ceph osd ls | grep "^${osdid}$" ; done)
+    local ids=$(for osdid in $(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id" | sort) ; do ceph osd ls | grep "^${osdid}$" ; done)
     ids+=$(ceph-volume lvm list --format json | jq -r ".[][] | select(.devices[] == \"$dev\").tags.\"ceph.osd_id\"")
 
     echo -n $ids
