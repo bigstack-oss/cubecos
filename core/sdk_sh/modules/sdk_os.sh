@@ -1281,7 +1281,7 @@ _os_pre_failure_host_evacuation()
 
             if [ $($OPENSTACK network agent list -f value -c ID -c Alive | grep -v -i true | wc -l) -ge 1 ] ; then
                 $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
-                timeout $SRVTO cubectl node exec -r control -pn systemctl restart neutron-server neutron-ovn-metadata-agent systemctl restart neutron-ovn-vpn-agent
+                timeout $SRVTO cubectl node exec -r control -pn systemctl restart neutron-server neutron-ovn-metadata-agent neutron-ovn-vpn-agent
             fi
         else
             Error "rabbitmq is not Ok"
