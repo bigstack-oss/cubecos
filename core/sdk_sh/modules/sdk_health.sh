@@ -495,10 +495,10 @@ health_hacluster_repair()
     done
 
     # split brains or master control in rolling-upgrade phase
-    if [ $(cubectl node exec -r control -pn "pcs status 2>/dev/null | grep vip" | sort -u | wc -l) -gt 1 ] ; then
+    if [ $(cubectl node exec -r control -pn "pcs status 2>/dev/null | grep \"vip.*St\"" | sort -u | wc -l) -gt 1 ] ; then
         $HEX_SDK pacemaker_cluster_stop
         $HEX_SDK pacemaker_cluster_restart
-    elif is_node_rolling_upgrade && [ "x$HOSTNAME" = "x$master" ] ; then
+    elif ! cube_node_ready && is_node_rolling_upgrade ; then
         $HEX_SDK pacemaker_cluster_restart
         $HEX_SDK pacemaker_node_stop
     else
@@ -731,8 +731,16 @@ _health_vip_auto_repair()
 
 health_vip_repair()
 {
+    health_hacluster_repair
+    pcs property set stonith-enabled=false
+    for i in {1..6} ; do
+        if cubectl node exec -pn "pcs resource status vip 2>/dev/null" | grep -q -i started ; then
+            break
+        else
+            sleep 5
+        fi
+    done
     local active_host=$($HEX_CFG status_pacemaker 2>/dev/null | awk '/IPaddr2/{print $5}')
-    pcs resource cleanup
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host:-NOVIP}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             local ipaddr=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $2}')
@@ -747,16 +755,6 @@ health_vip_repair()
                 if [ -n "$ipaddr" ] ; then
                     ip addr del $ipaddr dev $ifname
                 fi
-            fi
-        done
-    else
-        health_hacluster_repair
-        pcs property set stonith-enabled=false
-        for i in {1..6} ; do
-            if pcs resource status vip | grep -q -i started ; then
-                break
-            else
-                sleep 5
             fi
         done
     fi
