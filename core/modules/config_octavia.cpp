@@ -703,15 +703,15 @@ ReinitMain(int argc, char* argv[])
         std::string cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
         HexUtilSystemF(0, 0, HEX_SDK " os_octavia_init %s", cidr.c_str());
     }
-
     if (IsCompute(s_eCubeRole)) {
+        std::string sharedId = G(SHARED_ID);
         std::string myip = G(MGMT_ADDR);
         std::string octet4 = hex_string_util::split(myip, '.')[3];
-        // maps the 4th octet ranges from 1~9 to 11~19 for avoiding conflict with dhcp port
+        // maps the 4th octet ranges from 1~9 to 11~19 for avoiding conflict with dhcp port                                                                                                                           
         if (octet4.length() == 1)
             octet4 = "1" + octet4;
-        std::string cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
-        std::string cidrIp = GetMgmtCidrIp(s_mgmtCidr.newValue(), 0, octet4);
+        std::string cidr = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr 2>/dev/null", sharedId.c_str());
+        std::string cidrIp = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr_ip %s 2>/dev/null", sharedId.c_str(), octet4.c_str());
         HexUtilSystemF(0, 0, HEX_SDK " os_octavia_node_init %s %s", cidrIp.c_str(), cidr.c_str());
     }
 

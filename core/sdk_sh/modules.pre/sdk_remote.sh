@@ -10,7 +10,7 @@ remote_systemd_stop()
 {
     local host=$1
     shift 1
-    ! is_sshable $host || timeout $SRVTO ssh root@$host systemctl stop $@ >/dev/null 2>&1
+    ! is_sshable $host || timeout $SRVLTO ssh root@$host "timeout $SRVTO systemctl stop $@ >/dev/null 2>&1 || killall -9 $@"
 }
 
 remote_systemd_start()

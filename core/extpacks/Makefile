@@ -64,8 +64,8 @@ ext_build: $(EXTPACK_MD5)
 	$(Q)mkdir -p $(SHIP_DIR)
 	$(call RUN_CMD_TIMED,$(SHELL) $(HEX_SCRIPTSDIR)/makeextpack $(SHIP_DIR)/$(PROJ_EXT_LONGNAME) $(EXTPACK),"  GEN     $(PROJ_EXT_LONGNAME)")
 	$(Q)ln -sf $(SHIP_DIR)/$(PROJ_EXT_LONGNAME) $(PROJ_EXT)
-	$(Q)nohup md5sum < $(PROJ_EXT) > $(SHIP_DIR)/$(PROJ_EXT_LONGNAME).md5 &
-	$(Q)nohup sha256sum < $(PROJ_EXT) > $(SHIP_DIR)/$(PROJ_EXT_LONGNAME).sha256 &
+	$(Q)nohup md5sum < $(PROJ_EXT) > $(SHIP_DIR)/$(PROJ_EXT_LONGNAME).md5 2>&1 &
+	$(Q)nohup sha256sum < $(PROJ_EXT) > $(SHIP_DIR)/$(PROJ_EXT_LONGNAME).sha256 2>&1 &
 	$(Q)umount $(NAS) || true
 	$(Q)rmdir $(NAS) || true
 
@@ -77,8 +77,8 @@ portal_ext_build: $(NAS)
 	$(Q)mkdir -p $(SHIP_DIR)
 	$(call RUN_CMD_TIMED,$(SHELL) $(HEX_SCRIPTSDIR)/makeextpack $(SHIP_DIR)/$(PROJ_PORTAL_EXT_LONGNAME) $(PORTALPACK),"  GEN     $(PROJ_PORTAL_EXT_LONGNAME)")
 	$(Q)ln -sf $(SHIP_DIR)/$(PROJ_PORTAL_EXT_LONGNAME) $(PROJ_PORTAL_EXT)
-	$(Q)nohup md5sum < $(PROJ_PORTAL_EXT) > $(SHIP_DIR)/$(PROJ_PORTAL_EXT_LONGNAME).md5 &
-	$(Q)nohup sha256sum < $(PROJ_PORTAL_EXT) > $(SHIP_DIR)/$(PROJ_PORTAL_EXT_LONGNAME).sha256 &
+	$(Q)nohup md5sum < $(PROJ_PORTAL_EXT) > $(SHIP_DIR)/$(PROJ_PORTAL_EXT_LONGNAME).md5 2>&1 &
+	$(Q)nohup sha256sum < $(PROJ_PORTAL_EXT) > $(SHIP_DIR)/$(PROJ_PORTAL_EXT_LONGNAME).sha256 2>&1 &
 	$(Q)umount $(NAS) || true
 	$(Q)rmdir $(NAS) || true
 

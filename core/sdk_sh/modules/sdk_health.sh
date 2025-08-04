@@ -499,8 +499,14 @@ health_hacluster_repair()
         $HEX_SDK pacemaker_cluster_stop
         $HEX_SDK pacemaker_cluster_restart
     elif ! cube_node_ready && is_node_rolling_upgrade ; then
-        $HEX_SDK pacemaker_cluster_restart
-        $HEX_SDK pacemaker_node_stop
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            if [ "x$HOSTNAME" = "x$master" ] ; then
+                $HEX_SDK pacemaker_cluster_stop
+                $HEX_SDK pacemaker_node_restart
+            else
+                $HEX_SDK pacemaker_node_stop
+            fi
+        done
     else
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$HOSTNAME" = "x$node" ] ; then
