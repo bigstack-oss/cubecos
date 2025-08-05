@@ -192,7 +192,7 @@ cube_cluster_ready()
 {
     for node_entry in $(cubectl node list -j | jq -r .[].ip.management) ; do
         local node=$(echo $node_entry | head -c -1)
-        if ! timeout 5 $HEX_SDK remote_run $node $HEX_SDK cube_node_ready >/dev/null 2>&1 ; then
+        if ! timeout $SRVSTO $HEX_SDK remote_run $node $HEX_SDK cube_node_ready >/dev/null 2>&1 ; then
             return -1
         fi
     done
@@ -238,7 +238,7 @@ cube_cluster_start()
 
 cube_cluster_stop()
 {
-    if timeout 30 $HEX_SDK health_ceph_mds_check ; then
+    if timeout $SRVTO $HEX_SDK health_ceph_mds_check ; then
         ! $HEX_SDK os_nova_list || $HEX_SDK os_nova_list id status powerstate | grep -i 'active running' | cut -d' ' -f1 > $CEPHFS_NOVA_DIR/instances/active_running
     fi
     rm -f /var/lib/corosync/*
@@ -272,12 +272,12 @@ cube_cluster_power()
     if [ "x${MASTER_CONTROL:-NOMASTER}" != "x$(hostname)" ] ; then
         remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_cluster_power $1"
     else
-        Quiet timeout 15 cubectl node exec -p "timeout 10 umount $CEPHFS_STORE_DIR" || true
-        Quiet -n timeout 15 cubectl node exec -p -r controle "systemctl stop ceph-mds@\$HOSTNAME"
-        Quiet -n timeout 15 cubectl node exec -p -r controle "systemctl stop ceph-mgr@\$HOSTNAME"
-        Quiet -n timeout 15 cubectl node exec -p -r controle "systemctl stop ceph-mon@\$HOSTNAME"
+        Quiet timeout $SRVTO cubectl node exec -p "timeout $SRVSTO umount $CEPHFS_STORE_DIR" || true
+        Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mds@\$HOSTNAME"
+        Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mgr@\$HOSTNAME"
+        Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mon@\$HOSTNAME"
         for N in $(cubectl node list -j | jq -r .[].hostname | tac) ; do
-            timeout 3 $HEX_SDK remote_run $N "$PWRCMD" || true
+            timeout $SRVSTO $HEX_SDK remote_run $N "$PWRCMD" || true
         done
     fi
 }
@@ -877,7 +877,7 @@ cube_cluster_ppu()
         Error "PPU upgrade aborted: fix NG services before continuing"
     fi
 
-    local accessible_pkgs=$(timeout 30 cubectl node exec /usr/sbin/hex_install list | wc -l)
+    local accessible_pkgs=$(timeout $SRVTO cubectl node exec -pn /usr/sbin/hex_install list | wc -l)
     local cluster_nodes=$(cubectl node list | wc -l)
     if [ $accessible_pkgs -lt $cluster_nodes ] ; then
         cubectl node exec -p /usr/sbin/hex_install list

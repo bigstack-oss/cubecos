@@ -500,11 +500,11 @@ health_hacluster_repair()
         $HEX_SDK pacemaker_cluster_restart
     elif ! cube_node_ready && is_node_rolling_upgrade ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            if [ "x$HOSTNAME" = "x$master" ] ; then
+            if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
                 $HEX_SDK pacemaker_cluster_stop
-                $HEX_SDK pacemaker_node_restart
+                $HEX_SDK pacemaker_cluster_restart
             else
-                $HEX_SDK pacemaker_node_stop
+                Quiet -n remote_run $node "systemctl stop pcsd pacemaker corosync" # old FW may not have $HEX_SDK pacemaker_node_stop
             fi
         done
     else
