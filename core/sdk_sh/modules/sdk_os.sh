@@ -1315,7 +1315,7 @@ os_pre_failure_host_evacuation_sequential()
         old_host=$(echo $old_state_json | jq -r .hypervisor_hostname)
         old_status=$(echo $old_state_json | jq -r .status)
         old_power=$(echo $old_state_json | jq -r .power_state)
-        success=false
+        success=true
         echo "migrating $sid($old_status) from $from_host to $to_host"
         nova live-migration $sid $to_host
         for i in {1..15} ; do
@@ -1329,23 +1329,26 @@ os_pre_failure_host_evacuation_sequential()
                     echo " > $new_name($new_status) is on $new_host"
                 fi
                 if [ "x$new_host" = "x$to_host" -a "x$old_status" = "x$new_status" -a "x$old_power" = "x$new_power" ] ; then
-                    success=true
                     break
                 fi
+            elif [ $i -ge 15 ] ; then
+                success=false
             else
                 if [ "x$new_host" = "x$to_host" ] ; then
                     if [ "x$old_status" != "x$new_status" -o "x$old_power" != "x$new_power" ] ; then
                         os_nova_instance_reset $sid
                         os_nova_instance_hardreboot $sid
-                        success=true
                     fi
                 fi
             fi
         done
-        [ "x$success" = "xtrue" ] || return 1
     done
 
-    return 0
+    if [ "x$success" = "xtrue" ] ; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 os_cinder_volume_service_remove()

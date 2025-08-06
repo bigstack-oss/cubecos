@@ -503,8 +503,10 @@ health_hacluster_repair()
             if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
                 $HEX_SDK pacemaker_cluster_stop
                 $HEX_SDK pacemaker_cluster_restart
+            elif [ "x$node" = "x$HOSTNAME" -a "x$node" != "x$master" ] ; then
+                $HEX_SDK pacemaker_node_stop
             else
-                Quiet -n remote_run $node "systemctl stop pcsd pacemaker corosync" # old FW may not have $HEX_SDK pacemaker_node_stop
+                remote_run $master "pcs status >/dev/null 2>&1 || $HEX_SDK pacemaker_node_restart"
             fi
         done
     else
