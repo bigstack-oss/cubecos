@@ -52,15 +52,16 @@ alert_resp_jail_start()
 
 alert_jail_run()
 {
-    local fname=$1
+    local fname="$1"
     local ext="${fname##*.}"
-    local alert_data=$2
+    local alert_data="$2"
 
-    $KUBECTL cp $fname resp-runner:$fname
+    $KUBECTL exec resp-runner -- find "$ALERT_RESP_DIR" -type f -delete
+    $KUBECTL cp "$fname" "resp-runner:$fname"
     if [ "$ext" == "shell" ] ; then
-        echo  $alert_data | $KUBECTL exec -i resp-runner -- bash $fname
+        $KUBECTL exec resp-runner -- bash -c "export EVENT=\"$alert_data\"; bash \"$fname\""
     elif [ "$ext" == "bin" ] ; then
-        echo  $alert_data | $KUBECTL exec -i resp-runner -- $fname
+        $KUBECTL exec resp-runner -- bash -c "export EVENT=\"$alert_data\"; \"$fname\""
     fi
 }
 
@@ -72,16 +73,16 @@ alert_resp_runner()
     fi
 
     # redirect STDIN data to $alert_data
-    local alert_data=$(cat | jq -c .data.series[0] 2>/dev/null)
+    local alert_data="$(cat | jq -c .data.series[0] 2>/dev/null)"
     if [ -z "$alert_data" ] ; then
         return 0
     fi
 
-    local name=$1
-    local type=${2:-shell}
-    local fname=$ALERT_RESP_DIR/exec_$name.$type
+    local name="$1"
+    local type="${2:-shell}"
+    local fname="$ALERT_RESP_DIR/exec_$name.$type"
 
-    alert_jail_run $fname "$alert_data"
+    alert_jail_run "$fname" "$alert_data"
 }
 
 # Usage: $PROG alert_disable_project_by_id $project_id
