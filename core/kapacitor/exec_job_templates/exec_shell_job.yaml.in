@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "exec-shell-@EXEC_NAME@"
+  namespace: resp-runner
+spec:
+  completions: 1
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      volumes:
+        - name: script-volume
+          configMap:
+            name: "@EXEC_CONFIGMAP@"
+      containers:
+        - name: resp-runner
+          image: localhost:5080/bigstack/shell:latest
+          volumeMounts:
+            - name: script-volume
+              mountPath: "/var/alert_resp"
+              readOnly: true
+          env:
+            - name: EVENT
+              value: "@EVENT_DATA@"
+          command: ["/bin/bash", "@EXEC_FULL_PATH@"]
+      restartPolicy: Never

@@ -707,7 +707,7 @@ ReinitMain(int argc, char* argv[])
         std::string sharedId = G(SHARED_ID);
         std::string myip = G(MGMT_ADDR);
         std::string octet4 = hex_string_util::split(myip, '.')[3];
-        // maps the 4th octet ranges from 1~9 to 11~19 for avoiding conflict with dhcp port                                                                                                                           
+        // maps the 4th octet ranges from 1~9 to 11~19 for avoiding conflict with dhcp port
         if (octet4.length() == 1)
             octet4 = "1" + octet4;
         std::string cidr = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr 2>/dev/null", sharedId.c_str());

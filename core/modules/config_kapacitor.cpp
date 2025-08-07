@@ -723,9 +723,7 @@ Commit(bool modified, int dryLevel)
         DefineTemplates();
         RedefineHandlers();
 
-        HexUtilSystemF(0, 0, HEX_SDK " alert_resp_jail_start");
         HexUtilSystemF(0, 0, HEX_SDK " alert_sync_tenant");
-
         CronAlertCheck(s_alertChkEnabled, s_alertChkEventId, s_hostname, s_alertChkInterval);
     } else {
         SystemdCommitService(enabled, NAME);

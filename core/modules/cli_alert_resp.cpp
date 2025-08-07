@@ -7,6 +7,7 @@
 
 #include <hex/log.h>
 #include <hex/strict.h>
+#include <hex/filesystem.h>
 #include <hex/process.h>
 #include <hex/string_util.h>
 #include <hex/cli_module.h>
@@ -698,7 +699,9 @@ NotifySettingMain(int argc, const char** argv)
                 }
 
                 std::string fullPath = dir + "/" + execName;
-                HexSystemF(0, "cp -f %s /var/alert_resp/exec_%s.%s", fullPath.c_str(), execName.c_str(), execType.c_str());
+                std::string savedExecFullPath = std::string("/var/alert_resp/exec_") + execName + "." + execType;
+                HexSystemF(0, "cp -f %s %s", fullPath.c_str(), savedExecFullPath.c_str());
+                HexSetFileMode(savedExecFullPath.c_str(), "root", "root", 0755);
                 if (execFileDirectoryIndex == FILE_DIRECTORY_USB) {
                     HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0, HEX_CFG, "umount_usb", NULL);
                 }

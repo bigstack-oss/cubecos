@@ -6,6 +6,7 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+ALERT_RESP_EXEC_RUNNER_NAMESPACE="resp-runner"
 RESERVED_TRIGGER_ADMIN="admin-notify"
 RESERVED_TRIGGER_INSTANCE="instance-notify"
 
@@ -29,40 +30,65 @@ alert_vm_event_list()
     fi
 }
 
-alert_resp_jail_enter()
+_alert_run_job()
 {
-    $KUBECTL exec -i --tty resp-runner -- bash
-}
+    local job_name="$1"
+    local job_def="$2"
+    local duration="60"
 
-alert_resp_jail_restart()
-{
-    if $KUBECTL get all | grep -q pod/resp-runner ; then
-        $KUBECTL delete pod resp-runner
+    if [ ! -f "$job_def" ] ; then
+        return 1
     fi
 
-    $KUBECTL run resp-runner --image=localhost:5080/bigstack/shell
-}
+    $KUBECTL apply -f "$job_def"
+    for i in $(seq 1 "$duration") ; do
+        local status="$($KUBECTL get job "$job_name" \
+            --namespace "$ALERT_RESP_EXEC_RUNNER_NAMESPACE" \
+            -o=jsonpath='{.status.conditions[?(@.type=="Complete")].status}')"
 
-alert_resp_jail_start()
-{
-    if ! $KUBECTL get all | grep -q pod/resp-runner ; then
-        $KUBECTL run resp-runner --image=localhost:5080/bigstack/shell
-    fi
+        if [[ "$status" == "True" ]] ; then
+            break
+        fi
+        sleep 1
+    done
+
+    $KUBECTL delete job "$job_name" --namespace "$ALERT_RESP_EXEC_RUNNER_NAMESPACE"
 }
 
 alert_jail_run()
 {
-    local fname="$1"
-    local ext="${fname##*.}"
-    local alert_data="$2"
+    local name="$1"
+    local type="$2"
+    local alert_data="$3"
+    local valid_name="$(echo "$name" | tr -cd 'a-zA-Z-')"
 
-    $KUBECTL exec resp-runner -- find "$ALERT_RESP_DIR" -type f -delete
-    $KUBECTL cp "$fname" "resp-runner:$fname"
-    if [ "$ext" == "shell" ] ; then
-        $KUBECTL exec resp-runner -- bash -c "export EVENT=\"$alert_data\"; bash \"$fname\""
-    elif [ "$ext" == "bin" ] ; then
-        $KUBECTL exec resp-runner -- bash -c "export EVENT=\"$alert_data\"; \"$fname\""
+    $KUBECTL get namespace "$ALERT_RESP_EXEC_RUNNER_NAMESPACE" >/dev/null 2>&1 || $KUBECTL create namespace "$ALERT_RESP_EXEC_RUNNER_NAMESPACE"
+    ($KUBECTL get configmap "exec-$valid_name.$type" --namespace "$ALERT_RESP_EXEC_RUNNER_NAMESPACE" && $KUBECTL delete configmap "exec-$valid_name.$type" --namespace "$ALERT_RESP_EXEC_RUNNER_NAMESPACE") || true
+    $KUBECTL create configmap "exec-$valid_name.$type" --from-file="$ALERT_RESP_DIR/exec_$name.$type" --namespace "$ALERT_RESP_EXEC_RUNNER_NAMESPACE"
+
+    local job_dir=$(MakeTempDir)
+    if [ "$type" == "shell" ] ; then
+        sed \
+            -e "s/@EXEC_NAME@/$valid_name/" \
+            -e "s/@EXEC_CONFIGMAP@/exec-$valid_name.$type/" \
+            -e "s;@EXEC_FULL_PATH@;$ALERT_RESP_DIR/exec_$name.$type;" \
+            -e "s/@EVENT_DATA@/${alert_data//\//\\\/}/" \
+            "/etc/kapacitor/exec_job_templates/exec_shell_job.yaml.in" \
+            > "$job_dir/job.yaml"
+        _alert_run_job "exec-shell-$valid_name" "$job_dir/job.yaml"
+    elif [ "$type" == "bin" ] ; then
+        sed \
+            -e "s/@EXEC_NAME@/$valid_name/" \
+            -e "s/@EXEC_CONFIGMAP@/exec-$valid_name.$type/" \
+            -e "s;@EXEC_FULL_PATH@;$ALERT_RESP_DIR/exec_$name.$type;" \
+            -e "s/@EVENT_DATA@/${alert_data//\//\\\/}/" \
+            "/etc/kapacitor/exec_job_templates/exec_bin_job.yaml.in" \
+            > "$job_dir/job.yaml"
+        _alert_run_job "exec-bin-$valid_name" "$job_dir/job.yaml"
     fi
+    RemoveTempFiles
+
+    $KUBECTL delete configmap "exec-$valid_name.$type" --namespace "$ALERT_RESP_EXEC_RUNNER_NAMESPACE"
 }
 
 alert_resp_runner()
@@ -73,16 +99,15 @@ alert_resp_runner()
     fi
 
     # redirect STDIN data to $alert_data
-    local alert_data="$(cat | jq -c .data.series[0] 2>/dev/null)"
+    local alert_data="$(cat)"
     if [ -z "$alert_data" ] ; then
         return 0
     fi
 
     local name="$1"
     local type="${2:-shell}"
-    local fname="$ALERT_RESP_DIR/exec_$name.$type"
 
-    alert_jail_run "$fname" "$alert_data"
+    alert_jail_run "$name" "$type" "$alert_data"
 }
 
 # Usage: $PROG alert_disable_project_by_id $project_id
