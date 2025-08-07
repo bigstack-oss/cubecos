@@ -19,6 +19,13 @@ spec:
             - name: script-volume
               mountPath: "/var/alert_resp"
               readOnly: true
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "100Mi"
+            limits:
+              cpu: "200m"
+              memory: "100Mi"
           env:
             - name: EVENT
               value: "@EVENT_DATA@"
