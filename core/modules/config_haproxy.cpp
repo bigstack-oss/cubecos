@@ -145,9 +145,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
     fprintf(fout, "  option http-server-close\n");
-    fprintf(fout, "  http-request replace-header Cookie (^|;)token=[^;]+;+(.*) \\1\\2\n");
-    fprintf(fout, "  http-request replace-header Cookie (^|;)ceph_token=([^;]+)(.*) \\1token=\\2\\3\n");
-    fprintf(fout, "  http-response replace-header Set-Cookie token=(.*) ceph_token=\\1\n");
     if (ha) {
         fprintf(fout, "  server localhost %s:7443 check ssl verify none\n", sharedId.c_str());
     } else {
@@ -173,9 +170,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  option forwardfor\n");
     fprintf(fout, "  option http-server-close\n");
     fprintf(fout, "  redirect scheme https if !{ ssl_fc }\n");
-    fprintf(fout, "  http-request replace-header Cookie (^|;)token=[^;]+;+(.*) \\1\\2\n");
-    fprintf(fout, "  http-request replace-header Cookie (^|;)cos_token=([^;]+)(.*) \\1token=\\2\\3\n");
-    fprintf(fout, "  http-response replace-header Set-Cookie token=(.*) cos_token=\\1\n");
     fprintf(fout, "  server localhost %s:8082 check\n", myip.c_str());
     fprintf(fout, "  \n");
 
