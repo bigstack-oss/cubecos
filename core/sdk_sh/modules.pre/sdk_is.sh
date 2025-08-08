@@ -150,3 +150,12 @@ is_node_rolling_upgrade()
     fi
     return 1
 }
+
+is_vip_active()
+{
+    for i in {1..10} ; do
+        pcs resource status vip 2>/dev/null | grep -q "vip.*Started" || return 1
+        sleep 1
+    done
+    return 0
+}

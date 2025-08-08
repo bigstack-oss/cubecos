@@ -501,8 +501,16 @@ health_hacluster_repair()
     elif ! cube_node_ready && is_node_rolling_upgrade ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
-                $HEX_SDK pacemaker_cluster_stop
-                $HEX_SDK pacemaker_cluster_restart
+                for i in {1..10} ; do
+                    if is_vip_active ; then
+                        break
+                    else
+                        $HEX_SDK pacemaker_cluster_stop
+                        $HEX_SDK pacemaker_cluster_restart
+                        Quiet -n pcs resource cleanup
+                        Quiet -n pcs resource clear vip
+                    fi
+                done
             elif [ "x$node" = "x$HOSTNAME" -a "x$node" != "x$master" ] ; then
                 $HEX_SDK pacemaker_node_stop
             else

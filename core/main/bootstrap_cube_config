@@ -14,28 +14,27 @@ export HOSTNAME=$(ssh localhost hostname 2>/dev/null)
 query="insert system,category=BSP,severity=I,key=BSP00001I,service=bootstrap,host=$HOSTNAME"
 # Bring up influxdb as early as possible to log bootstrap activities
 cubectl node exec -r control -pn "systemctl show -p SubState influxdb | grep -q -i running || systemctl restart influxdb"
-
+space_filler="                                                                                "
 BootstrapAndClusterstart()
 {
-    echo -n "                                                            " $'\r' | tee $(hex_sdk GetKernelConsoleDevices)
     if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
         msg="Bootstrapping CubeCOS"
-        echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
         bash -c "hex_config -p bootstrap standalone-done | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
             msg="Bootstrap error: $(journalctl | grep hex | egrep -i 'failed to commit')"
-            echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"W\" message=\"$msg $(journalctl | grep hex | grep took | tail -1)\""
             return 1
+        else
+            msg="Starting cluster"
+            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+            hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
+            bash -c "hex_sdk -v cube_cluster_start | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
+            cubectl node exec -pn "rm -f /tmp/health_*error.count"
+            return 0
         fi
-    else
-        msg="Starting cluster"
-        echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-        hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
-        bash -c "hex_sdk -v cube_cluster_start | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
-        cubectl node exec -pn "rm -f /tmp/health_*error.count"
-        return 0
     fi
 }
 
@@ -47,7 +46,6 @@ RollingEvacuateAndReboot()
     local upgrading=false
     local last_n=$(cat $cluster_info 2>/dev/null | jq -r .[].hostname | tail -1)
     local query="insert system,category=RUG,severity=I,key=RUG00001I,service=rolling_upgrade,host=$HOSTNAME,metadata\"rolling upgrade to $(hex_cli -c firmware list | grep -i active | cut -d' ' -f2)\""
-    echo -n "                                                            " $'\r' | tee $(hex_sdk GetKernelConsoleDevices)
     if [ -e "$cluster_info" -a "x$inst_type" = "xPPU" ] ; then
         for N in $(cat $cluster_info | jq -r .[].hostname) ; do
             # Cube dashboard topN misses partial info after rolling upgrades
@@ -67,18 +65,18 @@ RollingEvacuateAndReboot()
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
                         hex_cli -c cluster check_repair
                         msg="Evacuating VMs on $N"
-                        echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
                         if ! hex_sdk remote_run $MASTER_CONTROL "hex_sdk os_pre_failure_host_evacuation_sequential $N" upgrade ; then
                             msg="Auto rolling upgrade aborted due to evacuation failures on $N"
-                            echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                             hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
                             break
                         fi
                     fi
                     if [ "x$(hex_sdk -f json health_vip_report | jq -r .description | cut -d '@' -f2)" = "x$N" ] ; then
                         msg="Moving VIP away from $N"
-                        echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
                         pcs resource cleanup
                         pcs resource move vip
@@ -86,7 +84,7 @@ RollingEvacuateAndReboot()
                             new_vip=$(hex_sdk -f json health_vip_report | jq -r .description | cut -d '@' -f2)
                             if cubectl node list -j | jq -r .[].hostname | grep "^${new_vip:-NOVIP}$" && [ "x$new_vip" != "x$N" ] ; then
                                 msg="Moved VIP away from $N"
-                                echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                                echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                                 hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
                                 break
                             else
@@ -95,7 +93,7 @@ RollingEvacuateAndReboot()
                         done
                     fi
                     msg="Rebooting $N"
-                    echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                    echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                     hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
                     hex_sdk remote_run $n_ip "echo YES | hex_cli -c reboot"
                     break
@@ -108,11 +106,11 @@ RollingEvacuateAndReboot()
     if [ "x$upgrading" = "xfalse" ]; then
         if hex_sdk cube_cluster_ready ; then
             msg="Cluster checking and repairing"
-            echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             hex_cli -c cluster check_repair
             msg="Cluster checked and repaired"
-            echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             need_be_active_servers="$(cat /mnt/cephfs/nova/instances/active_running 2>/dev/null)"
             if [ "x$need_be_active_servers" != "x" ] ; then
@@ -123,14 +121,14 @@ RollingEvacuateAndReboot()
                         hex_sdk os_nova_instance_reset $i
                         hex_sdk os_nova_instance_hardreboot $i
                         msg="Reset and booted non-active server: $i"
-                        echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
                     fi
                 done
             fi
         else
             msg="Cluster check and repair skipped as not all nodes are bootstrapped and synced"
-            echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
         fi
     fi
@@ -143,7 +141,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
     echo -n "                                                                    " $'\r' | tee $(hex_sdk GetKernelConsoleDevices)
     if grep -q manual $BOOTSTRAP_CUBE_MODE ; then
         msg="Auto bootstrap is disabled"
-        echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
     else
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
@@ -159,7 +157,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                 cnt=0
                 while ! hex_sdk remote_run ${MASTER_CONTROL:-NOMASTER} stat $BOOTSTRAP_CUBE_MARKER >/dev/null 2>&1 ; do
                     msg="Waiting for master control to finish bootstrapping [$cnt min]"
-                    echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                    echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                     hex_sdk influx_event "${query} code=0,status=\"$msg\""
                     ((cnt++))
                     sleep 60
@@ -173,7 +171,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                 cnt=0
                 while ! cubectl node exec -r control stat $BOOTSTRAP_CUBE_MARKER >/dev/null 2>1 ; do
                     msg="Waiting for control(s) to finish bootstrapping [$cnt min]"
-                    echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                    echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                     hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
                     ((cnt++))
                     sleep 60

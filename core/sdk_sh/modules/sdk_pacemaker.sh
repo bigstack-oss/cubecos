@@ -73,6 +73,9 @@ pacemaker_node_restart()
     is_running pcsd || systemctl restart pcsd
     is_running pacemaker || systemctl restart pacemaker
     is_running corosync || systemctl restart corosync
+    sleep 10
+    pcs resource cleanup
+    pcs resource clear vip
 }
 
 pacemaker_cluster_restart()
@@ -84,4 +87,7 @@ pacemaker_cluster_restart()
         is_remote_running $node pacemaker || remote_run $node "systemctl restart pacemaker"
         is_remote_running $node corosync || remote_run $node "systemctl restart corosync"
     done
+    sleep 10
+    pcs resource cleanup
+    pcs resource clear vip
 }

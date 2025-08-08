@@ -942,3 +942,9 @@ cluster_check_repair()
         fi
     done
 }
+
+node_bootstrap_status()
+{
+    local node=${1:-$HOSTNAME}
+    remote_run $node "tr '\r' '\n' </var/log/bootstrap_cube.log | tail -1"
+}
