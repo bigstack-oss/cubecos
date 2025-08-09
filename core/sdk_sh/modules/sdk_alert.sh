@@ -68,22 +68,22 @@ alert_jail_run()
 
     local job_dir=$(MakeTempDir)
     if [ "$type" == "shell" ] ; then
-        sed \
-            -e "s/@EXEC_NAME@/$valid_name/" \
-            -e "s/@EXEC_CONFIGMAP@/exec-$valid_name.$type/" \
-            -e "s;@EXEC_FULL_PATH@;$ALERT_RESP_DIR/exec_$name.$type;" \
-            -e "s/@EVENT_DATA@/${alert_data//\//\\\/}/" \
-            "/etc/kapacitor/exec_job_templates/exec_shell_job.yaml.in" \
-            > "$job_dir/job.yaml"
+        cat "/etc/kapacitor/exec_job_templates/exec_shell_job.yaml.in" \
+            | yq -o=json "." \
+            | jq -c --arg exec_name "exec-shell-${valid_name}" '.metadata.name = $exec_name' \
+            | jq -c --arg exec_configmap "exec-${valid_name}.${type}" '.spec.template.spec.volumes[0].configMap.name = $exec_configmap' \
+            | jq -c --arg exec_full_path "${ALERT_RESP_DIR}/exec_${name}.${type}" '.spec.template.spec.containers[0].command[1] = $exec_full_path' \
+            | jq -c --arg event_data "$alert_data" '.spec.template.spec.containers[0].env[0].value = $event_data' \
+            | yq -p=json -o=yaml "." > "$job_dir/job.yaml"
         _alert_run_job "exec-shell-$valid_name" "$job_dir/job.yaml"
     elif [ "$type" == "bin" ] ; then
-        sed \
-            -e "s/@EXEC_NAME@/$valid_name/" \
-            -e "s/@EXEC_CONFIGMAP@/exec-$valid_name.$type/" \
-            -e "s;@EXEC_FULL_PATH@;$ALERT_RESP_DIR/exec_$name.$type;" \
-            -e "s/@EVENT_DATA@/${alert_data//\//\\\/}/" \
-            "/etc/kapacitor/exec_job_templates/exec_bin_job.yaml.in" \
-            > "$job_dir/job.yaml"
+        cat "/etc/kapacitor/exec_job_templates/exec_bin_job.yaml.in" \
+            | yq -o=json "." \
+            | jq -c --arg exec_name "exec-bin-${valid_name}" '.metadata.name = $exec_name' \
+            | jq -c --arg exec_configmap "exec-${valid_name}.${type}" '.spec.template.spec.volumes[0].configMap.name = $exec_configmap' \
+            | jq -c --arg exec_full_path "${ALERT_RESP_DIR}/exec_${name}.${type}" '.spec.template.spec.containers[0].command[1] = $exec_full_path' \
+            | jq -c --arg event_data "$alert_data" '.spec.template.spec.containers[0].env[0].value = $event_data' \
+            | yq -p=json -o=yaml "." > "$job_dir/job.yaml"
         _alert_run_job "exec-bin-$valid_name" "$job_dir/job.yaml"
     fi
     RemoveTempFiles
