@@ -29,6 +29,38 @@ ceph_status()
     esac
 }
 
+ceph_check_usage()
+{
+    local output="[]"
+    local cluster_usage="$(ceph df -f json | jq -r ".stats.total_used_raw_ratio" | awk '{printf "%.0f", $1 * 100}')"
+    local cluster_output="$(jq -c -n \
+        --arg host "cluster" \
+        --arg component "cluster" \
+        --arg used "$cluster_usage" \
+        '{host: $host, component: $component, used_percent: $used | tonumber}')"
+    output="$(echo "$output" | jq -c \
+        --argjson cluster "$cluster_output" \
+        '. += [$cluster]')"
+
+    local osd_usages="$(ceph osd df -f json | jq -c '.nodes | map({name,utilization})')"
+    while read -r osd_usage ; do
+        local component="$(echo "$osd_usage" | jq -r ".name")"
+        local used="$(echo "$osd_usage" | jq -r ".utilization" | awk '{printf "%.0f", $1}')"
+        local host="$(ceph osd find "$component" -f json | jq -r '.host')"
+
+        local osd_output="$(jq -c -n \
+            --arg host "$host" \
+            --arg component "$component" \
+            --arg used "$used" \
+            '{host: $host, component: $component, used_percent: $used | tonumber}')"
+        output="$(echo "$output" | jq -c \
+            --argjson osd "$osd_output" \
+            '. += [$osd]')"
+    done <<< "$(echo "$osd_usages" | jq -c '.[]')"
+
+    echo -n "$output"
+}
+
 ceph_get_host_by_id()
 {
     local osd_id=${1#osd.}

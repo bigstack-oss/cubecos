@@ -7,6 +7,14 @@ data_format = "json"
 tag_keys = [ "service", "host", "description" ]
 
 [[inputs.exec]]
+commands = [ "/usr/sbin/hex_config sdk_run ceph_check_usage" ]
+interval = "10m"
+timeout = "10m"
+name_override = "ceph_osd_usage"
+data_format = "json"
+tag_keys = [ "host", "component" ]
+
+[[inputs.exec]]
 commands = [ "sudo /usr/sbin/hex_sdk -f line os_nova_instance_ping arping" ]
 interval = "5m"
 timeout = "5m"
