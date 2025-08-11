@@ -3,7 +3,7 @@
 
 ROOTFS_DNF += make kernel-devel elfutils-libelf-devel
 
-NVIDIA_DRIVER := NVIDIA-Linux-x86_64-535.129.03-vgpu-kvm.run
+NVIDIA_DRIVER := NVIDIA-Linux-x86_64-575.57.08.run
 
 rootfs_install::
 	$(Q)cp -f $(COREDIR)/nvidia/$(NVIDIA_DRIVER) $(ROOTDIR)/root/
@@ -12,11 +12,11 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh /root/$(NVIDIA_DRIVER) --kernel-name=$(KERNEL_VERS) -s || true
 	$(Q)umount -l $(ROOTDIR)/sys || true
 	$(Q)umount -l $(ROOTDIR)/dev || true
-	$(Q)chroot $(ROOTDIR) ls $(KERNEL_MODULE_DIR)/kernel/drivers/video/{nvidia,nvidia-vgpu-vfio}.ko
+	$(Q)chroot $(ROOTDIR) ls $(KERNEL_MODULE_DIR)/kernel/drivers/video/{nvidia,nvidia-vgpu-vfio}.ko || true
 	$(Q)rm -f $(ROOTDIR)/root/$(NVIDIA_DRIVER)
 	$(Q)rm -f $(ROOTDIR)/var/log/nvidia*.log
-	$(Q)chroot $(ROOTDIR) systemctl disable nvidia-vgpu-mgr
-	$(Q)chroot $(ROOTDIR) systemctl disable nvidia-vgpud
+	$(Q)chroot $(ROOTDIR) systemctl disable nvidia-vgpu-mgr || true
+	$(Q)chroot $(ROOTDIR) systemctl disable nvidia-vgpud || true
 
 # disable nouveau driver: nouveau is a free and open-source graphics device driver for Nvidia video cards
 rootfs_install::
