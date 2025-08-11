@@ -269,6 +269,9 @@ CommitLast(bool modified, int dryLevel)
         HexUtilSystemF(0, 0, HEX_SDK " migrate_pacemaker_remote %s", master.c_str());
     }
 
+    if (IsControl(s_eCubeRole))
+        HexUtilSystemF(0, 0, HEX_SDK " health_vip_check || " HEX_SDK " health_vip_repair");
+
     return true;
 }
 

@@ -501,20 +501,21 @@ health_hacluster_repair()
     elif ! cube_node_ready && is_node_rolling_upgrade ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
-                for i in {1..10} ; do
+                $HEX_SDK pacemaker_cluster_stop
+                $HEX_SDK pacemaker_cluster_restart
+                $HEX_SDK pacemaker_node_stop # until haproxy is bootstrapped, vip on master would not start
+                for i in {1..5} ; do
                     if is_vip_active ; then
                         break
                     else
-                        $HEX_SDK pacemaker_cluster_stop
-                        $HEX_SDK pacemaker_cluster_restart
-                        Quiet -n pcs resource cleanup
-                        Quiet -n pcs resource clear vip
+                        Quiet -n cubectl node exec -r control -pn pcs resource cleanup
                     fi
                 done
+                break
             elif [ "x$node" = "x$HOSTNAME" -a "x$node" != "x$master" ] ; then
                 $HEX_SDK pacemaker_node_stop
             else
-                remote_run $master "pcs status >/dev/null 2>&1 || $HEX_SDK pacemaker_node_restart"
+                remote_run $master "pcs status 2>/dev/null | grep -q \"vip.*Started\" || $HEX_SDK pacemaker_node_restart"
             fi
         done
     else
@@ -749,13 +750,9 @@ health_vip_repair()
 {
     health_hacluster_repair
     pcs property set stonith-enabled=false
-    for i in {1..6} ; do
-        if cubectl node exec -pn "pcs resource status vip 2>/dev/null" | grep -q -i started ; then
-            break
-        else
-            sleep 5
-        fi
-    done
+
+    is_vip_active || cubectl node exec -r control -pn pcs resource cleanup
+
     local active_host=$($HEX_CFG status_pacemaker 2>/dev/null | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host:-NOVIP}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -774,14 +771,15 @@ health_vip_repair()
             fi
         done
     fi
-    if ! cube_node_ready && is_node_rolling_upgrade && [ "x$HOSTNAME" != "x$master" ] ; then
-        if pcs resource status vip | grep -q Started ; then
-            local master=$CUBE_NODE_CONTROL_HOSTNAMES
+    if is_cluster_rolling_upgrade ; then
+        local master=$CUBE_NODE_CONTROL_HOSTNAMES
+        if remote_run $master "pcs resource status vip" | grep -q Started ; then
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-                if pcs resource status vip | grep "Started ${master}$" ; then
+                if remote_run $master "pcs resource status vip" | grep "Started ${master}$" ; then
                     break
                 else
-                    pcs resource move vip
+                    remote_run $master "pcs resource clear vip"
+                    remote_run $master "pcs resource move vip"
                     sleep 10
                 fi
             done

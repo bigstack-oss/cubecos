@@ -33,6 +33,7 @@ BootstrapAndClusterstart()
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             bash -c "hex_sdk -v cube_cluster_start | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
             cubectl node exec -pn "rm -f /tmp/health_*error.count"
+            iptables-save > /run/iptables
             return 0
         fi
     fi

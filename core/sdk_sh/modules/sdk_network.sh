@@ -304,3 +304,8 @@ network_ipt_serviceint()
 
     iptables -nv -L INPUT 2>/dev/null | grep -q $chain || iptables -A INPUT -j $chain
 }
+
+network_ipt_restore()
+{
+    [ ! -e /run/iptables ] || iptables-restore < /run/iptables
+}
