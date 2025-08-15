@@ -270,7 +270,7 @@ CommitLast(bool modified, int dryLevel)
     }
 
     if (IsControl(s_eCubeRole))
-        HexUtilSystemF(0, 0, HEX_SDK " health_vip_check || " HEX_SDK " health_vip_repair");
+        HexUtilSystemF(0, 0, HEX_SDK " pacemaker_node_start %s", s_hostname.c_str());
 
     return true;
 }

@@ -47,7 +47,7 @@ rootfs_install::
 # Preparation of repos should be done first
 rootfs_install::
 	# $(Q)sed "s/\/var\/run\//\/run\//g" $(ROOTDIR)/usr/lib/tmpfiles.d/subscription-manager.conf > $(ROOTDIR)/etc/tmpfiles.d/subscription-manager.conf
-	$(Q)mount -t proc proc $(ROOTDIR)/proc
+	$(Q)mount -t proc proc $(ROOTDIR)/proc || /bin/true
 	$(Q)chroot $(ROOTDIR) dnf clean all
 	$(Q)echo "Add to $(ROOTDIR) repos: $(INFLUXDB_REPO) $(CEPH_REPO) $(PROMETHEUS_REPO) $(ELK_REPO) $(DOCKER_REPO)"
 	$(Q)mkdir -p $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
@@ -65,7 +65,6 @@ rootfs_install::
 # Lock kernel to known good version
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf install -y 'dnf-command(versionlock)'
-	$(Q)umount $(ROOTDIR)/proc
 
 # First try to download kernel-lt from elrepo mirror which has better availabilities
 rootfs_install::
@@ -89,7 +88,7 @@ rootfs_install::
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
 rootfs_install::
-	$(Q)mount -t proc proc $(ROOTDIR)/proc
+	$(Q)mount -t proc proc $(ROOTDIR)/proc || /bin/true
 	$(Q)chroot $(ROOTDIR) dnf update -y systemd
 
 # python3-xmlsec
@@ -102,7 +101,6 @@ ERLANG += erlang-public_key-$(ERLANG_VER) erlang-runtime_tools-$(ERLANG_VER) erl
 LOCKED_DNF += $(ERLANG)
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install $(ERLANG)
-	$(Q)umount $(ROOTDIR)/proc
 
 # ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm
 RUBY := ruby-3.0.4-161.el9
@@ -203,6 +201,7 @@ rootfs_install::
 
 # /var/update should work irrespective of a functioning cephfs mount
 rootfs_install::
+	$(Q)umount $(ROOTDIR)/proc || /bin/true
 	$(Q)chroot $(ROOTDIR) sh -c "mkdir -p /mnt/cephfs/update"
 	$(Q)chroot $(ROOTDIR) sh -c "rm -rf /var/update ; ln -sf /mnt/cephfs/update /var/update"
 
