@@ -91,7 +91,7 @@ influxdb:x:997:
 etcd:x:999:
 kafka:x:1000:
 ceph:x:64045:
-qemu:x:64055:qemu
+qemu:x:64055:qemu,nova
 printadmin:x:989:
 unbound:x:988:
 radvd:x:75:
@@ -99,12 +99,10 @@ dnsmasq:x:980:
 rpc:x:32:
 gluster:x:979:
 placement:x:978:
-polkitd:x:977:
 chrony:x:976:
 libstoragemgmt:x:975:
 apache:x:48:
 saslauth:x:76:
-qemu:x:974:nova
 openvswitch:x:973:openvswitch
 hugetlbfs:x:1001:openvswitch
 memcached:x:972:
