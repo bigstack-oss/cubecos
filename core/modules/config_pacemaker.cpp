@@ -215,7 +215,7 @@ Commit(bool modified, int dryLevel)
 
     // vip could be missing when corosync doesn't form quorum between system reboots
     if (IsControl(s_eCubeRole))
-        HexUtilSystemF(0, 0, HEX_SDK " health_vip_check || " HEX_SDK " health_vip_repair");
+        HexUtilSystemF(0, 0, HEX_SDK " health_vip_repair");
 
     return true;
 }
@@ -268,9 +268,6 @@ CommitLast(bool modified, int dryLevel)
         std::string master = GetMaster(s_ha, ctrlIp, s_ctrlAddrs);
         HexUtilSystemF(0, 0, HEX_SDK " migrate_pacemaker_remote %s", master.c_str());
     }
-
-    if (IsControl(s_eCubeRole))
-        HexUtilSystemF(0, 0, HEX_SDK " pacemaker_node_start %s", s_hostname.c_str());
 
     return true;
 }

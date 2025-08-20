@@ -265,6 +265,7 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 
 SRV="k3s"
 eval "ERR_DESC_$SRV[1]='pods fewer than expected'"
+eval "ERR_DESC_$SRV[2]='bloated iptables'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="rancher"

@@ -499,27 +499,25 @@ health_hacluster_repair()
         $HEX_SDK pacemaker_cluster_stop
         $HEX_SDK pacemaker_cluster_restart
     elif ! cube_node_ready && is_node_rolling_upgrade ; then
-        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
-                for i in {1..10} ; do
-                    $HEX_SDK pacemaker_cluster_stop
-                    $HEX_SDK pacemaker_node_restart $node
-                    if is_vip_active ; then
-                        break
-                    else
-                        pcs resource cleanup
+        for i in 1 2 3 ; do
+            for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+                if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
+                    $HEX_SDK pacemaker_cluster_stop # release existing vip, irrespective of which node it is on
+                    $HEX_SDK pacemaker_cluster_restart
+                else
+                    if [ "x$node" != "x$master" ] ; then
+                        $HEX_SDK pacemaker_node_stop $node
+                        $HEX_SDK pacemaker_node_start $master
                     fi
-                done
-            else
-                $HEX_SDK pacemaker status | grep -q "vip.*Started" || $HEX_SDK pacemaker_node_restart $master
-                $HEX_SDK pacemaker_node_stop $node
-            fi
-        done
-        for i in {1..10} ; do
-            if is_vip_active ; then
+                fi
+            done
+            is_vip_active || Quiet -n pcs resource debug-start vip
+
+            if is_vip_reachable ; then
                 break
             else
-                remote_run $master "pcs resource cleanup"
+                pcs resource clear vip
+                pcs resource cleanup
             fi
         done
     else
@@ -529,10 +527,11 @@ health_hacluster_repair()
                 $HEX_SDK pacemaker_node_restart $node
                 status=$($HEX_SDK pacemaker status)
             else
-                echo "$status" | grep -i " online" | grep -q " $node " || remote_run $node "systemctl restart corosync pacemaker"
-                is_remote_running $node pcsd || remote_run $node "systemctl restart pcsd"
-                is_remote_running $node pacemaker || remote_run $node "systemctl restart pacemaker"
-                is_remote_running $node corosync || remote_run $node "systemctl restart corosync"
+                if echo "$status" | grep -i " online" | grep -q " $node " ; then
+                    $HEX_SDK pacemaker_node_start $node
+                else
+                    $HEX_SDK pacemaker_node_restart $node
+                fi
             fi
         done
         for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
@@ -754,8 +753,6 @@ health_vip_repair()
 {
     health_hacluster_repair
     pcs property set stonith-enabled=false
-
-    is_vip_active || cubectl node exec -r control -pn pcs resource cleanup
 
     local active_host=$(timeout $SRVSTO $HEX_SDK pacemaker status | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host:-NOVIP}$" ; then
@@ -2472,13 +2469,24 @@ health_k3s_report()
 
 health_k3s_check()
 {
+    iptables-save >/tmp/iptables
     if ! cubectl config check k3s 2>/dev/null ; then
         ERR_CODE=1
         ERR_LOG="journalctl -n $ERR_LOGSIZE -u k3s"
+        ERR_MSG+="`cubectl config status k3s`\n"
+    elif [ $(diff <(sed 's/^# .*//' /run/iptables 2>/dev/null) <(sed 's/^# .*//' /tmp/iptables 2>/dev/null) | wc -l) -gt 1000 ] ; then
+        ERR_CODE=2
+        ERR_MSG+="`cat /tmp/iptables`\n"
     fi
 
-    ERR_MSG+="`cubectl config status k3s`\n"
     _health_fail_log
+}
+
+_health_k3s_auto_repair()
+{
+    if [ "$ERR_CODE" == "2" ] ; then
+        $HEX_SDK network_ipt_restore
+    fi
 }
 
 health_k3s_repair()

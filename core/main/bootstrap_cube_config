@@ -33,7 +33,6 @@ BootstrapAndClusterstart()
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             bash -c "hex_sdk -v cube_cluster_start | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
             cubectl node exec -pn "rm -f /tmp/health_*error.count"
-            iptables-save > /run/iptables
             return 0
         fi
     fi
@@ -110,6 +109,9 @@ RollingEvacuateAndReboot()
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             hex_cli -c cluster check_repair
+            if hex_cli -c cluster check Storage | grep -i " ok " ; then
+                rsync -ar /var/lib/ceph /store/
+            fi
             msg="Cluster checked and repaired"
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""

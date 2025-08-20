@@ -153,9 +153,24 @@ is_node_rolling_upgrade()
 
 is_vip_active()
 {
-    for i in {1..10} ; do
-        cubectl node exec -pn "pcs resource status vip 2>/dev/null" | sort -u | grep -q "vip.*Started" || return 1
-        sleep 1
+    local ret=0
+    for i in {1..5} ; do
+        if cubectl node exec -pn "pcs resource status vip 2>/dev/null" | sort -u | grep -q "vip.*Started" ; then
+            sleep 1
+        else
+            ret=1 && break
+        fi
     done
-    return 0
+
+    return $ret
+}
+
+is_vip_reachable()
+{
+    local ret=0
+    local vip=$(shared_ip)
+
+    ping -q -c 10 ${vip:-256.256.256.256} >/dev/null 2>&1 || ret=1
+
+    return $ret
 }

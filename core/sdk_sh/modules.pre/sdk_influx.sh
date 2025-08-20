@@ -35,7 +35,7 @@ _influx()
 
 influx_event()
 {
-    _influx events "$@"
+    _influx events "$@" 2>/dev/null
 }
 
 influx_event_health()
