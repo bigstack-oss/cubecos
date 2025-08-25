@@ -88,7 +88,6 @@ rootfs_install::
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
 rootfs_install::
-	$(Q)mount -t proc proc $(ROOTDIR)/proc || /bin/true
 	$(Q)chroot $(ROOTDIR) dnf update -y systemd
 
 # python3-xmlsec

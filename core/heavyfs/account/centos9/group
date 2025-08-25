@@ -132,3 +132,4 @@ flatpak:x:950:
 opensearch-dashboards:x:949:
 nginx:x:939:
 mongod:x:938:
+influxdb3:x:937:

@@ -12,10 +12,16 @@ CLUSTER_SYNC=/run/cube_cluster_synced
 CLUSTER_REPAIRING=/run/cube_cluster_repairing
 HORIZON_APP_DIR=/usr/share/openstack-dashboard/openstack_dashboard/local/enabled
 
-_hex_exec_abort()
+_hex_exec_abort_repairing()
 {
     Quiet -n pkill -P $(cat $CLUSTER_REPAIRING 2>/dev/null)
     rm -f $CLUSTER_REPAIRING
+}
+
+_hex_exec_abort_checking()
+{
+    Quiet -n pkill -P $(cat /run/${@}ing 2>/dev/null)
+    rm -f /run/${@}ing
 }
 
 _hex_exec()
@@ -65,30 +71,46 @@ _hex_exec()
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"checking\""
             influx_event "${query},detail=\"$cmd\""
             if [ -e $runtime -a "x$last_chk" = "xtrue" ] ; then
-                ret=$(cat $runtime 2>/dev/null | jq -r .ERROR_CODE)
-                $cmd "$@" &
+                ret=$(cat $runtime 2>/dev/null | jq -r .ERROR_CODE 2>/dev/null)
                 return ${ret:-0}
             else
-                $cmd "$@"
+                local check_json="$(VERBOSE=1 is_checking $cmd)"
+                local log="${srv}-${HOSTNAME}-$(date +%s)-$(mktemp -u XXXX)"
+                local log_pth="log/$log"
+                local log_url=
+                rm -f /tmp/$log
+                if [ "x$MANNER" != "xforce" -a "x$check_json" != "x" ] ; then
+                    local node=$(echo $check_json | jq -r .node)
+                    local service=$(echo $check_json | jq -r .service)
+                    local elaps=$(echo $check_json | jq -r .elaps)
+                    query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"checking returns the last result due to $service($elaps) check by $node\""
+                    influx_event "${query},detail=\"$cmd\""
+                    ret=$(cat $runtime 2>/dev/null | jq -r .ERROR_CODE 2>/dev/null)
+                    return ${ret:-0}
+                else
+                    trap "_hex_exec_abort_checking $cmd" INT EXIT
+                    $cmd "$@" 2>&1 &
+                    echo $! >${runtime}ing 2>/dev/null
+                    wait $(cat ${runtime}ing 2>/dev/null)
+                    rm -f ${runtime}ing /tmp/$log
+                fi
             fi
         fi
     elif echo "$cmd" | grep -q "health_.*_repair$" ; then
         local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/^_health_//" -e "s/_auto_repair$//" -e "s/_repair$//")
-        [ "x$MANNER" != "xforce" ] || cubectl node exec -pn rm -f /run/cube_cluster_repairing
         local repair_json="$(VERBOSE=1 is_repairing)"
         local log="${srv}-${HOSTNAME}-$(date +%s)-$(mktemp -u XXXX)"
         local log_pth="log/$log"
-        local log_url=
         rm -f /tmp/$log
-        if [ "x$repair_json" != "x" ] ; then
+        if [ "x$MANNER" != "xforce" -a "x$repair_json" != "x" ] ; then
             local node=$(echo $repair_json | jq -r .node)
             local service=$(echo $repair_json | jq -r .service)
             local elaps=$(echo $repair_json | jq -r .elaps)
-            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing skipped due to $service($elaps) by $node\""
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing skipped due to $service($elaps) repairing by $node\""
             influx_event "${query},detail=\"$cmd\""
             return 1
         else
-            trap _hex_exec_abort INT EXIT
+            trap _hex_exec_abort_repairing INT EXIT
             if set -o | grep xtrace | awk '{print $2}' | grep -o "^on$" ; then
                 { $cmd "$@" 2>&1 | tee /tmp/$log; } &
             else
@@ -101,13 +123,15 @@ _hex_exec()
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
             influx_event "${query},detail=\"$cmd PID:$(cat $runtime 2>/dev/null)\""
             wait $(cat $runtime 2>/dev/null)
-            keys="$($OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value | head -n 1)"
-            keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
-            log_url="s3://$log_pth"
+            keys=$(cat /run/ec2.key 2>/dev/null)
+            if [ "x$keys" != "x" ] ; then
+                if keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 ; then
+                    log_url="s3://$log_pth"
+                fi
+            fi
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing completed\""
             influx_event "${query},log=\"${log_url}\",detail=\"$cmd PID:$(cat $runtime 2>/dev/null)\""
-            rm -f $runtime $CLUSTER_REPAIRING
-            rm -f /tmp/$log
+            rm -f $runtime $CLUSTER_REPAIRING /tmp/$log
         fi
     else
         $cmd "$@"
@@ -261,6 +285,9 @@ cube_cluster_power()
             echo "usage: cube_cluster_power off|cycle" && return 0
             ;;
     esac
+    local role=$2
+    local flg=
+    [ "x$role" = "x" ] || flg="-r $role"
 
     source /usr/sbin/hex_tuning /etc/settings.txt
     if [ "x$T_cubesys_control_hosts" = "x" ] ; then
@@ -271,13 +298,15 @@ cube_cluster_power()
     fi
 
     if [ "x${MASTER_CONTROL:-NOMASTER}" != "x$(hostname)" ] ; then
-        remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_cluster_power $1"
+        remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_cluster_power $1 $2"
     else
-        Quiet timeout $SRVTO cubectl node exec -p "timeout $SRVSTO umount $CEPHFS_STORE_DIR" || true
-        Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mds@\$HOSTNAME"
-        Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mgr@\$HOSTNAME"
-        Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mon@\$HOSTNAME"
-        for N in $(cubectl node list -j | jq -r .[].hostname | tac) ; do
+        Quiet timeout $SRVTO cubectl node exec $flg -p "timeout $SRVSTO umount $CEPHFS_STORE_DIR" || true
+        if [ "x$role" = "x" -o "x$role" = "xcontrol" ] ; then
+            Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mds@\$HOSTNAME"
+            Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mgr@\$HOSTNAME"
+            Quiet -n timeout $SRVTO cubectl node exec -p -r controle "systemctl stop ceph-mon@\$HOSTNAME"
+        fi
+        for N in $(cubectl node list $flg -j | jq -r .[].hostname | tac) ; do
             timeout $SRVSTO $HEX_SDK remote_run $N "$PWRCMD" || true
         done
     fi

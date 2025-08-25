@@ -82,3 +82,19 @@ stale_repair_clear()
         fi
     fi
 }
+
+stale_check_clear()
+{
+    local checking=$1
+    local pid=$(cat $checking 2>/dev/null)
+    if [ "x$pid" = "x" ]; then
+        rm -f $checking
+    else
+        if Quiet ps -p $pid 2>/dev/null ; then
+            if [ "x$(find $checking -cmin +15)" = "x$checking" ]; then
+                Quiet -n pkill -9 -P $pid
+                rm -f $checking
+            fi
+        fi
+    fi
+}

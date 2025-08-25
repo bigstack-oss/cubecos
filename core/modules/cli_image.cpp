@@ -13,6 +13,7 @@
 #define CEPHFS_GLANCE_DIR "/mnt/cephfs/glance"
 
 static const char* LABEL_IMAGE_NAME = "Specify image name: ";
+static const char* LABEL_METADATA_VAL = "Input metadata value: ";
 
 static int
 ImageImportMain(int argc, const char** argv)
@@ -246,9 +247,47 @@ InstanceExportMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+static int
+MetadataMain(int argc, const char** argv)
+{
+    if (argc > 3 /* [0]="volume_id" [1]="metadata_key" [2]="metadata_value"*/)
+        return CLI_INVALID_ARGS;
+
+    int index;
+    std::string vol_id, metadata_key, metadata_val;
+    std::string cmd, descCmd;
+
+    cmd = std::string(HEX_SDK) + " os_volume_image_list";
+    descCmd = std::string(HEX_SDK) + " -v os_volume_image_list";
+    if (CliMatchCmdDescHelper(argc, argv, 1, cmd, descCmd, &index, &vol_id, "Select volume ID: ") != CLI_SUCCESS) {
+        CliPrintf("Invalid instance");
+        return CLI_INVALID_ARGS;
+    }
+
+    cmd = std::string(HEX_SDK) + " os_volume_image_metadata " + vol_id.c_str();
+    descCmd = std::string(HEX_SDK) + " -v os_volume_image_metadata " + vol_id.c_str();
+    if (CliMatchCmdDescHelper(argc, argv, 2, cmd, descCmd, &index, &metadata_key, "Select a metadata key:value to change: ") != CLI_SUCCESS) {
+        CliPrintf("Invalid metadata_key/val");
+        return CLI_INVALID_ARGS;
+    }
+
+    if (!CliReadInputStr(argc, argv, 3, LABEL_METADATA_VAL, &metadata_val) || metadata_val.length() == 0) {
+        CliPrint("Metadata value is missing");
+        return CLI_INVALID_ARGS;
+    }
+
+    HexUtilSystemF(0, 0, HEX_SDK " os_volume_image_metadata %s %s %s", vol_id.c_str(), metadata_key.c_str(), metadata_val.c_str());
+
+    return CLI_SUCCESS;
+}
+
 CLI_MODE(CLI_TOP_MODE, "image",
          "Work with cube images. Please upload images to " CEPHFS_GLANCE_DIR " for local import.",
          !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+
+CLI_MODE_COMMAND("image", "metadata", MetadataMain, NULL,
+                 "set Cinder volume metadata.",
+                 "metadata <domain> <tenant>");
 
 CLI_MODE_COMMAND("image", "import", ImageImportMain, NULL,
     "import image from usb or local store folder.",

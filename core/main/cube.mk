@@ -9,6 +9,7 @@ hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_is.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_license.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_remote.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_stale.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_pacemaker.sh
 
 ## Install /usr/sbin/hex_sdk modules
 hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_firmware.sh
@@ -44,7 +45,6 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ntp.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_opensearch.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_os.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ovn.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_pacemaker.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_preset.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_rabbitmq.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_security.sh

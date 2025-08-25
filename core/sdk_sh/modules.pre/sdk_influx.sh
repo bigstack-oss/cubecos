@@ -13,10 +13,7 @@ _influx()
     local flag="-database $db"
 
     if echo "$@" | grep -q -i insert ; then
-        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            timeout 3 /usr/bin/influx $flag -host $node -execute "$@" >/dev/null 2>&1 &
-        done
-        wait $! || true
+        nohup cubectl node exec -r control -pn "$INFLUX $flag -host \$HOSTNAME -execute '$@'" >/dev/null 2>&1 &
     else
         if [ "x$FORMAT" = "xjson" ] ; then
             flag+=" -format json -pretty"
@@ -27,7 +24,7 @@ _influx()
 
         if ! $INFLUX $flag -execute "$@" 2>/dev/null ; then
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-                ! timeout 3 /usr/bin/influx $flag -host $node -execute "$@" 2>/dev/null || break
+                ! timeout $SRVTO /usr/bin/influx $flag -host $node -execute "$@" 2>/dev/null || break
             done
         fi
     fi
@@ -35,7 +32,7 @@ _influx()
 
 influx_event()
 {
-    _influx events "$@" 2>/dev/null
+    _influx events "$@" 2>/dev/null 2>&1
 }
 
 influx_event_health()

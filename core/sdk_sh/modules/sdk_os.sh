@@ -743,6 +743,7 @@ os_image_import()
     local flags=${4:---public}
     local pool=${5:-glance-images}
     local properties=${6:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
+    local backend=$7
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"
 
@@ -770,18 +771,25 @@ os_image_import()
             local img_raw=$(mktemp -u "$CEPHFS_GLANCE_DIR/${file##*/}_XXXX.raw")
         fi
 
+        local img_dir=$(dirname $img_raw)
         echo "[$(date +"%T")] Converting image to RAW format ... "
-        qemu-img convert -p -O raw "$IMG" "$img_raw"
+        if virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null ; then
+            echo "mv -f ${img_dir}/${file%.*}-* $img_raw"
+            mv -f ${img_dir}/${file%.*}-* $img_raw
+            rm -f ${img_dir}/${file%.*}.xml
+        else
+            qemu-img convert -p -O raw "$IMG" "$img_raw" 2>/dev/null
+        fi
         local img_name=$img_raw
     fi
 
     echo "[$(date +"%T")] Creating image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
-        openstack image create --disk-format raw --container-format bare $flags --file "$img_name" $properties --progress "$name" -f value -c id
+        glance image-create --disk-format raw --container-format bare --visibility public --store ${backend:-ceph} --file "$img_name" $properties --progress --name "$name"
     else
         rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$name"
         $OPENSTACK role add --user admin_cli --project $(echo $flags | grep -o "[-][-]project .* " | cut -d" " -f2) admin
-        local vol_id=$(cinder $(echo $flags | sed -e "s/--project-domain/--os-project-domain-name/" -e "s/--project/--os-project-name/" -e "s/--public//") manage --bootable --name "$name" cube@ceph#ceph "$name" 2>/dev/null | grep " id" | cut -d"|" -f3)
+        local vol_id=$(cinder $(echo $flags | sed -e "s/--project-domain/--os-project-domain-name/" -e "s/--project/--os-project-name/" -e "s/--public//") manage --bootable --name "$name" ${backend:-cube@ceph#ceph} "$name" 2>/dev/null | grep " id" | cut -d"|" -f3)
         $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
     fi
     echo "[$(date +"%T")] Finished creating image $name"
@@ -1162,20 +1170,6 @@ os_nova_sshkey_create()
     chmod 644 $nova_ssh_dir/config
     chmod 600 $nova_ssh_dir/id_rsa $nova_ssh_dir/authorized_keys
     chown -R nova:nova $nova_ssh_dir
-}
-
-os_cinder_volume_list()
-{
-    local vol_json=$($OPENSTACK volume list --all-project -f json)
-    for id in $(echo $vol_json | jq -r .[].ID) ; do
-        if [ "$VERBOSE" == "1" ] ; then
-            name=$(echo $vol_json | jq -r ".[] | select(.ID == \"$id\").Name")
-            status=$(echo $vol_json | jq -r ".[] | select(.ID == \"$id\").Status")
-            printf "%s %12s %s\n" "$id" "(${status:-NA})" "${name:-NA}"
-        else
-            printf "%s\n" "$id"
-        fi
-    done
 }
 
 os_cinder_volume_reset()
@@ -2390,7 +2384,7 @@ os_nova_instance_ping()
         return 0;
     fi
 
-    local active_host=$($HEX_SDK pacemaker status | awk '/IPaddr2/{print $5}')
+    local active_host=$(pacemaker status | awk '/IPaddr2/{print $5}')
     if [ -n "$active_host" ] ; then
         # HA
         if [ "$active_host" != "$(hostname)" ] ; then
@@ -2756,5 +2750,89 @@ os_nova_list()
         $NOVA list --all-tenants
     else
         eval "$NOVA list --all-tenants | awk -F'|' '/\|/ && !/ID/ { print ${fields} }' | tr -s ' ' | sed -e \"s/^ //\" -e \"s/ $//\""
+    fi
+}
+
+os_cinder_volume_metadata()
+{
+    local volume_id=${1:-NOSUCHID}
+    local metadata_key=$2
+    local metadata_val=$3
+
+    if [ "x$metadata_key" = "x" -o "x$metadata_val" = "x" ] ; then
+        if [ "$VERBOSE" == "1" ] ; then
+            $OPENSTACK volume show $volume_id -f json | jq -r ".volume_image_metadata" 2>/dev/null | sed -e 's/"//g' -e 's/,//g' | grep "^  [a-zA-Z]" | sort
+        else
+            $OPENSTACK volume show $volume_id -f json | jq -r ".volume_image_metadata | keys" 2>/dev/null | jq -r .[] 2>/dev/null | sort
+        fi
+    else
+        cinder image-metadata $volume_id set ${metadata_key}=${metadata_val}
+    fi
+}
+
+os_cinder_volume_list()
+{
+    local vol_json=$($OPENSTACK volume list --all-project -f json)
+    for id in $(echo $vol_json | jq -r .[].ID) ; do
+        name=$(echo $vol_json | jq -r ".[] | select(.ID == \"$id\").Name")
+        echo ${name:-NA} | grep -v -q -e "pvc[-]" -e "NA" || continue
+        if [ "$VERBOSE" == "1" ] ; then
+            status=$(echo $vol_json | jq -r ".[] | select(.ID == \"$id\").Status")
+            printf "%s %12s %s\n" "$id" "(${status:-NA})" "${name:-NA}"
+        else
+            printf "%s\n" "$id"
+        fi
+    done
+}
+
+os_glance_image_list()
+{
+    local img_json=$($OPENSTACK image list -f json)
+    for id in $(echo $img_json | jq -r .[].ID) ; do
+        if [ "$VERBOSE" == "1" ] ; then
+            name=$(echo $img_json | jq -r ".[] | select(.ID == \"$id\").Name")
+            status=$(echo $img_json | jq -r ".[] | select(.ID == \"$id\").Status")
+            printf "%s %12s %s\n" "$id" "(${status:-NA})" "${name:-NA}"
+        else
+            printf "%s\n" "$id"
+        fi
+    done
+}
+
+os_glance_image_metadata()
+{
+    local image_id=${1:-NOSUCHID}
+    local metadata_key=$2
+    local metadata_val=$3
+
+    if [ "x$metadata_key" = "x" -o "x$metadata_val" = "x" ] ; then
+        if [ "$VERBOSE" == "1" ] ; then
+            $OPENSTACK image show $image_id -f json | jq -r ".properties" 2>/dev/null | sed -e 's/"//g' -e 's/,//g' | grep "^  [a-zA-Z]" | sort
+        else
+            $OPENSTACK image show $image_id -f json | jq -r ".properties | keys" 2>/dev/null | jq -r .[] 2>/dev/null | sort
+        fi
+    else
+        glance image-update $image_id --property ${metadata_key}=${metadata_val}
+    fi
+}
+
+os_volume_image_list()
+{
+    os_cinder_volume_list
+    os_glance_image_list
+}
+
+os_volume_image_metadata()
+{
+    local image_id=${1:-NOSUCHID}
+    local metadata_key=$2
+    local metadata_val=$3
+
+    if $OPENSTACK image list -f value -c ID | grep -q $image_id ; then
+        os_glance_image_metadata $image_id $metadata_key $metadata_val
+    elif $OPENSTACK volume list -f value -c ID --all-projects | grep -q $image_id ; then
+        os_cinder_volume_metadata $image_id $metadata_key $metadata_val
+    else
+        Error "$image_id is neither a valid Glance Image ID, nor Cinder Volume ID"
     fi
 }

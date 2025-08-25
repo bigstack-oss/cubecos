@@ -121,7 +121,7 @@ _health_fail_log()
                 local auto_repair_func="_health_${srv}_auto_repair"
                 if Quiet type $auto_repair_func 2>/dev/null ; then
                     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
-                    $auto_repair_func &
+                    $HEX_SDK $auto_repair_func &
                     echo $! > $runtime
                     influx_event "${query},detail=\"$auto_repair_func $(cat $runtime) ($count/$maxerr)\""
                     ln -sf $runtime $CLUSTER_REPAIRING
@@ -144,14 +144,21 @@ EOF
     local log_url=
     rm -f /tmp/$log
     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"$description\""
-    if [ "x$ERR_LOG" != "x" -a $ERR_CODE -ne 0 ] ; then
-        local keys="$($OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value | head -n 1)"
+    if [ $count -lt $maxerr -a "x$ERR_LOG" != "x" -a $ERR_CODE -ne 0 ] ; then
+        local keys=$(cat /run/ec2.key 2>/dev/null)
         if [ "x$keys" = "x" ] ; then
-            Quiet -n $OPENSTACK ec2 credentials create --user admin --project admin
-            keys="$($OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value | head -n 1)"
-            keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
+            keys="$($OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null)"
+            if [ $? = 0 ] ; then
+                echo "$keys" | head -n 1 > /run/ec2.key
+                keys=$(cat /run/ec2.key 2>/dev/null)
+                if [ "x$keys" = "x" ] ; then
+                    Quiet -n $OPENSTACK ec2 credentials create --user admin --project admin
+                    $OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null > /run/ec2.key
+                    keys=$(cat /run/ec2.key 2>/dev/null)
+                    keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
+                fi
+            fi
         fi
-        # Only when there're valid keys would we be able to save logs
         if [ "x$keys" != "x" ] ; then
             timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
@@ -406,7 +413,7 @@ health_hacluster_check()
         fi
     done
 
-    local status=$($HEX_SDK pacemaker status)
+    local status=$(pacemaker status)
     local total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local online=$(echo "$status" | grep -i " online" | cut -d "[" -f2 | cut -d "]" -f1 | awk '{print NF}')
     if [ "$total" != "$online" ] ; then
@@ -473,6 +480,7 @@ health_hacluster_check()
 
 _health_hacluster_auto_repair()
 {
+    health_hacluster_repair
     if [ $ERR_CODE -eq 6 ] ; then
         health_ceph_mds_repair
         health_cinder_repair
@@ -484,7 +492,7 @@ _health_hacluster_auto_repair()
 
 health_hacluster_repair()
 {
-    local status=$($HEX_SDK pacemaker status)
+    local status=$(pacemaker status)
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
 
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -499,7 +507,7 @@ health_hacluster_repair()
         $HEX_SDK pacemaker_cluster_stop
         $HEX_SDK pacemaker_cluster_restart
     elif ! cube_node_ready && is_node_rolling_upgrade ; then
-        for i in 1 2 3 ; do
+        for i in 1 2 3 4 5 ; do
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
                 if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
                     $HEX_SDK pacemaker_cluster_stop # release existing vip, irrespective of which node it is on
@@ -511,8 +519,11 @@ health_hacluster_repair()
                     fi
                 fi
             done
-            is_vip_active || Quiet -n pcs resource debug-start vip
-
+            sleep 10
+            if ! is_vip_active ; then
+                Quiet -n pcs resource debug-start vip
+                sleep 10
+            fi
             if is_vip_reachable ; then
                 break
             else
@@ -525,9 +536,9 @@ health_hacluster_repair()
             if [ "x$HOSTNAME" = "x$node" ] ; then
                 $HEX_SDK pacemaker_node_stop $node
                 $HEX_SDK pacemaker_node_restart $node
-                status=$($HEX_SDK pacemaker status)
+                status=$(pacemaker status)
             else
-                if echo "$status" | grep -i " online" | grep -q " $node " ; then
+                if echo "$status" | grep -i " online" | grep -q " $node " && echo "$status" | grep -q "vip .* Started" ; then
                     $HEX_SDK pacemaker_node_start $node
                 else
                     $HEX_SDK pacemaker_node_restart $node
@@ -555,7 +566,7 @@ health_hacluster_repair()
                 fi
             fi
         done
-        for rsc in vip vaw haproxy cinder-volume ovndb_servers-clone $(cubectl node list -r compute -j | jq -r .[].hostname) ; do
+        for rsc in vip haproxy cinder-volume ovndb_servers-clone $(cubectl node list -r compute -j | jq -r .[].hostname) ; do
             Quiet -n pcs resource enable $rsc
         done
         Quiet -n pcs resource cleanup
@@ -694,7 +705,7 @@ health_vip_report()
 
 health_vip_check()
 {
-    local active_host=$($HEX_SDK pacemaker status | awk '/IPaddr2/{print $5}')
+    local active_host=$(pacemaker status | awk '/IPaddr2/{print $5}')
     DESCRIPTION="non-HA"
     ERR_LOG="pcs status"
 
@@ -741,12 +752,7 @@ health_vip_check()
 
 _health_vip_auto_repair()
 {
-    if [ $ERR_CODE -eq 3 ] ; then # fixing arp table first
-        Quiet -n cubectl node exec -np "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
-    elif [ $ERR_CODE -eq 5 ] ; then
-        unlink /run/cube_cluster_repairing # fixing vip has high priority
-        cubectl node exec -r control -p systemctl restart corosync
-    fi
+    Quiet -n cubectl node exec -np "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
 }
 
 health_vip_repair()
@@ -754,7 +760,7 @@ health_vip_repair()
     health_hacluster_repair
     pcs property set stonith-enabled=false
 
-    local active_host=$(timeout $SRVSTO $HEX_SDK pacemaker status | awk '/IPaddr2/{print $5}')
+    local active_host=$(timeout $SRVSTO pacemaker status | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host:-NOVIP}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             local ipaddr=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $2}')
@@ -790,7 +796,7 @@ health_vip_repair()
 
 health_haproxy_ha_report()
 {
-    local active_host=$($HEX_SDK pacemaker status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pacemaker status | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         DESCRIPTION="$ipaddr@$active_host"
         ERR_MSG+="($active_host)\n"
@@ -803,7 +809,7 @@ health_haproxy_ha_report()
 
 health_haproxy_ha_check()
 {
-    local active_host=$($HEX_SDK pacemaker status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pacemaker status | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "$node" == "$active_host" ] ; then
@@ -821,7 +827,7 @@ health_haproxy_ha_check()
 
 health_haproxy_ha_repair()
 {
-    local active_host=$($HEX_SDK pacemaker status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pacemaker status | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "$node" == "$active_host" ] ; then
@@ -1986,7 +1992,7 @@ health_swift_check()
         ERR_CODE=1
     elif [ -z "$service_stats" ] ; then
         ERR_CODE=2
-    elif [ ! $object_count -ge 0 ] ; then
+    elif [ ! ${object_count:-0} -ge 0 ] ; then
         ERR_CODE=3
     fi
 
@@ -2984,7 +2990,7 @@ health_hypervisor_check()
         [ -n "$srv" ] || continue
 
         # Only control node with VIP takes actions
-        if [ $($HEX_SDK pacemaker status | awk '/IPaddr2/{print $5}') = $(hostname) ] ; then
+        if [ $(pacemaker status | awk '/IPaddr2/{print $5}') = $(hostname) ] ; then
             for cnt in $(seq $max) ; do
                 echo "Failed to run $srv on node: $node ($cnt)"
                 if remote_systemd_restart $node $srv ; then

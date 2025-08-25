@@ -22,7 +22,7 @@ CUBE_NODE_COMPUTE_HOSTNAMES=($(echo $CUBE_NODE_COMPUTE_JSON | jq -r .[].hostname
 CUBE_NODE_STORAGE_HOSTNAMES=($(echo $CUBE_NODE_STORAGE_JSON | jq -r .[].hostname))
 
 if [ -f /etc/appliance/state/configured ] ; then
-    INFLUX="timeout 3 /usr/bin/influx -host $(shared_id)"
+    INFLUX="timeout $SRVTO /usr/bin/influx -host $(shared_id)"
 fi
 if [ -z "$MONGODB_ADMIN_ACCESS" ]; then
     MONGODB="timeout $SRVTO /usr/bin/mongosh mongodb://$(mgmt_ip)/?replicaSet=cube-cos-rs"

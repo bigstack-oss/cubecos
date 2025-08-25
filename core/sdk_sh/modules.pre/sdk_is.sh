@@ -116,14 +116,54 @@ is_node_repairing()
     fi
 }
 
+is_node_checking()
+{
+    local cmd=$1
+    [ "x$cmd" != "x" ] || Error "missing cmd"
+    local checking=false
+
+    stale_check_clear /run/${cmd}ing
+    if [ -e /run/${cmd}ing ]; then
+        checking=true
+    fi
+    if [ "$VERBOSE" = "1" ]; then
+        local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
+        local pid=$(cat /run/${cmd}ing 2>/dev/null)
+        local eps=$(ps --no-headers -o etime ${pid:-0} 2>/dev/null | xargs)
+        printf "{ \"node\" : \"$HOSTNAME\",\"checking\" : \"$checking\",\"service\" : \"$srv\",\"pid\" : \"$pid\",\"elaps\" : \"$eps\" }"
+    fi
+
+    if [ "$checking" = "false" ]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
 is_repairing()
 {
-    for node in $(cubectl node exec -pn "$HEX_SDK is_node_repairing >/dev/null && echo \$HOSTNAME"); do
-        remote_run $node "$HEX_SDK ${VERBOSE:+-v} is_node_repairing" 2>/dev/null
-        return 0
-    done
+    local regex_flg=
+    [ "$VERBOSE" = "1" ] || regex_flg="-q"
 
-    return 1
+    if cubectl node exec -r control -pn "$HEX_SDK -v is_node_repairing | grep true" | grep $regex_flg true ; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+is_checking()
+{
+    local cmd=$1
+    [ "x$cmd" != "x" ] || Error "missing cmd"
+    local regex_flg=
+    [ "$VERBOSE" = "1" ] || regex_flg="-q"
+
+    if cubectl node exec -r control -pn "$HEX_SDK -v is_node_checking $cmd | grep true" | grep $regex_flg true ; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 is_sshable()

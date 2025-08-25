@@ -2,8 +2,8 @@
 
 include ../../build.mk
 
-FIRST_RELEASE_VERSION := v2.4.0-rc1
-SUPPORTED_FIRMWARES   := 2.4.0 2.4.1 2.4.2
+FIRST_RELEASE_VERSION := v3.0.0-rc1
+SUPPORTED_FIRMWARES   := 3.0.0 3.1.0
 
 ifeq ($(COMMITSINCE),)
 COMMITSINCE           := $(FIRST_RELEASE_VERSION)
@@ -26,9 +26,6 @@ $(FIXPACK_DRAFT):
 	$(Q)sed -i "s/SUPPORTED_FIRMWARES=.*/SUPPORTED_FIRMWARES=\"$(SUPPORTED_FIRMWARES)\"/" $@/fixpack.info
 	$(Q)sed -i "s/^exit 0.*//"                                         $@/post_install.sh
 	$(Q)echo "chmod 4755 /usr/sbin/hex_{config,cli,firsttime,stats}" >>$@/post_install.sh
-	$(Q)echo "systemctl restart httpd"                               >>$@/post_install.sh
-	$(Q)echo "systemctl restart virtqemud"                           >>$@/post_install.sh
-	$(Q)echo "rm -rf /.gitignore /.git /mnt/cephfs/backup/cube.git"  >>$@/post_install.sh
 	$(Q)echo "exit 0"                                                >>$@/post_install.sh
 	$(Q)( cd $(TOP_BLDDIR)/core/main/rootfs/ && rsync -avr --relative root/.bashrc $(BLDDIR)/$@/rootfs/ )
 	$(Q)echo "root/.bashrc"                                          >>$@/backup.lst
