@@ -1,7 +1,7 @@
 // CUBE SDK
 
-#include <hex/translate_module.h>
 #include <hex/log.h>
+#include <hex/translate_module.h>
 
 #include "include/policy_notify_setting.h"
 
@@ -9,7 +9,7 @@
  * Translate the alert setting policy.
  */
 static bool
-Translate(const char *policy, FILE *settings)
+Translate(const char* policy, FILE* settings)
 {
     HexLogDebug("translate_alert_setting policy: %s", policy);
     NotifySettingPolicy nsPolicy;
