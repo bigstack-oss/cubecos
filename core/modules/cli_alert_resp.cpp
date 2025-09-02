@@ -1,21 +1,18 @@
 // HEX SDK
 
-#include <unistd.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <map>
-
-#include <hex/log.h>
-#include <hex/strict.h>
-#include <hex/filesystem.h>
-#include <hex/process.h>
-#include <hex/string_util.h>
-#include <hex/cli_module.h>
-
-#include <cube/cubesys.h>
-
 #include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"
+#include <arpa/inet.h>
+#include <cube/cubesys.h>
+#include <hex/cli_module.h>
+#include <hex/filesystem.h>
+#include <hex/log.h>
+#include <hex/process.h>
+#include <hex/strict.h>
+#include <hex/string_util.h>
+#include <map>
+#include <netinet/in.h>
+#include <unistd.h>
 
 #define LABEL_SENDER_EMAIL_HOST "Enter email sender host: "
 #define LABEL_SENDER_EMAIL_PORT "Enter email sender port: "
@@ -46,8 +43,7 @@
 #define LABEL_RESP_EXEC_BIN "Enter the exec bin name list (comma separated) [optional]: "
 #define LABEL_RESP_DESCRIPTION "Enter the notification description [optional]: "
 
-bool
-loadNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& settingPolicy, NotifyTriggerPolicy& triggerPolicy)
+bool loadNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& settingPolicy, NotifyTriggerPolicy& triggerPolicy)
 {
     // load the existing policy file into policy
     // the trigger policy could only be loaded after setting the setting policy into the trigger policy
@@ -62,8 +58,7 @@ loadNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& settingPo
     return true;
 }
 
-bool
-commitNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& settingPolicy, NotifyTriggerPolicy& triggerPolicy)
+bool commitNotifyPolicy(HexPolicyManager& policyManager, NotifySettingPolicy& settingPolicy, NotifyTriggerPolicy& triggerPolicy)
 {
     // save the updated policy into a policy file
     if (!policyManager.save(settingPolicy)) {
@@ -194,14 +189,12 @@ NotifyListMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-bool
-putSettingSenderEmail(
+bool putSettingSenderEmail(
     std::string host,
     std::string port,
     std::string username,
     std::string password,
-    std::string from
-)
+    std::string from)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy policy;
@@ -226,8 +219,7 @@ putSettingSenderEmail(
     return true;
 }
 
-bool
-putSettingReceiverEmail(std::string address, std::string note)
+bool putSettingReceiverEmail(std::string address, std::string note)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy policy;
@@ -252,14 +244,12 @@ putSettingReceiverEmail(std::string address, std::string note)
     return true;
 }
 
-bool
-putSettingReceiverSlack(
+bool putSettingReceiverSlack(
     std::string url,
     std::string username,
     std::string description,
     std::string workspace,
-    std::string channel
-)
+    std::string channel)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy policy;
@@ -284,8 +274,7 @@ putSettingReceiverSlack(
     return true;
 }
 
-bool
-putSettingReceiverExecShell(std::string name)
+bool putSettingReceiverExecShell(std::string name)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy policy;
@@ -310,8 +299,7 @@ putSettingReceiverExecShell(std::string name)
     return true;
 }
 
-bool
-putSettingReceiverExecBin(std::string name)
+bool putSettingReceiverExecBin(std::string name)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy policy;
@@ -336,8 +324,7 @@ putSettingReceiverExecBin(std::string name)
     return true;
 }
 
-bool
-deleteSettingSenderEmail()
+bool deleteSettingSenderEmail()
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy policy;
@@ -362,8 +349,7 @@ deleteSettingSenderEmail()
     return true;
 }
 
-bool
-deleteSettingReceiverEmail(std::string address)
+bool deleteSettingReceiverEmail(std::string address)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy settingPolicy;
@@ -384,8 +370,7 @@ deleteSettingReceiverEmail(std::string address)
     return true;
 }
 
-bool
-deleteSettingReceiverSlack(std::string url)
+bool deleteSettingReceiverSlack(std::string url)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy settingPolicy;
@@ -406,8 +391,7 @@ deleteSettingReceiverSlack(std::string url)
     return true;
 }
 
-bool
-deleteSettingReceiverExecShell(std::string name)
+bool deleteSettingReceiverExecShell(std::string name)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy settingPolicy;
@@ -428,8 +412,7 @@ deleteSettingReceiverExecShell(std::string name)
     return true;
 }
 
-bool
-deleteSettingReceiverExecBin(std::string name)
+bool deleteSettingReceiverExecBin(std::string name)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy settingPolicy;
@@ -607,7 +590,7 @@ NotifySettingMain(int argc, const char** argv)
                  * argv[7]=[<workspace>]
                  * argv[8]=[<channel>]
                  */
-                
+
                 std::string url;
                 std::string username;
                 std::string description;
@@ -667,7 +650,7 @@ NotifySettingMain(int argc, const char** argv)
 
                 std::string execFileDirectory;
 
-                if(CliMatchListHelper(argc, argv, 5, execFileDirectories, &execFileDirectoryIndex, &execFileDirectory) != 0) {
+                if (CliMatchListHelper(argc, argv, 5, execFileDirectories, &execFileDirectoryIndex, &execFileDirectory) != 0) {
                     CliPrint("file directory is missing or invalid");
                     return CLI_INVALID_ARGS;
                 }
@@ -746,7 +729,7 @@ NotifySettingMain(int argc, const char** argv)
             /**
              * argv[3]=<email|slack|exec>
              */
-            
+
             CliList receiverTypes;
             receiverTypes.push_back("email");
             receiverTypes.push_back("slack");
@@ -800,8 +783,8 @@ NotifySettingMain(int argc, const char** argv)
                 /**
                  * argv[4]=<file>
                  */
-                
-                 // list files (/var/alert_resp/exec_*)
+
+                // list files (/var/alert_resp/exec_*)
                 std::string cmd = "ls -p /var/alert_resp/ | grep -v / | grep exec_ | sed 's/^exec_//'";
                 int execFileIndex;
                 std::string execFile;
@@ -841,8 +824,7 @@ NotifySettingMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-bool
-putTrigger(
+bool putTrigger(
     std::string name,
     bool enabled,
     std::string topic,
@@ -851,8 +833,7 @@ putTrigger(
     const std::vector<std::string>& emails,
     const std::vector<std::string>& slacks,
     const std::vector<std::string>& execShells,
-    const std::vector<std::string>& execBins
-)
+    const std::vector<std::string>& execBins)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy settingPolicy;
@@ -871,8 +852,7 @@ putTrigger(
         emails,
         slacks,
         execShells,
-        execBins
-    );
+        execBins);
 
     if (!commitNotifyPolicy(policyManager, settingPolicy, triggerPolicy)) {
         return false;
@@ -881,8 +861,7 @@ putTrigger(
     return true;
 }
 
-bool
-deleteTrigger(std::string name)
+bool deleteTrigger(std::string name)
 {
     HexPolicyManager policyManager;
     NotifyTriggerPolicy policy;
@@ -904,8 +883,7 @@ deleteTrigger(std::string name)
             std::vector<std::string>(),
             std::vector<std::string>(),
             std::vector<std::string>(),
-            std::vector<std::string>()
-        );
+            std::vector<std::string>());
     } else if (name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) == 0) {
         policy.addOrUpdateTrigger(
             name,
@@ -916,8 +894,7 @@ deleteTrigger(std::string name)
             std::vector<std::string>(),
             std::vector<std::string>(),
             std::vector<std::string>(),
-            std::vector<std::string>()
-        );
+            std::vector<std::string>());
     } else {
         if (!policy.deleteTrigger(name)) {
             return false;
@@ -977,9 +954,7 @@ NotifyTriggerMain(int argc, const char** argv)
         }
 
         if (
-            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_ONE) != 0 &&
-            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) != 0
-        ) {
+            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_ONE) != 0 && name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) != 0) {
             CliPrint("the name is not supported");
             return CLI_INVALID_ARGS;
         }
@@ -1046,7 +1021,7 @@ NotifyTriggerMain(int argc, const char** argv)
         /**
          * argv[2]=<name>
          */
-        
+
         CliPrint(LABEL_RESP_NAME_CURRENT_LIMITATION);
 
         std::string name;
@@ -1056,9 +1031,7 @@ NotifyTriggerMain(int argc, const char** argv)
         }
 
         if (
-            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_ONE) != 0 &&
-            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) != 0
-        ) {
+            name.compare(LABEL_RESP_NAME_CURRENT_OPTION_ONE) != 0 && name.compare(LABEL_RESP_NAME_CURRENT_OPTION_TWO) != 0) {
             CliPrint("the name is not supported");
             return CLI_INVALID_ARGS;
         }
