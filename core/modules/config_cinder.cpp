@@ -1,22 +1,19 @@
 // CUBE
 
-#include <hex/log.h>
-#include <hex/pidfile.h>
-#include <hex/filesystem.h>
-#include <hex/process.h>
-#include <hex/process_util.h>
-
+#include "include/role_cubesys.h"
+#include "mysql_util.h"
+#include <cube/cluster.h>
+#include <cube/config_file.h>
+#include <cube/systemd_util.h>
+#include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
-#include <hex/config_global.h>
 #include <hex/dryrun.h>
-
-#include <cube/config_file.h>
-#include <cube/cluster.h>
-#include <cube/systemd_util.h>
-
-#include "mysql_util.h"
-#include "include/role_cubesys.h"
+#include <hex/filesystem.h>
+#include <hex/log.h>
+#include <hex/pidfile.h>
+#include <hex/process.h>
+#include <hex/process_util.h>
 
 static const char USER[] = "cinder";
 static const char GROUP[] = "cinder";
@@ -24,8 +21,8 @@ static const char VOLUME[] = "cinder-volumes";
 static const char BACKUP[] = "volume-backups";
 
 // cinder config files
-#define DEF_EXT     ".def"
-#define CONF        "/etc/cinder/cinder.conf"
+#define DEF_EXT ".def"
+#define CONF "/etc/cinder/cinder.conf"
 #define MAKRER_POOL "/etc/appliance/state/cinder_pool_done"
 
 // cinder common
@@ -151,10 +148,10 @@ SetupCheck()
     if (!IsControl(s_eCubeRole))
         return true;
 
-    if(!MysqlUtilIsDbExist("cinder")) {
-        if (!MysqlUtilRunSQL("CREATE DATABASE cinder") ||
-            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY 'cinder_dbpass'") ||
-            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'cinder_dbpass'")) {
+    if (!MysqlUtilIsDbExist("cinder")) {
+        if (!MysqlUtilRunSQL("CREATE DATABASE cinder")
+            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY 'cinder_dbpass'")
+            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'cinder_dbpass'")) {
             return false;
         }
 
@@ -181,19 +178,17 @@ SetupCinder(std::string domain, std::string userPass)
 
     // Create the cinder service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s cinder",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
+        env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder admin", env.c_str(), OSCMD);
     HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder service", env.c_str(), OSCMD);
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name cinderv2 "
-                         "--description \"OpenStack Block Storage\" volumev2",
-                         env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, "%s %s service create --name cinderv2 --description \"OpenStack Block Storage\" volumev2",
+        env.c_str(), OSCMD);
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name cinderv3 "
-                         "--description \"OpenStack Block Storage\" volumev3",
-                         env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, "%s %s service create --name cinderv3 --description \"OpenStack Block Storage\" volumev3",
+        env.c_str(), OSCMD);
 
     return true;
 }
@@ -211,14 +206,14 @@ UpdateEndpoint(std::string endpoint, std::string external, std::string region)
     std::string intr = "http://" + endpoint + ":8776/v2/%\\(project_id\\)s";
 
     HexUtilSystemF(0, 0, HEX_SDK " os_endpoint_update %s %s %s %s %s",
-                         "volumev2", region.c_str(), pub.c_str(), adm.c_str(), intr.c_str());
+        "volumev2", region.c_str(), pub.c_str(), adm.c_str(), intr.c_str());
 
     pub = "http://" + external + ":8776/v3/%\\(project_id\\)s";
     adm = "http://" + endpoint + ":8776/v3/%\\(project_id\\)s";
     intr = "http://" + endpoint + ":8776/v3/%\\(project_id\\)s";
 
     HexUtilSystemF(0, 0, HEX_SDK " os_endpoint_update %s %s %s %s %s",
-                         "volumev3", region.c_str(), pub.c_str(), adm.c_str(), intr.c_str());
+        "volumev3", region.c_str(), pub.c_str(), adm.c_str(), intr.c_str());
 
     return true;
 }
@@ -226,7 +221,7 @@ UpdateEndpoint(std::string endpoint, std::string external, std::string region)
 static bool
 UpdateDbConn(std::string sharedId, std::string password)
 {
-    if(IsControl(s_eCubeRole)) {
+    if (IsControl(s_eCubeRole)) {
         std::string dbconn = "mysql+pymysql://cinder:";
         dbconn += password;
         dbconn += "@";
@@ -242,7 +237,7 @@ UpdateDbConn(std::string sharedId, std::string password)
 static bool
 UpdateControllerIp(std::string ctrlIp)
 {
-    if(IsControl(s_eCubeRole)) {
+    if (IsControl(s_eCubeRole)) {
         cfg["DEFAULT"]["my_ip"] = ctrlIp;
         cfg["DEFAULT"]["osapi_volume_listen"] = ctrlIp;
     }
@@ -254,7 +249,7 @@ static bool
 UpdateSharedId(std::string sharedId)
 
 {
-    if(IsControl(s_eCubeRole)) {
+    if (IsControl(s_eCubeRole)) {
         cfg["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
         cfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
@@ -289,9 +284,9 @@ UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::str
 }
 
 static bool
-UpdateBackup(bool override, const std::string &type, const std::string &sharedId,
-             const std::string &endpoint, const std::string &account,
-             const std::string &secret, const std::string &pool)
+UpdateBackup(bool override, const std::string& type, const std::string& sharedId,
+    const std::string& endpoint, const std::string& account,
+    const std::string& secret, const std::string& pool)
 {
     if (!IsControl(s_eCubeRole))
         return true;
@@ -300,7 +295,7 @@ UpdateBackup(bool override, const std::string &type, const std::string &sharedId
         if (type == "cube-storage") {
             std::string conf = "/etc/cinder/ceph_backup.conf";
             HexUtilSystemF(0, 0, HEX_SDK " ceph_basic_config_gen %s %s %s",
-                                 conf.c_str(), endpoint.c_str(), secret.c_str());
+                conf.c_str(), endpoint.c_str(), secret.c_str());
             cfg["DEFAULT"]["backup_ceph_chunk_size"] = "134217728";
             cfg["DEFAULT"]["backup_ceph_user"] = "admin";
             cfg["DEFAULT"]["backup_ceph_conf"] = conf;
@@ -354,7 +349,7 @@ UpdateStorage(void)
 {
     std::string enabledBackends = "ceph";
 
-    for (unsigned i = 0 ; i < s_extNameArr.size() ; i++) {
+    for (unsigned i = 0; i < s_extNameArr.size(); i++) {
         if (s_extNameArr.newValue(i).length() == 0)
             continue;
 
@@ -381,9 +376,9 @@ UpdateStorage(void)
         if (driver == "cube") {
             std::string conf = std::string(BACKENDDIR) + "/" + name + ".conf";
             HexUtilSystemF(0, 0, HEX_SDK " ceph_basic_config_gen %s %s %s",
-                                 conf.c_str(), endpoint.c_str(), secret.c_str());
+                conf.c_str(), endpoint.c_str(), secret.c_str());
             std::string uuid = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s %s %s",
-                                            name.c_str(), endpoint.c_str(), secret.c_str());
+                name.c_str(), endpoint.c_str(), secret.c_str());
             cfg[name]["volume_driver"] = "cinder.volume.drivers.rbd.RBDDriver";
             cfg[name]["rbd_user"] = "admin";
             cfg[name]["rbd_secret_uuid"] = uuid;
@@ -420,9 +415,9 @@ UpdateDebug(bool enabled)
 
 static bool
 UpdateCfg(const std::string& domain, const std::string& region,
-          const std::string& userPass, const std::string& novaPass, const std::string& virshSecret)
+    const std::string& userPass, const std::string& novaPass, const std::string& virshSecret)
 {
-    if(IsControl(s_eCubeRole)) {
+    if (IsControl(s_eCubeRole)) {
         cfg["DEFAULT"]["auth_strategy"] = "keystone";
         cfg["DEFAULT"]["log_dir"] = "/var/log/cinder";
         cfg["DEFAULT"]["glance_api_version"] = "2";
@@ -476,12 +471,12 @@ UpdateCfg(const std::string& domain, const std::string& region,
 static bool
 CinderService(bool enabled, bool ha)
 {
-    if(IsControl(s_eCubeRole)) {
-        SystemdCommitService(enabled, API_NAME);   // cinder-api
-        SystemdCommitService(enabled, SCHL_NAME);   // cinder-scheduler
-        SystemdCommitService(enabled, BAK_NAME);    // cinder-backup
+    if (IsControl(s_eCubeRole)) {
+        SystemdCommitService(enabled, API_NAME); // cinder-api
+        SystemdCommitService(enabled, SCHL_NAME); // cinder-scheduler
+        SystemdCommitService(enabled, BAK_NAME); // cinder-backup
         if (!ha)
-            SystemdCommitService(enabled, VOL_NAME);    // cinder-volume
+            SystemdCommitService(enabled, VOL_NAME); // cinder-volume
         else if (!IsBootstrap())
             HexUtilSystemF(0, 0, "pcs resource restart cinder-volume");
     }
@@ -492,12 +487,12 @@ CinderService(bool enabled, bool ha)
 static bool
 CinderVolumeType(void)
 {
-    if(!IsControl(s_eCubeRole))
+    if (!IsControl(s_eCubeRole))
         return true;
 
     std::string types = "CubeStorage";
 
-    for (unsigned i = 0 ; i < s_extNameArr.size() ; i++) {
+    for (unsigned i = 0; i < s_extNameArr.size(); i++) {
         if (s_extNameArr.newValue(i).length() == 0)
             continue;
 
@@ -514,8 +509,7 @@ CinderVolumeType(void)
 static bool
 Init()
 {
-    if (HexMakeDir(RUNDIR, USER, GROUP, 0755) != 0 ||
-        HexMakeDir(BACKENDDIR, USER, GROUP, 0755) != 0)
+    if (HexMakeDir(RUNDIR, USER, GROUP, 0755) != 0 || HexMakeDir(BACKENDDIR, USER, GROUP, 0755) != 0)
         return false;
 
     // fail safe for creating state dir
@@ -531,15 +525,14 @@ Init()
 }
 
 static bool
-Parse(const char *name, const char *value, bool isNew)
+Parse(const char* name, const char* value, bool isNew)
 {
     bool r = true;
 
     TuneStatus s = ParseTune(name, value, isNew);
     if (s == TUNE_INVALID_NAME) {
         HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
-    }
-    else if (s == TUNE_INVALID_VALUE) {
+    } else if (s == TUNE_INVALID_VALUE) {
         HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
         r = false;
     }
@@ -547,21 +540,21 @@ Parse(const char *name, const char *value, bool isNew)
 }
 
 static bool
-ParseRabbitMQ(const char *name, const char *value, bool isNew)
+ParseRabbitMQ(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
     return true;
 }
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 2);
     return true;
 }
 
 static bool
-ParseNova(const char *name, const char *value, bool isNew)
+ParseNova(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 3);
     return true;
@@ -596,17 +589,13 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bExternalChanged = s_extNameArr.modified() | s_extDriverArr.modified() |
-                     s_extEndpointArr.modified() | s_extAccountArr.modified() |
-                       s_extSecretArr.modified();
+    s_bExternalChanged = s_extNameArr.modified() | s_extDriverArr.modified() | s_extEndpointArr.modified() | s_extAccountArr.modified() | s_extSecretArr.modified();
 
-    s_bConfigChanged = modified | s_bMqModified | s_bCubeModified | s_bNovaModified | s_bExternalChanged |
-                       G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
+    s_bConfigChanged = modified | s_bMqModified | s_bCubeModified | s_bNovaModified | s_bExternalChanged | G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
 
     s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
 
-    return s_bDbPassChanged | s_bConfigChanged |
-         s_bEndpointChanged | s_bExternalChanged;
+    return s_bDbPassChanged | s_bConfigChanged | s_bEndpointChanged | s_bExternalChanged;
 }
 
 static bool
@@ -648,7 +637,7 @@ Commit(bool modified, int dryLevel)
         UpdateDebug(s_debug.newValue());
         UpdateStorage();
         UpdateBackup(s_backupOverride, s_backupType, sharedId,
-                     s_backupEndpoint, s_backupAccount, s_backupSecret, s_backupPool);
+            s_backupEndpoint, s_backupAccount, s_backupSecret, s_backupPool);
 
         // write back to cinder config files
         WriteConfig(CONF, SB_SEC_WFMT, '=', cfg);
@@ -714,12 +703,12 @@ ReconfigMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    if(IsControl(s_eCubeRole)) {
+    if (IsControl(s_eCubeRole)) {
         // user-def node groups are mapped with *-pool, respectively
         std::string customPools = HexUtilPOpen("timeout 30 ceph osd pool ls | grep -e '[-]pool' -e '[-]ssd' | tr '\n' ' '");
 
         curCfg["DEFAULT"]["enabled_backends"] = "ceph";
-        for (int start=0,end=0; (start < (int)customPools.length()) && (end != -1); start=end+1) {
+        for (int start = 0, end = 0; (start < (int)customPools.length()) && (end != -1); start = end + 1) {
             end = customPools.find(" ", start);
 
             std::string pool = customPools.substr(start, end - start);
@@ -737,7 +726,7 @@ ReconfigMain(int argc, char* argv[])
 }
 
 static int
-ClusterStartMain(int argc, char **argv)
+ClusterStartMain(int argc, char** argv)
 {
     if (argc != 1)
         return EXIT_FAILURE;
@@ -768,4 +757,3 @@ CONFIG_OBSERVES(cinder, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(cinder, nova, ParseNova, NotifyNova);
 
 CONFIG_TRIGGER_WITH_SETTINGS(cinder, "cluster_start", ClusterStartMain);
-
