@@ -1,7 +1,7 @@
 // CUBE SDK
 
-#include <hex/translate_module.h>
 #include <hex/log.h>
+#include <hex/translate_module.h>
 
 #include "include/policy_notify_trigger.h"
 
@@ -9,7 +9,7 @@
  * Translate the alert trigger policy (alert_resp).
  */
 static bool
-Translate(const char *policy, FILE *settings)
+Translate(const char* policy, FILE* settings)
 {
     HexLogDebug("translate_alert_resp policy: %s", policy);
     NotifyTriggerPolicy ntPolicy;
@@ -37,8 +37,7 @@ Translate(const char *policy, FILE *settings)
                 "kapacitor.alert.resp.%zu.responses.emails.%zu.address = %s\n",
                 i,
                 j,
-                config.triggers[i].responses.emails[j].address.c_str()
-            );
+                config.triggers[i].responses.emails[j].address.c_str());
         }
 
         // slack
@@ -48,8 +47,7 @@ Translate(const char *policy, FILE *settings)
                 "kapacitor.alert.resp.%zu.responses.slacks.%zu.url = %s\n",
                 i,
                 j,
-                config.triggers[i].responses.slacks[j].url.c_str()
-            );
+                config.triggers[i].responses.slacks[j].url.c_str());
         }
 
         // exec shell
@@ -59,8 +57,7 @@ Translate(const char *policy, FILE *settings)
                 "kapacitor.alert.resp.%zu.responses.execs.shells.%zu.name = %s\n",
                 i,
                 j,
-                config.triggers[i].responses.execs.shells[j].name.c_str()
-            );
+                config.triggers[i].responses.execs.shells[j].name.c_str());
         }
 
         // exec bin
@@ -70,8 +67,7 @@ Translate(const char *policy, FILE *settings)
                 "kapacitor.alert.resp.%zu.responses.execs.bins.%zu.name = %s\n",
                 i,
                 j,
-                config.triggers[i].responses.execs.bins[j].name.c_str()
-            );
+                config.triggers[i].responses.execs.bins[j].name.c_str());
         }
     }
 
@@ -127,8 +123,7 @@ Migrate(const char* prevVersion, const char* prevPolicy, const char* policy)
             emailList,
             slackList,
             execShellList,
-            execBinList
-        );
+            execBinList);
     }
 
     return ntPolicy.save(policy);
