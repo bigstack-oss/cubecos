@@ -1,17 +1,14 @@
 // CUBE
 
-#include <hex/log.h>
-#include <hex/process.h>
-
+#include "include/role_cubesys.h"
+#include <cube/systemd_util.h>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/dryrun.h>
+#include <hex/log.h>
 #include <hex/logrotate.h>
-
-#include <cube/systemd_util.h>
-
-#include "include/role_cubesys.h"
+#include <hex/process.h>
 
 static const char NGINX_NAME[] = "nginx";
 static const char NGINX_CONF_IN[] = "/etc/nginx/nginx.conf.in";
@@ -36,7 +33,7 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 static LogRotateConf log_conf("cube-cos-ui", "/var/log/cube-cos-ui/*.log", DAILY, 128, 0, true);
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
     return true;
