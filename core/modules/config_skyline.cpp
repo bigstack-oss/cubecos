@@ -1,22 +1,19 @@
 // CUBE
 
-#include <hex/log.h>
-#include <hex/filesystem.h>
-#include <hex/process.h>
-#include <hex/process_util.h>
-
+#include "include/role_cubesys.h"
+#include "mysql_util.h"
+#include <cube/cluster.h>
+#include <cube/config_file.h>
+#include <cube/systemd_util.h>
+#include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
-#include <hex/config_global.h>
 #include <hex/dryrun.h>
+#include <hex/filesystem.h>
+#include <hex/log.h>
 #include <hex/logrotate.h>
-
-#include <cube/config_file.h>
-#include <cube/cluster.h>
-#include <cube/systemd_util.h>
-
-#include "mysql_util.h"
-#include "include/role_cubesys.h"
+#include <hex/process.h>
+#include <hex/process_util.h>
 
 static const char OSCMD[] = "/usr/bin/openstack";
 static const char OPENRC[] = "/etc/admin-openrc.sh";
@@ -79,10 +76,10 @@ SetupCheck()
     if (!IsControl(s_eCubeRole))
         return true;
 
-    if(!MysqlUtilIsDbExist("skyline")) {
-        if (!MysqlUtilRunSQL("CREATE DATABASE skyline DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci") ||
-            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON skyline.* TO 'skyline'@'localhost' IDENTIFIED BY 'skyline_dbpass'") ||
-            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON skyline.* TO 'skyline'@'%' IDENTIFIED BY 'skyline_dbpass'")) {
+    if (!MysqlUtilIsDbExist("skyline")) {
+        if (!MysqlUtilRunSQL("CREATE DATABASE skyline DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci")
+            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON skyline.* TO 'skyline'@'localhost' IDENTIFIED BY 'skyline_dbpass'")
+            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON skyline.* TO 'skyline'@'%' IDENTIFIED BY 'skyline_dbpass'")) {
             return false;
         }
 
@@ -107,7 +104,7 @@ SetupService(std::string domain, std::string userPass)
 
     // Create the skyline service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s skyline",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
+        env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user skyline admin", env.c_str(), OSCMD);
 
     return true;
@@ -118,7 +115,8 @@ WriteSkylineConf(bool debug, const char* domain, const char* sharedId, const cha
 {
     if (HexSystemF(0, "sed -e \"s/@SHARED_ID@/%s/\" -e \"s/@SKYLINE_SERVICE_PASSWORD@/%s/\" -e \"s/@SKYLINE_DB_PASSWORD@/%s/\" "
                       "-e \"s/@DEBUG@/%s/\" -e \"s/@DOMAIN@/%s/\" %s > %s",
-                      sharedId, userpass, dbpass, debug ? "true" : "false", domain, SKYLINE_CONF_IN, SKYLINE_CONF) != 0) {
+            sharedId, userpass, dbpass, debug ? "true" : "false", domain, SKYLINE_CONF_IN, SKYLINE_CONF)
+        != 0) {
         HexLogError("failed to update %s", SKYLINE_CONF);
         return false;
     }
@@ -130,14 +128,14 @@ static bool
 CommitService(bool enabled)
 {
     if (IsControl(s_eCubeRole)) {
-        SystemdCommitService(enabled, API_NAME, true);       // skyline-apiserver
+        SystemdCommitService(enabled, API_NAME, true); // skyline-apiserver
     }
 
     return true;
 }
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
     return true;
@@ -151,15 +149,14 @@ NotifyCube(bool modified)
 }
 
 static bool
-Parse(const char *name, const char *value, bool isNew)
+Parse(const char* name, const char* value, bool isNew)
 {
     bool r = true;
 
     TuneStatus s = ParseTune(name, value, isNew);
     if (s == TUNE_INVALID_NAME) {
         HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
-    }
-    else if (s == TUNE_INVALID_VALUE) {
+    } else if (s == TUNE_INVALID_VALUE) {
         HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
         r = false;
     }
