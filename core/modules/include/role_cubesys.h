@@ -1,14 +1,16 @@
 // CUBE SDK
 
+#include <string>
+
 #ifndef CUBESYS_H
 #define CUBESYS_H
 
-#define CUBE_MIGRATE    "/run/cube_migration"
-#define CONTROL_REJOIN   "/run/control_rejoin"
+#define CUBE_MIGRATE "/run/cube_migration"
+#define CONTROL_REJOIN "/run/control_rejoin"
 
-#define DOMAIN_DEF  "default"
-#define REGION_DEF  "RegionOne"
-#define MGMT_CIDR_DEF  "10.254.0.0/16"
+#define DOMAIN_DEF "default"
+#define REGION_DEF "RegionOne"
+#define MGMT_CIDR_DEF "10.254.0.0/16"
 
 typedef enum {
     ROLE_UNDEF = 0x0,
@@ -24,8 +26,7 @@ typedef enum {
 } CubeRole_e;
 
 // cubesys configuration
-struct CubeSysConfig
-{
+struct CubeSysConfig {
     std::string role;
     std::string domain;
     std::string region;
@@ -46,42 +47,54 @@ struct CubeSysConfig
     bool ha;
     bool saltkey;
 
-    CubeSysConfig(): ha(false), saltkey(false) {}
+    CubeSysConfig()
+        : ha(false)
+        , saltkey(false)
+    {
+    }
 };
 
 inline static CubeRole_e GetCubeRole(std::string s_role)
 {
-    if (s_role == "control") return ROLE_CONTROL;
-    else if (s_role == "network") return ROLE_NETWORK;
-    else if (s_role == "compute") return ROLE_COMPUTE;
-    else if (s_role == "storage") return ROLE_STORAGE;
-    else if (s_role == "control-network") return ROLE_CONTROL_NETWORK;
-    else if (s_role == "control-converged") return ROLE_CONTROL_CONVERGED;
-    else if (s_role == "edge-core") return ROLE_CORE;
-    else if (s_role == "moderator") return ROLE_MODERATOR;
-    else return ROLE_UNDEF;
+    if (s_role == "control")
+        return ROLE_CONTROL;
+    else if (s_role == "network")
+        return ROLE_NETWORK;
+    else if (s_role == "compute")
+        return ROLE_COMPUTE;
+    else if (s_role == "storage")
+        return ROLE_STORAGE;
+    else if (s_role == "control-network")
+        return ROLE_CONTROL_NETWORK;
+    else if (s_role == "control-converged")
+        return ROLE_CONTROL_CONVERGED;
+    else if (s_role == "edge-core")
+        return ROLE_CORE;
+    else if (s_role == "moderator")
+        return ROLE_MODERATOR;
+    else
+        return ROLE_UNDEF;
 }
 
-#define IsControl(r)     (r & ROLE_CONTROL)
-#define IsNetwork(r)     (r & ROLE_NETWORK)
-#define IsCompute(r)     (r & ROLE_COMPUTE)
-#define IsStorage(r)     (r & ROLE_STORAGE)
-#define IsEdge(r)        (r & ROLE_EDGE)
-#define IsConverged(r)   (r == ROLE_CONTROL_CONVERGED)
-#define IsCore(r)        (r == ROLE_CORE)
-#define IsModerator(r)   (r == ROLE_MODERATOR)
+#define IsControl(r) (r & ROLE_CONTROL)
+#define IsNetwork(r) (r & ROLE_NETWORK)
+#define IsCompute(r) (r & ROLE_COMPUTE)
+#define IsStorage(r) (r & ROLE_STORAGE)
+#define IsEdge(r) (r & ROLE_EDGE)
+#define IsConverged(r) (r == ROLE_CONTROL_CONVERGED)
+#define IsCore(r) (r == ROLE_CORE)
+#define IsModerator(r) (r == ROLE_MODERATOR)
 
-#define IsUndef(r)       (r == ROLE_UNDEF)
+#define IsUndef(r) (r == ROLE_UNDEF)
 
-#define ControlReq(r)    ((r != ROLE_UNDEF) && !(r & ROLE_CONTROL))
+#define ControlReq(r) ((r != ROLE_UNDEF) && !(r & ROLE_CONTROL))
 
-#define IfMgmtReq(r)     (r != ROLE_UNDEF)
+#define IfMgmtReq(r) (r != ROLE_UNDEF)
 #define IfProviderReq(r) (IsCompute(r))
-#define IfOverlayReq(r)  (IsCompute(r))
-#define IfStorageReq(r)  (IsControl(r) || IsCompute(r) || IsStorage(r))
+#define IfOverlayReq(r) (IsCompute(r))
+#define IfStorageReq(r) (IsControl(r) || IsCompute(r) || IsStorage(r))
 
-#define ControlVcpuReserved  4          /* 4 cores is considered minimum for running a control node */
-#define ControlMemoryReservedMib  16384 /* 16 GB is considered minimum for running a control node */
+#define ControlVcpuReserved 4 /* 4 cores is considered minimum for running a control node */
+#define ControlMemoryReservedMib 16384 /* 16 GB is considered minimum for running a control node */
 
 #endif /* endif CUBESYS_H */
-
