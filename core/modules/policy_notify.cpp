@@ -2,27 +2,29 @@
 
 #include "include/policy_notify.h"
 
-NotifyResponse::NotifyResponse():
-    enabled(true),
-    name(""),
-    type(""),
-    topic(""),
-    match(""),
-    slackUrl(""),
-    slackChannel(""),
-    emailHost(""),
-    emailPort(0),
-    emailUser(""),
-    emailPass(""),
-    emailFrom(""),
-    emailTo(""),
-    execType("")
-{}
+NotifyResponse::NotifyResponse()
+    : enabled(true)
+    , name("")
+    , type("")
+    , topic("")
+    , match("")
+    , slackUrl("")
+    , slackChannel("")
+    , emailHost("")
+    , emailPort(0)
+    , emailUser("")
+    , emailPass("")
+    , emailFrom("")
+    , emailTo("")
+    , execType("")
+{
+}
 
-NotifyPolicy::NotifyPolicy():
-    m_initialized(false),
-    m_yml(NULL)
-{}
+NotifyPolicy::NotifyPolicy()
+    : m_initialized(false)
+    , m_yml(NULL)
+{
+}
 
 NotifyPolicy::~NotifyPolicy()
 {
@@ -44,22 +46,19 @@ NotifyPolicy::policyVersion() const
     return "1.0";
 }
 
-bool
-NotifyPolicy::load(const char* policyFile)
+bool NotifyPolicy::load(const char* policyFile)
 {
     clear();
     m_initialized = parsePolicy(policyFile);
     return m_initialized;
 }
 
-bool
-NotifyPolicy::save(const char* policyFile)
+bool NotifyPolicy::save(const char* policyFile)
 {
     return true;
 }
 
-bool
-NotifyPolicy::getNotifyConfig(NotifyConfig *config) const
+bool NotifyPolicy::getNotifyConfig(NotifyConfig* config) const
 {
     if (!m_initialized) {
         return false;
@@ -70,16 +69,14 @@ NotifyPolicy::getNotifyConfig(NotifyConfig *config) const
     return true;
 }
 
-void
-NotifyPolicy::clear()
+void NotifyPolicy::clear()
 {
     m_initialized = false;
     m_cfg.enabled = true;
     m_cfg.resps.clear();
 }
 
-bool
-NotifyPolicy::parsePolicy(const char* policyFile)
+bool NotifyPolicy::parsePolicy(const char* policyFile)
 {
     if (m_yml) {
         FiniYml(m_yml);
@@ -96,7 +93,7 @@ NotifyPolicy::parsePolicy(const char* policyFile)
     HexYmlParseBool(&m_cfg.enabled, m_yml, "enabled");
 
     std::size_t num = SizeOfYmlSeq(m_yml, "responses");
-    for (std::size_t i = 1 ; i <= num ; i++) {
+    for (std::size_t i = 1; i <= num; i++) {
         NotifyResponse obj;
 
         HexYmlParseBool(&obj.enabled, m_yml, "responses.%d.enabled", i);

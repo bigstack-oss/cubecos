@@ -3,10 +3,10 @@
 #include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"
 
-NotifySettingPolicy::NotifySettingPolicy():
-    isInitialized(false),
-    ymlRoot(NULL),
-    triggerPolicy(nullptr)
+NotifySettingPolicy::NotifySettingPolicy()
+    : isInitialized(false)
+    , ymlRoot(NULL)
+    , triggerPolicy(nullptr)
 {
     this->config.titlePrefix = "";
 
@@ -51,8 +51,7 @@ NotifySettingPolicy::policyVersion() const
     return "1.0";
 }
 
-bool
-NotifySettingPolicy::isReady() const
+bool NotifySettingPolicy::isReady() const
 {
     return this->isInitialized;
 }
@@ -63,16 +62,14 @@ NotifySettingPolicy::getConfig() const
     return this->config;
 }
 
-void
-NotifySettingPolicy::setTriggerPolicy(NotifyTriggerPolicy* triggerPolicy)
+void NotifySettingPolicy::setTriggerPolicy(NotifyTriggerPolicy* triggerPolicy)
 {
     if (triggerPolicy && triggerPolicy->isReady()) {
         this->triggerPolicy = triggerPolicy;
     }
 }
 
-bool
-NotifySettingPolicy::load(const char* policyFile)
+bool NotifySettingPolicy::load(const char* policyFile)
 {
     this->isInitialized = false;
     if (this->ymlRoot) {
@@ -96,17 +93,14 @@ NotifySettingPolicy::load(const char* policyFile)
     HexYmlParseString(this->config.sender.email.password, this->ymlRoot, "sender.email.password");
     HexYmlParseString(this->config.sender.email.from, this->ymlRoot, "sender.email.from");
 
-    if ((
-        this->config.sender.email.host != "" ||
-        this->config.sender.email.port != "" ||
-        this->config.sender.email.username != "" ||
-        this->config.sender.email.password != "" ||
-        this->config.sender.email.from != ""
-    ) && (
-        this->config.sender.email.host == "" ||
-        this->config.sender.email.port == "" ||
-        this->config.sender.email.from == ""
-    )) {
+    if ((this->config.sender.email.host != ""
+            || this->config.sender.email.port != ""
+            || this->config.sender.email.username != ""
+            || this->config.sender.email.password != ""
+            || this->config.sender.email.from != "")
+        && (this->config.sender.email.host == ""
+            || this->config.sender.email.port == ""
+            || this->config.sender.email.from == "")) {
         // we only allow username and password to be blank
         // otherwise, reset the values
         this->config.sender.email.host = "";
@@ -219,8 +213,7 @@ NotifySettingPolicy::load(const char* policyFile)
     return this->isInitialized;
 }
 
-bool
-NotifySettingPolicy::save(const char* policyFile)
+bool NotifySettingPolicy::save(const char* policyFile)
 {
     // title prefix
     if (UpdateYmlValue(this->ymlRoot, "titlePrefix", this->config.titlePrefix.c_str()) != 0) {
@@ -296,10 +289,10 @@ NotifySettingPolicy::save(const char* policyFile)
         if (AddYmlNode(this->ymlRoot, prefix.c_str(), "url", this->config.receiver.slacks[i].url.c_str()) != 0) {
             return false;
         }
-        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "username", this->config.receiver.slacks[i].username.c_str()) !=0 ) {
+        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "username", this->config.receiver.slacks[i].username.c_str()) != 0) {
             return false;
         }
-        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "description", this->config.receiver.slacks[i].description.c_str()) !=0) {
+        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "description", this->config.receiver.slacks[i].description.c_str()) != 0) {
             return false;
         }
         if (AddYmlNode(this->ymlRoot, prefix.c_str(), "workspace", this->config.receiver.slacks[i].workspace.c_str()) != 0) {
@@ -359,8 +352,7 @@ NotifySettingPolicy::save(const char* policyFile)
     return (WriteYml(policyFile, this->ymlRoot) == 0);
 }
 
-bool
-NotifySettingPolicy::hasReceiverEmail(std::string address) const
+bool NotifySettingPolicy::hasReceiverEmail(std::string address) const
 {
     if (!this->isInitialized) {
         return false;
@@ -380,8 +372,7 @@ NotifySettingPolicy::hasReceiverEmail(std::string address) const
     return false;
 }
 
-bool
-NotifySettingPolicy::hasReceiverSlack(std::string url) const
+bool NotifySettingPolicy::hasReceiverSlack(std::string url) const
 {
     if (!this->isInitialized) {
         return false;
@@ -401,8 +392,7 @@ NotifySettingPolicy::hasReceiverSlack(std::string url) const
     return false;
 }
 
-bool
-NotifySettingPolicy::hasReceiverExecShell(std::string name) const
+bool NotifySettingPolicy::hasReceiverExecShell(std::string name) const
 {
     if (!this->isInitialized) {
         return false;
@@ -422,8 +412,7 @@ NotifySettingPolicy::hasReceiverExecShell(std::string name) const
     return false;
 }
 
-bool
-NotifySettingPolicy::hasReceiverExecBin(std::string name) const
+bool NotifySettingPolicy::hasReceiverExecBin(std::string name) const
 {
     if (!this->isInitialized) {
         return false;
@@ -443,14 +432,12 @@ NotifySettingPolicy::hasReceiverExecBin(std::string name) const
     return false;
 }
 
-void
-NotifySettingPolicy::updateSenderEmail(
+void NotifySettingPolicy::updateSenderEmail(
     std::string host,
     std::string port,
     std::string username,
     std::string password,
-    std::string from
-)
+    std::string from)
 {
     if (!this->isInitialized) {
         return;
@@ -468,8 +455,7 @@ NotifySettingPolicy::updateSenderEmail(
     email->from = from;
 }
 
-void
-NotifySettingPolicy::addOrUpdateReceiverEmail(std::string address, std::string note)
+void NotifySettingPolicy::addOrUpdateReceiverEmail(std::string address, std::string note)
 {
     if (!this->isInitialized) {
         return;
@@ -501,14 +487,12 @@ NotifySettingPolicy::addOrUpdateReceiverEmail(std::string address, std::string n
     }
 }
 
-void
-NotifySettingPolicy::addOrUpdateReceiverSlack(
+void NotifySettingPolicy::addOrUpdateReceiverSlack(
     std::string url,
     std::string username,
     std::string description,
     std::string workspace,
-    std::string channel
-)
+    std::string channel)
 {
     if (!this->isInitialized) {
         return;
@@ -546,8 +530,7 @@ NotifySettingPolicy::addOrUpdateReceiverSlack(
     }
 }
 
-void
-NotifySettingPolicy::addReceiverExecShell(std::string name)
+void NotifySettingPolicy::addReceiverExecShell(std::string name)
 {
     if (!this->isInitialized) {
         return;
@@ -573,8 +556,7 @@ NotifySettingPolicy::addReceiverExecShell(std::string name)
     }
 }
 
-void
-NotifySettingPolicy::addReceiverExecBin(std::string name)
+void NotifySettingPolicy::addReceiverExecBin(std::string name)
 {
     if (!this->isInitialized) {
         return;
@@ -600,8 +582,7 @@ NotifySettingPolicy::addReceiverExecBin(std::string name)
     }
 }
 
-void
-NotifySettingPolicy::deleteSenderEmail()
+void NotifySettingPolicy::deleteSenderEmail()
 {
     if (!this->isInitialized) {
         return;
@@ -619,8 +600,7 @@ NotifySettingPolicy::deleteSenderEmail()
     email->from = "";
 }
 
-bool
-NotifySettingPolicy::deleteReceiverEmail(std::string address)
+bool NotifySettingPolicy::deleteReceiverEmail(std::string address)
 {
     if (!this->isInitialized) {
         return false;
@@ -650,15 +630,14 @@ NotifySettingPolicy::deleteReceiverEmail(std::string address)
     return isSuccessful;
 }
 
-bool
-NotifySettingPolicy::deleteReceiverSlack(std::string url)
+bool NotifySettingPolicy::deleteReceiverSlack(std::string url)
 {
     if (!this->isInitialized) {
         return false;
     }
 
     bool isSuccessful = false;
-    
+
     std::vector<NotifySettingReceiverSlack>* slacks = &(this->config.receiver.slacks);
     if (slacks == nullptr) {
         return isSuccessful;
@@ -681,8 +660,7 @@ NotifySettingPolicy::deleteReceiverSlack(std::string url)
     return isSuccessful;
 }
 
-bool
-NotifySettingPolicy::deleteReceiverExecShell(std::string name)
+bool NotifySettingPolicy::deleteReceiverExecShell(std::string name)
 {
     if (!this->isInitialized) {
         return false;
@@ -712,8 +690,7 @@ NotifySettingPolicy::deleteReceiverExecShell(std::string name)
     return isSuccessful;
 }
 
-bool
-NotifySettingPolicy::deleteReceiverExecBin(std::string name)
+bool NotifySettingPolicy::deleteReceiverExecBin(std::string name)
 {
     if (!this->isInitialized) {
         return false;

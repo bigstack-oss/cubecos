@@ -1,7 +1,7 @@
 // CUBE SDK
 
-#include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"
+#include "include/policy_notify_setting.h"
 
 std::string escapeDoubleQuote(const std::string& str)
 {
@@ -18,10 +18,10 @@ std::string escapeDoubleQuote(const std::string& str)
     return out.str();
 }
 
-NotifyTriggerPolicy::NotifyTriggerPolicy():
-    isInitialized(false),
-    ymlRoot(NULL),
-    settingPolicy(nullptr)
+NotifyTriggerPolicy::NotifyTriggerPolicy()
+    : isInitialized(false)
+    , ymlRoot(NULL)
+    , settingPolicy(nullptr)
 {
     this->config.triggers = std::vector<NotifyTrigger>();
 }
@@ -47,8 +47,7 @@ NotifyTriggerPolicy::policyVersion() const
     return "2.0";
 }
 
-bool
-NotifyTriggerPolicy::isReady() const
+bool NotifyTriggerPolicy::isReady() const
 {
     return this->isInitialized;
 }
@@ -59,16 +58,14 @@ NotifyTriggerPolicy::getConfig() const
     return this->config;
 }
 
-void
-NotifyTriggerPolicy::setSettingPolicy(const NotifySettingPolicy* settingPolicy)
+void NotifyTriggerPolicy::setSettingPolicy(const NotifySettingPolicy* settingPolicy)
 {
     if (settingPolicy && settingPolicy->isReady()) {
         this->settingPolicy = settingPolicy;
     }
 }
 
-bool
-NotifyTriggerPolicy::load(const char* policyFile)
+bool NotifyTriggerPolicy::load(const char* policyFile)
 {
     this->isInitialized = false;
     if (this->ymlRoot) {
@@ -202,8 +199,7 @@ NotifyTriggerPolicy::load(const char* policyFile)
     return this->isInitialized;
 }
 
-bool
-NotifyTriggerPolicy::save(const char* policyFile)
+bool NotifyTriggerPolicy::save(const char* policyFile)
 {
     if (DeleteYmlChildren(this->ymlRoot, "triggers") != 0) {
         return false;
@@ -365,8 +361,7 @@ NotifyTriggerPolicy::save(const char* policyFile)
     return (WriteYml(policyFile, this->ymlRoot) == 0);
 }
 
-void
-NotifyTriggerPolicy::addOrUpdateTrigger(
+void NotifyTriggerPolicy::addOrUpdateTrigger(
     std::string name,
     bool enabled,
     std::string topic,
@@ -375,8 +370,7 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
     const std::vector<std::string>& emails,
     const std::vector<std::string>& slacks,
     const std::vector<std::string>& execShells,
-    const std::vector<std::string>& execBins
-)
+    const std::vector<std::string>& execBins)
 {
     if (!this->isInitialized) {
         return;
@@ -506,8 +500,7 @@ NotifyTriggerPolicy::addOrUpdateTrigger(
     }
 }
 
-bool
-NotifyTriggerPolicy::deleteTrigger(std::string name)
+bool NotifyTriggerPolicy::deleteTrigger(std::string name)
 {
     if (!this->isInitialized) {
         return false;
@@ -532,8 +525,7 @@ NotifyTriggerPolicy::deleteTrigger(std::string name)
     return isSuccessful;
 }
 
-void
-NotifyTriggerPolicy::deleteEmail(std::string address)
+void NotifyTriggerPolicy::deleteEmail(std::string address)
 {
     if (!this->isInitialized) {
         return;
@@ -550,8 +542,7 @@ NotifyTriggerPolicy::deleteEmail(std::string address)
     }
 }
 
-void
-NotifyTriggerPolicy::deleteSlack(std::string url)
+void NotifyTriggerPolicy::deleteSlack(std::string url)
 {
     if (!this->isInitialized) {
         return;
@@ -568,8 +559,7 @@ NotifyTriggerPolicy::deleteSlack(std::string url)
     }
 }
 
-void
-NotifyTriggerPolicy::deleteExecShell(std::string name)
+void NotifyTriggerPolicy::deleteExecShell(std::string name)
 {
     if (!this->isInitialized) {
         return;
@@ -586,8 +576,7 @@ NotifyTriggerPolicy::deleteExecShell(std::string name)
     }
 }
 
-void
-NotifyTriggerPolicy::deleteExecBin(std::string name)
+void NotifyTriggerPolicy::deleteExecBin(std::string name)
 {
     if (!this->isInitialized) {
         return;
