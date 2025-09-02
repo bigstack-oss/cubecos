@@ -5,6 +5,7 @@
 
 #include <string>
 #include <sys/socket.h>
+#include <vector>
 
 // Process extended API requires C++
 #ifdef __cplusplus
@@ -33,5 +34,3 @@ std::string GetMgmtCidrIp(const std::string& mgmtCidr, int idx, const std::strin
 #endif // __cplusplus
 
 #endif /* endif CUBE_CLUSTER_H */
-
-
