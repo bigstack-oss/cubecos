@@ -1,20 +1,17 @@
 // CUBE
 
-#include <unistd.h>
-#include <hex/log.h>
-#include <hex/process.h>
-#include <hex/process_util.h>
-
+#include "include/role_cubesys.h"
+#include <cube/cluster.h>
+#include <cube/systemd_util.h>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/dryrun.h>
+#include <hex/log.h>
 #include <hex/logrotate.h>
-
-#include <cube/systemd_util.h>
-#include <cube/cluster.h>
-
-#include "include/role_cubesys.h"
+#include <hex/process.h>
+#include <hex/process_util.h>
+#include <unistd.h>
 
 #define MARKER_API_IDP "/etc/appliance/state/api_idp_done"
 
@@ -48,7 +45,7 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 static LogRotateConf log_conf(API_NAME, "/var/log/cube-cos-api/*.log", DAILY, 128, 0, true);
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
     return true;
@@ -62,7 +59,7 @@ NotifyCube(bool modified)
 }
 
 static bool
-ParseMongodb(const char *name, const char *value, bool isNew)
+ParseMongodb(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 2);
     return true;
