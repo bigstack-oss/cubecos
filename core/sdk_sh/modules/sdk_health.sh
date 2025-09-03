@@ -121,7 +121,7 @@ _health_fail_log()
                 local auto_repair_func="_health_${srv}_auto_repair"
                 if Quiet type $auto_repair_func 2>/dev/null ; then
                     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
-                    $HEX_SDK $auto_repair_func &
+                    $auto_repair_func &
                     echo $! > $runtime
                     influx_event "${query},detail=\"$auto_repair_func $(cat $runtime) ($count/$maxerr)\""
                     ln -sf $runtime $CLUSTER_REPAIRING
@@ -234,7 +234,7 @@ health_dns_check()
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
         local real=$(timeout $SRVSTO ssh root@$node time arp -a 2>&1 | grep real | awk '{print $2}') || ERR_CODE=1
         if [ "x$ERR_CODE" = "x0" ] ; then
-            ERR_MSG+="$node DNS lookup took $real\n"
+            ERR_MSG+="$node DNS lookup took $real sec\n"
         else
             ERR_MSG+="$node dns lookup timed out\n"
         fi
@@ -323,6 +323,7 @@ health_bootstrap_check()
         if ! remote_run $node stat $CUBE_DONE >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="$node services ... [n/a]\n"
+            ERR_LOG="`journalctl | grep hex | grep -i -e error -e fail`\n"
         else
             ERR_MSG+="$node services ... [ready]\n"
         fi
@@ -712,6 +713,7 @@ health_vip_check()
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
     if ! cube_node_ready && [ "x$HOSTNAME" != "x$master" ] ; then
         ERR_CODE=6
+        ERR_MSG="`$HEX_SDK -x cube_node_ready`"
     elif ! is_control_node ; then
         ERR_MSG="not control node"
     elif [ -n "$active_host" ] ; then
@@ -742,7 +744,8 @@ health_vip_check()
     else
         if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
             ERR_CODE=5
-        elif ! Quiet pcs status 2>/dev/null ; then
+        elif ! Quiet pacemaker status 2>/dev/null ; then
+            ERR_MSG+="`cubectl node exec -p systemctl status pcsd pacemaker corosync`\n"
             ERR_CODE=6
         fi
     fi
@@ -816,6 +819,7 @@ health_haproxy_ha_check()
                 if ! is_remote_running $node haproxy-ha ; then
                     ERR_CODE=1
                     ERR_MSG+="haproxy-ha on $node is not running\n"
+                    ERR_MSG+="`cubectl node exec -r control -p systemctl status haproxy-ha`\n"
                     ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy-ha"
                 fi
             fi
@@ -854,6 +858,7 @@ health_haproxy_check()
         if ! is_remote_running $node haproxy >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="haproxy on $node is not running\n"
+            ERR_MSG+="`cubectl node exec -r control -p systemctl status haproxy`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy"
         fi
     done
@@ -881,6 +886,7 @@ health_httpd_check()
         if ! is_remote_running $node httpd ; then
             ERR_CODE=1
             ERR_MSG+="httpd on $node is not running\n"
+            ERR_MSG+="`cubectl node exec -r control -p systemctl status httpd`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u httpd"
         fi
         local i=2
@@ -892,7 +898,8 @@ health_httpd_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port $port on $node doesn't respond\n"
-                ERR_LOG="netstat -tunpl | grep $port"
+                ERR_MSG+="`cubectl node exec -r control -p \"netstat -tunpl | grep $port\"`\n"
+                ERR_LOG="`cubectl node exec -r control -p \"netstat -tunpl | grep $port\"`"
             fi
             let "i = $i + 1"
         done
@@ -904,7 +911,8 @@ health_httpd_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port 9311 on $node doesn't respond\n"
-                ERR_LOG="netstat -tunpl | grep 9311"
+                ERR_MSG+="`cubectl node exec -r control -p \"netstat -tunpl | grep 9311\"`\n"
+                ERR_LOG="`cubectl node exec -r control -p \"netstat -tunpl | grep 9311\"`"
             fi
         fi
     done
@@ -959,6 +967,7 @@ health_nginx_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port $port on $node doesn't respond\n"
+                ERR_MSG+="`cubectl node exec -r control -p \"netstat -tunpl | grep $port\"`\n"
                 ERR_LOG="netstat -tunpl | grep $port"
             fi
             let "i = $i + 1"
@@ -1101,12 +1110,12 @@ health_skyline_check()
         if ! is_remote_running $node nginx >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="nginx on $node is not running\n"
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u nginx"
+            ERR_LOG="$HEX_SDK cmd -cv systemctl status nginx"
         fi
         if ! is_remote_running $node skyline-apiserver >/dev/null 2>&1 ; then
             ERR_CODE=2
             ERR_MSG+="skyline-apiserver on $node is not running\n"
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u skyline-apiserver"
+            ERR_LOG="$HEX_SDK cmd -cv systemctl status skyline-apiserver"
         fi
     done
 
@@ -1136,7 +1145,8 @@ health_memcache_check()
         if ! is_remote_running $node memcached ; then
             ERR_CODE=1
             ERR_MSG+="memcached on $node is not running\n"
-            ERR_LOG="systemctl status memcached"
+            ERR_MSG+="`cubectl node exec -r control -p systemctl status memcached`\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u memcached"
         fi
     done
 
@@ -1183,14 +1193,14 @@ health_ceph_check()
     local stats=$($CEPH status -f json)
     local service_stats="$(echo $stats | jq -r .health.status)"
 
-    ERR_LOG="$HEX_SDK cmd $CEPH -s"
+    ERR_LOG="journalctl -n $ERR_LOGSIZE -u ceph-mon@$HOSTNAME"
     if [ "$service_stats" = "HEALTH_WARN" ] ; then
         ERR_CODE=1
     elif [ "$service_stats" = "HEALTH_ERR" ] ; then
         ERR_CODE=2
     fi
 
-    ERR_MSG+="$service_stats\n"
+    ERR_MSG+="`$CEPH health detail`"
     _health_fail_log
 }
 
@@ -1223,6 +1233,7 @@ health_ceph_mon_check()
         ERR_CODE=3
     fi
 
+    ERR_MSG+="`$CEPH health detail`"
     _health_fail_log
 }
 
@@ -1274,7 +1285,7 @@ health_ceph_mgr_check()
             online=1
         fi
     fi
-    ERR_LOG="$HEX_SDK cmd $CEPH -s"
+    ERR_LOG="journalctl -n $ERR_LOGSIZE -u ceph-mon@$HOSTNAME"
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
     elif echo $stats | jq -r .health | grep -q "Failed to list/create InfluxDB database" ; then
@@ -1293,8 +1304,8 @@ health_ceph_mgr_check()
         fi
     fi
 
+    ERR_MSG+="`$CEPH health detail`"
     ERR_MSG+="`echo $stats | jq -r .mgrmap`\n"
-
     _health_fail_log
 }
 
@@ -1372,7 +1383,9 @@ health_ceph_mds_check()
     timeout $SRVSTO umount -l $nfs_dir/ 2>/dev/null || true
     rmdir $nfs_dir
 
-    ERR_MSG+="$stats\n"
+    ERR_MSG+="`$CEPH health detail`"
+    ERR_MSG+="`cubectl node exec -p -- \"mountpoint -- $CEPHFS_STORE_DIR | grep mountpoint\"`\n"
+    ERR_MSG+="`$CEPH fs status`\n"
     _health_fail_log
 }
 
@@ -1423,7 +1436,9 @@ health_ceph_osd_check()
         ERR_LOG="dmesg | grep -i -e fail -e error"
     fi
 
+    ERR_MSG+="`$CEPH health detail`"
     ERR_MSG+="`echo $stats | jq -r .osdmap`\n"
+    ERR_MSG+="`$CEPH osd tree`"
     _health_fail_log
 }
 
@@ -1451,10 +1466,12 @@ health_ceph_rgw_check()
     local online=$($CEPH -s | awk '/rgw:/{print $2}')
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
-        ERR_LOG="$HEX_SDK cmd $CEPH -s"
     fi
 
+    ERR_LOG="journalctl -n $ERR_LOGSIZE -u ceph-radosgw@rgw.$HOSTNAME"
+    ERR_MSG+="`$CEPH health detail`"
     ERR_MSG+="$online/$total rgw are online\n"
+    ERR_MSG+="`cubectl node exec -r control -p systemctl status ceph-radosgw@rgw.\$HOSTNAME`\n"
     _health_fail_log
 }
 
@@ -1493,6 +1510,8 @@ health_rbd_target_check()
             fi
         done
     fi
+
+    ERR_MSG+="`$CEPH health detail`"
     _health_fail_log
 }
 
@@ -1578,40 +1597,38 @@ health_ironic_report()
 health_ironic_check()
 {
     source $HEX_TUN $SETTINGS_TXT ironic.enabled
-    if [ "$T_ironic_enabled" != "true" ] ; then
-        return 0
-    else
+    if [ "x$T_ironic_enabled" = "xtrue" ] ; then
+        stale_api_check_repair openstack-ironic-api 6385 ironic-api python3
+        stale_api_check_repair openstack-ironic-inspector 5050 ironic-inspecto python3
+
+        local service_stats="$($OPENSTACK compute service list -f value -c Binary -c Host -c Status -c State 2>/dev/null)"
+        local ironic_up=$(echo "$service_stats" | grep compute | grep ironic | grep -i enabled | grep -i up | wc -l )
+        local ironic_down=$(echo "$service_stats" | grep compute | grep ironic | grep -i enabled | grep -i down | wc -l )
+        if [ -z "$service_stats" ] ; then
+            ERR_CODE=1
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-nova-compute"
+        elif [ "$ironic_up" == "0" -o "$ironic_down" != "0" ] ; then
+            ERR_CODE=2
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-nova-compute"
+        else
+            for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+                if ! is_remote_running $node openstack-ironic-api ; then
+                    ERR_CODE=3
+                    ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-ironic-api"
+                elif ! is_remote_running $node openstack-ironic-conductor ; then
+                    ERR_CODE=4
+                    ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-ironic-conductor"
+                elif ! is_remote_running $node openstack-ironic-inspector ; then
+                    ERR_CODE=5
+                    ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-ironic-inspector"
+                fi
+            done
+        fi
+
+        ERR_MSG+="$service_stats\n"
         ERR_MSG+="`$OPENSTACK baremetal driver list`\n"
     fi
 
-    stale_api_check_repair openstack-ironic-api 6385 ironic-api python3
-    stale_api_check_repair openstack-ironic-inspector 5050 ironic-inspecto python3
-
-    local service_stats="$($OPENSTACK compute service list -f value -c Binary -c Host -c Status -c State 2>/dev/null)"
-    local ironic_up=$(echo "$service_stats" | grep compute | grep ironic | grep -i enabled | grep -i up | wc -l )
-    local ironic_down=$(echo "$service_stats" | grep compute | grep ironic | grep -i enabled | grep -i down | wc -l )
-    if [ -z "$service_stats" ] ; then
-        ERR_CODE=1
-        ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-nova-compute"
-    elif [ "$ironic_up" == "0" -o "$ironic_down" != "0" ] ; then
-        ERR_CODE=2
-        ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-nova-compute"
-    else
-        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            if ! is_remote_running $node openstack-ironic-api ; then
-                ERR_CODE=3
-                ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-ironic-api"
-            elif ! is_remote_running $node openstack-ironic-conductor ; then
-                ERR_CODE=4
-                ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-ironic-conductor"
-            elif ! is_remote_running $node openstack-ironic-inspector ; then
-                ERR_CODE=5
-                ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-ironic-inspector"
-            fi
-        done
-    fi
-
-    ERR_MSG+="$service_stats\n"
     _health_fail_log
 }
 
@@ -1723,7 +1740,7 @@ health_neutron_check()
     local control_up=$(echo "$service_stats" | grep ovn-controller | grep -i True | wc -l )
     local control_down=$(echo "$service_stats" | grep ovn-controller | grep -i False | wc -l )
 
-    ERR_MSG+="$service_stats\n"
+    ERR_MSG+="`$OPENSTACK network agent list`\n"
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u neutron-server"
     if echo $(VERBOSE=1 influx_event_health vip) | grep -q "vip changed" ; then
         ERR_CODE=1
@@ -1735,8 +1752,6 @@ health_neutron_check()
         ERR_CODE=4
     elif [ "$control_up" == "0" -o "$control_down" != "0" ] ; then
         ERR_CODE=5
-    else
-        ERR_MSG=
     fi
 
     if [ $ERR_CODE -eq 0 ] ; then
@@ -1830,6 +1845,7 @@ health_glance_check()
         done
     fi
 
+    ERR_MSG+="`hex_sdk cmd -cv \"hex_sdk is_running openstack-glance-api\"`\n"
     _health_fail_log
 }
 
@@ -1884,6 +1900,7 @@ health_cinder_check()
     fi
 
     ERR_MSG+="$service_stats\n"
+    ERR_MSG+="`$CEPH health detail`"
     _health_fail_log
 }
 

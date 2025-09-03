@@ -55,9 +55,15 @@ pacemaker_remote_cleanup()
 pacemaker_node_stop()
 {
     local node=${1:-$HOSTNAME}
-    remote_run $node "timeout $SRVSTO systemctl stop pcsd || killall -9 pcsd"
-    remote_run $node "timeout $SRVSTO systemctl stop pacemaker || killall -9 pacemakerd"
-    remote_run $node "timeout $SRVSTO systemctl stop corosync || killall -9 corosync"
+    if [ "x$node" = "x$HOSTNAME" ] ; then
+        timeout $SRVSTO systemctl stop pcsd || killall -9 pcsd
+        timeout $SRVSTO systemctl stop pacemaker || killall -9 pacemakerd
+        timeout $SRVSTO systemctl stop corosync || killall -9 corosync
+    else
+        remote_run $node "timeout $SRVSTO systemctl stop pcsd || killall -9 pcsd"
+        remote_run $node "timeout $SRVSTO systemctl stop pacemaker || killall -9 pacemakerd"
+        remote_run $node "timeout $SRVSTO systemctl stop corosync || killall -9 corosync"
+    fi
 }
 
 pacemaker_cluster_stop()
@@ -70,20 +76,35 @@ pacemaker_cluster_stop()
 pacemaker_node_restart()
 {
     local node=${1:-$HOSTNAME}
-    remote_run $node "systemctl restart pcsd corosync pacemaker"
-    sleep 10
-    pacemaker_node_start $node
-    sleep 10
-    remote_run $node "pcs resource cleanup"
-    remote_run $node  "pcs resource clear vip"
+    if [ "x$node" = "x$HOSTNAME" ] ; then
+        systemctl restart pcsd corosync pacemaker
+        sleep 10
+        pacemaker_node_start
+        sleep 10
+        pcs resource cleanup
+        pcs resource clear vip
+    else
+        remote_run $node "systemctl restart pcsd corosync pacemaker"
+        sleep 10
+        pacemaker_node_start $node
+        sleep 10
+        remote_run $node "pcs resource cleanup"
+        remote_run $node  "pcs resource clear vip"
+    fi
 }
 
 pacemaker_node_start()
 {
     local node=${1:-$HOSTNAME}
-    remote_run $node "$HEX_SDK is_running pcsd || systemctl restart pcsd"
-    remote_run $node "$HEX_SDK is_running pacemaker || systemctl restart pacemaker"
-    remote_run $node "$HEX_SDK is_running corosync || systemctl restart corosync"
+    if [ "x$node" = "x$HOSTNAME" ] ; then
+        is_running pcsd || systemctl restart pcsd
+        is_running pacemaker || systemctl restart pacemaker
+        is_running corosync || systemctl restart corosync
+    else
+        remote_run $node "$HEX_SDK is_running pcsd || systemctl restart pcsd"
+        remote_run $node "$HEX_SDK is_running pacemaker || systemctl restart pacemaker"
+        remote_run $node "$HEX_SDK is_running corosync || systemctl restart corosync"
+    fi
 }
 
 pacemaker_cluster_restart()
@@ -101,9 +122,13 @@ pacemaker_cluster_restart()
 pacemaker()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if remote_run $node "timeout $SRVSTO pcs status" >/dev/null 2>&1 ; then
-            remote_run $node "timeout $SRVSTO pcs $@"
-            break
+        if [ "x$@" = "xstatus" ] ; then
+            ! remote_run $node "timeout $SRVSTO pcs status" 2>/dev/null || break
+        else
+            if remote_run $node "timeout $SRVSTO pcs status" >/dev/null 2>&1 ; then
+                remote_run $node "timeout $SRVSTO pcs $@"
+                break
+            fi
         fi
     done
 }

@@ -214,14 +214,7 @@ cube_edge_cfg()
 
 cube_cluster_ready()
 {
-    for node_entry in $(cubectl node list -j | jq -r .[].ip.management) ; do
-        local node=$(echo $node_entry | head -c -1)
-        if ! timeout $SRVSTO $HEX_SDK remote_run $node $HEX_SDK cube_node_ready >/dev/null 2>&1 ; then
-            return -1
-        fi
-    done
-
-    return 0
+    cmd hex_sdk cube_node_ready
 }
 
 cube_node_ready()

@@ -199,8 +199,10 @@ Commit(bool modified, int dryLevel)
                 HexUtilSystemF(0, 0, "ip addr add %s dev %s label %s", sharedId.c_str(), mgmtIf.c_str(), mgmtIf.c_str());
         }
         else {
+            HexUtilSystemF(0, 0, HEX_SDK " pacemaker_node_stop");
             SystemdCommitService(enabled, NAME);
             SystemdCommitService(enabled, PCSD);
+            HexUtilSystemF(0, 0, HEX_SDK " pacemaker_node_start");
         }
     }
 
@@ -244,8 +246,10 @@ CommitLast(bool modified, int dryLevel)
             HexUtilSystemF(0, 0, "pcs resource disable vip");
             HexUtilSystemF(0, 0, "ip addr del %s/32 dev %s label %s",
                            sharedId.c_str(), pIf.c_str(), pIf.c_str());
+            HexUtilSystemF(0, 0, HEX_SDK " pacemaker_node_stop");
             SystemdCommitService(enabled, NAME);
             SystemdCommitService(enabled, PCSD);
+            HexUtilSystemF(0, 0, HEX_SDK " pacemaker_node_start");
             HexUtilSystemF(0, 0, "pcs resource enable vip");
         }
 
