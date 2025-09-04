@@ -10,7 +10,7 @@ fi
 ctr=$(buildah from alpine:latest)
 
 buildah run $ctr apk update
-buildah run $ctr apk add --no-cache bash curl jq openssh-client sshpass
+buildah run $ctr apk add --no-cache bash curl jq openssh-client sshpass busybox-extras
 buildah run $ctr mkdir -p /var/alert_resp
 
 buildah config --entrypoint '["/bin/sh","-c","trap : TERM INT; sleep infinity & wait"]' $ctr
