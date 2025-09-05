@@ -26,16 +26,12 @@ ListBackends(const ExtStoragePolicy& policy)
     line[sizeof(line) - 1] = 0;
 
     ExtStorageConfig cfg;
-    policy.getExtStorageConfig(&cfg);
 
 #define HEADER_FMT "\n %7s  %15s  %15s  %15s  %15s  %20s  %15s\n"
 #define BACKEND_FMT " %7s  %15s  %15s  %15s  %15s  %20s  %15s\n"
 
     printf(HEADER_FMT, "enabled", "name", "driver", "endpoint", "account", "secret", "pool");
     printf("%s\n", line);
-    for (auto& b : cfg.backends)
-        printf(BACKEND_FMT, CLI_ENABLE_STR(b.enabled), b.name.c_str(), b.driver.c_str(),
-                               b.endpoint.c_str(), b.account.c_str(), b.secret.c_str(), b.pool.c_str());
     printf("\n");
 
     return true;

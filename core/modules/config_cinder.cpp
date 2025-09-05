@@ -20,9 +20,17 @@ static const char GROUP[] = "cinder";
 static const char VOLUME[] = "cinder-volumes";
 static const char BACKUP[] = "volume-backups";
 
-// cinder config files
-#define DEF_EXT ".def"
+/**
+ * Cinder config file.
+ */
 #define CONF "/etc/cinder/cinder.conf"
+/**
+ * Cinder config directory.
+ */
+#define CONF_DIR "/etc/cinder/cinder.d"
+/**
+ * Marker file stating that Ceph pools are ready for Cinder
+ */
 #define MAKRER_POOL "/etc/appliance/state/cinder_pool_done"
 
 // cinder common
@@ -30,39 +38,32 @@ static const char RUNDIR[] = "/run/cinder";
 static const char STATDIR[] = "/store/cinder";
 static const char BACKENDDIR[] = "/etc/cinder/backends";
 
-// cinder-backup
+/**
+ * cinder-api
+ */
 static const char API_NAME[] = "openstack-cinder-api";
-
-// cinder-scheduler
+/**
+ * cinder-scheduler
+ */
 static const char SCHL_NAME[] = "openstack-cinder-scheduler";
-
-// cinder-volume
+/**
+ * cinder-volume
+ */
 static const char VOL_NAME[] = "openstack-cinder-volume";
-
-// cinder-backup
+/**
+ * cinder-backup
+ */
 static const char BAK_NAME[] = "openstack-cinder-backup";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
+static const char OSCMD[] = "/usr/bin/openstack";
 
 static const char USERPASS[] = "8YHpMKC1394HbTmL";
 static const char DBPASS[] = "hhyCDG3IdNmcQaJo";
 
-static const char OSCMD[] = "/usr/bin/openstack";
-
-static Configs cfg;
-
-static bool s_bSetup = true;
-
-static bool s_bMqModified = false;
-static bool s_bCubeModified = false;
-static bool s_bNovaModified = false;
-
-static bool s_bDbPassChanged = false;
-static bool s_bEndpointChanged = false;
-static bool s_bConfigChanged = false;
-static bool s_bExternalChanged = false;
-
-static CubeRole_e s_eCubeRole;
+#define BUILTIN_STORAGE_BACKEND "ceph"
+#define BUILTIN_STORAGE_HOST "cube"
+#define BUILTIN_VOLUME_TYPE "CubeStorage"
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(CTRL_IP);
@@ -73,15 +74,11 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 CONFIG_TUNING_BOOL(CINDER_ENABLED, "cinder.enabled", TUNING_UNPUB, "Set to true to enable cinder.", true);
 CONFIG_TUNING_STR(CINDER_USERPASS, "cinder.user.password", TUNING_UNPUB, "Set cinder user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CINDER_DBPASS, "cinder.db.password", TUNING_UNPUB, "Set cinder database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_NAME, "cinder.external.%d.name", TUNING_UNPUB, "Set cinder external storage rule name.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_DRIVER, "cinder.external.%d.driver", TUNING_UNPUB, "Set cinder external storage type name <cube|purestorage>.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_ENDPOINT, "cinder.external.%d.endpoint", TUNING_UNPUB, "Set cinder external storage endpoint.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_POOL, "cinder.external.%d.pool", TUNING_UNPUB, "Set cinder external storage pool.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_ACCOUNT, "cinder.external.%d.account", TUNING_UNPUB, "Set cinder external storage account.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(CINDER_EXTERNAL_SECRET, "cinder.external.%d.secret", TUNING_UNPUB, "Set cinder external storage account secret.", "", ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(CINDER_DEBUG, "cinder.debug.enabled", TUNING_PUB, "Set to true to enable cinder verbose log.", false);
+CONFIG_TUNING_STR(CINDER_STORAGE_BACKEND, "cinder.storage.backend.%d.name", TUNING_PUB, "Set additional storage backends.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_VOLUME_TYPE_DEFAULT, "cinder.storage.volumeType.default", TUNING_PUB, "Set the default cinder volume type.", BUILTIN_VOLUME_TYPE, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(CINDER_BACKUP_OVERRIDE, "cinder.backup.override", TUNING_PUB, "Enable override cinder backup configurations.", false);
 CONFIG_TUNING_STR(CINDER_BACKUP_TYPE, "cinder.backup.type", TUNING_PUB, "Set cinder backup storage type <cube-storage|cube-swift>.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CINDER_BACKUP_ENDPOINT, "cinder.backup.endpoint", TUNING_PUB, "Set cinder backup storage endpoint.", "", ValidateRegex, DFT_REGEX_STR);
@@ -105,12 +102,8 @@ PARSE_TUNING_BOOL(s_enabled, CINDER_ENABLED);
 PARSE_TUNING_BOOL(s_debug, CINDER_DEBUG);
 PARSE_TUNING_STR(s_cinderPass, CINDER_USERPASS);
 PARSE_TUNING_STR(s_dbPass, CINDER_DBPASS);
-PARSE_TUNING_STR_ARRAY(s_extNameArr, CINDER_EXTERNAL_NAME);
-PARSE_TUNING_STR_ARRAY(s_extDriverArr, CINDER_EXTERNAL_DRIVER);
-PARSE_TUNING_STR_ARRAY(s_extEndpointArr, CINDER_EXTERNAL_ENDPOINT);
-PARSE_TUNING_STR_ARRAY(s_extAccountArr, CINDER_EXTERNAL_ACCOUNT);
-PARSE_TUNING_STR_ARRAY(s_extSecretArr, CINDER_EXTERNAL_SECRET);
-PARSE_TUNING_STR_ARRAY(s_extPoolArr, CINDER_EXTERNAL_POOL);
+PARSE_TUNING_STR_ARRAY(s_storageBackends, CINDER_STORAGE_BACKEND);
+PARSE_TUNING_STR(s_volumeTypeDefault, CINDER_VOLUME_TYPE_DEFAULT);
 PARSE_TUNING_BOOL(s_backupOverride, CINDER_BACKUP_OVERRIDE);
 PARSE_TUNING_STR(s_backupType, CINDER_BACKUP_TYPE);
 PARSE_TUNING_STR(s_backupEndpoint, CINDER_BACKUP_ENDPOINT);
@@ -127,383 +120,58 @@ PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 2);
 PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 2);
 PARSE_TUNING_X_STR(s_novaPass, NOVA_USERPASS, 3);
 
-static bool
-PoolSetup(void)
-{
-    if (access(MAKRER_POOL, F_OK) != 0) {
-        // Create the cinder volume/backup storage
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", VOLUME);
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", BACKUP);
-        HexUtilSystemF(0, 0, "timeout 10 ceph osd pool set %s bulk true", VOLUME);
+static bool s_bSetup = true;
 
-        HexSystemF(0, "touch " MAKRER_POOL);
-    }
+static bool s_bMqModified = false;
+static bool s_bCubeModified = false;
+static bool s_bNovaModified = false;
+
+static bool s_bDbPassChanged = false;
+static bool s_bEndpointChanged = false;
+static bool s_bConfigChanged = false;
+static bool s_bStorageBackendChanged = false;
+
+static CubeRole_e s_eCubeRole;
+static Configs mainConfig;
+
+static bool
+ParseRabbitMQ(const char* name, const char* value, bool isNew)
+{
+    ParseTune(name, value, isNew, 1);
     return true;
 }
 
-// depends on mysqld (called inside commit())
-static bool
-SetupCheck()
+static void
+NotifyRabbitMQ(bool modified)
 {
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    if (!MysqlUtilIsDbExist("cinder")) {
-        if (!MysqlUtilRunSQL("CREATE DATABASE cinder")
-            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY 'cinder_dbpass'")
-            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'cinder_dbpass'")) {
-            return false;
-        }
-
-        s_bSetup = false;
-    }
-
-    return true;
-}
-
-// Setup should run after keystone & cinder services are running.
-static bool
-SetupCinder(std::string domain, std::string userPass)
-{
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    HexLogInfo("Setting up cinder");
-
-    // Populate the cinder service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"cinder-manage db sync\" %s", USER);
-
-    // prepare env settings
-    std::string env = ". " + std::string(OPENRC) + " &&";
-
-    // Create the cinder service credentials
-    HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s cinder",
-        env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder admin", env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder service", env.c_str(), OSCMD);
-
-    // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name cinderv2 --description \"OpenStack Block Storage\" volumev2",
-        env.c_str(), OSCMD);
-
-    // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name cinderv3 --description \"OpenStack Block Storage\" volumev3",
-        env.c_str(), OSCMD);
-
-    return true;
+    s_bMqModified = IsModifiedTune(1);
 }
 
 static bool
-UpdateEndpoint(std::string endpoint, std::string external, std::string region)
+ParseCube(const char* name, const char* value, bool isNew)
 {
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    HexLogInfo("Updating cinder endpoint");
-
-    std::string pub = "http://" + external + ":8776/v2/%\\(project_id\\)s";
-    std::string adm = "http://" + endpoint + ":8776/v2/%\\(project_id\\)s";
-    std::string intr = "http://" + endpoint + ":8776/v2/%\\(project_id\\)s";
-
-    HexUtilSystemF(0, 0, HEX_SDK " os_endpoint_update %s %s %s %s %s",
-        "volumev2", region.c_str(), pub.c_str(), adm.c_str(), intr.c_str());
-
-    pub = "http://" + external + ":8776/v3/%\\(project_id\\)s";
-    adm = "http://" + endpoint + ":8776/v3/%\\(project_id\\)s";
-    intr = "http://" + endpoint + ":8776/v3/%\\(project_id\\)s";
-
-    HexUtilSystemF(0, 0, HEX_SDK " os_endpoint_update %s %s %s %s %s",
-        "volumev3", region.c_str(), pub.c_str(), adm.c_str(), intr.c_str());
-
+    ParseTune(name, value, isNew, 2);
     return true;
 }
 
-static bool
-UpdateDbConn(std::string sharedId, std::string password)
+static void
+NotifyCube(bool modified)
 {
-    if (IsControl(s_eCubeRole)) {
-        std::string dbconn = "mysql+pymysql://cinder:";
-        dbconn += password;
-        dbconn += "@";
-        dbconn += sharedId;
-        dbconn += "/cinder";
-
-        cfg["database"]["connection"] = dbconn;
-    }
-
-    return true;
+    s_bCubeModified = IsModifiedTune(2);
+    s_eCubeRole = GetCubeRole(s_cubeRole);
 }
 
 static bool
-UpdateControllerIp(std::string ctrlIp)
+ParseNova(const char* name, const char* value, bool isNew)
 {
-    if (IsControl(s_eCubeRole)) {
-        cfg["DEFAULT"]["my_ip"] = ctrlIp;
-        cfg["DEFAULT"]["osapi_volume_listen"] = ctrlIp;
-    }
-
+    ParseTune(name, value, isNew, 3);
     return true;
 }
 
-static bool
-UpdateSharedId(std::string sharedId)
-
+static void
+NotifyNova(bool modified)
 {
-    if (IsControl(s_eCubeRole)) {
-        cfg["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
-        cfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
-        cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
-        cfg["keystone_authtoken"]["service_token_roles"] = "service";
-        cfg["nova"]["memcached_servers"] = sharedId + ":11211";
-        cfg["nova"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
-        cfg["nova"]["auth_url"] = "http://" + sharedId + ":5000";
-        cfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
-    }
-
-    return true;
-}
-
-static bool
-UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::string ctrlAddrs)
-{
-    if (IsControl(s_eCubeRole)) {
-        std::string dbconn = RabbitMqServers(ha, sharedId, password, ctrlAddrs);
-        cfg["DEFAULT"]["transport_url"] = dbconn;
-        cfg["DEFAULT"]["rpc_response_timeout"] = "1200";
-        cfg["keystone_authtoken"]["service_token_roles_required"] = "true";
-
-        if (ha) {
-            cfg["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
-            cfg["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
-            cfg["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
-            cfg["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
-        }
-    }
-
-    return true;
-}
-
-static bool
-UpdateBackup(bool override, const std::string& type, const std::string& sharedId,
-    const std::string& endpoint, const std::string& account,
-    const std::string& secret, const std::string& pool)
-{
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    if (override) {
-        if (type == "cube-storage") {
-            std::string conf = "/etc/cinder/ceph_backup.conf";
-            HexUtilSystemF(0, 0, HEX_SDK " ceph_basic_config_gen %s %s %s",
-                conf.c_str(), endpoint.c_str(), secret.c_str());
-            cfg["DEFAULT"]["backup_ceph_chunk_size"] = "134217728";
-            cfg["DEFAULT"]["backup_ceph_user"] = "admin";
-            cfg["DEFAULT"]["backup_ceph_conf"] = conf;
-            cfg["DEFAULT"]["backup_ceph_pool"] = BACKUP;
-            cfg["DEFAULT"]["backup_ceph_stripe_count"] = "0";
-            cfg["DEFAULT"]["backup_ceph_stripe_unit"] = "0";
-            cfg["DEFAULT"]["backup_driver"] = "cinder.backup.drivers.ceph.CephBackupDriver";
-            return true;
-        }
-        if (type == "cube-swift") {
-            cfg["DEFAULT"]["backup_swift_auth_url"] = "http://" + endpoint + ":5000/v3";
-            cfg["DEFAULT"]["backup_swift_auth_version"] = "3";
-            cfg["DEFAULT"]["backup_swift_auth"] = "single_user";
-            cfg["DEFAULT"]["backup_swift_user"] = account;
-            cfg["DEFAULT"]["backup_swift_user_domain"] = "default";
-            cfg["DEFAULT"]["backup_swift_key"] = secret;
-            cfg["DEFAULT"]["backup_swift_container"] = BACKUP;
-            cfg["DEFAULT"]["backup_swift_object_size"] = "134217728";
-            cfg["DEFAULT"]["backup_swift_project"] = pool;
-            cfg["DEFAULT"]["backup_swift_project_domain"] = "default";
-            cfg["DEFAULT"]["backup_swift_retry_attempts"] = "3";
-            cfg["DEFAULT"]["backup_swift_retry_backoff"] = "2";
-            cfg["DEFAULT"]["backup_compression_algorithm"] = "zlib";
-            cfg["DEFAULT"]["backup_driver"] = "cinder.backup.drivers.swift.SwiftBackupDriver";
-            return true;
-        }
-    }
-
-    // default settings
-    cfg["DEFAULT"]["backup_swift_url"] = "http://" + sharedId + ":8890/v1/AUTH_";
-    cfg["DEFAULT"]["backup_swift_auth_url"] = "http://" + sharedId + ":5000/v3";
-    cfg["DEFAULT"]["backup_swift_auth"] = "per_user";
-    cfg["DEFAULT"]["backup_swift_auth_version"] = "1";
-    cfg["DEFAULT"]["backup_swift_user"] = "None";
-    cfg["DEFAULT"]["backup_swift_user_domain"] = "None";
-    cfg["DEFAULT"]["backup_swift_key"] = "None";
-    cfg["DEFAULT"]["backup_swift_container"] = BACKUP;
-    cfg["DEFAULT"]["backup_swift_object_size"] = "134217728";
-    cfg["DEFAULT"]["backup_swift_project"] = "None";
-    cfg["DEFAULT"]["backup_swift_project_domain"] = "None";
-    cfg["DEFAULT"]["backup_swift_retry_attempts"] = "3";
-    cfg["DEFAULT"]["backup_swift_retry_backoff"] = "2";
-    cfg["DEFAULT"]["backup_compression_algorithm"] = "zlib";
-    cfg["DEFAULT"]["backup_driver"] = "cinder.backup.drivers.swift.SwiftBackupDriver";
-
-    return true;
-}
-
-static bool
-UpdateStorage(void)
-{
-    std::string enabledBackends = "ceph";
-
-    for (unsigned i = 0; i < s_extNameArr.size(); i++) {
-        if (s_extNameArr.newValue(i).length() == 0)
-            continue;
-
-        std::string name = s_extNameArr.newValue(i);
-        std::string driver, endpoint, account, secret, pool;
-
-        driver = endpoint = account = secret = pool = "";
-
-        if (i < s_extDriverArr.size())
-            driver = s_extDriverArr.newValue(i);
-        if (i < s_extEndpointArr.size())
-            endpoint = s_extEndpointArr.newValue(i);
-        if (i < s_extAccountArr.size())
-            account = s_extAccountArr.newValue(i);
-        if (i < s_extSecretArr.size())
-            secret = s_extSecretArr.newValue(i);
-        if (i < s_extPoolArr.size())
-            pool = s_extPoolArr.newValue(i);
-
-        enabledBackends += "," + name;
-
-        cfg[name]["backend_host"] = "cube";
-        cfg[name]["volume_backend_name"] = name;
-        if (driver == "cube") {
-            std::string conf = std::string(BACKENDDIR) + "/" + name + ".conf";
-            HexUtilSystemF(0, 0, HEX_SDK " ceph_basic_config_gen %s %s %s",
-                conf.c_str(), endpoint.c_str(), secret.c_str());
-            std::string uuid = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s %s %s",
-                name.c_str(), endpoint.c_str(), secret.c_str());
-            cfg[name]["volume_driver"] = "cinder.volume.drivers.rbd.RBDDriver";
-            cfg[name]["rbd_user"] = "admin";
-            cfg[name]["rbd_secret_uuid"] = uuid;
-            cfg[name]["rbd_pool"] = pool;
-            cfg[name]["rbd_ceph_conf"] = conf;
-            cfg[name]["rbd_flatten_volume_from_snapshot"] = "false";
-            cfg[name]["rbd_max_clone_depth"] = "5";
-            cfg[name]["rbd_store_chunk_size"] = "4";
-            cfg[name]["rados_connect_timeout"] = "-1";
-            cfg[name]["image_upload_use_cinder_backend"] = "true";
-        }
-        if (driver == "purestorage") {
-            cfg[name]["volume_driver"] = "cinder.volume.drivers.pure.PureISCSIDriver";
-            cfg[name]["san_ip"] = endpoint;
-            cfg[name]["pure_api_token"] = secret;
-            cfg[name]["use_multipath_for_image_xfer"] = "true";
-        }
-    }
-
-    cfg["DEFAULT"]["enabled_backends"] = enabledBackends;
-    cfg["DEFAULT"]["default_volume_type"] = "CubeStorage";
-
-    return true;
-}
-
-static bool
-UpdateDebug(bool enabled)
-{
-    std::string value = enabled ? "true" : "false";
-    cfg["DEFAULT"]["debug"] = value;
-
-    return true;
-}
-
-static bool
-UpdateCfg(const std::string& domain, const std::string& region,
-    const std::string& userPass, const std::string& novaPass, const std::string& virshSecret)
-{
-    if (IsControl(s_eCubeRole)) {
-        cfg["DEFAULT"]["auth_strategy"] = "keystone";
-        cfg["DEFAULT"]["log_dir"] = "/var/log/cinder";
-        cfg["DEFAULT"]["glance_api_version"] = "2";
-        cfg["DEFAULT"]["state_path"] = STATDIR;
-
-        cfg["DEFAULT"]["restore_discard_excess_bytes"] = "true";
-        cfg["DEFAULT"]["scheduler_default_filters"] = "AvailabilityZoneFilter,CapabilitiesFilter";
-        cfg["DEFAULT"]["osapi_volume_workers"] = std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole)));
-        cfg["DEFAULT"]["enable_force_upload"] = "true";
-        cfg["DEFAULT"]["allow_availability_zone_fallback"] = "true";
-
-        cfg["backend_defaults"]["volume_driver"] = "cinder.volume.drivers.rbd.RBDDriver";
-        cfg["backend_defaults"]["rbd_user"] = "admin";
-        cfg["backend_defaults"]["rbd_secret_uuid"] = virshSecret;
-        cfg["backend_defaults"]["rbd_ceph_conf"] = "/etc/ceph/ceph.conf";
-        cfg["backend_defaults"]["rbd_flatten_volume_from_snapshot"] = "false";
-        cfg["backend_defaults"]["rbd_max_clone_depth"] = "5";
-        cfg["backend_defaults"]["rbd_store_chunk_size"] = "4";
-        cfg["backend_defaults"]["rados_connect_timeout"] = "-1";
-        cfg["backend_defaults"]["image_upload_use_cinder_backend"] = "true";
-
-        cfg["ceph"]["volume_backend_name"] = "ceph";
-        cfg["ceph"]["rbd_pool"] = VOLUME;
-        cfg["ceph"]["backend_host"] = "cube";
-
-        cfg["keystone_authtoken"].clear();
-        cfg["keystone_authtoken"]["auth_type"] = "password";
-        cfg["keystone_authtoken"]["project_domain_name"] = domain.c_str();
-        cfg["keystone_authtoken"]["user_domain_name"] = domain.c_str();
-        cfg["keystone_authtoken"]["project_name"] = "service";
-        cfg["keystone_authtoken"]["username"] = "cinder";
-        cfg["keystone_authtoken"]["password"] = userPass.c_str();
-
-        // For supporting online volume expansion
-        cfg["nova"]["auth_type"] = "password";
-        cfg["nova"]["project_domain_name"] = domain.c_str();
-        cfg["nova"]["user_domain_name"] = domain.c_str();
-        cfg["nova"]["region_name"] = region.c_str();
-        cfg["nova"]["project_name"] = "service";
-        cfg["nova"]["username"] = "nova";
-        cfg["nova"]["password"] = novaPass.c_str();
-
-        cfg["oslo_concurrency"]["lock_path"] = "/var/lib/cinder/tmp";
-
-        cfg["oslo_messaging_notifications"]["driver"] = "messagingv2";
-    }
-
-    return true;
-}
-
-static bool
-CinderService(bool enabled, bool ha)
-{
-    if (IsControl(s_eCubeRole)) {
-        SystemdCommitService(enabled, API_NAME); // cinder-api
-        SystemdCommitService(enabled, SCHL_NAME); // cinder-scheduler
-        SystemdCommitService(enabled, BAK_NAME); // cinder-backup
-        if (!ha)
-            SystemdCommitService(enabled, VOL_NAME); // cinder-volume
-        else if (!IsBootstrap())
-            HexUtilSystemF(0, 0, "pcs resource restart cinder-volume");
-    }
-
-    return true;
-}
-
-static bool
-CinderVolumeType(void)
-{
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    std::string types = "CubeStorage";
-
-    for (unsigned i = 0; i < s_extNameArr.size(); i++) {
-        if (s_extNameArr.newValue(i).length() == 0)
-            continue;
-
-        std::string name = s_extNameArr.newValue(i);
-        types += "," + name;
-        HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_create %s %s", name.c_str(), name.c_str());
-    }
-
-    HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_clear %s", types.c_str());
-
-    return true;
+    s_bNovaModified = s_novaPass.modified();
 }
 
 static bool
@@ -514,12 +182,6 @@ Init()
 
     // fail safe for creating state dir
     HexMakeDir(STATDIR, USER, GROUP, 0755);
-
-    // load cinder configurations
-    if (!LoadConfig(CONF DEF_EXT, SB_SEC_RFMT, '=', cfg)) {
-        HexLogError("failed to load cinder config file %s", CONF);
-        return false;
-    }
 
     return true;
 }
@@ -540,46 +202,6 @@ Parse(const char* name, const char* value, bool isNew)
 }
 
 static bool
-ParseRabbitMQ(const char* name, const char* value, bool isNew)
-{
-    ParseTune(name, value, isNew, 1);
-    return true;
-}
-
-static bool
-ParseCube(const char* name, const char* value, bool isNew)
-{
-    ParseTune(name, value, isNew, 2);
-    return true;
-}
-
-static bool
-ParseNova(const char* name, const char* value, bool isNew)
-{
-    ParseTune(name, value, isNew, 3);
-    return true;
-}
-
-static void
-NotifyMQ(bool modified)
-{
-    s_bMqModified = IsModifiedTune(1);
-}
-
-static void
-NotifyCube(bool modified)
-{
-    s_bCubeModified = IsModifiedTune(2);
-    s_eCubeRole = GetCubeRole(s_cubeRole);
-}
-
-static void
-NotifyNova(bool modified)
-{
-    s_bNovaModified = s_novaPass.modified();
-}
-
-static bool
 CommitCheck(bool modified, int dryLevel)
 {
     if (IsBootstrap()) {
@@ -587,15 +209,489 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
+    s_bDbPassChanged = s_dbPass.modified()
+        || s_bCubeModified;
 
-    s_bExternalChanged = s_extNameArr.modified() | s_extDriverArr.modified() | s_extEndpointArr.modified() | s_extAccountArr.modified() | s_extSecretArr.modified();
+    s_bStorageBackendChanged = s_storageBackends.modified() || s_volumeTypeDefault.modified();
 
-    s_bConfigChanged = modified | s_bMqModified | s_bCubeModified | s_bNovaModified | s_bExternalChanged | G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
+    s_bConfigChanged = modified
+        || s_bMqModified
+        || s_bCubeModified
+        || s_bNovaModified
+        || s_bStorageBackendChanged
+        || G_MOD(CTRL_IP)
+        || G_MOD(SHARED_ID);
 
-    s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
+    s_bEndpointChanged = s_bCubeModified
+        || G_MOD(SHARED_ID)
+        || G_MOD(EXTERNAL);
 
-    return s_bDbPassChanged | s_bConfigChanged | s_bEndpointChanged | s_bExternalChanged;
+    return s_bDbPassChanged
+        || s_bConfigChanged
+        || s_bEndpointChanged
+        || s_bStorageBackendChanged;
+}
+
+/**
+ * Set up the database for Cinder.
+ */
+static bool
+SetupDatabase()
+{
+    if (!MysqlUtilIsDbExist("cinder")) {
+        if (!MysqlUtilRunSQL("CREATE DATABASE cinder")
+            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY 'cinder_dbpass'")
+            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'cinder_dbpass'")) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Set up the Ceph RBD pool for the built-in Cinder volume and backup service.
+ */
+static void
+SetupRbdPools()
+{
+    if (access(MAKRER_POOL, F_OK) != 0) {
+        // create the cinder volume/backup storage
+        HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", VOLUME);
+        HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", BACKUP);
+        HexUtilSystemF(0, 0, "timeout 10 ceph osd pool set %s bulk true", VOLUME);
+
+        HexSystemF(0, "touch " MAKRER_POOL);
+    }
+}
+
+/**
+ * Initiate the structure of the config.
+ */
+static void
+InitConfig(Configs& mainConfig)
+{
+    std::vector<std::string> sections = std::vector<std::string> {
+        "DEFAULT",
+        "backend",
+        "backend_defaults",
+        "barbican",
+        "barbican_service_user",
+        "brcd_fabric_example",
+        BUILTIN_STORAGE_BACKEND,
+        "cisco_fabric_example",
+        "coordination",
+        "cors",
+        "database",
+        "fc-zone-manager",
+        "healthcheck",
+        "key_manager",
+        "keystone_authtoken",
+        "nova",
+        "oslo_concurrency",
+        "oslo_messaging_amqp",
+        "oslo_messaging_kafka",
+        "oslo_messaging_notifications",
+        "oslo_messaging_rabbit",
+        "oslo_middleware",
+        "oslo_policy",
+        "oslo_reports",
+        "oslo_versionedobjects",
+        "privsep",
+        "profiler",
+        "sample_castellan_source",
+        "sample_remote_file_source",
+        "service_user",
+        "ssl",
+        "vault",
+    };
+
+    SetupConfig(sections, mainConfig);
+}
+
+/**
+ * Set the defaults.
+ */
+static void
+SetDefaults(
+    Configs& config,
+    const CubeRole_e role)
+{
+    config["DEFAULT"]["state_path"] = STATDIR;
+    config["DEFAULT"]["restore_discard_excess_bytes"] = "true";
+    config["DEFAULT"]["scheduler_default_filters"] = "AvailabilityZoneFilter,CapabilitiesFilter";
+    config["DEFAULT"]["osapi_volume_workers"] = std::to_string(GetControlWorkers(IsConverged(role), IsEdge(role)));
+    config["DEFAULT"]["enable_force_upload"] = "true";
+    config["DEFAULT"]["allow_availability_zone_fallback"] = "true";
+
+    config["oslo_concurrency"]["lock_path"] = "/var/lib/cinder/tmp";
+    config["oslo_reports"]["log_dir"] = "/var/log/cinder";
+}
+
+/**
+ * Set the endpoint of the process.
+ */
+static void
+SetEndpoint(Configs& config, const std::string ctrlIp)
+{
+    config["DEFAULT"]["my_ip"] = ctrlIp;
+    config["DEFAULT"]["osapi_volume_listen"] = ctrlIp;
+}
+
+/**
+ * Set the connection to the database.
+ */
+static void
+SetDatabaseConnection(
+    Configs& config,
+    const std::string sharedId,
+    const std::string dbPass)
+{
+    std::stringstream uri;
+    uri << "mysql+pymysql://cinder:" << dbPass << "@" << sharedId << "/cinder";
+
+    config["database"]["connection"] = uri.str();
+}
+
+/**
+ * Set the connection to the worker queue.
+ */
+static void
+SetWorkerQueue(
+    Configs& config,
+    const bool isHa,
+    const std::string sharedId,
+    const std::string mqPass,
+    const std::string ctrlAddrs)
+{
+    std::string dbconn = RabbitMqServers(isHa, sharedId, mqPass, ctrlAddrs);
+    config["DEFAULT"]["transport_url"] = dbconn;
+    config["DEFAULT"]["rpc_response_timeout"] = "1200";
+
+    if (isHa) {
+        config["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
+        config["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
+        config["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
+        config["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
+    }
+}
+
+/**
+ * Set the connection to the notification queue.
+ */
+static void
+SetNotificationQueue(
+    Configs& config,
+    const std::string sharedId)
+{
+    config["oslo_messaging_notifications"]["driver"] = "messagingv2";
+    config["oslo_messaging_notifications"]["transport_url"] = std::string("kafka://") + sharedId + ":9095";
+}
+
+/**
+ * Set the auth.
+ */
+static void
+SetAuth(
+    Configs& config,
+    const std::string sharedId,
+    const std::string domain,
+    const std::string cinderPass)
+{
+    config["DEFAULT"]["auth_strategy"] = "keystone";
+
+    config["keystone_authtoken"].clear();
+    config["keystone_authtoken"]["auth_type"] = "password";
+    config["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
+    config["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
+    config["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
+    config["keystone_authtoken"]["project_domain_name"] = domain;
+    config["keystone_authtoken"]["project_name"] = "service";
+    config["keystone_authtoken"]["user_domain_name"] = domain;
+    config["keystone_authtoken"]["username"] = "cinder";
+    config["keystone_authtoken"]["password"] = cinderPass;
+    config["keystone_authtoken"]["service_token_roles"] = "service";
+    config["keystone_authtoken"]["service_token_roles_required"] = "true";
+}
+
+/**
+ * Set infos for Nova, for supporting online volume expansion.
+ */
+static void
+SetNovaInfo(
+    Configs& config,
+    const std::string sharedId,
+    const std::string region,
+    const std::string domain,
+    const std::string novaPass)
+{
+    config["nova"]["auth_type"] = "password";
+    config["nova"]["auth_url"] = "http://" + sharedId + ":5000";
+    config["nova"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
+    config["nova"]["memcached_servers"] = sharedId + ":11211";
+    config["nova"]["region_name"] = region;
+    config["nova"]["project_domain_name"] = domain;
+    config["nova"]["project_name"] = "service";
+    config["nova"]["user_domain_name"] = domain;
+    config["nova"]["username"] = "nova";
+    config["nova"]["password"] = novaPass;
+}
+
+/**
+ * Set the connection to Ceph RBD as the built-in Cinder volume service.
+ */
+static void
+SetCeph(
+    Configs& config,
+    const std::string virshSecret)
+{
+    config[BUILTIN_STORAGE_BACKEND]["backend_host"] = BUILTIN_STORAGE_HOST;
+    config[BUILTIN_STORAGE_BACKEND]["volume_backend_name"] = BUILTIN_STORAGE_BACKEND;
+    config[BUILTIN_STORAGE_BACKEND]["volume_driver"] = "cinder.volume.drivers.rbd.RBDDriver";
+    config[BUILTIN_STORAGE_BACKEND]["rbd_ceph_conf"] = "/etc/ceph/ceph.conf";
+    config[BUILTIN_STORAGE_BACKEND]["rbd_pool"] = VOLUME;
+    config[BUILTIN_STORAGE_BACKEND]["rbd_user"] = "admin";
+    config[BUILTIN_STORAGE_BACKEND]["rbd_secret_uuid"] = virshSecret;
+    config[BUILTIN_STORAGE_BACKEND]["rados_connect_timeout"] = "-1";
+    config[BUILTIN_STORAGE_BACKEND]["rbd_store_chunk_size"] = "4";
+    config[BUILTIN_STORAGE_BACKEND]["rbd_max_clone_depth"] = "5";
+    config[BUILTIN_STORAGE_BACKEND]["rbd_flatten_volume_from_snapshot"] = "false";
+    config[BUILTIN_STORAGE_BACKEND]["image_upload_use_cinder_backend"] = "true";
+}
+
+/**
+ * Set the connection to the backend of cinder-backup.
+ */
+static void
+SetBackup(
+    Configs& config,
+    const bool override,
+    const std::string type,
+    const std::string sharedId,
+    const std::string endpoint,
+    const std::string account,
+    const std::string secret,
+    const std::string pool)
+{
+    if (override) {
+        if (type == "cube-storage") {
+            std::string conf = "/etc/cinder/ceph_backup.conf";
+            HexUtilSystemF(
+                0,
+                0,
+                HEX_SDK " ceph_basic_config_gen %s %s %s",
+                conf.c_str(),
+                endpoint.c_str(),
+                secret.c_str());
+
+            config["DEFAULT"]["backup_driver"] = "cinder.backup.drivers.ceph.CephBackupDriver";
+            config["DEFAULT"]["backup_ceph_conf"] = conf;
+            config["DEFAULT"]["backup_ceph_pool"] = BACKUP;
+            config["DEFAULT"]["backup_ceph_user"] = "admin";
+            config["DEFAULT"]["backup_ceph_chunk_size"] = "134217728";
+            config["DEFAULT"]["backup_ceph_stripe_count"] = "0";
+            config["DEFAULT"]["backup_ceph_stripe_unit"] = "0";
+        } else if (type == "cube-swift") {
+            config["DEFAULT"]["backup_driver"] = "cinder.backup.drivers.swift.SwiftBackupDriver";
+            config["DEFAULT"]["backup_swift_auth_url"] = "http://" + endpoint + ":5000/v3";
+            config["DEFAULT"]["backup_swift_auth_version"] = "3";
+            config["DEFAULT"]["backup_swift_auth"] = "single_user";
+            config["DEFAULT"]["backup_swift_user"] = account;
+            config["DEFAULT"]["backup_swift_user_domain"] = "default";
+            config["DEFAULT"]["backup_swift_key"] = secret;
+            config["DEFAULT"]["backup_swift_container"] = BACKUP;
+            config["DEFAULT"]["backup_swift_object_size"] = "134217728";
+            config["DEFAULT"]["backup_swift_project"] = pool;
+            config["DEFAULT"]["backup_swift_project_domain"] = "default";
+            config["DEFAULT"]["backup_swift_retry_attempts"] = "3";
+            config["DEFAULT"]["backup_swift_retry_backoff"] = "2";
+            config["DEFAULT"]["backup_compression_algorithm"] = "zlib";
+        }
+
+        return;
+    }
+
+    // default settings
+    config["DEFAULT"]["backup_driver"] = "cinder.backup.drivers.swift.SwiftBackupDriver";
+    config["DEFAULT"]["backup_swift_url"] = "http://" + sharedId + ":8890/v1/AUTH_";
+    config["DEFAULT"]["backup_swift_auth_url"] = "http://" + sharedId + ":5000/v3";
+    config["DEFAULT"]["backup_swift_auth"] = "per_user";
+    config["DEFAULT"]["backup_swift_auth_version"] = "1";
+    config["DEFAULT"]["backup_swift_user"] = "None";
+    config["DEFAULT"]["backup_swift_user_domain"] = "None";
+    config["DEFAULT"]["backup_swift_key"] = "None";
+    config["DEFAULT"]["backup_swift_container"] = BACKUP;
+    config["DEFAULT"]["backup_swift_object_size"] = "134217728";
+    config["DEFAULT"]["backup_swift_project"] = "None";
+    config["DEFAULT"]["backup_swift_project_domain"] = "None";
+    config["DEFAULT"]["backup_swift_retry_attempts"] = "3";
+    config["DEFAULT"]["backup_swift_retry_backoff"] = "2";
+    config["DEFAULT"]["backup_compression_algorithm"] = "zlib";
+}
+
+/**
+ * Set the storage backends.
+ */
+static void
+SetStorageBackend(
+    Configs& config,
+    const std::string defaultVolumeType)
+{
+    HexSystemF(0, "rm -f %s/ext_storage_*.conf", CONF_DIR);
+    HexSystemF(0, "cp -f %s/ext_storage_*.conf %s/", BACKENDDIR, CONF_DIR);
+
+    std::stringstream enabledBackendLine;
+    enabledBackendLine << BUILTIN_STORAGE_BACKEND;
+    for (std::vector<ConfigString>::const_iterator it = s_storageBackends.begin(); it != s_storageBackends.end(); it++) {
+        if (it->newValue().length() == 0) {
+            continue;
+        }
+
+        enabledBackendLine << "," << it->newValue();
+    }
+
+    config["DEFAULT"]["allowed_direct_url_schemes"] = "cinder";
+    config["DEFAULT"]["glance_request_timeout"] = "1200";
+    config["DEFAULT"]["enabled_backends"] = enabledBackendLine.str();
+    config["DEFAULT"]["default_volume_type"] = defaultVolumeType;
+}
+
+/**
+ * Set the debug toggle.
+ */
+static void
+SetDebug(
+    Configs& config,
+    const bool enabled)
+{
+    config["DEFAULT"]["debug"] = enabled ? "true" : "false";
+}
+
+/**
+ * Set up Cinder service.
+ * The function should be run after Keystone service is running.
+ */
+static void
+SetupService(const std::string domain, const std::string userPass)
+{
+    HexLogInfo("Setting up cinder");
+
+    // populate the cinder service database
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"cinder-manage db sync\" %s", USER);
+
+    // prepare env settings
+    std::string env = ". " + std::string(OPENRC) + " &&";
+
+    // create the cinder service credentials
+    HexUtilSystemF(
+        0,
+        0,
+        "%s %s user create --domain %s --password %s cinder",
+        env.c_str(),
+        OSCMD,
+        domain.c_str(),
+        userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder admin", env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder service", env.c_str(), OSCMD);
+
+    // create the service entity
+    HexUtilSystemF(
+        0,
+        0,
+        "%s %s service create --name cinderv2 --description \"OpenStack Block Storage\" volumev2",
+        env.c_str(),
+        OSCMD);
+    HexUtilSystemF(
+        0,
+        0,
+        "%s %s service create --name cinderv3 --description \"OpenStack Block Storage\" volumev3",
+        env.c_str(),
+        OSCMD);
+}
+
+/**
+ * Set service endpoints.
+ */
+static void
+SetServiceEndpoints(
+    std::string endpoint,
+    std::string external,
+    std::string region)
+{
+    HexLogInfo("Updating cinder endpoint");
+
+    const std::string publicUrlV2 = "http://" + external + ":8776/v2/%\\(project_id\\)s";
+    const std::string adminUrlV2 = "http://" + endpoint + ":8776/v2/%\\(project_id\\)s";
+    const std::string internalUrlV2 = "http://" + endpoint + ":8776/v2/%\\(project_id\\)s";
+
+    HexUtilSystemF(
+        0,
+        0,
+        HEX_SDK " os_endpoint_update %s %s %s %s %s",
+        "volumev2",
+        region.c_str(),
+        publicUrlV2.c_str(),
+        adminUrlV2.c_str(),
+        internalUrlV2.c_str());
+
+    const std::string publicUrlV3 = "http://" + external + ":8776/v3/%\\(project_id\\)s";
+    const std::string adminUrlV3 = "http://" + endpoint + ":8776/v3/%\\(project_id\\)s";
+    const std::string internalUrlV3 = "http://" + endpoint + ":8776/v3/%\\(project_id\\)s";
+
+    HexUtilSystemF(
+        0,
+        0,
+        HEX_SDK " os_endpoint_update %s %s %s %s %s",
+        "volumev3",
+        region.c_str(),
+        publicUrlV3.c_str(),
+        adminUrlV3.c_str(),
+        internalUrlV3.c_str());
+}
+
+/**
+ * Start Cinder services.
+ */
+static void
+StartCinderService(const bool enabled, const bool isHa, const bool isBootstrap)
+{
+    if (IsControl(s_eCubeRole)) {
+        SystemdCommitService(enabled, API_NAME); // cinder-api
+        SystemdCommitService(enabled, SCHL_NAME); // cinder-scheduler
+        SystemdCommitService(enabled, BAK_NAME); // cinder-backup
+        if (!isHa) {
+            SystemdCommitService(enabled, VOL_NAME); // cinder-volume
+        } else if (!isBootstrap) {
+            HexUtilSystemF(0, 0, "pcs resource restart cinder-volume");
+        }
+    }
+}
+
+/**
+ * Create volume types.
+ */
+static void
+CreateVolumeTypes(const TuningStringArray& storageBackends)
+{
+    std::stringstream typesLine;
+    typesLine << BUILTIN_VOLUME_TYPE;
+
+    /**
+     * We would set a convention here,
+     * volume type would be the same as storage backend (service & volume backend)
+     * for non built-in storage backends.
+     */
+    for (std::vector<ConfigString>::const_iterator it = storageBackends.begin(); it != storageBackends.end(); it++) {
+        std::string storageBackendName = it->newValue();
+        if (storageBackendName.length() == 0) {
+            continue;
+        }
+
+        typesLine << "," << storageBackendName;
+        HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_create %s %s", storageBackendName.c_str(), storageBackendName.c_str());
+    }
+
+    HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_clear %s", typesLine.str().c_str());
 }
 
 static bool
@@ -617,50 +713,86 @@ Commit(bool modified, int dryLevel)
     std::string novaPass = GetSaltKey(s_saltkey, s_novaPass.newValue(), s_seed.newValue());
     std::string virshSecret = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s", s_seed.c_str());
 
-    SetupCheck();
+    // set up the database
+    if (IsControl(s_eCubeRole)) {
+        s_bSetup = SetupDatabase();
+    } else {
+        s_bSetup = true;
+    }
+
     if (!s_bSetup) {
         s_bDbPassChanged = true;
         s_bEndpointChanged = true;
     }
 
-    // 1. System Config
-    if (s_bDbPassChanged && IsControl(s_eCubeRole))
+    // configure the database
+    if (IsControl(s_eCubeRole) && s_bDbPassChanged)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
-    // 2. Service Config
+    // set up the Ceph RBD pools
+    SetupRbdPools();
+
+    // configure the services
     if (s_bConfigChanged) {
-        UpdateCfg(s_cubeDomain.newValue(), s_cubeRegion.newValue(), cinderPass, novaPass, virshSecret);
-        UpdateSharedId(sharedId);
-        UpdateControllerIp(ctrlIp);
-        UpdateDbConn(sharedId, dbPass);
-        UpdateMqConn(s_ha, sharedId, mqPass, s_ctrlAddrs.newValue());
-        UpdateDebug(s_debug.newValue());
-        UpdateStorage();
-        UpdateBackup(s_backupOverride, s_backupType, sharedId,
-            s_backupEndpoint, s_backupAccount, s_backupSecret, s_backupPool);
+        std::string domain = s_cubeDomain.newValue();
+
+        InitConfig(mainConfig);
+        SetDefaults(mainConfig, s_eCubeRole);
+        SetEndpoint(mainConfig, ctrlIp);
+        SetDatabaseConnection(mainConfig, sharedId, dbPass);
+        SetWorkerQueue(mainConfig, s_ha, sharedId, mqPass, s_ctrlAddrs.newValue());
+        SetNotificationQueue(mainConfig, sharedId);
+        SetAuth(mainConfig, sharedId, domain, cinderPass);
+        SetNovaInfo(mainConfig, sharedId, s_cubeRegion.newValue(), domain, novaPass);
+        SetCeph(mainConfig, virshSecret);
+        SetStorageBackend(mainConfig, s_volumeTypeDefault);
+        SetBackup(
+            mainConfig,
+            s_backupOverride,
+            s_backupType,
+            sharedId,
+            s_backupEndpoint,
+            s_backupAccount,
+            s_backupSecret,
+            s_backupPool);
+        SetDebug(mainConfig, s_debug.newValue());
 
         // write back to cinder config files
-        WriteConfig(CONF, SB_SEC_WFMT, '=', cfg);
+        WriteConfig(CONF, SB_SEC_WFMT, '=', mainConfig);
     }
 
-    // 3. Service Setup (service must be running)
-    if (!s_bSetup)
-        SetupCinder(s_cubeDomain.newValue(), cinderPass);
+    if (IsControl(s_eCubeRole)) {
+        if (!s_bSetup) {
+            // set up the service (services must be running)
+            SetupService(s_cubeDomain.newValue(), cinderPass);
+        }
 
-    // check for db migration
-    HexUtilSystemF(0, 0, HEX_SDK " migrate_cinder_db");
+        // migrate db
+        HexUtilSystemF(0, 0, HEX_SDK " migrate_cinder_db");
 
-    PoolSetup();
+        if (s_bEndpointChanged) {
+            SetServiceEndpoints(sharedId, external, s_cubeRegion.newValue());
+        }
+    }
 
-    if (s_bEndpointChanged)
-        UpdateEndpoint(sharedId, external, s_cubeRegion.newValue());
+    // start services
+    StartCinderService(s_enabled, s_ha, IsBootstrap());
+    // wait for services to be up
+    std::stringstream enabledHostLine;
+    enabledHostLine << BUILTIN_STORAGE_HOST << "@" << BUILTIN_STORAGE_BACKEND;
+    for (std::vector<ConfigString>::const_iterator it = s_storageBackends.begin(); it != s_storageBackends.end(); it++) {
+        enabledHostLine << "," << it->newValue() << "@" << it->newValue();
+    }
+    HexUtilSystemF(
+        0,
+        0,
+        "%s cinder_wait_for_services_up %s",
+        HEX_SDK,
+        enabledHostLine.str().c_str());
 
-    // 4. create volume type
-    if (s_bExternalChanged)
-        CinderVolumeType();
-
-    // 5. Service kickoff
-    CinderService(s_enabled, s_ha);
+    // create the volume type
+    if (IsControl(s_eCubeRole) && s_bStorageBackendChanged)
+        CreateVolumeTypes(s_storageBackends);
 
     return true;
 }
@@ -679,9 +811,35 @@ RestartMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    CinderService(s_enabled, s_ha);
+    StartCinderService(s_enabled, s_ha, IsBootstrap());
 
     return EXIT_SUCCESS;
+}
+
+/**
+ * Add a Ceph pool as a storage backend.
+ */
+static void
+AddCephPoolAsStorageBackend(
+    Configs& config,
+    const std::string pool)
+{
+    config[pool]["backend_host"] = BUILTIN_STORAGE_HOST;
+    config[pool]["volume_backend_name"] = pool;
+    config[pool]["rbd_pool"] = pool;
+    config[pool]["volume_driver"] = "cinder.volume.drivers.rbd.RBDDriver";
+    config[pool]["rbd_ceph_conf"] = "/etc/ceph/ceph.conf";
+    config[pool]["rbd_user"] = "admin";
+    if (config.count(BUILTIN_STORAGE_BACKEND) > 0 && config[BUILTIN_STORAGE_BACKEND].count("rbd_secret_uuid") > 0) {
+        config[pool]["rbd_secret_uuid"] = config[BUILTIN_STORAGE_BACKEND]["rbd_secret_uuid"];
+    } else {
+        config[pool]["rbd_secret_uuid"] = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s", s_seed.c_str());
+    }
+    config[pool]["rados_connect_timeout"] = "-1";
+    config[pool]["rbd_store_chunk_size"] = "4";
+    config[pool]["rbd_max_clone_depth"] = "5";
+    config[pool]["rbd_flatten_volume_from_snapshot"] = "false";
+    config[pool]["image_upload_use_cinder_backend"] = "true";
 }
 
 static void
@@ -694,35 +852,57 @@ static int
 ReconfigMain(int argc, char* argv[])
 {
     bool enabled = s_enabled;
-    if (!enabled)
+    if (!enabled || !IsControl(s_eCubeRole))
         return EXIT_SUCCESS;
 
-    static Configs curCfg;
-    if (!LoadConfig(CONF, SB_SEC_RFMT, '=', curCfg)) {
+    static Configs currentConfig;
+    if (!LoadConfig(CONF, SB_SEC_RFMT, '=', currentConfig)) {
         HexLogError("failed to load existing cinder config file %s", CONF);
         return EXIT_FAILURE;
     }
 
-    if (IsControl(s_eCubeRole)) {
-        // user-def node groups are mapped with *-pool, respectively
-        std::string customPools = HexUtilPOpen("timeout 30 ceph osd pool ls | grep -e '[-]pool' -e '[-]ssd' | tr '\n' ' '");
+    // user-defined node groups are mapped with *-pool/*-ssd, respectively
+    std::string customPools = HexUtilPOpen("timeout 30 ceph osd pool ls | grep -e '[-]pool' -e '[-]ssd' | tr '\n' ' '");
 
-        curCfg["DEFAULT"]["enabled_backends"] = "ceph";
-        for (int start = 0, end = 0; (start < (int)customPools.length()) && (end != -1); start = end + 1) {
-            end = customPools.find(" ", start);
+    std::stringstream enabledBackendLine;
+    int index = 0;
 
-            std::string pool = customPools.substr(start, end - start);
-
-            curCfg[pool]["backend_host"] = "cube";
-            curCfg[pool]["volume_backend_name"] = pool;
-            curCfg[pool]["rbd_pool"] = pool;
-            curCfg["DEFAULT"]["enabled_backends"] += "," + pool;
+    // filter away existing node group storage backend configs
+    std::vector<std::string> existingStorageBackends = hex_string_util::split(currentConfig["DEFAULT"]["enabled_backends"], ',');
+    for (std::vector<std::string>::const_iterator it = existingStorageBackends.begin(); it != existingStorageBackends.end(); it++) {
+        if (it->find("-pool") == std::string::npos && it->find("-ssd") == std::string::npos) {
+            // keep storage backends not related to "*-pool" and "*-ssd"
+            if (index == 0) {
+                enabledBackendLine << *it;
+            } else {
+                enabledBackendLine << "," << *it;
+            }
+            ++index;
+        } else {
+            // drop the config section
+            if (currentConfig.count(*it) > 0) {
+                currentConfig.erase(*it);
+            }
         }
     }
 
-    WriteConfig(CONF, SB_SEC_WFMT, '=', curCfg);
+    for (int start = 0, end = 0; (start < (int)customPools.length()) && (end != -1); start = end + 1) {
+        end = customPools.find(" ", start);
+        std::string pool = customPools.substr(start, end - start);
 
-    return EXIT_SUCCESS;
+        AddCephPoolAsStorageBackend(currentConfig, pool);
+
+        if (index == 0) {
+            enabledBackendLine << pool;
+        } else {
+            enabledBackendLine << "," << pool;
+        }
+        ++index;
+    }
+    currentConfig["DEFAULT"]["enabled_backends"] = enabledBackendLine.str();
+
+    const bool writeSuccess = WriteConfig(CONF, SB_SEC_WFMT, '=', currentConfig);
+    return writeSuccess ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static int
@@ -734,26 +914,33 @@ ClusterStartMain(int argc, char** argv)
     // default volume type
     if (IsControl(s_eCubeRole)) {
         ReconfigMain(0, NULL);
-        HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_create CubeStorage ceph");
+        HexUtilSystemF(
+            0,
+            0,
+            "%s os_volume_type_create %s %s",
+            HEX_SDK,
+            BUILTIN_VOLUME_TYPE,
+            BUILTIN_STORAGE_BACKEND);
     }
 
     return EXIT_SUCCESS;
 }
 
-CONFIG_COMMAND_WITH_SETTINGS(restart_cinder, RestartMain, RestartUsage);
-CONFIG_COMMAND_WITH_SETTINGS(reconfig_cinder, ReconfigMain, ReconfigUsage);
-
 CONFIG_MODULE(cinder, Init, Parse, 0, 0, Commit);
 // startup sequence
 CONFIG_REQUIRES(cinder, memcache);
 CONFIG_REQUIRES(cinder, libvirtd);
+CONFIG_REQUIRES(cinder, keystone);
 
 CONFIG_MIGRATE(cinder, MAKRER_POOL);
-CONFIG_MIGRATE(cinder, "/etc/cinder/cinder.d");
+CONFIG_MIGRATE(cinder, CONF_DIR);
 
 // extra tunings
-CONFIG_OBSERVES(cinder, rabbitmq, ParseRabbitMQ, NotifyMQ);
+CONFIG_OBSERVES(cinder, rabbitmq, ParseRabbitMQ, NotifyRabbitMQ);
 CONFIG_OBSERVES(cinder, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(cinder, nova, ParseNova, NotifyNova);
 
 CONFIG_TRIGGER_WITH_SETTINGS(cinder, "cluster_start", ClusterStartMain);
+
+CONFIG_COMMAND_WITH_SETTINGS(restart_cinder, RestartMain, RestartUsage);
+CONFIG_COMMAND_WITH_SETTINGS(reconfig_cinder, ReconfigMain, ReconfigUsage);

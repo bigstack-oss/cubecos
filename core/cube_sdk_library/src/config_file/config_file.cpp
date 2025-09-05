@@ -1,16 +1,32 @@
 // CUBE SDK
 
-#include <hex/log.h>
-#include <hex/tuning.h>
-#include <hex/config_module.h>
 #include <cube/config_file.h>
 
-bool
-LoadConfig(const char* filepath, const char* secfmt, const char sep, Configs& config)
+/**
+ * Set up the config object with the sections.
+ */
+void SetupConfig(
+    const std::vector<std::string>& sections,
+    Configs& config)
+{
+    for (std::vector<std::string>::const_iterator it = sections.begin(); it != sections.end(); it++) {
+        std::string section = *it;
+        config.emplace(section, ConfigList {});
+    }
+}
+
+/**
+ * Load the config file into the config object using the specified separator.
+ */
+bool LoadConfig(
+    const char* filepath,
+    const char* secfmt,
+    const char sep,
+    Configs& config)
 {
     bool ret = false;
 
-    FILE *fin = fopen(filepath, "r");
+    FILE* fin = fopen(filepath, "r");
     if (!fin) {
         HexLogWarning("config file %s does not exist", filepath);
         return ret;
@@ -29,7 +45,7 @@ LoadConfig(const char* filepath, const char* secfmt, const char sep, Configs& co
     ConfigList settings;
     while ((result = HexTuningParseLineWithD(tun, &name, &value, sep)) != HEX_TUNING_EOF) {
         if (result != HEX_TUNING_SUCCESS) {
-            char nextsec[HEX_TUNING_NAME_MAXLEN + 1] = {0};
+            char nextsec[HEX_TUNING_NAME_MAXLEN + 1] = { 0 };
             if (result == HEX_TUNING_MALFORMED && sscanf(name, secfmt, nextsec) == 1) {
                 // Append multiple ']' to the last if it's nested section name
                 size_t c = 0;
@@ -63,10 +79,16 @@ LoadConfig(const char* filepath, const char* secfmt, const char sep, Configs& co
     return ret;
 }
 
-bool
-WriteConfig(const char* filepath, const char* secfmt, const char sep, Configs& config)
+/**
+ * Write the config object to a file using the specified separator.
+ */
+bool WriteConfig(
+    const char* filepath,
+    const char* secfmt,
+    const char sep,
+    Configs& config)
 {
-    FILE *fout;
+    FILE* fout;
     fout = fopen(filepath, "w+");
 
     if (!fout) {
@@ -105,10 +127,13 @@ WriteConfig(const char* filepath, const char* secfmt, const char sep, Configs& c
     return true;
 }
 
-
-bool
-DumpConfig(const char* secfmt, const char sep, Configs& config)
+/**
+ * Dump the config object to stdout using the specified separator.
+ */
+bool DumpConfig(
+    const char* secfmt,
+    const char sep,
+    Configs& config)
 {
     return WriteConfig("/dev/stdout", secfmt, sep, config);
 }
-
