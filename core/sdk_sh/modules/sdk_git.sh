@@ -37,10 +37,7 @@ EOF
 
 _git_server_init()
 {
-    $GIT stash 2>/dev/null || true
-    if $GIT pull 2>/dev/null ; then
-        return 0
-    fi
+    [ ! -e /etc/appliance/state/git_server_init ] || return 0
 
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
@@ -92,10 +89,7 @@ git_server_init()
 
 git_client_init()
 {
-    $GIT stash || true
-    if timeout 300 git pull 2>/dev/null ; then
-        return 0
-    fi
+    [ ! -e /etc/appliance/state/git_client_init ] || return 0
 
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
@@ -126,6 +120,7 @@ git_client_init()
     fi
     Quiet -n popd
     Quiet -n $GIT -P log
+    touch /etc/appliance/state/git_client_init
 }
 
 git_push()

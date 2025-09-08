@@ -103,7 +103,7 @@ static int ServerLaunchMain(int argc, const char** argv)
 
         std::string optCmd = "printf 'cinder-volumes\nephemeral-vms\n'";
         std::string descCmd = "printf 'cinder-volumes (boot from volume)\nephemeral-vms (boot from image)\n'";
-        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &backPool, "Enter index of back pool where servers will be created: ") != CLI_SUCCESS) {
+        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &backPool, "Enter index of back pool from which servers will be launched: ") != CLI_SUCCESS) {
             CliPrintf("Bad pool or invalid index chosen");
             return CLI_SUCCESS;
         }
@@ -138,7 +138,7 @@ static int PoolMain(int argc, const char** argv)
         int index;
         std::string optCmd = std::string(HEX_SDK) + " ceph_cacheable_backpool_list";
         std::string descCmd = std::string(HEX_SDK) + " -v ceph_cacheable_backpool_list";
-        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &backPool, "Enter index of back pool to check its cache status: ") != CLI_SUCCESS) {
+        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &backPool, "Enter index of back pool to check its performance: ") != CLI_SUCCESS) {
             CliPrintf("No cache tier available or invalid index chosen");
             return CLI_SUCCESS;
         }
@@ -173,8 +173,8 @@ static int PoolCleanupMain(int argc, const char** argv)
         int index;
         std::string optCmd = std::string(HEX_SDK) + " ceph_cacheable_backpool_list";
         std::string descCmd = std::string(HEX_SDK) + " -v ceph_cacheable_backpool_list";
-        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &backPool, "Enter index of back pool to check its cache status: ") != CLI_SUCCESS) {
-            CliPrintf("No cache tier available or invalid index chosen");
+        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &backPool, "Enter index of back pool to clean up its perf test data: ") != CLI_SUCCESS) {
+            CliPrintf("No such pool or invalid index chosen");
             return CLI_SUCCESS;
         }
     }
@@ -208,7 +208,7 @@ static int RbdMain(int argc, const char** argv)
         int index;
         std::string optCmd = std::string(HEX_SDK) + " ceph_cacheable_backpool_list";
         std::string descCmd = std::string(HEX_SDK) + " -v ceph_cacheable_backpool_list";
-        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &backPool, "Enter index of back pool to check its cache status: ") != CLI_SUCCESS) {
+        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &backPool, "Enter index of back pool to check its performance: ") != CLI_SUCCESS) {
             CliPrintf("No cache tier available or invalid index chosen");
             return CLI_SUCCESS;
         }
@@ -243,7 +243,7 @@ static int OsdMain(int argc, const char** argv)
         int index;
         std::string optCmd = "cubectl node exec \"ceph osd ls-tree \\$HOSTNAME 2>/dev/null || true\"";
         std::string descCmd = "cubectl node exec -pn hex_sdk ceph_osd_list | sort -k3";
-        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &osdId, "Enter index of back pool to check its cache status: ") != CLI_SUCCESS) {
+        if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &osdId, "Enter index of osd to check its performance: ") != CLI_SUCCESS) {
             CliPrintf("No cache tier available or invalid index chosen");
             return CLI_SUCCESS;
         }

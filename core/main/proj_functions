@@ -233,6 +233,14 @@ cube_commit_done()
 
 cube_cluster_start()
 {
+    source /usr/sbin/hex_tuning /etc/settings.txt
+    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
+        export MASTER_CONTROL=$T_cubesys_controller
+        [ -n "$MASTER_CONTROL" ] || MASTER_CONTROL=$T_net_hostname
+    else
+        export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
+    fi
+
     Quiet -n ip neigh flush all
     Quiet -n $HEX_SDK ceph_leave_maintenance # ensure storage is working (healing itself if necessary) before other actions
     if [ "$VERBOSE" == "1" ] ; then
@@ -250,8 +258,11 @@ cube_cluster_start()
     # by default disable ceph_osd which in case of disk failures cannot be handled by software
     ( $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ) || Quiet -n $HEX_SDK toggle_health_check ceph_osd
     iptables-save > /run/iptables
-    Quiet -n $HEX_SDK git_server_init          # fw upgrade needs to track the new filesystem
-    Quiet -n $HEX_SDK git_client_init
+    if [ "x${MASTER_CONTROL:-NOMASTER}" = "x$(hostname)" ] ; then
+        nohup bash -c "$HEX_SDK git_server_init && $HEX_SDK cmd \"$HEX_SDK git_client_init\"" >/dev/null 2>&1 &
+    else
+        nohup bash -c "$HEX_SDK git_client_init" >/dev/null 2>&1 &
+    fi
 }
 
 cube_cluster_stop()

@@ -20,15 +20,15 @@ ImageImportMain(int argc, const char** argv)
 {
     /* [0]="import|ide_import|lb_import|fs_import|deploy_kernel_import|deploy_initramfs_import",
      * [1]=<usb|local>, [2]=<file name>, [3]=<image name>
-     * [4]=<domain>, [5]=<tenant>, [6]=<public|private>
-     * [7]=<glance-images|cinder-volumes>
+     * [4]=<domain>, [5]=<tenant>, [6]=<from Bigstack|from another hypervisor>
+     * [7]=<public|private> [8]=<storage_backend>
      */
-    if (argc > 7)
+    if (argc > 9)
         return CLI_INVALID_ARGS;
 
     int type, index;
     std::string media, dir, file, name, domain, tenant, visibility, pool;
-    std::string attrsType = "default";
+    std::string flags, source, destination;
 
     bool isExtPack = false;
     bool isLbImg = false;
@@ -38,10 +38,6 @@ ImageImportMain(int argc, const char** argv)
 
     if (strcmp(argv[0], "import_extpack") == 0)
         isExtPack = true;
-    if (strcmp(argv[0], "import_ide") == 0)
-        attrsType = "ide";
-    if (strcmp(argv[0], "import_efi") == 0)
-        attrsType = "efi";
     if (strcmp(argv[0], "import_lb") == 0)
         isLbImg = true;
     if (strcmp(argv[0], "import_fs") == 0)
@@ -110,17 +106,28 @@ ImageImportMain(int argc, const char** argv)
             return CLI_INVALID_ARGS;
         }
 
-        if (CliMatchCmdHelper(argc, argv, 6, "echo 'glance-images\ncinder-volumes'", &index, &pool, "Bootable image or volume: ") != CLI_SUCCESS) {
-            CliPrintf("Invalid option");
+        if (CliMatchCmdHelper(argc, argv, 6, "echo 'from Bigstack\nfrom another hypervisor'", &index, &source, "Image source: ") != CLI_SUCCESS) {
+            CliPrintf("Invalid image source");
             return CLI_INVALID_ARGS;
         }
 
-        if (strcmp(pool.c_str(), "glance-images") == 0) {
-            // Only glance-images has the public/private visibility setting.
+        if (strcmp(source.c_str(), "from Bigstack") == 0) {
             if (CliMatchCmdHelper(argc, argv, 7, "echo 'public\nprivate'", &index, &visibility, "Visibility: ") != CLI_SUCCESS) {
                 CliPrintf("Unknown visibility");
                 return CLI_INVALID_ARGS;
             }
+            pool="glance-images";
+            flags="--project-domain " + domain + " --project " + tenant;
+            flags+=" --visibility " + visibility;
+        } else {
+            pool="cinder-volumes";
+            flags="--os-project-domain-name " + domain + " --os-project-name " + tenant;
+        }
+
+        cmd = HEX_SDK " os_list_volume_backend_by_pool " + pool;
+        if (CliMatchCmdHelper(argc, argv, 8, cmd, &index, &destination, "Select storage destination: ") != CLI_SUCCESS) {
+            CliPrintf("Invalid storage destination");
+            return CLI_INVALID_ARGS;
         }
     }
 
@@ -144,9 +151,9 @@ ImageImportMain(int argc, const char** argv)
                             HEX_SDK, "os_extpack_image_import", dir.c_str(), file.c_str(), NULL);
     else
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
-                            HEX_SDK, "os_image_import_with_attrs",
-                            attrsType.c_str(), dir.c_str(), file.c_str(), name.c_str(),
-                            domain.c_str(), tenant.c_str(), pool.c_str(), visibility.c_str(), NULL);
+                            HEX_SDK, "os_image_import",
+                            dir.c_str(), file.c_str(), name.c_str(),
+                            flags.c_str(), pool.c_str(), destination.c_str(), NULL);
 
 
     if (type == 0 /* usb */) {
@@ -290,37 +297,29 @@ CLI_MODE_COMMAND("image", "metadata", MetadataMain, NULL,
                  "metadata <domain> <tenant>");
 
 CLI_MODE_COMMAND("image", "import", ImageImportMain, NULL,
-    "import image from usb or local store folder.",
-    "import <usb|local> <file_name> <image_name> <domain> <tenant> <public|private>");
+                 "import image from usb or local store folder.",
+                 "import <usb|local> <file_name> <image_name> <domain> <tenant> <from Bigstack|from another hypervisor> <public|private> <storage_backend>");
 
 CLI_MODE_COMMAND("image", "import_extpack", ImageImportMain, NULL,
-    "import extension pack images from usb or local store folder.",
-    "import_extpack <usb|local> <file_name> <image_name> <domain> <tenant> <public|private>");
-
-CLI_MODE_COMMAND("image", "import_ide", ImageImportMain, NULL,
-    "import image using IDE properties from usb or local store folder.",
-    "import_ide <usb|local> <file_name> <image_name> <domain> <tenant> <public|private>");
-
-CLI_MODE_COMMAND("image", "import_efi", ImageImportMain, NULL,
-    "import image using EFI propetries from usb or local store folder.",
-    "import_efi <usb|local> <file_name> <image_name> <domain> <tenant> <public|private>");
+                 "import extension pack images from usb or local store folder.",
+                 "import_extpack <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "import_lb", ImageImportMain, NULL,
-    "import load-balancer image from usb or local store folder.",
-    "import_lb <usb|local> <file_name>");
+                 "import load-balancer image from usb or local store folder.",
+                 "import_lb <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "import_fs", ImageImportMain, NULL,
-    "import file storage image from usb or local store folder.",
-    "import_fs <usb|local> <file_name>");
+                 "import file storage image from usb or local store folder.",
+                 "import_fs <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "import_deploy_kernel", ImageImportMain, NULL,
-    "import baremetal deploy kernel from usb or local store folder.",
-    "import_deploy_kernel <usb|local> <file_name>");
+                 "import baremetal deploy kernel from usb or local store folder.",
+                 "import_deploy_kernel <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "import_deploy_initramfs", ImageImportMain, NULL,
-    "import baremetal deploy initramfs from usb or local store folder.",
-    "import_deploy_initramfs <usb|local> <file_name>");
+                 "import baremetal deploy initramfs from usb or local store folder.",
+                 "import_deploy_initramfs <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "export_instance", InstanceExportMain, NULL,
-    "export instance disks as vmdk to usb drive.",
-    "export_instance <usb> <file_name>");
+                 "export instance disks as vmdk to usb drive.",
+                 "export_instance <usb> <file_name>");
