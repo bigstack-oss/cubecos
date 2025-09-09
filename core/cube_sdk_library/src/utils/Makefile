@@ -6,7 +6,7 @@ SUBDIRS = tests
 
 LIB = $(PROJ_LIBDIR)/libcube_sdk.a
 
-LIB_SRCS = network.cpp cluster.cpp systemd_util.cpp
+LIB_SRCS = filesystem.cpp network.cpp cluster.cpp systemd_util.cpp
 
 COMPILE_FOR_SHARED_LIB = 1
 

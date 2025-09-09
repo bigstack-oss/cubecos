@@ -4,6 +4,7 @@
 #include "mysql_util.h"
 #include <cube/cluster.h>
 #include <cube/config_file.h>
+#include <cube/filesystem.h>
 #include <cube/systemd_util.h>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
@@ -233,17 +234,31 @@ CommitCheck(bool modified, int dryLevel)
 }
 
 /**
+ * Check if the database is set up for Cinder.
+ */
+static bool
+IsDatabaseSetup()
+{
+    return MysqlUtilIsDbExist("cinder");
+}
+
+/**
  * Set up the database for Cinder.
+ * Return:
+ * - true: The database has been successfully set up.
+ * - false: The database is failed to be set up.
  */
 static bool
 SetupDatabase()
 {
-    if (!MysqlUtilIsDbExist("cinder")) {
-        if (!MysqlUtilRunSQL("CREATE DATABASE cinder")
-            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY 'cinder_dbpass'")
-            || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'cinder_dbpass'")) {
-            return false;
-        }
+    if (MysqlUtilIsDbExist("cinder")) {
+        return true;
+    }
+
+    if (!MysqlUtilRunSQL("CREATE DATABASE cinder")
+        || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY 'cinder_dbpass'")
+        || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'cinder_dbpass'")) {
+        return false;
     }
 
     return true;
@@ -537,9 +552,25 @@ SetStorageBackend(
     Configs& config,
     const std::string defaultVolumeType)
 {
-    HexSystemF(0, "rm -f %s/ext_storage_*.conf", CONF_DIR);
-    HexSystemF(0, "cp -f %s/ext_storage_*.conf %s/", BACKENDDIR, CONF_DIR);
+    // move exta config files for external storage backends to Cinder config directory
+    std::string fsError;
+    bool fileExists = false;
 
+    fileExists = FileExistsWithGlob(CONF_DIR, "ext_storage_*.conf", fsError);
+    if (fsError != "") {
+        HexLogError("%s", fsError.c_str());
+    } else if (fileExists) {
+        HexSystemF(0, "rm -f %s/ext_storage_*.conf", CONF_DIR);
+    }
+
+    fileExists = FileExistsWithGlob(BACKENDDIR, "ext_storage_*.conf", fsError);
+    if (fsError != "") {
+        HexLogError("%s", fsError.c_str());
+    } else if (fileExists) {
+        HexSystemF(0, "cp -f %s/ext_storage_*.conf %s/", BACKENDDIR, CONF_DIR);
+    }
+
+    // set backends into the config
     std::stringstream enabledBackendLine;
     enabledBackendLine << BUILTIN_STORAGE_BACKEND;
     for (std::vector<ConfigString>::const_iterator it = s_storageBackends.begin(); it != s_storageBackends.end(); it++) {
@@ -714,10 +745,9 @@ Commit(bool modified, int dryLevel)
     std::string virshSecret = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s", s_seed.c_str());
 
     // set up the database
-    if (IsControl(s_eCubeRole)) {
-        s_bSetup = SetupDatabase();
-    } else {
-        s_bSetup = true;
+    if (IsControl(s_eCubeRole) && !IsDatabaseSetup()) {
+        s_bSetup = false;
+        SetupDatabase();
     }
 
     if (!s_bSetup) {
@@ -745,7 +775,11 @@ Commit(bool modified, int dryLevel)
         SetAuth(mainConfig, sharedId, domain, cinderPass);
         SetNovaInfo(mainConfig, sharedId, s_cubeRegion.newValue(), domain, novaPass);
         SetCeph(mainConfig, virshSecret);
-        SetStorageBackend(mainConfig, s_volumeTypeDefault);
+        if (s_volumeTypeDefault.newValue() != "") {
+            SetStorageBackend(mainConfig, s_volumeTypeDefault);
+        } else {
+            SetStorageBackend(mainConfig, BUILTIN_VOLUME_TYPE);
+        }
         SetBackup(
             mainConfig,
             s_backupOverride,
