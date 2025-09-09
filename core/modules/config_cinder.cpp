@@ -686,15 +686,13 @@ SetServiceEndpoints(
 static void
 StartCinderService(const bool enabled, const bool isHa, const bool isBootstrap)
 {
-    if (IsControl(s_eCubeRole)) {
-        SystemdCommitService(enabled, API_NAME); // cinder-api
-        SystemdCommitService(enabled, SCHL_NAME); // cinder-scheduler
-        SystemdCommitService(enabled, BAK_NAME); // cinder-backup
-        if (!isHa) {
-            SystemdCommitService(enabled, VOL_NAME); // cinder-volume
-        } else if (!isBootstrap) {
-            HexUtilSystemF(0, 0, "pcs resource restart cinder-volume");
-        }
+    SystemdCommitService(enabled, API_NAME); // cinder-api
+    SystemdCommitService(enabled, SCHL_NAME); // cinder-scheduler
+    SystemdCommitService(enabled, BAK_NAME); // cinder-backup
+    if (!isHa) {
+        SystemdCommitService(enabled, VOL_NAME); // cinder-volume
+    } else if (!isBootstrap) {
+        HexUtilSystemF(0, 0, "pcs resource restart cinder-volume");
     }
 }
 
@@ -731,7 +729,8 @@ Commit(bool modified, int dryLevel)
     // todo: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
-    if (IsUndef(s_eCubeRole) || !CommitCheck(modified, dryLevel))
+    // we only run Cinder services on control nodes
+    if (!IsControl(s_eCubeRole) || !CommitCheck(modified, dryLevel))
         return true;
 
     std::string ctrlIp = G(CTRL_IP);
@@ -745,7 +744,7 @@ Commit(bool modified, int dryLevel)
     std::string virshSecret = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s", s_seed.c_str());
 
     // set up the database
-    if (IsControl(s_eCubeRole) && !IsDatabaseSetup()) {
+    if (!IsDatabaseSetup()) {
         s_bSetup = false;
         SetupDatabase();
     }
@@ -756,7 +755,7 @@ Commit(bool modified, int dryLevel)
     }
 
     // configure the database
-    if (IsControl(s_eCubeRole) && s_bDbPassChanged)
+    if (s_bDbPassChanged)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
     // set up the Ceph RBD pools
@@ -795,18 +794,16 @@ Commit(bool modified, int dryLevel)
         WriteConfig(CONF, SB_SEC_WFMT, '=', mainConfig);
     }
 
-    if (IsControl(s_eCubeRole)) {
-        if (!s_bSetup) {
-            // set up the service (services must be running)
-            SetupService(s_cubeDomain.newValue(), cinderPass);
-        }
+    if (!s_bSetup) {
+        // set up the service (services must be running)
+        SetupService(s_cubeDomain.newValue(), cinderPass);
+    }
 
-        // migrate db
-        HexUtilSystemF(0, 0, HEX_SDK " migrate_cinder_db");
+    // migrate db
+    HexUtilSystemF(0, 0, HEX_SDK " migrate_cinder_db");
 
-        if (s_bEndpointChanged) {
-            SetServiceEndpoints(sharedId, external, s_cubeRegion.newValue());
-        }
+    if (s_bEndpointChanged) {
+        SetServiceEndpoints(sharedId, external, s_cubeRegion.newValue());
     }
 
     // start services
@@ -825,7 +822,7 @@ Commit(bool modified, int dryLevel)
         enabledHostLine.str().c_str());
 
     // create the volume type
-    if (IsControl(s_eCubeRole) && s_bStorageBackendChanged)
+    if (s_bStorageBackendChanged)
         CreateVolumeTypes(s_storageBackends);
 
     return true;
@@ -845,6 +842,9 @@ RestartMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    if (!IsControl(s_eCubeRole)) {
+        return EXIT_SUCCESS;
+    }
     StartCinderService(s_enabled, s_ha, IsBootstrap());
 
     return EXIT_SUCCESS;
