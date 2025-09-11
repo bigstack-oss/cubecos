@@ -738,6 +738,7 @@ health_vip_check()
             else
                 if [ -n "$ipcidr" ] ; then
                     ERR_CODE=2
+                    ERR_MSG="`cmd -v \"ip a | grep $ipcidr\"`"
                 fi
             fi
         done

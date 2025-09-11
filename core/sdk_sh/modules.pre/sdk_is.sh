@@ -98,21 +98,28 @@ is_first_three_compute_node()
 
 is_node_repairing()
 {
-    stale_repair_clear
-    local fixing=false
-    if [ -e $CLUSTER_REPAIRING ]; then
-        fixing=true
-    fi
-    if [ "$VERBOSE" = "1" ]; then
-        local srv=$(echo $(basename $(readlink $CLUSTER_REPAIRING) 2>/dev/null) | sed -e "s/^health_//" -e "s/_repair$//")
-        local pid=$(cat $CLUSTER_REPAIRING 2>/dev/null)
-        local eps=$(ps --no-headers -o etime ${pid:-0} 2>/dev/null | xargs)
-        printf "{ \"node\" : \"$HOSTNAME\",\"fixing\" : \"$fixing\",\"service\" : \"$srv\",\"pid\" : \"$pid\",\"elaps\" : \"$eps\" }"
-    fi
-    if [ "$fixing" = "false" ]; then
-        return 1
-    else
+    # stale_repair_clear
+
+    if [ -e /run/cube_cluster_repairing ]; then
+        if [ "$VERBOSE" = "1" ]; then
+            local cmd=$(echo $(basename $(readlink /run/cube_cluster_repairing) 2>/dev/null))
+            local pid=$(cat /run/cube_cluster_repairing 2>/dev/null)
+            local eps=$(ps --no-headers -o etime ${pid:-0} 2>/dev/null | xargs)
+            echo -n "${cmd},${pid},${eps}"
+        fi
         return 0
+    else
+        return 1
+    fi
+}
+
+is_repairing()
+{
+    [ "$VERBOSE" = "1" ] || local reg_flg="-q"
+    if cmd -cv is_node_repairing $@ | grep $reg_flg "| 0 |" ; then
+        return 0
+    else
+        return 1
     fi
 }
 
@@ -122,30 +129,12 @@ is_node_checking()
     [ "x$cmd" != "x" ] || Error "missing cmd"
     local checking=false
 
-    stale_check_clear /run/${cmd}ing
     if [ -e /run/${cmd}ing ]; then
-        checking=true
-    fi
-    if [ "$VERBOSE" = "1" ]; then
-        local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
-        local pid=$(cat /run/${cmd}ing 2>/dev/null)
-        local eps=$(ps --no-headers -o etime ${pid:-0} 2>/dev/null | xargs)
-        printf "{ \"node\" : \"$HOSTNAME\",\"checking\" : \"$checking\",\"service\" : \"$srv\",\"pid\" : \"$pid\",\"elaps\" : \"$eps\" }"
-    fi
-
-    if [ "$checking" = "false" ]; then
-        return 1
-    else
-        return 0
-    fi
-}
-
-is_repairing()
-{
-    local flg=
-    [ "$VERBOSE" != "1" ] || flg="-v"
-
-    if cube_cluster_ready && cmd -c "$HEX_SDK $flg is_node_repairing" ; then
+        if [ "$VERBOSE" = "1" ]; then
+            local pid=$(cat /run/${cmd}ing 2>/dev/null)
+            local eps=$(ps --no-headers -o etime ${pid:-0} 2>/dev/null | xargs)
+            echo -n "${cmd},${pid},${eps}"
+        fi
         return 0
     else
         return 1
@@ -154,12 +143,8 @@ is_repairing()
 
 is_checking()
 {
-    local command=$1
-    [ "x$command" != "x" ] || Error "missing command"
-    local flg=
-    [ "$VERBOSE" != "1" ] || flg="-v"
-
-    if cube_cluster_ready && cmd -c "$HEX_SDK $flg is_node_checking" ; then
+    [ "$VERBOSE" = "1" ] || local reg_flg="-q"
+    if cmd -cv is_node_checking $@ | grep $reg_flg "| 0 |" ; then
         return 0
     else
         return 1
@@ -168,12 +153,12 @@ is_checking()
 
 is_sshable()
 {
-    timeout 3 ssh root@$1 exit >/dev/null 2>&1
+    timeout $SRVSTO ssh root@$1 exit >/dev/null 2>&1
 }
 
 is_cluster_rolling_upgrade()
 {
-    if [ $($HEX_SDK cmd "hex_cli -c firmware list" | grep -i active | sort -u | wc -l) -gt 1 ] ; then
+    if [ $(cmd -v "hex_cli -c firmware list | grep -i active" | cut -d"|" -f3 | sort -u | wc -l) -gt 1 ] ; then
         if ! cube_cluster_ready ; then
             return 0
         fi
@@ -183,7 +168,7 @@ is_cluster_rolling_upgrade()
 
 is_node_rolling_upgrade()
 {
-    if [ $($HEX_SDK cmd "hex_cli -c firmware list" | grep -i active | sort -u | wc -l) -gt 1 ] ; then
+    if [ $(cmd -v "hex_cli -c firmware list | grep -i active" | cut -d"|" -f3 | sort -u | wc -l) -gt 1 ] ; then
         if ! cube_node_ready ; then
             return 0
         fi
@@ -195,7 +180,7 @@ is_vip_active()
 {
     local ret=0
     for i in {1..5} ; do
-        if $HEX_SDK cmd -c "pcs resource status vip 2>/dev/null" | sort -u | grep -q "vip.*Started" ; then
+        if cmd -cv "pcs resource status vip 2>/dev/null" | cut -d"|" -f3 | sort -u | sort -u | grep -q "vip.*Started" ; then
             sleep 1
         else
             ret=1 && break

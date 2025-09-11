@@ -430,14 +430,16 @@ SetCinderStores(
     const std::string glancePass)
 {
     for (std::vector<std::string>::const_iterator it = cinderStores.begin(); it != cinderStores.end(); it++) {
-        std::string volumeType = *it;
-        config.emplace(volumeType, ConfigList {});
-        config[volumeType]["store_description"] = "\"Cinder volume type " + volumeType + "\"";
-        config[volumeType]["cinder_store_auth_address"] = "http://" + sharedId + ":5000";
-        config[volumeType]["cinder_store_user_name"] = "glance";
-        config[volumeType]["cinder_store_password"] = glancePass;
-        config[volumeType]["cinder_store_project_name"] = "service";
-        config[volumeType]["cinder_volume_type"] = volumeType;
+        if (!(*it).empty()) {
+            std::string volumeType = *it;
+            config.emplace(volumeType, ConfigList {});
+            config[volumeType]["store_description"] = "\"Cinder volume type " + volumeType + "\"";
+            config[volumeType]["cinder_store_auth_address"] = "http://" + sharedId + ":5000";
+            config[volumeType]["cinder_store_user_name"] = "glance";
+            config[volumeType]["cinder_store_password"] = glancePass;
+            config[volumeType]["cinder_store_project_name"] = "service";
+            config[volumeType]["cinder_volume_type"] = volumeType;
+        }
     }
 }
 
@@ -446,14 +448,15 @@ SetCinderStores(
  */
 static void
 SetStores(Configs& config,
-    const std::vector<std::string>& cinderStores,
-    const std::string defaultVolumeType)
+          const std::vector<std::string>& cinderStores,
+          const std::string defaultVolumeType)
 {
     // enabled store
     std::stringstream stores;
     stores << "http:http" << "," << BUILTIN_STORE << ":rbd";
     for (std::vector<std::string>::const_iterator it = cinderStores.begin(); it != cinderStores.end(); it++) {
-        stores << "," << *it << ":cinder";
+        if (!(*it).empty())
+            stores << "," << *it << ":cinder";
     }
     config["DEFAULT"]["enabled_backends"] = stores.str();
 
@@ -464,9 +467,9 @@ SetStores(Configs& config,
          * set Glance to use its own built-in,
          * glance-images Ceph RBD pool, instead.
          */
-        config["glance_store"]["default_store"] = BUILTIN_STORE;
+        config["glance_store"]["default_backend"] = BUILTIN_STORE;
     } else {
-        config["glance_store"]["default_store"] = defaultVolumeType;
+        config["glance_store"]["default_backend"] = defaultVolumeType;
     }
 }
 

@@ -53,9 +53,7 @@ os_list_volume_backend_by_pool()
     if [ "x$pool" = "x$BUILTIN_BACKPOOL" ] ; then
         $OPENSTACK volume backend pool list -f value -c Name
     else
-        for i in $($OPENSTACK volume type list -f value -c Name | grep -v __DEFAULT__) ; do
-            openstack volume type show $i -f json | jq -r .properties.volume_backend_name
-        done
+        $OPENSTACK volume backend pool list -f value -c Name | cut -d"@" -f1
     fi
 }
 
@@ -780,16 +778,13 @@ os_image_import()
 
         local img_dir=$(dirname $img_raw)
         echo "[$(date +"%T")] Converting image to RAW format ... "
-        if virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null ; then
-            if [ -e ${img_dir}/${file%.*}.xml ] ; then
-                mv -f ${img_dir}/${file%.*}-* $img_raw
-                if grep -i "os firmware" ${img_dir}/${file%.*}.xml 2>/dev/null | grep -q -i efi ; then
-                    properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
-                else
-                    properties+=" --property hw_firmware_type=bios"
-                fi
+        virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
+        if [ -e ${img_dir}/${file%.*}.xml ] ; then
+            mv -f ${img_dir}/${file%.*}-* $img_raw
+            if grep -i "os firmware" ${img_dir}/${file%.*}.xml 2>/dev/null | grep -q -i efi ; then
+                properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
             else
-                qemu-img convert -p -O raw "$IMG" "$img_raw" 2>/dev/null
+                properties+=" --property hw_firmware_type=bios"
             fi
             rm -f ${img_dir}/${file%.*}.xml
         else
@@ -800,7 +795,7 @@ os_image_import()
 
     echo "[$(date +"%T")] Creating image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
-        glance image-create --disk-format raw --container-format bare $(echo "$flags" | grep -o -e "[-][-]visibility public" -e "[-][-]visibility private") --store ${backend:-ceph} --file "$img_name" $properties --progress --name "$name"
+        glance image-create --disk-format raw --container-format bare $(echo "$flags" | grep -o -e "[-][-]visibility public" -e "[-][-]visibility private") --store ${backend:-cube} --file "$img_name" $properties --progress --name "$name"
     else
         local vol_name=$(mktemp -u volume-${name}-XXXX)
         rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"

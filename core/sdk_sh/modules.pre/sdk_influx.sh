@@ -13,7 +13,9 @@ _influx()
     local flag="-database $db"
 
     if echo "$@" | grep -q -i insert ; then
-        nohup $HEX_SDK cmd -c "$INFLUX $flag -host \$HOSTNAME -execute '$@'" >/dev/null 2>&1 &
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            ! timeout $SRVSTO /usr/bin/influx $flag -host $node -execute "$@" 2>/dev/null &
+        done
     else
         if [ "x$FORMAT" = "xjson" ] ; then
             flag+=" -format json -pretty"

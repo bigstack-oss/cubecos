@@ -123,10 +123,12 @@ pacemaker()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if [ "x$@" = "xstatus" ] ; then
-            ! remote_run $node "timeout $SRVSTO pcs status" 2>/dev/null || break
+            if remote_run $node "timeout $SRVTO pcs status" 2>/dev/null ; then
+                break
+            fi
         else
-            if remote_run $node "timeout $SRVSTO pcs status" >/dev/null 2>&1 ; then
-                remote_run $node "timeout $SRVSTO pcs $@"
+            if remote_run $node "timeout $SRVTO pcs status" >/dev/null 2>&1 ; then
+                remote_run $node "timeout $SRVTO pcs $@"
                 break
             fi
         fi

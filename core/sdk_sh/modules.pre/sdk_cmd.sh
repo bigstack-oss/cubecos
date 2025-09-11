@@ -11,6 +11,7 @@ cmd()
     local nodes=()
     local reverse="false"
     local dryrun="false"
+    OPTIND=1
     while getopts "dvriacpsn:" opt; do
         case $opt in
             d) dryrun="true" ;;
@@ -77,18 +78,17 @@ cmd()
     for node in "${nodes[@]}" ; do
         nodes_logs[$node]="$(mktemp -u /tmp/cmd_${node}.XXXX)"
         if [ "x$dryrun" = "xfalse" ] ; then
-            remote_run $node "$@" >${nodes_logs[$node]} 2>&1 &
+            ssh -o LogLevel=quiet $node "$(typeset -f $1 || echo true ); VERBOSE=$VERBOSE; $@" >${nodes_logs[$node]} 2>&1 &
         else
-            echo remote_run $node "$@" >${nodes_logs[$node]} 2>&1 &
+            echo "ssh -o LogLevel=quiet $node $@"
         fi
         nodes_pids[$node]=$!
     done
     for node in "${nodes[@]}" ; do
-        [ "x$verbose" != "xtrue" ] || printf "\n### $node: $@"
         wait ${nodes_pids[$node]}
         nodes_rets[$node]=$?
-        [ "x$verbose" != "xtrue" ] || printf " # ${nodes_rets[$node]}\n"
-        cat ${nodes_logs[$node]} 2>/dev/null && rm -f ${nodes_logs[$node]}
+        [ "x$verbose" != "xtrue" ] || printf "%s | %s | %s\n" "$node" "${nodes_rets[$node]}" "$(cat ${nodes_logs[$node]} 2>/dev/null)"
+        rm -f ${nodes_logs[$node]}
     done
     local r=0
     for node in "${nodes[@]}" ; do

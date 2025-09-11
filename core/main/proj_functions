@@ -56,7 +56,7 @@ _hex_exec()
             gcmd+="(unknown)"
         fi
     fi
-    influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,gpid=$gpid,pusr=$pusr,pcmd=$pcmd,ppid=$PPID,usr=$usr,pid=$pid cmd=\"$cmd $@\""
+    # influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,gpid=$gpid,pusr=$pusr,pcmd=$pcmd,ppid=$PPID,usr=$usr,pid=$pid cmd=\"$cmd $@\""
 
     if echo "$cmd" | grep -q "health_.*_check$" ; then
         local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
@@ -69,22 +69,23 @@ _hex_exec()
                 local last_chk="true"
             fi
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"checking\""
-            influx_event "${query},detail=\"$cmd\""
+            # influx_event "${query},detail=\"$cmd\""
             if [ -e $runtime -a "x$last_chk" = "xtrue" ] ; then
                 ret=$(cat $runtime 2>/dev/null | jq -r .ERROR_CODE 2>/dev/null)
                 return ${ret:-0}
             else
-                local check_json="$(VERBOSE=1 is_checking $cmd)"
+                local checking_detected="$(VERBOSE=1 is_checking $cmd)"
                 local log="${srv}-${HOSTNAME}-$(date +%s)-$(mktemp -u XXXX)"
                 local log_pth="log/$log"
                 local log_url=
                 rm -f /tmp/$log
-                if [ "x$MANNER" != "xforce" -a "x$check_json" != "x" ] ; then
-                    local node=$(echo $check_json | jq -r .node)
-                    local service=$(echo $check_json | jq -r .service)
-                    local elaps=$(echo $check_json | jq -r .elaps)
-                    query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"checking returns the last result due to $service($elaps) check by $node\""
-                    influx_event "${query},detail=\"$cmd\""
+                if [ "x$MANNER" != "xforce" -a "x$checking_detected" != "x" ] ; then
+                    local node=$(echo $checking_detected | cut -d"|" -f1 | xargs)
+                    local cmd=$(echo $checking_detected | cut -d"|" -f3 | cut -d"," -f1 | xargs)
+                    local pid=$(echo $checking_detected | cut -d"|" -f3 | cut -d"," -f2)
+                    local elaps=$(echo $checking_detected | cut -d"|" -f3 | cut -d"," -f3)
+                    query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"checking by $node\""
+                    influx_event "${query},detail=\"$cmd (pid:$pid, elaps:$elaps) by $node\""
                     ret=$(cat $runtime 2>/dev/null | jq -r .ERROR_CODE 2>/dev/null)
                     return ${ret:-0}
                 else
@@ -98,16 +99,17 @@ _hex_exec()
         fi
     elif echo "$cmd" | grep -q "health_.*_repair$" ; then
         local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/^_health_//" -e "s/_auto_repair$//" -e "s/_repair$//")
-        local repair_json="$(VERBOSE=1 is_repairing)"
+        local repair_detected="$(VERBOSE=1 is_repairing)"
         local log="${srv}-${HOSTNAME}-$(date +%s)-$(mktemp -u XXXX)"
         local log_pth="log/$log"
         rm -f /tmp/$log
-        if [ "x$MANNER" != "xforce" -a "x$repair_json" != "x" ] ; then
-            local node=$(echo $repair_json | jq -r .node)
-            local service=$(echo $repair_json | jq -r .service)
-            local elaps=$(echo $repair_json | jq -r .elaps)
-            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing skipped due to $service($elaps) repairing by $node\""
-            influx_event "${query},detail=\"$cmd\""
+        if [ "x$MANNER" != "xforce" -a "x$repair_detected" != "x" ] ; then
+            local node=$(echo $repair_detected | cut -d"|" -f1 | xargs)
+            local cmd=$(echo $repair_detected | cut -d"|" -f3 | cut -d"," -f1 | xargs)
+            local pid=$(echo $repair_detected | cut -d"|" -f3 | cut -d"," -f2)
+            local elaps=$(echo $repair_detected | cut -d"|" -f3 | cut -d"," -f3)
+            query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing by $node\""
+            influx_event "${query},detail=\"$cmd (pid:$pid, elaps:$elaps) by $node\""
             return 1
         else
             trap _hex_exec_abort_repairing INT EXIT
