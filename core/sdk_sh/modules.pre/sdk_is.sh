@@ -142,10 +142,10 @@ is_node_checking()
 
 is_repairing()
 {
-    local regex_flg=
-    [ "$VERBOSE" = "1" ] || regex_flg="-q"
+    local flg=
+    [ "$VERBOSE" != "1" ] || flg="-v"
 
-    if cubectl node exec -r control -pn "$HEX_SDK -v is_node_repairing | grep true" | grep $regex_flg true ; then
+    if cube_cluster_ready && cmd -c "$HEX_SDK $flg is_node_repairing" ; then
         return 0
     else
         return 1
@@ -154,12 +154,12 @@ is_repairing()
 
 is_checking()
 {
-    local cmd=$1
-    [ "x$cmd" != "x" ] || Error "missing cmd"
-    local regex_flg=
-    [ "$VERBOSE" = "1" ] || regex_flg="-q"
+    local command=$1
+    [ "x$command" != "x" ] || Error "missing command"
+    local flg=
+    [ "$VERBOSE" != "1" ] || flg="-v"
 
-    if cubectl node exec -r control -pn "$HEX_SDK -v is_node_checking $cmd | grep true" | grep $regex_flg true ; then
+    if cube_cluster_ready && cmd -c "$HEX_SDK $flg is_node_checking" ; then
         return 0
     else
         return 1
@@ -173,7 +173,7 @@ is_sshable()
 
 is_cluster_rolling_upgrade()
 {
-    if [ $(cubectl node exec -pn hex_cli -c firmware list | grep -i active | sort -u | wc -l) -gt 1 ] ; then
+    if [ $($HEX_SDK cmd "hex_cli -c firmware list" | grep -i active | sort -u | wc -l) -gt 1 ] ; then
         if ! cube_cluster_ready ; then
             return 0
         fi
@@ -183,7 +183,7 @@ is_cluster_rolling_upgrade()
 
 is_node_rolling_upgrade()
 {
-    if [ $(cubectl node exec -pn hex_cli -c firmware list | grep -i active | sort -u | wc -l) -gt 1 ] ; then
+    if [ $($HEX_SDK cmd "hex_cli -c firmware list" | grep -i active | sort -u | wc -l) -gt 1 ] ; then
         if ! cube_node_ready ; then
             return 0
         fi
@@ -195,7 +195,7 @@ is_vip_active()
 {
     local ret=0
     for i in {1..5} ; do
-        if cubectl node exec -pn "pcs resource status vip 2>/dev/null" | sort -u | grep -q "vip.*Started" ; then
+        if $HEX_SDK cmd -c "pcs resource status vip 2>/dev/null" | sort -u | grep -q "vip.*Started" ; then
             sleep 1
         else
             ret=1 && break

@@ -13,7 +13,7 @@ _influx()
     local flag="-database $db"
 
     if echo "$@" | grep -q -i insert ; then
-        nohup cubectl node exec -r control -pn "$INFLUX $flag -host \$HOSTNAME -execute '$@'" >/dev/null 2>&1 &
+        nohup $HEX_SDK cmd -c "$INFLUX $flag -host \$HOSTNAME -execute '$@'" >/dev/null 2>&1 &
     else
         if [ "x$FORMAT" = "xjson" ] ; then
             flag+=" -format json -pretty"

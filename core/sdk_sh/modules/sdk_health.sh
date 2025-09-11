@@ -1365,7 +1365,8 @@ health_ceph_mds_check()
     fi
     let "online = $active + $standbys + $hotstandbys"
 
-    ERR_LOG="$HEX_SDK cmd ceph -s"
+    ERR_LOG+="`$CEPH fs status`\n"
+    ERR_LOG+="`cubectl node exec -p -- \"mountpoint -- $CEPHFS_STORE_DIR | grep mountpoint\"`\n"
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
     elif [ $(cubectl node exec -pn -- "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
@@ -1384,8 +1385,6 @@ health_ceph_mds_check()
     rmdir $nfs_dir
 
     ERR_MSG+="`$CEPH health detail`"
-    ERR_MSG+="`cubectl node exec -p -- \"mountpoint -- $CEPHFS_STORE_DIR | grep mountpoint\"`\n"
-    ERR_MSG+="`$CEPH fs status`\n"
     _health_fail_log
 }
 

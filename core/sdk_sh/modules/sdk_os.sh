@@ -713,13 +713,7 @@ os_image_import_with_attrs()
 
     local flags="--project-domain $domain --project $tenant --$visibility"
 
-    if [ "$type" == "ide" ] ; then
-        os_ide_image_import "$dir" "$file" "$name" "$flags" "$pool"
-    elif [ "$type" == "efi" ] ; then
-        os_efi_image_import "$dir" "$file" "$name" "$flags" "$pool"
-    else
-        os_image_import "$dir" "$file" "$name" "$flags" "$pool"
-    fi
+    os_image_import "$dir" "$file" "$name" "$flags" "$pool"
 }
 
 _os_image_distro_ver()
@@ -787,14 +781,17 @@ os_image_import()
         local img_dir=$(dirname $img_raw)
         echo "[$(date +"%T")] Converting image to RAW format ... "
         if virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null ; then
-            echo "mv -f ${img_dir}/${file%.*}-* $img_raw"
-            mv -f ${img_dir}/${file%.*}-* $img_raw
-            if grep -i "os firmware" ${img_dir}/${file%.*}.xml 2>/dev/null | grep -q -i efi ; then
-                properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
+            if [ -e ${img_dir}/${file%.*}.xml ] ; then
+                mv -f ${img_dir}/${file%.*}-* $img_raw
+                if grep -i "os firmware" ${img_dir}/${file%.*}.xml 2>/dev/null | grep -q -i efi ; then
+                    properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
+                else
+                    properties+=" --property hw_firmware_type=bios"
+                fi
             else
-                properties+=" --property hw_firmware_type=bios"
+                qemu-img convert -p -O raw "$IMG" "$img_raw" 2>/dev/null
             fi
-            echo "rm -f ${img_dir}/${file%.*}.xml"
+            rm -f ${img_dir}/${file%.*}.xml
         else
             qemu-img convert -p -O raw "$IMG" "$img_raw" 2>/dev/null
         fi
@@ -880,42 +877,6 @@ os_extpack_image_import()
 
     $OPENSTACK image list
     os_extpack_image_umount $dir
-}
-
-# params:
-# $1: file dir (required)
-# $2: file name  (required)
-# $3: image name (required)
-os_ide_image_import()
-{
-    local dir=$1
-    local file=$2
-    local name=$3
-    local flags=${4:---public}
-    local pool=${5:-glance-images}
-
-    os_image_import "$dir" "$file" "$name" "$flags" "$pool" "--property hw_disk_bus=ide"
-}
-
-# params:
-# $1: file dir (required)
-# $2: file name  (required)
-# $3: image name (required)
-os_efi_image_import()
-{
-    local dir=$1
-    local file=$2
-    local name=$3
-    local flags=${4:---public}
-    local pool=${5:-glance-images}
-    local properties="--property hw_disk_bus=sata"
-    properties+=" --property hw_firmware_type=uefi"
-    properties+=" --property hw_machine_type=q35"
-    properties+=" --property os_secure_boot=optional"
-    properties+=" --property hw_vif_model=e1000"
-    properties+=" --property hw_input_bus=virtio"
-
-    os_image_import "$dir" "$file" "$name" "$flags" "$pool" "$properties"
 }
 
 os_image_import_list()
