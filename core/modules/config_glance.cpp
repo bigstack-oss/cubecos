@@ -6,6 +6,7 @@
 #include <cube/cluster.h>
 #include <cube/config_file.h>
 #include <cube/systemd_util.h>
+#include <fcntl.h>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
@@ -214,7 +215,12 @@ SetupRbdPools()
 static bool
 SetupGlanceExportSyncCronJob(const int rp)
 {
-    FILE* fout = fopen(EXPORT_SYNC, "w");
+    int fd = open(EXPORT_SYNC, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        HexLogError("Unable to open file %s", EXPORT_SYNC);
+        return false;
+    }
+    FILE* fout = fdopen(fd, "w");
     if (!fout) {
         HexLogError("Unable to write %s export sync-er: %s", USER, EXPORT_SYNC);
         return false;
