@@ -1,4 +1,4 @@
-// HEX SDK
+// CUBE SDK
 
 #include <set>
 #include <map>

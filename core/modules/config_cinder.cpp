@@ -1,5 +1,6 @@
-// CUBE
+// CUBE SDK
 
+#include "include/constant.h"
 #include "include/role_cubesys.h"
 #include "mysql_util.h"
 #include <cube/cluster.h>
@@ -64,7 +65,6 @@ static const char DBPASS[] = "hhyCDG3IdNmcQaJo";
 
 #define BUILTIN_STORAGE_BACKEND "ceph"
 #define BUILTIN_STORAGE_HOST "cube"
-#define BUILTIN_VOLUME_TYPE "CubeStorage"
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(CTRL_IP);
@@ -251,7 +251,7 @@ IsDatabaseSetup()
 static bool
 SetupDatabase()
 {
-    if (MysqlUtilIsDbExist("cinder")) {
+    if (IsDatabaseSetup()) {
         return true;
     }
 
@@ -284,7 +284,7 @@ SetupRbdPools()
  * Initiate the structure of the config.
  */
 static void
-InitConfig(Configs& mainConfig)
+InitConfig(Configs& config)
 {
     std::vector<std::string> sections = std::vector<std::string> {
         "DEFAULT",
@@ -321,7 +321,7 @@ InitConfig(Configs& mainConfig)
         "vault",
     };
 
-    SetupConfig(sections, mainConfig);
+    SetupConfig(sections, config);
 }
 
 /**
@@ -415,7 +415,6 @@ SetAuth(
 {
     config["DEFAULT"]["auth_strategy"] = "keystone";
 
-    config["keystone_authtoken"].clear();
     config["keystone_authtoken"]["auth_type"] = "password";
     config["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
     config["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
@@ -796,7 +795,7 @@ Commit(bool modified, int dryLevel)
 
     if (!s_bSetup) {
         // set up the service (services must be running)
-        SetupService(s_cubeDomain.newValue(), cinderPass);
+        SetupService(s_cubeDomain, cinderPass);
     }
 
     // migrate db
@@ -962,9 +961,9 @@ ClusterStartMain(int argc, char** argv)
 
 CONFIG_MODULE(cinder, Init, Parse, 0, 0, Commit);
 // startup sequence
+CONFIG_REQUIRES(cinder, keystone);
 CONFIG_REQUIRES(cinder, memcache);
 CONFIG_REQUIRES(cinder, libvirtd);
-CONFIG_REQUIRES(cinder, keystone);
 
 CONFIG_MIGRATE(cinder, MAKRER_POOL);
 CONFIG_MIGRATE(cinder, CONF_DIR);

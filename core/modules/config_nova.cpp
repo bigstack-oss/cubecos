@@ -1,4 +1,4 @@
-// CUBE
+// CUBE SDK
 
 #include <sys/sysinfo.h>
 

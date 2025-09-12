@@ -1,4 +1,4 @@
-// HEX SDK
+// CUBE SDK
 
 #include <unistd.h>
 #include <pthread.h>

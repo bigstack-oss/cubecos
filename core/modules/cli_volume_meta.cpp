@@ -1,4 +1,4 @@
-// HEX SDK
+// CUBE SDK
 
 #include <unistd.h>  // gethostname()
 #include <climits> // HOST_NAME_MAX

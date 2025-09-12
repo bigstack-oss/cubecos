@@ -1,3 +1,5 @@
+// CUBE SDK
+
 #ifndef CLI_NTP_H
 #define CLI_NTP_H
 

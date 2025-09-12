@@ -1,4 +1,4 @@
-// HEX SDK
+// CUBE SDK
 
 #include <hex/log.h>
 #include <hex/yml_util.h>

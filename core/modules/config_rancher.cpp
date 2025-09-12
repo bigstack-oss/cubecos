@@ -1,3 +1,5 @@
+// CUBE SDK
+
 #include <hex/log.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>

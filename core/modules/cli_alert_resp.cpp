@@ -1,4 +1,4 @@
-// HEX SDK
+// CUBE SDK
 
 #include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"

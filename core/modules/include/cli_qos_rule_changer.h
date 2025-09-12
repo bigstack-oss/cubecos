@@ -1,4 +1,4 @@
-// HEX SDK
+// CUBE SDK
 
 #ifndef CLI_QOS_RULE_CHANGER_H
 #define CLI_QOS_RULE_CHANGER_H

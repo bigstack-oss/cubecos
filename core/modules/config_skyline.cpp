@@ -1,4 +1,4 @@
-// CUBE
+// CUBE SDK
 
 #include "include/role_cubesys.h"
 #include "mysql_util.h"

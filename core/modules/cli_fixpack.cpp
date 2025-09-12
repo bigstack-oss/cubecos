@@ -1,4 +1,4 @@
-// HEX SDK
+// CUBE SDK
 
 #include <hex/config_module.h>  // CONFIG_EXIT_NEED_REBOOT, ...
 #include <hex/cli_module.h>

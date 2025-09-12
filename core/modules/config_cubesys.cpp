@@ -1,4 +1,4 @@
-// CUBE
+// CUBE SDK
 
 #include <limits.h>
 #include <unistd.h>

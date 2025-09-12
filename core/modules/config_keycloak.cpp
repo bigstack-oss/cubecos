@@ -1,3 +1,5 @@
+// CUBE SDK
+
 #include <unistd.h>
 #include <sstream>
 #include <hex/log.h>

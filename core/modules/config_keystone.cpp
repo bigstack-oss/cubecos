@@ -1,4 +1,5 @@
-// CUBE
+// CUBE SDK
+
 #include <hex/log.h>
 #include <hex/pidfile.h>
 #include <hex/filesystem.h>

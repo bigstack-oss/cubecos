@@ -1,53 +1,39 @@
-// CUBE
+// CUBE SDK
 
-#include <hex/log.h>
-#include <hex/pidfile.h>
-#include <hex/filesystem.h>
-#include <hex/process.h>
-#include <hex/process_util.h>
-
+#include "include/constant.h"
+#include "include/role_cubesys.h"
+#include "mysql_util.h"
+#include <cube/cluster.h>
+#include <cube/config_file.h>
+#include <cube/systemd_util.h>
+#include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
-#include <hex/config_global.h>
 #include <hex/dryrun.h>
-
-#include <cube/config_file.h>
-#include <cube/cluster.h>
-#include <cube/systemd_util.h>
-
-#include "mysql_util.h"
-#include "include/role_cubesys.h"
+#include <hex/filesystem.h>
+#include <hex/log.h>
+#include <hex/pidfile.h>
+#include <hex/process.h>
+#include <hex/process_util.h>
 
 static const char USER[] = "glance";
 static const char GROUP[] = "glance";
 static const char VOLUME[] = "glance-images";
 
 // glance config files
-#define DEF_EXT     ".def"
-#define GA_CONF     "/etc/glance/glance-api.conf"
+#define GA_CONF "/etc/glance/glance-api.conf"
 
 static const char GA_NAME[] = "openstack-glance-api";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
+static const char OSCMD[] = "/usr/bin/openstack";
 
 static const char USERPASS[] = "0ZsvkS1bHXYsywTx";
 static const char DBPASS[] = "g6CEJCNFT6ufPY22";
 
-static const char OSCMD[] = "/usr/bin/openstack";
-
 static const char EXPORT_SYNC[] = "/etc/cron.d/glance_export_sync";
 
-static Configs apiCfg;
-
-static bool s_bSetup = true;
-static bool s_bCubeModified = false;
-static bool s_bMqModified = false;
-
-static bool s_bDbPassChanged = false;
-static bool s_bConfigChanged = false;
-static bool s_bEndpointChanged = false;
-
-static CubeRole_e s_eCubeRole;
+#define BUILTIN_STORE "cube"
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -72,6 +58,8 @@ CONFIG_TUNING_SPEC_BOOL(CUBESYS_SALTKEY);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
 CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
+CONFIG_TUNING_SPEC_STR(CINDER_STORAGE_BACKEND);
+CONFIG_TUNING_SPEC_STR(CINDER_VOLUME_TYPE_DEFAULT);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, GLANCE_ENABLED);
@@ -86,227 +74,25 @@ PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
 PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 2);
+PARSE_TUNING_X_STR_ARRAY(s_storageBackends, CINDER_STORAGE_BACKEND, 3);
+PARSE_TUNING_X_STR(s_volumeTypeDefault, CINDER_VOLUME_TYPE_DEFAULT, 3);
+
+static bool s_bSetup = true;
+static bool s_bCubeModified = false;
+static bool s_bMqModified = false;
+static bool s_bCinderModified = false;
+
+static bool s_bDbPassChanged = false;
+static bool s_bConfigChanged = false;
+static bool s_bEndpointChanged = false;
+
+static CubeRole_e s_eCubeRole;
+static Configs config;
 
 static bool
-CronGlanceExportSync(int rp)
-{
-    if(IsControl(s_eCubeRole)) {
-        FILE *fout = fopen(EXPORT_SYNC, "w");
-        if (!fout) {
-            HexLogError("Unable to write %s export sync-er: %s", USER, EXPORT_SYNC);
-            return false;
-        }
-
-        fprintf(fout, "*/5 * * * * root " HEX_SDK " os_glance_export_sync %d\n", rp);
-        fclose(fout);
-
-        if(HexSetFileMode(EXPORT_SYNC, "root", "root", 0644) != 0) {
-            HexLogError("Unable to set file %s mode/permission", EXPORT_SYNC);
-            return false;
-        }
-    }
-    else {
-        unlink(EXPORT_SYNC);
-    }
-
-    return true;
-}
-
-// depends on mysqld (called inside commit())
-static bool
-SetupCheck()
-{
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    if(!MysqlUtilIsDbExist("glance")) {
-        if (!MysqlUtilRunSQL("CREATE DATABASE glance") ||
-            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'glance_dbpass'") ||
-            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'glance_dbpass'")) {
-            return false;
-        }
-
-        s_bSetup = false;
-    }
-
-    return true;
-}
-
-// Setup should run after glance services are running.
-static bool
-SetupGlance(std::string domain, std::string password)
-{
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    HexLogInfo("Setting up glance");
-
-    // Populate the Image service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"glance-manage db_sync\" %s", USER);
-
-    // prepare env settings
-    std::string env = ". " + std::string(OPENRC) + " &&";
-
-    // Create the glance service credentials
-    HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s glance",
-                         env.c_str(), OSCMD, domain.c_str(), password.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user glance admin", env.c_str(), OSCMD);
-
-    // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name %s "
-                         "--description \"OpenStack Image\" image",
-                         env.c_str(), OSCMD, USER);
-
-    // Create the glance storage
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", VOLUME);
-    HexUtilSystemF(0, 0, "timeout 10 ceph osd pool set %s bulk true", VOLUME);
-
-    return true;
-}
-
-static bool
-UpdateEndpoint(std::string endpoint, std::string external, std::string region)
-{
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    HexLogInfo("Updating glance endpoint");
-
-    std::string pub = "http://" + external + ":9292";
-    std::string adm = "http://" + endpoint + ":9292";
-    std::string intr = "http://" + endpoint + ":9292";
-
-    HexUtilSystemF(0, 0, HEX_SDK " os_endpoint_update %s %s %s %s %s",
-                         "image", region.c_str(), pub.c_str(), adm.c_str(), intr.c_str());
-
-    return true;
-}
-
-static bool
-UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::string ctrlAddrs)
-{
-    if (IsControl(s_eCubeRole)) {
-        std::string dbconn = RabbitMqServers(ha, sharedId, password, ctrlAddrs);
-        apiCfg["DEFAULT"]["transport_url"] = dbconn;
-        apiCfg["DEFAULT"]["rpc_response_timeout"] = "1200";
-
-        if (ha) {
-            apiCfg["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
-            apiCfg["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
-            apiCfg["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
-            apiCfg["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
-        }
-    }
-
-    return true;
-}
-
-static bool
-UpdateDbConn(std::string sharedId, std::string password)
-{
-    std::string dbconn = "mysql+pymysql://glance:";
-    dbconn += password;
-    dbconn += "@";
-    dbconn += sharedId;
-    dbconn += "/glance";
-
-    apiCfg["database"]["connection"] = dbconn;
-
-    return true;
-}
-
-static bool
-UpdateMyIp(std::string myip)
-{
-    apiCfg["DEFAULT"]["bind_host"] = myip;
-    return true;
-}
-
-static bool
-UpdateSharedId(std::string sharedId)
-{
-    apiCfg["keystone_authtoken"]["service_token_roles_required"] = "false";
-    apiCfg["keystone_authtoken"]["service_token_roles"] = "service";
-    apiCfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
-    apiCfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
-    apiCfg["keystone_authtoken"]["memcached_servers "] = sharedId + ":11211";
-    apiCfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
-
-    return true;
-}
-
-static bool
-UpdateCfg(std::string domain, std::string password)
-{
-    // api default configuration
-
-    apiCfg["database"].erase("sqlite_db");
-    apiCfg["keystone_authtoken"].clear();
-    apiCfg["keystone_authtoken"]["auth_type"] = "password";
-    apiCfg["keystone_authtoken"]["project_domain_name"] = domain.c_str();
-    apiCfg["keystone_authtoken"]["user_domain_name"] = domain.c_str();
-    apiCfg["keystone_authtoken"]["project_name"] = "service";
-    apiCfg["keystone_authtoken"]["username"] = "glance";
-    apiCfg["keystone_authtoken"]["password"] = password.c_str();
-    apiCfg["paste_deploy"]["flavor"] = "keystone";
-    apiCfg["paste_deploy"]["config_file"] = "/etc/glance/glance-api-paste.ini";
-    apiCfg["glance_store"]["stores"] = "rbd,http";
-    apiCfg["glance_store"]["default_store"] = "rbd";
-    apiCfg["glance_store"]["rbd_store_user"] = USER;
-    apiCfg["glance_store"]["rbd_store_pool"] = VOLUME;
-    apiCfg["glance_store"]["rbd_store_ceph_conf"] = "/etc/ceph/ceph.conf";
-    apiCfg["glance_store"]["rbd_store_chunk_size"] = "8";
-    apiCfg["DEFAULT"]["show_image_direct_url"] = "true";
-    apiCfg["DEFAULT"]["show_multiple_locations"] = "true";
-    apiCfg["DEFAULT"]["log_dir"] = "/var/log/glance";
-    apiCfg["oslo_messaging_notifications"]["driver"] = "messagingv2";
-
-    if (IsControl(s_eCubeRole)) {
-        std::string workers = std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole)));
-        apiCfg["DEFAULT"]["workers"] = workers;
-    }
-
-    return true;
-}
-
-static bool
-Init()
-{
-    if (!LoadConfig(GA_CONF DEF_EXT, SB_SEC_RFMT, '=', apiCfg)) {
-        HexLogError("failed to load glance api config file %s", GA_CONF);
-        return false;
-    }
-
-    return true;
-}
-
-static bool
-Parse(const char *name, const char *value, bool isNew)
-{
-    bool r = true;
-
-    TuneStatus s = ParseTune(name, value, isNew);
-    if (s == TUNE_INVALID_NAME) {
-        HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
-    }
-    else if (s == TUNE_INVALID_VALUE) {
-        HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
-        r = false;
-    }
-    return r;
-}
-
-static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
-    return true;
-}
-
-static bool
-ParseRabbitMQ(const char *name, const char *value, bool isNew)
-{
-    ParseTune(name, value, isNew, 2);
     return true;
 }
 
@@ -317,10 +103,45 @@ NotifyCube(bool modified)
     s_eCubeRole = GetCubeRole(s_cubeRole);
 }
 
+static bool
+ParseRabbitMQ(const char* name, const char* value, bool isNew)
+{
+    ParseTune(name, value, isNew, 2);
+    return true;
+}
+
 static void
 NotifyMQ(bool modified)
 {
     s_bMqModified = IsModifiedTune(2);
+}
+
+static bool
+ParseCinder(const char* name, const char* value, bool isNew)
+{
+    ParseTune(name, value, isNew, 3);
+    return true;
+}
+
+static void
+NotifyCinder(bool modified)
+{
+    s_bCinderModified = IsModifiedTune(3);
+}
+
+static bool
+Parse(const char* name, const char* value, bool isNew)
+{
+    bool r = true;
+
+    TuneStatus s = ParseTune(name, value, isNew);
+    if (s == TUNE_INVALID_NAME) {
+        HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
+    } else if (s == TUNE_INVALID_VALUE) {
+        HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
+        r = false;
+    }
+    return r;
 }
 
 static bool
@@ -331,14 +152,379 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
+    s_bDbPassChanged = s_dbPass.modified()
+        || s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bMqModified | s_bCubeModified |
-               G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
+    s_bConfigChanged = modified
+        || s_bCinderModified
+        || s_bMqModified
+        || s_bCubeModified
+        || G_MOD(MGMT_ADDR)
+        || G_MOD(SHARED_ID);
 
-    s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
+    s_bEndpointChanged = s_bCubeModified
+        || G_MOD(SHARED_ID)
+        || G_MOD(EXTERNAL);
 
-    return s_bDbPassChanged | s_bConfigChanged | s_bEndpointChanged;
+    return s_bDbPassChanged || s_bConfigChanged || s_bEndpointChanged;
+}
+
+/**
+ * Check if the database is set up for Glance.
+ */
+static bool
+IsDatabaseSetup()
+{
+    return MysqlUtilIsDbExist("glance");
+}
+
+/**
+ * Set up the database for Glance.
+ */
+static bool
+SetupDatabase()
+{
+    if (IsDatabaseSetup()) {
+        return true;
+    }
+
+    if (!MysqlUtilRunSQL("CREATE DATABASE glance")
+        || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'glance_dbpass'")
+        || !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'glance_dbpass'")) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Set up the Ceph RBD pool for the built-in Glance store.
+ */
+static void
+SetupRbdPools()
+{
+    // create the pool for glance store
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", VOLUME);
+    HexUtilSystemF(0, 0, "timeout 10 ceph osd pool set %s bulk true", VOLUME);
+}
+
+/**
+ * Set up the cron job to clean up the glance directory in CephFS.
+ */
+static bool
+SetupGlanceExportSyncCronJob(const int rp)
+{
+    FILE* fout = fopen(EXPORT_SYNC, "w");
+    if (!fout) {
+        HexLogError("Unable to write %s export sync-er: %s", USER, EXPORT_SYNC);
+        return false;
+    }
+
+    fprintf(fout, "*/5 * * * * root " HEX_SDK " os_glance_export_sync %d\n", rp);
+    fclose(fout);
+
+    if (HexSetFileMode(EXPORT_SYNC, "root", "root", 0644) != 0) {
+        HexLogError("Unable to set file %s mode/permission", EXPORT_SYNC);
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Initiate the structure of the config.
+ */
+static void
+InitConfig(Configs& config)
+{
+    std::vector<std::string> sections = std::vector<std::string> {
+        "DEFAULT",
+        "barbican",
+        "barbican_service_user",
+        "cinder",
+        "cors",
+        "database",
+        "file",
+        "glance.store.http.store",
+        "glance.store.rbd.store",
+        "glance.store.s3.store",
+        "glance.store.swift.store",
+        "glance.store.vmware_datastore.store",
+        "glance_store",
+        "healthcheck",
+        "image_format",
+        "key_manager",
+        "keystone_authtoken",
+        "oslo_concurrency",
+        "oslo_messaging_amqp",
+        "oslo_messaging_kafka",
+        "oslo_messaging_notifications",
+        "oslo_messaging_rabbit",
+        "oslo_middleware",
+        "oslo_policy",
+        "oslo_reports",
+        "paste_deploy",
+        "profiler",
+        "store_type_location_strategy",
+        "task",
+        "taskflow_executor",
+        "vault",
+        "wsgi",
+    };
+
+    SetupConfig(sections, config);
+}
+
+/**
+ * Set the defaults.
+ */
+static void
+SetDefaults(Configs& config)
+{
+    config["DEFAULT"]["show_image_direct_url"] = "true";
+    config["DEFAULT"]["show_multiple_locations"] = "true";
+    config["DEFAULT"]["workers"] = std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole)));
+
+    config["oslo_concurrency"]["lock_path"] = "/var/lib/glance/locks";
+
+    config["oslo_reports"]["log_dir"] = "/var/log/glance";
+
+    config["paste_deploy"]["flavor"] = "keystone";
+    config["paste_deploy"]["config_file"] = "/etc/glance/glance-api-paste.ini";
+}
+
+/**
+ * Set the endpoint of the process.
+ */
+static void
+SetEndpoint(Configs& config, const std::string myIp)
+{
+    config["DEFAULT"]["bind_host"] = myIp;
+}
+
+/**
+ * Set the connection to the database.
+ */
+static void
+SetDatabaseConnection(
+    Configs& config,
+    const std::string sharedId,
+    const std::string dbPass)
+{
+    std::stringstream uri;
+    uri << "mysql+pymysql://glance:" << dbPass << "@" << sharedId << "/glance";
+
+    config["database"]["connection"] = uri.str();
+}
+
+/**
+ * Set the connection to the worker queue.
+ */
+static void
+SetWorkerQueue(
+    Configs& config,
+    const bool isHa,
+    const std::string sharedId,
+    const std::string mqPass,
+    const std::string ctrlAddrs)
+{
+    std::string dbconn = RabbitMqServers(isHa, sharedId, mqPass, ctrlAddrs);
+    config["DEFAULT"]["transport_url"] = dbconn;
+    config["DEFAULT"]["rpc_response_timeout"] = "1200";
+
+    if (isHa) {
+        config["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
+        config["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
+        config["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
+        config["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
+    }
+}
+
+/**
+ * Set the connection to the notification queue.
+ */
+static void
+SetNotificationQueue(
+    Configs& config,
+    const std::string sharedId)
+{
+    config["oslo_messaging_notifications"]["driver"] = "messagingv2";
+    config["oslo_messaging_notifications"]["transport_url"] = std::string("kafka://") + sharedId + ":9095";
+}
+
+/**
+ * Set the auth.
+ */
+static void
+SetAuth(
+    Configs& config,
+    const std::string sharedId,
+    const std::string domain,
+    const std::string glancePass)
+{
+    config["keystone_authtoken"]["auth_type"] = "password";
+    config["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
+    config["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
+    config["keystone_authtoken"]["memcached_servers "] = sharedId + ":11211";
+    config["keystone_authtoken"]["project_domain_name"] = domain;
+    config["keystone_authtoken"]["project_name"] = "service";
+    config["keystone_authtoken"]["user_domain_name"] = domain;
+    config["keystone_authtoken"]["username"] = "glance";
+    config["keystone_authtoken"]["password"] = glancePass;
+    config["keystone_authtoken"]["service_token_roles"] = "service";
+    config["keystone_authtoken"]["service_token_roles_required"] = "false";
+}
+
+/**
+ * Set Cinder store defaults.
+ */
+static void
+SetCinderInfo(
+    Configs& config,
+    const bool useMultipath,
+    const bool enforceMultipath)
+{
+    config["cinder"]["cinder_use_multipath"] = useMultipath ? "true" : "false";
+    config["cinder"]["cinder_enforce_multipath"] = enforceMultipath ? "true" : "false";
+    config["cinder"]["cinder_state_transition_timeout"] = "1200";
+}
+
+/**
+ * Set store http:http.
+ */
+static void
+SetHttpStore(Configs& config)
+{
+    config.emplace("http", ConfigList {});
+    config["http"]["store_description"] = "\"http\"";
+}
+
+/**
+ * Set the built-in store cube:rbd.
+ */
+static void
+SetCubeStore(Configs& config)
+{
+    config.emplace(BUILTIN_STORE, ConfigList {});
+    config[BUILTIN_STORE]["store_description"] = "\"Built-in Ceph RBD\"";
+    config[BUILTIN_STORE]["rbd_store_ceph_conf"] = "/etc/ceph/ceph.conf";
+    config[BUILTIN_STORE]["rbd_store_chunk_size"] = "8";
+    config[BUILTIN_STORE]["rbd_store_pool"] = VOLUME;
+    config[BUILTIN_STORE]["rbd_store_user"] = USER;
+}
+
+/**
+ * Set Cinder volume-backed stores.
+ */
+static void
+SetCinderStores(
+    Configs& config,
+    const std::vector<std::string>& cinderStores,
+    const std::string sharedId,
+    const std::string glancePass)
+{
+    for (std::vector<std::string>::const_iterator it = cinderStores.begin(); it != cinderStores.end(); it++) {
+        std::string volumeType = *it;
+        config.emplace(volumeType, ConfigList {});
+        config[volumeType]["store_description"] = "\"Cinder volume type " + volumeType + "\"";
+        config[volumeType]["cinder_store_auth_address"] = "http://" + sharedId + ":5000";
+        config[volumeType]["cinder_store_user_name"] = "glance";
+        config[volumeType]["cinder_store_password"] = glancePass;
+        config[volumeType]["cinder_store_project_name"] = "service";
+        config[volumeType]["cinder_volume_type"] = volumeType;
+    }
+}
+
+/**
+ * Set stores.
+ */
+static void
+SetStores(Configs& config,
+    const std::vector<std::string>& cinderStores,
+    const std::string defaultVolumeType)
+{
+    // enabled store
+    std::stringstream stores;
+    stores << "http:http" << "," << BUILTIN_STORE << ":rbd";
+    for (std::vector<std::string>::const_iterator it = cinderStores.begin(); it != cinderStores.end(); it++) {
+        stores << "," << *it << ":cinder";
+    }
+    config["DEFAULT"]["enabled_backends"] = stores.str();
+
+    // default store
+    if (defaultVolumeType.length() == 0 || defaultVolumeType == BUILTIN_VOLUME_TYPE) {
+        /**
+         * If built-ins are in use,
+         * set Glance to use its own built-in,
+         * glance-images Ceph RBD pool, instead.
+         */
+        config["glance_store"]["default_store"] = BUILTIN_STORE;
+    } else {
+        config["glance_store"]["default_store"] = defaultVolumeType;
+    }
+}
+
+/**
+ * Set up Glance service.
+ * The function should be run after Keystone service is running.
+ */
+static void
+SetupService(const std::string domain, const std::string userPass)
+{
+    HexLogInfo("Setting up glance");
+
+    // populate the glance service database
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"glance-manage db_sync\" %s", USER);
+
+    // prepare env settings
+    std::string env = ". " + std::string(OPENRC) + " &&";
+
+    // create the glance service credentials
+    HexUtilSystemF(
+        0,
+        0,
+        "%s %s user create --domain %s --password %s glance",
+        env.c_str(),
+        OSCMD,
+        domain.c_str(),
+        userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user glance admin", env.c_str(), OSCMD);
+
+    // create the service entity
+    HexUtilSystemF(
+        0,
+        0,
+        "%s %s service create --name %s --description \"OpenStack Image\" image",
+        env.c_str(),
+        OSCMD,
+        USER);
+}
+
+/**
+ * Set service endpoints.
+ */
+static void
+SetServiceEndpoints(
+    const std::string endpoint,
+    const std::string external,
+    const std::string region)
+{
+    HexLogInfo("Updating glance endpoint");
+
+    std::string publicUrl = "http://" + external + ":9292";
+    std::string adminUrl = "http://" + endpoint + ":9292";
+    std::string internalUrl = "http://" + endpoint + ":9292";
+
+    HexUtilSystemF(
+        0,
+        0,
+        "%s os_endpoint_update %s %s %s %s %s",
+        HEX_SDK,
+        "image",
+        region.c_str(),
+        publicUrl.c_str(),
+        adminUrl.c_str(),
+        internalUrl.c_str());
 }
 
 static bool
@@ -347,11 +533,11 @@ Commit(bool modified, int dryLevel)
     // todo: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
-    if (IsUndef(s_eCubeRole) || !CommitCheck(modified, dryLevel))
+    // we only run Glance services on control nodes
+    if (!IsControl(s_eCubeRole) || !CommitCheck(modified, dryLevel))
         return true;
 
-    bool enabled = IsControl(s_eCubeRole) && s_enabled;
-    std::string myip = G(MGMT_ADDR);
+    std::string myIp = G(MGMT_ADDR);
     std::string sharedId = G(SHARED_ID);
     std::string external = G(EXTERNAL);
 
@@ -359,41 +545,75 @@ Commit(bool modified, int dryLevel)
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass.newValue(), s_seed.newValue());
 
-    SetupCheck();
+    // set up the database
+    if (!IsDatabaseSetup()) {
+        s_bSetup = false;
+        SetupDatabase();
+    }
+
     if (!s_bSetup) {
         s_bDbPassChanged = true;
         s_bEndpointChanged = true;
     }
 
-    // 1. System Config
-    if (s_bDbPassChanged && IsControl(s_eCubeRole))
+    // configure the database
+    if (s_bDbPassChanged) {
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
-
-    // 2. Service Config
-    if (s_bConfigChanged) {
-        UpdateCfg(s_cubeDomain.newValue(), glancePass);
-        UpdateSharedId(sharedId);
-        UpdateMyIp(myip);
-        UpdateDbConn(sharedId, dbPass);
-        UpdateMqConn(s_ha, sharedId, mqPass, s_ctrlAddrs.newValue());
-
-        // write back to glance config files
-        WriteConfig(GA_CONF, SB_SEC_WFMT, '=', apiCfg);
-        CronGlanceExportSync(s_exportRp);
     }
 
-    // 3. Service Setup
-    if (!s_bSetup)
-        SetupGlance(s_cubeDomain.newValue(), glancePass);
+    // set up the Ceph RBD pools
+    if (!s_bSetup) {
+        SetupRbdPools();
+    }
+
+    // set up the cron job to clean up the glance directory in CephFS
+    if (s_bConfigChanged) {
+        SetupGlanceExportSyncCronJob(s_exportRp);
+    }
+
+    // configure the services
+    if (s_bConfigChanged) {
+        InitConfig(config);
+        SetDefaults(config);
+        SetEndpoint(config, myIp);
+        SetDatabaseConnection(config, sharedId, dbPass);
+        SetWorkerQueue(config, s_ha, sharedId, mqPass, s_ctrlAddrs);
+        SetNotificationQueue(config, sharedId);
+        SetAuth(config, sharedId, s_cubeDomain, glancePass);
+        SetCinderInfo(config, true, true);
+        SetHttpStore(config);
+        SetCubeStore(config);
+
+        std::vector<std::string> cinderStores;
+        std::transform(
+            s_storageBackends.begin(),
+            s_storageBackends.end(),
+            std::back_inserter(cinderStores),
+            [](const ConfigString& store) -> std::string {
+                return store;
+            });
+        SetCinderStores(config, cinderStores, sharedId, glancePass);
+        SetStores(config, cinderStores, s_volumeTypeDefault);
+
+        // write to glance config files
+        WriteConfig(GA_CONF, SB_SEC_WFMT, '=', config);
+    }
+
+    // set up the service
+    if (!s_bSetup) {
+        SetupService(s_cubeDomain, glancePass);
+    }
 
     // check for db migration
     HexUtilSystemF(0, 0, HEX_SDK " migrate_glance_db");
 
-    if (s_bEndpointChanged)
-        UpdateEndpoint(sharedId, external, s_cubeRegion.newValue());
+    // set service endpoints
+    if (s_bEndpointChanged) {
+        SetServiceEndpoints(sharedId, external, s_cubeRegion);
+    }
 
-    // 4. Service kickoff
-    SystemdCommitService(enabled, GA_NAME, true);
+    // start services
+    SystemdCommitService(s_enabled, GA_NAME, true);
 
     return true;
 }
@@ -412,18 +632,22 @@ RestartMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    bool enabled = IsControl(s_eCubeRole) && s_enabled;
-    SystemdCommitService(enabled, GA_NAME, true);
+    if (!IsControl(s_eCubeRole)) {
+        return EXIT_SUCCESS;
+    }
+    SystemdCommitService(s_enabled, GA_NAME, true);
 
     return EXIT_SUCCESS;
 }
 
-CONFIG_COMMAND_WITH_SETTINGS(restart_glance, RestartMain, RestartUsage);
-
-CONFIG_MODULE(glance, Init, Parse, 0, 0, Commit);
+CONFIG_MODULE(glance, 0, Parse, 0, 0, Commit);
 // startup sequence
+CONFIG_REQUIRES(glance, keystone);
 CONFIG_REQUIRES(glance, memcache);
+CONFIG_REQUIRES(glance, cinder);
 // extra tunings
 CONFIG_OBSERVES(glance, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(glance, rabbitmq, ParseRabbitMQ, NotifyMQ);
+CONFIG_OBSERVES(glance, cinder, ParseCinder, NotifyCinder);
 
+CONFIG_COMMAND_WITH_SETTINGS(restart_glance, RestartMain, RestartUsage);
