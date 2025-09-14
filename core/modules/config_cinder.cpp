@@ -811,6 +811,10 @@ Commit(bool modified, int dryLevel)
     std::stringstream enabledHostLine;
     enabledHostLine << BUILTIN_STORAGE_HOST << "@" << BUILTIN_STORAGE_BACKEND;
     for (std::vector<ConfigString>::const_iterator it = s_storageBackends.begin(); it != s_storageBackends.end(); it++) {
+        if (it->newValue().length() == 0) {
+            continue;
+        }
+
         enabledHostLine << "," << it->newValue() << "@" << it->newValue();
     }
     HexUtilSystemF(
