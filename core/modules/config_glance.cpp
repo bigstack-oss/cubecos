@@ -430,16 +430,19 @@ SetCinderStores(
     const std::string glancePass)
 {
     for (std::vector<std::string>::const_iterator it = cinderStores.begin(); it != cinderStores.end(); it++) {
-        if (!(*it).empty()) {
-            std::string volumeType = *it;
-            config.emplace(volumeType, ConfigList {});
-            config[volumeType]["store_description"] = "\"Cinder volume type " + volumeType + "\"";
-            config[volumeType]["cinder_store_auth_address"] = "http://" + sharedId + ":5000";
-            config[volumeType]["cinder_store_user_name"] = "glance";
-            config[volumeType]["cinder_store_password"] = glancePass;
-            config[volumeType]["cinder_store_project_name"] = "service";
-            config[volumeType]["cinder_volume_type"] = volumeType;
+        // filter out the empty strings
+        if ((*it).empty()) {
+            continue;
         }
+
+        std::string volumeType = *it;
+        config.emplace(volumeType, ConfigList {});
+        config[volumeType]["store_description"] = "\"Cinder volume type " + volumeType + "\"";
+        config[volumeType]["cinder_store_auth_address"] = "http://" + sharedId + ":5000";
+        config[volumeType]["cinder_store_user_name"] = "glance";
+        config[volumeType]["cinder_store_password"] = glancePass;
+        config[volumeType]["cinder_store_project_name"] = "service";
+        config[volumeType]["cinder_volume_type"] = volumeType;
     }
 }
 
@@ -448,15 +451,19 @@ SetCinderStores(
  */
 static void
 SetStores(Configs& config,
-          const std::vector<std::string>& cinderStores,
-          const std::string defaultVolumeType)
+    const std::vector<std::string>& cinderStores,
+    const std::string defaultVolumeType)
 {
     // enabled store
     std::stringstream stores;
     stores << "http:http" << "," << BUILTIN_STORE << ":rbd";
     for (std::vector<std::string>::const_iterator it = cinderStores.begin(); it != cinderStores.end(); it++) {
-        if (!(*it).empty())
-            stores << "," << *it << ":cinder";
+        // filter out the empty strings
+        if ((*it).empty()) {
+            continue;
+        }
+
+        stores << "," << *it << ":cinder";
     }
     config["DEFAULT"]["enabled_backends"] = stores.str();
 
@@ -594,13 +601,13 @@ Commit(bool modified, int dryLevel)
         SetCubeStore(config);
 
         std::vector<std::string> cinderStores;
-        std::transform(
-            s_storageBackends.begin(),
-            s_storageBackends.end(),
-            std::back_inserter(cinderStores),
-            [](const ConfigString& store) -> std::string {
-                return store;
-            });
+        for (std::vector<ConfigString>::const_iterator it = s_storageBackends.begin(); it != s_storageBackends.end(); it++) {
+            // filter out the empty strings
+            if ((*it).empty()) {
+                continue;
+            }
+            cinderStores.push_back(*it);
+        }
         SetCinderStores(config, cinderStores, sharedId, glancePass);
         SetStores(config, cinderStores, s_volumeTypeDefault);
 
