@@ -11,6 +11,11 @@ void SetupConfig(
 {
     for (std::vector<std::string>::const_iterator it = sections.begin(); it != sections.end(); it++) {
         std::string section = *it;
+        // if the section is already defined, skip the creation
+        if (config.count(section) > 0) {
+            continue;
+        }
+
         config.emplace(section, ConfigList {});
     }
 }

@@ -15,5 +15,5 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown mongod:mongod $(MONGODB_BINARY) $(MONGODB_LOG_DIR)
 	$(Q)chroot $(ROOTDIR) rm -rf ./lib/systemd/system/mongod.service
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/mongodb/mongodb.service ./lib/systemd/system
-	$(Q)chroot $(ROOTDIR) mv /etc/mongod.conf /etc/mongod.conf.bak
+	$(Q)chroot $(ROOTDIR) mv /etc/mongod.conf /etc/mongod.conf.org
 	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/mongodb/mongod.conf.in ./etc/mongod.conf.in

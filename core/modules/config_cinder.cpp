@@ -281,6 +281,20 @@ SetupRbdPools()
 }
 
 /**
+ * Load default configs.
+ */
+static bool
+LoadDefaultConfig(Configs& config)
+{
+    if (!LoadConfig(CONF DEF_EXT, SB_SEC_RFMT, '=', config)) {
+        HexLogError("Failed to load the default cinder config file %s", CONF DEF_EXT);
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * Initiate the structure of the config.
  */
 static void
@@ -764,6 +778,7 @@ Commit(bool modified, int dryLevel)
     if (s_bConfigChanged) {
         std::string domain = s_cubeDomain.newValue();
 
+        LoadDefaultConfig(mainConfig);
         InitConfig(mainConfig);
         SetDefaults(mainConfig, s_eCubeRole);
         SetEndpoint(mainConfig, ctrlIp);

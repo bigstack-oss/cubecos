@@ -238,6 +238,20 @@ SetupGlanceExportSyncCronJob(const int rp)
 }
 
 /**
+ * Load default configs.
+ */
+static bool
+LoadDefaultConfig(Configs& config)
+{
+    if (!LoadConfig(GA_CONF DEF_EXT, SB_SEC_RFMT, '=', config)) {
+        HexLogError("Failed to load the default glance api config file %s", GA_CONF DEF_EXT);
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * Initiate the structure of the config.
  */
 static void
@@ -589,6 +603,7 @@ Commit(bool modified, int dryLevel)
 
     // configure the services
     if (s_bConfigChanged) {
+        LoadDefaultConfig(config);
         InitConfig(config);
         SetDefaults(config);
         SetEndpoint(config, myIp);
