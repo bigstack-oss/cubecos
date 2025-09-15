@@ -464,9 +464,9 @@ SetCinderStores(
  * Set stores.
  */
 static void
-SetStores(Configs& config,
-    const std::vector<std::string>& cinderStores,
-    const std::string defaultVolumeType)
+SetStores(
+    Configs& config,
+    const std::vector<std::string>& cinderStores)
 {
     // enabled store
     std::stringstream stores;
@@ -480,7 +480,16 @@ SetStores(Configs& config,
         stores << "," << *it << ":cinder";
     }
     config["DEFAULT"]["enabled_backends"] = stores.str();
+}
 
+/**
+ * Set the default store.
+ */
+static void
+SetDefaultStore(
+    Configs& config,
+    const std::string defaultVolumeType)
+{
     // default store
     if (defaultVolumeType.length() == 0 || defaultVolumeType == BUILTIN_VOLUME_TYPE) {
         /**
@@ -541,9 +550,9 @@ SetServiceEndpoints(
 {
     HexLogInfo("Updating glance endpoint");
 
-    std::string publicUrl = "http://" + external + ":9292";
-    std::string adminUrl = "http://" + endpoint + ":9292";
-    std::string internalUrl = "http://" + endpoint + ":9292";
+    const std::string publicUrl = "http://" + external + ":9292";
+    const std::string adminUrl = "http://" + endpoint + ":9292";
+    const std::string internalUrl = "http://" + endpoint + ":9292";
 
     HexUtilSystemF(
         0,
@@ -624,7 +633,12 @@ Commit(bool modified, int dryLevel)
             cinderStores.push_back(*it);
         }
         SetCinderStores(config, cinderStores, sharedId, glancePass);
-        SetStores(config, cinderStores, s_volumeTypeDefault);
+        SetStores(config, cinderStores);
+        if (s_volumeTypeDefault.newValue() != "") {
+            SetDefaultStore(config, s_volumeTypeDefault);
+        } else {
+            SetDefaultStore(config, BUILTIN_VOLUME_TYPE);
+        }
 
         // write to glance config files
         WriteConfig(GA_CONF, SB_SEC_WFMT, '=', config);

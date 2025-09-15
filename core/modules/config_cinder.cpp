@@ -783,10 +783,10 @@ Commit(bool modified, int dryLevel)
         SetDefaults(mainConfig, s_eCubeRole);
         SetEndpoint(mainConfig, ctrlIp);
         SetDatabaseConnection(mainConfig, sharedId, dbPass);
-        SetWorkerQueue(mainConfig, s_ha, sharedId, mqPass, s_ctrlAddrs.newValue());
+        SetWorkerQueue(mainConfig, s_ha, sharedId, mqPass, s_ctrlAddrs);
         SetNotificationQueue(mainConfig, sharedId);
         SetAuth(mainConfig, sharedId, domain, cinderPass);
-        SetNovaInfo(mainConfig, sharedId, s_cubeRegion.newValue(), domain, novaPass);
+        SetNovaInfo(mainConfig, sharedId, s_cubeRegion, domain, novaPass);
         SetCeph(mainConfig, virshSecret);
         if (s_volumeTypeDefault.newValue() != "") {
             SetStorageBackend(mainConfig, s_volumeTypeDefault);
@@ -802,7 +802,7 @@ Commit(bool modified, int dryLevel)
             s_backupAccount,
             s_backupSecret,
             s_backupPool);
-        SetDebug(mainConfig, s_debug.newValue());
+        SetDebug(mainConfig, s_debug);
 
         // write back to cinder config files
         WriteConfig(CONF, SB_SEC_WFMT, '=', mainConfig);
@@ -817,7 +817,7 @@ Commit(bool modified, int dryLevel)
     HexUtilSystemF(0, 0, HEX_SDK " migrate_cinder_db");
 
     if (s_bEndpointChanged) {
-        SetServiceEndpoints(sharedId, external, s_cubeRegion.newValue());
+        SetServiceEndpoints(sharedId, external, s_cubeRegion);
     }
 
     // start services
