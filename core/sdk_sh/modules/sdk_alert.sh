@@ -742,7 +742,7 @@ alert_get_event_list()
     #   }
     # ]
 
-    local event_list="/usr/share/cube/cos/event.yaml"
+    local event_list="/usr/share/cube/cos/kapacitor/event.yaml"
     if [ ! -f "$event_list" ] ; then
         jq -c -n "[]"
         return 1

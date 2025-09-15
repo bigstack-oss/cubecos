@@ -37,12 +37,11 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/rc.d/init.d
 	$(Q)chroot $(ROOTDIR) ln -sf rc.d/init.d /etc/init.d
 
-# cube data
+# cube static data
 rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube
 	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube/cos
 	$(Q)cp -f $(TOP_SRCDIR)/LICENSE $(ROOTDIR)/usr/share/cube/cos/
-	$(Q)cp -f $(SRCDIR)/event.yaml $(ROOTDIR)/usr/share/cube/cos/
 
 # Preparation of repos should be done first
 rootfs_install::
