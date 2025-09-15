@@ -68,9 +68,9 @@ pacemaker_node_stop()
 
 pacemaker_cluster_stop()
 {
-    cubectl node exec -r control -pn "timeout $SRVSTO systemctl stop pcsd || killall -9 pcsd"
-    cubectl node exec -r control -pn "timeout $SRVSTO systemctl stop pacemaker || killall -9 pacemakerd"
-    cubectl node exec -r control -pn "timeout $SRVSTO systemctl stop corosync || killall -9 corosync"
+    cmd -c "timeout $SRVSTO systemctl stop pcsd || killall -9 pcsd"
+    cmd -c "timeout $SRVSTO systemctl stop pacemaker || killall -9 pacemakerd"
+    cmd -c "timeout $SRVSTO systemctl stop corosync || killall -9 corosync"
 }
 
 pacemaker_node_restart()
@@ -109,14 +109,14 @@ pacemaker_node_start()
 
 pacemaker_cluster_restart()
 {
-    cubectl node exec -r control -pn "systemctl restart pcsd corosync pacemaker"
+    cmd -c "systemctl restart pcsd corosync pacemaker"
     sleep 10
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         pacemaker_node_start $node
     done
     sleep 10
-    pcs resource cleanup
-    pcs resource clear vip
+    Quiet -n pcs resource cleanup
+    Quiet -n pcs resource clear vip
 }
 
 pacemaker()

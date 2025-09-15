@@ -96,5 +96,5 @@ support_node_abort_autobootstrap()
 
 support_cluster_abort_autobootstrap()
 {
-    cubectl node exec -pn "$HEX_SDK support_node_abort_autobootstrap"
+    cmd "$HEX_SDK support_node_abort_autobootstrap"
 }

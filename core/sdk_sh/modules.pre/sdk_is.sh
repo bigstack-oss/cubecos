@@ -98,8 +98,6 @@ is_first_three_compute_node()
 
 is_node_repairing()
 {
-    # stale_repair_clear
-
     if [ -e /run/cube_cluster_repairing ]; then
         if [ "$VERBOSE" = "1" ]; then
             local cmd=$(echo $(basename $(readlink /run/cube_cluster_repairing) 2>/dev/null))
@@ -107,6 +105,7 @@ is_node_repairing()
             local eps=$(ps --no-headers -o etime ${pid:-0} 2>/dev/null | xargs)
             echo -n "${cmd},${pid},${eps}"
         fi
+        $HEX_SDK stale_repair_clear
         return 0
     else
         return 1
@@ -153,7 +152,26 @@ is_checking()
 
 is_sshable()
 {
-    timeout $SRVSTO ssh root@$1 exit >/dev/null 2>&1
+    local mf=$(mktemp -u /tmp/is_sshable.XXXX)
+    local ret=1
+
+    ( timeout 3 ssh -o LogLevel=quiet root@${1:-$HOSTNAME} exit ; rm -f $mf ) &
+    local pid=$!
+    echo $pid > $mf
+    for i in 1 2 3 4 5 6; do
+        if [ -e $mf ] ; then
+            sleep 0.5
+        else
+            ret=0
+            break
+        fi
+    done
+    if ps -p $pid >/dev/null 2>&1 ; then
+        kill $pid
+        rm -f $mf
+    fi
+
+    return $ret
 }
 
 is_cluster_rolling_upgrade()

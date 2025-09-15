@@ -13,7 +13,7 @@ fi
 export HOSTNAME=$(ssh localhost hostname 2>/dev/null)
 query="insert system,category=BSP,severity=I,key=BSP00001I,service=bootstrap,host=$HOSTNAME"
 # Bring up influxdb as early as possible to log bootstrap activities
-cubectl node exec -r control -pn "systemctl show -p SubState influxdb | grep -q -i running || systemctl restart influxdb"
+hex_sdk cmd -c "systemctl show -p SubState influxdb | grep -q -i running || systemctl restart influxdb"
 space_filler="                                                                                                    "
 BootstrapAndClusterstart()
 {
@@ -32,7 +32,7 @@ BootstrapAndClusterstart()
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             bash -c "hex_sdk -v cube_cluster_start | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
-            cubectl node exec -pn "rm -f /tmp/health_*error.count"
+            hex_sdk cmd "rm -f /tmp/health_*error.count"
             return 0
         fi
     fi
@@ -172,7 +172,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
         else
             (
                 cnt=0
-                while ! cubectl node exec -r control stat $BOOTSTRAP_CUBE_MARKER >/dev/null 2>1 ; do
+                while ! hex_sdk cmd -c stat $BOOTSTRAP_CUBE_MARKER ; do
                     msg="Waiting for control(s) to finish bootstrapping [$cnt min]"
                     echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                     hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""

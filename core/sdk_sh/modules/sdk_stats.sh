@@ -416,3 +416,13 @@ stats_ceph_osd_cmd()
         echo "ceph_osdmap_cmd,host=$HOSTNAME epoch=$epoch,num_osds=$num_osds,num_up_osds=$num_up_osds,num_in_osds=$num_in_osds,num_remapped_pgs=$num_remapped_pgs"
     fi
 }
+
+stats_bootstrap()
+{
+    local flg="-v"
+    if [ "x$FORMAT" = "xjson" ] ; then
+        flg+="j"
+    fi
+
+    cmd $flg "cat -v /var/log/bootstrap_cube.log 2>/dev/null | sed 's/ \^M//g' ; egrep -v -q -i 'fail|error' /var/log/bootstrap_cube.log 2>/dev/null"
+}

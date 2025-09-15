@@ -117,7 +117,7 @@ _health_fail_log()
         echo -e "$ERR_MSG" $'\n' >> /var/log/health_${srv}_error.log
         echo $count > /tmp/health_${srv}_error.count
         if [ $count -lt $maxerr ] ; then
-            if [ `cubectl node exec -pn "[ -e $CUBE_DONE ] && echo 0" | wc -l` -eq ${#CUBE_NODE_LIST_HOSTNAMES[@]} ] ; then
+            if cube_cluster_ready ; then
                 local auto_repair_func="_health_${srv}_auto_repair"
                 if Quiet type $auto_repair_func 2>/dev/null ; then
                     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
@@ -160,7 +160,7 @@ EOF
             fi
         fi
         if [ "x$keys" != "x" ] ; then
-            timeout $SRVSTO cubectl node exec -p "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
+            cmd "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
                 keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
                 log_url="s3://$log_pth"
@@ -215,9 +215,9 @@ health_mtu_check()
         ifcs_mtus[$ifc]=$(cat $netpth/$ifc/mtu | xargs)
     done
     for ifc in ${!ifcs_mtus[@]}; do
-        if ! cubectl node exec "if ip link show $ifc >/dev/null 2>&1 ; then ip link show $ifc | grep -q -i \"mtu ${ifcs_mtus[$ifc]}\" ; fi" >/dev/null 2>&1 ; then
+        if ! cmd "if ip link show $ifc >/dev/null 2>&1 ; then ip link show $ifc | grep -q -i \"mtu ${ifcs_mtus[$ifc]}\" ; fi" >/dev/null 2>&1 ; then
             ERR_CODE=1
-            ERR_MSG+="$(cubectl node exec -p ip link show $ifc)\n"          
+            ERR_MSG+="$(cmd ip link show $ifc)\n"
         fi
     done
 
@@ -281,8 +281,8 @@ health_settings_check()
     local num_node=${#CUBE_NODE_LIST_HOSTNAMES[@]}
 
     for V in $(cat $SETTINGS_TXT | egrep -v "^#|^$" | cut -d"=" -f1 | sed 's/ $//' | tr "." "_") ; do
-        local CNT_UNIQ=$(timeout $SRVTO cubectl node exec -pn "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | sort -u | wc -l)
-        ERR_MSG+="`timeout $SRVTO cubectl node exec -r control -pn \"source $HEX_TUN $SETTINGS_TXT ; echo \\$HOSTNAME ${V}=\\$T_${V}\" | sort -u`\n"
+        local CNT_UNIQ=$(cmd "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | sort -u | wc -l)
+        ERR_MSG+="`cmd -cv \"source $HEX_TUN $SETTINGS_TXT ; echo \\$HOSTNAME ${V}=\\$T_${V}\"`\n"
         case $V in
             cubesys_role|cubesys_mgmt_cidr|cubesys_control_vip|cubesys_overlay|cubesys_provider|cubesys_storage|cubesys_management|net_if_*|ntp_server|cubesys_probeusb)
                 if [ ${CNT_UNIQ:-0} -ne 1 ] ; then
@@ -291,7 +291,7 @@ health_settings_check()
                 fi
                 ;;
             *_alert_*)
-                CNT_UNIQ=$(timeout $SRVTO cubectl node exec -r control -pn "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | sort -u | wc -l)
+                CNT_UNIQ=$(timeout $SRVTO cmd -cv "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | cut -d"|" -f3 | sort -u | wc -l)
                 if [ ${CNT_UNIQ:-0} -ne 1 ] ; then
                     ERR_CODE=1
                 fi
@@ -504,7 +504,7 @@ health_hacluster_repair()
     done
 
     # split brains or master control in rolling-upgrade phase
-    if [ $(cubectl node exec -r control -pn "pcs status 2>/dev/null | grep \"vip.*St\"" | sort -u | wc -l) -gt 1 ] ; then
+    if [ $(cmd -cv "pcs status 2>/dev/null | grep \"vip.*St\"" | cut -d"|" -f3 | sort -u | wc -l) -gt 1 ] ; then
         $HEX_SDK pacemaker_cluster_stop
         $HEX_SDK pacemaker_cluster_restart
     elif ! cube_node_ready && is_node_rolling_upgrade ; then
@@ -729,9 +729,9 @@ health_vip_check()
                     rm -f /tmp/health_neutron_error.count
                     ERR_CODE=1 _health_neutron_auto_repair
                     ERR_CODE=4
-                elif [ $(cubectl node exec -np "arping -c 1 -w 1 $ipaddr >/dev/null && arp -n $ipaddr" | grep "^${ipaddr}" | awk '{print $1, $3}' | sort -u | wc -l) -gt 1 ] ; then
+                elif [ $(cmd -v "arping -c 1 -w 1 $ipaddr >/dev/null && arp -n $ipaddr" | cut -d"|" -f3 | grep "^${ipaddr}" | awk '{print $1, $3}' | sort -u | wc -l) -gt 1 ] ; then
                     ERR_CODE=3
-                    ERR_LOG="cubectl node exec -p arp -e -n $ipaddr"
+                    ERR_LOG="cmd -v arp -e -n $ipaddr"
                 elif [ -z "$ipcidr" ] ; then
                     ERR_CODE=1
                 fi
@@ -746,7 +746,7 @@ health_vip_check()
         if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
             ERR_CODE=5
         elif ! Quiet pacemaker status 2>/dev/null ; then
-            ERR_MSG+="`cubectl node exec -p systemctl status pcsd pacemaker corosync`\n"
+            ERR_MSG+="`cmd -cv systemctl status pcsd pacemaker corosync`\n"
             ERR_CODE=6
         fi
     fi
@@ -756,7 +756,7 @@ health_vip_check()
 
 _health_vip_auto_repair()
 {
-    Quiet -n cubectl node exec -np "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
+    cmd "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
 }
 
 health_vip_repair()
@@ -764,7 +764,7 @@ health_vip_repair()
     health_hacluster_repair
     pcs property set stonith-enabled=false
 
-    local active_host=$(timeout $SRVSTO pacemaker status | awk '/IPaddr2/{print $5}')
+    local active_host=$(pacemaker status | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host:-NOVIP}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             local ipaddr=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $2}')
@@ -773,7 +773,7 @@ health_vip_repair()
                 if [ -z "$ipaddr" ] ; then
                     pcs resource disable vip
                     pcs resource enable vip
-                    Quiet -n cubectl node exec -np "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
+                    cmd "arp -d $ipaddr ; arping -c 1 -w 1 $ipaddr"
                 fi
             else
                 if [ -n "$ipaddr" ] ; then
@@ -820,7 +820,7 @@ health_haproxy_ha_check()
                 if ! is_remote_running $node haproxy-ha ; then
                     ERR_CODE=1
                     ERR_MSG+="haproxy-ha on $node is not running\n"
-                    ERR_MSG+="`cubectl node exec -r control -p systemctl status haproxy-ha`\n"
+                    ERR_MSG+="`cmd -c systemctl status haproxy-ha`\n"
                     ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy-ha"
                 fi
             fi
@@ -859,7 +859,7 @@ health_haproxy_check()
         if ! is_remote_running $node haproxy >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="haproxy on $node is not running\n"
-            ERR_MSG+="`cubectl node exec -r control -p systemctl status haproxy`\n"
+            ERR_MSG+="`cmd -c systemctl status haproxy`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy"
         fi
     done
@@ -887,7 +887,7 @@ health_httpd_check()
         if ! is_remote_running $node httpd ; then
             ERR_CODE=1
             ERR_MSG+="httpd on $node is not running\n"
-            ERR_MSG+="`cubectl node exec -r control -p systemctl status httpd`\n"
+            ERR_MSG+="`cmd -c systemctl status httpd`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u httpd"
         fi
         local i=2
@@ -899,8 +899,8 @@ health_httpd_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port $port on $node doesn't respond\n"
-                ERR_MSG+="`cubectl node exec -r control -p \"netstat -tunpl | grep $port\"`\n"
-                ERR_LOG="`cubectl node exec -r control -p \"netstat -tunpl | grep $port\"`"
+                ERR_MSG+="`cmd -c \"netstat -tunpl | grep $port\"`\n"
+                ERR_LOG="`cmd -c \"netstat -tunpl | grep $port\"`"
             fi
             let "i = $i + 1"
         done
@@ -912,8 +912,8 @@ health_httpd_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port 9311 on $node doesn't respond\n"
-                ERR_MSG+="`cubectl node exec -r control -p \"netstat -tunpl | grep 9311\"`\n"
-                ERR_LOG="`cubectl node exec -r control -p \"netstat -tunpl | grep 9311\"`"
+                ERR_MSG+="`cmd -c \"netstat -tunpl | grep 9311\"`\n"
+                ERR_LOG="`cmd -c \"netstat -tunpl | grep 9311\"`"
             fi
         fi
     done
@@ -968,7 +968,7 @@ health_nginx_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port $port on $node doesn't respond\n"
-                ERR_MSG+="`cubectl node exec -r control -p \"netstat -tunpl | grep $port\"`\n"
+                ERR_MSG+="`cmd -c \"netstat -tunpl | grep $port\"`\n"
                 ERR_LOG="netstat -tunpl | grep $port"
             fi
             let "i = $i + 1"
@@ -1146,7 +1146,7 @@ health_memcache_check()
         if ! is_remote_running $node memcached ; then
             ERR_CODE=1
             ERR_MSG+="memcached on $node is not running\n"
-            ERR_MSG+="`cubectl node exec -r control -p systemctl status memcached`\n"
+            ERR_MSG+="`cmd -c systemctl status memcached`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u memcached"
         fi
     done
@@ -1313,7 +1313,7 @@ health_ceph_mgr_check()
 _health_ceph_mgr_auto_repair()
 {
     if [ "$ERR_CODE" == "1" ] ; then
-        Quiet cubectl node exec -r control "systemctl reset-failed ; systemctl restart ceph-mgr@\$HOSTNAME"
+        cmd -c "systemctl reset-failed ; systemctl restart ceph-mgr@\$HOSTNAME"
     elif [ "$ERR_CODE" == "2" ] ; then
         if [ "$influx_hn" = "non-HA" ] ; then
             influx_hn=$(hostname)
@@ -1324,9 +1324,9 @@ _health_ceph_mgr_auto_repair()
         $CEPH mgr module disable influx
         $CEPH mgr module enable influx
     elif [ "$ERR_CODE" == "4" ] ; then
-        cubectl node exec -r control -p "systemctl stop ceph-mgr@\$HOSTNAME && sleep 5"
+        cmd -c "systemctl stop ceph-mgr@\$HOSTNAME && sleep 5"
         $CEPH osd pool rename .mgr .mgr-old
-        cubectl node exec -r control -p "systemctl start ceph-mgr@\$HOSTNAME"
+        cmd -c "systemctl start ceph-mgr@\$HOSTNAME"
         $CEPH osd pool delete .mgr-old .mgr-old --yes-i-really-really-mean-it
     elif [ "$ERR_CODE" == "5" ] ; then
         $CEPH mgr module disable dashboard
@@ -1367,17 +1367,17 @@ health_ceph_mds_check()
     let "online = $active + $standbys + $hotstandbys"
 
     ERR_LOG+="`$CEPH fs status`\n"
-    ERR_LOG+="`cubectl node exec -p -- \"mountpoint -- $CEPHFS_STORE_DIR | grep mountpoint\"`\n"
+    ERR_LOG+="`cmd \"mountpoint -- $CEPHFS_STORE_DIR | grep mountpoint\"`\n"
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
-    elif [ $(cubectl node exec -pn -- "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
+    elif [ $(cmd "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
         ERR_CODE=2
     elif ! timeout $SRVSTO mount ${vip}:/nfs $nfs_dir 2>/dev/null ; then
         timeout $SRVSTO umount -l $nfs_dir/ 2>/dev/null || true
         ERR_CODE=3
     elif ! touch $nfs_dir/.alive >/dev/null 2>&1 ; then
         ERR_CODE=4
-    elif [ $(cubectl node exec -pn -- "systemctl show -p SubState nfs-ganesha" | grep running| wc -l) -lt $num_ctrlnode ] ; then
+    elif [ $(cmd "systemctl show -p SubState nfs-ganesha" | grep running| wc -l) -lt $num_ctrlnode ] ; then
         ERR_CODE=5
     fi
 
@@ -1392,11 +1392,11 @@ health_ceph_mds_check()
 _health_ceph_mds_auto_repair()
 {
     if [ "$ERR_CODE" == "1" ] ; then
-        Quiet cubectl node exec -r control "systemctl reset-failed ; systemctl restart ceph-mds@\$HOSTNAME"
+        cmd -c "systemctl reset-failed ; systemctl restart ceph-mds@\$HOSTNAME"
     elif [ "$ERR_CODE" == "2" ] ; then
-        Quiet cubectl node exec -pn -- $HEX_SDK ceph_mount_cephfs
+        cmd $HEX_SDK ceph_mount_cephfs
     elif [ "$ERR_CODE" == "3" -o "$ERR_CODE" == "4" -o "$ERR_CODE" == "5" ] ; then
-        Quiet cubectl node exec -r control -p "systemctl restart nfs-ganesha"
+        cmd -c "systemctl restart nfs-ganesha"
     fi
 }
 
@@ -1412,8 +1412,8 @@ health_ceph_mds_repair()
         $CEPH fs status | grep -q active && break
     done
 
-    Quiet cubectl node exec -pn "$HEX_SDK ceph_mount_cephfs"
-    Quiet cubectl node exec -r control -pn "systemctl restart nfs-ganesha"
+    cmd "$HEX_SDK ceph_mount_cephfs"
+    Quiet cmd -cn "systemctl restart nfs-ganesha"
 }
 
 health_ceph_osd_report()
@@ -1431,7 +1431,7 @@ health_ceph_osd_check()
         ERR_CODE=1
     elif [ "$total" != "$inosd" ] ; then
         ERR_CODE=2
-    elif cubectl node exec -pn "$HEX_SDK ceph_osd_list" | sort -t. -n -k2 | egrep -q "warning|fail" ; then
+    elif cmd "$HEX_SDK ceph_osd_list" | sort -t. -n -k2 | egrep -q "warning|fail" ; then
         ERR_CODE=3
         ERR_LOG="dmesg | grep -i -e fail -e error"
     fi
@@ -1471,7 +1471,7 @@ health_ceph_rgw_check()
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u ceph-radosgw@rgw.$HOSTNAME"
     ERR_MSG+="`$CEPH health detail`"
     ERR_MSG+="$online/$total rgw are online\n"
-    ERR_MSG+="`cubectl node exec -r control -p systemctl status ceph-radosgw@rgw.\$HOSTNAME`\n"
+    ERR_MSG+="`cmd -c systemctl status ceph-radosgw@rgw.\$HOSTNAME`\n"
     _health_fail_log
 }
 
@@ -1586,7 +1586,7 @@ _health_nova_auto_repair()
 
 health_nova_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_nova
+    cmd $HEX_CFG restart_nova
 }
 
 health_ironic_report()
@@ -1659,7 +1659,7 @@ _health_ironic_auto_repair()
 
 health_ironic_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_ironic
+    cmd $HEX_CFG restart_ironic
 }
 
 health_cyborg_report()
@@ -1720,7 +1720,7 @@ _health_cyborg_auto_repair()
 
 health_cyborg_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_cyborg
+    cmd $HEX_CFG restart_cyborg
 }
 
 health_neutron_report()
@@ -1777,16 +1777,16 @@ _health_neutron_auto_repair()
         $OPENSTACK port list -f value -c ID -c Name | grep "diag[-]" | cut -d " " -f1 | xargs -i $OPENSTACK port delete {}
         if [ $ERR_CODE -eq 1 ] ; then
             # $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
-            cubectl node exec -r control -pn systemctl restart neutron-server
-            timeout $SRVTO cubectl node exec -r compute -pn "systemctl restart neutron-ovn-metadata-agent"
-            timeout $SRVTO cubectl node exec -r compute -pn "systemctl restart neutron-ovn-vpn-agent"
+            cmd -c systemctl restart neutron-server
+            cmd -p "systemctl restart neutron-ovn-metadata-agent"
+            cmd -p "systemctl restart neutron-ovn-vpn-agent"
 
             # Fail over Ceph dashboard which doesn't work automatically with new active ceph-mgr
             # SDK auto repair cannot help because when inst-ha takes place, not all nodes complete bootstrap
             $CEPH mgr module disable dashboard
             $CEPH mgr module enable dashboard
         elif [ $ERR_CODE -eq 6 ] ; then
-            Quiet -n cubectl node exec -r control -pn -- $HEX_SDK os_neutron_worker_scale
+            Quiet -n cmd -c -- $HEX_SDK os_neutron_worker_scale
         else
             $HEX_SDK ovn_neutron_db_sync
             readarray entry_array <<<"$(echo -n "$ERR_MSG" | awk '/False/{print $1" "$3}' | sort)"
@@ -1804,7 +1804,7 @@ _health_neutron_auto_repair()
 
 health_neutron_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG bootstrap neutron
+    cmd $HEX_CFG bootstrap neutron
 
     $HEX_SDK ovn_neutron_db_sync
 
@@ -1860,7 +1860,7 @@ _health_glance_auto_repair()
 
 health_glance_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_glance
+    cmd $HEX_CFG restart_glance
 }
 
 health_cinder_report()
@@ -1929,7 +1929,7 @@ _health_cinder_auto_repair()
 
 health_cinder_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_cinder
+    cmd $HEX_CFG restart_cinder
 }
 
 health_manila_report()
@@ -1990,7 +1990,7 @@ _health_manila_auto_repair()
 
 health_manila_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_manila
+    cmd $HEX_CFG restart_manila
 }
 
 health_swift_report()
@@ -2075,7 +2075,7 @@ _health_heat_auto_repair()
 
 health_heat_repair()
 {
-    Quiet -n cubectl node exec -r control -pn $HEX_CFG restart_heat
+    Quiet -n cmd -c $HEX_CFG restart_heat
 }
 
 health_octavia_report()
@@ -2152,7 +2152,7 @@ health_octavia_repair()
     # master node should run first before other nodes
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
     Quiet -n remote_run $master $HEX_CFG reinit_octavia
-    Quiet -n cubectl node exec -pn $HEX_CFG reinit_octavia
+    cmd $HEX_CFG reinit_octavia
 }
 
 health_designate_report()
@@ -2255,7 +2255,7 @@ health_designate_repair()
 {
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
     Quiet -n remote_run $master timeout $SRVSTO /usr/local/bin/cubectl node rsync -r control /etc/designate/rndc.key
-    Quiet -n cubectl node exec -r control -pn $HEX_CFG restart_designate
+    Quiet -n cmd -c $HEX_CFG restart_designate
 }
 
 health_masakari_report()
@@ -2324,7 +2324,7 @@ _health_masakari_auto_repair()
 
 health_masakari_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_masakari
+    cmd $HEX_CFG restart_masakari
 }
 
 health_monasca_report()
@@ -2380,7 +2380,7 @@ _health_monasca_auto_repair()
 
 health_monasca_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_monasca
+    cmd $HEX_CFG restart_monasca
 }
 
 health_senlin_report()
@@ -2434,7 +2434,7 @@ _health_senlin_auto_repair()
 
 health_senlin_repair()
 {
-    Quiet -n cubectl node exec -r control -p $HEX_CFG restart_senlin
+    cmd -c $HEX_CFG restart_senlin
 }
 
 health_watcher_report()
@@ -2482,7 +2482,7 @@ _health_watcher_auto_repair()
 
 health_watcher_repair()
 {
-    Quiet -n cubectl node exec -r control -p $HEX_CFG restart_watcher
+    cmd -c $HEX_CFG restart_watcher
 }
 
 health_k3s_report()
@@ -2545,8 +2545,8 @@ health_rancher_repair()
 # purge existing rancher data (USE WITH CAUTIONS)
 health_rancher_rebuild()
 {
-    Quiet -n cubectl node exec cubectl config reset --hard rancher k3s
-    Quiet -n cubectl node exec cubectl config commit k3s rancher
+    cmd cubectl config reset --hard rancher k3s
+    cmd cubectl config commit k3s rancher
 }
 
 health_opensearch_report()
@@ -2970,7 +2970,7 @@ _health_neutron_deep_repair()
 {
     # OVN DBs location: non-HA -> /var/lib/ovn/, HA -> /etc/ovn/
     Quiet -n cubectl node -r control exec -pn -- rm -f /etc/ovn/ovnnb_db.db /etc/ovn/ovnsb_db.db /var/lib/ovn/ovnnb_db.db /var/lib/ovn/ovnsb_db.db
-    Quiet -n cubectl node exec -pn -- rm -f /etc/openvswitch/conf.db
+    cmd rm -f /etc/openvswitch/conf.db
     Quiet -n $HEX_SDK health_neutron_repair
 }
 
@@ -2995,7 +2995,7 @@ _health_datapipe_deep_repair()
 
 health_hypervisor_check()
 {
-    [ `cubectl node exec -pn "[ -e $CUBE_DONE ] && echo 0" | wc -l` -eq ${#CUBE_NODE_LIST_HOSTNAMES[@]} ] || return 1
+    [ `cmd "[ -e $CUBE_DONE ] && echo 0" | wc -l` -eq ${#CUBE_NODE_LIST_HOSTNAMES[@]} ] || return 1
     local max=10
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         local srv=
@@ -3141,8 +3141,8 @@ _health_mongodb_auto_repair()
 
 health_mongodb_repair()
 {
-    Quiet -n cubectl node exec -pn $HEX_SDK mongodb_repair_keyfile_ownership
-    Quiet -n cubectl node exec -pn $HEX_CFG restart_mongodb
+    cmd $HEX_SDK mongodb_repair_keyfile_ownership
+    cmd $HEX_CFG restart_mongodb
     Quiet -n $HEX_SDK mongodb_add_read_write_role
 }
 

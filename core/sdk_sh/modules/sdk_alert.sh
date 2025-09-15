@@ -170,7 +170,7 @@ alert_sync_tenant()
 
 alert_cluster_sync_tenant()
 {
-    cubectl node exec -r control -p $HEX_SDK alert_sync_tenant
+    cmd -p $HEX_SDK alert_sync_tenant
 }
 
 alert_unsync_tenant()
@@ -190,14 +190,14 @@ alert_unsync_tenant()
 
 alert_cluster_unsync_tenant()
 {
-    cubectl node exec -r control -p $HEX_SDK alert_unsync_tenant
+    cmd -p $HEX_SDK alert_unsync_tenant
 }
 
 alert_extra_update()
 {
     local msgPrefix=$1
-    cubectl node exec -r control -p "echo \"msgPrefix: $msgPrefix\" > $ALERT_EXTRA" >/dev/null
-    cubectl node exec -r control -p kapacitor define alert_events -tick /etc/kapacitor/tasks/alert_events.tick >/dev/null
+    cmd -p "echo \"msgPrefix: $msgPrefix\" > $ALERT_EXTRA"
+    cmd -c kapacitor define alert_events -tick /etc/kapacitor/tasks/alert_events.tick
 }
 
 alert_get_setting()

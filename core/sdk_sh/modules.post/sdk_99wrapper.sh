@@ -33,7 +33,7 @@ appliance_reboot()
             Quiet -n $CEPH mds fail $HOSTNAME
         fi
     fi
-    Quiet -n cubectl node exec -r control -p "source /usr/sbin/hex_tuning /etc/settings.txt ; MASTER_CONTROL=\$T_cubesys_controller ; API_TOKEN=\$(cat /var/run/cube-cos-api/node_token) ; curl -X POST http://\$(hex_sdk mgmt_ip):8082/api/v1/datacenters/\$MASTER_CONTROL/nodes/drain -H \'Node: $HOSTNAME\' -H \'Authorization: Bearer \${API_TOKEN}\'" 2>/dev/null
+    cmd -c "source /usr/sbin/hex_tuning /etc/settings.txt ; MASTER_CONTROL=\$T_cubesys_controller ; API_TOKEN=\$(cat /var/run/cube-cos-api/node_token) ; curl -X POST http://\$(hex_sdk mgmt_ip):8082/api/v1/datacenters/\$MASTER_CONTROL/nodes/drain -H \'Node: $HOSTNAME\' -H \'Authorization: Bearer \${API_TOKEN}\'"
 
     _${FUNCNAME[0]} $@
 }

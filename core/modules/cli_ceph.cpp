@@ -41,10 +41,10 @@ static int CephListOsdMain(int argc, const char** argv)
     std::string osdId;
     if (argc == 2) {
         osdId = argv[1];
-        HexSystemF(0, "cubectl node exec -pn hex_sdk -v ceph_osd_list %s", osdId.c_str());
+        HexSystemF(0, "hex_sdk cmd -v \"hex_sdk -v ceph_osd_list %s\" | cut -d'|' -f3", osdId.c_str());
     } else {
         printf(LIST_OSD_FMT, "OSD", "STATE", "HOST", "DEV", "SERIAL", "POWER_ON", "USE", "REMARK");
-        HexSystemF(0, "cubectl node exec -pn hex_sdk ceph_osd_list | sort -k3");
+        HexSystemF(0, "hex_sdk cmd -v hex_sdk ceph_osd_list | cut -d'|' -f3 | sort -k3");
     }
     return CLI_SUCCESS;
 }

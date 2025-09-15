@@ -327,7 +327,7 @@ os_instance_ha_helper()
         $CEPH mgr module disable dashboard
         $CEPH mgr module enable dashboard
     fi
-    mountpoint -- $CEPHFS_STORE_DIR  | grep -q "is a mountpoint" || timeout $SRVTO cubectl node exec -pn "$HEX_SDK ceph_mount_cephfs"
+    mountpoint -- $CEPHFS_STORE_DIR  | grep -q "is a mountpoint" || cmd "$HEX_SDK ceph_mount_cephfs"
 
     local new_notify=$($OPENSTACK notification list -f value | grep COMPUTE_HOST | head -1)
     local old_notify=$(VERBOSE=1 FORMAT=json influx_event_health instanceha 1 | jq -r .results[].series[].values[][4])
@@ -862,7 +862,7 @@ os_extpack_image_import()
                 ;;
             appfw-)
                 local appfw_dir=/opt/appfw/images/
-                cubectl node exec -r control -pn "mkdir -p $appfw_dir"
+                cmd -c "mkdir -p $appfw_dir"
                 ( tar xf $dir/$ext_folder/$img -C $appfw_dir ; cubectl node rsync -r control $appfw_dir )
                 ;;
             *) echo "Unknown builtin image prefix: $PREFIX" ;;
@@ -1238,19 +1238,19 @@ _os_pre_failure_host_evacuation()
 
         if $HEX_SDK health_rabbitmq_check ; then
             # clear stale api for nova, neutron, and cinder
-            cubectl node exec -r control -p $HEX_SDK stale_api_check_repair openstack-nova-api 8774 nova-api python3 0 >/dev/null 2>&1
-            cubectl node exec -r control -p $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0 >/dev/null 2>&1
-            cubectl node exec -r control -p $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0 >/dev/null 2>&1
+            cmd -c $HEX_SDK stale_api_check_repair openstack-nova-api 8774 nova-api python3 0
+            cmd -c $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0
+            cmd -c $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0
 
             if [ $($OPENSTACK compute service list -f value -c Status -c State | grep -v -i "enabled up" | wc -l) -ge 1 ] ; then
-                cubectl node exec -r control -p systemctl restart openstack-nova-scheduler >/dev/null 2>&1
-                cubectl node exec -r control -p systemctl restart openstack-nova-conductor >/dev/null 2>&1
-                cubectl node exec -r compute -p systemctl restart openstack-nova-compute >/dev/null 2>&1
+                cmd -c systemctl restart openstack-nova-scheduler
+                cmd -c systemctl restart openstack-nova-conductor
+                cmd -p systemctl restart openstack-nova-compute
             fi
 
             if [ $($OPENSTACK network agent list -f value -c ID -c Alive | grep -v -i true | wc -l) -ge 1 ] ; then
                 $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
-                timeout $SRVTO cubectl node exec -r control -pn systemctl restart neutron-server neutron-ovn-metadata-agent neutron-ovn-vpn-agent
+                cmd -c "$SRVLTO systemctl restart neutron-server neutron-ovn-metadata-agent neutron-ovn-vpn-agent"
             fi
         else
             Error "rabbitmq is not Ok"

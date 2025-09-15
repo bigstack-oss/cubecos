@@ -24,10 +24,10 @@ toggle_health_check()
         $HEX_SDK health 2>/dev/null | grep -q "^health_${srv}_check$" || Error "no health_${srv}_check"
         local mkf=$HEX_STATE_DIR/health_${srv}_check_disabled
         if [ -e $mkf ] ; then
-            Quiet -n cubectl node exec -pn rm -f $mkf
+            cmd rm -f $mkf
             status=enabled
         else
-            Quiet -n cubectl node exec -pn touch $mkf
+            cmd touch $mkf
             status=disabled
         fi
         printf "health_%s_check is %s\n" "$srv" "$status"

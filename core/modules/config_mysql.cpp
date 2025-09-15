@@ -215,7 +215,7 @@ SetupCluster(bool enabled, bool isMaster, bool force, const std::string& ctrlAdd
         HexLogInfo("force mysql bootstrap");
         if (isMaster) {
             HexLogInfo("stop all mysql processes of the cluster");
-            HexUtilSystemF(0, 0, "cubectl node exec --parallel --hosts %s systemctl stop %s", ctrlAddrs.c_str(), NAME);
+            HexUtilSystemF(0, 0, "hex_sdk cmd -n %s systemctl stop %s", ctrlAddrs.c_str(), NAME);
             HexSystemF(0, "sed -i 's/^\\(safe_to_bootstrap\\s*:\\s*\\).*$/\\11/' /var/lib/mysql/grastate.dat");
         }
         else

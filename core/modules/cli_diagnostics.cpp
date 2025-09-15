@@ -20,8 +20,8 @@ static const char* LABEL_NAME_SERVER_IP = "Specify DNS name server IP (ex: 8.8.8
 static int ArpScanMain(int argc, const char** argv)
 {
     CliPrintf("Scanning ARP tables of all operational networks (takes minutes)");
-    HexSystemF(0, "cubectl node exec -p hex_sdk diagnostics_arpscan >/dev/null");
-    HexSystemF(0, "cubectl node exec hex_sdk diagnostics_arpscan_report");
+    HexSystemF(0, "hex_sdk cmd hex_sdk diagnostics_arpscan");
+    HexSystemF(0, "hex_sdk cmd -v hex_sdk diagnostics_arpscan_report");
 
     return CLI_SUCCESS;
 }
@@ -241,8 +241,8 @@ static int OsdMain(int argc, const char** argv)
         osdId = argv[1];
     } else {
         int index;
-        std::string optCmd = "cubectl node exec \"ceph osd ls-tree \\$HOSTNAME 2>/dev/null || true\"";
-        std::string descCmd = "cubectl node exec -pn hex_sdk ceph_osd_list | sort -k3";
+        std::string optCmd = "hex_sdk cmd -v \"ceph osd ls-tree \\$HOSTNAME 2>/dev/null || true\" | cut -d'|' -f3";
+        std::string descCmd = "hex_sdk cmd -v hex_sdk ceph_osd_list | cut -d'|' -f3 | sort -k3";
         if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &osdId, "Enter index of osd to check its performance: ") != CLI_SUCCESS) {
             CliPrintf("No cache tier available or invalid index chosen");
             return CLI_SUCCESS;
@@ -251,7 +251,7 @@ static int OsdMain(int argc, const char** argv)
 
     HexSystemF(0, "ceph osd df osd.%s | head -2", osdId.c_str());
     HexSystemF(0, "ceph tell osd.%s bench 1073741824 4906", osdId.c_str());
-    HexSystemF(0, "cubectl node exec -pn hex_sdk diagnostics_osd_hdparm osd.%s", osdId.c_str());
+    HexSystemF(0, "hex_sdk cmd -v hex_sdk diagnostics_osd_hdparm osd.%s  | cut -d'|' -f3", osdId.c_str());
     return CLI_SUCCESS;
 }
 

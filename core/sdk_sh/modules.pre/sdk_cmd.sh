@@ -12,10 +12,11 @@ cmd()
     local reverse="false"
     local dryrun="false"
     OPTIND=1
-    while getopts "dvriacpsn:" opt; do
+    while getopts "dvjriacpsn:" opt; do
         case $opt in
             d) dryrun="true" ;;
             v) verbose="true" ;;
+            j) json="true" ;;
             r) reverse="true" ;;
             q) qend=">/dev/null 2>&1" ;;
             a)                  # all nodes
@@ -78,18 +79,37 @@ cmd()
     for node in "${nodes[@]}" ; do
         nodes_logs[$node]="$(mktemp -u /tmp/cmd_${node}.XXXX)"
         if [ "x$dryrun" = "xfalse" ] ; then
-            ssh -o LogLevel=quiet $node "$(typeset -f $1 || echo true ); VERBOSE=$VERBOSE; $@" >${nodes_logs[$node]} 2>&1 &
+            if is_sshable $node ; then
+                ssh -o LogLevel=quiet $node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >${nodes_logs[$node]} 2>&1 &
+            else
+                false &
+            fi
         else
-            echo "ssh -o LogLevel=quiet $node $@"
+            echo "ssh -o LogLevel=quiet $node $@" &
         fi
         nodes_pids[$node]=$!
     done
+    if [ "x$verbose" = "xtrue" -a "x$json" = "xtrue" ] ; then
+        printf "[ "
+    fi
     for node in "${nodes[@]}" ; do
         wait ${nodes_pids[$node]}
         nodes_rets[$node]=$?
-        [ "x$verbose" != "xtrue" ] || printf "%s | %s | %s\n" "$node" "${nodes_rets[$node]}" "$(cat ${nodes_logs[$node]} 2>/dev/null)"
+        if [ "x$verbose" = "xtrue" ] ; then
+            if [ "x$json" = "xtrue" ] ; then
+                if [ ${#nodes_rets[@]} -gt 1 ] ; then
+                    printf ","
+                fi
+                echo -n "{ \"node\" : \"$node\",\"return\" : \"${nodes_rets[$node]}\", \"stdout\" : \"$(cat ${nodes_logs[$node]} 2>/dev/null)\" }"
+            else
+                printf "%s|%s|%s\n" "$node" "${nodes_rets[$node]}" "$(cat ${nodes_logs[$node]} 2>/dev/null)"
+            fi
+        fi
         rm -f ${nodes_logs[$node]}
     done
+    if [ "x$verbose" = "xtrue" -a "x$json" = "xtrue" ] ; then
+        printf "]"
+    fi
     local r=0
     for node in "${nodes[@]}" ; do
         [ "x${nodes_rets[$node]}" = "x0" ] || r=${nodes_rets[$node]}

@@ -49,7 +49,7 @@ _git_server_init()
     fi
 
     Quiet -n ceph_wait_for_status        # need cephfs be ready before git init and push
-    Quiet -n cubectl node exec -pn "$HEX_SDK ceph_mount_cephfs"
+    cmd "$HEX_SDK -x ceph_mount_cephfs"
     if mountpoint -q -- $CEPHFS_STORE_DIR ; then
         if [ ! -e $cube_git_dir ] ; then
             mkdir -p $cube_git_dir
@@ -95,7 +95,7 @@ git_client_init()
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
     local branch=master
-    local gitserverip=$(cubectl node exec -r control -pn "$HEX_SDK -f json health_vip_report | jq -r .description" | sort -u | cut -d"/" -f1)
+    local gitserverip=$($HEX_SDK -f json health_vip_report | jq -r .description | sort -u | cut -d"/" -f1)
     if [ "$gitserverip" = "non-HA" ] ; then
         gitserverip=$ipaddr
     fi
@@ -126,7 +126,7 @@ git_client_init()
 git_push()
 {
     local msg="${@:-n/a}"
-    ( $GIT commit -m "$msg" -a && $GIT push -q && cubectl node exec "$GIT stash ; $GIT pull" ) >/dev/null || Error "nothing is pushed"
+    ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "$GIT stash ; $GIT pull" ) >/dev/null || Error "nothing is pushed"
     Quiet -n $GIT -P log -3
 }
 
@@ -134,6 +134,6 @@ git_init()
 {
     git_server_init
     if [ -e /etc/appliance/state/git_server_init ] ; then
-        host_local_run cubectl node exec -p "hex_sdk git_client_init"
+        cmd "$HEX_SDK git_client_init"
     fi
 }

@@ -817,10 +817,10 @@ ClusterReadyMain(int argc, const char** argv)
         HexSpawn(0, HEX_CFG, "-p", "trigger", "cluster_ready", ZEROCHAR_PTR);
 
     CliPrintf("[4/6] Starting cluster");
-    HexUtilSystemF(0, 0, HEX_SDK " host_local_run cubectl node exec -p " HEX_SDK " cube_cluster_start");
+    HexUtilSystemF(0, 0, HEX_SDK " host_local_run hex_sdk cmd " HEX_SDK " cube_cluster_start");
 
     CliPrintf("[5/6] Strengthening password");
-    HexUtilSystemF(0, 0, HEX_SDK " host_local_run cubectl node exec -p " HEX_CFG " cube_password_init");
+    HexUtilSystemF(0, 0, HEX_SDK " host_local_run hex_sdk cmd " HEX_CFG " cube_password_init");
 
     CliPrintf("[6/6] Cluster check and repair");
     HexSpawn(0, HEX_SDK, "host_local_run", "hex_cli", "-c", "cluster check_repair", ZEROCHAR_PTR);
@@ -877,9 +877,9 @@ ClusterSetRolePasswordMain(int argc, const char** argv)
     }
 
     if (role != "all")
-        opts = "-r " + role;
+        opts = "-n " + role;
 
-    HexSystemF(0, "cubectl node exec %s -p " HEX_CFG " password %s %s", opts.c_str(), oldPass.c_str(), newPass.c_str());
+    HexSystemF(0, "hex_sdk cmd %s -p " HEX_CFG " password %s %s", opts.c_str(), oldPass.c_str(), newPass.c_str());
 
     return CLI_SUCCESS;
 }

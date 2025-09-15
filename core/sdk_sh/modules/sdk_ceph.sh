@@ -75,7 +75,7 @@ ceph_get_host_by_id()
         host=$($CEPH osd tree -f json 2>/dev/null | jq -r --arg OSDID $osd_id '.nodes[] | select(.type == "host") | select(.children[] | select(. == ($OSDID | tonumber))).name')
     fi
     if [ -z "$host" ] ; then
-        cubectl node exec -pn "ceph-volume lvm list --format json 2>/dev/null | jq -r '.[][] | select(.tags.\"ceph.osd_id\" == \"$osd_id\")' | grep -q osd-block && hostname"
+        cmd "ceph-volume lvm list --format json 2>/dev/null | jq -r '.[][] | select(.tags.\"ceph.osd_id\" == \"$osd_id\")' | grep -q osd-block && hostname" | cut -d"|" -f3
     fi
 
     echo -n $host
@@ -1826,7 +1826,7 @@ ceph_mirror_demote_image()
     fi
 
     local self_site=$(find /etc/ceph/ -type l -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
-    cubectl node exec -r control "systemctl restart ceph-rbd-mirror@${self_site}.service >/dev/null 2>&1"
+    cmd -c "systemctl restart ceph-rbd-mirror@${self_site}.service"
 }
 
 # params:
@@ -1914,7 +1914,7 @@ ceph_mirror_demote_site()
     fi
 
     local self_site=$(find /etc/ceph/ -type l -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
-    Quiet -n cubectl node exec -r control -pn "systemctl restart ceph-rbd-mirror@${self_site}.service"
+    cmd -c "systemctl restart ceph-rbd-mirror@${self_site}.service"
 }
 
 # return crush class by SCSI disk
@@ -2113,7 +2113,7 @@ ceph_wait_for_services()
     if ! Quiet $CEPH -s ; then
         # When HA cluster is powercycled, master node or any control node running alone has no quorum yet
         if [ $(cubectl node list -r control | wc -l) -gt 1 ] ; then
-            if [ $(cubectl node exec -r control -pn "systemctl is-active ceph-mon@\$HOSTNAME" | grep -i "^active$" | wc -l) -eq 1 ] ; then
+            if [ $(cmd -cv "systemctl is-active ceph-mon@\$HOSTNAME" | cut -d"|" -f3 | grep -i "^active$" | wc -l) -eq 1 ] ; then
                 return 0
             fi
         fi
@@ -2471,9 +2471,9 @@ ceph_create_node_group()
 
     Quiet -n $HEX_SDK os_volume_type_create $group $pool
 
-    Quiet -n cubectl node exec -pn -r storage "hex_config restart_ceph_osd"
-    Quiet -n cubectl node exec -pn -r control "hex_config reconfig_cinder"
-    Quiet -n cubectl node exec -pn -r control "hex_config restart_cinder"
+    cmd -s "hex_config restart_ceph_osd"
+    cmd -c "hex_config reconfig_cinder"
+    cmd -c "hex_config restart_cinder"
 
     # Make another attempt to ensure osds are up
     readarray node_array <<<"$(/usr/sbin/cubectl node list -r storage -j | jq -r .[].hostname | sort)"
@@ -2536,9 +2536,9 @@ ceph_remove_node_group()
 
     Quiet -n $OPENSTACK volume type delete $group
 
-    Quiet -n cubectl node exec -pn -r storage "hex_config restart_ceph_osd"
-    Quiet -n cubectl node exec -pn -r control "hex_config reconfig_cinder"
-    Quiet -n cubectl node exec -pn -r control "hex_config restart_cinder"
+    cmd -s "hex_config restart_ceph_osd"
+    cmd -c "hex_config reconfig_cinder"
+    cmd -c "hex_config restart_cinder"
 
     Quiet -n $OPENSTACK volume service set --disable cube@$pool cinder-volume
     Quiet -n cinder-manage service remove cinder-volume cube@$pool
@@ -2578,8 +2578,8 @@ ceph_create_group_ssdpool()
     $CEPH osd pool set $pool crush_rule $rule
     Quiet -n $HEX_SDK os_volume_type_create $vtype $pool
 
-    Quiet -n cubectl node exec -pn -r control "hex_config reconfig_cinder"
-    Quiet -n cubectl node exec -pn -r control "hex_config restart_cinder"
+    cmd -c "hex_config reconfig_cinder"
+    cmd -c "hex_config restart_cinder"
     # It can happen that openstack-cinder-volume stops after hex_config reconfig_cinder
     Quiet -n $OPENSTACK volume service set --enable cube@${pool} cinder-volume
     Quiet hex_cli -c cluster check_repair HaCluster 2>/dev/null
@@ -2608,8 +2608,8 @@ ceph_remove_group_ssdpool()
         if ($CEPH osd pool ls | grep -q "^$pool$") ; then
             Quiet -n $CEPH osd pool delete $pool $pool --yes-i-really-really-mean-it
         fi
-        Quiet -n cubectl node exec -pn -r control "hex_config reconfig_cinder"
-        Quiet -n cubectl node exec -pn -r control "hex_config restart_cinder"
+        cmd -c "hex_config reconfig_cinder"
+        cmd -c "hex_config restart_cinder"
         # It can happen that openstack-cinder-volume stops after hex_config reconfig_cinder
         Quiet -n $HEX_CLI -c cluster check_repair HaCluster
 
@@ -2738,12 +2738,12 @@ ceph_mirror_pair()
 
     local self_id_rsa_pub=$(cat /root/.ssh/id_rsa.pub)
     local auth_keys=/root/.ssh/authorized_keys
-    Quiet sshpass -p "$pass" $sshcmd root@$vip "cubectl node exec -r control \"echo $self_id_rsa_pub >>$auth_keys\""
-    Quiet sshpass -p "$pass" $sshcmd root@$vip "cubectl node exec -r control \"$HEX_SDK dedup_sshauthkey\""
+    Quiet sshpass -p "$pass" $sshcmd root@$vip "$HEX_SDK cmd -c \"echo $self_id_rsa_pub >>$auth_keys\""
+    Quiet sshpass -p "$pass" $sshcmd root@$vip "$HEX_SDK cmd -c \"$HEX_SDK dedup_sshauthkey\""
 
     local peer_id_rsa_pub=$($sshcmd root@$vip cat /root/.ssh/id_rsa.pub 2>/dev/null)
-    Quiet cubectl node exec -r control "echo $peer_id_rsa_pub >> $auth_keys"
-    Quiet cubectl node exec -r control "$HEX_SDK dedup_sshauthkey"
+    cmd -c "echo $peer_id_rsa_pub >> $auth_keys"
+    cmd -c "$HEX_SDK dedup_sshauthkey"
     $sshcmd root@$vip "exit 0" || Error "ssh-key not exchanged"
 
     local self_vip=$($HEX_SDK -f json health_vip_report | jq -r .description | cut -d"/" -f1)
@@ -2752,17 +2752,17 @@ ceph_mirror_pair()
     if [ -z "$(echo $self_ctlr | cut -d"-" -f1)" ] ; then
         self_ctlr=$(hostname)${self_ctlr}
     fi
-    Quiet cubectl node exec -r control "ln -sf /etc/ceph/ceph.conf /etc/ceph/${self_ctlr}-site.conf"
-    Quiet cubectl node exec -r control "systemctl enable ceph-rbd-mirror@${self_ctlr}-site.service >/dev/null 2>&1"
-    Quiet cubectl node exec -r control "systemctl restart ceph-rbd-mirror@${self_ctlr}-site.service >/dev/null 2>&1"
+    cmd -c "ln -sf /etc/ceph/ceph.conf /etc/ceph/${self_ctlr}-site.conf"
+    cmd -c "systemctl enable ceph-rbd-mirror@${self_ctlr}-site.service"
+    cmd -c "systemctl restart ceph-rbd-mirror@${self_ctlr}-site.service"
 
     local peer_ctlr=$($sshcmd root@$vip "grep cubesys.controller $SETTINGS_TXT | cut -d'=' -f2 | xargs" 2>/dev/null)-$vip
     if [ -z "$(echo $peer_ctlr | cut -d"-" -f1)" ] ; then
         peer_ctlr=$($sshcmd root@$vip hostname 2>/dev/null)${peer_ctlr}
     fi
-    Quiet $sshcmd root@$vip cubectl node exec -r control "ln -sf /etc/ceph/ceph.conf /etc/ceph/${peer_ctlr}-site.conf"
-    Quiet $sshcmd root@$vip cubectl node exec -r control "systemctl enable ceph-rbd-mirror@${peer_ctlr}-site.service >/dev/null 2>&1"
-    Quiet $sshcmd root@$vip cubectl node exec -r control "systemctl restart ceph-rbd-mirror@${peer_ctlr}-site.service >/dev/null 2>&1"
+    Quiet $sshcmd root@$vip $HEX_SDK cmd -c "ln -sf /etc/ceph/ceph.conf /etc/ceph/${peer_ctlr}-site.conf"
+    Quiet $sshcmd root@$vip $HEX_SDK cmd -c "systemctl enable ceph-rbd-mirror@${peer_ctlr}-site.service"
+    Quiet $sshcmd root@$vip $HEX_SDK cmd -c "systemctl restart ceph-rbd-mirror@${peer_ctlr}-site.service"
 
     Quiet rbd mirror pool enable glance-images image
     Quiet rbd mirror pool enable cinder-volumes image
@@ -2801,15 +2801,15 @@ ceph_mirror_unpair()
         Quiet -n $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_disable"
     fi
 
-    Quiet -n cubectl node exec -r control "systemctl stop ceph-rbd-mirror@${self_site}.service"
-    Quiet -n $sshcmd root@$peer_vip cubectl node exec -pn -r control "systemctl stop ceph-rbd-mirror@${peer_site}.service"
+    cmd -c "systemctl stop ceph-rbd-mirror@${self_site}.service"
+    Quiet -n $sshcmd root@$peer_vip $HEX_SDK cmd -c "systemctl stop ceph-rbd-mirror@${peer_site}.service"
 
-    Quiet -n cubectl node exec -pn -r control rm -f /etc/ceph/${peer_site}.conf /etc/ceph/${self_site}.conf
-    Quiet -n $sshcmd root@$peer_vip cubectl node exec -pn -r control "rm -f /etc/ceph/${peer_site}.conf /etc/ceph/${self_site}.conf"
+    cmd -c "rm -f /etc/ceph/${peer_site}.conf /etc/ceph/${self_site}.conf"
+    Quiet -n $sshcmd root@$peer_vip $HEX_SDK cmd -c "rm -f /etc/ceph/${peer_site}.conf /etc/ceph/${self_site}.conf"
 
     local mirror_dir=/var/lib/ceph/rbd-mirror
-    Quiet -n cubectl node exec -pn -r control rm -rf $mirror_dir
-    Quiet -n $sshcmd root@$peer_vip "cubectl node exec -pn -r control rm -rf $mirror_dir"
+    cmd -c rm -rf $mirror_dir
+    Quiet -n $sshcmd root@$peer_vip $HEX_SDK cmd -c "rm -rf $mirror_dir"
 }
 
 ceph_mirror_restart()
@@ -2819,8 +2819,8 @@ ceph_mirror_restart()
     local peer_vip=$(echo $peer_site | cut -d"-" -f2)
     local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
-    Quiet -n cubectl node exec -r control systemctl restart ceph-rbd-mirror@$self_site
-    Quiet -n $sshcmd root@${peer_vip:-emptyIp} "cubectl node exec -r control systemctl restart ceph-rbd-mirror@$peer_site"
+    cmd -c systemctl restart ceph-rbd-mirror@$self_site
+    Quiet -n $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK cmd -c systemctl restart ceph-rbd-mirror@$peer_site"
 }
 
 ceph_fs_mds_init()
@@ -2883,12 +2883,12 @@ ceph_nfs_ganesha()
 {
     case $1 in
         enable)
-            Quiet -n cubectl node exec -r control -p "systemctl unmask nfs-ganesha"
-            Quiet -n cubectl node exec -r control -p "systemctl start nfs-ganesha"
+            cmd -c "systemctl unmask nfs-ganesha"
+            cmd -c "systemctl start nfs-ganesha"
             ;;
         disable)
-            Quiet -n cubectl node exec -r control -p "systemctl stop nfs-ganesha"
-            Quiet -n cubectl node exec -r control -p "systemctl mask nfs-ganesha"
+            cmd -c "systemctl stop nfs-ganesha"
+            cmd -c "systemctl mask nfs-ganesha"
             ;;
         *)
             echo "usage: ceph_nfs_ganesha enable|disable"

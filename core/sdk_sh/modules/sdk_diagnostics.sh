@@ -181,7 +181,7 @@ _diagSrvCreate()
     for sid in ${server_id_array[@]} ; do
         sn=$(echo $server_list_json | jq -r ".[] | select(.ID==\"$sid\").Name")
         echo -n "Creating ${sn:-unknown} "
-        cubectl node exec -r compute -pn -- "grep -a $sid /var/log/nova/nova-compute.log | grep -o '\[instance: .* Took .* to build instance'" | grep Took || echo "[instance: $sid] Failed to build instance"
+        cmd -pv "grep -a $sid /var/log/nova/nova-compute.log | grep -o '\[instance: .* Took .* to build instance'" | grep Took || echo "[instance: $sid] Failed to build instance"
     done
 }
 
@@ -344,7 +344,7 @@ _diagnostics_instance_dns()
     local domain_name=${1:-www.google.com}
     local name_server=${2:-8.8.8.8}
 
-    cubectl node exec -r compute -p "$HEX_SDK diagnostics_cirros_host_exec \"nslookup $domain_name $name_server ; ping $name_server -c 3\""
+    cmd -pv "$HEX_SDK diagnostics_cirros_host_exec \"nslookup $domain_name $name_server ; ping $name_server -c 3\""
 }
 
 _diagnostics_instance_dd()
@@ -354,7 +354,7 @@ _diagnostics_instance_dd()
     [ $szgb -lt 150 ] || Error "Test data size $szgb GB can not be bigger 150"
     local bs=1M
     local count=$((szgb * 1024))
-    cubectl node exec -r compute -p "$HEX_SDK diagnostics_cirros_host_exec \"rm -f ./test.file ; time dd if=/dev/zero of=./test.file bs=$bs count=$count ; ls -lt\""
+    cmd -pv "$HEX_SDK diagnostics_cirros_host_exec \"rm -f ./test.file ; time dd if=/dev/zero of=./test.file bs=$bs count=$count ; ls -lt\""
 }
 
 _diagnostics_server_list()

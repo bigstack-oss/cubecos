@@ -110,7 +110,7 @@ ClusterStartMain(int argc, char **argv)
     std::string myip = G(MGMT_ADDR);
     if (access(KEYCLOAK_SAML_METADATA_FILE, F_OK) == 0) {
         HexUtilSystemF(0, 0, "cp -f %s %s", KEYCLOAK_SAML_METADATA_FILE, KEYCLOAK_SAML_METADATA_FILE_TMP);
-        HexUtilSystemF(0, 0, "cubectl node exec -r control -p scp root@%s:%s %s", myip.c_str(), KEYCLOAK_SAML_METADATA_FILE_TMP, KEYCLOAK_SAML_METADATA_FILE);
+        HexUtilSystemF(0, 0, "hex_sdk cmd -cv scp root@%s:%s %s", myip.c_str(), KEYCLOAK_SAML_METADATA_FILE_TMP, KEYCLOAK_SAML_METADATA_FILE);
         unlink(KEYCLOAK_SAML_METADATA_FILE_TMP);
     } else {
         HexLogError("%s is missing on %s", KEYCLOAK_SAML_METADATA_FILE, myip.c_str());
