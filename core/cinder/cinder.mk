@@ -23,4 +23,4 @@ rootfs_install::
 #	$(Q)cp -f $(COREDIR)/cinder/db_schema_stein.tgz $(CINDER_CONFDIR)
 	$(Q)cp -f $(CINDER_CONFDIR)/cinder.conf $(CINDER_CONFDIR)/cinder.conf.org
 	$(Q)touch $(CINDER_CONFDIR)/cinder.conf.def
-	$(Q)chroot $(ROOTDIR) systemctl disable qemu-guest-agent multipathd iscsi-onboot iscsi
+	$(Q)chroot $(ROOTDIR) systemctl disable multipathd iscsi
