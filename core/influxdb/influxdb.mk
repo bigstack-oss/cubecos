@@ -12,4 +12,4 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable influxdb
 	$(Q)mv -f $(ROOTDIR)/etc/influxdb/influxdb.conf $(ROOTDIR)/etc/influxdb/influxdb.conf.org
 	$(Q)cp -f $(COREDIR)/influxdb/influxdb.conf $(ROOTDIR)/etc/influxdb/
-	$(Q)chroot $(ROOTDIR) chown -R influxdb:influxdb /usr/share/influxdb
+	$(Q)chroot $(ROOTDIR) chown -R influxdb3:influxdb3 /usr/share/influxdb3

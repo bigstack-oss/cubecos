@@ -15,4 +15,4 @@ rootfs_install::
 	$(Q)cp -rf $(COREDIR)/kapacitor/exec_job_templates $(ROOTDIR)/etc/kapacitor/
 	$(Q)mkdir -p $(ROOTDIR)/etc/kapacitor/config_handlers $(ROOTDIR)/var/alert_resp $(ROOTDIR)/var/response
 	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube/cos/kapacitor
-	$(Q)cp -f $(SRCDIR)/event.yaml $(ROOTDIR)/usr/share/cube/cos/kapacitor/
+	$(Q)cp -f $(COREDIR)/kapacitor/event.yaml $(ROOTDIR)/usr/share/cube/cos/kapacitor/

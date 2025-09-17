@@ -820,7 +820,7 @@ health_haproxy_ha_check()
                 if ! is_remote_running $node haproxy-ha ; then
                     ERR_CODE=1
                     ERR_MSG+="haproxy-ha on $node is not running\n"
-                    ERR_MSG+="`cmd -c systemctl status haproxy-ha`\n"
+                    ERR_MSG+="`cmd -cv systemctl status haproxy-ha`\n"
                     ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy-ha"
                 fi
             fi
@@ -859,7 +859,7 @@ health_haproxy_check()
         if ! is_remote_running $node haproxy >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="haproxy on $node is not running\n"
-            ERR_MSG+="`cmd -c systemctl status haproxy`\n"
+            ERR_MSG+="`cmd -cv systemctl status haproxy`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy"
         fi
     done
@@ -887,7 +887,7 @@ health_httpd_check()
         if ! is_remote_running $node httpd ; then
             ERR_CODE=1
             ERR_MSG+="httpd on $node is not running\n"
-            ERR_MSG+="`cmd -c systemctl status httpd`\n"
+            ERR_MSG+="`cmd -cv systemctl status httpd`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u httpd"
         fi
         local i=2
@@ -899,8 +899,8 @@ health_httpd_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port $port on $node doesn't respond\n"
-                ERR_MSG+="`cmd -c \"netstat -tunpl | grep $port\"`\n"
-                ERR_LOG="`cmd -c \"netstat -tunpl | grep $port\"`"
+                ERR_MSG+="`cmd -cv \"netstat -tunpl | grep $port\"`\n"
+                ERR_LOG="`cmd -cv \"netstat -tunpl | grep $port\"`"
             fi
             let "i = $i + 1"
         done
@@ -912,8 +912,8 @@ health_httpd_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port 9311 on $node doesn't respond\n"
-                ERR_MSG+="`cmd -c \"netstat -tunpl | grep 9311\"`\n"
-                ERR_LOG="`cmd -c \"netstat -tunpl | grep 9311\"`"
+                ERR_MSG+="`cmd -cv \"netstat -tunpl | grep 9311\"`\n"
+                ERR_LOG="`cmd -cv \"netstat -tunpl | grep 9311\"`"
             fi
         fi
     done
@@ -968,7 +968,7 @@ health_nginx_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port $port on $node doesn't respond\n"
-                ERR_MSG+="`cmd -c \"netstat -tunpl | grep $port\"`\n"
+                ERR_MSG+="`cmd -cv \"netstat -tunpl | grep $port\"`\n"
                 ERR_LOG="netstat -tunpl | grep $port"
             fi
             let "i = $i + 1"
@@ -1146,7 +1146,7 @@ health_memcache_check()
         if ! is_remote_running $node memcached ; then
             ERR_CODE=1
             ERR_MSG+="memcached on $node is not running\n"
-            ERR_MSG+="`cmd -c systemctl status memcached`\n"
+            ERR_MSG+="`cmd -cv systemctl status memcached`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u memcached"
         fi
     done
@@ -1367,17 +1367,17 @@ health_ceph_mds_check()
     let "online = $active + $standbys + $hotstandbys"
 
     ERR_LOG+="`$CEPH fs status`\n"
-    ERR_LOG+="`cmd \"mountpoint -- $CEPHFS_STORE_DIR | grep mountpoint\"`\n"
+    ERR_LOG+="`cmd -v \"mountpoint -- $CEPHFS_STORE_DIR | grep mountpoint\"`\n"
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
-    elif [ $(cmd "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
+    elif [ $(cmd -v "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
         ERR_CODE=2
     elif ! timeout $SRVSTO mount ${vip}:/nfs $nfs_dir 2>/dev/null ; then
         timeout $SRVSTO umount -l $nfs_dir/ 2>/dev/null || true
         ERR_CODE=3
     elif ! touch $nfs_dir/.alive >/dev/null 2>&1 ; then
         ERR_CODE=4
-    elif [ $(cmd "systemctl show -p SubState nfs-ganesha" | grep running| wc -l) -lt $num_ctrlnode ] ; then
+    elif [ $(cmd -cv "systemctl show -p SubState nfs-ganesha" | grep running| wc -l) -lt $num_ctrlnode ] ; then
         ERR_CODE=5
     fi
 
@@ -1471,7 +1471,7 @@ health_ceph_rgw_check()
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u ceph-radosgw@rgw.$HOSTNAME"
     ERR_MSG+="`$CEPH health detail`"
     ERR_MSG+="$online/$total rgw are online\n"
-    ERR_MSG+="`cmd -c systemctl status ceph-radosgw@rgw.\$HOSTNAME`\n"
+    ERR_MSG+="`cmd -cv systemctl status ceph-radosgw@rgw.\$HOSTNAME`\n"
     _health_fail_log
 }
 
