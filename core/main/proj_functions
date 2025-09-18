@@ -110,7 +110,6 @@ _hex_exec()
             local elaps=$(echo $repair_detected | cut -d"|" -f3 | cut -d"," -f3)
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing by $node\""
             influx_event "${query},detail=\"$cmd (pid:$pid, elaps:$elaps) by $node\""
-            return 1
         else
             trap _hex_exec_abort_repairing INT EXIT
             if set -o | grep xtrace | awk '{print $2}' | grep -o "^on$" ; then
@@ -120,7 +119,6 @@ _hex_exec()
                 { $cmd "$@" >/tmp/$log 2>&1; } &
             fi
             echo $! >$runtime 2>/dev/null
-            { set +x; } >/dev/null 2>&1
             ln -sf $runtime $CLUSTER_REPAIRING
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
             influx_event "${query},detail=\"$cmd pid:$(cat $runtime 2>/dev/null)\""

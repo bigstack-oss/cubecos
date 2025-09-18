@@ -105,7 +105,7 @@ is_node_repairing()
             local eps=$(ps --no-headers -o etime ${pid:-0} 2>/dev/null | xargs)
             echo -n "${cmd},${pid},${eps}"
         fi
-        $HEX_SDK stale_repair_clear
+        hex_sdk stale_repair_clear # Do not replace hex_sdk with $HEX_SDK which cmd does not expand
         return 0
     else
         return 1
@@ -115,7 +115,7 @@ is_node_repairing()
 is_repairing()
 {
     [ "$VERBOSE" = "1" ] || local reg_flg="-q"
-    if cmd -cv is_node_repairing $@ | grep $reg_flg "| 0 |" ; then
+    if cmd -cv is_node_repairing $@ | grep $reg_flg "|0|" ; then
         return 0
     else
         return 1
@@ -143,7 +143,7 @@ is_node_checking()
 is_checking()
 {
     [ "$VERBOSE" = "1" ] || local reg_flg="-q"
-    if cmd -cv is_node_checking $@ | grep $reg_flg "| 0 |" ; then
+    if cmd -cv is_node_checking $@ | grep $reg_flg "|0|" ; then
         return 0
     else
         return 1
