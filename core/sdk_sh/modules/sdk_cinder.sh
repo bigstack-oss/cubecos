@@ -6,6 +6,9 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+CINDER_USER_INPUT_MODEL_DIRECTORY="/etc/cube/cos/cinder/models"
+CINDER_BUILTIN_MODEL_DIRECTORY="/usr/share/cube/cos/cinder/builtin_models"
+
 cinder_is_all_true()
 {
     local lines="${1:-""}"
@@ -344,7 +347,7 @@ cinder_put_model()
         return "$ERROR_JSON_PARSING_FAILED"
     fi
     local model_file_name="$(cinder_get_model_file_name "$driver")"
-    _hex_function_ret filesystem_write_file "/etc/cube/cos/cinder/models/${model_file_name}.yaml" "$exec_output"
+    _hex_function_ret filesystem_write_file "${CINDER_USER_INPUT_MODEL_DIRECTORY}/${model_file_name}.yaml" "$exec_output"
     if [[ "$?" != "0" ]] ; then
         # Failed to write the model file.
         jq -c -n \
@@ -394,4 +397,45 @@ cinder_put_model()
     jq -c -n \
         --arg message "model ${driver} created" \
         '{success: true, message: $message}'
+}
+
+cinder_get_model()
+{
+    local exec_output=""
+    local exec_error=""
+    local model_found="false"
+    local driver="${1:-""}"
+    if [[ "$driver" == "" ]] ; then
+        jq -c -n \
+            '{success: false, message: "the driver name should not be blank"}' \
+            >&2
+        return 1
+    fi
+
+    local model_file_name="$(cinder_get_model_file_name "$driver")"
+    local model_file_path=""
+    local user_input_model_file_path="${CINDER_USER_INPUT_MODEL_DIRECTORY}/${model_file_name}.yaml"
+    local builtin_model_file_path="${CINDER_BUILTIN_MODEL_DIRECTORY}/${model_file_name}.yaml"
+    if [ -f "$user_input_model_file_path" ] ; then
+        model_file_path="$user_input_model_file_path"
+        model_found="true"
+    elif [ -f "$builtin_model_file_path" ] ; then
+        model_file_path="$builtin_model_file_path"
+        model_found="true"
+    else
+        jq -c -n \
+            '{success: false, message: "the model does not exist"}' \
+            >&2
+        return 2
+    fi
+
+    _hex_function exec_output exec_error yq -p=yaml -o=json "$model_file_path"
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            '{success: false, message: "failed to output the model file as JSON}' \
+            >&2
+        return "$ERROR_JSON_PARSING_FAILED"
+    fi
+
+    echo "$exec_output" | jq -c
 }
