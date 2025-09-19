@@ -1,0 +1,69 @@
+driver: "cinder.volume.drivers.dell_emc.sc.storagecenter_fc.SCFCDriver"
+vendor: "Dell EMC"
+model: "SC Series FC"
+multipath:
+  - section: "devices"
+    attributes: []
+    subSections:
+      - section: "device"
+        attributes:
+          - key: "vendor"
+            value: "\"COMPELNT\""
+          - key: "product"
+            value: "\"Compellent Vol\""
+          - key: "user_friendly_names"
+            value: "\"no\""
+          - key: "flush_on_last_del"
+            value: "\"yes\""
+storage:
+  service:
+    driverSection:
+      - key: "san_ip"
+        value: ""
+      - key: "san_login"
+        value: ""
+      - key: "san_password"
+        value: ""
+      - key: "san_thin_provision"
+        value: "true"
+      - key: "dell_sc_ssn"
+        value: ""
+      - key: "dell_sc_api_port"
+        value: ""
+      - key: "dell_sc_verify_cert"
+        value: "false"
+      - key: "dell_sc_server_folder"
+        value: ""
+      - key: "dell_sc_volume_folder"
+        value: ""
+      - key: "use_multipath_for_image_xfer"
+        value: "true"
+      - key: "enforce_multipath_for_image_xfer"
+        value: "true"
+      - key: "image_upload_use_cinder_backend"
+        value: "true"
+    extraSettings: []
+    extraConfigFiles: []
+  volumeType:
+    settings:
+      - key: "storagetype:storageprofile"
+        value: ""
+      - key: "replication_enabled"
+        value: ""
+      - key: "replication_type"
+        value: ""
+      - key: "replication:activereplay"
+        value: ""
+      - key: "replication:livevolume"
+        value: ""
+      - key: "storagetype:volumeqos"
+        value: ""
+      - key: "storagetype:groupqos"
+        value: ""
+      - key: "storagetype:datareductionprofile"
+        value: ""
+      - key: "multiattach"
+        value: ""
+  image:
+    useMultipath: true
+    forceMultipath: true

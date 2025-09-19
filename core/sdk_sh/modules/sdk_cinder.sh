@@ -6,7 +6,7 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
-_is_all_true()
+cinder_is_all_true()
 {
     local lines="${1:-""}"
 
@@ -23,25 +23,28 @@ _is_all_true()
     return 0
 }
 
-_are_services_up()
+cinder_are_services_up()
 {
+    local exec_output=""
+    local exec_error=""
     local storage_backends="${1:-""}"
 
-    local status="$(openstack volume service list -c Binary -c Host -c State -f json)"
-    echo "$status" | jq "." > /dev/null 2>&1
+    _hex_function exec_output exec_error openstack volume service list -c Binary -c Host -c State -f json
+    is_valid_json "$exec_output"
     if [[ "$?" != "0" ]] ; then
         # the status is not a valid JSON string
         return 1
     fi
+    local status="$exec_output"
 
-    _is_all_true "$(echo "$status" | jq -r ".[] | select(.Binary == \"cinder-scheduler\") | .State | test(\"up\")")"
+    _hex_function_ret cinder_is_all_true "$(echo "$status" | jq -r ".[] | select(.Binary == \"cinder-scheduler\") | .State | test(\"up\")")"
     local isSchedulerUp="$?"
     if [[ "$isSchedulerUp" != "0" ]] ; then
         # cinder-scheduler is not up
         return 2
     fi
 
-    _is_all_true "$(echo "$status" | jq -r ".[] | select(.Binary == \"cinder-backup\") | .State | test(\"up\")")"
+    _hex_function_ret cinder_is_all_true "$(echo "$status" | jq -r ".[] | select(.Binary == \"cinder-backup\") | .State | test(\"up\")")"
     local isBackupUp="$?"
     if [[ "$isBackupUp" != "0" ]] ; then
         # cinder-backup is not up
@@ -51,7 +54,7 @@ _are_services_up()
     local isVolumeUp="0"
     if [ ! -z "$storage_backends" ] ; then
         while read -r backend ; do
-            _is_all_true "$(echo "$status" | jq -r ".[] | select(.Binary == \"cinder-volume\" and .Host == \"${backend//\"/}\") | .State | test(\"up\")")"
+            _hex_function_ret cinder_is_all_true "$(echo "$status" | jq -r ".[] | select(.Binary == \"cinder-volume\" and .Host == \"${backend//\"/}\") | .State | test(\"up\")")"
             isVolumeUp="$?"
 
             if [[ "$isVolumeUp" != "0" ]] ; then
@@ -60,7 +63,7 @@ _are_services_up()
             fi
         done <<< "$(echo "$storage_backends" | tr ',' '\n')"
     else
-        _is_all_true "$(echo "$status" | jq -r ".[] | select(.Binary == \"cinder-volume\") | .State | test(\"up\")")"
+        _hex_function_ret cinder_is_all_true "$(echo "$status" | jq -r ".[] | select(.Binary == \"cinder-volume\") | .State | test(\"up\")")"
         isVolumeUp="$?"
 
         if [[ "$isVolumeUp" != "0" ]] ; then
@@ -79,7 +82,7 @@ cinder_wait_for_services_up()
 
     local i=0
     while [ $i -lt $timeout ] ; do
-        if _are_services_up "$storage_backends" ; then
+        if cinder_are_services_up "$storage_backends" ; then
             break
         else
             sleep 1
@@ -87,4 +90,302 @@ cinder_wait_for_services_up()
         i=$(expr $i + 1)
     done
     [ $i -lt $timeout ]
+}
+
+cinder_get_model_file_name()
+{
+    local driver="${1:-""}"
+
+    local output="${driver##*( )}"
+    output="${output%%*( )}"
+    output="${output#"cinder.volume.drivers."}"
+    output="${output//./-}"
+
+    echo -n "$output"
+}
+
+cinder_marshall_multipath_conf()
+{
+    local exec_output=""
+    local exec_error=""
+    local multipath_conf="${1:-""}"
+    local section=""
+    local section_name=""
+    local attributes=""
+    local attribute=""
+    local sub_sections=""
+    local sub_section=""
+    local sub_section_name=""
+    local key=""
+    local value=""
+    local output=""
+
+    is_valid_json "$multipath_conf"
+    if [[ "$?" != "0" ]] ; then
+        # The config is not a valid JSON.
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+    json_is_array "$multipath_conf"
+    if [[ "$?" != "0" ]] ; then
+        # The config is not an array.
+        return "$ERROR_JSON_NOT_ARRAY"
+    fi
+
+    while read -r section; do
+        if [ -z "$section" ] ; then
+            continue
+        fi
+
+        if ! json_has_key "$section" "section" ; then
+            # Field section should exist.
+            return "$ERROR_JSON_KEY_MISSING"
+        fi
+        if ! json_has_key "$section" "attributes" ; then
+            # Field attributes should exist.
+            return "$ERROR_JSON_KEY_MISSING"
+        fi
+        if ! json_has_key "$section" "subSections" ; then
+            # Field subSections should exist.
+            return "$ERROR_JSON_KEY_MISSING"
+        fi
+
+        # section name
+        section_name="$(json_get_value "$section" ".section")"
+        output+="${section_name} {\n"
+
+        # section attributes
+        attributes="$(json_get_compact_value "$section" ".attributes")"
+        json_is_array "$attributes"
+        if [[ "$?" != "0" ]] ; then
+            # Field attributes is not an array.
+            return "$ERROR_JSON_NOT_ARRAY"
+        fi
+
+        while read -r attribute; do
+            if [ -z "$attribute" ] ; then
+                continue
+            fi
+
+            if ! json_has_key "$attribute" "key" ; then
+                # Field key should exist.
+                return "$ERROR_JSON_KEY_MISSING"
+            fi
+            if ! json_has_key "$attribute" "value" ; then
+                # Field value should exist.
+                return "$ERROR_JSON_KEY_MISSING"
+            fi
+
+            key="$(json_get_value "$attribute" ".key")"
+            value="$(json_get_value "$attribute" ".value")"
+
+            output+="    ${key} ${value}\n"
+        done <<< "$(echo "$attributes" | jq -c ".[]")"
+
+        # section subsections
+        sub_sections="$(json_get_compact_value "$section" ".subSections")"
+        json_is_array "$sub_sections"
+        if [[ "$?" != "0" ]] ; then
+            # Field subSections is not an array.
+            return "$ERROR_JSON_NOT_ARRAY"
+        fi
+
+        while read -r sub_section; do
+            if [ -z "$sub_section" ] ; then
+                continue
+            fi
+
+            if ! json_has_key "$sub_section" "section" ; then
+                # Field section should exist.
+                return "$ERROR_JSON_KEY_MISSING"
+            fi
+            if ! json_has_key "$sub_section" "attributes" ; then
+                # Field attributes should exist.
+                return "$ERROR_JSON_KEY_MISSING"
+            fi
+
+            sub_section_name="$(json_get_value "$sub_section" ".section")"
+            output+="    ${sub_section_name} {\n"
+
+            attributes="$(json_get_compact_value "$sub_section" ".attributes")"
+            json_is_array "$attributes"
+            if [[ "$?" != "0" ]] ; then
+                # Field attributes is not an array.
+                return "$ERROR_JSON_NOT_ARRAY"
+            fi
+
+            while read -r attribute; do
+                if [ -z "$attribute" ] ; then
+                    continue
+                fi
+
+                if ! json_has_key "$attribute" "key" ; then
+                    # Field key should exist.
+                    return "$ERROR_JSON_KEY_MISSING"
+                fi
+                if ! json_has_key "$attribute" "value" ; then
+                    # Field value should exist.
+                    return "$ERROR_JSON_KEY_MISSING"
+                fi
+
+                key="$(json_get_value "$attribute" ".key")"
+                value="$(json_get_value "$attribute" ".value")"
+
+                output+="        ${key} ${value}\n"
+            done <<< "$(echo "$attributes" | jq -c ".[]")"
+
+            output+="    }\n"
+        done <<< "$(echo "$sub_sections" | jq -c ".[]")"
+
+        output+="}\n"
+    done <<< "$(echo "$multipath_conf" | jq -c ".[]")"
+
+    echo -e "$output"
+}
+
+cinder_put_model()
+{
+    # input format : {
+    #   driver: "",
+    #   vendor: "",
+    #   model: "",
+    #   multipath: [
+    #     {
+    #       section: "",
+    #       attributes: [
+    #         {
+    #           key: "",
+    #           value: ""
+    #         }
+    #       ],
+    #       subSections: [
+    #         section: "",
+    #         attributes: [
+    #           {
+    #             key: "",
+    #             value: ""
+    #           }
+    #         ],
+    #       ]
+    #     }
+    #   ],
+    #   storage: {
+    #     service: {
+    #       driverSection: [
+    #         {
+    #           key: "",
+    #           value: "",
+    #         }
+    #       ],
+    #       extraSettings: [
+    #         {
+    #           sectionHeader: "",
+    #           settings: [
+    #             {
+    #               key: "",
+    #               value: "",
+    #             },
+    #           ],
+    #         },
+    #       ],
+    #      extraConfigFiles: [
+    #        {
+    #          name: "", // name = test.conf => file path = /etc/cinder/external_storage/test.conf
+    #          content: "", // base64 encoded file content
+    #        },
+    #      ],
+    #     },
+    #     volumeType: {
+    #       settings: [
+    #         {
+    #           key: "",
+    #           value: "",
+    #         },
+    #       ],
+    #     },
+    #     image: {
+    #       useMultipath: true,
+    #       forceMultipath: true,
+    #     },
+    #   },
+    # }
+    #
+    # output format: {
+    #   success: true,
+    #   message: "",
+    # }
+
+    local exec_output=""
+    local exec_error=""
+    local ret=""
+    local input="${1:-""}"
+    is_valid_json "$input"
+    if [[ "$?" != "0" ]] ; then
+        # The input is not a valid JSON string.
+        jq -c -n \
+            '{success: false, message: "the input is not a valid JSON string"}'
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+
+    # process inputs
+    local driver="$(json_get_value "$input" ".driver")"
+    if [ -z "$driver" ] ; then
+        # The field driver is the ID, and it should not be blank.
+        jq -c -n \
+            '{success: false, message: "field driver should not be blank"}'
+        return "$ERROR_JSON_KEY_MISSING"
+    fi
+
+    # output the model config to /etc/cube/cos/cinder/models as a YAML file
+    _hex_function exec_output exec_error yq -p=json -o=yaml <(printf "%s" "$input")
+    if [[ "$?" != "0" ]] ; then
+        # The conversion from JSON to YAML failed.
+        jq -c -n \
+            '{success: false, message: "failed to convert the input JSON to YAML"}'
+        return "$ERROR_JSON_PARSING_FAILED"
+    fi
+    local model_file_name="$(cinder_get_model_file_name "$driver")"
+    _hex_function_ret filesystem_write_file "/etc/cube/cos/cinder/models/${model_file_name}.yaml" "$exec_output"
+    if [[ "$?" != "0" ]] ; then
+        # Failed to write the model file.
+        jq -c -n \
+            '{success: false, message: "failed to write the model file"}'
+        return 1
+    fi
+
+    # set the multipath settings to /etc/multipath/conf.d
+    local multipath="$(json_get_value "$input" ".multipath")"
+    local multipath_conf_file=""
+    multipath_conf_file="$(cinder_marshall_multipath_conf "$multipath")"
+    ret="$?"
+
+    if [[ "$ret" == "$ERROR_JSON_INVALID_JSON" ]] ; then
+        jq -c -n \
+            '{success: false, message: "the input is not a valid JSON string"}'
+        return "$ret"
+    elif [[  "$ret" == "$ERROR_JSON_KEY_MISSING" ]] ; then
+        jq -c -n \
+            '{success: false, message: "a field is missing"}'
+        return "$ret"
+    elif [[ "$ret" == "$ERROR_JSON_NOT_ARRAY" ]] ; then
+        jq -c -n \
+            '{success: false, message: "a field should be an array"}'
+        return "$ret"
+    elif [[ "$ret" != "0" ]] ; then
+        # general error case, we should not be here, errors should already be handled above
+        jq -c -n \
+            '{success: false, message: "failed to generate the multipath config"}'
+        return 2
+    fi
+
+    _hex_function_ret filesystem_write_file "/etc/multipath/conf.d/${model_file_name}.conf" "$multipath_conf_file"
+    if [[ "$?" != "0" ]] ; then
+        # Failed to write the multipath config file.
+        jq -c -n \
+            '{success: false, message: "failed to write the multipath config file"}'
+        return 3
+    fi
+
+    jq -c -n \
+        --arg message "model ${driver} created" \
+        '{success: true, message: $message}'
 }

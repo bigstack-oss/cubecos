@@ -37,6 +37,11 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/rc.d/init.d
 	$(Q)chroot $(ROOTDIR) ln -sf rc.d/init.d /etc/init.d
 
+# cube configs
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos
+
 # cube static data
 rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube
