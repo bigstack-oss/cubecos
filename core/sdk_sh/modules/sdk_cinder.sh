@@ -385,6 +385,12 @@ cinder_put_model()
         return 3
     fi
 
+    # apply multipathd changes
+    if is_compute_node ; then
+        # multipathd is only need by nova-compute on compute nodes
+        _hex_function_ret systemctl reload multipathd
+    fi
+
     jq -c -n \
         --arg message "model ${driver} created" \
         '{success: true, message: $message}'
