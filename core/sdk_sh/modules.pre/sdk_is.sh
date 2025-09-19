@@ -217,3 +217,9 @@ is_vip_reachable()
 
     return $ret
 }
+
+is_valid_json()
+{
+    echo "${1}" | _hex_function_ret jq "."
+    return $?
+}
