@@ -12,6 +12,37 @@ CLUSTER_SYNC=/run/cube_cluster_synced
 CLUSTER_REPAIRING=/run/cube_cluster_repairing
 HORIZON_APP_DIR=/usr/share/openstack-dashboard/openstack_dashboard/local/enabled
 
+# Programming language like function,
+# which captures stdout, stderr, and the exit code.
+# Usage: _hex_function STDOUT_VARIABLE STDERR_VARIABLE COMMAND [ARG1[ ARG2[ ...[ ARGN]]]]
+_hex_function()
+{
+    {
+        IFS=$'\n' read -r -d '' "${1}";
+        IFS=$'\n' read -r -d '' "${2}";
+        (IFS=$'\n' read -r -d '' _ERRNO_; return ${_ERRNO_});
+    } < <((printf '\0%s\0%d\0' "$(
+        (
+            (
+                (
+                    {
+                        shift 2;
+                        "${@}";
+                        echo "${?}" 1>&3-;
+                    } | tr -d '\0' 1>&4-
+                ) 4>&2- 2>&1- | tr -d '\0' 1>&4-
+            ) 3>&1- | exit "$(cat)"
+        ) 4>&1-
+    )" "${?}" 1>&2) 2>&1)
+}
+
+# Function call, which only cares about the exit status.
+_hex_function_ret()
+{
+    "${@}" >/dev/null 2>&1
+    return $?
+}
+
 _hex_exec_abort_repairing()
 {
     Quiet -n pkill -P $(cat $CLUSTER_REPAIRING 2>/dev/null)
