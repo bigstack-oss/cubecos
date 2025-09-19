@@ -111,17 +111,16 @@ ImageImportMain(int argc, const char** argv)
             return CLI_INVALID_ARGS;
         }
 
+        flags="--os-project-domain-name " + domain + " --os-project-name " + tenant;
         if (strcmp(source.c_str(), "from Bigstack") == 0) {
             if (CliMatchCmdHelper(argc, argv, 7, "echo 'public\nprivate'", &index, &visibility, "Visibility: ") != CLI_SUCCESS) {
                 CliPrintf("Unknown visibility");
                 return CLI_INVALID_ARGS;
             }
             pool="glance-images";
-            flags="--project-domain " + domain + " --project " + tenant;
             flags+=" --visibility " + visibility;
         } else {
             pool="cinder-volumes";
-            flags="--os-project-domain-name " + domain + " --os-project-name " + tenant;
         }
 
         cmd = HEX_SDK " os_list_volume_backend_by_pool " + pool;

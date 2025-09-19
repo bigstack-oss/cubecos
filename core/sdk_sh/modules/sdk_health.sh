@@ -217,7 +217,7 @@ health_mtu_check()
     for ifc in ${!ifcs_mtus[@]}; do
         if ! cmd "if ip link show $ifc >/dev/null 2>&1 ; then ip link show $ifc | grep -q -i \"mtu ${ifcs_mtus[$ifc]}\" ; fi" >/dev/null 2>&1 ; then
             ERR_CODE=1
-            ERR_MSG+="$(cmd ip link show $ifc)\n"
+            ERR_LOG+="ip link show"
         fi
     done
 
@@ -528,8 +528,8 @@ health_hacluster_repair()
             if is_vip_reachable ; then
                 break
             else
-                pcs resource clear vip
-                pcs resource cleanup
+                Quiet -n pcs resource clear vip 2>/dev/null
+                Quiet -n pcs resource cleanup 2>/dev/null
             fi
         done
     else
@@ -731,14 +731,14 @@ health_vip_check()
                     ERR_CODE=4
                 elif [ $(cmd -v "arping -c 1 -w 1 $ipaddr >/dev/null && arp -n $ipaddr" | cut -d"|" -f3 | grep "^${ipaddr}" | awk '{print $1, $3}' | sort -u | wc -l) -gt 1 ] ; then
                     ERR_CODE=3
-                    ERR_LOG="cmd -v arp -e -n $ipaddr"
+                    ERR_LOG="arp -e -n $ipaddr"
                 elif [ -z "$ipcidr" ] ; then
                     ERR_CODE=1
                 fi
             else
                 if [ -n "$ipcidr" ] ; then
                     ERR_CODE=2
-                    ERR_MSG="`cmd -v \"ip a | grep $ipcidr\"`"
+                    ERR_LOG="ip addr show"
                 fi
             fi
         done
@@ -746,7 +746,7 @@ health_vip_check()
         if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
             ERR_CODE=5
         elif ! Quiet pacemaker status 2>/dev/null ; then
-            ERR_MSG+="`cmd -cv systemctl status pcsd pacemaker corosync`\n"
+            ERR_LOG="systemctl status pcsd pacemaker corosync"
             ERR_CODE=6
         fi
     fi
@@ -789,8 +789,8 @@ health_vip_repair()
                 if remote_run $master "pcs resource status vip" | grep "Started ${master}$" ; then
                     break
                 else
-                    remote_run $master "pcs resource clear vip"
-                    remote_run $master "pcs resource move vip"
+                    remote_run $master "pcs resource clear vip 2>/dev/null"
+                    remote_run $master "pcs resource move vip 2>/dev/null"
                     sleep 10
                 fi
             done
@@ -804,7 +804,7 @@ health_haproxy_ha_report()
     if [ -n "$active_host" ] ; then
         DESCRIPTION="$ipaddr@$active_host"
         ERR_MSG+="($active_host)\n"
-        ERR_MSG+="`remote_run $active_host $HEX_SDK haproxy_stats /run/haproxy/admin.sock`\n"
+        ERR_LOG="$HEX_SDK haproxy_stats /run/haproxy/admin.sock"
     else
         DESCRIPTION="non-HA"
     fi
@@ -820,7 +820,6 @@ health_haproxy_ha_check()
                 if ! is_remote_running $node haproxy-ha ; then
                     ERR_CODE=1
                     ERR_MSG+="haproxy-ha on $node is not running\n"
-                    ERR_MSG+="`cmd -cv systemctl status haproxy-ha`\n"
                     ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy-ha"
                 fi
             fi
@@ -848,7 +847,7 @@ health_haproxy_report()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         ERR_MSG+="($node)\n"
-        ERR_MSG+="`remote_run $node $HEX_SDK haproxy_stats /run/haproxy/admin-local.sock`\n"
+        ERR_LOG="$HEX_SDK haproxy_stats /run/haproxy/admin-local.sock"
     done
     _health_report ${FUNCNAME[0]}
 }
@@ -859,7 +858,6 @@ health_haproxy_check()
         if ! is_remote_running $node haproxy >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="haproxy on $node is not running\n"
-            ERR_MSG+="`cmd -cv systemctl status haproxy`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy"
         fi
     done
@@ -883,37 +881,27 @@ health_httpd_report()
 
 health_httpd_check()
 {
+    ERR_LOG="systemctl status httpd"
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node httpd ; then
             ERR_CODE=1
             ERR_MSG+="httpd on $node is not running\n"
-            ERR_MSG+="`cmd -cv systemctl status httpd`\n"
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u httpd"
         fi
         local i=2
-        # monasca(8070)
-        # keystone(5000) placement(8778) mellon(5443)
         for port in 8070 5000 8778 5443 ; do
             $CURL -sf http://$node:$port >/dev/null
-            # 0: ok, 22: http error (page not found)
+            # 0: ok, 22: http error (page not found)                                                                                                                                                                                                      
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
-                ERR_MSG+="http port $port on $node doesn't respond\n"
-                ERR_MSG+="`cmd -cv \"netstat -tunpl | grep $port\"`\n"
-                ERR_LOG="`cmd -cv \"netstat -tunpl | grep $port\"`"
+                ERR_MSG+="missing port ${node}:${port}\n"
             fi
-            let "i = $i + 1"
         done
 
         if ! is_edge_node ; then
-            # barbican(9311)
             $CURL -sf http://$node:9311 >/dev/null
-            # 0: ok, 22: http error (page not found)
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port 9311 on $node doesn't respond\n"
-                ERR_MSG+="`cmd -cv \"netstat -tunpl | grep 9311\"`\n"
-                ERR_LOG="`cmd -cv \"netstat -tunpl | grep 9311\"`"
             fi
         fi
     done
@@ -923,6 +911,13 @@ health_httpd_check()
 
 health_httpd_repair()
 {
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! cmd -c "[ \$(ls -1 /var/www/certs/ | wc -l) -eq 3 ]" ; then
+            if remote_run $node "[ \$(ls -1 /var/www/certs/ | wc -l) -eq 3 ]" ; then
+                remote_run $node cubectl node rsync /var/www/certs
+            fi
+        fi
+    done
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node httpd ; then
             remote_systemd_restart $node httpd
@@ -968,7 +963,6 @@ health_nginx_check()
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port $port on $node doesn't respond\n"
-                ERR_MSG+="`cmd -cv \"netstat -tunpl | grep $port\"`\n"
                 ERR_LOG="netstat -tunpl | grep $port"
             fi
             let "i = $i + 1"
@@ -1047,7 +1041,7 @@ health_api_check()
             if [ "$?" -eq 0 ] ; then
                 ERR_CODE=2
                 ERR_MSG+="saml client is not ready for cube-cos-api\n"
-                ERR_LOG=$(tail -n 10 $api_log)
+                ERR_LOG="tail -n 10 $api_log"
                 continue
             fi
         fi
@@ -1111,12 +1105,12 @@ health_skyline_check()
         if ! is_remote_running $node nginx >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="nginx on $node is not running\n"
-            ERR_LOG="$HEX_SDK cmd -cv systemctl status nginx"
+            ERR_LOG="systemctl status nginx"
         fi
         if ! is_remote_running $node skyline-apiserver >/dev/null 2>&1 ; then
             ERR_CODE=2
             ERR_MSG+="skyline-apiserver on $node is not running\n"
-            ERR_LOG="$HEX_SDK cmd -cv systemctl status skyline-apiserver"
+            ERR_LOG="systemctl status skyline-apiserver"
         fi
     done
 
@@ -1146,7 +1140,6 @@ health_memcache_check()
         if ! is_remote_running $node memcached ; then
             ERR_CODE=1
             ERR_MSG+="memcached on $node is not running\n"
-            ERR_MSG+="`cmd -cv systemctl status memcached`\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u memcached"
         fi
     done
@@ -1201,7 +1194,7 @@ health_ceph_check()
         ERR_CODE=2
     fi
 
-    ERR_MSG+="`$CEPH health detail`"
+    ERR_MSG="`$CEPH health detail`"
     _health_fail_log
 }
 
@@ -1225,7 +1218,7 @@ health_ceph_mon_check()
     local total=$(echo $stats | jq -r .monmap.num_mons)
     local online=$(echo $stats | jq -r .quorum_names[] | wc -l)
 
-    ERR_LOG="/var/log/ceph/ceph-mon*.log"
+    ERR_LOG="systemctl status ceph-mon@*"
     if echo $stats | jq -r .health.checks.MON_MSGR2_NOT_ENABLED.summary.message | grep -q "have not enabled msgr2" ; then
         ERR_CODE=1
     elif [ "$total" != "$online" ] ; then
@@ -1306,7 +1299,6 @@ health_ceph_mgr_check()
     fi
 
     ERR_MSG+="`$CEPH health detail`"
-    ERR_MSG+="`echo $stats | jq -r .mgrmap`\n"
     _health_fail_log
 }
 
@@ -1366,8 +1358,6 @@ health_ceph_mds_check()
     fi
     let "online = $active + $standbys + $hotstandbys"
 
-    ERR_LOG+="`$CEPH fs status`\n"
-    ERR_LOG+="`cmd -v \"mountpoint -- $CEPHFS_STORE_DIR | grep mountpoint\"`\n"
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
     elif [ $(cmd -v "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
@@ -1386,6 +1376,7 @@ health_ceph_mds_check()
     rmdir $nfs_dir
 
     ERR_MSG+="`$CEPH health detail`"
+    ERR_LOG+="$CEPH fs status"
     _health_fail_log
 }
 
@@ -1437,8 +1428,6 @@ health_ceph_osd_check()
     fi
 
     ERR_MSG+="`$CEPH health detail`"
-    ERR_MSG+="`echo $stats | jq -r .osdmap`\n"
-    ERR_MSG+="`$CEPH osd tree`"
     _health_fail_log
 }
 
@@ -1469,9 +1458,7 @@ health_ceph_rgw_check()
     fi
 
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u ceph-radosgw@rgw.$HOSTNAME"
-    ERR_MSG+="`$CEPH health detail`"
     ERR_MSG+="$online/$total rgw are online\n"
-    ERR_MSG+="`cmd -cv systemctl status ceph-radosgw@rgw.\$HOSTNAME`\n"
     _health_fail_log
 }
 
@@ -1511,7 +1498,6 @@ health_rbd_target_check()
         done
     fi
 
-    ERR_MSG+="`$CEPH health detail`"
     _health_fail_log
 }
 
@@ -1626,7 +1612,6 @@ health_ironic_check()
         fi
 
         ERR_MSG+="$service_stats\n"
-        ERR_MSG+="`$OPENSTACK baremetal driver list`\n"
     fi
 
     _health_fail_log
@@ -1845,7 +1830,6 @@ health_glance_check()
         done
     fi
 
-    ERR_MSG+="`hex_sdk cmd -cv \"hex_sdk is_running openstack-glance-api\"`\n"
     _health_fail_log
 }
 
@@ -1899,7 +1883,6 @@ health_cinder_check()
         ERR_CODE=5
     fi
 
-    ERR_MSG+="$service_stats\n"
     ERR_MSG+="`$CEPH health detail`"
     _health_fail_log
 }

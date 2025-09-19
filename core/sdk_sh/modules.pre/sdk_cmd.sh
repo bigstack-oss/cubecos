@@ -8,7 +8,7 @@ fi
 
 cmd()
 {
-    local nodes=()
+    local _cmd_nodes=()
     local reverse="false"
     local dryrun="false"
     OPTIND=1
@@ -20,99 +20,99 @@ cmd()
             r) reverse="true" ;;
             q) qend=">/dev/null 2>&1" ;;
             a)                  # all nodes
-                nodes=( "${CUBE_NODE_LIST_HOSTNAMES[@]}" ) ;;
+                _cmd_nodes=( "${CUBE_NODE_LIST_HOSTNAMES[@]}" ) ;;
             c)                  # control nodes
                 for c in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
                     exist=false
-                    for n in "${nodes[@]}" ; do
+                    for n in "${_cmd_nodes[@]}" ; do
                         if [ "x$n" = "x$c" ] ; then
                             echo "[ x$n = x$c ]"
                             exist=true
                         fi
                     done
-                    [ "x$exist" = "xtrue" ] || nodes+=("$c")
+                    [ "x$exist" = "xtrue" ] || _cmd_nodes+=("$c")
                 done
                 ;;
             p)                  # compute nodes
                 for c in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
                     exist=false
-                    for n in "${nodes[@]}" ; do
+                    for n in "${_cmd_nodes[@]}" ; do
                         if [ "x$n" = "x$c" ] ; then
                             exist=true
                         fi
                     done
-                    [ "x$exist" = "xtrue" ] || nodes+=("$c")
+                    [ "x$exist" = "xtrue" ] || _cmd_nodes+=("$c")
                 done
                 ;;
             s)                  # storage nodes
                 for c in "${CUBE_NODE_STORAGE_HOSTNAMES[@]}" ; do
                     exist=false
-                    for n in "${nodes[@]}" ; do
+                    for n in "${_cmd_nodes[@]}" ; do
                         if [ "x$n" = "x$c" ] ; then
                             exist=true
                         fi
                     done
-                    [ "x$exist" = "xtrue" ] || nodes+=("$c")
+                    [ "x$exist" = "xtrue" ] || _cmd_nodes+=("$c")
                 done
                 ;;
             n)                  # individual node(s)
                 for c in $OPTARG ; do
                     exist=false
-                    for n in "${nodes[@]}" ; do
+                    for n in "${_cmd_nodes[@]}" ; do
                         if [ "x$n" = "x$c" ] ; then
                             exist=true
                         fi
                     done
-                    [ "x$exist" = "xtrue" ] || nodes+=("$c")
+                    [ "x$exist" = "xtrue" ] || _cmd_nodes+=("$c")
                 done
                 ;;
             \?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
         esac
     done
     shift $((OPTIND - 1))
-    [ ${#nodes[@]} -ne 0 ] || nodes=( "${CUBE_NODE_LIST_HOSTNAMES[@]}" )
+    [ ${#_cmd_nodes[@]} -ne 0 ] || _cmd_nodes=( "${CUBE_NODE_LIST_HOSTNAMES[@]}" )
 
-    [ "x$reverse" = "xfalse" ] || nodes=( $(printf '%s\n' "${nodes[@]}" | tac | tr '\n' ' ') )
-    declare -A nodes_pids=()
-    declare -A nodes_rets=()
-    declare -A nodes_logs=()
-    for node in "${nodes[@]}" ; do
-        nodes_logs[$node]="$(mktemp -u /tmp/cmd_${node}.XXXX)"
+    [ "x$reverse" = "xfalse" ] || _cmd_nodes=( $(printf '%s\n' "${_cmd_nodes[@]}" | tac | tr '\n' ' ') )
+    declare -A _cmd_nodes_pids=()
+    declare -A _cmd_nodes_rets=()
+    declare -A _cmd_nodes_logs=()
+    for _cmd_node in "${_cmd_nodes[@]}" ; do
+        _cmd_nodes_logs[$_cmd_node]="$(mktemp -u /tmp/cmd_${node}.XXXX)"
         if [ "x$dryrun" = "xfalse" ] ; then
-            if is_sshable $node ; then
-                ssh -o LogLevel=quiet $node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >${nodes_logs[$node]} 2>&1 &
+            if is_sshable $_cmd_node ; then
+                ssh -o LogLevel=quiet $_cmd_node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >${_cmd_nodes_logs[$_cmd_node]} 2>&1 &
             else
                 false &
             fi
         else
-            echo "ssh -o LogLevel=quiet $node $@" &
+            echo "ssh -o LogLevel=quiet $_cmd_node $@" &
         fi
-        nodes_pids[$node]=$!
+        _cmd_nodes_pids[$_cmd_node]=$!
     done
     if [ "x$verbose" = "xtrue" -a "x$json" = "xtrue" ] ; then
         printf "[ "
     fi
-    for node in "${nodes[@]}" ; do
-        wait ${nodes_pids[$node]}
-        nodes_rets[$node]=$?
+    for  _cmd_node in "${_cmd_nodes[@]}" ; do
+        wait ${_cmd_nodes_pids[$_cmd_node]}
+        _cmd_nodes_rets[$_cmd_node]=$?
         if [ "x$verbose" = "xtrue" ] ; then
             if [ "x$json" = "xtrue" ] ; then
-                if [ ${#nodes_rets[@]} -gt 1 ] ; then
+                if [ ${#_cmd_nodes_rets[@]} -gt 1 ] ; then
                     printf ","
                 fi
-                echo -n "{ \"node\" : \"$node\",\"return\" : \"${nodes_rets[$node]}\", \"stdout\" : \"$(cat ${nodes_logs[$node]} 2>/dev/null)\" }"
+                echo -n "{ \"node\" : \"$_cmd_node\",\"return\" : \"${_cmd_nodes_rets[$_cmd_node]}\", \"stdout\" : \"$(cat ${_cmd_nodes_logs[$_cmd_node]} 2>/dev/null)\" }"
             else
-                printf "%s|%s|%s\n" "$node" "${nodes_rets[$node]}" "$(cat ${nodes_logs[$node]} 2>/dev/null)"
+                printf "%s|%s|%s\n" "$_cmd_node" "${_cmd_nodes_rets[$_cmd_node]}" "$(cat ${_cmd_nodes_logs[$_cmd_node]} 2>/dev/null)"
             fi
         fi
-        rm -f ${nodes_logs[$node]}
+        rm -f ${_cmd_nodes_logs[$_cmd_node]}
     done
     if [ "x$verbose" = "xtrue" -a "x$json" = "xtrue" ] ; then
         printf "]"
     fi
     local r=0
-    for node in "${nodes[@]}" ; do
-        [ "x${nodes_rets[$node]}" = "x0" ] || r=${nodes_rets[$node]}
+    for _cmd_node in "${_cmd_nodes[@]}" ; do
+        [ "x${_cmd_nodes_rets[$_cmd_node]}" = "x0" ] || r=${_cmd_nodes_rets[$_cmd_node]}
     done
 
     return $r

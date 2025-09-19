@@ -152,23 +152,30 @@ is_checking()
 
 is_sshable()
 {
-    local mf=$(mktemp -u /tmp/is_sshable.XXXX)
+    local node=${1:-$HOSTNAME}
+    local mf_ssh=/run/${FUNCNAME[0]}_${node}
     local ret=1
 
-    ( timeout 3 ssh -o LogLevel=quiet root@${1:-$HOSTNAME} exit ; rm -f $mf ) &
-    local pid=$!
-    echo $pid > $mf
-    for i in 1 2 3 4 5 6; do
-        if [ -e $mf ] ; then
-            sleep 0.5
-        else
-            ret=0
-            break
+    if [ -e $mf_ssh ] ; then
+        ret=0
+    else
+        local mf_tmp=$(mktemp -u /tmp/is_sshable.XXXX)
+        ( timeout 3 ssh -o LogLevel=quiet root@$node exit && rm -f $mf_tmp ) &
+        local pid=$!
+        echo $pid > $mf_tmp
+        for i in 1 2 3 ; do
+            if [ -e $mf_tmp ] ; then
+                sleep 1
+            else
+                ret=0
+                touch $mf_ssh
+                break
+            fi
+        done
+        if ps -p $pid >/dev/null 2>&1 ; then
+            kill $pid
+            rm -f $mf_tmp
         fi
-    done
-    if ps -p $pid >/dev/null 2>&1 ; then
-        kill $pid
-        rm -f $mf
     fi
 
     return $ret

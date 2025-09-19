@@ -616,7 +616,7 @@ NovaService(bool enabled)
     }
 
     if (IsCompute(s_eCubeRole)) {
-        SystemdCommitService(enabled, CMP_NAME, true);
+        SystemdCommitService(enabled, CMP_NAME, false);
         SystemdCommitService(enabled, MULTIPATHD, true);
         SystemdCommitService(enabled, ISCSI_NAME, true);   // nova-compute complains not finding /etc/iscsi/initiatorname.iscsi
         //SystemdCommitService(enabled, QEMU_GA, true);

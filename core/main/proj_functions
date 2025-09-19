@@ -143,12 +143,7 @@ _hex_exec()
             influx_event "${query},detail=\"$cmd (pid:$pid, elaps:$elaps) by $node\""
         else
             trap _hex_exec_abort_repairing INT EXIT
-            if set -o | grep xtrace | awk '{print $2}' | grep -o "^on$" ; then
-                { $cmd "$@" 2>&1 | tee /tmp/$log; } &
-            else
-                { set -x; } >/dev/null 2>&1
-                { $cmd "$@" >/tmp/$log 2>&1; } &
-            fi
+            { $cmd "$@" 2>&1 | tee /tmp/$log; } &
             echo $! >$runtime 2>/dev/null
             ln -sf $runtime $CLUSTER_REPAIRING
             query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""

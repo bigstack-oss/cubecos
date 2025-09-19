@@ -83,7 +83,7 @@ func keycloakDeploy() error {
 			return errors.WithStack(err)
 		}
 
-		if err := k3sWatchRollOut("statefulset.apps/keycloak", "keycloak", "3m"); err != nil {
+		if err := k3sWatchRollOut("statefulset.apps/keycloak", "keycloak", "2m"); err != nil {
 			zap.S().Warn(errors.WithStack(err))
 		}
 

@@ -49,11 +49,13 @@ os_get_horizon_sessionid()
 os_list_volume_backend_by_pool()
 {
     local pool=${1:-$BUILTIN_BACKPOOL}
+    local vtype=${2:-CubeStorage}
+    local backend_name=$($OPENSTACK volume type show $vtype -f json -c properties | jq -r .properties.volume_backend_name)
 
     if [ "x$pool" = "x$BUILTIN_BACKPOOL" ] ; then
-        $OPENSTACK volume backend pool list -f value -c Name
+        $OPENSTACK volume backend pool list -f value -c Name | grep $backend_name
     else
-        $OPENSTACK volume backend pool list -f value -c Name | cut -d"@" -f1
+        echo $backend_name
     fi
 }
 
@@ -795,12 +797,12 @@ os_image_import()
 
     echo "[$(date +"%T")] Creating image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
-        glance image-create --disk-format raw --container-format bare $(echo "$flags" | grep -o -e "[-][-]visibility public" -e "[-][-]visibility private") --store ${backend:-cube} --file "$img_name" $properties --progress --name "$name"
+        glance $(echo "$flags" | sed -e "s/--visibility public//" -e "s/--visibility private//") image-create --disk-format raw --container-format bare $(echo "$flags" | grep -o -e "[-][-]visibility public" -e "[-][-]visibility private") --store ${backend:-cube} --file "$img_name" $properties --progress --name "$name"
     else
         local vol_name=$(mktemp -u volume-${name}-XXXX)
         rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"
         $OPENSTACK role add --user admin_cli --project $(echo $flags | grep -o "[-][-]os[-]project[-]name .*" | cut -d" " -f2) admin
-        local vol_id=$(cinder $(echo $flags | sed -e "s/--project-domain/--os-project-domain-name/" -e "s/--project/--os-project-name/" -e "s/--visibility public//" -e "s/--visibility private//") manage --bootable --name "$name" ${backend:-cube@ceph#ceph} "$vol_name" 2>/dev/null | grep " id" | cut -d"|" -f3)
+        local vol_id=$(cinder $(echo $flags | sed -e "s/--visibility public//" -e "s/--visibility private//") manage --bootable --name "$name" ${backend:-cube@ceph#ceph} "$vol_name" 2>/dev/null | grep " id" | cut -d"|" -f3)
         $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
     fi
     echo "[$(date +"%T")] Finished creating image $name"
