@@ -437,5 +437,95 @@ cinder_get_model()
         return "$ERROR_JSON_PARSING_FAILED"
     fi
 
-    echo "$exec_output" | jq -c
+    json_get_compact_value "$exec_output" "."
+}
+
+cinder_get_models()
+{
+    local exec_output=""
+    local exec_error=""
+    local models="[]"
+    local model=""
+    local driver=""
+    declare -A model_set
+
+    # iterate through user input models
+    local file=""
+    for file in "$(ls "${CINDER_USER_INPUT_MODEL_DIRECTORY}")" ; do
+        if [ ! -f "${CINDER_USER_INPUT_MODEL_DIRECTORY}/${file}" ] ; then
+            continue
+        fi
+
+        _hex_function exec_output exec_error yq -p=yaml -o=json "${CINDER_USER_INPUT_MODEL_DIRECTORY}/${file}"
+        if [[ "$?" != "0" ]] ; then
+            # parsing failed, skip it silently
+            continue
+        fi
+        model="$(json_get_compact_value "$exec_output" ".")"
+
+        driver="$(json_get_value "$model" ".driver")"
+        if [[ "$driver" == "" ]] ; then
+            # field driver is missing, skip it silently
+            continue
+        fi
+        if [[ -v model_set["$driver"] ]] ; then
+            # duplicated model, skip it silently
+            continue
+        fi
+
+        _hex_function \
+            exec_output \
+            exec_error \
+            jq -c \
+                --argjson model "$model" \
+                '. += [$model]' \
+                <(printf "%s" "$models")
+        if [[ "$?" != "0" ]] ; then
+            # failed to add the model into array models, skip it silently
+            continue
+        fi
+        models="$exec_output"
+        model_set["$driver"]=1
+    done
+
+    # iterate through built-in models
+    # if it is already defined in user input models, skip it
+    for file in "$(ls "${CINDER_BUILTIN_MODEL_DIRECTORY}")" ; do
+        if [ ! -f "${CINDER_BUILTIN_MODEL_DIRECTORY}/${file}" ] ; then
+            continue
+        fi
+
+        _hex_function exec_output exec_error yq -p=yaml -o=json "${CINDER_BUILTIN_MODEL_DIRECTORY}/${file}"
+        if [[ "$?" != "0" ]] ; then
+            # parsing failed, skip it silently
+            continue
+        fi
+        model="$(json_get_compact_value "$exec_output" ".")"
+
+        driver="$(json_get_value "$model" ".driver")"
+        if [[ "$driver" == "" ]] ; then
+            # field driver is missing, skip it silently
+            continue
+        fi
+        if [[ -v model_set["$driver"] ]] ; then
+            # duplicated model, skip it silently
+            continue
+        fi
+
+        _hex_function \
+            exec_output \
+            exec_error \
+            jq -c \
+                --argjson model "$model" \
+                '. += [$model]' \
+                <(printf "%s" "$models")
+        if [[ "$?" != "0" ]] ; then
+            # failed to add the model into array models, skip it silently
+            continue
+        fi
+        models="$exec_output"
+        model_set["$driver"]=1
+    done
+
+    json_get_compact_value "$models" "."
 }
