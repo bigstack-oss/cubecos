@@ -104,7 +104,7 @@ cinder_get_model_file_name()
     echo -n "$output"
 }
 
-cinder_marshall_multipath_conf()
+cinder_marshal_multipath_conf()
 {
     local exec_output=""
     local exec_error=""
@@ -355,7 +355,7 @@ cinder_put_model()
     # set the multipath settings to /etc/multipath/conf.d
     local multipath="$(json_get_value "$input" ".multipath")"
     local multipath_conf_file=""
-    multipath_conf_file="$(cinder_marshall_multipath_conf "$multipath")"
+    multipath_conf_file="$(cinder_marshal_multipath_conf "$multipath")"
     ret="$?"
 
     if [[ "$ret" == "$ERROR_JSON_INVALID_JSON" ]] ; then
