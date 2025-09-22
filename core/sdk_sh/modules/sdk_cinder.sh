@@ -9,6 +9,9 @@ fi
 CINDER_USER_INPUT_MODEL_DIRECTORY="/etc/cube/cos/cinder/models"
 CINDER_BUILTIN_MODEL_DIRECTORY="/usr/share/cube/cos/cinder/builtin_models"
 
+ERROR_CINDER_WRITE_MODEL_FILE_FAILED="1"
+ERROR_CINDER_WRITE_MULTIPATH_CONFIG_FAILED="2"
+
 cinder_is_all_true()
 {
     local lines="${1:-""}"
@@ -105,6 +108,31 @@ cinder_get_model_file_name()
     output="${output//./-}"
 
     echo -n "$output"
+}
+
+cinder_write_model_file()
+{
+    local exec_output=""
+    local exec_error=""
+    local file_name="${1:-""}"
+    local model="${2:-""}"
+    is_valid_json "$model"
+    if [[ "$?" != "0" ]] ; then
+        # The model is not a valid JSON string.
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+
+    # output the model config to /etc/cube/cos/cinder/models as a YAML file
+    _hex_function exec_output exec_error yq -p=json -o=yaml <(printf "%s" "$model")
+    if [[ "$?" != "0" ]] ; then
+        # The conversion from JSON to YAML failed.
+        return "$ERROR_JSON_PARSING_FAILED"
+    fi
+    _hex_function_ret filesystem_write_file "${CINDER_USER_INPUT_MODEL_DIRECTORY}/${file_name}.yaml" "$exec_output"
+    if [[ "$?" != "0" ]] ; then
+        # Failed to write the model file.
+        return "$ERROR_CINDER_WRITE_MODEL_FILE_FAILED"
+    fi
 }
 
 cinder_marshal_multipath_conf()
@@ -245,6 +273,33 @@ cinder_marshal_multipath_conf()
     echo -e "$output"
 }
 
+cinder_write_multipath_conf()
+{
+    local ret=""
+    local file_name="${1:-""}"
+    local multipath="${2:-""}"
+    is_valid_json "$multipath"
+    if [[ "$?" != "0" ]] ; then
+        # The input is not a valid JSON string.
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+
+    # set the multipath settings to /etc/multipath/conf.d
+    local multipath_conf_file=""
+    multipath_conf_file="$(cinder_marshal_multipath_conf "$multipath")"
+    ret="$?"
+    if [[ "$ret" != "0" ]] ; then
+        # Failed to generate the multipath config file.
+        return "$ret"
+    fi
+
+    _hex_function_ret filesystem_write_file "/etc/multipath/conf.d/${file_name}.conf" "$multipath_conf_file"
+    if [[ "$?" != "0" ]] ; then
+        # Failed to write the multipath config file.
+        return "$ERROR_CINDER_WRITE_MULTIPATH_CONFIG_FAILED"
+    fi
+}
+
 cinder_put_model()
 {
     # input format : {
@@ -322,8 +377,6 @@ cinder_put_model()
     #   message: "",
     # }
 
-    local exec_output=""
-    local exec_error=""
     local ret=""
     local input="${1:-""}"
     is_valid_json "$input"
@@ -345,31 +398,29 @@ cinder_put_model()
         return "$ERROR_JSON_KEY_MISSING"
     fi
 
-    # output the model config to /etc/cube/cos/cinder/models as a YAML file
-    _hex_function exec_output exec_error yq -p=json -o=yaml <(printf "%s" "$input")
-    if [[ "$?" != "0" ]] ; then
-        # The conversion from JSON to YAML failed.
+    local model_file_name="$(cinder_get_model_file_name "$driver")"
+    _hex_function_ret cinder_write_model_file "$model_file_name" "$input"
+    ret="$?"
+    if [[ "$ret" == "$ERROR_JSON_INVALID_JSON" ]] ; then
+        jq -c -n \
+            '{message: "the input is not a valid JSON string"}' \
+            >&2
+        return "$ret"
+    elif [[ "$ret" == "$ERROR_JSON_PARSING_FAILED" ]] ; then
         jq -c -n \
             '{message: "failed to convert the input JSON to YAML"}' \
             >&2
-        return "$ERROR_JSON_PARSING_FAILED"
-    fi
-    local model_file_name="$(cinder_get_model_file_name "$driver")"
-    _hex_function_ret filesystem_write_file "${CINDER_USER_INPUT_MODEL_DIRECTORY}/${model_file_name}.yaml" "$exec_output"
-    if [[ "$?" != "0" ]] ; then
-        # Failed to write the model file.
+        return "$ret"
+    elif [[ "$ret" == "$ERROR_CINDER_WRITE_MODEL_FILE_FAILED" ]] ; then
         jq -c -n \
             '{message: "failed to write the model file"}' \
             >&2
-        return 1
+        return "$ret"
     fi
 
-    # set the multipath settings to /etc/multipath/conf.d
     local multipath="$(json_get_value "$input" ".multipath")"
-    local multipath_conf_file=""
-    multipath_conf_file="$(cinder_marshal_multipath_conf "$multipath")"
+    _hex_function_ret cinder_write_multipath_conf "$model_file_name" "$multipath"
     ret="$?"
-
     if [[ "$ret" == "$ERROR_JSON_INVALID_JSON" ]] ; then
         jq -c -n \
             '{message: "the input is not a valid JSON string"}' \
@@ -385,21 +436,11 @@ cinder_put_model()
             '{message: "a field should be an array"}' \
             >&2
         return "$ret"
-    elif [[ "$ret" != "0" ]] ; then
-        # general error case, we should not be here, errors should already be handled above
-        jq -c -n \
-            '{message: "failed to generate the multipath config"}' \
-            >&2
-        return 2
-    fi
-
-    _hex_function_ret filesystem_write_file "/etc/multipath/conf.d/${model_file_name}.conf" "$multipath_conf_file"
-    if [[ "$?" != "0" ]] ; then
-        # Failed to write the multipath config file.
+    elif [[ "$ret" == "$ERROR_CINDER_WRITE_MULTIPATH_CONFIG_FAILED" ]] ; then
         jq -c -n \
             '{message: "failed to write the multipath config file"}' \
             >&2
-        return 3
+        return "$ret"
     fi
 
     # apply multipathd changes
@@ -411,6 +452,150 @@ cinder_put_model()
     jq -c -n \
         --arg message "model ${driver} created" \
         '{message: $message}'
+}
+
+cinder_put_models()
+{
+    # input format: [
+    #   {
+    #     driver: "",
+    #     vendor: "",
+    #     model: "",
+    #     multipath: [
+    #       {
+    #         section: "",
+    #         attributes: [
+    #           {
+    #             key: "",
+    #             value: "",
+    #           },
+    #         ],
+    #         subSections: [
+    #           {
+    #             section: "",
+    #             attributes: [
+    #               {
+    #                 key: "",
+    #                 value: "",
+    #               },
+    #             ],
+    #           },
+    #         ],
+    #       },
+    #     ],
+    #     storage: {
+    #       service: {
+    #         driverSection: [
+    #           {
+    #             key: "",
+    #             value: "",
+    #           },
+    #         ],
+    #         extraSettings: [
+    #           {
+    #             sectionHeader: "",
+    #             settings: [
+    #               {
+    #                 key: "",
+    #                 value: "",
+    #               },
+    #             ],
+    #           },
+    #         ],
+    #       extraConfigFiles: [
+    #         {
+    #           name: "", // name = test.conf => file path = /etc/cinder/external_storage/test.conf
+    #           content: "", // base64 encoded file content
+    #         },
+    #       ],
+    #       },
+    #       volumeType: {
+    #         settings: [
+    #           {
+    #             key: "",
+    #             value: "",
+    #           },
+    #         ],
+    #       },
+    #       image: {
+    #         useMultipath: true,
+    #         forceMultipath: true,
+    #       },
+    #     },
+    #   }
+    # ]
+    #
+    # stdout format: {
+    #   message: "",
+    # }
+
+    local exec_output=""
+    local exec_error=""
+    local input="${1:-""}"
+    local created_drivers=""
+    is_valid_json "$input"
+    if [[ "$?" != "0" ]] ; then
+        # The input is not a valid JSON string.
+        jq -c -n \
+            '{message: "the input is not a valid JSON string"}' \
+        >&2
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+    json_is_array "$input"
+    if [[ "$?" != "0" ]] ; then
+        # The input is not an array.
+        jq -c -n \
+            '{message: "the input should be an array"}' \
+            >&2
+        return "$ERROR_JSON_NOT_ARRAY"
+    fi
+
+    local driver=""
+    local model_file_name=""
+    while read -r model; do
+        driver="$(json_get_value "$model" ".driver")"
+        if [ -z "$driver" ] ; then
+            # The field driver is the ID, and it should not be blank.
+            # Skip it silently.
+            continue
+        fi
+
+        model_file_name="$(cinder_get_model_file_name "$driver")"
+        _hex_function_ret cinder_write_model_file "$model_file_name" "$model"
+        if [[ "$?" != "0" ]] ; then
+            # Skip it silently.
+            continue
+        fi
+
+        local multipath="$(json_get_value "$model" ".multipath")"
+        _hex_function_ret cinder_write_multipath_conf "$model_file_name" "$multipath"
+        if [[ "$?" != "0" ]] ; then
+            # Skip it silently.
+            continue
+        fi
+
+        if [ -z "$created_drivers" ] ; then
+            created_drivers+="${driver}"
+        else
+            created_drivers+=",${driver}"
+        fi
+    done <<< "$(echo "$input" | jq -c ".[]")"
+
+    # apply multipathd changes
+    if is_compute_node ; then
+        # multipathd is only need by nova-compute on compute nodes
+        _hex_function_ret systemctl reload multipathd
+    fi
+
+    if [ -z "$created_drivers" ] ; then
+        jq -c -n \
+            --arg message "no model created" \
+            '{message: $message}'
+    else
+        jq -c -n \
+            --arg message "model ${created_drivers} created" \
+            '{message: $message}'
+    fi
 }
 
 cinder_get_model()
