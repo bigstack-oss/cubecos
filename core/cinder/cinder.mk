@@ -27,7 +27,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable multipathd iscsi
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/share/cube/cos/cinder
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/share/cube/cos/cinder/builtin_models
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cinder/builtin_models/dell-emc-sc-fc.yaml ./usr/share/cube/cos/cinder/builtin_models/dell-emc-sc-fc.yaml
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cinder/builtin_models/dell_emc-sc-storagecenter_fc-SCFCDriver.yaml ./usr/share/cube/cos/cinder/builtin_models/dell_emc-sc-storagecenter_fc-SCFCDriver.yaml
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cinder
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cinder/models
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/multipath/conf.d
