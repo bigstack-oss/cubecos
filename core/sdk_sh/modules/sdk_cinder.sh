@@ -403,7 +403,6 @@ cinder_get_model()
 {
     local exec_output=""
     local exec_error=""
-    local model_found="false"
     local driver="${1:-""}"
     if [[ "$driver" == "" ]] ; then
         jq -c -n \
@@ -418,10 +417,8 @@ cinder_get_model()
     local builtin_model_file_path="${CINDER_BUILTIN_MODEL_DIRECTORY}/${model_file_name}.yaml"
     if [ -f "$user_input_model_file_path" ] ; then
         model_file_path="$user_input_model_file_path"
-        model_found="true"
     elif [ -f "$builtin_model_file_path" ] ; then
         model_file_path="$builtin_model_file_path"
-        model_found="true"
     else
         jq -c -n \
             '{success: false, message: "the model does not exist"}' \
