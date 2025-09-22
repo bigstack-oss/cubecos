@@ -247,7 +247,7 @@ cinder_marshal_multipath_conf()
 
 cinder_put_model()
 {
-    # input format : {
+    # stdin format : {
     #   driver: "",
     #   vendor: "",
     #   model: "",
@@ -257,19 +257,21 @@ cinder_put_model()
     #       attributes: [
     #         {
     #           key: "",
-    #           value: ""
-    #         }
+    #           value: "",
+    #         },
     #       ],
     #       subSections: [
-    #         section: "",
-    #         attributes: [
-    #           {
-    #             key: "",
-    #             value: ""
-    #           }
-    #         ],
-    #       ]
-    #     }
+    #         {
+    #           section: "",
+    #           attributes: [
+    #             {
+    #               key: "",
+    #               value: "",
+    #             },
+    #           ],
+    #         },
+    #       ],
+    #     },
     #   ],
     #   storage: {
     #     service: {
@@ -277,7 +279,7 @@ cinder_put_model()
     #         {
     #           key: "",
     #           value: "",
-    #         }
+    #         },
     #       ],
     #       extraSettings: [
     #         {
@@ -312,8 +314,11 @@ cinder_put_model()
     #   },
     # }
     #
-    # output format: {
-    #   success: true,
+    # stdout format: {
+    #   message: "",
+    # }
+    #
+    # stderr format: {
     #   message: "",
     # }
 
@@ -325,7 +330,8 @@ cinder_put_model()
     if [[ "$?" != "0" ]] ; then
         # The input is not a valid JSON string.
         jq -c -n \
-            '{success: false, message: "the input is not a valid JSON string"}'
+            '{message: "the input is not a valid JSON string"}' \
+        >&2
         return "$ERROR_JSON_INVALID_JSON"
     fi
 
@@ -334,7 +340,8 @@ cinder_put_model()
     if [ -z "$driver" ] ; then
         # The field driver is the ID, and it should not be blank.
         jq -c -n \
-            '{success: false, message: "field driver should not be blank"}'
+            '{message: "field driver should not be blank"}' \
+            >&2
         return "$ERROR_JSON_KEY_MISSING"
     fi
 
@@ -343,7 +350,8 @@ cinder_put_model()
     if [[ "$?" != "0" ]] ; then
         # The conversion from JSON to YAML failed.
         jq -c -n \
-            '{success: false, message: "failed to convert the input JSON to YAML"}'
+            '{message: "failed to convert the input JSON to YAML"}' \
+            >&2
         return "$ERROR_JSON_PARSING_FAILED"
     fi
     local model_file_name="$(cinder_get_model_file_name "$driver")"
@@ -351,7 +359,8 @@ cinder_put_model()
     if [[ "$?" != "0" ]] ; then
         # Failed to write the model file.
         jq -c -n \
-            '{success: false, message: "failed to write the model file"}'
+            '{message: "failed to write the model file"}' \
+            >&2
         return 1
     fi
 
@@ -363,20 +372,24 @@ cinder_put_model()
 
     if [[ "$ret" == "$ERROR_JSON_INVALID_JSON" ]] ; then
         jq -c -n \
-            '{success: false, message: "the input is not a valid JSON string"}'
+            '{message: "the input is not a valid JSON string"}' \
+            >&2
         return "$ret"
     elif [[  "$ret" == "$ERROR_JSON_KEY_MISSING" ]] ; then
         jq -c -n \
-            '{success: false, message: "a field is missing"}'
+            '{message: "a field is missing"}' \
+            >&2
         return "$ret"
     elif [[ "$ret" == "$ERROR_JSON_NOT_ARRAY" ]] ; then
         jq -c -n \
-            '{success: false, message: "a field should be an array"}'
+            '{message: "a field should be an array"}' \
+            >&2
         return "$ret"
     elif [[ "$ret" != "0" ]] ; then
         # general error case, we should not be here, errors should already be handled above
         jq -c -n \
-            '{success: false, message: "failed to generate the multipath config"}'
+            '{message: "failed to generate the multipath config"}' \
+            >&2
         return 2
     fi
 
@@ -384,7 +397,8 @@ cinder_put_model()
     if [[ "$?" != "0" ]] ; then
         # Failed to write the multipath config file.
         jq -c -n \
-            '{success: false, message: "failed to write the multipath config file"}'
+            '{message: "failed to write the multipath config file"}' \
+            >&2
         return 3
     fi
 
@@ -396,19 +410,105 @@ cinder_put_model()
 
     jq -c -n \
         --arg message "model ${driver} created" \
-        '{success: true, message: $message}'
+        '{message: $message}'
 }
 
 cinder_get_model()
 {
+    # stdin format: {
+    #   driver: "",
+    # }
+    #
+    # stdout format : {
+    #   driver: "",
+    #   vendor: "",
+    #   model: "",
+    #   multipath: [
+    #     {
+    #       section: "",
+    #       attributes: [
+    #         {
+    #           key: "",
+    #           value: "",
+    #         },
+    #       ],
+    #       subSections: [
+    #         {
+    #           section: "",
+    #           attributes: [
+    #             {
+    #               key: "",
+    #               value: "",
+    #             },
+    #           ],
+    #         },
+    #       ],
+    #     },
+    #   ],
+    #   storage: {
+    #     service: {
+    #       driverSection: [
+    #         {
+    #           key: "",
+    #           value: "",
+    #         },
+    #       ],
+    #       extraSettings: [
+    #         {
+    #           sectionHeader: "",
+    #           settings: [
+    #             {
+    #               key: "",
+    #               value: "",
+    #             },
+    #           ],
+    #         },
+    #       ],
+    #      extraConfigFiles: [
+    #        {
+    #          name: "", // name = test.conf => file path = /etc/cinder/external_storage/test.conf
+    #          content: "", // base64 encoded file content
+    #        },
+    #      ],
+    #     },
+    #     volumeType: {
+    #       settings: [
+    #         {
+    #           key: "",
+    #           value: "",
+    #         },
+    #       ],
+    #     },
+    #     image: {
+    #       useMultipath: true,
+    #       forceMultipath: true,
+    #     },
+    #   },
+    # }
+    #
+    # stderr format: {
+    #   message: "",
+    # }
+
     local exec_output=""
     local exec_error=""
-    local driver="${1:-""}"
-    if [[ "$driver" == "" ]] ; then
+    local input="${1:-""}"
+
+    is_valid_json "$input"
+    if [[ "$?" != "0" ]] ; then
+        # The input is not a valid JSON string.
         jq -c -n \
-            '{success: false, message: "the driver name should not be blank"}' \
+            '{message: "the input is not a valid JSON string"}' \
             >&2
-        return 1
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+    local driver="$(json_get_value "$input" ".driver")"
+    if [ -z "$driver" ] ; then
+        # The field driver is required.
+        jq -c -n \
+            '{message: "field driver should not be blank"}' \
+            >&2
+        return "$ERROR_JSON_KEY_MISSING"
     fi
 
     local model_file_name="$(cinder_get_model_file_name "$driver")"
@@ -421,15 +521,15 @@ cinder_get_model()
         model_file_path="$builtin_model_file_path"
     else
         jq -c -n \
-            '{success: false, message: "the model does not exist"}' \
+            '{message: "the model does not exist"}' \
             >&2
-        return 2
+        return 1
     fi
 
     _hex_function exec_output exec_error yq -p=yaml -o=json "$model_file_path"
     if [[ "$?" != "0" ]] ; then
         jq -c -n \
-            '{success: false, message: "failed to output the model file as JSON}' \
+            '{message: "failed to output the model file as JSON}' \
             >&2
         return "$ERROR_JSON_PARSING_FAILED"
     fi
@@ -439,6 +539,79 @@ cinder_get_model()
 
 cinder_get_models()
 {
+    # stdout format: [
+    #   {
+    #     driver: "",
+    #     vendor: "",
+    #     model: "",
+    #     multipath: [
+    #       {
+    #         section: "",
+    #         attributes: [
+    #           {
+    #             key: "",
+    #             value: "",
+    #           },
+    #         ],
+    #         subSections: [
+    #           {
+    #             section: "",
+    #             attributes: [
+    #               {
+    #                 key: "",
+    #                 value: "",
+    #               },
+    #             ],
+    #           },
+    #         ],
+    #       },
+    #     ],
+    #     storage: {
+    #       service: {
+    #         driverSection: [
+    #           {
+    #             key: "",
+    #             value: "",
+    #           },
+    #         ],
+    #         extraSettings: [
+    #           {
+    #             sectionHeader: "",
+    #             settings: [
+    #               {
+    #                 key: "",
+    #                 value: "",
+    #               },
+    #             ],
+    #           },
+    #         ],
+    #       extraConfigFiles: [
+    #         {
+    #           name: "", // name = test.conf => file path = /etc/cinder/external_storage/test.conf
+    #           content: "", // base64 encoded file content
+    #         },
+    #       ],
+    #       },
+    #       volumeType: {
+    #         settings: [
+    #           {
+    #             key: "",
+    #             value: "",
+    #           },
+    #         ],
+    #       },
+    #       image: {
+    #         useMultipath: true,
+    #         forceMultipath: true,
+    #       },
+    #     },
+    #   }
+    # ]
+    #
+    # stderr format: {
+    #   message: "",
+    # }
+
     local exec_output=""
     local exec_error=""
     local models="[]"
