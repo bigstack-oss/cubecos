@@ -607,10 +607,6 @@ cinder_get_models()
     #     },
     #   }
     # ]
-    #
-    # stderr format: {
-    #   message: "",
-    # }
 
     local exec_output=""
     local exec_error=""
