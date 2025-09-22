@@ -880,3 +880,51 @@ cinder_get_models()
 
     json_get_compact_value "$models" "."
 }
+
+cinder_delete_model()
+{
+    local input="${1:-""}"
+    is_valid_json "$input"
+    if [[ "$?" != "0" ]] ; then
+        # The input is not a valid JSON string.
+        jq -c -n \
+            '{message: "the input is not a valid JSON string"}' \
+            >&2
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+    local driver="$(json_get_value "$input" ".driver")"
+    if [ -z "$driver" ] ; then
+        # The field driver is required.
+        jq -c -n \
+            '{message: "field driver should not be blank"}' \
+            >&2
+        return "$ERROR_JSON_KEY_MISSING"
+    fi
+
+    # remove the model file
+    local model_file_name="$(cinder_get_model_file_name "$driver")"
+    local model_file_path="${CINDER_USER_INPUT_MODEL_DIRECTORY}/${model_file_name}.yaml"
+    if [ ! -f "$model_file_path" ] ; then
+        jq -c -n \
+            '{message: "the model does not exist"}' \
+            >&2
+        return 1
+    fi
+    rm -f "$model_file_path"
+
+    # remove the multipath config file
+    local multipath_conf_file_path="/etc/multipath/conf.d/${model_file_name}.conf"
+    if [ -f "$multipath_conf_file_path" ] ; then
+        rm -f "$multipath_conf_file_path"
+    fi
+
+    # apply multipathd changes
+    if is_compute_node ; then
+        # multipathd is only need by nova-compute on compute nodes
+        _hex_function_ret systemctl reload multipathd
+    fi
+
+    jq -c -n \
+        --arg message "model ${driver} deleted" \
+        '{message: $message}'
+}
