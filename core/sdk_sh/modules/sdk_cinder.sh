@@ -883,6 +883,18 @@ cinder_get_models()
 
 cinder_delete_model()
 {
+    # input format: {
+    #   driver: "",
+    # }
+    #
+    # stdout format: {
+    #   message: "",
+    # }
+    #
+    # stderr format: {
+    #   message: "",
+    # }
+
     local input="${1:-""}"
     is_valid_json "$input"
     if [[ "$?" != "0" ]] ; then
