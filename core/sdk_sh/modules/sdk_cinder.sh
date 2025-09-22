@@ -247,7 +247,7 @@ cinder_marshal_multipath_conf()
 
 cinder_put_model()
 {
-    # stdin format : {
+    # input format : {
     #   driver: "",
     #   vendor: "",
     #   model: "",
@@ -415,7 +415,7 @@ cinder_put_model()
 
 cinder_get_model()
 {
-    # stdin format: {
+    # input format: {
     #   driver: "",
     # }
     #
