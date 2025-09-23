@@ -532,6 +532,11 @@ health_hacluster_repair()
                 Quiet -n pcs resource cleanup 2>/dev/null
             fi
         done
+    elif [ ! -e /etc/appliance/state/configured ] ; then
+        if is_control_node ; then
+            $HEX_SDK pacemaker_node_stop
+            $HEX_SDK pacemaker_node_restart
+        fi
     else
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$HOSTNAME" = "x$node" ] ; then

@@ -55,7 +55,7 @@ os_list_volume_backend_by_pool()
     if [ "x$pool" = "x$BUILTIN_BACKPOOL" ] ; then
         $OPENSTACK volume backend pool list -f value -c Name | grep $backend_name
     else
-        echo $backend_name
+        $OPENSTACK volume backend pool list -f value -c Name | grep $backend_name | cut -d "@" -f1
     fi
 }
 
@@ -749,7 +749,7 @@ os_image_import()
     local name=$3
     local flags=${4:---visibility public}
     local pool=${5:-glance-images}
-    local backend=$6
+    local backend=$(os_list_volume_backend_by_pool $pool ${6:-CubeStorage})
     local properties=${7:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"

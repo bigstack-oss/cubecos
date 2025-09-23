@@ -123,8 +123,8 @@ ImageImportMain(int argc, const char** argv)
             pool="cinder-volumes";
         }
 
-        cmd = HEX_SDK " os_list_volume_backend_by_pool " + pool;
-        if (CliMatchCmdHelper(argc, argv, 8, cmd, &index, &destination, "Select storage destination: ") != CLI_SUCCESS) {
+        cmd = "openstack volume type list -f value -c Name  | grep -v __DEFAULT__";
+        if (CliMatchCmdHelper(argc, argv, 8, cmd, &index, &destination, "Select storage destination (volume type): ") != CLI_SUCCESS) {
             CliPrintf("Invalid storage destination");
             return CLI_INVALID_ARGS;
         }
