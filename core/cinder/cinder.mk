@@ -30,4 +30,5 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cinder/builtin_models/dell_emc-sc-storagecenter_fc-SCFCDriver.yaml ./usr/share/cube/cos/cinder/builtin_models/dell_emc-sc-storagecenter_fc-SCFCDriver.yaml
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cinder
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cinder/models
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cinder/storage_extra_configs_ownership
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/multipath/conf.d

@@ -8,13 +8,13 @@ multipath:
       - section: "device"
         attributes:
           - key: "vendor"
-            value: "\"COMPELNT\""
+            value: "COMPELNT"
           - key: "product"
-            value: "\"Compellent Vol\""
+            value: "Compellent Vol"
           - key: "user_friendly_names"
-            value: "\"no\""
+            value: "no"
           - key: "flush_on_last_del"
-            value: "\"yes\""
+            value: "yes"
 storage:
   service:
     driverSection:
