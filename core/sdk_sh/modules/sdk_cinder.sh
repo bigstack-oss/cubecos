@@ -15,7 +15,8 @@ ERROR_CINDER_WRITE_EXT_STORAGE_BACKEND_CONFIG_FAILED="3"
 ERROR_CINDER_WRITE_EXT_STORAGE_EXTRA_CONFIG_OWNERSHIP_FAILED="4"
 ERROR_CINDER_WRITE_EXT_STORAGE_EXTRA_CONFIG_FAILED="5"
 ERROR_CINDER_APPLY_EXT_STORAGE_FAILED="6"
-ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED="7"
+ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_IGNORED="7"
+ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED="8"
 
 cinder_is_all_true()
 {
@@ -1356,12 +1357,12 @@ cinder_set_volume_type_properties()
         fi
     done <<< "$(echo "$exec_output" | jq -c ".[]")"
     if [[ "$volume_type_found" == "false" ]] ; then
-        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_IGNORED"
     fi
 
     # check if the volume type is in use, skip applying changes if in use
     if ! cinder_is_volume_type_in_use "$storage_name" ; then
-        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_IGNORED"
     fi
 
     # compute the difference between the current properties
@@ -1373,11 +1374,11 @@ cinder_set_volume_type_properties()
 
     _hex_function exec_output exec_error openstack volume type show "$storage_name" -f json
     if [[ "$?" != "0" ]] ; then
-        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_IGNORED"
     fi
     _hex_function exec_output exec_error jq -c ".properties" <(printf "%s" "$exec_output")
     if [[ "$?" != "0" ]] ; then
-        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_IGNORED"
     fi
     local current_properties="$exec_output"
     local current_property_key=""
@@ -1473,6 +1474,9 @@ cinder_set_volume_type_properties()
 
     if [[ "$flag_index" != "0" ]] ; then
         _hex_function_ret openstack volume type unset "${unset_flag[@]}" "$storage_name"
+        if [[ "$?" != "0" ]] ; then
+            return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+        fi
     fi
 
     flag_index="0"
@@ -1497,6 +1501,9 @@ cinder_set_volume_type_properties()
 
     if [[ "$flag_index" != "0" ]] ; then
         _hex_function_ret openstack volume type set "${set_flag[@]}" "$storage_name"
+        if [[ "$?" != "0" ]] ; then
+            return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+        fi
     fi
 }
 
@@ -1764,8 +1771,10 @@ cinder_put_storage()
             '{message: "a field should be an array"}' \
             >&2
         return "$ret"
-    elif [[ "$ret" == "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED" ]] ; then
+    elif [[ "$ret" == "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_IGNORED" ]] ; then
         message+=", volume type properties ignored"
+    elif [[ "$ret" == "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED" ]] ; then
+        message+=", volume type properties failed to apply"
     fi
 
     jq -c -n \
