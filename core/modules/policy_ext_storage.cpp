@@ -56,6 +56,9 @@ bool ExtStoragePolicy::load(const char* policyFile)
         this->config.storageBackends.push_back(backendName);
     }
 
+    HexYmlParseBool(&(this->config.imageUseMultipath), this->ymlRoot, "image.multipath.use");
+    HexYmlParseBool(&(this->config.imageEnforceMultipath), this->ymlRoot, "image.multipath.enforce");
+
     this->isInitialized = true;
     return this->isInitialized;
 }
@@ -86,6 +89,14 @@ bool ExtStoragePolicy::save(const char* policyFile)
         if (AddYmlNode(this->ymlRoot, prefix.c_str(), "name", this->config.storageBackends[i].c_str()) != 0) {
             return false;
         }
+    }
+
+    if (UpdateYmlValue(this->ymlRoot, "image.multipath.use", this->config.imageUseMultipath ? "true" : "false") != 0) {
+        return false;
+    }
+
+    if (UpdateYmlValue(this->ymlRoot, "image.multipath.enforce", this->config.imageEnforceMultipath ? "true" : "false") != 0) {
+        return false;
     }
 
     return (WriteYml(policyFile, this->ymlRoot) == 0);

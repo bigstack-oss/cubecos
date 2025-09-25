@@ -14,12 +14,14 @@ ERROR_CINDER_WRITE_MULTIPATH_CONFIG_FAILED="2"
 ERROR_CINDER_WRITE_EXT_STORAGE_BACKEND_CONFIG_FAILED="3"
 ERROR_CINDER_WRITE_EXT_STORAGE_EXTRA_CONFIG_OWNERSHIP_FAILED="4"
 ERROR_CINDER_WRITE_EXT_STORAGE_EXTRA_CONFIG_FAILED="5"
+ERROR_CINDER_APPLY_EXT_STORAGE_FAILED="6"
+ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED="7"
 
 cinder_is_all_true()
 {
     local lines="${1:-""}"
 
-    while read -r line; do
+    while read -r line ; do
         if [ -z "$line" ]; then
             continue
         fi
@@ -36,6 +38,7 @@ cinder_are_services_up()
 {
     local exec_output=""
     local exec_error=""
+
     local storage_backends="${1:-""}"
 
     _hex_function exec_output exec_error openstack volume service list -c Binary -c Host -c State -f json
@@ -117,6 +120,7 @@ cinder_write_model_file()
 {
     local exec_output=""
     local exec_error=""
+
     local file_name="${1:-""}"
     local model="${2:-""}"
 
@@ -147,7 +151,9 @@ cinder_marshal_multipath_conf()
 {
     local exec_output=""
     local exec_error=""
+
     local multipath="${1:-""}"
+
     local section=""
     local section_name=""
     local attributes=""
@@ -170,7 +176,7 @@ cinder_marshal_multipath_conf()
         return "$ERROR_JSON_NOT_ARRAY"
     fi
 
-    while read -r section; do
+    while read -r section ; do
         if [ -z "$section" ] ; then
             continue
         fi
@@ -200,7 +206,7 @@ cinder_marshal_multipath_conf()
             return "$ERROR_JSON_NOT_ARRAY"
         fi
 
-        while read -r attribute; do
+        while read -r attribute ; do
             if [ -z "$attribute" ] ; then
                 continue
             fi
@@ -228,7 +234,7 @@ cinder_marshal_multipath_conf()
             return "$ERROR_JSON_NOT_ARRAY"
         fi
 
-        while read -r sub_section; do
+        while read -r sub_section ; do
             if [ -z "$sub_section" ] ; then
                 continue
             fi
@@ -252,7 +258,7 @@ cinder_marshal_multipath_conf()
                 return "$ERROR_JSON_NOT_ARRAY"
             fi
 
-            while read -r attribute; do
+            while read -r attribute ; do
                 if [ -z "$attribute" ] ; then
                     continue
                 fi
@@ -536,8 +542,11 @@ cinder_put_models()
 
     local exec_output=""
     local exec_error=""
+
     local input="${1:-""}"
+
     local created_drivers=""
+
     is_valid_json "$input"
     if [[ "$?" != "0" ]] ; then
         # The input is not a valid JSON string.
@@ -557,7 +566,7 @@ cinder_put_models()
 
     local driver=""
     local model_file_name=""
-    while read -r model; do
+    while read -r model ; do
         driver="$(json_get_value "$model" ".driver")"
         if [ -z "$driver" ] ; then
             # The field driver is the ID, and it should not be blank.
@@ -688,6 +697,7 @@ cinder_get_model()
 
     local exec_output=""
     local exec_error=""
+
     local input="${1:-""}"
 
     is_valid_json "$input"
@@ -806,6 +816,7 @@ cinder_get_models()
 
     local exec_output=""
     local exec_error=""
+
     local models="[]"
     local model=""
     local driver=""
@@ -967,6 +978,7 @@ cinder_marshal_storage_external_backend_conf()
 {
     local exec_output=""
     local exec_error=""
+
     local external_backend="${1:-""}"
     local name="${2:-""}"
     local driver="${3:-""}"
@@ -1010,7 +1022,7 @@ attributes: [
         value: $driver
     }
 ]}')"
-    while read -r setting; do
+    while read -r setting ; do
         key="$(json_get_value "$setting" ".key")"
         value="$(json_get_value "$setting" ".value")"
 
@@ -1055,7 +1067,7 @@ attributes: [
     fi
     local section=""
     local section_header=""
-    while read -r section; do
+    while read -r section ; do
         section_header="$(json_get_value "$section" ".sectionHeader")"
         if [ -z "$section_header" ] ; then
             # section header should not be blank
@@ -1072,7 +1084,7 @@ attributes: [
             return "$ERROR_JSON_NOT_ARRAY"
         fi
 
-        while read -r setting; do
+        while read -r setting ; do
             key="$(json_get_value "$setting" ".key")"
             value="$(json_get_value "$setting" ".value")"
 
@@ -1132,6 +1144,7 @@ cinder_marshal_storage_extra_configs_ownership()
 {
     local exec_output=""
     local exec_error=""
+
     local name="${1:-""}"
     local extra_configs="${2:-""}"
     local ownership="{}"
@@ -1148,7 +1161,7 @@ cinder_marshal_storage_extra_configs_ownership()
 
     local extra_config=""
     local file_name=""
-    while read -r extra_config; do
+    while read -r extra_config ; do
         file_name="$(json_get_value "$extra_config" ".name")"
         if [ -z "$file_name" ] ; then
             continue
@@ -1176,6 +1189,7 @@ cinder_write_storage_extra_configs_ownership()
 {
     local exec_output=""
     local exec_error=""
+
     local file_name="${1:-""}"
     local ownership="${2:-""}"
 
@@ -1218,6 +1232,271 @@ cinder_write_storage_extra_config_file()
     if [[ "$?" != "0" ]] ; then
         # Failed to write the external storage backend config file.
         return "$ERROR_CINDER_WRITE_EXT_STORAGE_EXTRA_CONFIG_FAILED"
+    fi
+}
+
+cinder_apply_storage()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local storage_name="${1:-""}"
+    local is_default="${2:-""}"
+    local image_use_multipath="${3:-""}"
+    local image_enforce_multipath="${4:-""}"
+
+    if [ -z "$storage_name" ] \
+        || [[ "$is_default" != "true" && "$is_default" != "false" ]] \
+        || [[ "$image_use_multipath" != "true" && "$image_use_multipath" != "false" ]] \
+        || [[ "$image_enforce_multipath" != "true" && "$image_enforce_multipath" != "false" ]] ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+
+    # edit the policy file
+    local input_dir="$(MakeTempDir)"
+    mkdir -p "${input_dir}/external_storage"
+    cp -f "/etc/policies/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/"
+    local ext_storage_policy_file="${input_dir}/external_storage/external_storage1_0.yml"
+
+    # storage backends
+    _hex_function exec_output exec_error yq '.backends | length' "$ext_storage_policy_file"
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+    local backend_count_minus_one=$(($(echo -n "$exec_output") - 1))
+    local storage_found="false"
+    local backend_index="0"
+    for backend_index in "$(seq 0 "$backend_count_minus_one")" ; do
+        _hex_function exec_output exec_error yq -r ".backends[${backend_index}].name" "$ext_storage_policy_file"
+        if [[ "$?" == "0" && "$exec_output" == "$storage_name" ]] ; then
+            storage_found="true"
+            break
+        fi
+    done
+    if [[ "$storage_found" == "false" ]] ; then
+        _hex_function_ret yq -i ".backends[$((${backend_count_minus_one} + 1))].name = \"${storage_name}\"" "$ext_storage_policy_file"
+        if [[ "$?" != "0" ]] ; then
+            return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+        fi
+    fi
+
+    # default volume type
+    if [[ "$is_default" == "true" ]] ; then
+        _hex_function_ret yq -i ".volumeType.default = \"${storage_name}\"" "$ext_storage_policy_file"
+        if [[ "$?" != "0" ]] ; then
+            return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+        fi
+    fi
+
+    # glance volume-backed image use/force multipath
+    _hex_function_ret yq -i ".image.multipath.use = ${image_use_multipath}" "$ext_storage_policy_file"
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+    _hex_function_ret yq -i ".image.multipath.enforce = ${image_enforce_multipath}" "$ext_storage_policy_file"
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+
+    # apply configs, and restart services
+    $HEX_CFG apply $input_dir
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+
+    return 0
+}
+
+cinder_is_volume_type_in_use()
+{
+    local volume_type="${1:-""}"
+    if [ -z "$volume_type" ] ; then
+        return 0
+    fi
+
+    _hex_function exec_output exec_error openstack volume list --long -f json
+    if [[ "$?" != "0" ]] || ! json_is_array "$exec_output" ; then
+        return 1
+    fi
+    _hex_function exec_output exec_error \
+        jq -c "map(select(.Type == \"${volume_type}\")) | length" <(printf "%s" "$exec_output")
+    if [[ "$?" != "0" || "$exec_output" != "0" ]] ; then
+         # the volume type is in use
+        return 1
+    fi
+
+    return 0
+}
+
+cinder_set_volume_type_properties()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local storage_name="${1:-""}"
+    local properties="${2:-""}"
+
+    # check if the volume type exist
+    _hex_function exec_output exec_error openstack volume type list -c Name -f json
+    is_valid_json "$exec_output"
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+    json_is_array "$exec_output"
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_JSON_NOT_ARRAY"
+    fi
+
+    local volume_type_found="false"
+    local volume_type=""
+    while read -r volume_type ; do
+        if [[ "$(json_get_value "$volume_type" ".Name")" == "$storage_name" ]] ; then
+            volume_type_found="true"
+            break
+        fi
+    done <<< "$(echo "$exec_output" | jq -c ".[]")"
+    if [[ "$volume_type_found" == "false" ]] ; then
+        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+    fi
+
+    # check if the volume type is in use, skip applying changes if in use
+    if ! cinder_is_volume_type_in_use "$storage_name" ; then
+        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+    fi
+
+    # compute the difference between the current properties
+    # of the volume type and the target properties
+    json_is_array "$properties"
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_JSON_NOT_ARRAY"
+    fi
+
+    _hex_function exec_output exec_error openstack volume type show "$storage_name" -f json
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+    fi
+    _hex_function exec_output exec_error jq -c ".properties" <(printf "%s" "$exec_output")
+    if [[ "$?" != "0" ]] ; then
+        return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
+    fi
+    local current_properties="$exec_output"
+    local current_property_key=""
+    local current_value=""
+
+    local property=""
+    local key=""
+    local value=""
+    local properties_to_set="[]"
+    local property_object="{}"
+
+    while read -r property ; do
+        key="$(json_get_value "$property" ".key")"
+        value="$(json_get_value "$property" ".value")"
+
+        if [ -z "$value" ] ; then
+            continue
+        fi
+
+        if _hex_function \
+            exec_output \
+            exec_error \
+            jq -c \
+            --arg key "$key" \
+            --arg value "$value" \
+            '.[$key] = $value' \
+            <(printf "%s" "$property_object") ; then
+            property_object="$exec_output"
+        fi
+
+        current_value="$(json_get_value "$current_properties" ".\"${key}\"")"
+
+        if [[ "$value" != "$current_value" ]] ; then
+            _hex_function \
+                exec_output \
+                exec_error \
+                jq -c \
+                --arg key "$key" \
+                --arg value "$value" \
+                '. += [{key: $key, value: $value}]' \
+                <(printf "%s" "$properties_to_set")
+            if [[ "$?" != "0" ]] ; then
+                # failed to add the key value pair into array properties_to_set,
+                # skip it silently
+                continue
+            fi
+
+            properties_to_set="$exec_output"
+        fi
+    done <<< "$(echo "$properties" | jq -c ".[]")"
+
+    local properties_to_unset="[]"
+    while read -r current_property_key ; do
+        if [[ "$current_property_key" == "volume_backend_name" ]] ; then
+            # we should not remove this property
+            continue
+        fi
+
+        value="$(json_get_value "$property_object" ".\"${current_property_key}\"")"
+        if [ -n "$value" ] ; then
+            continue
+        fi
+
+        _hex_function \
+            exec_output \
+            exec_error \
+            jq -c \
+            --arg key "$current_property_key" \
+            '. += [$key]' \
+            <(printf "%s" "$properties_to_unset")
+        if [[ "$?" != "0" ]] ; then
+            # failed to add the key into array properties_to_unset,
+            # skip it silently
+            continue
+        fi
+
+        properties_to_unset="$exec_output"
+    done <<< "$(echo "$current_properties" | jq -r "keys[]")"
+
+    # apply changes of volume type properties
+    local flag_index="0"
+    declare -a unset_flag
+    while read -r property ; do
+        if [ -z "$property" ] ; then
+            continue
+        fi
+
+        unset_flag["$flag_index"]="--property"
+        flag_index=$(($flag_index + 1))
+        unset_flag["$flag_index"]="${property}"
+        flag_index=$(($flag_index + 1))
+    done <<< "$(echo "$properties_to_unset" | jq -r ".[]")"
+
+    if [[ "$flag_index" != "0" ]] ; then
+        _hex_function_ret openstack volume type unset "${unset_flag[@]}" "$storage_name"
+    fi
+
+    flag_index="0"
+    declare -a set_flag
+    while read -r property ; do
+        if [ -z "$property" ] ; then
+            continue
+        fi
+
+        key="$(json_get_value "$property" ".key")"
+        value="$(json_get_value "$property" ".value")"
+
+        if [ -z "$key" ] || [ -z "$value" ] ; then
+            continue
+        fi
+
+        set_flag["$flag_index"]="--property"
+        flag_index=$(($flag_index + 1))
+        set_flag["$flag_index"]="${key}=${value}"
+        flag_index=$(($flag_index + 1))
+    done <<< "$(echo "$properties_to_set" | jq -c ".[]")"
+
+    if [[ "$flag_index" != "0" ]] ; then
+        _hex_function_ret openstack volume type set "${set_flag[@]}" "$storage_name"
     fi
 }
 
@@ -1321,7 +1600,7 @@ cinder_put_storage()
             if [[ "$?" == "0" ]] ; then
                 local nodes=($exec_output)
                 local node=""
-                for node in "${nodes[@]}"; do
+                for node in "${nodes[@]}" ; do
                     if [[ "$name" == "$node" ]] ; then
                         # The value of field name is reserved.
                         jq -c -n \
@@ -1427,7 +1706,7 @@ cinder_put_storage()
     local extra_config=""
     local file_name=""
     local file_content_base64=""
-    while read -r extra_config; do
+    while read -r extra_config ; do
         file_name="$(json_get_value "$extra_config" ".name")"
         if [ -z "$file_name" ] ; then
             continue
@@ -1444,7 +1723,52 @@ cinder_put_storage()
         fi
     done <<< "$(echo "$extra_configs" | jq -c ".[]")"
 
+    # apply changes
+    local is_default="$(json_get_value "$input" ".isDefault")"
+    if [[ "$is_default" != "true" ]] ; then
+        is_default="false"
+    fi
+    local image_use_multipath="$(json_get_value "$storage" ".image.useMultipath")"
+    if [[ "$image_use_multipath" != "true" ]] ; then
+        image_use_multipath="false"
+    fi
+    local image_force_multipath="$(json_get_value "$storage" ".image.forceMultipath")"
+    if [[ "$image_force_multipath" != "true" ]] ; then
+        image_force_multipath="false"
+    fi
+    _hex_function_ret \
+        cinder_apply_storage \
+        "$name" \
+        "$is_default" \
+        "$image_use_multipath" \
+        "$image_force_multipath"
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            '{message: "failed to apply the storage config"}' \
+            >&2
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+
+    # set volume type properties
+    local volume_type_settings="$(json_get_compact_value "$storage" ".volumeType.settings")"
+    cinder_set_volume_type_properties "$name" "$volume_type_settings"
+    ret="$?"
+    local message="storage ${name} created"
+    if [[ "$ret" == "$ERROR_JSON_INVALID_JSON" ]] ; then
+        jq -c -n \
+            '{message: "the input is not a valid JSON string"}' \
+            >&2
+        return "$ret"
+    elif [[ "$ret" == "$ERROR_JSON_NOT_ARRAY" ]] ; then
+        jq -c -n \
+            '{message: "a field should be an array"}' \
+            >&2
+        return "$ret"
+    elif [[ "$ret" == "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED" ]] ; then
+        message+=", volume type properties ignored"
+    fi
+
     jq -c -n \
-        --arg message "storage ${name} created" \
+        --arg message "$message" \
         '{message: $message}'
 }

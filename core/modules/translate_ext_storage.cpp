@@ -25,6 +25,9 @@ Translate(const char* policyFile, FILE* settings)
         fprintf(settings, "cinder.storage.backend.%zu.name = %s\n", i, config.storageBackends[i].c_str());
     }
 
+    fprintf(settings, "glance.cinder.useMultipath = %s\n", (config.imageUseMultipath ? "true" : "false"));
+    fprintf(settings, "glance.cinder.enforceMultipath = %s\n", (config.imageEnforceMultipath ? "true" : "false"));
+
     return true;
 }
 

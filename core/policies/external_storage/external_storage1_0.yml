@@ -7,3 +7,7 @@ volumeType:
   default: CubeStorage
 backends:
   - name:
+image:
+  multipath:
+    use: true
+    enforce: true

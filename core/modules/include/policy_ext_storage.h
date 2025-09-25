@@ -10,6 +10,8 @@
 struct ExtStorageConfig {
     std::string volumeTypeDefault;
     std::vector<std::string> storageBackends;
+    bool imageUseMultipath;
+    bool imageEnforceMultipath;
 };
 
 class ExtStoragePolicy : public HexPolicy {

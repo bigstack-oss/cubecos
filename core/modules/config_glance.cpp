@@ -45,6 +45,8 @@ CONFIG_GLOBAL_STR_REF(EXTERNAL);
 CONFIG_TUNING_BOOL(GLANCE_ENABLED, "glance.enabled", TUNING_UNPUB, "Set to true to enable glance.", true);
 CONFIG_TUNING_STR(GLANCE_USERPASS, "glance.user.password", TUNING_UNPUB, "Set glance user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(GLANCE_DBPASS, "glance.db.password", TUNING_UNPUB, "Set glance database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_BOOL(GLANCE_CINDER_USE_MULTIPATH, "glance.cinder.useMultipath", TUNING_UNPUB, "Use multipath for volume-backed images.", true);
+CONFIG_TUNING_BOOL(GLANCE_CINDER_ENFORCE_MULTIPATH, "glance.cinder.enforceMultipath", TUNING_UNPUB, "Enforce multipath for volume-backed images.", true);
 
 // public tunigns
 CONFIG_TUNING_BOOL(GLANCE_DEBUG, "glance.debug.enabled", TUNING_PUB, "Set to true to enable glance verbose log.", false);
@@ -67,6 +69,8 @@ PARSE_TUNING_BOOL(s_enabled, GLANCE_ENABLED);
 PARSE_TUNING_STR(s_glancePass, GLANCE_USERPASS);
 PARSE_TUNING_STR(s_dbPass, GLANCE_DBPASS);
 PARSE_TUNING_INT(s_exportRp, GLANCE_EXPORT_RP);
+PARSE_TUNING_BOOL(s_cinderUseMultipath, GLANCE_CINDER_USE_MULTIPATH);
+PARSE_TUNING_BOOL(s_cinderEnforceMultipath, GLANCE_CINDER_ENFORCE_MULTIPATH);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 1);
 PARSE_TUNING_X_STR(s_cubeRegion, CUBESYS_REGION, 1);
@@ -620,7 +624,7 @@ Commit(bool modified, int dryLevel)
         SetWorkerQueue(config, s_ha, sharedId, mqPass, s_ctrlAddrs);
         SetNotificationQueue(config, sharedId);
         SetAuth(config, sharedId, s_cubeDomain, glancePass);
-        SetCinderInfo(config, true, true);
+        SetCinderInfo(config, s_cinderUseMultipath, s_cinderEnforceMultipath);
         SetHttpStore(config);
         SetCubeStore(config);
 
