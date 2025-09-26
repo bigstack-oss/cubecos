@@ -1655,7 +1655,7 @@ cinder_put_storage()
     if [[ "$?" != "0" ]] ; then
         # The field extraConfigFiles is not an array.
         jq -c -n \
-            '{message: "the field extraConfigFiles should be an array"}' \
+            '{message: "field extraConfigFiles should be an array"}' \
             >&2
         return "$ERROR_JSON_NOT_ARRAY"
     fi
