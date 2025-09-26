@@ -1826,7 +1826,8 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
     _hex_function \
@@ -1839,14 +1840,16 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
     if ! cinder_is_all_true "$exec_output" ; then
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
 
@@ -1856,7 +1859,8 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
     _hex_function \
@@ -1869,14 +1873,16 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
     if ! cinder_is_all_true "$exec_output" ; then
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
 
@@ -1886,7 +1892,8 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
     _hex_function \
@@ -1899,14 +1906,16 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
     if ! cinder_is_all_true "$exec_output" ; then
         jq -c -n \
             --arg isCinderServiceUp "false" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
 
@@ -1925,7 +1934,8 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         jq -c -n \
             --arg isCinderServiceUp "true" \
             --arg isTestVolumeSuccessful "false" \
-            "$output_template"
+            "$output_template" \
+            >&2
         return 1
     fi
     local volume_id="$exec_output"
@@ -1956,14 +1966,18 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
 
     _hex_function_ret openstack volume delete --force "$volume_id"
 
+    if [[ "$success" != "true" ]] ; then
+        jq -c -n \
+            --arg isCinderServiceUp "true" \
+            --arg isTestVolumeSuccessful "$success" \
+            "$output_template" \
+            >&2
+        return 1
+    fi
+
     jq -c -n \
         --arg isCinderServiceUp "true" \
         --arg isTestVolumeSuccessful "$success" \
         "$output_template"
-
-    if [[ "$success" != "true" ]] ; then
-        return 1
-    fi
-
     return 0
 }
