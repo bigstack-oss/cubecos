@@ -1781,3 +1781,189 @@ cinder_put_storage()
         --arg message "$message" \
         '{message: $message}'
 }
+
+cinder_test_storage()
+{
+    # input format: {
+    #   name: "",
+    # }
+    #
+    # stdout format: {
+    #   isCinderServiceUp: true,
+    #   isTestVolumeSuccessful: true,
+    # }
+
+    local exec_output=""
+    local exec_error=""
+    local output_template='{
+isCinderServiceUp: $isCinderServiceUp | test("true"),
+isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
+}'
+
+    # process inputs
+    local input="${1:-""}"
+    is_valid_json "$input"
+    if [[ "$?" != "0" ]] ; then
+        # The input is not a valid JSON string.
+        jq -c -n \
+            '{message: "the input is not a valid JSON string"}' \
+            >&2
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+
+    local name="$(json_get_value "$input" ".name")"
+    if [ -z "$name" ] ; then
+        # The field name is required.
+        jq -c -n \
+            '{message: "field name should not be blank"}' \
+            >&2
+        return "$ERROR_JSON_KEY_MISSING"
+    fi
+
+    # test volume service status
+    _hex_function exec_output exec_error openstack volume service list -f json
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+    _hex_function \
+        exec_output \
+        exec_error \
+        jq -r \
+        ".[] | select(.Binary == \"cinder-volume\" and .Host == \"${name}@${name}\") | .Status == \"enabled\" and .State == \"up\"" \
+        <(printf "%s" "$exec_output")
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+    if ! cinder_is_all_true "$exec_output" ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+
+    # test volume backend pool status
+    _hex_function exec_output exec_error openstack volume backend pool list -f json
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+    _hex_function \
+        exec_output \
+        exec_error \
+        jq -r \
+        ".[] | select(.Name == \"${name}@${name}#${name}\") | length > 0" \
+        <(printf "%s" "$exec_output")
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+    if ! cinder_is_all_true "$exec_output" ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+
+    # test volume type status
+    _hex_function exec_output exec_error openstack volume type list -f json
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+    _hex_function \
+        exec_output \
+        exec_error \
+        jq -r \
+        ".[] | select(.Name == \"dell-emc-sc-fc\") | length > 0" \
+        <(printf "%s" "$exec_output")
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+    if ! cinder_is_all_true "$exec_output" ; then
+        jq -c -n \
+            --arg isCinderServiceUp "false" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+
+    # test volume creation
+    local test_volume_name="test-volume-$(echo $RANDOM)"
+    _hex_function \
+        exec_output \
+        exec_error \
+        openstack volume create \
+        --size 1 \
+        --type "$name" \
+        --description "volume for testing storage ${name}" \
+        "$test_volume_name" \
+        -c id -f value
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n \
+            --arg isCinderServiceUp "true" \
+            --arg isTestVolumeSuccessful "false" \
+            "$output_template"
+        return 1
+    fi
+    local volume_id="$exec_output"
+
+    local success="false"
+    local i="0"
+    for i in {1..60} ; do
+        _hex_function \
+            exec_output \
+            exec_error \
+            openstack volume show "$volume_id" -f json
+        if [[ "$?" != "0" ]] ; then
+            continue
+        fi
+
+        _hex_function exec_output exec_error \
+            jq -r ".status == \"available\"" <(printf "%s" "$exec_output")
+        if [[ "$?" != "0" ]] ; then
+            continue
+        fi
+
+        if cinder_is_all_true "$exec_output" ; then
+            success="true"
+            break
+        fi
+        sleep 1
+    done
+
+    _hex_function_ret openstack volume delete --force "$volume_id"
+
+    jq -c -n \
+        --arg isCinderServiceUp "true" \
+        --arg isTestVolumeSuccessful "$success" \
+        "$output_template"
+
+    if [[ "$success" != "true" ]] ; then
+        return 1
+    fi
+
+    return 0
+}
