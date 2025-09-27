@@ -9,6 +9,8 @@ fi
 CINDER_USER_INPUT_MODEL_DIRECTORY="/etc/cube/cos/cinder/models"
 CINDER_BUILTIN_MODEL_DIRECTORY="/usr/share/cube/cos/cinder/builtin_models"
 CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY="/etc/cinder/backends"
+CINDER_STORAGE_EXTRA_CONFIGS_OWNERSHIP_DIRECTORY="/etc/cube/cos/cinder/storage_extra_configs_ownership"
+CINDER_STORAGE_EXTRA_CONFIGS_DIRECTORY="/etc/cinder/external_storage_extra_configs"
 
 ERROR_CINDER_WRITE_MODEL_FILE_FAILED="1"
 ERROR_CINDER_WRITE_MULTIPATH_CONFIG_FAILED="2"
@@ -44,8 +46,7 @@ cinder_are_services_up()
     local storage_backends="${1:-""}"
 
     _hex_function exec_output exec_error openstack volume service list -c Binary -c Host -c State -f json
-    is_valid_json "$exec_output"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$exec_output" ; then
         # the status is not a valid JSON string
         return 1
     fi
@@ -129,8 +130,7 @@ cinder_write_model_file()
         return "$ERROR_CINDER_WRITE_MODEL_FILE_FAILED"
     fi
 
-    is_valid_json "$model"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$model" ; then
         # The model is not a valid JSON string.
         return "$ERROR_JSON_INVALID_JSON"
     fi
@@ -166,13 +166,11 @@ cinder_marshal_multipath_conf()
     local value=""
     local output=""
 
-    is_valid_json "$multipath"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$multipath" ; then
         # The config is not a valid JSON.
         return "$ERROR_JSON_INVALID_JSON"
     fi
-    json_is_array "$multipath"
-    if [[ "$?" != "0" ]] ; then
+    if ! json_is_array "$multipath" ; then
         # The config is not an array.
         return "$ERROR_JSON_NOT_ARRAY"
     fi
@@ -201,8 +199,7 @@ cinder_marshal_multipath_conf()
 
         # section attributes
         attributes="$(json_get_compact_value "$section" ".attributes")"
-        json_is_array "$attributes"
-        if [[ "$?" != "0" ]] ; then
+        if ! json_is_array "$attributes" ; then
             # Field attributes is not an array.
             return "$ERROR_JSON_NOT_ARRAY"
         fi
@@ -229,8 +226,7 @@ cinder_marshal_multipath_conf()
 
         # section subsections
         sub_sections="$(json_get_compact_value "$section" ".subSections")"
-        json_is_array "$sub_sections"
-        if [[ "$?" != "0" ]] ; then
+        if ! json_is_array "$sub_sections" ; then
             # Field subSections is not an array.
             return "$ERROR_JSON_NOT_ARRAY"
         fi
@@ -253,8 +249,7 @@ cinder_marshal_multipath_conf()
             output+="    ${sub_section_name} {\n"
 
             attributes="$(json_get_compact_value "$sub_section" ".attributes")"
-            json_is_array "$attributes"
-            if [[ "$?" != "0" ]] ; then
+            if ! json_is_array "$attributes" ; then
                 # Field attributes is not an array.
                 return "$ERROR_JSON_NOT_ARRAY"
             fi
@@ -385,8 +380,8 @@ cinder_put_model()
 
     local ret=""
     local input="${1:-""}"
-    is_valid_json "$input"
-    if [[ "$?" != "0" ]] ; then
+    
+    if ! is_valid_json "$input" ; then
         # The input is not a valid JSON string.
         jq -c -n \
             '{message: "the input is not a valid JSON string"}' \
@@ -548,16 +543,14 @@ cinder_put_models()
 
     local created_drivers=""
 
-    is_valid_json "$input"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$input" ; then
         # The input is not a valid JSON string.
         jq -c -n \
             '{message: "the input is not a valid JSON string"}' \
         >&2
         return "$ERROR_JSON_INVALID_JSON"
     fi
-    json_is_array "$input"
-    if [[ "$?" != "0" ]] ; then
+    if ! json_is_array "$input" ; then
         # The input is not an array.
         jq -c -n \
             '{message: "the input should be an array"}' \
@@ -701,8 +694,7 @@ cinder_get_model()
 
     local input="${1:-""}"
 
-    is_valid_json "$input"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$input" ; then
         # The input is not a valid JSON string.
         jq -c -n \
             '{message: "the input is not a valid JSON string"}' \
@@ -919,8 +911,7 @@ cinder_delete_model()
     # }
 
     local input="${1:-""}"
-    is_valid_json "$input"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$input" ; then
         # The input is not a valid JSON string.
         jq -c -n \
             '{message: "the input is not a valid JSON string"}' \
@@ -983,13 +974,11 @@ cinder_marshal_storage_external_backend_conf()
     local name="${2:-""}"
     local driver="${3:-""}"
 
-    is_valid_json "$external_backend"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$external_backend" ; then
         # The input is not a valid JSON string.
         return "$ERROR_JSON_INVALID_JSON"
     fi
 
-    local storage_name="$(cinder_get_storage_name "$name")"
     local settings=""
     local setting=""
     local key=""
@@ -999,12 +988,11 @@ cinder_marshal_storage_external_backend_conf()
 
     # prepare the config object of the driver section
     settings="$(json_get_value "$external_backend" ".driverSection")"
-    json_is_array "$settings"
-    if [[ "$?" != "0" ]] ; then
+    if ! json_is_array "$settings" ; then
         return "$ERROR_JSON_NOT_ARRAY"
     fi
     config_section="$(jq -c -n \
-        --arg name "$storage_name" \
+        --arg name "$name" \
         --arg driver "$driver" \
         '{
 header: $name,
@@ -1061,8 +1049,7 @@ attributes: [
 
     # prepare the config objects of extraSettings sections
     local extra_settings="$(json_get_value "$external_backend" ".extraSettings")"
-    json_is_array "$extra_settings"
-    if [[ "$?" != "0" ]] ; then
+    if ! json_is_array "$extra_settings" ; then
         return "$ERROR_JSON_NOT_ARRAY"
     fi
     local section=""
@@ -1079,8 +1066,7 @@ attributes: [
             '{header: $header, attributes: []}')"
 
         settings="$(json_get_value "$section" ".settings")"
-        json_is_array "$settings"
-        if [[ "$?" != "0" ]] ; then
+        if ! json_is_array "$settings" ; then
             return "$ERROR_JSON_NOT_ARRAY"
         fi
 
@@ -1120,6 +1106,102 @@ attributes: [
     ini_marshal_config "$config"
 }
 
+cinder_unmarshal_storage_external_backend_conf()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local external_backend_conf="${1:-""}"
+    local name="${2:-""}"
+
+    local config="$(ini_unmarshal_config "$external_backend_conf")"
+
+    local external_backend="$(jq -c -n '{driverSection: [], extraSettings: []}')"
+    
+    if ! json_is_array "$config" ; then
+        json_get_compact_value "$external_backend" "."
+        return 0
+    fi
+
+    local section=""
+    local attribute=""
+    local header=""
+    local extra_setting="{}"
+    local key=""
+    local value=""
+    while read -r section ; do
+        if [ -z "$section" ] ; then
+            continue
+        fi
+
+        header="$(json_get_value "$section" ".header")"
+
+        if [[ "$header" == "$name" ]] ; then
+            while read -r attribute ; do
+                key="$(json_get_value "$attribute" ".key")"
+                if [ -z "$key" ] ; then
+                    continue
+                fi
+                if [[ "$key" == "backend_host" \
+                    || "$key" == "volume_backend_name" \
+                    || "$key" == "volume_driver" ]] ; then
+                    # driver section title, field backend_host, field volume_backend_name,
+                    # and field volume_driver are controlled fields
+                    continue
+                fi
+
+                value="$(json_get_value "$attribute" ".value")"
+
+                if _hex_function exec_output exec_error \
+                    jq -c \
+                    --arg key "$key" \
+                    --arg value "$value" \
+                    '.driverSection += [{key: $key, value: $value}]' \
+                    <(printf "%s" "$external_backend") ; then
+                    external_backend="$exec_output"
+                fi
+            done <<< "$(echo "$section" | jq -c ".attributes[]")"
+        else
+            if _hex_function exec_output exec_error \
+                jq -c -n \
+                --arg header "$header" \
+                '{sectionHeader: $header, settings: []}' ; then
+                extra_setting="$exec_output"
+            else
+                continue
+            fi
+
+            while read -r attribute ; do
+                key="$(json_get_value "$attribute" ".key")"
+                if [ -z "$key" ] ; then
+                    continue
+                fi
+
+                value="$(json_get_value "$attribute" ".value")"
+
+                if _hex_function exec_output exec_error \
+                    jq -c \
+                    --arg key "$key" \
+                    --arg value "$value" \
+                    '.settings += [{key: $key, value: $value}]' \
+                    <(printf "%s" "$extra_setting") ; then
+                    extra_setting="$exec_output"
+                fi
+            done <<< "$(echo "$section" | jq -c ".attributes[]")"
+
+            if _hex_function exec_output exec_error \
+                jq -c \
+                --argjson extraSetting "$extra_setting" \
+                '.extraSettings += [$extraSetting]' \
+                <(printf "%s" "$external_backend") ; then
+                external_backend="$exec_output"
+            fi
+        fi
+    done <<< "$(echo "$config" | jq -c ".[]")"
+
+    json_get_compact_value "$external_backend" "."
+}
+
 cinder_write_storage_external_backend_conf()
 {
     local name="${1:-""}"
@@ -1129,11 +1211,9 @@ cinder_write_storage_external_backend_conf()
         return "$ERROR_CINDER_WRITE_EXT_STORAGE_BACKEND_CONFIG_FAILED"
     fi
 
-    local storage_name="$(cinder_get_storage_name "$name")"
-
     # set the config to /etc/cinder/backends
     # file name format: ext_storage_*.conf
-    _hex_function_ret filesystem_write_file "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${storage_name}.conf" "$external_backend_conf"
+    _hex_function_ret filesystem_write_file "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf" "$external_backend_conf"
     if [[ "$?" != "0" ]] ; then
         # Failed to write the external storage backend config file.
         return "$ERROR_CINDER_WRITE_EXT_STORAGE_BACKEND_CONFIG_FAILED"
@@ -1154,9 +1234,8 @@ cinder_marshal_storage_extra_configs_ownership()
         return
     fi
 
-    local storage_name="$(cinder_get_storage_name "$name")"
     local ownership="$(jq -c -n \
-        --arg storage "$storage_name" \
+        --arg storage "$name" \
         '{storage: $storage, extraConfigFiles: []}')"
 
     local extra_config=""
@@ -1197,8 +1276,7 @@ cinder_write_storage_extra_configs_ownership()
         return "$ERROR_CINDER_WRITE_EXT_STORAGE_EXTRA_CONFIG_OWNERSHIP_FAILED"
     fi
 
-    is_valid_json "$ownership"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$ownership" ; then
         # The ownership is not a valid JSON string.
         return "$ERROR_JSON_INVALID_JSON"
     fi
@@ -1208,10 +1286,31 @@ cinder_write_storage_extra_configs_ownership()
         # The conversion from JSON to YAML failed.
         return "$ERROR_JSON_PARSING_FAILED"
     fi
-    _hex_function_ret filesystem_write_file "/etc/cube/cos/cinder/storage_extra_configs_ownership/${file_name}.yaml" "$exec_output"
+    _hex_function_ret \
+        filesystem_write_file \
+        "${CINDER_STORAGE_EXTRA_CONFIGS_OWNERSHIP_DIRECTORY}/${file_name}.yaml" \
+        "$exec_output"
     if [[ "$?" != "0" ]] ; then
         # Failed to write the ownership file.
         return "$ERROR_CINDER_WRITE_EXT_STORAGE_EXTRA_CONFIG_OWNERSHIP_FAILED"
+    fi
+}
+
+cinder_read_storage_extra_configs_ownership()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local file_name="${1:-""}"
+
+    if [ ! -f "${CINDER_STORAGE_EXTRA_CONFIGS_OWNERSHIP_DIRECTORY}/${file_name}.yaml" ] ; then
+        return 0
+    fi
+
+    if _hex_function exec_output exec_error \
+        yq -p=yaml -o=json \
+        "${CINDER_STORAGE_EXTRA_CONFIGS_OWNERSHIP_DIRECTORY}/${file_name}.yaml" ; then
+        json_get_compact_value "$exec_output" "."
     fi
 }
 
@@ -1228,11 +1327,23 @@ cinder_write_storage_extra_config_file()
     local file_content="$(filesystem_decode_base64string "$file_content_base64")"
 
     # set the config under /etc/cinder/external_storage_extra_configs
-    _hex_function_ret filesystem_write_file "/etc/cinder/external_storage_extra_configs/${file_name}" "$file_content"
+    _hex_function_ret filesystem_write_file "${CINDER_STORAGE_EXTRA_CONFIGS_DIRECTORY}/${file_name}" "$file_content"
     if [[ "$?" != "0" ]] ; then
         # Failed to write the external storage backend config file.
         return "$ERROR_CINDER_WRITE_EXT_STORAGE_EXTRA_CONFIG_FAILED"
     fi
+}
+
+cinder_read_storage_extra_config_file()
+{
+    local file_name="${1:-""}"
+
+    if [ ! -f "${CINDER_STORAGE_EXTRA_CONFIGS_DIRECTORY}/${file_name}" ] ; then
+        return 0
+    fi
+
+    filesystem_encode_base64string "$(filesystem_read_file \
+        "${CINDER_STORAGE_EXTRA_CONFIGS_DIRECTORY}/${file_name}")"
 }
 
 cinder_apply_storage()
@@ -1338,12 +1449,11 @@ cinder_set_volume_type_properties()
 
     # check if the volume type exist
     _hex_function exec_output exec_error openstack volume type list -c Name -f json
-    is_valid_json "$exec_output"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$exec_output" ; then
         return "$ERROR_JSON_INVALID_JSON"
     fi
-    json_is_array "$exec_output"
-    if [[ "$?" != "0" ]] ; then
+    
+    if ! json_is_array "$exec_output" ; then
         return "$ERROR_JSON_NOT_ARRAY"
     fi
 
@@ -1366,8 +1476,7 @@ cinder_set_volume_type_properties()
 
     # compute the difference between the current properties
     # of the volume type and the target properties
-    json_is_array "$properties"
-    if [[ "$?" != "0" ]] ; then
+    if ! json_is_array "$properties" ; then
         return "$ERROR_JSON_NOT_ARRAY"
     fi
 
@@ -1506,6 +1615,126 @@ cinder_set_volume_type_properties()
     fi
 }
 
+cinder_get_volume_type_properties()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local storage_name="${1:-""}"
+    local driver="${2:-""}"
+
+    local properties="[]"
+
+    # check if the volume type exist
+    _hex_function exec_output exec_error openstack volume type list -c Name -f json
+    if ! is_valid_json "$exec_output" ; then
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+
+    if ! json_is_array "$exec_output" ; then
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+
+    local volume_type_found="false"
+    local volume_type=""
+    while read -r volume_type ; do
+        if [[ "$(json_get_value "$volume_type" ".Name")" == "$storage_name" ]] ; then
+            volume_type_found="true"
+            break
+        fi
+    done <<< "$(echo "$exec_output" | jq -c ".[]")"
+    if [[ "$volume_type_found" == "false" ]] ; then
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+
+    # get currently applied volume type properties
+    _hex_function exec_output exec_error openstack volume type show "$storage_name" -f json
+    if [[ "$?" != "0" ]] ; then
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+    _hex_function exec_output exec_error jq -c ".properties" <(printf "%s" "$exec_output")
+    if [[ "$?" != "0" ]] ; then
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+    local current_properties="$exec_output"
+
+    local current_property_key=""
+    local current_property_value=""
+    while read -r current_property_key ; do
+        if [[ "$current_property_key" == "volume_backend_name" ]] ; then
+            # we would ignore this key value pair
+            continue
+        fi
+
+        current_property_value="$(json_get_value "$current_properties" ".${current_property_key}")"
+
+        if _hex_function exec_output exec_error \
+            jq -c \
+            --arg key "$current_property_key" \
+            --arg value "$current_property_value" \
+            '. += [{key: $key, value: $value}]' \
+            <(printf "%s" "$properties") ; then
+            properties="$exec_output"
+        fi
+    done <<< "$(echo "$current_properties" | jq -r "keys[]")"
+
+    # get blank volume type from the model
+    if [ -z "$driver" ] ; then
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+
+    local model_file_name="$(cinder_get_model_file_name "$driver")"
+    local model_file_path=""
+    local user_input_model_file_path="${CINDER_USER_INPUT_MODEL_DIRECTORY}/${model_file_name}.yaml"
+    local builtin_model_file_path="${CINDER_BUILTIN_MODEL_DIRECTORY}/${model_file_name}.yaml"
+    if [ -f "$user_input_model_file_path" ] ; then
+        model_file_path="$user_input_model_file_path"
+    elif [ -f "$builtin_model_file_path" ] ; then
+        model_file_path="$builtin_model_file_path"
+    else
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+
+    if ! _hex_function exec_output exec_error yq -p=yaml -o=json "$model_file_path" ; then
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+    local model_volume_type_properties="$(json_get_compact_value \
+        "$exec_output" \
+        ".storage.volumeType.settings")"
+    if ! json_is_array "$model_volume_type_properties" ; then
+        json_get_compact_value "$properties" "."
+        return 0
+    fi
+    local model_property=""
+    local key=""
+    while read -r model_property ; do
+        key="$(json_get_value "$model_property" ".key")"
+        if [ -z "$key" ] ; then
+            continue
+        fi
+
+        if [[ "$(json_get_value "$current_properties" "has(\"${key}\")")" != "true" ]] ; then
+            if _hex_function exec_output exec_error \
+                jq -c \
+                --arg key "$key" \
+                '. += [{key: $key, value: ""}]' \
+                <(printf "%s" "$properties") ; then
+                properties="$exec_output"
+            fi
+        fi
+    done <<< "$(echo "$model_volume_type_properties" | jq -c ".[]")"
+
+    json_get_compact_value "$properties" "."
+}
+
 cinder_put_storage()
 {
     # input format: {
@@ -1567,8 +1796,8 @@ cinder_put_storage()
 
     # process inputs
     local input="${1:-""}"
-    is_valid_json "$input"
-    if [[ "$?" != "0" ]] ; then
+    
+    if ! is_valid_json "$input" ; then
         # The input is not a valid JSON string.
         jq -c -n \
             '{message: "the input is not a valid JSON string"}' \
@@ -1576,7 +1805,7 @@ cinder_put_storage()
         return "$ERROR_JSON_INVALID_JSON"
     fi
 
-    local name="$(json_get_value "$input" ".name")"
+    local name="$(cinder_get_storage_name "$(json_get_value "$input" ".name")")"
     if [ -z "$name" ] ; then
         # The field name is required. Field name is also the ID of this put operation.
         jq -c -n \
@@ -1650,8 +1879,7 @@ cinder_put_storage()
 
     local external_backend="$(json_get_compact_value "$storage" ".service")"
     local extra_configs="$(json_get_compact_value "$external_backend" ".extraConfigFiles")"
-    json_is_array "$extra_configs"
-    if [[ "$?" != "0" ]] ; then
+    if ! json_is_array "$extra_configs" ; then
         # The field extraConfigFiles is not an array.
         jq -c -n \
             '{message: "field extraConfigFiles should be an array"}' \
@@ -1687,8 +1915,7 @@ cinder_put_storage()
 
     # set the extra config files ownership
     # We write the ownership file first in case writing extra config files fail.
-    local storage_extra_configs_ownership=""
-    storage_extra_configs_ownership="$(cinder_marshal_storage_extra_configs_ownership "$name" "$extra_configs")"
+    local storage_extra_configs_ownership="$(cinder_marshal_storage_extra_configs_ownership "$name" "$extra_configs")"
     _hex_function_ret cinder_write_storage_extra_configs_ownership "$name" "$storage_extra_configs_ownership"
     ret="$?"
     if [[ "$ret" == "$ERROR_JSON_INVALID_JSON" ]] ; then
@@ -1798,6 +2025,29 @@ updateTime: "1970-01-01T00:00:00Z"
 }'
 }
 
+cinder_get_builtin_storage()
+{
+    local volume_type_default="${1:-""}"
+
+    jq -c -n \
+        --argjson basicInfo "$(cinder_get_builtin_storage_basic_info "$volume_type_default")" \
+        '$basicInfo + {
+storage: {
+    service: {
+        driverSection: [],
+        extraSettings: [],
+        extraConfigFiles: []
+    },
+    volumeType: {
+        settings: []
+    },
+    image: {
+        useMultipath: false,
+        forceMultipath: false
+    }
+}}'
+}
+
 cinder_get_storage_basic_info()
 {
     local exec_output=""
@@ -1863,6 +2113,220 @@ isDefault: $volumeTypeDefault | test($name),
 isBuiltin: false,
 updateTime: $updateTime
 }'
+}
+
+cinder_get_storage()
+{
+    # input format: {
+    #   name: "",
+    # }
+    #
+    # stdout format: {
+    #   name: "",
+    #   driver: "",
+    #   vendor: "",
+    #   model: "",
+    #   isDefault: true,
+    #   isBuiltin: false,
+    #   updateTime: "", // RFC 7493, Section 4.3 (ISO 8601 / RFC 3339)
+    #   storage: {
+    #     service: {
+    #       driverSection: [
+    #         {
+    #           key: "",
+    #           value: "",
+    #         }
+    #       ],
+    #       extraSettings: [
+    #         {
+    #           sectionHeader: "",
+    #           settings: [
+    #             {
+    #               key: "",
+    #               value: "",
+    #             },
+    #           ],
+    #         },
+    #       ],
+    #       extraConfigFiles: [
+    #         {
+    #           name: "", // name = test.conf => file path = /etc/cinder/external_storage_extra_configs/test.conf
+    #           content: "", // base64 encoded file content
+    #         },
+    #       ],
+    #     },
+    #     volumeType: {
+    #       settings: [
+    #         {
+    #           key: "",
+    #           value: "",
+    #         },
+    #       ],
+    #     },
+    #     image: {
+    #       useMultipath: true,
+    #       forceMultipath: true,
+    #     },
+    #   },
+    # }
+    #
+    # stderr format: {
+    #   message: "",
+    # }
+
+    local exec_output=""
+    local exec_error=""
+
+    local input="${1:-""}"
+    local output="{}"
+
+    # process inputs
+    if ! is_valid_json "$input" ; then
+        # The input is not a valid JSON string.
+        jq -c -n \
+            '{message: "the input is not a valid JSON string"}' \
+            >&2
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+
+    local name="$(json_get_value "$input" ".name")"
+    if [ -z "$name" ] ; then
+        # The field name is required.
+        jq -c -n \
+            '{message: "field name should not be blank"}' \
+            >&2
+        return "$ERROR_JSON_KEY_MISSING"
+    fi
+
+    # return the builtin storage info if name == "CubeStorage"
+    local volume_type_default="$(ini_read_value "$SETTINGS_TXT" "" "cinder.storage.volumeType.default")"
+    if [[ "$name" == "CubeStorage" ]] ; then
+        cinder_get_builtin_storage "$volume_type_default"
+        return 0
+    fi
+
+    # check if the storage exists
+    if [ ! -f "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf" ] ; then
+        jq -c -n \
+            --arg message "storage ${name} does not exist" \
+            '{message: $message}' \
+            >&2
+        return 1
+    fi
+
+    # set basic infos
+    _hex_function exec_output exec_error \
+        jq -c \
+        --argjson storageBasicInfo "$(cinder_get_storage_basic_info \
+            "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf" \
+            "$volume_type_default")" \
+        '. + $storageBasicInfo' \
+        <(printf "%s" "$output")
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+    output="$exec_output"
+
+    # parse the storage config
+    local external_backend_conf="$(filesystem_read_file \
+        "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf")"
+    local external_backend="$(cinder_unmarshal_storage_external_backend_conf \
+        "$external_backend_conf" \
+        "$name")"
+    if ! _hex_function exec_output exec_error \
+        jq -c \
+        --argjson externalBackend "$external_backend" \
+        '.storage.service = $externalBackend' \
+        <(printf "%s" "$output") ; then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+    output="$exec_output"
+
+    # parse the extra configs
+    local storage_extra_configs_ownership="$(cinder_read_storage_extra_configs_ownership "$name")"
+    if ! json_is_array "$(json_get_compact_value \
+        "$storage_extra_configs_ownership" \
+        ".extraConfigFiles")" ; then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+
+    if ! _hex_function exec_output exec_error \
+        jq -c \
+        '.storage.service.extraConfigFiles = []' \
+        <(printf "%s" "$output") ; then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+    output="$exec_output"
+
+    local extra_config=""
+    local file_name=""
+    while read -r extra_config ; do
+        file_name="$(json_get_value "$extra_config" ".name")"
+        if [ -z "$file_name" ] ; then
+            continue
+        fi
+
+        if ! _hex_function exec_output exec_error \
+            jq -c \
+            --arg fileName "$file_name" \
+            --arg fileContent "$(cinder_read_storage_extra_config_file "$file_name")" \
+            '.storage.service.extraConfigFiles += [{
+name: $fileName,
+content: $fileContent
+}]' \
+            <(printf "%s" "$output") ; then
+            jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+            return 1
+        fi
+        output="$exec_output"
+    done <<< "$(echo "$storage_extra_configs_ownership" | jq -c ".extraConfigFiles[]")"
+
+    # parse volume-backed image multipath settings
+    local image_use_multipath="$(ini_read_value "$SETTINGS_TXT" "" "glance.cinder.useMultipath")"
+    local image_force_multipath="$(ini_read_value "$SETTINGS_TXT" "" "glance.cinder.enforceMultipath")"
+    if ! _hex_function exec_output exec_error \
+        jq -c \
+        --arg useMultipath "$image_use_multipath" \
+        '.storage.image.useMultipath = ($useMultipath | test("true"))' \
+        <(printf "%s" "$output") ; then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+    output="$exec_output"
+    if ! _hex_function exec_output exec_error \
+        jq -c \
+        --arg forceMultipath "$image_force_multipath" \
+        '.storage.image.forceMultipath = ($forceMultipath | test("true"))' \
+        <(printf "%s" "$output") ; then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+    output="$exec_output"
+
+    # parse volume type properties
+    local volume_type_properties="$(cinder_get_volume_type_properties \
+        "$name" \
+        "$(json_get_value "$output" ".driver")")"
+    if ! json_is_array "$volume_type_properties" ; then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+    if ! _hex_function exec_output exec_error \
+        jq -c \
+        --argjson volumeTypeProperties "$volume_type_properties" \
+        '.storage.volumeType.settings = $volumeTypeProperties' \
+        <(printf "%s" "$output"); then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+    output="$exec_output"
+
+    # output
+    json_get_compact_value "$output" "."
 }
 
 cinder_get_storages()
@@ -1943,8 +2407,7 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
 
     # process inputs
     local input="${1:-""}"
-    is_valid_json "$input"
-    if [[ "$?" != "0" ]] ; then
+    if ! is_valid_json "$input" ; then
         # The input is not a valid JSON string.
         jq -c -n \
             '{message: "the input is not a valid JSON string"}' \

@@ -99,8 +99,7 @@ ini_marshal_config()
     local input="${1:-"[]"}"
     local output=""
 
-    json_is_array "$input"
-    if [[ "$?" != "0" ]] ; then
+    if ! json_is_array "$input" ; then
         return "$ERROR_JSON_NOT_ARRAY"
     fi
 
@@ -114,8 +113,7 @@ ini_marshal_config()
         section_header="$(json_get_value "$section" ".header")"
         attributes="$(json_get_compact_value "$section" ".attributes")"
 
-        json_is_array "$attributes"
-        if [[ "$?" != "0" ]] ; then
+        if ! json_is_array "$attributes" ; then
           return "$ERROR_JSON_NOT_ARRAY"
         fi
 
@@ -138,4 +136,131 @@ ini_marshal_config()
     done <<< "$(echo "$input" | jq -c ".[]")"
 
     echo -e "$output"
+}
+
+# Unmarshal ini file content to ini config JSON object.
+# We would allow .[].header to be blank to represent configs without a section header.
+# The .[].attributes[].key should not be blank.
+ini_unmarshal_config()
+{
+    # stdout format: [
+    #   {
+    #     header: "",
+    #     attributes: [
+    #       {
+    #         key: "",
+    #         value: "",
+    #       },
+    #     ],
+    #   },
+    # ]
+
+    local exec_output=""
+    local exec_error=""
+    local IFS=$'='
+
+    local input="${1:-""}"
+
+    local output="[]"
+
+    local line=""
+    local first_part=""
+    local second_part=""
+    local section_header=""
+    local section_no_header="$(jq -c -n '{header: "", attributes: []}')"
+    local section="$(jq -c -n '{header: "", attributes: []}')"
+    while read -r line ; do
+        # split the line by the first '='
+        read -r first_part second_part <<< "$line"
+        if [ -z "$first_part" ] ; then
+            continue
+        fi
+
+        first_part="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$first_part")"
+        second_part="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$second_part")"
+
+        if [ -z "$section_header" ] && [ -n "$first_part" ] && [ -n "$second_part" ] ; then
+            # These are configs without a section header.
+            _hex_function exec_output exec_error \
+                jq -c \
+                --arg key "$first_part" \
+                --arg value "$second_part" \
+                '.attributes += [{key: $key, value: $value}]' \
+                <(printf "%s" "$section_no_header")
+            if [[ "$?" == "0" ]] ; then
+                section_no_header="$exec_output"
+            fi
+
+            continue
+        fi
+
+        if [[ "$first_part" =~ ^"[".*"]"$ ]] ; then
+            # This is a section header.
+            first_part="${first_part#"["}"
+            first_part="${first_part%"]"}"
+
+            if [[ "$first_part" != "$section_header" ]] ; then
+                # save the previous section into the output
+                if [[ -n "$(json_get_value "$section" ".header")" ]] ; then
+                    _hex_function exec_output exec_error \
+                        jq -c \
+                        --argjson section "$section" \
+                        '. += [$section]' \
+                        <(printf "%s" "$output")
+                    if [[ "$?" == "0" ]] ; then
+                        output="$exec_output"
+                    fi
+                fi
+
+                section_header="$first_part"
+                section="$(jq -c -n '{header: "", attributes: []}')"
+
+                _hex_function exec_output exec_error \
+                    jq -c \
+                    --arg header "$section_header" \
+                    '.header = $header' \
+                    <(printf "%s" "$section")
+                if [[ "$?" == "0" ]] ; then
+                    section="$exec_output"
+                fi
+            fi
+
+            continue
+        fi
+
+        if [[ "$section_header" == "$(json_get_value "$section" ".header")" ]] ; then
+            # ensure it is the correct section object
+            _hex_function exec_output exec_error \
+                jq -c \
+                --arg key "$first_part" \
+                --arg value "$second_part" \
+                '.attributes += [{key: $key, value: $value}]' \
+                <(printf "%s" "$section")
+            if [[ "$?" == "0" ]] ; then
+                section="$exec_output"
+            fi
+        fi
+    done <<< "$input"
+
+    _hex_function exec_output exec_error \
+        jq -c \
+        --argjson section "$section" \
+        '. += [$section]' \
+        <(printf "%s" "$output")
+    if [[ "$?" == "0" ]] ; then
+        output="$exec_output"
+    fi
+
+    if [[ "$(json_get_value "$section_no_header" ".attributes[] | length > 0")" == "true" ]] ; then
+        _hex_function exec_output exec_error \
+            jq -c \
+            --argjson section "$section_no_header" \
+            '. += [$section]' \
+            <(printf "%s" "$output")
+        if [[ "$?" == "0" ]] ; then
+            output="$exec_output"
+        fi
+    fi
+
+    json_get_compact_value "$output" "."
 }
