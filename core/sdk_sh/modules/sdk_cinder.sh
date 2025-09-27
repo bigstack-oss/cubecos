@@ -45,7 +45,7 @@ cinder_are_services_up()
 
     local storage_backends="${1:-""}"
 
-    _hex_function exec_output exec_error openstack volume service list -c Binary -c Host -c State -f json
+    _hex_function exec_output exec_error $OPENSTACK volume service list -c Binary -c Host -c State -f json
     if ! is_valid_json "$exec_output" ; then
         # the status is not a valid JSON string
         return 1
@@ -1346,7 +1346,7 @@ cinder_read_storage_extra_config_file()
         "${CINDER_STORAGE_EXTRA_CONFIGS_DIRECTORY}/${file_name}")"
 }
 
-cinder_apply_storage()
+cinder_apply_storage_creation()
 {
     local exec_output=""
     local exec_error=""
@@ -1422,21 +1422,21 @@ cinder_is_volume_type_in_use()
 {
     local volume_type="${1:-""}"
     if [ -z "$volume_type" ] ; then
-        return 0
+        return 1
     fi
 
-    _hex_function exec_output exec_error openstack volume list --long -f json
+    _hex_function exec_output exec_error $OPENSTACK volume list --long -f json
     if [[ "$?" != "0" ]] || ! json_is_array "$exec_output" ; then
-        return 1
+        return 0
     fi
     _hex_function exec_output exec_error \
         jq -c "map(select(.Type == \"${volume_type}\")) | length" <(printf "%s" "$exec_output")
     if [[ "$?" != "0" || "$exec_output" != "0" ]] ; then
          # the volume type is in use
-        return 1
+        return 0
     fi
 
-    return 0
+    return 1
 }
 
 cinder_set_volume_type_properties()
@@ -1448,7 +1448,7 @@ cinder_set_volume_type_properties()
     local properties="${2:-""}"
 
     # check if the volume type exist
-    _hex_function exec_output exec_error openstack volume type list -c Name -f json
+    _hex_function exec_output exec_error $OPENSTACK volume type list -c Name -f json
     if ! is_valid_json "$exec_output" ; then
         return "$ERROR_JSON_INVALID_JSON"
     fi
@@ -1470,7 +1470,7 @@ cinder_set_volume_type_properties()
     fi
 
     # check if the volume type is in use, skip applying changes if in use
-    if ! cinder_is_volume_type_in_use "$storage_name" ; then
+    if cinder_is_volume_type_in_use "$storage_name" ; then
         return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_IGNORED"
     fi
 
@@ -1480,7 +1480,7 @@ cinder_set_volume_type_properties()
         return "$ERROR_JSON_NOT_ARRAY"
     fi
 
-    _hex_function exec_output exec_error openstack volume type show "$storage_name" -f json
+    _hex_function exec_output exec_error $OPENSTACK volume type show "$storage_name" -f json
     if [[ "$?" != "0" ]] ; then
         return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_IGNORED"
     fi
@@ -1581,7 +1581,7 @@ cinder_set_volume_type_properties()
     done <<< "$(echo "$properties_to_unset" | jq -r ".[]")"
 
     if [[ "$flag_index" != "0" ]] ; then
-        _hex_function_ret openstack volume type unset "${unset_flag[@]}" "$storage_name"
+        _hex_function_ret $OPENSTACK volume type unset "${unset_flag[@]}" "$storage_name"
         if [[ "$?" != "0" ]] ; then
             return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
         fi
@@ -1608,7 +1608,7 @@ cinder_set_volume_type_properties()
     done <<< "$(echo "$properties_to_set" | jq -c ".[]")"
 
     if [[ "$flag_index" != "0" ]] ; then
-        _hex_function_ret openstack volume type set "${set_flag[@]}" "$storage_name"
+        _hex_function_ret $OPENSTACK volume type set "${set_flag[@]}" "$storage_name"
         if [[ "$?" != "0" ]] ; then
             return "$ERROR_CINDER_APPLY_VOLUME_TYPE_PROPERTIES_FAILED"
         fi
@@ -1626,7 +1626,7 @@ cinder_get_volume_type_properties()
     local properties="[]"
 
     # check if the volume type exist
-    _hex_function exec_output exec_error openstack volume type list -c Name -f json
+    _hex_function exec_output exec_error $OPENSTACK volume type list -c Name -f json
     if ! is_valid_json "$exec_output" ; then
         json_get_compact_value "$properties" "."
         return 0
@@ -1651,7 +1651,7 @@ cinder_get_volume_type_properties()
     fi
 
     # get currently applied volume type properties
-    _hex_function exec_output exec_error openstack volume type show "$storage_name" -f json
+    _hex_function exec_output exec_error $OPENSTACK volume type show "$storage_name" -f json
     if [[ "$?" != "0" ]] ; then
         json_get_compact_value "$properties" "."
         return 0
@@ -1721,7 +1721,7 @@ cinder_get_volume_type_properties()
             continue
         fi
 
-        if [[ "$(json_get_value "$current_properties" "has(\"${key}\")")" != "true" ]] ; then
+        if ! json_has_key "$current_properties" "$key" ; then
             if _hex_function exec_output exec_error \
                 jq -c \
                 --arg key "$key" \
@@ -1970,7 +1970,7 @@ cinder_put_storage()
         image_force_multipath="false"
     fi
     _hex_function_ret \
-        cinder_apply_storage \
+        cinder_apply_storage_creation \
         "$name" \
         "$is_default" \
         "$image_use_multipath" \
@@ -2214,7 +2214,7 @@ cinder_get_storage()
         return 1
     fi
 
-    # set basic infos
+    # parse basic infos
     _hex_function exec_output exec_error \
         jq -c \
         --argjson storageBasicInfo "$(cinder_get_storage_basic_info \
@@ -2387,6 +2387,190 @@ cinder_get_storages()
     json_get_compact_value "$output" "."
 }
 
+cinder_apply_storage_deletion()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local storage_name="${1:-""}"
+
+    if [ -z "$storage_name" ] ; then
+        return 0
+    fi
+
+    # edit the policy file
+    local input_dir="$(MakeTempDir)"
+    mkdir -p "${input_dir}/external_storage"
+    cp -f "/etc/policies/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/"
+    local ext_storage_policy_file="${input_dir}/external_storage/external_storage1_0.yml"
+
+    # storage backends
+    local policy="{}"
+    if ! _hex_function exec_output exec_error \
+        yq -p=yaml -o=json "$ext_storage_policy_file" ; then
+        return 1
+    fi
+    policy="$exec_output"
+
+    local backends="$(json_get_compact_value "$policy" ".backends")"
+    if ! json_is_array "$backends" ; then
+        return 1
+    fi
+    if ! _hex_function exec_output exec_error \
+        jq -c "map(select(.name != \"${storage_name}\"))" <(printf "%s" "$backends") ; then
+        return 1
+    fi
+    backends="$exec_output"
+
+    if ! _hex_function exec_output exec_error \
+        jq -r '.[] | length' <(printf "%s" "$backends") ; then
+        return 1
+    fi
+    if [[ "$exec_output" -le 0 ]] ; then
+        backends="$(jq -c -n '[{name: ""}]')"
+    fi
+
+    if ! _hex_function exec_output exec_error \
+        jq -c \
+        --argjson backends "$backends" \
+        '.backends = $backends' \
+        <(printf "%s" "$policy") ; then
+        return 1
+    fi
+    policy="$exec_output"
+    if ! _hex_function exec_output exec_error \
+        yq -p=json -o=yaml <(printf "%s" "$policy") ; then
+        return 1
+    fi
+    if ! filesystem_write_file "$ext_storage_policy_file" "$exec_output" ; then
+        return 1
+    fi
+
+    # default volume type
+    local volume_type_default=""
+    local new_volume_type_default=""
+    if ! _hex_function exec_output exec_error \
+        yq -r ".volumeType.default" "$ext_storage_policy_file" ; then
+        return 1
+    fi
+    volume_type_default="$exec_output"
+    if [[ "$volume_type_default" == "$storage_name" ]] ; then
+        new_volume_type_default="CubeStorage"
+    else
+        new_volume_type_default="$volume_type_default"
+    fi
+    if ! _hex_function exec_output exec_error \
+        yq -i \
+        ".volumeType.default = \"${new_volume_type_default}\"" \
+        "$ext_storage_policy_file" ; then
+        return 1
+    fi
+
+    # apply configs, and restart services
+    if ! $HEX_CFG apply "$input_dir" ; then
+        return 1
+    fi
+
+    return 0
+}
+
+cinder_delete_storage()
+{
+    # input format: {
+    #   name: "",
+    # }
+    #
+    # stdout format: {
+    #   message: "",
+    # }
+    #
+    # stderr format: {
+    #   message: "",
+    # }
+
+    # process inputs
+    local input="${1:-""}"
+    if ! is_valid_json "$input" ; then
+        # The input is not a valid JSON string.
+        jq -c -n \
+            '{message: "the input is not a valid JSON string"}' \
+            >&2
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+
+    local name="$(json_get_value "$input" ".name")"
+    if [ -z "$name" ] ; then
+        # The field name is required.
+        jq -c -n \
+            '{message: "field name should not be blank"}' \
+            >&2
+        return "$ERROR_JSON_KEY_MISSING"
+    fi
+
+    # check if the volume type is in use
+    if cinder_is_volume_type_in_use "$name" ; then
+        jq -c -n \
+            --arg message "volume type ${name} is still in use" \
+            '{message: $message}' \
+            >&2
+        return 1
+    fi
+
+    # delete the volume type
+    _hex_function_ret $OPENSTACK volume type delete "$name"
+
+    # delete extra configs and the ownership file
+    local storage_extra_configs_ownership="$(cinder_read_storage_extra_configs_ownership "$name")"
+    if ! json_is_array "$(json_get_compact_value \
+        "$storage_extra_configs_ownership" \
+        ".extraConfigFiles")" ; then
+        jq -c -n \
+            --arg message "failed to delete storage ${name}" \
+            '{message: $message}' \
+            >&2
+        return 2
+    fi
+
+    local extra_config=""
+    local file_name=""
+    while read -r extra_config ; do
+        file_name="$(json_get_value "$extra_config" ".name")"
+        if [ -z "$file_name" ] ; then
+            continue
+        fi
+
+        if [ -f "${CINDER_STORAGE_EXTRA_CONFIGS_DIRECTORY}/${file_name}" ] ; then
+            rm -f "${CINDER_STORAGE_EXTRA_CONFIGS_DIRECTORY}/${file_name}"
+        fi
+    done <<< "$(echo "$storage_extra_configs_ownership" | jq -c ".extraConfigFiles[]")"
+    if [ -f "${CINDER_STORAGE_EXTRA_CONFIGS_OWNERSHIP_DIRECTORY}/${name}.yaml" ] ; then
+        rm -f "${CINDER_STORAGE_EXTRA_CONFIGS_OWNERSHIP_DIRECTORY}/${name}.yaml"
+    fi
+
+    # delete the storage config
+    if [ -f "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf" ] ; then
+        rm -f "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf"
+    fi
+
+    # apply changes
+    if ! cinder_apply_storage_deletion "$name" ; then
+        jq -c -n \
+            --arg message "failed to delete storage ${name}" \
+            '{message: $message}' \
+            >&2
+        return 2
+    fi
+
+    if is_control_node ; then
+        _hex_function_ret $OPENSTACK volume service set --disable "$name" "cinder-volume"
+        _hex_function_ret /usr/bin/cinder-manage service remove "cinder-volume" "$name"
+    fi
+
+    jq -c -n \
+        --arg message "storage ${name} deleted" \
+        '{message: $message}'
+}
+
 cinder_test_storage()
 {
     # input format: {
@@ -2425,7 +2609,7 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
     fi
 
     # test volume service status
-    _hex_function exec_output exec_error openstack volume service list -f json
+    _hex_function exec_output exec_error $OPENSTACK volume service list -f json
     if [[ "$?" != "0" ]] ; then
         jq -c -n \
             --arg isCinderServiceUp "false" \
@@ -2458,7 +2642,7 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
     fi
 
     # test volume backend pool status
-    _hex_function exec_output exec_error openstack volume backend pool list -f json
+    _hex_function exec_output exec_error $OPENSTACK volume backend pool list -f json
     if [[ "$?" != "0" ]] ; then
         jq -c -n \
             --arg isCinderServiceUp "false" \
@@ -2491,7 +2675,7 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
     fi
 
     # test volume type status
-    _hex_function exec_output exec_error openstack volume type list -f json
+    _hex_function exec_output exec_error $OPENSTACK volume type list -f json
     if [[ "$?" != "0" ]] ; then
         jq -c -n \
             --arg isCinderServiceUp "false" \
@@ -2528,7 +2712,7 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
     _hex_function \
         exec_output \
         exec_error \
-        openstack volume create \
+        $OPENSTACK volume create \
         --size 1 \
         --type "$name" \
         --description "volume for testing storage ${name}" \
@@ -2550,7 +2734,7 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         _hex_function \
             exec_output \
             exec_error \
-            openstack volume show "$volume_id" -f json
+            $OPENSTACK volume show "$volume_id" -f json
         if [[ "$?" != "0" ]] ; then
             continue
         fi
@@ -2568,7 +2752,7 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         sleep 1
     done
 
-    _hex_function_ret openstack volume delete --force "$volume_id"
+    _hex_function_ret $OPENSTACK volume delete --force "$volume_id"
 
     if [[ "$success" != "true" ]] ; then
         jq -c -n \
