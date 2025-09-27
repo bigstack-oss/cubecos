@@ -2571,6 +2571,22 @@ cinder_delete_storage()
         '{message: $message}'
 }
 
+cinder_get_default_storage()
+{
+    # stdout format: {
+    #   name: "",
+    # }
+
+    local volume_type_default="$(ini_read_value \
+        "$SETTINGS_TXT" \
+        "" \
+        "cinder.storage.volumeType.default")"
+
+    jq -c -n \
+        --arg name "$volume_type_default" \
+        '{name: $name}'
+}
+
 cinder_test_storage()
 {
     # input format: {
