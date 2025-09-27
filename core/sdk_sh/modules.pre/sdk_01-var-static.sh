@@ -41,6 +41,7 @@ CEPHFS_GLANCE_DIR=/mnt/cephfs/glance
 CEPHFS_NOVA_DIR=/mnt/cephfs/nova
 CEPHFS_K8S_DIR=/mnt/cephfs/k8s
 CEPHFS_UPDATE_DIR=/mnt/cephfs/update
+CEPHFS_DOCKER_DIR=/mnt/cephfs/docker/registry
 ADMIN_KEYRING=/etc/ceph/ceph.client.admin.keyring
 CEPHFS_CLIENT_AUTHKEY=/etc/ceph/admin.key
 CEPH_OSD_MAP=/var/lib/ceph/osd/dev_osd.map

@@ -23,7 +23,7 @@ const (
 	dockerConfigFile      = "/etc/docker/daemon.json"
 	dockerDataDir         = "/opt/docker/"
 	dockerRegistryArchive = dockerDataDir + "/registry@2.tar"
-	dockerRegistryVolume  = dockerDataDir + "/registry"
+	dockerRegistryVolume  = "/mnt/cephfs/docker/registry"
 	dockerRegistryPort    = 5080
 )
 
@@ -204,12 +204,6 @@ var cmdDockerImportRegistry = &cobra.Command{
 			return errors.Wrap(err, outErr)
 		}
 		zap.L().Info("Registry volume extracted")
-
-		zap.L().Info("Syncing registry volume to every control nodes")
-		if _, outErr, err := util.ExecCmd("cubectl", "node", "rsync", dockerRegistryVolume, "--role", "control"); err != nil {
-			return errors.Wrap(err, outErr)
-		}
-		zap.L().Info("Registry volume synced")
 
 		if _, outErr, err := util.ExecCmd("cubectl", "node", "exec",
 			"--role", "control", "--parallel",

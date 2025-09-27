@@ -20,5 +20,6 @@ Commit(bool modified, int dryLevel)
 
 CONFIG_MODULE(docker, 0, 0, 0, 0, Commit);
 CONFIG_REQUIRES(docker, cluster);
+CONFIG_REQUIRES(docker, ceph);
 
 //CONFIG_MIGRATE(docker, "/var/lib/docker");
