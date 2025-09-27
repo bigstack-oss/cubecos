@@ -283,6 +283,118 @@ cinder_marshal_multipath_conf()
     echo -e "$output"
 }
 
+cinder_unmarshal_multipath_conf()
+{
+    local multipath_setting="${1:-""}"
+
+    local output="[]"
+
+    local line=""
+    local section="{}"
+    local sub_section="{}"
+    local in_section="false"
+    local in_sub_section="false"
+    local section_name=""
+    local sub_section_name=""
+    local key=""
+    local value=""
+    while read -r line ; do
+        if [[ "$in_section" != "true" ]] ; then
+            if [[ "$line" =~ "{" ]] ; then
+                section_name="$(awk '{ print $1; exit; }' <<< "$line")"
+
+                if _hex_function exec_output exec_error \
+                    jq -c -n \
+                    --arg sectionName "$section_name" \
+                    '{section: $sectionName, attributes: [], subSections: []}' ; then
+                    section="$exec_output"
+                    in_section="true"
+                fi
+            fi
+        else
+            if [[ "$in_sub_section" != "true" ]] ; then
+                if [[ "$line" =~ "}" ]] ; then
+                    in_section="false"
+
+                    if _hex_function exec_output exec_error \
+                        jq -c \
+                        --argjson section "$section" \
+                        '. += [$section]' \
+                        <(printf "%s" "$output") ; then
+                        output="$exec_output"
+                    fi
+                elif [[ "$line" =~ "{" ]] ; then
+                    sub_section_name="$(awk '{ print $1; exit; }' <<< "$line")"
+
+                    if _hex_function exec_output exec_error \
+                        jq -c -n \
+                        --arg subSectionName "$sub_section_name" \
+                        '{section: $subSectionName, attributes: []}' ; then
+                        sub_section="$exec_output"
+                        in_sub_section="true"
+                    fi
+                else
+                    key="$(awk '{ print $1; exit; }' <<< "$line")"
+                    key="${key##\"}"
+                    key="${key%%\"}"
+
+                    value="$(awk '{ print $2; exit; }' <<< "$line")"
+                    value="${value##\"}"
+                    value="${value%%\"}"
+
+                    if [ -z "$key" ] || [ -z "$value" ] ; then
+                        continue
+                    fi
+
+                    if _hex_function exec_output exec_error \
+                        jq -c \
+                        --arg key "$key" \
+                        --arg value "$value" \
+                        '.attributes += [{key: $key, value: $value}]' \
+                        <(printf "%s" "$section") ; then
+                        section="$exec_output"
+                    fi
+                fi
+            else
+                if [[ "$line" =~ "}" ]] ; then
+                    in_sub_section="false"
+
+                    if _hex_function exec_output exec_error \
+                        jq -c \
+                        --argjson subSection "$sub_section" \
+                        '.subSections += [$subSection]' \
+                        <(printf "%s" "$section") ; then
+                        section="$exec_output"
+                    fi
+                else
+                    key="$(awk '{ print $1; exit; }' <<< "$line")"
+                    key="${key##\"}"
+                    key="${key%%\"}"
+
+                    value="$(awk '{ print $2; exit; }' <<< "$line")"
+                    value="${value##\"}"
+                    value="${value%%\"}"
+
+                    if [ -z "$key" ] || [ -z "$value" ] ; then
+                        continue
+                    fi
+
+                    if _hex_function exec_output exec_error \
+                        jq -c \
+                        --arg key "$key" \
+                        --arg value "$value" \
+                        '.attributes += [{key: $key, value: $value}]' \
+                        <(printf "%s" "$sub_section") ; then
+                        sub_section="$exec_output"
+                    fi
+                fi
+            fi
+        fi
+    done <<< "$multipath_setting"
+
+    echo -n "$output"
+}
+
 cinder_write_multipath_conf()
 {
     local ret=""
@@ -953,6 +1065,44 @@ cinder_delete_model()
     jq -c -n \
         --arg message "model ${driver} deleted" \
         '{message: $message}'
+}
+
+cinder_get_active_multipath_setting()
+{
+    # stdout format: [
+    #   {
+    #     section: "",
+    #     attributes: [
+    #       {
+    #         key: "",
+    #         value: "",
+    #       },
+    #     ],
+    #     subSections: [
+    #       {
+    #         section: "",
+    #         attributes: [
+    #           {
+    #             key: "",
+    #             value: "",
+    #           },
+    #         ],
+    #       },
+    #     ],
+    #   },
+    # ]
+
+    local exec_output=""
+    local exec_error=""
+
+    local multipath_setting=""
+    if ! _hex_function exec_output exec_error multipath -t ; then
+        echo -n "[]"
+        return 0
+    fi
+    multipath_setting="$exec_output"
+
+    cinder_unmarshal_multipath_conf "$multipath_setting"
 }
 
 cinder_get_storage_name()
