@@ -8,6 +8,7 @@ fi
 
 CINDER_USER_INPUT_MODEL_DIRECTORY="/etc/cube/cos/cinder/models"
 CINDER_BUILTIN_MODEL_DIRECTORY="/usr/share/cube/cos/cinder/builtin_models"
+CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY="/etc/cinder/backends"
 
 ERROR_CINDER_WRITE_MODEL_FILE_FAILED="1"
 ERROR_CINDER_WRITE_MULTIPATH_CONFIG_FAILED="2"
@@ -109,8 +110,7 @@ cinder_get_model_file_name()
 {
     local driver="${1:-""}"
 
-    local output="${driver##*( )}"
-    output="${output%%*( )}"
+    local output="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$driver")"
     output="${output#"cinder.volume.drivers."}"
     output="${output//./-}"
 
@@ -825,12 +825,12 @@ cinder_get_models()
 
     # iterate through user input models
     local file=""
-    for file in "$(ls "${CINDER_USER_INPUT_MODEL_DIRECTORY}")" ; do
-        if [ ! -f "${CINDER_USER_INPUT_MODEL_DIRECTORY}/${file}" ] ; then
+    for file in "$CINDER_USER_INPUT_MODEL_DIRECTORY"/* ; do
+        if [ ! -f "$file" ] ; then
             continue
         fi
 
-        _hex_function exec_output exec_error yq -p=yaml -o=json "${CINDER_USER_INPUT_MODEL_DIRECTORY}/${file}"
+        _hex_function exec_output exec_error yq -p=yaml -o=json "$file"
         if [[ "$?" != "0" ]] ; then
             # parsing failed, skip it silently
             continue
@@ -864,12 +864,12 @@ cinder_get_models()
 
     # iterate through built-in models
     # if it is already defined in user input models, skip it
-    for file in "$(ls "${CINDER_BUILTIN_MODEL_DIRECTORY}")" ; do
-        if [ ! -f "${CINDER_BUILTIN_MODEL_DIRECTORY}/${file}" ] ; then
+    for file in "$CINDER_BUILTIN_MODEL_DIRECTORY"/* ; do
+        if [ ! -f "$file" ] ; then
             continue
         fi
 
-        _hex_function exec_output exec_error yq -p=yaml -o=json "${CINDER_BUILTIN_MODEL_DIRECTORY}/${file}"
+        _hex_function exec_output exec_error yq -p=yaml -o=json "$file"
         if [[ "$?" != "0" ]] ; then
             # parsing failed, skip it silently
             continue
@@ -968,8 +968,7 @@ cinder_get_storage_name()
 {
     local storage_name="${1:-""}"
 
-    local output="${storage_name##*( )}"
-    output="${output%%*( )}"
+    local output="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$storage_name")"
     output="${output//./-}"
 
     echo -n "$output"
@@ -1134,7 +1133,7 @@ cinder_write_storage_external_backend_conf()
 
     # set the config to /etc/cinder/backends
     # file name format: ext_storage_*.conf
-    _hex_function_ret filesystem_write_file "/etc/cinder/backends/ext_storage_${storage_name}.conf" "$external_backend_conf"
+    _hex_function_ret filesystem_write_file "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${storage_name}.conf" "$external_backend_conf"
     if [[ "$?" != "0" ]] ; then
         # Failed to write the external storage backend config file.
         return "$ERROR_CINDER_WRITE_EXT_STORAGE_BACKEND_CONFIG_FAILED"
@@ -1780,6 +1779,148 @@ cinder_put_storage()
     jq -c -n \
         --arg message "$message" \
         '{message: $message}'
+}
+
+cinder_get_builtin_storage_basic_info()
+{
+    local volume_type_default="${1:-""}"
+
+    jq -c -n \
+        --arg volumeTypeDefault "$volume_type_default" \
+        '{
+name: "CubeStorage",
+driver: "cinder.volume.drivers.rbd.RBDDriver",
+vendor: "Bigstack",
+model: "CubeCOS",
+isDefault: $volumeTypeDefault | test("CubeStorage"),
+isBuiltin: true,
+updateTime: "1970-01-01T00:00:00Z"
+}'
+}
+
+cinder_get_storage_basic_info()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local file_name="${1:-""}"
+    local volume_type_default="${2:-""}"
+
+    if [ ! -f "$file_name" ] ; then
+        jq -c -n \
+        '{
+name: "",
+driver: "",
+vendor: "",
+model: "",
+isDefault: false,
+isBuiltin: false,
+updateTime: "1970-01-01T00:00:00Z"
+}'
+        return 0
+    fi
+
+    local name="${file_name#"${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_"}"
+    name="${name%".conf"}"
+
+    local driver="$(ini_read_value "$file_name" "$name" "volume_driver")"
+
+    local vendor=""
+    local model=""
+    local model_file_name="$(cinder_get_model_file_name "$driver")"
+    local model_file_path="${CINDER_USER_INPUT_MODEL_DIRECTORY}/${model_file_name}.yaml"
+    if [ ! -f "$model_file_path" ] ; then
+        # if not found in user input models, try built-in models
+        model_file_path="${CINDER_BUILTIN_MODEL_DIRECTORY}/${model_file_name}.yaml"
+    fi
+    if [ -f "$model_file_path" ] ; then
+        _hex_function exec_output exec_error yq -r ".vendor" "$model_file_path"
+        if [[ "$?" == "0" ]] ; then
+            vendor="$exec_output"
+        fi
+
+        _hex_function exec_output exec_error yq -r ".model" "$model_file_path"
+        if [[ "$?" == "0" ]] ; then
+            model="$exec_output"
+        fi
+    fi
+
+    local update_time="$(date --utc -r "$file_name" +"%Y-%m-%dT%H:%M:%SZ")"
+
+    jq -c -n \
+        --arg name "$name" \
+        --arg driver "$driver" \
+        --arg vendor "$vendor" \
+        --arg model "$model" \
+        --arg volumeTypeDefault "$volume_type_default" \
+        --arg updateTime "$update_time" \
+        '{
+name: $name,
+driver: $driver,
+vendor: $vendor,
+model: $model,
+isDefault: $volumeTypeDefault | test($name),
+isBuiltin: false,
+updateTime: $updateTime
+}'
+}
+
+cinder_get_storages()
+{
+    # stdout format: [
+    #   {
+    #     name: "",
+    #     driver: "",
+    #     vendor: "",
+    #     model: "",
+    #     isDefault: true,
+    #     isBuiltin: false,
+    #     updateTime: "", // RFC 7493, Section 4.3 (ISO 8601 / RFC 3339)
+    #   },
+    # ]
+
+    local exec_output=""
+    local exec_error=""
+
+    local output="[]"
+
+    # collect the basic infos of the builtin storage
+    local volume_type_default="$(ini_read_value "$SETTINGS_TXT" "" "cinder.storage.volumeType.default")"
+    _hex_function exec_output exec_error \
+        jq -c \
+        --argjson builtinStorageBasicInfo "$(cinder_get_builtin_storage_basic_info "$volume_type_default")" \
+        '. += [$builtinStorageBasicInfo]' \
+        <(printf "%s" "$output")
+    if [[ "$?" != "0" ]] ; then
+        jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+        return 1
+    fi
+    output="$exec_output"
+
+    # collect the basic infos of user input storages
+    local file=""
+    for file in "$CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY"/* ; do
+        if [ ! -f "$file" ] ; then
+            continue
+        fi
+        if [[ ! "$file" =~ ^"${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_".*".conf"$ ]] ; then
+            continue
+        fi
+
+        _hex_function exec_output exec_error \
+            jq -c \
+            --argjson storageBasicInfo "$(cinder_get_storage_basic_info "$file" "$volume_type_default")" \
+            '. += [$storageBasicInfo]' \
+            <(printf "%s" "$output")
+        if [[ "$?" != "0" ]] ; then
+            jq -c -n '{message: "failed to retrieve storage infos"}' >&2
+            return 1
+        fi
+        output="$exec_output"
+    done
+
+    # output
+    json_get_compact_value "$output" "."
 }
 
 cinder_test_storage()

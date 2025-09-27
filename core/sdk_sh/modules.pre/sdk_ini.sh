@@ -6,6 +6,77 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+# Read a value from an INI with the section and the key.
+# If the section is not provided, the section would be ignored.
+# If either the file, the section, or the key does not exist, a blank string would be returned.
+ini_read_value()
+{
+    local file="${1:-""}"
+    local section="${2:-""}"
+    local key="${3:-""}"
+
+    if [ ! -f "$file" ] || [ -z "$key" ]; then
+        return 0
+    fi
+
+    key="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$key")"
+
+    if [ -z "$section" ] ; then
+        awk -v key="$key" '
+BEGIN {
+    FS = "=";
+}
+{
+    # remove the leading spaces
+    gsub(/^[ \t]+/, "", $1)
+    # remove the ending spaces
+    gsub(/[ \t]+$/, "", $1)
+}
+$1 == key {
+    output=$2;
+}
+END {
+    # remove the leading spaces
+    gsub(/^[ \t]+/, "", output)
+    # remove the ending spaces
+    gsub(/[ \t]+$/, "", output)
+    print output;
+}
+' "$file" | tr -d '\n'
+    else
+        section="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$section")"
+
+        awk -v section="[${section}]" -v key="$key" '
+BEGIN {
+    FS = "=";
+}
+{
+    # remove the leading spaces
+    gsub(/^[ \t]+/, "", $1)
+    # remove the ending spaces
+    gsub(/[ \t]+$/, "", $1)
+}
+$0 !~ FS && $1 == section {
+    in_section=1;
+    next;
+}
+$0 !~ FS && $1 ~ /^\[.*\]$/ {
+    in_section=0;
+}
+in_section && $1 == key {
+    output=$2;
+}
+END {
+    # remove the leading spaces
+    gsub(/^[ \t]+/, "", output)
+    # remove the ending spaces
+    gsub(/[ \t]+$/, "", output)
+    print output;
+}
+' "$file" | tr -d '\n'
+    fi
+}
+
 # Marshal ini config JSON object to ini file content.
 # We would allow .[].header to be blank to represent configs without a section header.
 # If .[].attributes[].key is blank, the config line would be ignored.
