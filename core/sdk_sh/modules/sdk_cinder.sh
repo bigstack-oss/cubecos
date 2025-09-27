@@ -1375,8 +1375,21 @@ cinder_apply_storage_creation()
         return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
     fi
     local backend_count_minus_one=$(($(echo -n "$exec_output") - 1))
-    local storage_found="false"
+
     local backend_index="0"
+    local blank_backend_index=""
+    for backend_index in "$(seq 0 "$backend_count_minus_one")" ; do
+        if _hex_function exec_output exec_error \
+            yq -r ".backends[${backend_index}].name" \
+            "$ext_storage_policy_file" \
+            && [ -z "$exec_output" ] ; then
+            blank_backend_index="$backend_index"
+            break
+        fi
+    done
+
+    local storage_found="false"
+    backend_index="0"
     for backend_index in "$(seq 0 "$backend_count_minus_one")" ; do
         _hex_function exec_output exec_error yq -r ".backends[${backend_index}].name" "$ext_storage_policy_file"
         if [[ "$?" == "0" && "$exec_output" == "$storage_name" ]] ; then
@@ -1387,6 +1400,15 @@ cinder_apply_storage_creation()
     if [[ "$storage_found" == "false" ]] ; then
         _hex_function_ret yq -i ".backends[$((${backend_count_minus_one} + 1))].name = \"${storage_name}\"" "$ext_storage_policy_file"
         if [[ "$?" != "0" ]] ; then
+            return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+        fi
+    fi
+
+    # remove the blank child
+    if [ -n "$blank_backend_index" ] ; then
+        if ! _hex_function_ret yq -i \
+            "del(.backends[${blank_backend_index}])" \
+            "$ext_storage_policy_file" ; then
             return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
         fi
     fi
@@ -2569,6 +2591,99 @@ cinder_delete_storage()
     jq -c -n \
         --arg message "storage ${name} deleted" \
         '{message: $message}'
+}
+
+cinder_apply_default_storage()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local storage_name="${1:-""}"
+
+    if [ -z "$storage_name" ] ; then
+        return 0
+    fi
+
+    # edit the policy file
+    local input_dir="$(MakeTempDir)"
+    mkdir -p "${input_dir}/external_storage"
+    cp -f "/etc/policies/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/"
+    local ext_storage_policy_file="${input_dir}/external_storage/external_storage1_0.yml"
+
+    # default volume type
+    if ! _hex_function exec_output exec_error \
+        yq -i \
+        ".volumeType.default = \"${storage_name}\"" \
+        "$ext_storage_policy_file" ; then
+        return 1
+    fi
+
+    # apply configs, and restart services
+    if ! $HEX_CFG apply "$input_dir" ; then
+        return 1
+    fi
+
+    return 0
+}
+
+cinder_set_default_storage()
+{
+    # input format: {
+    #   name: "",
+    # }
+    #
+    # stdout format: {
+    #   message: "",
+    # }
+    #
+    # stderr format: {
+    #   message: "",
+    # }
+
+    # process inputs
+    local input="${1:-""}"
+    if ! is_valid_json "$input" ; then
+        # The input is not a valid JSON string.
+        jq -c -n \
+            '{message: "the input is not a valid JSON string"}' \
+            >&2
+        return "$ERROR_JSON_INVALID_JSON"
+    fi
+
+    local name="$(json_get_value "$input" ".name")"
+    if [ -z "$name" ] ; then
+        # The field name is required.
+        jq -c -n \
+            '{message: "field name should not be blank"}' \
+            >&2
+        return "$ERROR_JSON_KEY_MISSING"
+    fi
+
+    # check if the storage is a valid backend
+    if [[ "$name" != "CubeStorage" ]] ; then
+        local backend_ini="$(filesystem_read_file "$SETTINGS_TXT" \
+            | grep "cinder\.storage\.backend\..*\.name")"
+        local backend_config="$(ini_unmarshal_config "$backend_ini")"
+
+        if ! _hex_function_ret jq -e \
+            ".[].attributes[] | select(.value == \"${name}\") | length > 0" \
+            <(printf "%s" "$backend_config") ; then
+            jq -c -n \
+                --arg message "storage ${name} does not exist" \
+                '{message: $message}' \
+                >&2
+            return 1
+        fi
+    fi
+
+    # apply changes
+    if ! cinder_apply_default_storage "$name" ; then
+        jq -c -n \
+            --arg message "failed to set the default storage to ${name}" \
+            '{message: $message}' \
+            >&2
+        return 2
+    fi
 }
 
 cinder_get_default_storage()
