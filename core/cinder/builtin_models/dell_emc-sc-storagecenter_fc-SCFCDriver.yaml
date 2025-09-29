@@ -1,6 +1,6 @@
 driver: "cinder.volume.drivers.dell_emc.sc.storagecenter_fc.SCFCDriver"
 vendor: "Dell EMC"
-model: "SC Series FC"
+type: "SC Series FC"
 multipath:
   - section: "devices"
     attributes: []

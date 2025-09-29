@@ -418,7 +418,7 @@ cinder_put_model()
     # input format : {
     #   driver: "",
     #   vendor: "",
-    #   model: "",
+    #   type: "",
     #   multipath: [
     #     {
     #       section: "",
@@ -579,7 +579,7 @@ cinder_put_models()
     #   {
     #     driver: "",
     #     vendor: "",
-    #     model: "",
+    #     type: "",
     #     multipath: [
     #       {
     #         section: "",
@@ -733,7 +733,7 @@ cinder_get_model()
     # stdout format : {
     #   driver: "",
     #   vendor: "",
-    #   model: "",
+    #   type: "",
     #   multipath: [
     #     {
     #       section: "",
@@ -854,7 +854,7 @@ cinder_get_models()
     #   {
     #     driver: "",
     #     vendor: "",
-    #     model: "",
+    #     type: "",
     #     multipath: [
     #       {
     #         section: "",
