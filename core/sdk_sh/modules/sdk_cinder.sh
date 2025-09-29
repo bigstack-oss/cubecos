@@ -2514,6 +2514,10 @@ cinder_get_storages()
     #     updateTime: "", // RFC 7493, Section 4.3 (ISO 8601 / RFC 3339)
     #   },
     # ]
+    #
+    # stderr format: {
+    #   message: "",
+    # }
 
     local exec_output=""
     local exec_error=""
@@ -2834,6 +2838,10 @@ cinder_set_default_storage()
             >&2
         return 2
     fi
+
+    jq -c -n \
+        --arg message "the default storage is set to ${name}" \
+        '{message: $message}'
 }
 
 cinder_get_default_storage()
