@@ -1005,3 +1005,17 @@ node_bootstrap_status()
     local node=${1:-$HOSTNAME}
     remote_run $node "tr '\r' '\n' </var/log/bootstrap_cube.log | tail -1"
 }
+
+fixpack_sync()
+{
+    local action=$1
+
+    if [ "x$action" = "xinstall" ] ; then
+        hex_sdk git_push "$FIXPACK_ID $FIXPACK_NAME ROLLBACK=$ROLLBACK $FIXPACK_DESCRIPTION Installed"
+    else
+        hex_sdk git_push "$FIXPACK_ID $FIXPACK_NAME ROLLBACK=$ROLLBACK $FIXPACK_DESCRIPTION Uninstalled"
+    fi
+    hex_sdk cmd "[ $HOSTNAME = \$HOSTNAME ] || rm -rf $ROLLBACK_DIR"
+    cubectl node rsync $ROLLBACK_DIR
+    cubectl node rsync /var/appliance-db/fixpack.history
+}

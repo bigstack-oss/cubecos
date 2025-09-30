@@ -12,7 +12,7 @@ ifeq ($(COMMITUNTIL),)
 COMMITUNTIL           := $(shell date "+%Y%m%d")
 endif
 FIXPACK_DRAFT         := $(COMMITSINCE)_$(COMMITUNTIL)
-FIXPACK               := $(COMMITSINCE).fixpack
+FIXPACK               := $(shell ls -d */ | sed "s;/;;").fixpack
 
 PKGCLEAN += $(FIXPACK)* $(FIXPACK_DRAFT)* $(COMMITSINCE)
 
@@ -25,7 +25,7 @@ $(FIXPACK_DRAFT):
 	$(call RUN_CMD_SILENT,$(SHELL) $(HEX_SCRIPTSDIR)/makehotfixdraft $@,"  GEN     $@")
 	$(Q)sed -i "s/SUPPORTED_FIRMWARES=.*/SUPPORTED_FIRMWARES=\"$(SUPPORTED_FIRMWARES)\"/" $@/fixpack.info
 	$(Q)sed -i "s/^exit 0.*//"                                         $@/post_install.sh
-	$(Q)echo "chmod 4755 /usr/sbin/hex_{config,cli,firsttime,stats}" >>$@/post_install.sh
+	$(Q)echo "chmod 4755 /usr/sbin/hex_{config,cli,firsttime}" >>$@/post_install.sh
 	$(Q)echo "exit 0"                                                >>$@/post_install.sh
 	$(Q)( cd $(TOP_BLDDIR)/core/main/rootfs/ && rsync -avr --relative root/.bashrc $(BLDDIR)/$@/rootfs/ )
 	$(Q)echo "root/.bashrc"                                          >>$@/backup.lst

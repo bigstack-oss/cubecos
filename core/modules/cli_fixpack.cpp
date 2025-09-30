@@ -178,15 +178,11 @@ InstallMain(int argc, const char** argv)
 
     fixpackpath = dir + "/" + file;
 
-    std::string hostname = HexUtilPOpen("hostname | tr -d '\n'");
-    std::string sync_fixpack = " cube_cluster_run all rsync -a root@" + hostname + ":" + fixpackpath + " " + fixpackpath;
-    HexSpawn(0, HEX_SDK, sync_fixpack.c_str(), NULL);
-
     size_t pos = fixpackname.find(".fixpack");
     if (pos != std::string::npos)
         fixpackname.erase(pos, std::string::npos);
 
-    std::string cmd = std::string(HEX_SDK) + " cube_cluster_run all " + std::string(HEX_CFG) + " fixpack " + fixpackpath;
+    std::string cmd = std::string(HEX_CFG) + " fixpack " + fixpackpath;
 
     CliList list;
     int ret = CliPopulateList(list, cmd.c_str());
@@ -225,8 +221,7 @@ static int RollbackMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    std::string cmd = " cube_cluster_run all " + std::string(HEX_CFG) + " fixpack_rollback";
-    int ret = HexSpawn(0, HEX_SDK, cmd.c_str(), NULL);
+    int ret = HexSpawn(0, HEX_CFG, "fixpack_rollback", NULL);
    
     if ((ret & CONFIG_EXIT_NEED_REBOOT) != 0) {
         CliPrintf("fixpack requires reboot");
