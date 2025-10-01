@@ -1083,7 +1083,6 @@ MountCephfsStore()
         HexSystemF(0, "mkdir -p %s/k8s", CEPHFS_STORE_DIR);
         HexSystemF(0, "mkdir -p %s/nfs", CEPHFS_STORE_DIR);
         HexSystemF(0, "mkdir -p %s/nova/instances", CEPHFS_STORE_DIR);
-        HexSystemF(0, "mkdir -p %s/docker/registry", CEPHFS_STORE_DIR);
         HexSetFileMode("/mnt/cephfs/glance", "root", "root", 0777);
         HexSetFileMode("/mnt/cephfs/nfs", "root", "root", 0777);
         HexSetFileMode("/mnt/cephfs/nova", "nova", "nova", 0755);
