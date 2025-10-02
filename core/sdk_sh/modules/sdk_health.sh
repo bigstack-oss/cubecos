@@ -544,7 +544,7 @@ health_hacluster_repair()
                 $HEX_SDK pacemaker_node_restart $node
                 status=$(pacemaker status)
             else
-                if echo "$status" | grep -i " online" | grep -q " $node " && echo "$status" | grep -q "vip .* Started" ; then
+                if echo "$status" | grep -i " online" | grep -q " $node " && echo "$status" | grep vip | grep -q Started ; then
                     $HEX_SDK pacemaker_node_start $node
                 else
                     $HEX_SDK pacemaker_node_restart $node

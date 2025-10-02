@@ -12,7 +12,7 @@ ifeq ($(COMMITUNTIL),)
 COMMITUNTIL           := $(shell date "+%Y%m%d")
 endif
 FIXPACK_DRAFT         := $(COMMITSINCE)_$(COMMITUNTIL)
-FIXPACK               := $(shell ls -d */ | sed "s;/;;").fixpack
+FIXPACK               := $(shell ls -d */ 2>/dev/null | sed "s;/;;" | xargs -i echo {}.fixpack)
 
 PKGCLEAN += $(FIXPACK)* $(FIXPACK_DRAFT)* $(COMMITSINCE)
 
