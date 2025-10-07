@@ -126,6 +126,7 @@ git_client_init()
 git_push()
 {
     local msg="${@:-n/a}"
+    cmd git_client_init
     ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "$GIT stash ; $GIT pull" ) >/dev/null || Error "nothing is pushed"
     Quiet -n $GIT -P log -3
 }

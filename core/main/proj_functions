@@ -1015,7 +1015,8 @@ fixpack_sync()
     else
         hex_sdk git_push "$FIXPACK_ID $FIXPACK_NAME ROLLBACK=$ROLLBACK $FIXPACK_DESCRIPTION Uninstalled"
     fi
-    hex_sdk cmd "[ $HOSTNAME = \$HOSTNAME ] || rm -rf $ROLLBACK_DIR"
+    cmd "chmod 4755 /usr/sbin/hex_{config,cli,firsttime}"
+    cmd "[ $HOSTNAME = \$HOSTNAME ] || rm -rf $ROLLBACK_DIR"
     cubectl node rsync $ROLLBACK_DIR >/dev/null 2>&1
     cubectl node rsync /var/appliance-db/fixpack.history >/dev/null 2>&1
 }
