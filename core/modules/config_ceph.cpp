@@ -1643,6 +1643,7 @@ ClusterStartMain(int argc, char **argv)
     if (IsControl(s_eCubeRole)) {
         HexUtilSystemF(0, 0, HEX_SDK " ceph_dashboard_init %s", sharedId.c_str());
         HexUtilSystemF(0, 0, HEX_SDK " ceph_dashboard_idp_config %s %s", sharedId.c_str(), port.c_str());
+        HexUtilSystemF(0, 0, "timeout 10 ceph fs set cephfs max_file_size 4398046511104"); // cephfs file size limit to 4TiB, supporting large image import
     }
     /*
     if (s_osdIds.size() > 0)

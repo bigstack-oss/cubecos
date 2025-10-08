@@ -46,6 +46,7 @@ RollingEvacuateAndReboot()
     local upgrading=false
     local last_n=$(cat $cluster_info 2>/dev/null | jq -r .[].hostname | tail -1)
     local query="insert system,category=RUG,severity=I,key=RUG00001I,service=rolling_upgrade,host=$HOSTNAME,metadata\"rolling upgrade to $(hex_cli -c firmware list | grep -i active | cut -d' ' -f2)\""
+    hex_sdk cmd "systemctl restart sshd"
     if [ -e "$cluster_info" -a "x$inst_type" = "xPPU" ] ; then
         for N in $(cat $cluster_info | jq -r .[].hostname) ; do
             # Cube dashboard topN misses partial info after rolling upgrades

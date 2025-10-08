@@ -14,7 +14,7 @@ _influx()
 
     if echo "$@" | grep -q -i insert ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            timeout $SRVSTO /usr/bin/influx $flag -host $node -execute "$@" 2>/dev/null &
+            timeout $SRVSTO /usr/bin/influx $flag -host $node -execute "$@" >/dev/null 2>&1 &
         done
     else
         if [ "x$FORMAT" = "xjson" ] ; then

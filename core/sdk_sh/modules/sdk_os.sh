@@ -710,8 +710,7 @@ os_image_import_with_attrs()
     local tenant=${6:-admin}
     local pool=${7:-glance-images}
     local visibility=${8:-public}
-
-    local flags="--project-domain $domain --project $tenant --$visibility"
+    local flags="--os-project-domain-name $domain --os-project-name $tenant --visibility $visibility"
 
     os_image_import "$dir" "$file" "$name" "$flags" "$pool"
 }
@@ -1398,7 +1397,7 @@ os_octavia_image_import()
     if [ -n "$olds" ] ; then
         $OPENSTACK image delete $olds 2>/dev/null
     fi
-    os_image_import $dir $file amphora-x64-haproxy "--private"
+    os_image_import $dir $file amphora-x64-haproxy "--visibility private"
     local amphora_id=$($OPENSTACK image list -f value --property name=amphora-x64-haproxy -c ID)
     $OPENSTACK image set --tag amphora $amphora_id
 }
@@ -1962,7 +1961,7 @@ os_manila_image_import()
     if [ -n "$olds" ] ; then
         $OPENSTACK image delete $olds 2>/dev/null
     fi
-    os_image_import $dir $file manila-service-image "--private"
+    os_image_import $dir $file manila-service-image "--visibility private"
     local manila_id=$($OPENSTACK image list -f value --property name=manila-service-image -c ID)
     $OPENSTACK image set --tag manila-service-image $manila_id
 }

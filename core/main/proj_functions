@@ -87,7 +87,7 @@ _hex_exec()
             gcmd+="(unknown)"
         fi
     fi
-    # influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,gpid=$gpid,pusr=$pusr,pcmd=$pcmd,ppid=$PPID,usr=$usr,pid=$pid cmd=\"$cmd $@\""
+    influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,gpid=$gpid,pusr=$pusr,pcmd=$pcmd,ppid=$PPID,usr=$usr,pid=$pid cmd=\"$cmd\""
 
     if echo "$cmd" | grep -q "health_.*_check$" ; then
         local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")

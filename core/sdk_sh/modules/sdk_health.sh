@@ -535,22 +535,18 @@ health_hacluster_repair()
     elif [ ! -e /etc/appliance/state/configured ] ; then
         if is_control_node ; then
             $HEX_SDK pacemaker_node_stop
-            $HEX_SDK pacemaker_node_restart
+            $HEX_SDK pacemaker_node_start
         fi
     else
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$HOSTNAME" = "x$node" ] ; then
                 $HEX_SDK pacemaker_node_stop $node
-                $HEX_SDK pacemaker_node_restart $node
-                status=$(pacemaker status)
+                $HEX_SDK pacemaker_node_start $node
             else
-                if echo "$status" | grep -i " online" | grep -q " $node " && echo "$status" | grep vip | grep -q Started ; then
-                    $HEX_SDK pacemaker_node_start $node
-                else
-                    $HEX_SDK pacemaker_node_restart $node
-                fi
+                $HEX_SDK pacemaker_node_start $node
             fi
         done
+        status=$(pacemaker status)
         for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
             if ! remote_run $node hex_sdk is_control_node ; then
                 if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
@@ -690,18 +686,23 @@ health_mysql_check()
 
 health_mysql_repair()
 {
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        # mariadbd might hang and unable to stop in some circumstances
-        local pid=$(remote_run $node pidof mariadbd)
-        if [ -n "$pid" ] ; then
-            remote_run $node kill -9 $pid
-        fi
-        remote_systemd_stop $node mariadb
-    done
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        remote_run $node touch $HEX_STATE_DIR/mysql_new_cluster
-        remote_run $node $HEX_CFG restart_mysql
-    done
+    cmd -cor "hex_sdk remote_systemd_stop \$HOSTNAME mariadb"
+    if cmd -cv cat /var/lib/mysql/grastate.dat | grep -q "safe_to_bootstrap: 1" ; then
+        cmd -c "grep -q 'safe_to_bootstrap: 1' /var/lib/mysql/grastate.dat && galera_new_cluster"
+        cmd -co "hex_sdk remote_systemd_start \$HOSTNAME mariadb"
+    else
+        local num_control=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
+        local cnt=0
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            ((cnt++))
+            echo "num_control: $((num_control - 1))"
+            if [ $(cmd -v "systemctl is-active mariadb" | grep failed | wc -l) -ge $((num_control - 1)) -a $cnt -eq 1 ] ; then
+                galera_new_cluster
+            else
+                remote_systemd_start $node mariadb
+            fi
+        done
+    fi
 }
 
 health_vip_report()
@@ -1374,6 +1375,8 @@ health_ceph_mds_check()
         ERR_CODE=4
     elif [ $(cmd -cv "systemctl show -p SubState nfs-ganesha" | grep running| wc -l) -lt $num_ctrlnode ] ; then
         ERR_CODE=5
+    elif ! cmd git log ; then
+        ERR_CODE=6
     fi
 
     rm -f $nfs_dir/.alive
@@ -1393,6 +1396,9 @@ _health_ceph_mds_auto_repair()
         cmd $HEX_SDK ceph_mount_cephfs
     elif [ "$ERR_CODE" == "3" -o "$ERR_CODE" == "4" -o "$ERR_CODE" == "5" ] ; then
         cmd -c "systemctl restart nfs-ganesha"
+    elif [ "$ERR_CODE" == "6" ] ; then
+        cmd "git log -1 || rm -f /etc/appliance/state/git_client_init"
+        cmd hex_sdk git_client_init
     fi
 }
 

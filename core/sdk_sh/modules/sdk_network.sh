@@ -302,6 +302,7 @@ network_ipt_serviceint()
         [ -z "$rule" ] || iptables -A $chain $rule
     done < $ipt_rc
 
+    iptables -A $chain -p tcp --match multiport --dports 5900:5999 -j DROP # drop all direct vnc access, except for internal nodes
     iptables -nv -L INPUT 2>/dev/null | grep -q $chain || iptables -A INPUT -j $chain
 }
 
