@@ -311,7 +311,8 @@ SetDefaults(Configs& config)
 
     config["oslo_concurrency"]["lock_path"] = "/var/lib/glance/locks";
 
-    config["oslo_reports"]["log_dir"] = "/var/log/glance";
+    // should be oslo_reports.log_dir, however, the current version does not support it
+    config["DEFAULT"]["log_dir"] = "/var/log/glance";
 
     config["paste_deploy"]["flavor"] = "keystone";
     config["paste_deploy"]["config_file"] = "/etc/glance/glance-api-paste.ini";
