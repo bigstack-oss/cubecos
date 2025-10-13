@@ -10,6 +10,13 @@ else
     export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
 fi
 
+# Safe net to prevent system from entering isolated network state
+if systemctl is-active -q openvswitch ; then
+    systemctl stop openvswitch
+    systemctl disable openvswitch
+    init 6
+fi
+
 export HOSTNAME=$(ssh localhost hostname 2>/dev/null)
 query="insert system,category=BSP,severity=I,key=BSP00001I,service=bootstrap,host=$HOSTNAME"
 # Bring up influxdb as early as possible to log bootstrap activities

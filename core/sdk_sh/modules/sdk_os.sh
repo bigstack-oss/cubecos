@@ -11,6 +11,11 @@ LOGIN_PAGE=/tmp/login.html
 EP_SNAPSHOT=/var/appliance-db/os_endpoint.snapshot
 NEUTRON_AGENT_CACHE=/var/appliance-db/neutron_agent.list
 
+os_get_image_oses()
+{
+    $HEX_SDK api_get_images_materials | jq -r ".data.oses | to_entries[] | \"\(.value)\""
+}
+
 os_wsgi_conf_update()
 {
     local infs=$(ls /etc/httpd/conf.d/*-wsgi.conf.in)
@@ -749,16 +754,24 @@ os_image_import()
     local flags=${4:---visibility public}
     local pool=${5:-glance-images}
     local backend=$(os_list_volume_backend_by_pool $pool ${6:-CubeStorage})
-    local properties=${7:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
+    local distro=${7:-linux}
+    local properties=${8:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"
 
-    local distro_ver=$(_os_image_distro_ver $file)
-    local distro=$(echo $distro_ver | cut -d ":" -f1)
-    local ver=$(echo $distro_ver | cut -d ":" -f2)
-    properties+=" --property os_distro=$distro"
-    properties+=" --property os_admin_user=$distro"
-    properties+=" --property os_vers=$ver"
+    if [ "x$distro" = "xwindows" ] ; then
+        properties+=" --property os_distro=$distro"
+        properties+=" --property os_type=$distro"
+    else
+        local distro_ver=$(_os_image_distro_ver $file)
+        local user=$(echo $distro_ver | cut -d ":" -f1)
+        local ver=$(echo $distro_ver | cut -d ":" -f2)
+        if [ "x$user" = "x" -o "xver" = "x" ] ; then
+            properties+=" --property os_distro=$distro"
+            properties+=" --property os_admin_user=$distro"
+            properties+=" --property os_vers=$ver"
+        fi
+    fi
 
     if [[ $(qemu-img info "$IMG" | grep "file format") =~ raw ]] ; then
         local img_name=$IMG

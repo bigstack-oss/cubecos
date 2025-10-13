@@ -303,6 +303,7 @@ network_ipt_serviceint()
     done < $ipt_rc
 
     iptables -A $chain -p tcp --match multiport --dports 5900:5999 -j DROP # drop all direct vnc access, except for internal nodes
+    iptables -A $chain -p tcp --dport 3306 -j DROP # drop Database Open Access (database-open-access 3306)
     iptables -nv -L INPUT 2>/dev/null | grep -q $chain || iptables -A INPUT -j $chain
 }
 

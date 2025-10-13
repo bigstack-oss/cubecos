@@ -21,14 +21,14 @@ ImageImportMain(int argc, const char** argv)
     /* [0]="import|ide_import|lb_import|fs_import|deploy_kernel_import|deploy_initramfs_import",
      * [1]=<usb|local>, [2]=<file name>, [3]=<image name>
      * [4]=<domain>, [5]=<tenant>, [6]=<from Bigstack|from another hypervisor>
-     * [7]=<public|private> [8]=<storage_backend>
+     * [7]=<public|private> [8]=<storage_backend> [9]=<os>
      */
-    if (argc > 9)
+    if (argc > 10)
         return CLI_INVALID_ARGS;
 
     int type, index;
     std::string media, dir, file, name, domain, tenant, visibility, pool;
-    std::string flags, source, destination;
+    std::string flags, source, destination, os;
 
     bool isExtPack = false;
     bool isLbImg = false;
@@ -128,6 +128,12 @@ ImageImportMain(int argc, const char** argv)
             CliPrintf("Invalid storage destination");
             return CLI_INVALID_ARGS;
         }
+        cmd = HEX_SDK " os_get_image_oses";
+        if (CliMatchCmdHelper(argc, argv, 9, cmd, &index, &os, "Select OS (big impacts to performance if it's windows): ") != CLI_SUCCESS) {
+            CliPrintf("Invalid OS");
+            return CLI_INVALID_ARGS;
+        }
+
     }
 
     CliPrintf("Importing...");
@@ -152,7 +158,7 @@ ImageImportMain(int argc, const char** argv)
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
                             HEX_SDK, "os_image_import",
                             dir.c_str(), file.c_str(), name.c_str(),
-                            flags.c_str(), pool.c_str(), destination.c_str(), NULL);
+                            flags.c_str(), pool.c_str(), destination.c_str(), os.c_str(), NULL);
 
 
     if (type == 0 /* usb */) {
@@ -297,7 +303,7 @@ CLI_MODE_COMMAND("image", "metadata", MetadataMain, NULL,
 
 CLI_MODE_COMMAND("image", "import", ImageImportMain, NULL,
                  "import image from usb or local store folder.",
-                 "import <usb|local> <file_name> <image_name> <domain> <tenant> <from Bigstack|from another hypervisor> <public|private> <storage_backend>");
+                 "import <usb|local> <file_name> <image_name> <domain> <tenant> <from Bigstack|from another hypervisor> <public|private> <storage_backend> <os>");
 
 CLI_MODE_COMMAND("image", "import_extpack", ImageImportMain, NULL,
                  "import extension pack images from usb or local store folder.",

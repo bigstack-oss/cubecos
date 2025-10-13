@@ -503,11 +503,8 @@ health_hacluster_repair()
         fi
     done
 
-    # split brains or master control in rolling-upgrade phase
-    if [ $(cmd -cv "pcs status 2>/dev/null | grep \"vip.*St\"" | cut -d"|" -f3 | sort -u | wc -l) -gt 1 ] ; then
-        $HEX_SDK pacemaker_cluster_stop
-        $HEX_SDK pacemaker_cluster_restart
-    elif ! cube_node_ready && is_node_rolling_upgrade ; then
+    # if first time setup not completed or cluster in rolling upgrade process, ensure master node has VIP
+    if ! cube_node_ready || is_node_rolling_upgrade ; then
         for i in 1 2 3 4 5 ; do
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
                 if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
@@ -520,7 +517,7 @@ health_hacluster_repair()
                     fi
                 fi
             done
-            sleep 10
+            sleep 15
             if ! is_vip_active ; then
                 Quiet -n pcs resource debug-start vip
                 sleep 10
@@ -530,6 +527,15 @@ health_hacluster_repair()
             else
                 Quiet -n pcs resource clear vip 2>/dev/null
                 Quiet -n pcs resource cleanup 2>/dev/null
+            fi
+        done
+    elif [ $(cmd -cv "pcs status 2>/dev/null | grep \"vip.*St\"" | cut -d"|" -f3 | sort -u | wc -l) -gt 1 ] ; then
+        $HEX_SDK pacemaker_cluster_stop
+        $HEX_SDK pacemaker_cluster_restart
+        for i in 1 2 3 4 5 ; do
+            sleep 15
+            if ! is_vip_active || ! is_vip_reachable ; then
+                $HEX_SDK pacemaker_cluster_restart
             fi
         done
     elif [ ! -e /etc/appliance/state/configured ] ; then
@@ -688,7 +694,8 @@ health_mysql_repair()
 {
     cmd -cor "hex_sdk remote_systemd_stop \$HOSTNAME mariadb"
     if cmd -cv cat /var/lib/mysql/grastate.dat | grep -q "safe_to_bootstrap: 1" ; then
-        cmd -c "grep -q 'safe_to_bootstrap: 1' /var/lib/mysql/grastate.dat && galera_new_cluster"
+        local node=$(cmd -cv "grep -q 'safe_to_bootstrap: 1' /var/lib/mysql/grastate.dat" | grep '|0|' | cut -d"|" -f1 | tail -1)
+        remote_run $node galera_new_cluster
         cmd -co "hex_sdk remote_systemd_start \$HOSTNAME mariadb"
     else
         local num_control=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
@@ -788,7 +795,8 @@ health_vip_repair()
             fi
         done
     fi
-    if is_cluster_rolling_upgrade ; then
+    # if first time setup not completed or cluster in rolling upgrade process, ensure master node has VIP
+    if ! cube_node_ready ] || is_cluster_rolling_upgrade ; then
         local master=$CUBE_NODE_CONTROL_HOSTNAMES
         if remote_run $master "pcs resource status vip" | grep -q Started ; then
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do

@@ -127,6 +127,10 @@ ovn_bridge_phy_port_add_v4()
     local cidrs=$(ip -4 addr show $port | grep "^    inet .* $port" | awk '{print $2}')
     local defgw=$(ip -4 route | grep "^default.*$port" | awk '{print $3}')
 
+    # allow time for interfaces to appear
+    for i in {1..10} ; do sleep 1 ; ip link show $bridge >/dev/null 2>&1 && break ; done
+    for i in {1..10} ; do sleep 1 ; ip link show $port >/dev/null 2>&1 && break ; done
+
     # clean up tasks
     local obrig=$(GetParentIfname $port)
     if [ -n "$obrig" -a "$obrig" != "$port" ] ; then

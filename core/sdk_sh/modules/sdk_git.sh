@@ -51,7 +51,7 @@ _git_server_init()
     Quiet -n ceph_wait_for_status        # need cephfs be ready before git init and push
     cmd "$HEX_SDK -x ceph_mount_cephfs"
     if mountpoint -q -- $CEPHFS_STORE_DIR ; then
-        if [ ! -e $cube_git_dir ] ; then
+        if [ ! -e /etc/appliance/state/git_server_init ] ; then
             mkdir -p $cube_git_dir
             GIT_DIR=$cube_git_dir $GIT init --bare -b $branch
             $GIT config --global user.email "${HOSTNAME}@${ipaddr}"
@@ -63,7 +63,8 @@ _git_server_init()
             if [ -e "/.gitignore" ] ; then
                 Quiet -n git add -A
                 Quiet -n git commit -m "$(hex_cli -c firmware list | grep ACTIVE | awk '{print $2}')" -a
-                Quiet -n git push --set-upstream $project $branch && touch /etc/appliance/state/git_server_init
+                Quiet -n git push --set-upstream $project $branch
+                git -P branch -r | grep -q "${project}/${branch}" && touch /etc/appliance/state/git_server_init
             else
                 Error "failed to generate /.gitignore"
             fi
@@ -126,8 +127,17 @@ git_client_init()
 git_push()
 {
     local msg="${@:-n/a}"
+    local mf_suid=$(mktemp -u /mnt/cephfs/backup/${FUNCNAME[0]}.XXXX)
+    declare -A bins
+
     cmd git_client_init
+    for bin in $(find ${PATH//:/ } -type f -perm /4000 ) ; do
+        bins[${bin}]=$(stat --printf='%a' $bin)
+    done
     ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "$GIT stash ; $GIT pull" ) >/dev/null || Error "nothing is pushed"
+    for bin in ${!bins[@]} ; do
+        cmd chmod ${bins[$bin]} $bin
+    done
     Quiet -n $GIT -P log -3
 }
 
