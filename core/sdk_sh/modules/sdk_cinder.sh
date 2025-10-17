@@ -1022,6 +1022,9 @@ cinder_delete_model()
     #   message: "",
     # }
 
+    local exec_output=""
+    local exec_error=""
+
     local input="${1:-""}"
     if ! is_valid_json "$input" ; then
         # The input is not a valid JSON string.
@@ -1054,6 +1057,36 @@ cinder_delete_model()
     local multipath_conf_file_path="/etc/multipath/conf.d/${model_file_name}.conf"
     if [ -f "$multipath_conf_file_path" ] ; then
         rm -f "$multipath_conf_file_path"
+    fi
+
+    # restore the built-in model's multipath settings if it exists
+    local builtin_model_file_path="${CINDER_BUILTIN_MODEL_DIRECTORY}/${model_file_name}.yaml"
+    if [ -f "$builtin_model_file_path" ] ; then
+        _hex_function exec_output exec_error yq -p=yaml -o=json "$builtin_model_file_path"
+        if [[ "$?" != "0" ]] ; then
+            jq -c -n \
+                '{message: "failed to restore the built-in model multipath settings"}' \
+                >&2
+            return 2
+        fi
+
+        local multipath="$(json_get_value "$exec_output" ".multipath")"
+        local multipath_conf=""
+        multipath_conf="$(cinder_marshal_multipath_conf "$multipath")"
+        if [[ "$?" != "0" ]] ; then
+            jq -c -n \
+                '{message: "failed to restore the built-in model multipath settings"}' \
+                >&2
+            return 2
+        fi
+
+        _hex_function_ret cinder_write_multipath_conf "$model_file_name" "$multipath_conf"
+        if [[ "$?" != "0" ]] ; then
+            jq -c -n \
+                '{message: "failed to restore the built-in model multipath settings"}' \
+                >&2
+            return 2
+        fi
     fi
 
     # apply multipathd changes
