@@ -11,7 +11,7 @@ cp /etc/libvirt/secrets/* /store/ppu/libvirt/secrets/
 # Run on first control node only
 if [ "$FIRST_CTRLHOST" == "$(hostname)" ]; then
     # Workaround: restart etcd to let etcd-watch to apply pending tunning updates
-    systemctl restart etcd && sleep 60
+    # systemctl restart etcd && sleep 60
     # Backup k3s etcd data
     k3s etcd-snapshot
     # Backup mysql

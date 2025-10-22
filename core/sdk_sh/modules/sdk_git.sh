@@ -37,43 +37,46 @@ EOF
 
 _git_server_init()
 {
-    [ ! -e /etc/appliance/state/git_server_init ] || return 0
+    $HEX_SDK cube_node_ready || return 0
+    if [ -e /run/${FUNCNAME[0]} ] ; then
+        return 0
+    else
+        touch /run/${FUNCNAME[0]}
+    fi
 
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
     local branch=master
-    local gitserverip=$($HEX_SDK -f json health_vip_report | jq -r .description | cut -d"/" -f1)
-    if [ "$gitserverip" = "non-HA" ] ; then
-        gitserverip=$ipaddr
-    fi
 
-    Quiet -n ceph_wait_for_status        # need cephfs be ready before git init and push
+    Quiet -n $HEX_SDK ceph_wait_for_status        # need cephfs be ready before git init and push
     cmd "$HEX_SDK -x ceph_mount_cephfs"
     if mountpoint -q -- $CEPHFS_STORE_DIR ; then
-        if [ ! -e /etc/appliance/state/git_server_init ] ; then
-            mkdir -p $cube_git_dir
-            GIT_DIR=$cube_git_dir $GIT init --bare -b $branch
-            $GIT config --global user.email "${HOSTNAME}@${ipaddr}"
-            git_ignore_file
+        mkdir -p $cube_git_dir
+        GIT_DIR=$cube_git_dir $GIT init --bare -b $branch
+        $GIT config --global user.email "${HOSTNAME}@${ipaddr}"
+        git_ignore_file
 
-            Quiet -n pushd /
-            Quiet -n git init -b $branch
-            Quiet -n git remote add $project ssh://root@${gitserverip}${cube_git_dir}
-            if [ -e "/.gitignore" ] ; then
+        Quiet -n pushd /
+        Quiet -n git init -b $branch
+        Quiet -n $GIT remote add $project ssh://root@$(shared_ip)${cube_git_dir}
+        if [ -e "/.gitignore" ] ; then
+            if ! git log -1 >/dev/null 2>&1 ; then
                 Quiet -n git add -A
                 Quiet -n git commit -m "$(hex_cli -c firmware list | grep ACTIVE | awk '{print $2}')" -a
-                Quiet -n git push --set-upstream $project $branch
-                git -P branch -r | grep -q "${project}/${branch}" && touch /etc/appliance/state/git_server_init
-            else
-                Error "failed to generate /.gitignore"
             fi
-            Quiet -n popd
-            $GIT -P log || Error "failed to initialize GIT server"
+            Quiet -n git push --set-upstream $project $branch
+            git -P branch -r | grep -q "${project}/${branch}"
+        else
+            Error "failed to generate /.gitignore"
         fi
+        Quiet -n popd
+        $GIT -P log || Error "failed to initialize GIT server"
     else
         Error "no ceph mount point in $CEPHFS_STORE_DIR to initialize GIT server"
     fi
+
+    rm -f /run/${FUNCNAME[0]}
 }
 
 git_server_init()
@@ -88,25 +91,27 @@ git_server_init()
     remote_run $master_control "$HEX_SDK _git_server_init"
 }
 
-git_client_init()
+_git_client_init()
 {
-    [ ! -e /etc/appliance/state/git_client_init ] || return 0
+    $HEX_SDK cube_node_ready || return 0
+    ! git log -1 >/dev/null 2>&1 || return 0
+    if [ -e /run/${FUNCNAME[0]} ] ; then
+        return 0
+    else
+        touch /run/${FUNCNAME[0]}
+    fi
 
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
     local branch=master
-    local gitserverip=$($HEX_SDK -f json health_vip_report | jq -r .description | sort -u | cut -d"/" -f1)
-    if [ "$gitserverip" = "non-HA" ] ; then
-        gitserverip=$ipaddr
-    fi
 
     Quiet -n $GIT config --global user.email "${HOSTNAME}@${ipaddr}"
     Quiet -n git_ignore_file
 
     Quiet -n pushd /
     Quiet -n $GIT init -b $branch
-    Quiet -n $GIT remote add $project ssh://root@${gitserverip}${cube_git_dir}
+    Quiet -n $GIT remote add $project ssh://root@$(shared_ip)${cube_git_dir}
     if [ -e "/.gitignore" ] ; then
         if $GIT fetch ; then
             Quiet -n $GIT branch --track $branch $project/$branch
@@ -121,7 +126,18 @@ git_client_init()
     fi
     Quiet -n popd
     Quiet -n $GIT -P log
-    touch /etc/appliance/state/git_client_init
+    rm -f /run/${FUNCNAME[0]}
+}
+
+git_client_init()
+{
+    cmd $HEX_SDK _git_client_init
+}
+
+git_init()
+{
+    git_server_init
+    git_client_init
 }
 
 git_push()
@@ -130,21 +146,17 @@ git_push()
     local mf_suid=$(mktemp -u /mnt/cephfs/backup/${FUNCNAME[0]}.XXXX)
     declare -A bins
 
-    cmd git_client_init
-    for bin in $(find ${PATH//:/ } -type f -perm /4000 ) ; do
-        bins[${bin}]=$(stat --printf='%a' $bin)
-    done
-    ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "$GIT stash ; $GIT pull" ) >/dev/null || Error "nothing is pushed"
-    for bin in ${!bins[@]} ; do
-        cmd chmod ${bins[$bin]} $bin
-    done
-    Quiet -n $GIT -P log -3
-}
-
-git_init()
-{
-    git_server_init
-    if [ -e /etc/appliance/state/git_server_init ] ; then
-        cmd "$HEX_SDK git_client_init"
+    if git -P status | grep -q modified ; then
+        cmd $HEX_SDK git_client_init
+        for bin in $(find ${PATH//:/ } -type f -perm /4000 ) ; do
+            bins[${bin}]=$(stat --printf='%a' $bin)
+        done
+        ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "$GIT stash ; $GIT pull" ) >/dev/null
+        for bin in ${!bins[@]} ; do
+            cmd chmod ${bins[$bin]} $bin
+        done
+        Quiet -n $GIT -P log -3
+    else
+        Error "nothing is pushed"
     fi
 }

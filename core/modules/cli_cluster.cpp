@@ -716,7 +716,7 @@ ClusterStartMain(int argc, const char** argv)
     const char* ACTION = "check";
 
     CliPrintf("Starting cluster");
-    HexSpawn(0, CUBECTL, "node", "exec", "-p", HEX_SDK, "-v", "cube_cluster_start", ZEROCHAR_PTR);
+    HexSpawn(0, HEX_SDK, "cmd", HEX_SDK, "-v", "cube_cluster_start", ZEROCHAR_PTR);
 
     // FIXME: workaround neutron services that aren't always in ready state
     HexUtilSystemF(0, 0, HEX_SDK " health_neutron_repair");
@@ -823,6 +823,7 @@ ClusterReadyMain(int argc, const char** argv)
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run hex_sdk cmd " HEX_CFG " cube_password_init");
 
     CliPrintf("[6/6] Cluster check and repair");
+    HexSpawn(0, HEX_SDK, "host_local_run", "rm -f /tmp/health_*_error.count", ZEROCHAR_PTR);
     HexSpawn(0, HEX_SDK, "host_local_run", "hex_cli", "-c", "cluster check_repair", ZEROCHAR_PTR);
 
     CliPrintf("Done");

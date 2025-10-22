@@ -184,7 +184,7 @@ migrate_nova_db()
 
 migrate_nova_db_post()
 {
-    mountpoint -- $CEPHFS_STORE_DIR  | grep -q "is a mountpoint" || ceph_mount_cephfs
+    mountpoint -- $CEPHFS_STORE_DIR  | grep -q "is a mountpoint" || $HEX_SDK ceph_mount_cephfs
     if [ ! -e ${CEPHFS_NOVA_DIR}/instances ] ; then
         mkdir -p ${CEPHFS_NOVA_DIR}/instances
         chown -R nova:nova ${CEPHFS_NOVA_DIR}

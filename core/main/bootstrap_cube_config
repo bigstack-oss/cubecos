@@ -2,6 +2,7 @@
 export BOOTSTRAP_CUBE_MARKER=/run/cube_commit_done
 export BOOTSTRAP_CUBE_MODE=/etc/appliance/state/boot_mode
 export BOOTSTRAP_CUBE_LOG=/var/log/bootstrap_cube.log
+export ROLLING_UPGRADE_MARKER=/run/rolling-upgrading
 source /usr/sbin/hex_tuning /etc/settings.txt
 if [ "x$T_cubesys_control_hosts" = "x" ] ; then
     export MASTER_CONTROL=$T_cubesys_controller
@@ -10,12 +11,7 @@ else
     export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
 fi
 
-# Safe net to prevent system from entering isolated network state
-if systemctl is-active -q openvswitch ; then
-    systemctl stop openvswitch
-    systemctl disable openvswitch
-    init 6
-fi
+systemctl mask openvswitch # openvswitch shouldn't be brought up by pacemaker commit
 
 export HOSTNAME=$(ssh localhost hostname 2>/dev/null)
 query="insert system,category=BSP,severity=I,key=BSP00001I,service=bootstrap,host=$HOSTNAME"
@@ -53,7 +49,6 @@ RollingEvacuateAndReboot()
     local upgrading=false
     local last_n=$(cat $cluster_info 2>/dev/null | jq -r .[].hostname | tail -1)
     local query="insert system,category=RUG,severity=I,key=RUG00001I,service=rolling_upgrade,host=$HOSTNAME,metadata\"rolling upgrade to $(hex_cli -c firmware list | grep -i active | cut -d' ' -f2)\""
-    hex_sdk cmd "systemctl restart sshd"
     if [ -e "$cluster_info" -a "x$inst_type" = "xPPU" ] ; then
         for N in $(cat $cluster_info | jq -r .[].hostname) ; do
             # Cube dashboard topN misses partial info after rolling upgrades
@@ -70,8 +65,8 @@ RollingEvacuateAndReboot()
                 fwver="$(hex_sdk firmware_get_info `hex_sdk firmware_get_active` | grep firmware_version)"
                 if [ "x$n_lastboot" = "xlast_boot = Never" -a "x$n_fwver" = "x$fwver" ] ; then
                     upgrading=true
+                    touch $ROLLING_UPGRADE_MARKER
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
-                        hex_cli -c cluster check_repair
                         msg="Evacuating VMs on $N"
                         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""

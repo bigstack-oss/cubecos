@@ -504,12 +504,16 @@ health_hacluster_repair()
     done
 
     # if first time setup not completed or cluster in rolling upgrade process, ensure master node has VIP
-    if ! cube_node_ready || is_node_rolling_upgrade ; then
+    if [ ! -e /etc/appliance/state/configured ] || is_node_rolling_upgrade ; then
         for i in 1 2 3 4 5 ; do
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
                 if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
                     $HEX_SDK pacemaker_cluster_stop # release existing vip, irrespective of which node it is on
-                    $HEX_SDK pacemaker_cluster_restart
+                    # rolling_upgrade: cluster_restart needed for master pcs to be aware of resources
+                    # first time setup: do not cluster_restart which doesn't guarantee VIP on master control
+                    if is_node_rolling_upgrade ; then
+                        $HEX_SDK pacemaker_cluster_restart
+                    fi
                 else
                     if [ "x$node" != "x$master" ] ; then
                         $HEX_SDK pacemaker_node_stop $node
@@ -796,7 +800,7 @@ health_vip_repair()
         done
     fi
     # if first time setup not completed or cluster in rolling upgrade process, ensure master node has VIP
-    if ! cube_node_ready ] || is_cluster_rolling_upgrade ; then
+    if [ ! -e /etc/appliance/state/configured ] || is_node_rolling_upgrade ; then
         local master=$CUBE_NODE_CONTROL_HOSTNAMES
         if remote_run $master "pcs resource status vip" | grep -q Started ; then
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -1363,8 +1367,6 @@ health_ceph_mds_check()
     local hotstandbys=$(echo $stats | jq | grep 'up:standby-replay' | wc -l)
     local num_ctrlnode=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local num_nodes=${#CUBE_NODE_LIST_HOSTNAMES[@]}
-    local vip=$($HEX_SDK -f json health_vip_report | jq -r .description | cut -d"/" -f1)
-    [ "x$vip" != "xnon-HA" ] || vip=$CUBE_NODE_CONTROL_HOSTNAMES
     local nfs_dir=$(mktemp -u /tmp/nfs-XXXX)
     mkdir -p $nfs_dir
     if [ -z "$standbys" ] ; then
@@ -1376,7 +1378,7 @@ health_ceph_mds_check()
         ERR_CODE=1
     elif [ $(cmd -v "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
         ERR_CODE=2
-    elif ! timeout $SRVSTO mount ${vip}:/nfs $nfs_dir 2>/dev/null ; then
+    elif ! timeout $SRVSTO mount $(shared_ip):/nfs $nfs_dir 2>/dev/null ; then
         timeout $SRVSTO umount -l $nfs_dir/ 2>/dev/null || true
         ERR_CODE=3
     elif ! touch $nfs_dir/.alive >/dev/null 2>&1 ; then
@@ -1405,8 +1407,7 @@ _health_ceph_mds_auto_repair()
     elif [ "$ERR_CODE" == "3" -o "$ERR_CODE" == "4" -o "$ERR_CODE" == "5" ] ; then
         cmd -c "systemctl restart nfs-ganesha"
     elif [ "$ERR_CODE" == "6" ] ; then
-        cmd "git log -1 || rm -f /etc/appliance/state/git_client_init"
-        cmd hex_sdk git_client_init
+        $HEX_SDK git_init
     fi
 }
 
@@ -1423,7 +1424,8 @@ health_ceph_mds_repair()
     done
 
     cmd "$HEX_SDK ceph_mount_cephfs"
-    Quiet cmd -cn "systemctl restart nfs-ganesha"
+    cmd -cn "systemctl restart nfs-ganesha"
+    $HEX_SDK git_init
 }
 
 health_ceph_osd_report()
@@ -2106,23 +2108,23 @@ health_octavia_check()
         done
         ERR_LOG="ip addr show"
         for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-            if ! remote_run $node ovs-vsctl port-to-br octavia-hm0 >/dev/null 2>&1 ; then
-                ERR_MSG+="no octavia-hm0 ovn port found on $node\n"
-                ERR_CODE=5
-            elif remote_run $node ip link show octavia-hm0 | grep -q DOWN ; then
-                ERR_MSG+="no link octavia-hm0 found on $node\n"
-                ERR_CODE=6
-            elif ! remote_run $node route -n | grep -q octavia-hm0 ; then
-                ERR_MSG+="no route from octavia-hm0 found on $node\n"
-                ERR_CODE=7
-            elif ! is_remote_running $node octavia-worker ; then
-                if remote_run $node hex_sdk is_first_three_compute_node ; then
+            if remote_run $node hex_sdk is_first_three_compute_node ; then
+                if ! remote_run $node ovs-vsctl port-to-br octavia-hm0 >/dev/null 2>&1 ; then
+                    ERR_MSG+="no octavia-hm0 ovn port found on $node\n"
+                    ERR_CODE=5
+                elif remote_run $node ip link show octavia-hm0 | grep -q DOWN ; then
+                    ERR_MSG+="no link octavia-hm0 found on $node\n"
+                    ERR_CODE=6
+                elif ! remote_run $node route -n | grep -q octavia-hm0 ; then
+                    ERR_MSG+="no route from octavia-hm0 found on $node\n"
+                    ERR_CODE=7
+                elif ! is_remote_running $node octavia-worker ; then
                     ERR_MSG+="octavia-worker on $node is not running\n"
                     ERR_CODE=8
+                elif ! is_remote_running $node octavia-health-manager ; then
+                    ERR_MSG+="octavia-health-manager on $node is not running\n"
+                    ERR_CODE=9
                 fi
-            elif ! is_remote_running $node octavia-health-manager ; then
-                ERR_MSG+="octavia-health-manager on $node is not running\n"
-                ERR_CODE=9
             fi
         done
     fi
@@ -2141,10 +2143,12 @@ _health_octavia_auto_repair()
     done
 
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node octavia-worker ; then
-            remote_systemd_restart $node octavia-worker
-        elif ! is_remote_running $node octavia-health-manager ; then
-            remote_systemd_restart $node octavia-health-manager
+        if remote_run $node hex_sdk is_first_three_compute_node ; then
+            if ! is_remote_running $node octavia-worker ; then
+                remote_systemd_restart $node octavia-worker
+            elif ! is_remote_running $node octavia-health-manager ; then
+                remote_systemd_restart $node octavia-health-manager
+            fi
         fi
     done
 }
@@ -2680,7 +2684,7 @@ _health_kafka_auto_repair()
         fi
     elif [ "$ERR_CODE" == "3" ] ; then
         $HEX_CFG recreate_kafka_topic "metrics"
-        Quiet -n cubectl node -r control exec -pn systemctl restart monasca-persister
+        cmd -c systemctl restart monasca-persister
     elif [ "$ERR_CODE" == "4" ] ; then
         $HEX_CFG recreate_kafka_topic "transformed-logs"
     elif [ "$ERR_CODE" == "5" ] ; then
@@ -2971,28 +2975,28 @@ health_opensearch-dashboards_repair()
 _health_neutron_deep_repair()
 {
     # OVN DBs location: non-HA -> /var/lib/ovn/, HA -> /etc/ovn/
-    Quiet -n cubectl node -r control exec -pn -- rm -f /etc/ovn/ovnnb_db.db /etc/ovn/ovnsb_db.db /var/lib/ovn/ovnnb_db.db /var/lib/ovn/ovnsb_db.db
+    cmd -c "rm -f /etc/ovn/ovnnb_db.db /etc/ovn/ovnsb_db.db /var/lib/ovn/ovnnb_db.db /var/lib/ovn/ovnsb_db.db"
     cmd rm -f /etc/openvswitch/conf.db
     Quiet -n $HEX_SDK health_neutron_repair
 }
 
 _health_datapipe_deep_repair()
 {
-    Quiet -n cubectl node -r control exec -pn systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
     Quiet -n sleep 10
-    Quiet -n cubectl node -r control exec -pn rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*
+    cmd -c "rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*"
 
-    Quiet -n cubectl node -r control exec -pn systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c  systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
     Quiet -n sleep 10
-    Quiet -n cubectl node -r control exec -pn rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*
+    cmd -c  rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*
 
-    Quiet -n cubectl node -r control exec -pn $HEX_CFG bootstrap kafka
-    Quiet -n cubectl node -r control exec -pn $HEX_CFG bootstrap logstash
-    Quiet -n cubectl node -r control exec -pn $HEX_CFG bootstrap kapacitor
+    cmd -c  $HEX_CFG bootstrap kafka
+    cmd -c  $HEX_CFG bootstrap logstash
+    cmd -c  $HEX_CFG bootstrap kapacitor
     Quiet -n $HEX_CFG update_kafka_topics
-    Quiet -n cubectl node -r control exec -pn systemctl reset-failed
-    Quiet -n cubectl node -r control exec -pn systemctl start kapacitor influxdb monasca-forwarder monasca-persister telegraf
-    Quiet -n cubectl node -r control exec -pn systemctl restart httpd
+    cmd -c  systemctl reset-failed
+    cmd -c  systemctl start kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c  systemctl restart httpd
 }
 
 health_hypervisor_check()

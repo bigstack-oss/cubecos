@@ -284,11 +284,7 @@ cube_cluster_start()
     # by default disable ceph_osd which in case of disk failures cannot be handled by software
     ( $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ) || Quiet -n $HEX_SDK toggle_health_check ceph_osd
     iptables-save > /run/iptables
-    if [ "x${MASTER_CONTROL:-NOMASTER}" = "x$(hostname)" ] ; then
-        nohup bash -c "$HEX_SDK git_server_init && $HEX_SDK cmd \"$HEX_SDK git_client_init\"" >/dev/null 2>&1 &
-    else
-        nohup bash -c "$HEX_SDK git_client_init" >/dev/null 2>&1 &
-    fi
+    nohup bash -c "$HEX_SDK git_init" >/dev/null 2>&1 &
 }
 
 cube_cluster_stop()

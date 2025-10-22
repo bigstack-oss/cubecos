@@ -552,6 +552,7 @@ static bool
 OvnService(bool enabled, bool isMaster, bool forceRun, bool ha)
 {
     if (IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
+        HexUtilSystemF(0, 0, "systemctl unmask %s", OVS_NAME);
         SystemdCommitService(enabled , OVS_NAME, true);     // openvswitch
     }
 

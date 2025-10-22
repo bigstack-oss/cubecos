@@ -78,14 +78,7 @@ banner_login()
     [ -e /run/cube_commit_done ] || srv_st="services n/a"
     printf "%${space}s | %s\n\n" "$role" "$srv_st"
     echo "----------"
-    if grep -q '[.]controller =' $SETTINGS_TXT ; then
-        printf "%${space}s" "$(grep '[.]controller =' $SETTINGS_TXT | cut -d'=' -f2 | xargs)"
-        if grep -q 'controller[.]ip' $SETTINGS_TXT ; then
-            printf " | %s\n\n" "$(grep 'controller[.]ip' $SETTINGS_TXT | cut -d'=' -f2 | xargs)"
-        else
-            printf " | %s\n\n" "$($HEX_SDK -f json health_vip_report | jq -r .description)"
-        fi
-    fi
+    printf "%${space}s | %s\n\n" "$(grep '[.]controller =' $SETTINGS_TXT | cut -d'=' -f2 | xargs)" "$(shared_ip)"
     printf "%${space}s x %s\n" "${#CUBE_NODE_CONTROL_HOSTNAMES[@]}" "control"
     printf "%${space}s x %s\n" "${#CUBE_NODE_COMPUTE_HOSTNAMES[@]}" "compute"
     printf "%${space}s x %s\n" "${#CUBE_NODE_STORAGE_HOSTNAMES[@]}" "storage"

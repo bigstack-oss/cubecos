@@ -751,27 +751,25 @@ os_image_import()
     local file=$2
     local IMG="$dir/$file"
     local name=$3
-    local flags=${4:---visibility public}
+    local flags=${4:---os-project-domain-name default --os-project-name admin --visibility public}
     local pool=${5:-glance-images}
-    local backend=$(os_list_volume_backend_by_pool $pool ${6:-CubeStorage})
+    local volume_type=${6:-CubeStorage}
+    local backend=$(os_list_volume_backend_by_pool $pool $volume_type)
     local distro=${7:-linux}
     local properties=${8:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"
-
-    if [ "x$distro" = "xwindows" ] ; then
-        properties+=" --property os_distro=$distro"
-        properties+=" --property os_type=$distro"
+    properties+=" --property os_distro=$distro"
+    if [ "x$distro" = "xwindows" -o "x$distro" = "xWindows" ] ; then
+        properties+=" --property os_type=windows"
     else
-        local distro_ver=$(_os_image_distro_ver $file)
-        local user=$(echo $distro_ver | cut -d ":" -f1)
-        local ver=$(echo $distro_ver | cut -d ":" -f2)
-        if [ "x$user" = "x" -o "xver" = "x" ] ; then
-            properties+=" --property os_distro=$distro"
-            properties+=" --property os_admin_user=$distro"
-            properties+=" --property os_vers=$ver"
-        fi
+        properties+=" --property os_type=linux"
     fi
+    local distro_ver=$(_os_image_distro_ver $file)
+    local user=$(echo $distro_ver | cut -d ":" -f1)
+    local ver=$(echo $distro_ver | cut -d ":" -f2)
+    properties+=" --property os_admin_user=$distro"
+    properties+=" --property os_vers=$ver"
 
     if [[ $(qemu-img info "$IMG" | grep "file format") =~ raw ]] ; then
         local img_name=$IMG
@@ -807,14 +805,28 @@ os_image_import()
         local img_name=$img_raw
     fi
 
-    echo "[$(date +"%T")] Creating image $name ..."
+    local proj_name=$(echo $flags | grep -o "[-][-]os-project-name .*" | cut -d" " -f2)
+    local visibility=$(echo $flags | grep -o "[-][-]visibility .*" | cut -d" " -f2)
+    local domain=$(echo $flags | grep -o "[-][-]os-project-domain-name .*" | cut -d" " -f2)
+    $OPENSTACK role add --user admin_cli --project $proj_name admin
+    echo "[$(date +"%T")] Importing image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
-        glance $(echo "$flags" | sed -e "s/--visibility public//" -e "s/--visibility private//") image-create --disk-format raw --container-format bare $(echo "$flags" | grep -o -e "[-][-]visibility public" -e "[-][-]visibility private") --store ${backend:-cube} --file "$img_name" $properties --progress --name "$name"
+        if [ "x$visibility" = "xpublic" ] ; then
+            glance --os-project-domain-name $domain --os-project-name admin image-create --disk-format raw --container-format bare --visibility public --store ${backend:-cube} --file "$img_name" $properties --name "$name" --progress
+        else
+            img_id=$(glance --os-project-domain-name $domain --os-project-name admin image-create --disk-format raw --container-format bare --visibility shared --store ${backend:-cube} --file "$img_name" $properties --name "$name" | grep '^| id' | cut -d"|" -f3)
+            if [ "x$img_id" = "x" ] ; then
+                Error "failed to import image"
+            else
+                $OPENSTACK image add project $img_id $proj_name
+                $OPENSTACK image set --accept $img_id --project $proj_name >/dev/null 2>&1
+                glance image-update --visibility private $img_id >/dev/null 2>&1
+            fi
+        fi
     else
         local vol_name=$(mktemp -u volume-${name}-XXXX)
         rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"
-        $OPENSTACK role add --user admin_cli --project $(echo $flags | grep -o "[-][-]os[-]project[-]name .*" | cut -d" " -f2) admin
-        local vol_id=$(cinder $(echo $flags | sed -e "s/--visibility public//" -e "s/--visibility private//") manage --bootable --name "$name" ${backend:-cube@ceph#ceph} "$vol_name" 2>/dev/null | grep " id" | cut -d"|" -f3)
+        local vol_id=$(cinder --os-project-domain-name $domain --os-project-name $proj_name manage --bootable --name "$name" --volume-type $volume_type ${backend:-cube@ceph#ceph} "$vol_name" | grep " id" | cut -d"|" -f3)
         $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
     fi
     echo "[$(date +"%T")] Finished creating image $name"

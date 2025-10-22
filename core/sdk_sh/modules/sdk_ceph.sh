@@ -2746,7 +2746,7 @@ ceph_mirror_pair()
     cmd -c "$HEX_SDK dedup_sshauthkey"
     $sshcmd root@$vip "exit 0" || Error "ssh-key not exchanged"
 
-    local self_vip=$($HEX_SDK -f json health_vip_report | jq -r .description | cut -d"/" -f1)
+    local self_vip=$(shared_ip)
     [ "$self_vip" != "non-HA" ] || self_vip=$(cat /etc/settings.cluster.json | jq -r ".[].ip.management")
     local self_ctlr=$(grep cubesys.controller $SETTINGS_TXT | cut -d"=" -f2 | xargs 2>/dev/null)-$self_vip
     if [ -z "$(echo $self_ctlr | cut -d"-" -f1)" ] ; then

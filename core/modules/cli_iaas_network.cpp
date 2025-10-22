@@ -348,10 +348,10 @@ FlowSwitchMain(int argc, const char** argv)
 
     switch(index) {
         case 0:
-            HexSpawn(0, CUBECTL, "node", "exec", "-r", "compute", "-p", HEX_CFG, "enable_sflow", ZEROCHAR_PTR);
+            HexSpawn(0, HEX_SDK, "cmd", "-p", HEX_CFG, "enable_sflow", ZEROCHAR_PTR);
             break;
         case 1:
-            HexSpawn(0, CUBECTL, "node", "exec", "-r", "compute", "-p", HEX_CFG, "disable_sflow", ZEROCHAR_PTR);
+            HexSpawn(0, HEX_SDK, "cmd", "-p", HEX_CFG, "disable_sflow", ZEROCHAR_PTR);
             break;
     }
 
