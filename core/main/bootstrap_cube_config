@@ -1,8 +1,7 @@
 #!/bin/sh
 export BOOTSTRAP_CUBE_MARKER=/run/cube_commit_done
 export BOOTSTRAP_CUBE_MODE=/etc/appliance/state/boot_mode
-export BOOTSTRAP_CUBE_LOG=/var/log/bootstrap_cube.log
-export ROLLING_UPGRADE_MARKER=/run/rolling-upgrading
+export BOOTSTRAP_CUBE_LOG=/run/cube_bootstrap.log
 source /usr/sbin/hex_tuning /etc/settings.txt
 if [ "x$T_cubesys_control_hosts" = "x" ] ; then
     export MASTER_CONTROL=$T_cubesys_controller
@@ -65,7 +64,7 @@ RollingEvacuateAndReboot()
                 fwver="$(hex_sdk firmware_get_info `hex_sdk firmware_get_active` | grep firmware_version)"
                 if [ "x$n_lastboot" = "xlast_boot = Never" -a "x$n_fwver" = "x$fwver" ] ; then
                     upgrading=true
-                    touch $ROLLING_UPGRADE_MARKER
+                    echo "Starting auto rolling upgrade" >> $BOOTSTRAP_CUBE_MODE
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
                         msg="Evacuating VMs on $N"
                         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
@@ -150,6 +149,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
     else
+        echo "Starting auto bootstrap" >> $BOOTSTRAP_CUBE_MODE
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop

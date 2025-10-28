@@ -20,6 +20,8 @@ rootfs_install::
 #	$(Q)chroot $(ROOTDIR) /sbin/setfiles -F -e /proc -e /sys -e /dev /etc/selinux/targeted/contexts/files/file_contexts /
 	$(Q)cp -f $(SRCDIR)/selinux.config $(ROOTDIR)/etc/selinux/config
 	$(Q)chroot $(ROOTDIR) bash -c "dnf list installed | egrep \"devel|headers\" | grep -v python3-devel | awk '{print \$$1}'| xargs -i dnf autoremove -y {}"
+	$(Q)chroot $(ROOTDIR) bash -c "dnf autoremove -y systemtap-runtime"
+	$(Q)sed -i -e "/stapunpriv/d" -e "/stapusr/d" -e "/stapsys/d" -e "/stapdev/d" $(ROOTDIR)/etc/passwd $(ROOTDIR)/etc/shadow $(ROOTDIR)/etc/group $(ROOTDIR)/etc/gshadow
 
 rootfs_install::
 	$(Q)diff $(ROOTDIR)/etc/passwd $(BLDDIR)/passwd.before

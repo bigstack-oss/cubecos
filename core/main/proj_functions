@@ -999,7 +999,7 @@ cluster_check_repair()
 node_bootstrap_status()
 {
     local node=${1:-$HOSTNAME}
-    remote_run $node "tr '\r' '\n' </var/log/bootstrap_cube.log | tail -1"
+    remote_run $node "tr '\r' '\n' </run/cube_bootstrap.log | tail -1"
 }
 
 fixpack_sync()

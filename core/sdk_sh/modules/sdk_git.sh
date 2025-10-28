@@ -38,12 +38,6 @@ EOF
 _git_server_init()
 {
     $HEX_SDK cube_node_ready || return 0
-    if [ -e /run/${FUNCNAME[0]} ] ; then
-        return 0
-    else
-        touch /run/${FUNCNAME[0]}
-    fi
-
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
@@ -75,8 +69,6 @@ _git_server_init()
     else
         Error "no ceph mount point in $CEPHFS_STORE_DIR to initialize GIT server"
     fi
-
-    rm -f /run/${FUNCNAME[0]}
 }
 
 git_server_init()
@@ -95,12 +87,6 @@ _git_client_init()
 {
     $HEX_SDK cube_node_ready || return 0
     ! git log -1 >/dev/null 2>&1 || return 0
-    if [ -e /run/${FUNCNAME[0]} ] ; then
-        return 0
-    else
-        touch /run/${FUNCNAME[0]}
-    fi
-
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
@@ -126,7 +112,6 @@ _git_client_init()
     fi
     Quiet -n popd
     Quiet -n $GIT -P log
-    rm -f /run/${FUNCNAME[0]}
 }
 
 git_client_init()

@@ -808,25 +808,25 @@ os_image_import()
     local proj_name=$(echo $flags | grep -o "[-][-]os-project-name .*" | cut -d" " -f2)
     local visibility=$(echo $flags | grep -o "[-][-]visibility .*" | cut -d" " -f2)
     local domain=$(echo $flags | grep -o "[-][-]os-project-domain-name .*" | cut -d" " -f2)
-    $OPENSTACK role add --user admin_cli --project $proj_name admin
+    $OPENSTACK role add --user admin_cli --project ${proj_name:-admin} admin
     echo "[$(date +"%T")] Importing image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
         if [ "x$visibility" = "xpublic" ] ; then
-            glance --os-project-domain-name $domain --os-project-name admin image-create --disk-format raw --container-format bare --visibility public --store ${backend:-cube} --file "$img_name" $properties --name "$name" --progress
+            glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility public --store ${backend:-cube} --file "$img_name" $properties --name "$name" --progress
         else
-            img_id=$(glance --os-project-domain-name $domain --os-project-name admin image-create --disk-format raw --container-format bare --visibility shared --store ${backend:-cube} --file "$img_name" $properties --name "$name" | grep '^| id' | cut -d"|" -f3)
+            img_id=$(glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility shared --store ${backend:-cube} --file "$img_name" $properties --name "$name" | grep '^| id' | cut -d"|" -f3)
             if [ "x$img_id" = "x" ] ; then
                 Error "failed to import image"
             else
-                $OPENSTACK image add project $img_id $proj_name
-                $OPENSTACK image set --accept $img_id --project $proj_name >/dev/null 2>&1
+                $OPENSTACK image add project $img_id ${proj_name:-admin}
+                $OPENSTACK image set --accept $img_id --project ${proj_name:-admin} >/dev/null 2>&1
                 glance image-update --visibility private $img_id >/dev/null 2>&1
             fi
         fi
     else
         local vol_name=$(mktemp -u volume-${name}-XXXX)
         rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"
-        local vol_id=$(cinder --os-project-domain-name $domain --os-project-name $proj_name manage --bootable --name "$name" --volume-type $volume_type ${backend:-cube@ceph#ceph} "$vol_name" | grep " id" | cut -d"|" -f3)
+        local vol_id=$(cinder --os-project-domain-name ${domain:-default} --os-project-name ${proj_name:-admin} manage --bootable --name "$name" --volume-type $volume_type ${backend:-cube@ceph#ceph} "$vol_name" | grep " id" | cut -d"|" -f3)
         $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
     fi
     echo "[$(date +"%T")] Finished creating image $name"
@@ -1100,7 +1100,7 @@ os_nova_instance_reset()
 {
     local instance_ids=$@
 
-    Quiet -n nova reset-state --active $instance_ids --wait 2>/dev/null
+    Quiet -n nova reset-state --active $instance_ids 2>/dev/null
 }
 
 os_nova_instance_hardreboot()

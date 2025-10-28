@@ -65,7 +65,7 @@ haclient:x:118:
 keystone:x:119:
 ssl-cert:x:120:
 glance:x:121:
-kvm:x:122:
+kvm:x:122:qemu
 libvirt:x:123:nova,masakari,monasca
 nova:x:124:
 haproxy:x:125:

@@ -5,9 +5,8 @@
 # $(call PROJ_INSTALL_APT,,dosfstools nova-api nova-conductor nova-consoleauth nova-novncproxy nova-spicehtml5proxy spice-html5 spice-vdagent nova-scheduler nova-placement-api nova-compute)
 
 ROOTFS_DNF += libvirt
-ROOTFS_DNF += dosfstools python3-libvirt ksmtuned qemu-kvm-device-display-virtio-gpu-pci qemu-kvm-device-display-virtio-gpu qemu-guest-agent virt-v2v
+ROOTFS_DNF += dosfstools python3-libvirt ksmtuned virt-v2v
 ROOTFS_DNF_NOARCH += openstack-nova-api openstack-nova-conductor openstack-nova-novncproxy openstack-nova-scheduler openstack-nova-compute openstack-placement-api python3-osc-placement
-
 NOVA_SRCDIR := $(ROOTDIR)/usr/lib/python3.9/site-packages/nova
 NOVA_PATCHDIR := $(COREDIR)/nova/$(OPENSTACK_RELEASE)_patch
 

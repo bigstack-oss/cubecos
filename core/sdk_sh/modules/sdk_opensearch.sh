@@ -51,7 +51,7 @@ opensearch_ops_reqid_url()
     local message="req-"
     local template_ndjson=/etc/opensearch-dashboards/export.ndjson
     local new_ndjson=/tmp/${reqid}.ndjson
-    local ops_url="http://$$(shared_ip):5601/opensearch-dashboards"
+    local ops_url="http://$(shared_ip):5601/opensearch-dashboards"
 
     echo "${reqid}" | grep -q "^req[-]" || Error "bad req-id: ${reqid}"
 

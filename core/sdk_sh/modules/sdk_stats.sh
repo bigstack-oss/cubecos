@@ -424,5 +424,5 @@ stats_bootstrap()
         flg+="j"
     fi
 
-    cmd $flg "cat -v /var/log/bootstrap_cube.log 2>/dev/null | sed 's/ \^M//g' ; egrep -v -q -i 'fail|error' /var/log/bootstrap_cube.log 2>/dev/null"
+    cmd $flg "cat -v /run/cube_bootstrap.log 2>/dev/null | sed 's/ \^M//g' ; egrep -v -q -i 'fail|error' /run/cube_bootstrap.log 2>/dev/null"
 }

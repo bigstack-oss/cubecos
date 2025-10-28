@@ -89,6 +89,27 @@ LOCKED_DNF += kernel-lt-$(KERNEL_VERS) kernel-lt-core-$(KERNEL_VERS) kernel-lt-d
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
 
+# qemu-kvm-17:9.1.0-29.el9 is not compatible with 17:9.1.0-20 (v3.0.0)
+QEMU_VER := 17:9.1.0-24.el9
+QEMU_LOCKED_RPMS := qemu-kvm-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-gpu-pci-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-gpu-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-vga-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-device-usb-redirect-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-device-usb-host-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-guest-agent-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-block-rbd-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-block-blkio-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-common-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-core-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-img-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-audio-pa-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-pr-helper-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-tools-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-ui-egl-headless-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-docs-$(QEMU_VER)
+LOCKED_DNF += $(QEMU_LOCKED_RPMS)
+
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
 rootfs_install::
