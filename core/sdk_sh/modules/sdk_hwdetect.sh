@@ -12,14 +12,10 @@ hwdetect_cluster_ready()
         return 0
     fi
 
-    local image_id=$($OPENSTACK image list | awk '/ Cirros /{print $2}')
     local flavor_id=$($OPENSTACK flavor list | awk '/ t2.medium /{print $2}')
     local iprange=$@
 
-    if [ -z "$image_id" -o -z "$flavor_id" ] ; then
-        $HEX_SDK os_image_import /etc/glance cirros-0.4.0-x86_64-disk.qcow2 Cirros && rm -f /etc/glance/cirros-0.4.0-x86_64-disk.qcow2
-        $HEX_SDK os_image_import /etc/glance alpine-tools.qcow2 Alpine && rm -f /etc/glance/alpine-tools.qcow2
-
+    if [ -z "$flavor_id" ] ; then
         # ref: https://aws.amazon.com/ec2/instance-types/
         Quiet -n $OPENSTACK flavor create --vcpus 1 --ram 128 --disk 1 --public t2.pico
         Quiet -n $OPENSTACK flavor create --vcpus 1 --ram 512 --disk 10 --public t2.nano

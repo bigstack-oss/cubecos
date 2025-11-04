@@ -55,12 +55,12 @@ os_list_volume_backend_by_pool()
 {
     local pool=${1:-$BUILTIN_BACKPOOL}
     local vtype=${2:-CubeStorage}
-    local backend_name=$($OPENSTACK volume type show $vtype -f json -c properties | jq -r .properties.volume_backend_name)
+    local backend_name=$($OPENSTACK volume type show $vtype -f json -c properties | jq -r .properties.volume_backend_name 2>/dev/null)
 
     if [ "x$pool" = "x$BUILTIN_BACKPOOL" ] ; then
-        $OPENSTACK volume backend pool list -f value -c Name | grep $backend_name
+        $OPENSTACK volume backend pool list -f value -c Name | grep ${backend_name:-cube@ceph#ceph}
     else
-        $OPENSTACK volume backend pool list -f value -c Name | grep $backend_name | cut -d "@" -f1
+        $OPENSTACK volume backend pool list -f value -c Name | grep ${backend_name:-cube@ceph#ceph} | cut -d "@" -f1
     fi
 }
 
@@ -756,6 +756,13 @@ os_image_import()
     local volume_type=${6:-CubeStorage}
     local backend=$(os_list_volume_backend_by_pool $pool $volume_type)
     local distro=${7:-linux}
+    local mf_importing="/run/${FUNCNAME[0]}_${file}_${name}_${pool}_${distro}_${backend}"
+    if  cmd -v ls $mf_importing | grep -q "|0|" ; then
+        cmd -v ls $mf_importing
+        Error "Image is being imported"
+    else
+        touch $mf_importing
+    fi
     local properties=${8:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"
@@ -833,6 +840,7 @@ os_image_import()
     echo "[$(date +"%T")] Finished creating image $name"
 
     [ -z "$img_raw" ] || rm -f "$img_raw"
+    cmd rm -f $mf_importing
 }
 
 os_extpack_image_mount()

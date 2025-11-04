@@ -174,8 +174,8 @@ is_sshable()
         done
         if ps -p $pid >/dev/null 2>&1 ; then
             kill $pid
-            rm -f $mf_tmp
         fi
+        rm -f $mf_tmp
     fi
 
     return $ret

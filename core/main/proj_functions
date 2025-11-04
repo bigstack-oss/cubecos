@@ -275,6 +275,14 @@ cube_cluster_start()
         /usr/sbin/hex_config trigger cluster_start
     fi
 
+    if $OPENSTACK image list -f value | grep -q "Cirros active" ; then
+        rm -f /etc/glance/cirros-0.4.0-x86_64-disk.qcow2
+        rm -f /etc/glance/alpine-tools.qcow2
+    else
+        [ ! -e /etc/glance/cirros-0.4.0-x86_64-disk.qcow2 ] || $HEX_SDK os_image_import /etc/glance cirros-0.4.0-x86_64-disk.qcow2 Cirros
+        [ ! -e /etc/glance/alpine-tools.qcow2 ] || $HEX_SDK os_image_import /etc/glance alpine-tools.qcow2 Alpine
+    fi
+
     touch $CLUSTER_SYNC
 
     cmd "$HEX_SDK network_ipt_serviceint" # customized iptables
