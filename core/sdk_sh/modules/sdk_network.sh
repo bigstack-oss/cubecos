@@ -285,6 +285,9 @@ network_ipt_serviceint()
     iptables $table -n --list $chain >/dev/null 2>&1 || iptables -N $chain
     iptables -F $chain
 
+    # we should allow all local traffics
+    iptables -A $chain -i lo -j ACCEPT
+
     source hex_tuning $SETTINGS_TXT cubesys.controller.ip
     [ "x$T_cubesys_controller_ip" = "x" ] || iptables -A $chain -s $T_cubesys_controller_ip -j ACCEPT
 
@@ -304,7 +307,6 @@ network_ipt_serviceint()
 
     iptables -A $chain -p tcp --match multiport --dports 5900:5999 -j DROP # drop all direct vnc access, except for internal nodes
     iptables -A $chain -p tcp --dport 3306 -j DROP # drop Database Open Access (database-open-access 3306)
-    # FIXME: dropping 8080 port /server-status would lead to broken /horizon
     iptables -A $chain -p tcp --dport 8080 -j DROP # drop Apache mod_status /server-status
     iptables -nv -L INPUT 2>/dev/null | grep -q $chain || iptables -A INPUT -j $chain
 }
