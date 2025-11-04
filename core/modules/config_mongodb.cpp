@@ -1,23 +1,23 @@
 // CUBE SDK
 
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
-#include <hex/log.h>
-#include <hex/process.h>
-#include <hex/process_util.h>
-#include <hex/filesystem.h>
-#include <hex/string_util.h>
+#include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
-#include <hex/config_global.h>
 #include <hex/dryrun.h>
+#include <hex/filesystem.h>
+#include <hex/log.h>
 #include <hex/logrotate.h>
+#include <hex/process.h>
+#include <hex/process_util.h>
+#include <hex/string_util.h>
 
-#include <cube/systemd_util.h>
-#include <cube/config_file.h>
 #include <cube/cluster.h>
+#include <cube/config_file.h>
+#include <cube/systemd_util.h>
 
 #include "include/role_cubesys.h"
 
@@ -72,7 +72,7 @@ PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 1);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 
 static bool
-ParseNet(const char *name, const char *value, bool isNew)
+ParseNet(const char* name, const char* value, bool isNew)
 {
     if (strcmp(name, NET_HOSTNAME) == 0) {
         s_hostname.parse(value, isNew);
@@ -88,7 +88,7 @@ NotifyNet(bool modified)
 }
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
     return true;
@@ -113,15 +113,14 @@ Init()
 }
 
 static bool
-Parse(const char *name, const char *value, bool isNew)
+Parse(const char* name, const char* value, bool isNew)
 {
     bool r = true;
 
     TuneStatus s = ParseTune(name, value, isNew);
     if (s == TUNE_INVALID_NAME) {
         HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
-    }
-    else if (s == TUNE_INVALID_VALUE) {
+    } else if (s == TUNE_INVALID_VALUE) {
         HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
         r = false;
     }
@@ -165,7 +164,7 @@ WriteMongodConf(bool enableAuth, const char* myip)
 static bool
 WriteMongodKeyfile(std::string key)
 {
-    FILE *fout = fopen(MONGODB_KEYFILE, "w");
+    FILE* fout = fopen(MONGODB_KEYFILE, "w");
     if (!fout) {
         HexLogError("Unable to write mongodb keyfile: %s", MONGODB_KEYFILE);
         return false;
@@ -190,13 +189,13 @@ GetAdminAccess()
         return "";
     }
 
-    FILE *fin = fopen(MONGODB_ADMIN_ACCESS, "r");
+    FILE* fin = fopen(MONGODB_ADMIN_ACCESS, "r");
     if (!fin) {
         HexLogError("could not read mongodb admin access %s", MONGODB_ADMIN_ACCESS);
         return "";
     }
 
-    char *buffer = NULL;
+    char* buffer = NULL;
     std::size_t bufferSize = 0;
     if (getline(&buffer, &bufferSize, fin) < 0) {
         return "";
@@ -221,7 +220,7 @@ static bool
 WriteAdminAccess(std::string dbPass)
 {
     // update the mongodb admin access
-    FILE *fout = fopen(MONGODB_ADMIN_ACCESS, "w");
+    FILE* fout = fopen(MONGODB_ADMIN_ACCESS, "w");
     if (!fout) {
         HexLogError("Unable to write mongodb admin access: %s", MONGODB_ADMIN_ACCESS);
         return 1;
@@ -248,8 +247,7 @@ WaitActiveStatus(std::string myip)
             FWD,
             0,
             "mongosh mongodb://%s --quiet --eval \"db.hello().ok\"",
-            myip.c_str()
-        );
+            myip.c_str());
         if (result == 0) {
             return 0;
         }
@@ -280,8 +278,7 @@ CheckAndInitReplicaSet(std::vector<std::string> ctrlHosts, std::string myip, con
             0,
             0,
             "mongosh mongodb://%s --quiet --eval 'db.hello().isWritablePrimary || db.hello().secondary' | grep -q true",
-            ctrlHost.c_str()
-        );
+            ctrlHost.c_str());
         if (result == 0) {
             HexLogInfo("replicaSet already inited on %s, skip replicaSet initializing", ctrlHost.c_str());
             return 0;
@@ -294,8 +291,7 @@ CheckAndInitReplicaSet(std::vector<std::string> ctrlHosts, std::string myip, con
         "mongosh mongodb://%s --quiet --eval 'rs.initiate({_id:\"%s\",members:[{_id:0,host:\"%s\"}]})'",
         myip.c_str(),
         MONGODB_REPLICA_SET_NAME,
-        myHostName
-    );
+        myHostName);
 }
 
 static bool
@@ -306,8 +302,7 @@ IsHostRegistered(char* host, std::string myip)
         0,
         "mongosh mongodb://%s --quiet --eval 'JSON.stringify(rs.conf().members)' | jq '([.[] | select(.host == \"%s:27017\")] | length) > 0' | grep -q true",
         myip.c_str(),
-        host
-    );
+        host);
     if (result == 0) {
         return true;
     }
@@ -329,8 +324,7 @@ SyncHostsToReplicaSet(std::vector<std::string>& ctrlHosts, std::string myip)
             0,
             "mongosh mongodb://%s --quiet --eval 'rs.add(\"%s\")'",
             myip.c_str(),
-            ctrlHost.c_str()
-        );
+            ctrlHost.c_str());
         if (result != 0) {
             HexLogError("failed to add %s in replicaSet, stop all node registration", ctrlHost.c_str());
             return result;
@@ -350,8 +344,7 @@ CheckAdminUser(std::string mongodbUri)
         0,
         0,
         "mongosh %s --quiet --eval 'db.getSiblingDB(\"admin\").getUser(\"admin\")' | grep -q admin",
-        mongodbUri.c_str()
-    );
+        mongodbUri.c_str());
     return (result == 0);
 }
 
@@ -372,8 +365,7 @@ InitAdminUser(std::string myip, std::string dbPass)
         "{role:\"readWriteAnyDatabase\",db:\"admin\"}"
         "]})'",
         myip.c_str(),
-        dbPass.c_str()
-    );
+        dbPass.c_str());
     return (result == 0);
 }
 
@@ -386,8 +378,7 @@ UpdateAdminUser(std::string mongodbUri, std::string dbPass)
         0,
         "mongosh %s --quiet --eval 'db.getSiblingDB(\"admin\").changeUserPassword(\"admin\", \"%s\")'",
         mongodbUri.c_str(),
-        dbPass.c_str()
-    );
+        dbPass.c_str());
     return (result == 0);
 }
 
@@ -420,7 +411,7 @@ Commit(bool modified, int dryLevel)
     }
 
     // get the control host list
-    std::vector<std::string> ctrlHosts = {s_hostname.c_str()};
+    std::vector<std::string> ctrlHosts = { s_hostname.c_str() };
     AppendCtrlPeerHostsIfObserved(ctrlHosts);
 
     // set up the replica set on the master node
@@ -433,7 +424,7 @@ Commit(bool modified, int dryLevel)
         }
 
         // start mongodb
-        SystemdCommitService(s_enabled, SERVICE, true);
+        SystemdCommitService(s_enabled, SERVICE, true, true);
 
         // wait for mongodb to be ready
         int result = WaitActiveStatus(myip);
@@ -472,7 +463,7 @@ Commit(bool modified, int dryLevel)
     }
 
     // restart mongodb
-    SystemdCommitService(s_enabled, SERVICE, true);
+    SystemdCommitService(s_enabled, SERVICE, true, true);
     WriteLogRotateConf(log_conf);
 
     // wait for mongodb to be ready
@@ -494,7 +485,7 @@ Commit(bool modified, int dryLevel)
     } else {
         mongodbUri << "admin:" << dbPass << "@";
     }
-    for (std::string c: ctrlHosts) {
+    for (std::string c : ctrlHosts) {
         if (index != 0) {
             mongodbUri << ",";
         }

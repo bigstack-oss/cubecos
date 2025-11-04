@@ -7,8 +7,7 @@
 
 #define LIMIT 3
 
-bool
-SystemdCommitService(const bool enabled, const char* name, const bool retry)
+bool SystemdCommitService(const bool enabled, const char* name, const bool retry, const bool quiet)
 {
     HexUtilSystemF(FWD, 0, "systemctl stop %s", name);
 
@@ -17,21 +16,31 @@ SystemdCommitService(const bool enabled, const char* name, const bool retry)
         int cnt = 0;
 
         do {
-            if (HexUtilSystemF(0, 0, "systemctl %s %s", cnt ? "restart" : "start", name) != 0) {
+            int ret = 0;
+            if (quiet) {
+                ret = HexUtilSystemF(FWD, 0, "systemctl %s %s", cnt ? "restart" : "start", name);
+            } else {
+                ret = HexUtilSystemF(AWY, 0, "systemctl %s %s", cnt ? "restart" : "start", name);
+            }
+
+            if (ret != 0) {
                 HexLogError("failed to start %s service", name);
                 if (!retry || ++cnt > LIMIT)
                     return false;
-            }
-            else
+            } else {
                 break;
+            }
         } while (retry == true);
 
         HexLogInfo("%s is running", name);
-    }
-    else {
+    } else {
         HexLogInfo("%s has been stopped", name);
     }
 
     return true;
 }
 
+bool SystemdCommitService(const bool enabled, const char* name, const bool retry)
+{
+    return SystemdCommitService(enabled, name, retry, false);
+}

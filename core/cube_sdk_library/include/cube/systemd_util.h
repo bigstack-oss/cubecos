@@ -6,9 +6,10 @@
 // Process extended API requires C++
 #ifdef __cplusplus
 
+bool SystemdCommitService(const bool enabled, const char* name, const bool retry, const bool quiet);
+
 bool SystemdCommitService(const bool enabled, const char* name, const bool retry = false);
 
 #endif // __cplusplus
 
 #endif /* endif CUBE_SYSTEMD_UTIL_H */
-
