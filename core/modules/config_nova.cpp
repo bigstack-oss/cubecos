@@ -462,6 +462,8 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["state_path"] = "/var/lib/nova";
         cfg["DEFAULT"]["instances_path"] = "$state_path/instances";
         cfg["libvirt"]["hw_machine_type"] = hwType.c_str();
+        cfg["libvirt"]["swtpm_enabled"] = "True";
+        cfg["libvirt"]["ovmf_path"] = "/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd";
         cfg["libvirt"]["images_type"] = "rbd";
         cfg["libvirt"]["images_rbd_pool"] = VOLUME;
         cfg["libvirt"]["images_rbd_ceph_conf"] = "/etc/ceph/ceph.conf";
