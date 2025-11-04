@@ -443,7 +443,7 @@ CONFIG_SUPPORT_COMMAND(HEX_SDK " support_log_archive $HEX_SUPPORT_DIR");
 CONFIG_SUPPORT_COMMAND(HEX_SDK " cube_stats");
 CONFIG_SUPPORT_COMMAND(HEX_SDK " cube_oom_stats");
 CONFIG_SUPPORT_COMMAND(HEX_SDK " cube_disk_stats /var/lib /var/log /var/support /var/update");
-CONFIG_SUPPORT_COMMAND(HEX_CLI " -c boot status");
+CONFIG_SUPPORT_COMMAND(HEX_SDK " node_boot_status");
 CONFIG_SUPPORT_COMMAND(HEX_CLI " -c cluster check");
 CONFIG_SUPPORT_COMMAND_TO_FILE(HEX_CLI " -c cluster health", "/tmp/health_report.txt");
 
