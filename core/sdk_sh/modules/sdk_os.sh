@@ -753,16 +753,16 @@ os_image_import()
     local name=$3
     local flags=${4:---os-project-domain-name default --os-project-name admin --visibility public}
     local pool=${5:-glance-images}
-    local volume_type=${6:-CubeStorage}
-    local backend=$(os_list_volume_backend_by_pool $pool $volume_type)
-    local distro=${7:-linux}
-    local mf_importing="/run/${FUNCNAME[0]}_${file}_${name}_${pool}_${distro}_${backend}"
+    local mf_importing="/run/${FUNCNAME[0]}_${file}_${name}_${pool}"
     if  cmd -v ls $mf_importing | grep -q "|0|" ; then
         cmd -v ls $mf_importing
         Error "Image is being imported"
     else
         touch $mf_importing
     fi
+    local volume_type=${6:-CubeStorage}
+    local backend=$(os_list_volume_backend_by_pool $pool $volume_type)
+    local distro=${7:-linux}
     local properties=${8:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"

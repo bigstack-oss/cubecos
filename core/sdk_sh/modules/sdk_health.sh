@@ -2757,8 +2757,10 @@ health_influxdb_check()
 
 health_influxdb_repair()
 {
+    local vip=$($HEX_SDK -f json health_vip_report | jq -r .description | cut -d "@" -f2)
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if remote_run $node $HEX_SDK is_moderator_node >/dev/null 2>&1 ; then
+            [ "x$vip" != "x$node" ] || pacemaker resource move vip
             continue
         fi
         if ! is_remote_running $node influxdb ; then
@@ -2770,7 +2772,6 @@ health_influxdb_repair()
         fi
     done
 }
-
 
 health_kapacitor_report()
 {
