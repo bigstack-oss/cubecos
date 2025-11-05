@@ -818,10 +818,8 @@ os_image_import()
     $OPENSTACK role add --user admin_cli --project ${proj_name:-admin} admin
     echo "[$(date +"%T")] Importing image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
-        tmp_out=$(mktemp -u /tmp/out.XXXX)
-        script -q -c "glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility shared --store ${backend:-cube} --file $img_name $properties --name $name --progress" | tee $tmp_out
-        img_id=$(cat $tmp_out | grep '^| id' | cut -d"|" -f3)
-        rm -f $tmp_out
+        img_id=$(uuidgen)
+        glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility shared --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
         if [ "x$visibility" = "xprivate" ] ; then
             if [ "x$img_id" = "x" ] ; then
                 Error "failed to import image"
