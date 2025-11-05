@@ -798,14 +798,14 @@ os_image_import()
         local img_dir=$(dirname $img_raw)
         echo "[$(date +"%T")] Converting image to RAW format ... "
         virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
-        if [ -e ${img_dir}/${file%.*}.xml ] ; then
-            mv -f ${img_dir}/${file%.*}-* $img_raw
-            if grep -i "os firmware" ${img_dir}/${file%.*}.xml 2>/dev/null | grep -q -i efi ; then
+        if [ -e ${img_dir}/${file%.*}*.xml ] ; then
+            mv -f ${img_dir}/${file%.*}*-* $img_raw
+            if grep -i "os firmware" ${img_dir}/${file%.*}*.xml 2>/dev/null | grep -q -i efi ; then
                 properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
             else
                 properties+=" --property hw_firmware_type=bios"
             fi
-            rm -f ${img_dir}/${file%.*}.xml
+            rm -f ${img_dir}/${file%.*}*.xml
         else
             qemu-img convert -p -O raw "$IMG" "$img_raw" 2>/dev/null
         fi

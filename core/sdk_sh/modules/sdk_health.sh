@@ -694,13 +694,13 @@ health_mysql_check()
     _health_fail_log
 }
 
-health_mysql_repair()
+_health_mysql_repair()
 {
     cmd -cor "hex_sdk remote_systemd_stop \$HOSTNAME mariadb"
     if cmd -cv cat /var/lib/mysql/grastate.dat | grep -q "safe_to_bootstrap: 1" ; then
         local node=$(cmd -cv "grep -q 'safe_to_bootstrap: 1' /var/lib/mysql/grastate.dat" | grep '|0|' | cut -d"|" -f1 | tail -1)
         remote_run $node galera_new_cluster
-        cmd -co "hex_sdk remote_systemd_start \$HOSTNAME mariadb"
+        cmd -co "hex_sdk remote_systemd_start \$HOSTNAME mariadb || ( killall -9 mariadbd ; systemctl restart mariadb )"
     else
         local num_control=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
         local cnt=0
@@ -710,10 +710,21 @@ health_mysql_repair()
             if [ $(cmd -v "systemctl is-active mariadb" | grep failed | wc -l) -ge $((num_control - 1)) -a $cnt -eq 1 ] ; then
                 galera_new_cluster
             else
-                remote_systemd_start $node mariadb
+                remote_systemd_start $node mariadb || remote_run $node "killall -9 mariadbd ; systemctl restart mariadb"
             fi
         done
     fi
+}
+
+health_mysql_repair()
+{
+    # multiple attempts to fix is needed, especially after rolling-upgrade
+    for i in 1 2 3 ; do
+        _health_mysql_repair
+        if health_mysql_check ; then
+            break
+        fi
+    done
 }
 
 health_vip_report()
@@ -1330,6 +1341,7 @@ _health_ceph_mgr_auto_repair()
         fi
         $CEPH config set mgr mgr/influx/hostname $influx_hn
         $CEPH config set mgr mgr/influx/interval 60
+        health_influxdb_repair
     elif [ "$ERR_CODE" == "3" ] ; then
         $CEPH mgr module disable influx
         $CEPH mgr module enable influx
@@ -1348,6 +1360,7 @@ _health_ceph_mgr_auto_repair()
 
 health_ceph_mgr_repair()
 {
+    health_influxdb_repair
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         remote_run $node $HEX_CFG restart_ceph_mgr
     done
@@ -2735,8 +2748,10 @@ health_influxdb_report()
 
 health_influxdb_check()
 {
+    local vip=$($HEX_SDK -f json health_vip_report | jq -r .description | cut -d "@" -f2)
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if remote_run $node $HEX_SDK is_moderator_node >/dev/null 2>&1 ; then
+            [ "x$vip" != "x$node" ] || ERR_CODE=3
             continue
         fi
         if ! is_remote_running $node influxdb ; then

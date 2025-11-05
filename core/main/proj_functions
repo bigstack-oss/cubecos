@@ -334,9 +334,10 @@ cube_cluster_power()
     fi
 
     if [ "x${MASTER_CONTROL:-NOMASTER}" != "x$(hostname)" ] ; then
-        remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_cluster_power $1 $2"
+        remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_cluster_power $1"
     else
         cmd "timeout $SRVSTO umount $CEPHFS_STORE_DIR" || true
+        cmd "systemctl stop ceph-osd@*"
         cmd -c "systemctl stop ceph-mds@\$HOSTNAME"
         cmd -c "systemctl stop ceph-mgr@\$HOSTNAME"
         cmd -c "systemctl stop ceph-mon@\$HOSTNAME"

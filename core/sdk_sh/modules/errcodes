@@ -305,6 +305,7 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 SRV="influxdb"
 eval "ERR_DESC_$SRV[1]='daemon down'"
 eval "ERR_DESC_$SRV[2]='port not responding'"
+eval "ERR_DESC_$SRV[3]='moderator owns vip'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="kapacitor"
