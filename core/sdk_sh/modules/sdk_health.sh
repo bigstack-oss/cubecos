@@ -1188,7 +1188,7 @@ health_memcache_repair()
 
 health_keycloak_report()
 {
-    ERR_MSG+="`cubectl config status keycloak`\n"
+    ERR_MSG+="`$HEX_CFG status_keycloak`\n"
     _health_report ${FUNCNAME[0]}
 }
 

@@ -1,20 +1,21 @@
 // CUBE SDK
 
-#include <unistd.h>
-#include <sstream>
-#include <hex/log.h>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
-#include <hex/process_util.h>
 #include <hex/dryrun.h>
+#include <hex/log.h>
+#include <hex/process.h>
+#include <hex/process_util.h>
+#include <sstream>
+#include <unistd.h>
 
 #include <cube/cluster.h>
 
 #define KEYCLOAK_SAML_METADATA_FILE "/etc/keycloak/saml-metadata.xml"
 #define KEYCLOAK_SAML_METADATA_FILE_TMP "/tmp/keycloak-saml-metadata.xml"
 
-static const char KEYCLOAK_VALUES_CHART[] = "/opt/keycloak/chart-values.yaml";
+static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -28,7 +29,7 @@ CONFIG_TUNING_SPEC_STR(APPLIANCE_LOGIN_GREETING);
 PARSE_TUNING_STR(s_loginGreeting, APPLIANCE_LOGIN_GREETING);
 
 static bool
-ParseAppliance(const char *name, const char *value, bool isNew)
+ParseAppliance(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 0);
     return true;
@@ -41,7 +42,7 @@ NotifyAppliance(bool modified)
 }
 
 static const std::string
-EscapeQuote(const std::string &str)
+escapeQuote(const std::string& str)
 {
     std::stringstream out;
     for (std::string::const_iterator it = str.begin(); it != str.end(); it++) {
@@ -62,23 +63,45 @@ EscapeQuote(const std::string &str)
 }
 
 static bool
+updateKeycloakChartValues(const std::string loginGreeting)
+{
+    if (access(KEYCLOAK_CHART_VALUES, F_OK) != 0) {
+        HexLogError("failed to access %s", KEYCLOAK_CHART_VALUES);
+        return false;
+    }
+
+    int ret = 0;
+
+    if (loginGreeting.empty()) {
+        // remove the login greeting message from keycloak helm values chart
+        ret = HexUtilSystemF(
+            0,
+            0,
+            "sed -i '/LOGIN_GREETING/{n;s/value:.*/value:/}' %s",
+            KEYCLOAK_CHART_VALUES);
+    } else {
+        // inject the login greeting message to keycloak through the helm values chart
+        ret = HexUtilSystemF(
+            0,
+            0,
+            "sed -i '/LOGIN_GREETING/{n;s/value:.*/value: \"%s\"/}' %s", escapeQuote(loginGreeting).c_str(),
+            KEYCLOAK_CHART_VALUES);
+    }
+
+    return (ret == 0);
+}
+
+static bool
 Commit(bool modified, int dryLevel)
 {
     // TODO: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
     if (s_bApplianceModified) {
-        if (access(KEYCLOAK_VALUES_CHART, F_OK) != 0) {
-            HexLogError("Unable to write the login greeting message to %s", KEYCLOAK_VALUES_CHART);
+        if (!updateKeycloakChartValues(s_loginGreeting)) {
+            HexLogError(
+                "unable to write the login greeting message to %s", KEYCLOAK_CHART_VALUES);
             return false;
-        }
-    
-        if (s_loginGreeting.empty()) {
-            // remove the login greeting message from keycloak helm values chart
-            HexUtilSystemF(0, 0, "sed -i '/LOGIN_GREETING/{n;s/value:.*/value:/}' %s", KEYCLOAK_VALUES_CHART);
-        } else {
-            // inject the login greeting message to keycloak through the helm values chart
-            HexUtilSystemF(0, 0, "sed -i '/LOGIN_GREETING/{n;s/value:.*/value: \"%s\"/}' %s", EscapeQuote(s_loginGreeting).c_str(), KEYCLOAK_VALUES_CHART);
         }
 
         // should not destroy keycloak during node level bootstrapping
@@ -95,7 +118,7 @@ Commit(bool modified, int dryLevel)
 }
 
 static int
-ClusterStartMain(int argc, char **argv)
+ClusterStartMain(int argc, char** argv)
 {
     if (argc != 1) {
         return EXIT_FAILURE;
@@ -131,3 +154,17 @@ CONFIG_OBSERVES(keycloak, appliance, ParseAppliance, NotifyAppliance);
 CONFIG_MIGRATE(keycloak, "/etc/keycloak");
 
 CONFIG_TRIGGER_WITH_SETTINGS(keycloak, "cluster_start", ClusterStartMain);
+
+static void
+StatusKeycloakUsage(void)
+{
+    fprintf(stderr, "Usage: %s status_keycloak\n", HexLogProgramName());
+}
+
+static int
+StatusKeycloakMain(int argc, char** argv)
+{
+    return HexSpawn(0, "/usr/local/bin/k3s", "kubectl", "get", "all", "-n", "keycloak", "-o", "wide", NULL);
+}
+
+CONFIG_COMMAND(status_keycloak, StatusKeycloakMain, StatusKeycloakUsage);

@@ -189,15 +189,6 @@ func resetKeycloak() error {
 }
 
 func statusKeycloak() error {
-	if out, outErr, err := util.ExecCmd("/usr/local/bin/k3s", "kubectl",
-		"get", "all", "-n", "keycloak",
-		"-o", "wide",
-	); err != nil {
-		return errors.Wrap(err, outErr)
-	} else {
-		fmt.Println(out)
-	}
-
 	return nil
 }
 
