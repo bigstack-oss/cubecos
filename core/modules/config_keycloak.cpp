@@ -1,19 +1,6 @@
 // CUBE SDK
 
-#include <hex/config_global.h>
-#include <hex/config_module.h>
-#include <hex/config_tuning.h>
-#include <hex/dryrun.h>
-#include <hex/log.h>
-#include <hex/process.h>
-#include <hex/process_util.h>
-#include <sstream>
-#include <unistd.h>
-
-#include <cube/cluster.h>
-
-#define KEYCLOAK_SAML_METADATA_FILE "/etc/keycloak/saml-metadata.xml"
-#define KEYCLOAK_SAML_METADATA_FILE_TMP "/tmp/keycloak-saml-metadata.xml"
+#include "config_keycloak.hpp"
 
 static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 
@@ -65,6 +52,7 @@ escapeQuote(const std::string& str)
 static bool
 updateKeycloakChartValues(const std::string loginGreeting)
 {
+    HexLogInfo("update %s", KEYCLOAK_CHART_VALUES);
     if (access(KEYCLOAK_CHART_VALUES, F_OK) != 0) {
         HexLogError("failed to access %s", KEYCLOAK_CHART_VALUES);
         return false;
@@ -88,6 +76,12 @@ updateKeycloakChartValues(const std::string loginGreeting)
             KEYCLOAK_CHART_VALUES);
     }
 
+    if (ret == 0) {
+        HexLogInfo("updated %s", KEYCLOAK_CHART_VALUES);
+    } else {
+        HexLogError("failed to update %s", KEYCLOAK_CHART_VALUES);
+    }
+
     return (ret == 0);
 }
 
@@ -100,7 +94,8 @@ Commit(bool modified, int dryLevel)
     if (s_bApplianceModified) {
         if (!updateKeycloakChartValues(s_loginGreeting)) {
             HexLogError(
-                "unable to write the login greeting message to %s", KEYCLOAK_CHART_VALUES);
+                "unable to write the login greeting message to %s",
+                KEYCLOAK_CHART_VALUES);
             return false;
         }
 
@@ -108,12 +103,22 @@ Commit(bool modified, int dryLevel)
         // since we could not get keycloak back on the master node when etcd quorum is not ready
         if (!IsBootstrap()) {
             // destroy the running keycloak
-            HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
+            HexLogInfo("destroy keycloak");
+            if (HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace") == 0) {
+                HexLogInfo("destroyed keycloak");
+            } else {
+                HexLogError("failed to destroy keycloak");
+            }
         }
     }
 
     // restart keycloak
-    HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace");
+    HexLogInfo("commit keycloak");
+    if (HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0) {
+        HexLogInfo("committed keycloak");
+    } else {
+        HexLogError("failed to commit keycloak");
+    }
     return true;
 }
 
@@ -125,13 +130,25 @@ ClusterStartMain(int argc, char** argv)
     }
 
     // destroy the running keycloak
-    HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace");
+    HexLogInfo("destroy keycloak");
+    if (HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace") == 0) {
+        HexLogInfo("destroyed keycloak");
+    } else {
+        HexLogError("failed to destroy keycloak");
+    }
     // restart keycloak
-    HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace");
+    HexLogInfo("commit keycloak");
+    if (HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0) {
+        HexLogInfo("committed keycloak");
+    } else {
+        HexLogError("failed to commit keycloak");
+    }
 
     // sync saml-metadata.xml
     std::string myip = G(MGMT_ADDR);
     if (access(KEYCLOAK_SAML_METADATA_FILE, F_OK) == 0) {
+        HexLogInfo("sync the keycloak saml metadata file");
+
         HexUtilSystemF(0, 0, "cp -f %s %s", KEYCLOAK_SAML_METADATA_FILE, KEYCLOAK_SAML_METADATA_FILE_TMP);
         HexUtilSystemF(0, 0, "hex_sdk cmd -cv scp root@%s:%s %s", myip.c_str(), KEYCLOAK_SAML_METADATA_FILE_TMP, KEYCLOAK_SAML_METADATA_FILE);
         unlink(KEYCLOAK_SAML_METADATA_FILE_TMP);
@@ -162,9 +179,67 @@ StatusKeycloakUsage(void)
 }
 
 static int
-StatusKeycloakMain(int argc, char** argv)
+statusKeycloak()
 {
+    HexLogInfo("print keycloak status");
     return HexSpawn(0, "/usr/local/bin/k3s", "kubectl", "get", "all", "-n", "keycloak", "-o", "wide", NULL);
 }
 
+static int
+StatusKeycloakMain(int argc, char** argv)
+{
+    return statusKeycloak();
+}
+
 CONFIG_COMMAND(status_keycloak, StatusKeycloakMain, StatusKeycloakUsage);
+
+static void
+CheckKeycloakUsage(void)
+{
+    fprintf(stderr, "Usage: %s check_keycloak\n", HexLogProgramName());
+}
+
+static bool
+checkKeycloak()
+{
+    HexLogInfo("check keycloak");
+
+    const std::string app = "statefulset.apps/keycloak";
+    const std::string appNamespace = "keycloak";
+
+    if (!K3sWatchRollOut(app, appNamespace, "1s")) {
+        HexLogError("failed to see all pods rolled out");
+        return false;
+    }
+
+    int nodeCount = K3sGetNodeCounts();
+    if (nodeCount < 0) {
+        HexLogError("failed to get the node count");
+        return false;
+    }
+
+    int replicaCount = K3sGetReadyReplicas(app, appNamespace);
+    if (replicaCount < 0) {
+        HexLogError("failed to get the ready replica count");
+        return false;
+    }
+
+    if (nodeCount != replicaCount) {
+        HexLogError(
+            "control node count: %d doesn't match replica count: %d",
+            nodeCount,
+            replicaCount);
+        return false;
+    }
+
+    HexLogInfo("checked keycloak");
+    return true;
+}
+
+static int
+CheckKeycloakMain(int argc, char** argv)
+{
+    return checkKeycloak() ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+CONFIG_COMMAND(check_keycloak, CheckKeycloakMain, CheckKeycloakUsage);

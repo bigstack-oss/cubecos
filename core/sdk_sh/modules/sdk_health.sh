@@ -1194,9 +1194,9 @@ health_keycloak_report()
 
 health_keycloak_check()
 {
-    if ! cubectl config check keycloak 2>/dev/null ; then
+    if ! $HEX_CFG check_keycloak 2>/dev/null ; then
         ERR_CODE=1
-        ERR_MSG+="`cubectl config status keycloak ; k3s kubectl get events -n keycloak | grep -v -i normal | head`\n"
+        ERR_MSG+="`$HEX_CFG status_keycloak ; k3s kubectl get events -n keycloak | grep -v -i normal | head`\n"
         ERR_LOG+="k3s kubectl describe node $HOSTNAME"
     fi
 

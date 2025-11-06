@@ -193,24 +193,6 @@ func statusKeycloak() error {
 }
 
 func checkKeycloak() error {
-	if err := k3sWatchRollOut("statefulset.apps/keycloak", "keycloak", "1s"); err != nil {
-		return errors.WithStack(err)
-	}
-
-	nodeCount, err := k3sGetNodeCounts()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	replicaCount, err := k3sGetReadyReplicas("statefulset.apps/keycloak", "keycloak")
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	if nodeCount != replicaCount {
-		return fmt.Errorf("control node count: %d doesn't match replica count: %d", nodeCount, replicaCount)
-	}
-
 	return nil
 }
 
