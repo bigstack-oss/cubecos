@@ -3,6 +3,8 @@
 #ifndef CUBE_CONFIG_KEYCLOAK_H
 #define CUBE_CONFIG_KEYCLOAK_H
 
+#include "include/role_cubesys.h"
+
 #include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>

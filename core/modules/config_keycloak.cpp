@@ -3,17 +3,23 @@
 #include "config_keycloak.hpp"
 
 static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
+static const std::string APP = "statefulset.apps/keycloak";
+static std::string APP_NAMESPACE = "keycloak";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
-
-static bool s_bApplianceModified = false;
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(APPLIANCE_LOGIN_GREETING);
 
 // parse tunings
 PARSE_TUNING_STR(s_loginGreeting, APPLIANCE_LOGIN_GREETING);
+PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
+
+static bool s_bApplianceModified = false;
+static bool s_bCubeModified = false;
+
+static CubeRole_e s_eCubeRole;
 
 static bool
 ParseAppliance(const char* name, const char* value, bool isNew)
@@ -26,6 +32,20 @@ static void
 NotifyAppliance(bool modified)
 {
     s_bApplianceModified = IsModifiedTune(0);
+}
+
+static bool
+ParseCube(const char* name, const char* value, bool isNew)
+{
+    ParseTune(name, value, isNew, 1);
+    return true;
+}
+
+static void
+NotifyCube(bool modified)
+{
+    s_bCubeModified = IsModifiedTune(1);
+    s_eCubeRole = GetCubeRole(s_cubeRole);
 }
 
 static const std::string
@@ -167,6 +187,7 @@ CONFIG_REQUIRES(keycloak, mysql);
 
 // tuning dependencies
 CONFIG_OBSERVES(keycloak, appliance, ParseAppliance, NotifyAppliance);
+CONFIG_OBSERVES(keycloak, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(keycloak, "/etc/keycloak");
 
@@ -204,10 +225,7 @@ checkKeycloak()
 {
     HexLogInfo("check keycloak");
 
-    const std::string app = "statefulset.apps/keycloak";
-    const std::string appNamespace = "keycloak";
-
-    if (!K3sWatchRollOut(app, appNamespace, "1s")) {
+    if (!K3sWatchRollOut(APP, APP_NAMESPACE, "1s")) {
         HexLogError("failed to see all pods rolled out");
         return false;
     }
@@ -218,7 +236,7 @@ checkKeycloak()
         return false;
     }
 
-    int replicaCount = K3sGetReadyReplicas(app, appNamespace);
+    int replicaCount = K3sGetReadyReplicas(APP, APP_NAMESPACE);
     if (replicaCount < 0) {
         HexLogError("failed to get the ready replica count");
         return false;
@@ -243,3 +261,38 @@ CheckKeycloakMain(int argc, char** argv)
 }
 
 CONFIG_COMMAND(check_keycloak, CheckKeycloakMain, CheckKeycloakUsage);
+
+static void
+RepairKeycloakUsage(void)
+{
+    fprintf(stderr, "Usage: %s repair_keycloak\n", HexLogProgramName());
+}
+
+static bool
+repairKeycloak()
+{
+    if (!IsControl(s_eCubeRole)) {
+        HexLogNotice("keycloak should not be repaired from a non-control node");
+        return true;
+    }
+
+    if (!K3sDeleteAllPods(APP_NAMESPACE)) {
+        HexLogError("failed to delete all pods of keycloak");
+        return false;
+    }
+
+    if (!K3sWatchRollOut(APP, APP_NAMESPACE, "3m")) {
+        HexLogError("failed to see all pods rolled out");
+        return false;
+    }
+
+    return true;
+}
+
+static int
+RepairKeycloakMain(int argc, char** argv)
+{
+    return repairKeycloak() ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+CONFIG_COMMAND_WITH_SETTINGS(repair_keycloak, RepairKeycloakMain, RepairKeycloakUsage);

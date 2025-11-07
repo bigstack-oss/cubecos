@@ -1205,7 +1205,7 @@ health_keycloak_check()
 
 health_keycloak_repair()
 {
-    cubectl config repair keycloak
+    $HEX_CFG repair_keycloak
 }
 
 health_ceph_report()

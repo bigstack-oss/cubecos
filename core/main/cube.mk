@@ -124,7 +124,6 @@ hex_config_LIBS += $(PROJ_LIBDIR)/libcube_sdk.a $(PROJ_LIBDIR)/libmysql_util.a
 # cube moudles
 hex_config_MODULES += config_cluster.o
 hex_config_MODULES += config_docker.o
-hex_config_MODULES += config_keycloak.o
 hex_config_MODULES += config_rancher.o
 hex_config_MODULES += config_cubesys.o
 hex_config_MODULES += config_cube_scan.o
@@ -161,6 +160,7 @@ hex_config_MODULES += config_corosync.o
 hex_config_MODULES += config_pacemaker.o
 hex_config_MODULES += config_haproxy.o
 hex_config_MODULES += config_k3s.o
+hex_config_MODULES += config_keycloak.o
 hex_config_MODULES += config_grafana.o
 hex_config_MODULES += config_volume_meta.o
 hex_config_MODULES += config_influxdb.o

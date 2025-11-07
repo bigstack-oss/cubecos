@@ -14,6 +14,14 @@
 int K3sGetNodeCounts();
 
 /**
+ * Get the number of ready replicas.
+ * Return -1, if the output is not an integer.
+ */
+int K3sGetReadyReplicas(
+    const std::string app,
+    const std::string appNamespace);
+
+/**
  * Check if the app pods are all rolled out.
  */
 bool K3sWatchRollOut(
@@ -22,11 +30,8 @@ bool K3sWatchRollOut(
     const std::string timeout);
 
 /**
- * Get the number of ready replicas.
- * Return -1, if the output is not an integer.
+ * Delete all pods within a namespace.
  */
-int K3sGetReadyReplicas(
-    const std::string app,
-    const std::string appNamespace);
+bool K3sDeleteAllPods(const std::string appNamespace);
 
 #endif /* endif CUBE_K3S_H */

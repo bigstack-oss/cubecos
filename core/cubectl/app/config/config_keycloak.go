@@ -197,21 +197,6 @@ func checkKeycloak() error {
 }
 
 func repairKeycloak() error {
-	if !cubeSettings.IsRole(util.ROLE_CONTROL) {
-		return nil
-	}
-
-	if _, outErr, err := util.ExecCmd("/usr/local/bin/k3s", "kubectl",
-		"delete", "pods", "--all", "-n", "keycloak",
-		"--grace-period=0", "--force",
-	); err != nil {
-		return errors.Wrap(err, outErr)
-	}
-
-	if err := k3sWatchRollOut("statefulset.apps/keycloak", "keycloak", "3m"); err != nil {
-		return errors.WithStack(err)
-	}
-
 	return nil
 }
 

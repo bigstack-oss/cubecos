@@ -25,21 +25,6 @@ int K3sGetNodeCounts()
     return count;
 }
 
-bool K3sWatchRollOut(
-    const std::string app,
-    const std::string appNamespace,
-    const std::string timeout)
-{
-    return HexUtilSystemF(
-               0,
-               0,
-               "/usr/local/bin/k3s kubectl rollout status --timeout %s %s -n %s",
-               timeout.c_str(),
-               app.c_str(),
-               appNamespace.c_str())
-        == 0;
-}
-
 int K3sGetReadyReplicas(
     const std::string app,
     const std::string appNamespace)
@@ -65,4 +50,29 @@ int K3sGetReadyReplicas(
     }
 
     return count;
+}
+
+bool K3sWatchRollOut(
+    const std::string app,
+    const std::string appNamespace,
+    const std::string timeout)
+{
+    return HexUtilSystemF(
+               0,
+               0,
+               "/usr/local/bin/k3s kubectl rollout status --timeout %s %s -n %s",
+               timeout.c_str(),
+               app.c_str(),
+               appNamespace.c_str())
+        == 0;
+}
+
+bool K3sDeleteAllPods(const std::string appNamespace)
+{
+    return HexUtilSystemF(
+               0,
+               0,
+               "/usr/local/bin/k3s kubectl delete pods --all -n %s --grace-period=0 --force",
+               appNamespace.c_str())
+        == 0;
 }
