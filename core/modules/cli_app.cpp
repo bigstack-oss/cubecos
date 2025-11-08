@@ -13,6 +13,11 @@
 
 #include <cube/cubesys.h>
 
+static const char* HINT_INPUT_PUBLIC_NET = "Input public net for the framework(e.g. 'public' and so on): ";
+static const char* HINT_INPUT_MGMT_NET = "Input management net for the framework(e.g. 'public' or 'mgmt' and so on): ";
+static const char* HINT_INPUT_LB_IP = "Input load balancer ip for the framework(should be an ip address in the range of public net): ";
+static const char* HINT_INPUT_OS_IMAGE = "Input os image for the framework(default is rancher-cluster-image-rke2-v1.32.4.raw): ";
+
 static int
 frameworkInstallMain(int argc, const char** argv)
 {
@@ -150,6 +155,79 @@ appProjectDeleteMain(int argc, const char** argv)
 }
 
 
+static int
+frameworkCheckPrerequisitesMain(int argc, const char** argv)
+{
+    int result = HexSystemF(0, "appctl check framework prerequisites");
+    if (result != 0) {
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+static int
+frameworkCreateMain(int argc, const char** argv)
+{
+    if (argc > 6 /* [1]="FRAMEWORK NAME", [2]="PUBLIC NET", [3]="MANAGEMENT NET", [4]="LOAD BALANCER IP", [5]="OS IMAGE" */) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string name, publicNet, mgmtNet, loadBalancerIp, osImage;
+    if (!CliReadInputStr(argc, argv, 1, "Input name for new framework: ", &name) || name.length() <= 0) {
+        CliPrint("framework name is required");
+        return CLI_INVALID_ARGS;
+    }
+
+    if (!CliReadInputStr(argc, argv, 2, HINT_INPUT_PUBLIC_NET, &publicNet) || publicNet.length() <= 0) {
+        CliPrint("public net is required");
+        return CLI_INVALID_ARGS;
+    }
+
+    if (!CliReadInputStr(argc, argv, 3, HINT_INPUT_MGMT_NET, &mgmtNet) || mgmtNet.length() <= 0) {
+        CliPrint("management net is required");
+        return CLI_INVALID_ARGS;
+    }
+
+    if (!CliReadInputStr(argc, argv, 4, HINT_INPUT_LB_IP, &loadBalancerIp) || loadBalancerIp.length() <= 0) {
+        CliPrint("load balancer ip is required");
+        return CLI_INVALID_ARGS;
+    }
+
+    if (!CliReadInputStr(argc, argv, 4, HINT_INPUT_OS_IMAGE, &osImage) || osImage.length() <= 0) {
+        CliPrint("os image is required");
+        return CLI_INVALID_ARGS;
+    }
+
+    int result = HexSystemF(0, "appctl install framework --name=%s --net.public=%s --net.mgmt=%s --net.loadbalancer.ip=%s --os.image=%s", name.c_str(), publicNet.c_str(), mgmtNet.c_str(), loadBalancerIp.c_str(), osImage.c_str());
+    if (result != 0) {
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+static int
+frameworkDeleteMain(int argc, const char** argv)
+{
+    if (argc > 2 /* [1]="FRAMEWORK NAME" */) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string name;
+    if (!CliReadInputStr(argc, argv, 1, "Input name to delete framework: ", &name) || name.length() <= 0) {
+        CliPrint("framework name is required");
+        return CLI_INVALID_ARGS;
+    }
+
+    int result = HexSystemF(0, "appctl delete framework --name=%s", name.c_str());
+    if (result != 0) {
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
 CLI_MODE(CLI_TOP_MODE, "app", "Work with applications.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
@@ -176,4 +254,16 @@ CLI_MODE_COMMAND("app", "project_create", appProjectCreateMain, NULL,
 CLI_MODE_COMMAND("app", "project_delete", appProjectDeleteMain, NULL,
                  "Delete app project.",
                  "project_delete PROJ_NAME");
+
+CLI_MODE_COMMAND("app", "framework_check_prerequisites", frameworkCheckPrerequisitesMain, NULL,
+                 "Check app-framework prerequisites.",
+                 "framework_check_prerequisites");
+
+CLI_MODE_COMMAND("app", "framework_create", frameworkCreateMain, NULL,
+                 "Create app-framework.",
+                 "framework_create FRAMEWORK_NAME PUBLIC_NET MANAGEMENT_NET LOAD_BALANCER_IP OS_IMAGE");
+
+CLI_MODE_COMMAND("app", "framework_delete", frameworkDeleteMain, NULL,
+                 "Delete app-framework.",
+                 "framework_delete FRAMEWORK_NAME");
 
