@@ -167,6 +167,27 @@ frameworkCheckPrerequisitesMain(int argc, const char** argv)
 }
 
 static int
+frameworkCheckPortAccessMain(int argc, const char** argv)
+{
+    if (argc > 2 /* [1]="FRAMEWORK NAME" */) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string name, publicNet, mgmtNet, loadBalancerIp, osImage;
+    if (!CliReadInputStr(argc, argv, 1, "Input name for new framework: ", &name) || name.length() <= 0) {
+        CliPrint("framework name is required");
+        return CLI_INVALID_ARGS;
+    }
+
+    int result = HexSystemF(0, "appctl check framework portAaccess --name=%s", name.c_str());
+    if (result != 0) {
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+static int
 frameworkCreateMain(int argc, const char** argv)
 {
     if (argc > 6 /* [1]="FRAMEWORK NAME", [2]="PUBLIC NET", [3]="MANAGEMENT NET", [4]="LOAD BALANCER IP", [5]="OS IMAGE" */) {
@@ -194,7 +215,7 @@ frameworkCreateMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    if (!CliReadInputStr(argc, argv, 4, HINT_INPUT_OS_IMAGE, &osImage) || osImage.length() <= 0) {
+    if (!CliReadInputStr(argc, argv, 5, HINT_INPUT_OS_IMAGE, &osImage) || osImage.length() <= 0) {
         CliPrint("os image is required");
         return CLI_INVALID_ARGS;
     }
@@ -258,6 +279,10 @@ CLI_MODE_COMMAND("app", "project_delete", appProjectDeleteMain, NULL,
 CLI_MODE_COMMAND("app", "framework_check_prerequisites", frameworkCheckPrerequisitesMain, NULL,
                  "Check app-framework prerequisites.",
                  "framework_check_prerequisites");
+
+CLI_MODE_COMMAND("app", "framework_check_port_access", frameworkCheckPortAccessMain, NULL,
+                 "Check app-framework port access.",
+                 "framework_check_port_access");
 
 CLI_MODE_COMMAND("app", "framework_create", frameworkCreateMain, NULL,
                  "Create app-framework.",
