@@ -28,7 +28,12 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 
 SRV="bootstrap"
 eval "ERR_DESC_$SRV[1]='service unready'"
-eval "ERR_DESC_$SRV[2]='settings misconfigured'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="settings"
+eval "ERR_DESC_$SR[1]='misconfigured alerts'"
+eval "ERR_DESC_$SR[2]='misconfigured net_hostname'"
+eval "ERR_DESC_$SR[3]='misconfigured tunings'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="license"

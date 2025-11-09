@@ -281,8 +281,8 @@ health_settings_check()
     local num_node=${#CUBE_NODE_LIST_HOSTNAMES[@]}
 
     for V in $(cat $SETTINGS_TXT | egrep -v "^#|^$" | cut -d"=" -f1 | sed 's/ $//' | tr "." "_") ; do
-        local CNT_UNIQ=$(cmd "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | sort -u | wc -l)
-        ERR_MSG+="`cmd -cv \"source $HEX_TUN $SETTINGS_TXT ; echo \\$HOSTNAME ${V}=\\$T_${V}\"`\n"
+        local CNT_UNIQ=$(cmd -v "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | cut -d"|" -f3 | sort -u | wc -l)
+        ERR_MSG+="`cmd -v \"source $HEX_TUN $SETTINGS_TXT ; echo \\$HOSTNAME ${V}=\\$T_${V}\"`\n"
         case $V in
             cubesys_role|cubesys_mgmt_cidr|cubesys_control_vip|cubesys_overlay|cubesys_provider|cubesys_storage|cubesys_management|net_if_*|ntp_server|cubesys_probeusb)
                 if [ ${CNT_UNIQ:-0} -ne 1 ] ; then
@@ -291,19 +291,22 @@ health_settings_check()
                 fi
                 ;;
             *_alert_*)
-                CNT_UNIQ=$(timeout $SRVTO cmd -cv "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | cut -d"|" -f3 | sort -u | wc -l)
+                CNT_UNIQ=$(timeout $SRVTO $HEX_SDK cmd -cv "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | cut -d"|" -f3 | sort -u | wc -l)
                 if [ ${CNT_UNIQ:-0} -ne 1 ] ; then
+                    ERR_MSG+="mismatched ${V}\n"
                     ERR_CODE=1
                 fi
                 ;;
             net_hostname)
                 if [ ${CNT_UNIQ:-0} -ne ${num_node:-3} ] ; then
-                    ERR_CODE=1
+                    ERR_MSG+="mismatched ${V}\n"
+                    ERR_CODE=2
                 fi
                 ;;
             *)
                 if [ ${CNT_UNIQ:-0} -ne 1 ] ; then
-                    ERR_CODE=1
+                    ERR_MSG+="mismatched ${V}\n"
+                    ERR_CODE=3
                 fi
                 ;;
         esac

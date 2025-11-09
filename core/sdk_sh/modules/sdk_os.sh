@@ -13,7 +13,24 @@ NEUTRON_AGENT_CACHE=/var/appliance-db/neutron_agent.list
 
 os_get_image_oses()
 {
-    $HEX_SDK api_get_images_materials | jq -r ".data.oses | to_entries[] | \"\(.value)\""
+    local img_json="$($HEX_SDK api_get_images_materials)"
+
+    if [ "x$img_json" = "x" ] || [[ "$img_json" =~ "503" ]] ; then
+        cat <<EOF
+CentOS
+Fedora
+Ubuntu
+Debian
+Windows
+Rocky
+FreeBSD
+CoreOS
+Arch
+Others
+EOF
+    else
+        echo $img_json | jq -r ".data.oses | to_entries[] | \"\(.value)\""
+    fi
 }
 
 os_wsgi_conf_update()
@@ -724,7 +741,7 @@ _os_image_distro_ver()
 {
     local img=${1:-NOSUCHIMAGE}
     local distro=other
-    local ver=22.04
+    local ver=
 
     if echo $img | grep -q -i -e rancher-cluster-image -e amphora -e manila ; then
         ver=$(echo ${img%.*} | cut -d "_" -f2)
@@ -755,8 +772,7 @@ os_image_import()
     local pool=${5:-glance-images}
     local mf_importing="/run/${FUNCNAME[0]}_${file}_${name}_${pool}"
     if  cmd -v ls $mf_importing | grep -q "|0|" ; then
-        cmd -v ls $mf_importing
-        Error "Image is being imported"
+        Error "Image is being imported. If this is not the case, remove $mf_importing on all nodes"
     else
         touch $mf_importing
     fi
@@ -795,19 +811,45 @@ os_image_import()
             local img_raw=$(mktemp -u "$CEPHFS_GLANCE_DIR/${file##*/}_XXXX.raw")
         fi
 
-        local img_dir=$(dirname $img_raw)
         echo "[$(date +"%T")] Converting image to RAW format ... "
-        virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
-        if [ -e ${img_dir}/${file%.*}*.xml ] ; then
-            mv -f ${img_dir}/${file%.*}*-* $img_raw
-            if grep -i "os firmware" ${img_dir}/${file%.*}*.xml 2>/dev/null | grep -q -i efi ; then
+        if [ "x$pool" = "xglance-images" ] ; then
+            qemu-img convert -p -O raw "$IMG" "$img_raw"
+            if [[ $file =~ efi ]] ; then
                 properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
             else
                 properties+=" --property hw_firmware_type=bios"
             fi
-            rm -f ${img_dir}/${file%.*}*.xml
         else
-            qemu-img convert -p -O raw "$IMG" "$img_raw" 2>/dev/null
+            local gigabytes_json=$($OPENSTACK quota show --volume --usage ${proj_name:-admin} -f json | jq -r ".[] | select(.Resource==\"gigabytes\")")
+            local limit=$(echo $gigabytes_json | jq -r ".Limit")
+            local used=$(echo $gigabytes_json | jq -r ".\"In Use\"")
+            local free=$(($limit - $used))
+            local vol_name=$(mktemp -u volume-${name}-XXXX)
+            if [ $free -le $((img_siz / 1024 / 1024 / 1024)) ] ; then
+                cmd rm -f $mf_importing
+                Error "${proj_name:-admin} quota's free volume space $free(GB) is less then needed $((img_siz / 1024 / 1024 / 1024))(GB)"
+            fi
+            local volumes_json=$($OPENSTACK quota show --volume --usage ${proj_name:-admin} -f json | jq -r ".[] | select(.Resource==\"volumes\")")
+            limit=$(echo $volumes_json | jq -r ".Limit")
+            used=$(echo $volumes_json | jq -r ".\"In Use\"")
+            if [ $used -ge $limit ] ; then
+                cmd rm -f $mf_importing
+                Error "${proj_name:-admin} quota's volume ${used}/${limit} (used/limit)"
+            fi
+
+            local img_dir=$(dirname $img_raw)
+            virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
+            if [ -e ${img_dir}/${file%.*}*.xml ] ; then
+                mv -f ${img_dir}/${file%.*}*-* $img_raw
+                if grep -i "os firmware" ${img_dir}/${file%.*}*.xml 2>/dev/null | grep -q -i efi ; then
+                    properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
+                else
+                    properties+=" --property hw_firmware_type=bios"
+                fi
+                rm -f ${img_dir}/${file%.*}*.xml
+            else
+                qemu-img convert -p -O raw "$IMG" "$img_raw" 2>/dev/null
+            fi
         fi
         local img_name=$img_raw
     fi
@@ -822,6 +864,8 @@ os_image_import()
         glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility shared --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
         if [ "x$visibility" = "xprivate" ] ; then
             if [ "x$img_id" = "x" ] ; then
+                [ -z "$img_raw" ] || rm -f "$img_raw"
+                cmd rm -f $mf_importing
                 Error "failed to import image"
             else
                 $OPENSTACK image add project $img_id ${proj_name:-admin}
