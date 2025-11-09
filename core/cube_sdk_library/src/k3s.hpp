@@ -14,6 +14,16 @@
 int K3sGetNodeCounts();
 
 /**
+ * Check if the namespace exists.
+ */
+bool K3sHasNamespace(const std::string appNamespace);
+
+/**
+ * Delete a namespace.
+ */
+bool K3sDeleteNamespace(const std::string appNamespace);
+
+/**
  * Get the number of ready replicas.
  * Return -1, if the output is not an integer.
  */

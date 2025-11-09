@@ -25,6 +25,30 @@ int K3sGetNodeCounts()
     return count;
 }
 
+bool K3sHasNamespace(const std::string appNamespace)
+{
+    return HexUtilSystemF(
+               0,
+               0,
+               "/usr/local/bin/k3s kubectl get namespace %s -o name",
+               appNamespace.c_str())
+        == 0;
+}
+
+bool K3sDeleteNamespace(const std::string appNamespace)
+{
+    if (!K3sHasNamespace(appNamespace)) {
+        return true;
+    }
+
+    return HexUtilSystemF(
+               0,
+               0,
+               "/usr/local/bin/k3s kubectl delete namespace %s",
+               appNamespace.c_str())
+        == 0;
+}
+
 int K3sGetReadyReplicas(
     const std::string app,
     const std::string appNamespace)

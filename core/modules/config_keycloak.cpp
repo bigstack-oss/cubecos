@@ -2,9 +2,11 @@
 
 #include "config_keycloak.hpp"
 
-static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 static const std::string APP = "statefulset.apps/keycloak";
-static std::string APP_NAMESPACE = "keycloak";
+static const std::string APP_NAMESPACE = "keycloak";
+static const std::string CHART_RELEASE_NAME = "keycloak";
+static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
+static const std::string DB_NAME = "keycloak";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -194,7 +196,77 @@ CONFIG_MIGRATE(keycloak, "/etc/keycloak");
 CONFIG_TRIGGER_WITH_SETTINGS(keycloak, "cluster_start", ClusterStartMain);
 
 static void
-StatusKeycloakUsage(void)
+RemoveKeycloakUsage()
+{
+    fprintf(
+        stderr,
+        "Usage: %s remove_keycloak [hard]\n"
+        "    Option hard is not recoverable on clusters with more than one control node.\n",
+        HexLogProgramName());
+}
+
+static bool
+removeKeycloak(const bool isHard)
+{
+    if (!IsControl(s_eCubeRole)) {
+        HexLogNotice("keycloak should not be removed from a non-control node");
+        return true;
+    }
+
+    HexLogInfo("remove keycloak");
+
+    if (!ExecTerraform("destroy", "keycloak", {})) {
+        HexLogError("failed to remove settings managed by terraform on keycloak");
+        return false;
+    }
+    HexLogInfo("destroyed terraform settings on keycloak");
+
+    if (!ExecHelm("uninstall", CHART_RELEASE_NAME, APP_NAMESPACE)) {
+        HexLogError(
+            "failed to uninstall helm chart release %s from %s",
+            CHART_RELEASE_NAME.c_str(),
+            APP_NAMESPACE.c_str());
+        return false;
+    }
+    HexLogInfo("uninstalled keycloak helm chart release");
+
+    if (isHard) {
+        if (!ExecTerraform("destroy", "mysql", { "mysql_dbname=" + DB_NAME })) {
+            HexLogError("failed to remove keycloak database");
+            return false;
+        }
+        HexLogInfo("destroyed keycloak database via terraform");
+
+        if (!K3sDeleteNamespace(APP_NAMESPACE)) {
+            HexLogError("failed to delete namespace %s", APP_NAMESPACE.c_str());
+            return false;
+        }
+        HexLogInfo("deleted keycloak namespace");
+    }
+
+    HexLogInfo("removed keycloak");
+    return true;
+}
+
+static int
+RemoveKeycloakMain(int argc, char** argv)
+{
+    if (argc > 2) {
+        return EXIT_FAILURE;
+    }
+
+    if (argc == 2) {
+        if (std::string(argv[1]).compare("hard") == 0) {
+            return removeKeycloak(true) ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+    }
+    return removeKeycloak(false) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+CONFIG_COMMAND_WITH_SETTINGS(remove_keycloak, RemoveKeycloakMain, RemoveKeycloakUsage);
+
+static void
+StatusKeycloakUsage()
 {
     fprintf(stderr, "Usage: %s status_keycloak\n", HexLogProgramName());
 }
@@ -215,7 +287,7 @@ StatusKeycloakMain(int argc, char** argv)
 CONFIG_COMMAND(status_keycloak, StatusKeycloakMain, StatusKeycloakUsage);
 
 static void
-CheckKeycloakUsage(void)
+CheckKeycloakUsage()
 {
     fprintf(stderr, "Usage: %s check_keycloak\n", HexLogProgramName());
 }
@@ -229,6 +301,7 @@ checkKeycloak()
         HexLogError("failed to see all pods rolled out");
         return false;
     }
+    HexLogInfo("all keycloak pods are rolled out");
 
     int nodeCount = K3sGetNodeCounts();
     if (nodeCount < 0) {
@@ -249,6 +322,7 @@ checkKeycloak()
             replicaCount);
         return false;
     }
+    HexLogInfo("keycloak replica count matched the node count");
 
     HexLogInfo("checked keycloak");
     return true;
@@ -263,7 +337,7 @@ CheckKeycloakMain(int argc, char** argv)
 CONFIG_COMMAND(check_keycloak, CheckKeycloakMain, CheckKeycloakUsage);
 
 static void
-RepairKeycloakUsage(void)
+RepairKeycloakUsage()
 {
     fprintf(stderr, "Usage: %s repair_keycloak\n", HexLogProgramName());
 }
@@ -276,16 +350,21 @@ repairKeycloak()
         return true;
     }
 
+    HexLogInfo("repair keycloak");
+
     if (!K3sDeleteAllPods(APP_NAMESPACE)) {
         HexLogError("failed to delete all pods of keycloak");
         return false;
     }
+    HexLogInfo("deleted all keycloak pods");
 
     if (!K3sWatchRollOut(APP, APP_NAMESPACE, "3m")) {
         HexLogError("failed to see all pods rolled out");
         return false;
     }
+    HexLogInfo("all keycloak pods are rolled out");
 
+    HexLogInfo("repaired keycloak");
     return true;
 }
 
@@ -296,3 +375,36 @@ RepairKeycloakMain(int argc, char** argv)
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(repair_keycloak, RepairKeycloakMain, RepairKeycloakUsage);
+
+static void
+RemoveKeycloakSamlMetadataUsage()
+{
+    fprintf(stderr, "Usage: %s remove_keycloak_saml_metadata\n", HexLogProgramName());
+}
+
+static void
+removeKeycloakSamlMetadata()
+{
+    if (!IsControl(s_eCubeRole)) {
+        HexLogNotice("keycloak saml metadata does not exist on a non-control node");
+        return;
+    }
+
+    HexLogInfo("remove %s", KEYCLOAK_SAML_METADATA_FILE);
+    if (access(KEYCLOAK_SAML_METADATA_FILE, F_OK) != 0) {
+        HexLogInfo("%s not found", KEYCLOAK_SAML_METADATA_FILE);
+        return;
+    }
+
+    unlink(KEYCLOAK_SAML_METADATA_FILE);
+    HexLogInfo("removed %s", KEYCLOAK_SAML_METADATA_FILE);
+}
+
+static int
+RemoveKeycloakSamlMetadataMain(int argc, char** argv)
+{
+    removeKeycloakSamlMetadata();
+    return EXIT_SUCCESS;
+}
+
+CONFIG_COMMAND_WITH_SETTINGS(remove_keycloak_saml_metadata, RemoveKeycloakSamlMetadataMain, RemoveKeycloakSamlMetadataUsage);

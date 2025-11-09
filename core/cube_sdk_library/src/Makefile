@@ -10,7 +10,9 @@ SUBDIRS += cubesys
 
 LIB = $(PROJ_LIBDIR)/libcube_sdk.a
 
-LIB_SRCS = k3s.cpp
+LIB_SRCS = helm.cpp
+LIB_SRCS += k3s.cpp
+LIB_SRCS += terraform.cpp
 
 COMPILE_FOR_SHARED_LIB = 1
 

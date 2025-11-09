@@ -5,6 +5,7 @@
 
 #include "include/role_cubesys.h"
 
+#include <helm.hpp>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
@@ -13,6 +14,7 @@
 #include <hex/process.h>
 #include <hex/process_util.h>
 #include <k3s.hpp>
+#include <terraform.hpp>
 
 #include <unistd.h>
 
