@@ -12,6 +12,7 @@ static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.x
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
+CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(APPLIANCE_LOGIN_GREETING);
@@ -223,19 +224,22 @@ checkKeycloakEndpoint(const std::string& endpointIp)
     // retry 15 times
     bool isSuccessful = false;
     for (int i = 0; i < 15; i++) {
-        const HttpResponse r = HttpGet(url);
+        const HttpRequest req = {
+            .url = url,
+        };
+        const HttpResponse res = GetHttp(req);
 
-        if (r.error.length() > 0) {
+        if (res.error.length() > 0) {
             HexLogError("failed to send the http request");
         } else {
-            if (r.statusCode != 200) {
-                HexLogError("keycloak is not ready, status code: %d", r.statusCode);
+            if (!isHttpResponseSuccessful(res)) {
+                HexLogError("keycloak is not ready, status code: %d", res.statusCode);
             } else {
                 isSuccessful = true;
             }
         }
 
-        CleanupHttpResponse(r);
+        CleanupHttpResponse(res);
 
         if (isSuccessful) {
             HexLogInfo("keycloak endpoint is ready");
@@ -295,12 +299,15 @@ downloadKeycloakSamlMetadata(const std::string& endpointIp)
     bool isDownloadSuccessful = false;
     bool isCopySuccessful = false;
     for (int i = 0; i < 120; i++) {
-        const HttpResponse r = HttpGet(url);
+        const HttpRequest req = {
+            .url = url,
+        };
+        const HttpResponse res = GetHttp(req);
 
-        if (r.error.length() > 0) {
+        if (res.error.length() > 0) {
             HexLogError("failed to send the http request");
         } else {
-            if (r.statusCode != 200) {
+            if (!isHttpResponseSuccessful(res)) {
                 HexLogError("failed to download keycloak saml metadata");
             } else {
                 isDownloadSuccessful = true;
@@ -308,12 +315,12 @@ downloadKeycloakSamlMetadata(const std::string& endpointIp)
                 std::string fsError;
                 isCopySuccessful = CopyFile(
                     fsError,
-                    r.outputFileName,
+                    res.outputFileName,
                     KEYCLOAK_SAML_METADATA_FILE);
             }
         }
 
-        CleanupHttpResponse(r);
+        CleanupHttpResponse(res);
 
         if (isDownloadSuccessful) {
             HexLogInfo("downloaded keycloak saml metadata");
@@ -376,7 +383,8 @@ Commit(bool modified, int dryLevel)
         }
 
         // check if the Keycloak endpoint is reachable
-        if (!checkKeycloakEndpoint("10.32.45.10")) {
+        std::string sharedId = G(SHARED_ID);
+        if (!checkKeycloakEndpoint(sharedId)) {
             HexLogError("keycloak endpoint is not ready");
 
             // let other modules to commit
@@ -390,7 +398,7 @@ Commit(bool modified, int dryLevel)
 
         // pull down the saml metadata and save it to /etc/keycloak/saml-metadata.xml
         if (!hasKeycloakSamlMetadataFile()) {
-            if (!downloadKeycloakSamlMetadata("10.32.45.10")) {
+            if (!downloadKeycloakSamlMetadata(sharedId)) {
                 HexLogError("failed to download the saml metadata from keycloak");
             }
         }
@@ -470,6 +478,20 @@ ClusterStartMain(int argc, char** argv)
 }
 
 CONFIG_TRIGGER_WITH_SETTINGS(keycloak, "cluster_start", ClusterStartMain);
+
+static void
+InstallKeycloakUsage()
+{
+    fprintf(stderr, "Usage: %s install_keycloak\n", HexLogProgramName());
+}
+
+static int
+InstallKeycloakMain(int argc, char** argv)
+{
+    return Commit(false, DRYLEVEL_NONE) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+CONFIG_COMMAND_WITH_SETTINGS(install_keycloak, InstallKeycloakMain, InstallKeycloakUsage);
 
 static void
 RemoveKeycloakUsage()
@@ -648,3 +670,234 @@ RemoveKeycloakSamlMetadataMain(int argc, char** argv)
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(remove_keycloak_saml_metadata, RemoveKeycloakSamlMetadataMain, RemoveKeycloakSamlMetadataUsage);
+
+static void
+UpdateKeycloakAdminPasswordUsage()
+{
+    fprintf(stderr, "Usage: %s update_keycloak_admin_password\n", HexLogProgramName());
+}
+
+static std::string
+getKeycloakAdminAccessToken(
+    const std::string& endpointIp,
+    const std::string& adminPass)
+{
+    HexLogInfo("get keycloak admin access token");
+
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+    Url url = Url(host, "/auth/realms/master/protocol/openid-connect/token");
+    url.scheme = "https";
+
+    const std::vector<std::string> formBody = {
+        "grant_type=password",
+        "client_id=admin-cli",
+        "username=admin",
+        "password=" + adminPass,
+    };
+
+    const HttpResponse r = PostFormHttp(url, formBody);
+
+    if (!r.error.empty()) {
+        HexLogError("failed to send the http request");
+
+        CleanupHttpResponse(r);
+        return "";
+    }
+    if (!isHttpResponseSuccessful(r)) {
+        HexLogError("failed to get the response");
+
+        CleanupHttpResponse(r);
+        return "";
+    }
+
+    std::string fsError;
+    const std::string responseString = ReadFile(fsError, r.outputFileName);
+    CleanupHttpResponse(r);
+
+    if (!fsError.empty()) {
+        HexLogError("failed to read out the response");
+        return "";
+    }
+
+    std::string jsonError;
+    const json11::Json responseJson = json11::Json::parse(responseString.c_str(), jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("failed to parse the response");
+        return "";
+    }
+
+    std::string token;
+    if (responseJson["access_token"].is_string()) {
+        token = responseJson["access_token"].string_value();
+    }
+
+    HexLogInfo("got keycloak admin access token");
+    return token;
+}
+
+static std::string
+getKeycloakUserId(
+    const std::string& endpointIp,
+    const std::string& accessToken,
+    const std::string& username)
+{
+    HexLogInfo("get keycloak user id of user %s", username.c_str());
+
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+    Url url = Url(
+        host,
+        "/auth/admin/realms/master/users",
+        {
+            { "username", username },
+        });
+    url.scheme = "https";
+
+    const HttpRequest req = {
+        .url = url,
+        .header = {
+            { "Authorization", "Bearer " + accessToken },
+        },
+    };
+    const HttpResponse res = GetHttp(req);
+
+    if (!res.error.empty()) {
+        HexLogError("failed to send the http request");
+
+        CleanupHttpResponse(res);
+        return "";
+    }
+    if (!isHttpResponseSuccessful(res)) {
+        HexLogError("failed to get the response");
+
+        CleanupHttpResponse(res);
+        return "";
+    }
+
+    std::string fsError;
+    const std::string responseString = ReadFile(fsError, res.outputFileName);
+    CleanupHttpResponse(res);
+
+    if (!fsError.empty()) {
+        HexLogError("failed to read out the response");
+        return "";
+    }
+
+    std::string jsonError;
+    const json11::Json responseJson = json11::Json::parse(responseString.c_str(), jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("failed to parse the response");
+        return "";
+    }
+
+    std::string userId;
+    if (responseJson.is_array()) {
+        const json11::Json::array& userArray = responseJson.array_items();
+
+        if (userArray.size() > 0 && userArray[0]["id"].is_string()) {
+            userId = userArray[0]["id"].string_value();
+        }
+    }
+
+    HexLogInfo("got keycloak user id of user %s", username.c_str());
+    return userId;
+}
+
+static bool
+updateKeycloakUserPassword(
+    const std::string& endpointIp,
+    const std::string& accessToken,
+    const std::string& userId,
+    const std::string& password)
+{
+    HexLogInfo("update the password of the keycloak user with user id %s", userId.c_str());
+
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+    Url url = Url(
+        host,
+        "/auth/admin/realms/master/users/" + userId + "/reset-password");
+    url.scheme = "https";
+
+    const HttpRequest req = {
+        .method = "PUT",
+        .url = url,
+        .header = {
+            { "Authorization", "Bearer " + accessToken },
+            { "Content-Type", "application/json" },
+        },
+        .body = R"({"type":"password","value":")" + password + R"(","temporary":false})",
+    };
+    const HttpResponse res = DoHttp(req);
+
+    if (!res.error.empty()) {
+        HexLogError("failed to send the http request");
+
+        CleanupHttpResponse(res);
+        return false;
+    }
+    if (!isHttpResponseSuccessful(res)) {
+        HexLogError("failed to get the response");
+
+        CleanupHttpResponse(res);
+        return false;
+    }
+    CleanupHttpResponse(res);
+
+    HexLogInfo("updated the password of the keycloak user with user id %s", userId.c_str());
+    return true;
+}
+
+static bool
+updateKeycloakAdminPassword(
+    const std::string& endpointIp,
+    const std::string& password)
+{
+    // TODO hash admin user password
+    // - delete the existing admin user in the keycloak database
+    // - get the new password
+    // - use helm update with the update chart values KEYCLOAK_PASSWORD
+    // - store the password in k8s secret
+    // - supply the new password to terraform
+
+    /**
+     * TODO: Check if the admin password is stored in k8s secret on k3s.
+     * If so, retrieve the password. If not, use the default.
+     */
+    std::string adminPass = "admin";
+
+    // get the admin access token
+    const std::string token = getKeycloakAdminAccessToken(endpointIp, adminPass);
+    if (token.empty()) {
+        HexLogError("failed to get the keycloak admin access token");
+        return false;
+    }
+
+    // get the user id of user admin
+    const std::string userId = getKeycloakUserId(endpointIp, token, "admin");
+    if (userId.empty()) {
+        HexLogError("failed to get the user id");
+        return false;
+    }
+
+    // set the new password
+    if (!updateKeycloakUserPassword(endpointIp, token, userId, password)) {
+        HexLogError("failed to update the password of the keycloak user");
+        return false;
+    }
+
+    // TODO: save the new password to the k8s secret
+
+    return true;
+}
+
+static int
+UpdateKeycloakAdminPasswordMain(int argc, char** argv)
+{
+    std::string sharedId = G(SHARED_ID);
+    std::cout << (updateKeycloakAdminPassword(sharedId, "test") ? "true" : "false") << std::endl;
+    return EXIT_SUCCESS;
+}
+
+CONFIG_COMMAND_WITH_SETTINGS(update_keycloak_admin_password, UpdateKeycloakAdminPasswordMain, UpdateKeycloakAdminPasswordUsage);

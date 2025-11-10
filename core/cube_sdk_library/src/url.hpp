@@ -3,6 +3,7 @@
 #ifndef CUBE_URL_H
 #define CUBE_URL_H
 
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -58,6 +59,12 @@ public:
      * Construct an HTTP URL object.
      */
     Url(const std::string host, const std::string path);
+    /**
+     * Construct an HTTP URL object with a query string.
+     */
+    Url(const std::string host,
+        const std::string path,
+        const std::map<std::string, std::string> queryString);
     /**
      * Generate a full URL string.
      */

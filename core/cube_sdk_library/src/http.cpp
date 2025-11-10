@@ -10,6 +10,11 @@ HttpResponse::HttpResponse()
 {
 }
 
+bool isHttpResponseSuccessful(const HttpResponse& r)
+{
+    return (r.statusCode >= 200 && r.statusCode <= 299);
+}
+
 bool CleanupHttpResponse(const HttpResponse& r)
 {
     bool ret1 = DeleteFile(r.outputFileName);
@@ -18,33 +23,217 @@ bool CleanupHttpResponse(const HttpResponse& r)
     return ret1 && ret2;
 }
 
+/**
+ * Prepare temporary files for HTTP requests.
+ */
+static bool
+prepareTempFiles(
+    std::string& error,
+    TempFile& statusCodeFile,
+    TempFile& outputFile,
+    TempFile& errorFile)
+{
+    statusCodeFile = CreateTempFile();
+    if (!statusCodeFile.isValid) {
+        error = "failed to create a temporary file";
+        HexLogError("%s", error.c_str());
+        return false;
+    }
+    CloseTempFileFd(statusCodeFile);
+
+    outputFile = CreateTempFile();
+    if (!outputFile.isValid) {
+        error = "failed to create a temporary file";
+        HexLogError("%s", error.c_str());
+        return false;
+    }
+    CloseTempFileFd(outputFile);
+
+    errorFile = CreateTempFile();
+    if (!errorFile.isValid) {
+        error = "failed to create a temporary file";
+        HexLogError("%s", error.c_str());
+        return false;
+    }
+    CloseTempFileFd(errorFile);
+
+    return true;
+}
+
+/**
+ * Parse the status code from the status code file.
+ *
+ * @return HTTP status code. If failed, 0.
+ */
+static int
+parseStatusCode(
+    std::string& error,
+    const TempFile& statusCodeFile)
+{
+    std::string fsError;
+    const std::string statusCodeString = ReadFile(fsError, statusCodeFile.fileName);
+    if (fsError.length() > 0) {
+        error = "failed to parse the HTTP status code of the response";
+        HexLogError("%s", error.c_str());
+        return 0;
+    }
+
+    int statusCode = 0;
+    try {
+        std::size_t pos;
+        statusCode = std::stoi(statusCodeString, &pos);
+    } catch (const std::exception& e) {
+        // failed to convert the output string to an integer
+        error = "failed to parse the HTTP status code of the response";
+        HexLogError("%s", error.c_str());
+        return 0;
+    }
+
+    return statusCode;
+}
+
 const HttpResponse
-HttpGet(const Url& url)
+DoHttp(const HttpRequest& req)
+{
+    HttpResponse res = HttpResponse();
+
+    // request temporary files for status code, stdout, and stderr
+    TempFile statusCodeFile, outputFile, errorFile;
+    std::string tmpError;
+    if (!prepareTempFiles(tmpError, statusCodeFile, outputFile, errorFile)) {
+        res.error = tmpError;
+        return res;
+    }
+
+    // form the header string
+    std::stringstream headerString;
+    bool isFirst = true;
+    for (std::map<std::string, std::string>::const_iterator it = req.header.begin();
+        it != req.header.end();
+        it++) {
+        if (it->first.empty()) {
+            continue;
+        }
+
+        if (isFirst) {
+            isFirst = false;
+        } else {
+            headerString << " ";
+        }
+
+        headerString << "-H \"" << it->first << ": " << it->second << "\"";
+    }
+
+    // form the body string
+    std::string bodyString;
+    if (!req.body.empty()) {
+        bodyString = "-d '" + req.body + "'";
+    }
+
+    // send the request via curl
+    bool isCurlSuccessful = false;
+    if (req.url.scheme == "http") {
+        isCurlSuccessful = HexUtilSystemF(
+                               0,
+                               0,
+                               "curl --silent --show-error "
+                               "--output %s --write-out \"%%{http_code}\" "
+                               "--request %s \"%s\" "
+                               "%s %s >%s 2>%s",
+                               outputFile.fileName.c_str(),
+                               req.method.c_str(),
+                               req.url.String().c_str(),
+                               headerString.str().c_str(),
+                               bodyString.c_str(),
+                               statusCodeFile.fileName.c_str(),
+                               errorFile.fileName.c_str())
+            == 0;
+    } else if (req.url.scheme == "https") {
+        isCurlSuccessful = HexUtilSystemF(
+                               0,
+                               0,
+                               "curl --insecure --silent --show-error "
+                               "--output %s --write-out \"%%{http_code}\" "
+                               "--request %s \"%s\" "
+                               "%s %s >%s 2>%s",
+                               outputFile.fileName.c_str(),
+                               req.method.c_str(),
+                               req.url.String().c_str(),
+                               headerString.str().c_str(),
+                               bodyString.c_str(),
+                               statusCodeFile.fileName.c_str(),
+                               errorFile.fileName.c_str())
+            == 0;
+    } else {
+        res.error = "the url scheme is not supported";
+        HexLogError("%s", res.error.c_str());
+
+        DeleteTempFile(statusCodeFile);
+        DeleteTempFile(outputFile);
+        DeleteTempFile(errorFile);
+        return res;
+    }
+
+    res.outputFileName = outputFile.fileName;
+    res.errorFileName = errorFile.fileName;
+
+    if (!isCurlSuccessful) {
+        res.error = "curl is not successful";
+        HexLogError("%s", res.error.c_str());
+
+        DeleteTempFile(statusCodeFile);
+        return res;
+    }
+
+    // parse the status code
+    std::string parseStatusCodeError;
+    res.statusCode = parseStatusCode(parseStatusCodeError, statusCodeFile);
+    if (parseStatusCodeError.length() > 0) {
+        res.error = parseStatusCodeError;
+    }
+    DeleteTempFile(statusCodeFile);
+
+    // return the HttpResponse object
+    return res;
+}
+
+const HttpResponse
+GetHttp(const HttpRequest& req)
+{
+    HttpRequest getReq = req;
+    getReq.method = "GET";
+
+    return DoHttp(getReq);
+}
+
+const HttpResponse
+PostFormHttp(const Url& url, const std::vector<std::string> formBody)
 {
     HttpResponse r = HttpResponse();
 
-    // request temporary files for status code, stdout, and stderr
-    TempFile statusCodeFile = CreateTempFile();
-    if (!statusCodeFile.isValid) {
-        r.error = "failed to create a temporary file";
-        HexLogError("%s", r.error.c_str());
+    TempFile statusCodeFile, outputFile, errorFile;
+    std::string tmpError;
+    if (!prepareTempFiles(tmpError, statusCodeFile, outputFile, errorFile)) {
+        r.error = tmpError;
         return r;
     }
-    CloseTempFileFd(statusCodeFile);
-    TempFile outputFile = CreateTempFile();
-    if (!outputFile.isValid) {
-        r.error = "failed to create a temporary file";
-        HexLogError("%s", r.error.c_str());
-        return r;
+
+    // form the body string
+    std::stringstream bodyString;
+    bool isFirst = true;
+    for (std::vector<std::string>::const_iterator it = formBody.begin(); it != formBody.end(); it++) {
+        if (it->empty()) {
+            continue;
+        }
+
+        if (isFirst) {
+            isFirst = false;
+        } else {
+            bodyString << " ";
+        }
+
+        bodyString << "-d \"" << *it << "\"";
     }
-    CloseTempFileFd(outputFile);
-    TempFile errorFile = CreateTempFile();
-    if (!errorFile.isValid) {
-        r.error = "failed to create a temporary file";
-        HexLogError("%s", r.error.c_str());
-        return r;
-    }
-    CloseTempFileFd(errorFile);
 
     // send the request via curl
     bool isCurlSuccessful = false;
@@ -52,9 +241,14 @@ HttpGet(const Url& url)
         isCurlSuccessful = HexUtilSystemF(
                                0,
                                0,
-                               "curl --silent --show-error --output %s --write-out \"%%{http_code}\" \"%s\" >%s 2>%s",
+                               "curl --silent --show-error "
+                               "--output %s --write-out \"%%{http_code}\" "
+                               "--request POST \"%s\" "
+                               "--header \"Content-Type: application/x-www-form-urlencoded\" %s "
+                               ">%s 2>%s",
                                outputFile.fileName.c_str(),
                                url.String().c_str(),
+                               bodyString.str().c_str(),
                                statusCodeFile.fileName.c_str(),
                                errorFile.fileName.c_str())
             == 0;
@@ -62,15 +256,24 @@ HttpGet(const Url& url)
         isCurlSuccessful = HexUtilSystemF(
                                0,
                                0,
-                               "curl --insecure --silent --show-error --output %s --write-out \"%%{http_code}\" \"%s\" >%s 2>%s",
+                               "curl --insecure --silent --show-error "
+                               "--output %s --write-out \"%%{http_code}\" "
+                               "--request POST \"%s\" "
+                               "--header \"Content-Type: application/x-www-form-urlencoded\" %s "
+                               ">%s 2>%s",
                                outputFile.fileName.c_str(),
                                url.String().c_str(),
+                               bodyString.str().c_str(),
                                statusCodeFile.fileName.c_str(),
                                errorFile.fileName.c_str())
             == 0;
     } else {
         r.error = "the url scheme is not supported";
         HexLogError("%s", r.error.c_str());
+
+        DeleteTempFile(statusCodeFile);
+        DeleteTempFile(outputFile);
+        DeleteTempFile(errorFile);
         return r;
     }
 
@@ -80,28 +283,17 @@ HttpGet(const Url& url)
     if (!isCurlSuccessful) {
         r.error = "curl is not successful";
         HexLogError("%s", r.error.c_str());
+
+        DeleteTempFile(statusCodeFile);
         return r;
     }
 
     // parse the status code
-    std::string fsError;
-    const std::string statusCodeString = ReadFile(fsError, statusCodeFile.fileName);
-    if (fsError.length() > 0) {
-        r.error = "failed to parse the HTTP status code of the response";
-        HexLogError("%s", r.error.c_str());
-        return r;
+    std::string parseStatusCodeError;
+    r.statusCode = parseStatusCode(parseStatusCodeError, statusCodeFile);
+    if (parseStatusCodeError.length() > 0) {
+        r.error = parseStatusCodeError;
     }
-    int statusCode = 0;
-    try {
-        std::size_t pos;
-        statusCode = std::stoi(statusCodeString, &pos);
-    } catch (const std::exception& e) {
-        // failed to convert the output string to an integer
-        r.error = "failed to parse the HTTP status code of the response";
-        HexLogError("%s", r.error.c_str());
-        return r;
-    }
-    r.statusCode = statusCode;
     DeleteTempFile(statusCodeFile);
 
     // return the HttpResponse object

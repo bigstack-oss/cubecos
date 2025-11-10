@@ -14,6 +14,30 @@ Url::Url(
     this->forceQuery = false;
 }
 
+Url::Url(const std::string host,
+    const std::string path,
+    const std::map<std::string, std::string> queryString)
+    : host(host)
+    , path(path)
+{
+    this->scheme = "http";
+    this->rawPath = path;
+    this->omitHost = false;
+    this->forceQuery = false;
+
+    std::stringstream q;
+    for (std::map<std::string, std::string>::const_iterator it = queryString.begin();
+        it != queryString.end();
+        it++) {
+        if (it->first.empty()) {
+            continue;
+        }
+
+        q << it->first << "=" << it->second;
+    }
+    this->rawQuery = q.str();
+}
+
 bool isStartsWith(const std::string& s1, const std::string& s2)
 {
     return (s1.compare(0, s2.length(), s2) == 0);

@@ -19,6 +19,7 @@
 #include <k3s.hpp>
 #include <mysql_util.h>
 #include <terraform.hpp>
+#include <third_party/json11.hpp>
 
 #include <iostream>
 #include <unistd.h>
