@@ -5,8 +5,10 @@
 static const std::string APP = "statefulset.apps/keycloak";
 static const std::string APP_NAMESPACE = "keycloak";
 static const std::string CHART_RELEASE_NAME = "keycloak";
+static const char KEYCLOAK_CHARTS[] = "/opt/keycloak/keycloak-*.tgz";
 static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 static const std::string DB_NAME = "keycloak";
+static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.xml";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -48,6 +50,39 @@ NotifyCube(bool modified)
 {
     s_bCubeModified = IsModifiedTune(1);
     s_eCubeRole = GetCubeRole(s_cubeRole);
+}
+
+/**
+ * Check if the database is set up for Keycloak.
+ */
+static bool
+isDatabaseSetup()
+{
+    return MysqlUtilIsDbExist("keycloak");
+}
+
+/**
+ * Set up the database for Keycloak.
+ * Return:
+ * - true: The database has been successfully set up.
+ * - false: The database is failed to be set up.
+ */
+static bool
+setupDatabase()
+{
+    HexLogInfo("create the database for keycloak");
+
+    if (isDatabaseSetup()) {
+        HexLogInfo("the database for keycloak is already created");
+        return true;
+    }
+
+    if (!ExecTerraform("apply", "mysql", { "mysql_dbname=" + DB_NAME })) {
+        HexLogError("failed to create keycloak database via terraform");
+        return false;
+    }
+
+    return true;
 }
 
 static const std::string
@@ -107,77 +142,261 @@ updateKeycloakChartValues(const std::string loginGreeting)
     return (ret == 0);
 }
 
+/**
+ * Check if Keycloak is deployed or not.
+ */
+static bool
+checkKeycloak()
+{
+    HexLogInfo("check keycloak");
+
+    if (!K3sWatchRollOut(APP, APP_NAMESPACE, "1s")) {
+        HexLogError("failed to see all pods rolled out");
+        return false;
+    }
+    HexLogInfo("all keycloak pods are rolled out");
+
+    int nodeCount = K3sGetNodeCounts();
+    if (nodeCount < 0) {
+        HexLogError("failed to get the node count");
+        return false;
+    }
+
+    int replicaCount = K3sGetReadyReplicas(APP, APP_NAMESPACE);
+    if (replicaCount < 0) {
+        HexLogError("failed to get the ready replica count");
+        return false;
+    }
+
+    if (nodeCount != replicaCount) {
+        HexLogError(
+            "control node count: %d doesn't match replica count: %d",
+            nodeCount,
+            replicaCount);
+        return false;
+    }
+    HexLogInfo("keycloak replica count matched the node count");
+
+    HexLogInfo("checked keycloak");
+    return true;
+}
+
+/**
+ * Deploy Keycloak using Helm.
+ */
+static bool
+updateKeycloak()
+{
+    HexLogInfo("update keycloak helm chart and roll out pods");
+
+    int nodeCount = K3sGetNodeCounts();
+    if (nodeCount < 0) {
+        // there is no node to deploy the pods
+        nodeCount = 0;
+    }
+
+    return HexUtilSystemF(
+               0,
+               0,
+               "/usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml "
+               "upgrade --install %s %s -f %s "
+               "-n %s --create-namespace --set replicas=%d",
+               CHART_RELEASE_NAME.c_str(),
+               KEYCLOAK_CHARTS,
+               KEYCLOAK_CHART_VALUES,
+               APP_NAMESPACE.c_str(),
+               nodeCount)
+        == 0;
+}
+
+/**
+ * Check if the endpoint is available.
+ */
+static bool
+checkKeycloakEndpoint(const std::string& endpointIp)
+{
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+    Url url = Url(host, "/auth/realms/master");
+    url.scheme = "https";
+
+    // retry 15 times
+    bool isSuccessful = false;
+    for (int i = 0; i < 15; i++) {
+        const HttpResponse r = HttpGet(url);
+
+        if (r.error.length() > 0) {
+            HexLogError("failed to send the http request");
+        } else {
+            if (r.statusCode != 200) {
+                HexLogError("keycloak is not ready, status code: %d", r.statusCode);
+            } else {
+                isSuccessful = true;
+            }
+        }
+
+        CleanupHttpResponse(r);
+
+        if (isSuccessful) {
+            HexLogInfo("keycloak endpoint is ready");
+            break;
+        } else {
+            sleep(1);
+        }
+    }
+
+    return isSuccessful;
+}
+
+/**
+ * Check if the Keycloak SAML metadata file exists and is complete.
+ */
+static bool
+hasKeycloakSamlMetadataFile()
+{
+    if (access(KEYCLOAK_SAML_METADATA_FILE, F_OK) != 0) {
+        HexLogError("%s is missing", KEYCLOAK_SAML_METADATA_FILE);
+        return false;
+    }
+
+    std::uintmax_t samlMetadataFileSize = 0;
+    try {
+        samlMetadataFileSize = std::filesystem::file_size(KEYCLOAK_SAML_METADATA_FILE);
+    } catch (const std::filesystem::filesystem_error& e) {
+        HexLogError("failed to get the file size of %s", KEYCLOAK_SAML_METADATA_FILE);
+        return false;
+    }
+
+    if (samlMetadataFileSize <= 0) {
+        HexLogError("%s is not complete", KEYCLOAK_SAML_METADATA_FILE);
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Download the SAML metadata file from Keycloak,
+ * for other SAML service providers to register itself
+ * to the SAML IDP, Keycloak.
+ */
+static bool
+downloadKeycloakSamlMetadata(const std::string& endpointIp)
+{
+    HexLogInfo("download keycloak saml metadata");
+
+    // must use control vip in curl because the content of saml metadata will honor it as ip/hostname
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+    Url url = Url(host, "/auth/realms/master/protocol/saml/descriptor");
+    url.scheme = "https";
+
+    // retry 120 times
+    bool isDownloadSuccessful = false;
+    bool isCopySuccessful = false;
+    for (int i = 0; i < 120; i++) {
+        const HttpResponse r = HttpGet(url);
+
+        if (r.error.length() > 0) {
+            HexLogError("failed to send the http request");
+        } else {
+            if (r.statusCode != 200) {
+                HexLogError("failed to download keycloak saml metadata");
+            } else {
+                isDownloadSuccessful = true;
+
+                std::string fsError;
+                isCopySuccessful = CopyFile(
+                    fsError,
+                    r.outputFileName,
+                    KEYCLOAK_SAML_METADATA_FILE);
+            }
+        }
+
+        CleanupHttpResponse(r);
+
+        if (isDownloadSuccessful) {
+            HexLogInfo("downloaded keycloak saml metadata");
+            break;
+        } else {
+            sleep(1);
+        }
+    }
+
+    if (isDownloadSuccessful && !isCopySuccessful) {
+        HexLogError("failed to persist keycloak saml metadata");
+    }
+
+    return isDownloadSuccessful && isCopySuccessful;
+}
+
 static bool
 Commit(bool modified, int dryLevel)
 {
     // TODO: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
+    if (!IsControl(s_eCubeRole)) {
+        HexLogNotice("keycloak should not be updated from a non-control node");
+        return true;
+    }
+
+    // set up the database
+    if (!isDatabaseSetup()) {
+        if (!setupDatabase()) {
+            HexLogError("failed to set up the database for keycloak");
+        }
+    }
+
     if (s_bApplianceModified) {
         if (!updateKeycloakChartValues(s_loginGreeting)) {
             HexLogError(
-                "unable to write the login greeting message to %s",
+                "unable to update %s",
                 KEYCLOAK_CHART_VALUES);
             return false;
         }
+    }
 
-        // should not destroy keycloak during node level bootstrapping
-        // since we could not get keycloak back on the master node when etcd quorum is not ready
-        if (!IsBootstrap()) {
-            // destroy the running keycloak
-            HexLogInfo("destroy keycloak");
-            if (HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace") == 0) {
-                HexLogInfo("destroyed keycloak");
-            } else {
-                HexLogError("failed to destroy keycloak");
+    if (s_bApplianceModified || !checkKeycloak()) {
+        // update keycloak and roll out pods
+        HexLogInfo("update keycloak");
+        if (!updateKeycloak()) {
+            HexLogError("failed to update keycloak");
+
+            // let other modules to commit
+            return true;
+        }
+        HexLogInfo("updated keycloak");
+
+        // check the roll out status of pods
+        if (!K3sWatchRollOut(APP, APP_NAMESPACE, "3m")) {
+            HexLogError("failed to see all pods rolled out");
+        } else {
+            HexLogInfo("keycloak pods were all rolled out");
+        }
+
+        // check if the Keycloak endpoint is reachable
+        if (!checkKeycloakEndpoint("10.32.45.10")) {
+            HexLogError("keycloak endpoint is not ready");
+
+            // let other modules to commit
+            return true;
+        }
+
+        // create default cube groups
+        if (!ExecTerraform("apply", "keycloak", {})) {
+            HexLogError("failed to create default cube groups via terraform");
+        }
+
+        // pull down the saml metadata and save it to /etc/keycloak/saml-metadata.xml
+        if (!hasKeycloakSamlMetadataFile()) {
+            if (!downloadKeycloakSamlMetadata("10.32.45.10")) {
+                HexLogError("failed to download the saml metadata from keycloak");
             }
         }
     }
 
-    // restart keycloak
-    HexLogInfo("commit keycloak");
-    if (HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0) {
-        HexLogInfo("committed keycloak");
-    } else {
-        HexLogError("failed to commit keycloak");
-    }
     return true;
-}
-
-static int
-ClusterStartMain(int argc, char** argv)
-{
-    if (argc != 1) {
-        return EXIT_FAILURE;
-    }
-
-    // destroy the running keycloak
-    HexLogInfo("destroy keycloak");
-    if (HexUtilSystemF(0, 0, "cubectl config reset keycloak --stacktrace") == 0) {
-        HexLogInfo("destroyed keycloak");
-    } else {
-        HexLogError("failed to destroy keycloak");
-    }
-    // restart keycloak
-    HexLogInfo("commit keycloak");
-    if (HexUtilSystemF(0, 0, "cubectl config commit keycloak --stacktrace") == 0) {
-        HexLogInfo("committed keycloak");
-    } else {
-        HexLogError("failed to commit keycloak");
-    }
-
-    // sync saml-metadata.xml
-    std::string myip = G(MGMT_ADDR);
-    if (access(KEYCLOAK_SAML_METADATA_FILE, F_OK) == 0) {
-        HexLogInfo("sync the keycloak saml metadata file");
-
-        HexUtilSystemF(0, 0, "cp -f %s %s", KEYCLOAK_SAML_METADATA_FILE, KEYCLOAK_SAML_METADATA_FILE_TMP);
-        HexUtilSystemF(0, 0, "hex_sdk cmd -cv scp root@%s:%s %s", myip.c_str(), KEYCLOAK_SAML_METADATA_FILE_TMP, KEYCLOAK_SAML_METADATA_FILE);
-        unlink(KEYCLOAK_SAML_METADATA_FILE_TMP);
-    } else {
-        HexLogError("%s is missing on %s", KEYCLOAK_SAML_METADATA_FILE, myip.c_str());
-    }
-    return EXIT_SUCCESS;
 }
 
 CONFIG_MODULE(keycloak, 0, 0, 0, 0, Commit);
@@ -192,6 +411,63 @@ CONFIG_OBSERVES(keycloak, appliance, ParseAppliance, NotifyAppliance);
 CONFIG_OBSERVES(keycloak, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(keycloak, "/etc/keycloak");
+
+static bool
+syncSamlMetadata(const std::string myip)
+{
+    HexLogInfo("sync the keycloak saml metadata file");
+
+    if (!hasKeycloakSamlMetadataFile()) {
+        return false;
+    }
+
+    // copy the content of the keycloak saml metadata file to a temporary file
+    TempFile tmpFile = CreateTempFile();
+    if (!tmpFile.isValid) {
+        HexLogError("failed to create a temporary file");
+        return false;
+    }
+    std::string fsError;
+    if (!CopyFile(fsError, KEYCLOAK_SAML_METADATA_FILE, tmpFile.fileName)) {
+        HexLogError("failed to copy the file, error: %s", fsError.c_str());
+        return false;
+    }
+
+    // sync the file to all control nodes
+    HexUtilSystemF(
+        0,
+        0,
+        "hex_sdk cmd -cv scp root@%s:%s %s",
+        myip.c_str(),
+        tmpFile.fileName.c_str(),
+        KEYCLOAK_SAML_METADATA_FILE);
+
+    // clean up the temporary file
+    DeleteTempFile(tmpFile);
+
+    HexLogInfo("synced the keycloak saml metadata file");
+    return true;
+}
+
+static int
+ClusterStartMain(int argc, char** argv)
+{
+    if (argc != 1) {
+        return EXIT_FAILURE;
+    }
+
+    HexLogInfo("update keycloak");
+    if (!updateKeycloak()) {
+        HexLogError("failed to update keycloak");
+    }
+    HexLogInfo("updated keycloak");
+
+    // sync /etc/keycloak/saml-metadata.xml
+    std::string myip = G(MGMT_ADDR);
+    syncSamlMetadata(myip);
+
+    return EXIT_SUCCESS;
+}
 
 CONFIG_TRIGGER_WITH_SETTINGS(keycloak, "cluster_start", ClusterStartMain);
 
@@ -290,42 +566,6 @@ static void
 CheckKeycloakUsage()
 {
     fprintf(stderr, "Usage: %s check_keycloak\n", HexLogProgramName());
-}
-
-static bool
-checkKeycloak()
-{
-    HexLogInfo("check keycloak");
-
-    if (!K3sWatchRollOut(APP, APP_NAMESPACE, "1s")) {
-        HexLogError("failed to see all pods rolled out");
-        return false;
-    }
-    HexLogInfo("all keycloak pods are rolled out");
-
-    int nodeCount = K3sGetNodeCounts();
-    if (nodeCount < 0) {
-        HexLogError("failed to get the node count");
-        return false;
-    }
-
-    int replicaCount = K3sGetReadyReplicas(APP, APP_NAMESPACE);
-    if (replicaCount < 0) {
-        HexLogError("failed to get the ready replica count");
-        return false;
-    }
-
-    if (nodeCount != replicaCount) {
-        HexLogError(
-            "control node count: %d doesn't match replica count: %d",
-            nodeCount,
-            replicaCount);
-        return false;
-    }
-    HexLogInfo("keycloak replica count matched the node count");
-
-    HexLogInfo("checked keycloak");
-    return true;
 }
 
 static int

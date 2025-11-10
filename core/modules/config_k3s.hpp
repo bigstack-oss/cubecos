@@ -1,0 +1,8 @@
+// CUBE SDK
+
+#ifndef CUBE_CONFIG_K3S_H
+#define CUBE_CONFIG_K3S_H
+
+#define K3S_INGRESS_HTTPS_PORT 10443
+
+#endif /* endif CUBE_CONFIG_K3S_H */

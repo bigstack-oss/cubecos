@@ -2,11 +2,11 @@
 
 #include "include/constant.h"
 #include "include/role_cubesys.h"
-#include "mysql_util.h"
+
 #include <cube/cluster.h>
 #include <cube/config_file.h>
-#include <cube/filesystem.h>
 #include <cube/systemd_util.h>
+#include <filesystem.hpp>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
@@ -16,6 +16,7 @@
 #include <hex/pidfile.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
+#include <mysql_util.h>
 
 static const char USER[] = "cinder";
 static const char GROUP[] = "cinder";
@@ -569,14 +570,14 @@ SetStorageBackend(
     std::string fsError;
     bool fileExists = false;
 
-    fileExists = FileExistsWithGlob(CONF_DIR, "ext_storage_*.conf", fsError);
+    fileExists = HasFileMatchGlob(fsError, CONF_DIR, "ext_storage_*.conf");
     if (fsError != "") {
         HexLogError("%s", fsError.c_str());
     } else if (fileExists) {
         HexSystemF(0, "rm -f %s/ext_storage_*.conf", CONF_DIR);
     }
 
-    fileExists = FileExistsWithGlob(BACKENDDIR, "ext_storage_*.conf", fsError);
+    fileExists = HasFileMatchGlob(fsError, BACKENDDIR, "ext_storage_*.conf");
     if (fsError != "") {
         HexLogError("%s", fsError.c_str());
     } else if (fileExists) {
