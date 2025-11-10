@@ -9,6 +9,7 @@ static const char KEYCLOAK_CHARTS[] = "/opt/keycloak/keycloak-*.tgz";
 static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 static const std::string DB_NAME = "keycloak";
 static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.xml";
+static const std::string KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET = "admin-password";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -854,18 +855,44 @@ updateKeycloakAdminPassword(
     const std::string& endpointIp,
     const std::string& password)
 {
-    // TODO hash admin user password
-    // - delete the existing admin user in the keycloak database
-    // - get the new password
-    // - use helm update with the update chart values KEYCLOAK_PASSWORD
-    // - store the password in k8s secret
-    // - supply the new password to terraform
-
     /**
      * TODO: Check if the admin password is stored in k8s secret on k3s.
      * If so, retrieve the password. If not, use the default.
      */
+    bool isAdminPassStored = HexUtilSystemF(
+                                 0,
+                                 0,
+                                 "kubectl get secret %s -n %s",
+                                 KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+                                 APP_NAMESPACE.c_str())
+        == 0;
     std::string adminPass = "admin";
+    if (isAdminPassStored) {
+        HexLogInfo("found the existing keycloak admin password");
+
+        TempFile base64encodedAdminPass = CreateTempFile();
+        if (HexUtilSystemF(
+                0,
+                0,
+                "kubectl get secret %s -n %s -o jsonpath='{.data.password}' > %s",
+                KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+                APP_NAMESPACE.c_str(),
+                base64encodedAdminPass.fileName.c_str())
+            != 0) {
+            HexLogError("failed to read the existing keycloak admin password k8s secret");
+            return false;
+        }
+        HexLogInfo("extracted the existing keycloak admin password");
+
+        const std::string base64encodedAdminPassString = HexUtilPOpen(
+            "base64 --decode %s",
+            base64encodedAdminPass.fileName.c_str());
+        DeleteTempFile(base64encodedAdminPass);
+
+        if (!base64encodedAdminPassString.empty()) {
+            adminPass = base64encodedAdminPassString;
+        }
+    }
 
     // get the admin access token
     const std::string token = getKeycloakAdminAccessToken(endpointIp, adminPass);
@@ -887,7 +914,30 @@ updateKeycloakAdminPassword(
         return false;
     }
 
-    // TODO: save the new password to the k8s secret
+    // save the new password to the k8s secret
+    if (isAdminPassStored) {
+        if (HexUtilSystemF(
+                0,
+                0,
+                "kubectl delete secret %s -n %s",
+                KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+                APP_NAMESPACE.c_str())
+            != 0) {
+            HexLogError("failed to delete the old keycloak admin password k8s secret");
+            return false;
+        }
+    }
+    if (HexUtilSystemF(
+            0,
+            0,
+            "kubectl create secret generic %s --from-literal=password='%s' -n %s",
+            KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+            password.c_str(),
+            APP_NAMESPACE.c_str())
+        != 0) {
+        HexLogError("failed to save keycloak admin password as a k8s secret");
+        return false;
+    }
 
     return true;
 }
@@ -895,9 +945,17 @@ updateKeycloakAdminPassword(
 static int
 UpdateKeycloakAdminPasswordMain(int argc, char** argv)
 {
+    if (argc != 2) {
+        return EXIT_FAILURE;
+    }
+
+    const std::string password = argv[1];
+    if (password.empty()) {
+        return EXIT_FAILURE;
+    }
+
     std::string sharedId = G(SHARED_ID);
-    std::cout << (updateKeycloakAdminPassword(sharedId, "test") ? "true" : "false") << std::endl;
-    return EXIT_SUCCESS;
+    return updateKeycloakAdminPassword(sharedId, password) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(update_keycloak_admin_password, UpdateKeycloakAdminPasswordMain, UpdateKeycloakAdminPasswordUsage);

@@ -21,7 +21,6 @@
 #include <terraform.hpp>
 #include <third_party/json11.hpp>
 
-#include <iostream>
 #include <unistd.h>
 
 #endif /* endif CUBE_CONFIG_KEYCLOAK_H */
