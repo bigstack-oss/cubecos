@@ -15,6 +15,10 @@ import (
 	cubeTesting "cubectl/util/testing"
 )
 
+const (
+	keycloakSamlMetadataFile = "/etc/keycloak/saml-metadata.xml"
+)
+
 func runRancherContainer(ns *cubeTesting.Namespace) (*cubeTesting.Container, error) {
 	if err := genSelfSignCerts(); err != nil {
 		return nil, err
