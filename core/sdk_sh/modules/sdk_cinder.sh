@@ -1876,7 +1876,7 @@ cinder_get_volume_type_properties()
             continue
         fi
 
-        current_property_value="$(json_get_value "$current_properties" ".${current_property_key}")"
+        current_property_value="$(json_get_value "$current_properties" ".[\"${current_property_key}\"]")"
 
         if _hex_function exec_output exec_error \
             jq -c \
