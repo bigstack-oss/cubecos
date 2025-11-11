@@ -10,6 +10,8 @@ static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 static const std::string DB_NAME = "keycloak";
 static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.xml";
 static const std::string KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET = "admin-password";
+static const std::string KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE
+    = "/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -79,7 +81,7 @@ setupDatabase()
         return true;
     }
 
-    if (!ExecTerraform("apply", "mysql", { "mysql_dbname=" + DB_NAME })) {
+    if (!ExecTerraform("apply", "mysql", { "mysql_dbname=" + DB_NAME }, {})) {
         HexLogError("failed to create keycloak database via terraform");
         return false;
     }
@@ -393,7 +395,11 @@ Commit(bool modified, int dryLevel)
         }
 
         // create default cube groups
-        if (!ExecTerraform("apply", "keycloak", {})) {
+        if (!ExecTerraform(
+                "apply",
+                "keycloak",
+                { "cube_controller=" + sharedId },
+                { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
             HexLogError("failed to create default cube groups via terraform");
         }
 
@@ -514,7 +520,12 @@ removeKeycloak(const bool isHard)
 
     HexLogInfo("remove keycloak");
 
-    if (!ExecTerraform("destroy", "keycloak", {})) {
+    std::string sharedId = G(SHARED_ID);
+    if (!ExecTerraform(
+            "destroy",
+            "keycloak",
+            { "cube_controller=" + sharedId },
+            { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
         HexLogError("failed to remove settings managed by terraform on keycloak");
         return false;
     }
@@ -530,7 +541,7 @@ removeKeycloak(const bool isHard)
     HexLogInfo("uninstalled keycloak helm chart release");
 
     if (isHard) {
-        if (!ExecTerraform("destroy", "mysql", { "mysql_dbname=" + DB_NAME })) {
+        if (!ExecTerraform("destroy", "mysql", { "mysql_dbname=" + DB_NAME }, {})) {
             HexLogError("failed to remove keycloak database");
             return false;
         }
@@ -730,7 +741,7 @@ getKeycloakAdminPasswordFromK8sSecret()
 }
 
 /**
- * Save the new admin to the K8S secret.
+ * Save the new admin password to the K8S secret.
  */
 static bool
 saveKeycloakUserPasswordToK8sSecret(
@@ -964,6 +975,28 @@ updateKeycloakUserPassword(
     return true;
 }
 
+/**
+ * Save the new admin password to Terraform variable file.
+ */
+static bool
+saveKeycloakAdminPasswordToTerraformVariableFile(const std::string& password)
+{
+    const std::vector<std::string> fileContent = {
+        "keycloak_admin_password = \"" + password + "\"\n",
+    };
+
+    std::string fsError;
+    if (!WriteFile(
+            fsError,
+            KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE,
+            fileContent)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
+
+    return true;
+}
+
 static bool
 updateKeycloakAdminPassword(
     const std::string& endpointIp,
@@ -1011,7 +1044,11 @@ updateKeycloakAdminPassword(
         return false;
     }
 
-    // TODO: update the password used in terraform provider
+    // update the password used in terraform provider
+    if (!saveKeycloakAdminPasswordToTerraformVariableFile(password)) {
+        HexLogError("failed to update keycloak admin password to the terraform variable file");
+        return false;
+    }
 
     return true;
 }

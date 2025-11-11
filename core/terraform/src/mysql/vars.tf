@@ -1,1 +1,4 @@
-variable "mysql_dbname" {}
+variable "mysql_dbname" {
+  type    = string
+  default = ""
+}

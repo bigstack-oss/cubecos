@@ -69,6 +69,35 @@ bool DeleteFile(const std::string& fileName)
     return unlink(fileName.c_str()) == 0;
 }
 
+bool WriteFile(
+    std::string& error,
+    const std::string& name,
+    const std::vector<std::string>& content)
+{
+    int fd = open(
+        name.c_str(),
+        O_CREAT | O_WRONLY | O_TRUNC,
+        S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        error = "unable to open file " + name;
+        return false;
+    }
+    FILE* fout = fdopen(fd, "w");
+    if (!fout) {
+        error = "unable to write to " + name;
+        return false;
+    }
+
+    for (std::vector<std::string>::const_iterator it = content.begin();
+        it != content.end();
+        it++) {
+        fprintf(fout, "%s", (*it).c_str());
+    }
+
+    fclose(fout);
+    return true;
+}
+
 TempFile::TempFile()
     : isValid(false)
     , fd(-1)

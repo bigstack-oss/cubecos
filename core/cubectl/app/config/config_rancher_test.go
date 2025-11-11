@@ -167,7 +167,7 @@ func TestConfigRancher(t *testing.T) {
 	os.MkdirAll(path.Dir(keycloakSamlMetadataFile), 0755)
 	ioutil.WriteFile(keycloakSamlMetadataFile, []byte{}, 0644)
 
-	if err := terraformExec("apply", "rancher", "cube_controller="+cubeSettings.GetControllerIp()); err != nil {
+	if err := terraformExec("apply", "rancher", []string{"cube_controller=" + cubeSettings.GetControllerIp()}, []string{}); err != nil {
 		t.Fatal(err)
 	}
 

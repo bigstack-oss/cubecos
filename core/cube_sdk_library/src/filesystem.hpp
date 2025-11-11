@@ -3,6 +3,7 @@
 #ifndef CUBE_FILESYSTEM_H
 #define CUBE_FILESYSTEM_H
 
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -35,6 +36,21 @@ ReadFile(
  * false: Either the file is a directory or the deletion failed.
  */
 bool DeleteFile(const std::string& fileName);
+
+/**
+ * Write contents to a file.
+ *
+ * The file permission would be 0644 if created.
+ *
+ * @param error error string to be returned
+ * @param name file name
+ * @param content file content
+ * @return success or not
+ */
+bool WriteFile(
+    std::string& error,
+    const std::string& name,
+    const std::vector<std::string>& content);
 
 /**
  * The object type for temporary file operations

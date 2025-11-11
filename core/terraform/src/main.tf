@@ -16,37 +16,43 @@ module "mysql" {
 module "keycloak" {
   source = "./keycloak/"
 
-  #cube_controller = var.cube_controller
+  cube_controller         = var.cube_controller
+  keycloak_admin_password = var.keycloak_admin_password
 }
 
 module "keycloak_keystone" {
   source = "./keycloak/keystone_client/"
 
-  cube_controller = var.cube_controller
+  cube_controller         = var.cube_controller
+  keycloak_admin_password = var.keycloak_admin_password
 }
 
 module "keycloak_rancher" {
   source = "./keycloak/rancher_client/"
 
-  cube_controller = var.cube_controller
+  cube_controller         = var.cube_controller
+  keycloak_admin_password = var.keycloak_admin_password
 }
 
 module "keycloak_ceph_dashboard" {
   source = "./keycloak/ceph_dashboard_client/"
 
-  cube_controller = var.cube_controller
+  cube_controller         = var.cube_controller
+  keycloak_admin_password = var.keycloak_admin_password
 }
 
 module "keycloak_lmi" {
   source = "./keycloak/lmi_client/"
 
-  cube_controller = var.cube_controller
+  cube_controller         = var.cube_controller
+  keycloak_admin_password = var.keycloak_admin_password
 }
 
 module "keycloak_api" {
   source = "./keycloak/api_client/"
 
-  cube_controller = var.cube_controller
+  cube_controller         = var.cube_controller
+  keycloak_admin_password = var.keycloak_admin_password
 }
 
 module "rancher" {

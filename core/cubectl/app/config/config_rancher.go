@@ -19,14 +19,15 @@ import (
 )
 
 const (
-	rancherDataDir       = "/opt/rancher/"
-	rancherWorkDir       = "/root/.rancher/"
-	rancherTokenFile     = rancherWorkDir + "/token"
-	rancherCliDataFile   = rancherWorkDir + "/cli2.json"
-	rancherTmpDir        = "/tmp/rancher/"
-	rancherTmpKubeconfig = rancherTmpDir + "/kubeconfig"
-	rancherCliBin        = "/usr/local/bin/rancher"
-	rancherNamespace     = "cattle-system"
+	rancherDataDir                        = "/opt/rancher/"
+	rancherWorkDir                        = "/root/.rancher/"
+	rancherTokenFile                      = rancherWorkDir + "/token"
+	rancherCliDataFile                    = rancherWorkDir + "/cli2.json"
+	rancherTmpDir                         = "/tmp/rancher/"
+	rancherTmpKubeconfig                  = rancherTmpDir + "/kubeconfig"
+	rancherCliBin                         = "/usr/local/bin/rancher"
+	rancherNamespace                      = "cattle-system"
+	terraformVarFileKeycloakAdminPassword = "/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars"
 )
 
 type RancherAddNodeOpts struct {
@@ -719,12 +720,16 @@ func commitRancher() error {
 		}
 
 		// Create token and eanble keycloak auth
-		if err := terraformExec("apply", "rancher", "cube_controller="+cubeSettings.GetControllerIp()); err != nil {
+		if err := terraformExec("apply", "rancher", []string{"cube_controller=" + cubeSettings.GetControllerIp()}, []string{}); err != nil {
 			zap.S().Warn(errors.WithStack(err))
 		}
 
 		// Create rancher client on keycloak
-		if err := terraformExec("apply", "keycloak_rancher", "cube_controller="+cubeSettings.GetControllerIp()); err != nil {
+		if err := terraformExec(
+			"apply",
+			"keycloak_rancher",
+			[]string{"cube_controller=" + cubeSettings.GetControllerIp()},
+			[]string{terraformVarFileKeycloakAdminPassword}); err != nil {
 			zap.S().Warn(errors.WithStack(err))
 		}
 
@@ -766,11 +771,15 @@ func resetRancher() error {
 
 	os.RemoveAll(rancherWorkDir)
 
-	if err := terraformExec("destroy", "keycloak_rancher", "cube_controller="+cubeSettings.GetControllerIp()); err != nil {
+	if err := terraformExec(
+		"destroy",
+		"keycloak_rancher",
+		[]string{"cube_controller=" + cubeSettings.GetControllerIp()},
+		[]string{terraformVarFileKeycloakAdminPassword}); err != nil {
 		zap.S().Warn(errors.WithStack(err))
 	}
 
-	if err := terraformExec("destroy", "rancher", "cube_controller="+cubeSettings.GetControllerIp()); err != nil {
+	if err := terraformExec("destroy", "rancher", []string{"cube_controller=" + cubeSettings.GetControllerIp()}, []string{}); err != nil {
 		zap.S().Warn(errors.WithStack(err))
 	}
 

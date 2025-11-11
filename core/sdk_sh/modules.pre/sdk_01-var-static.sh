@@ -54,6 +54,7 @@ BUILTIN_EPHEMERAL=ephemeral-vms
 
 ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
 TERRAFORM_CUBE="/usr/local/bin/terraform-cube.sh"
+TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD="/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars"
 CURL="timeout $SRVTO /usr/bin/curl"
 MYSQL="timeout $SRVTO /usr/bin/mysql"
 

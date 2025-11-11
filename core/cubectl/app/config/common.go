@@ -105,7 +105,7 @@ func genSshKeys() error {
 	return nil
 }
 
-func terraformExec(cmd string, mod string, vars ...string) error {
+func terraformExec(cmd string, mod string, vars []string, varFiles []string) error {
 	args := []string{
 		cmd, "-auto-approve",
 		"-target=module." + mod,
@@ -117,6 +117,10 @@ func terraformExec(cmd string, mod string, vars ...string) error {
 
 	for _, v := range vars {
 		args = append(args, "-var", v)
+	}
+
+	for _, vf := range varFiles {
+		args = append(args, "-var-file="+vf)
 	}
 
 	if err := util.Retry(

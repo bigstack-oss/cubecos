@@ -2361,8 +2361,14 @@ ceph_dashboard_idp_config()
         else
             curl -k https://$shared_id:$port/ceph/auth/saml2/metadata | xmllint --format - > /etc/keycloak/ceph_dashboard_sp_metadata.xml
             # WHY?! run twice to make configure default client scope work
-            Quiet -n $TERRAFORM_CUBE apply -auto-approve -target=module.keycloak_ceph_dashboard -var cube_controller=$shared_id
-            Quiet -n $TERRAFORM_CUBE apply -auto-approve -target=module.keycloak_ceph_dashboard -var cube_controller=$shared_id
+            Quiet -n $TERRAFORM_CUBE apply \
+                -auto-approve -target=module.keycloak_ceph_dashboard \
+                -var "cube_controller=${shared_id}" \
+                "-var-file=${TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD}"
+            Quiet -n $TERRAFORM_CUBE apply \
+                -auto-approve -target=module.keycloak_ceph_dashboard \
+                -var "cube_controller=${shared_id}" \
+                "-var-file=${TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD}"
             break
         fi
         sleep 1

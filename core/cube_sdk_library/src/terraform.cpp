@@ -5,7 +5,8 @@
 bool ExecTerraform(
     const std::string command,
     const std::string terraformModule,
-    const std::vector<std::string> variables)
+    const std::vector<std::string> variables,
+    const std::vector<std::string> variableFiles)
 {
     std::vector<std::string> arguments = {
         command,
@@ -20,6 +21,10 @@ bool ExecTerraform(
     for (const std::string& v : variables) {
         arguments.push_back("-var");
         arguments.push_back(v);
+    }
+
+    for (const std::string& vf : variableFiles) {
+        arguments.push_back("-var-file=" + vf);
     }
 
     std::stringstream argumentLine;

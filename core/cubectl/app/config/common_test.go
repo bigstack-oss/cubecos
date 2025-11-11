@@ -123,7 +123,7 @@ func TestTerraformModuleMysql(t *testing.T) {
 
 	testdb := "testdb"
 
-	if err := terraformExec("apply", "mysql", "mysql_dbname="+testdb); err != nil {
+	if err := terraformExec("apply", "mysql", []string{"mysql_dbname=" + testdb}, []string{}); err != nil {
 		t.Fatal(err)
 	}
 
