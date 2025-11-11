@@ -800,7 +800,7 @@ CONFIG_COMMAND(get_keycloak_admin_password, GetKeycloakAdminPasswordMain, GetKey
 static void
 UpdateKeycloakAdminPasswordUsage()
 {
-    fprintf(stderr, "Usage: %s update_keycloak_admin_password\n", HexLogProgramName());
+    fprintf(stderr, "Usage: %s update_keycloak_admin_password <password>\n", HexLogProgramName());
 }
 
 static std::string
