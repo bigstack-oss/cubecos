@@ -672,6 +672,120 @@ RemoveKeycloakSamlMetadataMain(int argc, char** argv)
 
 CONFIG_COMMAND_WITH_SETTINGS(remove_keycloak_saml_metadata, RemoveKeycloakSamlMetadataMain, RemoveKeycloakSamlMetadataUsage);
 
+/**
+ * Check if the admin password is stored in K8S secret on K3S.
+ */
+static bool
+isKeycloakUserPasswordInK8sSecret()
+{
+    bool ret = HexUtilSystemF(
+                   0,
+                   0,
+                   "/usr/local/bin/k3s kubectl get secret %s -n %s",
+                   KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+                   APP_NAMESPACE.c_str())
+        == 0;
+
+    if (ret) {
+        HexLogInfo("found the existing keycloak admin password");
+    }
+
+    return ret;
+}
+
+/**
+ * Get the admin password from the K8S secret.
+ */
+static std::string
+getKeycloakAdminPasswordFromK8sSecret()
+{
+    if (!isKeycloakUserPasswordInK8sSecret()) {
+        return "";
+    }
+
+    TempFile base64encodedAdminPass = CreateTempFile();
+    if (!base64encodedAdminPass.isValid) {
+        HexLogError("failed to create a temporary file");
+        return "";
+    }
+    if (HexUtilSystemF(
+            0,
+            0,
+            "/usr/local/bin/k3s kubectl get secret %s -n %s -o jsonpath='{.data.password}' > %s",
+            KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+            APP_NAMESPACE.c_str(),
+            base64encodedAdminPass.fileName.c_str())
+        != 0) {
+        HexLogError("failed to read the existing keycloak admin password k8s secret");
+        return "";
+    }
+    HexLogInfo("extracted the existing keycloak admin password");
+
+    const std::string base64encodedAdminPassString = HexUtilPOpen(
+        "base64 --decode %s",
+        base64encodedAdminPass.fileName.c_str());
+    DeleteTempFile(base64encodedAdminPass);
+
+    return base64encodedAdminPassString;
+}
+
+/**
+ * Save the new admin to the K8S secret.
+ */
+static bool
+saveKeycloakUserPasswordToK8sSecret(
+    const bool& hasOldOne,
+    const std::string& password)
+{
+    if (hasOldOne) {
+        if (HexUtilSystemF(
+                0,
+                0,
+                "/usr/local/bin/k3s kubectl delete secret %s -n %s",
+                KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+                APP_NAMESPACE.c_str())
+            != 0) {
+            HexLogError("failed to delete the old keycloak admin password k8s secret");
+            return false;
+        }
+    }
+
+    if (HexUtilSystemF(
+            0,
+            0,
+            "/usr/local/bin/k3s kubectl create secret generic %s --from-literal=password='%s' -n %s",
+            KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+            password.c_str(),
+            APP_NAMESPACE.c_str())
+        != 0) {
+        HexLogError("failed to save keycloak admin password as a k8s secret");
+        return false;
+    }
+
+    return true;
+}
+
+static void
+GetKeycloakAdminPasswordUsage()
+{
+    fprintf(stderr, "Usage: %s get_keycloak_admin_password\n", HexLogProgramName());
+}
+
+static int
+GetKeycloakAdminPasswordMain(int argc, char** argv)
+{
+    std::string adminPassInK8sSecret = getKeycloakAdminPasswordFromK8sSecret();
+    if (adminPassInK8sSecret.empty()) {
+        std::cout << "admin";
+        return EXIT_SUCCESS;
+    }
+
+    std::cout << adminPassInK8sSecret;
+    return EXIT_SUCCESS;
+}
+
+CONFIG_COMMAND(get_keycloak_admin_password, GetKeycloakAdminPasswordMain, GetKeycloakAdminPasswordUsage);
+
 static void
 UpdateKeycloakAdminPasswordUsage()
 {
@@ -856,42 +970,19 @@ updateKeycloakAdminPassword(
     const std::string& password)
 {
     /**
-     * TODO: Check if the admin password is stored in k8s secret on k3s.
-     * If so, retrieve the password. If not, use the default.
+     * Retrieve the existing password,
+     * use the default one if not stored in K8S secret.
      */
-    bool isAdminPassStored = HexUtilSystemF(
-                                 0,
-                                 0,
-                                 "kubectl get secret %s -n %s",
-                                 KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
-                                 APP_NAMESPACE.c_str())
-        == 0;
+    bool isAdminPassStored = isKeycloakUserPasswordInK8sSecret();
     std::string adminPass = "admin";
     if (isAdminPassStored) {
-        HexLogInfo("found the existing keycloak admin password");
-
-        TempFile base64encodedAdminPass = CreateTempFile();
-        if (HexUtilSystemF(
-                0,
-                0,
-                "kubectl get secret %s -n %s -o jsonpath='{.data.password}' > %s",
-                KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
-                APP_NAMESPACE.c_str(),
-                base64encodedAdminPass.fileName.c_str())
-            != 0) {
-            HexLogError("failed to read the existing keycloak admin password k8s secret");
+        const std::string adminPassInK8sSecret = getKeycloakAdminPasswordFromK8sSecret();
+        if (adminPassInK8sSecret.empty()) {
+            HexLogError("failed to get the admin password from the k8s secret");
             return false;
         }
-        HexLogInfo("extracted the existing keycloak admin password");
 
-        const std::string base64encodedAdminPassString = HexUtilPOpen(
-            "base64 --decode %s",
-            base64encodedAdminPass.fileName.c_str());
-        DeleteTempFile(base64encodedAdminPass);
-
-        if (!base64encodedAdminPassString.empty()) {
-            adminPass = base64encodedAdminPassString;
-        }
+        adminPass = adminPassInK8sSecret;
     }
 
     // get the admin access token
@@ -915,29 +1006,12 @@ updateKeycloakAdminPassword(
     }
 
     // save the new password to the k8s secret
-    if (isAdminPassStored) {
-        if (HexUtilSystemF(
-                0,
-                0,
-                "kubectl delete secret %s -n %s",
-                KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
-                APP_NAMESPACE.c_str())
-            != 0) {
-            HexLogError("failed to delete the old keycloak admin password k8s secret");
-            return false;
-        }
-    }
-    if (HexUtilSystemF(
-            0,
-            0,
-            "kubectl create secret generic %s --from-literal=password='%s' -n %s",
-            KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
-            password.c_str(),
-            APP_NAMESPACE.c_str())
-        != 0) {
-        HexLogError("failed to save keycloak admin password as a k8s secret");
+    if (!saveKeycloakUserPasswordToK8sSecret(isAdminPassStored, password)) {
+        HexLogError("failed to save keycloak admin password to the k8s secret");
         return false;
     }
+
+    // TODO: update the password used in terraform provider
 
     return true;
 }
