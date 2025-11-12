@@ -1070,3 +1070,41 @@ UpdateKeycloakAdminPasswordMain(int argc, char** argv)
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(update_keycloak_admin_password, UpdateKeycloakAdminPasswordMain, UpdateKeycloakAdminPasswordUsage);
+
+/**
+ * Check if we could use the stored Keycloak admin password to log in Keycloak.
+ */
+static bool
+checkKeycloakAdminPassword(const std::string& endpointIp)
+{
+    std::string currentAdminPass;
+    if (isKeycloakUserPasswordInK8sSecret()) {
+        currentAdminPass = getKeycloakAdminPasswordFromK8sSecret();
+    } else {
+        currentAdminPass = "admin";
+    }
+
+    const std::string token = getKeycloakAdminAccessToken(endpointIp, currentAdminPass);
+
+    if (token.empty()) {
+        HexLogError("failed to log in keycloak using the current admin password");
+        return false;
+    }
+
+    return true;
+}
+
+static void
+CheckKeycloakAdminPasswordUsage()
+{
+    fprintf(stderr, "Usage: %s check_keycloak_admin_password <password>\n", HexLogProgramName());
+}
+
+static int
+CheckKeycloakAdminPasswordMain(int argc, char** argv)
+{
+    std::string sharedId = G(SHARED_ID);
+    return checkKeycloakAdminPassword(sharedId) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+CONFIG_COMMAND_WITH_SETTINGS(check_keycloak_admin_password, CheckKeycloakAdminPasswordMain, CheckKeycloakAdminPasswordUsage);

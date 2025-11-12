@@ -312,6 +312,11 @@ health_settings_check()
         esac
     done
 
+    if ! $HEX_CFG check_keycloak_admin_password ; then
+        ERR_MSG+="wrong keycloak admin password\n"
+        ERR_CODE=4
+    fi
+
     _health_fail_log
 }
 

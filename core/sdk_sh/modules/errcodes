@@ -31,9 +31,10 @@ eval "ERR_DESC_$SRV[1]='service unready'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="settings"
-eval "ERR_DESC_$SR[1]='misconfigured alerts'"
-eval "ERR_DESC_$SR[2]='misconfigured net_hostname'"
-eval "ERR_DESC_$SR[3]='misconfigured tunings'"
+eval "ERR_DESC_$SRV[1]='misconfigured alerts'"
+eval "ERR_DESC_$SRV[2]='misconfigured net_hostname'"
+eval "ERR_DESC_$SRV[3]='misconfigured tunings'"
+eval "ERR_DESC_$SRV[4]='wrong keycloak admin password'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="license"
