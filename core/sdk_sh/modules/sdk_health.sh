@@ -681,6 +681,7 @@ health_mysql_check()
     local status=$($MYSQL -u root -e "show global status like 'wsrep_cluster_status'" | grep wsrep_cluster_status | awk '{print $2}')
     local online=$($MYSQL -u root -e "show global status like 'wsrep_cluster_size'" | grep wsrep_cluster_size | awk '{print $2}')
     local state=$($MYSQL -u root -e "show global status like 'wsrep_local_state_comment'" | grep wsrep_local_state_comment | awk '{print $2}')
+    local active_total=$(cmd -v systemctl is-active mariadb | grep "|0|active$" | wc -l)
     if [ $node_total -eq 1 ] ; then
         if [ "$status" != "Disconnected" ] ; then
             ERR_CODE=1
@@ -696,6 +697,9 @@ health_mysql_check()
             ERR_CODE=3
             ERR_MSG+="mysql cluster doesn't sync-ed\n"
             ERR_LOG="$MYSQL -u root -e \"show global status like 'wsrep_local_state_comment'\""
+        elif [ $"$node_total" != "$active_total" ] ; then
+            ERR_CODE=4
+            ERR_MSG+="$active_total/$node_total mariadb active\n"
         fi
     fi
 
@@ -704,35 +708,44 @@ health_mysql_check()
 
 _health_mysql_repair()
 {
-    cmd -cor "hex_sdk remote_systemd_stop \$HOSTNAME mariadb"
+    local ts=$(date +%Y%m%d-%H%M%S)
+    local master=$CUBE_NODE_CONTROL_HOSTNAMES
+
+    cmd -cor "hex_sdk remote_systemd_stop \$HOSTNAME mariadb ; killall -9 mariadbd ; rm -f /var/lib/mysql/mysql.sock"
     if cmd -cv cat /var/lib/mysql/grastate.dat | grep -q "safe_to_bootstrap: 1" ; then
         local node=$(cmd -cv "grep -q 'safe_to_bootstrap: 1' /var/lib/mysql/grastate.dat" | grep '|0|' | cut -d"|" -f1 | tail -1)
         remote_run $node galera_new_cluster
-        cmd -co "hex_sdk remote_systemd_start \$HOSTNAME mariadb || ( killall -9 mariadbd ; systemctl restart mariadb )"
     else
-        local num_control=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
+        cmd -c "cp -rp /var/lib/mysql /var/lib/mysql-\${HOSTNAME}-${ts}"
         local cnt=0
-        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
             ((cnt++))
-            echo "num_control: $((num_control - 1))"
-            if [ $(cmd -v "systemctl is-active mariadb" | grep failed | wc -l) -ge $((num_control - 1)) -a $cnt -eq 1 ] ; then
-                galera_new_cluster
+            if [ $cnt -eq 1 ] ; then # last control node
+                remote_run $node "sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /var/lib/mysql/grastate.dat"
+                remote_run $node galera_new_cluster
             else
-                remote_systemd_start $node mariadb || remote_run $node "killall -9 mariadbd ; systemctl restart mariadb"
+                remote_run $node "rm -rf /var/lib/mysql/*"
             fi
         done
     fi
+
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        remote_systemd_start $node mariadb || remote_run $node "timeout $SRVSTO systemctl stop mariadb ; killall -9 mariadbd ; rm -rf /var/lib/mysql/* ; systemctl start mariadb"
+    done
 }
 
 health_mysql_repair()
 {
-    # multiple attempts to fix is needed, especially after rolling-upgrade
-    for i in 1 2 3 ; do
-        _health_mysql_repair
-        if health_mysql_check ; then
-            break
-        fi
-    done
+    cmd -c "timeout $SRVTO systemctl restart mariadb"
+    if ! health_mysql_check ; then
+        # multiple attempts to fix is needed, especially after rolling-upgrade
+        for i in 1 2 3 ; do
+            _health_mysql_repair
+            if health_mysql_check ; then
+                break
+            fi
+        done
+    fi
 }
 
 health_vip_report()
@@ -2934,7 +2947,7 @@ health_logstash_report()
 health_logstash_check()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if cubectl node list -r control | grep "^${ctrl}," | grep -q moderator ; then
+        if remote_run $node $HEX_SDK is_moderator_node >/dev/null 2>&1 ; then
             continue
         fi
         if ! is_remote_running $node logstash ; then
@@ -2950,7 +2963,7 @@ health_logstash_check()
 health_logstash_repair()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if cubectl node list -r control | grep "^${ctrl}," | grep -q moderator ; then
+        if remote_run $node $HEX_SDK is_moderator_node >/dev/null 2>&1 ; then
             continue
         fi
         if ! is_remote_running $node logstash ; then

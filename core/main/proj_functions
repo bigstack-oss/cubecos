@@ -282,6 +282,9 @@ cube_cluster_start()
         [ ! -e /etc/glance/cirros-0.4.0-x86_64-disk.qcow2 ] || $HEX_SDK os_image_import /etc/glance cirros-0.4.0-x86_64-disk.qcow2 Cirros
         [ ! -e /etc/glance/alpine-tools.qcow2 ] || $HEX_SDK os_image_import /etc/glance alpine-tools.qcow2 Alpine
     fi
+    for i in $($OPENSTACK image list -f value | grep "Cirros queued" | cut -d " " -f1) ; do
+        [ $cnt -le 1 ] || $OPENSTACK image delete $i
+    done
     local cnt=0
     for i in $($OPENSTACK image list -f value | grep "Cirros active" | cut -d " " -f1) ; do
         ((cnt++))

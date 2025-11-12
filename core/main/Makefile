@@ -73,7 +73,7 @@ PROJ_SBOM := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).sbom
 $(PROJ_BASE_ROOTFS): $(TOP_BLDDIR)/core/heavyfs/heavy_rootfs $(PROJ_BOOTSTRAP) $(PROGRAMS) $(shell for m in $(ROOT_COMPONENTS); do find $(COREDIR)/$$m -type f; done)
 	$(call RUN_CMD_TIMED,rm -rf $@,"  RM      $$(basename $@)")
 	$(call RUN_CMD_TIMED,cp -rpf $< $@,"  COPY    $$(basename $<)")
-	$(call RUN_CMD_TIMED, mkdir -p $(PROJ_SHIPDIR) ; trivy fs --format cyclonedx $(PROJ_BASE_ROOTFS) -o $(PROJ_SHIPDIR)/$(PROJ_SBOM), "  GEN     $(PROJ_SBOM)")
+	$(call RUN_CMD_TIMED, mkdir -p $(PROJ_SHIPDIR) ; trivy fs --skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/docker" --skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/rancher" --format cyclonedx $(PROJ_BASE_ROOTFS) -o $(PROJ_SHIPDIR)/$(PROJ_SBOM), "  GEN     $(PROJ_SBOM)")
 
 PKGCLEAN += $(CURDIR)/*.before rootfs *initramfs $(PROJ_SHIPDIR)/$(PROJ_SBOM)
 

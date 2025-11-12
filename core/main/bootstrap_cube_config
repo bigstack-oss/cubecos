@@ -76,24 +76,6 @@ RollingEvacuateAndReboot()
                             break
                         fi
                     fi
-                    if [ "x$(hex_sdk -f json health_vip_report | jq -r .description | cut -d '@' -f2)" = "x$N" ] ; then
-                        msg="Moving VIP away from $N"
-                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-                        hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
-                        pcs resource cleanup
-                        pcs resource move vip
-                        for i in {1..10} ; do
-                            new_vip=$(hex_sdk -f json health_vip_report | jq -r .description | cut -d '@' -f2)
-                            if cubectl node list -j | jq -r .[].hostname | grep "^${new_vip:-NOVIP}$" && [ "x$new_vip" != "x$N" ] ; then
-                                msg="Moved VIP away from $N"
-                                echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-                                hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
-                                break
-                            else
-                                sleep 10
-                            fi
-                        done
-                    fi
                     msg="Rebooting $N"
                     echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                     hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""

@@ -1953,8 +1953,9 @@ ceph_osd_get_id()
         local id0=$(cat $CEPH_OSD_MAP | grep $dev | awk '{print $2}')
         if [ -n "$id0" ] ; then
             if grep "$dev" $CEPH_OSD_MAP | grep -q "$uuid" ; then
+                # while quorum is not formed (ex: powercycling), any further ceph operation is unnecessary
                 # ceph-volume raw list could be wrong
-                if [ "x$($CEPH osd find $id0 | jq -r .crush_location.host)" = "x$HOSTNAME" ] ; then
+                if ! $CEPH -s >/dev/null 2>&1 || [ "x$($CEPH osd find $id0 | jq -r .crush_location.host)" = "x$HOSTNAME" ] ; then
                     echo -n $id0
                     return 0
                 fi

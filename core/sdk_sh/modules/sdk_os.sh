@@ -1315,6 +1315,7 @@ _os_pre_failure_host_evacuation()
     if [ "$1" == "upgrade" ] ; then
         # os_evac_upgrade_prepare
         $HEX_CLI -c cluster check_repair MsgQueue >/tmp/upgrade_rabbitmq.log 2>&1
+        $HEX_SDK -m force health_mysql_repair
 
         if $HEX_SDK health_rabbitmq_check ; then
             # clear stale api for nova, neutron, and cinder

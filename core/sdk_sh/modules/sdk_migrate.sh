@@ -8,10 +8,6 @@ fi
 
 migrate_prepare()
 {
-    if is_control_node ; then
-        # During rolling upgrade, maria times out to start on control 2 and 3
-        touch /etc/appliance/state/mysql_new_cluster
-    fi
     touch /run/cube_migration
 }
 

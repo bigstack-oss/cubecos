@@ -14,6 +14,7 @@ appliance_shutdown()
         timeout 10 umount $CEPHFS_STORE_DIR
         Quiet -n $HEX_SDK ceph_osd_compact
         if is_control_node ; then
+            systemctl stop mariadb
             systemctl stop nfs-ganesha
             Quiet -n $CEPH mds fail $HOSTNAME
         fi
@@ -29,6 +30,7 @@ appliance_reboot()
         timeout 10 umount $CEPHFS_STORE_DIR
         Quiet -n $HEX_SDK ceph_osd_compact
         if is_control_node ; then
+            systemctl stop mariadb
             systemctl stop nfs-ganesha
             Quiet -n $CEPH mds fail $HOSTNAME
         fi
@@ -46,6 +48,7 @@ firmware_swap_active()
         timeout 10 umount $CEPHFS_STORE_DIR
         Quiet -n $HEX_SDK ceph_osd_compact
         if is_control_node ; then
+            systemctl stop mariadb
             systemctl stop nfs-ganesha
             Quiet -n $CEPH mds fail $HOSTNAME
         fi
@@ -61,6 +64,7 @@ firmware_backup()
         timeout 10 umount $CEPHFS_STORE_DIR
         Quiet -n $HEX_SDK ceph_osd_compact
         if is_control_node ; then
+            systemctl stop mariadb
             systemctl stop nfs-ganesha
             Quiet -n $CEPH mds fail $HOSTNAME
         fi
