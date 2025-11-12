@@ -1561,7 +1561,7 @@ cinder_apply_storage_creation()
 
     local backend_index="0"
     local blank_backend_index=""
-    for backend_index in "$(seq 0 "$backend_count_minus_one")" ; do
+    for backend_index in $(seq 0 "$backend_count_minus_one") ; do
         if _hex_function exec_output exec_error \
             yq -r ".backends[${backend_index}].name" \
             "$ext_storage_policy_file" \
@@ -1573,7 +1573,7 @@ cinder_apply_storage_creation()
 
     local storage_found="false"
     backend_index="0"
-    for backend_index in "$(seq 0 "$backend_count_minus_one")" ; do
+    for backend_index in $(seq 0 "$backend_count_minus_one") ; do
         _hex_function exec_output exec_error yq -r ".backends[${backend_index}].name" "$ext_storage_policy_file"
         if [[ "$?" == "0" && "$exec_output" == "$storage_name" ]] ; then
             storage_found="true"
