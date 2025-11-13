@@ -742,7 +742,8 @@ class API:
 
         # Target disk is a volume. Don't check flavor disk size because it
         # doesn't make sense, and check min_disk against the volume size.
-        if root_bdm is not None and root_bdm.is_volume:
+        # Also, skip checking instance snapshots without base images.
+        if root_bdm is not None and root_bdm.is_volume and root_bdm.source_type != 'snapshot':
             # There are 2 possibilities here:
             #
             # 1. The target volume already exists but bdm.volume_size is not
