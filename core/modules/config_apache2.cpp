@@ -1,18 +1,17 @@
 // CUBE SDK
 
+#include "include/role_cubesys.h"
+
+#include <cube/systemd_util.h>
+#include <hex/config_global.h>
+#include <hex/config_module.h>
+#include <hex/config_tuning.h>
+#include <hex/dryrun.h>
 #include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/pidfile.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
-#include <hex/logrotate.h>
-
-#include <hex/config_module.h>
-#include <hex/config_tuning.h>
-#include <hex/config_global.h>
-#include <hex/dryrun.h>
-#include <cube/systemd_util.h>
-
-#include "include/role_cubesys.h"
 
 #define HTTP_PORT 8080
 
@@ -35,6 +34,7 @@ static CubeRole_e s_eCubeRole;
 static LogRotateConf log_conf("httpd", "/var/log/httpd/*.log", DAILY, 128, 0, true);
 
 // external global variables
+CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // public tunings
@@ -46,16 +46,20 @@ CONFIG_TUNING_BOOL(APACHE_ENABLED, "apache.enabled", TUNING_UNPUB, "Set to true 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
+CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
+CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_debugEnabled, APACHE_DEBUG_ENABLED);
 PARSE_TUNING_BOOL(s_enabled, APACHE_ENABLED);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
+PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
+PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 
 static bool
 WriteSiteConf(const char* hostname, const bool debug)
 {
-    FILE *fout = fopen(SITECONF, "w");
+    FILE* fout = fopen(SITECONF, "w");
     if (!fout) {
         HexLogFatal("Unable to write default site file: %s", SITECONF);
         return false;
@@ -73,10 +77,13 @@ WriteSiteConf(const char* hostname, const bool debug)
     return true;
 }
 
+/**
+ * Write Apache mod_status server-status config for non-HA nodes.
+ */
 static bool
-WriteStatusConf()
+writeStatusConf(const std::string& myIp)
 {
-    FILE *fout = fopen(STATUSCONF, "w");
+    FILE* fout = fopen(STATUSCONF, "w");
     if (!fout) {
         HexLogFatal("Unable to write server status config: %s", STATUSCONF);
         return false;
@@ -84,19 +91,60 @@ WriteStatusConf()
 
     fprintf(fout, "<Location \"/server-status\">\n");
     fprintf(fout, "  SetHandler server-status\n");
-    fprintf(fout, "  allow from localhost\n");
+
+    // ban all requests to mitigate Apache mod_status information disclosure vulnerability
+    fprintf(fout, "  Require all denied\n");
+
+    // allow Monasca agents to access
+    fprintf(fout, "  Require local\n");
+    fprintf(fout, "  Require ip %s\n", myIp.c_str());
+
     fprintf(fout, "</Location>\n");
 
     fclose(fout);
+    return true;
+}
 
+/**
+ * Write Apache mod_status server-status config for HA clusters.
+ */
+static bool
+writeStatusConf(const std::vector<std::string>& controlIps)
+{
+    FILE* fout = fopen(STATUSCONF, "w");
+    if (!fout) {
+        HexLogFatal("Unable to write server status config: %s", STATUSCONF);
+        return false;
+    }
+
+    fprintf(fout, "<Location \"/server-status\">\n");
+    fprintf(fout, "  SetHandler server-status\n");
+
+    // ban all requests to mitigate Apache mod_status information disclosure vulnerability
+    fprintf(fout, "  Require all denied\n");
+
+    // allow Monasca agents to access
+    fprintf(fout, "  Require local\n");
+    for (std::vector<std::string>::const_iterator it = controlIps.begin(); it != controlIps.end(); it++) {
+        fprintf(fout, "  Require ip %s\n", it->c_str());
+    }
+
+    fprintf(fout, "</Location>\n");
+
+    fclose(fout);
     return true;
 }
 
 static bool
 Init()
 {
-    if (HexSystemF(0, "sed -e \"s/Listen 80/Listen %d/\" %s > %s",
-                      HTTP_PORT, ORIG, CONF) != 0) {
+    if (HexSystemF(
+            0,
+            "sed -e \"s/Listen 80/Listen %d/\" %s > %s",
+            HTTP_PORT,
+            ORIG,
+            CONF)
+        != 0) {
         HexLogError("failed to update %s", CONF);
         return false;
     }
@@ -105,15 +153,14 @@ Init()
 }
 
 static bool
-Parse(const char *name, const char *value, bool isNew)
+Parse(const char* name, const char* value, bool isNew)
 {
     bool r = true;
 
     TuneStatus s = ParseTune(name, value, isNew);
     if (s == TUNE_INVALID_NAME) {
         HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
-    }
-    else if (s == TUNE_INVALID_VALUE) {
+    } else if (s == TUNE_INVALID_VALUE) {
         HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
         r = false;
     }
@@ -121,7 +168,7 @@ Parse(const char *name, const char *value, bool isNew)
 }
 
 static bool
-ParseNet(const char *name, const char *value, bool isNew)
+ParseNet(const char* name, const char* value, bool isNew)
 {
     if (strcmp(name, NET_HOSTNAME) == 0) {
         s_hostname.parse(value, isNew);
@@ -131,7 +178,7 @@ ParseNet(const char *name, const char *value, bool isNew)
 }
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
     return true;
@@ -174,23 +221,33 @@ Commit(bool modified, int dryLevel)
     if (!IsControl(s_eCubeRole) || !CommitCheck(modified, dryLevel))
         return true;
 
-    std::string sharedId = G(SHARED_ID);
-
-    WriteStatusConf();
-
-    if (s_bSiteConfChanged)
+    if (s_bSiteConfChanged) {
         WriteSiteConf(s_hostname.c_str(), s_debugEnabled.newValue());
+    }
+
+    if (s_ha.modified() || s_ctrlAddrs.modified() || G_MOD(MGMT_ADDR)) {
+        if (s_ha) {
+            const std::vector<std::string> controlIps = hex_string_util::split(s_ctrlAddrs, ',');
+            writeStatusConf(controlIps);
+        } else {
+            const std::string myIp = G(MGMT_ADDR);
+            writeStatusConf(myIp);
+        }
+    }
 
     bool enabled = s_enabled && IsControl(s_eCubeRole);
     SystemdCommitService(enabled, NAME);
 
     // waiting for keystone endpoint service back to work
+    std::string sharedId = G(SHARED_ID);
     if (enabled && HexUtilSystemF(0, 0, HEX_SDK " wait_for_http_endpoint %s 5000 60", sharedId.c_str()) != 0) {
         return false;
     }
 
-    snprintf(buf, sizeof(buf),
-            "/bin/systemctl reload httpd.service > /dev/null 2>/dev/null || true");
+    snprintf(
+        buf,
+        sizeof(buf),
+        "/bin/systemctl reload httpd.service > /dev/null 2>/dev/null || true");
     log_conf.postRotateCmds = buf;
     WriteLogRotateConf(log_conf);
 
@@ -216,4 +273,3 @@ CONFIG_REQUIRES(apache2, masakari);
 // extra tunings
 CONFIG_OBSERVES(apache2, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(apache2, cubesys, ParseCube, NotifyCube);
-
