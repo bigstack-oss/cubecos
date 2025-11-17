@@ -3,6 +3,7 @@
 #include "include/role_cubesys.h"
 
 #include <cube/systemd_util.h>
+#include <filesystem.hpp>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
@@ -59,20 +60,23 @@ PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 static bool
 WriteSiteConf(const char* hostname, const bool debug)
 {
-    FILE* fout = fopen(SITECONF, "w");
-    if (!fout) {
-        HexLogFatal("Unable to write default site file: %s", SITECONF);
+    const std::vector<std::string> fileContent = {
+        std::string("ServerName ") + hostname + "\n",
+        "ErrorLog /var/log/httpd/error.log\n",
+        "CustomLog /var/log/httpd/access.log combined\n",
+        std::string("LogLevel ") + (debug ? "debug" : "info") + "\n",
+        std::string("<VirtualHost *:") + std::to_string(HTTP_PORT) + ">\n",
+        "</VirtualHost>\n",
+    };
+
+    std::string fsError;
+    if (!WriteFile(
+            fsError,
+            SITECONF,
+            fileContent)) {
+        HexLogError("%s", fsError.c_str());
         return false;
     }
-
-    fprintf(fout, "ServerName %s\n", hostname);
-    fprintf(fout, "ErrorLog /var/log/httpd/error.log\n");
-    fprintf(fout, "CustomLog /var/log/httpd/access.log combined\n");
-    fprintf(fout, "LogLevel %s\n", debug ? "debug" : "info");
-    fprintf(fout, "<VirtualHost *:%d>\n", HTTP_PORT);
-    fprintf(fout, "</VirtualHost>\n");
-
-    fclose(fout);
 
     return true;
 }
@@ -83,25 +87,28 @@ WriteSiteConf(const char* hostname, const bool debug)
 static bool
 writeStatusConf(const std::string& myIp)
 {
-    FILE* fout = fopen(STATUSCONF, "w");
-    if (!fout) {
-        HexLogFatal("Unable to write server status config: %s", STATUSCONF);
+    const std::vector<std::string> fileContent = {
+        "<Location \"/server-status\">\n",
+        "  SetHandler server-status\n",
+
+        // ban all requests to mitigate Apache mod_status information disclosure vulnerability
+        "  Require all denied\n",
+
+        // allow Monasca agents to access
+        "  Require local\n",
+        "  Require ip " + myIp + "\n",
+        "</Location>\n",
+    };
+
+    std::string fsError;
+    if (!WriteFile(
+            fsError,
+            STATUSCONF,
+            fileContent)) {
+        HexLogError("%s", fsError.c_str());
         return false;
     }
 
-    fprintf(fout, "<Location \"/server-status\">\n");
-    fprintf(fout, "  SetHandler server-status\n");
-
-    // ban all requests to mitigate Apache mod_status information disclosure vulnerability
-    fprintf(fout, "  Require all denied\n");
-
-    // allow Monasca agents to access
-    fprintf(fout, "  Require local\n");
-    fprintf(fout, "  Require ip %s\n", myIp.c_str());
-
-    fprintf(fout, "</Location>\n");
-
-    fclose(fout);
     return true;
 }
 
@@ -111,27 +118,31 @@ writeStatusConf(const std::string& myIp)
 static bool
 writeStatusConf(const std::vector<std::string>& controlIps)
 {
-    FILE* fout = fopen(STATUSCONF, "w");
-    if (!fout) {
-        HexLogFatal("Unable to write server status config: %s", STATUSCONF);
+    std::vector<std::string> fileContent = {
+        "<Location \"/server-status\">\n",
+        "  SetHandler server-status\n",
+
+        // ban all requests to mitigate Apache mod_status information disclosure vulnerability
+        "  Require all denied\n",
+    };
+
+    // allow Monasca agents to access
+    fileContent.push_back("  Require local\n");
+    for (std::vector<std::string>::const_iterator it = controlIps.begin(); it != controlIps.end(); it++) {
+        fileContent.push_back("  Require ip " + (*it) + "\n");
+    }
+
+    fileContent.push_back("</Location>\n");
+
+    std::string fsError;
+    if (!WriteFile(
+            fsError,
+            STATUSCONF,
+            fileContent)) {
+        HexLogError("%s", fsError.c_str());
         return false;
     }
 
-    fprintf(fout, "<Location \"/server-status\">\n");
-    fprintf(fout, "  SetHandler server-status\n");
-
-    // ban all requests to mitigate Apache mod_status information disclosure vulnerability
-    fprintf(fout, "  Require all denied\n");
-
-    // allow Monasca agents to access
-    fprintf(fout, "  Require local\n");
-    for (std::vector<std::string>::const_iterator it = controlIps.begin(); it != controlIps.end(); it++) {
-        fprintf(fout, "  Require ip %s\n", it->c_str());
-    }
-
-    fprintf(fout, "</Location>\n");
-
-    fclose(fout);
     return true;
 }
 
