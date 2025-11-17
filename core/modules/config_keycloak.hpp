@@ -6,6 +6,7 @@
 #include "config_k3s.hpp"
 #include "include/role_cubesys.h"
 
+#include <cluster.hpp>
 #include <filesystem.hpp>
 #include <helm.hpp>
 #include <hex/config_global.h>
@@ -20,6 +21,7 @@
 #include <mysql_util.h>
 #include <terraform.hpp>
 #include <third_party/json11.hpp>
+#include <upgrade.hpp>
 
 #include <iostream>
 #include <unistd.h>

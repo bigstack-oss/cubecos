@@ -19,14 +19,21 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(APPLIANCE_LOGIN_GREETING);
+CONFIG_TUNING_SPEC(NET_HOSTNAME);
+CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
+CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_HOSTS);
 
 // parse tunings
 PARSE_TUNING_STR(s_loginGreeting, APPLIANCE_LOGIN_GREETING);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
+PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
+PARSE_TUNING_X_STR(s_ctrlHosts, CUBESYS_CONTROL_HOSTS, 1);
 
 static bool s_bApplianceModified = false;
+static bool s_bNetModified = false;
 static bool s_bCubeModified = false;
 
+static ConfigString s_hostname;
 static CubeRole_e s_eCubeRole;
 
 static bool
@@ -40,6 +47,22 @@ static void
 NotifyAppliance(bool modified)
 {
     s_bApplianceModified = IsModifiedTune(0);
+}
+
+static bool
+ParseNet(const char* name, const char* value, bool isNew)
+{
+    if (strcmp(name, NET_HOSTNAME) == 0) {
+        s_hostname.parse(value, isNew);
+    }
+
+    return true;
+}
+
+static void
+NotifyNet(bool modified)
+{
+    s_bNetModified = s_hostname.modified();
 }
 
 static bool
@@ -182,6 +205,28 @@ checkKeycloak()
     HexLogInfo("keycloak replica count matched the node count");
 
     HexLogInfo("checked keycloak");
+    return true;
+}
+
+/**
+ * Check if it is possible to update Keycloak. This would iron out some edge cases.
+ */
+static bool
+isUpdateKeycloakPossible(
+    const bool isHa,
+    const std::string& hostname,
+    const std::string& controlNodes)
+{
+    if (!isHa) {
+        // always possible to update Keycloak on non-HA nodes
+        return true;
+    }
+
+    if (IsRollingUpgrade() && !IsLastControlNode(hostname, controlNodes)) {
+        HexLogInfo("skipped updating keycloak, reason: rolling upgrade");
+        return false;
+    }
+
     return true;
 }
 
@@ -367,7 +412,8 @@ Commit(bool modified, int dryLevel)
         }
     }
 
-    if (s_bApplianceModified || !checkKeycloak()) {
+    if ((s_bApplianceModified || !checkKeycloak())
+        && isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
         // update keycloak and roll out pods
         HexLogInfo("update keycloak");
         if (!updateKeycloak()) {
@@ -384,7 +430,9 @@ Commit(bool modified, int dryLevel)
         } else {
             HexLogInfo("keycloak pods were all rolled out");
         }
+    }
 
+    if (s_bApplianceModified) {
         // check if the Keycloak endpoint is reachable
         std::string sharedId = G(SHARED_ID);
         if (!checkKeycloakEndpoint(sharedId)) {
@@ -423,6 +471,7 @@ CONFIG_REQUIRES(keycloak, mysql);
 
 // tuning dependencies
 CONFIG_OBSERVES(keycloak, appliance, ParseAppliance, NotifyAppliance);
+CONFIG_OBSERVES(keycloak, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(keycloak, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(keycloak, "/etc/keycloak");
@@ -469,6 +518,10 @@ ClusterStartMain(int argc, char** argv)
 {
     if (argc != 1) {
         return EXIT_FAILURE;
+    }
+
+    if (!isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
+        return EXIT_SUCCESS;
     }
 
     HexLogInfo("update keycloak");

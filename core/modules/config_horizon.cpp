@@ -9,7 +9,7 @@
 #include <hex/process_util.h>
 #include <hex/dryrun.h>
 
-#include <cube/cluster.h>
+#include <cluster.hpp>
 
 #include "mysql_util.h"
 #include "include/role_cubesys.h"

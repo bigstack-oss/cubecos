@@ -5,7 +5,7 @@
 #include <hex/process_util.h>
 #include <hex/dryrun.h>
 
-#include <cube/cluster.h>
+#include <cluster.hpp>
 
 static bool
 Commit(bool modified, int dryLevel)

@@ -6,7 +6,7 @@
 #include <hex/process_util.h>
 #include <hex/dryrun.h>
 
-#include <cube/cluster.h>
+#include <cluster.hpp>
 
 // public tunings
 CONFIG_TUNING_BOOL(RANCHER_ENABLED, "rancher.enabled", TUNING_UNPUB, "Set to true to enable Kubernetes as a Service.", true);

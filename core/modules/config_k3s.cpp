@@ -11,7 +11,7 @@
 #include <hex/logrotate.h>
 
 #include <cube/network.h>
-#include <cube/cluster.h>
+#include <cluster.hpp>
 
 typedef std::map<std::string, ConfigUInt> MtuMap;
 

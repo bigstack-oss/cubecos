@@ -12,7 +12,7 @@
 #include <hex/logrotate.h>
 
 #include <cube/config_file.h>
-#include <cube/cluster.h>
+#include <cluster.hpp>
 #include <cube/systemd_util.h>
 
 #include "mysql_util.h"

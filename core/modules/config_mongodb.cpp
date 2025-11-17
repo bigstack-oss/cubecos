@@ -15,7 +15,7 @@
 #include <hex/process_util.h>
 #include <hex/string_util.h>
 
-#include <cube/cluster.h>
+#include <cluster.hpp>
 #include <cube/config_file.h>
 #include <cube/systemd_util.h>
 

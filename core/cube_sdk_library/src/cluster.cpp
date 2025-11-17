@@ -1,20 +1,8 @@
 // CUBE SDK
 
-#include <string>
-#include <algorithm>
-#include <thread>
+#include "cluster.hpp"
 
-#include <unistd.h>
-#include <hex/log.h>
-#include <hex/string_util.h>
-#include <hex/crypto.h>
-
-#include <cube/network.h>
-
-#define ConvergedRatio  16
-
-int
-GetControlWorkers(bool isConverged, bool isEdge)
+int GetControlWorkers(bool isConverged, bool isEdge)
 {
     if (isEdge) {
         return 1;
@@ -63,9 +51,9 @@ GetSaltKey(bool saltkey, const std::string& key, const std::string& salt)
     HexCryptoGetPassphrase(16, key, salt, &pass);
 
     // replace all special characters appear in b64 encoding table
-    std::replace(pass.begin(), pass.end(), '+', 'p');   // replace all + to p
-    std::replace(pass.begin(), pass.end(), '/', 'S');   // replace all / to S
-    std::replace(pass.begin(), pass.end(), '=', 'e');   // replace all = to e
+    std::replace(pass.begin(), pass.end(), '+', 'p'); // replace all + to p
+    std::replace(pass.begin(), pass.end(), '/', 'S'); // replace all / to S
+    std::replace(pass.begin(), pass.end(), '=', 'e'); // replace all = to e
 
     return pass;
 }
@@ -85,7 +73,7 @@ GetSharedId(bool isCtrl, bool ha, const std::string& ctrl, const std::string& ct
 std::string
 GetIfAddr(std::string ifname)
 {
-    char ipaddr[64] = {0};
+    char ipaddr[64] = { 0 };
     if (!GetIPAddr(ifname.c_str(), ipaddr, sizeof(ipaddr), AF_INET)) {
         HexLogError("failed to read %s ipv4 address, return 0.0.0.0", ifname.c_str());
         return "0.0.0.0";
@@ -103,7 +91,7 @@ GetControllerIp(bool isCtrl, std::string controllerIp, std::string mgmtIf)
     return GetIfAddr(mgmtIf);
 }
 
-size_t
+std::size_t
 GetClusterSize(bool ha, const std::string& clusterGroup)
 {
     if (!ha)
@@ -112,8 +100,7 @@ GetClusterSize(bool ha, const std::string& clusterGroup)
     return hex_string_util::split(clusterGroup.c_str(), ',').size();
 }
 
-bool
-IsMaster(bool isCtrl, const std::string& hostname, const std::string& clusterHosts)
+bool IsMaster(bool isCtrl, const std::string& hostname, const std::string& clusterHosts)
 {
     if (!isCtrl)
         return false;
@@ -162,6 +149,16 @@ GetControllerPeers(const std::string& self, const std::string& controlGroup)
     return peers;
 }
 
+bool IsLastControlNode(
+    const std::string& hostname,
+    const std::string& controlGroup)
+{
+    const std::vector<std::string> controls = hex_string_util::split(controlGroup, ',');
+    const std::string lastControl = controls.back();
+
+    return hostname == lastControl;
+}
+
 std::string
 MemcachedServers(const bool ha, const std::string& controller, const std::string& clusterGroup)
 {
@@ -170,7 +167,7 @@ MemcachedServers(const bool ha, const std::string& controller, const std::string
     else {
         auto group = hex_string_util::split(clusterGroup, ',');
         std::string servers = "";
-        for (size_t i = 0 ; i < group.size() ; i++) {
+        for (size_t i = 0; i < group.size(); i++) {
             servers += group[i] + ":11211";
             if (i + 1 < group.size())
                 servers += ",";
@@ -182,14 +179,14 @@ MemcachedServers(const bool ha, const std::string& controller, const std::string
 
 std::string
 RabbitMqServers(const bool ha, const std::string& controller,
-                const std::string& pass, const std::string& clusterGroup)
+    const std::string& pass, const std::string& clusterGroup)
 {
     if (!ha)
         return "rabbit://openstack:" + pass + "@" + controller + ":5672";
     else {
         auto group = hex_string_util::split(clusterGroup, ',');
         std::string servers = "rabbit://";
-        for (size_t i = 0 ; i < group.size() ; i++) {
+        for (size_t i = 0; i < group.size(); i++) {
             servers += "openstack:" + pass + "@" + group[i] + ":5672";
             if (i + 1 < group.size())
                 servers += ",";
@@ -209,7 +206,7 @@ KafkaServers(const bool ha, const std::string& controller, const std::string& cl
     else {
         auto group = hex_string_util::split(clusterGroup, ',');
         std::string servers = "";
-        for (size_t i = 0 ; i < group.size() ; i++) {
+        for (size_t i = 0; i < group.size(); i++) {
             servers += q + group[i] + ":9095" + q;
             if (i + 1 < group.size())
                 servers += ",";
@@ -275,4 +272,3 @@ GetMgmtCidr(const std::string& mgmtCidr, int idx)
 {
     return GetMgmtCidrIp(mgmtCidr, idx, "");
 }
-

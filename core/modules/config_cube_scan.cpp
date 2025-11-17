@@ -13,7 +13,7 @@
 #include <hex/config_global.h>
 
 #include <cube/network.h>
-#include <cube/cluster.h>
+#include <cluster.hpp>
 
 #include "include/role_cubesys.h"
 

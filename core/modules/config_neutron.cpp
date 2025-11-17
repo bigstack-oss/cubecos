@@ -17,7 +17,7 @@
 #include <cube/systemd_util.h>
 #include <cube/config_file.h>
 #include <cube/network.h>
-#include <cube/cluster.h>
+#include <cluster.hpp>
 #include <cube/cubesys.h>
 
 #include "mysql_util.h"

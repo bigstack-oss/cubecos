@@ -17,7 +17,7 @@
 #include <hex/logrotate.h>
 
 #include <cube/systemd_util.h>
-#include <cube/cluster.h>
+#include <cluster.hpp>
 
 #include "include/role_cubesys.h"
 

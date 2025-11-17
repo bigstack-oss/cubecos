@@ -1,7 +1,7 @@
 // CUBE SDK
 
 #include "include/role_cubesys.h"
-#include <cube/cluster.h>
+#include <cluster.hpp>
 #include <cube/systemd_util.h>
 #include <hex/config_global.h>
 #include <hex/config_module.h>
