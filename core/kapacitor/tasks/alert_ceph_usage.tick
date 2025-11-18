@@ -17,7 +17,7 @@ data
     .infoReset(lambda: int("used") <= 65)
     .stateChangesOnly()
     .noRecoveries()
-    .message('system,category=CEP,severity=I,key=CEP00003I,host={{ .Tags.host }} message="host "{{ .Tags.host }}" osd "{{ .Tags.component }}" usage {{ .Fields.used }}% exceeds threshold 65%",metadata="{ "category": "cep", "host": "{{ .Tags.host }}" }" {{ .Fields.ts }}')
+    .message('system,category=CEP,severity=I,key=CEP00003I,host={{ .Tags.host }} message="host "{{ .Tags.host }}" osd "{{ .Tags.component }}" usage {{ .Fields.used }}% exceeds threshold 75%",metadata="{ "category": "cep", "host": "{{ .Tags.host }}" }" {{ .Fields.ts }}')
     .post()
       .endpoint('events')
 
@@ -27,6 +27,6 @@ data
     .warnReset(lambda: int("used") <= 75)
     .stateChangesOnly()
     .noRecoveries()
-    .message('system,category=CEP,severity=W,key=CEP00004W,host={{ .Tags.host }} message="host "{{ .Tags.host }}" osd "{{ .Tags.component }}" usage {{ .Fields.used }}% exceeds threshold 75%",metadata="{ "category": "cep", "host": "{{ .Tags.host }}" }" {{ .Fields.ts }}')
+    .message('system,category=CEP,severity=W,key=CEP00004W,host={{ .Tags.host }} message="host "{{ .Tags.host }}" osd "{{ .Tags.component }}" usage {{ .Fields.used }}% exceeds threshold 85%",metadata="{ "category": "cep", "host": "{{ .Tags.host }}" }" {{ .Fields.ts }}')
     .post()
       .endpoint('events')
