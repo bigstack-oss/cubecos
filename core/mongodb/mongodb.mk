@@ -4,7 +4,7 @@
 MONGODB_BINARY := /usr/bin/mongod
 MONGODB_LOG_DIR := /var/log/mongodb
 
-MONGODB_PKG := mongodb-org-server-7.0.12-1.el9.x86_64.rpm
+MONGODB_PKG := mongodb-org-server-7.0.25-1.el9.x86_64.rpm
 MONGOSH_PKG := mongodb-mongosh-shared-openssl3-2.2.15.x86_64.rpm
 
 ROOTFS_DNF_DL_FROM += https://repo.mongodb.org/yum/redhat/9/mongodb-org/7.0/x86_64/RPMS/$(MONGODB_PKG)
