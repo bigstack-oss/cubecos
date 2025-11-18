@@ -71,9 +71,30 @@ include $(SRCDIR)/cube-post.mk
 
 PROJ_SBOM := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).sbom
 $(PROJ_BASE_ROOTFS): $(TOP_BLDDIR)/core/heavyfs/heavy_rootfs $(PROJ_BOOTSTRAP) $(PROGRAMS) $(shell for m in $(ROOT_COMPONENTS); do find $(COREDIR)/$$m -type f; done)
-	$(call RUN_CMD_TIMED,rm -rf $@,"  RM      $$(basename $@)")
-	$(call RUN_CMD_TIMED,cp -rpf $< $@,"  COPY    $$(basename $<)")
-	$(call RUN_CMD_TIMED, mkdir -p $(PROJ_SHIPDIR) ; trivy fs --skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/docker" --skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/rancher" --format cyclonedx $(PROJ_BASE_ROOTFS) -o $(PROJ_SHIPDIR)/$(PROJ_SBOM), "  GEN     $(PROJ_SBOM)")
+	$(call RUN_CMD_TIMED, rm -rf $@,"  RM      $$(basename $@)")
+	$(call RUN_CMD_TIMED, cp -rpf $< $@,"  COPY    $$(basename $<)")
+	$(call RUN_CMD_TIMED, mkdir -p $(PROJ_SHIPDIR); trivy fs \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/dev" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/proc" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/sys" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/run" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/run" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/tmp" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/tmp" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/cache" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/log" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/lock" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/spool" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/mnt" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/media" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/docker" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/rancher" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/kubelet" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/srv" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/home" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/root" \
+	--format cyclonedx $(PROJ_BASE_ROOTFS) \
+	-o $(PROJ_SHIPDIR)/$(PROJ_SBOM), "  GEN     $(PROJ_SBOM)")
 
 PKGCLEAN += $(CURDIR)/*.before rootfs *initramfs $(PROJ_SHIPDIR)/$(PROJ_SBOM)
 
