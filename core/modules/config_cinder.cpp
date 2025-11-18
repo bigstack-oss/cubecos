@@ -985,8 +985,13 @@ CONFIG_REQUIRES(cinder, keystone);
 CONFIG_REQUIRES(cinder, memcache);
 CONFIG_REQUIRES(cinder, libvirtd);
 
-CONFIG_MIGRATE(cinder, MAKRER_POOL);
+CONFIG_MIGRATE(cinder, "/etc/cube/cos/cinder/models");
+CONFIG_MIGRATE(cinder, "/etc/multipath/conf.d");
+CONFIG_MIGRATE(cinder, BACKENDDIR);
+CONFIG_MIGRATE(cinder, "/etc/cube/cos/cinder/storage_extra_configs_ownership");
+CONFIG_MIGRATE(cinder, "/etc/cinder/external_storage_extra_configs");
 CONFIG_MIGRATE(cinder, CONF_DIR);
+CONFIG_MIGRATE(cinder, MAKRER_POOL);
 
 // extra tunings
 CONFIG_OBSERVES(cinder, rabbitmq, ParseRabbitMQ, NotifyRabbitMQ);
