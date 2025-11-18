@@ -412,6 +412,7 @@ Commit(bool modified, int dryLevel)
         }
     }
 
+    bool isKeycloakUpdated = false;
     if ((s_bApplianceModified || !checkKeycloak())
         && isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
         // update keycloak and roll out pods
@@ -423,6 +424,7 @@ Commit(bool modified, int dryLevel)
             return true;
         }
         HexLogInfo("updated keycloak");
+        isKeycloakUpdated = true;
 
         // check the roll out status of pods
         if (!K3sWatchRollOut(APP, APP_NAMESPACE, "3m")) {
@@ -432,7 +434,7 @@ Commit(bool modified, int dryLevel)
         }
     }
 
-    if (s_bApplianceModified) {
+    if (isKeycloakUpdated) {
         // check if the Keycloak endpoint is reachable
         std::string sharedId = G(SHARED_ID);
         if (!checkKeycloakEndpoint(sharedId)) {
