@@ -2,7 +2,7 @@
 # grafana installation
 
 # ROOTFS_DNF += grafana
-ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-10.1.10-1.x86_64.rpm
+ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-10.3.12-1.x86_64.rpm
 
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
