@@ -93,6 +93,7 @@ $(PROJ_BASE_ROOTFS): $(TOP_BLDDIR)/core/heavyfs/heavy_rootfs $(PROJ_BOOTSTRAP) $
 	--skip-dirs "$(PROJ_BASE_ROOTFS)/srv" \
 	--skip-dirs "$(PROJ_BASE_ROOTFS)/home" \
 	--skip-dirs "$(PROJ_BASE_ROOTFS)/root" \
+	--skip-dirs "$(PROJ_BASE_ROOTFS)/etc" \
 	--format cyclonedx $(PROJ_BASE_ROOTFS) \
 	-o $(PROJ_SHIPDIR)/$(PROJ_SBOM), "  GEN     $(PROJ_SBOM)")
 
