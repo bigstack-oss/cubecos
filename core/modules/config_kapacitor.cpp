@@ -1,44 +1,44 @@
 // CUBE SDK
 
-#include <unistd.h>
-#include <functional>
-#include <sstream>
-#include <set>
+#include "include/role_cubesys.h"
 
-#include <hex/log.h>
+#include <cluster.hpp>
+#include <cube/systemd_util.h>
+#include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
-#include <hex/config_global.h>
 #include <hex/dryrun.h>
+#include <hex/filesystem.h>
+#include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
 #include <hex/string_util.h>
-#include <hex/filesystem.h>
-#include <hex/logrotate.h>
 
-#include <cube/systemd_util.h>
-#include <cluster.hpp>
-
-#include "include/role_cubesys.h"
+#include <functional>
+#include <regex>
+#include <set>
+#include <sstream>
+#include <unistd.h>
 
 static const char NAME[] = "kapacitor";
 
 #define DEF_EXT ".def"
 #define CONF_PATH "/etc/kapacitor/"
-#define CONF        CONF_PATH "kapacitor.conf"
-#define TASK_DIR    CONF_PATH "tasks/"
-#define TPL_DIR     CONF_PATH "templates/"
-#define HDR_DIR     CONF_PATH "handlers/"
-#define CFGHDR_DIR  CONF_PATH "config_handlers/"
-#define EXTRA_DIR   CONF_PATH "alert_extra/"
+#define CONF CONF_PATH "kapacitor.conf"
+#define TASK_DIR CONF_PATH "tasks/"
+#define TPL_DIR CONF_PATH "templates/"
+#define HDR_DIR CONF_PATH "handlers/"
+#define CFGHDR_DIR CONF_PATH "config_handlers/"
+#define EXTRA_DIR CONF_PATH "alert_extra/"
 #define TELEGRAF_DB "telegraf"
 #define CEPH_DB "ceph"
 #define MONASCA_DB "monasca"
 #define EVENTS_DB "events"
 #define TSDB_RP "def"
 #define HC_TSDB_RP "hc"
-#define ALERT_CHECKER     "/etc/systemd/system/alert-checker.service"
-#define ALERT_TIMER       "/etc/systemd/system/alert-checker.timer"
+#define ALERT_CHECKER "/etc/systemd/system/alert-checker.service"
+#define ALERT_TIMER "/etc/systemd/system/alert-checker.timer"
 
 static std::vector<std::string> s_telegrafTasks = {
     "cpu",
@@ -80,9 +80,9 @@ CONFIG_TUNING_INT(KAPACITOR_ALERT_FLOW_THRESHOLD, "kapacitor.alert.flow.threshol
 CONFIG_TUNING_STR(KAPACITOR_ALERT_EXTRA_PREFIX, "kapacitor.alert.extra.prefix", TUNING_PUB, "Set kapacitor alert message prefix.", "Cube", ValidateRegex, DFT_REGEX_STR);
 
 // private tunigns
-CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_CRIT, "kapacitor.alert.default.crit", TUNING_UNPUB, "Set kapacitor alert default critical threshold.", 95 , 0, 100);
-CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_WARN, "kapacitor.alert.default.warn", TUNING_UNPUB, "Set kapacitor alert default warning threshold.", 85 , 0, 100);
-CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_INFO, "kapacitor.alert.default.info", TUNING_UNPUB, "Set kapacitor alert default info threshold.", 75 , 0, 100);
+CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_CRIT, "kapacitor.alert.default.crit", TUNING_UNPUB, "Set kapacitor alert default critical threshold.", 95, 0, 100);
+CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_WARN, "kapacitor.alert.default.warn", TUNING_UNPUB, "Set kapacitor alert default warning threshold.", 85, 0, 100);
+CONFIG_TUNING_UINT(KAPACITOR_ALERT_DEF_INFO, "kapacitor.alert.default.info", TUNING_UNPUB, "Set kapacitor alert default info threshold.", 75, 0, 100);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_TITLE_PREFIX, "kapacitor.alert.setting.titlePrefix", TUNING_UNPUB, "Set kapacitor alert setting title prefix.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_HOST, "kapacitor.alert.setting.sender.email.host", TUNING_UNPUB, "Set kapacitor alert setting email sender host.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_PORT, "kapacitor.alert.setting.sender.email.port", TUNING_UNPUB, "Set kapacitor alert setting email sender port.", "", ValidateRegex, DFT_REGEX_STR);
@@ -175,12 +175,15 @@ TimerStr(const std::string& interval)
 }
 
 static bool
-CronAlertCheck(bool enabled, const std::string& eventid,
-               const std::string& hostname, const std::string& interval)
+CronAlertCheck(
+    bool enabled,
+    const std::string& eventid,
+    const std::string& hostname,
+    const std::string& interval)
 {
-    if(enabled) {
+    if (enabled) {
         std::string checkerStr = CheckerStr(eventid, hostname);
-        FILE *fout = fopen(ALERT_CHECKER, "w");
+        FILE* fout = fopen(ALERT_CHECKER, "w");
         if (!fout) {
             HexLogError("Could not write alert checker file: %s", ALERT_CHECKER);
             return false;
@@ -205,8 +208,7 @@ CronAlertCheck(bool enabled, const std::string& eventid,
 
         HexSystemF(0, "/usr/bin/systemctl enable alert-checker.timer 2>/dev/null");
         HexSystemF(0, "/usr/bin/systemctl start alert-checker.timer 2>/dev/null");
-    }
-    else {
+    } else {
         HexSystemF(0, "/usr/bin/systemctl disable alert-checker.timer 2>/dev/null");
         HexSystemF(0, "/usr/bin/systemctl stop alert-checker.timer 2>/dev/null");
         unlink(ALERT_CHECKER);
@@ -216,11 +218,23 @@ CronAlertCheck(bool enabled, const std::string& eventid,
     return true;
 }
 
+/**
+ * Filter out illegal characters in a handler name,
+ * since Kapacitor only allow letters, numbers, '-', '.' and '_'
+ * in the name of a handler.
+ */
+std::string
+getValidHandlerName(const std::string& name)
+{
+    const std::regex illegalCharactersRegex("[^a-zA-Z0-9\\-\\.\\_]");
+    return std::regex_replace(name, illegalCharactersRegex, "");
+}
+
 std::string
 AddQuote(const std::vector<std::string>& list)
 {
     std::stringstream out;
-    for (std::size_t i = 0 ; i < list.size() ; i++) {
+    for (std::size_t i = 0; i < list.size(); i++) {
         out << "\"" << list[i] << "\"";
         if (i + 1 < list.size()) {
             out << ", ";
@@ -231,7 +245,7 @@ AddQuote(const std::vector<std::string>& list)
 }
 
 static const std::string
-EscapeDoubleQuote(const std::string &str)
+EscapeDoubleQuote(const std::string& str)
 {
     // Escape each single quoat(") to '\"'
     std::stringstream out;
@@ -246,14 +260,18 @@ EscapeDoubleQuote(const std::string &str)
 }
 
 static bool
-WriteEmailEventHandler(const std::string& name, const std::string& topic, const std::string& match, const std::vector<std::string>& toList)
+WriteEmailEventHandler(
+    const std::string& name,
+    const std::string& topic,
+    const std::string& match,
+    const std::vector<std::string>& toList)
 {
     if (name.length() == 0 || toList.size() == 0) {
         return false;
     }
 
     std::string fname = CFGHDR_DIR "email_" + name + ".yaml";
-    FILE *fout = fopen(fname.c_str(), "w");
+    FILE* fout = fopen(fname.c_str(), "w");
     if (!fout) {
         HexLogError("Unable to write email event handler : %s", fname.c_str());
         return false;
@@ -309,14 +327,18 @@ findSlack(std::string url)
 }
 
 static bool
-WriteSlackEventHandler(const std::string& name, const std::string& id, const std::string& topic, const std::string& match)
+WriteSlackEventHandler(
+    const std::string& name,
+    const std::string& id,
+    const std::string& topic,
+    const std::string& match)
 {
     if (name.length() == 0 || id.length() == 0) {
         return false;
     }
 
     std::string fname = CFGHDR_DIR "slack_" + name + "_" + id + ".yaml";
-    FILE *fout = fopen(fname.c_str(), "w");
+    FILE* fout = fopen(fname.c_str(), "w");
     if (!fout) {
         HexLogError("Unable to write slack event handler : %s", fname.c_str());
         return false;
@@ -338,14 +360,19 @@ WriteSlackEventHandler(const std::string& name, const std::string& id, const std
 }
 
 static bool
-WriteExecEventHandler(const std::string& name, const std::string& type, const std::string& execName, const std::string& topic, const std::string& match)
+WriteExecEventHandler(
+    const std::string& name,
+    const std::string& type,
+    const std::string& execName,
+    const std::string& topic,
+    const std::string& match)
 {
     if (name.length() == 0 || type.length() == 0 || execName.length() == 0) {
         return false;
     }
 
     std::string fname = CFGHDR_DIR "exec_" + name + "_" + type + "_" + execName + ".yaml";
-    FILE *fout = fopen(fname.c_str(), "w");
+    FILE* fout = fopen(fname.c_str(), "w");
     if (!fout) {
         HexLogError("Unable to write executable event handler : %s", fname.c_str());
         return false;
@@ -367,9 +394,10 @@ WriteExecEventHandler(const std::string& name, const std::string& type, const st
     return true;
 }
 
-
 static bool
-WriteConfig(const std::vector<std::string>& peerNames, const std::vector<std::string>& peerAddrs)
+WriteConfig(
+    const std::vector<std::string>& peerNames,
+    const std::vector<std::string>& peerAddrs)
 {
     if (HexSystemF(0, "cp -f %s %s", CONF DEF_EXT, CONF) != 0) {
         HexLogError("Failed to copy default kapacitor config %s", CONF DEF_EXT);
@@ -386,7 +414,7 @@ WriteConfig(const std::vector<std::string>& peerNames, const std::vector<std::st
     if (peerNames.size() && peerAddrs.size() && peerNames.size() == peerAddrs.size()) {
         auto iName = peerNames.cbegin();
         auto iAddr = peerAddrs.cbegin();
-        for(; iName != peerNames.end() && iAddr != peerAddrs.end(); iName++, iAddr++) {
+        for (; iName != peerNames.end() && iAddr != peerAddrs.end(); iName++, iAddr++) {
             ofsConf << std::endl;
             ofsConf << "[[influxdb]]" << std::endl;
             ofsConf << "  enabled = true" << std::endl;
@@ -395,36 +423,35 @@ WriteConfig(const std::vector<std::string>& peerNames, const std::vector<std::st
             ofsConf << "  urls = [\"http://" << *iAddr << ":8086\"]" << std::endl;
             ofsConf << "  timeout = \"10s\"" << std::endl;
         }
-
     }
 
     HexSystemF(0, "rm -f " CFGHDR_DIR "*");
     std::vector<std::string> defaultEmailAddressList;
     bool isFirstSlack = true;
     std::set<std::string> slackIdSet;
-    for (std::size_t i = 0 ; i < s_respNameArray.size() ; i++) {
-        std::string name = s_respNameArray.newValue(i);
+    for (std::size_t i = 0; i < s_respNameArray.size(); i++) {
+        const std::string name = getValidHandlerName(s_respNameArray.newValue(i));
         if (name.length() == 0) {
             continue;
         }
 
-        bool enabled = (i < s_respEnabledArray.size() ? s_respEnabledArray.newValue(i) : false);
+        const bool enabled = (i < s_respEnabledArray.size() ? s_respEnabledArray.newValue(i) : false);
         if (!enabled) {
             continue;
         }
 
-        std::string topic = (i < s_respTopicArray.size() ? s_respTopicArray.newValue(i) : "");
-        std::string match = (i < s_respMatchArray.size() ? s_respMatchArray.newValue(i) : "");
+        const std::string topic = (i < s_respTopicArray.size() ? s_respTopicArray.newValue(i) : "");
+        const std::string match = (i < s_respMatchArray.size() ? s_respMatchArray.newValue(i) : "");
 
         // email
-        std::vector<std::string> toEmailAddressList = s_respEmailAddressMatrix.newValue(i);
+        const std::vector<std::string> toEmailAddressList = s_respEmailAddressMatrix.newValue(i);
         WriteEmailEventHandler(name, topic, match, toEmailAddressList);
         if (topic == "events") {
             defaultEmailAddressList = toEmailAddressList;
         }
 
         // slack
-        std::vector<std::string> toSlackUrlList = s_respSlackUrlMatrix.newValue(i);
+        const std::vector<std::string> toSlackUrlList = s_respSlackUrlMatrix.newValue(i);
         for (std::vector<std::string>::const_iterator it = toSlackUrlList.begin(); it != toSlackUrlList.end(); it++) {
             SlackInfo s = findSlack(*it);
             if (s.url == "") {
@@ -461,22 +488,22 @@ WriteConfig(const std::vector<std::string>& peerNames, const std::vector<std::st
         }
 
         // exec
-        std::vector<std::string> execShellNameList = s_respExecShellNameMatrix.newValue(i);
+        const std::vector<std::string> execShellNameList = s_respExecShellNameMatrix.newValue(i);
         for (std::vector<std::string>::const_iterator it = execShellNameList.begin(); it != execShellNameList.end(); it++) {
             WriteExecEventHandler(name, std::string("shell"), *it, topic, match);
         }
-        std::vector<std::string> execBinNameList = s_respExecBinNameMatrix.newValue(i);
+        const std::vector<std::string> execBinNameList = s_respExecBinNameMatrix.newValue(i);
         for (std::vector<std::string>::const_iterator it = execBinNameList.begin(); it != execBinNameList.end(); it++) {
             WriteExecEventHandler(name, std::string("bin"), *it, topic, match);
         }
     }
 
     // email sender
-    std::string emailSenderHost = s_alertSettingSenderEmailHost.newValue();
-    std::string emailSenderPort = s_alertSettingSenderEmailPort.newValue();
-    std::string emailSenderUsername = s_alertSettingSenderEmailUsername.newValue();
-    std::string emailSenderPassword = s_alertSettingSenderEmailPassword.newValue();
-    std::string emailSenderFrom = s_alertSettingSenderEmailFrom.newValue();
+    const std::string emailSenderHost = s_alertSettingSenderEmailHost.newValue();
+    const std::string emailSenderPort = s_alertSettingSenderEmailPort.newValue();
+    const std::string emailSenderUsername = s_alertSettingSenderEmailUsername.newValue();
+    const std::string emailSenderPassword = s_alertSettingSenderEmailPassword.newValue();
+    const std::string emailSenderFrom = s_alertSettingSenderEmailFrom.newValue();
     if (emailSenderHost.length() > 0 && emailSenderPort.length() > 0 && emailSenderFrom.length() > 0) {
         ofsConf << std::endl;
         ofsConf << "[smtp]" << std::endl;
@@ -499,7 +526,10 @@ WriteConfig(const std::vector<std::string>& peerNames, const std::vector<std::st
 }
 
 static bool
-WriteRelayTask(const std::string& db, const std::string& rp, const std::vector<std::string>& peerNames)
+WriteRelayTask(
+    const std::string& db,
+    const std::string& rp,
+    const std::vector<std::string>& peerNames)
 {
     if (HexMakeDir(TASK_DIR, "root", "root", 0755) != 0) {
         HexLogWarning("failed to create kapacitor task directory %s", TASK_DIR);
@@ -508,7 +538,7 @@ WriteRelayTask(const std::string& db, const std::string& rp, const std::vector<s
 
     std::string taskName = "relay_" + db + "_" + rp;
     std::string taskFile = TASK_DIR + taskName + ".tick";
-    FILE *fout = fopen(taskFile.c_str(), "w");
+    FILE* fout = fopen(taskFile.c_str(), "w");
     if (!fout) {
         HexLogError("Unable to write %s task: %s", NAME, taskFile.c_str());
         return false;
@@ -520,11 +550,11 @@ WriteRelayTask(const std::string& db, const std::string& rp, const std::vector<s
     fprintf(fout, "    |from()\n");
     fprintf(fout, "        .database('%s')\n", db.c_str());
 
-    std::vector<std::string> outDBs = {"localhost"};
+    std::vector<std::string> outDBs = { "localhost" };
     outDBs.insert(outDBs.end(), peerNames.begin(), peerNames.end());
 
     auto iName = outDBs.cbegin();
-    for(; iName != outDBs.end(); iName++) {
+    for (; iName != outDBs.end(); iName++) {
         fprintf(fout, "data\n");
         fprintf(fout, "    |influxDBOut()\n");
         fprintf(fout, "        .cluster('%s')\n", (*iName).c_str());
@@ -552,7 +582,7 @@ WriteAlertExtra(const std::string& msgPrefix)
 static bool
 DefineTasks()
 {
-    HexSystemF(0, "find " TASK_DIR " -name '*.tick' -exec sh -c 'kapacitor define $(basename {} .tick) -tick {}' ';'");
+    HexSystemF(0, "find " TASK_DIR " -name '*.tick' -exec sh -c 'kapacitor define $(basename \"{}\" .tick) -tick \"{}\"' ';'");
 
     return true;
 }
@@ -576,7 +606,7 @@ DeleteAllTasks()
 static bool
 DefineTemplates()
 {
-    HexSystemF(0, "find " TPL_DIR " -name '*.tick' -exec sh -c 'kapacitor define-template $(basename {} .tick) -tick {}' ';'");
+    HexSystemF(0, "find " TPL_DIR " -name '*.tick' -exec sh -c 'kapacitor define-template $(basename \"{}\" .tick) -tick \"{}\"' ';'");
 
     return true;
 }
@@ -586,14 +616,14 @@ RedefineHandlers()
 {
     HexSystemF(0, "kapacitor delete topic-handlers events '*'");
     HexSystemF(0, "kapacitor delete topic-handlers instance-events '*'");
-    HexSystemF(0, "find " HDR_DIR " -name '*.yaml' -exec sh -c 'kapacitor define-topic-handler {}' ';'");
-    HexSystemF(0, "find " CFGHDR_DIR " -name '*.yaml' -exec sh -c 'kapacitor define-topic-handler {}' ';'");
+    HexSystemF(0, "find " HDR_DIR " -name '*.yaml' -exec sh -c 'kapacitor define-topic-handler \"{}\"' ';'");
+    HexSystemF(0, "find " CFGHDR_DIR " -name '*.yaml' -exec sh -c 'kapacitor define-topic-handler \"{}\"' ';'");
 
     return true;
 }
 
 static bool
-ParseNet(const char *name, const char *value, bool isNew)
+ParseNet(const char* name, const char* value, bool isNew)
 {
     if (strcmp(name, NET_HOSTNAME) == 0) {
         s_hostname.parse(value, isNew);
@@ -603,7 +633,7 @@ ParseNet(const char *name, const char *value, bool isNew)
 }
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
     return true;
@@ -630,7 +660,7 @@ Init()
 }
 
 static bool
-Parse(const char *name, const char *value, bool isNew)
+Parse(const char* name, const char* value, bool isNew)
 {
     bool r = true;
 
@@ -651,8 +681,7 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    return modified | s_bCubeModified | s_bNetModified |
-        G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
+    return modified | s_bCubeModified | s_bNetModified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
 }
 
 static bool
@@ -668,7 +697,6 @@ Commit(bool modified, int dryLevel)
     bool enabled = IsControl(s_eCubeRole);
     std::string myip = G(MGMT_ADDR);
     std::string sharedId = G(SHARED_ID);
-
 
     if (enabled) {
         std::vector<std::string> peerNames(0);
