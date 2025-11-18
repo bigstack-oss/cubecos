@@ -277,13 +277,22 @@ network_device_link()
     done
 }
 
-network_ipt_serviceint()
+_init_network_chain()
 {
-    local policy=${1:-ACCEPT}
-    local chain=SERVICE-INT
+    local chain="${1:-""}"
 
-    iptables $table -n --list $chain >/dev/null 2>&1 || iptables -N $chain
+    if [ -z "$chain" ] ; then
+        return 0
+    fi
+
+    iptables -n --list $chain >/dev/null 2>&1 || iptables -N $chain
     iptables -F $chain
+}
+
+_set_ipt_service_int()
+{
+    local chain=SERVICE-INT
+    _init_network_chain "$chain"
 
     # we should allow all local traffics
     iptables -A $chain -i lo -j ACCEPT
@@ -307,7 +316,26 @@ network_ipt_serviceint()
 
     iptables -A $chain -p tcp --match multiport --dports 5900:5999 -j DROP # drop all direct vnc access, except for internal nodes
     iptables -A $chain -p tcp --dport 3306 -j DROP # drop Database Open Access (database-open-access 3306)
+    iptables -A $chain -p icmp --icmp-type timestamp-request -j DROP # drop ICMP timestamp requests
+
     iptables -nv -L INPUT 2>/dev/null | grep -q $chain || iptables -A INPUT -j $chain
+}
+
+_set_ipt_service_out()
+{
+    local chain=SERVICE-OUT
+    _init_network_chain "$chain"
+
+    # drop ICMP timestamp replies
+    iptables -A "$chain" -p icmp --icmp-type timestamp-reply -j DROP
+
+    iptables -nv -L OUTPUT 2>/dev/null | grep -q $chain || iptables -A OUTPUT -j $chain
+}
+
+network_ipt_serviceint()
+{
+    _set_ipt_service_int
+    _set_ipt_service_out
 }
 
 network_ipt_restore()
