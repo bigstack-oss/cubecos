@@ -793,6 +793,9 @@ os_image_import()
     local ver=$(echo $distro_ver | cut -d ":" -f2)
     properties+=" --property os_admin_user=$distro"
     properties+=" --property os_vers=$ver"
+    local proj_name=$(echo $flags | grep -o "[-][-]os-project-name .*" | cut -d" " -f2)
+    local visibility=$(echo $flags | grep -o "[-][-]visibility .*" | cut -d" " -f2)
+    local domain=$(echo $flags | grep -o "[-][-]os-project-domain-name .*" | cut -d" " -f2)
 
     if [[ $(qemu-img info "$IMG" | grep "file format") =~ raw ]] ; then
         local img_name=$IMG
@@ -854,9 +857,6 @@ os_image_import()
         local img_name=$img_raw
     fi
 
-    local proj_name=$(echo $flags | grep -o "[-][-]os-project-name .*" | cut -d" " -f2)
-    local visibility=$(echo $flags | grep -o "[-][-]visibility .*" | cut -d" " -f2)
-    local domain=$(echo $flags | grep -o "[-][-]os-project-domain-name .*" | cut -d" " -f2)
     $OPENSTACK role add --user admin_cli --project ${proj_name:-admin} admin
     echo "[$(date +"%T")] Importing image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
