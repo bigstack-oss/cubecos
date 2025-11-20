@@ -117,15 +117,13 @@ appProjectCreateMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    std::string proj_name = argv[1];
-    std::string mgmt_net = argv[2];
-    std::string pub_net = argv[3];
+    std::string name = argv[1];
+    std::string mgmtMet = argv[2];
+    std::string pubNet = argv[3];
 
-    CliPrintf("creating app project: %s...", proj_name.c_str());
-    if (HexSpawn(0, HEX_SDK, "app_project_create", proj_name.c_str(), mgmt_net.c_str(), pub_net.c_str(), NULL) != 0)
-        CliPrintf("app project failed to create");
-    else {
-        CliPrintf("app project created successfully");
+    int result = HexSystemF(0, "appctl create project --name=%s --net.public=%s --net.mgmt=%s", name.c_str(), pubNet.c_str(), mgmtMet.c_str());
+    if (result != 0) {
+        return CLI_FAILURE;
     }
 
     return CLI_SUCCESS;
@@ -138,17 +136,15 @@ appProjectDeleteMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    std::string proj_name = argv[1];
+    std::string name = argv[1];
 
     CliPrintf("confirm to delete app project.");
     if (!CliReadConfirmation())
         return CLI_SUCCESS;
 
-    CliPrintf("deleting app project: %s...", proj_name.c_str());
-    if (HexSpawn(0, HEX_SDK, "app_project_delete", proj_name.c_str(), NULL) != 0)
-        CliPrintf("app project failed to delete");
-    else {
-        CliPrintf("app project deleted successfully");
+    int result = HexSystemF(0, "appctl delete project --name=%s", name.c_str());
+    if (result != 0) {
+        return CLI_FAILURE;
     }
 
     return CLI_SUCCESS;
@@ -173,13 +169,13 @@ frameworkCheckPortAccessMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    std::string name, publicNet, mgmtNet, loadBalancerIp, osImage;
-    if (!CliReadInputStr(argc, argv, 1, "Input name for new framework: ", &name) || name.length() <= 0) {
+    std::string name;
+    if (!CliReadInputStr(argc, argv, 1, "Input framework name for port check: ", &name) || name.length() <= 0) {
         CliPrint("framework name is required");
         return CLI_INVALID_ARGS;
     }
 
-    int result = HexSystemF(0, "appctl check framework portAaccess --name=%s", name.c_str());
+    int result = HexSystemF(0, "appctl check framework portAccess --name=%s", name.c_str());
     if (result != 0) {
         return CLI_FAILURE;
     }
@@ -220,8 +216,22 @@ frameworkCreateMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    int result = HexSystemF(0, "appctl install framework --name=%s --net.public=%s --net.mgmt=%s --net.loadbalancer.ip=%s --os.image=%s", name.c_str(), publicNet.c_str(), mgmtNet.c_str(), loadBalancerIp.c_str(), osImage.c_str());
+    int result = HexSystemF(0, "appctl create framework --name=%s --net.public=%s --net.mgmt=%s --net.loadbalancer.ip=%s --os.image=%s", name.c_str(), publicNet.c_str(), mgmtNet.c_str(), loadBalancerIp.c_str(), osImage.c_str());
     if (result != 0) {
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+static int
+frameworkListMain(int argc, const char** argv)
+{
+    if (argc > 1) {
+        return CLI_INVALID_ARGS;
+    }
+
+    if (HexSystemF(0, "appctl list framework --welcome=false") != 0) {
         return CLI_FAILURE;
     }
 
@@ -288,7 +298,10 @@ CLI_MODE_COMMAND("app", "framework_create", frameworkCreateMain, NULL,
                  "Create app-framework.",
                  "framework_create FRAMEWORK_NAME PUBLIC_NET MANAGEMENT_NET LOAD_BALANCER_IP OS_IMAGE");
 
+CLI_MODE_COMMAND("app", "framework_list", frameworkListMain, NULL,
+                 "List app-framework.",
+                 "framework_list");
+
 CLI_MODE_COMMAND("app", "framework_delete", frameworkDeleteMain, NULL,
                  "Delete app-framework.",
                  "framework_delete FRAMEWORK_NAME");
-
