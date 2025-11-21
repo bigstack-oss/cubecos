@@ -861,18 +861,8 @@ os_image_import()
     echo "[$(date +"%T")] Importing image $name ..."
     if [ "x$pool" = "xglance-images" ] ; then
         img_id=$(uuidgen)
-        glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility shared --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
-        if [ "x$visibility" = "xprivate" ] ; then
-            if [ "x$img_id" = "x" ] ; then
-                [ -z "$img_raw" ] || rm -f "$img_raw"
-                cmd rm -f $mf_importing
-                Error "failed to import image"
-            else
-                $OPENSTACK image add project $img_id ${proj_name:-admin}
-                $OPENSTACK image set --accept $img_id --project ${proj_name:-admin} >/dev/null 2>&1
-                glance image-update --visibility private $img_id >/dev/null 2>&1
-            fi
-        fi
+        glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility $visibility --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
+        $OPENSTACK image set --project ${proj_name:-admin} $img_id >/dev/null 2>&1
     else
         local vol_name=$(mktemp -u volume-${name}-XXXX)
         rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"
@@ -1050,9 +1040,9 @@ os_keystone_idp_config()
     cat $fed_dir/v3.xml | xmllint --format - > /etc/keycloak/keystone_sp_metadata.xml
     cp -f /etc/httpd/conf.d/v3_mellon_keycloak_master.conf.def /etc/httpd/conf.d/v3_mellon_keycloak_master.conf
     Quiet -n $TERRAFORM_CUBE apply \
-        -auto-approve -target=module.keycloak_keystone \
-        -var "cube_controller=${shared_id}" \
-        "-var-file=${TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD}"
+          -auto-approve -target=module.keycloak_keystone \
+          -var "cube_controller=${shared_id}" \
+          "-var-file=${TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD}"
 }
 
 os_endpoint_url_set()

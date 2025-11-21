@@ -711,32 +711,23 @@ _health_mysql_repair()
     local ts=$(date +%Y%m%d-%H%M%S)
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
 
-    cmd -cor "hex_sdk remote_systemd_stop \$HOSTNAME mariadb ; killall -9 mariadbd ; rm -f /var/lib/mysql/mysql.sock"
-    if cmd -cv cat /var/lib/mysql/grastate.dat | grep -q "safe_to_bootstrap: 1" ; then
-        local node=$(cmd -cv "grep -q 'safe_to_bootstrap: 1' /var/lib/mysql/grastate.dat" | grep '|0|' | cut -d"|" -f1 | tail -1)
-        remote_run $node galera_new_cluster
-    else
-        cmd -c "cp -rp /var/lib/mysql /var/lib/mysql-\${HOSTNAME}-${ts}"
-        local cnt=0
-        for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
-            ((cnt++))
-            if [ $cnt -eq 1 ] ; then # last control node
-                remote_run $node "sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /var/lib/mysql/grastate.dat"
-                remote_run $node galera_new_cluster
-            else
-                remote_run $node "rm -rf /var/lib/mysql/*"
-            fi
-        done
-    fi
-
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        remote_systemd_start $node mariadb || remote_run $node "timeout $SRVSTO systemctl stop mariadb ; killall -9 mariadbd ; rm -rf /var/lib/mysql/* ; systemctl start mariadb"
+    cmd -c "hex_sdk remote_systemd_stop \$HOSTNAME mariadb ; killall -9 mariadbd ; rm -f /var/lib/mysql/mysql.sock"
+    cmd -c "cp -rp /var/lib/mysql /var/lib/mysql-\${HOSTNAME}-${ts}"
+    local cnt=0
+    for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
+        ((cnt++))
+        if [ $cnt -eq 1 ] ; then # last control node
+            remote_run $node "sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /var/lib/mysql/grastate.dat"
+            remote_run $node galera_new_cluster
+        else
+            remote_systemd_start $node mariadb
+        fi
     done
 }
 
 health_mysql_repair()
 {
-    cmd -c "timeout $SRVTO systemctl restart mariadb"
+    cmd -cor "timeout $SRVTO systemctl stop mariadb ; killall -9 mariadbd ; systemctl start mariadb"
     if ! health_mysql_check ; then
         # multiple attempts to fix is needed, especially after rolling-upgrade
         for i in 1 2 3 ; do

@@ -156,11 +156,12 @@ is_sshable()
     local mf_ssh=/run/${FUNCNAME[0]}_${node}
     local ret=1
 
-    if [ -e $mf_ssh ] ; then
+    if [ -e $mf_ssh ] && [ $(find $mf_ssh -type f -mmin -1 | wc -l) -eq 1 ] ; then
         ret=0
     else
+        rm -f $mf_ssh
         local mf_tmp=$(mktemp -u /tmp/is_sshable.XXXX)
-        ( timeout 3 ssh -o LogLevel=quiet root@$node exit && rm -f $mf_tmp ) &
+        ( timeout 2 ssh -o LogLevel=quiet root@$node exit && rm -f $mf_tmp ) &
         local pid=$!
         echo $pid > $mf_tmp
         for i in 1 2 3 ; do
