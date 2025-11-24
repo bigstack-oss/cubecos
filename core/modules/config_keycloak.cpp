@@ -695,6 +695,13 @@ repairKeycloak()
     }
     HexLogInfo("deleted all keycloak pods");
 
+    HexLogInfo("update keycloak");
+    if (!updateKeycloak()) {
+        HexLogError("failed to update keycloak");
+        return false;
+    }
+    HexLogInfo("updated keycloak");
+
     if (!K3sWatchRollOut(APP, APP_NAMESPACE, "3m")) {
         HexLogError("failed to see all pods rolled out");
         return false;
