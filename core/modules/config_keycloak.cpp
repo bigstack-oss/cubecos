@@ -243,6 +243,14 @@ updateKeycloak()
         // there is no node to deploy the pods
         nodeCount = 0;
     }
+    if (nodeCount == 0) {
+        /**
+         * Deploying Keycloak to 0 node is meaningless.
+         * However, sometimes, during bootstrapping, K3S would report itself having 0 node.
+         * We would force this to at least one instead.
+         */
+        nodeCount = 1;
+    }
 
     return HexUtilSystemF(
                0,
