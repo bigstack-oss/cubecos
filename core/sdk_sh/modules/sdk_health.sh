@@ -511,8 +511,8 @@ health_hacluster_repair()
         fi
     done
 
-    # if first time setup not completed or cluster in rolling upgrade process, ensure master node has VIP
-    if [ ! -e /etc/appliance/state/configured ] || is_node_rolling_upgrade ; then
+    # if first time setup not completed, in non-rolling upgrade process or in rolling upgrade process, ensure master node has VIP
+    if [ ! -e /etc/appliance/state/configured ] || [ -e /run/cube_migration ] || is_node_rolling_upgrade ; then
         for i in 1 2 3 4 5 ; do
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
                 if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
@@ -531,7 +531,11 @@ health_hacluster_repair()
             done
             sleep 15
             if ! is_vip_active ; then
-                Quiet -n pcs resource debug-start vip
+                if pcs resource status | grep -q vip ; then
+                    Quiet -n pcs resource debug-start vip
+                else
+                    pcs resource create vip ocf:heartbeat:IPaddr2 ip="$(hex_sdk shared_ip)" op monitor interval="30s"
+                fi
                 sleep 10
             fi
             if is_vip_reachable ; then
