@@ -2294,7 +2294,7 @@ updateTime: "1970-01-01T00:00:00Z"
             vendor="$exec_output"
         fi
 
-        _hex_function exec_output exec_error yq -r ".model" "$model_file_path"
+        _hex_function exec_output exec_error yq -r ".type" "$model_file_path"
         if [[ "$?" == "0" ]] ; then
             model="$exec_output"
         fi
@@ -2632,7 +2632,7 @@ cinder_apply_storage_deletion()
     backends="$exec_output"
 
     if ! _hex_function exec_output exec_error \
-        jq -r '.[] | length' <(printf "%s" "$backends") ; then
+        jq -r 'length' <(printf "%s" "$backends") ; then
         return 1
     fi
     if [[ "$exec_output" -le 0 ]] ; then
