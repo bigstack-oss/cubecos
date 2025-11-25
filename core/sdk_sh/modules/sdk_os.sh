@@ -778,12 +778,13 @@ os_image_import()
     fi
     local volume_type=${6:-CubeStorage}
     local backend=$(os_list_volume_backend_by_pool $pool $volume_type)
-    local distro=${7:-linux}
+    local _distro=${7:-linux}
+    local distro=$(echo $_distro | tr "[A-Z]" "[a-z]")
     local properties=${8:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"
     properties+=" --property os_distro=$distro"
-    if [ "x$distro" = "xwindows" -o "x$distro" = "xWindows" ] ; then
+    if [ "x$distro" = "xwindows" ] ; then
         properties+=" --property os_type=windows"
     else
         properties+=" --property os_type=linux"

@@ -9,6 +9,7 @@ fi
 cmd()
 {
     local _cmd_nodes=()
+    local verbose="false"
     local reverse="false"
     local onebyone="false"
     local dryrun="false"

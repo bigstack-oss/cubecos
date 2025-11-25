@@ -426,3 +426,28 @@ stats_bootstrap()
 
     cmd $flg "cat -v /run/cube_bootstrap.log 2>/dev/null | sed 's/ \^M//g' ; egrep -v -q -i 'fail|error' /run/cube_bootstrap.log 2>/dev/null"
 }
+
+stats_partition()
+{
+    local mpt=/mnt/target
+    local log=$mpt/var/log/install.log
+    local num_node=${#CUBE_NODE_LIST_HOSTNAMES[@]}
+
+    cmd MountOtherPartition
+
+    local num_success=$(cmd -v "grep '^Firmware .* has been updated with success' $log" | cut -d "|" -f2 | grep "^0$" | wc -l)
+    if [ $num_success -eq $num_node ] ; then
+        [ "x$VERBOSE" != "x1" ] || echo "Firmware update ${num_success}/${num_node} succeeded. Evacuate all VMs, if any, before rebooting master control."
+        return 0
+    elif [ $num_success -gt 0 -a $num_success -lt $num_node ] ; then
+        [ "x$VERBOSE" != "x1" ] || echo "Firmware update failed with only ${num_success}/${num_node} nodes successfully partitioned. On the failed nodes, run CLI update update."
+        return 1
+    elif ! cmd "mountpoint -- $mpt" ; then
+        [ "x$VERBOSE" != "x1" ] || echo "Firmware update failed with target partition corrupted. If some nodes succeeded, run CLI update update on failed nodes. Otherwise, confirm firmware source, verify checksum and disk health."
+        return 2
+    else
+        [ "x$VERBOSE" != "x1" ] || echo "Firmware update failed with unknown errors that need to be investigated"
+        return 3
+    fi
+    cmd "umount $mpt"
+}
