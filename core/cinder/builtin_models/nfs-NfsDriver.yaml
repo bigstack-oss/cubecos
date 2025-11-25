@@ -1,0 +1,28 @@
+driver: "cinder.volume.drivers.nfs.NfsDriver"
+vendor: "Generic"
+type: "NFS"
+multipath: []
+storage:
+  service:
+    driverSection:
+      - key: "nfs_shares_config"
+        value: "/etc/cinder/external_storage_extra_configs/nfs_shares"
+      - key: "nfs_mount_options"
+        value: ""
+      - key: "nfs_mount_attempts"
+        value: "3"
+      - key: "nfs_qcow2_volumes"
+        value: "false"
+      - key: "nfs_snapshot_support"
+        value: "true"
+      - key: "nfs_sparsed_volumes"
+        value: "true"
+    extraSettings: []
+    extraConfigFiles:
+      - name: "nfs_shares"
+        content: ""
+  volumeType:
+    settings: []
+  image:
+    useMultipath: true
+    forceMultipath: true
