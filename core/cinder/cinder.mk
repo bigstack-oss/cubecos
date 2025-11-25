@@ -28,8 +28,10 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/share/cube/cos/cinder
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/share/cube/cos/cinder/builtin_models
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cinder/builtin_models/dell_emc-sc-storagecenter_fc-SCFCDriver.yaml ./usr/share/cube/cos/cinder/builtin_models
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cinder/builtin_models/dell_emc-powerstore-driver-PowerStoreDriver.yaml ./usr/share/cube/cos/cinder/builtin_models
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/multipath/conf.d
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cinder/builtin_models/multipath/dell_emc-sc-storagecenter_fc-SCFCDriver.conf ./etc/multipath/conf.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cinder/builtin_models/multipath/dell_emc-powerstore-driver-PowerStoreDriver.conf ./etc/multipath/conf.d
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cinder
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cinder/models
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cinder/storage_extra_configs_ownership

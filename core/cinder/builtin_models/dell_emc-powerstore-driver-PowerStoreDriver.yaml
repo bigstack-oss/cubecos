@@ -1,0 +1,61 @@
+driver: "cinder.volume.drivers.dell_emc.powerstore.driver.PowerStoreDriver"
+vendor: "Dell EMC"
+type: "PowerStore"
+multipath:
+  - section: "devices"
+    attributes: []
+    subSections:
+      - section: "device"
+        attributes:
+          - key: "vendor"
+            value: "DellEMC"
+          - key: "product"
+            value: "PowerStore"
+          - key: "path_selector"
+            value: "queue-length 0"
+          - key: "path_grouping_policy"
+            value: "group_by_prio"
+          - key: "path_checker"
+            value: "tur"
+          - key: "detect_prio"
+            value: "yes"
+          - key: "failback"
+            value: "immediate"
+          - key: "no_path_retry"
+            value: "3"
+          - key: "rr_min_io_rq"
+            value: "1"
+          - key: "fast_io_fail_tmo"
+            value: "15"
+          - key: "max_sectors_kb"
+            value: "1024"
+storage:
+  service:
+    driverSection:
+      - key: "san_ip"
+        value: ""
+      - key: "san_login"
+        value: ""
+      - key: "san_password"
+        value: ""
+      - key: "storage_protocol"
+        value: "<FC|iSCSI>"
+      - key: "driver_ssl_cert_verify"
+        value: "false"
+      - key: "driver_ssl_cert_path"
+        value: ""
+      - key: "powerstore_ports"
+        value: "<port_a,port_b> or blank"
+    extraSettings: []
+    extraConfigFiles: []
+  volumeType:
+    settings:
+      - key: "replication_enabled"
+        value: ""
+      - key: "powerstore:protection_policy"
+        value: ""
+      - key: "multiattach"
+        value: ""
+  image:
+    useMultipath: true
+    forceMultipath: true
