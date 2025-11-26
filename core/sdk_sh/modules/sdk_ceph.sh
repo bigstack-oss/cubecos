@@ -72,7 +72,7 @@ ceph_get_host_by_id()
         host=$($CEPH device ls-by-daemon osd.$osd_id --format json 2>/dev/null | jq -r ".[].location[].host")
     fi
     if [ -z "$host" ] ; then
-        host=$($CEPH osd tree -f json 2>/dev/null | jq -r --arg OSDID $osd_id '.nodes[] | select(.type == "host") | select(.children[] | select(. == ($OSDID | tonumber))).name')
+        host=$($CEPH osd tree -f json 2>/dev/null | jq -r --arg OSDID $osd_id ".nodes[] | select(.type == \"host\") | select(.children[] | select(. == ($OSDID | tonumber))).name")
     fi
     if [ -z "$host" ] ; then
         cmd "ceph-volume lvm list --format json 2>/dev/null | jq -r '.[][] | select(.tags.\"ceph.osd_id\" == \"$osd_id\")' | grep -q osd-block && hostname" | cut -d"|" -f3
@@ -886,7 +886,7 @@ ceph_osd_host_remove()
 {
     local host=$1
 
-    for osd in $($CEPH osd tree -f json | jq -r '.nodes[] | select(.name == "$host").children[]') ; do
+    for osd in $($CEPH osd tree -f json | jq -r ".nodes[] | select(.name == \"$host\").children[]") ; do
         Quiet -n ceph_osd_remove $osd
     done
     Quiet -n $CEPH osd crush rm $host
