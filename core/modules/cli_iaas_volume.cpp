@@ -1,13 +1,6 @@
 // CUBE SDK
 
-#include <hex/log.h>
-#include <hex/strict.h>
-#include <hex/process.h>
-
-#include <hex/cli_module.h>
-#include <hex/cli_util.h>
-
-#include <cube/cubesys.h>
+#include "cli_iaas_volume.hpp"
 
 static int
 ResetMain(int argc, const char** argv)
@@ -24,7 +17,7 @@ ResetMain(int argc, const char** argv)
     std::string optCmd = std::string(HEX_SDK) + " os_cinder_volume_list";
     std::string descCmd = std::string(HEX_SDK) + " -v os_cinder_volume_list";
 
-    if(CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &uuid, "Select a volume to be reset: ") != CLI_SUCCESS) {
+    if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &uuid, "Select a volume to be reset: ") != CLI_SUCCESS) {
         CliPrintf("instance name is missing or not found");
         return CLI_INVALID_ARGS;
     }
@@ -65,8 +58,7 @@ QuotaSetMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    if (!CliReadInputStr(argc, argv, 4, "Input quota value: ", &quota) ||
-        quota.length() <= 0) {
+    if (!CliReadInputStr(argc, argv, 4, "Input quota value: ", &quota) || quota.length() <= 0) {
         CliPrint("quota value is required");
         return CLI_INVALID_ARGS;
     }
@@ -104,19 +96,18 @@ QuotaShowMain(int argc, const char** argv)
 }
 
 // This mode is not available in STRICT error state
-CLI_MODE("iaas", "volume",
+CLI_MODE(CLI_TOP_COMMAND_IAAS, "volume",
     "Work with the IaaS volume settings.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE_COMMAND("volume", "reset", ResetMain, NULL,
-        "Reset volume state to available for attaching.",
-        "reset [<volume id>]");
+    "Reset volume state to available for attaching.",
+    "reset [<volume id>]");
 
 CLI_MODE_COMMAND("volume", "quota_set", QuotaSetMain, NULL,
-        "Set volume quota for a tenant.",
-        "quota_set [<domain>] [<tenant>] [<type>] [<quota>]");
+    "Set volume quota for a tenant.",
+    "quota_set [<domain>] [<tenant>] [<type>] [<quota>]");
 
 CLI_MODE_COMMAND("volume", "quota_show", QuotaShowMain, NULL,
-        "Show volume quota for a tenant.",
-        "quota_show [<domain>] [<tenant>]");
-
+    "Show volume quota for a tenant.",
+    "quota_show [<domain>] [<tenant>]");

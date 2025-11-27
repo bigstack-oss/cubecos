@@ -1,17 +1,6 @@
 // CUBE SDK
 
-#include <unistd.h>  // gethostname()
-#include <climits> // HOST_NAME_MAX
-
-#include <hex/process.h>
-#include <hex/log.h>
-#include <hex/strict.h>
-
-#include <hex/cli_module.h>
-#include <hex/cli_util.h>
-#include <hex/cli_support_helper.h>
-
-#include <cube/cubesys.h>
+#include "cli_iaas_volume_meta.hpp"
 
 static int
 CreateMain(int argc, const char** argv)
@@ -22,7 +11,7 @@ CreateMain(int argc, const char** argv)
 
     char filename[256];
     std::string list;
-    FILE *fp = NULL;
+    FILE* fp = NULL;
 
     AutoSignalHandlerMgt hdr(UnInterruptibleHdr);
 
@@ -35,19 +24,16 @@ CreateMain(int argc, const char** argv)
             HexLogError("Unable to retieve the name of the file created");
             pclose(fp);
             return CLI_UNEXPECTED_ERROR;
-        }
-        else if (pclose(fp) == 0) {
+        } else if (pclose(fp) == 0) {
             char username[256];
             CliGetUserName(username, sizeof(username));
             HexLogInfo("%s created a volume metadata file %s via %s", username, filename, "CLI");
             CliPrintf("%s", filename);
-        }
-        else {
+        } else {
             HexLogError("Could not create volume metadata file");
             return CLI_UNEXPECTED_ERROR;
         }
-    }
-    else {
+    } else {
         HexLogError("Could not create volume metadata file");
         return CLI_UNEXPECTED_ERROR;
     }
@@ -77,8 +63,8 @@ ApplyMain(int argc, const char** argv)
         return CLI_FAILURE;
 
     HexSpawn(0, HEX_CFG, "volume_meta_apply",
-                user.c_str(), proj.c_str(),
-                "cube@ceph#ceph", "CubeStorage", filename.c_str(), NULL);
+        user.c_str(), proj.c_str(),
+        "cube@ceph#ceph", "CubeStorage", filename.c_str(), NULL);
 
     return CLI_SUCCESS;
 }
@@ -120,15 +106,15 @@ DeleteMain(int argc, const char** argv)
 
     AutoSignalHandlerMgt hdr(UnInterruptibleHdr);
     if (HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
-                      HEX_CFG, "volume_meta_delete",
-                      filename.c_str(), NULL) == 0) {
+            HEX_CFG, "volume_meta_delete",
+            filename.c_str(), NULL)
+        == 0) {
         CliPrintf("Volume meta file %s deleted", filename.c_str());
 
         // char username[256];
         // CliGetUserName(username, sizeof(username));
         // HexLogEvent("User [username] successfully delete [filename] via [CLI]");
-    }
-    else {
+    } else {
         HexLogError("Could not delete volume meta file: %s", filename.c_str());
         return CLI_UNEXPECTED_ERROR;
     }
@@ -170,7 +156,7 @@ UploadMain(int argc, const char** argv)
 }
 
 // This mode is not available in strict error state
-CLI_MODE(CLI_TOP_MODE, "volume_meta",
+CLI_MODE(CLI_TOP_COMMAND_IAAS, "volume_meta",
     "Work with volume meta files.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
@@ -179,8 +165,8 @@ CLI_MODE_COMMAND("volume_meta", "create", CreateMain, 0,
     "create <comma-separated volume id list>");
 
 CLI_MODE_COMMAND("volume_meta", "apply", ApplyMain, 0,
-   "Apply volume metadata file by giving project and user ID.",
-   "apply [<user_name>] [<project_name>] [<file_index>] [<hostname>]");
+    "Apply volume metadata file by giving project and user ID.",
+    "apply [<user_name>] [<project_name>] [<file_index>] [<hostname>]");
 
 CLI_MODE_COMMAND("volume_meta", "list", ListMain, 0,
     "List the volume meta files.",
@@ -197,4 +183,3 @@ CLI_MODE_COMMAND("volume_meta", "download", DownloadMain, 0,
 CLI_MODE_COMMAND("volume_meta", "upload", UploadMain, 0,
     "Upload a volume metadata file from a USB flash drive.",
     "upload");
-

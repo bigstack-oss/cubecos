@@ -1,16 +1,6 @@
 // CUBE SDK
 
-#include <hex/process.h>
-#include <hex/log.h>
-#include <hex/strict.h>
-
-#include <hex/cli_module.h>
-#include <hex/cli_util.h>
-#include <hex/process_util.h>
-
-#include <cube/cubesys.h>
-
-#define CEPHFS_GLANCE_DIR "/mnt/cephfs/glance"
+#include "cli_iaas_image.hpp"
 
 static const char* LABEL_IMAGE_NAME = "Specify image name: ";
 static const char* LABEL_METADATA_VAL = "Input metadata value: ";
@@ -65,8 +55,7 @@ ImageImportMain(int argc, const char** argv)
         }
 
         HexUtilSystemF(0, 0, HEX_SDK " os_extpack_image_mount %s", USB_MNT_DIR);
-    }
-    else if (type == 1 /* local */) {
+    } else if (type == 1 /* local */) {
         dir = CEPHFS_GLANCE_DIR;
         HexUtilSystemF(0, 0, HEX_SDK " os_extpack_image_mount %s", CEPHFS_GLANCE_DIR);
     }
@@ -111,16 +100,16 @@ ImageImportMain(int argc, const char** argv)
             return CLI_INVALID_ARGS;
         }
 
-        flags="--os-project-domain-name " + domain + " --os-project-name " + tenant;
+        flags = "--os-project-domain-name " + domain + " --os-project-name " + tenant;
         if (strcmp(source.c_str(), "from Bigstack") == 0) {
             if (CliMatchCmdHelper(argc, argv, 7, "echo 'public\nprivate'", &index, &visibility, "Visibility: ") != CLI_SUCCESS) {
                 CliPrintf("Unknown visibility");
                 return CLI_INVALID_ARGS;
             }
-            pool="glance-images";
-            flags+=" --visibility " + visibility;
+            pool = "glance-images";
+            flags += " --visibility " + visibility;
         } else {
-            pool="cinder-volumes";
+            pool = "cinder-volumes";
         }
 
         cmd = "openstack volume type list -f value -c Name  | grep -v __DEFAULT__";
@@ -133,7 +122,6 @@ ImageImportMain(int argc, const char** argv)
             CliPrintf("Invalid OS");
             return CLI_INVALID_ARGS;
         }
-
     }
 
     CliPrintf("Importing...");
@@ -141,25 +129,24 @@ ImageImportMain(int argc, const char** argv)
 
     if (isFsImg)
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
-                            HEX_SDK, "os_manila_image_import", dir.c_str(), file.c_str(), NULL);
+            HEX_SDK, "os_manila_image_import", dir.c_str(), file.c_str(), NULL);
     else if (isLbImg)
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
-                            HEX_SDK, "os_octavia_image_import", dir.c_str(), file.c_str(), NULL);
+            HEX_SDK, "os_octavia_image_import", dir.c_str(), file.c_str(), NULL);
     else if (isDeployKernel)
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
-                            HEX_SDK, "os_ironic_deploy_kernel_import", dir.c_str(), file.c_str(), NULL);
+            HEX_SDK, "os_ironic_deploy_kernel_import", dir.c_str(), file.c_str(), NULL);
     else if (isDeployInitrd)
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
-                            HEX_SDK, "os_ironic_deploy_initramfs_import", dir.c_str(), file.c_str(), NULL);
+            HEX_SDK, "os_ironic_deploy_initramfs_import", dir.c_str(), file.c_str(), NULL);
     else if (isExtPack)
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
-                            HEX_SDK, "os_extpack_image_import", dir.c_str(), file.c_str(), NULL);
+            HEX_SDK, "os_extpack_image_import", dir.c_str(), file.c_str(), NULL);
     else
         ret = HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0,
-                            HEX_SDK, "os_image_import",
-                            dir.c_str(), file.c_str(), name.c_str(),
-                            flags.c_str(), pool.c_str(), destination.c_str(), os.c_str(), NULL);
-
+            HEX_SDK, "os_image_import",
+            dir.c_str(), file.c_str(), name.c_str(),
+            flags.c_str(), pool.c_str(), destination.c_str(), os.c_str(), NULL);
 
     if (type == 0 /* usb */) {
         HexUtilSystemF(0, 0, HEX_SDK " os_extpack_image_umount %s", USB_MNT_DIR);
@@ -168,8 +155,7 @@ ImageImportMain(int argc, const char** argv)
         else
             CliPrintf("Importing %s complete. It is safe to remove the USB drive.", name.c_str());
         HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0, HEX_CFG, "umount_usb", NULL);
-    }
-    else if (type == 1 /* local */) {
+    } else if (type == 1 /* local */) {
         HexUtilSystemF(0, 0, HEX_SDK " os_extpack_image_umount %s", CEPHFS_GLANCE_DIR);
         if (ret != 0)
             CliPrintf("Importing failed. Please check the local drive and retry the command.");
@@ -214,12 +200,12 @@ InstanceExportMain(int argc, const char** argv)
     if (!CliReadConfirmation())
         return CLI_SUCCESS;
 
-    if(CliMatchCmdHelper(argc, argv, 4, "echo 'vmdk\nraw'", &index, &format, "Select output format: ") != CLI_SUCCESS) {
+    if (CliMatchCmdHelper(argc, argv, 4, "echo 'vmdk\nraw'", &index, &format, "Select output format: ") != CLI_SUCCESS) {
         CliPrintf("Unknown file format");
         return CLI_INVALID_ARGS;
     }
 
-    if(CliMatchCmdHelper(argc, argv, 5, "echo 'usb\nlocal'", &type, &media, "Select output destination: ") != CLI_SUCCESS) {
+    if (CliMatchCmdHelper(argc, argv, 5, "echo 'usb\nlocal'", &type, &media, "Select output destination: ") != CLI_SUCCESS) {
         CliPrintf("Unknown media");
         return CLI_INVALID_ARGS;
     }
@@ -235,8 +221,7 @@ InstanceExportMain(int argc, const char** argv)
             CliPrintf("Could not write to the USB drive. Please check the USB drive and retry the command.\n");
             return CLI_SUCCESS;
         }
-    }
-    else if (type == 1 /* local */) {
+    } else if (type == 1 /* local */) {
         dir = CEPHFS_GLANCE_DIR;
     }
 
@@ -248,8 +233,7 @@ InstanceExportMain(int argc, const char** argv)
         else
             CliPrintf("Exporting %s complete. It is safe to remove the USB drive.", instanceId.c_str());
         HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0, HEX_CFG, "umount_usb", NULL);
-    }
-    else if (type == 1 /* local */) {
+    } else if (type == 1 /* local */) {
         if (ret != 0)
             CliPrintf("Exporting failed. Please check the local drive and retry the command.");
         else
@@ -293,38 +277,38 @@ MetadataMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-CLI_MODE(CLI_TOP_MODE, "image",
-         "Work with cube images. Please upload images to " CEPHFS_GLANCE_DIR " for local import.",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+CLI_MODE(CLI_TOP_COMMAND_IAAS, "image",
+    "Work with cube images. Please upload images to " CEPHFS_GLANCE_DIR " for local import.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE_COMMAND("image", "metadata", MetadataMain, NULL,
-                 "set Cinder volume metadata.",
-                 "metadata <domain> <tenant>");
+    "set Cinder volume metadata.",
+    "metadata <domain> <tenant>");
 
 CLI_MODE_COMMAND("image", "import", ImageImportMain, NULL,
-                 "import image from usb or local store folder.",
-                 "import <usb|local> <file_name> <image_name> <domain> <tenant> <from Bigstack|from another hypervisor> <public|private> <storage_backend> <os>");
+    "import image from usb or local store folder.",
+    "import <usb|local> <file_name> <image_name> <domain> <tenant> <from Bigstack|from another hypervisor> <public|private> <storage_backend> <os>");
 
 CLI_MODE_COMMAND("image", "import_extpack", ImageImportMain, NULL,
-                 "import extension pack images from usb or local store folder.",
-                 "import_extpack <usb|local> <file_name>");
+    "import extension pack images from usb or local store folder.",
+    "import_extpack <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "import_lb", ImageImportMain, NULL,
-                 "import load-balancer image from usb or local store folder.",
-                 "import_lb <usb|local> <file_name>");
+    "import load-balancer image from usb or local store folder.",
+    "import_lb <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "import_fs", ImageImportMain, NULL,
-                 "import file storage image from usb or local store folder.",
-                 "import_fs <usb|local> <file_name>");
+    "import file storage image from usb or local store folder.",
+    "import_fs <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "import_deploy_kernel", ImageImportMain, NULL,
-                 "import baremetal deploy kernel from usb or local store folder.",
-                 "import_deploy_kernel <usb|local> <file_name>");
+    "import baremetal deploy kernel from usb or local store folder.",
+    "import_deploy_kernel <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "import_deploy_initramfs", ImageImportMain, NULL,
-                 "import baremetal deploy initramfs from usb or local store folder.",
-                 "import_deploy_initramfs <usb|local> <file_name>");
+    "import baremetal deploy initramfs from usb or local store folder.",
+    "import_deploy_initramfs <usb|local> <file_name>");
 
 CLI_MODE_COMMAND("image", "export_instance", InstanceExportMain, NULL,
-                 "export instance disks as vmdk to usb drive.",
-                 "export_instance <usb> <file_name>");
+    "export instance disks as vmdk to usb drive.",
+    "export_instance <usb> <file_name>");

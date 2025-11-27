@@ -1,22 +1,6 @@
 // CUBE SDK
 
-#include <unistd.h>
-
-#include <map>
-
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#include <hex/log.h>
-#include <hex/strict.h>
-#include <hex/process.h>
-
-#include <hex/cli_module.h>
-
-#include <cube/cubesys.h>
-
-#include "include/policy_ext_storage.h"
-#include "include/cli_ext_storage_changer.h"
+#include "cli_iaas_volume_backend.hpp"
 
 static bool
 ListBackends(const ExtStoragePolicy& policy)
@@ -84,20 +68,29 @@ BackendCfgMain(int argc, const char** argv)
     }
 
     // should identify real user name
-    //TODO: HexLogEvent("[user] modified external storage policy via cli");
+    // TODO: HexLogEvent("[user] modified external storage policy via cli");
     return CLI_SUCCESS;
 }
 
 // This mode is not available in STRICT error state
-CLI_MODE(CLI_TOP_MODE, "external-storage",
+CLI_MODE(
+    CLI_TOP_COMMAND_IAAS,
+    CLI_COMMAND_IAAS_STORAGE,
     "Work with external settings.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
-CLI_MODE_COMMAND("external-storage", "list", BackendListMain, NULL,
-        "List all external storage settings on the appliance.",
-        "list");
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "list",
+    BackendListMain,
+    NULL,
+    "List all external storage settings on the appliance.",
+    "list");
 
-CLI_MODE_COMMAND("external-storage", "configure", BackendCfgMain, NULL,
-        "Configure external storage settings.",
-        "configure [<add|delete|update>] [<name>] [<driver>] [<endpoint>] [<account>] [<secret>] [<pool>]");
-
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "configure",
+    BackendCfgMain,
+    NULL,
+    "Configure external storage settings.",
+    "configure [<add|delete|update>] [<name>] [<driver>] [<endpoint>] [<account>] [<secret>] [<pool>]");

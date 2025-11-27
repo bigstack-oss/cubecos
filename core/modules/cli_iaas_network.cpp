@@ -1,21 +1,6 @@
 // CUBE SDK
 
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#include <hex/log.h>
-#include <hex/parse.h>
-#include <hex/strict.h>
-#include <hex/process.h>
-#include <hex/process_util.h>
-#include <hex/string_util.h>
-
-#include <hex/cli_module.h>
-#include <hex/cli_util.h>
-
-#include <cube/cubesys.h>
-
-#define CUBECTL "/usr/local/bin/cubectl"
+#include "cli_iaas_network.hpp"
 
 static const char* LABEL_NET_IP_LIST = "Enter IP range [IP-IP,IP]: ";
 static const char* LABEL_NET_GW_ADDR = "Enter gateway IP address: ";
@@ -45,7 +30,7 @@ ValidateFip(const std::string& allocPools, const uint32_t ipaddr)
             uint32_t from = htonl(hfrom);
             uint32_t to = htonl(hto);
 
-            for (uint32_t ip = from ; ip <= to ; ip++) {
+            for (uint32_t ip = from; ip <= to; ip++) {
                 uint32_t hip = ntohl(ip);
                 char ipStr[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &hip, ipStr, INET_ADDRSTRLEN);
@@ -90,8 +75,7 @@ FipRangeCreateMain(int argc, const char** argv)
     std::string allocPools = HexUtilPOpen(HEX_SDK " os_get_network_alloc_pools_by_tenant_and_name %s %s", tenant.c_str(), network.c_str());
     CliPrintf("network IP allocation pools: %s", allocPools.c_str());
 
-    if (!CliReadInputStr(argc, argv, 4, LABEL_NET_IP_LIST, &ipList) ||
-        !HexParseIPList(ipList.c_str(), AF_INET)) {
+    if (!CliReadInputStr(argc, argv, 4, LABEL_NET_IP_LIST, &ipList) || !HexParseIPList(ipList.c_str(), AF_INET)) {
         CliPrintf("Invalid IP list %s\n", ipList.c_str());
         return CLI_INVALID_ARGS;
     }
@@ -104,7 +88,7 @@ FipRangeCreateMain(int argc, const char** argv)
             uint32_t from = htonl(hfrom);
             uint32_t to = htonl(hto);
 
-            for (uint32_t ip = from ; ip <= to ; ip++) {
+            for (uint32_t ip = from; ip <= to; ip++) {
                 uint32_t hip = ntohl(ip);
                 char ipStr[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &hip, ipStr, INET_ADDRSTRLEN);
@@ -113,9 +97,8 @@ FipRangeCreateMain(int argc, const char** argv)
                     HexUtilSystemF(0, 0, ". /etc/admin-openrc.sh && "
                                          "/usr/bin/openstack floating ip create "
                                          "--floating-ip-address %s --project %s %s",
-                                         ipStr, tenant.c_str(), network.c_str());
-                }
-                else {
+                        ipStr, tenant.c_str(), network.c_str());
+                } else {
                     CliPrintf("skipping IP %s which does not belong to allocation pools", ipStr);
                 }
             }
@@ -150,23 +133,23 @@ RouterSetGatewayMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    cmd = HEX_SDK " os_list_router_by_project_basic " + tenant;;
+    cmd = HEX_SDK " os_list_router_by_project_basic " + tenant;
     if (CliMatchCmdHelper(argc, argv, 3, cmd, &index, &router, "Select router: ") != CLI_SUCCESS) {
         CliPrintf("Invalid router");
         return CLI_INVALID_ARGS;
     }
 
-    if (!CliReadInputStr(argc, argv, 4, LABEL_NET_GW_ADDR, &gateway) ||
-        !HexParseIP(gateway.c_str(), AF_INET, &v4addr)) {
+    if (!CliReadInputStr(argc, argv, 4, LABEL_NET_GW_ADDR, &gateway) || !HexParseIP(gateway.c_str(), AF_INET, &v4addr)) {
         CliPrintf("Invalid gateway IP address %s\n", gateway.c_str());
         return CLI_INVALID_ARGS;
     }
 
     if (gateway.length()) {
         CliPrintf("Set gateway %s for %s of project %s",
-                  gateway.c_str(), router.c_str(), tenant.c_str());
+            gateway.c_str(), router.c_str(), tenant.c_str());
         if (HexUtilSystemF(0, 0, HEX_SDK " os_set_router_ext_gateway %s %s %s",
-                                 tenant.c_str(), router.c_str(), gateway.c_str()) == 0)
+                tenant.c_str(), router.c_str(), gateway.c_str())
+            == 0)
             CliPrintf("Success");
         else
             CliPrintf("Failed");
@@ -203,8 +186,7 @@ QuotaSetMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    if (!CliReadInputStr(argc, argv, 4, "Input quota value: ", &quota) ||
-        quota.length() <= 0) {
+    if (!CliReadInputStr(argc, argv, 4, "Input quota value: ", &quota) || quota.length() <= 0) {
         CliPrint("quota value is required");
         return CLI_INVALID_ARGS;
     }
@@ -278,16 +260,15 @@ NetSetMain(int argc, const char** argv)
     if (type.rfind("no-", 0) == 0)
         value = "";
     else {
-        if (!CliReadInputStr(argc, argv, 5, "Input value: ", &value) ||
-            value.length() <= 0) {
+        if (!CliReadInputStr(argc, argv, 5, "Input value: ", &value) || value.length() <= 0) {
             CliPrint("value is required");
             return CLI_INVALID_ARGS;
         }
     }
 
     HexSpawn(0, HEX_SDK, "os_neutron_network_update",
-                         tenant.c_str(), network.c_str(),
-                         type.c_str(), value.c_str(), NULL);
+        tenant.c_str(), network.c_str(),
+        type.c_str(), value.c_str(), NULL);
 
     return CLI_SUCCESS;
 }
@@ -346,13 +327,13 @@ FlowSwitchMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    switch(index) {
-        case 0:
-            HexSpawn(0, HEX_SDK, "cmd", "-p", HEX_CFG, "enable_sflow", ZEROCHAR_PTR);
-            break;
-        case 1:
-            HexSpawn(0, HEX_SDK, "cmd", "-p", HEX_CFG, "disable_sflow", ZEROCHAR_PTR);
-            break;
+    switch (index) {
+    case 0:
+        HexSpawn(0, HEX_SDK, "cmd", "-p", HEX_CFG, "enable_sflow", ZEROCHAR_PTR);
+        break;
+    case 1:
+        HexSpawn(0, HEX_SDK, "cmd", "-p", HEX_CFG, "disable_sflow", ZEROCHAR_PTR);
+        break;
     }
 
     return CLI_SUCCESS;
@@ -394,17 +375,12 @@ LoadBalancerFixMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-// This mode is not available in STRICT error state
-CLI_MODE(CLI_TOP_MODE, "iaas",
-    "Work with IaaS settings.",
-    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
-
-CLI_MODE_COMMAND("iaas", "vrouter_stats", VRouterStatsMain, NULL,
+CLI_MODE_COMMAND(CLI_TOP_COMMAND_IAAS, "vrouter_stats", VRouterStatsMain, NULL,
     "Display virtual router stats.",
     "vrouter_stats");
 
 // This mode is not available in STRICT error state
-CLI_MODE("iaas", "fip",
+CLI_MODE(CLI_TOP_COMMAND_IAAS, "fip",
     "Work with the IaaS floating IP settings.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
@@ -412,7 +388,7 @@ CLI_MODE_COMMAND("fip", "range_create", FipRangeCreateMain, NULL,
     "Allocate floating IP addresses by giving a IP list.",
     "range_create [<domain>] [<tenant>] [<network>] [<ip list>]");
 
-CLI_MODE("iaas", "router",
+CLI_MODE(CLI_TOP_COMMAND_IAAS, "router",
     "Work with the IaaS router settings.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
@@ -420,7 +396,7 @@ CLI_MODE_COMMAND("router", "set_external_gateway", RouterSetGatewayMain, NULL,
     "Specify IP addresses for router external gateway.",
     "set_external_gateway [<domain>] [<tenant>] [<router>] [<gateway>]");
 
-CLI_MODE("iaas", "network",
+CLI_MODE(CLI_TOP_COMMAND_IAAS, "network",
     "Work with the network settings.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
@@ -440,7 +416,7 @@ CLI_MODE_COMMAND("network", "network_show", NetShowMain, NULL,
     "Show a tenant network.",
     "network_show [<domain>] [<tenant>] [<network>]");
 
-CLI_MODE("iaas", "flowdata",
+CLI_MODE(CLI_TOP_COMMAND_IAAS, "flowdata",
     "Work with the network flow data.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
@@ -448,7 +424,7 @@ CLI_MODE_COMMAND("flowdata", "set_flowdata", FlowSwitchMain, NULL,
     "Set on to enable collecting flow data on this node and set off to disable.",
     "set_flowdata [on|off]");
 
-CLI_MODE("iaas", "lb",
+CLI_MODE(CLI_TOP_COMMAND_IAAS, "lb",
     "Work with the IaaS load balancers.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
