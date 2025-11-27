@@ -90,7 +90,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
 
 # qemu-kvm-17:9.1.0-29.el9 is not compatible with 17:9.1.0-20 (v3.0.0)
-QEMU_VER := 17:9.1.0-26.el9
+QEMU_VER := 17:9.1.0-27.el9
 QEMU_LOCKED_RPMS := qemu-kvm-$(QEMU_VER)
 QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-gpu-pci-$(QEMU_VER)
 QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-gpu-$(QEMU_VER)
