@@ -89,8 +89,8 @@ LOCKED_DNF += kernel-lt-$(KERNEL_VERS) kernel-lt-core-$(KERNEL_VERS) kernel-lt-d
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
 
-# qemu-kvm-17:9.1.0-29.el9 is not compatible with 17:9.1.0-20 (v3.0.0)
-QEMU_VER := 17:9.1.0-27.el9
+# qemu-kvm-17:9.1.0-27.el9 is not compatible with 17:9.1.0-20 (v3.0.0)
+QEMU_VER := 17:9.1.0-24.el9
 QEMU_LOCKED_RPMS := qemu-kvm-$(QEMU_VER)
 QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-gpu-pci-$(QEMU_VER)
 QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-gpu-$(QEMU_VER)
@@ -107,6 +107,7 @@ QEMU_LOCKED_RPMS += qemu-kvm-audio-pa-$(QEMU_VER)
 QEMU_LOCKED_RPMS += qemu-pr-helper-$(QEMU_VER)
 QEMU_LOCKED_RPMS += qemu-kvm-tools-$(QEMU_VER)
 QEMU_LOCKED_RPMS += qemu-kvm-ui-egl-headless-$(QEMU_VER)
+QEMU_LOCKED_RPMS += qemu-kvm-ui-opengl-$(QEMU_VER)
 QEMU_LOCKED_RPMS += qemu-kvm-docs-$(QEMU_VER)
 LOCKED_DNF += $(QEMU_LOCKED_RPMS)
 
@@ -130,7 +131,7 @@ rootfs_install::
 RUBY := ruby-3.0.4-161.el9
 LOCKED_DNF += $(RUBY)
 
-OPENSSL_VER := 3.5.1-1.el9
+OPENSSL_VER := 3.5.1-6.el9
 OPENSSL += openssl-$(OPENSSL_VER) openssl-devel-$(OPENSSL_VER) openssl-libs-$(OPENSSL_VER)
 LOCKED_DNF += $(OPENSSL)
 
