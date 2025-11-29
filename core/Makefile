@@ -17,6 +17,7 @@ SUBDIRS += cubectl
 SUBDIRS += appfw
 SUBDIRS += api
 SUBDIRS += ui
+SUBDIRS += appctl
 
 # Building heavy filesystem
 SUBDIRS += heavyfs
