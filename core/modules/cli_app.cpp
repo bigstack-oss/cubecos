@@ -19,92 +19,29 @@ static const char* HINT_INPUT_LB_IP = "Input load balancer ip for the framework(
 static const char* HINT_INPUT_OS_IMAGE = "Input os image for the framework(default is rancher-cluster-image-rke2-v1.32.4.raw): ";
 
 static int
-frameworkInstallMain(int argc, const char** argv)
+appRegisterMain(int argc, const char** argv)
 {
-    if (argc != 4 /* [1]="MGMT_NETWORK", [2]="PUB_NETWORK", [3]="LB_IP" */) {
-        return CLI_INVALID_ARGS;
-    }
-
-    std::string mgmt_net = argv[1];
-    std::string pub_net = argv[2];
-    std::string lb_ip = argv[3];
-
-    CliPrintf("installing app-framework...");
-    if (HexSpawn(0, HEX_SDK, "app_framework_install", mgmt_net.c_str(), pub_net.c_str(), lb_ip.c_str(), NULL) != 0)
-        CliPrintf("preconditions: extpack and mgmt/pub networks on admin project");
-    else {
-        CliPrintf("app-framework installed successfully");
-    }
-
-    return CLI_SUCCESS;
-}
-
-static int
-frameworkUninstallMain(int argc, const char** argv)
-{
-    if (argc > 1) {
-        return CLI_INVALID_ARGS;
-    }
-
-    CliPrintf("Uninstall app-framework will also destroy all apps running on top of it.");
-    if (!CliReadConfirmation())
-        return CLI_SUCCESS;
-
-    CliPrintf("uninstalling app-framework...");
-    if (HexSpawn(0, HEX_SDK, "app_framework_uninstall", NULL) != 0)
-        CliPrintf("app-framework failed to uninstall");
-    else {
-        CliPrintf("app-framework uninstalled successfully");
-    }
-
-    return CLI_SUCCESS;
-}
-
-static int
-appInstallMain(int argc, const char** argv)
-{
-    if (argc == 1 || argc > 3  /* [1]="app.pigz", [2]="skip_flavor"  */) {
+    if (argc == 1 || argc > 4  /* [1]="app.pigz", [2]="app framework name", [3]="skip_flavor"  */) {
         return CLI_INVALID_ARGS;
     }
     int ret;
     std::string app_path = argv[1];
+    std::string app_fw_name = argv[2];
+    std::string skip_flag = argv[3];
 
     CliPrintf("installing app: %s...", app_path.c_str());
 
-    if(argc == 3){
-        std::string skip_flag = argv[2];
-        ret = HexSpawn(0, HEX_SDK, "app_import", app_path.c_str(), skip_flag.c_str(), NULL);
+    if(argc == 4){
+        std::string skip_flag = argv[3];
+        ret = HexSpawn(0, HEX_SDK, "app_import", app_path.c_str(), app_fw_name.c_str(), skip_flag.c_str(), NULL);
     } else {
-        ret = HexSpawn(0, HEX_SDK, "app_import", app_path.c_str(), NULL);
+        ret = HexSpawn(0, HEX_SDK, "app_import", app_path.c_str(), app_fw_name.c_str(), NULL);
     }
 
     if (ret != 0)
         CliPrintf("app failed to install");
     else {
         CliPrintf("app installed successfully");
-    }
-
-    return CLI_SUCCESS;
-}
-
-static int
-appUninstallMain(int argc, const char** argv)
-{
-    if (argc != 2 /* [1]="app.pigz"*/) {
-        return CLI_INVALID_ARGS;
-    }
-
-    std::string app_path = argv[1];
-
-    CliPrintf("confirm to uninstall specified app.");
-    if (!CliReadConfirmation())
-        return CLI_SUCCESS;
-
-    CliPrintf("uninstalling app: %s...", app_path.c_str());
-    if (HexSpawn(0, HEX_SDK, "app_deploy uninstall", app_path.c_str(), NULL) != 0)
-        CliPrintf("app failed to uninstall");
-    else {
-        CliPrintf("app uninstalled successfully");
     }
 
     return CLI_SUCCESS;
@@ -262,29 +199,9 @@ frameworkDeleteMain(int argc, const char** argv)
 CLI_MODE(CLI_TOP_MODE, "app", "Work with applications.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
-CLI_MODE_COMMAND("app", "framework_install", frameworkInstallMain, NULL,
-                 "Install app-framework.",
-                 "framework_install MGMT_NETWORK PUB_NETWORK LOADBALANCER_IP");
-
-CLI_MODE_COMMAND("app", "framework_uninstall", frameworkUninstallMain, NULL,
-                 "Uninstall app-framework.",
-                 "framework_uninstall");
-
-CLI_MODE_COMMAND("app", "app_install", appInstallMain, NULL,
+CLI_MODE_COMMAND("app", "app_register", appRegisterMain, NULL,
                  "Install app.",
                  "app_install app.pigz");
-
-CLI_MODE_COMMAND("app", "app_uninstall", appUninstallMain, NULL,
-                 "Uninstall app.",
-                 "app_uninstall app.pigz");
-
-CLI_MODE_COMMAND("app", "project_create", appProjectCreateMain, NULL,
-                 "Create app project.",
-                 "project_create PROJ_NAME MGMT_NET PUB_NET");
-
-CLI_MODE_COMMAND("app", "project_delete", appProjectDeleteMain, NULL,
-                 "Delete app project.",
-                 "project_delete PROJ_NAME");
 
 CLI_MODE_COMMAND("app", "framework_check_prerequisites", frameworkCheckPrerequisitesMain, NULL,
                  "Check app-framework prerequisites.",
@@ -305,3 +222,11 @@ CLI_MODE_COMMAND("app", "framework_list", frameworkListMain, NULL,
 CLI_MODE_COMMAND("app", "framework_delete", frameworkDeleteMain, NULL,
                  "Delete app-framework.",
                  "framework_delete FRAMEWORK_NAME");
+
+CLI_MODE_COMMAND("app", "project_create", appProjectCreateMain, NULL,
+                 "Create app project.",
+                 "project_create PROJ_NAME MGMT_NET PUB_NET");
+
+CLI_MODE_COMMAND("app", "project_delete", appProjectDeleteMain, NULL,
+                 "Delete app project.",
+                 "project_delete PROJ_NAME");

@@ -164,7 +164,8 @@ app_framework_install()
 app_import()
 {
     local app_pigz=$1
-    local skip_flag=$2
+    local app_fw=$2
+    local skip_flag=$3
     if [ ! -f "$app_pigz" ] ; then
         echo "usage: $0 ${FUNCNAME[0]} /mnt/cephfs/update/app-1.2.3.pigz [skip_flavor]"
         exit 1
@@ -173,7 +174,7 @@ app_import()
     local tmpdir=$(mktemp -d -t $(basename $app_pigz).XXXXXXXX)
     tar -I pigz -xf $app_pigz -C $tmpdir
 
-    (cd $tmpdir && ./import.sh $skip_flag) || true
+    (cd $tmpdir && ENV_PROJ_NAME=$app_fw ./import.sh $skip_flag) || true
 
     rm -rf $tmpdir
 }
