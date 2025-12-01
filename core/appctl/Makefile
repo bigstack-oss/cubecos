@@ -13,7 +13,7 @@ include version
 include build_number
 
 # appctl binary
-APPCTL_GIT_DIR := ./git
+APPCTL_GIT_DIR := ./git_appctl
 APPCTL_RPMBUILD_DIR := rpmbuild
 APPCTL_TARBALL := $(APPCTL_RPMBUILD_DIR)/SOURCES/cube-cos-app-framework-$(APPCTL_VERSION).tar.gz
 APPCTL_SPEC_FILE := $(APPCTL_RPMBUILD_DIR)/SPECS/cube-cos-app-framework.spec
