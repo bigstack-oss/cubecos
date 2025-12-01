@@ -49,7 +49,7 @@ $(APPCTL_TARBALL): $(APPCTL_RPMBUILD_DIR) $(APPCTL_GIT_DIR)
 	$(Q)mkdir ./source
 	$(Q)cp -r $(APPCTL_GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)
-	$(Q)sudo rm -r ./source/.git/ ./source/.github/ ./source/.gitignore
+	$(Q)sudo rm -r ./source/.git/ ./source/.github/
 	$(Q)tar -cvzf "cube-cos-app-framework-$(APPCTL_VERSION).tar.gz" source $(QEND)
 	$(Q)mv ./cube-cos-app-framework-$(APPCTL_VERSION).tar.gz $(APPCTL_RPMBUILD_DIR)/SOURCES
 	$(Q)rm -r ./source
