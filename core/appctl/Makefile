@@ -22,6 +22,7 @@ APPCTL_RPM_BUILD := $(APPCTL_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-app-framework-$(
 # prepare the appctl source code, being pulled from GitHub using the default branch
 # For RC: git clone -b v3.0.0-rc4
 $(APPCTL_GIT_DIR):
+	$(Q)rm -rf $(APPCTL_GIT_DIR)
 	$(Q)mkdir $(APPCTL_GIT_DIR)
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
