@@ -402,14 +402,20 @@ func syncStorageAccess() error {
 		aws.S3DefaultAccessKey,
 		aws.S3DefaultSecretKey,
 	)
-	if err == nil {
-		return nil
+	if err != nil {
+		_, is409 := err.(gophercloud.ErrDefault409)
+		if !is409 {
+			return err
+		}
 	}
-	_, is409 := err.(gophercloud.ErrDefault409)
-	if !is409 {
+
+	cred, err := openstack.GetEc2CredentialByUserId(identityCli, userId)
+	if err != nil {
 		return err
 	}
 
+	aws.S3DefaultAccessKey = cred.AccessKey
+	aws.S3DefaultSecretKey = cred.SecretKey
 	return nil
 }
 

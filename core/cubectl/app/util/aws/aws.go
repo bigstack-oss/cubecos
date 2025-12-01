@@ -9,7 +9,9 @@ import (
 
 const (
 	RegionAuto = "auto"
+)
 
+var (
 	S3DefaultAccessKey = "admin"
 	S3DefaultSecretKey = "admin"
 )

@@ -274,6 +274,16 @@ func initDependencyClients() error {
 		return err
 	}
 
+	identityCli, err = openstack.NewIdentityCli()
+	if err != nil {
+		return err
+	}
+
+	err = syncStorageAccess()
+	if err != nil {
+		return err
+	}
+
 	s3Cli, err = aws.NewS3Client(
 		aws.Region(aws.RegionAuto),
 		aws.EnableStaticCreds(true),
@@ -283,11 +293,6 @@ func initDependencyClients() error {
 		aws.S3Url(ceph.GetRadosGatewayUrl()),
 		aws.InsecureSkipVerify(true),
 	)
-	if err != nil {
-		return err
-	}
-
-	identityCli, err = openstack.NewIdentityCli()
 	if err != nil {
 		return err
 	}

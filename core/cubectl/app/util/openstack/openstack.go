@@ -2,6 +2,7 @@ package openstack
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -188,6 +189,51 @@ func CreateEc2Credential(identityCli *gophercloud.ServiceClient, userId, project
 	).Extract()
 	if err != nil {
 		return nil, err
+	}
+
+	return &Credential{
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+	}, nil
+}
+
+func GetEc2CredentialByUserId(identityCli *gophercloud.ServiceClient, userId string) (*Credential, error) {
+	pages, err := credentials.List(
+		identityCli,
+		credentials.ListOpts{
+			UserID: userId,
+			Type:   "ec2",
+		},
+	).AllPages()
+	if err != nil {
+		return nil, err
+	}
+
+	creds, err := credentials.ExtractCredentials(pages)
+	if err != nil {
+		return nil, err
+	}
+	if len(creds) == 0 {
+		return nil, fmt.Errorf(
+			"ec2 credential for user %s not found",
+			userId,
+		)
+	}
+
+	blob := creds[0].Blob
+	keys := map[string]string{}
+	err = json.Unmarshal([]byte(blob), &keys)
+	if err != nil {
+		return nil, err
+	}
+
+	accessKey, found := keys["access"]
+	if !found {
+		return nil, fmt.Errorf("access key not found for %s", blob)
+	}
+	secretKey, found := keys["secret"]
+	if !found {
+		return nil, fmt.Errorf("secret key not found for %s", blob)
 	}
 
 	return &Credential{
