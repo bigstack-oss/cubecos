@@ -815,7 +815,7 @@ os_image_import()
         fi
 
         echo "[$(date +"%T")] Converting image to RAW format ... "
-        if [ "x$pool" = "xglance-images" -o "x$volume_type" != "xCubeStorage" ] ; then
+        if [ "x$pool" = "xglance-images" ] ; then
             qemu-img convert -p -O raw "$IMG" "$img_raw"
             if [[ $file =~ efi ]] ; then
                 properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
