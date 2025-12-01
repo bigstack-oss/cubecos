@@ -54,7 +54,6 @@ oslo.i18n===5.1.0
 jsonpath-rw-ext===1.2.2
 python-mistralclient===4.4.0
 oslo.context===4.1.0
-python-senlinclient===2.4.0
 rcssmin===1.0.6
 pycadf===3.1.1
 types-enum34===1.1.8

@@ -150,7 +150,6 @@ hex_config_MODULES += config_manila.o
 hex_config_MODULES += config_monasca.o
 hex_config_MODULES += config_octavia.o
 hex_config_MODULES += config_designate.o
-hex_config_MODULES += config_senlin.o
 hex_config_MODULES += config_watcher.o
 hex_config_MODULES += config_cyborg.o
 hex_config_MODULES += config_api.o

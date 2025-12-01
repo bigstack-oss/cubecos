@@ -2418,60 +2418,6 @@ health_monasca_repair()
     cmd $HEX_CFG restart_monasca
 }
 
-health_senlin_report()
-{
-    [ "$VERBOSE" != "1" ] || $OPENSTACK cluster service list
-    _health_report ${FUNCNAME[0]}
-}
-
-health_senlin_check()
-{
-    stale_api_check_repair openstack-senlin-api 8777 senlin-api python3
-
-    local service_stats="$($OPENSTACK cluster service list -f value -c host -c binary -c status -c state 2>/dev/null)"
-    local engine_up=$(echo "$service_stats" | grep senlin-engine | grep -i enabled | grep -i up | wc -l )
-    local engine_down=$(echo "$service_stats" | grep senlin-engine | grep -i enabled | grep -i down | wc -l )
-    local conductor_up=$(echo "$service_stats" | grep senlin-conductor | grep -i enabled | grep -i up | wc -l )
-    local conductor_down=$(echo "$service_stats" | grep senlin-conductor | grep -i enabled | grep -i down | wc -l )
-    local hmgr_up=$(echo "$service_stats" | grep senlin-health-manager | grep -i enabled | grep -i up | wc -l )
-    local hmgr_down=$(echo "$service_stats" | grep senlin-health-manager | grep -i enabled | grep -i down | wc -l )
-
-    if [ -z "$service_stats" ] ; then
-        ERR_CODE=2
-        ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-senlin-api"
-    elif [ "$engine_up" == "0" -o "$engine_down" != "0" ] ; then
-        ERR_CODE=3
-        ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-senlin-engine"
-    elif [ "$conductor_up" == "0" -o "$conductor_down" != "0" ] ; then
-        ERR_CODE=4
-        ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-senlin-conductor"
-    elif [ "$hmgr_up" == "0" -o "$hmgr_down" != "0" ] ; then
-        ERR_CODE=5
-        ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-senlin-health-manager"
-    fi
-
-    ERR_MSG+="$service_stats\n"
-    _health_fail_log
-}
-
-_health_senlin_auto_repair()
-{
-    readarray entry_array <<<"$(echo "$ERR_MSG" | awk '/enabled.*down/{print $1" "$2}' | sort)"
-    declare -p entry_array > /dev/null
-    for entry in "${entry_array[@]}" ; do
-        local srv=$(echo $entry | awk '{print $1}')
-        local host=$(echo $entry | awk '{print $2}')
-        if [ -n "$host" ] ; then
-            remote_systemd_restart $host openstack-$srv
-        fi
-    done
-}
-
-health_senlin_repair()
-{
-    cmd -c $HEX_CFG restart_senlin
-}
-
 health_watcher_report()
 {
     [ "$VERBOSE" != "1" ] || $OPENSTACK optimize service list

@@ -116,7 +116,6 @@ tss:x:59:clevis
 prometheus:x:964:
 ironic:x:960:
 ironic-inspector:x:959:
-senlin:x:958:
 watcher:x:957:
 cyborg:x:940:
 nfast:x:42481:barbican

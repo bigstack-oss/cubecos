@@ -292,19 +292,6 @@ migrate_octavia_db()
     touch $STATE_DIR/octavia_db_migrated
 }
 
-migrate_senlin_db()
-{
-    if [ -f $STATE_DIR/senlin_db_migrated ] ; then
-        return 0
-    fi
-
-    if is_control_node ; then
-        su -s /bin/sh -c "senlin-manage db_sync" senlin
-    fi
-
-    touch $STATE_DIR/senlin_db_migrated
-}
-
 migrate_watcher_db()
 {
     if [ -f $STATE_DIR/watcher_db_migrated ] ; then

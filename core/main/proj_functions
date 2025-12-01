@@ -227,8 +227,6 @@ cube_edge_cfg()
         remote_run $ctrl mv $HORIZON_APP_DIR/_17*.py $HORIZON_APP_DIR/bak/
         # watcher
         remote_run $ctrl mv $HORIZON_APP_DIR/_310*.py $HORIZON_APP_DIR/bak/
-        # senlin
-        remote_run $ctrl mv $HORIZON_APP_DIR/_50_senlin.py $HORIZON_APP_DIR/bak/
         remote_run $ctrl python3 /usr/share/openstack-dashboard/manage.py compilemessages 2>&1 > /dev/null
         remote_run $ctrl python3 /usr/share/openstack-dashboard/manage.py collectstatic --noinput 2>&1 > /dev/null
         remote_run $ctrl python3 /usr/share/openstack-dashboard/manage.py compress --force 2>&1 > /dev/null
@@ -890,7 +888,7 @@ check_service_stats()
 
     if ! is_edge_node ; then
         # openstack services
-        local service_array=(ironic designate senlin watcher)
+        local service_array=(ironic designate watcher)
         for service in "${service_array[@]}" ; do
             check_service $service
         done

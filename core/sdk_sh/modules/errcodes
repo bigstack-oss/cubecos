@@ -258,13 +258,6 @@ eval "ERR_DESC_$SRV[5]='forwarder down'"
 eval "ERR_DESC_$SRV[6]='statsd down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
-SRV="senlin"
-eval "ERR_DESC_$SRV[2]='api timeout'"
-eval "ERR_DESC_$SRV[3]='engine down'"
-eval "ERR_DESC_$SRV[4]='conductor down'"
-eval "ERR_DESC_$SRV[5]='health-manager down'"
-eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
-
 SRV="watcher"
 eval "ERR_DESC_$SRV[2]='api timeout'"
 eval "ERR_DESC_$SRV[3]='applier down'"

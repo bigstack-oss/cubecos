@@ -186,7 +186,7 @@ rootfs_install::
 HEAVY_COMPONENTS += api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
 HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift
-HEAVY_COMPONENTS += heat horizon octavia barbican manila designate masakari monasca senlin watcher cyborg
+HEAVY_COMPONENTS += heat horizon octavia barbican manila designate masakari monasca watcher cyborg
 HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw nvidia
 
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
