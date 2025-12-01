@@ -46,13 +46,13 @@ $(APPCTL_RPMBUILD_DIR):
 
 # make the source tarball
 $(APPCTL_TARBALL): $(APPCTL_RPMBUILD_DIR) $(APPCTL_GIT_DIR)
-	$(Q)mkdir ./source
-	$(Q)cp -r $(APPCTL_GIT_DIR)/.git/ ./source/
-	$(Q)cd ./source && git checkout . $(QEND)
-	$(Q)sudo rm -r ./source/.git/ ./source/.github/
+	$(Q)mkdir ./source_appctl
+	$(Q)cp -r $(APPCTL_GIT_DIR)/.git/ ./source_appctl/
+	$(Q)cd ./source_appctl && git checkout . $(QEND)
+	$(Q)sudo rm -r ./source_appctl/.git/ ./source_appctl/.github/
 	$(Q)tar -cvzf "cube-cos-app-framework-$(APPCTL_VERSION).tar.gz" source $(QEND)
 	$(Q)mv ./cube-cos-app-framework-$(APPCTL_VERSION).tar.gz $(APPCTL_RPMBUILD_DIR)/SOURCES
-	$(Q)rm -r ./source
+	$(Q)rm -r ./source_appctl
 
 # prepare the rpm spec file
 $(APPCTL_SPEC_FILE): $(APPCTL_RPMBUILD_DIR) $(APPCTL_GIT_DIR)
