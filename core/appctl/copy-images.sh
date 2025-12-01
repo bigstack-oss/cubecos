@@ -11,6 +11,6 @@ cd $imagesDir
 
 for f in $(find * -type f)
 do
-    local file=${f%.*}
+    file=${f%.*}
     skopeo copy docker-archive:$f docker://$registry/${file/@/:} --dest-tls-verify=false
 done
