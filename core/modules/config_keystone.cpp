@@ -15,6 +15,7 @@
 #include <cluster.hpp>
 #include <cube/systemd_util.h>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -27,7 +28,6 @@
 
 static const char ADMINPASS[] = "admin";
 static const char DBPASS[] = "kWYg6aDBadeM6Xz3";
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static const char ADMINCLI[] = "admin_cli";
 static const char ADMINCLIPASS[] = "66K1ogIiRt5KnyHe";
@@ -166,19 +166,19 @@ SetupPublicAdminUser(std::string name, std::string password, std::string sharedI
     std::string env = GetOpenstackEnv(name, password, sharedId, domain);
 
     // create _member_ and delete member role for backward-compatible
-    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role create _member_" RETRY_FMT_F, env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role set --no-immutable member" RETRY_FMT_F, env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role delete member" RETRY_FMT_F, env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role create _member_" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role set --no-immutable member" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role delete member" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
 
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role add --user admin --domain %s admin" RETRY_FMT_F,
-                         env.c_str(), OSCMD, domain.c_str());
+                         env.c_str(), OPENSTACK_CLI, domain.c_str());
 
     // Create a service project for each service that we add to your environment.
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s project create --domain %s --description \"Service Project\" service" RETRY_FMT_F,
-                         env.c_str(), OSCMD, domain.c_str());
+                         env.c_str(), OPENSTACK_CLI, domain.c_str());
 
     // Create a service role for other services to auth (nova, cinder)
-    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role create service" RETRY_FMT_F, env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role create service" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
 
     return true;
 }
@@ -199,11 +199,11 @@ SetupInternalAdminUser(std::string name, std::string password, std::string share
     std::string env = GetOpenstackEnv(name, password, sharedId, domain);
 
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s user create --domain %s --password %s %s" RETRY_FMT_F,
-                         env.c_str(), OSCMD, domain.c_str(), adminCliPass.c_str(), adminCli.c_str());
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), adminCliPass.c_str(), adminCli.c_str());
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role add --project admin --user %s admin" RETRY_FMT_F,
-                         env.c_str(), OSCMD, adminCli.c_str());
+                         env.c_str(), OPENSTACK_CLI, adminCli.c_str());
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role add --user %s --domain %s admin" RETRY_FMT_F,
-                         env.c_str(), OSCMD, adminCli.c_str(), domain.c_str());
+                         env.c_str(), OPENSTACK_CLI, adminCli.c_str(), domain.c_str());
 
     HexUtilSystemF(0, 0, "touch %s", ADMINCLI_MARKER);
 
@@ -224,19 +224,19 @@ SetupIdp(std::string name, std::string password, std::string sharedId, std::stri
         std::string env = GetOpenstackEnv(name, password, sharedId, domain);
 
         HexUtilSystemF(0, 0, "%s %s identity provider create --domain %s --remote-id https://%s:10443/auth/realms/master cube_idp",
-                             env.c_str(), OSCMD, domain.c_str(), sharedId.c_str());
+                             env.c_str(), OPENSTACK_CLI, domain.c_str(), sharedId.c_str());
         HexUtilSystemF(0, 0, "%s %s mapping create --rules %s cube_idp_mapping",
-                             env.c_str(), OSCMD, IDP_RULES);
+                             env.c_str(), OPENSTACK_CLI, IDP_RULES);
         HexUtilSystemF(0, 0, "%s %s group create cube_admins",
-                             env.c_str(), OSCMD);
+                             env.c_str(), OPENSTACK_CLI);
         HexUtilSystemF(0, 0, "%s %s role add --group cube_admins --project admin admin",
-                             env.c_str(), OSCMD);
+                             env.c_str(), OPENSTACK_CLI);
         HexUtilSystemF(0, 0, "%s %s group create cube_users",
-                             env.c_str(), OSCMD);
+                             env.c_str(), OPENSTACK_CLI);
         HexUtilSystemF(0, 0, "%s %s role add --group cube_users --project admin _member_",
-                             env.c_str(), OSCMD);
+                             env.c_str(), OPENSTACK_CLI);
         HexUtilSystemF(0, 0, "%s %s federation protocol create mapped --mapping cube_idp_mapping --identity-provider cube_idp",
-                             env.c_str(), OSCMD);
+                             env.c_str(), OPENSTACK_CLI);
 
         HexUtilSystemF(0, 0, HEX_SDK " os_keystone_idp_config %s", sharedId.c_str());
 
@@ -247,7 +247,7 @@ SetupIdp(std::string name, std::string password, std::string sharedId, std::stri
         std::string env = GetOpenstackEnv(name, password, sharedId, domain);
 
         HexUtilSystemF(0, 0, "%s %s identity provider set --remote-id https://%s:10443/auth/realms/master cube_idp",
-                             env.c_str(), OSCMD, sharedId.c_str());
+                             env.c_str(), OPENSTACK_CLI, sharedId.c_str());
         HexUtilSystemF(0, 0, HEX_SDK " os_keystone_idp_config %s", sharedId.c_str());
 
         unlink(IDP_UPDATE);

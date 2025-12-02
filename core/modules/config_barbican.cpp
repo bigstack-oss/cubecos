@@ -14,6 +14,7 @@
 #include <cube/config_file.h>
 #include <cluster.hpp>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -38,8 +39,6 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
 static const char USERPASS[] = "0jtLcw028IYRjIMd";
 static const char DBPASS[] = "tp7FcmpO4fSfM2NI";
 static const char CRYPTOPASS[] = "paA7W6gtT3lHXJBb";
-
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static Configs cfg;
 
@@ -130,17 +129,17 @@ SetupBarbican(std::string domain, std::string userPass)
 
     // Create the barbican service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s barbican",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user barbican admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user barbican admin", env.c_str(), OPENSTACK_CLI);
 
     // Create a creator role
-    HexUtilSystemF(0, 0, "%s %s role create creator", env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user barbican creator", env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, "%s %s role create creator", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user barbican creator", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name barbican "
                          "--description \"Key Manager\" key-manager",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     return true;
 }

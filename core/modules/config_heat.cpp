@@ -15,6 +15,7 @@
 #include <cube/config_file.h>
 #include <cluster.hpp>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -38,8 +39,6 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
 static const char USERPASS[] = "SVgOEffYgYu63rvR";
 static const char ADMPASS[] = "Qwte0o3CwfMwSlFC";
 static const char DBPASS[] = "nLgOGI6TUHpLbXqW";
-
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static Configs cfg;
 
@@ -131,28 +130,28 @@ SetupHeat(std::string domain, std::string userPass, std::string adminPass)
 
     // Create the heat service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s heat",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user heat admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user heat admin", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name heat "
                          "--description \"Orchestration\" orchestration",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name heat-cfn "
                          "--description \"Orchestration\" cloudformation",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     // heat specific domain, roles, and admin
     HexUtilSystemF(0, 0, "%s %s domain create --description \"Stack projects and users\" heat",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     HexUtilSystemF(0, 0, "%s %s user create --domain heat --password %s heat_domain_admin",
-                         env.c_str(), OSCMD, adminPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --domain heat --user-domain heat --user heat_domain_admin admin", env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, "%s %s role create heat_stack_owner", env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, "%s %s role create heat_stack_user", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, adminPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --domain heat --user-domain heat --user heat_domain_admin admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role create heat_stack_owner", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role create heat_stack_user", env.c_str(), OPENSTACK_CLI);
 
     return true;
 }

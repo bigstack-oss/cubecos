@@ -16,6 +16,7 @@
 #include <cube/config_file.h>
 #include <cluster.hpp>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -46,8 +47,6 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
 
 static const char USERPASS[] = "C5rfkCpSfb9G4jiQ";
 static const char DBPASS[] = "GRmeqOmBcyus5cW0";
-
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static Configs cfg;
 static Configs monCfg;
@@ -150,13 +149,13 @@ SetupMasakari(std::string domain, std::string userPass)
 
     // Create the masakari service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s masakari",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user masakari admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user masakari admin", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name masakari "
                          "--description \"masakari high availability\" ha",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     return true;
 }

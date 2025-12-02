@@ -1,6 +1,6 @@
 // CUBE SDK
 
-#include "include/constant.h"
+#include "constant.hpp"
 #include "include/role_cubesys.h"
 #include "mysql_util.h"
 #include <cluster.hpp>
@@ -33,7 +33,6 @@ static const char SCHEDULER_NAME[] = "openstack-manila-scheduler";
 static const char SHARE_NAME[] = "openstack-manila-share";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static const char USERPASS[] = "iSH2oRU3cwyOG6vj";
 static const char DBPASS[] = "vSV8gnW0PtuFgnHA";
@@ -531,7 +530,7 @@ SetupService(const std::string domain, const std::string userPass)
         0,
         "%s %s user create --domain %s --password %s %s",
         env.c_str(),
-        OSCMD,
+        OPENSTACK_CLI,
         domain.c_str(),
         userPass.c_str(),
         USER);
@@ -540,7 +539,7 @@ SetupService(const std::string domain, const std::string userPass)
         0,
         "%s %s role add --project service --user %s admin",
         env.c_str(),
-        OSCMD,
+        OPENSTACK_CLI,
         USER);
 
     // create the service entity
@@ -549,13 +548,13 @@ SetupService(const std::string domain, const std::string userPass)
         0,
         "%s %s service create --name manila --description \"OpenStack Shared File Systems\" share",
         env.c_str(),
-        OSCMD);
+        OPENSTACK_CLI);
     HexUtilSystemF(
         0,
         0,
         "%s %s service create --name manilav2 --description \"OpenStack Shared File Systems\" sharev2",
         env.c_str(),
-        OSCMD);
+        OPENSTACK_CLI);
 }
 /**
  * Set service endpoints.

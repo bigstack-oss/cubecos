@@ -15,6 +15,7 @@
 #include <cube/config_file.h>
 #include <cluster.hpp>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -55,8 +56,6 @@ static const char USERPASS[] = "Rf5jKHUrqRIRhw9Z";
 static const char INSPPASS[] = "zwV64adt04oqAuAO";
 static const char DBPASS[] = "bMkbMPKXwhBckKhY";
 static const char INSPDBPASS[] = "2XZyAEwkYLPWasWK";
-
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static Configs cfg;
 static Configs inspCfg;
@@ -242,28 +241,28 @@ SetupIronic(std::string domain, std::string ironicPass, std::string inspPass)
     std::string env = ". " + std::string(OPENRC) + " &&";
 
     // Create the ironic roles
-    HexUtilSystemF(0, 0, "%s %s role create baremetal_admin", env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, "%s %s role create baremetal_observer", env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, "%s %s role create baremetal_admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role create baremetal_observer", env.c_str(), OPENSTACK_CLI);
 
     // Create the ironic service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s ironic",
-                         env.c_str(), OSCMD, domain.c_str(), ironicPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), ironicPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic admin", env.c_str(), OPENSTACK_CLI);
 
     // Create the ironic service entity
     HexUtilSystemF(0, 0, "%s %s service create --name ironic "
                          "--description \"Ironic baremetal provisioning service\" baremetal",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     // Create the ironic-inspector service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s ironic-inspector",
-                         env.c_str(), OSCMD, domain.c_str(), inspPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic-inspector admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), inspPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic-inspector admin", env.c_str(), OPENSTACK_CLI);
 
     // Create the ironic-inspector service entity
     HexUtilSystemF(0, 0, "%s %s service create --name ironic-inspector "
                          "--description \"Ironic Inspector baremetal introspection service\" baremetal-introspection",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
     return true;
 }
 

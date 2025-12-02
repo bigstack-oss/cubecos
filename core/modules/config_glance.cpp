@@ -1,6 +1,6 @@
 // CUBE SDK
 
-#include "include/constant.h"
+#include "constant.hpp"
 #include "include/role_cubesys.h"
 #include "mysql_util.h"
 #include <cluster.hpp>
@@ -27,7 +27,6 @@ static const char VOLUME[] = "glance-images";
 static const char GA_NAME[] = "openstack-glance-api";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static const char USERPASS[] = "0ZsvkS1bHXYsywTx";
 static const char DBPASS[] = "g6CEJCNFT6ufPY22";
@@ -532,10 +531,15 @@ SetupService(const std::string domain, const std::string userPass)
         0,
         "%s %s user create --domain %s --password %s glance",
         env.c_str(),
-        OSCMD,
+        OPENSTACK_CLI,
         domain.c_str(),
         userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user glance admin", env.c_str(), OSCMD);
+    HexUtilSystemF(
+        0,
+        0,
+        "%s %s role add --project service --user glance admin",
+        env.c_str(),
+        OPENSTACK_CLI);
 
     // create the service entity
     HexUtilSystemF(
@@ -543,7 +547,7 @@ SetupService(const std::string domain, const std::string userPass)
         0,
         "%s %s service create --name %s --description \"OpenStack Image\" image",
         env.c_str(),
-        OSCMD,
+        OPENSTACK_CLI,
         USER);
 }
 

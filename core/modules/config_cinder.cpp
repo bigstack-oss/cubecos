@@ -1,6 +1,6 @@
 // CUBE SDK
 
-#include "include/constant.h"
+#include "constant.hpp"
 #include "include/role_cubesys.h"
 
 #include <cluster.hpp>
@@ -59,7 +59,6 @@ static const char VOL_NAME[] = "openstack-cinder-volume";
 static const char BAK_NAME[] = "openstack-cinder-backup";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static const char USERPASS[] = "8YHpMKC1394HbTmL";
 static const char DBPASS[] = "hhyCDG3IdNmcQaJo";
@@ -633,11 +632,11 @@ SetupService(const std::string domain, const std::string userPass)
         0,
         "%s %s user create --domain %s --password %s cinder",
         env.c_str(),
-        OSCMD,
+        OPENSTACK_CLI,
         domain.c_str(),
         userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder admin", env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder service", env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder service", env.c_str(), OPENSTACK_CLI);
 
     // create the service entity
     HexUtilSystemF(
@@ -645,13 +644,13 @@ SetupService(const std::string domain, const std::string userPass)
         0,
         "%s %s service create --name cinderv2 --description \"OpenStack Block Storage\" volumev2",
         env.c_str(),
-        OSCMD);
+        OPENSTACK_CLI);
     HexUtilSystemF(
         0,
         0,
         "%s %s service create --name cinderv3 --description \"OpenStack Block Storage\" volumev3",
         env.c_str(),
-        OSCMD);
+        OPENSTACK_CLI);
 }
 
 /**

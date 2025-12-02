@@ -15,6 +15,7 @@
 #include <cluster.hpp>
 #include <cube/systemd_util.h>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -34,7 +35,6 @@ static const char API_NAME[] = "cyborg-api";
 static const char CDTR_NAME[] = "cyborg-conductor";
 static const char AGENT_NAME[] = "cyborg-agent";
 
-static const char OSCMD[] = "/usr/bin/openstack";
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
 static const char USERPASS[] = "jfWRcIf8FOpFhX9L";
@@ -134,12 +134,12 @@ SetupService(std::string domain, std::string userPass)
 
     // Create the cyborg service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s cyborg",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user cyborg admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user cyborg admin", env.c_str(), OPENSTACK_CLI);
 
     HexUtilSystemF(0, 0, "%s %s service create --name cyborg "
                          "--description \"Acceleration Service\" accelerator",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     return true;
 }

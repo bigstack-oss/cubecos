@@ -13,14 +13,13 @@
 
 #include <cluster.hpp>
 
+#include "constant.hpp"
 #include "include/role_cubesys.h"
 
 static const char SETUP_MARK[] = "/etc/appliance/state/swift_done";
 static const char SETUP_S3_MARK[] = "/etc/appliance/state/s3_done";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
-
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static ConfigString s_hostname;
 
@@ -107,7 +106,7 @@ SetupSwift(void)
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name swift "
                          "--description \"Openstack Object Storage\" object-store",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     HexSystemF(0, "touch %s", SETUP_MARK);
 
@@ -128,7 +127,7 @@ SetupS3(void)
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name s3 "
                          "--description \"Simple Storage Service\" s3",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     HexSystemF(0, "touch %s", SETUP_S3_MARK);
 

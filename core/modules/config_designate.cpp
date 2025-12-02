@@ -18,6 +18,7 @@
 #include <cluster.hpp>
 #include <cube/systemd_util.h>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -50,7 +51,6 @@ static const char WKR_NAME[] = "designate-worker";
 static const char PDR_NAME[] = "designate-producer";
 static const char MDNS_NAME[] = "designate-mdns";
 
-static const char OSCMD[] = "/usr/bin/openstack";
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 static const char RNDC_KEY[] = "/etc/designate/rndc.key";
 
@@ -257,12 +257,12 @@ SetupService(std::string domain, std::string userPass)
 
     // Create the designate service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s designate",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user designate admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user designate admin", env.c_str(), OPENSTACK_CLI);
 
     HexUtilSystemF(0, 0, "%s %s service create --name designate "
                          "--description \"Openstack DNS Service\" dns",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     return true;
 }

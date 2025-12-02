@@ -19,6 +19,7 @@
 #include <cluster.hpp>
 #include <cube/systemd_util.h>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -60,8 +61,6 @@ static const char USERPASS[] = "8YdO3T0l3qaEgdjT";
 static const char PLACEPASS[] = "TXh08jAWj1gDdd82";
 static const char DBPASS[] = "ZEuDgxtp6TuMB2gc";
 static const char PLADBPASS[] = "WsBrzP5t49k4LqEo";
-
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static ConfigString s_hostname;
 
@@ -230,24 +229,24 @@ SetupNova(std::string domain, std::string novaPass, std::string placePass)
 
     // Create the nova service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s nova",
-                         env.c_str(), OSCMD, domain.c_str(), novaPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user nova admin", env.c_str(), OSCMD);
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user nova service", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), novaPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user nova admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user nova service", env.c_str(), OPENSTACK_CLI);
 
     // Create the nova placement service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s placement",
-                         env.c_str(), OSCMD, domain.c_str(), placePass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user placement admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), placePass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user placement admin", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name nova "
                          "--description \"OpenStack Compute\" compute",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name placement "
                          "--description \"Placement API\" placement",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     // Create the nova ephemeral storage
     HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", VOLUME);

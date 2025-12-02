@@ -94,9 +94,13 @@ FipRangeCreateMain(int argc, const char** argv)
                 inet_ntop(AF_INET, &hip, ipStr, INET_ADDRSTRLEN);
                 if (ValidateFip(allocPools, hip)) {
                     CliPrintf("creating floating IP %s", ipStr);
-                    HexUtilSystemF(0, 0, ". /etc/admin-openrc.sh && "
-                                         "/usr/bin/openstack floating ip create "
-                                         "--floating-ip-address %s --project %s %s",
+                    HexUtilSystemF(
+                        0, 
+                        0, 
+                        ". /etc/admin-openrc.sh && "
+                        "%s floating ip create "
+                        "--floating-ip-address %s --project %s %s",
+                        OPENSTACK_CLI,
                         ipStr, tenant.c_str(), network.c_str());
                 } else {
                     CliPrintf("skipping IP %s which does not belong to allocation pools", ipStr);

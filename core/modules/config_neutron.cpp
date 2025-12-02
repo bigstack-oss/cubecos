@@ -20,6 +20,7 @@
 #include <cluster.hpp>
 #include <cube/cubesys.h>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -55,8 +56,6 @@ static const char AGENT_CACHE[] = "/etc/cron.d/neutron_agent_cache_renew";
 static const char USERPASS[] = "XPrCSFAZu5h98rVM";
 static const char METAPASS[] = "HeBlO7sMRH6fYtmC";
 static const char DBPASS[] = "KNaHKGg62djyeJ6M";
-
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static Configs cfg;
 static Configs ml2Cfg;
@@ -289,13 +288,13 @@ SetupNeutron(std::string domain, std::string password)
     std::string env = ". " + std::string(OPENRC) + " &&";
 
     // Create the neutron service credentials
-    HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s neutron", env.c_str(), OSCMD, domain.c_str(), password.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user neutron admin", env.c_str(), OSCMD);
+    HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s neutron", env.c_str(), OPENSTACK_CLI, domain.c_str(), password.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user neutron admin", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name %s "
                          "--description \"OpenStack Networking\" network",
-                         env.c_str(), OSCMD, USER);
+                         env.c_str(), OPENSTACK_CLI, USER);
 
     return true;
 }

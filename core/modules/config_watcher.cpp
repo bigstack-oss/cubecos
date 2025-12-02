@@ -15,6 +15,7 @@
 #include <cluster.hpp>
 #include <cube/systemd_util.h>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -34,7 +35,6 @@ static const char API_NAME[] = "openstack-watcher-api";
 static const char ENGINE_NAME[] = "openstack-watcher-decision-engine";
 static const char APPLIER_NAME[] = "openstack-watcher-applier";
 
-static const char OSCMD[] = "/usr/bin/openstack";
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
 static const char USERPASS[] = "Kjba1ugwByLdEugp";
@@ -129,12 +129,12 @@ SetupService(std::string domain, std::string userPass)
 
     // Create the watcher service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s watcher",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user watcher admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user watcher admin", env.c_str(), OPENSTACK_CLI);
 
     HexUtilSystemF(0, 0, "%s %s service create --name watcher "
                          "--description \"Infrastructure Optimization\" infra-optim",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     return true;
 }

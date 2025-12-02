@@ -4,6 +4,7 @@
 #define CLI_IAAS_NETWORK_H
 
 #include "cli_iaas.hpp"
+#include "constant.hpp"
 
 #include <cube/cubesys.h>
 #include <hex/cli_module.h>

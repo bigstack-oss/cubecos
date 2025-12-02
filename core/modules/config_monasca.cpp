@@ -16,6 +16,7 @@
 #include <cube/config_file.h>
 #include <cluster.hpp>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -70,8 +71,6 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
 
 static const char USERPASS[] = "FLCHzqeXyf6d63ZR";
 static const char DBPASS[] = "pvDiNFbHpQwKnFdB";
-
-static const char OSCMD[] = "/usr/bin/openstack";
 
 static Configs apiCfg;
 static Configs pstCfg;
@@ -263,13 +262,13 @@ SetupMonasca(std::string domain, std::string userPass)
 
     // Create the monasca service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s monasca",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user monasca admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user monasca admin", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name monasca-api "
                          "--description \"monasca monitoring service\" monitoring",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     return true;
 }

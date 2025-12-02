@@ -18,6 +18,7 @@
 #include <cluster.hpp>
 #include <cube/systemd_util.h>
 
+#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
@@ -45,7 +46,6 @@ static const char WRKR_NAME[] = "octavia-worker";
 static const char HMGR_NAME[] = "octavia-health-manager";
 static const char HSKP_NAME[] = "octavia-housekeeping";
 
-static const char OSCMD[] = "/usr/bin/openstack";
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
 static const char USERPASS[] = "t4vYsP1IEW6O6PRo";
@@ -162,12 +162,12 @@ SetupService(std::string domain, std::string userPass)
 
     // Create the octavia service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s octavia",
-                         env.c_str(), OSCMD, domain.c_str(), userPass.c_str());
-    HexUtilSystemF(0, 0, "%s %s role add --project service --user octavia admin", env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user octavia admin", env.c_str(), OPENSTACK_CLI);
 
     HexUtilSystemF(0, 0, "%s %s service create --name octavia "
                          "--description \"Openstack Load Balance Service\" load-balancer",
-                         env.c_str(), OSCMD);
+                         env.c_str(), OPENSTACK_CLI);
 
     return true;
 }
