@@ -503,7 +503,8 @@ health_hacluster_repair()
 {
     local status=$(pacemaker status)
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
-
+    local num_ctrl=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
+    local last_ctrl=${CUBE_NODE_CONTROL_HOSTNAMES[$((num_ctrl - 1))]}
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if remote_run $node "[ -e /etc/pacemaker/authkey ]" ; then
             Quiet -n remote_run $node "timeout $SRVSTO cubectl node rsync -r compute /etc/pacemaker/authkey"
@@ -511,17 +512,22 @@ health_hacluster_repair()
         fi
     done
 
-    # if first time setup not completed, in non-rolling upgrade process or in rolling upgrade process, ensure master node has VIP
-    if [ ! -e /etc/appliance/state/configured ] || [ -e /run/cube_migration ] || is_node_rolling_upgrade ; then
-        for i in 1 2 3 4 5 ; do
+    if is_node_rolling_upgrade ; then
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$last_ctrl" ] ; then
+                $HEX_SDK pacemaker_cluster_stop # release existing vip, irrespective of which node it is on
+                $HEX_SDK pacemaker_cluster_restart
+            elif [ "x$node" = "x$HOSTNAME" ] ; then
+                $HEX_SDK pacemaker_node_stop $node
+            else
+                $HEX_SDK pacemaker_node_start $node
+            fi
+        done
+    elif [ ! -e /etc/appliance/state/configured ] || [ -e /run/cube_migration ] ; then
+        for i in 1 2 3 ; do
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
                 if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
                     $HEX_SDK pacemaker_cluster_stop # release existing vip, irrespective of which node it is on
-                    # rolling_upgrade: cluster_restart needed for master pcs to be aware of resources
-                    # first time setup: do not cluster_restart which doesn't guarantee VIP on master control
-                    if is_node_rolling_upgrade ; then
-                        $HEX_SDK pacemaker_cluster_restart
-                    fi
                 else
                     if [ "x$node" != "x$master" ] ; then
                         $HEX_SDK pacemaker_node_stop $node

@@ -22,6 +22,7 @@ driver/${OS_TAG}/Dockerfile: driver/${OS_TAG}/Dockerfile.orig
 		-e 's/OS_ARCH/TARGETARCH/' \
 		-e 's/ TARGETARCH=.* &&//' \
 		-e 's;^FROM nvidia/cuda;FROM docker.io/nvidia/cuda;' \
+		-e 's;curl https://storage.googleapis.com/golang;curl -fSL https://go.dev/dl;' \
 		,"  SED     nvidia container-images $@")
 
 .build-img: driver/${OS_TAG}/Dockerfile

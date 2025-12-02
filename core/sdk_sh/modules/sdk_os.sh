@@ -973,6 +973,11 @@ os_image_import_extpack_list()
     done
 }
 
+os_volume_type_list()
+{
+    openstack volume type list -f value -c Name  | grep -v __DEFAULT__
+}
+
 os_volume_type_create()
 {
     local name=$1
@@ -1332,6 +1337,7 @@ _os_pre_failure_host_evacuation()
                 $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
                 cmd -c "$SRVLTO systemctl restart neutron-server neutron-ovn-metadata-agent neutron-ovn-vpn-agent"
             fi
+            $HEX_SDK health_neutron_check || Error "neutron is not Ok"
         else
             Error "rabbitmq is not Ok"
         fi
@@ -1343,7 +1349,7 @@ os_pre_failure_host_evacuation()
     local host=$1
     local env=${2:-default}
 
-    _os_pre_failure_host_evacuation $env
+    _os_pre_failure_host_evacuation $env || _os_pre_failure_host_evacuation $env
     nova host-evacuate-live $host
 }
 
@@ -1357,7 +1363,7 @@ os_pre_failure_host_evacuation_sequential()
     local srv_cnt=${#server_list_array[@]}
     local cnt=0
 
-    _os_pre_failure_host_evacuation $env
+    _os_pre_failure_host_evacuation $env || _os_pre_failure_host_evacuation $env
     for sid in ${server_list_array[@]} ; do
         to_host=${host_array[$((cnt++ % $num_host))]}
         old_state_json=$($OPENSTACK server show $sid -f json)
