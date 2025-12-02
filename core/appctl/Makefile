@@ -68,7 +68,7 @@ $(APPCTL_RPM_BUILD): $(APPCTL_TARBALL) $(APPCTL_SPEC_FILE)
 # move the built rpm back to the local directory
 $(APPCTL_RPM): $(APPCTL_RPM_BUILD)
 	$(Q)cp -f $(APPCTL_RPM_BUILD) ./appctl.rpm
-	$(Q)cp -f $(APPCTL_GIT_DIR)/plugins ./plugins
+	$(Q)cp -rf $(APPCTL_GIT_DIR)/plugins ./plugins
 endif
 
 copy-source-eol-image:
