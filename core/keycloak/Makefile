@@ -13,116 +13,111 @@ $(CHART):
 # login rpm
 LOGIN_RPM := login.rpm
 KEYCLOAK_DIR := /opt/keycloak
+PKG_NAME := cube-cos-login
+GITHUB_URL := https://github.com/bigstack-oss/cube-cos-ui
 
 ifneq ($(RC),)
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O login.rpm https://github.com/bigstack-oss/cube-cos-ui/releases/download/cube-cos-login-v3.0.0-rc4/cube-cos-login-17.1.0-1.cddd34e.x86_64.rpm, \
+		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.0.0-rc4/$(PKG_NAME)-17.1.0-1.cddd34e.x86_64.rpm, \
 		"  PULL    $(LOGIN_RPM)")
 else
-include version
-include build_number
-include keycloak_version
-
-LOGIN_GIT_DIR := ./git
-LOGIN_RPMBUILD_DIR := rpmbuild
-LOGIN_TARBALL := $(LOGIN_RPMBUILD_DIR)/SOURCES/cube-cos-login-$(LOGIN_VERSION).tar.gz
-LOGIN_SPEC_FILE := $(LOGIN_RPMBUILD_DIR)/SPECS/cube-cos-login.spec
-LOGIN_RPM_BUILD := $(LOGIN_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm
+GIT_DIR := git
+RPMBUILD_DIR := rpmbuild
+RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
+RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
+RPMBUILD_RPMS = $(RPMBUILD_DIR)/RPMS
 
 # prepare the login source code, being pulled from GitHub using the default branch
 # For RC: git clone -b v3.0.0-rc4
-$(LOGIN_GIT_DIR):
-	$(Q)mkdir $(LOGIN_GIT_DIR)
+$(GIT_DIR):
+	$(Q)mkdir $@
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-ui.git $(LOGIN_GIT_DIR) && break ; \
+		timeout 30 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   github.com/bigstack-oss/cube-cos-ui.git")
+		"  CLONE   $(GITHUB_URL)")
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
-	$(Q)cd $(LOGIN_GIT_DIR) && nvm install $(QEND)
-	$(Q)cd $(LOGIN_GIT_DIR) && nvm use $(QEND) && npm install -g pnpm@latest-10 $(QEND)
+	$(Q)cd $@ && nvm install $(QEND)
+	$(Q)cd $@ && nvm use $(QEND) && npm install -g pnpm@latest-10 $(QEND)
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 
-version: $(LOGIN_GIT_DIR)
-	$(Q)echo -n "LOGIN_VERSION := " > version
+version: $(GIT_DIR)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
-	$(Q)cd $(LOGIN_GIT_DIR) && \
+	$(Q)cd $(GIT_DIR) && \
 		nvm use $(QEND) && \
 		node -p "require('./packages/cube-frontend-keycloak-login/package.json').version" >> ../version
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 
-build_number: $(LOGIN_GIT_DIR)
-	$(Q)echo -n "LOGIN_BUILD_NUMBER := " > build_number
-	$(Q)cd $(LOGIN_GIT_DIR) && \
+build_number: $(GIT_DIR)
+	$(Q)cd $(GIT_DIR) && \
 		git rev-parse --short HEAD >> ../build_number
 
-keycloak_version: $(LOGIN_GIT_DIR)
-	$(Q)echo -n "KEYCLOAK_VERSION := " > keycloak_version
-	$(Q)cd $(LOGIN_GIT_DIR) && \
+keycloak_version: $(GIT_DIR)
+	$(Q)cd $(GIT_DIR) && \
 		head -n 1 ./packages/cube-frontend-keycloak-login/KEYCLOAK_VERSION >> ../keycloak_version
 
 # prepare the rpm build directory
-$(LOGIN_RPMBUILD_DIR):
-	$(Q)mkdir $(LOGIN_RPMBUILD_DIR)
-	$(Q)cd $(LOGIN_RPMBUILD_DIR) && mkdir BUILD RPMS SOURCES SPECS SRPMS
+$(RPMBUILD_DIR):
+	$(Q)mkdir $(RPMBUILD_DIR)
+	$(Q)cd $(RPMBUILD_DIR) && mkdir BUILD SRPMS SPECS
 
 # make the source tarball
-$(LOGIN_TARBALL): $(LOGIN_RPMBUILD_DIR) $(LOGIN_GIT_DIR)
+$(RPMBUILD_SOURCES): $(RPMBUILD_DIR) $(GIT_DIR) version
 	$(Q)mkdir ./source
-	$(Q)cp -r $(LOGIN_GIT_DIR)/.git/ ./source/
+	$(Q)cp -r $(GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)
 	$(Q)sudo rm -r ./source/.git/ ./source/.github/ ./source/.husky/ ./source/.vscode/
-	$(Q)tar -cvzf "cube-cos-login-$(LOGIN_VERSION).tar.gz" source $(QEND)
-	$(Q)mv ./cube-cos-login-$(LOGIN_VERSION).tar.gz $(LOGIN_RPMBUILD_DIR)/SOURCES
+	$(Q)tar -cvzf $@.tgz source $(QEND)
+	$(Q)mkdir -p $(RPMBUILD_DIR)/SOURCES
+	$(Q)mv $@.tgz $(RPMBUILD_DIR)/SOURCES/$(PKG_NAME)-`cat version`.tar.gz
 	$(Q)rm -r ./source
 
-# prepare the rpm spec file
-$(LOGIN_SPEC_FILE): $(LOGIN_RPMBUILD_DIR) $(LOGIN_GIT_DIR)
-	$(Q)cp $(LOGIN_GIT_DIR)/packages/cube-frontend-keycloak-login/cube-cos-login.spec $(LOGIN_RPMBUILD_DIR)/SPECS/
-
 # build the login rpm package
-$(LOGIN_RPM_BUILD): $(LOGIN_TARBALL) $(LOGIN_SPEC_FILE)
+$(RPMBUILD_RPMS): $(RPMBUILD_SOURCES) build_number keycloak_version
+	$(Q)cp $(GIT_DIR)/packages/cube-frontend-keycloak-login/$(PKG_NAME).spec $(RPMBUILD_DIR)/SPECS/
+	$(Q)mkdir -p $(RPMBUILD_DIR)/RPMS/x86_64
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(call RUN_CMD_SILENT, \
-		cd $(LOGIN_GIT_DIR) && \
+		cd $(GIT_DIR) && \
 		nvm use $(QEND) && \
 		cd - && \
-		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(LOGIN_RPMBUILD_DIR)" --define "version $(LOGIN_VERSION)" --define "build_number $(LOGIN_BUILD_NUMBER)" --define "keycloak_version $(KEYCLOAK_VERSION)" $(LOGIN_SPEC_FILE), \
-		"  BUILD   cube-cos-login-$(LOGIN_VERSION)-1.el9.$(LOGIN_BUILD_NUMBER).x86_64.rpm")
+		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(RPMBUILD_DIR)" --define "version `cat version`" --define "build_number `cat build_number`" --define "keycloak_version `cat keycloak_version`" $(RPMBUILD_DIR)/SPECS/$(PKG_NAME).spec, \
+		"  BUILD   $(PKG_NAME)-`cat version`-1.el9.`cat build_number`.x86_64.rpm")
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
+	$(Q)touch $@
 
 # move the built rpm back to the local directory
-$(LOGIN_RPM): $(LOGIN_RPM_BUILD)
-	$(Q)cp -f $(LOGIN_RPM_BUILD) ./login.rpm
+$(LOGIN_RPM): $(RPMBUILD_RPMS)
+	$(Q)cp -f $</x86_64/$(PKG_NAME)-`cat version`-1.el9.`cat build_number`.x86_64.rpm $@
 endif
 
 ifneq ($(RC),)
 IMG_BUILD := localhost:5080/bigstack/keycloak:17.1.0
 else
-IMG_BUILD := localhost:5080/bigstack/keycloak:$(LOGIN_VERSION)
+IMG_BUILD := localhost:5080/bigstack/keycloak:`cat version`
 endif
 
 .load-img: $(LOGIN_RPM)
-	$(Q)dnf install -y ./login.rpm $(QEND)
+	$(Q)dnf install -y $< $(QEND)
 	$(Q)podman load -i /usr/share/cube/login/keycloak-image.tar $(QEND)
-	$(Q)dnf remove -y cube-cos-login $(QEND)
+	$(Q)dnf remove -y $(PKG_NAME) $(QEND)
 	$(Q)echo $(IMG_BUILD) > $@
 
 .push-img: .load-img
-	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(shell cat .load-img) $(QEND)
+	$(Q)make push-image -C $(TOP_BLDDIR)/core/docker IMG=$(shell cat $<) $(QEND)
 	$(Q)touch $@
 
 .PHONY: copy-image
 copy-image: .load-img
 	$(call RUN_CMD_TIMED, \
-		sh -x $(COREDIR)/keycloak/copy-images.sh containers-storage:$(shell cat .load-img) \
+		sh -x $(COREDIR)/keycloak/copy-images.sh containers-storage:$(shell cat $<) \
 		,"  COPY    keycloak image")
 
 install:: $(CHART) .push-img
@@ -163,11 +158,12 @@ endif
 clean:: testclean
 	$(Q)podman image rm -f $(shell cat .load-img) $(QEND) || true
 ifeq ($(RC),)
-	$(Q)rm -rf $(LOGIN_RPMBUILD_DIR)
-	$(Q)rm -rf $(LOGIN_GIT_DIR)
+	$(Q)rm -rf $(RPMBUILD_DIR)
+	$(Q)rm -rf $(GIT_DIR)
 endif
 
 BUILD += $(CHART)
-BUILDCLEAN += $(CHART) $(LOGIN_GIT_DIR) version build_number keycloak_version $(LOGIN_RPMBUILD_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
+BUILDCLEAN += $(CHART) $(GIT_DIR) version build_number keycloak_version $(RPMBUILD_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
+

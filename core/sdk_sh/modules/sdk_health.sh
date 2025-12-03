@@ -513,16 +513,22 @@ health_hacluster_repair()
     done
 
     if is_node_rolling_upgrade ; then
+        echo 99 > /tmp/health_vip_error.count # disable auto repair
+        echo 99 > /tmp/health_hacluster_error.count # disable auto repair
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$last_ctrl" ] ; then
-                $HEX_SDK pacemaker_cluster_stop # release existing vip, irrespective of which node it is on
-                $HEX_SDK pacemaker_cluster_restart
-            elif [ "x$node" = "x$HOSTNAME" ] ; then
+                $HEX_SDK pacemaker_node_start $node
+                cmd -co "pcs resource create vaw systemd:vaw op monitor interval=\"30s\""
+                cmd -co "pcs constraint colocation add vip with vaw score=INFINITY"
+                cmd -co "pcs constraint order vip then vaw"
+            elif [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
                 $HEX_SDK pacemaker_node_stop $node
             else
                 $HEX_SDK pacemaker_node_start $node
+                cmd -co "pcs resource remove vaw" # v3.0.0 or older doesn't have vaw, hindering VIP to start
             fi
         done
+        hex_sdk cmd -c "systemctl restart haproxy haproxy-ha"
     elif [ ! -e /etc/appliance/state/configured ] || [ -e /run/cube_migration ] ; then
         for i in 1 2 3 ; do
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do

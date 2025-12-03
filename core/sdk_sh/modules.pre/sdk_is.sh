@@ -185,7 +185,7 @@ is_sshable()
 is_node_rolling_upgrade()
 {
     local ret=1
-    if cmd -v "cat /run/cube_bootstrap.log" | grep -q -e 'Rebooting' -e 'Starting auto rolling upgrade' ; then
+    if cmd -v "cat /run/cube_bootstrap.log" | grep -q -e 'Rebooting' -e 'rolling upgrade' ; then
         $HEX_SDK cube_cluster_ready || ret=0
     fi
     if [ $(cmd -v "hex_cli -c firmware list | grep -i active" | cut -d"|" -f3 | sort -u | sed "/^$/d" | wc -l) -gt 1 ] ; then

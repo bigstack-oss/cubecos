@@ -1319,7 +1319,7 @@ _os_pre_failure_host_evacuation()
     if [ "$1" == "upgrade" ] ; then
         # os_evac_upgrade_prepare
         $HEX_CLI -c cluster check_repair MsgQueue >/tmp/upgrade_rabbitmq.log 2>&1
-        $HEX_SDK -m force health_mysql_repair
+        $HEX_SDK health_mysql_check || $HEX_SDK -m force health_mysql_repair
 
         if $HEX_SDK health_rabbitmq_check ; then
             # clear stale api for nova, neutron, and cinder
@@ -1349,7 +1349,13 @@ os_pre_failure_host_evacuation()
     local host=$1
     local env=${2:-default}
 
-    _os_pre_failure_host_evacuation $env || _os_pre_failure_host_evacuation $env
+    for i in 1 2 3 ; do
+        if _os_pre_failure_host_evacuation $env ; then
+            break
+        else
+            sleep 10
+        fi
+    done
     nova host-evacuate-live $host
 }
 
@@ -1363,7 +1369,13 @@ os_pre_failure_host_evacuation_sequential()
     local srv_cnt=${#server_list_array[@]}
     local cnt=0
 
-    _os_pre_failure_host_evacuation $env || _os_pre_failure_host_evacuation $env
+    for i in 1 2 3 ; do
+        if _os_pre_failure_host_evacuation $env ; then
+            break
+        else
+            sleep 10
+        fi
+    done
     for sid in ${server_list_array[@]} ; do
         to_host=${host_array[$((cnt++ % $num_host))]}
         old_state_json=$($OPENSTACK server show $sid -f json)

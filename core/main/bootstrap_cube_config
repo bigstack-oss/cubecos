@@ -69,7 +69,7 @@ RollingEvacuateAndReboot()
                         msg="Evacuating VMs on $N"
                         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
-                        if ! hex_sdk remote_run $MASTER_CONTROL "hex_sdk os_pre_failure_host_evacuation_sequential $N" upgrade ; then
+                        if ! hex_sdk remote_run $MASTER_CONTROL "hex_sdk os_pre_failure_host_evacuation_sequential $N upgrade" ; then
                             msg="Auto rolling upgrade aborted due to evacuation failures on $N"
                             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                             hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
@@ -85,7 +85,8 @@ RollingEvacuateAndReboot()
             fi
             prev_n=$N
         done
-        hex_sdk os_nova_instance_hardreboot $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i -e error -e nostate | cut -d" " -f1)
+        # While next node (in case of having VIP) is being rebooted, we are unable to establish connection to http://${vip}:5000
+        # hex_sdk os_nova_instance_hardreboot $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i -e error -e nostate | cut -d" " -f1)
     fi
     if [ "x$upgrading" = "xfalse" ]; then
         if hex_sdk cube_cluster_ready ; then

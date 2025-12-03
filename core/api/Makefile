@@ -2,73 +2,68 @@
 
 include ../../build.mk
 API_RPM := api.rpm
+PKG_NAME := cube-cos-api
+GITHUB_URL := https://github.com/bigstack-oss/cube-cos-api
 
 ifneq ($(RC),)
 $(API_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O api.rpm https://github.com/bigstack-oss/cube-cos-api/releases/download/v3.0.0-rc4/cube-cos-api-v0.0.1-1.fc35.7619a7f.x86_64.rpm, \
+		wget -O api.rpm $(GITHUB_URL)/releases/download/v3.0.0-rc4/cube-cos-api-v0.0.1-1.fc35.7619a7f.x86_64.rpm, \
 		"  PULL    $(API_RPM)")
 else
-include version
-include build_number
-
-# api binary
-API_GIT_DIR := ./git
-API_RPMBUILD_DIR := rpmbuild
-API_TARBALL := $(API_RPMBUILD_DIR)/SOURCES/cube-cos-api-$(API_VERSION).tar.gz
-API_SPEC_FILE := $(API_RPMBUILD_DIR)/SPECS/cube-cos-api.spec
-API_RPM_BUILD := $(API_RPMBUILD_DIR)/RPMS/x86_64/cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm
+GIT_DIR := git
+RPMBUILD_DIR := rpmbuild
+RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
+RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
+RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 
 # prepare the api source code, being pulled from GitHub using the default branch
 # For RC: git clone -b v3.0.0-rc4
-$(API_GIT_DIR):
-	$(Q)mkdir $(API_GIT_DIR)
+$(GIT_DIR):
+	$(Q)mkdir $@
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone --depth 1 https://github.com/bigstack-oss/cube-cos-api.git $(API_GIT_DIR) && break ; \
+		timeout 30 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   github.com/bigstack-oss/cube-cos-api.git")
+		"  CLONE   $(GITHUB_URL)")
 
-version: $(API_GIT_DIR)
-	$(Q)echo -n "API_VERSION := " > version
-	$(Q)head -n 1 $(API_GIT_DIR)/VERSION >> version
+version: $(GIT_DIR)
+	$(Q)head -n 1 $(GIT_DIR)/VERSION >> version
 
-build_number: $(API_GIT_DIR)
-	$(Q)echo -n "API_BUILD_NUMBER := " > build_number
-	$(Q)cd $(API_GIT_DIR) && \
+build_number: $(GIT_DIR)
+	$(Q)cd $(GIT_DIR) && \
 		git rev-parse --short HEAD >> ../build_number
 
 # prepare the rpm build directory
-$(API_RPMBUILD_DIR):
-	$(Q)mkdir $(API_RPMBUILD_DIR)
-	$(Q)cd $(API_RPMBUILD_DIR) && mkdir BUILD RPMS SOURCES SPECS SRPMS
+$(RPMBUILD_DIR):
+	$(Q)mkdir $(RPMBUILD_DIR)
+	$(Q)cd $(RPMBUILD_DIR) && mkdir BUILD SRPMS SPECS
 
 # make the source tarball
-$(API_TARBALL): $(API_RPMBUILD_DIR) $(API_GIT_DIR)
+$(RPMBUILD_SOURCES): $(RPMBUILD_DIR) $(GIT_DIR) version
 	$(Q)mkdir ./source
-	$(Q)cp -r $(API_GIT_DIR)/.git/ ./source/
+	$(Q)cp -r $(GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)
 	$(Q)sudo rm -r ./source/.git/ ./source/.github/ ./source/.gitignore
-	$(Q)tar -cvzf "cube-cos-api-$(API_VERSION).tar.gz" source $(QEND)
-	$(Q)mv ./cube-cos-api-$(API_VERSION).tar.gz $(API_RPMBUILD_DIR)/SOURCES
+	$(Q)tar -cvzf $@.tgz source $(QEND)
+	$(Q)mkdir -p $(RPMBUILD_DIR)/SOURCES
+	$(Q)mv $@.tgz $(RPMBUILD_DIR)/SOURCES/$(PKG_NAME)-`cat version`.tar.gz
 	$(Q)rm -r ./source
-
-# prepare the rpm spec file
-$(API_SPEC_FILE): $(API_RPMBUILD_DIR) $(API_GIT_DIR)
-	$(Q)cp $(API_GIT_DIR)/init/cube-cos-api.spec $(API_RPMBUILD_DIR)/SPECS/
+	$(Q)touch $@
 
 # build the api rpm package
-$(API_RPM_BUILD): $(API_TARBALL) $(API_SPEC_FILE)
+$(RPMBUILD_RPMS): $(RPMBUILD_SOURCES) build_number
+	$(Q)cp $(GIT_DIR)/init/$(PKG_NAME).spec $(RPMBUILD_DIR)/SPECS/
 	$(call RUN_CMD_TIMED, \
-		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(API_RPMBUILD_DIR)" --define "version $(API_VERSION)" --define "build_number $(API_BUILD_NUMBER)" $(API_SPEC_FILE),\
-		"  BUILD   cube-cos-api-$(API_VERSION)-1.el9.$(API_BUILD_NUMBER).x86_64.rpm")
+		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(RPMBUILD_DIR)" --define "version `cat version`" --define "build_number `cat build_number`" $(RPMBUILD_DIR)/SPECS/$(PKG_NAME).spec,\
+		"  BUILD   $(PKG_NAME)-`cat version`-1.el9.`cat build_number`.x86_64.rpm")
 
 # move the built rpm back to the local directory
-$(API_RPM): $(API_RPM_BUILD)
-	$(Q)cp -f $(API_RPM_BUILD) ./api.rpm
+$(API_RPM): $(RPMBUILD_RPMS)
+	$(Q)cp -f $</x86_64/$(PKG_NAME)-`cat version`-1.el9.`cat build_number`.x86_64.rpm $@
 endif
 
 BUILD += $(API_RPM)
-BUILDCLEAN += $(API_RPM) $(API_RPMBUILD_DIR) $(API_GIT_DIR) version build_number
+BUILDCLEAN += $(API_RPM) $(RPMBUILD_DIR) $(GIT_DIR) version build_number
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

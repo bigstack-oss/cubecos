@@ -17,7 +17,9 @@ APPCTL_PLUGINS_RPM = $(TOP_BLDDIR)/core/appctl/plugins
 
 rootfs_install::
 	$(Q)cp -f $(APPCTL_RPM) $(ROOTDIR)/tmp/
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/appctl.rpm
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)rm -rf /tmp/appctl.rpm
 	$(Q)mkdir -p $(ROOTDIR)/opt/appfw
 	$(Q)cp -r $(APPCTL_PLUGINS_RPM) $(ROOTDIR)/opt/appfw/
