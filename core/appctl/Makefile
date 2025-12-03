@@ -13,7 +13,7 @@ include version
 include build_number
 
 # appctl binary
-APPCTL_GIT_DIR := ./git_appctl
+APPCTL_GIT_DIR := ./git
 APPCTL_RPMBUILD_DIR := rpmbuild
 APPCTL_TARBALL := $(APPCTL_RPMBUILD_DIR)/SOURCES/cube-cos-app-framework-$(APPCTL_VERSION).tar.gz
 APPCTL_SPEC_FILE := $(APPCTL_RPMBUILD_DIR)/SPECS/cube-cos-app-framework.spec
@@ -47,13 +47,13 @@ $(APPCTL_RPMBUILD_DIR):
 
 # make the source tarball
 $(APPCTL_TARBALL): $(APPCTL_RPMBUILD_DIR) $(APPCTL_GIT_DIR)
-	$(Q)mkdir ./source_appctl
-	$(Q)cp -r $(APPCTL_GIT_DIR)/.git/ ./source_appctl/
-	$(Q)cd ./source_appctl && git checkout . $(QEND)
-	$(Q)sudo rm -r ./source_appctl/.git/ ./source_appctl/.github/
+	$(Q)mkdir ./source
+	$(Q)cp -r $(APPCTL_GIT_DIR)/.git/ ./source/
+	$(Q)cd ./source && git checkout . $(QEND)
+	$(Q)sudo rm -r ./source/.git/ ./source/.github/
 	$(Q)tar -cvzf "cube-cos-app-framework-$(APPCTL_VERSION).tar.gz" source $(QEND)
 	$(Q)mv ./cube-cos-app-framework-$(APPCTL_VERSION).tar.gz $(APPCTL_RPMBUILD_DIR)/SOURCES
-	$(Q)rm -r ./source_appctl
+	$(Q)rm -r ./source
 
 # prepare the rpm spec file
 $(APPCTL_SPEC_FILE): $(APPCTL_RPMBUILD_DIR) $(APPCTL_GIT_DIR)
@@ -79,6 +79,6 @@ copy-image: copy-source-eol-image
 	$(call RUN_CMD_TIMED, sh -x $(COREDIR)/docker/copy-images.sh $(shell cat $(APPCTL_GIT_DIR)/plugins/images/list.txt),"  COPY    appctl image")
 
 BUILD += $(APPCTL_RPM)
-BUILDCLEAN += $(APPCTL_RPM) $(APPCTL_RPMBUILD_DIR) $(APPCTL_GIT_DIR) version build_number
+BUILDCLEAN += $(APPCTL_RPM) $(APPCTL_RPMBUILD_DIR) $(APPCTL_GIT_DIR) version build_number source cube-cos-app-framework-$(APPCTL_VERSION).tar.gz
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
