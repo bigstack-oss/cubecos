@@ -2,82 +2,52 @@
 
 #include "cli_iaas_volume_backend.hpp"
 
-static bool
-ListBackends(const ExtStoragePolicy& policy)
-{
-    char line[116];
-    memset(line, '-', sizeof(line));
-    line[sizeof(line) - 1] = 0;
-
-    ExtStorageConfig cfg;
-
-#define HEADER_FMT "\n %7s  %15s  %15s  %15s  %15s  %20s  %15s\n"
-#define BACKEND_FMT " %7s  %15s  %15s  %15s  %15s  %20s  %15s\n"
-
-    printf(HEADER_FMT, "enabled", "name", "driver", "endpoint", "account", "secret", "pool");
-    printf("%s\n", line);
-    printf("\n");
-
-    return true;
-}
-
-static int
-BackendListMain(int argc, const char** argv)
-{
-    if (argc > 2 /* [0]="list" */)
-        return CLI_INVALID_ARGS;
-
-    HexPolicyManager policyManager;
-    ExtStoragePolicy policy;
-    if (!policyManager.load(policy)) {
-        return CLI_UNEXPECTED_ERROR;
-    }
-
-    ListBackends(policy);
-
-    return CLI_SUCCESS;
-}
-
-static int
-BackendCfgMain(int argc, const char** argv)
-{
-    if (argc > 8 /* [0]="configure", [1]=<add|delete|update>, [2]=<name>, [3~7]=<settings> */)
-        return CLI_INVALID_ARGS;
-
-    HexPolicyManager policyManager;
-    ExtStoragePolicy policy;
-    if (!policyManager.load(policy)) {
-        return CLI_UNEXPECTED_ERROR;
-    }
-
-    ListBackends(policy);
-
-    CliExtStorageChanger changer;
-
-    if (!changer.configure(&policy, argc, argv)) {
-        return CLI_FAILURE;
-    }
-
-    if (!policyManager.save(policy)) {
-        return CLI_UNEXPECTED_ERROR;
-    }
-
-    // hex_config apply (translate + commit)
-    if (!policyManager.apply()) {
-        return CLI_UNEXPECTED_ERROR;
-    }
-
-    // should identify real user name
-    // TODO: HexLogEvent("[user] modified external storage policy via cli");
-    return CLI_SUCCESS;
-}
-
 // This mode is not available in STRICT error state
 CLI_MODE(
     CLI_TOP_COMMAND_IAAS,
     CLI_COMMAND_IAAS_STORAGE,
     "Work with external settings.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+
+static bool
+ListExistingBackends()
+{
+    std::cout << "[Current Cinder Volume Backends]" << std::endl;
+    const auto r = OpenstackExec({ "volume", "service", "list" });
+    if (r.exitCode == 0) {
+        std::cout << r.stdoutOutput << std::endl;
+    } else {
+        std::cout << r.stderrOutput << std::endl;
+    }
+    return true;
+}
+
+static bool
+ListConfiguredBackends(const ExtStorageConfig& config)
+{
+    return true;
+}
+
+static int
+BackendListMain(int argc, const char** argv)
+{
+    if (argc > 2 /* [0]="list" */) {
+        return CLI_INVALID_ARGS;
+    }
+
+    ListExistingBackends();
+
+    HexPolicyManager policyManager;
+    ExtStoragePolicy policy;
+    if (!policyManager.load(policy)) {
+        return CLI_UNEXPECTED_ERROR;
+    }
+    const ExtStorageConfig config = policy.getConfig();
+
+    ListConfiguredBackends(config);
+
+    return CLI_SUCCESS;
+}
 
 CLI_MODE_COMMAND(
     CLI_COMMAND_IAAS_STORAGE,
@@ -86,6 +56,16 @@ CLI_MODE_COMMAND(
     NULL,
     "List all external storage settings on the appliance.",
     "list");
+
+static int
+BackendCfgMain(int argc, const char** argv)
+{
+    if (argc > 8 /* [0]="configure", [1]=<add|delete|update>, [2]=<name>, [3~7]=<settings> */)
+        return CLI_INVALID_ARGS;
+
+    // TODO: HexLogEvent("[user] modified external storage policy via cli");
+    return CLI_SUCCESS;
+}
 
 CLI_MODE_COMMAND(
     CLI_COMMAND_IAAS_STORAGE,

@@ -14,6 +14,7 @@ LIB_SRCS += filesystem.cpp
 LIB_SRCS += helm.cpp
 LIB_SRCS += http.cpp
 LIB_SRCS += k3s.cpp
+LIB_SRCS += openstack.cpp
 LIB_SRCS += terraform.cpp
 LIB_SRCS += upgrade.cpp
 LIB_SRCS += url.cpp

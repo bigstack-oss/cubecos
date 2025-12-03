@@ -19,8 +19,8 @@
 #include <cube/network.h>
 #include <cluster.hpp>
 #include <cube/cubesys.h>
+#include <constant.hpp>
 
-#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 

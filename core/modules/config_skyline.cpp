@@ -1,9 +1,9 @@
 // CUBE SDK
 
-#include "constant.hpp"
 #include "include/role_cubesys.h"
 #include "mysql_util.h"
 #include <cluster.hpp>
+#include <constant.hpp>
 #include <cube/config_file.h>
 #include <cube/systemd_util.h>
 #include <hex/config_global.h>

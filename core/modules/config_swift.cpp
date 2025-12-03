@@ -12,8 +12,8 @@
 #include <hex/dryrun.h>
 
 #include <cluster.hpp>
+#include <constant.hpp>
 
-#include "constant.hpp"
 #include "include/role_cubesys.h"
 
 static const char SETUP_MARK[] = "/etc/appliance/state/swift_done";

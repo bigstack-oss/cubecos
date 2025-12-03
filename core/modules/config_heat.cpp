@@ -14,8 +14,8 @@
 #include <cube/systemd_util.h>
 #include <cube/config_file.h>
 #include <cluster.hpp>
+#include <constant.hpp>
 
-#include "constant.hpp"
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
