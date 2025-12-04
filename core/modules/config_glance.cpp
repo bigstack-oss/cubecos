@@ -33,6 +33,7 @@ static const char USERPASS[] = "0ZsvkS1bHXYsywTx";
 static const char DBPASS[] = "g6CEJCNFT6ufPY22";
 
 static const char EXPORT_SYNC[] = "/etc/cron.d/glance_export_sync";
+static const char TwoTiB[] = "2199023255552";
 
 #define BUILTIN_STORE "cube"
 
@@ -308,6 +309,7 @@ SetDefaults(Configs& config)
     config["DEFAULT"]["show_image_direct_url"] = "true";
     config["DEFAULT"]["show_multiple_locations"] = "true";
     config["DEFAULT"]["workers"] = std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole)));
+    config["DEFAULT"]["image_size_cap"] = TwoTiB;
 
     config["oslo_concurrency"]["lock_path"] = "/var/lib/glance/locks";
 
