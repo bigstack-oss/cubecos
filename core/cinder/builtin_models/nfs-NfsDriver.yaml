@@ -6,7 +6,7 @@ storage:
   service:
     driverSection:
       - key: "nfs_shares_config"
-        value: "/etc/cinder/external_storage_extra_configs/nfs_shares"
+        value: "/etc/cinder/external_storage_extra_configs/<storage_name>_nfs_shares"
       - key: "nfs_mount_options"
         value: ""
       - key: "nfs_mount_attempts"

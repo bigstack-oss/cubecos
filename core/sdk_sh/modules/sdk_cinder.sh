@@ -1403,6 +1403,22 @@ cinder_write_storage_external_backend_conf()
     fi
 }
 
+cinder_get_storage_extra_config_file_unique_name()
+{
+    # To support multiple backends using the same model,
+    # we need to make the extra config file name unique.
+
+    local storage_name="${1:-""}"
+    local file_name="${2:-""}"
+
+    if [ -z "$storage_name" ] ; then
+        echo -n "$file_name"
+        return
+    fi
+
+    echo -n "${storage_name}_${file_name}"
+}
+
 cinder_marshal_storage_extra_configs_ownership()
 {
     local exec_output=""
@@ -1428,6 +1444,8 @@ cinder_marshal_storage_extra_configs_ownership()
         if [ -z "$file_name" ] ; then
             continue
         fi
+
+        file_name="$(cinder_get_storage_extra_config_file_unique_name "$name" "$file_name")"
 
         _hex_function \
             exec_output \
@@ -2150,6 +2168,7 @@ cinder_put_storage()
             continue
         fi
 
+        file_name="$(cinder_get_storage_extra_config_file_unique_name "$name" "$file_name")"
         file_content_base64="$(json_get_value "$extra_config" ".content")"
 
         _hex_function_ret cinder_write_storage_extra_config_file "$file_name" "$file_content_base64"
