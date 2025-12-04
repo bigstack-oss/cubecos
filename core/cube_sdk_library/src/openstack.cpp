@@ -88,31 +88,22 @@ parseOpenstackCliAuth()
 }
 
 const ExecSyncResult
-OpenstackExec(const std::vector<std::string>& args)
+OpenstackExec(const std::string& command)
 {
-    std::stringstream argumentLine;
-    bool isFirst = true;
-    for (const std::string& a : args) {
-        if (isFirst) {
-            argumentLine << a;
-            isFirst = false;
-        } else {
-            argumentLine << " " << a;
-        }
-    }
-    HexLogInfo("execute openstack cli: %s", argumentLine.str().c_str());
+    HexLogInfo("execute openstack cli: %s", command.c_str());
 
-    Cmd c;
-    c.path = OPENSTACK_CLI;
-    c.args = args;
-    c.captureStdout = true;
-    c.captureStderr = true;
+    std::string openstackCommand = std::string(OPENSTACK_CLI) + std::string(" ") + command;
 
     // set openstack admin rc for openstack cli auth
     const std::map<std::string, std::string> openstackCliAuth = parseOpenstackCliAuth();
-    c.env = openstackCliAuth;
 
-    const ExecSyncResult r = ExecSync(0, c);
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        openstackCliAuth,
+        openstackCommand);
+
     if (r.isTimedOut) {
         HexLogInfo("openstack cli timedout");
     }
@@ -120,6 +111,6 @@ OpenstackExec(const std::vector<std::string>& args)
         HexLogInfo("openstack cli returned error");
     }
 
-    HexLogInfo("executed openstack cli: %s", argumentLine.str().c_str());
+    HexLogInfo("executed openstack cli: %s", command.c_str());
     return r;
 }

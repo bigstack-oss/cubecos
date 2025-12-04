@@ -13,7 +13,7 @@ static bool
 ListExistingBackends()
 {
     std::cout << "[Current Cinder Volume Backends]" << std::endl;
-    const auto r = OpenstackExec({ "volume", "service", "list" });
+    const auto r = OpenstackExec("volume service list");
     if (r.exitCode == 0) {
         std::cout << r.stdoutOutput << std::endl;
     } else {

@@ -15,6 +15,6 @@
  * Execute OpenStack CLI.
  */
 const ExecSyncResult
-OpenstackExec(const std::vector<std::string>& args);
+OpenstackExec(const std::string& command);
 
 #endif /* endif CUBE_OPENSTACK_H */
