@@ -2,6 +2,13 @@
 
 #include "cli_iaas_volume.hpp"
 
+// This mode is not available in STRICT error state
+CLI_MODE(
+    CLI_TOP_COMMAND_IAAS,
+    CLI_COMMAND_IAAS_VOLUME,
+    "Work with the IaaS volume settings.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+
 static int
 ResetMain(int argc, const char** argv)
 {
@@ -29,6 +36,14 @@ ResetMain(int argc, const char** argv)
 
     return CLI_SUCCESS;
 }
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_VOLUME,
+    "reset",
+    ResetMain,
+    NULL,
+    "Reset volume state to available for attaching.",
+    "reset [<volume id>]");
 
 static int
 QuotaSetMain(int argc, const char** argv)
@@ -68,6 +83,14 @@ QuotaSetMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_VOLUME,
+    "quota_set",
+    QuotaSetMain,
+    NULL,
+    "Set volume quota for a tenant.",
+    "quota_set [<domain>] [<tenant>] [<type>] [<quota>]");
+
 static int
 QuotaShowMain(int argc, const char** argv)
 {
@@ -95,19 +118,10 @@ QuotaShowMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-// This mode is not available in STRICT error state
-CLI_MODE(CLI_TOP_COMMAND_IAAS, "volume",
-    "Work with the IaaS volume settings.",
-    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
-
-CLI_MODE_COMMAND("volume", "reset", ResetMain, NULL,
-    "Reset volume state to available for attaching.",
-    "reset [<volume id>]");
-
-CLI_MODE_COMMAND("volume", "quota_set", QuotaSetMain, NULL,
-    "Set volume quota for a tenant.",
-    "quota_set [<domain>] [<tenant>] [<type>] [<quota>]");
-
-CLI_MODE_COMMAND("volume", "quota_show", QuotaShowMain, NULL,
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_VOLUME,
+    "quota_show",
+    QuotaShowMain,
+    NULL,
     "Show volume quota for a tenant.",
     "quota_show [<domain>] [<tenant>]");
