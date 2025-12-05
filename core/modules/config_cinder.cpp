@@ -39,7 +39,6 @@ static const char BACKUP[] = "volume-backups";
 // cinder common
 static const char RUNDIR[] = "/run/cinder";
 static const char STATDIR[] = "/store/cinder";
-static const char BACKENDDIR[] = "/etc/cinder/backends";
 
 /**
  * cinder-api
@@ -178,7 +177,7 @@ NotifyNova(bool modified)
 static bool
 Init()
 {
-    if (HexMakeDir(RUNDIR, USER, GROUP, 0755) != 0 || HexMakeDir(BACKENDDIR, USER, GROUP, 0755) != 0)
+    if (HexMakeDir(RUNDIR, USER, GROUP, 0755) != 0 || HexMakeDir(CINDER_BACKEND_DIR, USER, GROUP, 0755) != 0)
         return false;
 
     // fail safe for creating state dir
@@ -576,11 +575,11 @@ SetStorageBackend(
         HexSystemF(0, "rm -f %s/ext_storage_*.conf", CONF_DIR);
     }
 
-    fileExists = HasFileMatchGlob(fsError, BACKENDDIR, "ext_storage_*.conf");
+    fileExists = HasFileMatchGlob(fsError, CINDER_BACKEND_DIR, "ext_storage_*.conf");
     if (fsError != "") {
         HexLogError("%s", fsError.c_str());
     } else if (fileExists) {
-        HexSystemF(0, "cp -f %s/ext_storage_*.conf %s/", BACKENDDIR, CONF_DIR);
+        HexSystemF(0, "cp -f %s/ext_storage_*.conf %s/", CINDER_BACKEND_DIR, CONF_DIR);
     }
 
     // set backends into the config
@@ -986,7 +985,7 @@ CONFIG_REQUIRES(cinder, libvirtd);
 
 CONFIG_MIGRATE(cinder, "/etc/cube/cos/cinder/models");
 CONFIG_MIGRATE(cinder, "/etc/multipath/conf.d");
-CONFIG_MIGRATE(cinder, BACKENDDIR);
+CONFIG_MIGRATE(cinder, CINDER_BACKEND_DIR);
 CONFIG_MIGRATE(cinder, "/etc/cube/cos/cinder/storage_extra_configs_ownership");
 CONFIG_MIGRATE(cinder, "/etc/cinder/external_storage_extra_configs");
 CONFIG_MIGRATE(cinder, CONF_DIR);

@@ -29,7 +29,8 @@ trim(const std::string& str)
  *
  * TODO: move this to string.hpp after the refactor branch is rebased.
  */
-std::string removePrefix(const std::string& line, const std::string& prefix)
+const std::string
+removePrefix(const std::string& line, const std::string& prefix)
 {
     // check if the line starts with the prefix, the prefix must be found at position 0
     if (line.rfind(prefix, 0) == 0) {
@@ -41,11 +42,8 @@ std::string removePrefix(const std::string& line, const std::string& prefix)
     return line;
 }
 
-/**
- * Parse an INI config.
- */
 const std::map<std::string, std::string>
-parseIni(const std::vector<std::string>& configLines)
+ParseEnv(const std::vector<std::string>& configLines)
 {
     std::map<std::string, std::string> settings;
 
@@ -64,10 +62,60 @@ parseIni(const std::vector<std::string>& configLines)
             value = trim(line.substr(equalPosition + 1));
         }
 
+        if (key.empty()) {
+            continue;
+        }
+
         settings.emplace(key, value);
     }
 
     return settings;
+}
+
+const std::vector<IniSection>
+ParseIni(const std::string& config)
+{
+    // group ini config into sections
+    std::map<std::string, std::vector<std::string>> sections;
+    std::stringstream ss(config);
+    std::string line;
+    std::string header = "";
+    while (std::getline(ss, line)) {
+        const std::string trimmedLine = trim(line);
+
+        if (trimmedLine.empty()) {
+            continue;
+        }
+
+        // detect the header
+        if (trimmedLine.length() >= 2) {
+            if (trimmedLine.front() == '[' && trimmedLine.back() == ']') {
+                header = trimmedLine.substr(1, trimmedLine.length() - 2);
+                continue;
+            }
+        }
+
+        // if not a header, push the line into the section
+        if (sections.count(header) == 0) {
+            sections.emplace(header, std::vector<std::string>());
+        }
+        sections[header].push_back(line);
+    }
+
+    // form the output
+    std::vector<IniSection> result;
+    for (const std::pair<std::string, std::vector<std::string>> s : sections) {
+        // parse the section header
+        IniSection i = {
+            .header = s.first,
+        };
+
+        // parse settings
+        i.settings = ParseEnv(s.second);
+
+        result.push_back(i);
+    }
+    return result;
 }
 
 const std::map<std::string, std::string>
@@ -76,6 +124,10 @@ parseOpenstackCliAuth()
     // read the openrc file
     std::string fsError;
     const std::string openstackCliAuthString = ReadFile(fsError, OPENSTACK_CLI_AUTH);
+    if (!fsError.empty()) {
+        HexLogError("failed to read admin openrc for openstack cli, %s", fsError.c_str());
+        return {};
+    }
 
     std::stringstream ss(openstackCliAuthString);
     std::string line;
@@ -84,7 +136,7 @@ parseOpenstackCliAuth()
         configLines.push_back(removePrefix(trim(line), "export "));
     }
 
-    return parseIni(configLines);
+    return ParseEnv(configLines);
 }
 
 const ExecSyncResult

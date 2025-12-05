@@ -12,6 +12,26 @@
 #define OPENSTACK_CLI_AUTH "/etc/admin-openrc.sh"
 
 /**
+ * Parse an env file.
+ */
+const std::map<std::string, std::string>
+ParseEnv(const std::vector<std::string>& configLines);
+
+/**
+ * Ini section structure.
+ */
+struct IniSection {
+    std::string header;
+    std::map<std::string, std::string> settings;
+};
+
+/**
+ * Parse an ini file.
+ */
+const std::vector<IniSection>
+ParseIni(const std::string& config);
+
+/**
  * Execute OpenStack CLI.
  */
 const ExecSyncResult

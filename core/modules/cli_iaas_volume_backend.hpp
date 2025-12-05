@@ -6,11 +6,13 @@
 #include "cli_iaas.hpp"
 #include "include/policy_ext_storage.h"
 
+#include <constant.hpp>
 #include <cube/cubesys.h>
 #include <hex/cli_module.h>
 #include <hex/cli_util.h>
 #include <hex/strict.h>
 #include <openstack.hpp>
+#include <third_party/json11.hpp>
 
 #include <iostream>
 
