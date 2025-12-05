@@ -242,16 +242,19 @@ ini_unmarshal_config()
         fi
     done <<< "$input"
 
-    _hex_function exec_output exec_error \
-        jq -c \
-        --argjson section "$section" \
-        '. += [$section]' \
-        <(printf "%s" "$output")
-    if [[ "$?" == "0" ]] ; then
-        output="$exec_output"
+    # If the section (with header) has an empty header, the section should be ignored.
+    if [ -n "$(json_get_value "$section" ".header")" ] ; then
+        _hex_function exec_output exec_error \
+            jq -c \
+            --argjson section "$section" \
+            '. += [$section]' \
+            <(printf "%s" "$output")
+        if [[ "$?" == "0" ]] ; then
+            output="$exec_output"
+        fi
     fi
 
-    if [[ "$(json_get_value "$section_no_header" ".attributes[] | length > 0")" == "true" ]] ; then
+    if [[ "$(json_get_value "$section_no_header" ".attributes | length > 0")" == "true" ]] ; then
         _hex_function exec_output exec_error \
             jq -c \
             --argjson section "$section_no_header" \
