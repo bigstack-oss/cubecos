@@ -1083,7 +1083,9 @@ MountCephfsStore()
         HexSystemF(0, "mkdir -p %s/k8s", CEPHFS_STORE_DIR);
         HexSystemF(0, "mkdir -p %s/nfs", CEPHFS_STORE_DIR);
         HexSystemF(0, "mkdir -p %s/nova/instances", CEPHFS_STORE_DIR);
+        HexSystemF(0, "mkdir -p %s/glance_tmp_transition", CEPHFS_STORE_DIR);
         HexSetFileMode("/mnt/cephfs/glance", "root", "root", 0777);
+        HexSetFileMode("/mnt/cephfs/glance_tmp_transition", "root", "root", 0777);
         HexSetFileMode("/mnt/cephfs/nfs", "root", "root", 0777);
         HexSetFileMode("/mnt/cephfs/nova", "nova", "nova", 0755);
         HexSetFileMode("/mnt/cephfs/nova/instances", "nova", "nova", 0755);

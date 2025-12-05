@@ -310,6 +310,7 @@ SetDefaults(Configs& config)
     config["DEFAULT"]["show_multiple_locations"] = "true";
     config["DEFAULT"]["workers"] = std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole)));
     config["DEFAULT"]["image_size_cap"] = TwoTiB;
+    config["DEFAULT"]["node_staging_uri"] = "file:///mnt/cephfs/glance_tmp_transition";
 
     config["oslo_concurrency"]["lock_path"] = "/var/lib/glance/locks";
 
