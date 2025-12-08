@@ -2,13 +2,8 @@
 
 #include "openstack.hpp"
 
-/**
- * Trim the leadning and ending spaces in a string.
- *
- * TODO: move this to string.hpp after the refactor branch is rebased.
- */
 const std::string
-trim(const std::string& str)
+Trim(const std::string& str)
 {
     // find the first non-whitespace character (start)
     const std::size_t first = str.find_first_not_of(" \t\n\r");
@@ -55,11 +50,11 @@ ParseEnv(const std::vector<std::string>& configLines)
 
         if (equalPosition == std::string::npos) {
             // not found
-            key = trim(line);
+            key = Trim(line);
             value = "";
         } else {
-            key = trim(line.substr(0, equalPosition));
-            value = trim(line.substr(equalPosition + 1));
+            key = Trim(line.substr(0, equalPosition));
+            value = Trim(line.substr(equalPosition + 1));
         }
 
         if (key.empty()) {
@@ -81,7 +76,7 @@ ParseIni(const std::string& config)
     std::string line;
     std::string header = "";
     while (std::getline(ss, line)) {
-        const std::string trimmedLine = trim(line);
+        const std::string trimmedLine = Trim(line);
 
         if (trimmedLine.empty()) {
             continue;
@@ -133,7 +128,7 @@ parseOpenstackCliAuth()
     std::string line;
     std::vector<std::string> configLines;
     while (std::getline(ss, line)) {
-        configLines.push_back(removePrefix(trim(line), "export "));
+        configLines.push_back(removePrefix(Trim(line), "export "));
     }
 
     return ParseEnv(configLines);

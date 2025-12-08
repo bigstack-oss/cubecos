@@ -12,6 +12,14 @@
 #define OPENSTACK_CLI_AUTH "/etc/admin-openrc.sh"
 
 /**
+ * Trim the leadning and ending spaces in a string.
+ *
+ * TODO: move this to string.hpp after the refactor branch is rebased.
+ */
+const std::string
+Trim(const std::string& str);
+
+/**
  * Parse an env file.
  */
 const std::map<std::string, std::string>
