@@ -82,10 +82,9 @@ WriteConfigs(const std::string &kafkaHosts)
     }
 
     fprintf(fout, "filebeat.inputs:\n");
-    fprintf(fout, "- type: log\n");
+    fprintf(fout, "- type: filestream\n");
     fprintf(fout, "  paths:\n");
     fprintf(fout, "    - /var/log/messages\n");
-    fprintf(fout, "    - /var/log/keystone/*.log\n");
     fprintf(fout, "    - /var/log/nova/*.log\n");
     fprintf(fout, "    - /var/log/glance/*.log\n");
     fprintf(fout, "    - /var/log/cinder/*.log\n");

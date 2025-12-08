@@ -1789,7 +1789,7 @@ health_neutron_check()
 
     ERR_MSG+="`$OPENSTACK network agent list`\n"
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u neutron-server"
-    if echo $(VERBOSE=1 influx_event_health vip) | grep -q "vip changed" ; then
+    if echo $(VERBOSE=1 influx_event_health vip 1) | grep -q "vip changed" ; then
         ERR_CODE=1
     elif [ -z "$service_stats" ] ; then
         ERR_CODE=2

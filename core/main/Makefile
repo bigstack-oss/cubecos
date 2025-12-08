@@ -69,35 +69,34 @@ include $(shell for m in $(ROOT_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 # cube finalizer
 include $(SRCDIR)/cube-post.mk
 
-PROJ_SBOM := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).sbom
-$(PROJ_BASE_ROOTFS): $(TOP_BLDDIR)/core/heavyfs/heavy_rootfs $(PROJ_BOOTSTRAP) $(PROGRAMS) $(shell for m in $(ROOT_COMPONENTS); do find $(COREDIR)/$$m -type f; done)
-	$(call RUN_CMD_TIMED, rm -rf $@,"  RM      $$(basename $@)")
-	$(call RUN_CMD_TIMED, cp -rpf $< $@,"  COPY    $$(basename $<)")
-	$(call RUN_CMD_TIMED, mkdir -p $(PROJ_SHIPDIR); trivy fs \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/dev" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/proc" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/sys" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/run" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/run" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/tmp" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/tmp" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/cache" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/log" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/lock" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/spool" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/mnt" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/media" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/docker" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/rancher" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/var/lib/kubelet" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/srv" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/home" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/root" \
-	--skip-dirs "$(PROJ_BASE_ROOTFS)/etc" \
-	--format cyclonedx $(PROJ_BASE_ROOTFS) \
-	-o $(PROJ_SHIPDIR)/$(PROJ_SBOM), "  GEN     $(PROJ_SBOM)")
+PROJ_SBM := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).sbm
+PROJ_VLN := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).vln
+PROJ_BDL := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).bdl
+PROJ_PUB := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).pub
 
-PKGCLEAN += $(CURDIR)/*.before rootfs *initramfs $(PROJ_SHIPDIR)/$(PROJ_SBOM)
+SYFT_URL := https://github.com/anchore/syft/releases
+SYFT_VER := $(shell curl -sL $(SYFT_URL)/latest | grep -o "tag_name=.*&amp" | cut -d "v" -f2 | cut -d "&" -f1)
+SYFT_RPM := $(SYFT_URL)/download/v$(SYFT_VER)/syft_$(SYFT_VER)_linux_amd64.rpm
+
+GRYPE_URL := https://github.com/anchore/grype/releases
+GRYPE_VER := $(shell curl -sL $(GRYPE_URL)/latest | grep -o "tag_name=.*&amp" | cut -d "v" -f2 | cut -d "&" -f1)
+GRYPE_RPM := $(GRYPE_URL)/download/v$(GRYPE_VER)/grype_$(GRYPE_VER)_linux_amd64.rpm
+
+COSIGN_URL := https://github.com/sigstore/cosign/releases
+COSIGN_VER := $(shell curl -sL $(COSIGN_URL)/latest | grep -o "tag_name=.*&amp" | cut -d "v" -f2 | cut -d "&" -f1)
+COSIGN_RPM := $(COSIGN_URL)/download/v$(COSIGN_VER)/cosign-$(COSIGN_VER)-1.x86_64.rpm
+
+$(PROJ_BASE_ROOTFS): $(TOP_BLDDIR)/core/heavyfs/heavy_rootfs $(PROJ_BOOTSTRAP) $(PROGRAMS) $(shell for m in $(ROOT_COMPONENTS); do find $(COREDIR)/$$m -type f; done)
+	$(call RUN_CMD_TIMED, umount -l $@/proc ; rm -rf $@,"  RM      $$(basename $@)")
+	$(call RUN_CMD_TIMED, cp -rpf $< $@,"  COPY    $$(basename $<)")
+	$(call RUN_CMD_TIMED, dnf install -y   $(SYFT_RPM),"  DNF     syft")
+	$(call RUN_CMD_TIMED, dnf install -y  $(GRYPE_RPM),"  DNF     grype")
+	$(call RUN_CMD_TIMED, dnf install -y $(COSIGN_RPM),"  DNF     cosign")
+	$(call RUN_CMD_TIMED, rm -f cosign.key cosign.pub} ; COSIGN_PASSWORD= cosign generate-key-pair,"  GEN     cosign keypair")
+	$(call RUN_CMD_TIMED, mkdir -p $(PROJ_SHIPDIR) ; cp -f cosign.pub  $(PROJ_SHIPDIR)/$(PROJ_PUB),"  COPY    cosign pubkey")
+
+PKGCLEAN += $(CURDIR)/*.before rootfs *initramfs cosign.*
+PKGCLEAN += $(PROJ_SHIPDIR)/$(PROJ_SBM) $(PROJ_SHIPDIR)/$(PROJ_VLN) $(PROJ_SHIPDIR)/$(PROJ_BDL) $(PROJ_SHIPDIR)/$(PROJ_PUB)
 
 liveusb: liveusb_warning
 

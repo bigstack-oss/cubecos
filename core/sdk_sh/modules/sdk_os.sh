@@ -1352,7 +1352,7 @@ os_pre_failure_host_evacuation()
         if _os_pre_failure_host_evacuation $env ; then
             break
         else
-            sleep 10
+            sleep 30
         fi
     done
     nova host-evacuate-live $host

@@ -33,3 +33,11 @@ rootfs_install::
 	$(Q)rm -f $(ROOTDIR)/*.tsv $(LOCKED_RPMS) $(BLKLST_RPMS)
 	$(Q)chroot $(ROOTDIR) bash -c "rm -rf /usr/local/share/{doc,man} /usr/share/{man,doc,licenses} /usr/src /usr/local/src /var/log/*.log /var/cache/dnf/* /{tmp,boot}/* /lib/.build-id" /afs
 	$(Q)chroot $(ROOTDIR) find /usr -type f -name '*.pyc' -exec rm {} \;
+
+rootfs_install::
+	$(call RUN_CMD_TIMED, cd $(ROOTDIR) && syft --config $(SRCDIR)/syft.yml --source-version $(PROJ_NAME)_$(PROJ_VERSION) ./,"  GEN     sbom")
+	$(call RUN_CMD_TIMED, mv $(ROOTDIR)/syft-fs-cubecos.cdx.json $(PROJ_SHIPDIR)/$(PROJ_SBM) ; rm -f $(ROOTDIR)/syft*,"  COPY    sbom")
+
+	$(call RUN_CMD_TIMED, grype sbom:$(PROJ_SHIPDIR)/$(PROJ_SBM) --output=json > $(PROJ_SHIPDIR)/$(PROJ_VLN),"  SCAN    vulnerabilities")
+	$(call RUN_CMD_TIMED, COSIGN_PASSWORD= cosign sign-blob --key cosign.key --bundle=$(PROJ_SHIPDIR)/$(PROJ_BDL) $(PROJ_SHIPDIR)/$(PROJ_SBM),"  GEN      bundle")
+	$(call RUN_CMD_TIMED, COSIGN_PASSWORD= cosign sign-blob --key cosign.key --bundle=$(PROJ_SHIPDIR)/$(PROJ_BDL) $(PROJ_SHIPDIR)/$(PROJ_SBM),"  CHK      sbom")

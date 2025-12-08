@@ -20,10 +20,9 @@ RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 # prepare the api source code, being pulled from GitHub using the default branch
 # For RC: git clone -b v3.0.0-rc4
 $(GIT_DIR):
-	$(Q)mkdir $@
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
-		timeout 30 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 30 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
 		"  CLONE   $(GITHUB_URL)")
 

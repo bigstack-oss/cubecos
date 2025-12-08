@@ -1,0 +1,79 @@
+output:
+  - "cyclonedx-json=syft-fs-cubecos.cdx.json"
+
+quiet: false
+
+check-for-app-update: true
+
+parallelism: 8
+
+exclude:
+  - "./var/lib/docker/**"
+  - "./var/lib/rancher/**"
+  - "./var/lib/kubelet/**"
+
+format:
+  pretty:
+  json:
+    pretty: true
+    legacy: true
+
+  template:
+  cyclonedx-json:
+    pretty: true
+
+  cyclonedx-xml:
+    pretty: true
+
+file:
+  metadata:
+    selection: "owned-by-package"
+    digests:
+      - "sha256"
+      - "sha1"
+  content:
+    skip-files-above-size: 1048576
+
+package:
+  search-indexed-archives: true
+  search-unindexed-archives: false
+  exclude-binary-overlap-by-ownership: true
+
+golang:
+  search-local-mod-cache-licenses: false
+  #local-mod-cache-dir: ""
+  search-remote-licenses: false
+  main-module-version:
+    from-ld-flags: true
+    from-build-settings: true
+    from-contents: true
+
+java:
+  maven-url: "https://repo1.maven.org/maven2"
+  max-parent-recursive-depth: 5
+  use-network: true
+
+python:
+  guess-unpinned-requirements: false
+
+linux-kernel:
+  catalog-modules: true
+
+relationships:
+  package-file-ownership: true
+  package-file-ownership-overlap: true
+
+compliance:
+  missing-name: "drop"
+  missing-version: "stub"
+
+source:
+  name: "CubeCOS"
+  supplier: "Bigstack co., ltd"
+  file:
+    digests:
+      - "sha256"
+log:
+  structured: true
+  level: "error"
+  file: "./syft.log"

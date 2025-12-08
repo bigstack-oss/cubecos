@@ -8,7 +8,7 @@ else
 OSEARCH := $(shell echo "opensearch")
 endif
 
-LOGSTASH_VER := 8.9.0
+LOGSTASH_VER := 9.2.2
 LOGSTASH_CONF_DIR := /etc/logstash
 LOGSTASH_CONF_D_DIR := $(LOGSTASH_CONF_DIR)/conf.d
 LOGSTASH_CONF_EVENTDB_DIR := $(LOGSTASH_CONF_DIR)/eventdb
@@ -16,7 +16,7 @@ LOGSTASH_HOME := /usr/share/logstash
 LOGSTASH_LOG_DIR := /var/log/logstash
 LOGSTASH_LIB_DIR := /var/lib/logstash
 
-OSEARCH_VER := 2.10.0
+OSEARCH_VER := 3.3.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
 OSEARCH_CONF_SECURITY_DIR := $(OSEARCH_CONF_DIR)/opensearch-security
 OSEARCH_HOME := /usr/share/$(OSEARCH)
@@ -24,7 +24,7 @@ OSEARCH_JDK := $(OSEARCH_HOME)/jdk
 OSEARCH_BOARDS_CONF_DIR := /etc/$(OSEARCH)-dashboards
 OSEARCH_BOARDS_LOG_DIR := /var/log/$(OSEARCH)-dashboards
 
-BEATS_VER := 8.10.2
+BEATS_VER := 9.2.2
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-$(BEATS_VER)-x86_64.rpm
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/auditbeat-$(BEATS_VER)-x86_64.rpm
 
@@ -32,9 +32,9 @@ ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearc
 ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch/$(OSEARCH_VER)/opensearch-$(OSEARCH_VER)-linux-x64.rpm
 ROOTFS_PIP_NC += curator-$(OSEARCH)
 
-LOGSTASH_TGZ := logstash-oss-with-opensearch-output-plugin-$(LOGSTASH_VER)-linux-x64.tar.gz
+LOGSTASH_TGZ := logstash-$(LOGSTASH_VER)-linux-x86_64.tar.gz
 $(ARCS_DIR)/$(LOGSTASH_TGZ):
-	$(Q)wget https://artifacts.opensearch.org/logstash/$(LOGSTASH_TGZ) -O $@
+	$(Q)wget https://artifacts.elastic.co/downloads/logstash/$(LOGSTASH_TGZ) -O $@
 
 rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 	$(Q)tar xf $< -C $(ROOTDIR)/usr/share/
@@ -77,5 +77,5 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 # install logstash plugins, such as output-syslog for N-Reporter
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) /usr/bin/env PATH=$(OSEARCH_JDK)/bin:$$PATH LD_LIBRARY_PATH=$(OSEARCH_JDK)/lib $(LOGSTASH_HOME)/bin/logstash-plugin install logstash-output-syslog
+	$(Q)chroot $(ROOTDIR) /usr/bin/env PATH=$(OSEARCH_JDK)/bin:$$PATH LD_LIBRARY_PATH=$(OSEARCH_JDK)/lib $(LOGSTASH_HOME)/bin/logstash-plugin install logstash-output-syslog logstash-output-opensearch
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
