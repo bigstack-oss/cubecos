@@ -1,4 +1,4 @@
-## [3.0.0-rc4](https://github.com/bigstack-oss/cubecos/compare/v3.0.0...v3.0.0-rc4) (2025-06-08)
+## [3.0.0-rc4](https://github.com/bigstack-oss/cubecos/compare/v3.0.0-rc3...v3.0.0-rc4) (2025-06-08)
 
 ### Bug Fixes
 
