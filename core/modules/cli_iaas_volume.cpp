@@ -541,7 +541,12 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     }
 
     std::string performVolumeConversionAnswer;
-    bool isAnswered = CliReadLine("Enter 'YES' to perform virt-v2v conversion on the volume: ", performVolumeConversionAnswer);
+    bool isAnswered = CliReadInputStr(
+        argc,
+        argv,
+        7,
+        "Enter 'YES' to perform virt-v2v conversion on the volume: ",
+        &performVolumeConversionAnswer);
     performVolumeConversion = isAnswered && performVolumeConversionAnswer == "YES";
 
     std::cout << "backend: " << sourceNfsStorageBackend << std::endl;
