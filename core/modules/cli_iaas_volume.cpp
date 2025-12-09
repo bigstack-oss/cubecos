@@ -303,6 +303,56 @@ getNfsMountPoints(const std::string name)
     return mountPoints;
 }
 
+/**
+ * Check if the file is already managed by Cinder.
+ *
+ * @param filePath full path of the file
+ * @param volumeType
+ * @return true or false
+ */
+static bool
+isFileAlreadyManagedByCinder(
+    const std::string& filePath,
+    const std::string& volumeType)
+{
+    const std::filesystem::path p(filePath);
+    const std::string basename = p.filename().string();
+    if (basename.empty()) {
+        return false;
+    }
+
+    // check if the file name starts with "volume-"
+    const std::string managedVolumeNamePrefix = "volume-";
+    std::string volumeId;
+    if (basename.rfind(managedVolumeNamePrefix, 0) == 0) {
+        volumeId = basename.substr(managedVolumeNamePrefix.length());
+    }
+    if (volumeId.empty()) {
+        return false;
+    }
+
+    // check with OpenStack
+    const ExecSyncResult r = OpenstackExec("volume show " + volumeId + " -f json");
+    if (r.exitCode != 0) {
+        return false;
+    }
+
+    // parse the output
+    std::string jsonError;
+    const json11::Json volumeDetail = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        return false;
+    }
+    if (!volumeDetail["type"].is_string()) {
+        return false;
+    }
+    if (volumeDetail["type"].string_value() != volumeType) {
+        return false;
+    }
+
+    return true;
+}
+
 struct fileInfo : public mountPoint {
     std::string filePath;
 };
@@ -358,6 +408,16 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
         }
 
         for (const std::string& f : fl) {
+            /**
+             * We would skip volumes already managed by Cinder.
+             * Since we enforced host name = volume backend name
+             * = volume backend pool name = type name, we would use
+             * the backend name as the volume type.
+             */
+            if (isFileAlreadyManagedByCinder(f, sourceNfsStorageBackend)) {
+                continue;
+            }
+
             fileInfo fi;
             fi.exportPath = p.exportPath;
             fi.target = p.target;
