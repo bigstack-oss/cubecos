@@ -687,6 +687,31 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
     std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
     std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
 
+    // check if we still have enough quota in the project to manage the volume
+    const long long volumeSizeInBytes = getVolumeVirtualSize(fileExtraInfo.filePath);
+
+    if (!IsQuotaGigabytesEnough(domain, project, volumeSizeInBytes)) {
+        CliPrintf(
+            "Project %s under domain %s does not have enough quota on resource %s, "
+            "needed space for the volume is %lld",
+            project.c_str(),
+            domain.c_str(),
+            "gigabytes",
+            volumeSizeInBytes);
+        return CLI_FAILURE;
+    }
+
+    if (!IsQuotaVolumesEnough(domain, project)) {
+        CliPrintf(
+            "Project %s under domain %s does not have enough quota on resource %s, "
+            "needed space for the volume is %lld",
+            project.c_str(),
+            domain.c_str(),
+            "volumes",
+            volumeSizeInBytes);
+        return CLI_FAILURE;
+    }
+
     /**
      * Perform the conversion.
      *
@@ -696,32 +721,9 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
      * We only need to convert volumes not in the raw format.
      */
     if (performVolumeConversion && !isVolumeInRaw(fileExtraInfo.filePath)) {
-        // check if we still have enough quota in the project to manage the volume
-        const long long volumeSizeInBytes = getVolumeVirtualSize(fileExtraInfo.filePath);
+        // perform the conversion
 
-        if (!IsQuotaGigabytesEnough(domain, project, volumeSizeInBytes)) {
-            CliPrintf(
-                "Project %s under domain %s does not have enough quota on resource %s, "
-                "needed space for the volume is %lld",
-                project.c_str(),
-                domain.c_str(),
-                "gigabytes",
-                volumeSizeInBytes);
-            return CLI_FAILURE;
-        }
-
-        if (!IsQuotaVolumesEnough(domain, project)) {
-            CliPrintf(
-                "Project %s under domain %s does not have enough quota on resource %s, "
-                "needed space for the volume is %lld",
-                project.c_str(),
-                domain.c_str(),
-                "volumes",
-                volumeSizeInBytes);
-            return CLI_FAILURE;
-        }
-
-        // TODO: perform the conversion and metadata parsing
+        // parse the metadata
     }
 
     if (!addAdminCliToProject(domain, project)) {
