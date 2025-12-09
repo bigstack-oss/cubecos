@@ -312,7 +312,7 @@ getNfsMountPoints(const std::string name)
 static const std::string
 getVolumeTypeById(const std::string& volumeId)
 {
-    const ExecSyncResult r = OpenstackExec("volume show " + volumeId + " -f json");
+    const ExecSyncResult r = OpenstackExec("volume show \"" + volumeId + "\" -f json");
     if (r.exitCode != 0) {
         HexLogError("%s", r.stderrOutput.c_str());
         return "";
@@ -564,9 +564,9 @@ static const std::vector<volumeInfo>
 getVolumes(const std::string& domain, const std::string& project)
 {
     const ExecSyncResult r = OpenstackExec(
-        "volume list --project " + project
-        + " --project-domain " + domain
-        + " -f json");
+        "volume list --project \"" + project
+        + "\" --project-domain \"" + domain
+        + "\" -f json");
     if (r.exitCode != 0) {
         HexLogError("%s", r.stderrOutput.c_str());
         return {};
@@ -696,8 +696,8 @@ MoveVolumeToBackendMain(int argc, const char** argv)
         true,
         true,
         ParseOpenstackCliAuth(),
-        "cinder retype --migration-policy on-demand "
-            + volumeId + " " + destinationVolumeType);
+        "cinder retype --migration-policy on-demand \""
+            + volumeId + "\" \"" + destinationVolumeType + "\"");
     if (r.exitCode != 0) {
         HexLogError("%s", r.stderrOutput.c_str());
         std::cout << "Output: " << std::endl
