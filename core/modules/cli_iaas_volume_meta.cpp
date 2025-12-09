@@ -64,7 +64,7 @@ ApplyMain(int argc, const char** argv)
 
     HexSpawn(0, HEX_CFG, "volume_meta_apply",
         user.c_str(), proj.c_str(),
-        "cube@ceph#ceph", "CubeStorage", filename.c_str(), NULL);
+        BUILTIN_VOLUME_BACKEND_POOL, BUILTIN_VOLUME_TYPE, filename.c_str(), NULL);
 
     return CLI_SUCCESS;
 }

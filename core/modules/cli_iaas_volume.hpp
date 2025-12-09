@@ -12,6 +12,7 @@
 #include <hex/cli_util.h>
 #include <hex/process.h>
 #include <hex/strict.h>
+#include <hex/string_util.h>
 
 #include <filesystem>
 #include <iostream>

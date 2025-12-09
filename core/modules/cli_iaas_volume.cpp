@@ -364,6 +364,95 @@ isFileAlreadyManagedByCinder(
     return (getVolumeTypeById(volumeId) == volumeType);
 }
 
+/**
+ * Add admin_cli to the project for having sufficient permissions
+ * to add the volume to the project.
+ *
+ * @param domain
+ * @param project
+ * @return successful or not
+ */
+static const bool
+addAdminCliToProject(const std::string& domain, const std::string& project)
+{
+    const ExecSyncResult r = OpenstackExec(
+        "role add --user admin_cli --project \"" + project
+        + "\" --project-domain \"" + domain + "\" admin");
+    if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Take an existing volume under control of Cinder.
+ *
+ * @param volumeType
+ * @param filePath the full path of the file on the NFS share, e.g., <ip>:<file_full_path>
+ * @param volumeName the display name for the incoming volume
+ * @param domain
+ * @param project
+ * @param isBootable
+ * @return volume ID, if blank, the manage failed
+ */
+static const std::string
+manageExistingVolume(
+    const std::string& volumeType,
+    const std::string& filePath,
+    const std::string& volumeName,
+    const std::string& domain,
+    const std::string& project,
+    const bool& isBootable)
+{
+    std::string volumeBackendPool;
+    if (volumeType == BUILTIN_VOLUME_TYPE) {
+        volumeBackendPool = BUILTIN_VOLUME_BACKEND_POOL;
+    } else {
+        volumeBackendPool = volumeType + "@" + volumeType + "#" + volumeType;
+    }
+
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        ParseOpenstackCliAuth(),
+        "cinder --os-project-domain-name \"" + domain
+            + "\" --os-project-name \"" + project
+            + "\" manage " + (isBootable ? "--bootable" : "")
+            + " --name \"" + volumeName
+            + "\" --volume-type \"" + volumeType
+            + "\" \"" + volumeBackendPool + "\" \"" + filePath + "\"");
+    if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
+        return "";
+    }
+
+    // parse the id
+    std::stringstream volumeDetail(r.stdoutOutput);
+    std::string line;
+    // read the output line by line
+    while (std::getline(volumeDetail, line)) {
+        if (line.find("| id") == std::string::npos) {
+            continue;
+        }
+
+        break;
+    }
+
+    const std::vector<std::string> lineData = hex_string_util::split(line, '|');
+    std::string volumeId;
+    try {
+        volumeId = lineData.at(2);
+    } catch (const std::out_of_range& e) {
+        HexLogError("failed to parse the volume id from\n%s", r.stdoutOutput.c_str());
+        return "";
+    }
+
+    return Trim(volumeId);
+}
+
 struct fileInfo : public mountPoint {
     std::string filePath;
 };
@@ -378,7 +467,8 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
      * [3]=<volume_name>
      * [4]=<domain>
      * [5]=<project>
-     * [6]=<YES|NO> perform virt-v2v conversion or not
+     * [6]=<YES|NO> perform virt-v2v conversion or not,
+     * also implies the volume is bootable or not
      */
     if (argc > 7) {
         return CLI_INVALID_ARGS;
@@ -492,15 +582,46 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         &performVolumeConversionAnswer);
     performVolumeConversion = isAnswered && performVolumeConversionAnswer == "YES";
 
-    std::cout << "backend: " << sourceNfsStorageBackend << std::endl;
-    std::cout << "filePath: " << filePath << std::endl;
     std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
     std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
     std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
-    std::cout << "volume name: " << volumeName << std::endl;
-    std::cout << "domain: " << domain << std::endl;
-    std::cout << "project: " << project << std::endl;
-    std::cout << "perform volume conversion: " << (performVolumeConversion ? "yes" : "no") << std::endl;
+
+    // TODO: perform the conversion and metadata parsing
+
+    // TODO: raise the project quotas
+
+    if (!addAdminCliToProject(domain, project)) {
+        HexLogError("failed to add admin_cli to the project to manage volumes");
+        CliPrint("Not sufficient permissions to manage volumes in the project");
+        return CLI_FAILURE;
+    }
+
+    const std::string volumeId = manageExistingVolume(
+        sourceNfsStorageBackend,
+        filePath,
+        volumeName,
+        domain,
+        project,
+        performVolumeConversion);
+    if (volumeId.empty()) {
+        HexLogError(
+            "failed to manage the existing volume on nfs, "
+            "source nfs storage backend: %s, file path: %s, "
+            "volume name: %s, domain: %s, project: %s, "
+            "perform volume conversion: %s",
+            sourceNfsStorageBackend.c_str(),
+            filePath.c_str(),
+            volumeName.c_str(),
+            domain.c_str(),
+            project.c_str(),
+            (performVolumeConversion ? "YES" : "NO"));
+        CliPrint("Failed to manage the existing volume on NFS");
+        return CLI_FAILURE;
+    }
+
+    std::cout << "volume id: " << volumeId << std::endl;
+    // TODO: set volume metadata
+
     return CLI_SUCCESS;
 }
 

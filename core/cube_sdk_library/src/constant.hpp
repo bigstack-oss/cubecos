@@ -11,6 +11,7 @@
 
 #define OPENSTACK_CLI "/usr/bin/openstack"
 
+#define BUILTIN_VOLUME_BACKEND_POOL "cube@ceph#ceph"
 #define BUILTIN_VOLUME_TYPE "CubeStorage"
 #define CINDER_BACKEND_DIR "/etc/cinder/backends"
 
