@@ -827,7 +827,6 @@ os_image_import()
             local limit=$(echo $gigabytes_json | jq -r ".Limit")
             local used=$(echo $gigabytes_json | jq -r ".\"In Use\"")
             local free=$(($limit - $used))
-            local vol_name=$(mktemp -u volume-${name}-XXXX)
             if [ $free -le $((img_siz / 1024 / 1024 / 1024)) ] ; then
                 cmd rm -f $mf_importing
                 Error "${proj_name:-admin} quota's free volume space $free(GB) is less then needed $((img_siz / 1024 / 1024 / 1024))(GB)"
