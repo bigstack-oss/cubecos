@@ -661,6 +661,37 @@ convertVolume(const std::string& filePath, const std::string& workingDirectory)
     return false;
 }
 
+/**
+ * Get the converted volume file full path.
+ *
+ * @param workingDirectory the full path of the working directory
+ * @param sourceFile the full path of the source volume file
+ * @return the full path of the converted volume file,
+ * if failed, path.empty() = true
+ */
+static const std::filesystem::path
+getConvertedVolumePath(
+    const std::filesystem::path& workingDirectory,
+    const std::filesystem::path& sourceFile)
+{
+    const std::string fileNameFeature = sourceFile.stem().string();
+
+    std::string fsError;
+    const std::vector<std::string> files = GetFilesUnderDirectory(
+        fsError,
+        workingDirectory.string());
+    for (const std::string& f : files) {
+        const std::string basename = std::filesystem::path(f).filename().string();
+        if (basename.rfind(fileNameFeature + "-", 0) != 0) {
+            continue;
+        }
+
+        return workingDirectory / basename;
+    }
+
+    return std::filesystem::path();
+}
+
 struct fileInfo : public mountPoint {
     std::string filePath;
 };
@@ -873,6 +904,19 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         }
 
         // update the filePath with the converted volume path
+        const std::filesystem::path convertedVolumePath = getConvertedVolumePath(workingDirectory, fileExtraInfo.filePath);
+        if (convertedVolumePath.empty()) {
+            HexLogError(
+                "failed to get the converted volume file path, working directory: %s",
+                workingDirectory.c_str());
+            CliPrintf(
+                "Failed to get the converted volume file path, working directory: %s",
+                workingDirectory.c_str());
+            return CLI_FAILURE;
+        }
+
+        filePath = convertedVolumePath.string();
+        std::cout << "updated file path: " << filePath << std::endl;
 
         // parse the metadata
     }
