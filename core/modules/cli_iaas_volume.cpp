@@ -403,8 +403,9 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
      * [4]=<domain>
      * [5]=<project>
      * [6]=<destination_volume_type>
+     * [7]=<YES|NO> perform virt-v2v conversion or not
      */
-    if (argc > 7) {
+    if (argc > 8) {
         return CLI_INVALID_ARGS;
     }
 
@@ -418,6 +419,7 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     std::string domain;
     std::string project;
     std::string destinationVolumeType;
+    bool performVolumeConversion;
 
     if (CliMatchListHelper(
             argc,
@@ -538,6 +540,10 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    std::string performVolumeConversionAnswer;
+    bool isAnswered = CliReadLine("Enter 'YES' to perform virt-v2v conversion on the volume: ", performVolumeConversionAnswer);
+    performVolumeConversion = isAnswered && performVolumeConversionAnswer == "YES";
+
     std::cout << "backend: " << sourceNfsStorageBackend << std::endl;
     std::cout << "filePath: " << filePath << std::endl;
     std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
@@ -547,6 +553,7 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     std::cout << "domain: " << domain << std::endl;
     std::cout << "project: " << project << std::endl;
     std::cout << "destination volume type: " << destinationVolumeType << std::endl;
+    std::cout << "perform volume conversion: " << (performVolumeConversion ? "yes" : "no") << std::endl;
     return CLI_SUCCESS;
 }
 
@@ -557,4 +564,5 @@ CLI_MODE_COMMAND(
     NULL,
     "Migrate a large volume from a configured NFS volume backend.",
     "migrate_large_volume_from_nfs <source_nfs_storage_backend> "
-    "<file_path> <volume_name> <domain> <project> <destination_volume_type>");
+    "<file_path> <volume_name> <domain> <project> <destination_volume_type> "
+    "<perform virt-v2v conversion or not>");
