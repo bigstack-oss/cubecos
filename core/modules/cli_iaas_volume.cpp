@@ -334,6 +334,7 @@ isFileAlreadyManagedByCinder(
     // check with OpenStack
     const ExecSyncResult r = OpenstackExec("volume show " + volumeId + " -f json");
     if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
         return false;
     }
 
@@ -341,6 +342,7 @@ isFileAlreadyManagedByCinder(
     std::string jsonError;
     const json11::Json volumeDetail = json11::Json::parse(r.stdoutOutput, jsonError);
     if (!jsonError.empty()) {
+        HexLogError("%s", jsonError.c_str());
         return false;
     }
     if (!volumeDetail["type"].is_string()) {
@@ -351,6 +353,39 @@ isFileAlreadyManagedByCinder(
     }
 
     return true;
+}
+
+/**
+ * Get volume types.
+ *
+ * @return a list of volume types, not filtered
+ */
+static const std::vector<std::string>
+getVolumeTypes()
+{
+    const ExecSyncResult r = OpenstackExec("volume type list -f json");
+    if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
+        return {};
+    }
+
+    // parse the output
+    std::string jsonError;
+    const json11::Json volumeTypeList = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("%s", jsonError.c_str());
+        return {};
+    }
+    const json11::Json::array& volumeTypes = volumeTypeList.array_items();
+    std::vector<std::string> result;
+    for (const json11::Json& t : volumeTypes) {
+        if (!t["Name"].is_string()) {
+            continue;
+        }
+        result.push_back(t["Name"].string_value());
+    }
+
+    return result;
 }
 
 struct fileInfo : public mountPoint {
@@ -472,6 +507,37 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    const std::vector<std::string> volumeTypes = getVolumeTypes();
+    CliList typeList;
+    // filter out undesired types
+    for (const std::string& t : volumeTypes) {
+        if (t == "__DEFAULT__") {
+            continue;
+        }
+        if (t == sourceNfsStorageBackend) {
+            /**
+             * Setting the destination volume type the same
+             * as the source volume type is meaningless.
+             */
+            continue;
+        }
+
+        typeList.push_back(t);
+    }
+
+    if (CliMatchListHelper(
+            argc,
+            argv,
+            6,
+            typeList,
+            &index,
+            &destinationVolumeType,
+            "Select the destination volume type: ")
+        != CLI_SUCCESS) {
+        CliPrintf("Invalid volume type");
+        return CLI_INVALID_ARGS;
+    }
+
     std::cout << "backend: " << sourceNfsStorageBackend << std::endl;
     std::cout << "filePath: " << filePath << std::endl;
     std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
@@ -480,6 +546,7 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     std::cout << "volume name: " << volumeName << std::endl;
     std::cout << "domain: " << domain << std::endl;
     std::cout << "project: " << project << std::endl;
+    std::cout << "destination volume type: " << destinationVolumeType << std::endl;
     return CLI_SUCCESS;
 }
 
