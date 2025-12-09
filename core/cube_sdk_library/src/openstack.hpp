@@ -20,6 +20,14 @@ const std::string
 Trim(const std::string& str);
 
 /**
+ * Remove the matching prefix.
+ *
+ * TODO: move this to string.hpp after the refactor branch is rebased.
+ */
+const std::string
+RemovePrefix(const std::string& line, const std::string& prefix);
+
+/**
  * Parse an env file.
  */
 const std::map<std::string, std::string>

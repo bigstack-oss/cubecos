@@ -365,6 +365,48 @@ isFileAlreadyManagedByCinder(
 }
 
 /**
+ * Check if the volume is already in raw format.
+ *
+ * @param filePath the local full path of the file
+ * @return is in raw format or not
+ */
+static const bool
+isVolumeInRaw(const std::string& filePath)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "qemu-img info \"" + filePath + "\"");
+    if (r.exitCode != 0) {
+        HexLogError(
+            "failed to use qemu-img to probe the info of the volume, error: %s",
+            r.stderrOutput.c_str());
+        return false;
+    }
+
+    // parse the file format
+    std::stringstream volumeInfo(r.stdoutOutput);
+    std::string line;
+    const std::string fileFormatLineTitle = "file format: ";
+    // read the output line by line
+    while (std::getline(volumeInfo, line)) {
+        if (line.find(fileFormatLineTitle) == std::string::npos) {
+            continue;
+        }
+
+        break;
+    }
+    if (line.empty()) {
+        HexLogError("failed to parse the file format from\n%s", r.stdoutOutput.c_str());
+        return false;
+    }
+
+    return (RemovePrefix(line, fileFormatLineTitle) == "raw");
+}
+
+/**
  * Add admin_cli to the project for having sufficient permissions
  * to add the volume to the project.
  *
@@ -440,6 +482,10 @@ manageExistingVolume(
 
         break;
     }
+    if (line.empty()) {
+        HexLogError("failed to parse the volume id from\n%s", r.stdoutOutput.c_str());
+        return "";
+    }
 
     const std::vector<std::string> lineData = hex_string_util::split(line, '|');
     std::string volumeId;
@@ -474,6 +520,7 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    // gather the arguments
     std::string cmd = "";
     int index;
 
@@ -485,6 +532,7 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
     std::string project;
     bool performVolumeConversion;
 
+    // [1]=<source_nfs_storage_backend>
     if (CliMatchListHelper(
             argc,
             argv,
@@ -498,6 +546,7 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    // [2]=<file_path>
     const std::vector<mountPoint> nfsMountPoints = getNfsMountPoints(sourceNfsStorageBackend);
     std::vector<fileInfo> fileInfos;
     CliList files;
@@ -551,6 +600,7 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         fileExtraInfo = fileInfos[index];
     }
 
+    // [3]=<volume_name>
     if (!CliReadInputStr(
             argc,
             argv,
@@ -561,18 +611,21 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    // [4]=<domain>
     cmd = HEX_SDK " os_list_domain_basic | awk '{print tolower($0)}'";
     if (CliMatchCmdHelper(argc, argv, 4, cmd, &index, &domain, "Select domain: ") != CLI_SUCCESS) {
         CliPrintf("Invalid domain");
         return CLI_INVALID_ARGS;
     }
 
+    // [5]=<project>
     cmd = HEX_SDK " os_list_project_by_domain_basic " + domain;
     if (CliMatchCmdHelper(argc, argv, 5, cmd, &index, &project, "Select project: ") != CLI_SUCCESS) {
         CliPrintf("Invalid project");
         return CLI_INVALID_ARGS;
     }
 
+    // [6]=<YES|NO> perform virt-v2v conversion or not
     std::string performVolumeConversionAnswer;
     bool isAnswered = CliReadInputStr(
         argc,
@@ -585,6 +638,18 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
     std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
     std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
     std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
+
+    /**
+     * Perform the conversion.
+     * Only virt-v2v is used since we are highly likely
+     * only migrating large volumes from other hypervisors.
+     */
+    if (isVolumeInRaw(fileExtraInfo.filePath)) {
+        std::cout << "file is in raw" << std::endl;
+    } else {
+        std::cout << "file is not in raw" << std::endl;
+    }
+    return CLI_SUCCESS;
 
     // TODO: perform the conversion and metadata parsing
 

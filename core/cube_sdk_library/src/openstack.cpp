@@ -25,7 +25,7 @@ Trim(const std::string& str)
  * TODO: move this to string.hpp after the refactor branch is rebased.
  */
 const std::string
-removePrefix(const std::string& line, const std::string& prefix)
+RemovePrefix(const std::string& line, const std::string& prefix)
 {
     // check if the line starts with the prefix, the prefix must be found at position 0
     if (line.rfind(prefix, 0) == 0) {
@@ -128,7 +128,7 @@ ParseOpenstackCliAuth()
     std::string line;
     std::vector<std::string> configLines;
     while (std::getline(ss, line)) {
-        configLines.push_back(removePrefix(Trim(line), "export "));
+        configLines.push_back(RemovePrefix(Trim(line), "export "));
     }
 
     return ParseEnv(configLines);
