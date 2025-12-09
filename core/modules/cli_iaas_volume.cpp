@@ -363,7 +363,7 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     /**
      * [0]="migrate_large_volume_from_nfs"
      * [1]=<source_nfs_storage_backend>
-     * [2]=<file_name>
+     * [2]=<file_path>
      * [3]=<volume_name>
      * [4]=<domain>
      * [5]=<project>
@@ -450,6 +450,16 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
         fileExtraInfo = fileInfos[index];
     }
 
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            3,
+            "Specify volume name: ",
+            &volumeName)) {
+        CliPrint("Volume name is required");
+        return CLI_INVALID_ARGS;
+    }
+
     cmd = HEX_SDK " os_list_domain_basic | awk '{print tolower($0)}'";
     if (CliMatchCmdHelper(argc, argv, 4, cmd, &index, &domain, "Select domain: ") != CLI_SUCCESS) {
         CliPrintf("Invalid domain");
@@ -467,6 +477,7 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
     std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
     std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
+    std::cout << "volume name: " << volumeName << std::endl;
     std::cout << "domain: " << domain << std::endl;
     std::cout << "project: " << project << std::endl;
     return CLI_SUCCESS;
