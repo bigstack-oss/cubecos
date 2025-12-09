@@ -7,6 +7,7 @@
 #include "include/policy_ext_storage.h"
 
 #include <cube/cubesys.h>
+#include <filesystem.hpp>
 #include <hex/cli_module.h>
 #include <hex/cli_util.h>
 #include <hex/process.h>

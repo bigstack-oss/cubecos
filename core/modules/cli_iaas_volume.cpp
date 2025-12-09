@@ -126,6 +126,12 @@ CLI_MODE_COMMAND(
     "Show volume quota for a tenant.",
     "quota_show [<domain>] [<tenant>]");
 
+/**
+ * Get names of NFS storage backends.
+ * The backends must be configured, enabled, and up.
+ *
+ * @return names of NFS storage backends
+ */
 static const std::vector<std::string>
 getNfsStorageBackends()
 {
@@ -175,6 +181,12 @@ getNfsStorageBackends()
     return result;
 }
 
+/**
+ * Find the mount point on the file system from the NFS host export.
+ *
+ * @param nfsExport export path of the NFS share
+ * @return mount point
+ */
 static const std::string
 findNfsMountPointFromExport(const std::string& nfsExport)
 {
@@ -211,6 +223,12 @@ struct mountPoint {
     std::string target;
 };
 
+/**
+ * Get NFS mount point infos of an NFS storage backend.
+ *
+ * @param name NFS storage backend name
+ * @return mount point infos of the NFS storage backend
+ */
 static const std::vector<mountPoint>
 getNfsMountPoints(const std::string name)
 {
@@ -285,32 +303,6 @@ getNfsMountPoints(const std::string name)
     return mountPoints;
 }
 
-static const std::vector<std::string>
-getFilesUnderDirectory(const std::string& path)
-{
-    std::vector<std::string> result;
-    // check if the path exists and is a directory
-    if (!std::filesystem::exists(path) || !std::filesystem::is_directory(path)) {
-        HexLogError(" path %s does not exist or is not a directory", path.c_str());
-        return {};
-    }
-
-    try {
-        // tterate over all entries in the directory
-        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(path)) {
-            // check if the entry is a regular file
-            if (entry.is_regular_file()) {
-                // get the full path
-                result.push_back(entry.path().string());
-            }
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
-        HexLogError("filesystem error: %s", e.what());
-    }
-
-    return result;
-}
-
 struct fileInfo : public mountPoint {
     std::string filePath;
 };
@@ -359,7 +351,11 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     std::vector<fileInfo> fileInfos;
     CliList files;
     for (const mountPoint& p : nfsMountPoints) {
-        const CliList fl = getFilesUnderDirectory(p.target);
+        std::string fsError;
+        const CliList fl = GetFilesUnderDirectory(fsError, p.target);
+        if (!fsError.empty()) {
+            HexLogError("%s", fsError.c_str());
+        }
 
         for (const std::string& f : fl) {
             fileInfo fi;

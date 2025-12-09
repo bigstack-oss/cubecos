@@ -2,6 +2,38 @@
 
 #include "filesystem.hpp"
 
+const std::vector<std::string>
+GetFilesUnderDirectory(
+    std::string& error,
+    const std::string& path)
+{
+    std::vector<std::string> result;
+    // check if the path exists and is a directory
+    if (!std::filesystem::exists(path) || !std::filesystem::is_directory(path)) {
+        std::stringstream errorOutput;
+        errorOutput << "path " << path << " does not exist or is not a directory";
+        error = errorOutput.str();
+        return {};
+    }
+
+    try {
+        // tterate over all entries in the directory
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(path)) {
+            // check if the entry is a regular file
+            if (entry.is_regular_file()) {
+                // get the full path
+                result.push_back(entry.path().string());
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::stringstream errorOutput;
+        errorOutput << "filesystem error: " << e.what();
+        error = errorOutput.str();
+    }
+
+    return result;
+}
+
 bool HasFileMatchGlob(
     std::string& error,
     const std::string& directory,
@@ -32,7 +64,7 @@ bool HasFileMatchGlob(
         }
     } catch (const std::filesystem::filesystem_error& e) {
         std::stringstream errorOutput;
-        errorOutput << "Filesystem error: " << e.what();
+        errorOutput << "filesystem error: " << e.what();
         error = errorOutput.str();
         return false;
     }

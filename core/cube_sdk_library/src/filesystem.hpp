@@ -12,6 +12,18 @@
 #include <unistd.h>
 
 /**
+ * Get all files under a directory.
+ *
+ * @param error error messages
+ * @param path path of a directory
+ * @return a list of files in full path
+ */
+const std::vector<std::string>
+GetFilesUnderDirectory(
+    std::string& error,
+    const std::string& path);
+
+/**
  * Check if any file under a directory matches the glob pattern.
  *
  * @param error The error message if the function return false.
