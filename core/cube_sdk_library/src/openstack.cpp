@@ -329,3 +329,26 @@ IsQuotaVolumesEnough(
 
     return (q.used < q.limit);
 }
+
+const std::string
+GetVolumeTypeById(const std::string& volumeId)
+{
+    const ExecSyncResult r = OpenstackExec("volume show \"" + volumeId + "\" -f json");
+    if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
+        return "";
+    }
+
+    // parse the output
+    std::string jsonError;
+    const json11::Json volumeDetail = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("%s", jsonError.c_str());
+        return "";
+    }
+    if (!volumeDetail["type"].is_string()) {
+        return "";
+    }
+
+    return volumeDetail["type"].string_value();
+}

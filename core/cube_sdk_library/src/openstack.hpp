@@ -127,4 +127,13 @@ IsQuotaVolumesEnough(
     const std::string& domain,
     const std::string& project);
 
+/**
+ * Get the volume type by ID.
+ *
+ * @param volumeId
+ * @return volume type
+ */
+const std::string
+GetVolumeTypeById(const std::string& volumeId);
+
 #endif /* endif CUBE_OPENSTACK_H */
