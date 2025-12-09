@@ -40,6 +40,12 @@ const std::vector<IniSection>
 ParseIni(const std::string& config);
 
 /**
+ * Parse OpenStack admin-openrc into the env format.
+ */
+const std::map<std::string, std::string>
+ParseOpenstackCliAuth();
+
+/**
  * Execute OpenStack CLI.
  */
 const ExecSyncResult

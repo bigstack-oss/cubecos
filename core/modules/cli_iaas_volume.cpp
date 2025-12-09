@@ -304,13 +304,42 @@ getNfsMountPoints(const std::string name)
 }
 
 /**
+ * Get the volume type by ID.
+ *
+ * @param volumeId
+ * @return volume type
+ */
+static const std::string
+getVolumeTypeById(const std::string& volumeId)
+{
+    const ExecSyncResult r = OpenstackExec("volume show " + volumeId + " -f json");
+    if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
+        return "";
+    }
+
+    // parse the output
+    std::string jsonError;
+    const json11::Json volumeDetail = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("%s", jsonError.c_str());
+        return "";
+    }
+    if (!volumeDetail["type"].is_string()) {
+        return "";
+    }
+
+    return volumeDetail["type"].string_value();
+}
+
+/**
  * Check if the file is already managed by Cinder.
  *
  * @param filePath full path of the file
  * @param volumeType
  * @return true or false
  */
-static bool
+static const bool
 isFileAlreadyManagedByCinder(
     const std::string& filePath,
     const std::string& volumeType)
@@ -332,60 +361,7 @@ isFileAlreadyManagedByCinder(
     }
 
     // check with OpenStack
-    const ExecSyncResult r = OpenstackExec("volume show " + volumeId + " -f json");
-    if (r.exitCode != 0) {
-        HexLogError("%s", r.stderrOutput.c_str());
-        return false;
-    }
-
-    // parse the output
-    std::string jsonError;
-    const json11::Json volumeDetail = json11::Json::parse(r.stdoutOutput, jsonError);
-    if (!jsonError.empty()) {
-        HexLogError("%s", jsonError.c_str());
-        return false;
-    }
-    if (!volumeDetail["type"].is_string()) {
-        return false;
-    }
-    if (volumeDetail["type"].string_value() != volumeType) {
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Get volume types.
- *
- * @return a list of volume types, not filtered
- */
-static const std::vector<std::string>
-getVolumeTypes()
-{
-    const ExecSyncResult r = OpenstackExec("volume type list -f json");
-    if (r.exitCode != 0) {
-        HexLogError("%s", r.stderrOutput.c_str());
-        return {};
-    }
-
-    // parse the output
-    std::string jsonError;
-    const json11::Json volumeTypeList = json11::Json::parse(r.stdoutOutput, jsonError);
-    if (!jsonError.empty()) {
-        HexLogError("%s", jsonError.c_str());
-        return {};
-    }
-    const json11::Json::array& volumeTypes = volumeTypeList.array_items();
-    std::vector<std::string> result;
-    for (const json11::Json& t : volumeTypes) {
-        if (!t["Name"].is_string()) {
-            continue;
-        }
-        result.push_back(t["Name"].string_value());
-    }
-
-    return result;
+    return (getVolumeTypeById(volumeId) == volumeType);
 }
 
 struct fileInfo : public mountPoint {
@@ -402,10 +378,9 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
      * [3]=<volume_name>
      * [4]=<domain>
      * [5]=<project>
-     * [6]=<destination_volume_type>
-     * [7]=<YES|NO> perform virt-v2v conversion or not
+     * [6]=<YES|NO> perform virt-v2v conversion or not
      */
-    if (argc > 8) {
+    if (argc > 7) {
         return CLI_INVALID_ARGS;
     }
 
@@ -418,7 +393,6 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     std::string volumeName;
     std::string domain;
     std::string project;
-    std::string destinationVolumeType;
     bool performVolumeConversion;
 
     if (CliMatchListHelper(
@@ -509,6 +483,182 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    std::string performVolumeConversionAnswer;
+    bool isAnswered = CliReadInputStr(
+        argc,
+        argv,
+        6,
+        "Enter 'YES' to perform virt-v2v conversion on the volume: ",
+        &performVolumeConversionAnswer);
+    performVolumeConversion = isAnswered && performVolumeConversionAnswer == "YES";
+
+    std::cout << "backend: " << sourceNfsStorageBackend << std::endl;
+    std::cout << "filePath: " << filePath << std::endl;
+    std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
+    std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
+    std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
+    std::cout << "volume name: " << volumeName << std::endl;
+    std::cout << "domain: " << domain << std::endl;
+    std::cout << "project: " << project << std::endl;
+    std::cout << "perform volume conversion: " << (performVolumeConversion ? "yes" : "no") << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_VOLUME,
+    "migrate_large_volume_from_nfs",
+    MigrateLargeVolumeFromNfsMain,
+    NULL,
+    "Migrate a large volume from a configured NFS volume backend.",
+    "migrate_large_volume_from_nfs <source_nfs_storage_backend> "
+    "<file_path> <volume_name> <domain> <project> "
+    "<perform virt-v2v conversion or not>");
+
+/**
+ * Get volume types.
+ *
+ * @return a list of volume types, not filtered
+ */
+static const std::vector<std::string>
+getVolumeTypes()
+{
+    const ExecSyncResult r = OpenstackExec("volume type list -f json");
+    if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
+        return {};
+    }
+
+    // parse the output
+    std::string jsonError;
+    const json11::Json volumeTypeList = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("%s", jsonError.c_str());
+        return {};
+    }
+    const json11::Json::array& volumeTypes = volumeTypeList.array_items();
+    std::vector<std::string> result;
+    for (const json11::Json& t : volumeTypes) {
+        if (!t["Name"].is_string()) {
+            continue;
+        }
+        result.push_back(t["Name"].string_value());
+    }
+
+    return result;
+}
+
+struct volumeInfo {
+    std::string id;
+    std::string name;
+};
+
+/**
+ * Get the list of volumes under a project under a domain.
+ *
+ * @param domain
+ * @param project
+ * @return a list of volumes with id and name
+ */
+static const std::vector<volumeInfo>
+getVolumes(const std::string& domain, const std::string& project)
+{
+    const ExecSyncResult r = OpenstackExec(
+        "volume list --project " + project
+        + " --project-domain " + domain
+        + " -f json");
+    if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
+        return {};
+    }
+
+    // parse the output
+    std::string jsonError;
+    const json11::Json volumeList = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("%s", jsonError.c_str());
+        return {};
+    }
+    const json11::Json::array& volumes = volumeList.array_items();
+    std::vector<volumeInfo> result;
+    for (const json11::Json& v : volumes) {
+        if (!v["ID"].is_string()) {
+            continue;
+        }
+
+        volumeInfo i = {
+            .id = v["ID"].string_value(),
+        };
+
+        if (v["Name"].is_string()) {
+            i.name = v["Name"].string_value();
+        }
+
+        result.push_back(i);
+    }
+
+    return result;
+}
+
+static int
+MoveVolumeToBackendMain(int argc, const char** argv)
+{
+    /**
+     * [0]="move"
+     * [1]=<domain>
+     * [2]=<project>
+     * [3]=<volume_id>
+     * [4]=<destination_volume_type>
+     */
+    if (argc > 5) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string cmd = "";
+    int index;
+
+    std::string domain;
+    std::string project;
+    std::string volumeId;
+    std::string destinationVolumeType;
+
+    // [1] domain
+    cmd = HEX_SDK " os_list_domain_basic | awk '{print tolower($0)}'";
+    if (CliMatchCmdHelper(argc, argv, 1, cmd, &index, &domain, "Select domain: ") != CLI_SUCCESS) {
+        CliPrintf("Invalid domain");
+        return CLI_INVALID_ARGS;
+    }
+
+    // [2] project
+    cmd = HEX_SDK " os_list_project_by_domain_basic " + domain;
+    if (CliMatchCmdHelper(argc, argv, 2, cmd, &index, &project, "Select project: ") != CLI_SUCCESS) {
+        CliPrintf("Invalid project");
+        return CLI_INVALID_ARGS;
+    }
+
+    // [3] volume_id
+    const std::vector<volumeInfo> volumes = getVolumes(domain, project);
+    CliList volumeList;
+    CliList volumeDescList;
+    for (const volumeInfo& v : volumes) {
+        volumeList.push_back(v.id);
+        volumeDescList.push_back(v.id + " " + v.name);
+    }
+    if (CliMatchListDescHelper(
+            argc,
+            argv,
+            3,
+            volumeList,
+            volumeDescList,
+            &index,
+            &volumeId,
+            "Select the volume ID: ")
+        != CLI_SUCCESS) {
+        CliPrintf("Invalid volume ID");
+        return CLI_INVALID_ARGS;
+    }
+
+    // [4] destination_volume_type
+    const std::string volumeSrouceType = getVolumeTypeById(volumeId);
     const std::vector<std::string> volumeTypes = getVolumeTypes();
     CliList typeList;
     // filter out undesired types
@@ -516,7 +666,7 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
         if (t == "__DEFAULT__") {
             continue;
         }
-        if (t == sourceNfsStorageBackend) {
+        if (t == volumeSrouceType) {
             /**
              * Setting the destination volume type the same
              * as the source volume type is meaningless.
@@ -530,7 +680,7 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
     if (CliMatchListHelper(
             argc,
             argv,
-            6,
+            4,
             typeList,
             &index,
             &destinationVolumeType,
@@ -540,34 +690,31 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    std::string performVolumeConversionAnswer;
-    bool isAnswered = CliReadInputStr(
-        argc,
-        argv,
-        7,
-        "Enter 'YES' to perform virt-v2v conversion on the volume: ",
-        &performVolumeConversionAnswer);
-    performVolumeConversion = isAnswered && performVolumeConversionAnswer == "YES";
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        ParseOpenstackCliAuth(),
+        "cinder retype --migration-policy on-demand "
+            + volumeId + " " + destinationVolumeType);
+    if (r.exitCode != 0) {
+        HexLogError("%s", r.stderrOutput.c_str());
+        std::cout << "Output: " << std::endl
+                  << r.stdoutOutput << std::endl;
+        std::cout << "Error: " << std::endl
+                  << r.stderrOutput << std::endl;
+        return CLI_FAILURE;
+    }
 
-    std::cout << "backend: " << sourceNfsStorageBackend << std::endl;
-    std::cout << "filePath: " << filePath << std::endl;
-    std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
-    std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
-    std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
-    std::cout << "volume name: " << volumeName << std::endl;
-    std::cout << "domain: " << domain << std::endl;
-    std::cout << "project: " << project << std::endl;
-    std::cout << "destination volume type: " << destinationVolumeType << std::endl;
-    std::cout << "perform volume conversion: " << (performVolumeConversion ? "yes" : "no") << std::endl;
+    std::cout << "Output: " << std::endl
+              << r.stdoutOutput << std::endl;
     return CLI_SUCCESS;
 }
 
 CLI_MODE_COMMAND(
     CLI_COMMAND_IAAS_VOLUME,
-    "migrate_large_volume_from_nfs",
-    MigrateLargeVolumeFromNfsMain,
+    "move",
+    MoveVolumeToBackendMain,
     NULL,
-    "Migrate a large volume from a configured NFS volume backend.",
-    "migrate_large_volume_from_nfs <source_nfs_storage_backend> "
-    "<file_path> <volume_name> <domain> <project> <destination_volume_type> "
-    "<perform virt-v2v conversion or not>");
+    "Move a volume to a volume backend.",
+    "move <domain> <project> <volume_id> <destination_volume_type>");

@@ -114,7 +114,7 @@ ParseIni(const std::string& config)
 }
 
 const std::map<std::string, std::string>
-parseOpenstackCliAuth()
+ParseOpenstackCliAuth()
 {
     // read the openrc file
     std::string fsError;
@@ -142,7 +142,7 @@ OpenstackExec(const std::string& command)
     std::string openstackCommand = std::string(OPENSTACK_CLI) + std::string(" ") + command;
 
     // set openstack admin rc for openstack cli auth
-    const std::map<std::string, std::string> openstackCliAuth = parseOpenstackCliAuth();
+    const std::map<std::string, std::string> openstackCliAuth = ParseOpenstackCliAuth();
 
     const ExecSyncResult r = ExecBashSync(
         0,
