@@ -455,6 +455,47 @@ getVolumeVirtualSize(const std::string& filePath)
 }
 
 /**
+ * Get the virt-v2v XML and decide if the volume supports UEFI.
+ *
+ * @param workingDirectory
+ * @return is UEFI supported
+ */
+const bool
+doesVolumeSupportUefi(const std::filesystem::path& workingDirectory)
+{
+    // get the XML
+    std::string fsError;
+    const std::vector<std::string> files = GetFilesUnderDirectory(fsError, workingDirectory.string());
+    if (!fsError.empty()) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
+
+    std::string filePath;
+    for (const std::string& f : files) {
+        if (f.find(".xml") == std::string::npos) {
+            continue;
+        }
+
+        filePath = f;
+        break;
+    }
+    if (filePath.empty()) {
+        return false;
+    }
+
+    // parse the XML
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "grep -i \"os firmware\" \"" + filePath + "\" 2>/dev/null | grep -q -i efi");
+
+    return (r.exitCode == 0);
+}
+
+/**
  * Add admin_cli to the project for having sufficient permissions
  * to add the volume to the project.
  *
@@ -708,8 +749,13 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
      * [5]=<project>
      * [6]=<YES|NO> perform virt-v2v conversion or not,
      * also implies the volume is bootable or not
+     * [7]=<os_distro>
+     * [8]=<os_version>
+     *
+     * Volume image properties are set if and only if
+     * performing virt-v2v conversion is yes.
      */
-    if (argc > 7) {
+    if (argc > 9) {
         return CLI_INVALID_ARGS;
     }
 
@@ -724,6 +770,8 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
     std::string domain;
     std::string project;
     bool performVolumeConversion;
+    std::string osDistro;
+    std::string osVersion;
 
     // [1]=<source_nfs_storage_backend>
     if (CliMatchListHelper(
@@ -828,6 +876,38 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         &performVolumeConversionAnswer);
     performVolumeConversion = isAnswered && performVolumeConversionAnswer == "YES";
 
+    // [7]=<os_distro>
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            7,
+            "Specify OS distro name (big impacts to performance if it's windows): ",
+            &osDistro)) {
+        CliPrint("OS distro name is required");
+        return CLI_INVALID_ARGS;
+    }
+    if (osDistro.empty()) {
+        osDistro = "linux";
+    } else {
+        // set OS distro to lowercase
+        std::transform(
+            osDistro.begin(),
+            osDistro.end(),
+            osDistro.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+    }
+
+    // [8]=<os_version>
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            8,
+            "Specify OS version number: ",
+            &osVersion)) {
+        CliPrint("OS version number is required");
+        return CLI_INVALID_ARGS;
+    }
+
     // check if we still have enough quota in the project to manage the volume
     const long long volumeSizeInBytes = getVolumeVirtualSize(fileExtraInfo.filePath);
 
@@ -913,10 +993,26 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
             return CLI_FAILURE;
         }
 
-        filePath = convertedVolumePath.string();
-        std::cout << "updated file path: " << filePath << std::endl;
+        filePath = fileExtraInfo.exportPath + RemovePrefix(convertedVolumePath.string(), fileExtraInfo.target);
 
-        // TODO: parse the metadata
+        // parse the metadata
+        volumeMetadata["hw_machine_type"] = "q35";
+        volumeMetadata["hw_disk_bus"] = "scsi";
+        volumeMetadata["hw_scsi_model"] = "virtio-scsi";
+        volumeMetadata["hw_video_model"] = "vga";
+        volumeMetadata["hw_input_bus"] = "virtio";
+        volumeMetadata["hw_qemu_guest_agent"] = "yes";
+        volumeMetadata["os_require_quiesce"] = "yes";
+        volumeMetadata["os_type"] = (osDistro == "windows" ? "windows" : "linux");
+        volumeMetadata["os_distro"] = osDistro;
+        volumeMetadata["os_admin_user"] = osDistro;
+        volumeMetadata["os_vers"] = osVersion;
+        if (doesVolumeSupportUefi(workingDirectory)) {
+            volumeMetadata["hw_firmware_type"] = "uefi";
+            volumeMetadata["os_secure_boot"] = "optional";
+        } else {
+            volumeMetadata["hw_firmware_type"] = "bios";
+        }
     }
 
     // set access to the project
@@ -972,7 +1068,7 @@ CLI_MODE_COMMAND(
     "Perform needed conversions and set metadata if requested.",
     "manage_existing_from_nfs <source_nfs_storage_backend> "
     "<file_path> <volume_name> <domain> <project> "
-    "<perform virt-v2v conversion or not>");
+    "<perform virt-v2v conversion or not> <os_distro> <os_version>");
 
 /**
  * Get volume types.
