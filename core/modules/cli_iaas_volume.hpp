@@ -16,6 +16,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <sys/stat.h>
 
 #define CLI_COMMAND_IAAS_VOLUME "volume"
 

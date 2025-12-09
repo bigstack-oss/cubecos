@@ -547,6 +547,120 @@ manageExistingVolume(
     return Trim(volumeId);
 }
 
+/**
+ * Create a working directory for the volume conversion.
+ *
+ * @param baseDirectory the local mount point (target) of the NFS share
+ * @param fileName the volume file name
+ * @return the working directory path, if failed, path.empty() = true
+ */
+static const std::filesystem::path
+createWorkingDirectoryForVolumeConversion(
+    const std::string& baseDirectory,
+    const std::string& fileName)
+{
+    // replace all dots (.) to dashes (-)
+    std::string tentativeDirectoryName = fileName;
+    std::replace(
+        tentativeDirectoryName.begin(),
+        tentativeDirectoryName.end(),
+        '.',
+        '-');
+
+    std::filesystem::path directoryPath = std::filesystem::path(baseDirectory)
+        / std::filesystem::path(tentativeDirectoryName);
+    if (mkdir(directoryPath.c_str(), 0755) != 0) {
+        return std::filesystem::path();
+    }
+
+    return directoryPath;
+}
+
+/**
+ * Perform the conversion and stream the outputs to stdout and stderr.
+ *
+ * @param filePath the local full path of the volume file
+ * @param workingDirectory the full path of the working directory
+ * @return successful or not
+ */
+static const bool
+convertVolume(const std::string& filePath, const std::string& workingDirectory)
+{
+    Cmd c;
+    c.path = "/usr/bin/virt-v2v";
+    c.args = {
+        "-i", "disk", filePath,
+        "-o", "local",
+        "-of", "raw",
+        "-os", workingDirectory,
+        "--parallel", "4"
+    };
+    c.captureStdout = true;
+    c.captureStderr = true;
+
+    const Process p = Exec(c, false);
+    if (p.pid == -1) {
+        // failed to create the process
+        return false;
+    }
+
+    int status;
+    bool processFinished = false;
+    char buffer[4096];
+    ssize_t bytesRead = 0;
+    while (!processFinished) {
+        // read from stdout
+        bytesRead = ReadByNonblockingPoll(p.stdoutPipeReadEnd, buffer, sizeof(buffer));
+        if (bytesRead > 0) {
+            // stream to stdout
+            std::cout.write(buffer, bytesRead);
+        }
+
+        // read from stderr
+        bytesRead = ReadByNonblockingPoll(p.stderrPipeReadEnd, buffer, sizeof(buffer));
+        if (bytesRead > 0) {
+            // stream to stderr
+            std::cerr.write(buffer, bytesRead);
+        }
+
+        pid_t waitpidResult = waitpid(p.pid, &status, WNOHANG);
+        if (waitpidResult == p.pid) {
+            processFinished = true;
+        }
+
+        if (!processFinished) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
+
+    // read any remaining data
+    bytesRead = ReadByNonblockingPoll(p.stdoutPipeReadEnd, buffer, sizeof(buffer));
+    if (bytesRead > 0) {
+        // stream to stdout
+        std::cout.write(buffer, bytesRead);
+    }
+    // close the read-end
+    close(p.stdoutPipeReadEnd);
+
+    bytesRead = ReadByNonblockingPoll(p.stderrPipeReadEnd, buffer, sizeof(buffer));
+    if (bytesRead > 0) {
+        // stream to stderr
+        std::cerr.write(buffer, bytesRead);
+    }
+    // close the read-ends
+    close(p.stderrPipeReadEnd);
+
+    // wait for process to fully terminate
+    waitpid(p.pid, &status, 0);
+
+    if (WIFEXITED(status)) {
+        return (WEXITSTATUS(status) == 0);
+    }
+
+    // abnormal termination
+    return false;
+}
+
 struct fileInfo : public mountPoint {
     std::string filePath;
 };
@@ -683,14 +797,17 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         &performVolumeConversionAnswer);
     performVolumeConversion = isAnswered && performVolumeConversionAnswer == "YES";
 
-    std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
-    std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
-    std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
-
     // check if we still have enough quota in the project to manage the volume
     const long long volumeSizeInBytes = getVolumeVirtualSize(fileExtraInfo.filePath);
 
     if (!IsQuotaGigabytesEnough(domain, project, volumeSizeInBytes)) {
+        HexLogError(
+            "project %s under domain %s does not have enough quota on resource %s, "
+            "needed space for the volume is %lld",
+            project.c_str(),
+            domain.c_str(),
+            "gigabytes",
+            volumeSizeInBytes);
         CliPrintf(
             "Project %s under domain %s does not have enough quota on resource %s, "
             "needed space for the volume is %lld",
@@ -702,6 +819,13 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
     }
 
     if (!IsQuotaVolumesEnough(domain, project)) {
+        HexLogError(
+            "project %s under domain %s does not have enough quota on resource %s, "
+            "needed space for the volume is %lld",
+            project.c_str(),
+            domain.c_str(),
+            "volumes",
+            volumeSizeInBytes);
         CliPrintf(
             "Project %s under domain %s does not have enough quota on resource %s, "
             "needed space for the volume is %lld",
@@ -721,10 +845,38 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
      * We only need to convert volumes not in the raw format.
      */
     if (performVolumeConversion && !isVolumeInRaw(fileExtraInfo.filePath)) {
-        // perform the conversion
+        // create the working directory
+        std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
+        std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
+        std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
+        std::filesystem::path workingDirectory = createWorkingDirectoryForVolumeConversion(
+            fileExtraInfo.target,
+            std::filesystem::path(fileExtraInfo.filePath).filename().string());
+        if (workingDirectory.empty()) {
+            HexLogError(
+                "failed to create the working directory %s",
+                workingDirectory.c_str());
+            CliPrintf(
+                "Failed to create the working directory %s",
+                workingDirectory.c_str());
+            return CLI_FAILURE;
+        }
+
+        // perform the conversion and stream the outputs
+        if (!convertVolume(fileExtraInfo.filePath, workingDirectory.string())) {
+            HexLogError(
+                "failed to perform the volume conversion from %s to %s",
+                fileExtraInfo.filePath.c_str(),
+                workingDirectory.c_str());
+            CliPrintf("Failed to perform the volume conversion");
+            return CLI_FAILURE;
+        }
+
+        // update the filePath with the converted volume path
 
         // parse the metadata
     }
+    return CLI_SUCCESS;
 
     if (!addAdminCliToProject(domain, project)) {
         HexLogError("failed to add admin_cli to the project to manage volumes");
