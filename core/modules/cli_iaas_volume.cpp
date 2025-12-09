@@ -369,10 +369,10 @@ struct fileInfo : public mountPoint {
 };
 
 static int
-MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
+ManageExistingVolumeFromNfsMain(int argc, const char** argv)
 {
     /**
-     * [0]="migrate_large_volume_from_nfs"
+     * [0]="manage_existing_from_nfs"
      * [1]=<source_nfs_storage_backend>
      * [2]=<file_path>
      * [3]=<volume_name>
@@ -506,11 +506,12 @@ MigrateLargeVolumeFromNfsMain(int argc, const char** argv)
 
 CLI_MODE_COMMAND(
     CLI_COMMAND_IAAS_VOLUME,
-    "migrate_large_volume_from_nfs",
-    MigrateLargeVolumeFromNfsMain,
+    "manage_existing_from_nfs",
+    ManageExistingVolumeFromNfsMain,
     NULL,
-    "Migrate a large volume from a configured NFS volume backend.",
-    "migrate_large_volume_from_nfs <source_nfs_storage_backend> "
+    "Manage an existing volume from a configured NFS volume backend. "
+    "Perform needed conversions and set metadata if requested.",
+    "manage_existing_from_nfs <source_nfs_storage_backend> "
     "<file_path> <volume_name> <domain> <project> "
     "<perform virt-v2v conversion or not>");
 
