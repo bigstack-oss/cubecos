@@ -161,3 +161,171 @@ OpenstackExec(const std::string& command)
     HexLogInfo("executed openstack cli: %s", command.c_str());
     return r;
 }
+
+const std::string
+GetProjectId(const std::string& domain, const std::string& project)
+{
+    const ExecSyncResult r = OpenstackExec(
+        "project show --domain \"" + domain
+        + "\" \"" + project + "\" -f json");
+    if (r.exitCode != 0) {
+        return "";
+    }
+
+    // parse the output
+    std::string jsonError;
+    const json11::Json projectDetail = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("%s", jsonError.c_str());
+        return "";
+    }
+    if (!projectDetail["id"].is_string()) {
+        return "";
+    }
+
+    return projectDetail["id"].string_value();
+}
+
+const QuotaWithUsage
+GetQuotaWithUsage(
+    std::string& error,
+    const std::string& domain,
+    const std::string& project,
+    const QuotaResourceType& resourceType,
+    const std::string& resource)
+{
+    const std::string projectId = GetProjectId(domain, project);
+    if (projectId.empty()) {
+        error = "failed to get the project id";
+        return {};
+    }
+
+    std::string resourceTypeFlag;
+    switch (resourceType) {
+    case QuotaResourceType::all:
+        resourceTypeFlag = "--all";
+        break;
+    case QuotaResourceType::compute:
+        resourceTypeFlag = "--compute";
+        break;
+    case QuotaResourceType::volume:
+        resourceTypeFlag = "--volume";
+        break;
+    case QuotaResourceType::network:
+        resourceTypeFlag = "--network";
+        break;
+    default:
+        error = "the resource type is not supported";
+        return {};
+    }
+
+    const ExecSyncResult r = OpenstackExec(
+        "quota show " + resourceTypeFlag + " --usage \"" + projectId
+        + "\" -f json");
+    if (r.exitCode != 0) {
+        error = "failed to get the quota details";
+        return {};
+    }
+
+    // parse the output
+    std::string jsonError;
+    const json11::Json quotaList = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        error = jsonError;
+        return {};
+    }
+
+    int limit = 0;
+    int used = 0;
+    int reserved = 0;
+    const json11::Json::array& quotas = quotaList.array_items();
+    for (const json11::Json& q : quotas) {
+        if (!q["Resource"].is_string()) {
+            continue;
+        }
+
+        if (q["Resource"].string_value() != resource) {
+            continue;
+        }
+
+        if (!q["Limit"].is_number()) {
+            error = "failed to parse the limit of resource " + resource;
+            return {};
+        }
+        limit = q["Limit"].number_value();
+
+        if (!q["In Use"].is_number()) {
+            error = "failed to parse the in use of resource " + resource;
+            return {};
+        }
+        used = q["In Use"].number_value();
+
+        if (!q["Reserved"].is_number()) {
+            error = "failed to parse the reserved of resource " + resource;
+            return {};
+        }
+        reserved = q["Reserved"].number_value();
+
+        break;
+    }
+
+    return {
+        .limit = limit,
+        .used = used,
+        .reserved = reserved,
+    };
+}
+
+const bool
+IsQuotaGigabytesEnough(
+    const std::string& domain,
+    const std::string& project,
+    const long long& needSpaceInBytes)
+{
+    std::string error;
+    const QuotaWithUsage q = GetQuotaWithUsage(
+        error,
+        domain,
+        project,
+        QuotaResourceType::volume,
+        "gigabytes");
+
+    if (!error.empty()) {
+        HexLogError("%s", error.c_str());
+        return false;
+    }
+
+    if (q.limit == -1) {
+        // we have no limit here
+        return true;
+    }
+
+    long long freeSize = q.limit - q.used;
+    return (needSpaceInBytes <= (freeSize << 10 << 10 << 10));
+}
+
+const bool
+IsQuotaVolumesEnough(
+    const std::string& domain,
+    const std::string& project)
+{
+    std::string error;
+    const QuotaWithUsage q = GetQuotaWithUsage(
+        error,
+        domain,
+        project,
+        QuotaResourceType::volume,
+        "volumes");
+
+    if (!error.empty()) {
+        HexLogError("%s", error.c_str());
+        return false;
+    }
+
+    if (q.limit == -1) {
+        // we have no limit here
+        return true;
+    }
+
+    return (q.used < q.limit);
+}

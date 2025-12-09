@@ -3,6 +3,7 @@
 #ifndef CUBE_OPENSTACK_H
 #define CUBE_OPENSTACK_H
 
+#include "third_party/json11.hpp"
 #include <constant.hpp>
 #include <filesystem.hpp>
 #include <hex/exec.hpp>
@@ -58,5 +59,72 @@ ParseOpenstackCliAuth();
  */
 const ExecSyncResult
 OpenstackExec(const std::string& command);
+
+/**
+ * Get the project ID by the domain and the project name.
+ *
+ * @param domain
+ * @param project
+ * @return project ID, if failed, blank
+ */
+const std::string
+GetProjectId(const std::string& domain, const std::string& project);
+
+struct QuotaWithUsage {
+    int limit;
+    int used;
+    int reserved;
+};
+
+enum QuotaResourceType {
+    all,
+    compute,
+    volume,
+    network,
+};
+
+/**
+ * Get the quota with usage.
+ *
+ * @param error error messages
+ * @param domain
+ * @param project
+ * @param resourceType
+ * @param resource
+ * @return quota with usage
+ */
+const QuotaWithUsage
+GetQuotaWithUsage(
+    std::string& error,
+    const std::string& domain,
+    const std::string& project,
+    const QuotaResourceType& resourceType,
+    const std::string& resource);
+
+/**
+ * Check if the quota gigabytes of the project enough to contain the volume.
+ *
+ * @param domain
+ * @param project
+ * @param needSpaceInBytes
+ * @return is quota enough or not
+ */
+const bool
+IsQuotaGigabytesEnough(
+    const std::string& domain,
+    const std::string& project,
+    const long long& needSpaceInBytes);
+
+/**
+ * Check if the quota volumes of the project is still available.
+ *
+ * @param domain
+ * @param project
+ * @return is quota enough or not
+ */
+const bool
+IsQuotaVolumesEnough(
+    const std::string& domain,
+    const std::string& project);
 
 #endif /* endif CUBE_OPENSTACK_H */

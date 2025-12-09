@@ -407,6 +407,83 @@ isVolumeInRaw(const std::string& filePath)
 }
 
 /**
+ * Get the virtual size of the volume.
+ *
+ * @param filePath the local full path of the file
+ * @return is in raw format or not
+ */
+static const long long
+getVolumeVirtualSize(const std::string& filePath)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "qemu-img info \"" + filePath + "\"");
+    if (r.exitCode != 0) {
+        HexLogError(
+            "failed to use qemu-img to probe the info of the volume, error: %s",
+            r.stderrOutput.c_str());
+        return 0;
+    }
+
+    // parse the virtual size
+    std::stringstream volumeInfo(r.stdoutOutput);
+    std::string line;
+    const std::string virtualSizeLineTitle = "virtual size: ";
+    // read the output line by line
+    while (std::getline(volumeInfo, line)) {
+        if (line.find(virtualSizeLineTitle) == std::string::npos) {
+            continue;
+        }
+
+        break;
+    }
+    if (line.empty()) {
+        HexLogError("failed to parse the virtual size from\n%s", r.stdoutOutput.c_str());
+        return 0;
+    }
+
+    const std::size_t startPosition = line.find('(');
+    if (startPosition == std::string::npos) {
+        HexLogError("failed to parse the virtual size from\n%s", r.stdoutOutput.c_str());
+        return 0;
+    }
+    const std::size_t endPosition = line.find(')');
+    if (endPosition == std::string::npos) {
+        HexLogError("failed to parse the virtual size from\n%s", r.stdoutOutput.c_str());
+        return 0;
+    }
+    if (startPosition >= endPosition) {
+        HexLogError("failed to parse the virtual size from\n%s", r.stdoutOutput.c_str());
+        return 0;
+    }
+
+    const std::string data = line.substr(startPosition + 1, endPosition - startPosition - 1);
+    const std::size_t bytesPosition = data.find("bytes");
+    if (bytesPosition == std::string::npos) {
+        HexLogError("failed to parse the virtual size from\n%s", r.stdoutOutput.c_str());
+        return 0;
+    }
+
+    const std::string byteNumberString = Trim(data.substr(0, bytesPosition));
+    long long byteNumber = 0;
+    try {
+        std::size_t pos;
+        byteNumber = std::stoll(byteNumberString, &pos);
+    } catch (const std::exception& e) {
+        // failed to convert the output string to a long long
+        HexLogError(
+            "failed to parse the virtual size from %s, error: %s",
+            byteNumberString.c_str(),
+            e.what());
+        return 0;
+    }
+    return byteNumber;
+}
+
+/**
  * Add admin_cli to the project for having sufficient permissions
  * to add the volume to the project.
  *
@@ -641,19 +718,40 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
 
     /**
      * Perform the conversion.
+     *
      * Only virt-v2v is used since we are highly likely
      * only migrating large volumes from other hypervisors.
+     *
+     * We only need to convert volumes not in the raw format.
      */
-    if (isVolumeInRaw(fileExtraInfo.filePath)) {
-        std::cout << "file is in raw" << std::endl;
-    } else {
-        std::cout << "file is not in raw" << std::endl;
+    if (performVolumeConversion && !isVolumeInRaw(fileExtraInfo.filePath)) {
+        // check if we still have enough quota in the project to manage the volume
+        const long long volumeSizeInBytes = getVolumeVirtualSize(fileExtraInfo.filePath);
+
+        if (!IsQuotaGigabytesEnough(domain, project, volumeSizeInBytes)) {
+            CliPrintf(
+                "Project %s under domain %s does not have enough quota on resource %s, "
+                "needed space for the volume is %lld",
+                project.c_str(),
+                domain.c_str(),
+                "gigabytes",
+                volumeSizeInBytes);
+            return CLI_FAILURE;
+        }
+
+        if (!IsQuotaVolumesEnough(domain, project)) {
+            CliPrintf(
+                "Project %s under domain %s does not have enough quota on resource %s, "
+                "needed space for the volume is %lld",
+                project.c_str(),
+                domain.c_str(),
+                "volumes",
+                volumeSizeInBytes);
+            return CLI_FAILURE;
+        }
+
+        // TODO: perform the conversion and metadata parsing
     }
-    return CLI_SUCCESS;
-
-    // TODO: perform the conversion and metadata parsing
-
-    // TODO: raise the project quotas
 
     if (!addAdminCliToProject(domain, project)) {
         HexLogError("failed to add admin_cli to the project to manage volumes");
