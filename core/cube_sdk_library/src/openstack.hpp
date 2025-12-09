@@ -136,4 +136,16 @@ IsQuotaVolumesEnough(
 const std::string
 GetVolumeTypeById(const std::string& volumeId);
 
+/**
+ * Set image properties onto a volume.
+ *
+ * @param volumeId
+ * @param metadata
+ * @return successful or not
+ */
+const bool
+SetVolumeImageProperties(
+    const std::string& volumeId,
+    const std::map<std::string, std::string>& metadata);
+
 #endif /* endif CUBE_OPENSTACK_H */

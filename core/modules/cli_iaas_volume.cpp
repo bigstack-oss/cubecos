@@ -875,11 +875,9 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
      *
      * We only need to convert volumes not in the raw format.
      */
+    std::map<std::string, std::string> volumeMetadata;
     if (performVolumeConversion && !isVolumeInRaw(fileExtraInfo.filePath)) {
         // create the working directory
-        std::cout << "fileInfo export: " << fileExtraInfo.exportPath << std::endl;
-        std::cout << "fileInfo target: " << fileExtraInfo.target << std::endl;
-        std::cout << "fileInfo path: " << fileExtraInfo.filePath << std::endl;
         std::filesystem::path workingDirectory = createWorkingDirectoryForVolumeConversion(
             fileExtraInfo.target,
             std::filesystem::path(fileExtraInfo.filePath).filename().string());
@@ -918,16 +916,17 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         filePath = convertedVolumePath.string();
         std::cout << "updated file path: " << filePath << std::endl;
 
-        // parse the metadata
+        // TODO: parse the metadata
     }
-    return CLI_SUCCESS;
 
+    // set access to the project
     if (!addAdminCliToProject(domain, project)) {
         HexLogError("failed to add admin_cli to the project to manage volumes");
         CliPrint("Not sufficient permissions to manage volumes in the project");
         return CLI_FAILURE;
     }
 
+    // manage the existing volume
     const std::string volumeId = manageExistingVolume(
         sourceNfsStorageBackend,
         filePath,
@@ -951,8 +950,15 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         return CLI_FAILURE;
     }
 
-    std::cout << "volume id: " << volumeId << std::endl;
-    // TODO: set volume metadata
+    // set the volume metadata
+    if (!SetVolumeImageProperties(volumeId, volumeMetadata)) {
+        HexLogError(
+            "failed to set the metadata onto volume %s",
+            volumeId.c_str());
+        CliPrintf("Failed to set the metadata onto volume %s",
+            volumeId.c_str());
+        return CLI_FAILURE;
+    }
 
     return CLI_SUCCESS;
 }

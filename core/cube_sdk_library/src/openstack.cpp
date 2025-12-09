@@ -352,3 +352,31 @@ GetVolumeTypeById(const std::string& volumeId)
 
     return volumeDetail["type"].string_value();
 }
+
+const bool
+SetVolumeImageProperties(
+    const std::string& volumeId,
+    const std::map<std::string, std::string>& metadata)
+{
+    if (metadata.empty()) {
+        return true;
+    }
+
+    // construct the flags
+    std::stringstream flags;
+    for (const std::pair<const std::string, std::string>& m : metadata) {
+        flags << "--image-property " << m.first << "=" << m.second << " ";
+    }
+
+    // set the metadata
+    const ExecSyncResult r = OpenstackExec("volume set " + flags.str() + volumeId);
+    if (r.exitCode != 0) {
+        HexLogError(
+            "failed to set the metadata %s on volume %s",
+            flags.str().c_str(),
+            volumeId.c_str());
+        return false;
+    }
+
+    return true;
+}
