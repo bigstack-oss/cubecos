@@ -224,3 +224,77 @@ CLI_MODE_COMMAND(
     NULL,
     "List external storage drivers in models.",
     "list_drivers");
+
+static bool
+listModel(const std::string& driver)
+{
+    // structure the payload
+    json11::Json payload = json11::Json::object {
+        { "driver", driver },
+    };
+
+    // call the hex_sdk interface
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_get_model '" + payload.dump() + "'");
+    if (r.exitCode != 0) {
+        std::cerr << "Error: " << r.stderrOutput << std::endl;
+        return false;
+    }
+
+    const ExecSyncResult yr = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "echo '" + r.stdoutOutput + "' | yq -p=json -o=yaml");
+    if (yr.exitCode != 0) {
+        std::cerr << "Error: " << yr.stderrOutput << std::endl;
+        return false;
+    }
+
+    std::cout << yr.stdoutOutput << std::endl;
+    return true;
+}
+
+static int
+ListModelMain(int argc, const char** argv)
+{
+    /**
+     * [0] list_model
+     * [1] <driver>
+     */
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string driver;
+
+    // [1] <driver>
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            1,
+            "Enter the driver: ",
+            &driver)) {
+        std::cerr << "Field driver is required" << std::endl;
+        return CLI_INVALID_ARGS;
+    }
+
+    if (!listModel(driver)) {
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "list_model",
+    ListModelMain,
+    NULL,
+    "List an external storage model by driver.",
+    "list_model <driver>");
