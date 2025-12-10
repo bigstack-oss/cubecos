@@ -10,6 +10,7 @@
 #include <cube/cubesys.h>
 #include <hex/cli_module.h>
 #include <hex/cli_util.h>
+#include <hex/process.h>
 #include <hex/strict.h>
 #include <openstack.hpp>
 

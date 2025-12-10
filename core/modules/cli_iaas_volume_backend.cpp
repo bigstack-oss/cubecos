@@ -98,20 +98,48 @@ CLI_MODE_COMMAND(
     "List all external storage settings on the appliance.",
     "list");
 
-static int
-BackendCfgMain(int argc, const char** argv)
+static void
+listModels()
 {
-    if (argc > 8 /* [0]="configure", [1]=<add|delete|update>, [2]=<name>, [3~7]=<settings> */)
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_get_models");
+    if (r.exitCode != 0) {
+        std::cerr << "Error: " << r.stderrOutput << std::endl;
+        return;
+    }
+
+    const ExecSyncResult yr = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "echo '" + r.stdoutOutput + "' | yq -p=json -o=yaml");
+    if (yr.exitCode != 0) {
+        std::cerr << "Error: " << yr.stderrOutput << std::endl;
+    }
+
+    std::cout << yr.stdoutOutput << std::endl;
+}
+
+static int
+ListModelsMain(int argc, const char** argv)
+{
+    if (argc > 1)
         return CLI_INVALID_ARGS;
 
-    // TODO: HexLogEvent("[user] modified external storage policy via cli");
+    listModels();
+
     return CLI_SUCCESS;
 }
 
 CLI_MODE_COMMAND(
     CLI_COMMAND_IAAS_STORAGE,
-    "configure",
-    BackendCfgMain,
+    "list_models",
+    ListModelsMain,
     NULL,
-    "Configure external storage settings.",
-    "configure [<add|delete|update>] [<name>] [<driver>] [<endpoint>] [<account>] [<secret>] [<pool>]");
+    "List external storage models.",
+    "list_models");
