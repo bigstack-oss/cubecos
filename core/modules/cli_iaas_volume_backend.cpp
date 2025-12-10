@@ -98,7 +98,7 @@ CLI_MODE_COMMAND(
     "List all external storage settings on the appliance.",
     "list");
 
-static void
+static bool
 listModels()
 {
     const ExecSyncResult r = ExecBashSync(
@@ -109,7 +109,7 @@ listModels()
         HEX_SDK " cinder_get_models");
     if (r.exitCode != 0) {
         std::cerr << "Error: " << r.stderrOutput << std::endl;
-        return;
+        return false;
     }
 
     const ExecSyncResult yr = ExecBashSync(
@@ -120,18 +120,23 @@ listModels()
         "echo '" + r.stdoutOutput + "' | yq -p=json -o=yaml");
     if (yr.exitCode != 0) {
         std::cerr << "Error: " << yr.stderrOutput << std::endl;
+        return false;
     }
 
     std::cout << yr.stdoutOutput << std::endl;
+    return true;
 }
 
 static int
 ListModelsMain(int argc, const char** argv)
 {
-    if (argc > 1)
+    if (argc > 1) {
         return CLI_INVALID_ARGS;
+    }
 
-    listModels();
+    if (!listModels()) {
+        return CLI_FAILURE;
+    }
 
     return CLI_SUCCESS;
 }
@@ -143,3 +148,79 @@ CLI_MODE_COMMAND(
     NULL,
     "List external storage models.",
     "list_models");
+
+static const std::vector<std::string>
+getDrivers(std::string& error)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_get_models");
+    if (r.exitCode != 0) {
+        std::cerr << "Error: " << r.stderrOutput << std::endl;
+        error = "hex_sdk interface error";
+        return {};
+    }
+
+    // parse the field driver
+    std::string jsonError;
+    const json11::Json modelList = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        std::cerr << "Error: " << r.stderrOutput << std::endl;
+        error = "json parsing error";
+        return {};
+    }
+
+    std::vector<std::string> drivers;
+    const json11::Json::array& models = modelList.array_items();
+    for (const json11::Json& m : models) {
+        if (!m["driver"].is_string()) {
+            continue;
+        }
+
+        drivers.push_back(m["driver"].string_value());
+    }
+
+    return drivers;
+}
+
+static bool
+listDrivers()
+{
+    std::string error;
+    const std::vector<std::string> drivers = getDrivers(error);
+    if (!error.empty()) {
+        return false;
+    }
+
+    // print the drivers
+    std::cout << "[Driver]" << std::endl;
+    for (const std::string& d : drivers) {
+        std::cout << "- " << d << std::endl;
+    }
+    return true;
+}
+
+static int
+ListDriversMain(int argc, const char** argv)
+{
+    if (argc > 1) {
+        return CLI_INVALID_ARGS;
+    }
+
+    if (!listDrivers()) {
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "list_drivers",
+    ListDriversMain,
+    NULL,
+    "List external storage drivers in models.",
+    "list_drivers");
