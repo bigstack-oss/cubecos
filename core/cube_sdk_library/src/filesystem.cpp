@@ -17,7 +17,7 @@ GetFilesUnderDirectory(
     }
 
     try {
-        // tterate over all entries in the directory
+        // iterate over all entries in the directory
         for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(path)) {
             // check if the entry is a regular file
             if (entry.is_regular_file()) {
