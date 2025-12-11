@@ -514,7 +514,7 @@ CLI_MODE_COMMAND(
     SetModelMain,
     NULL,
     "Set an external storage model.",
-    "set_model");
+    "set_model <local | console> <local_model_file_name | model_content>");
 
 static bool
 deleteModel(
