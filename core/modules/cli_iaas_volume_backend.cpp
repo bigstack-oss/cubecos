@@ -298,3 +298,220 @@ CLI_MODE_COMMAND(
     NULL,
     "List an external storage model by driver.",
     "list_model <driver>");
+
+/**
+ * Prepare the model file with console inputs.
+ *
+ * @param error
+ * @param modelContent
+ * @return the model file
+ */
+static TempFile
+prepareModelFile(
+    std::string& error,
+    const std::string& modelContent)
+{
+    if (modelContent.empty()) {
+        error = "model content should not be blank";
+        return TempFile();
+    }
+
+    // pour the multiline input to a file
+    TempFile f = CreateTempFile();
+
+    FILE* fout = fdopen(f.fd, "w");
+    if (!fout) {
+        error = "failed to create a file to contain the model content";
+        return f;
+    }
+
+    fprintf(fout, "%s", modelContent.c_str());
+    fclose(fout);
+
+    CloseTempFileFd(f);
+    return f;
+}
+
+/**
+ * Parse the model file into a JSON string.
+ *
+ * @param error
+ * @param modelFilePath
+ * @return model
+ */
+static const std::string
+parseModel(
+    std::string& error,
+    const std::string& modelFilePath)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "yq -p=yaml -o=json \"" + modelFilePath + "\"");
+    if (r.exitCode != 0) {
+        error = r.stderrOutput;
+        return "";
+    }
+
+    return r.stdoutOutput;
+}
+
+static bool
+setModel(
+    std::string& output,
+    const std::string& model)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_put_model '" + model + "'");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}
+
+/**
+ * Get the message field out of the output.
+ *
+ * @param output
+ * @return message field string
+ */
+static const std::string
+getMessage(const std::string& output)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "echo '" + output + "' | jq -r \".message\"");
+    if (r.exitCode != 0) {
+        return r.stderrOutput;
+    }
+
+    return r.stdoutOutput;
+}
+
+static int
+SetModelMain(int argc, const char** argv)
+{
+    /**
+     * [0] set_model
+     * [1] <local | console>
+     * [2] <local_model_file_name | model_content>
+     */
+    if (argc > 3) {
+        return CLI_INVALID_ARGS;
+    }
+
+    const std::string localDirectory = "/var/update";
+
+    // collect inputs
+    int index;
+    std::string sourceType;
+    std::string modelFilePath;
+    std::string modelContent;
+
+    CliList sourceTypes;
+    sourceTypes.push_back("local");
+    sourceTypes.push_back("console");
+
+    // [1] <local | console>
+    if (CliMatchListHelper(
+            argc,
+            argv,
+            1,
+            sourceTypes,
+            &index,
+            &sourceType,
+            "Select input method: ")
+        != 0) {
+        std::cerr << "Input method is missing or invalid" << std::endl;
+        return CLI_INVALID_ARGS;
+    }
+
+    if (sourceType == "local") {
+        // [2] <local_model_file_name>
+        const std::string message = "Please prepare the model file under "
+            + localDirectory
+            + " . Select the input file: ";
+        std::cout << "" << localDirectory << std::endl;
+        if (CliMatchCmdHelper(
+                argc,
+                argv,
+                2,
+                "find " + localDirectory + "/ -type f -print0 | xargs -0 -n 1 basename",
+                &index,
+                &modelFilePath,
+                message.c_str())
+            != 0) {
+            std::cerr << "File " << modelFilePath << " not found" << std::endl;
+            return CLI_INVALID_ARGS;
+        }
+    } else {
+        // [2] <model_content>
+        if (!CliReadMultipleLines("Please enter the content of the model: ", modelContent)) {
+            std::cerr << "Invalid file content" << std::endl;
+            return CLI_INVALID_ARGS;
+        }
+    }
+
+    // parse the model
+    std::string model;
+    if (sourceType == "local") {
+        std::string error;
+
+        model = parseModel(
+            error,
+            std::filesystem::path(localDirectory) / std::filesystem::path(modelFilePath));
+        if (!error.empty()) {
+            std::cerr << "Error: " << error << std::endl;
+            return CLI_FAILURE;
+        }
+    } else if (sourceType == "console") {
+        // prepare the model file
+        std::string error;
+
+        TempFile f = prepareModelFile(error, modelContent);
+        if (!error.empty()) {
+            std::cerr << "Error: " << error << std::endl;
+            DeleteTempFile(f);
+            return CLI_FAILURE;
+        }
+
+        model = parseModel(error, f.fileName);
+        if (!error.empty()) {
+            std::cerr << "Error: " << error << std::endl;
+            DeleteTempFile(f);
+            return CLI_FAILURE;
+        }
+
+        DeleteTempFile(f);
+    }
+
+    // set the model
+    std::string output;
+    if (!setModel(output, model)) {
+        std::cerr << "Error: " << getMessage(output) << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << getMessage(output) << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "set_model",
+    SetModelMain,
+    NULL,
+    "Set an external storage model.",
+    "set_model");
