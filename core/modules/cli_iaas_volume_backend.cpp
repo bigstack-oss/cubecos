@@ -515,3 +515,71 @@ CLI_MODE_COMMAND(
     NULL,
     "Set an external storage model.",
     "set_model");
+
+static bool
+deleteModel(
+    std::string& output,
+    const std::string& driver)
+{
+    // structure the payload
+    json11::Json payload = json11::Json::object {
+        { "driver", driver },
+    };
+
+    // call the hex_sdk interface
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_delete_model '" + payload.dump() + "'");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}
+
+static int
+DeleteModelMain(int argc, const char** argv)
+{
+    /**
+     * [0] delete_model
+     * [1] <driver>
+     */
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string driver;
+
+    // [1] <driver>
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            1,
+            "Enter the driver: ",
+            &driver)) {
+        std::cerr << "Field driver is required" << std::endl;
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string output;
+    if (!deleteModel(output, driver)) {
+        std::cerr << "Error: " << output << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << getMessage(output) << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "delete_model",
+    DeleteModelMain,
+    NULL,
+    "Delete an external storage model.",
+    "delete_model <driver>");
