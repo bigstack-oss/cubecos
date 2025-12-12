@@ -117,7 +117,7 @@ listModels()
         true,
         true,
         {},
-        "echo '" + r.stdoutOutput + "' | yq -p=json -o=yaml");
+        "/usr/bin/echo '" + r.stdoutOutput + "' | /usr/local/bin/yq -p=json -o=yaml");
     if (yr.exitCode != 0) {
         std::cerr << "Error: " << yr.stderrOutput << std::endl;
         return false;
@@ -250,7 +250,7 @@ listModel(const std::string& driver)
         true,
         true,
         {},
-        "echo '" + r.stdoutOutput + "' | yq -p=json -o=yaml");
+        "/usr/bin/echo '" + r.stdoutOutput + "' | /usr/local/bin/yq -p=json -o=yaml");
     if (yr.exitCode != 0) {
         std::cerr << "Error: " << yr.stderrOutput << std::endl;
         return false;
@@ -349,7 +349,7 @@ parseModel(
         true,
         true,
         {},
-        "yq -p=yaml -o=json \"" + modelFilePath + "\"");
+        "/usr/local/bin/yq -p=yaml -o=json \"" + modelFilePath + "\"");
     if (r.exitCode != 0) {
         error = r.stderrOutput;
         return "";
@@ -392,7 +392,7 @@ getMessage(const std::string& output)
         true,
         true,
         {},
-        "echo '" + output + "' | jq -r \".message\"");
+        "/usr/bin/echo '" + output + "' | /usr/bin/jq -r \".message\"");
     if (r.exitCode != 0) {
         return r.stderrOutput;
     }
@@ -610,7 +610,7 @@ getActiveMultipathSetting(std::string& output)
         true,
         true,
         {},
-        "yq -p=json -o=yaml " + f.fileName);
+        "/usr/local/bin/yq -p=json -o=yaml " + f.fileName);
     DeleteTempFile(f);
 
     if (yr.exitCode != 0) {

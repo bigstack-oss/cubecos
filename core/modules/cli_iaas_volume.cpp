@@ -349,7 +349,7 @@ isVolumeInRaw(const std::string& filePath)
         true,
         true,
         {},
-        "qemu-img info \"" + filePath + "\"");
+        "/usr/bin/qemu-img info \"" + filePath + "\"");
     if (r.exitCode != 0) {
         HexLogError(
             "failed to use qemu-img to probe the info of the volume, error: %s",
@@ -391,7 +391,7 @@ getVolumeVirtualSize(const std::string& filePath)
         true,
         true,
         {},
-        "qemu-img info \"" + filePath + "\"");
+        "/usr/bin/qemu-img info \"" + filePath + "\"");
     if (r.exitCode != 0) {
         HexLogError(
             "failed to use qemu-img to probe the info of the volume, error: %s",
@@ -490,7 +490,7 @@ doesVolumeSupportUefi(const std::filesystem::path& workingDirectory)
         false,
         false,
         {},
-        "grep -i \"os firmware\" \"" + filePath + "\" 2>/dev/null | grep -q -i efi");
+        "/usr/bin/grep -i \"os firmware\" \"" + filePath + "\" 2>/dev/null | grep -q -i efi");
 
     return (r.exitCode == 0);
 }
@@ -1251,7 +1251,7 @@ MoveVolumeToBackendMain(int argc, const char** argv)
         true,
         true,
         ParseOpenstackCliAuth(),
-        "cinder retype --migration-policy on-demand \""
+        "/usr/local/bin/cinder retype --migration-policy on-demand \""
             + volumeId + "\" \"" + destinationVolumeType + "\"");
     if (r.exitCode != 0) {
         HexLogError("%s", r.stderrOutput.c_str());
