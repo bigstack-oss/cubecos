@@ -703,3 +703,107 @@ CLI_MODE_COMMAND(
     NULL,
     "Get storages of external storage.",
     "get_storages");
+
+/**
+ * Get a storage by name.
+ *
+ * @param output
+ * @param name
+ * @return hex_sdk interface output
+ */
+static bool
+getStorage(std::string& output, const std::string& name)
+{
+    // structure the payload
+    json11::Json payload = json11::Json::object {
+        { "name", name },
+    };
+
+    // call the hex_sdk interface
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_get_storage '" + payload.dump() + "'");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}
+
+/**
+ * Parse the storage JSON into YAML.
+ *
+ * @param output
+ * @param storage
+ * @return storage in YAML
+ */
+static bool
+parseStorage(std::string& output, const std::string& storage)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "/usr/bin/echo '" + storage + "' | /usr/local/bin/yq -p=json -o=yaml");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}
+
+static int
+GetStorageMain(int argc, const char** argv)
+{
+    /**
+     * [0] get_storage
+     * [1] <name>
+     */
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string name;
+
+    // [1] <name>
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            1,
+            "Enter the name: ",
+            &name)) {
+        std::cerr << "Field name is required" << std::endl;
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string storage;
+    if (!getStorage(storage, name)) {
+        std::cerr << "Error: " << storage << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::string storageOutput;
+    if (!parseStorage(storageOutput, storage)) {
+        std::cerr << "Error: " << storageOutput << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << storageOutput << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "get_storage",
+    GetStorageMain,
+    NULL,
+    "Get a storage by name.",
+    "get_storage <name>");
