@@ -583,3 +583,66 @@ CLI_MODE_COMMAND(
     NULL,
     "Delete an external storage model.",
     "delete_model <driver>");
+
+/**
+ * Get the active multipath settings in the kernel.
+ *
+ * @param output
+ * @return active multipath settings in YAML
+ */
+static bool
+getActiveMultipathSetting(std::string& output)
+{
+    TempFile f = CreateTempFile();
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_get_active_multipath_setting > " + f.fileName);
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    const ExecSyncResult yr = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "yq -p=json -o=yaml " + f.fileName);
+    DeleteTempFile(f);
+
+    if (yr.exitCode != 0) {
+        output = yr.stderrOutput;
+        return false;
+    }
+
+    output = yr.stdoutOutput;
+    return true;
+}
+
+static int
+GetActiveMultipathSettingMain(int argc, const char** argv)
+{
+    if (argc > 1) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string output;
+    if (!getActiveMultipathSetting(output)) {
+        std::cerr << "Error: " << output << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << output << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "get_active_multipath_setting",
+    GetActiveMultipathSettingMain,
+    NULL,
+    "Get the active multipath settings.",
+    "get_active_multipath_setting");
