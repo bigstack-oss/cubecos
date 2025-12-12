@@ -448,7 +448,7 @@ SetModelMain(int argc, const char** argv)
                 argc,
                 argv,
                 2,
-                "find " + localDirectory + "/ -type f -print0 | xargs -0 -n 1 basename",
+                "/usr/bin/find " + localDirectory + "/ -type f -print0 | xargs -0 -n 1 basename",
                 &index,
                 &modelFilePath,
                 message.c_str())
@@ -643,3 +643,63 @@ CLI_MODE_COMMAND(
     NULL,
     "Get the active multipath settings.",
     "get_active_multipath_setting");
+
+/**
+ * Get storages.
+ *
+ * @param output
+ * @return storages in YAML
+ */
+static bool
+getStorages(std::string& output)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_get_storages");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    const ExecSyncResult yr = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "/usr/bin/echo '" + r.stdoutOutput + "' | /usr/local/bin/yq -p=json -o=yaml");
+    if (yr.exitCode != 0) {
+        output = yr.stderrOutput;
+        return false;
+    }
+
+    output = yr.stdoutOutput;
+    return true;
+}
+
+static int
+GetStoragesMain(int argc, const char** argv)
+{
+    if (argc > 1) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string output;
+    if (!getStorages(output)) {
+        std::cerr << "Error: " << output << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << output << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "get_storages",
+    GetStoragesMain,
+    NULL,
+    "Get storages of external storage.",
+    "get_storages");
