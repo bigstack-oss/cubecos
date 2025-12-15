@@ -20,3 +20,20 @@ YamlFileToJson(
 
     return r.stdoutOutput;
 }
+
+bool YamlFromJson(std::string& output, const std::string& input)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "/usr/bin/echo '" + input + "' | /usr/local/bin/yq -p=json -o=yaml");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}

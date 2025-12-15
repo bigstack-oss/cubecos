@@ -709,31 +709,6 @@ getStorage(std::string& output, const std::string& name)
     return true;
 }
 
-/**
- * Parse the storage JSON into YAML.
- *
- * @param output
- * @param storage
- * @return storage in YAML
- */
-static bool
-parseStorage(std::string& output, const std::string& storage)
-{
-    const ExecSyncResult r = ExecBashSync(
-        0,
-        true,
-        true,
-        {},
-        "/usr/bin/echo '" + storage + "' | /usr/local/bin/yq -p=json -o=yaml");
-    if (r.exitCode != 0) {
-        output = r.stderrOutput;
-        return false;
-    }
-
-    output = r.stdoutOutput;
-    return true;
-}
-
 static int
 GetStorageMain(int argc, const char** argv)
 {
@@ -765,7 +740,7 @@ GetStorageMain(int argc, const char** argv)
     }
 
     std::string storageOutput;
-    if (!parseStorage(storageOutput, storage)) {
+    if (!YamlFromJson(storageOutput, storage)) {
         std::cerr << "Error: " << storageOutput << std::endl;
         return CLI_FAILURE;
     }
