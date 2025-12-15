@@ -593,13 +593,12 @@ CLI_MODE_COMMAND(
 static bool
 getActiveMultipathSetting(std::string& output)
 {
-    TempFile f = CreateTempFile();
     const ExecSyncResult r = ExecBashSync(
         0,
         true,
         true,
         {},
-        HEX_SDK " cinder_get_active_multipath_setting > " + f.fileName);
+        HEX_SDK " cinder_get_active_multipath_setting");
     if (r.exitCode != 0) {
         output = r.stderrOutput;
         return false;
@@ -610,9 +609,7 @@ getActiveMultipathSetting(std::string& output)
         true,
         true,
         {},
-        "/usr/local/bin/yq -p=json -o=yaml " + f.fileName);
-    DeleteTempFile(f);
-
+        "echo '" + r.stdoutOutput + "' | /usr/local/bin/yq -p=json -o=yaml");
     if (yr.exitCode != 0) {
         output = yr.stderrOutput;
         return false;

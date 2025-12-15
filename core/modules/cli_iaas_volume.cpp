@@ -651,17 +651,27 @@ convertVolume(const std::string& filePath, const std::string& workingDirectory)
     ssize_t bytesRead = 0;
     while (!processFinished) {
         // read from stdout
-        bytesRead = ReadByNonblockingPoll(p.stdoutPipeReadEnd, buffer, sizeof(buffer));
-        if (bytesRead > 0) {
-            // stream to stdout
-            std::cout.write(buffer, bytesRead);
+        while (true) {
+            // drain the pipe
+            bytesRead = ReadByNonblockingPoll(p.stdoutPipeReadEnd, buffer, sizeof(buffer));
+            if (bytesRead > 0) {
+                // stream to stdout
+                std::cout.write(buffer, bytesRead);
+            } else {
+                break;
+            }
         }
 
         // read from stderr
-        bytesRead = ReadByNonblockingPoll(p.stderrPipeReadEnd, buffer, sizeof(buffer));
-        if (bytesRead > 0) {
-            // stream to stderr
-            std::cerr.write(buffer, bytesRead);
+        while (true) {
+            // drain the pipe
+            bytesRead = ReadByNonblockingPoll(p.stderrPipeReadEnd, buffer, sizeof(buffer));
+            if (bytesRead > 0) {
+                // stream to stderr
+                std::cerr.write(buffer, bytesRead);
+            } else {
+                break;
+            }
         }
 
         pid_t waitpidResult = waitpid(p.pid, &status, WNOHANG);
@@ -675,18 +685,28 @@ convertVolume(const std::string& filePath, const std::string& workingDirectory)
     }
 
     // read any remaining data
-    bytesRead = ReadByNonblockingPoll(p.stdoutPipeReadEnd, buffer, sizeof(buffer));
-    if (bytesRead > 0) {
-        // stream to stdout
-        std::cout.write(buffer, bytesRead);
+    while (true) {
+        // drain the pipe
+        bytesRead = ReadByNonblockingPoll(p.stdoutPipeReadEnd, buffer, sizeof(buffer));
+        if (bytesRead > 0) {
+            // stream to stdout
+            std::cout.write(buffer, bytesRead);
+        } else {
+            break;
+        }
     }
     // close the read-end
     close(p.stdoutPipeReadEnd);
 
-    bytesRead = ReadByNonblockingPoll(p.stderrPipeReadEnd, buffer, sizeof(buffer));
-    if (bytesRead > 0) {
-        // stream to stderr
-        std::cerr.write(buffer, bytesRead);
+    while (true) {
+        // drain the pipe
+        bytesRead = ReadByNonblockingPoll(p.stderrPipeReadEnd, buffer, sizeof(buffer));
+        if (bytesRead > 0) {
+            // stream to stderr
+            std::cerr.write(buffer, bytesRead);
+        } else {
+            break;
+        }
     }
     // close the read-ends
     close(p.stderrPipeReadEnd);
