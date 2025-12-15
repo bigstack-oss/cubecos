@@ -758,6 +758,147 @@ CLI_MODE_COMMAND(
     "get_storage <name>");
 
 /**
+ * Set a storage using a storage JSON.
+ *
+ * @param output
+ * @param storage
+ * @return is successful or not
+ */
+static bool
+setStorage(std::string& output, const std::string& storage)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_put_storage '" + storage + "'");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}
+
+static int
+SetStorageMain(int argc, const char** argv)
+{
+    /**
+     * [0] set_model
+     * [1] <local | console>
+     * [2] <local_storage_file_name | storage_content>
+     */
+    if (argc > 3) {
+        return CLI_INVALID_ARGS;
+    }
+
+    const std::string localDirectory = "/var/update";
+
+    // collect inputs
+    int index;
+    std::string sourceType;
+    std::string storageFilePath;
+    std::string storageContent;
+
+    CliList sourceTypes;
+    sourceTypes.push_back("local");
+    sourceTypes.push_back("console");
+
+    // [1] <local | console>
+    if (CliMatchListHelper(
+            argc,
+            argv,
+            1,
+            sourceTypes,
+            &index,
+            &sourceType,
+            "Select input method: ")
+        != 0) {
+        std::cerr << "Input method is missing or invalid" << std::endl;
+        return CLI_INVALID_ARGS;
+    }
+
+    if (sourceType == "local") {
+        // [2] <local_storage_file_name>
+        const std::string message = "Please prepare the storage file under "
+            + localDirectory
+            + " . Select the input file: ";
+        std::cout << "" << localDirectory << std::endl;
+        if (CliMatchCmdHelper(
+                argc,
+                argv,
+                2,
+                "/usr/bin/find " + localDirectory + "/ -type f -print0 | xargs -0 -n 1 basename",
+                &index,
+                &storageFilePath,
+                message.c_str())
+            != 0) {
+            std::cerr << "File " << storageFilePath << " not found" << std::endl;
+            return CLI_INVALID_ARGS;
+        }
+    } else {
+        // [2] <storage_content>
+        if (!CliReadMultipleLines("Please enter the content of the storage: ", storageContent)) {
+            std::cerr << "Invalid file content" << std::endl;
+            return CLI_INVALID_ARGS;
+        }
+    }
+
+    // parse the storage
+    std::string storage;
+    if (sourceType == "local") {
+        std::string error;
+
+        storage = YamlFileToJson(
+            error,
+            std::filesystem::path(localDirectory) / std::filesystem::path(storageFilePath));
+        if (!error.empty()) {
+            std::cerr << "Error: " << error << std::endl;
+            return CLI_FAILURE;
+        }
+    } else if (sourceType == "console") {
+        // prepare the model file
+        std::string error;
+
+        TempFile f = prepareModelFile(error, storageContent);
+        if (!error.empty()) {
+            std::cerr << "Error: " << error << std::endl;
+            DeleteTempFile(f);
+            return CLI_FAILURE;
+        }
+
+        storage = YamlFileToJson(error, f.fileName);
+        if (!error.empty()) {
+            std::cerr << "Error: " << error << std::endl;
+            DeleteTempFile(f);
+            return CLI_FAILURE;
+        }
+
+        DeleteTempFile(f);
+    }
+
+    // set the model
+    std::string output;
+    if (!setStorage(output, storage)) {
+        std::cerr << "Error: " << getMessage(output) << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << getMessage(output) << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "set_storage",
+    SetStorageMain,
+    NULL,
+    "Set a storage.",
+    "set_storage <local | console> <local_storage_file_name | storage_content>");
+
+/**
  * Delete a storage by name.
  *
  * @param output
