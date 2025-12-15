@@ -13,6 +13,7 @@
 #include <hex/process.h>
 #include <hex/strict.h>
 #include <openstack.hpp>
+#include <yaml.hpp>
 
 #include <iostream>
 

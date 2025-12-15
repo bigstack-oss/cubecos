@@ -18,6 +18,7 @@ LIB_SRCS += openstack.cpp
 LIB_SRCS += terraform.cpp
 LIB_SRCS += upgrade.cpp
 LIB_SRCS += url.cpp
+LIB_SRCS += yaml.cpp
 
 COMPILE_FOR_SHARED_LIB = 1
 

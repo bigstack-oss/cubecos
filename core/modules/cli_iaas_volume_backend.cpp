@@ -332,32 +332,6 @@ prepareModelFile(
     return f;
 }
 
-/**
- * Parse the model file into a JSON string.
- *
- * @param error
- * @param modelFilePath
- * @return model
- */
-static const std::string
-parseModel(
-    std::string& error,
-    const std::string& modelFilePath)
-{
-    const ExecSyncResult r = ExecBashSync(
-        0,
-        true,
-        true,
-        {},
-        "/usr/local/bin/yq -p=yaml -o=json \"" + modelFilePath + "\"");
-    if (r.exitCode != 0) {
-        error = r.stderrOutput;
-        return "";
-    }
-
-    return r.stdoutOutput;
-}
-
 static bool
 setModel(
     std::string& output,
@@ -469,7 +443,7 @@ SetModelMain(int argc, const char** argv)
     if (sourceType == "local") {
         std::string error;
 
-        model = parseModel(
+        model = YamlFileToJson(
             error,
             std::filesystem::path(localDirectory) / std::filesystem::path(modelFilePath));
         if (!error.empty()) {
@@ -487,7 +461,7 @@ SetModelMain(int argc, const char** argv)
             return CLI_FAILURE;
         }
 
-        model = parseModel(error, f.fileName);
+        model = YamlFileToJson(error, f.fileName);
         if (!error.empty()) {
             std::cerr << "Error: " << error << std::endl;
             DeleteTempFile(f);
@@ -609,7 +583,7 @@ getActiveMultipathSetting(std::string& output)
         true,
         true,
         {},
-        "echo '" + r.stdoutOutput + "' | /usr/local/bin/yq -p=json -o=yaml");
+        "/usr/bin/echo '" + r.stdoutOutput + "' | /usr/local/bin/yq -p=json -o=yaml");
     if (yr.exitCode != 0) {
         output = yr.stderrOutput;
         return false;
