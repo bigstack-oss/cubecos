@@ -839,3 +839,66 @@ CLI_MODE_COMMAND(
     "It would first check if the Cinder service for the storage is up. "
     "Then, it would create a test volume with size 1 GiB on the storage and delete it afterwards.",
     "test_storage <name>");
+
+/**
+ * Get the name of the default storage.
+ *
+ * @param defaultStorage
+ * @return successful or not
+ */
+static bool
+getDefaultStorage(std::string& defaultStorage)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_get_default_storage");
+    if (r.exitCode != 0) {
+        defaultStorage = "";
+        return false;
+    }
+
+    // parse the name
+    std::string jsonError;
+    const json11::Json response = json11::Json::parse(r.stdoutOutput, jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("%s", jsonError.c_str());
+        defaultStorage = "";
+        return false;
+    }
+
+    if (!response["name"].is_string()) {
+        HexLogError("failed to parse the field name out of %s", r.stdoutOutput.c_str());
+        defaultStorage = "";
+        return false;
+    }
+
+    defaultStorage = response["name"].string_value();
+    return true;
+}
+
+static int
+GetDefaultStorageMain(int argc, const char** argv)
+{
+    if (argc > 1) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string defaultStorage;
+    if (!getDefaultStorage(defaultStorage)) {
+        return CLI_FAILURE;
+    }
+
+    std::cout << "Default storage: " << defaultStorage << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "get_default_storage",
+    GetDefaultStorageMain,
+    NULL,
+    "Get the default storage.",
+    "get_default_storage");
