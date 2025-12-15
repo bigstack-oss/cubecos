@@ -3,7 +3,7 @@
 include ../../build.mk
 
 APP := etcd etcdctl
-VERSION := v3.5.5
+VERSION := v3.5.18
 
 $(APP):
 	$(Q)wget -qO- --no-check-certificate https://github.com/etcd-io/etcd/releases/download/$(VERSION)/etcd-$(VERSION)-linux-amd64.tar.gz | tar -I pigz -x --strip-components=1 --wildcards */etcd */etcdctl
