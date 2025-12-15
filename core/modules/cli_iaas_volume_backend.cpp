@@ -756,3 +756,86 @@ CLI_MODE_COMMAND(
     NULL,
     "Get a storage by name.",
     "get_storage <name>");
+
+/**
+ * Test a storage by name.
+ *
+ * @param output
+ * @param name
+ * @return is storage working or not
+ */
+static bool
+testStorage(std::string& output, const std::string& name)
+{
+    // structure the payload
+    json11::Json payload = json11::Json::object {
+        { "name", name },
+    };
+
+    // call the hex_sdk interface
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_test_storage '" + payload.dump() + "'");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}
+
+static int
+TestStorageMain(int argc, const char** argv)
+{
+    /**
+     * [0] test_storage
+     * [1] <name>
+     */
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string name;
+
+    // [1] <name>
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            1,
+            "Enter the name: ",
+            &name)) {
+        std::cerr << "Field name is required" << std::endl;
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string testResult;
+    bool isSuccessful = testStorage(testResult, name);
+
+    std::string output;
+    if (!YamlFromJson(output, testResult)) {
+        std::cerr << "Error: " << output << std::endl;
+        return CLI_FAILURE;
+    }
+
+    if (!isSuccessful) {
+        std::cerr << output << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << output << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "test_storage",
+    TestStorageMain,
+    NULL,
+    "Test a storage by name. "
+    "It would first check if the Cinder service for the storage is up. "
+    "Then, it would create a test volume with size 1 GiB on the storage and delete it afterwards.",
+    "test_storage <name>");
