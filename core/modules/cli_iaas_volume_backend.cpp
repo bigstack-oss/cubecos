@@ -758,6 +758,79 @@ CLI_MODE_COMMAND(
     "get_storage <name>");
 
 /**
+ * Delete a storage by name.
+ *
+ * @param output
+ * @param name
+ * @return is successful or not
+ */
+static bool
+deleteStorage(std::string& output, const std::string& name)
+{
+    // structure the payload
+    json11::Json payload = json11::Json::object {
+        { "name", name },
+    };
+
+    // call the hex_sdk interface
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_delete_storage '" + payload.dump() + "'");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}
+
+static int
+DeleteStorageMain(int argc, const char** argv)
+{
+    /**
+     * [0] delete_storage
+     * [1] <name>
+     */
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string name;
+
+    // [1] <name>
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            1,
+            "Enter the name: ",
+            &name)) {
+        std::cerr << "Field name is required" << std::endl;
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string output;
+    if (!deleteStorage(output, name)) {
+        std::cerr << getMessage(output) << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << getMessage(output) << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "delete_storage",
+    DeleteStorageMain,
+    NULL,
+    "Delete a storage by name.",
+    "delete_storage <name>");
+
+/**
  * Test a storage by name.
  *
  * @param output
