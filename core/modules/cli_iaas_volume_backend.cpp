@@ -902,3 +902,69 @@ CLI_MODE_COMMAND(
     NULL,
     "Get the default storage.",
     "get_default_storage");
+
+static bool
+setDefaultStorage(std::string& output, const std::string& name)
+{
+    // structure the payload
+    json11::Json payload = json11::Json::object {
+        { "name", name },
+    };
+
+    // call the hex_sdk interface
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        HEX_SDK " cinder_set_default_storage '" + payload.dump() + "'");
+    if (r.exitCode != 0) {
+        output = r.stderrOutput;
+        return false;
+    }
+
+    output = r.stdoutOutput;
+    return true;
+}
+
+static int
+SetDefaultStorageMain(int argc, const char** argv)
+{
+    /**
+     * [0] set_default_storage
+     * [1] <name>
+     */
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string name;
+
+    // [1] <name>
+    if (!CliReadInputStr(
+            argc,
+            argv,
+            1,
+            "Enter the name: ",
+            &name)) {
+        std::cerr << "Field name is required" << std::endl;
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string output;
+    if (!setDefaultStorage(output, name)) {
+        std::cerr << getMessage(output) << std::endl;
+        return CLI_FAILURE;
+    }
+
+    std::cout << getMessage(output) << std::endl;
+    return CLI_SUCCESS;
+}
+
+CLI_MODE_COMMAND(
+    CLI_COMMAND_IAAS_STORAGE,
+    "set_default_storage",
+    SetDefaultStorageMain,
+    NULL,
+    "Set the default storage.",
+    "set_default_storage <name>");
