@@ -10,6 +10,7 @@ hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_ini.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_is.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_json.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_license.sh
+hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_log.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_remote.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_stale.sh
 hex_shell_MODULES_PRE += $(PROJ_SHMODDIR)/modules.pre/sdk_pacemaker.sh
