@@ -1090,15 +1090,3 @@ CONFIG_TRIGGER_WITH_SETTINGS(cinder, "cluster_start", ClusterStartMain);
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_cinder, RestartMain, RestartUsage);
 CONFIG_COMMAND_WITH_SETTINGS(reconfig_cinder, ReconfigMain, ReconfigUsage);
-
-static int
-TestMain(int argc, char* argv[])
-{
-    if (argc != 1) {
-        return EXIT_FAILURE;
-    }
-
-    return Commit(false, DRYLEVEL_NONE) ? EXIT_SUCCESS : EXIT_FAILURE;
-}
-
-CONFIG_COMMAND_WITH_SETTINGS(test_cinder, TestMain, NULL);
