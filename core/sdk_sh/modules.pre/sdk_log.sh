@@ -12,7 +12,7 @@ log_debug()
         return 0
     fi
 
-    logger -p user.debug -t "$PROG" "debug: ${1}"
+    /usr/bin/logger -p user.debug -t "$PROG" "debug: ${1}"
 }
 
 log_info()
@@ -21,7 +21,7 @@ log_info()
         return 0
     fi
 
-    logger -p user.info -t "$PROG" "info: ${1}"
+    /usr/bin/logger -p user.info -t "$PROG" "info: ${1}"
 }
 
 log_warning()
@@ -30,7 +30,7 @@ log_warning()
         return 0
     fi
 
-    logger -p user.warning -t "$PROG" "warning: ${1}"
+    /usr/bin/logger -p user.warning -t "$PROG" "warning: ${1}"
 }
 
 log_error()
@@ -39,5 +39,5 @@ log_error()
         return 0
     fi
 
-    logger -p user.err -t "$PROG" "error: ${1}"
+    /usr/bin/logger -p user.err -t "$PROG" "error: ${1}"
 }
