@@ -208,7 +208,7 @@ Parse(const char* name, const char* value, bool isNew)
  * Since we write storage configs in hex_sdk instead of setting them as tunings,
  * hex_config could not detect the changes directly from tunings.
  * We would need to perform the checks ourselves.
- * 
+ *
  * @return is storage backend config files modified or not
  */
 static bool
@@ -216,7 +216,15 @@ isStorageBackendModified()
 {
     std::string fsError;
     const std::vector<std::string> configuredConfigs = GetFilesUnderDirectory(fsError, CINDER_BACKEND_DIR);
+    if (!fsError.empty()) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
     const std::vector<std::string> currentConfigs = GetFilesUnderDirectory(fsError, CONF_DIR);
+    if (!fsError.empty()) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
 
     // first check the length, if not even, then must be modified
     if (configuredConfigs.size() != currentConfigs.size()) {
