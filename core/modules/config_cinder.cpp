@@ -202,6 +202,77 @@ Parse(const char* name, const char* value, bool isNew)
     return r;
 }
 
+/**
+ * Check if storage backend configs are modified.
+ *
+ * Since we write storage configs in hex_sdk instead of setting them as tunings,
+ * hex_config could not detect the changes directly from tunings.
+ * We would need to perform the checks ourselves.
+ * 
+ * @return is storage backend config files modified or not
+ */
+static bool
+isStorageBackendModified()
+{
+    std::string fsError;
+    const std::vector<std::string> configuredConfigs = GetFilesUnderDirectory(fsError, CINDER_BACKEND_DIR);
+    const std::vector<std::string> currentConfigs = GetFilesUnderDirectory(fsError, CONF_DIR);
+
+    // first check the length, if not even, then must be modified
+    if (configuredConfigs.size() != currentConfigs.size()) {
+        return true;
+    }
+
+    // then check the names are the same set or not
+    for (const std::string& con : configuredConfigs) {
+        bool fileFound = false;
+        for (const std::string& cur : currentConfigs) {
+            if (std::filesystem::path(con).filename().string() == std::filesystem::path(cur).filename().string()) {
+                fileFound = true;
+                break;
+            }
+        }
+
+        if (!fileFound) {
+            return true;
+        }
+    }
+    for (const std::string& cur : currentConfigs) {
+        bool fileFound = false;
+        for (const std::string& con : configuredConfigs) {
+            if (std::filesystem::path(con).filename().string() == std::filesystem::path(cur).filename().string()) {
+                fileFound = true;
+                break;
+            }
+        }
+
+        if (!fileFound) {
+            return true;
+        }
+    }
+
+    // check file modification times
+    for (const std::string& p : configuredConfigs) {
+        const std::filesystem::path configuredConfigFile(p);
+
+        const std::string fileName = std::filesystem::path(p).filename();
+        const std::filesystem::path currentConfigFile = std::filesystem::path(CONF_DIR) / fileName;
+
+        // if the current correspondence does not exist, then must be modified
+        if (!std::filesystem::exists(currentConfigFile)
+            || !std::filesystem::is_regular_file(currentConfigFile)) {
+            return true;
+        }
+
+        if (std::filesystem::last_write_time(configuredConfigFile)
+            > std::filesystem::last_write_time(currentConfigFile)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static bool
 CommitCheck(bool modified, int dryLevel)
 {
@@ -213,7 +284,9 @@ CommitCheck(bool modified, int dryLevel)
     s_bDbPassChanged = s_dbPass.modified()
         || s_bCubeModified;
 
-    s_bStorageBackendChanged = s_storageBackends.modified() || s_volumeTypeDefault.modified();
+    s_bStorageBackendChanged = s_storageBackends.modified()
+        || s_volumeTypeDefault.modified()
+        || isStorageBackendModified();
 
     s_bConfigChanged = modified
         || s_bMqModified
@@ -1017,3 +1090,15 @@ CONFIG_TRIGGER_WITH_SETTINGS(cinder, "cluster_start", ClusterStartMain);
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_cinder, RestartMain, RestartUsage);
 CONFIG_COMMAND_WITH_SETTINGS(reconfig_cinder, ReconfigMain, ReconfigUsage);
+
+static int
+TestMain(int argc, char* argv[])
+{
+    if (argc != 1) {
+        return EXIT_FAILURE;
+    }
+
+    return Commit(false, DRYLEVEL_NONE) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+CONFIG_COMMAND_WITH_SETTINGS(test_cinder, TestMain, NULL);
