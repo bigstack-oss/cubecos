@@ -1138,6 +1138,70 @@ cinder_get_active_multipath_setting()
     cinder_unmarshal_multipath_conf "$multipath_setting"
 }
 
+cinder_sync_models_from_control()
+{
+    # only applies to pure compute nodes
+    if ! is_pure_compute_node ; then
+        return 0
+    fi
+
+    local exec_output=""
+    local exec_error=""
+
+    # get the model list on local
+    if ! _hex_function exec_output exec_error cinder_get_models ; then
+        return 1
+    fi
+    local models_on_local="$exec_output"
+
+    # get the model list on controls from the control node holding the vip
+    if ! _hex_function exec_output exec_error remote_run "$(shared_id)" "${HEX_SDK} cinder_get_models" ; then
+        return 1
+    fi
+    local models_on_controls="$exec_output"
+
+    # delete models not on controls
+    local driver=""
+    declare -A model_set
+    while read -r model ; do
+        driver="$(json_get_value "$model" ".driver")"
+        if [ -z "$driver" ] ; then
+            # The field driver is the ID, and it should not be blank.
+            # Skip it silently.
+            continue
+        fi
+
+        model_set["$driver"]=1
+    done <<< "$(echo "$models_on_controls" | jq -c ".[]")"
+
+    while read -r model ; do
+        driver="$(json_get_value "$model" ".driver")"
+        if [ -z "$driver" ] ; then
+            # The field driver is the ID, and it should not be blank.
+            # Skip it silently.
+            continue
+        fi
+
+        if [[ -v model_set["$driver"] ]] ; then
+            # the model also exists on controls, do not delete it
+            continue
+        fi
+
+        if ! _hex_function exec_output exec_error jq -c -n \
+            --arg driver "$driver" \
+                '{driver: $driver}' ; then
+            continue
+        fi
+
+        if ! _hex_function_ret cinder_delete_model "$exec_output" ; then
+            log_error "failed to delete model ${driver}"
+        fi
+    done <<< "$(echo "$models_on_local" | jq -c ".[]")"
+
+    # put models from controls
+    _hex_function_ret cinder_put_models "$models_on_controls"
+}
+
 cinder_get_storage_name()
 {
     local storage_name="${1:-""}"

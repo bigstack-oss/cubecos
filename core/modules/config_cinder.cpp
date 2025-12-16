@@ -11,6 +11,7 @@
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/dryrun.h>
+#include <hex/exec.hpp>
 #include <hex/filesystem.h>
 #include <hex/log.h>
 #include <hex/pidfile.h>
@@ -740,6 +741,22 @@ Commit(bool modified, int dryLevel)
 {
     // todo: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
+
+    /**
+     * Sync models and multipath settings from control nodes,
+     * for pure compute nodes during bootstrapping.
+     */
+    if (IsCompute(s_eCubeRole) && !IsControl(s_eCubeRole) && IsBootstrap()) {
+        const ExecSyncResult r = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " cinder_sync_models_from_control");
+        if (r.exitCode != 0) {
+            HexLogError("failed to sync models from controls to this pure compute node");
+        }
+    }
 
     // we only run Cinder services on control nodes
     if (!IsControl(s_eCubeRole) || !CommitCheck(modified, dryLevel))
