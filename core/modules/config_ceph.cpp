@@ -1,30 +1,25 @@
 // CUBE SDK
 
-#include <netinet/in.h>
+#include "include/role_cubesys.h"
 #include <arpa/inet.h>
-#include <sys/stat.h>
-
-#include <list>
 #include <cctype>
-#include <iterator>
-
+#include <cluster.hpp>
+#include <cube/network.h>
+#include <cube/systemd_util.h>
+#include <hex/config_global.h>
+#include <hex/config_module.h>
+#include <hex/config_tuning.h>
+#include <hex/dryrun.h>
+#include <hex/filesystem.h>
 #include <hex/log.h>
 #include <hex/pidfile.h>
-#include <hex/filesystem.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
 #include <hex/string_util.h>
-
-#include <hex/config_module.h>
-#include <hex/config_tuning.h>
-#include <hex/config_global.h>
-#include <hex/dryrun.h>
-
-#include <cube/network.h>
-#include <cluster.hpp>
-#include <cube/systemd_util.h>
-
-#include "include/role_cubesys.h"
+#include <iterator>
+#include <list>
+#include <netinet/in.h>
+#include <sys/stat.h>
 
 #define MONDIR_FMT "/var/lib/ceph/mon/ceph-%s"
 #define MGRDIR_FMT "/var/lib/ceph/mgr/ceph-%s"
@@ -120,7 +115,7 @@ CONFIG_TUNING_BOOL(CEPH_MIRROR_META_SYNC, "ceph.mirror.meta.sync", TUNING_PUB, "
 CONFIG_TUNING_BOOL(CEPH_ENABLED, "ceph.enabled", TUNING_UNPUB, "Set to true to enable ceph service.", true);
 CONFIG_TUNING_BOOL(CEPH_MON_ENABLED, "ceph.mon.enabled", TUNING_UNPUB, "Enable ceph monitor on this host.", false);
 CONFIG_TUNING_BOOL(CEPH_PERF_TUNED, "ceph.perf.tuned", TUNING_UNPUB, "Enable ceph performance tuning on this host.", true);
-CONFIG_TUNING_STR(CEPH_FSID, "ceph.fsid", TUNING_UNPUB, "Set to true to enable ceph service.", FSID, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CEPH_FSID, "ceph.fsid", TUNING_UNPUB, "Set the UUID of the ceph cluster.", FSID, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(CEPH_MIRROR_ENABLED, "ceph.mirror.enabled", TUNING_UNPUB, "Enable ceph rbd mirror.", false);
 CONFIG_TUNING_STR(CEPH_MIRROR_NAME, "ceph.mirror.name", TUNING_UNPUB, "Set local site name.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CEPH_MIRROR_PEER_NAME, "ceph.mirror.peer.%d.name", TUNING_UNPUB, "Set peer site name.", "", ValidateRegex, DFT_REGEX_STR);
@@ -161,7 +156,7 @@ PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 
 // FIXME: circular issue
-//PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 2);
+// PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 2);
 static ConfigString s_adminCliPass("66K1ogIiRt5KnyHe");
 
 static bool
@@ -176,7 +171,7 @@ __setup_bluestore()
                 continue;
 
             int part_nums = 2;
-            int part_size = 819200;  // sectors (512B) --> 400 MB by default
+            int part_size = 819200; // sectors (512B) --> 400 MB by default
             std::string type = "scsi";
 
             std::size_t found = d.find("nvme");
@@ -186,7 +181,7 @@ __setup_bluestore()
             }
 
             HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_prepare_bluestore %s %d %d %s",
-                           d.c_str(), part_nums, part_size, type.c_str());
+                d.c_str(), part_nums, part_size, type.c_str());
         }
     }
 
@@ -249,8 +244,12 @@ IsMonEnabled(bool ha, bool monEn, CubeRole_e role, const std::string& ctrlHosts)
 }
 
 static bool
-SetupMon(bool enabled, std::string hostname, std::string fsid,
-         const char* storIp, const bool isMaster)
+SetupMon(
+    bool enabled,
+    std::string hostname,
+    std::string fsid,
+    const char* storIp,
+    const bool isMaster)
 {
     if (!enabled)
         return true;
@@ -271,12 +270,12 @@ SetupMon(bool enabled, std::string hostname, std::string fsid,
     if (isMaster && access(CONTROL_REJOIN, F_OK) != 0)
         HexUtilSystemF(0, 0, "sudo -u %s monmaptool --create --add %s %s "
                              "--fsid %s /tmp/monmap --clobber",
-                             USER, hostname.c_str(), storIp, fsid.c_str());
+            USER, hostname.c_str(), storIp, fsid.c_str());
     else
         HexUtilSystemF(0, 0, "sudo -u %s timeout 10 ceph mon getmap -o /tmp/monmap", USER);
 
     HexUtilSystemF(0, 0, "sudo -u %s ceph-mon --mkfs -i %s --monmap /tmp/monmap",
-                         USER, hostname.c_str());
+        USER, hostname.c_str());
     HexSystemF(0, "touch %s", marker);
 
     return true;
@@ -314,8 +313,8 @@ SetupMds(std::string hostname)
         return false;
     }
     if (HexSystemF(0, "sed -i 's/@BIND_ADDR@/%s/' %s", myIp.c_str(), NFS_GANESHA_CONF) != 0) {
-      HexLogError("failed to update %s", NFS_GANESHA_CONF);
-      return false;
+        HexLogError("failed to update %s", NFS_GANESHA_CONF);
+        return false;
     }
 
     return true;
@@ -344,8 +343,7 @@ SetupRgw(std::string hostname)
 
     snprintf(rgwdir, sizeof(rgwdir), RGWDIR_FMT, hostname.c_str());
     snprintf(nssdir, sizeof(nssdir), RGWDIR_FMT "/nss", hostname.c_str());
-    if (HexMakeDir(rgwdir, USER, GROUP, 0755) != 0 ||
-        HexMakeDir(nssdir, USER, GROUP, 0755) != 0) {
+    if (HexMakeDir(rgwdir, USER, GROUP, 0755) != 0 || HexMakeDir(nssdir, USER, GROUP, 0755) != 0) {
         HexLogError("failed to create ceph rgw directory %s", rgwdir);
         return false;
     }
@@ -354,17 +352,19 @@ SetupRgw(std::string hostname)
 }
 
 static bool
-SetupRbdMirror(const bool enabled, const bool sync,
-               const TuningStringArray& peerIpAry,
-               const TuningStringArray& peerSecretAry,
-               const TuningStringArray& peerNameAry,
-               const TuningStringArray& ruleVolumeAry)
+SetupRbdMirror(
+    const bool enabled,
+    const bool sync,
+    const TuningStringArray& peerIpAry,
+    const TuningStringArray& peerSecretAry,
+    const TuningStringArray& peerNameAry,
+    const TuningStringArray& ruleVolumeAry)
 {
     if (enabled) {
         HexUtilSystemF(0, 0, "rbd mirror pool enable glance-images image");
         HexUtilSystemF(0, 0, "rbd mirror pool enable cinder-volumes image");
 
-        for (unsigned i = 1 ; i < peerNameAry.size() ; i++) {
+        for (unsigned i = 1; i < peerNameAry.size(); i++) {
             std::string siteName = peerNameAry.newValue(i);
             HexUtilSystemF(0, 0, HEX_SDK " ceph_mirror_pool_peer_set glance-images %s-site", siteName.c_str());
             HexUtilSystemF(0, 0, HEX_SDK " ceph_mirror_pool_peer_set cinder-volumes %s-site", siteName.c_str());
@@ -372,7 +372,7 @@ SetupRbdMirror(const bool enabled, const bool sync,
 
         std::string imglist = "";
 
-        for (unsigned i = 1 ; i < ruleVolumeAry.size() ; i++) {
+        for (unsigned i = 1; i < ruleVolumeAry.size(); i++) {
             std::string imageId = ruleVolumeAry.newValue(i);
             if (imageId.length() < 36 /* uuid length */)
                 continue;
@@ -380,18 +380,17 @@ SetupRbdMirror(const bool enabled, const bool sync,
             imglist += imageId + ",";
             HexUtilSystemF(0, 0, HEX_SDK " ceph_mirror_image_enable %s", imageId.c_str());
             if (sync) {
-                for (unsigned i = 1 ; i < peerNameAry.size() ; i++) {
+                for (unsigned i = 1; i < peerNameAry.size(); i++) {
                     std::string siteIp = peerIpAry.newValue(i);
                     std::string secret = peerSecretAry.newValue(i);
                     HexUtilSystemF(0, 0, HEX_SDK " os_volume_meta_sync %s %s %s",
-                                         siteIp.c_str(), secret.c_str(), imageId.c_str());
+                        siteIp.c_str(), secret.c_str(), imageId.c_str());
                 }
             }
         }
 
         HexUtilSystemF(0, 0, HEX_SDK " ceph_mirror_image_state_sync \"%s\"", imglist.c_str());
-    }
-    else {
+    } else {
         if (!IsBootstrap())
             HexUtilSystemF(0, 0, HEX_SDK " ceph_mirror_disable");
     }
@@ -446,7 +445,7 @@ SetupFS()
     if (access(MAKRER_CEPHFS, F_OK) != 0) {
         // Current kernel verion 4.4 doesn't support CRUSH_TUNABLES5
         // Remove it after upgrading kernel version above 4.5
-        //HexUtilSystemF(0, 0, "ceph osd crush tunables hammer");
+        // HexUtilSystemF(0, 0, "ceph osd crush tunables hammer");
 
         // Create ceph pools for data and metadata
         HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s cephfs", CEPHFS_DATA_POOL);
@@ -479,7 +478,7 @@ static bool SetupISCSI()
 static bool
 UpdateISCSIConfig(const std::string& iplist, const std::string& gwApiPass)
 {
-    FILE *fout = fopen(ISCSI_GW_CONF, "w");
+    FILE* fout = fopen(ISCSI_GW_CONF, "w");
     if (!fout) {
         HexLogError("Unable to write %s iscsi config: %s", NAME, CONF);
         return false;
@@ -501,13 +500,20 @@ UpdateISCSIConfig(const std::string& iplist, const std::string& gwApiPass)
 }
 
 static bool
-UpdateConfig(std::string fsid, std::string hostname,
-             std::string myip, std::string sharedId,
-             std::string monHosts, std::string monIplist,
-             std::string pubNet, std::string clstrNet,
-             std::string adminCliPass, bool perfTuned, std::string mdsIplist="")
+UpdateConfig(
+    std::string fsid,
+    std::string hostname,
+    std::string myip,
+    std::string sharedId,
+    std::string monHosts,
+    std::string monIplist,
+    std::string pubNet,
+    std::string clstrNet,
+    std::string adminCliPass,
+    bool perfTuned,
+    std::string mdsIplist = "")
 {
-    FILE *fout = fopen(CONF, "w");
+    FILE* fout = fopen(CONF, "w");
     if (!fout) {
         HexLogError("Unable to write %s config: %s", NAME, CONF);
         return false;
@@ -699,22 +705,22 @@ UpdateConfig(std::string fsid, std::string hostname,
         fprintf(fout, "bluestore extent map shard min size = 50\n");
         fprintf(fout, "bluestore extent map shard target size = 100\n");
         fprintf(fout, "bluestore rocksdb options = "
-                        "compression=kNoCompression,"
-                        "max_write_buffer_number=32,"
-                        "min_write_buffer_number_to_merge=2,"
-                        "recycle_log_file_num=32,"
-                        "compaction_style=kCompactionStyleLevel,"
-                        "write_buffer_size=67108864,"
-                        "target_file_size_base=67108864,"
-                        "max_background_compactions=31,"
-                        "level0_file_num_compaction_trigger=8,"
-                        "level0_slowdown_writes_trigger=32,"
-                        "level0_stop_writes_trigger=64,"
-                        "max_bytes_for_level_base=536870912,"
-                        "compaction_threads=32,"
-                        "max_bytes_for_level_multiplier=8,"
-                        "flusher_threads=8,"
-                        "compaction_readahead_size=2MB\n");
+                      "compression=kNoCompression,"
+                      "max_write_buffer_number=32,"
+                      "min_write_buffer_number_to_merge=2,"
+                      "recycle_log_file_num=32,"
+                      "compaction_style=kCompactionStyleLevel,"
+                      "write_buffer_size=67108864,"
+                      "target_file_size_base=67108864,"
+                      "max_background_compactions=31,"
+                      "level0_file_num_compaction_trigger=8,"
+                      "level0_slowdown_writes_trigger=32,"
+                      "level0_stop_writes_trigger=64,"
+                      "max_bytes_for_level_base=536870912,"
+                      "compaction_threads=32,"
+                      "max_bytes_for_level_multiplier=8,"
+                      "flusher_threads=8,"
+                      "compaction_readahead_size=2MB\n");
         fprintf(fout, "osd map share max epochs = 100\n");
         fprintf(fout, "osd max backfills = 5\n");
         fprintf(fout, "osd memory target = 2147483648\n");
@@ -733,10 +739,12 @@ UpdateConfig(std::string fsid, std::string hostname,
 }
 
 static bool
-UpdateMirrorConfig(bool enabled, const char* mysite,
-                   const TuningStringArray& peerNameAry,
-                   const TuningStringArray& peerIpAry,
-                   const TuningStringArray& peerSecretAry)
+UpdateMirrorConfig(
+    bool enabled,
+    const char* mysite,
+    const TuningStringArray& peerNameAry,
+    const TuningStringArray& peerIpAry,
+    const TuningStringArray& peerSecretAry)
 {
     HexLogInfo("updating rbd mirror config files");
     HexSystemF(0, "rm -f " MIRROR_CONF_WILDCARD);
@@ -746,7 +754,7 @@ UpdateMirrorConfig(bool enabled, const char* mysite,
 
     HexSystemF(0, "ln -sf %s " MIRROR_CONF_FMT, CONF, mysite);
 
-    for (unsigned i = 1 ; i < peerNameAry.size() ; i++) {
+    for (unsigned i = 1; i < peerNameAry.size(); i++) {
         char peerConf[256];
         std::string siteName = peerNameAry.newValue(i);
         std::string siteIp = peerIpAry.newValue(i);
@@ -754,7 +762,7 @@ UpdateMirrorConfig(bool enabled, const char* mysite,
 
         snprintf(peerConf, sizeof(peerConf), MIRROR_CONF_FMT, siteName.c_str());
         HexUtilSystemF(0, 0, HEX_SDK " ceph_basic_config_gen %s %s %s",
-                             peerConf, siteIp.c_str(), secret.c_str());
+            peerConf, siteIp.c_str(), secret.c_str());
     }
 
     return true;
@@ -782,8 +790,7 @@ CommitMon(bool enabled, const char* name, const char* hostname, const char* oldh
             HexSystemF(0, "for i in 1 2 3 ; do ! timeout 10 ceph -s > /dev/null || break ; done");
             HexLogInfo("%s-mon is responding", name);
         }
-    }
-    else {
+    } else {
         HexLogInfo("%s-mon has been stopped", name);
     }
 
@@ -856,8 +863,7 @@ CommitOsd(const char* name, bool restartAll = true)
         }
 
         HexLogInfo("%s-osd is running", name);
-    }
-    else {
+    } else {
         HexLogInfo("compact and stop %s-osd", name);
         for (auto& id : (restartAll ? s_osdIds : s_osdNewIds)) {
             HexUtilSystemF(FWD, 0, "timeout 60 ceph tell osd.%lu compact ; systemctl stop ceph-osd@%lu", id, id);
@@ -881,8 +887,7 @@ CommitRgw(const char* name, const char* hostname)
         HexUtilSystemF(0, 0, "systemctl restart ceph-radosgw@rgw.%s", hostname);
 
         HexLogInfo("%s-rgw is running", name);
-    }
-    else {
+    } else {
         HexUtilSystemF(FWD, 0, "systemctl stop ceph-radosgw@rgw.%s", hostname);
         HexLogInfo("%s-rgw has been stopped", name);
     }
@@ -907,13 +912,13 @@ CommitRbdMirror(const bool enabled, const ConfigString& site)
         HexUtilSystemF(0, 0, "systemctl reset-failed && systemctl start ceph-rbd-mirror@%s-site", site.c_str());
 
         HexLogInfo("%s rbd-mirror is running", site.c_str());
-    }
-    else {
+    } else {
         HexLogInfo("%s rbd-mirror has been stopped", site.c_str());
     }
 
     return true;
 }
+
 /*
 static bool
 CommitISCSI()
@@ -956,6 +961,7 @@ EnabledDashbaordISCSIGateway(const std::string myIp, const std::string gwApiPass
     return true;
 }
 */
+
 static bool
 EnableMgrRestful()
 {
@@ -1046,12 +1052,13 @@ InitCephClient(const std::string& master, const std::string& peer)
             HexUtilSystemF(0, 0, "rsync root@%s:%s %s 2>/dev/null", peer.c_str(), ADMIN_KEYRING, KEYRING_DIR);
             HexUtilSystemF(0, 0, "rsync root@%s:%s %s 2>/dev/null", peer.c_str(), K8S_KEYRING, KEYRING_DIR);
             HexUtilSystemF(0, 0, "rsync root@%s:%s %s 2>/dev/null", peer.c_str(), CEPHFS_CLIENT_AUTHKEY, KEYRING_DIR);
-        }
-        else {
+        } else {
             HexUtilSystemF(0, 0, "timeout 10 ceph auth get-or-create client.admin "
-                                 "mon 'allow *' mds 'allow *' mgr 'allow *' osd 'allow *' -o %s", ADMIN_KEYRING);
+                                 "mon 'allow *' mds 'allow *' mgr 'allow *' osd 'allow *' -o %s",
+                ADMIN_KEYRING);
             HexUtilSystemF(0, 0, "timeout 10 ceph auth get-or-create client.k8s "
-                                 "mon 'allow r' osd 'allow rw pool=%s' -o %s", K8S_VOLUME, K8S_KEYRING);
+                                 "mon 'allow r' osd 'allow rw pool=%s' -o %s",
+                K8S_VOLUME, K8S_KEYRING);
             HexUtilSystemF(0, 0, "ceph-authtool -p %s > %s", ADMIN_KEYRING, CEPHFS_CLIENT_AUTHKEY);
             HexUtilSystemF(0, 0, "chmod 0600 %s", CEPHFS_CLIENT_AUTHKEY);
         }
@@ -1109,15 +1116,14 @@ Init()
 }
 
 static bool
-Parse(const char *name, const char *value, bool isNew)
+Parse(const char* name, const char* value, bool isNew)
 {
     bool r = true;
 
     TuneStatus s = ParseTune(name, value, isNew);
     if (s == TUNE_INVALID_NAME) {
         HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
-    }
-    else if (s == TUNE_INVALID_VALUE) {
+    } else if (s == TUNE_INVALID_VALUE) {
         HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
         r = false;
     }
@@ -1125,7 +1131,7 @@ Parse(const char *name, const char *value, bool isNew)
 }
 
 static bool
-ParseNet(const char *name, const char *value, bool isNew)
+ParseNet(const char* name, const char* value, bool isNew)
 {
     if (strcmp(name, NET_HOSTNAME) == 0) {
         s_hostname.parse(value, isNew);
@@ -1135,14 +1141,14 @@ ParseNet(const char *name, const char *value, bool isNew)
 }
 
 static bool
-ParseCube(const char *name, const char *value, bool isNew)
+ParseCube(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
     return true;
 }
 
 static bool
-ParseKeystone(const char *name, const char *value, bool isNew)
+ParseKeystone(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 2);
     return true;
@@ -1175,7 +1181,7 @@ Validate()
             return true;
 
         if (s_mirrorName.modified() | s_peerNameAry.modified()) {
-            for (unsigned i = 1 ; i < s_peerNameAry.size() ; i++) {
+            for (unsigned i = 1; i < s_peerNameAry.size(); i++) {
                 if (s_mirrorName.newValue() == s_peerNameAry.newValue(i)) {
                     HexLogError("Mirror local site name %s cannot be the same to remote site name %s", s_mirrorName.c_str(), s_mirrorName.c_str());
                     printf("Mirror local site name %s cannot be the same to remote site name %s\n", s_mirrorName.c_str(), s_mirrorName.c_str());
@@ -1197,15 +1203,27 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    s_bRbdMirrorChanged = s_mirrorEnabled.modified() | s_mirrorName.modified() |
-                            s_peerNameAry.modified() | s_peerIpAry.modified() |
-                          s_peerSecretAry.modified() | s_ruleVolumeAry.modified();
+    s_bRbdMirrorChanged = s_mirrorEnabled.modified()
+        | s_mirrorName.modified()
+        | s_peerNameAry.modified()
+        | s_peerIpAry.modified()
+        | s_peerSecretAry.modified()
+        | s_ruleVolumeAry.modified();
 
-    s_bConfigChanged = s_enabled.modified() | s_debugEnabled.modified() |
-                          s_fsid.modified() | s_monEnabled.modified() | s_perfTuned.modified() |
-                             s_bNetModified | s_bCubeModified | s_bKeystoneModified |
-                           G_MOD(IS_MASTER) | G_MOD(CTRL_IP) | G_MOD(SHARED_ID) |
-                      G_MOD(STORAGE_F_CIDR) | G_MOD(STORAGE_B_CIDR) | G_MOD(STORAGE_F_ADDR);
+    s_bConfigChanged = s_enabled.modified()
+        | s_debugEnabled.modified()
+        | s_fsid.modified()
+        | s_monEnabled.modified()
+        | s_perfTuned.modified()
+        | s_bNetModified
+        | s_bCubeModified
+        | s_bKeystoneModified
+        | G_MOD(IS_MASTER)
+        | G_MOD(CTRL_IP)
+        | G_MOD(SHARED_ID)
+        | G_MOD(STORAGE_F_CIDR)
+        | G_MOD(STORAGE_B_CIDR)
+        | G_MOD(STORAGE_F_ADDR);
 
     s_bMonMapChanged = s_bNetModified | G_MOD(STORAGE_F_ADDR);
 
@@ -1215,8 +1233,8 @@ CommitCheck(bool modified, int dryLevel)
 static bool
 CronCephHousekeeper()
 {
-    if(IsControl(s_eCubeRole)) {
-        FILE *fout = fopen(CEPH_HOUSEKEEPER, "w");
+    if (IsControl(s_eCubeRole)) {
+        FILE* fout = fopen(CEPH_HOUSEKEEPER, "w");
         if (!fout) {
             HexLogError("Unable to write %s agent cache renew-er: %s", USER, CEPH_HOUSEKEEPER);
             return false;
@@ -1225,12 +1243,11 @@ CronCephHousekeeper()
         fprintf(fout, "0 3 * * SUN root " HEX_SDK " _health_log_purge\n");
         fclose(fout);
 
-        if(HexSetFileMode(CEPH_HOUSEKEEPER, "root", "root", 0644) != 0) {
+        if (HexSetFileMode(CEPH_HOUSEKEEPER, "root", "root", 0644) != 0) {
             HexLogError("Unable to set file %s mode/permission", CEPH_HOUSEKEEPER);
             return false;
         }
-    }
-    else {
+    } else {
         unlink(CEPH_HOUSEKEEPER);
     }
 
@@ -1300,19 +1317,15 @@ Commit(bool modified, int dryLevel)
             return false;
 
         CommitMon(monEnabled, NAME, s_hostname.c_str(), s_hostname.oldValue().c_str(),
-                  storIp.c_str(), s_bMonMapChanged);
+            storIp.c_str(), s_bMonMapChanged);
         EnableMonMsgr2();
 
         if (!monEnabled)
             RemoveMon(s_hostname.c_str());
 
-        if (!SetupPools() ||
-            !SetupFS() ||
-            !SetupMgr(s_hostname) ||
-            !SetupMds(s_hostname) ||
-            !SetupRgw(s_hostname.c_str()) ||
-            !SetupOsd(s_hostname, fsid) ||
-            !SetupISCSI())
+        if (!SetupPools() || !SetupFS() || !SetupMgr(s_hostname)
+            || !SetupMds(s_hostname) || !SetupRgw(s_hostname.c_str())
+            || !SetupOsd(s_hostname, fsid) || !SetupISCSI())
             return false;
 
         CommitMgr(NAME, s_hostname.c_str());
@@ -1332,13 +1345,13 @@ Commit(bool modified, int dryLevel)
 
     if (s_bRbdMirrorChanged && IsControl(s_eCubeRole)) {
         UpdateMirrorConfig(s_mirrorEnabled, s_mirrorName.c_str(),
-                           s_peerNameAry, s_peerIpAry, s_peerSecretAry);
+            s_peerNameAry, s_peerIpAry, s_peerSecretAry);
 
         CommitRbdMirror(s_mirrorEnabled, s_mirrorName);
 
         SetupRbdMirror(s_mirrorEnabled, s_mirrorMetaSync,
-                       s_peerIpAry, s_peerSecretAry,
-                       s_peerNameAry, s_ruleVolumeAry);
+            s_peerIpAry, s_peerSecretAry,
+            s_peerNameAry, s_ruleVolumeAry);
     }
 
     CronCephHousekeeper();
@@ -1507,7 +1520,6 @@ RestartMirrorMain(int argc, char* argv[])
     return EXIT_SUCCESS;
 }
 
-
 static void
 SyncConfigUsage(void)
 {
@@ -1596,8 +1608,7 @@ PurgeMonMain(int argc, char* argv[])
         copy(peers.begin(), peers.end(), std::ostream_iterator<std::string>(strPeers, ","));
         HexUtilSystemF(0, 0, HEX_SDK " ceph_mon_map_remove %s %s", CONF, strPeers.str().c_str());
         CommitMon(true, NAME, s_hostname.c_str(), NULL, NULL, false);
-    }
-    else {
+    } else {
         RemoveMonData(s_hostname.c_str());
     }
 
@@ -1627,7 +1638,7 @@ SetGuiPasswordMain(int argc, char* argv[])
 }
 
 static int
-ClusterStartMain(int argc, char **argv)
+ClusterStartMain(int argc, char** argv)
 {
     if (argc != 1) {
         return EXIT_FAILURE;
@@ -1693,4 +1704,4 @@ CONFIG_SUPPORT_COMMAND_TO_FILE("timeout 60 ceph pg dump", "/tmp/ceph_pg_dump.txt
 
 CONFIG_TRIGGER_WITH_SETTINGS(ceph, "cluster_start", ClusterStartMain);
 
-//CONFIG_SHUTDOWN(ceph, ShutdownCeph);
+// CONFIG_SHUTDOWN(ceph, ShutdownCeph);
