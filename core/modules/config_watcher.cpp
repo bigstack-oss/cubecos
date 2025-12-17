@@ -46,6 +46,7 @@ static bool s_bSetup = true;
 
 static bool s_bCubeModified = false;
 static bool s_bMqModified = false;
+static bool s_bKeystoneModified = false;
 
 static bool s_bDbPassChanged = false;
 static bool s_bConfigChanged = false;
@@ -329,6 +330,19 @@ NotifyCube(bool modified)
 }
 
 static bool
+ParseKeystone(const char* name, const char* value, bool isNew)
+{
+    ParseTune(name, value, isNew, 3);
+    return true;
+}
+
+static void
+NotifyKeystone(bool modified)
+{
+    s_bKeystoneModified = IsModifiedTune(3);
+}
+
+static bool
 Parse(const char *name, const char *value, bool isNew)
 {
     bool r = true;
@@ -354,7 +368,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bMqModified | s_bCubeModified |
+    s_bConfigChanged = modified | s_bMqModified | s_bCubeModified | s_bKeystoneModified |
                                G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
 
     s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
@@ -449,4 +463,5 @@ CONFIG_REQUIRES(watcher, memcache);
 // extra tunings
 CONFIG_OBSERVES(watcher, rabbitmq, ParseRabbitMQ, NotifyMQ);
 CONFIG_OBSERVES(watcher, cubesys, ParseCube, NotifyCube);
+CONFIG_OBSERVES(watcher, keystone, ParseKeystone, NotifyKeystone);
 
