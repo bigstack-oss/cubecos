@@ -5,11 +5,11 @@ include ../../../build.mk
 CEPH_CSI_DIR := /opt/k3s/ceph-csi
 CEPH_CSI_IMAGES_TGZ := ceph-csi-images.tgz
 
-VERSION := 3.11.0
+VERSION := 3.13.1
 CEPH_CSI_RBD_CHART := ceph-csi-rbd-$(VERSION).tgz
 CEPH_CSI_FS_CHART := ceph-csi-cephfs-$(VERSION).tgz
 
-CEPH_CSI_IMG_TAG := v3.11.0
+CEPH_CSI_IMG_TAG := v3.13.1
 CEPH_CSI_IMG := quay.io/cephcsi/cephcsi
 CEPH_CSI_IMG_TAR := ceph-csi.tar
 

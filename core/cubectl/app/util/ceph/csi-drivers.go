@@ -14,26 +14,26 @@ const (
 	CsiFs                   = "fs"
 	DefaultFsSubVolumeGroup = "cephfs_default_sub_volume_group"
 
-	CsiRbdRemoteTgz    = "https://ceph.github.io/csi-charts/rbd/ceph-csi-rbd-3.11.0.tgz"
+	CsiRbdRemoteTgz    = "https://ceph.github.io/csi-charts/rbd/ceph-csi-rbd-3.13.1.tgz"
 	CsiRbdNamespace    = "ceph-csi-rbd"
 	CsiRbdStorageClass = "ceph-rbd"
 	CsiRbdRelease      = "ceph-csi-rbd"
-	CsiRbdImageTag     = "v3.11.0"
+	CsiRbdImageTag     = "v3.13.1"
 
-	CsiFsRemoteTgz = "https://ceph.github.io/csi-charts/cephfs/ceph-csi-cephfs-3.11.0.tgz"
+	CsiFsRemoteTgz = "https://ceph.github.io/csi-charts/cephfs/ceph-csi-cephfs-3.13.1.tgz"
 	CsiFsNamespace = "ceph-csi-cephfs"
 	CsiFsRelease   = "ceph-csi-cephfs"
-	CsiFsImageTag  = "v3.11.0"
+	CsiFsImageTag  = "v3.13.1"
 )
 
 var (
-	CsiRbdLocalTgz = fmt.Sprintf("%s/ceph-csi-rbd-3.11.0.tgz", CsiLocalStore)
-	CsiFsLocalTgz  = fmt.Sprintf("%s/ceph-csi-cephfs-3.11.0.tgz", CsiLocalStore)
+	CsiRbdLocalTgz = fmt.Sprintf("%s/ceph-csi-rbd-3.13.1.tgz", CsiLocalStore)
+	CsiFsLocalTgz  = fmt.Sprintf("%s/ceph-csi-cephfs-3.13.1.tgz", CsiLocalStore)
 	CsiImages      = []docker.Image{
 		{
 			Registry: "quay.io",
 			Name:     "cephcsi/cephcsi",
-			Tag:      "v3.11.0",
+			Tag:      "v3.13.1",
 			LocalTar: fmt.Sprintf("%s/ceph-csi.tar", CsiLocalStore),
 		},
 		{
