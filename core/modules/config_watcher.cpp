@@ -78,6 +78,7 @@ CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 CONFIG_TUNING_SPEC_STR(CUBESYS_SEED);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_SALTKEY);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
+CONFIG_TUNING_SPEC_STR(KEYSTONE_ADMIN_CLI_PASS);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, WATCHER_ENABLED);
@@ -92,6 +93,7 @@ PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 2);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 2);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 2);
 PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 2);
+PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 3);
 
 // should run after mysql services are running.
 static bool
@@ -226,7 +228,7 @@ UpdateDebug(bool enabled)
 }
 
 static bool
-UpdateCfg(const std::string& domain, const std::string& userPass)
+UpdateCfg(const std::string& domain, const std::string& userPass, const std::string& adminCliPass)
 {
     if(IsControl(s_eCubeRole)) {
         cfg["DEFAULT"]["log_dir"] = LOGDIR;
@@ -244,13 +246,17 @@ UpdateCfg(const std::string& domain, const std::string& userPass)
         cfg["keystone_authtoken"]["password"] = userPass;
         cfg["keystone_authtoken"]["service_token_roles_required"] = "true";
 
+        cfg["monasca_client"].clear();
+        cfg["monasca_client"]["interface"] = "public";
+        cfg["monasca_client"]["region_name"] = "RegionOne";
+
         cfg["watcher_clients_auth"].clear();
         cfg["watcher_clients_auth"]["auth_type"] = "password";
         cfg["watcher_clients_auth"]["project_domain_name"] = domain;
         cfg["watcher_clients_auth"]["user_domain_name"] = domain;
-        cfg["watcher_clients_auth"]["project_name"] = "service";
-        cfg["watcher_clients_auth"]["username"] = "watcher";
-        cfg["watcher_clients_auth"]["password"] = userPass;
+        cfg["watcher_clients_auth"]["project_name"] = "admin";
+        cfg["watcher_clients_auth"]["username"] = "admin_cli";
+        cfg["watcher_clients_auth"]["password"] = adminCliPass;
 
         cfg["watcher_datasources"]["datasources"] = "monasca";
 
@@ -260,6 +266,7 @@ UpdateCfg(const std::string& domain, const std::string& userPass)
             std::string workers = std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole)));
             cfg["api"]["workers"] = workers;
             cfg["watcher_decision_engine"]["max_workers"] = workers;
+            cfg["watcher_decision_engine"]["metric_map_path"] = "/etc/watcher/metric_map.yaml";
             cfg["watcher_applier"]["workers"] = workers;
         }
     }
@@ -370,6 +377,7 @@ Commit(bool modified, int dryLevel)
     std::string external = G(EXTERNAL);
 
     std::string userPass = GetSaltKey(s_saltkey, s_userPass, s_seed);
+    std::string adminCliPass = GetSaltKey(s_saltkey, s_adminCliPass.newValue(), s_seed.newValue());
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass, s_seed);
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass, s_seed);
 
@@ -383,7 +391,7 @@ Commit(bool modified, int dryLevel)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
     if (s_bConfigChanged) {
-        UpdateCfg(s_cubeDomain, userPass);
+        UpdateCfg(s_cubeDomain, userPass, adminCliPass);
         UpdateSharedId(sharedId);
         UpdateMyIp(myip);
         UpdateDbConn(sharedId, dbPass);

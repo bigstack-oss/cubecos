@@ -1,0 +1,4 @@
+monasca:
+  instance_cpu_usage: cpu.utilization_norm_perc
+  instance_ram_usage: mem.used_gb
+  host_cpu_usage: cpu.utilization_perc

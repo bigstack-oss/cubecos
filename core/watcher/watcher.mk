@@ -21,6 +21,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(WATCHER_CONF_DIR) $(WATCHER_APP_DIR) $(WATCHER_LOG_DIR)
 	$(Q)chroot $(ROOTDIR) chown watcher:watcher $(WATCHER_CONF_DIR) $(WATCHER_APP_DIR) $(WATCHER_LOG_DIR)
 	$(Q)cp -f $(ROOTDIR)/$(WATCHER_CONF_DIR)/watcher.conf $(ROOTDIR)/$(WATCHER_CONF_DIR)/watcher.conf.def
+	$(Q)cp -f $(COREDIR)/watcher/metric_map.yaml $(ROOTDIR)/$(WATCHER_CONF_DIR)/metric_map.yaml
 
 rootfs_install::
 	$(Q)[ -d $(WATCHER_PATCHDIR) ] && cp -rf $(WATCHER_PATCHDIR)/* $(WATCHER_SRCDIR)/ || /bin/true
