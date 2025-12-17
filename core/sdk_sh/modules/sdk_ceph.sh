@@ -2220,7 +2220,7 @@ ceph_restful_username_list()
 ceph_restful_key_create()
 {
     local username=$1
-    Quiet -n $CEPH restful create-key $username
+    $CEPH restful create-key $username
 }
 
 ceph_restful_key_delete()
@@ -2231,7 +2231,7 @@ ceph_restful_key_delete()
 
 ceph_restful_key_list()
 {
-    Quiet -n $CEPH restful list-keys
+    $CEPH restful list-keys
 }
 
 ceph_mgr_module_enable()
