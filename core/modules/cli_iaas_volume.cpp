@@ -126,6 +126,9 @@ CLI_MODE_COMMAND(
     "Show volume quota for a tenant.",
     "quota_show [<domain>] [<tenant>]");
 
+static const std::string V2V_TEMP_LARGE = "v2v_tmp_large";
+static const std::string V2V_TEMP = "v2v_tmp";
+
 /**
  * Get names of NFS storage backends.
  * The backends must be configured, enabled, and up.
@@ -614,6 +617,19 @@ createWorkingDirectoryForVolumeConversion(
         return std::filesystem::path();
     }
 
+    // create temporary directories
+    std::filesystem::path v2vTmpLargePath = directoryPath / V2V_TEMP_LARGE;
+    if (mkdir(v2vTmpLargePath.c_str(), 0755) != 0) {
+        rmdir(directoryPath.c_str());
+        return std::filesystem::path();
+    }
+    std::filesystem::path v2vTmpPath = directoryPath / V2V_TEMP;
+    if (mkdir(v2vTmpPath.c_str(), 0755) != 0) {
+        rmdir(v2vTmpLargePath.c_str());
+        rmdir(directoryPath.c_str());
+        return std::filesystem::path();
+    }
+
     return directoryPath;
 }
 
@@ -627,6 +643,9 @@ createWorkingDirectoryForVolumeConversion(
 static const bool
 convertVolume(const std::string& filePath, const std::string& workingDirectory)
 {
+    std::filesystem::path v2vTmpLargePath = std::filesystem::path(workingDirectory) / V2V_TEMP_LARGE;
+    std::filesystem::path v2vTmpPath = std::filesystem::path(workingDirectory) / V2V_TEMP;
+
     Cmd c;
     c.path = "/usr/bin/virt-v2v";
     c.args = {
@@ -635,6 +654,10 @@ convertVolume(const std::string& filePath, const std::string& workingDirectory)
         "-of", "raw",
         "-os", workingDirectory,
         "--parallel", "4"
+    };
+    c.env = {
+        { "VIRT_V2V_TMPDIR", v2vTmpLargePath },
+        { "TMPDIR", v2vTmpPath },
     };
     c.captureStdout = true;
     c.captureStderr = true;
