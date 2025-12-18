@@ -802,6 +802,16 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    CliPrint("The following is needed before using this command:");
+    CliPrint(
+        "1. Users need to stop the running VMs on other platforms. "
+        "Currently, only cold migration is supported. "
+        "Hot migration is not supported at the current stage.");
+    CliPrint("2. Users need to prepare a large enough NFS host export.");
+    CliPrint("3. Users need to prepare and export the volumes onto the NFS export.");
+    CliPrint("4. The NFS export needs to be added as a storage backend either via UI or CLI > iaas > volume_backend > set_storage.");
+    CliPrint("Press Ctrl + C to exit if not ready.");
+
     // gather the arguments
     std::string cmd = "";
     int index;
