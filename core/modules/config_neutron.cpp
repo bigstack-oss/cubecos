@@ -440,7 +440,7 @@ UpdateCfg(std::string domain, std::string region, std::string password,
 
         cfg["oslo_concurrency"]["lock_path"] = RUNDIR;
         cfg["DEFAULT"]["core_plugin"] = "neutron.plugins.ml2.plugin.Ml2Plugin";
-        cfg["DEFAULT"]["service_plugins"] = "neutron.services.ovn_l3.plugin.OVNL3RouterPlugin,ovn-vpnaas";
+        cfg["DEFAULT"]["service_plugins"] = "neutron.services.ovn_l3.plugin.OVNL3RouterPlugin,ovn-vpnaas,neutron.services.qos.qos_plugin.QoSPlugin";
         cfg["DEFAULT"]["allow_overlapping_ips"] = "true";
         cfg["DEFAULT"]["notify_nova_on_port_status_changes"] = "true";
         cfg["DEFAULT"]["notify_nova_on_port_data_changes"] = "true";
@@ -485,7 +485,7 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         ml2Cfg["ml2"]["type_drivers"] = "local,flat,vlan,geneve";
         ml2Cfg["ml2"]["tenant_network_types"] = "geneve";
         ml2Cfg["ml2"]["mechanism_drivers"] = "ovn,baremetal";
-        ml2Cfg["ml2"]["extension_drivers"] = "port_security,dns_domain_ports";
+        ml2Cfg["ml2"]["extension_drivers"] = "port_security,dns_domain_ports,qos";
         ml2Cfg["ml2"]["overlay_ip_version"] = "4";
         ml2Cfg["ml2"]["path_mtu"] = std::to_string(overlayMtu);
         ml2Cfg["ml2_type_flat"]["flat_networks"] = "provider" + ep;
