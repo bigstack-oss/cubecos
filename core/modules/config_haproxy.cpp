@@ -113,13 +113,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  server localhost 127.0.0.1:8080 check\n");
     fprintf(fout, "  \n");
 
-    fprintf(fout, "backend rancher_node_driver\n");
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  option forwardfor\n");
-    fprintf(fout, "  option http-server-close\n");
-    fprintf(fout, "  server localhost 127.0.0.1:8080 check\n");
-    fprintf(fout, "  \n");
-
     fprintf(fout, "backend grafana_backend\n");
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
@@ -191,7 +184,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  option http-server-close\n");
     fprintf(fout, "  http-request add-header X-Forwarded-Proto http\n");
     fprintf(fout, "  use_backend openstack_horizon if { path_beg /horizon }\n");
-    fprintf(fout, "  use_backend rancher_node_driver if { path_beg /static/nodedrivers/ }\n");
     fprintf(fout, "  use_backend grafana_backend if { path_beg /grafana } or { path_beg /grafana/ }\n");
     if (!IsEdge(s_eCubeRole)) {
         fprintf(fout, "  use_backend opensearch-dashboards_backend if { path_beg /opensearch-dashboards } or { path_beg /opensearch-dashboards/ }\n");
@@ -212,7 +204,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  option http-server-close\n");
     fprintf(fout, "  http-request add-header X-Forwarded-Proto https\n");
     fprintf(fout, "  use_backend openstack_horizon if { path_beg /horizon }\n");
-    fprintf(fout, "  use_backend rancher_node_driver if { path_beg /static/nodedrivers/ }\n");
     fprintf(fout, "  use_backend grafana_backend if { path_beg /grafana } or { path_beg /grafana/ }\n");
     if (!IsEdge(s_eCubeRole)) {
         fprintf(fout, "  use_backend opensearch-dashboards_backend if { path_beg /opensearch-dashboards } or { path_beg /opensearch-dashboards/ }\n");

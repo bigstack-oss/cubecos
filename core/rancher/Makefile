@@ -22,10 +22,6 @@ $(CHART):
 	$(Q)helm repo add rancher-stable https://releases.rancher.com/server-charts/stable $(QEND)
 	$(Q)helm pull rancher-stable/rancher --version $(APP_VERSION) $(QEND)
 
-nodedrivers/docker-machine-driver-cube:
-	$(Q)mkdir -p nodedrivers/
-	$(call RUN_CMD_TIMED,(cd $(SRCDIR)/rancher-machine-driver-cube/ && CGO_ENABLED=0 go build -o $(BLDDIR)/$@ && go mod tidy),"  GEN     $@")
-
 .PHONY: build-image
 build-image:
 	$(call RUN_CMD_TIMED, \
@@ -63,7 +59,7 @@ clean:: testclean
 	$(Q)rm -f /usr/local/bin/$(CLI_BIN)
 	$(Q)podman image rm -f localhost/bigstack/rancher:v$(APP_VERSION) 2>/dev/null || true
 
-BUILD += $(CLI_BIN) $(CHART) nodedrivers/docker-machine-driver-cube
+BUILD += $(CLI_BIN) $(CHART)
 BUILDCLEAN += $(CLI_BIN) $(CHART) nodedrivers $(RANCHER_DIR)
 
 SUBDIRS += cpo

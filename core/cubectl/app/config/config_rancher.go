@@ -191,79 +191,6 @@ func rancherReq(method string, resource string, data string) (map[string]interfa
 	return result, nil
 }
 
-func rancherConfigClusterNodeDrivers() error {
-	enabledTypeDrivers := map[string]map[string]bool{
-		"kontainerDrivers": {},
-		"nodeDrivers":      {
-			// "openstack": true,
-		},
-	}
-
-	var nodeDrvFound bool
-	for key, val := range enabledTypeDrivers {
-		result, err := rancherReq("GET",
-			"/v3/"+key,
-			``,
-		)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		for _, data := range result["data"].([]interface{}) {
-			id := data.(map[string]interface{})["id"].(string)
-
-			// Found if default node driver was created
-			if key == "nodeDrivers" {
-				name := data.(map[string]interface{})["name"].(string)
-				if name == "cube" {
-					nodeDrvFound = true
-					// Do not take action for default node driver
-					continue
-				}
-			}
-
-			var action string
-			if _, ok := val[id]; ok {
-				action = "activate"
-			} else {
-				action = "deactivate"
-			}
-
-			if _, err := rancherReq("POST",
-				"/v3/"+key+"/"+id+"?action="+action,
-				``,
-			); err != nil {
-				return errors.WithStack(err)
-			}
-			zap.L().Info("Rancher driver configured", zap.Any("id", id), zap.Any("action", action))
-		}
-	}
-
-	if nodeDrvFound {
-		zap.L().Info("Rancher default node driver found")
-	} else {
-		driverDataFmt := `
-{
-	"active": true,
-	"builtin": false,
-	"name": "cube",
-	"url": "http://%s:8080/static/nodedrivers/docker-machine-driver-cube"
-}
-`
-
-		if _, err := rancherReq("POST",
-			"/v3/nodedrivers",
-			fmt.Sprintf(driverDataFmt, cubeSettings.GetControllerIp()),
-		); err != nil {
-			return errors.WithStack(err)
-		}
-
-		zap.L().Info("Rancher default node driver created", zap.String("name", "cube"))
-	}
-
-	return nil
-}
-
 func rancherConfigInit() error {
 	// if err := rancherReq("PUT",
 	// 	"/v3/settings/first-login",
@@ -279,10 +206,6 @@ func rancherConfigInit() error {
 	// ); err != nil {
 	// 	return errors.WithStack(err)
 	// }
-
-	if err := rancherConfigClusterNodeDrivers(); err != nil {
-		return errors.WithStack(err)
-	}
 
 	// Enable unsupported storage drivers
 	if _, err := rancherReq("PUT",
