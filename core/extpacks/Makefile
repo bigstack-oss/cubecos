@@ -15,7 +15,7 @@ NAS := $(TOP_BLDDIR)/nas
 
 AMPHORA := $(TOP_BLDDIR)/../amphora-x64-haproxy_yoga.qcow2
 MANILA  := $(TOP_BLDDIR)/../manila-service-image_yoga.qcow2
-RANCHER := $(TOP_BLDDIR)/../rancher-cluster-image_22.04.raw
+RANCHER := $(TOP_BLDDIR)/../rancher-cluster-image-rke2-v1.32.4.raw
 EXTPACK := $(AMPHORA) $(MANILA) $(RANCHER)
 EXTPACK_MD5 := $(shell for E in $(EXTPACK); do echo $${E}.md5 ; done)
 
@@ -45,11 +45,11 @@ $(MANILA).md5: $(MANILA)
 	$(Q)diff $@ $(NAS)/app-image/yoga/manila-service-image_yoga.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/yoga/manila-service-image_yoga.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
 
 $(RANCHER): $(NAS)
-	$(Q)cp $</app-image/yoga/rancher-cluster-image_22.04.raw $@
+	$(Q)cp $</app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw $@
 
 .PHONY: $(RANCHER).md5
 $(RANCHER).md5: $(RANCHER)
-	$(Q)diff $@ $(NAS)/app-image/yoga/rancher-cluster-image_22.04.raw.md5 2>/dev/null || ( cp -f $(NAS)/app-image/yoga/rancher-cluster-image_22.04.raw $< && md5sum $< | awk '{print $$1}' > $@ )
+	$(Q)diff $@ $(NAS)/app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw.md5 2>/dev/null || ( cp -f $(NAS)/app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw.raw $< && md5sum $< | awk '{print $$1}' > $@ )
 
 .PHONY: ext
 ext: $(PROJ_EXT) $(PROJ_PORTAL_EXT)
