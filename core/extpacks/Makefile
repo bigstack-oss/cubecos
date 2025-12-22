@@ -49,7 +49,7 @@ $(RANCHER): $(NAS)
 
 .PHONY: $(RANCHER).md5
 $(RANCHER).md5: $(RANCHER)
-	$(Q)diff $@ $(NAS)/app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw.md5 2>/dev/null || ( cp -f $(NAS)/app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw.raw $< && md5sum $< | awk '{print $$1}' > $@ )
+	$(Q)diff $@ $(NAS)/app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw.md5 2>/dev/null || ( cp -f $(NAS)/app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw $< && md5sum $< | awk '{print $$1}' > $@ )
 
 .PHONY: ext
 ext: $(PROJ_EXT) $(PROJ_PORTAL_EXT)
