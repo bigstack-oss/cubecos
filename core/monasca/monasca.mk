@@ -9,6 +9,7 @@ MONASCA_RUN_DIR := /var/run/monasca
 MONASCA_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages
 MONASCA_PATCHDIR := $(COREDIR)/monasca/$(OPENSTACK_RELEASE)_patch
 
+ROOTFS_PIP += monasca-agent
 
 # config file examples are copied from github repo: openstack-ansible-os_monasca
 # monasca common

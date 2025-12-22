@@ -109,6 +109,7 @@ immutables===0.16
 python-swiftclient===3.13.1
 pyOpenSSL===22.0.0
 monasca-common===3.5.0
+monasca-agent===10.0.0
 zeroconf===0.37.0;python_version=='3.6'
 zeroconf===0.38.3;python_version=='3.8'
 scipy===1.5.4;python_version=='3.6'
@@ -433,7 +434,7 @@ python-rsdclient===1.0.2
 flux===1.3.5
 python-solumclient===3.5.1
 krb5===0.3.0
-PyMySQL===1.0.2
+PyMySQL===1.1.2
 uhashring===2.1
 kubernetes===22.6.0
 httplib2===0.20.4
@@ -462,7 +463,7 @@ pyasn1===0.4.8
 directord===0.12.0
 oslo.rootwrap===6.3.1
 pyroute2.nslink===0.6.6
-Django===3.2.12
+Django===3.2.25
 pexpect===4.8.0
 contextvars===2.4
 cmd2===2.4.0

@@ -60,7 +60,7 @@ clean:: testclean
 	$(Q)podman image rm -f localhost/bigstack/rancher:v$(APP_VERSION) 2>/dev/null || true
 
 BUILD += $(CLI_BIN) $(CHART)
-BUILDCLEAN += $(CLI_BIN) $(CHART) nodedrivers $(RANCHER_DIR)
+BUILDCLEAN += $(CLI_BIN) $(CHART) $(RANCHER_DIR)
 
 SUBDIRS += cpo
 
