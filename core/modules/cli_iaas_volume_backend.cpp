@@ -6,7 +6,7 @@
 CLI_MODE(
     CLI_TOP_COMMAND_IAAS,
     CLI_COMMAND_IAAS_STORAGE,
-    "Work with external settings.",
+    "Work with the IaaS volume external storage settings.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 static void

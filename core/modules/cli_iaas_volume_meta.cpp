@@ -157,7 +157,7 @@ UploadMain(int argc, const char** argv)
 
 // This mode is not available in strict error state
 CLI_MODE(CLI_TOP_COMMAND_IAAS, "volume_meta",
-    "Work with volume meta files.",
+    "Work with the IaaS volume meta files.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE_COMMAND("volume_meta", "create", CreateMain, 0,

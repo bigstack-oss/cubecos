@@ -175,6 +175,7 @@ hex_config_MODULES += config_prometheus.o
 PROGRAMS += hex_config
 
 hex_cli_MODULES += cli_cubesys.o
+hex_cli_MODULES += cli_management_cleanup.o
 hex_cli_MODULES += cli_ssh.o
 hex_cli_MODULES += cli_appliance.o
 hex_cli_MODULES += cli_support.o
