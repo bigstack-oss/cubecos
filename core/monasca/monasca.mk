@@ -65,3 +65,6 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)[ -d $(MONASCA_PATCHDIR) ] && cp -rf $(MONASCA_PATCHDIR)/* $(MONASCA_SRCDIR)/ || /bin/true
+
+rootfs_install::
+	$(Q)$(COREDIR)/monasca/santize-monasca-log4j.sh $(BLDDIR)/heavy_rootfs/usr/local/lib/python3.9/site-packages/monasca_agent/collector/checks/libs

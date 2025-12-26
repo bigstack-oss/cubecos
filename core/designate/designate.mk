@@ -19,7 +19,6 @@ rootfs_install::
 
 # https://releases.openstack.org/teams/designate.html
 ROOTFS_PIP_DL_FROM += https://github.com/openstack/designate.git
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/python-designateclient.git
 ROOTFS_PIP_DL_FROM += https://github.com/openstack/designate-dashboard.git
 
 rootfs_install::
