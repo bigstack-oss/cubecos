@@ -1,5 +1,5 @@
 output:
-  - "cyclonedx-json=syft-fs-cubecos.cdx.json"
+  - "cyclonedx-json=../syft-fs-cubecos.cdx.json"
 
 quiet: false
 
@@ -73,7 +73,3 @@ source:
   file:
     digests:
       - "sha256"
-log:
-  structured: true
-  level: "error"
-  file: "./syft.log"

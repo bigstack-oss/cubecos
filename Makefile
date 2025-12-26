@@ -97,6 +97,13 @@ vagrant: all
 	$(Q)$(MAKE) -C core/main vagrant
 
 help::
+	$(Q)echo "sbom         Build SBOM artifacts"
+
+.PHONY: sbom
+sbom:
+	$(Q)$(MAKE) -C core/main sbom
+
+help::
 	$(Q)echo "masqon       turn on iptables masquerade, allowing VMs to Internet"
 
 .PHONY: masqon

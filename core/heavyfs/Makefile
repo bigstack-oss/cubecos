@@ -19,9 +19,18 @@ HORIZON_DIR := $(HORIZON_APP_DIR)/openstack_dashboard
 HORIZON_ETCDIR := /etc/openstack-dashboard
 HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
 
+ROOTFS_PIP += numpy
 BLKLST_DNF += iptables-legacy iptables-legacy-libs python3-django3 ceph-mgr-k8sevents
 BLKLST_DNF += python3-PyMySQL	# CVE-2024-36039 Upgrade to version: 1.1.1
 BLKLST_DNF += python3-django	# CVE-2022-28347, CVE-2023-31047, CVE-2025-64459 CVE-2023-46695, CVE-2023-43665, CVE-2022-36359 Upgrade to version: 3.2.23
+ROOTFS_PIP += python-jose       # CVE-2024-33663 Upgrade to version: 3.4.0
+BLKLST_DNF += python3-monascaclient # Remove DNF managed package
+BLKLST_DNF += python3-scciclient # CVE-2022-2996
+ROOTFS_PIP += python-scciclient # CVE-2022-2996 Upgrade to version: 0.12.0
+ROOTFS_PIP += waitress          # CVE-2024-49768 Upgrade to version: 3.0.1
+ROOTFS_PIP += numexpr		# CVE-2023-39631 Upgrade to version: 2.8.5
+BLKLST_DNF += ansible ansible-core # CVE-2025-58367 Remove DNF managed package
+ROOTFS_PIP += ansible ansible-core # CVE-2025-58367 Upgrade to version: 8.6.1
 
 ALL = $(HEAVYFS)
 
@@ -138,9 +147,9 @@ OPENSSL += openssl-$(OPENSSL_VER) openssl-devel-$(OPENSSL_VER) openssl-libs-$(OP
 LOCKED_DNF += $(OPENSSL)
 
 # python3-numpy-1:1.23.5-1.el9.x86_64 from @commandline and python3-numpy-1:1.20.1-5.el9.x86_64 from appstream
-PYTHON3-NUMPY := python3-numpy-1:1.20.1-5.el9
-PYTHON3-NUMPY-F2PY := python3-numpy-f2py-1:1.20.1-5.el9
-LOCKED_DNF += $(PYTHON3-NUMPY-F2PY)
+# PYTHON3-NUMPY := python3-numpy-1:1.20.1-5.el9
+# PYTHON3-NUMPY-F2PY := python3-numpy-f2py-1:1.20.1-5.el9
+# LOCKED_DNF += $(PYTHON3-NUMPY-F2PY)
 
 $(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-openstackclient python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) perf arp-scan")
 

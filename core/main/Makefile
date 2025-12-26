@@ -45,6 +45,7 @@ PROJ_BUILD_ISO := 1
 PROJ_BUILD_OVA := 1
 PROJ_BUILD_VAGRANT := 1
 ifeq ($(PRODUCTION),1)
+PROJ_BUILD_SBOM := 1
 PROJ_BUILD_EXT := 1
 else
 PROJ_BUILD_FAKE_PPU := 1
@@ -69,34 +70,11 @@ include $(shell for m in $(ROOT_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 # cube finalizer
 include $(SRCDIR)/cube-post.mk
 
-PROJ_SBM := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).sbm
-PROJ_VLN := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).vln
-PROJ_BDL := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).bdl
-PROJ_PUB := $(PROJ_NAME)_$(PROJ_VERSION)_$(PROJ_BUILD_LABEL).pub
-
-SYFT_URL := https://github.com/anchore/syft/releases
-SYFT_VER := $(shell curl -sL $(SYFT_URL)/latest | grep -o "tag_name=.*&amp" | cut -d "v" -f2 | cut -d "&" -f1)
-SYFT_RPM := $(SYFT_URL)/download/v$(SYFT_VER)/syft_$(SYFT_VER)_linux_amd64.rpm
-
-GRYPE_URL := https://github.com/anchore/grype/releases
-GRYPE_VER := $(shell curl -sL $(GRYPE_URL)/latest | grep -o "tag_name=.*&amp" | cut -d "v" -f2 | cut -d "&" -f1)
-GRYPE_RPM := $(GRYPE_URL)/download/v$(GRYPE_VER)/grype_$(GRYPE_VER)_linux_amd64.rpm
-
-COSIGN_URL := https://github.com/sigstore/cosign/releases
-COSIGN_VER := $(shell curl -sL $(COSIGN_URL)/latest | grep -o "tag_name=.*&amp" | cut -d "v" -f2 | cut -d "&" -f1)
-COSIGN_RPM := $(COSIGN_URL)/download/v$(COSIGN_VER)/cosign-$(COSIGN_VER)-1.x86_64.rpm
-
 $(PROJ_BASE_ROOTFS): $(TOP_BLDDIR)/core/heavyfs/heavy_rootfs $(PROJ_BOOTSTRAP) $(PROGRAMS) $(shell for m in $(ROOT_COMPONENTS); do find $(COREDIR)/$$m -type f; done)
 	$(call RUN_CMD_TIMED, umount -l $@/proc ; rm -rf $@,"  RM      $$(basename $@)")
 	$(call RUN_CMD_TIMED, cp -rpf $< $@,"  COPY    $$(basename $<)")
-	$(call RUN_CMD_TIMED, dnf install -y   $(SYFT_RPM),"  DNF     syft")
-	$(call RUN_CMD_TIMED, dnf install -y  $(GRYPE_RPM),"  DNF     grype")
-	$(call RUN_CMD_TIMED, dnf install -y $(COSIGN_RPM),"  DNF     cosign")
-	$(call RUN_CMD_TIMED, rm -f cosign.key cosign.pub} ; COSIGN_PASSWORD= cosign generate-key-pair,"  GEN     cosign keypair")
-	$(call RUN_CMD_TIMED, mkdir -p $(PROJ_SHIPDIR) ; cp -f cosign.pub  $(PROJ_SHIPDIR)/$(PROJ_PUB),"  COPY    cosign pubkey")
 
-PKGCLEAN += $(CURDIR)/*.before rootfs *initramfs cosign.*
-PKGCLEAN += $(PROJ_SHIPDIR)/$(PROJ_SBM) $(PROJ_SHIPDIR)/$(PROJ_VLN) $(PROJ_SHIPDIR)/$(PROJ_BDL) $(PROJ_SHIPDIR)/$(PROJ_PUB)
+PKGCLEAN += $(CURDIR)/*.before rootfs *initramfs
 
 liveusb: liveusb_warning
 

@@ -9,17 +9,22 @@ MONASCA_RUN_DIR := /var/run/monasca
 MONASCA_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages
 MONASCA_PATCHDIR := $(COREDIR)/monasca/$(OPENSTACK_RELEASE)_patch
 
+ROOTFS_PIP += monasca-api
+ROOTFS_PIP += monasca-common
 ROOTFS_PIP += monasca-agent
+ROOTFS_PIP += monasca-persister
+ROOTFS_PIP += monasca-statsd
+ROOTFS_PIP += python-monascaclient
 
 # config file examples are copied from github repo: openstack-ansible-os_monasca
 # monasca common
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-common.git
+# ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-common.git
 
 # monasca command line plugin
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/python-monascaclient.git
+# ROOTFS_PIP_DL_FROM += https://github.com/openstack/python-monascaclient.git
 
 # monasca-persister
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-persister.git
+# ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-persister.git
 
 
 # monasca user/group/directory
@@ -34,7 +39,7 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/monasca/persister/monasca-persister.service ./lib/systemd/system
 
 # monasca-api
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-api.git
+# ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-api.git
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -f $(MONASCA_CONF_DIR)/api-config.ini $(MONASCA_CONF_DIR)/api-logging.conf
@@ -45,7 +50,7 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/monasca/api/monasca-api-wsgi.conf.in ./etc/httpd/conf.d/
 
 
-ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-agent.git
+# ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-agent.git
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(MONASCA_CONF_DIR)/agent/conf.d.in
