@@ -152,9 +152,9 @@ RUN pip3 install --ignore-installed wheel
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # install terraform
-RUN wget https://releases.hashicorp.com/terraform/0.14.3/terraform_0.14.3_linux_amd64.zip && \
-    unzip terraform_0.14.3_linux_amd64.zip -d /usr/local/bin && \
-    rm -f terraform_0.14.3_linux_amd64.zip
+RUN wget https://releases.hashicorp.com/terraform/1.12.0/terraform_1.12.0_linux_amd64.zip && \
+    unzip terraform_1.12.0_linux_amd64.zip -d /usr/local/bin && \
+    rm -f terraform_1.12.0_linux_amd64.zip
 
 # install helm
 RUN curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
