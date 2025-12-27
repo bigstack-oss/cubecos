@@ -427,6 +427,13 @@ os_neutron_network_update()
     local value=$4
     local nid=$(os_get_network_id_by_tenant_and_name $tenant $network)
     neutron net-update $nid --$type $value 2>/dev/null
+
+    if [ "$type" == "dns-domain" ]; then
+        local subnet_ids=$(openstack subnet list --network $nid -f value -c ID)
+        for subnet_id in $subnet_ids; do
+            openstack subnet set --dns-publish-fixed-ip $subnet_id
+        done
+    fi
 }
 
 os_neutron_network_show()
