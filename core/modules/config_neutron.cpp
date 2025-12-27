@@ -485,7 +485,7 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         ml2Cfg["ml2"]["type_drivers"] = "local,flat,vlan,geneve";
         ml2Cfg["ml2"]["tenant_network_types"] = "geneve";
         ml2Cfg["ml2"]["mechanism_drivers"] = "ovn,baremetal";
-        ml2Cfg["ml2"]["extension_drivers"] = "port_security,dns_domain_ports,qos";
+        ml2Cfg["ml2"]["extension_drivers"] = "port_security,dns_domain_ports,qos,subnet_dns_publish_fixed_ip";
         ml2Cfg["ml2"]["overlay_ip_version"] = "4";
         ml2Cfg["ml2"]["path_mtu"] = std::to_string(overlayMtu);
         ml2Cfg["ml2_type_flat"]["flat_networks"] = "provider" + ep;
