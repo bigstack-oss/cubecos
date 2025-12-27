@@ -1,6 +1,6 @@
 module cubectl
 
-go 1.24.0
+go 1.24.2
 
 require (
 	github.com/avast/retry-go v2.6.1+incompatible
