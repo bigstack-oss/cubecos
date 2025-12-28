@@ -4,7 +4,7 @@ include ../../build.mk
 
 include $(SRCDIR)/k3s.mk
 
-VERSION := v1.26.6+k3s1
+VERSION := v1.32.11+k3s1
 
 BIN := k3s
 INSTALL_SCRIPT := install.sh
