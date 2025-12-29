@@ -66,11 +66,11 @@ $(APPCTL_RPM): $(RPMBUILD_RPMS)
 endif
 
 copy-source-eol-image:
-	$(call RUN_CMD_TIMED, sh -x $(COREDIR)/appctl/copy-images.sh $(GIT_DIR)/plugins/images/tars,"  COPY    appctl image")
+	$(call RUN_CMD_TIMED, sh -x $(COREDIR)/appctl/copy-images.sh $(COREDIR)/appctl/images/tars,"  COPY    appctl eol image")
 
 .PHONY: copy-image
 copy-image: copy-source-eol-image
-	$(call RUN_CMD_TIMED, sh -x $(COREDIR)/docker/copy-images.sh $(shell cat $(GIT_DIR)/plugins/images/list.txt),"  COPY    appctl image")
+	$(call RUN_CMD_TIMED, sh -x $(COREDIR)/docker/copy-images.sh $(shell cat $(COREDIR)/appctl/images/list.txt),"  COPY    appctl image")
 
 BUILD += $(APPCTL_RPM)
 BUILDCLEAN += $(APPCTL_RPM) $(RPMBUILD_DIR) $(GIT_DIR) version build_number source $(PKG_NAME)-$(APPCTL_VERSION).tar.gz plugins

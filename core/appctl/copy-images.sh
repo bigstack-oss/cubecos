@@ -8,9 +8,4 @@ fi
 
 imagesDir=$1
 cd $imagesDir
-
-for f in $(find * -type f)
-do
-    file=${f%.*}
-    skopeo copy docker-archive:$f docker://$registry/${file/@/:} --dest-tls-verify=false
-done
+skopeo copy docker-archive:postgresql-11.11.0-debian-10-r31.tar docker://$registry/bitnami/postgresql:11.11.0-debian-10-r31 --dest-tls-verify=false
