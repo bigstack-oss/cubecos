@@ -791,10 +791,151 @@ ceph_osd_add_disk_raw()
     Quiet -n ceph_adjust_cache_flush_bytes
 }
 
-# remove an existing OSD
-# !!!USE WITH CAUTIONS!!!
+ceph_osd_purge()
+{
+    # purge an OSD, immediately
+    # OSD must already be out
+
+    local osd_id="${1#"osd."}"
+    local host="$(ceph_get_host_by_id $osd_id)"
+    if [ "x$host" = "xnull" -o "x$host" = "x" ] ; then
+        host=$HOSTNAME
+    fi
+
+    # ensure the OSD is already out
+    local osd_in_status="$($CEPH osd dump --format=json | jq -r ".osds[] | select(.osd == ${osd_id}) | .in")"
+    if [[ "$osd_in_status" == "1" ]] ; then
+        log_error "Ceph OSD ${osd_id} is still in, not purging"
+        return 1
+    fi
+
+    $CEPH osd down "$osd_id"
+    Quiet -n remote_run "$host" "systemctl stop ceph-osd@${osd_id}"
+    Quiet -n $CEPH osd purge "$osd_id" --yes-i-really-mean-it
+    Quiet -n remote_run "$host" ceph-volume lvm deactivate "$osd_id"
+    Quiet -n remote_run "$host" umount -l "/var/lib/ceph/osd/ceph-${osd_id}"
+    Quiet -n remote_run "$host" rmdir "/var/lib/ceph/osd/ceph-${osd_id}"
+    if remote_run "$host" "[ -e \"/var/lib/ceph/osd/ceph-${osd_id}\" ]" ; then
+        log_error "/var/lib/ceph/osd/ceph-${osd_id} is not fully cleaned up"
+        return 1 
+    fi
+
+    return 0
+}
+
+ceph_osd_safe_remove()
+{
+    # perform the safe remove
+    # first check if it is safe, then purge it
+    # if is not safe, set a timer to purge it 1 minute later
+    # retry at most 30 times (30 minutes)
+    # if it exceeds the limit (30 times), log it and restore the OSD
+
+    local limit=30
+    local osd_id="${1#"osd."}"
+    local original_crush_weight="${2:-"0"}"
+    local nth_attempt="${3:-"${limit}"}"
+    local last_pg_count="${4:-""}"
+
+    # recursion jobs
+    local jobs=""
+    local filtered_jobs=""
+
+    # clean up old jobs
+    jobs="$(MakeTemp)"
+    crontab -l > "$jobs"
+    filtered_jobs="$(MakeTemp)"
+    grep -v "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" " "$jobs" > "$filtered_jobs"
+    rm -f "$jobs"
+    crontab "$filtered_jobs"
+    rm -f "$filtered_jobs"
+
+    local exec_output=""
+    local exec_error=""
+    local why_quitting=""
+    local pg_count=""
+    if ! _hex_function exec_output exec_error \
+        $CEPH osd safe-to-destroy "osd.${osd_id}" ; then
+        log_info "Ceph OSD ${osd_id} is not ready to be purged"
+
+        if [ -n "$exec_output" ] ; then
+            log_info "$exec_output"
+        fi
+        if [ -n "$exec_error" ] ; then
+            log_error "$exec_error"
+        fi
+
+        ((nth_attempt++))
+        pg_count="$(echo "$exec_error" | egrep -o '[0-9]+ pgs' | tail -1)"
+        log_info "Ceph OSD ${osd_id} pg count: ${pg_count}"
+
+        if [ $nth_attempt -gt $limit ] ; then
+            why_quitting="timed out moving data from disk"
+        elif [ "x$($CEPH -s -f json | jq -r .health.status)" = "xHEALTH_ERR" ] ; then
+            if [ $nth_attempt -ge 3 ] ; then
+                why_quitting="ceph would be in error state without this disk"
+            fi
+        elif [[ "$pg_count" == "$last_pg_count" ]] ; then
+            if [ $nth_attempt -ge 3 ] ; then
+                why_quitting="pgs could not be moved likely due to too few disks or little space in the failure domain"
+            fi
+        fi
+
+        if [ "x$why_quitting" != "x" ] ; then
+            # restore the OSD
+            systemctl restart "ceph-osd@${osd_id}"
+            Quiet $CEPH osd crush reweight "osd.${osd_id}" "$original_crush_weight"
+            Quiet $CEPH osd in "$osd_id"
+
+            # log it
+            log_info "Ceph OSD ${osd_id} restored as ${why_quitting}"
+        else
+            # retry
+            jobs="$(MakeTemp)"
+            crontab -l > "$jobs"
+            echo "* * * * * $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\"" \
+                >> "$jobs"
+            crontab "$jobs"
+            rm -f "$jobs"
+
+            # log it
+            log_info "set to try safe removal of Ceph OSD ${osd_id} with attempt ${nth_attempt}"
+        fi
+
+        return 1
+    fi
+
+    ceph_osd_purge "$osd_id"
+}
+
+ceph_osd_remove()
+{
+    # remove an osd, either in safe mode or force mode
+    # safe mode would schedule ceph_osd_safe_remove
+    local osd_id=${1#osd.}
+    local mode=${2:-safe}
+
+    $CEPH osd df "osd.${osd_id}"
+    timeout 600 ceph tell "osd.${osd_id}" compact >/dev/null 2>&1 || true
+    local crush_weight=$($CEPH osd tree -f json | jq -r ".[][] | select(.name == \"osd.${osd_id}\").crush_weight")
+    Quiet $CEPH osd crush reweight "osd.${osd_id}" 0
+    Quiet $CEPH osd out $osd_id
+
+    if [ "x$mode" = "xsafe" ] ; then
+        # wait 60s to move at least one pg, otherwise the recursion would be stopped
+        sleep 60
+        ceph_osd_safe_remove "$osd_id" "$crush_weight" "1" ""
+        return 0
+    fi
+
+    ceph_osd_purge "$osd_id"
+}
+
 ceph_osd_remove_disk()
 {
+    # remove existing OSDs on a disk
+    # !!!USE WITH CAUTIONS!!!
+
     local dev=$1
     local mode=${2:-safe}
     [ -n "$(readlink -e $dev)" ] || Error "no such device $dev"
@@ -830,56 +971,6 @@ ceph_osd_remove_disk()
         Quiet ceph_osd_create_map
         Quiet ceph_adjust_cache_flush_bytes
     fi
-}
-
-ceph_osd_remove()
-{
-    local osd_id=${1#osd.}
-    local mode=${2:-safe}
-    local host=$(ceph_get_host_by_id $osd_id)
-    if [ "x$host" = "xnull" -o "x$host" = "x" ] ; then
-        host=$HOSTNAME
-    fi
-
-    $CEPH osd df osd.$osd_id
-    timeout 600 ceph tell osd.$osd_id compact >/dev/null 2>&1 || true
-    local crush_weight=$($CEPH osd tree -f json | jq -r ".[][] | select(.name == \"osd.${osd_id}\").crush_weight")
-    Quiet $CEPH osd crush reweight osd.$osd_id 0
-    Quiet $CEPH osd out $osd_id
-    if [ "x$mode" = "xsafe" ] ; then
-        sleep 10
-        local cnt=0
-        local max=30
-        local pgs_log=$(mktemp -u /tmp/remove_osd.1.XXX)
-        local why_quitting=
-        while ! $CEPH osd safe-to-destroy osd.$osd_id >$pgs_log 2>&1 ; do
-            tail -1 $pgs_log | sed "s/Error EBUSY: //"
-            ((cnt++))
-            sleep 60
-            if [ $cnt -gt $max ] ; then
-                why_quitting="timed out moving data from disk"
-            elif [ "x$($CEPH -s -f json | jq -r .health.status)" = "xHEALTH_ERR" ] ; then
-                [ $cnt -lt 3 ] || why_quitting="ceph would be in error state without this disk"
-            elif [ "x$($CEPH osd safe-to-destroy osd.$osd_id 2>&1 | egrep -o '[0-9]+ pgs')" == "x$(egrep -o '[0-9]+ pgs' $pgs_log)" ] ; then
-                [ $cnt -lt 3 ] || why_quitting="pgs could not be moved likely due to too few disks or little space in the failure domain"
-            fi
-            if [ "x$why_quitting" != "x" ] ; then
-                systemctl restart ceph-osd@$osd_id
-                Quiet $CEPH osd crush reweight osd.$osd_id $crush_weight
-                Quiet $CEPH osd in $osd_id
-                echo "Restored ${dev}: osd.$osd_id as $why_quitting." && exit 1
-            fi
-        done
-        rm -f $pgs_log
-        $CEPH osd down $osd_id
-    fi
-
-    Quiet -n remote_run $host "systemctl stop ceph-osd@$osd_id"
-    Quiet -n $CEPH osd purge $osd_id --force
-    Quiet -n remote_run $host ceph-volume lvm deactivate $osd_id
-    Quiet -n remote_run $host umount -l /var/lib/ceph/osd/ceph-$osd_id
-    Quiet -n remote_run $host rmdir /var/lib/ceph/osd/ceph-$osd_id
-    remote_run $host "[ ! -e /var/lib/ceph/osd/ceph-$osd_id ]" || return 1
 }
 
 ceph_osd_host_remove()
