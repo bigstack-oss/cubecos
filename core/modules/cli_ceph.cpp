@@ -623,8 +623,8 @@ CephRemoveDiskMain(int argc, const char** argv)
         std::vector<std::string> allDevs = hex_string_util::split(osddev, ' ');
 
         // 1.a) return directly if no OSDs
-        size_t cnt = allDevs.size();
-        if (!cnt) {
+        std::size_t cnt = allDevs.size();
+        if (cnt == 0) {
             CliPrintf("No disk to be removed.");
             return CLI_SUCCESS;
         }
@@ -641,9 +641,13 @@ CephRemoveDiskMain(int argc, const char** argv)
 
         // 2. User input
         std::string input;
-        size_t index = 0;
+        std::size_t index = 0;
         CliReadLine("Enter the index of disk to be removed: ", input);
         if (!HexParseUInt(input.c_str(), 1, cnt, &index)) {
+            CliPrintf("Invalid index, cancelled.");
+            return CLI_SUCCESS;
+        }
+        if ((index - 1) < 0 || (index - 1) >= cnt) {
             CliPrintf("Invalid index, cancelled.");
             return CLI_SUCCESS;
         }
@@ -663,6 +667,7 @@ CephRemoveDiskMain(int argc, const char** argv)
         if (!CliReadConfirmation())
             return CLI_SUCCESS;
     }
+
     // 3. remove this disk
     if (HexSystemF(0, HEX_SDK " ceph_osd_remove_disk %s %s", device.c_str(), mode.c_str()) != 0)
         CliPrintf("Failed to remove disk %s with %s mode.", device.c_str(), mode.c_str());
