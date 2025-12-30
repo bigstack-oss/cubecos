@@ -47,9 +47,13 @@
 #define RESTFUL_PORT "8003"
 #define ISCSI_API_PORT "5010"
 
+static const char MULTIPATHD[] = "multipathd";
+static const char MULTIPATH_CONF[] = "/etc/multipath.conf";
+
 const static char NAME[] = "ceph";
 const static char USER[] = "ceph";
 const static char GROUP[] = "ceph";
+
 const static char CONF[] = "/etc/ceph/ceph.conf";
 const static char ISCSI_GW_CONF[] = "/etc/ceph/iscsi-gateway.cfg";
 const static char NFS_GANESHA_CONF[] = "/etc/ganesha/ganesha.conf";
@@ -166,6 +170,8 @@ static ConfigString s_adminCliPass("66K1ogIiRt5KnyHe");
 static bool
 updateDeviceMaps()
 {
+    SystemdCommitService(true, MULTIPATHD, true);
+
     const ExecSyncResult r = ExecBashSync(
         0,
         false,
@@ -1302,6 +1308,10 @@ MountCephfsStore()
 static bool
 Init()
 {
+    if (access(MULTIPATH_CONF, F_OK) != 0) {
+        HexUtilSystemF(0, 0, "mpathconf --enable");
+    }
+
     // fail safe for creating ceph guest socket dir
     HexMakeDir(CLIENT_SOCK, "ceph", "ceph", 0755);
 

@@ -52,7 +52,6 @@ static const char SPICEP_NAME[] = "nova-spicehtml5proxy";
 static const char ISCSI_NAME[] = "iscsid";
 static const char CMP_NAME[] = "openstack-nova-compute";
 static const char QEMU_GA[] = "qemu-guest-agent";
-static const char MULTIPATH_CONF[] = "/etc/multipath.conf";
 static const char MULTIPATHD[] = "multipathd";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
@@ -618,7 +617,7 @@ NovaService(bool enabled)
 
     if (IsCompute(s_eCubeRole)) {
         SystemdCommitService(enabled, CMP_NAME, false);
-        SystemdCommitService(enabled, MULTIPATHD, true);
+        SystemdCommitService(true, MULTIPATHD, true);
         SystemdCommitService(enabled, ISCSI_NAME, true);   // nova-compute complains not finding /etc/iscsi/initiatorname.iscsi
         //SystemdCommitService(enabled, QEMU_GA, true);
     }
@@ -634,10 +633,6 @@ Init()
         HexMakeDir(NOVA_SSH, USER, GROUP, 0755) != 0 ||
         HexMakeDir(NOVA_CEPH_LOG, "qemu", "qemu", 0755) != 0)
         return false;
-
-    if (access(MULTIPATH_CONF, F_OK) != 0) {
-        HexUtilSystemF(0, 0, "mpathconf --enable");
-    }
 
     // load nova configurations
     if (!LoadConfig(CONF DEF_EXT, SB_SEC_RFMT, '=', cfg)) {
