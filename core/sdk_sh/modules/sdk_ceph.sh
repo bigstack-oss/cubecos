@@ -852,18 +852,8 @@ ceph_osd_safe_remove()
     local nth_attempt="${3:-"${limit}"}"
     local last_pg_count="${4:-""}"
 
-    # recursion jobs
-    local jobs=""
-    local filtered_jobs=""
-
     # clean up old jobs
-    jobs="$(MakeTemp)"
-    crontab -l > "$jobs"
-    filtered_jobs="$(MakeTemp)"
-    grep -v "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" " "$jobs" > "$filtered_jobs"
-    rm -f "$jobs"
-    crontab "$filtered_jobs"
-    rm -f "$filtered_jobs"
+    $HEX_SDK util_cron_cleanup_job "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
 
     local exec_output=""
     local exec_error=""
@@ -906,20 +896,12 @@ ceph_osd_safe_remove()
             log_info "Ceph OSD ${osd_id} restored as ${why_quitting}"
         else
             # retry
-            jobs="$(MakeTemp)"
-            crontab -l > "$jobs"
-
             if [[ "$nth_attempt" == "2" ]] ; then
                 # wait 60s to move at least one pg, otherwise the recursion would be stopped
-                echo "* * * * * sleep 60 && $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\"" \
-                    >> "$jobs"
+                $HEX_SDK util_cron_add_job "* * * * * sleep 60 && $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\""
             else
-                echo "* * * * * $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\"" \
-                    >> "$jobs"
+                $HEX_SDK util_cron_add_job "* * * * * $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\""
             fi
-
-            crontab "$jobs"
-            rm -f "$jobs"
 
             # log it
             log_info "set to try safe removal of Ceph OSD ${osd_id} with attempt ${nth_attempt}"
@@ -979,25 +961,15 @@ ceph_osd_remove_disk_cleanup()
     local dev="$1"
     local nth_attempt="${2:-"${limit}"}"
 
-    # recursion jobs
-    local jobs=""
-    local filtered_jobs=""
-
     # clean up old jobs
-    jobs="$(MakeTemp)"
-    crontab -l > "$jobs"
-    filtered_jobs="$(MakeTemp)"
-    grep -v "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" " "$jobs" > "$filtered_jobs"
-    rm -f "$jobs"
-    crontab "$filtered_jobs"
-    rm -f "$filtered_jobs"
+    $HEX_SDK util_cron_cleanup_job "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" "
 
     # check if OSDs are completely purged
     local osd_ids="$(ceph_osd_get_ids "$dev")"
     local osd_id=""
     local are_osds_purged="true"
     for osd_id in $osd_ids ; do
-        if $CEPH osd find "$osd_id" ; then
+        if _hex_function_ret $CEPH osd find "$osd_id" ; then
             log_info "Ceph OSD ${osd_id} is still on ${dev}"
             are_osds_purged="false"
         fi
@@ -1011,12 +983,7 @@ ceph_osd_remove_disk_cleanup()
 
     if [[ "$are_osds_purged" != "true" ]] ; then
         # retry
-        jobs="$(MakeTemp)"
-        crontab -l > "$jobs"
-        echo "* * * * * $HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" \"$nth_attempt\"" \
-            >> "$jobs"
-        crontab "$jobs"
-        rm -f "$jobs"
+        $HEX_SDK util_cron_add_job "* * * * * $HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" \"$nth_attempt\""
 
         # log it
         log_info "set to try remove disk cleanup for ${dev} with attempt ${nth_attempt}"
