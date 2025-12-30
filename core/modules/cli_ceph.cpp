@@ -1285,29 +1285,10 @@ CephMirrorRestart(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-static int
-CephToggleDiskCheckMain(int argc, const char** argv)
-{
-    if (argc > 1 /* [0]="toggle_diskcheck" */)
-        return CLI_INVALID_ARGS;
-
-    std::string status=HexUtilPOpen(HEX_SDK " health_check_toggle_status ceph_disk");
-    CliPrintf("Current status: %s", status.c_str());
-
-    if (CliReadConfirmation())
-        HexSpawn(0, HEX_SDK, "health_check_toggle ceph_disk", NULL);
-
-    return CLI_SUCCESS;
-}
-
 // This mode is not available in STRICT error state
 CLI_MODE(CLI_TOP_MODE, "storage",
          "Work with storage settings.",
          !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
-
-CLI_MODE_COMMAND("storage", "toggle_diskcheck", CephToggleDiskCheckMain, NULL,
-                 "Toggle disk check.",
-                 "toggle_diskcheck");
 
 CLI_MODE_COMMAND("storage", "status", CephStatusMain, NULL,
                  "Show storage status.",
