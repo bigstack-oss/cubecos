@@ -1309,7 +1309,7 @@ static bool
 Init()
 {
     if (access(MULTIPATH_CONF, F_OK) != 0) {
-        HexUtilSystemF(0, 0, "mpathconf --enable");
+        HexUtilSystemF(0, 0, "/usr/sbin/mpathconf --enable");
     }
 
     // fail safe for creating ceph guest socket dir
