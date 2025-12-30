@@ -631,7 +631,7 @@ CephRemoveDiskMain(int argc, const char** argv)
 
         // 1.b) display candidates
         printf(OSD_H_FMT, "index", "name", "size", "osd", "serial");
-        for (size_t i = 0; i < cnt; i++) {
+        for (std::size_t i = 0; i < cnt; i++) {
             std::string sz = HexUtilPOpen("echo -n $(lsblk -n -d -o SIZE %s)", allDevs[i].c_str());
             std::string ids = HexUtilPOpen(HEX_SDK " ceph_get_ids_by_dev %s", allDevs[i].c_str());
             std::string sn = HexUtilPOpen(HEX_SDK " ceph_get_sn_by_dev %s", allDevs[i].c_str());
@@ -695,15 +695,15 @@ CephRemoveExistMain(int argc, const char** argv)
     std::vector<std::string> allDevs = hex_string_util::split(osddev, ' ');
 
     // 1.a) return directly if no OSDs
-    size_t cnt = allDevs.size();
-    if (!cnt) {
+    std::size_t cnt = allDevs.size();
+    if (cnt == 0) {
         CliPrintf("No disk to be removed.");
         return CLI_SUCCESS;
     }
 
     // 1.b) display candidates
     printf(OSD_H_FMT, "index", "name", "size", "osd", "serial");
-    for (size_t i = 0; i < cnt; i++) {
+    for (std::size_t i = 0; i < cnt; i++) {
         std::string sz = HexUtilPOpen("echo -n $(lsblk -n -d -o SIZE %s)", allDevs[i].c_str());
         std::string ids = HexUtilPOpen(HEX_SDK " ceph_get_ids_by_dev %s", allDevs[i].c_str());
         std::string sn = HexUtilPOpen(HEX_SDK " ceph_get_sn_by_dev %s", allDevs[i].c_str());
@@ -727,6 +727,7 @@ CephRemoveExistMain(int argc, const char** argv)
         if (!CliReadConfirmation())
             return CLI_SUCCESS;
     }
+
     // 3. remove all existing disks
     cnt = 0;
     printf(DISK_F_FMT);
