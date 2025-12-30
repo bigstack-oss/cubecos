@@ -14,17 +14,17 @@ TF_CORE_DIR          := terraform-core
 TF_CORE_BIN          := $(TF_CORE_DIR)/terraform-core
 
 $(RANCHER_PROV_DIR):
-	$(call RUN_CMD_TIMED,git clone -b $(RANCHER_PROV_VER) $(RANCHER_PROV_REPO) $(RANCHER_PROV_DIR),"  CLONE   provider")
+	$(call RUN_CMD_TIMED,git clone -b $(RANCHER_PROV_VER) $(RANCHER_PROV_REPO) $(RANCHER_PROV_DIR),"  CLONE   rancher-provider")
 
 $(RANCHER_UPSTREAM_BIN): $(RANCHER_PROV_DIR)
-	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && go get github.com/hashicorp/go-getter@v1.7.4 && go mod tidy, "  UPDATE  deps")
+	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && go get github.com/hashicorp/go-getter@v1.7.4 && go mod tidy, "  UPDATE  rancher-provider")
 	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && make build, "  BUILD   rancher-provider")
 
 $(TF_CORE_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(TF_CORE_VER) $(TF_CORE_REPO) $(TF_CORE_DIR),"  CLONE   tf-core")
 
 $(TF_CORE_BIN): $(TF_CORE_DIR)
-	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && go mod tidy, "  TIDY    tf-core")
+	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && go mod tidy, "  UPDATE  tf-core")
 	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 		go build \
