@@ -957,6 +957,78 @@ ceph_osd_remove()
     ceph_osd_purge "$osd_id"
 }
 
+ceph_osd_is_remove_disk_cleanup_scheduled()
+{
+    # check if ceph_osd_remove_disk_cleanup is scheduled
+    local dev="$1"
+
+    local exec_output=""
+    local exec_error=""
+    if ! _hex_function exec_output exec_error crontab -l ; then
+        log_error "failed to get the crontab list for ceph_osd_is_remove_disk_cleanup_scheduled"
+        return 1
+    fi
+
+    _hex_function_ret grep -q "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" " <(printf "%s" "$exec_output")
+}
+
+ceph_osd_remove_disk_cleanup()
+{
+    # wait until OSDs on the disk are completely purged and remove the disk
+    local limit=40
+    local dev="$1"
+    local nth_attempt="${2:-"${limit}"}"
+
+    # recursion jobs
+    local jobs=""
+    local filtered_jobs=""
+
+    # clean up old jobs
+    jobs="$(MakeTemp)"
+    crontab -l > "$jobs"
+    filtered_jobs="$(MakeTemp)"
+    grep -v "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" " "$jobs" > "$filtered_jobs"
+    rm -f "$jobs"
+    crontab "$filtered_jobs"
+    rm -f "$filtered_jobs"
+
+    # check if OSDs are completely purged
+    local osd_ids="$(ceph_osd_get_ids "$dev")"
+    local osd_id=""
+    local are_osds_purged="true"
+    for osd_id in $osd_ids ; do
+        if $CEPH osd find "$osd_id" ; then
+            log_info "Ceph OSD ${osd_id} is still on ${dev}"
+            are_osds_purged="false"
+        fi
+    done
+
+    ((nth_attempt++))
+    if [ $nth_attempt -gt $limit ] ; then
+        log_info "disk ${dev} is not cleaned up"
+        return 1
+    fi
+
+    if [[ "$are_osds_purged" != "true" ]] ; then
+        # retry
+        jobs="$(MakeTemp)"
+        crontab -l > "$jobs"
+        echo "* * * * * $HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" \"$nth_attempt\"" \
+            >> "$jobs"
+        crontab "$jobs"
+        rm -f "$jobs"
+
+        # log it
+        log_info "set to try remove disk cleanup for ${dev} with attempt ${nth_attempt}"
+        return 1
+    fi
+
+    # perform the cleanup
+    Quiet ceph_osd_zap_disk $dev
+    Quiet ceph_osd_create_map
+    Quiet ceph_adjust_cache_flush_bytes
+}
+
 ceph_osd_remove_disk()
 {
     # remove existing OSDs on a disk
@@ -968,35 +1040,21 @@ ceph_osd_remove_disk()
     ceph_osd_list_disk 2>/dev/null | grep -q $dev || Error "no such OSD disk $dev"
     [[ "$($CEPH -s -f json | jq -r .health.status)" == "HEALTH_OK" || "$mode" == "force" ]] || Error "ceph health has to be OK to proceed disk removals"
 
-    local part_num=$(( $(ListNumOfPartitions $dev) / 2 ))
-    if [ $part_num -gt 0 ] ; then
-        local part_enum="$(seq 1 $part_num)"
-    else
-        local part_enum=$part_num
-    fi
-    local disk_removable=true
-    for i in $part_enum ; do
-        osd_id=
-        if [ $i -eq 0 ] ; then
-            osd_id=$(ceph_osd_get_id ${dev})
-        else
-            if [[ "$dev" =~ nvme.n. ]] ; then
-                osd_id=$(ceph_osd_get_id ${dev}p${i})
-            elif [[ "$dev" =~ nvme ]] ; then
-                osd_id=$(ceph_osd_get_id ${dev}n1p${i})
-            else
-                osd_id=$(ceph_osd_get_id ${dev}${i})
-            fi
-        fi
-        ceph_osd_remove $osd_id $mode 2>/dev/null || disk_removable=false
+    local osd_ids="$(ceph_osd_get_ids "$dev")"
+    local osd_id=""
+    for osd_id in $osd_ids ; do
+        ceph_osd_remove $osd_id $mode 2>/dev/null
         # For raw osd disk, modify PARTLABEL to exclude disk in next hex_config refresh_ceph_osd
         # Quiet parted $dev name $i removed
     done
-    if [ "$disk_removable" = "true" ] ; then
-        Quiet ceph_osd_zap_disk $dev
-        Quiet ceph_osd_create_map
-        Quiet ceph_adjust_cache_flush_bytes
+
+    # we do not need to schedule duplicated jobs
+    if ceph_osd_is_remove_disk_cleanup_scheduled "$dev" ; then
+        return 0
     fi
+
+    ceph_osd_remove_disk_cleanup "$dev" "1"
+    return 0
 }
 
 ceph_osd_host_remove()
@@ -2113,6 +2171,50 @@ ceph_osd_get_id()
     done
     echo -n $id4
     return 0
+}
+
+ceph_osd_get_ids()
+{
+    # get osd ids by disk
+    # params: $1 - disk name (e.g.: /dev/sdd)
+    # return: osd ids (1 2 3 ...)
+
+    local dev="$1"
+    local part_num=$(( $(ListNumOfPartitions $dev) / 2 ))
+    if [ $part_num -gt 0 ] ; then
+        local part_enum="$(seq 1 $part_num)"
+    else
+        local part_enum=$part_num
+    fi
+
+    local result=""
+    local is_first="true"
+    local osd_id=""
+    for i in $part_enum ; do
+        osd_id=""
+        if [ $i -eq 0 ] ; then
+            osd_id=$(ceph_osd_get_id ${dev})
+        else
+            if [[ "$dev" =~ nvme.n. ]] ; then
+                osd_id=$(ceph_osd_get_id ${dev}p${i})
+            elif [[ "$dev" =~ nvme ]] ; then
+                osd_id=$(ceph_osd_get_id ${dev}n1p${i})
+            else
+                osd_id=$(ceph_osd_get_id ${dev}${i})
+            fi
+        fi
+
+        if [ -n "$osd_id" ] ; then
+            if [[ "$is_first" == "true" ]] ; then
+                result="$osd_id"
+                is_first="false"
+            else
+                result="${result} ${osd_id}"
+            fi
+        fi
+    done
+
+    echo -n "$result"
 }
 
 ceph_osd_get_datapart()
