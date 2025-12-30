@@ -1,23 +1,19 @@
 // CUBE SDK
 
-#include <unistd.h>
-
-#include <vector>
-#include <string>
-
+#include <cube/cubesys.h>
+#include <hex/cli_module.h>
+#include <hex/cli_util.h>
 #include <hex/log.h>
-#include <hex/strict.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
+#include <hex/strict.h>
 #include <hex/string_util.h>
 #include <hex/yml_util.h>
-#include <hex/cli_util.h>
-#include <hex/cli_module.h>
-
-#include <cube/cubesys.h>
-
-#include <sys/socket.h>
 #include <netinet/in.h>
+#include <string>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <vector>
 
 #define DISK_H_FMT " %6s  %12s  %8s  %8s  %8s  %18s\n--\n"
 #define DISK_FMT " %6u  %12s  %8s  %8s  %8s  %18s\n"
@@ -57,7 +53,7 @@ static int CephShowCache(int argc, const char** argv)
     }
 
     std::string backPool;
-    if (argc == 2){
+    if (argc == 2) {
         backPool = argv[1];
     } else {
         int index;
@@ -111,10 +107,10 @@ static int CephSwitchCache(int argc, const char** argv)
 
     std::string backPool;
     std::string input;
-    if (argc == 3){
+    if (argc == 3) {
         backPool = argv[1];
         input = argv[2];
-    } else if (argc == 2){
+    } else if (argc == 2) {
         backPool = argv[1];
     } else {
         int index;
@@ -173,10 +169,10 @@ static int CephCacheProfileSet(int argc, const char** argv)
 
     std::string backPool;
     std::string profile;
-    if (argc == 3){
+    if (argc == 3) {
         backPool = argv[1];
         profile = argv[2];
-    } else if (argc == 2){
+    } else if (argc == 2) {
         backPool = argv[1];
     } else {
         int index;
@@ -229,10 +225,12 @@ static int CephPromoteDiskToCache(int argc, const char** argv)
     std::vector<std::string> matchedDevs;
     for (auto& d : allDevs) {
         // only proceed for valid scsi disk (e.g.: /dev/sdc)
-        if (d.length() < 8) continue;
-        std::string typ = HexUtilPOpen(HEX_SDK" ceph_osd_get_class %s", d.c_str());
+        if (d.length() < 8)
+            continue;
+        std::string typ = HexUtilPOpen(HEX_SDK " ceph_osd_get_class %s", d.c_str());
         // display only non ssd device (e.g.: hdd or nvme)
-        if (typ == "ssd") continue;
+        if (typ == "ssd")
+            continue;
         matchedDevs.push_back(d);
     }
     // 1.a) return directly if no avail disk
@@ -247,7 +245,7 @@ static int CephPromoteDiskToCache(int argc, const char** argv)
         std::string sz = HexUtilPOpen("echo -n $(lsblk -n -d -o SIZE %s)", matchedDevs[i].c_str());
         std::string ids = HexUtilPOpen(HEX_SDK " ceph_get_ids_by_dev %s", matchedDevs[i].c_str());
         std::string sn = HexUtilPOpen(HEX_SDK " ceph_get_sn_by_dev %s", matchedDevs[i].c_str());
-        printf(OSD_FMT, i + 1,  matchedDevs[i].c_str(), sz.c_str(), ids.c_str(), sn.c_str());
+        printf(OSD_FMT, i + 1, matchedDevs[i].c_str(), sz.c_str(), ids.c_str(), sn.c_str());
     }
     printf(OSD_F_FMT);
 
@@ -279,10 +277,12 @@ static int CephDemoteDiskToCache(int argc, const char** argv)
     std::vector<std::string> matchedDevs;
     for (auto& d : allDevs) {
         // only proceed for valid scsi disk (e.g.: /dev/sdc)
-        if (d.length() < 8) continue;
-        std::string typ = HexUtilPOpen(HEX_SDK" ceph_osd_get_class %s", d.c_str());
+        if (d.length() < 8)
+            continue;
+        std::string typ = HexUtilPOpen(HEX_SDK " ceph_osd_get_class %s", d.c_str());
         // display only ssd device
-        if (typ != "ssd") continue;
+        if (typ != "ssd")
+            continue;
         matchedDevs.push_back(d);
     }
     // 1.a) return directly if no avail disk
@@ -323,7 +323,7 @@ static int CephCacheFlush(int argc, const char** argv)
         return CLI_INVALID_ARGS;
 
     std::string backPool;
-    if (argc == 2){
+    if (argc == 2) {
         backPool = argv[1];
     } else {
         int index;
@@ -370,12 +370,10 @@ CephStatusMain(int argc, const char** argv)
     if (argc == 2 && strcmp(argv[1], "details") == 0) {
         if (HexSpawn(30, HEX_SDK, "ceph_status", "details", NULL) != 0)
             return CLI_UNEXPECTED_ERROR;
-    }
-    else {
+    } else {
         if (HexSpawn(30, HEX_SDK, "ceph_status", NULL) != 0)
             return CLI_UNEXPECTED_ERROR;
     }
-
 
     return CLI_SUCCESS;
 }
@@ -395,7 +393,7 @@ CephAutoScaleMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    switch(index) {
+    switch (index) {
     case 0:
         HexSpawn(0, HEX_SDK, "ceph_pool_autoscale_set", "on", NULL);
         break;
@@ -671,7 +669,6 @@ CephRemoveDiskMain(int argc, const char** argv)
     else
         CliPrintf("Removed disk %s.", device.c_str());
 
-
     return CLI_SUCCESS;
 }
 
@@ -786,8 +783,7 @@ CephRebalanceMain(int argc, const char** argv)
     int64_t size;
     std::string rf;
 
-    if (!CliReadInputStr(argc, argv, 1, "Input replication factor(1/2/3): ", &rf) ||
-        !HexParseInt(rf.c_str(), 1, 3, &size)) {
+    if (!CliReadInputStr(argc, argv, 1, "Input replication factor(1/2/3): ", &rf) || !HexParseInt(rf.c_str(), 1, 3, &size)) {
         CliPrint("bad rf value (1/2/3)");
         return CLI_INVALID_ARGS;
     }
@@ -825,12 +821,12 @@ CephMaintenanceMain(int argc, const char** argv)
     options.push_back("off");
     options.push_back("status");
 
-    if(CliMatchListHelper(argc, argv, 1, options, &index, &value) != 0) {
+    if (CliMatchListHelper(argc, argv, 1, options, &index, &value) != 0) {
         CliPrintf("Unknown command");
         return CLI_INVALID_ARGS;
     }
 
-    switch(index) {
+    switch (index) {
     case 0:
         HexSpawn(0, HEX_SDK, "ceph_enter_maintenance", NULL);
         break;
@@ -854,9 +850,10 @@ static int CephCreateNodeGroup(int argc, const char** argv)
 
     std::string group = argv[1];
     std::string nodes;
-    for (int i=1; i<argc; i++) {
+    for (int i = 1; i < argc; i++) {
         nodes.append(argv[i]);
-        if (i < (argc - 1)) nodes.append(" ");
+        if (i < (argc - 1))
+            nodes.append(" ");
     }
 
     int ret = 0;
@@ -959,8 +956,7 @@ CreateRestfulKeyMain(int argc, const char** argv)
 
     std::string name;
 
-    if (!CliReadInputStr(argc, argv, 1, "Input username: ", &name) ||
-        name.length() <= 0) {
+    if (!CliReadInputStr(argc, argv, 1, "Input username: ", &name) || name.length() <= 0) {
         CliPrint("username is required");
         return CLI_INVALID_ARGS;
     }
@@ -981,7 +977,7 @@ DeleteRestfulKeyMain(int argc, const char** argv)
     std::string name;
 
     cmd = std::string(HEX_SDK) + " ceph_restful_username_list";
-    if(CliMatchCmdHelper(argc, argv, 1, cmd, &index, &name, "Select a username: ") != CLI_SUCCESS) {
+    if (CliMatchCmdHelper(argc, argv, 1, cmd, &index, &name, "Select a username: ") != CLI_SUCCESS) {
         CliPrintf("Invalid username");
         return CLI_INVALID_ARGS;
     }
@@ -1012,17 +1008,21 @@ CephMirrorSitePair(int argc, const char** argv)
     struct in_addr v4addr;
     std::string strSecret;
 
-    if (argc > 1) strIp=argv[1];
+    if (argc > 1)
+        strIp = argv[1];
 
-    if (argc > 2) strSecret=argv[2];
+    if (argc > 2)
+        strSecret = argv[2];
 
-    if (!strIp.length()) CliReadLine(LABEL_SITE_IP, strIp);
+    if (!strIp.length())
+        CliReadLine(LABEL_SITE_IP, strIp);
     if (!HexParseIP(strIp.c_str(), AF_INET, &v4addr)) {
         CliPrintf("Invalid IP address: %s\n", strIp.c_str());
         return false;
     }
 
-    if (!strSecret.length()) CliReadLine(LABEL_SITE_SECRET, strSecret);
+    if (!strSecret.length())
+        CliReadLine(LABEL_SITE_SECRET, strSecret);
 
     HexSpawn(0, HEX_SDK, "ceph_mirror_pair", strIp.c_str(), strSecret.c_str(), NULL);
 
@@ -1070,9 +1070,9 @@ CephMirrorRuleDisable(int argc, const char** argv)
         }
         HexSpawn(0, HEX_SDK, "ceph_mirror_image_disable", volVal.c_str(), NULL);
     } else {
-        for (int i=1; i<argc; i++) {
+        for (int i = 1; i < argc; i++) {
             volVal += argv[i];
-            if (i<argc-1) {
+            if (i < argc - 1) {
                 volVal += " ";
             }
         }
@@ -1085,7 +1085,7 @@ CephMirrorRuleDisable(int argc, const char** argv)
 static int
 CephMirrorRuleEnableSnapshot(int argc, const char** argv)
 {
-    std::string  mirrorMode="snapshot";
+    std::string mirrorMode = "snapshot";
     const char* label_snapshot_interval = "Press enter to continue with default 15m or provide snapshot interval (ex: 1d, 2h or 3m): ";
     int volIdx;
     std::string volVal, snapshotInterval;
@@ -1096,7 +1096,7 @@ CephMirrorRuleEnableSnapshot(int argc, const char** argv)
     }
 
     if (!CliReadInputStr(0, NULL, 0, label_snapshot_interval, &snapshotInterval) || snapshotInterval.length() == 0) {
-        snapshotInterval="15m";
+        snapshotInterval = "15m";
     }
 
     if ((argc == 2 && std::string(argv[1]) == "?") || (argc == 2 && std::string(argv[1]) == "help")) {
@@ -1116,9 +1116,9 @@ CephMirrorRuleEnableSnapshot(int argc, const char** argv)
         }
         HexSpawn(0, HEX_SDK, "ceph_mirror_image_enable", mirrorMode.c_str(), snapshotInterval.c_str(), volVal.c_str(), NULL);
     } else {
-        for (int i=1; i<argc; i++) {
+        for (int i = 1; i < argc; i++) {
             volVal += argv[i];
-            if (i<argc-1) {
+            if (i < argc - 1) {
                 volVal += " ";
             }
         }
@@ -1131,7 +1131,7 @@ CephMirrorRuleEnableSnapshot(int argc, const char** argv)
 static int
 CephMirrorRuleEnableJournal(int argc, const char** argv)
 {
-    std::string  mirrorMode="journal";
+    std::string mirrorMode = "journal";
     int volIdx;
     std::string volVal;
     std::string availVols = HexUtilPOpen(HEX_SDK " ceph_mirror_avail_volume_list");
@@ -1157,9 +1157,9 @@ CephMirrorRuleEnableJournal(int argc, const char** argv)
         }
         HexSpawn(0, HEX_SDK, "ceph_mirror_image_enable", mirrorMode.c_str(), volVal.c_str(), NULL);
     } else {
-        for (int i=1; i<argc; i++) {
+        for (int i = 1; i < argc; i++) {
             volVal += argv[i];
-            if (i<argc-1) {
+            if (i < argc - 1) {
                 volVal += " ";
             }
         }
@@ -1198,7 +1198,7 @@ CephMirrorPromote(int argc, const char** argv)
     type.push_back("normal");
     type.push_back("force");
 
-    if(CliMatchListHelper(argc, argv, 1, type, &typeIdx, &typeVal) != 0) {
+    if (CliMatchListHelper(argc, argv, 1, type, &typeIdx, &typeVal) != 0) {
         CliPrintf("Unknown type");
         return CLI_INVALID_ARGS;
     }
@@ -1206,7 +1206,7 @@ CephMirrorPromote(int argc, const char** argv)
     mode.push_back("site");
     mode.push_back("volume");
 
-    if(CliMatchListHelper(argc, argv, 2, mode, &modeIdx, &modeVal) != 0) {
+    if (CliMatchListHelper(argc, argv, 2, mode, &modeIdx, &modeVal) != 0) {
         CliPrintf("Unknown mode");
         return CLI_INVALID_ARGS;
     }
@@ -1245,14 +1245,14 @@ CephMirrorInstance(int argc, const char** argv)
     choice.push_back("all");
     choice.push_back("single");
 
-    if(CliMatchListHelper(argc, argv, 1, choice, &choiceIdx, &choiceVal) != 0) {
+    if (CliMatchListHelper(argc, argv, 1, choice, &choiceIdx, &choiceVal) != 0) {
         CliPrintf("Unknown choice");
         return CLI_INVALID_ARGS;
     }
 
     if (choiceVal == "all") {
-        insVal=HexUtilPOpen(HEX_SDK " ceph_mirror_promoted_instance_list");
-        if ( insVal.length() == 0) {
+        insVal = HexUtilPOpen(HEX_SDK " ceph_mirror_promoted_instance_list");
+        if (insVal.length() == 0) {
             CliPrintf("no instance to create and launch");
             return false;
         }
@@ -1287,171 +1287,171 @@ CephMirrorRestart(int argc, const char** argv)
 
 // This mode is not available in STRICT error state
 CLI_MODE(CLI_TOP_MODE, "storage",
-         "Work with storage settings.",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+    "Work with storage settings.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE_COMMAND("storage", "status", CephStatusMain, NULL,
-                 "Show storage status.",
-                 "status [details]");
+    "Show storage status.",
+    "status [details]");
 
 CLI_MODE_COMMAND("storage", "set_autoscale", CephAutoScaleMain, NULL,
-                 "Turn on/off pool autoscaling.",
-                 "set_pool_autoscale [on|off]");
+    "Turn on/off pool autoscaling.",
+    "set_pool_autoscale [on|off]");
 
 CLI_MODE_COMMAND("storage", "list_avail", CephListAvailDisksMain, NULL,
-                 "List all available disks recognized by this node.",
-                 "list_avail");
+    "List all available disks recognized by this node.",
+    "list_avail");
 
 CLI_MODE_COMMAND("storage", "add_avail", CephAddAvailDisksMain, NULL,
-                 "Add all available disks recognized by this node.",
-                 "add_avail <[raw|encrypt]>");
+    "Add all available disks recognized by this node.",
+    "add_avail <[raw|encrypt]>");
 
 CLI_MODE_COMMAND("storage", "add_disk", CephAddDiskMain, NULL,
-                 "Add a disk recognized by this node.",
-                 "add_disk <[/dev/sdx]> <[raw|encrypt]>");
+    "Add a disk recognized by this node.",
+    "add_disk <[/dev/sdx]> <[raw|encrypt]>");
 
 CLI_MODE_COMMAND("storage", "remove_disk", CephRemoveDiskMain, NULL,
-                 "Remove a disk with safe or force mode from this node.",
-                 "remove_disk <[/dev/sdx]> <[safe|force]>");
+    "Remove a disk with safe or force mode from this node.",
+    "remove_disk <[/dev/sdx]> <[safe|force]>");
 
 CLI_MODE_COMMAND("storage", "remove_exist", CephRemoveExistMain, NULL,
-                 "Remove all existing disks from this node.",
-                 "remove_exist <[safe|force]>");
+    "Remove all existing disks from this node.",
+    "remove_exist <[safe|force]>");
 
 CLI_MODE_COMMAND("storage", "list_osd", CephListOsdMain, NULL,
-                 "List all osds and examine the selected one for health details.",
-                 "remove_osd [<osd.id>]");
+    "List all osds and examine the selected one for health details.",
+    "remove_osd [<osd.id>]");
 
 CLI_MODE_COMMAND("storage", "remove_osd", CephRemoveOsdMain, NULL,
-                 "Remove an osd from cluster.",
-                 "remove_osd [<osd.id>]");
+    "Remove an osd from cluster.",
+    "remove_osd [<osd.id>]");
 
 CLI_MODE_COMMAND("storage", "rebalance", CephRebalanceMain, NULL,
-                 "Re-balance page groups or adjust replication size.",
-                 "rebalance [<replication size>]");
+    "Re-balance page groups or adjust replication size.",
+    "rebalance [<replication size>]");
 
 CLI_MODE_COMMAND("storage", "sync_config", CephConfigSyncMain, NULL,
-                 "Sync storage config when monitor cluster topology is changed.",
-                 "sync_config");
+    "Sync storage config when monitor cluster topology is changed.",
+    "sync_config");
 
 CLI_MODE_COMMAND("storage", "maintenance", CephMaintenanceMain, NULL,
-                 "Turn on/off storage maintenance mode to avoid data migrations.",
-                 "maintenance [on|off|status]");
+    "Turn on/off storage maintenance mode to avoid data migrations.",
+    "maintenance [on|off|status]");
 
 CLI_MODE_COMMAND("storage", "add_group", CephCreateNodeGroup, NULL,
-                 "Add a new group whose backend and cache pools map to osd devices of corresponding nodes.",
-                 "add_group group node [<node2...>]");
+    "Add a new group whose backend and cache pools map to osd devices of corresponding nodes.",
+    "add_group group node [<node2...>]");
 
 CLI_MODE_COMMAND("storage", "remove_group", CephRemoveNodeGroup, NULL,
-                 "Remove a group and reassign corresponding nodes back to default bucket.",
-                 "remove_group group");
+    "Remove a group and reassign corresponding nodes back to default bucket.",
+    "remove_group group");
 
 CLI_MODE_COMMAND("storage", "list_group", CephNodeGroupList, NULL,
-                 "List existing ceph groups and the associated nodes.",
-                 "list_group");
+    "List existing ceph groups and the associated nodes.",
+    "list_group");
 
 CLI_MODE_COMMAND("storage", "promote_disk", CephPromoteDiskToCache, NULL,
-                 "Promote a (fast) disk to cache-tier or ssdpool.",
-                 "promote_disk");
+    "Promote a (fast) disk to cache-tier or ssdpool.",
+    "promote_disk");
 
 CLI_MODE_COMMAND("storage", "demote_disk", CephDemoteDiskToCache, NULL,
-                 "Demote a (fast) disk from cache-tier or ssdpool.",
-                 "demote_disk");
+    "Demote a (fast) disk from cache-tier or ssdpool.",
+    "demote_disk");
 
 CLI_MODE_COMMAND("storage", "add_ssdpool", CephCreateSsdPool, NULL,
-                 "Add SSD pool (block device volume) to specified group.",
-                 "add_ssdpool group");
+    "Add SSD pool (block device volume) to specified group.",
+    "add_ssdpool group");
 
 CLI_MODE_COMMAND("storage", "remove_ssdpool", CephRemoveSsdPool, NULL,
-                 "Remove SSD pool of specified group.",
-                 "remove_ssdpool group");
+    "Remove SSD pool of specified group.",
+    "remove_ssdpool group");
 
 CLI_MODE("storage", "restful",
-         "Work with stroage restful API settings.",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+    "Work with stroage restful API settings.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE_COMMAND("restful", "key_create", CreateRestfulKeyMain, NULL,
-                 "Create a restful API for a given name.",
-                 "key_create [<name>]");
+    "Create a restful API for a given name.",
+    "key_create [<name>]");
 
 CLI_MODE_COMMAND("restful", "key_delete", DeleteRestfulKeyMain, NULL,
-                 "Delete a restful API for a given name.",
-                 "key_delete [<name>]");
+    "Delete a restful API for a given name.",
+    "key_delete [<name>]");
 
 CLI_MODE_COMMAND("restful", "key_list", ListRestfulKeyMain, NULL,
-                 "List all restful API keys.",
-                 "key_list");
+    "List all restful API keys.",
+    "key_list");
 
 // This mode is not available in STRICT error state
 CLI_MODE("storage", "mirror",
-         "Work with block device (volume) data protection settings and rules.",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+    "Work with block device (volume) data protection settings and rules.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE("mirror", "site",
-         "Configure mirror sites (primary and peer).",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+    "Configure mirror sites (primary and peer).",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE_COMMAND("site", "pair", CephMirrorSitePair, NULL,
-                 "Pair up local and peer sites with volume mirroring.",
-                 "pair peerVip peerPasswd");
+    "Pair up local and peer sites with volume mirroring.",
+    "pair peerVip peerPasswd");
 
 CLI_MODE_COMMAND("site", "unpair", CephMirrorSiteUnpair, NULL,
-                 "Unpair local and peer sites.",
-                 "unpair");
+    "Unpair local and peer sites.",
+    "unpair");
 
 CLI_MODE("mirror", "rule",
-         "Work with block device (volume) data protection rules.",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+    "Work with block device (volume) data protection rules.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE("rule", "enable",
-         "Enable volume mirror rule(s) on local site.",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+    "Enable volume mirror rule(s) on local site.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE_COMMAND("enable", "snapshot", CephMirrorRuleEnableSnapshot, NULL,
-                 "Enable volume mirror rule(s) with snapshot mode.",
-                 "snapshot [all|volumeId(s)]");
+    "Enable volume mirror rule(s) with snapshot mode.",
+    "snapshot [all|volumeId(s)]");
 
 CLI_MODE_COMMAND("enable", "journal", CephMirrorRuleEnableJournal, NULL,
-                 "Enable volume mirror rule(s) with journal mode.",
-                 "journal [all|volumeId(s)]");
+    "Enable volume mirror rule(s) with journal mode.",
+    "journal [all|volumeId(s)]");
 
 CLI_MODE_COMMAND("rule", "disable", CephMirrorRuleDisable, NULL,
-                 "Disable volume mirror rule(s) on local site.",
-                 "disable [all|volumeId(s)]");
+    "Disable volume mirror rule(s) on local site.",
+    "disable [all|volumeId(s)]");
 
 CLI_MODE_COMMAND("mirror", "status", CephMirrorStatus, NULL,
-                 "Get the volumes/pools mirroring status.",
-                 "status [watch]");
+    "Get the volumes/pools mirroring status.",
+    "status [watch]");
 
 CLI_MODE_COMMAND("mirror", "promote", CephMirrorPromote, NULL,
-                 "Promote the storage cluster as primary cluster.",
-                 "promote [normal|force] [site|volume]");
+    "Promote the storage cluster as primary cluster.",
+    "promote [normal|force] [site|volume]");
 
 CLI_MODE_COMMAND("mirror", "instance", CephMirrorInstance, NULL,
-                 "Create and launch servers whose volumes were promoted on peer cluster.",
-                 "instance [all|single]");
+    "Create and launch servers whose volumes were promoted on peer cluster.",
+    "instance [all|single]");
 
 CLI_MODE_COMMAND("mirror", "restart", CephMirrorRestart, NULL,
-                 "Restart mirroring process in case of unstable or unsynced.",
-                 "restart");
+    "Restart mirroring process in case of unstable or unsynced.",
+    "restart");
 
 // Cache Tier related commands
 CLI_MODE("storage", "cache",
-         "Work with fast storage to store hot data.",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+    "Work with fast storage to store hot data.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
 
 CLI_MODE_COMMAND("cache", "status", CephShowCache, NULL,
-                 "Display cache status.",
-                 "status <backpool>");
+    "Display cache status.",
+    "status <backpool>");
 
 CLI_MODE_COMMAND("cache", "switch", CephSwitchCache, NULL,
-                 "Switch on/off of the cache.",
-                 "switch backpool <[on|off]>");
+    "Switch on/off of the cache.",
+    "switch backpool <[on|off]>");
 
 CLI_MODE_COMMAND("cache", "set_profile", CephCacheProfileSet, NULL,
-                 "Adjust cache profile.",
-                 "set_profile backpool <[high-burst|default|low-burst]>");
+    "Adjust cache profile.",
+    "set_profile backpool <[high-burst|default|low-burst]>");
 
 CLI_MODE_COMMAND("cache", "flush", CephCacheFlush, NULL,
-                 "Flush data back to the base tier.",
-                 "flush backpool");
+    "Flush data back to the base tier.",
+    "flush backpool");
