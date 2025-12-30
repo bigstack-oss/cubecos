@@ -6,6 +6,17 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+filesystem_is_directory_mounted()
+{
+    local dir="${1:-""}"
+
+    if [ ! -e "/proc/mounts" ] ; then
+        return 1
+    fi
+
+    _hex_function_ret grep -q "$dir" "/proc/mounts"
+}
+
 filesystem_write_file()
 {
     local path="${1:-""}"

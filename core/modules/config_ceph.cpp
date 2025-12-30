@@ -10,6 +10,7 @@
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/dryrun.h>
+#include <hex/exec.hpp>
 #include <hex/filesystem.h>
 #include <hex/log.h>
 #include <hex/pidfile.h>
@@ -159,48 +160,228 @@ PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 // PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 2);
 static ConfigString s_adminCliPass("66K1ogIiRt5KnyHe");
 
+/**
+ * Update device maps for multipath devices.
+ */
 static bool
-__setup_bluestore()
+updateDeviceMaps()
 {
-    // 1. Partition/format all prepared osd disks
-    std::string prep_devs = HexUtilPOpen(HEX_SDK " ListPreparedDisks");
-    if (prep_devs.length() >= 8 /* start with /dev/sdx | /dev/nvme0n1 */) {
-        std::vector<std::string> devs = hex_string_util::split(prep_devs, ' ');
-        for (auto& d : devs) {
-            if (d.length() == 0)
-                continue;
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        HEX_SDK " storage_update_device_maps");
+    if (r.exitCode != 0) {
+        HexLogError("failed to update device maps");
+        return false;
+    }
 
-            int part_nums = 2;
-            int part_size = 819200; // sectors (512B) --> 400 MB by default
-            std::string type = "scsi";
+    HexLogInfo("finished updating device maps");
+    return true;
+}
 
-            std::size_t found = d.find("nvme");
-            if (found != std::string::npos) {
-                type = "nvme";
-                part_nums = 2;
-            }
+/**
+ * Partition all prepared OSD disks from the installation process.
+ *
+ * Prepared OSD disks are disks with part label "hex_prep_" prefix.
+ */
+static bool
+partitionPreparedDisks()
+{
+    bool result = true;
+    HexLogInfo("start partitioning prepared disks");
+    // force the kernel to load the current partition table
+    const ExecSyncResult ur = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        HEX_SDK " storage_update_partition_table");
+    if (ur.exitCode != 0) {
+        return false;
+    }
 
-            HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_prepare_bluestore %s %d %d %s",
-                d.c_str(), part_nums, part_size, type.c_str());
+    std::string preparedDisks = HexUtilPOpen(HEX_SDK " ListPreparedDisks");
+    std::vector<std::string> devs = hex_string_util::split(preparedDisks, ' ');
+    std::vector<pid_t> partitionTasks;
+    for (std::string& d : devs) {
+        if (d.length() == 0) {
+            continue;
+        }
+
+        // ensure the device is a valid block device
+        const ExecSyncResult vr = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " storage_is_valid_block_device " + d);
+        if (vr.exitCode != 0) {
+            HexLogError("device %s is not a valid block device", d.c_str());
+            continue;
+        }
+
+        /**
+         * Ensure the device is a direct-attached storage.
+         * We would not partition non DAS disks during FTS/bootstrapping/tuning.
+         */
+        const ExecSyncResult dr = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " storage_is_das " + d);
+        if (dr.exitCode != 0) {
+            HexLogWarning("device %s is not a DAS disk", d.c_str());
+            continue;
+        }
+
+        int partNums = 2;
+        // sectors (512B) --> 400 MB by default
+        int partSize = 819200;
+        std::string type = "scsi";
+
+        std::size_t found = d.find("nvme");
+        if (found != std::string::npos) {
+            type = "nvme";
+            partNums = 2;
+        }
+
+        // partition the disk in parallel
+        Cmd pc;
+        pc.path = HEX_SDK;
+        pc.args = {
+            "ceph_osd_prepare_bluestore",
+            d,
+            std::to_string(partNums),
+            std::to_string(partSize),
+            type,
+        };
+
+        const Process pp = Exec(pc, false);
+        if (pp.pid == -1) {
+            HexLogError(
+                "failed to create process to run partition task for %s, error: %s",
+                d.c_str(),
+                pp.error.c_str());
+        } else {
+            partitionTasks.push_back(pp.pid);
         }
     }
 
-    // 2. Bring up osds (old and new)
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_relabel");
-    std::string osd_devs = HexUtilPOpen(HEX_SDK " ceph_osd_list_meta_partitions");
-    if (osd_devs.length() < 8 /* start with /dev/sdx */)
-        return true;
-    std::vector<std::string> devs = hex_string_util::split(osd_devs, ' ');
-    for (auto& d : devs) {
-        if (d.length() == 0)
+    // wait for the partition tasks to end
+    int status;
+    bool tasksFinished = false;
+    std::vector<bool> partitionTaskDones;
+    for (const pid_t& pt : partitionTasks) {
+        if (pt == -1) {
+            partitionTaskDones.push_back(true);
+        } else {
+            partitionTaskDones.push_back(false);
+        }
+    }
+    while (!tasksFinished) {
+        // check processes
+        for (std::size_t i = 0; i < partitionTasks.size(); i++) {
+            if (partitionTaskDones[i]) {
+                // the process is either not started or is already ended
+                continue;
+            }
+
+            pid_t waitpidResult = waitpid(partitionTasks[i], &status, WNOHANG);
+            if (waitpidResult == partitionTasks[i]) {
+                partitionTaskDones[i] = true;
+            }
+        }
+
+        // check if all tasks are finished
+        bool done = true;
+        for (const bool& pd : partitionTaskDones) {
+            done = done && pd;
+        }
+        if (done) {
+            tasksFinished = true;
             continue;
+        }
+
+        // wait
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    // collect statuses
+    int exitCode = 0;
+    for (const auto& pt : partitionTasks) {
+        waitpid(pt, &status, 0);
+
+        if (WIFEXITED(status)) {
+            exitCode = WEXITSTATUS(status);
+        } else {
+            // abnormal termination
+            exitCode = -1;
+        }
+
+        result = result && (exitCode == 0);
+    }
+
+    HexLogInfo("finished partitioning prepared disks");
+    return result;
+}
+
+/**
+ * Update partition label links under /dev/disk/by-partlabel
+ * since /dev/sdx naming is not guaranteed to be the same as the last reboot.
+ */
+static bool
+updatePartitionLabelLinks()
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        HEX_SDK " storage_update_partition_label_links");
+    if (r.exitCode != 0) {
+        HexLogError("failed to update partition label links");
+        return false;
+    }
+
+    HexLogInfo("finished updating partition label links");
+    return true;
+}
+
+/**
+ * Prepare OSD directories before bringing up old and new OSDs.
+ */
+static bool
+prepareOsdDirectories()
+{
+    std::string osdDevs = HexUtilPOpen(HEX_SDK " ceph_osd_list_meta_partitions");
+    std::vector<std::string> devs = hex_string_util::split(osdDevs, ' ');
+    for (auto& d : devs) {
+        if (d.length() == 0) {
+            continue;
+        }
+
+        // ensure the device is a valid block device
+        const ExecSyncResult vr = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " storage_is_valid_block_device " + d);
+        if (vr.exitCode != 0) {
+            HexLogError("device %s is not a valid block device", d.c_str());
+            continue;
+        }
 
         std::string dataPart = HexUtilPOpen(HEX_SDK " ceph_osd_get_datapart %s", d.c_str());
+        std::string dataPartUuid = HexUtilPOpen(HEX_SDK " ceph_osd_get_datapartuuid %s", d.c_str());
         HexSystemF(0, "chown %s:%s %s", USER, GROUP, d.c_str());
         HexSystemF(0, "chown %s:%s %s", USER, GROUP, dataPart.c_str());
 
         char osddir[256];
-        size_t osdId = 0;
+        std::size_t osdId = 0;
         struct stat ds;
         std::string uuid = HexUtilPOpen(HEX_SDK " GetBlkUuid %s", d.c_str());
         std::string strOsdId = HexUtilPOpen(HEX_SDK " ceph_osd_get_id %s", d.c_str());
@@ -211,16 +392,27 @@ __setup_bluestore()
         snprintf(osddir, sizeof(osddir), OSDDIR_FMT, osdId);
         s_osdIds.push_back(osdId);
 
-        if (stat(osddir, &ds) == 0 && S_ISDIR(ds.st_mode))
-            HexUtilSystemF(0, 0, "mount %s %s", d.c_str(), osddir);
-        else {
+        bool isOldOsd = stat(osddir, &ds) == 0 && S_ISDIR(ds.st_mode);
+        if (!isOldOsd) {
             if (HexMakeDir(osddir, USER, GROUP, 0755) != 0) {
                 HexLogError("failed to create ceph osd directory %s", osddir);
                 return false;
             }
+
             s_osdNewIds.push_back(osdId);
-            std::string dataPartUuid = HexUtilPOpen(HEX_SDK " ceph_osd_get_datapartuuid %s", d.c_str());
-            HexSystemF(0, "mount %s %s", d.c_str(), osddir);
+        }
+
+        const ExecSyncResult mr = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " filesystem_is_directory_mounted '" + std::string(osddir) + "'");
+        if (mr.exitCode != 0) {
+            HexUtilSystemF(0, 0, "mount %s %s", d.c_str(), osddir);
+        }
+
+        if (!isOldOsd) {
             HexSystemF(0, "rm -rf %s/*", osddir);
             HexSystemF(0, "echo bluestore > %s/type", osddir);
             HexSystemF(0, "ln -sf /dev/disk/by-partuuid/%s %s/block", dataPartUuid.c_str(), osddir);
@@ -326,7 +518,10 @@ SetupOsd(std::string hostname, std::string fsid)
     s_osdIds.clear();
     s_osdNewIds.clear();
 
-    __setup_bluestore();
+    updateDeviceMaps();
+    partitionPreparedDisks();
+    updatePartitionLabelLinks();
+    prepareOsdDirectories();
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_map");
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount");
 

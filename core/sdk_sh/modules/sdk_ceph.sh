@@ -2005,7 +2005,7 @@ ceph_osd_get_datapart()
     # check if osd meta partition exists
     [ -n "$(readlink -e $metapart)" ] || return 1
     datapart_partuuid=$(grep $metapart $CEPH_OSD_MAP 2>/dev/null | cut -d" " -f4)
-    datapart=$(blkid -o device  --match-token PARTUUID=$datapart_partuuid 2>/dev/null)
+    datapart=$(blkid -o device --match-token PARTUUID=$datapart_partuuid 2>/dev/null)
     if [ "x$datapart" = "x" ] ; then
         local metapart_num=$(echo ${metapart} | grep -o "[0-9]$")
         local metapart_stem=$(echo ${metapart} | sed "s/[0-9]$//")
@@ -2018,19 +2018,9 @@ ceph_osd_get_datapart()
 ceph_osd_get_datapartuuid()
 {
     local metapart=$1
-    local datapart_partuuid=
-    # check if osd meta partition exists
-    [ -n "$(readlink -e $metapart)" ] || return 1
-    datapart_partuuid=$(grep $metapart $CEPH_OSD_MAP 2>/dev/null | cut -d" " -f4)
-    if [ "x$datapart_partuuid" = "x" ] ; then
-        local metapart_num=$(echo ${metapart} | grep -o "[0-9]$")
-        local metapart_stem=$(echo ${metapart} | sed "s/[0-9]$//")
-        local datapart=${metapart_stem}$((metapart_num + 2))
-        datapart=$(blkid | grep -e 'PARTLABEL=\"cube_data' | cut -d":" -f1 | grep $datapart)
-        datapart_partuuid=$(blkid -o value -s PARTUUID $datapart)
-    fi
-
-    echo -n $datapart_partuuid
+    local datapart="$(ceph_osd_get_datapart "$metapart")"
+    local datapart_partuuid="$(GetBlkPartUuid "$datapart")"
+    echo -n "$datapart_partuuid"
 }
 
 ceph_osd_remount()
@@ -2068,6 +2058,9 @@ ceph_osd_remount()
 
 ceph_osd_create_map()
 {
+    # create the OSD map
+    # format: <device> <osd id> <metapart_uuid> <datapart_partuuid>
+    # e.g., /dev/sdb1 0 xxxx-xxxx xxxx-xxxx
     local osdpth=/var/lib/ceph/osd
     local osdmap_new=$(mktemp -u /tmp/dev_osd.mapXXXX)
     local osdmap_json=$(ceph-volume raw list --format json)
@@ -2660,57 +2653,6 @@ ceph_osd_host_set()
     for id in $osd_ids ; do
         Quiet -n $CEPH osd $status $id
     done
-}
-
-ceph_osd_relabel()
-{
-    local label_pth="/dev/disk/by-partlabel"
-    local prefixes="cube_meta cube_data"
-    local type=
-    local dev=
-    local disk=
-    local part_pth=
-    local part=
-    local part_symbol=
-    local part_num=
-    local slink_symbol=
-    local slink_num=
-
-    [ -e $label_pth ] || return 0
-
-    pushd $label_pth >/dev/null
-    for prefix in $prefixes ; do
-        for slink in $(find . -type l -name "*${prefix}*" | sort) ; do
-            part_pth=$(readlink -e $slink)
-            part=${part_pth#/dev/}
-            disk=$(lsblk $part_pth -s -r -o NAME,TYPE | grep disk | cut -d' ' -f1 | sort -u)
-
-            if [[ $disk =~ nvme ]] ; then
-                # part: nvme0n1p1
-                # disk: nvme0n1
-                # part_symbol=0n1
-                # part_num=p1
-                type=nvme
-            else
-                # part: sda1
-                # disk: sda
-                # part_symbol=a
-                # part_num=1
-                type=sd
-            fi
-            part_symbol=${disk#*$type}
-            part_num=${part#$type$part_symbol}
-
-            slink_symbol=$(echo $slink | cut -d'_' -f3)
-            slink_num=$(echo $slink | cut -d'_' -f4)
-
-            if [ "${part_symbol}${part_num}" != "${slink_symbol}${slink_num}" ] ; then
-                unlink $slink
-                ln -sf ../../${type}${part_symbol}${part_num} ./${prefix}_${part_symbol}_${part_num}
-            fi
-        done
-    done
-    popd >/dev/null
 }
 
 ceph_osd_fix_fsid()
