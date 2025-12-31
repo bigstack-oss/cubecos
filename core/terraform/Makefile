@@ -3,15 +3,19 @@
 
 include ../../build.mk
 
-SRCS                 := $(shell find $(SRCDIR)/src/ -name "*.tf")
-RANCHER_PROV_REPO    := https://github.com/rancher/terraform-provider-rancher2.git
-RANCHER_PROV_VER     := v7.0.0
-RANCHER_PROV_DIR     := terraform-provider-rancher2
-RANCHER_UPSTREAM_BIN := $(RANCHER_PROV_DIR)/bin/terraform-provider-rancher2
-TF_CORE_REPO         := https://github.com/hashicorp/terraform.git
-TF_CORE_VER          := v0.14.3
-TF_CORE_DIR          := terraform-core
-TF_CORE_BIN          := $(TF_CORE_DIR)/terraform-core
+SRCS                  := $(shell find $(SRCDIR)/src/ -name "*.tf")
+RANCHER_PROV_REPO     := https://github.com/rancher/terraform-provider-rancher2.git
+RANCHER_PROV_VER      := v7.0.0
+RANCHER_PROV_DIR      := terraform-provider-rancher2
+RANCHER_UPSTREAM_BIN  := $(RANCHER_PROV_DIR)/bin/terraform-provider-rancher2
+KEYCLOAK_PROV_REPO    := https://github.com/mrparkers/terraform-provider-keycloak.git
+KEYCLOAK_PROV_VER     := v3.10.0
+KEYCLOAK_PROV_DIR     := terraform-provider-keycloak
+KEYCLOAK_UPSTREAM_BIN := $(KEYCLOAK_PROV_DIR)/terraform-provider-keycloak
+TF_CORE_REPO          := https://github.com/hashicorp/terraform.git
+TF_CORE_VER           := v0.14.3
+TF_CORE_DIR           := terraform-core
+TF_CORE_BIN           := $(TF_CORE_DIR)/terraform-core
 
 $(RANCHER_PROV_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(RANCHER_PROV_VER) $(RANCHER_PROV_REPO) $(RANCHER_PROV_DIR),"  CLONE   rancher-provider")
@@ -19,6 +23,18 @@ $(RANCHER_PROV_DIR):
 $(RANCHER_UPSTREAM_BIN): $(RANCHER_PROV_DIR)
 	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && go get github.com/hashicorp/go-getter@v1.7.4 && go mod tidy, "  UPDATE  rancher-provider")
 	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && make build, "  BUILD   rancher-provider")
+
+$(KEYCLOAK_PROV_DIR):
+	$(call RUN_CMD_TIMED,git clone -b $(KEYCLOAK_PROV_VER) $(KEYCLOAK_PROV_REPO) $(KEYCLOAK_PROV_DIR),"  CLONE   keycloak-provider")
+
+$(KEYCLOAK_UPSTREAM_BIN): $(KEYCLOAK_PROV_DIR)
+	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && go mod tidy, "  UPDATE  keycloak-provider")
+	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && \
+		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+		go build \
+		-gcflags "all=-N -l" -trimpath -ldflags " -X main.version=$(KEYCLOAK_PROV_VER)" \
+		-o terraform-provider-keycloak ., \
+		"  BUILD   keycloak-provider")
 
 $(TF_CORE_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(TF_CORE_VER) $(TF_CORE_REPO) $(TF_CORE_DIR),"  CLONE   tf-core")
@@ -33,13 +49,15 @@ $(TF_CORE_BIN): $(TF_CORE_DIR)
 		-o terraform-core ., \
 		"  BUILD   tf-core")
 
-terraform: $(TF_CORE_BIN) $(RANCHER_UPSTREAM_BIN)
+terraform: $(TF_CORE_BIN) $(RANCHER_UPSTREAM_BIN) $(KEYCLOAK_UPSTREAM_BIN)
 	$(Q)cp -rfT $(SRCDIR)/src/ ./$@
 	$(Q)make clean-etcd
 	$(call RUN_CMD_TIMED,make run-etcd,"  RUN     etcd@jail")
 	$(call RUN_CMD_TIMED,$(TF_CORE_BIN) -chdir=$@ init,"  INIT    $@")
 	$(Q)cp -f $(RANCHER_UPSTREAM_BIN) \
         ./$@/.terraform/providers/registry.terraform.io/rancher/rancher2/7.0.0/linux_amd64/terraform-provider-rancher2_v7.0.0
+	$(Q)cp -f $(KEYCLOAK_UPSTREAM_BIN) \
+		./$@/.terraform/providers/registry.terraform.io/mrparkers/keycloak/3.10.0/linux_amd64/terraform-provider-keycloak_v3.10.0
 	$(Q)make clean-etcd
 
 install: terraform
