@@ -308,17 +308,17 @@ func TestIntegrationAll(t *testing.T) {
 		runSetup(cNew)
 	}
 
-	downloadLatestK3s := func() error {
-		if _, _, err := util.ExecCmd("curl", "-sL", "https://github.com/k3s-io/k3s/releases/download/v1.23.6%2Bk3s1/k3s", "-o", "/opt/k3s/k3s"); err != nil {
-			return err
-		}
+	// downloadLatestK3s := func() error {
+	// 	if _, _, err := util.ExecCmd("curl", "-sL", "https://github.com/k3s-io/k3s/releases/download/v1.23.6%2Bk3s1/k3s", "-o", "/opt/k3s/k3s"); err != nil {
+	// 		return err
+	// 	}
 
-		if _, _, err := util.ExecCmd("chmod", "+x", "/opt/k3s/k3s"); err != nil {
-			return err
-		}
+	// 	if _, _, err := util.ExecCmd("chmod", "+x", "/opt/k3s/k3s"); err != nil {
+	// 		return err
+	// 	}
 
-		return nil
-	}
+	// 	return nil
+	// }
 
 	t.Run("1cc", func(t *testing.T) {
 		_, err := runMysqlContainer(cubeTesting.ContainerNS(""), "")
