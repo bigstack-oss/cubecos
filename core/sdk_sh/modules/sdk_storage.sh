@@ -32,6 +32,31 @@ storage_is_valid_block_device()
     return 0
 }
 
+storage_is_mpath()
+{
+    # check if the device is a mpath device
+    local device="${1:-""}"
+    if [ -z "$device" ] ; then
+        return 1
+    fi
+
+    local exec_output=""
+    local exec_error=""
+    if ! _hex_function exec_output exec_error /usr/bin/lsblk -ln -o TYPE "$device" ; then
+        # error, might not be a proper block device
+        return 1
+    fi
+
+    local type=""
+    while read -r type ; do
+        if [[ "$type" == "mpath" ]] ; then
+            return 0
+        fi
+    done <<< "$exec_output"
+
+    return 1
+}
+
 storage_is_das()
 {
     # check if the device is a direct-attached storage, DAS
@@ -43,19 +68,10 @@ storage_is_das()
     local exec_output=""
     local exec_error=""
 
-    # test if mpath devices
-    if ! _hex_function exec_output exec_error /usr/bin/lsblk -ln -o TYPE "$device" ; then
-        # error, might not be a proper block device
+    # test if mpath devices, mpath devices are not DAS
+    if storage_is_mpath "$device" ; then
         return 1
     fi
-
-    local type=""
-    while read -r type ; do
-        if [[ "$type" == "mpath" ]] ; then
-            # mpath devices are not DAS
-            return 1
-        fi
-    done <<< "$exec_output"
 
     # test if fc devices
     if [[ "$(/usr/bin/lsblk -dn -o TRAN "$device")" == "fc" ]] ; then
@@ -137,6 +153,9 @@ storage_update_partition_label_links()
 storage_list_all_disks()
 {
     # list all nvme* and sd* on the system
+    # output format: "/dev/sda /dev/sdb /dev/sdc"
+
+    storage_update_device_maps
 
     # force rescans of SCSI buses
     for host in /sys/class/scsi_host/* ; do
@@ -148,25 +167,118 @@ storage_list_all_disks()
     done
 
     # collect disk device names
-    local nvmes=$(ls /dev/nvme* 2>/dev/null| grep -oe '/dev/nvme[0-9]\+n[0-9]\+$')
-    local ssds=$(ls /dev/sd* 2>/dev/null| grep -oe '/dev/sd[a-z]\+$')
-
-    local disks=
-    for d in $nvmes $ssds ; do
-        if lsblk -nd | grep -q "${d#/dev/}" ; then
-            disks+="$d "
+    local disks=""
+    local block_dev=""
+    for block_dev in /sys/block/sd* /sys/block/nvme* ; do
+        # skip non-existing links
+        if [[ "$block_dev" == "/sys/block/sd*" ]] ; then
+            continue
         fi
+        if [[ "$block_dev" == "/sys/block/nvme*" ]] ; then
+            continue
+        fi
+
+        local device_basename="$(/usr/bin/basename "$block_dev")"
+        local device="/dev/${device_basename}"
+
+        # test if mpath devices, if so, skip it
+        if storage_is_mpath "$device" ; then
+            continue
+        fi
+
+        # exclude non-block devices
+        if [[ "$(/bin/lsblk -dn -o TYPE "$device")" != "disk" ]] ; then
+            continue
+        fi
+
+        # exclude not writable devices
+        if [[ "$(/bin/lsblk -dn -o RO "$device")" =~ "1" ]] ; then
+            continue
+        fi
+
+        # exclude zero size devices
+        if [[ "$(/bin/lsblk -dn -o SIZE "$device")" == " 0B" ]] ; then
+            continue
+        fi
+
+        # ensure the device is a block device
+        if [ ! -b "$device" ] ; then
+            continue
+        fi
+
+        disks+="$device "
     done
+
+    # collect mapper devices
+    local mpath_dev=""
+    for mpath_dev in /dev/mapper/* ; do
+        # skip non-existing links
+        if [[ "$block_dev" == "/dev/mapper/*" ]] ; then
+            continue
+        fi
+
+        # a mapper device must be a symbolic link
+        if [ ! -L "$mpath_dev" ] ; then
+            continue
+        fi
+
+        # exclude partitions
+        if [[ "$(/bin/lsblk -dn -o TYPE "$mpath_dev")" != "mpath" ]] ; then
+            continue
+        fi
+
+        disks+="$mpath_dev "
+    done
+
+    echo -n ${disks%% }
+}
+
+storage_list_mounted_disks()
+{
+    # list all mounted (in-use) disks
+    # output format: "/dev/sda /dev/sdb /dev/sdc"
+    local disks=""
+
+    # first, find all mounted disks for normal file systems
+    local mounted_devices="$(grep /dev/ /proc/mounts | awk '{ print $1; }' | grep "/dev/.*")"
+    local device=""
+    local device_basename=""
+    local disk_name=""
+    while read -r device ; do
+        device_basename="$(/usr/bin/basename "$device")"
+        if [[ ! $device_basename =~ ^(sd|nvme) ]]; then
+            # we are only interested in SCSI disks or NVME disks
+            continue
+        fi
+
+        disk_name="$(/bin/lsblk -n -o PKNAME "$device")"
+        if [ -z "$disk_name" ] ; then
+            continue
+        fi
+
+        disks+="/dev/${disk_name} "
+    done <<< "$mounted_devices"
+
+    # second, find all mounted disks for LVM
+    local lvms=$(ceph-volume lvm list --format json | jq -r ".[][].devices[]" | sort | uniq)
+    local lvm=""
+    for lvm in $lvms ; do
+        disks+="$lvm "
+    done
+
+    # use awk to pick unique disks only
+    disks="$(echo "$disks" | awk '{for(i=1;i<=NF;i++) if(!a[$i]++) printf "%s%s", $i, (i==NF?ORS:OFS)}')"
     echo -n ${disks%% }
 }
 
 storage_list_available_disks()
 {
     # list all free disks for Ceph OSD
-    local disks_mounted=
+    local disks_mounted=""
+    local available=""
     for d in $(storage_list_all_disks) ; do
-        local available=true
-        for b in $(ListMountedDisks) ; do
+        available=true
+        for b in $(storage_list_mounted_disks) ; do
             if [ "x${d}" = "x${b}" ] ; then
                 available=false
                 break
