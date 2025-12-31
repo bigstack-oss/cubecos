@@ -6,17 +6,28 @@ include $(SRCDIR)/rancher.mk
 APP_VERSION := 2.11.2
 CLI_VERSION := 2.11.2
 
+CLI_REPO    := https://github.com/rancher/cli.git
+CLI_SRC_DIR := rancher-cli-source
+
 IMG_LIST := $(shell cat $(SRCDIR)/images.txt)
 ifeq ($(FULL),true)
 	IMG_LIST += $(shell cat $(SRCDIR)/rancher-images.txt)
 endif
 
 CLI_BIN := rancher
-CHART := rancher-$(APP_VERSION).tgz
+CHART   := rancher-$(APP_VERSION).tgz
 
+$(CLI_SRC_DIR):
+	$(call RUN_CMD_TIMED,git clone -b v$(CLI_VERSION) $(CLI_REPO) $(CLI_SRC_DIR),"  CLONE   rancher-cli")
 
-$(CLI_BIN):
-	$(Q)wget -qO- --no-check-certificate https://releases.rancher.com/cli2/v$(CLI_VERSION)/rancher-linux-amd64-v$(CLI_VERSION).tar.gz | tar -zx --strip-components=2
+$(CLI_BIN): $(CLI_SRC_DIR)
+	$(call RUN_CMD_TIMED,cd $(CLI_SRC_DIR) && go mod tidy,"  UPDATE  rancher-cli")
+	$(call RUN_CMD_TIMED,cd $(CLI_SRC_DIR) && \
+		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+		go build \
+		-ldflags="-s -w -X main.VERSION=v$(CLI_VERSION) -extldflags '-static'" \
+		-o ../$(CLI_BIN) ., \
+		"  BUILD   rancher-cli")
 
 $(CHART):
 	$(Q)helm repo add rancher-stable https://releases.rancher.com/server-charts/stable $(QEND)
