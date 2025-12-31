@@ -817,7 +817,7 @@ ceph_osd_purge()
     Quiet -n remote_run "$host" rmdir "/var/lib/ceph/osd/ceph-${osd_id}"
     if remote_run "$host" "[ -e \"/var/lib/ceph/osd/ceph-${osd_id}\" ]" ; then
         log_error "/var/lib/ceph/osd/ceph-${osd_id} is not fully cleaned up"
-        return 1 
+        return 1
     fi
 
     return 0
@@ -967,11 +967,39 @@ ceph_osd_remove_disk_cleanup()
     # check if OSDs are completely purged
     local osd_ids="$(ceph_osd_get_ids "$dev")"
     local osd_id=""
+    local exec_output=""
+    local exec_error=""
+    local osd_pg_count=""
+    local osd_up_status=""
+    local host=""
     local are_osds_purged="true"
     for osd_id in $osd_ids ; do
-        if _hex_function_ret $CEPH osd find "$osd_id" ; then
-            log_info "Ceph OSD ${osd_id} is still on ${dev}"
+        # check if the OSD does not contain any PG
+        if ! _hex_function exec_output exec_error ceph osd df "osd.${osd_id}" --format json ; then
+            log_info "Ceph OSD ${osd_id} is already removed, ${exec_error}"
+            continue
+        fi
+        osd_pg_count="$(echo "$exec_output" | jq -r ".nodes[] | select(.id == ${osd_id}) | .pgs")"
+        if [[ "$osd_pg_count" != "0" ]] ; then
+            log_info "Ceph OSD ${osd_id} still contains PG"
             are_osds_purged="false"
+            continue
+        fi
+
+        # check if the OSD is marked as down
+        osd_up_status="$($CEPH osd dump --format=json | jq -r ".osds[] | select(.osd == ${osd_id}) | .up")"
+        if [[ "$osd_up_status" == "1" ]] ; then
+            log_info "Ceph OSD ${osd_id} is still up"
+            are_osds_purged="false"
+            continue
+        fi
+
+        # check if the OSD directory is cleaned up
+        host="$(ceph_get_host_by_id "$osd_id")"
+        if remote_run "$host" "[ -e \"/var/lib/ceph/osd/ceph-${osd_id}\" ]" ; then
+            log_info "the directory for Ceph OSD ${osd_id} is not cleaned up"
+            are_osds_purged="false"
+            continue
         fi
     done
 
@@ -989,6 +1017,11 @@ ceph_osd_remove_disk_cleanup()
         log_info "set to try remove disk cleanup for ${dev} with attempt ${nth_attempt}"
         return 1
     fi
+
+    # clean up the OSDs in case some testing created those in phantom status
+    for osd_id in $osd_ids ; do
+        Quiet -n $CEPH osd purge "$osd_id" --yes-i-really-mean-it
+    done
 
     # perform the cleanup
     Quiet ceph_osd_zap_disk $dev
@@ -1015,12 +1048,20 @@ ceph_osd_remove_disk()
         # Quiet parted $dev name $i removed
     done
 
-    # we do not need to schedule duplicated jobs
-    if ceph_osd_is_remove_disk_cleanup_scheduled "$dev" ; then
+    if [[ "$mode" == "safe" ]] ; then
+        # we do not need to schedule duplicated jobs
+        if ceph_osd_is_remove_disk_cleanup_scheduled "$dev" ; then
+            return 0
+        fi
+
+        ceph_osd_remove_disk_cleanup "$dev" "1"
         return 0
     fi
 
-    ceph_osd_remove_disk_cleanup "$dev" "1"
+    # perform the cleanup
+    Quiet ceph_osd_zap_disk $dev
+    Quiet ceph_osd_create_map
+    Quiet ceph_adjust_cache_flush_bytes
     return 0
 }
 
