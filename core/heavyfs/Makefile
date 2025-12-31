@@ -155,8 +155,25 @@ LOCKED_DNF += $(OPENSSL)
 
 $(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-openstackclient python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) perf arp-scan")
 
-rootfs_install::
-	$(Q)wget -qO $(ROOTDIR)/usr/local/bin/yq --no-check-certificate "https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64"
+YQ_REPO    := https://github.com/mikefarah/yq.git
+YQ_VER     := v4.45.1
+YQ_SRC_DIR := $(CURDIR)/yq-source
+YQ_BIN     := yq
+
+$(YQ_SRC_DIR):
+	$(call RUN_CMD_TIMED,git clone -b $(YQ_VER) $(YQ_REPO) $(YQ_SRC_DIR),"  CLONE   yq")
+
+$(YQ_BIN): $(YQ_SRC_DIR)
+	$(call RUN_CMD_TIMED,cd $(YQ_SRC_DIR) && go mod tidy,"  UPDATE  yq")
+	$(call RUN_CMD_TIMED,cd $(YQ_SRC_DIR) && \
+		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+		go build \
+		-ldflags="-s -w" \
+		-o $(YQ_BIN) ., \
+		"  BUILD   yq")
+
+rootfs_install:: $(YQ_BIN)
+	$(Q)cp -f $(YQ_SRC_DIR)/$(YQ_BIN) $(ROOTDIR)/usr/local/bin
 	$(Q)chroot $(ROOTDIR) chmod +x /usr/local/bin/yq
 
 rootfs_install::
@@ -243,6 +260,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c "mkdir -p /mnt/cephfs/update"
 	$(Q)chroot $(ROOTDIR) sh -c "rm -rf /var/update ; ln -sf /mnt/cephfs/update /var/update"
 
-PKGCLEAN += $(HEAVYFS) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
+PKGCLEAN += $(HEAVYFS) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR) $(YQ_SRC_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
