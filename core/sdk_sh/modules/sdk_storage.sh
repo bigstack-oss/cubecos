@@ -133,3 +133,47 @@ storage_update_partition_label_links()
         done
     done
 }
+
+storage_list_all_disks()
+{
+    # list all nvme* and sd* on the system
+
+    # force rescans of SCSI buses
+    for host in /sys/class/scsi_host/* ; do
+        if [ -e $host/rescan ] ; then
+            echo "- - -" > $host/rescan
+        elif [ -e $host/scan ] ; then
+            echo "- - -" > $host/scan
+        fi
+    done
+
+    # collect disk device names
+    local nvmes=$(ls /dev/nvme* 2>/dev/null| grep -oe '/dev/nvme[0-9]\+n[0-9]\+$')
+    local ssds=$(ls /dev/sd* 2>/dev/null| grep -oe '/dev/sd[a-z]\+$')
+
+    local disks=
+    for d in $nvmes $ssds ; do
+        if lsblk -nd | grep -q "${d#/dev/}" ; then
+            disks+="$d "
+        fi
+    done
+    echo -n ${disks%% }
+}
+
+storage_list_available_disks()
+{
+    # list all free disks for Ceph OSD
+    local disks_mounted=
+    for d in $(storage_list_all_disks) ; do
+        local available=true
+        for b in $(ListMountedDisks) ; do
+            if [ "x${d}" = "x${b}" ] ; then
+                available=false
+                break
+            fi
+        done
+        [ "$available" = "false" ] || disks_available+="$d "
+    done
+
+    echo -n ${disks_available%% }
+}

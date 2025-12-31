@@ -413,7 +413,7 @@ CephListAvailDisksMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    std::string alldev = HexUtilPOpen(HEX_SDK " ListAvailDisks");
+    std::string alldev = HexUtilPOpen(HEX_SDK " storage_list_available_disks");
     if (alldev.length() < 8 /* start with /dev/sdx */) {
         CliPrintf("No available disk.");
         return CLI_SUCCESS;
@@ -458,7 +458,7 @@ CephAddAvailDisksMain(int argc, const char** argv)
     }
 
     // 1. List avail disks
-    std::string alldev = HexUtilPOpen(HEX_SDK " ListAvailDisks");
+    std::string alldev = HexUtilPOpen(HEX_SDK " storage_list_available_disks");
     if (alldev.length() < 8 /* start with /dev/sdx */) {
         CliPrintf("No available disk.");
         return CLI_SUCCESS;
@@ -537,7 +537,7 @@ CephAddDiskMain(int argc, const char** argv)
 
     if (device.empty()) {
         // 1. List avail disks
-        std::string alldev = HexUtilPOpen(HEX_SDK " ListAvailDisks");
+        std::string alldev = HexUtilPOpen(HEX_SDK " storage_list_available_disks");
         if (alldev.length() < 8 /* start with /dev/sdx */) {
             CliPrintf("No available disk.");
             return CLI_SUCCESS;
