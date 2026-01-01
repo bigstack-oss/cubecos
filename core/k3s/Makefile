@@ -4,7 +4,9 @@ include ../../build.mk
 
 include $(SRCDIR)/k3s.mk
 
-VERSION := v1.26.6+k3s1
+VERSION     := v1.26.6+k3s1
+K3S_REPO    := https://github.com/k3s-io/k3s.git
+K3S_SRC_DIR := k3s-source
 
 BIN := k3s
 INSTALL_SCRIPT := install.sh
@@ -15,10 +17,26 @@ define IMGS
 endef
 export IMGS
 
+.dapper:
+	$(Q)curl -sL https://releases.rancher.com/dapper/v0.6.0/dapper-$$(uname -s)-$$(uname -m) > .dapper.tmp
+	$(Q)chmod +x .dapper.tmp
+	$(Q)mv .dapper.tmp .dapper
 
-$(BIN):
-	$(call RUN_CMD_TIMED,wget https://github.com/rancher/k3s/releases/download/$(VERSION)/$(BIN),"  PULL    $(BIN)")
-	$(Q)chmod +x $(BIN)
+$(K3S_SRC_DIR):
+	$(call RUN_CMD_TIMED,git clone -b $(VERSION) $(K3S_REPO) $(K3S_SRC_DIR),"  CLONE   k3s")
+
+$(BIN): $(K3S_SRC_DIR) .dapper
+	$(Q)rm -rf $(K3S_SRC_DIR)/build $(K3S_SRC_DIR)/dist $(K3S_SRC_DIR)/bin
+	$(Q)cp $(SRCDIR)/build/Dockerfile.dapper $(K3S_SRC_DIR)/Dockerfile.dapper
+	$(Q)cp $(SRCDIR)/build/custom-ci.sh $(K3S_SRC_DIR)/scripts/ci
+	$(Q)chmod +x $(K3S_SRC_DIR)/scripts/ci
+	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
+		PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
+		DRONE_TAG=$(VERSION) \
+		DOCKER_BUILDKIT=1 \
+		make ci, \
+		"  BUILD   k3s")
+	$(Q)cp $(K3S_SRC_DIR)/bin/k3s $(BIN)
 
 $(INSTALL_SCRIPT):
 #	$(call RUN_CMD_TIMED,wget https://get.k3s.io/ -O ./$(INSTALL_SCRIPT),"  PULL    $(INSTALL_SCRIPT)")
