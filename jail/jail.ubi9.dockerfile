@@ -83,7 +83,6 @@ ARG HEX_TEST="qemu-kvm-core telnet net-tools iproute iputils expect nmap-ncat dn
 # extra packages for building projects
 ARG HEX_EXTRA="sudo kpartx python3-pip python3-devel java-11-openjdk maven ruby ruby-devel rpm-build rubygems squashfs-tools podman podman-docker skopeo buildah toilet linux-firmware"
 
-
 RUN echo "hex" > /etc/machine-id
 RUN echo "_WEAK_DEP=$WEAK_DEP" >> /etc/hex.manifest
 
@@ -269,6 +268,16 @@ RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/
 COPY centos9/root/.gitconfig /root/
 
 VOLUME /var/lib/containers/ /var/lib/rancher/
+
+# mute podman emulated docker warning
+RUN touch /etc/containers/nodocker
+
+# FIX: Configure Podman to use 'cgroupfs' driver to prevent 'pids' controller errors in nested builds
+RUN cat <<EOF > /etc/containers/containers.conf
+[engine]
+cgroup_manager = "cgroupfs"
+events_logger = "file"
+EOF
 
 EXPOSE 6900/tcp
 EXPOSE 443/tcp
