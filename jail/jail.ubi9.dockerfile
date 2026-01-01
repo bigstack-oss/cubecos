@@ -100,7 +100,7 @@ FROM tier2_weak_dep_${WEAK_DEP} AS tier3
 # kernel > 5.14.0-435.el9 fails to build Nvidia driver. ERROR: modpost: GPL-incompatible module nvidia.ko uses GPL-only symbol '__rcu_read_unlock'
 # ENV=KER_VER 5.14.0-435.el9
 ARG KER_VER=
-ARG HEX_KERNEL="kernel-lt$KER_VER kernel-lt-core$KER_VER kernel-lt-modules$KER_VER kernel-lt-modules-extra$KER_VE kernel-lt-devel$KER_VER"
+ARG HEX_KERNEL="kernel-lt$KER_VER kernel-lt-core$KER_VER kernel-lt-modules$KER_VER kernel-lt-modules-extra$KER_VER kernel-lt-devel$KER_VER"
 # kernel-uki-virt
 RUN dnf install -y $HEX_KERNEL
 
