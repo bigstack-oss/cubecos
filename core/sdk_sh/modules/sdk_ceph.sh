@@ -885,6 +885,9 @@ ceph_osd_add_mpath_lvm()
     # bring up OSDs
     _hex_function_ret ceph-volume lvm activate --bluestore --all
     _hex_function_ret ceph_adjust_cache_flush_bytes
+
+    # backup
+    _hex_function_ret /usr/sbin/vgcfgbackup -f /etc/cube/cos/ceph/lvm.vg
 }
 
 ceph_osd_purge()
