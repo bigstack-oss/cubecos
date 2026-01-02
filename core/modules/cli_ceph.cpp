@@ -3,6 +3,7 @@
 #include <cube/cubesys.h>
 #include <hex/cli_module.h>
 #include <hex/cli_util.h>
+#include <hex/exec.hpp>
 #include <hex/log.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
@@ -453,8 +454,9 @@ CephAddAvailDisksMain(int argc, const char** argv)
     } else if (argc == 2) {
         // any user input mode which is not "force" falls back to "safe" mode
         mode = argv[1];
-        if (mode != "encrypt")
+        if (mode != "encrypt") {
             mode = "raw";
+        }
     }
 
     // 1. List avail disks
@@ -487,29 +489,45 @@ CephAddAvailDisksMain(int argc, const char** argv)
     // 2. confirm
     if (mode.empty()) {
         int index;
-        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'raw\nencrypt'", &index, &mode, "Disk protection mode:") != CLI_SUCCESS)
+        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'raw\nencrypt'", &index, &mode, "Disk protection mode:") != CLI_SUCCESS) {
             return CLI_INVALID_ARGS;
+        }
 
-        if (mode == "encrypt")
+        if (mode == "encrypt") {
             CliPrintf("Encrypt disk(s) to protect physical disk loss (beware of performance impacts).");
-        else if (mode == "raw")
+        } else if (mode == "raw") {
             CliPrintf("No disk encryption (default mode).");
-        else
+        } else {
             return CLI_SUCCESS;
+        }
 
-        if (!CliReadConfirmation())
+        if (!CliReadConfirmation()) {
             return CLI_SUCCESS;
+        }
     }
 
     // 3. Add this OSD
     cnt = 0;
     printf(DISK_F_FMT);
     for (auto& d : allDevs) {
-        if (HexSystemF(0, HEX_SDK " ceph_osd_add_disk_%s %s", mode.c_str(), d.c_str()) != 0) {
-            CliPrintf("Failed to add disk(%s) %s.", mode.c_str(), d.c_str());
+        const ExecSyncResult ir = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " storage_is_das '" + d + "'");
+        if (ir.exitCode == 0) {
+            // handle direct-attached storage
+            if (HexSystemF(0, HEX_SDK " ceph_osd_add_disk_%s %s", mode.c_str(), d.c_str()) != 0) {
+                CliPrintf("Failed to add disk(%s) %s.", mode.c_str(), d.c_str());
+            } else {
+                CliPrintf("Added disk(%s) %s.", mode.c_str(), d.c_str());
+            }
         } else {
-            CliPrintf("Added disk(%s) %s.", mode.c_str(), d.c_str());
+            // handle mpath devices
+            // not yet supported
         }
+
         cnt++;
     }
     printf(DISK_F_FMT);
@@ -527,10 +545,11 @@ CephAddDiskMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     } else if (argc == 3) {
         device = argv[1];
-        // any user input mode which is not "force" falls back to "safe" mode
+        // any user input mode which is not "encrypt" falls back to "raw" mode
         mode = argv[2];
-        if (mode != "encrypt")
+        if (mode != "encrypt") {
             mode = "raw";
+        }
     } else if (argc == 2) {
         device = argv[1];
     }
@@ -546,7 +565,7 @@ CephAddDiskMain(int argc, const char** argv)
         std::vector<std::string> allDevs = hex_string_util::split(alldev, ' ');
         uint32_t cnt = 0;
 
-        // 1.b) display candidates
+        // 1. Display candidates
         printf(DISK_H_FMT, "index", "name", "size", "on_hours", "error", "serial");
         for (auto& d : allDevs) {
             if (d.length() < 8)
@@ -575,27 +594,56 @@ CephAddDiskMain(int argc, const char** argv)
             CliPrintf("Invalid index, cancelled");
             return CLI_SUCCESS;
         }
+        if ((index - 1) < 0 || (index - 1) >= cnt) {
+            CliPrintf("Invalid index, cancelled.");
+            return CLI_SUCCESS;
+        }
         device = allDevs[index - 1];
 
         int idx;
-        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'raw\nencrypt'", &idx, &mode, "Disk protection mode:") != CLI_SUCCESS)
+        if (CliMatchCmdHelper(
+                argc,
+                argv,
+                2,
+                "echo -e 'raw\nencrypt'",
+                &idx,
+                &mode,
+                "Disk protection mode:")
+            != CLI_SUCCESS) {
             return CLI_INVALID_ARGS;
+        }
 
-        if (mode == "encrypt")
+        if (mode == "encrypt") {
             CliPrintf("Encrypt disk(s) to protect physical disk loss (beware of performance impacts).");
-        else if (mode == "raw")
+        } else if (mode == "raw") {
             CliPrintf("No disk encryption (default mode).");
-        else
+        } else {
+            CliPrintf("Invalid mode, cancelled.");
             return CLI_SUCCESS;
+        }
 
-        if (!CliReadConfirmation())
+        if (!CliReadConfirmation()) {
             return CLI_SUCCESS;
+        }
     }
+
     // 3. Add this OSD
-    if (HexSystemF(0, HEX_SDK " ceph_osd_add_disk_%s %s", mode.c_str(), device.c_str()) != 0) {
-        CliPrintf("Failed to add disk(%s) %s.", mode.c_str(), device.c_str());
+    const ExecSyncResult ir = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        HEX_SDK " storage_is_das '" + device + "'");
+    if (ir.exitCode == 0) {
+        // handle direct-attached storage
+        if (HexSystemF(0, HEX_SDK " ceph_osd_add_disk_%s %s", mode.c_str(), device.c_str()) != 0) {
+            CliPrintf("Failed to add disk(%s) %s.", mode.c_str(), device.c_str());
+        } else {
+            CliPrintf("Added disk(%s) %s.", mode.c_str(), device.c_str());
+        }
     } else {
-        CliPrintf("Added disk(%s) %s.", mode.c_str(), device.c_str());
+        // handle mpath devices
+        // not yet supported
     }
     return CLI_SUCCESS;
 }
