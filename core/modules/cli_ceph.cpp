@@ -523,10 +523,9 @@ CephAddAvailDisksMain(int argc, const char** argv)
             } else {
                 CliPrintf("Added disk(%s) %s.", mode.c_str(), d.c_str());
             }
-        } else {
-            // handle mpath devices
-            // not yet supported
         }
+
+        // do not automatically handle mpath devices
 
         cnt++;
     }
@@ -643,7 +642,16 @@ CephAddDiskMain(int argc, const char** argv)
         }
     } else {
         // handle mpath devices
-        // not yet supported
+        if (mode == "encrypt") {
+            CliPrint("Encrypted mode on adding multipath devices is not yet supported.");
+            return CLI_SUCCESS;
+        }
+
+        if (HexSystemF(0, HEX_SDK " ceph_osd_add_mpath_lvm %s", device.c_str()) != 0) {
+            CliPrintf("Failed to add disk %s.", device.c_str());
+        } else {
+            CliPrintf("Added disk %s.", device.c_str());
+        }
     }
     return CLI_SUCCESS;
 }

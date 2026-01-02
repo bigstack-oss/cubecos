@@ -790,6 +790,103 @@ ceph_osd_add_disk_raw()
     Quiet -n ceph_adjust_cache_flush_bytes
 }
 
+ceph_osd_prepare_mpath_lvm()
+{
+    local device="$1"
+    if [ -z "$(readlink -e "$device")" ] ; then
+        return 1
+    fi
+
+    local exec_output=""
+    local exec_error=""
+
+    if ! $HEX_SDK storage_is_mpath "$device" ; then
+        log_error "device ${device} is not a mpath device, hence adding this device as an OSD is not supported"
+        return 1
+    fi
+
+    local wwid="$(/usr/bin/basename "$device")"
+    if [ -z "$wwid" ] ; then
+        log_error "WWID of device ${device} not found"
+        return 1
+    fi
+
+    # delete the partition mapping
+    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/kpartx -d "$device" ; then
+        log_error "failed to delete the partition mapping"
+        return 1
+    fi
+    # wipe the device
+    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/wipefs -a "$device" ; then
+        log_error "failed to wipe the file system"
+        return 1
+    fi
+    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/sgdisk -Z "$device" ; then
+        log_error "failed to zap the partition table"
+        return 1
+    fi
+
+    # reload the partitions
+    if ! $HEX_SDK storage_update_device_maps ; then
+        log_error "failed to reload the device maps"
+        return 1
+    fi
+
+    # create PV
+    if ! _hex_function_ret /usr/sbin/pvcreate "$device" ; then
+        log_error "failed to create PV from ${device}"
+        return 1
+    fi
+    # create VG
+    if ! _hex_function_ret /usr/sbin/vgcreate "$wwid" "$device" ; then
+        log_error "failed to create VG ${wwid} with PV ${device}"
+        return 1
+    fi
+    # create LV
+    if ! _hex_function_ret /usr/sbin/lvcreate -y -l 100%FREE -n "$wwid" "$wwid" ; then
+        log_error "failed to create LV ${wwid} from VG ${wwid}"
+        return 1
+    fi
+
+    return 0
+}
+
+ceph_osd_add_mpath_lvm()
+{
+    # prepare free mpath devices and make them lvm OSDs
+    # !!!USE WITH CAUTIONS!!!
+
+    local devs="$*"
+
+    local exec_output=""
+    local exec_error=""
+
+    local wwid=""
+    for dev in $devs ; do
+        wwid="$(/usr/bin/basename "$dev")"
+        if [ -z "$wwid" ] ; then
+            log_error "WWID of device ${dev} not found"
+            continue
+        fi
+
+        if ! ceph_osd_prepare_mpath_lvm "$dev" ; then
+            log_error "failed to prepare ${dev}"
+            continue
+        fi
+
+        # create the OSD
+        if ! _hex_function exec_output exec_error \
+            /usr/sbin/ceph-volume lvm create --bluestore --data "${wwid}/${wwid}" ; then
+            log_error "failed to create OSD on LV ${wwid} from VG ${wwid}, error: ${exec_error}"
+            continue
+        fi
+    done
+
+    # bring up OSDs
+    _hex_function_ret ceph-volume lvm activate --bluestore --all
+    _hex_function_ret ceph_adjust_cache_flush_bytes
+}
+
 ceph_osd_purge()
 {
     # purge an OSD, immediately
