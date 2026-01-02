@@ -822,21 +822,6 @@ ceph_osd_purge()
     return 0
 }
 
-ceph_osd_is_under_safe_remove()
-{
-    # check if the OSD is scheduled with ceph_osd_safe_remove
-    local osd_id="${1#"osd."}"
-
-    local exec_output=""
-    local exec_error=""
-    if ! _hex_function exec_output exec_error crontab -l ; then
-        log_error "failed to get the crontab list for ceph_osd_is_under_safe_remove"
-        return 1
-    fi
-
-    _hex_function_ret grep -q "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" " <(printf "%s" "$exec_output")
-}
-
 ceph_osd_safe_remove()
 {
     # perform the safe remove
@@ -930,11 +915,6 @@ ceph_osd_remove()
     Quiet $CEPH osd out $osd_id
 
     if [ "x$mode" = "xsafe" ] ; then
-        # we do not need to schedule duplicated jobs
-        if ceph_osd_is_under_safe_remove "$osd_id" ; then
-            return 0
-        fi
-
         ceph_osd_safe_remove "$osd_id" "$crush_weight" "1" ""
         return 0
     fi
@@ -979,21 +959,6 @@ ceph_osd_is_osd_purged()
     fi
 
     return 0
-}
-
-ceph_osd_is_remove_disk_cleanup_scheduled()
-{
-    # check if ceph_osd_remove_disk_cleanup is scheduled
-    local dev="$1"
-
-    local exec_output=""
-    local exec_error=""
-    if ! _hex_function exec_output exec_error crontab -l ; then
-        log_error "failed to get the crontab list for ceph_osd_is_remove_disk_cleanup_scheduled"
-        return 1
-    fi
-
-    _hex_function_ret grep -q "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" " <(printf "%s" "$exec_output")
 }
 
 ceph_osd_remove_disk_cleanup()
@@ -1064,11 +1029,6 @@ ceph_osd_remove_disk()
     done
 
     if [[ "$mode" == "safe" ]] ; then
-        # we do not need to schedule duplicated jobs
-        if ceph_osd_is_remove_disk_cleanup_scheduled "$dev" ; then
-            return 0
-        fi
-
         ceph_osd_remove_disk_cleanup "$dev" "1"
         return 0
     fi
