@@ -1169,6 +1169,14 @@ ceph_osd_host_remove()
     Quiet -n $CEPH osd crush rm $host
 }
 
+ceph_osd_activate_lvms()
+{
+    _hex_function_ret /usr/sbin/pvscan
+    _hex_function_ret /usr/sbin/vgscan
+    _hex_function_ret /usr/sbin/vgchange -ay
+    _hex_function_ret /usr/sbin/ceph-volume lvm activate --all
+}
+
 ceph_osd_get_cache_size()
 {
     local cachepool=${1:-$BUILTIN_CACHEPOOL}

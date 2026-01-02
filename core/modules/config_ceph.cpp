@@ -426,9 +426,34 @@ prepareOsdDirectories()
             HexSystemF(0, "chown -R %s:%s %s", USER, GROUP, osddir);
         }
     }
-    HexSystemF(0, "ceph-volume lvm activate --all >/dev/null 2>&1");
 
     return true;
+}
+
+/**
+ * Activate Raw OSDs backed by FileStore XFS.
+ */
+static void
+activateRawOsds(void)
+{
+    partitionPreparedDisks();
+    updatePartitionLabelLinks();
+    prepareOsdDirectories();
+}
+
+/**
+ * Activate LVM OSDs, including encrypted DAS and mpath devices.
+ */
+static bool
+activateLvmOsds(void)
+{
+    const ExecSyncResult alr = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        HEX_SDK " ceph_osd_activate_lvms");
+    return (alr.exitCode == 0);
 }
 
 static bool
@@ -525,9 +550,8 @@ SetupOsd(std::string hostname, std::string fsid)
     s_osdNewIds.clear();
 
     updateDeviceMaps();
-    partitionPreparedDisks();
-    updatePartitionLabelLinks();
-    prepareOsdDirectories();
+    activateRawOsds();
+    activateLvmOsds();
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_map");
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount");
 
