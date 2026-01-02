@@ -720,7 +720,7 @@ CephRemoveDiskMain(int argc, const char** argv)
     if (HexSystemF(0, HEX_SDK " ceph_osd_remove_disk %s %s", device.c_str(), mode.c_str()) != 0)
         CliPrintf("Failed to remove disk %s with %s mode.", device.c_str(), mode.c_str());
     else
-        CliPrintf("Removed disk %s.", device.c_str());
+        CliPrintf("Job to remove disk %s is scheduled.", device.c_str());
 
     return CLI_SUCCESS;
 }
@@ -787,12 +787,17 @@ CephRemoveExistMain(int argc, const char** argv)
             CliPrintf("Failed to remove disk %s with %s mode for storage cannot become healthy without it.", d.c_str(), mode.c_str());
             break;
         } else {
-            CliPrintf("Removed disk %s.", d.c_str());
+            CliPrintf("Job to remove disk %s is scheduled.", d.c_str());
             cnt++;
         }
     }
     printf(DISK_F_FMT);
-    CliPrintf("Processed %u disk%s out of %u.", cnt, (cnt <= 1) ? "" : "s", allDevs.size());
+    CliPrintf(
+        "Job to process %u disk%s out of %u %s scheduled.",
+        cnt,
+        (cnt <= 1) ? "" : "s",
+        allDevs.size(),
+        (cnt <= 1) ? "is" : "are");
 
     return CLI_SUCCESS;
 }

@@ -643,7 +643,6 @@ ceph_osd_list_disk()
 {
     local all_devs=
     local blkdevs=$(lsblk -J | jq -r .blockdevices[])
-    # local raw_devs=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.daemons[] | startswith(\"osd\")).location[].dev" | sort -u | xargs -i echo /dev/{})
     local raw_devs=$(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"/dev/\")).device" | grep -v "/dev/mapper" | sort -u)
     for DEV in $raw_devs ; do
         parent_dev=/dev/$(echo $blkdevs | jq -r ". | select(.children[].name == \"${DEV#/dev/}\").name" 2>/dev/null)
@@ -853,7 +852,7 @@ ceph_osd_safe_remove()
     local last_pg_count="${4:-""}"
 
     # clean up old jobs
-    $HEX_SDK util_cron_cleanup_job "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
+    $HEX_SDK util_cron_delete_every_minute_job "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
 
     local exec_output=""
     local exec_error=""
@@ -898,9 +897,13 @@ ceph_osd_safe_remove()
             # retry
             if [[ "$nth_attempt" == "2" ]] ; then
                 # wait 60s to move at least one pg, otherwise the recursion would be stopped
-                $HEX_SDK util_cron_add_job "* * * * * sleep 60 && $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\""
+                $HEX_SDK util_cron_add_every_minute_job \
+                    "sleep 60 && $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\"" \
+                    "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
             else
-                $HEX_SDK util_cron_add_job "* * * * * $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\""
+                $HEX_SDK util_cron_add_every_minute_job \
+                    "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\"" \
+                    "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
             fi
 
             # log it
@@ -939,6 +942,45 @@ ceph_osd_remove()
     ceph_osd_purge "$osd_id"
 }
 
+ceph_osd_is_osd_purged()
+{
+    # check if the OSD is fully purged
+    local osd_id="${1:-""}"
+    if [ -z "$osd_id" ] ; then
+        return 0
+    fi
+
+    local exec_output=""
+    local exec_error=""
+
+    # check if the OSD does not contain any PG
+    if ! _hex_function exec_output exec_error ceph osd df "osd.${osd_id}" --format json ; then
+        log_info "Ceph OSD ${osd_id} is already removed, ${exec_error}"
+        return 0
+    fi
+    local osd_pg_count="$(echo "$exec_output" | jq -r ".nodes[] | select(.id == ${osd_id}) | .pgs")"
+    if [[ "$osd_pg_count" != "0" ]] ; then
+        log_info "Ceph OSD ${osd_id} still contains PG"
+        return 1
+    fi
+
+    # check if the OSD is marked as down
+    local osd_up_status="$($CEPH osd dump --format=json | jq -r ".osds[] | select(.osd == ${osd_id}) | .up")"
+    if [[ "$osd_up_status" == "1" ]] ; then
+        log_info "Ceph OSD ${osd_id} is still up"
+        return 1
+    fi
+
+    # check if the OSD directory is cleaned up
+    local host="$(ceph_get_host_by_id "$osd_id")"
+    if remote_run "$host" "[ -e \"/var/lib/ceph/osd/ceph-${osd_id}\" ]" ; then
+        log_info "the directory for Ceph OSD ${osd_id} is not cleaned up"
+        return 1
+    fi
+
+    return 0
+}
+
 ceph_osd_is_remove_disk_cleanup_scheduled()
 {
     # check if ceph_osd_remove_disk_cleanup is scheduled
@@ -962,44 +1004,15 @@ ceph_osd_remove_disk_cleanup()
     local nth_attempt="${2:-"${limit}"}"
 
     # clean up old jobs
-    $HEX_SDK util_cron_cleanup_job "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" "
+    $HEX_SDK util_cron_delete_every_minute_job "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" "
 
     # check if OSDs are completely purged
     local osd_ids="$(ceph_osd_get_ids "$dev")"
     local osd_id=""
-    local exec_output=""
-    local exec_error=""
-    local osd_pg_count=""
-    local osd_up_status=""
-    local host=""
     local are_osds_purged="true"
     for osd_id in $osd_ids ; do
-        # check if the OSD does not contain any PG
-        if ! _hex_function exec_output exec_error ceph osd df "osd.${osd_id}" --format json ; then
-            log_info "Ceph OSD ${osd_id} is already removed, ${exec_error}"
-            continue
-        fi
-        osd_pg_count="$(echo "$exec_output" | jq -r ".nodes[] | select(.id == ${osd_id}) | .pgs")"
-        if [[ "$osd_pg_count" != "0" ]] ; then
-            log_info "Ceph OSD ${osd_id} still contains PG"
+        if ! ceph_osd_is_osd_purged "$osd_id" ; then
             are_osds_purged="false"
-            continue
-        fi
-
-        # check if the OSD is marked as down
-        osd_up_status="$($CEPH osd dump --format=json | jq -r ".osds[] | select(.osd == ${osd_id}) | .up")"
-        if [[ "$osd_up_status" == "1" ]] ; then
-            log_info "Ceph OSD ${osd_id} is still up"
-            are_osds_purged="false"
-            continue
-        fi
-
-        # check if the OSD directory is cleaned up
-        host="$(ceph_get_host_by_id "$osd_id")"
-        if remote_run "$host" "[ -e \"/var/lib/ceph/osd/ceph-${osd_id}\" ]" ; then
-            log_info "the directory for Ceph OSD ${osd_id} is not cleaned up"
-            are_osds_purged="false"
-            continue
         fi
     done
 
@@ -1011,7 +1024,9 @@ ceph_osd_remove_disk_cleanup()
 
     if [[ "$are_osds_purged" != "true" ]] ; then
         # retry
-        $HEX_SDK util_cron_add_job "* * * * * $HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" \"$nth_attempt\""
+        $HEX_SDK util_cron_add_every_minute_job \
+            "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" \"$nth_attempt\"" \
+            "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" "
 
         # log it
         log_info "set to try remove disk cleanup for ${dev} with attempt ${nth_attempt}"
@@ -1072,6 +1087,28 @@ ceph_osd_host_remove()
     for osd in $($CEPH osd tree -f json | jq -r ".nodes[] | select(.name == \"$host\").children[]") ; do
         Quiet -n ceph_osd_remove $osd
     done
+
+    # wait for all OSDs to be safely purged
+    local osd_ids="$($CEPH osd ls-tree $HOSTNAME | tr '\n' ' ')"
+    osd_ids="${osd_ids%% }"
+    local are_osds_purged=""
+    while true ; do
+        are_osds_purged="true"
+        for osd_id in $osd_ids ; do
+            if ! ceph_osd_is_osd_purged "$osd_id" ; then
+                are_osds_purged="false"
+                break
+            fi
+        done
+
+        if [[ "$are_osds_purged" == "true" ]] ; then
+            break;
+        fi
+
+        # wait
+        sleep 30
+    done
+
     Quiet -n $CEPH osd crush rm $host
 }
 
