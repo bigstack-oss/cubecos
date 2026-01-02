@@ -40,6 +40,7 @@ rootfs_install::
 	#$(Q)mv $(ROOTDIR)/lib/udev/rules.d/95-ceph-osd.rules $(ROOTDIR)/lib/udev/disabled/.
 	$(Q)rm -f $(ROOTDIR)/etc/ganesha/*
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/ganesha.conf ./etc/ganesha/
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/ceph
 
 rootfs_install::
 	$(Q)[ -d $(CEPH_PATCHDIR) ] && (cd $(CEPH_PATCHDIR) && rsync -ar . $(ROOTDIR)/) || /bin/true

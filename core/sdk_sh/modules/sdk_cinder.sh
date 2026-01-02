@@ -2679,6 +2679,11 @@ cinder_get_storages()
     json_get_compact_value "$output" "."
 }
 
+cinder_is_storage_set()
+{
+    _hex_function_ret ls "$CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY"/*
+}
+
 cinder_apply_storage_deletion()
 {
     local exec_output=""
