@@ -485,6 +485,7 @@ CONFIG_OBSERVES(keycloak, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(keycloak, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(keycloak, "/etc/keycloak");
+CONFIG_MIGRATE(keycloak, "/etc/cube/cos/terraform");
 
 static bool
 syncSamlMetadata(const std::string myip)

@@ -1895,6 +1895,7 @@ CONFIG_OBSERVES(ceph, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(ceph, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(ceph, keystone, ParseKeystone, NotifyKeystone);
 
+CONFIG_MIGRATE(ceph, "/etc/cube/cos/ceph");
 CONFIG_MIGRATE(ceph, "/var/lib/ceph");
 CONFIG_MIGRATE(ceph, MAKRER_POOL);
 CONFIG_MIGRATE(ceph, MAKRER_CEPHFS);
