@@ -279,6 +279,9 @@ cgroup_manager = "cgroupfs"
 events_logger = "file"
 EOF
 
+# ENABLE PODMAN SOCKET: Required for Dapper to communicate with the engine
+RUN systemctl enable podman.socket
+
 EXPOSE 6900/tcp
 EXPOSE 443/tcp
 
