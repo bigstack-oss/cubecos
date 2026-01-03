@@ -155,27 +155,6 @@ LOCKED_DNF += $(OPENSSL)
 
 $(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-openstackclient python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) perf arp-scan")
 
-YQ_REPO    := https://github.com/mikefarah/yq.git
-YQ_VER     := v4.45.1
-YQ_SRC_DIR := $(CURDIR)/yq-source
-YQ_BIN     := yq
-
-$(YQ_SRC_DIR):
-	$(call RUN_CMD_TIMED,git clone -b $(YQ_VER) $(YQ_REPO) $(YQ_SRC_DIR),"  CLONE   yq")
-
-$(YQ_BIN): $(YQ_SRC_DIR)
-	$(call RUN_CMD_TIMED,cd $(YQ_SRC_DIR) && go mod tidy,"  UPDATE  yq")
-	$(call RUN_CMD_TIMED,cd $(YQ_SRC_DIR) && \
-		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-		go build \
-		-ldflags="-s -w" \
-		-o $(YQ_BIN) ., \
-		"  BUILD   yq")
-
-rootfs_install:: $(YQ_BIN)
-	$(Q)cp -f $(YQ_SRC_DIR)/$(YQ_BIN) $(ROOTDIR)/usr/local/bin
-	$(Q)chroot $(ROOTDIR) chmod +x /usr/local/bin/yq
-
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) python3 -m pip install -U pip
 	$(Q)chroot $(ROOTDIR) dnf install -y liburing
@@ -213,7 +192,7 @@ rootfs_install::
 	$(Q)echo "install usb_storage /bin/true" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 
 # note: install skyline pkgs first since it doesn't follow yoga constraint
-HEAVY_COMPONENTS += api ui skyline nginx
+HEAVY_COMPONENTS += yq api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
 HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift
 HEAVY_COMPONENTS += heat horizon octavia barbican manila designate masakari monasca watcher cyborg
@@ -260,6 +239,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c "mkdir -p /mnt/cephfs/update"
 	$(Q)chroot $(ROOTDIR) sh -c "rm -rf /var/update ; ln -sf /mnt/cephfs/update /var/update"
 
-PKGCLEAN += $(HEAVYFS) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR) $(YQ_SRC_DIR)
+PKGCLEAN += $(HEAVYFS) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

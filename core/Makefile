@@ -5,7 +5,13 @@ include ../build.mk
 # Additional fakeroot build tools required by this project
 # SUBDIRS += fakeroot
 
+SUBDIRS += api
+SUBDIRS += ui
+SUBDIRS += cubectl
+SUBDIRS += appctl
 SUBDIRS += telegraf
+SUBDIRS += yq
+SUBDIRS += prometheus
 SUBDIRS += nvidia
 SUBDIRS += etcd
 SUBDIRS += terraform
@@ -13,11 +19,7 @@ SUBDIRS += docker
 SUBDIRS += k3s
 SUBDIRS += keycloak
 SUBDIRS += rancher
-SUBDIRS += cubectl
 SUBDIRS += appfw
-SUBDIRS += api
-SUBDIRS += ui
-SUBDIRS += appctl
 
 # Building heavy filesystem
 SUBDIRS += heavyfs

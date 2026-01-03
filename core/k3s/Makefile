@@ -107,7 +107,7 @@ clean:: testclean
 
 
 BUILD += $(BIN) $(INSTALL_SCRIPT) build-image
-BUILDCLEAN +=
+BUILDCLEAN += .dapper and $(K3S_SRC_DIR)
 DISTCLEAN += $(BIN) $(INSTALL_SCRIPT)
 
 SUBDIRS += ingress-nginx

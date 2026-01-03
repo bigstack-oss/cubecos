@@ -1,4 +1,3 @@
-
 # CUBE SDK
 
 include ../../build.mk
@@ -80,6 +79,6 @@ clean::
 	$(Q)make clean-etcd
 
 BUILD += terraform
-BUILDCLEAN += terraform
+BUILDCLEAN += terraform $(RANCHER_UPSTREAM_BIN) $(RANCHER_PROV_DIR) $(KEYCLOAK_UPSTREAM_BIN) $(KEYCLOAK_PROV_DIR) $(TF_CORE_BIN) $(TF_CORE_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

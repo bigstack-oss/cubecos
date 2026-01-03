@@ -1,4 +1,3 @@
-
 # CUBE SDK
 
 include ../../build.mk
@@ -19,9 +18,7 @@ $(PROM_TOOL): $(PROM_SRC)
 		-o ../$(PROM_TOOL) ./cmd/promtool, \
 		"  BUILD   promtool")
 
-prometheus: $(PROM_TOOL)
-
-BUILD += prometheus
-BUILDCLEAN += prometheus
+BUILD += $(PROM_TOOL)
+BUILDCLEAN += $(PROM_TOOL) $(PROM_SRC)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
