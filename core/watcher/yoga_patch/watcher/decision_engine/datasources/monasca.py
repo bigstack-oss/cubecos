@@ -124,14 +124,14 @@ class MonascaHelper(base.DataSourceBase):
         statistics = self.query_retry(
             f=self.monasca.metrics.list_statistics, **kwargs)
 
-        cpu_usage = None
+        usage = None
         for stat in statistics:
             avg_col_idx = stat['columns'].index(aggregate)
             values = [r[avg_col_idx] for r in stat['statistics']]
             value = float(sum(values)) / len(values)
-            cpu_usage = value
+            usage = value
 
-        return cpu_usage
+        return usage
 
     def statistic_series(self, resource=None, resource_type=None,
                          meter_name=None, start_time=None, end_time=None,

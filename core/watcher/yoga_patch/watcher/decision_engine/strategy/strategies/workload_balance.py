@@ -203,16 +203,20 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
                     free_res['memory'] >= required_mem and
                     free_res['disk'] >= required_disk):
                 if self._meter == 'instance_cpu_usage':
+                    metric = 'cpu'
                     usage = src_instance_workload + workload
                     usage_percent = usage / host.vcpus * 100
                     limit = self.threshold / 100 * host.vcpus
                     if usage < limit:
                         destination_hosts.append(instance_data)
-                LOG.info(f"Host {host.hostname} evaluated as destination for {instance_to_migrate.uuid}. Host usage for cpu would be {usage_percent}. The threshold is: {self.threshold}. selected: {usage < limit}")
-                if (self._meter == 'instance_ram_usage' and
-                    ((src_instance_workload + workload) <
-                     self.threshold / 100 * host.memory)):
-                    destination_hosts.append(instance_data)
+                if self._meter == 'instance_ram_usage':
+                    metric = 'memory'
+                    usage = src_instance_workload + workload
+                    usage_percent = usage / host.memory * 100
+                    limit = self.threshold / 100 * host.memory
+                    if usage < limit:
+                        destination_hosts.append(instance_data)
+                LOG.info(f"Host {host.hostname} evaluated as destination for {instance_to_migrate.uuid}. Host usage for {metric} would be {usage_percent}. The threshold is: {self.threshold}. selected: {usage < limit}")
 
         return destination_hosts
 
@@ -253,10 +257,9 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
                               instance.uuid, self._meter)
                     continue
                 if self._meter == 'instance_cpu_usage':
-                    workload_cache[instance.uuid] = (util *
-                                                     instance.vcpus / 100)
+                    workload_cache[instance.uuid] = (util * instance.vcpus / 100)
                 else:
-                    workload_cache[instance.uuid] = util
+                    workload_cache[instance.uuid] = (util * 1024.0)
                 node_workload += workload_cache[instance.uuid]
                 LOG.debug("VM (%s): %s %f", instance.uuid, self._meter,
                           util)
