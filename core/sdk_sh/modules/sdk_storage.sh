@@ -152,6 +152,24 @@ storage_update_partition_label_links()
     done
 }
 
+storage_set_force_use_mpath_devices_for_ceph()
+{
+    if [ -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then
+        return 0
+    fi
+
+    touch "$STORAGE_FORCE_TO_USE_MPATH_DEVICES"
+}
+
+storage_unset_force_use_mpath_devices_for_ceph()
+{
+    if [ ! -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then
+        return 0
+    fi
+
+    rm -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES"
+}
+
 storage_are_mpath_devices_allowed_for_ceph()
 {
     if [ -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then

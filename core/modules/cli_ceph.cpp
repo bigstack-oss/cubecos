@@ -408,6 +408,56 @@ CephAutoScaleMain(int argc, const char** argv)
 }
 
 static int
+CephSetForceUseMpathDevicesMain(int argc, const char** argv)
+{
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    int index;
+    std::string value;
+
+    if (CliMatchCmdHelper(
+            argc,
+            argv,
+            1,
+            "echo 'true\nfalse'",
+            &index,
+            &value,
+            "Set to force to use multipath devices for Ceph: ")
+        != CLI_SUCCESS) {
+        CliPrintf("Unknown option");
+        return CLI_INVALID_ARGS;
+    }
+
+    if (value == "true") {
+        const ExecSyncResult sr = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " storage_set_force_use_mpath_devices_for_ceph"
+        );
+        if (sr.exitCode != 0) {
+            return CLI_FAILURE;
+        }
+    } else {
+        const ExecSyncResult ur = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " storage_unset_force_use_mpath_devices_for_ceph"
+        );
+        if (ur.exitCode != 0) {
+            return CLI_FAILURE;
+        }
+    }
+
+    return CLI_SUCCESS;
+}
+
+static int
 CephListAvailDisksMain(int argc, const char** argv)
 {
     if (argc > 1) {
@@ -1364,6 +1414,14 @@ CLI_MODE_COMMAND("storage", "status", CephStatusMain, NULL,
 CLI_MODE_COMMAND("storage", "set_autoscale", CephAutoScaleMain, NULL,
     "Turn on/off pool autoscaling.",
     "set_pool_autoscale [on|off]");
+
+CLI_MODE_COMMAND(
+    "storage",
+    "set_force_use_mpath_devices",
+    CephSetForceUseMpathDevicesMain,
+    NULL,
+    "Set to allow multipath devices be added to Ceph even if external storage is set under iaas > volume_backend.",
+    "set_force_use_mpath_devices [true|false]");
 
 CLI_MODE_COMMAND("storage", "list_avail", CephListAvailDisksMain, NULL,
     "List all available disks recognized by this node.",
