@@ -176,7 +176,8 @@ storage_are_mpath_devices_allowed_for_ceph()
         return 0
     fi
 
-    if _hex_function_ret $HEX_SDK cinder_is_storage_set ; then
+    # check if external storages are set on controls from the control node holding the vip
+    if _hex_function_ret remote_run "$(shared_id)" "${HEX_SDK} cinder_is_storage_set" ; then
         return 1
     fi
 
