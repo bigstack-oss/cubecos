@@ -6,8 +6,8 @@ pushd $SCRIPT_DIR
 
 echo $SCRIPT_DIR
 
-# cd $(dirname $0)/..
 ./download
 ./build
+./package-cli
 
 popd

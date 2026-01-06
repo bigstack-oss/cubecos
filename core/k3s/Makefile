@@ -31,12 +31,13 @@ $(BIN): $(K3S_SRC_DIR) .dapper
 	$(Q)cp $(SRCDIR)/build/custom-ci.sh $(K3S_SRC_DIR)/scripts/ci
 	$(Q)chmod +x $(K3S_SRC_DIR)/scripts/ci
 	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
+		STATIC_BUILD=true \
 		PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
 		DRONE_TAG=$(VERSION) \
 		DOCKER_BUILDKIT=1 \
 		make ci, \
 		"  BUILD   k3s")
-	$(Q)cp $(K3S_SRC_DIR)/bin/k3s $(BIN)
+	$(Q)cp $(K3S_SRC_DIR)/dist/artifacts/k3s $(BIN)
 
 $(INSTALL_SCRIPT):
 #	$(call RUN_CMD_TIMED,wget https://get.k3s.io/ -O ./$(INSTALL_SCRIPT),"  PULL    $(INSTALL_SCRIPT)")
