@@ -33,7 +33,7 @@ rootfs_install::
 heavyfs_install::
 	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-apiserver
 	$(Q)chroot $(ROOTDIR) pip3 cache remove skyline-apiserver
-	$(Q)for i in {1..10} ; do timeout 30 git clone -b v3.0.0-rc4 --depth 1 https://github.com/bigstack-oss/skyline-apiserver.git $(ROOTDIR)/skyline-apiserver && break ; done
+	$(Q)for i in {1..10} ; do timeout 30 git clone --depth 1 https://github.com/bigstack-oss/skyline-apiserver.git $(ROOTDIR)/skyline-apiserver && break ; done
 	$(Q)chroot $(ROOTDIR) sh -c "cd /skyline-apiserver && pip3 install -r requirements.txt && python3 setup.py install"
 	$(Q)cp ${ROOTDIR}/skyline-apiserver/etc/gunicorn.py ${ROOTDIR}/etc/skyline/gunicorn.py
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/skyline/skyline-apiserver.service ./lib/systemd/system
