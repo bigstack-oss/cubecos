@@ -23,19 +23,32 @@ export IMGS
 	$(Q)mv .dapper.tmp .dapper
 
 $(K3S_SRC_DIR):
-	$(call RUN_CMD_TIMED,git clone -b $(VERSION) $(K3S_REPO) $(K3S_SRC_DIR),"  CLONE   k3s")
+	$(call RUN_CMD_TIMED,git clone --depth 1 -b $(VERSION) $(K3S_REPO) $(K3S_SRC_DIR),"  CLONE   k3s")
 
 $(BIN): $(K3S_SRC_DIR) .dapper
 	$(Q)rm -rf $(K3S_SRC_DIR)/build $(K3S_SRC_DIR)/dist $(K3S_SRC_DIR)/bin
 	$(Q)cp $(SRCDIR)/build/Dockerfile.dapper $(K3S_SRC_DIR)/Dockerfile.dapper
-	$(Q)cp $(SRCDIR)/build/custom-ci.sh $(K3S_SRC_DIR)/scripts/ci
+	$(Q)cp $(SRCDIR)/build/log.go $(K3S_SRC_DIR)/pkg/cli/cmds/log.go
 	$(Q)chmod +x $(K3S_SRC_DIR)/scripts/ci
+# Update the golnag to 1.24 to fix stdlib security issues
+# but k3s uses klog v2 which is not compatible with go 1.24+
+# so we need to upgrade klog to v2.130.1 which is compatible
+# and also need to remove the old flage or it will cause runtime error
+# panic: flag alsologtostderr set at /go/src/github.com/k3s-io/k3s/pkg/cli/cmds/log.go:78 before being defined
 	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
-		STATIC_BUILD=true \
-		PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
+		go mod edit -dropreplace k8s.io/klog/v2 && \
+		go get k8s.io/klog/v2@v2.130.1 && \
+		go mod tidy, \
+		"  PATCH   k3s")
+	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
+		export PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
 		DRONE_TAG=$(VERSION) \
-		DOCKER_BUILDKIT=1 \
-		make ci, \
+		SKIP_VALIDATE=1 \
+		SKIP_AIRGAP=1 && \
+		mkdir -p build/data && \
+		make download && \
+		make generate && \
+		make, \
 		"  BUILD   k3s")
 	$(Q)cp $(K3S_SRC_DIR)/dist/artifacts/k3s $(BIN)
 
