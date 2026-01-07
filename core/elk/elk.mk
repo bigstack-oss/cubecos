@@ -8,7 +8,7 @@ else
 OSEARCH := $(shell echo "opensearch")
 endif
 
-LOGSTASH_VER := 9.2.2
+LOGSTASH_VER := 9.2.3
 LOGSTASH_CONF_DIR := /etc/logstash
 LOGSTASH_CONF_D_DIR := $(LOGSTASH_CONF_DIR)/conf.d
 LOGSTASH_CONF_EVENTDB_DIR := $(LOGSTASH_CONF_DIR)/eventdb
@@ -17,14 +17,14 @@ LOGSTASH_LOG_DIR := /var/log/logstash
 LOGSTASH_LIB_DIR := /var/lib/logstash
 LOGSTASH_JDK := $(LOGSTASH_HOME)/jdk
 
-OSEARCH_VER := 3.3.0
+OSEARCH_VER := 3.4.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
 OSEARCH_CONF_SECURITY_DIR := $(OSEARCH_CONF_DIR)/opensearch-security
 OSEARCH_HOME := /usr/share/$(OSEARCH)
 OSEARCH_BOARDS_CONF_DIR := /etc/$(OSEARCH)-dashboards
 OSEARCH_BOARDS_LOG_DIR := /var/log/$(OSEARCH)-dashboards
 
-BEATS_VER := 9.2.2
+BEATS_VER := 9.2.3
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-$(BEATS_VER)-x86_64.rpm
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/auditbeat-$(BEATS_VER)-x86_64.rpm
 

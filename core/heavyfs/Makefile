@@ -21,18 +21,18 @@ HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
 
 ROOTFS_PIP += numpy
 BLKLST_DNF += iptables-legacy iptables-legacy-libs python3-django3 ceph-mgr-k8sevents
-BLKLST_DNF += python3-PyMySQL	# CVE-2024-36039 Upgrade to version: 1.1.1
-BLKLST_DNF += python3-django	# CVE-2022-28347, CVE-2023-31047, CVE-2025-64459 CVE-2023-46695, CVE-2023-43665, CVE-2022-36359 Upgrade to version: 3.2.23
+BLKLST_DNF += python3-PyMySQL   # CVE-2024-36039 Upgrade to version: 1.1.1
+BLKLST_DNF += python3-django    # CVE-2022-28347, CVE-2023-31047, CVE-2025-64459 CVE-2023-46695, CVE-2023-43665, CVE-2022-36359 Upgrade to version: 3.2.23
 ROOTFS_PIP += python-jose       # CVE-2024-33663 Upgrade to version: 3.4.0
 BLKLST_DNF += python3-monascaclient # Remove DNF managed package
 BLKLST_DNF += python3-scciclient # CVE-2022-2996
 ROOTFS_PIP += python-scciclient # CVE-2022-2996 Upgrade to version: 0.12.0
-BLKLST_DNF += python3-pillow	# CVE-2023-50447
-ROOTFS_PIP += pillow		# CVE-2023-50447 Upgrade to version: 10.2.0
+BLKLST_DNF += python3-pillow    # CVE-2023-50447
+ROOTFS_PIP += pillow            # CVE-2023-50447 Upgrade to version: 10.2.0
 ROOTFS_PIP += waitress          # CVE-2024-49768 Upgrade to version: 3.0.1
-ROOTFS_PIP += numexpr		# CVE-2023-39631 Upgrade to version: 2.8.5
+BLKLST_DNF += python3-numexpr   # Remove DNF managed package
+ROOTFS_PIP += numexpr           # CVE-2023-39631 Upgrade to version: 2.8.5
 BLKLST_DNF += ansible ansible-core # CVE-2025-58367 Remove DNF managed package
-ROOTFS_PIP += ansible ansible-core # CVE-2025-58367 Upgrade to version: 8.6.1
 
 ALL = $(HEAVYFS)
 

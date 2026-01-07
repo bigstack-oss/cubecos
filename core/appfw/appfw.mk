@@ -1,7 +1,7 @@
 # Cube SDK
 # appfw packages
 
-ROOTFS_DNF_NOARCH += ansible
+ROOTFS_PIP += ansible-core
 ROOTFS_PIP += git+https://opendev.org/x/ospurge.git
 ROOTFS_PIP += git+https://github.com/rancher/client-python.git@master
 

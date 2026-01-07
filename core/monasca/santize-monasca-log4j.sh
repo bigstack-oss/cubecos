@@ -58,6 +58,9 @@ for JAR in "${TARGET_JARS[@]}"; do
 
     REMOVED=0
     if [ -e $WORK_DIR/WORLDS-INF/lib/log4j.jar ] ; then
+        # CVE-2015-7501 Upgrade to version: 3.2.2
+        curl https://repo1.maven.org/maven2/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar -o $WORK_DIR/WORLDS-INF/lib/commons-collections.jar && REMOVED=1
+
 	mkdir -p $BACKUP_DIR/WORLDS-INF/lib/log4j.jar
 	( cd $BACKUP_DIR/WORLDS-INF/lib/log4j.jar && jar xf $WORK_DIR/WORLDS-INF/lib/log4j.jar && rm -f $WORK_DIR/WORLDS-INF/lib/log4j.jar )
 	for PATTERN in "${VULN_PATTERNS[@]}"; do
@@ -93,3 +96,4 @@ for JAR in "${TARGET_JARS[@]}"; do
 
     echo
 done
+rm -rf $WORK_BASE $BACKUP_DIR
