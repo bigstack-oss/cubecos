@@ -28,19 +28,13 @@ BEATS_VER := 9.2.3
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-$(BEATS_VER)-x86_64.rpm
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/auditbeat-$(BEATS_VER)-x86_64.rpm
 
-# ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/$(OSEARCH_VER)/opensearch-dashboards-$(OSEARCH_VER)-linux-x64.rpm
+ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/$(OSEARCH_VER)/opensearch-dashboards-$(OSEARCH_VER)-linux-x64.rpm
 ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch/$(OSEARCH_VER)/opensearch-$(OSEARCH_VER)-linux-x64.rpm
 ROOTFS_PIP_NC += curator-$(OSEARCH)
 
 LOGSTASH_TGZ := logstash-$(LOGSTASH_VER)-linux-x86_64.tar.gz
 $(ARCS_DIR)/$(LOGSTASH_TGZ):
 	$(Q)wget https://artifacts.elastic.co/downloads/logstash/$(LOGSTASH_TGZ) -O $@
-
-DASHBOARD_RPM := $(TOP_BLDDIR)/core/elk/opensearch-dashboards-3.4.0-1.patched.x86_64.rpm
-rootfs_install::
-	$(Q)cp -f $(DASHBOARD_RPM) $(ROOTDIR)/tmp/
-	$(Q)chroot $(ROOTDIR) dnf install -y --nogpgcheck /tmp/$(notdir $(DASHBOARD_RPM))
-	$(Q)rm -f $(ROOTDIR)/tmp/$(notdir $(DASHBOARD_RPM))
 
 rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 	$(Q)tar xf $< -C $(ROOTDIR)/usr/share/
