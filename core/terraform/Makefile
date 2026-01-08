@@ -27,7 +27,9 @@ $(KEYCLOAK_PROV_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(KEYCLOAK_PROV_VER) $(KEYCLOAK_PROV_REPO) $(KEYCLOAK_PROV_DIR),"  CLONE   keycloak-provider")
 
 $(KEYCLOAK_UPSTREAM_BIN): $(KEYCLOAK_PROV_DIR)
-	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && go mod tidy, "  UPDATE  keycloak-provider")
+	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && \
+		go get golang.org/x/crypto@v0.31.0 && \
+		go mod tidy, "  UPDATE  keycloak-provider")
 	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 		go build \
@@ -39,7 +41,29 @@ $(TF_CORE_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(TF_CORE_VER) $(TF_CORE_REPO) $(TF_CORE_DIR),"  CLONE   tf-core")
 
 $(TF_CORE_BIN): $(TF_CORE_DIR)
-	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && go mod tidy, "  UPDATE  tf-core")
+	@# 1. DELETE TESTS
+	@#    Consul v1.5.0 removed 'testutil', so these old test files are now broken.
+	@#    We delete them because we only need the binary, not the tests.
+	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && \
+		find backend/remote-state/consul -name "*_test.go" -delete, \
+		"  CLEAN   tf-core")
+
+	@# 2. UPDATE DEPENDENCIES
+	@#    - Consul: v1.5.0 (Min version with api/go.mod "Border" to fix Ambiguous Import)
+	@#    - gRPC: v1.29.1 (Min version with 'naming' package required by Etcd)
+	@#    - API: v0.34.0 (Goldilocks version: Has 'ImpersonateCredentials' but works with gRPC 1.29)
+	@#    - Storage: v1.10.0 (MUST MATCH API v0.34.0)
+	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && \
+		go get github.com/hashicorp/go-getter@v1.7.4 && \
+		go get golang.org/x/crypto@v0.31.0 && \
+		go mod edit -replace github.com/hashicorp/consul=github.com/hashicorp/consul@v1.5.0 && \
+		go mod edit -replace google.golang.org/grpc=google.golang.org/grpc@v1.29.1 && \
+		go mod edit -replace google.golang.org/api=google.golang.org/api@v0.34.0 && \
+		go mod edit -replace cloud.google.com/go/storage=cloud.google.com/go/storage@v1.10.0 && \
+		go mod tidy, \
+		"  UPDATE  tf-core")
+
+	@# 3. Build
 	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 		go build \
