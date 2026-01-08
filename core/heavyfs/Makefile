@@ -83,7 +83,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf install -y 'dnf-command(versionlock)'
 
-# First try to download kernel-lt from elrepo mirror which has better availabilities
+# First try to download kernel-ml from elrepo mirror which has better availabilities
 rootfs_install::
 	$(Q)cp /etc/yum.repos.d/elrepo-kernel-mirror.repo $(ROOTDIR)/etc/yum.repos.d/
 
@@ -98,7 +98,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)[ ! -e $(ROOTDIR)/etc/yum.repos.d/elrepo.repo ] || sed -i 's/^mirrorlist=.*/#&/g' $(ROOTDIR)/etc/yum.repos.d/elrepo.repo
 
-LOCKED_DNF += kernel-lt-$(KERNEL_VERS) kernel-lt-core-$(KERNEL_VERS) kernel-lt-devel-$(KERNEL_VERS) kernel-lt-modules-$(KERNEL_VERS)
+LOCKED_DNF += kernel-ml-$(KERNEL_VERS) kernel-ml-core-$(KERNEL_VERS) kernel-ml-devel-$(KERNEL_VERS) kernel-ml-modules-$(KERNEL_VERS)
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
 
@@ -196,7 +196,9 @@ HEAVY_COMPONENTS += yq api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
 HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift
 HEAVY_COMPONENTS += heat horizon octavia barbican manila designate masakari monasca watcher cyborg
-HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw nvidia appctl
+HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl
+# FIXME: uncomment nvia when the new driver is available
+# HEAVY_COMPONENTS += nvidia
 
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 $(shell for r in $(LOCKED_DNF); do echo $$r >> $(LOCKED_RPMS); done)

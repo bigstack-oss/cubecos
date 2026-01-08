@@ -45,7 +45,7 @@ $(RPMBUILD_SOURCES): $(RPMBUILD_DIR) $(GIT_DIR) version
 	$(Q)cp -r $(GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)
 	$(Q)sudo rm -r ./source/.git/ ./source/.github/
-	$(Q)tar -cvzf $@.tgz source $(QEND)
+	$(Q)tar -cvzf $@.tgz source $(QEND) || tar -cvzf $@.tgz source $(QEND)
 	$(Q)mkdir -p $(RPMBUILD_DIR)/SOURCES
 	$(Q)mv $@.tgz $(RPMBUILD_DIR)/SOURCES/$(PKG_NAME)-`cat version`.tar.gz
 	$(Q)rm -r ./source

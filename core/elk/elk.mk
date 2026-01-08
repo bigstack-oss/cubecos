@@ -38,9 +38,9 @@ $(ARCS_DIR)/$(LOGSTASH_TGZ):
 
 DASHBOARD_RPM := $(TOP_BLDDIR)/core/elk/opensearch-dashboards-3.4.0-1.patched.x86_64.rpm
 rootfs_install::
-    $(Q)cp -f $(DASHBOARD_RPM) $(ROOTDIR)/tmp/
-    $(Q)chroot $(ROOTDIR) dnf install -y --nogpgcheck /tmp/$(notdir $(DASHBOARD_RPM))
-    $(Q)rm -f $(ROOTDIR)/tmp/$(notdir $(DASHBOARD_RPM))
+	$(Q)cp -f $(DASHBOARD_RPM) $(ROOTDIR)/tmp/
+	$(Q)chroot $(ROOTDIR) dnf install -y --nogpgcheck /tmp/$(notdir $(DASHBOARD_RPM))
+	$(Q)rm -f $(ROOTDIR)/tmp/$(notdir $(DASHBOARD_RPM))
 
 rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 	$(Q)tar xf $< -C $(ROOTDIR)/usr/share/

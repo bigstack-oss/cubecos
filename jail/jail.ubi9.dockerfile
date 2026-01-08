@@ -97,10 +97,8 @@ RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
 ######## tier3
 FROM tier2_weak_dep_${WEAK_DEP} AS tier3
 # kernel packages
-# kernel > 5.14.0-435.el9 fails to build Nvidia driver. ERROR: modpost: GPL-incompatible module nvidia.ko uses GPL-only symbol '__rcu_read_unlock'
-# ENV=KER_VER 5.14.0-435.el9
 ARG KER_VER=
-ARG HEX_KERNEL="kernel-lt$KER_VER kernel-lt-core$KER_VER kernel-lt-modules$KER_VER kernel-lt-modules-extra$KER_VER kernel-lt-devel$KER_VER"
+ARG HEX_KERNEL="kernel-ml$KER_VER kernel-ml-core$KER_VER kernel-ml-modules$KER_VER kernel-ml-modules-extra$KER_VER kernel-ml-devel$KER_VER"
 # kernel-uki-virt
 RUN dnf install -y $HEX_KERNEL
 
@@ -110,7 +108,7 @@ RUN [ -e /boot/hex ] || mkdir -p /boot/hex
 COPY ubi9.tar.gz /boot/hex/ubi9.tar.gz
 # RUN dnf versionlock add kernel kernel-core kernel-modules kernel-modules-extra kernel-headers kernel-uki-virt kernel-modules-core
 RUN dnf versionlock add $HEX_KERNEL
-RUN dnf info --installed kernel-lt > /kernel-info
+RUN dnf info --installed kernel-ml > /kernel-info
 RUN echo "export KER_VER=`grep Version /kernel-info | cut -d ":" -f2 | xargs`" > /cube.env
 RUN echo "export KER_REL=`grep Release /kernel-info | cut -d ":" -f2 | xargs`" >> /cube.env
 RUN echo "export KER_ARC=`grep Architecture /kernel-info | cut -d ":" -f2 | xargs`" >> /cube.env
