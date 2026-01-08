@@ -12,6 +12,7 @@ SUBDIRS += appctl
 SUBDIRS += telegraf
 SUBDIRS += yq
 SUBDIRS += prometheus
+SUBDIRS += elk
 SUBDIRS += nvidia
 SUBDIRS += etcd
 SUBDIRS += terraform
