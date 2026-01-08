@@ -1,0 +1,29 @@
+driver: "cinder.volume.drivers.fujitsu.eternus_dx.eternus_dx_iscsi.FJDXISCSIDriver"
+vendor: "Fujitsu"
+type: "ETERNUS DX S3 Series iSCSI"
+multipath:
+  - section: "devices"
+    attributes: []
+    subSections:
+      - section: "device"
+        attributes:
+          - key: "vendor"
+            value: "FUJITSU"
+          - key: "product"
+            value: "ETERNUS_DXL"
+          - key: "user_friendly_names"
+            value: "no"
+storage:
+  service:
+    driverSection:
+      - key: "cinder_eternus_config_file"
+        value: "/etc/cinder/external_storage_extra_configs/<storage_name>_eternus_dx_iscsi.xml"
+    extraSettings: []
+    extraConfigFiles:
+      - name: "eternus_dx_iscsi.xml"
+        content: ""
+  volumeType:
+    settings: []
+  image:
+    useMultipath: true
+    forceMultipath: true
