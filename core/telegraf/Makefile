@@ -13,9 +13,17 @@ $(CLONEDIR):
 	$(call RUN_CMD_TIMED, for i in {1..10} ; do timeout 30 git clone -b $(BRANCH) https://github.com/bigstack-oss/telegraf.git $(CLONEDIR) && break ; done,"  CLONE   telegraf")
 
 $(PKG):: $(CLONEDIR)
+	$(call RUN_CMD_TIMED, cd $(CLONEDIR) && \
+		go get golang.org/x/crypto@v0.31.0 && \
+		go mod edit -replace github.com/nats-io/jwt=github.com/nats-io/jwt@v1.2.3-0.20210314221642-a826c77dc9d2 && \
+		go mod tidy,"  UPDATE  $(PKGNAME)")
 	$(call RUN_CMD_TIMED, cd $(CLONEDIR) && make $(PKGNAME),"  GEN     $(PKGNAME)")
 
 $(BIN):: $(CLONEDIR)
+	$(call RUN_CMD_TIMED, cd $(CLONEDIR) && \
+		go get golang.org/x/crypto@v0.31.0 && \
+		go mod edit -replace github.com/nats-io/jwt=github.com/nats-io/jwt@v1.2.3-0.20210314221642-a826c77dc9d2 && \
+		go mod tidy,"  UPDATE  $(BINNAME)")
 	$(call RUN_CMD_TIMED, cd $(CLONEDIR) && make,"  BUILD   $(BINNAME)")
 
 BUILD += $(BIN)
