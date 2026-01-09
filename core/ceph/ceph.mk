@@ -25,7 +25,6 @@ CEPH_PATCHDIR := $(COREDIR)/ceph/$(OPENSTACK_RELEASE)_patch
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
 
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) mv /etc/multipath.conf /etc/multipath.conf.orig
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/multipath.conf ./etc/
 
 rootfs_install::

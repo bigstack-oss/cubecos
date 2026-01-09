@@ -30,15 +30,6 @@ RUN dnf install -y epel-release
 RUN rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
 RUN rpm --import https://www.elrepo.org/RPM-GPG-KEY-v2-elrepo.org
 RUN dnf install -y https://www.elrepo.org/elrepo-release-9.el9.elrepo.noarch.rpm
-RUN dnf config-manager --set-enabled elrepo-kernel
-COPY --chmod=644 <<EOF /etc/yum.repos.d/elrepo-kernel-mirror.repo
-[elrepo-kernel-mirror]
-name=ELRepo Kernel Mirror
-baseurl=http://mirrors.coreix.net/elrepo-archive-archive/kernel/el9/x86_64
-enabled=1
-gpgcheck=1
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-elrepo.org file:///etc/pki/rpm-gpg/RPM-GPG-KEY-v2-elrepo.org
-EOF
 # setup dnf parallel downloads
 RUN echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf
 RUN echo "deltarpm=0" >> /etc/dnf/dnf.conf
@@ -97,18 +88,19 @@ RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
 ######## tier3
 FROM tier2_weak_dep_${WEAK_DEP} AS tier3
 # kernel packages
-ARG KER_VER=
-ARG HEX_KERNEL="kernel-ml$KER_VER kernel-ml-core$KER_VER kernel-ml-modules$KER_VER kernel-ml-modules-extra$KER_VER kernel-ml-devel$KER_VER"
-# kernel-uki-virt
-RUN dnf install -y $HEX_KERNEL
+ARG KER_VER="6.12.64"
+ARG KER_REL="1.el9"
+ARG KER_ARC="x86_64"
+ARG HEX_KERNEL="kernel-${KER_VER}-${KER_REL} kernel-core-${KER_VER}-${KER_REL} kernel-modules-${KER_VER}-${KER_REL} kernel-devel-${KER_VER}-${KER_REL}"
+RUN mkdir kernel-${KER_VER}-${KER_REL}.${KER_ARC}
+RUN cd kernel-${KER_VER}-${KER_REL}.${KER_ARC} && for k in $HEX_KERNEL ; do wget -q http://ftp.centos.is/centos-stream/SIGs/9/kmods/x86_64/kernel-6.12/Packages/k/${k}.${KER_ARC}.rpm ; rpm -i --nodeps ${k}.${KER_ARC}.rpm ; done
 
 # RUN [ -e /boot/hex ] || mv /boot/$(cat /etc/machine-id) /boot/hex || /bin/true
 RUN [ -e /boot/hex ] || mkdir -p /boot/hex
 # ubi9.tar.gz is the prerequisite of base_rootfs
 COPY ubi9.tar.gz /boot/hex/ubi9.tar.gz
-# RUN dnf versionlock add kernel kernel-core kernel-modules kernel-modules-extra kernel-headers kernel-uki-virt kernel-modules-core
 RUN dnf versionlock add $HEX_KERNEL
-RUN dnf info --installed kernel-ml > /kernel-info
+RUN dnf info --installed kernel > /kernel-info
 RUN echo "export KER_VER=`grep Version /kernel-info | cut -d ":" -f2 | xargs`" > /cube.env
 RUN echo "export KER_REL=`grep Release /kernel-info | cut -d ":" -f2 | xargs`" >> /cube.env
 RUN echo "export KER_ARC=`grep Architecture /kernel-info | cut -d ":" -f2 | xargs`" >> /cube.env

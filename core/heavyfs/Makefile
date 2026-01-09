@@ -83,24 +83,20 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf install -y 'dnf-command(versionlock)'
 
-# First try to download kernel-ml from elrepo mirror which has better availabilities
+# elrepo
 rootfs_install::
-	$(Q)cp /etc/yum.repos.d/elrepo-kernel-mirror.repo $(ROOTDIR)/etc/yum.repos.d/
-
-# Secondly try elrepo (where only latest versions can be found)
-# rootfs_install::
-# 	$(Q)chroot $(ROOTDIR) rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
-# 	$(Q)chroot $(ROOTDIR) rpm --import https://www.elrepo.org/RPM-GPG-KEY-v2-elrepo.org
-# 	$(Q)chroot $(ROOTDIR) dnf install -y https://www.elrepo.org/elrepo-release-9.el9.elrepo.noarch.rpm
-# 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled elrepo-kernel
+	$(Q)cp /etc/yum.repos.d/elrepo.repo $(ROOTDIR)/etc/yum.repos.d/
 
 # DDoS-ed repo sites block IPs from offending source
 rootfs_install::
 	$(Q)[ ! -e $(ROOTDIR)/etc/yum.repos.d/elrepo.repo ] || sed -i 's/^mirrorlist=.*/#&/g' $(ROOTDIR)/etc/yum.repos.d/elrepo.repo
 
-LOCKED_DNF += kernel-ml-$(KERNEL_VERS) kernel-ml-core-$(KERNEL_VERS) kernel-ml-devel-$(KERNEL_VERS) kernel-ml-modules-$(KERNEL_VERS)
+KERNEL_PKGS := kernel-$(KERNEL_VERS) kernel-core-$(KERNEL_VERS) kernel-devel-$(KERNEL_VERS) kernel-modules-$(KERNEL_VERS)
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) dnf versionlock add $(LOCKED_DNF)
+	$(Q)cp -r /kernel-$(KERNEL_VERS) $(ROOTDIR)/
+	$(Q)for k in $(KERNEL_PKGS) ; do chroot $(ROOTDIR) rpm -i --nodeps /kernel-$(KERNEL_VERS)/$$k.rpm ; done
+	$(Q)chroot $(ROOTDIR) dnf versionlock add $(KERNEL_PKGS)
+	$(Q)rm -rf $(ROOTDIR)/kernel-$(KERNEL_VERS)
 
 # qemu-kvm-17:9.1.0-27.el9 is not compatible with 17:9.1.0-20 (v3.0.0)
 QEMU_VER := 17:9.1.0-24.el9
