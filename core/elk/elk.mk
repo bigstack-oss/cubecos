@@ -17,12 +17,14 @@ LOGSTASH_LOG_DIR := /var/log/logstash
 LOGSTASH_LIB_DIR := /var/lib/logstash
 LOGSTASH_JDK := $(LOGSTASH_HOME)/jdk
 
+NODE_VERSION := 20
 OSEARCH_VER := 3.4.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
 OSEARCH_CONF_SECURITY_DIR := $(OSEARCH_CONF_DIR)/opensearch-security
 OSEARCH_HOME := /usr/share/$(OSEARCH)
 OSEARCH_BOARDS_CONF_DIR := /etc/$(OSEARCH)-dashboards
 OSEARCH_BOARDS_LOG_DIR := /var/log/$(OSEARCH)-dashboards
+OSEARCH_DASHBOARDS := $(OSEARCH)-dashboards
 
 BEATS_VER := 9.2.3
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-$(BEATS_VER)-x86_64.rpm
@@ -79,3 +81,13 @@ rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) /usr/bin/env PATH=$(LOGSTASH_JDK)/bin:$$PATH LD_LIBRARY_PATH=$(LOGSTASH_JDK)/lib $(LOGSTASH_HOME)/bin/logstash-plugin install logstash-output-syslog logstash-output-opensearch
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+
+# security patch
+rootfs_install::
+	$(Q)sed -i 's/^#//g' $$BASH_ENV
+	$(Q)chroot $(ROOTDIR)/usr/share/opensearch-dashboards/plugins/reportsDashboards nvm install $(NODE_VERSION) && \
+		nvm use $(NODE_VERSION) && \
+		npm install -g yarn && \
+		yarn add jspdf@4.0.0 && \
+		rm -rf node_modules/.cache
+	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
