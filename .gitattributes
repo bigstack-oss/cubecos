@@ -3,4 +3,5 @@ core/glance/cirros-0.4.0-x86_64-disk.qcow2 filter=lfs diff=lfs merge=lfs -text
 core/nvidia/NVIDIA-Linux-x86_64-535.129.03-grid.run filter=lfs diff=lfs merge=lfs -text
 core/nvidia/NVIDIA-Linux-x86_64-535.129.03-vgpu-kvm.run filter=lfs diff=lfs merge=lfs -text
 core/nvidia/NVIDIA-Linux-x86_64-575.57.08.run filter=lfs diff=lfs merge=lfs -text
+core/nvidia/NVIDIA-Linux-x86_64-580.105.06-vgpu-kvm-aie.run filter=lfs diff=lfs merge=lfs -text
 core/pkg/x86_64/oss/ssh-keydgen filter=lfs diff=lfs merge=lfs -text
