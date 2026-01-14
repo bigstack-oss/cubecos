@@ -85,7 +85,7 @@ rootfs_install::
 # security patch
 rootfs_install::
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
-	$(Q)chroot $(ROOTDIR)/usr/share/opensearch-dashboards/plugins/reportsDashboards nvm install $(NODE_VERSION) && \
+	$(Q)cd $(ROOTDIR)/usr/share/opensearch-dashboards/plugins/reportsDashboards && nvm install $(NODE_VERSION) && \
 		nvm use $(NODE_VERSION) && \
 		npm install -g yarn && \
 		yarn add jspdf@4.0.0 && \
