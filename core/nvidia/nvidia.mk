@@ -25,3 +25,10 @@ rootfs_install::
 rootfs_install::
 	$(Q)echo "blacklist nouveau" > $(ROOTDIR)/etc/modprobe.d/nvidia-installer-disable-nouveau.conf
 	$(Q)echo "options nouveau modeset=0" >> $(ROOTDIR)/etc/modprobe.d/nvidia-installer-disable-nouveau.conf
+
+NVIDIA_FABRIC_MANAGER_RPM := nvidia-fabricmanager-580.105.06-1.x86_64.rpm
+
+rootfs_install::
+	$(Q)cp -f $(COREDIR)/nvidia/$(NVIDIA_FABRIC_MANAGER_RPM) $(ROOTDIR)/tmp/
+	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/$(NVIDIA_FABRIC_MANAGER_RPM)
+	$(Q)rm -rf /tmp/$(NVIDIA_FABRIC_MANAGER_RPM)
