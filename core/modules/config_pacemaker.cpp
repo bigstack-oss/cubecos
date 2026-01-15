@@ -71,7 +71,7 @@ SetupCluster(const bool enabled, const bool ha, std::string sharedId, const std:
         return true;
 
     HexUtilSystemF(0, 0, "pcs property set pe-warn-series-max=\"1000\" "
-                         "pe-error-series-max=\"1000\" cluster-recheck-interval=\"5min\"");
+                   "pe-error-series-max=\"1000\" cluster-recheck-interval=\"5min\"");
 
     HexUtilSystemF(0, 0, "pcs property set stonith-enabled=false");
 
@@ -81,20 +81,20 @@ SetupCluster(const bool enabled, const bool ha, std::string sharedId, const std:
         HexUtilSystemF(0, 0, "pcs resource create vip ocf:heartbeat:IPaddr2 "
                        "ip=\"%s\" op monitor interval=\"30s\"", sharedId.c_str());
         if ( HexSystemF(0, "hex_sdk is_node_rolling_upgrade") != 0 ) {
-            HexUtilSystemF(0, 0, "pcs resource create vaw systemd:vaw op monitor interval=\"30s\"");
-            HexUtilSystemF(0, 0, "pcs constraint colocation add vip with vaw score=INFINITY");
+            HexUtilSystemF(0, 0, "pcs resource create vaw systemd:vaw op monitor interval=\"0\" op start timeout=\"600s\" op stop timeout=\"600s\"");
+            HexUtilSystemF(0, 0, "pcs constraint colocation add vaw with vip INFINITY");
             HexUtilSystemF(0, 0, "pcs constraint order vip then vaw");
         }
         HexUtilSystemF(0, 0, "pcs resource create haproxy systemd:haproxy-ha op monitor interval=\"1s\"");
-        HexUtilSystemF(0, 0, "pcs constraint colocation add vip with haproxy score=INFINITY");
+        HexUtilSystemF(0, 0, "pcs constraint colocation add haproxy with vip score=INFINITY");
         HexUtilSystemF(0, 0, "pcs constraint order vip then haproxy");
         HexUtilSystemF(0, 0, "pcs resource create cinder-volume systemd:openstack-cinder-volume");
 
         HexUtilSystemF(0, 0, "pcs resource create ovndb_servers ocf:ovn:ovndb-servers "
-                             "manage_northd=yes master_ip=%s listen_on_master_ip_only=no promotable", sharedId.c_str());
+                       "manage_northd=yes master_ip=%s listen_on_master_ip_only=no promotable", sharedId.c_str());
         HexUtilSystemF(0, 0, "pcs resource meta ovndb_servers-clone notify=true clone-max=%lu", hosts.size());
         HexUtilSystemF(0, 0, "pcs constraint order start vip then promote ovndb_servers-clone");
-        HexUtilSystemF(0, 0, "pcs constraint colocation add vip with master ovndb_servers-clone");
+        HexUtilSystemF(0, 0, "pcs constraint colocation add promoted ovndb_servers-clone with vip");
 
         for (auto host : hosts) {
             HexUtilSystemF(0, 0, "pcs constraint location vip prefers %s --force", host.c_str());

@@ -422,7 +422,7 @@ health_hacluster_check()
         fi
     done
 
-    local status=$(pacemaker status)
+    local status=$(pcs status)
     local total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local online=$(echo "$status" | grep -i " online" | cut -d "[" -f2 | cut -d "]" -f1 | awk '{print NF}')
     if [ "$total" != "$online" ] ; then
@@ -501,7 +501,7 @@ _health_hacluster_auto_repair()
 
 health_hacluster_repair()
 {
-    local status=$(pacemaker status)
+    local status=$(pcs status)
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
     local num_ctrl=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local last_ctrl=${CUBE_NODE_CONTROL_HOSTNAMES[$((num_ctrl - 1))]}
@@ -558,10 +558,8 @@ health_hacluster_repair()
             fi
         done
     elif [ $(cmd -cv "pcs status 2>/dev/null | grep \"vip.*St\"" | cut -d"|" -f3 | sort -u | wc -l) -gt 1 ] ; then
-        $HEX_SDK pacemaker_cluster_stop
-        $HEX_SDK pacemaker_cluster_restart
+        cmd -co $HEX_SDK pacemaker_node_restart
         for i in 1 2 3 4 5 ; do
-            sleep 15
             if ! is_vip_active || ! is_vip_reachable ; then
                 $HEX_SDK pacemaker_cluster_restart
             fi
@@ -580,7 +578,7 @@ health_hacluster_repair()
                 $HEX_SDK pacemaker_node_start $node
             fi
         done
-        status=$(pacemaker status)
+        status=$(pcs status)
         for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
             if ! remote_run $node hex_sdk is_control_node ; then
                 if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
@@ -762,7 +760,7 @@ health_vip_report()
 
 health_vip_check()
 {
-    local active_host=$(pacemaker status | awk '/IPaddr2/{print $5}')
+    local active_host=$(pcs status | awk '/IPaddr2/{print $5}')
     DESCRIPTION="non-HA"
     ERR_LOG="pcs status"
 
@@ -801,7 +799,7 @@ health_vip_check()
     else
         if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -ge 3 ] ; then
             ERR_CODE=5
-        elif ! Quiet pacemaker status 2>/dev/null ; then
+        elif ! Quiet pcs status 2>/dev/null ; then
             ERR_LOG="systemctl status pcsd pacemaker corosync"
             ERR_CODE=6
         fi
@@ -820,7 +818,7 @@ health_vip_repair()
     health_hacluster_repair
     pcs property set stonith-enabled=false
 
-    local active_host=$(pacemaker status | awk '/IPaddr2/{print $5}')
+    local active_host=$(pcs status | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host:-NOVIP}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             local ipaddr=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $2}')
@@ -857,7 +855,7 @@ health_vip_repair()
 
 health_haproxy_ha_report()
 {
-    local active_host=$(pacemaker status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pcs status | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         DESCRIPTION="$ipaddr@$active_host"
         ERR_MSG+="($active_host)\n"
@@ -870,7 +868,7 @@ health_haproxy_ha_report()
 
 health_haproxy_ha_check()
 {
-    local active_host=$(pacemaker status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pcs status | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "$node" == "$active_host" ] ; then
@@ -888,7 +886,7 @@ health_haproxy_ha_check()
 
 health_haproxy_ha_repair()
 {
-    local active_host=$(pacemaker status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pcs status | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "$node" == "$active_host" ] ; then
@@ -3003,7 +3001,7 @@ health_hypervisor_check()
         [ -n "$srv" ] || continue
 
         # Only control node with VIP takes actions
-        if [ $(pacemaker status | awk '/IPaddr2/{print $5}') = $(hostname) ] ; then
+        if [ $(pcs status | awk '/IPaddr2/{print $5}') = $(hostname) ] ; then
             for cnt in $(seq $max) ; do
                 echo "Failed to run $srv on node: $node ($cnt)"
                 if remote_systemd_restart $node $srv ; then

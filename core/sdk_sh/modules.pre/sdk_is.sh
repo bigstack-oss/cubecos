@@ -115,7 +115,7 @@ is_node_repairing()
 is_repairing()
 {
     [ "$VERBOSE" = "1" ] || local reg_flg="-q"
-    if cmd -cv is_node_repairing $@ | grep $reg_flg "|0|" ; then
+    if timeout 5 $HEX_SDK cmd -cv is_node_repairing $@ | grep $reg_flg "|0|" ; then
         return 0
     else
         return 1

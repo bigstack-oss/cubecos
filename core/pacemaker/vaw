@@ -1,7 +1,21 @@
-#/bin/bash
+#!/bin/bash
 
 source /etc/admin-openrc.sh
-while true; do
-    hex_sdk health_vip_check
-    hex_sdk os_instance_ha_helper
-done
+if ! hex_sdk cube_node_ready ; then
+    echo "=== $(date) SKIP: node not ready"
+elif ! openstack segment list -f value -c is_enabled | grep -q -i true ; then
+    echo "=== $(date) SKIP: instance ha not enabled "
+else
+    for i in {1..10} ; do
+        echo "=== $(date) CHECKING: neutron ($i)"
+        openstack network agent list
+        if openstack network agent list -f value -c Alive | grep -q -i false ; then
+            echo "=== $(date) REPAIRING: neutron"
+            hex_sdk -m force health_neutron_repair
+            echo "=== $(date) REPAIRED: neutron"
+            openstack network agent list
+            break
+        fi
+    done
+    echo "=== $(date) DONE: vaw finished"
+fi

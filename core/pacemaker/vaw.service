@@ -4,9 +4,12 @@ DefaultDependencies=no
 Wants=network-online.target
 
 [Service]
-ExecStart=bash -c "/usr/sbin/vaw 0<&- &> /var/log/vaw.log"
-Restart=on-failure
-KillMode=process
+Type=oneshot
+ExecStart=/usr/sbin/vaw
+RemainAfterExit=yes
+TimeoutStartSec=0
+StandardOutput=append:/var/log/vaw.log
+StandardError=append:/var/log/vaw.log
 
 [Install]
 WantedBy=multi-user.target
