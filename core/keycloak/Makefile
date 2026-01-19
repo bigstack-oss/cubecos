@@ -1,4 +1,4 @@
-core/keycloak/Makefile # CUBE SDK
+# CUBE SDK
 
 include ../../build.mk
 
