@@ -59,7 +59,7 @@ rootfs_install::
 heavyfs_install::
 	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) pip3 cache remove skyline-console
-	$(Q)for i in {1..10} ; do timeout 30 git clone -b v3.0.0-rc4 --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
+	$(Q)for i in {1..10} ; do timeout 30 git clone -b v3.1.0-rc1 --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(ROOTDIR)/skyline-console && nvm install $(QEND)

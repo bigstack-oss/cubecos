@@ -8,7 +8,7 @@ GITHUB_URL := https://github.com/bigstack-oss/cube-cos-api
 ifneq ($(RC),)
 $(API_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O api.rpm $(GITHUB_URL)/releases/download/v3.0.0-rc4/cube-cos-api-v0.0.1-1.fc35.7619a7f.x86_64.rpm, \
+		wget -O api.rpm $(GITHUB_URL)/releases/download/v3.1.0-rc1/cube-cos-api-v3.1.0-1.fc35.61ed578.x86_64.rpm, \
 		"  PULL    $(API_RPM)")
 else
 GIT_DIR := git
@@ -18,7 +18,7 @@ RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 
 # prepare the api source code, being pulled from GitHub using the default branch
-# For RC: git clone -b v3.0.0-rc4
+# For RC: git clone -b v3.1.0-rc1
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..10} ; do \
