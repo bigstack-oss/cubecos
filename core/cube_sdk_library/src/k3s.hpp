@@ -25,6 +25,11 @@ int K3sGetNodeCounts();
 bool K3sHasNamespace(const std::string appNamespace);
 
 /**
+ * Create a namespace.
+ */
+bool K3sCreateNamespace(const std::string appNamespace);
+
+/**
  * Delete a namespace.
  */
 bool K3sDeleteNamespace(const std::string appNamespace);

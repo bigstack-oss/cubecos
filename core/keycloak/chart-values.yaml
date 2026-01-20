@@ -23,15 +23,30 @@ extraEnv: |
   - name: DB_PORT
     value: "3306"
   - name: DB_DATABASE
-    value: keycloak
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-db-secret
+        key: db-database
   - name: DB_USER
-    value: keycloak
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-db-secret
+        key: db-user
   - name: DB_PASSWORD
-    value: password
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-db-secret
+        key: db-password
   - name: KEYCLOAK_USER
-    value: admin
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-db-secret
+        key: keycloak-user
   - name: KEYCLOAK_PASSWORD
-    value: admin
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-db-secret
+        key: keycloak-password
   - name: KEYCLOAK_DEFAULT_THEME
     value: cos-ui
   - name: PROXY_ADDRESS_FORWARDING

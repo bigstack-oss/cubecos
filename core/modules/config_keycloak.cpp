@@ -170,6 +170,37 @@ updateKeycloakChartValues(const std::string loginGreeting)
 }
 
 /**
+ * Create needed DB secrets for Keycloak.
+ */
+static bool
+createKeycloakDbSecrets()
+{
+    const std::string secretName = "keycloak-db-secret";
+    // check if the secret exists
+    const ExecSyncResult cr = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl get secret " + secretName
+            + " -n " + APP_NAMESPACE);
+    if (cr.exitCode == 0) {
+        return true;
+    }
+
+    // create the secret
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl create secret generic " + secretName
+            + " --from-file=/opt/keycloak/db"
+            + " -n " + APP_NAMESPACE);
+    return (r.exitCode == 0);
+}
+
+/**
  * Check if Keycloak is deployed or not.
  */
 static bool
@@ -422,6 +453,24 @@ Commit(bool modified, int dryLevel)
 
     // check if K3S is running, if not, the actions below are not executable
     if (!IsK3sReady()) {
+        // let other modules to commit
+        return true;
+    }
+
+    // set up the namespace if not set
+    if (!K3sHasNamespace(APP_NAMESPACE)) {
+        if (!K3sCreateNamespace(APP_NAMESPACE)) {
+            HexLogError("failed to create the namespace for keycloak");
+
+            // let other modules to commit
+            return true;
+        }
+    }
+
+    // create db secrets on k3s
+    if (!createKeycloakDbSecrets()) {
+        HexLogError("failed to create the db secrets for keycloak");
+
         // let other modules to commit
         return true;
     }

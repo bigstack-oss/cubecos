@@ -60,6 +60,21 @@ bool K3sHasNamespace(const std::string appNamespace)
         == 0;
 }
 
+bool K3sCreateNamespace(const std::string appNamespace)
+{
+    if (K3sHasNamespace(appNamespace)) {
+        return true;
+    }
+
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl create namespace '" + appNamespace + "'");
+    return (r.exitCode == 0);
+}
+
 bool K3sDeleteNamespace(const std::string appNamespace)
 {
     if (!K3sHasNamespace(appNamespace)) {
