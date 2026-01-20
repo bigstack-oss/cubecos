@@ -243,12 +243,13 @@ WaitActiveStatus(std::string myip)
             break;
         }
 
-        int result = HexUtilSystemF(
-            FWD,
+        const ExecSyncResult r = ExecBashSync(
             0,
-            "mongosh mongodb://%s --quiet --eval \"db.hello().ok\"",
-            myip.c_str());
-        if (result == 0) {
+            false,
+            false,
+            {},
+            "mongosh mongodb://" + myip + " --quiet --eval \"db.hello().ok\"");
+        if (r.exitCode == 0) {
             return 0;
         }
 
@@ -274,36 +275,39 @@ static int
 CheckAndInitReplicaSet(std::vector<std::string> ctrlHosts, std::string myip, const char* myHostName)
 {
     for (auto ctrlHost : ctrlHosts) {
-        int result = HexUtilSystemF(
+        const ExecSyncResult r = ExecBashSync(
             0,
-            0,
-            "mongosh mongodb://%s --quiet --eval 'db.hello().isWritablePrimary || db.hello().secondary' | grep -q true",
-            ctrlHost.c_str());
-        if (result == 0) {
+            false,
+            false,
+            {},
+            "mongosh mongodb://" + ctrlHost + " --quiet --eval 'db.hello().isWritablePrimary || db.hello().secondary' | grep -q true");
+        if (r.exitCode == 0) {
             HexLogInfo("replicaSet already inited on %s, skip replicaSet initializing", ctrlHost.c_str());
             return 0;
         }
     }
 
-    return HexUtilSystemF(
-        FWD,
+    const ExecSyncResult r = ExecBashSync(
         0,
-        "mongosh mongodb://%s --quiet --eval 'rs.initiate({_id:\"%s\",members:[{_id:0,host:\"%s\"}]})'",
-        myip.c_str(),
-        MONGODB_REPLICA_SET_NAME,
-        myHostName);
+        false,
+        false,
+        {},
+        "mongosh mongodb://" + myip
+            + " --quiet --eval 'rs.initiate({_id:\"" + MONGODB_REPLICA_SET_NAME + "\",members:[{_id:0,host:\"" + myHostName + "\"}]})'");
+    return r.exitCode;
 }
 
 static bool
 IsHostRegistered(char* host, std::string myip)
 {
-    int result = HexUtilSystemF(
+    const ExecSyncResult r = ExecBashSync(
         0,
-        0,
-        "mongosh mongodb://%s --quiet --eval 'JSON.stringify(rs.conf().members)' | jq '([.[] | select(.host == \"%s:27017\")] | length) > 0' | grep -q true",
-        myip.c_str(),
-        host);
-    if (result == 0) {
+        false,
+        false,
+        {},
+        "mongosh mongodb://" + myip
+            + " --quiet --eval 'JSON.stringify(rs.conf().members)' | jq '([.[] | select(.host == \"" + host + ":27017\")] | length) > 0' | grep -q true");
+    if (r.exitCode == 0) {
         return true;
     }
 
@@ -319,15 +323,15 @@ SyncHostsToReplicaSet(std::vector<std::string>& ctrlHosts, std::string myip)
             continue;
         }
 
-        int result = HexUtilSystemF(
-            FWD,
+        const ExecSyncResult r = ExecBashSync(
             0,
-            "mongosh mongodb://%s --quiet --eval 'rs.add(\"%s\")'",
-            myip.c_str(),
-            ctrlHost.c_str());
-        if (result != 0) {
+            false,
+            false,
+            {},
+            "mongosh mongodb://" + myip + " --quiet --eval 'rs.add(\"" + ctrlHost + "\")'");
+        if (r.exitCode != 0) {
             HexLogError("failed to add %s in replicaSet, stop all node registration", ctrlHost.c_str());
-            return result;
+            return r.exitCode;
         }
 
         HexLogInfo("%s has joined mongodb replicaSet", ctrlHost.c_str());
@@ -340,46 +344,47 @@ static bool
 CheckAdminUser(std::string mongodbUri)
 {
     // check if admin user is created or not
-    int result = HexUtilSystemF(
+    const ExecSyncResult r = ExecBashSync(
         0,
-        0,
-        "mongosh %s --quiet --eval 'db.getSiblingDB(\"admin\").getUser(\"admin\")' | grep -q admin",
-        mongodbUri.c_str());
-    return (result == 0);
+        false,
+        false,
+        {},
+        "mongosh " + mongodbUri + " --quiet --eval 'db.getSiblingDB(\"admin\").getUser(\"admin\")' | grep -q admin");
+    return (r.exitCode == 0);
 }
 
 static bool
 InitAdminUser(std::string myip, std::string dbPass)
 {
     // create the admin user
-    int result = HexUtilSystemF(
-        FWD,
+    const ExecSyncResult r = ExecBashSync(
         0,
-        "mongosh mongodb://%s --quiet --eval "
-        "'db.getSiblingDB(\"admin\").createUser({"
-        "user:\"admin\","
-        "pwd:\"%s\","
-        "roles:["
-        "{role:\"userAdminAnyDatabase\",db:\"admin\"},"
-        "{role:\"clusterAdmin\",db:\"admin\"},"
-        "{role:\"readWriteAnyDatabase\",db:\"admin\"}"
-        "]})'",
-        myip.c_str(),
-        dbPass.c_str());
-    return (result == 0);
+        false,
+        false,
+        {},
+        "mongosh mongodb://" + myip + " --quiet --eval "
+            + "'db.getSiblingDB(\"admin\").createUser({"
+            + "user:\"admin\","
+            + "pwd:\"" + dbPass + "\","
+            + "roles:["
+            + "{role:\"userAdminAnyDatabase\",db:\"admin\"},"
+            + "{role:\"clusterAdmin\",db:\"admin\"},"
+            + "{role:\"readWriteAnyDatabase\",db:\"admin\"}"
+            + "]})'");
+    return (r.exitCode == 0);
 }
 
 static bool
 UpdateAdminUser(std::string mongodbUri, std::string dbPass)
 {
     // update the mongodb admin password
-    int result = HexUtilSystemF(
-        FWD,
+    const ExecSyncResult r = ExecBashSync(
         0,
-        "mongosh %s --quiet --eval 'db.getSiblingDB(\"admin\").changeUserPassword(\"admin\", \"%s\")'",
-        mongodbUri.c_str(),
-        dbPass.c_str());
-    return (result == 0);
+        false,
+        false,
+        {},
+        "mongosh " + mongodbUri + " --quiet --eval 'db.getSiblingDB(\"admin\").changeUserPassword(\"admin\", \"" + dbPass + "\")'");
+    return (r.exitCode == 0);
 }
 
 static bool
@@ -511,7 +516,12 @@ Commit(bool modified, int dryLevel)
 
     // sync mongodb admin access across the cluster control nodes
     if (GetAdminAccess() != "") {
-        HexUtilSystemF(0, 0, "cubectl node rsync --role=control %s", MONGODB_ADMIN_ACCESS);
+        const ExecSyncResult r = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            std::string("cubectl node rsync --role=control ") + MONGODB_ADMIN_ACCESS);
     }
 
     return true;

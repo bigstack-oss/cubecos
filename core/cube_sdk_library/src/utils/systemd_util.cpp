@@ -1,11 +1,8 @@
 // CUBE SDK
 
-#include <hex/log.h>
-#include <hex/process_util.h>
-
 #include <cube/systemd_util.h>
 
-#define LIMIT 3
+static const int LIMIT = 3;
 
 bool SystemdCommitService(const bool enabled, const char* name, const bool retry, const bool quiet)
 {
@@ -17,10 +14,20 @@ bool SystemdCommitService(const bool enabled, const char* name, const bool retry
 
         do {
             int ret = 0;
+            const std::string command = std::string("systemctl ")
+                + (cnt ? "restart" : "start") + " " + name;
+
             if (quiet) {
-                ret = HexUtilSystemF(FWD, 0, "systemctl %s %s", cnt ? "restart" : "start", name);
+                HexLogInfo("Executing: %s", command.c_str());
+                const ExecSyncResult r = ExecBashSync(
+                    0,
+                    false,
+                    false,
+                    {},
+                    command);
+                ret = r.exitCode;
             } else {
-                ret = HexUtilSystemF(AWY, 0, "systemctl %s %s", cnt ? "restart" : "start", name);
+                ret = HexUtilSystemF(AWY, 0, "%s", command.c_str());
             }
 
             if (ret != 0) {
