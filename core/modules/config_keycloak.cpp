@@ -420,6 +420,12 @@ Commit(bool modified, int dryLevel)
         }
     }
 
+    // check if K3S is running, if not, the actions below are not executable
+    if (!IsK3sReady()) {
+        // let other modules to commit
+        return true;
+    }
+
     bool isKeycloakUpdated = false;
     if ((s_bApplianceModified || !checkKeycloak())
         && isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {

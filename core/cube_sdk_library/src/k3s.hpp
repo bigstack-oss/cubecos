@@ -3,9 +3,15 @@
 #ifndef CUBE_K3S_H
 #define CUBE_K3S_H
 
+#include <hex/exec.hpp>
 #include <hex/process_util.h>
 
 #include <string>
+
+/**
+ * Check if K3S is ready for other services.
+ */
+bool IsK3sReady();
 
 /**
  * Get the number of K3S node.

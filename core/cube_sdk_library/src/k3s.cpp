@@ -2,6 +2,31 @@
 
 #include "k3s.hpp"
 
+bool IsK3sReady()
+{
+    const ExecSyncResult nr = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl get nodes");
+    if (nr.exitCode != 0) {
+        return false;
+    }
+
+    const ExecSyncResult cr = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl cluster-info");
+    if (cr.exitCode != 0) {
+        return false;
+    }
+
+    return true;
+}
+
 int K3sGetNodeCounts()
 {
     std::string output = HexUtilPOpen(
