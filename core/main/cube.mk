@@ -50,6 +50,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_node.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ntp.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_opensearch.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_os.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_os/os_cinder.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ovn.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_preset.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_rabbitmq.sh

@@ -6,6 +6,9 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+# source dependencies
+source "${SDK_DIR}/modules/os_cinder.sh"
+
 COOKIE_FILE=/tmp/cookie.txt
 LOGIN_PAGE=/tmp/login.html
 EP_SNAPSHOT=/var/appliance-db/os_endpoint.snapshot
@@ -66,19 +69,6 @@ os_get_horizon_sessionid()
     #verify the presence of sessionid
     sessionid=`cat $COOKIE_FILE | grep sessionid | sed 's/^.*sessionid\s*//'`
     echo -n $sessionid
-}
-
-os_list_volume_backend_by_pool()
-{
-    local pool=${1:-$BUILTIN_BACKPOOL}
-    local vtype=${2:-CubeStorage}
-    local backend_name=$($OPENSTACK volume type show $vtype -f json -c properties | jq -r .properties.volume_backend_name 2>/dev/null)
-
-    if [ "x$pool" = "x$BUILTIN_BACKPOOL" ] ; then
-        $OPENSTACK volume backend pool list -f value -c Name | grep ${backend_name:-cube@ceph#ceph}
-    else
-        $OPENSTACK volume backend pool list -f value -c Name | grep ${backend_name:-cube@ceph#ceph} | cut -d "@" -f1
-    fi
 }
 
 os_list_domain_basic()
@@ -869,7 +859,7 @@ os_image_import()
     $OPENSTACK role add --user admin_cli --project ${proj_name:-admin} admin
     echo "[$(date +"%T")] Importing image $name ..."
     if [ "x$pool" = "xglance-images" -o "x$volume_type" != "xCubeStorage" ] ; then
-        local backend=$(os_list_volume_backend_by_pool glance-images $volume_type)
+        local backend=$(os_cinder_get_volume_backend_host_by_volume_type "$volume_type" | jq -r ".[0]")
         local img_id=$(uuidgen)
         glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility ${visibility:-public} --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
         if [ "x$pool" != "xglance-images" -a "x$volume_type" != "xCubeStorage" ] ; then
@@ -881,7 +871,7 @@ os_image_import()
             $OPENSTACK image set --project ${proj_name:-admin} $img_id >/dev/null 2>&1
         fi
     else
-        local backend=$(os_list_volume_backend_by_pool $pool $volume_type)
+        local backend=$(os_cinder_get_volume_backend_pool_by_volume_type "$volume_type" | jq -r ".[0]")
         local vol_name=$(mktemp -u volume-${name}-XXXX)
         rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"
         local vol_id=$(cinder --os-project-domain-name ${domain:-default} --os-project-name ${proj_name:-admin} manage --bootable --name "$name" --volume-type $volume_type ${backend:-cube@ceph#ceph} "$vol_name" | grep " id" | cut -d"|" -f3)
