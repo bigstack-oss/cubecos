@@ -755,28 +755,37 @@ _os_image_distro_ver()
     echo "${distro}:${ver}"
 }
 
-# params:
-# $1: file dir (required)
-# $2: file name  (required)
-# $3: image name (required)
 os_image_import()
 {
+    # params:
+    # $1: file dir (required)
+    # $2: file name  (required)
+    # $3: image name (required)
+    # $4: flags
+    # $5: pool: glance-images: from Bigstack, cinder-volumes: from another hypervisor
+    # $6: volume_type: destination
+    # $7: _distro: OS distro
+    # $8: properties: image properties
     local dir=$1
     local file=$2
-    local IMG="$dir/$file"
     local name=$3
     local flags=${4:---os-project-domain-name default --os-project-name admin --visibility public}
     local pool=${5:-glance-images}
+    local volume_type=${6:-CubeStorage}
+    local _distro=${7:-linux}
+    local properties=${8:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
+
+    # prevent duplicated importing
     local mf_importing="/run/${FUNCNAME[0]}_${file}_${name}_${pool}"
     if  cmd -v ls $mf_importing | grep -q "|0|" ; then
         Error "Image is being imported. If this is not the case, remove $mf_importing on all nodes"
     else
         touch $mf_importing
     fi
-    local volume_type=${6:-CubeStorage}
-    local _distro=${7:-linux}
+
+    # process inputs
     local distro=$(echo $_distro | tr "[A-Z]" "[a-z]")
-    local properties=${8:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
+
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"
     properties+=" --property os_distro=$distro"
@@ -794,6 +803,8 @@ os_image_import()
     local visibility=$(echo $flags | grep -o "[-][-]visibility .*" | cut -d" " -f2)
     local domain=$(echo $flags | grep -o "[-][-]os-project-domain-name .*" | cut -d" " -f2)
 
+    # convert the image file
+    local IMG="$dir/$file"
     if [[ $(qemu-img info "$IMG" | grep "file format") =~ raw ]] ; then
         local img_name=$IMG
     else
@@ -856,29 +867,39 @@ os_image_import()
         local img_name=$img_raw
     fi
 
+    # import the image
     $OPENSTACK role add --user admin_cli --project ${proj_name:-admin} admin
     echo "[$(date +"%T")] Importing image $name ..."
-    if [ "x$pool" = "xglance-images" -o "x$volume_type" != "xCubeStorage" ] ; then
-        local backend=$(os_cinder_get_volume_backend_host_by_volume_type "$volume_type" | jq -r ".[0]")
-        local img_id=$(uuidgen)
+    local backend=""
+    local img_id=""
+    if [ "x$pool" = "xglance-images" ] ; then
+        backend=$(os_cinder_get_volume_backend_host_by_volume_type "$volume_type" | jq -r ".[0]")
+        img_id=$(uuidgen)
         glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility ${visibility:-public} --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
-        if [ "x$pool" != "xglance-images" -a "x$volume_type" != "xCubeStorage" ] ; then
-            local cinder_id=$($OPENSTACK image show $img_id -f json | jq -r ".properties.direct_url" | sed -e "s;^cinder://${volume_type}/;;")
-            local vol_id=$($OPENSTACK volume create --type $volume_type --source $cinder_id --bootable $name -f value -c id)
+        $OPENSTACK image set --project ${proj_name:-admin} $img_id >/dev/null 2>&1
+    else
+        local vol_name=""
+        local vol_id=""
+        local cinder_id=""
+        if [ "x$volume_type" = "xCubeStorage" ] ; then
+            backend=$(os_cinder_get_volume_backend_pool_by_volume_type "$volume_type" | jq -r ".[0]")
+            vol_name=$(mktemp -u volume-${name}-XXXX)
+            rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"
+            vol_id=$(cinder --os-project-domain-name ${domain:-default} --os-project-name ${proj_name:-admin} manage --bootable --name "$name" --volume-type $volume_type ${backend:-cube@ceph#ceph} "$vol_name" | grep " id" | cut -d"|" -f3)
+            $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
+        else
+            backend=$(os_cinder_get_volume_backend_host_by_volume_type "$volume_type" | jq -r ".[0]")
+            img_id=$(uuidgen)
+            glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility ${visibility:-public} --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
+            cinder_id=$($OPENSTACK image show $img_id -f json | jq -r ".properties.direct_url" | sed -e "s;^cinder://${volume_type}/;;")
+            vol_id=$($OPENSTACK volume create --type $volume_type --source $cinder_id --bootable $name -f value -c id)
             $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
             [ "x$($OPENSTACK volume show $cinder_id -f value -c status)" != "xavailable" ] || $OPENSTACK image delete $img_id
-        else
-            $OPENSTACK image set --project ${proj_name:-admin} $img_id >/dev/null 2>&1
         fi
-    else
-        local backend=$(os_cinder_get_volume_backend_pool_by_volume_type "$volume_type" | jq -r ".[0]")
-        local vol_name=$(mktemp -u volume-${name}-XXXX)
-        rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"
-        local vol_id=$(cinder --os-project-domain-name ${domain:-default} --os-project-name ${proj_name:-admin} manage --bootable --name "$name" --volume-type $volume_type ${backend:-cube@ceph#ceph} "$vol_name" | grep " id" | cut -d"|" -f3)
-        $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
     fi
     echo "[$(date +"%T")] Finished creating image $name"
 
+    # clean up
     [ -z "$img_raw" ] || rm -f "$img_raw"
     cmd rm -f $mf_importing
 }
