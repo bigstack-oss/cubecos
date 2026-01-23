@@ -834,18 +834,21 @@ os_image_import()
             local limit=$(echo $gigabytes_json | jq -r ".Limit")
             local used=$(echo $gigabytes_json | jq -r ".\"In Use\"")
             local free=$(($limit - $used))
-            if [ $free -le $((img_siz / 1024 / 1024 / 1024)) ] ; then
-                cmd rm -f $mf_importing
-                Error "${proj_name:-admin} quota's free volume space $free(GB) is less then needed $((img_siz / 1024 / 1024 / 1024))(GB)"
+            if [ $limit -gt 0 ] ; then # limit=-1 means unlimited
+                if [ $free -le $((img_siz / 1024 / 1024 / 1024)) ] ; then
+                    cmd rm -f $mf_importing
+                    Error "${proj_name:-admin} quota's free volume space $free(GB) is less then needed $((img_siz / 1024 / 1024 / 1024))(GB)"
+                fi
             fi
             local volumes_json=$($OPENSTACK quota show --volume --usage ${proj_name:-admin} -f json | jq -r ".[] | select(.Resource==\"volumes\")")
             limit=$(echo $volumes_json | jq -r ".Limit")
             used=$(echo $volumes_json | jq -r ".\"In Use\"")
-            if [ $used -ge $limit ] ; then
-                cmd rm -f $mf_importing
-                Error "${proj_name:-admin} quota's volume ${used}/${limit} (used/limit)"
+            if [ $limit -gt 0 ] ; then # limit=-1 means unlimited
+                if [ $used -ge $limit ] ; then
+                    cmd rm -f $mf_importing
+                    Error "${proj_name:-admin} quota's volume ${used}/${limit} (used/limit)"
+                fi
             fi
-
             local img_dir=$(dirname $img_raw)
             virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
             if [ -e ${img_dir}/${file%.*}*.xml ] ; then
