@@ -15,7 +15,6 @@ registry: $(REGISTRY_TAR)
 	$(Q)make copy-image -C ../k3s
 	$(Q)make copy-image -C ../keycloak
 	$(Q)make copy-image -C ../rancher FULL=$(FULL)
-	$(Q)make copy-image -C ../nvidia
 	$(Q)make copy-image -C ../appctl
 	$(Q)make rm-registry
 
