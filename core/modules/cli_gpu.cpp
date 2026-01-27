@@ -1,11 +1,10 @@
 // CUBE SDK
 
-#include <hex/process.h>
-#include <hex/log.h>
-#include <hex/strict.h>
-
 #include <hex/cli_module.h>
 #include <hex/cli_util.h>
+#include <hex/log.h>
+#include <hex/process.h>
+#include <hex/strict.h>
 
 static int
 GpuStatusMain(int argc, const char** argv)
@@ -63,8 +62,7 @@ GpuCreateDpMain(int argc, const char** argv)
 
     if (argc == 1) {
         HexSystemF(0, HEX_SDK " os_device_profile_create");
-    }
-    else {
+    } else {
         HexSystemF(0, HEX_SDK " os_device_profile_create %s", argv[1]);
     }
 
@@ -83,8 +81,8 @@ GpuDeleteDpMain(int argc, const char** argv)
 }
 
 CLI_MODE(CLI_TOP_MODE, "gpu",
-         "Work with GPU settings.",
-         !HexStrictIsErrorState() && !FirstTimeSetupRequired());
+    "Work with GPU settings.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired());
 
 CLI_MODE_COMMAND("gpu", "status", GpuStatusMain, NULL,
     "Show GPU and virtual GPU status.",
@@ -109,4 +107,3 @@ CLI_MODE_COMMAND("gpu", "device_profile_create", GpuCreateDpMain, NULL,
 CLI_MODE_COMMAND("gpu", "device_profile_delete", GpuDeleteDpMain, NULL,
     "Delete device profile of the giving name.",
     "device_profile_delete [name]");
-
