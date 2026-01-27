@@ -1149,7 +1149,7 @@ ceph_osd_host_remove()
     done
 
     # wait for all OSDs to be safely purged
-    local osd_ids="$($CEPH osd ls-tree $HOSTNAME | tr '\n' ' ')"
+    local osd_ids="$($CEPH osd ls-tree $host | tr '\n' ' ')"
     osd_ids="${osd_ids%% }"
     local are_osds_purged=""
     while true ; do
