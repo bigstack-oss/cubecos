@@ -106,8 +106,7 @@ RUN echo "export KER_REL=`grep Release /kernel-info | cut -d ":" -f2 | xargs`" >
 RUN echo "export KER_ARC=`grep Architecture /kernel-info | cut -d ":" -f2 | xargs`" >> /cube.env
 
 # crun-1.21-1 leads to docker/podman run errors: OCI runtime attempted to invoke a command
-RUN dnf install -y crun-1.20-2.el9
-RUN dnf versionlock add crun-1.20-2.el9
+RUN dnf install -y crun
 
 # lock kernel version before updating
 RUN dnf -y update
