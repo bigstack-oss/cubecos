@@ -1,17 +1,16 @@
 // CUBE SDK
 
-#include <unistd.h>
-#include <hex/log.h>
+#include <cluster.hpp>
+#include <cube/network.h>
+#include <hex/config_global.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
-#include <hex/config_global.h>
-#include <hex/process_util.h>
 #include <hex/dryrun.h>
-#include <hex/tuning.h>
+#include <hex/log.h>
 #include <hex/logrotate.h>
-
-#include <cube/network.h>
-#include <cluster.hpp>
+#include <hex/process_util.h>
+#include <hex/tuning.h>
+#include <unistd.h>
 
 typedef std::map<std::string, ConfigUInt> MtuMap;
 
@@ -33,7 +32,7 @@ PARSE_TUNING_X_UINT(s_resvHostVcpu, NOVA_RESV_HOST_VCPU, 0);
 PARSE_TUNING_X_UINT(s_resvHostMem, NOVA_RESV_HOST_MEM, 0);
 
 static bool
-ParseNova(const char *name, const char *value, bool isNew)
+ParseNova(const char* name, const char* value, bool isNew)
 {
     ParseTune(name, value, isNew, 0);
     return true;
@@ -46,7 +45,7 @@ NotifyNova(bool modified)
 }
 
 static bool
-ParseNet(const char *name, const char *value, bool isNew)
+ParseNet(const char* name, const char* value, bool isNew)
 {
     const char* p = 0;
 
@@ -108,7 +107,7 @@ CommitLast(bool modified, int dryLevel)
 }
 
 static int
-ClusterStartMain(int argc, char **argv)
+ClusterStartMain(int argc, char** argv)
 {
     if (argc != 1) {
         return EXIT_FAILURE;
