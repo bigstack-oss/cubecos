@@ -1712,7 +1712,7 @@ cinder_is_volume_type_in_use()
         return 1
     fi
 
-    _hex_function exec_output exec_error $OPENSTACK volume list --long -f json
+    _hex_function exec_output exec_error $OPENSTACK volume list --all-projects --long -f json
     if [[ "$?" != "0" ]] || ! json_is_array "$exec_output" ; then
         return 0
     fi
