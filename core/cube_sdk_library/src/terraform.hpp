@@ -3,8 +3,8 @@
 #ifndef CUBE_TERRAFORM_H
 #define CUBE_TERRAFORM_H
 
+#include <hex/exec.hpp>
 #include <hex/log.h>
-#include <hex/process_util.h>
 
 #include <sstream>
 #include <string>

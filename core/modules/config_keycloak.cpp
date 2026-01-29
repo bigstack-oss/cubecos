@@ -283,18 +283,19 @@ updateKeycloak()
         nodeCount = 1;
     }
 
-    return HexUtilSystemF(
-               0,
-               0,
-               "/usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml "
-               "upgrade --install %s %s -f %s "
-               "-n %s --create-namespace --set replicas=%d",
-               CHART_RELEASE_NAME.c_str(),
-               KEYCLOAK_CHARTS,
-               KEYCLOAK_CHART_VALUES,
-               APP_NAMESPACE.c_str(),
-               nodeCount)
-        == 0;
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        std::string()
+            + "/usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml "
+            + "upgrade --install " + CHART_RELEASE_NAME + " " + KEYCLOAK_CHARTS + " "
+            + "-f " + KEYCLOAK_CHART_VALUES + " "
+            + "-n " + APP_NAMESPACE + " "
+            + "--create-namespace "
+            + "--set replicas=" + std::to_string(nodeCount));
+    return (r.exitCode == 0);
 }
 
 /**

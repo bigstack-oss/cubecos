@@ -29,15 +29,19 @@ bool IsK3sReady()
 
 int K3sGetNodeCounts()
 {
-    std::string output = HexUtilPOpen(
-        "/usr/local/bin/k3s kubectl "
-        "get nodes "
-        "-o \"go-template={{len .items}}\"");
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        false,
+        {}, "/usr/local/bin/k3s kubectl get nodes -o \"go-template={{len .items}}\"");
+    if (r.exitCode != 0) {
+        return -1;
+    }
 
     int count = 0;
     try {
         std::size_t pos;
-        count = std::stoi(output, &pos);
+        count = std::stoi(r.stdoutOutput, &pos);
     } catch (const std::exception& e) {
         // failed to convert the output string to an integer
         return -1;
@@ -52,12 +56,16 @@ int K3sGetNodeCounts()
 
 bool K3sHasNamespace(const std::string appNamespace)
 {
-    return HexUtilSystemF(
-               0,
-               0,
-               "/usr/local/bin/k3s kubectl get namespace %s -o name",
-               appNamespace.c_str())
-        == 0;
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        std::string()
+            + "/usr/local/bin/k3s kubectl get namespace '"
+            + appNamespace
+            + "' -o name");
+    return (r.exitCode == 0);
 }
 
 bool K3sCreateNamespace(const std::string appNamespace)
@@ -93,17 +101,24 @@ int K3sGetReadyReplicas(
     const std::string app,
     const std::string appNamespace)
 {
-    std::string output = HexUtilPOpen(
-        "/usr/local/bin/k3s kubectl "
-        "get %s -n %s "
-        "-o \"go-template={{.status.readyReplicas}}\"",
-        app.c_str(),
-        appNamespace.c_str());
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        false,
+        {},
+        std::string()
+            + "/usr/local/bin/k3s kubectl "
+            + "get " + app
+            + " -n " + appNamespace + " "
+            + "-o \"go-template={{.status.readyReplicas}}\"");
+    if (r.exitCode != 0) {
+        return -1;
+    }
 
     int count = 0;
     try {
         std::size_t pos;
-        count = std::stoi(output, &pos);
+        count = std::stoi(r.stdoutOutput, &pos);
     } catch (const std::exception& e) {
         // failed to convert the output string to an integer
         return -1;
@@ -121,14 +136,16 @@ bool K3sWatchRollOut(
     const std::string appNamespace,
     const std::string timeout)
 {
-    return HexUtilSystemF(
-               0,
-               0,
-               "/usr/local/bin/k3s kubectl rollout status --timeout %s %s -n %s",
-               timeout.c_str(),
-               app.c_str(),
-               appNamespace.c_str())
-        == 0;
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        std::string()
+            + "/usr/local/bin/k3s kubectl rollout status "
+            + "--timeout " + timeout + " " + app + " "
+            + "-n " + appNamespace);
+    return (r.exitCode == 0);
 }
 
 bool K3sDeleteAllPods(const std::string appNamespace)

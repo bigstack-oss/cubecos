@@ -44,10 +44,11 @@ bool ExecTerraform(
         terraformModule.c_str(),
         argumentLine.str().c_str());
 
-    return HexUtilSystemF(
-               0,
-               0,
-               "/usr/local/bin/terraform-cube.sh %s",
-               argumentLine.str().c_str())
-        == 0;
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        std::string() + "/usr/local/bin/terraform-cube.sh " + argumentLine.str());
+    return (r.exitCode == 0);
 }
