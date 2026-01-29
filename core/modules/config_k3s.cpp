@@ -6,6 +6,7 @@
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/dryrun.h>
+#include <hex/exec.hpp>
 #include <hex/log.h>
 #include <hex/logrotate.h>
 #include <hex/process_util.h>
@@ -79,6 +80,7 @@ Commit(bool modified, int dryLevel)
     // TODO: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
+    WriteLogRotateConf(log_conf);
     CheckMTU();
 
     // Reconfigure MTU when applying MTU tunning
@@ -89,7 +91,40 @@ Commit(bool modified, int dryLevel)
         HexUtilSystemF(0, 0, "cubectl config commit k3s --stacktrace");
     }
 
-    WriteLogRotateConf(log_conf);
+    /**
+     * Wait for metrics-server to be ready
+     * for clients like kubectl and helm to operate.
+     */
+    HexLogInfo("k3s: wait for metrics-server");
+    const ExecSyncResult pr = ExecBashSync(
+        61,
+        true,
+        true,
+        {},
+        "/usr/local/bin/kubectl wait --for=condition=Ready pod -l k8s-app=metrics-server -n kube-system --timeout=60s");
+    HexLogInfo("k3s: wait for metrics-server, %s", pr.stdoutOutput.c_str());
+    if (pr.exitCode != 0) {
+        // fall through the error
+        HexLogError("k3s: wait for metrics-server, %s", pr.stderrOutput.c_str());
+        return true;
+    }
+    HexLogInfo("k3s: check metrics-server api service");
+    const ExecSyncResult ar = ExecBashSync(
+        10,
+        true,
+        true,
+        {},
+        "/usr/local/bin/kubectl get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type==\"Available\")].status");
+    if (ar.exitCode != 0) {
+        // fall through the error
+        HexLogError("k3s: check metrics-server api service, %s", ar.stderrOutput.c_str());
+        return true;
+    }
+    if (ar.stdoutOutput != "True") {
+        // fall through the error
+        HexLogError("k3s: check metrics-server api service, not ready");
+        return true;
+    }
 
     return true;
 }
