@@ -34,7 +34,6 @@ BootstrapAndClusterstart()
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             bash -c "hex_sdk -v cube_cluster_start | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
-            hex_sdk cmd "rm -f /tmp/health_*error.count"
             return 0
         fi
     fi
@@ -94,7 +93,9 @@ RollingEvacuateAndReboot()
             msg="Cluster checking and repairing"
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
-            hex_cli -c cluster check_repair
+            hex_sdk cmd "rm -f /tmp/health_*error.count"
+            hex_cli -c cluster check # kick off auto_repair
+            hex_cli -c cluster check_repair # safe net in case auto_repair is not enough
             if hex_cli -c cluster check Storage | grep -i " ok " ; then
                 rsync -ar /var/lib/ceph /store/
             fi
