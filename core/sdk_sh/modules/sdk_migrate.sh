@@ -8,6 +8,8 @@ fi
 
 migrate_prepare()
 {
+    # FW upgrade should've included fixpack contents of previous releases
+    rm -fr /var/support/fixpack /var/fixpack/* /var/appliance-db/fixpack.history
     touch /run/cube_migration
 }
 
