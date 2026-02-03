@@ -10,7 +10,7 @@ BINNAME := telegraf
 BIN := $(TOP_BLDDIR)/core/telegraf/telegraf/telegraf
 
 $(CLONEDIR):
-	$(call RUN_CMD_TIMED, for i in {1..10} ; do timeout 30 git clone -b $(BRANCH) https://github.com/bigstack-oss/telegraf.git $(CLONEDIR) && break ; done,"  CLONE   telegraf")
+	$(call RUN_CMD_TIMED, for i in {1..3} ; do timeout 120 git clone -b $(BRANCH) https://github.com/bigstack-oss/telegraf.git $(CLONEDIR) && break ; done,"  CLONE   telegraf")
 
 $(PKG):: $(CLONEDIR)
 	$(call RUN_CMD_TIMED, cd $(CLONEDIR) && \

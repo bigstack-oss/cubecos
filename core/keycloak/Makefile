@@ -32,8 +32,8 @@ RPMBUILD_RPMS = $(RPMBUILD_DIR)/RPMS
 # For RC: git clone -b v3.1.0-rc1
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
-		for i in {1..10} ; do \
-		rm -fr $@ && timeout 30 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		for i in {1..3} ; do \
+		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
 		"  CLONE   $(GITHUB_URL)")
 	$(Q)# enable nvm
