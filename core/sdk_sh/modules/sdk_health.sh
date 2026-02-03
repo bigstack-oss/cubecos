@@ -422,7 +422,7 @@ health_hacluster_check()
         fi
     done
 
-    local status=$(pcs status)
+    local status=$(pcs status 2>/dev/null)
     local total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local online=$(echo "$status" | grep -i " online" | cut -d "[" -f2 | cut -d "]" -f1 | awk '{print NF}')
     if [ "$total" != "$online" ] ; then
@@ -501,7 +501,7 @@ _health_hacluster_auto_repair()
 
 health_hacluster_repair()
 {
-    local status=$(pcs status)
+    local status=$(pcs status 2>/dev/null)
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
     local num_ctrl=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local last_ctrl=${CUBE_NODE_CONTROL_HOSTNAMES[$((num_ctrl - 1))]}
@@ -578,7 +578,7 @@ health_hacluster_repair()
                 $HEX_SDK pacemaker_node_start $node
             fi
         done
-        status=$(pcs status)
+        status=$(pcs status 2>/dev/null)
         for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
             if ! remote_run $node hex_sdk is_control_node ; then
                 if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
@@ -760,7 +760,7 @@ health_vip_report()
 
 health_vip_check()
 {
-    local active_host=$(pcs status | awk '/IPaddr2/{print $5}')
+    local active_host=$(pcs status 2>/dev/null | awk '/IPaddr2/{print $5}')
     DESCRIPTION="non-HA"
     ERR_LOG="pcs status"
 
@@ -818,7 +818,7 @@ health_vip_repair()
     health_hacluster_repair
     pcs property set stonith-enabled=false
 
-    local active_host=$(pcs status | awk '/IPaddr2/{print $5}')
+    local active_host=$(pcs status 2>/dev/null | awk '/IPaddr2/{print $5}')
     if cubectl node list -r control -j | jq -r .[].hostname | grep -q "^${active_host:-NOVIP}$" ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             local ipaddr=$(ssh -o ConnectTimeout=3 root@$node 2>/dev/null ip addr list | awk '/ secondary /{print $2}')
@@ -855,7 +855,7 @@ health_vip_repair()
 
 health_haproxy_ha_report()
 {
-    local active_host=$(pcs status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pcs status 2>/dev/null | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         DESCRIPTION="$ipaddr@$active_host"
         ERR_MSG+="($active_host)\n"
@@ -868,7 +868,7 @@ health_haproxy_ha_report()
 
 health_haproxy_ha_check()
 {
-    local active_host=$(pcs status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pcs status 2>/dev/null | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "$node" == "$active_host" ] ; then
@@ -886,7 +886,7 @@ health_haproxy_ha_check()
 
 health_haproxy_ha_repair()
 {
-    local active_host=$(pcs status | awk '/haproxy-ha/{print $5}')
+    local active_host=$(pcs status 2>/dev/null | awk '/haproxy-ha/{print $5}')
     if [ -n "$active_host" ] ; then
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "$node" == "$active_host" ] ; then
@@ -1463,7 +1463,7 @@ health_ceph_mds_repair()
     done
 
     cmd "$HEX_SDK ceph_mount_cephfs"
-    cmd -cn "systemctl restart nfs-ganesha"
+    cmd -c "systemctl restart nfs-ganesha"
     $HEX_SDK git_init
 }
 
@@ -3001,7 +3001,7 @@ health_hypervisor_check()
         [ -n "$srv" ] || continue
 
         # Only control node with VIP takes actions
-        if [ $(pcs status | awk '/IPaddr2/{print $5}') = $(hostname) ] ; then
+        if [ $(pcs status 2>/dev/null | awk '/IPaddr2/{print $5}') = $(hostname) ] ; then
             for cnt in $(seq $max) ; do
                 echo "Failed to run $srv on node: $node ($cnt)"
                 if remote_systemd_restart $node $srv ; then

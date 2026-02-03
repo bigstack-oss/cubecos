@@ -291,6 +291,7 @@ cube_cluster_start()
 
     touch $CLUSTER_SYNC
 
+    cmd "$HEX_SDK migrate_fixpack"
     cmd "$HEX_SDK network_ipt_serviceint" # customized iptables
     Quiet -n $HEX_SDK ceph_osd_set_bucket_host # assign osds to customized ceph buckets
     Quiet -n $HEX_SDK os_resume_hypervisor     # resume hypervisors disabled due to ins-ha

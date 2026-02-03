@@ -8,9 +8,18 @@ fi
 
 migrate_prepare()
 {
+    touch /run/cube_migration
+}
+
+migrate_fixpack()
+{
+    if [ -f $STATE_DIR/fixpack_migrated ] ; then
+        return 0
+    fi
+
     # FW upgrade should've included fixpack contents of previous releases
     rm -fr /var/support/fixpack /var/fixpack/* /var/appliance-db/fixpack.history
-    touch /run/cube_migration
+    touch $STATE_DIR/fixpack_migrated
 }
 
 migrate_keystone_db()
@@ -363,7 +372,7 @@ migrate_pacemaker_remote()
     if is_pure_compute_node ; then
         systemctl stop pacemaker_remote
         remote_run $master $HEX_SDK pacemaker_remote_remove $hostname
-        for OFF_N in $($HEX_SDK remote_run $master "pcs status nodes" | grep "Remote Nodes:" -A 99 | grep "Offline:" | cut -d":" -f2) ; do
+        for OFF_N in $($HEX_SDK remote_run $master "pcs status nodes 2>/dev/null" | grep "Remote Nodes:" -A 99 | grep "Offline:" | cut -d":" -f2) ; do
             remote_run $master $HEX_SDK pacemaker_remote_remove $OFF_N
         done
         remote_run $master $HEX_SDK pacemaker_remote_add $hostname

@@ -2477,7 +2477,7 @@ os_nova_instance_ping()
         return 0;
     fi
 
-    local active_host=$(pcs status | awk '/IPaddr2/{print $5}')
+    local active_host=$(pcs status 2>/dev/null | awk '/IPaddr2/{print $5}')
     if [ -n "$active_host" ] ; then
         # HA
         if [ "$active_host" != "$(hostname)" ] ; then
