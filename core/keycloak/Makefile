@@ -19,7 +19,7 @@ GITHUB_URL := https://github.com/bigstack-oss/cube-cos-ui
 ifneq ($(RC),)
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.0-rc1/$(PKG_NAME)-17.2.0-1.96de32d.x86_64.rpm, \
+		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.0-rc3/$(PKG_NAME)-17.2.0-1.9835cfd.x86_64.rpm, \
 		"  PULL    $(LOGIN_RPM)")
 else
 GIT_DIR := git
@@ -29,7 +29,7 @@ RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS = $(RPMBUILD_DIR)/RPMS
 
 # prepare the login source code, being pulled from GitHub using the default branch
-# For RC: git clone -b v3.1.0-rc1
+# For RC: git clone -b v3.1.0-rc3
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \

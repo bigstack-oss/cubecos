@@ -146,24 +146,34 @@ EOF
     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"$description\""
     if [ $count -lt $maxerr -a "x$ERR_LOG" != "x" -a $ERR_CODE -ne 0 ] ; then
         local keys=$(cat /run/ec2.key 2>/dev/null)
-        if [ "x$keys" = "x" ] ; then
-            keys="$($OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null)"
-            if [ $? = 0 ] ; then
-                echo "$keys" | head -n 1 > /run/ec2.key
+        local access=$(echo $keys | awk '{print $1}')
+        local secret=$(echo $keys | awk '{print $2}')
+        if [ "x$access" = "x" -o "x$secret" = "x" ] ; then
+            keys="$($OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null | head -n 1)"
+            access=$(echo $keys | awk '{print $1}')
+            secret=$(echo $keys | awk '{print $2}')
+            if [ "x$access" = "x" -o "x$secret" = "x" ] ; then
                 keys=$(cat /run/ec2.key 2>/dev/null)
                 if [ "x$keys" = "x" ] ; then
+                    Quiet -n $OPENSTACK ec2 credentials delete admin
                     Quiet -n $OPENSTACK ec2 credentials create --user admin --project admin
-                    $OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null > /run/ec2.key
+                    $OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null | head -n 1 > /run/ec2.key
                     keys=$(cat /run/ec2.key 2>/dev/null)
                     keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
+                    access=$(echo $keys | awk '{print $1}')
+                    secret=$(echo $keys | awk '{print $2}')
+                    Quiet -n cubectl node rsync /run/ec2.key
                 fi
+            else
+                echo "$keys" > /run/ec2.key
+                Quiet -n cubectl node rsync /run/ec2.key
             fi
         fi
-        if [ "x$keys" != "x" ] ; then
+        if [ "x$access" != "x" -a "x$secret" != "x" ] ; then
             cmd "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
-                keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
-                log_url="s3://$log_pth"
+                keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || cmd "rm -f /run/ec2.key"
+                [ $(timeout $SRVSTO $HEX_SDK  os_s3_list admin $log_pth | wc -l) -eq 0 ] || log_url="s3://$log_pth"
                 rm -f /tmp/$log
             else
                 # In case collecting logs from remote fails, look for local log
