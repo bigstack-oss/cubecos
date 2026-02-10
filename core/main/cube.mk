@@ -34,6 +34,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_diagnostics.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_firmware.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_gcp.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_git.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_glance.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_gpu.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_haproxy.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_health.sh

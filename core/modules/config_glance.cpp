@@ -708,3 +708,36 @@ CONFIG_OBSERVES(glance, rabbitmq, ParseRabbitMQ, NotifyMQ);
 CONFIG_OBSERVES(glance, cinder, ParseCinder, NotifyCinder);
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_glance, RestartMain, RestartUsage);
+
+static bool
+liftQuotaForVolumeImage()
+{
+    HexLogInfo("glance: lift quota for volume image");
+    ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        std::string(HEX_SDK) + " glance_lift_quota_for_volume_image");
+    if (r.exitCode != 0) {
+        HexLogError("glance: failed to lift quota for volume image");
+        return false;
+    }
+
+    HexLogInfo("glance: lifted quota for volume image");
+    return true;
+}
+
+static int
+ClusterStartMain(int argc, char** argv)
+{
+    if (argc != 1) {
+        return EXIT_FAILURE;
+    }
+
+    liftQuotaForVolumeImage();
+
+    return EXIT_SUCCESS;
+}
+
+CONFIG_TRIGGER(glance, "cluster_start", ClusterStartMain);
