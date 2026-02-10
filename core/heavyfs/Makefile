@@ -159,15 +159,15 @@ rootfs_install::
 rootfs_install::
 	$(Q)wget https://raw.githubusercontent.com/python/cpython/main/Lib/encodings/cp437.py -P $(ROOTDIR)/usr/lib64/python3.9/encodings/
 
-# install no constraint packages first
-$(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
-$(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
-
 # cannot install both python3-google-auth-1:2.28.0-1.el9.noarch from @commandline and python3-google-auth-1:1.30.0-1.el9s.noarch from centos-openstack-yoga
 LOCKED_DNF += python3-google-auth-1.30.0-1.el9s
 
 $(call PROJ_INSTALL_DNF_NOARCH,-d "$(ROOTFS_DNF_DL_FROM)","$(ROOTFS_DNF)")
 # $(call PROJ_INSTALL_DNF_NOARCH,-n,"$(ROOTFS_DNF_NS)")
+
+# install no constraint packages first
+$(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
+$(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
 
 # Allow admin to be sudoers
 rootfs_install::
