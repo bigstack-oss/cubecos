@@ -300,6 +300,19 @@ cube_cluster_start()
     ( $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ) || Quiet -n $HEX_SDK toggle_health_check ceph_osd
     iptables-save > /run/iptables
     nohup bash -c "$HEX_SDK git_init" >/dev/null 2>&1 &
+
+    $OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null | head -n 1 > /run/ec2.key
+    local keys=$(cat /run/ec2.key 2>/dev/null)
+    local access=$(echo $keys | awk '{print $1}')
+    local secret=$(echo $keys | awk '{print $2}')
+    if [ "x$access" = "x" -o "x$secret" = "x" ] ; then
+        Quiet -n $OPENSTACK ec2 credentials delete admin
+        Quiet -n $OPENSTACK ec2 credentials create --user admin --project admin
+        $OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null | head -n 1 > /run/ec2.key
+        keys=$(cat /run/ec2.key 2>/dev/null)
+    fi
+    keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
+    Quiet -n cubectl node rsync /run/ec2.key
 }
 
 cube_cluster_stop()

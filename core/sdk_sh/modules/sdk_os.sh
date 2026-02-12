@@ -1406,6 +1406,7 @@ os_pre_failure_host_evacuation_sequential()
         echo "migrating $sid($old_status) from $from_host to $to_host"
         nova live-migration $sid $to_host
         for i in {1..15} ; do
+            sleep 5
             new_state_json=$($OPENSTACK server show $sid -f json)
             new_host=$(echo $new_state_json | jq -r .hypervisor_hostname)
             new_status=$(echo $new_state_json | jq -r .status)
@@ -1421,8 +1422,8 @@ os_pre_failure_host_evacuation_sequential()
             elif [ $i -ge 15 ] ; then
                 success=false
             else
-                if [ "x$new_host" = "x$to_host" ] ; then
-                    if [ "x$old_status" != "x$new_status" -o "x$old_power" != "x$new_power" ] ; then
+                if [ "x$new_host" = "x$to_host" -o "x$new_status" = "xERROR" ] ; then
+                    if [ "x$old_status" != "x$new_status" -o "x$old_power" != "x$new_power" -o "x$new_status" = "xERROR" ] ; then
                         os_nova_instance_reset $sid
                         os_nova_instance_hardreboot $sid
                     fi
