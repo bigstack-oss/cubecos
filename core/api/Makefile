@@ -8,7 +8,7 @@ GITHUB_URL := https://github.com/bigstack-oss/cube-cos-api
 ifneq ($(RC),)
 $(API_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O api.rpm $(GITHUB_URL)/releases/download/v3.1.0-rc3/cube-cos-api-v3.1.0-1.fc35.5ea50ff.x86_64.rpm, \
+		wget -O api.rpm $(GITHUB_URL)/releases/download/v3.1.0-rc3/cube-cos-api-v3.1.0-1.fc35.5310e06.x86_64.rpm, \
 		"  PULL    $(API_RPM)")
 else
 GIT_DIR := git
