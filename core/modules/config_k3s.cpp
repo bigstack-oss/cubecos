@@ -114,7 +114,7 @@ Commit(bool modified, int dryLevel)
         true,
         true,
         {},
-        "/usr/local/bin/kubectl get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type==\"Available\")].status");
+        "/usr/local/bin/kubectl get apiservice v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type==\"Available\")].status}'");
     if (ar.exitCode != 0) {
         // fall through the error
         HexLogError("k3s: check metrics-server api service, %s", ar.stderrOutput.c_str());
