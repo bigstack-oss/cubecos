@@ -568,9 +568,19 @@ syncSamlMetadata(const std::string myip)
     HexUtilSystemF(
         0,
         0,
-        "hex_sdk cmd -cv scp root@%s:%s %s",
+        HEX_SDK " cmd -cv scp root@%s:%s %s",
         myip.c_str(),
         tmpFile.fileName.c_str(),
+        KEYCLOAK_SAML_METADATA_FILE);
+    HexUtilSystemF(
+        0,
+        0,
+        HEX_SDK " cmd chmod 664 %s",
+        KEYCLOAK_SAML_METADATA_FILE);
+    HexUtilSystemF(
+        0,
+        0,
+        HEX_SDK " cmd chown root:admin %s",
         KEYCLOAK_SAML_METADATA_FILE);
 
     // clean up the temporary file
