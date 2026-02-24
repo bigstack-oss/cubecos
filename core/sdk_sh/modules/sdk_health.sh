@@ -170,7 +170,7 @@ EOF
             fi
         fi
         if [ "x$access" != "x" -a "x$secret" != "x" ] ; then
-            cmd "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
+            cmd -v "if [ -f \"$ERR_LOG\" ] ; then tail -n $ERR_LOGSIZE $ERR_LOG ; else $ERR_LOG ; fi" > /tmp/$log
             if [ -e /tmp/${log:-NOSUCHLOG} ] ; then
                 keys=$keys timeout $SRVSTO $HEX_SDK os_s3_object_put admin /tmp/$log $log_pth >/dev/null 2>&1 || cmd "rm -f /run/ec2.key"
                 [ $(timeout $SRVSTO $HEX_SDK  os_s3_list admin $log_pth | wc -l) -eq 0 ] || log_url="s3://$log_pth"
