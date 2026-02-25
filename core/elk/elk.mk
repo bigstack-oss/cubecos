@@ -79,7 +79,7 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 # install logstash plugins, such as output-syslog for N-Reporter
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) /usr/bin/env PATH=$(LOGSTASH_JDK)/bin:$$PATH LD_LIBRARY_PATH=$(LOGSTASH_JDK)/lib $(LOGSTASH_HOME)/bin/logstash-plugin install logstash-output-syslog logstash-output-opensearch
+	$(Q)chroot $(ROOTDIR) /usr/bin/env PATH=$(LOGSTASH_JDK)/bin:$$PATH LD_LIBRARY_PATH=$(LOGSTASH_JDK)/lib LS_JAVA_OPTS="-Xmx2048M" $(LOGSTASH_HOME)/bin/logstash-plugin install logstash-output-syslog logstash-output-opensearch
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 # security patch
