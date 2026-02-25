@@ -1,0 +1,39 @@
+---
+convention:
+  commitTypes:
+  - feat     # Commits, that add or remove a new feature to the API or UI
+  - fix      # Commits, that fix a API or UI bug of a preceded feat commit
+  - refactor # Commits, that rewrite/restructure your code, however do not change any API or UI behaviour
+  - perf     # Commits are special `refactor` commits, that improve performance
+  - style    # Commits, that do not affect the meaning (white-space, formatting, missing semi-colons, etc)
+  - test     # Commits, that add missing tests or correcting existing tests
+  - build    # Commits, that affect build components like build tool, ci pipeline, dependencies, project version, ...
+  - ops      # Commits, that affect operational components like infrastructure, deployment, backup, recovery, ...
+  - docs     # Commits, that affect documentation only 
+  - chore    # Miscellaneous commits e.g. modifying `.gitignore`
+  - merge
+  - revert
+  commitScopes: ["cinder", "glance", "keystone", "neutron", "nova", "sbom","security","watcher","hex_sdk","cubectl","etcd","keycloak","make","build","new","docker","deps","readme","bump","haproxy","ci","tests","docs","ui","api","ceph","hex_install","app frameworks","rancher","k3s","bootstrap","sec","rc","gpu","git","elk","hex_fixpack_install","terraform","prometheus","kernel","skyline","jail","hex_cli","hex_config","telegraf","mongodb","fixpack_history","cve-2026-21721","pcs","provider","changelog","rolling-upgrade","senlin","appctl","cube_sdk_library","app","kapacitor","httpd","log","appfw","alert","hex_translate","license","ci","pr","oci image","linux","typo"]
+changelog:
+  commitTypes:
+  - feat
+  - fix
+  - perf
+  - merge
+  - reverts
+  includeInvalidCommits: true
+  commitIgnoreRegexPattern: "^WIP "
+  headlines:
+    feat: Features
+    fix: Bug Fixes
+    perf: Performance Improvements
+    merge: Merges
+    breakingChange: BREAKING CHANGES
+
+  ## GitHub
+  commitUrl: https://github.com/bigstack-oss/cubecos/commit/%commit%
+  commitRangeUrl: https://github.com/bigstack-oss/cubecos/compare/%from%...%to%?diff=split
+
+  ## GitHub Issues
+  issueRegexPattern: "#[0-9]+"
+  issueUrl: https://github.com/bigstack-oss/cubecos/issues/%issue%

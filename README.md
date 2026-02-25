@@ -21,7 +21,7 @@ Join us in building the future of software-defined infrastructure!
 
 ## ⚡️ Installation
 
-Download CubeCOS from the [Release Page](https://github.com/bigstack-oss/cubecos/releases/tag/v3.0.0), and check out our [quick start installation](https://docs.bigstack.co/docs/cubecos/quick-start/overview) guide.
+Download CubeCOS from the [Release Page](https://github.com/bigstack-oss/cubecos/releases/latest), and check out our [quick start installation](https://docs.bigstack.co/docs/cubecos/quick-start/overview) guide.
 
 ## 📚 Documentation
 
