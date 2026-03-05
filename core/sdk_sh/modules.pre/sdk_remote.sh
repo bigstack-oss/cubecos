@@ -10,7 +10,11 @@ remote_systemd_stop()
 {
     local host=$1
     shift 1
-    ! is_sshable $host || timeout $SRVLTO ssh root@$host "timeout $SRVTO systemctl stop $@ >/dev/null 2>&1 || killall -9 $@"
+    if is_sshable $host ; then
+        timeout $SRVLTO ssh root@$host "timeout $SRVTO systemctl stop $@ >/dev/null 2>&1 || killall -9 $@"
+    else
+        Error "$host not sshable"
+    fi
 }
 
 remote_systemd_start()
@@ -20,6 +24,8 @@ remote_systemd_start()
     if is_sshable $host ; then
         timeout $SRVTO ssh root@$host systemctl reset-failed >/dev/null 2>&1
         timeout $SRVLTO ssh root@$host systemctl start $@ >/dev/null 2>&1
+    else
+        Error "$host not sshable"
     fi
 }
 
@@ -30,6 +36,8 @@ remote_systemd_restart()
     if is_sshable $host ; then
         timeout $SRVTO ssh root@$host systemctl reset-failed >/dev/null 2>&1
         timeout $SRVLTO ssh root@$host systemctl restart $@ >/dev/null 2>&1
+    else
+        Error "$host not sshable"
     fi
 }
 
@@ -43,5 +51,9 @@ remote_run()
             flag="-t"
         fi
     fi
-    ! is_sshable $host || ssh $flag root@$host $@ 2>/dev/null
+    if is_sshable $host ; then
+        ssh $flag root@$host $@ 2>/dev/null
+    else
+        Error "$host not sshable"
+    fi
 }
