@@ -6,7 +6,7 @@ KAFKA_APP_DIR := /var/lib/kafka
 KAFKA_LOG_DIR := /var/log/kafka
 KAFKA_RUN_DIR := /var/run/kafka
 
-KAFKA_VER := 3.8.0
+KAFKA_VER := 3.9.2
 KAFKA_TGZ := kafka_2.13-$(KAFKA_VER).tgz
 
 $(ARCS_DIR)/$(KAFKA_TGZ):
