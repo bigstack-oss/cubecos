@@ -3135,7 +3135,8 @@ _health_mongodb_auto_repair()
         IFS=' ' read -r -a unavailable_nodes <<< "$result"
         for node in "${unavailable_nodes[@]}"; do
             hostname="$(echo "$node" | sed 's/:.*//')"
-            remote_systemd_restart $hostname mongodb
+            remote_run "$hostname" "${HEX_SDK} mongodb_repair_keyfile_ownership"
+            remote_run "$hostname" "${HEX_CFG} restart_mongodb"
         done
     elif [ "$ERR_CODE" == "5" ] ; then
         # code 5: user admin needs role readWriteAnyDatabase

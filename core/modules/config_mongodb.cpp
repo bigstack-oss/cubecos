@@ -172,7 +172,18 @@ WriteMongodKeyfile(std::string key)
     fprintf(fout, key.c_str());
     fclose(fout);
 
-    HexSetFileMode(MONGODB_KEYFILE, USER, GROUP, 0400);
+    HexUtilSystemF(
+        0,
+        0,
+        "chown %s:%s %s",
+        USER,
+        GROUP,
+        MONGODB_KEYFILE);
+    HexUtilSystemF(
+        0,
+        0,
+        "chmod 0400 %s",
+        MONGODB_KEYFILE);
     return true;
 }
 
