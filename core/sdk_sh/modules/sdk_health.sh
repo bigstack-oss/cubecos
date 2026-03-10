@@ -260,18 +260,23 @@ health_clock_report()
 
 health_clock_check()
 {
-    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        local delta=$(clockdiff $node 2>/dev/null | awk '{print $2}')
-        if [ -n "$delta" ] ; then
-            if [ ${delta#-} -gt 10000 ] ; then
-                ERR_CODE=1
-                ERR_MSG+="time difference to $node is ${delta}ms\n"
-                ERR_LOG="journalctl -n $ERR_LOGSIZE -u chronyd"
-            fi
-        fi
-    done
+    local times=$(cmd -v "date +%s" | cut -d"|" -f3 | sed "/^$/d" | sort)
+    local timea=$(echo "$times" | head -1)
+    local timeb=$(echo "$times" | tail -1)
+    local delta=$(expr ${timeb:-0} - ${timea:-0})
+
+    if [ $delta -gt 10 ] ; then
+        ERR_CODE=1
+        ERR_MSG+="Biggest time gap between nodes is ${delta}s\n"
+        ERR_LOG="date +%s"
+    fi
 
     _health_fail_log
+}
+
+_health_clock_auto_repair()
+{
+    health_clock_repair
 }
 
 health_clock_repair()
