@@ -251,7 +251,7 @@ COPY vnc/app/ui.js $NO_VNC_HOME/app/
 COPY vnc/app/styles/base.css $NO_VNC_HOME/app/styles/
 
 # Security tools
-RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/bin
+# RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/bin
 
 # get rid of git error msg while making builds: detected dubious ownership
 COPY centos9/root/.gitconfig /root/
