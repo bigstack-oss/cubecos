@@ -156,7 +156,7 @@ is_sshable()
     local mf_ssh=/run/${FUNCNAME[0]}_${node}
     local ret=1
 
-    if [ -e $mf_ssh ] && [ $(find $mf_ssh -type f -mmin -1 | wc -l) -eq 1 ] ; then
+    if [ -e $mf_ssh ] && [ $(find $mf_ssh -type f -mmin -1 2>/dev/null | wc -l) -eq 1 ] ; then
         ret=0
     else
         rm -f $mf_ssh

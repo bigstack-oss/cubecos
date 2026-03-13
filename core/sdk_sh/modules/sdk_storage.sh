@@ -16,6 +16,7 @@ storage_update_device_maps()
 storage_update_partition_table()
 {
     _hex_function_ret /usr/sbin/partprobe
+    sleep 10
 }
 
 storage_is_valid_block_device()

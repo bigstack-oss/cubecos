@@ -14,7 +14,7 @@ filesystem_is_directory_mounted()
         return 1
     fi
 
-    _hex_function_ret grep -q "$dir" "/proc/mounts"
+    _hex_function_ret grep -q " $dir " "/proc/mounts"
 }
 
 filesystem_write_file()
