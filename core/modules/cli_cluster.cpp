@@ -822,9 +822,9 @@ ClusterReadyMain(int argc, const char** argv)
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run hex_sdk cmd " HEX_CFG " cube_password_init");
 
     CliPrintf("[6/6] Cluster check and repair");
-    HexSpawn(0, HEX_SDK, "host_local_run", "hex_cli", "-c", "cluster check_repair", ZEROCHAR_PTR);
     HexSpawn(0, HEX_SDK, "host_local_run", "hex_sdk", "-m force",  "health_neutron_repair", ZEROCHAR_PTR);
-    HexSpawn(0, HEX_SDK, "host_local_run", "rm -f /tmp/health_*_error.count", ZEROCHAR_PTR);
+    HexSpawn(0, HEX_SDK, "cmd", "-co", "hex_cli -c cluster check_repair", ZEROCHAR_PTR);
+    HexSpawn(0, HEX_SDK, "cmd", "rm -f /tmp/health_*_error.count", ZEROCHAR_PTR);
 
     CliPrintf("Done");
 
