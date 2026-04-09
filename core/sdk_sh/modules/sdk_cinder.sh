@@ -3097,8 +3097,8 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
     _hex_function \
         exec_output \
         exec_error \
-        jq -r \
-        ".[] | select(.Name == \"dell-emc-sc-fc\") | length > 0" \
+        jq -e \
+        "any(.[]; .Name == \"${name}\")" \
         <(printf "%s" "$exec_output")
     if [[ "$?" != "0" ]] ; then
         jq -c -n \
