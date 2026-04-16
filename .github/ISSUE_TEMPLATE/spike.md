@@ -4,6 +4,7 @@ about: Necessary investigation, research, discussion, or technical exploration t
   reduce uncertainty about any subject.
 title: "[Spike] "
 labels: ''
+type: Spike
 assignees: ''
 
 ---

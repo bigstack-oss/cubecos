@@ -3,6 +3,7 @@ name: Epic
 about: Highest-level description of the product or a major delivery of functionality.
 title: "[Epic] "
 labels: ''
+type: Epic
 assignees: ''
 
 ---

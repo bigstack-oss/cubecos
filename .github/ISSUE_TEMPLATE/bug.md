@@ -4,6 +4,7 @@ about: A defect found in a specific user story or feature that caused the system
   behave incorrectly.
 title: "[Bug] "
 labels: ''
+type: Bug
 assignees: ''
 
 ---

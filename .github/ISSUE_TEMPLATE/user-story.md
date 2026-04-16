@@ -5,6 +5,7 @@ about: A concise statement written from the perspective of the person requesting
   outcome.
 title: "[User Story] "
 labels: ''
+type: "User Story"
 assignees: ''
 
 ---

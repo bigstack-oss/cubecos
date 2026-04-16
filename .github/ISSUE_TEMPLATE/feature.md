@@ -4,6 +4,7 @@ about: A distinct unit of functionality or a significant part that forms a speci
   user story.
 title: "[Feature] "
 labels: ''
+type: Feature
 assignees: ''
 
 ---
