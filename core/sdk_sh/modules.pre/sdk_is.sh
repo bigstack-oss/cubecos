@@ -188,7 +188,7 @@ is_node_rolling_upgrade()
     if cmd -v "cat /run/cube_bootstrap.log" | grep -q -e 'Rebooting' -e 'rolling upgrade' ; then
         $HEX_SDK cube_cluster_ready || ret=0
     fi
-    if [ $(cmd -v "hex_cli -c firmware list | grep -i active" | cut -d"|" -f3 | sort -u | sed "/^$/d" | wc -l) -gt 1 ] ; then
+    if [ $(cmd -v "hex_cli -c firmware list | grep -i active" | cut -d"|" -f3 | cut -d" " -f2 | sort -u | sed "/^$/d" | wc -l) -gt 1 ] ; then
         ret=0
     fi
 
