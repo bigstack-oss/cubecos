@@ -27,8 +27,6 @@ appRegisterMain(int argc, const char** argv)
     int ret;
     std::string app_path = argv[1];
     std::string app_fw_name = argv[2];
-    std::string skip_flag = argv[3];
-
     CliPrintf("installing app: %s...", app_path.c_str());
 
     if(argc == 4){
