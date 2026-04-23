@@ -32,6 +32,7 @@ static const char SSH_DIR[] = "/root/.ssh";
 static const char KEYFILE[] = "/root/.ssh/id_rsa";
 static const char KEYFILE_PUB[] = "/root/.ssh/id_rsa.pub";
 static const char AUTHORIZED_KEYS[] = "/root/.ssh/authorized_keys";
+static const char CRON_D[] = "/etc/cron.d";
 
 static const char IPTABLES_RULESET[] = "/etc/sysconfig/iptables";
 
@@ -452,6 +453,7 @@ CONFIG_MIGRATE(cubesys, MigrateMain);
 //CONFIG_MIGRATE(cubesys, SRV_CRT);
 CONFIG_MIGRATE(cubesys, SSH_CLIENT_CONFIG);
 CONFIG_MIGRATE(cubesys, AUTHORIZED_KEYS);
+CONFIG_MIGRATE(cubesys, CRON_D);
 
 CONFIG_MODULE(standalone, 0, 0, 0, 0, 0);
 CONFIG_REQUIRES(standalone, time);
