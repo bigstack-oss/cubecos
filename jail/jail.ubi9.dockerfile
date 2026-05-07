@@ -72,7 +72,7 @@ ARG HEX_SDK="dosfstools e4fsprogs qemu-kvm qemu-img syslinux genisoimage psmisc 
 ARG HEX_TEST="qemu-kvm-core telnet net-tools iproute iputils expect nmap-ncat dnsmasq nmap sshpass ipmitool"
 
 # extra packages for building projects
-ARG HEX_EXTRA="sudo kpartx python3-pip python3-devel java-11-openjdk maven ruby ruby-devel rpm-build rubygems squashfs-tools podman podman-docker skopeo buildah toilet linux-firmware"
+ARG HEX_EXTRA="sudo kpartx python3-pip python3-devel java-21-openjdk java-21-openjdk-devel ruby ruby-devel rpm-build rubygems squashfs-tools podman podman-docker skopeo buildah toilet linux-firmware"
 
 RUN echo "hex" > /etc/machine-id
 RUN echo "_WEAK_DEP=$WEAK_DEP" >> /etc/hex.manifest
@@ -80,7 +80,8 @@ RUN echo "_WEAK_DEP=$WEAK_DEP" >> /etc/hex.manifest
 ###### install packages with WEAK_DEP == 0
 FROM tier2 AS tier2_weak_dep_0
 RUN dnf install -y $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
-
+# Jenkins is with java 21
+RUN alternatives --set java java-21-openjdk.x86_64
 ###### install packages with WEAK_DEP == 1
 FROM tier2 AS tier2_weak_dep_1
 RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
