@@ -13,19 +13,19 @@ CEPH_CSI_IMG_TAG := v3.13.1
 CEPH_CSI_IMG := quay.io/cephcsi/cephcsi
 CEPH_CSI_IMG_TAR := ceph-csi.tar
 
-CSI_PROVISIONER_IMG_TAG := v4.0.0
+CSI_PROVISIONER_IMG_TAG := v5.0.1
 CSI_PROVISIONER_IMG := registry.k8s.io/sig-storage/csi-provisioner
 CSI_PROVISIONER_IMG_TAR := ceph-csi-provisioner.tar
 
-CSI_RESIZER_IMG_TAG := v1.10.0
+CSI_RESIZER_IMG_TAG := v1.11.1
 CSI_RESIZER_IMG := registry.k8s.io/sig-storage/csi-resizer
 CSI_RESIZER_IMG_TAR := ceph-csi-resizer.tar
 
-CSI_SNAPSHOTTER_IMG_TAG := v7.0.0
+CSI_SNAPSHOTTER_IMG_TAG := v8.2.0
 CSI_SNAPSHOTTER_IMG := registry.k8s.io/sig-storage/csi-snapshotter
 CSI_SNAPSHOTTER_IMG_TAR := ceph-csi-snapshotter.tar
 
-CSI_ATTACHER_IMG_TAG := v4.5.0
+CSI_ATTACHER_IMG_TAG := v4.6.1
 CSI_ATTACHER_IMG := registry.k8s.io/sig-storage/csi-attacher
 CSI_ATTACHER_IMG_TAR := ceph-csi-attacher.tar
 
