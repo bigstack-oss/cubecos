@@ -11,7 +11,6 @@ rootfs_install::
 	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
 	$(Q)chroot $(ROOTDIR) sh /root/$(NVIDIA_DRIVER) \
 		--kernel-name=$(KERNEL_VERS) \
-		--kernel-module-type=open \
 		-s || true
 	$(Q)umount -l $(ROOTDIR)/sys || true
 	$(Q)umount -l $(ROOTDIR)/dev || true
