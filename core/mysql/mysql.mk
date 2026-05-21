@@ -3,15 +3,33 @@
 
 # Unknown system variable 'innodb_version' since MariaDB 10.10
 # ROOTFS_DNF += mariadb-server mariadb-server-galera rsync
-MARIADB_VER := 10.5.29-3.el9_7
 # rpmfind.net is often not responsive
 # MARIADB_URL := https://rpmfind.net/linux/centos-stream/9-stream/AppStream/x86_64/os/Packages
-# ftp.icm.edu.pl went unreachable too; the CDN keeps rotated pins in /vault
-MARIADB_URL := https://dl.rockylinux.org/pub/rocky/9/devel/x86_64/os/Packages/m
-MARIADB_LOCKED_RPMS := mariadb-$(MARIADB_VER) mariadb-backup-$(MARIADB_VER) mariadb-common-$(MARIADB_VER) mariadb-errmsg-$(MARIADB_VER)
-MARIADB_LOCKED_RPMS += mariadb-gssapi-server-$(MARIADB_VER) mariadb-server-$(MARIADB_VER) mariadb-server-galera-$(MARIADB_VER) mariadb-server-utils-$(MARIADB_VER)
-LOCKED_DNF += $(MARIADB_LOCKED_RPMS)
+
+MARIADB_VER := 10.6.26-1.el9
+GALERA_VER := 26.4.26-1.el9
+MARIADB_URL := https://mirror.mariadb.org/yum/10.6/rocky9-amd64/rpms
+
+# Official MariaDB package list
+# Note: we dropped errmsg and server-utils as they are now bundled
+MARIADB_LOCKED_RPMS := MariaDB-client-$(MARIADB_VER) \
+                       MariaDB-server-$(MARIADB_VER) \
+                       MariaDB-common-$(MARIADB_VER) \
+                       MariaDB-shared-$(MARIADB_VER) \
+                       MariaDB-backup-$(MARIADB_VER) \
+                       MariaDB-gssapi-server-$(MARIADB_VER)
+
+# Galera library is versioned differently than the database engine
+GALERA_RPM := galera-4-$(GALERA_VER)
+
+LOCKED_DNF += $(MARIADB_LOCKED_RPMS) $(GALERA_RPM)
+
+# Map URLs for MariaDB packages
 $(foreach mariadb_rpm,$(MARIADB_LOCKED_RPMS),$(eval ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(mariadb_rpm).x86_64.rpm))
+
+# Map URL for Galera package
+ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(GALERA_RPM).x86_64.rpm
+
 ROOTFS_DNF += rsync
 ROOTFS_DNF_NOARCH += python3-PyMySQL
 
