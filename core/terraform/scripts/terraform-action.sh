@@ -3,6 +3,7 @@
 export TF_CLI_CONFIG_FILE=/etc/cube/cos/terraform/configs/override.tfrc
 
 pushd /tmp >/dev/null 2>&1
+timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform init -upgrade
 timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform "$@"
 [ $? -eq 0 ] || exit 1
 

@@ -1,7 +1,9 @@
 provider_installation {
-  dev_overrides {
-    "registry.terraform.io/rancher/rancher2" = "/var/lib/terraform/.terraform/providers/registry.terraform.io/rancher/rancher2/7.0.0/linux_amd64"
-    "registry.terraform.io/mrparkers/keycloak" = "/var/lib/terraform/.terraform/providers/registry.terraform.io/mrparkers/keycloak/3.10.0/linux_amd64"
+  filesystem_mirror {
+    path    = "/var/lib/terraform/patched-registry"
+    include = ["registry.terraform.io/rancher/*", "registry.terraform.io/mrparkers/*", "registry.terraform.io/terraform-providers/*"]
   }
-  direct {}
+  direct {
+    exclude = ["registry.terraform.io/rancher/*", "registry.terraform.io/mrparkers/*", "registry.terraform.io/terraform-providers/*"]
+  }
 }
