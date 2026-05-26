@@ -23,6 +23,7 @@ MARIADB_LOCKED_RPMS := MariaDB-client-$(MARIADB_VER) \
 GALERA_RPM := galera-4-$(GALERA_VER)
 
 LOCKED_DNF += $(MARIADB_LOCKED_RPMS) $(GALERA_RPM)
+BLKLST_DNF += mariadb-connector-c mariadb-connector-c-config
 
 # Map URLs for MariaDB packages
 $(foreach mariadb_rpm,$(MARIADB_LOCKED_RPMS),$(eval ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(mariadb_rpm).x86_64.rpm))
