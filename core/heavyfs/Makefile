@@ -79,6 +79,10 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-nfs-ganesha5
 
+# Disable module mariadb from CentOS Stream 9 - AppStream repo to avoid dependency conflicts after switching to MariaDB official repo
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) dnf module disable mariadb -y
+
 # Lock kernel to known good version
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf install -y 'dnf-command(versionlock)'
