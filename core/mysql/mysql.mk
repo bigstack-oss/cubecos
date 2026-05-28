@@ -35,6 +35,7 @@ ROOTFS_DNF += rsync
 ROOTFS_DNF_NOARCH += python3-PyMySQL
 
 rootfs_install::
-	$(Q)mv $(ROOTDIR)/etc/my.cnf.d/galera.cnf $(ROOTDIR)/etc/my.cnf.d/galera.cnf.orig
+	$(Q)# /etc/my.cnf.d/galera.cnf came from centos stream 9 appstream repo, mariadb repo mariadb does not have this default config
+	$(Q)# mv $(ROOTDIR)/etc/my.cnf.d/galera.cnf $(ROOTDIR)/etc/my.cnf.d/galera.cnf.orig
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/default_dbs/
 	$(Q)chroot $(ROOTDIR) sh -c "tar -cf - var/lib/mysql | pigz -9 > /etc/default_dbs/mysql.tgz"
