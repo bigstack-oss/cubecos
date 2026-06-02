@@ -138,7 +138,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install $(ERLANG)
 
 # ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm
-RUBY := ruby-3.0.4-161.el9
+RUBY := ruby-3.0.7-166.el9
 LOCKED_DNF += $(RUBY)
 
 OPENSSL_VER := 3.5.1-6.el9
