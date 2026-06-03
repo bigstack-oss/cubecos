@@ -6,6 +6,8 @@ if [ -z "$PROG" ]; then
     exit 1
 fi
 
+GPU_CONFIG_FILE_PATH="/etc/cube/cos/gpu/config.json"
+
 gpu_iommu_list()
 {
     shopt -s nullglob
@@ -234,6 +236,102 @@ fbc_sess=%s,fbc_fps=%s,fbc_latency=%s\n" \
             printf "%s\n\n" "$vm_stats"
         fi
     done
+}
+
+gpu_device_list()
+{
+    local gpu_config="[]"
+
+    if [ -f "$GPU_CONFIG_FILE_PATH" ]; then
+        local raw
+        raw=$(cat "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
+        if echo "$raw" | jq -e 'type == "array"' >/dev/null 2>&1; then
+            gpu_config="$raw"
+        fi
+    else
+        log_error "gpu_device_list: $GPU_CONFIG_FILE_PATH does not exist"
+        return 1
+    fi
+
+    local gpu_csv
+    gpu_csv=$($NVIDIA_SMI --query-gpu=uuid,name,pci.bus_id --format=csv,noheader,nounits 2>/dev/null)
+    if [ -z "$gpu_csv" ]; then
+        jq -c -n '[]'
+        return 0
+    fi
+
+    local output="[]"
+
+    while IFS=',' read -r uuid name pci_bus_id; do
+        uuid=$(echo "$uuid" | xargs)
+        name=$(echo "$name" | xargs)
+        pci_bus_id=$(echo "$pci_bus_id" | xargs)
+
+        local gpu_type
+        gpu_type=$(echo "$gpu_config" | jq -r --arg id "$uuid" \
+            'map(select(.id == $id)) | if length > 0 then .[0].type else "" end')
+
+        if [ -z "$gpu_type" ] || [ "$gpu_type" = "null" ]; then
+            output=$(echo "$output" | jq -c \
+                --arg id "$uuid" --arg name "$name" --arg pciAddress "$pci_bus_id" \
+                '. + [{id:$id, name:$name, type:"unset", pciAddress:$pciAddress, status:"unassigned", allocation:null}]')
+            continue
+        fi
+
+        local status="idle"
+        local allocation
+
+        if [ "$gpu_type" = "pgpu" ]; then
+            local pci_bus pci_slot
+            pci_bus=$(echo "$pci_bus_id" | awk -F: '{print tolower($2)}')
+            pci_slot=$(echo "$pci_bus_id" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
+
+            local in_use=0
+            for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
+                if virsh dumpxml "$vm_id" 2>/dev/null | \
+                    grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
+                    in_use=1
+                    break
+                fi
+            done
+
+            if [ "$in_use" = "1" ]; then
+                status="inUse"
+                allocation='{"current":1,"total":1}'
+            else
+                allocation='{"current":0,"total":1}'
+            fi
+
+        else
+            local vgpu_out
+            vgpu_out=$($NVIDIA_SMI vgpu -q -i "$pci_bus_id" 2>/dev/null || true)
+            local current
+            current=$(echo "$vgpu_out" | grep -c "vGPU ID" || true)
+            current=${current:-0}
+
+            local total
+            total=$(echo "$gpu_config" | jq --arg id "$uuid" \
+                '[map(select(.id == $id)) | .[0].profiles // [] | .[].count] | add // 0')
+
+            if [ "${current}" -gt 0 ]; then
+                status="inUse"
+            fi
+
+            allocation=$(jq -c -n --argjson c "$current" --argjson t "$total" \
+                '{current:$c, total:$t}')
+        fi
+
+        output=$(echo "$output" | jq -c \
+            --arg id "$uuid" \
+            --arg name "$name" \
+            --arg type "$gpu_type" \
+            --arg pciAddress "$pci_bus_id" \
+            --arg status "$status" \
+            --argjson allocation "$allocation" \
+            '. + [{id:$id, name:$name, type:$type, pciAddress:$pciAddress, status:$status, allocation:$allocation}]')
+    done <<< "$gpu_csv"
+
+    echo "$output"
 }
 
 gpu_host_stats()
