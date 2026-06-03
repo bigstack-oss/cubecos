@@ -334,6 +334,39 @@ gpu_device_list()
     echo "$output"
 }
 
+gpu_vgpu_profile_list()
+{
+    local gpu_id=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -gpuId) gpu_id="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+
+    if [ -z "$gpu_id" ]; then
+        echo "Error: -gpuId is required" >&2
+        return 1
+    fi
+
+    local gpu_config="[]"
+
+    if [ -f "$GPU_CONFIG_FILE_PATH" ]; then
+        local raw
+        raw=$(cat "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
+        if echo "$raw" | jq -e 'type == "array"' >/dev/null 2>&1; then
+            gpu_config="$raw"
+        fi
+    else
+        log_error "gpu_vgpu_profile_list: $GPU_CONFIG_FILE_PATH does not exist"
+        return 1
+    fi
+
+    echo "$gpu_config" | jq -c --arg id "$gpu_id" \
+        'map(select(.id == $id)) | if length > 0 then .[0].profiles else null end'
+}
+
 gpu_host_stats()
 {
     if ! gpu_is_installed; then
