@@ -367,6 +367,34 @@ gpu_vgpu_profile_list()
         'map(select(.id == $id)) | if length > 0 then .[0].profiles else null end'
 }
 
+gpu_pgpu_attached_instance_get()
+{
+    local pci_address="$1"
+
+    if [ -z "$pci_address" ]; then
+        echo "Error: pciAddress is required" >&2
+        return 1
+    fi
+
+    local pci_bus pci_slot
+    pci_bus=$(echo "$pci_address" | awk -F: '{print tolower($2)}')
+    pci_slot=$(echo "$pci_address" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
+
+    for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
+        if virsh dumpxml "$vm_id" 2>/dev/null | \
+            grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
+            local vm_name
+            vm_name=$(openstack server show "$vm_id" -f value -c name 2>/dev/null)
+            if [ -n "$vm_name" ]; then
+                jq -c -n --arg id "$vm_id" --arg name "$vm_name" '{id:$id, name:$name}'
+                return 0
+            fi
+        fi
+    done
+
+    echo "null"
+}
+
 gpu_host_stats()
 {
     if ! gpu_is_installed; then
