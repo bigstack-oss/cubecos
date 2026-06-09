@@ -3,7 +3,7 @@
 
 # Unknown system variable 'innodb_version' since MariaDB 10.10
 # ROOTFS_DNF += mariadb-server mariadb-server-galera rsync
-MARIADB_VER := 10.5.27-1.el9_5.0.2
+MARIADB_VER := 10.5.29-3.el9_7
 # rpmfind.net is often not responsive
 # MARIADB_URL := https://rpmfind.net/linux/centos-stream/9-stream/AppStream/x86_64/os/Packages
 MARIADB_URL := https://ftp.icm.edu.pl/packages/linux-rocky/9/devel/x86_64/os/Packages/m
