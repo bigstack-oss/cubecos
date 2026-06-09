@@ -174,6 +174,22 @@ $(call PROJ_INSTALL_DNF_NOARCH,-d "$(ROOTFS_DNF_DL_FROM)","$(ROOTFS_DNF)")
 $(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
 $(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
 
+# install python 3.10 for openstack antelope
+rootfs_install::
+	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
+	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
+	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
+	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-3.10
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-3.10/Python-3.10.20.tgz https://www.python.org/ftp/python/3.10.20/Python-3.10.20.tgz
+	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-3.10/Python-3.10.20.tgz -C /usr/src/python-3.10
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-3.10/Python-3.10.20 && ./configure --enable-optimizations"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-3.10/Python-3.10.20 && make altinstall"
+	$(Q)umount -l $(ROOTDIR)/dev || true
+	$(Q)# ensure python 3.10 is successfully built
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python3.10 ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip3.10 ]
+
 # Allow admin to be sudoers
 rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/sudoers.d
