@@ -238,6 +238,20 @@ fbc_sess=%s,fbc_fps=%s,fbc_latency=%s\n" \
     done
 }
 
+# Returns a stringified JSON array conforming to the following schema:
+# {
+#   id: string
+#   name: string
+#   type: "unset" | "pgpu" | "sriovVgpu" | "migBackedVgpu"
+#   supportTypes: ("pgpu" | "sriovVgpu" | "migBackedVgpu")[]
+#   pciAddress: string
+#   profileCountLimit: number | null
+#   status: "unassigned" | "idle" | "inUse"
+#   allocation: {
+#     current: number
+#     total: number
+#   }
+# }[]
 gpu_device_list()
 {
     local gpu_config="[]"
@@ -267,6 +281,20 @@ gpu_device_list()
         name=$(echo "$name" | xargs)
         pci_bus_id=$(echo "$pci_bus_id" | xargs)
 
+        local vgpu_support_out
+        vgpu_support_out=$($NVIDIA_SMI vgpu -s -i "$pci_bus_id" 2>/dev/null)
+
+        local support_types='["pgpu"]'
+        if echo "$vgpu_support_out" | grep -q "vGPU Type ID"; then
+            support_types=$(echo "$support_types" | jq -c '. + ["sriovVgpu"]')
+        fi
+
+        local mig_mode_out
+        mig_mode_out=$($NVIDIA_SMI -i "$pci_bus_id" --query-gpu=mig.mode.current --format=csv,noheader,nounits 2>/dev/null | xargs)
+        if [ "$mig_mode_out" = "Enabled" ] || [ "$mig_mode" = "Disabled" ]; then
+            support_types=$(echo "$support_types" | jq -c '. + ["migBackedVgpu"]')
+        fi
+
         local gpu_type
         gpu_type=$(echo "$gpu_config" | jq -r --arg id "$uuid" \
             'map(select(.id == $id)) | if length > 0 then .[0].type else "" end')
@@ -274,12 +302,14 @@ gpu_device_list()
         if [ -z "$gpu_type" ] || [ "$gpu_type" = "null" ]; then
             output=$(echo "$output" | jq -c \
                 --arg id "$uuid" --arg name "$name" --arg pciAddress "$pci_bus_id" \
-                '. + [{id:$id, name:$name, type:"unset", pciAddress:$pciAddress, status:"unassigned", allocation:null}]')
+                --argjson supportTypes "$support_types" \
+                '. + [{id:$id, name:$name, type:"unset", supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:null, status:"unassigned", allocation:null}]')
             continue
         fi
 
         local status="idle"
         local allocation
+        local profile_count_limit="null"
 
         if [ "$gpu_type" = "pgpu" ]; then
             local pci_bus pci_slot
@@ -319,16 +349,38 @@ gpu_device_list()
 
             allocation=$(jq -c -n --argjson c "$current" --argjson t "$total" \
                 '{current:$c, total:$t}')
+
+            if [ "$gpu_type" = "sriovVgpu" ]; then
+                local pci_sysfs
+                pci_sysfs=$(echo "$pci_bus_id" | tr '[:upper:]' '[:lower:]' | cut -c5-)
+                local totalvfs
+                totalvfs=$(cat "/sys/bus/pci/devices/${pci_sysfs}/sriov_totalvfs" 2>/dev/null | tr -d '[:space:]')
+                if echo "$totalvfs" | grep -qE '^[0-9]+$'; then
+                    profile_count_limit="$totalvfs"
+                fi
+            elif [ "$gpu_type" = "migBackedVgpu" ]; then
+                local mig_max
+                mig_max=$($NVIDIA_SMI mig -lgip -i "$pci_bus_id" 2>/dev/null | \
+                    grep -E '\|\s+[0-9]+\s+MIG\s+[0-9]+g\.' | \
+                    awk '{gsub(/\|/, ""); print $5}' | \
+                    sort -n | tail -1)
+                if echo "$mig_max" | grep -qE '^[0-9]+$'; then
+                    profile_count_limit="$mig_max"
+                fi
+            fi
+
         fi
 
         output=$(echo "$output" | jq -c \
             --arg id "$uuid" \
             --arg name "$name" \
             --arg type "$gpu_type" \
+            --argjson supportTypes "$support_types" \
             --arg pciAddress "$pci_bus_id" \
+            --argjson profileCountLimit "$profile_count_limit" \
             --arg status "$status" \
             --argjson allocation "$allocation" \
-            '. + [{id:$id, name:$name, type:$type, pciAddress:$pciAddress, status:$status, allocation:$allocation}]')
+            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:$profileCountLimit,, status:$status, allocation:$allocation}]')
     done <<< "$gpu_csv"
 
     echo "$output"
