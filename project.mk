@@ -42,3 +42,7 @@ PYTHON_VER := 3.9
 
 # pip contraints file
 PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
+
+# openstack next version
+NEXT_OPENSTACK_RELEASE := antelope
+NEXT_PYTHON_VER := 3.10
