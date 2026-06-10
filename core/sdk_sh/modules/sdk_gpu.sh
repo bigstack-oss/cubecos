@@ -282,16 +282,19 @@ gpu_device_list()
         pci_bus_id=$(echo "$pci_bus_id" | xargs)
 
         local vgpu_support_out
-        vgpu_support_out=$($NVIDIA_SMI vgpu -s -i "$pci_bus_id" 2>/dev/null)
+        vgpu_support_out=$($NVIDIA_SMI vgpu -s -v -i "$pci_bus_id" 2>/dev/null)
+
+        local profile_names
+        profile_names=$(echo "$vgpu_support_out" | grep "Name" | awk '{print $NF}')
 
         local support_types='["pgpu"]'
-        if echo "$vgpu_support_out" | grep -q "vGPU Type ID"; then
+        # SR-IOV profiles are named "<board> XX-YY" (e.g. "... DC-2B" and "DC-12Q")
+        if echo "$profile_names" | grep -qE '^[A-Za-z]+-[0-9]+[A-Za-z]+$'; then
             support_types=$(echo "$support_types" | jq -c '. + ["sriovVgpu"]')
         fi
 
-        local mig_mode_out
-        mig_mode_out=$($NVIDIA_SMI -i "$pci_bus_id" --query-gpu=mig.mode.current --format=csv,noheader,nounits 2>/dev/null | xargs)
-        if [ "$mig_mode_out" = "Enabled" ] || [ "$mig_mode" = "Disabled" ]; then
+        # MIG-backed profiles are named "<board> XX-YY-ZZ" (e.g. "... DC-1-2Q" and "DC-4-96A")
+        if echo "$profile_names" | grep -qE '^[A-Za-z]+-[0-9]+-[0-9]+[A-Za-z]+$'; then
             support_types=$(echo "$support_types" | jq -c '. + ["migBackedVgpu"]')
         fi
 
@@ -359,13 +362,18 @@ gpu_device_list()
                     profile_count_limit="$totalvfs"
                 fi
             elif [ "$gpu_type" = "migBackedVgpu" ]; then
-                local mig_max
-                mig_max=$($NVIDIA_SMI mig -lgip -i "$pci_bus_id" 2>/dev/null | \
+                local total_fb_memory_mib
+                total_fb_memory_mib=$($NVIDIA_SMI -i "$pci_bus_id" --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | xargs)
+
+                local min_slice_gib
+                min_slice_gib=$($NVIDIA_SMI mig -lgip -i "$pci_bus_id" 2>/dev/null | \
                     grep -E '\|\s+[0-9]+\s+MIG\s+[0-9]+g\.' | \
-                    awk '{gsub(/\|/, ""); print $5}' | \
-                    sort -n | tail -1)
-                if echo "$mig_max" | grep -qE '^[0-9]+$'; then
-                    profile_count_limit="$mig_max"
+                    awk '{gsub(/\|/, ""); print $6}' | \
+                    sort -n | head -1)
+
+                if echo "$total_fb_memory_mib" | grep -qE '^[0-9]+$' && echo "$min_slice_gib" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+                    # Number of total VRAM divided by the smallest MIG GPU instance VRAM size.
+                    profile_count_limit=$(awk -v total="$total_fb_memory_mib" -v slice="$min_slice_gib" 'BEGIN{printf "%d", total / (slice * 1024)}')
                 fi
             fi
 
@@ -380,7 +388,7 @@ gpu_device_list()
             --argjson profileCountLimit "$profile_count_limit" \
             --arg status "$status" \
             --argjson allocation "$allocation" \
-            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:$profileCountLimit,, status:$status, allocation:$allocation}]')
+            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:$profileCountLimit, status:$status, allocation:$allocation}]')
     done <<< "$gpu_csv"
 
     echo "$output"
