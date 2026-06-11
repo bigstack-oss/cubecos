@@ -184,11 +184,12 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python3.10 ]
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip3.10 ]
 
-# install openstack packages for the next version
+# set up the execution context for openstack antelope
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /opt/openstack-antelope
 	$(Q)chroot $(ROOTDIR) python3.10 -m venv /opt/openstack-antelope
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && pip install --upgrade pip wheel setuptools"
+	$(Q)cp -f $(NEXT_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)/opt/openstack-antelope/
 
 # Allow admin to be sudoers
 rootfs_install::
