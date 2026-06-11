@@ -45,5 +45,7 @@ PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(OPENSTACK_RELEASE)-pip-upper-cons
 
 # openstack next version
 NEXT_OPENSTACK_RELEASE := antelope
+NEXT_OPENSTACK_HOME_DIR := /opt/openstack-antelope
 NEXT_PYTHON_VER := 3.10
 NEXT_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(NEXT_OPENSTACK_HOME_DIR)/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
