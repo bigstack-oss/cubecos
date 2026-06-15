@@ -7,6 +7,8 @@ if [ -z "$PROG" ]; then
 fi
 
 GPU_CONFIG_FILE_PATH="/etc/cube/cos/gpu/config.json"
+SRIOV_PROFILE_NAME_REGEX="^[A-Za-z0-9]+-[0-9]+[A-Za-z]+$"
+MIG_PROFILE_NAME_REGEX="^[A-Za-z0-9]+-[0-9]+-[0-9]+[A-Za-z]+$"
 
 gpu_iommu_list()
 {
@@ -250,7 +252,7 @@ fbc_sess=%s,fbc_fps=%s,fbc_latency=%s\n" \
 #   allocation: {
 #     current: number
 #     total: number
-#   }
+#   } | null
 # }[]
 gpu_device_list()
 {
@@ -289,12 +291,12 @@ gpu_device_list()
 
         local support_types='["pgpu"]'
         # SR-IOV profiles are named "<board> XX-YY" (e.g. "... DC-2B" and "DC-12Q")
-        if echo "$profile_names" | grep -qE '^[A-Za-z]+-[0-9]+[A-Za-z]+$'; then
+        if echo "$profile_names" | grep -qE "$SRIOV_PROFILE_NAME_REGEX"; then
             support_types=$(echo "$support_types" | jq -c '. + ["sriovVgpu"]')
         fi
 
         # MIG-backed profiles are named "<board> XX-YY-ZZ" (e.g. "... DC-1-2Q" and "DC-4-96A")
-        if echo "$profile_names" | grep -qE '^[A-Za-z]+-[0-9]+-[0-9]+[A-Za-z]+$'; then
+        if echo "$profile_names" | grep -qE "$MIG_PROFILE_NAME_REGEX"; then
             support_types=$(echo "$support_types" | jq -c '. + ["migBackedVgpu"]')
         fi
 
@@ -304,9 +306,11 @@ gpu_device_list()
 
         if [ -z "$gpu_type" ] || [ "$gpu_type" = "null" ]; then
             output=$(echo "$output" | jq -c \
-                --arg id "$uuid" --arg name "$name" --arg pciAddress "$pci_bus_id" \
+                --arg id "$uuid" \
+                --arg name "$name" \
+                --arg pciAddress "$pci_bus_id" \
                 --argjson supportTypes "$support_types" \
-                '. + [{id:$id, name:$name, type:"unset", supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:null, status:"unassigned", allocation:null}]')
+                '. + [{ id: $id, name: $name, type:"unset", supportTypes: $supportTypes, pciAddress: $pciAddress, profileCountLimit: null, status: "unassigned", allocation: null }]')
             continue
         fi
 
@@ -350,8 +354,10 @@ gpu_device_list()
                 status="inUse"
             fi
 
-            allocation=$(jq -c -n --argjson c "$current" --argjson t "$total" \
-                '{current:$c, total:$t}')
+            allocation=$(jq -c -n \
+                --argjson current "$current" \
+                --argjson total "$total" \
+                '{ current: $current, total: $total }')
 
             if [ "$gpu_type" = "sriovVgpu" ]; then
                 local pci_sysfs
@@ -360,20 +366,6 @@ gpu_device_list()
                 totalvfs=$(cat "/sys/bus/pci/devices/${pci_sysfs}/sriov_totalvfs" 2>/dev/null | tr -d '[:space:]')
                 if echo "$totalvfs" | grep -qE '^[0-9]+$'; then
                     profile_count_limit="$totalvfs"
-                fi
-            elif [ "$gpu_type" = "migBackedVgpu" ]; then
-                local total_fb_memory_mib
-                total_fb_memory_mib=$($NVIDIA_SMI -i "$pci_bus_id" --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | xargs)
-
-                local min_slice_gib
-                min_slice_gib=$($NVIDIA_SMI mig -lgip -i "$pci_bus_id" 2>/dev/null | \
-                    grep -E '\|\s+[0-9]+\s+MIG\s+[0-9]+g\.' | \
-                    awk '{gsub(/\|/, ""); print $6}' | \
-                    sort -n | head -1)
-
-                if echo "$total_fb_memory_mib" | grep -qE '^[0-9]+$' && echo "$min_slice_gib" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
-                    # Number of total VRAM divided by the smallest MIG GPU instance VRAM size.
-                    profile_count_limit=$(awk -v total="$total_fb_memory_mib" -v slice="$min_slice_gib" 'BEGIN{printf "%d", total / (slice * 1024)}')
                 fi
             fi
 
@@ -394,19 +386,27 @@ gpu_device_list()
     echo "$output"
 }
 
+# Returns a stringified JSON object conforming to the following schema:
+# {
+#   sriov: Profile[] | null
+#   migBacked: Profile[] | null
+# }
+#
+# where Profile is:
+# {
+#   id: number
+#   name: string
+#   vramMiB: number
+#   count: number
+#   alias: string | null
+#   vmCountLimit: number | null
+# }
 gpu_vgpu_profile_list()
 {
-    local gpu_id=""
-
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -gpuId) gpu_id="$2"; shift 2 ;;
-            *) shift ;;
-        esac
-    done
+    local gpu_id="$1"
 
     if [ -z "$gpu_id" ]; then
-        echo "Error: -gpuId is required" >&2
+        echo "Error: gpuId is required" >&2
         return 1
     fi
 
@@ -423,8 +423,100 @@ gpu_vgpu_profile_list()
         return 1
     fi
 
-    echo "$gpu_config" | jq -c --arg id "$gpu_id" \
-        'map(select(.id == $id)) | if length > 0 then .[0].profiles else null end'
+    local config_profiles
+    config_profiles=$(echo "$gpu_config" | jq -c --arg id "$gpu_id" \
+        'map(select(.id == $id)) | if length > 0 then (.[0].profiles // []) else [] end')
+
+    # SR-IOV vGPU profiles
+    local sriov_profiles="[]"
+
+    # Maps a MIG GPU Instance Profile ID -> MIG-backed vGPU type name ("XX-YY-ZZ"),
+    # used below to name the corresponding mig -lgip profile.
+    local mig_profile_name_map="{}"
+
+    local vgpu_output
+    vgpu_output=$($NVIDIA_SMI vgpu -s -v -i "$gpu_id" 2>/dev/null)
+
+    local vgpu_type_id_hex
+    for vgpu_type_id_hex in $(echo "$vgpu_output" | grep "vGPU Type ID" | awk '{print $NF}'); do
+        # `vgpu_type_id_hex` is a number in hex format (e.g. 0x619).
+        # Convert it to a decimal number and store it in `decimal_id`.
+        local decimal_id
+        decimal_id=$(awk -v v="$vgpu_type_id_hex" 'BEGIN{print strtonum(v)}')
+
+        local block profile_name fb_memory_mib gpu_instance_profile_id
+        block=$(echo "$vgpu_output" | grep -A 20 "vGPU Type ID *: $vgpu_type_id_hex\$")
+        # `Name                              : NVIDIA RTX Pro 6000 Blackwell DC-1-24Q`
+        profile_name=$(echo "$block" | grep "Name" | head -1 | awk '{print $NF}')
+        # `FB Memory                         : 24576 MiB`
+        fb_memory_mib=$(echo "$block" | grep "FB Memory" | head -1 | awk '{print $4}')
+        # `GPU Instance Profile ID           : 47`
+        # This column is present only for MIG-backed vGPUs and does not exist for SR-IOV vGPUs.
+        gpu_instance_profile_id=$(echo "$block" | grep "GPU Instance Profile ID" | head -1 | awk '{print $NF}')
+
+        # MIG-backed vGPU types (name "XX-YY-ZZ") are already covered by the `mig -lgip` command below.
+        # Record their name for later use and skip.
+        if echo "$profile_name" | grep -qE "$MIG_PROFILE_NAME_REGEX"; then
+            if [ -n "$gpu_instance_profile_id" ]; then
+                mig_profile_name_map=$(echo "$mig_profile_name_map" | jq -c \
+                    --arg id "$gpu_instance_profile_id" \
+                    --arg name "$profile_name" \
+                    '. + {($id): $name}')
+            fi
+            continue
+        fi
+        if ! echo "$profile_name" | grep -qE "$SRIOV_PROFILE_NAME_REGEX"; then
+            # Unknown/unhandled profile name format.
+            continue
+        fi
+
+        sriov_profiles=$(echo "$sriov_profiles" | jq -c \
+            --argjson id "$decimal_id" \
+            --arg name "$profile_name" \
+            --argjson vram_mib "$fb_memory_mib" \
+            '. + [{ id: $id, name: $name, vramMiB: $vram_mib, vmCountLimit: null }]')
+    done
+
+    # MIG GPU instance profiles
+    local mig_profiles="[]"
+    local mig_output
+    mig_output=$($NVIDIA_SMI mig -lgip -i "$gpu_id" 2>/dev/null)
+
+    while read -r _gpu_idx _mig_text profile_name profile_id instances memory_gib _rest; do
+        [ -z "$profile_id" ] && continue
+
+        local instances_total
+        instances_total=${instances#*/}
+
+        local vram_mib
+        vram_mib=$(awk -v g="$memory_gib" 'BEGIN{printf "%.2f", g * 1024}')
+
+        local name
+        name=$(echo "$mig_profile_name_map" | jq -r \
+            --arg id "$profile_id" \
+            --arg fallback "MIG $profile_name" \
+            '.[$id] // $fallback')
+
+        mig_profiles=$(echo "$mig_profiles" | jq -c \
+            --argjson id "$profile_id" \
+            --arg name "$name" \
+            --argjson vram "$vram_mib" \
+            --argjson vmCountLimit "$instances_total" \
+            '. + [{ id: $id, name: $name, vramMiB: $vram, vmCountLimit: $vmCountLimit }]')
+    done <<< "$(echo "$mig_output" | grep -E '^\|\s+[0-9]+\s+MIG\s+[0-9]+g\.' | tr -d '|')"
+
+    jq -c -n \
+        --argjson sriovProfiles "$sriov_profiles" \
+        --argjson migProfiles "$mig_profiles" \
+        --argjson configProfiles "$config_profiles" \
+        '
+        def withCountAndAlias:
+            map(. as $profile
+                | (($configProfiles | map(select(.id == $profile.id)) | .[0]) // {}) as $configProfile
+                | $profile + { count: ($configProfile.count // 0), alias: ($configProfile.alias // null) });
+
+        { sriov: ($sriovProfiles | withCountAndAlias), migBacked: ($migProfiles | withCountAndAlias) }
+        '
 }
 
 gpu_pgpu_attached_instance_get()
