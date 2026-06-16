@@ -6,8 +6,8 @@
 # rpmfind.net is often not responsive
 # MARIADB_URL := https://rpmfind.net/linux/centos-stream/9-stream/AppStream/x86_64/os/Packages
 
-MARIADB_VER := 10.6.26-1.el9
-GALERA_VER := 26.4.26-1.el9
+MARIADB_VER := 10.6.27-1.el9
+GALERA_VER := 26.4.27-1.el9
 MARIADB_URL := https://mirror.mariadb.org/yum/10.6/rocky9-amd64/rpms
 
 # Official MariaDB package list
