@@ -1,4 +1,4 @@
-{% load i18n branding %}
+{% load i18n branding static %}
 <!DOCTYPE html>
 <html lang="en" xml:lang="en" class="login-cube">
   <head>
@@ -13,13 +13,13 @@
   </head>
   <body id="splash" ng-app='horizon.app' class="login-cube">
     <a href="http://www.bigstack.co/" id="bigstack">
-      <img src="../../static/themes/cube/images/bigstack-logo.png" alt="Bigstack" />
+      <img src="{% static 'themes/cube/images/bigstack-logo.png' %}" alt="Bigstack Logo" />
     </a>
     <div class="container">
       <div class="row-fluid">
         <div class="span12">
           <div id="brand">
-            <img src="../../static/themes/cube/images/cube-logo.png" width="250" height="83" style="margin:0" fetchpriority="high" >
+            <img src="{% static 'themes/cube/images/cube-logo.png' %}" width="250" height="83" style="margin:0" fetchpriority="high" >
           </div><!--/#brand-->
         </div><!--/.span*-->
         {% include 'auth/_login.html' %}
