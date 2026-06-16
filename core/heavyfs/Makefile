@@ -176,6 +176,7 @@ $(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH)" -d "$(ROOTFS_PIP_DL_FROM)",$(R
 
 # install python 3.10 for openstack antelope
 rootfs_install::
+	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
 	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
 	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
 	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
