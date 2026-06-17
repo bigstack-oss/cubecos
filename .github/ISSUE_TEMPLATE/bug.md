@@ -52,3 +52,11 @@ Insert content here.
  - OS: [e.g. iOS8.1]
  - Browser [e.g. stock browser, safari]
  - Version [e.g. 22]
+
+## Output artifacts (Definition of Done)
+
+> Beyond code, docs, and config changes, completing this issue must also deliver:
+
+- [ ] **Handbook knowledge update** — land the durable, team-readable knowledge from this
+      work into the bigstack-handbook cubecos kb (`kb/cubecos/…`) via
+      `/bigstack-core:save-to-handbook` (Topic / Runbook / Known-issue / ADR as fits).

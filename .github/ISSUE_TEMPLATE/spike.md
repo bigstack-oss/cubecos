@@ -26,3 +26,11 @@ TBD
 > Summarize the findings and the conclusion drawn from the investigation.
 
 TBD
+
+## Output artifacts (Definition of Done)
+
+> Beyond code, docs, and config changes, completing this issue must also deliver:
+
+- [ ] **Handbook knowledge update** — land the durable, team-readable knowledge from this
+      work into the bigstack-handbook cubecos kb (`kb/cubecos/…`) via
+      `/bigstack-core:save-to-handbook` (Topic / Runbook / Known-issue / ADR as fits).

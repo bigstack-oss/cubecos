@@ -30,3 +30,11 @@ As a **[type of user]**, I want **[some goal]** so that **[some reason]**.
 >| 3 | Medium | Moderate workload; requires some focus, but risks are well-managed.
 >| 5 | High | High complexity; difficult to implement, requiring significant time and effort.
 >| 8 | Very High | Extreme complexity or high uncertainty. If possible, this should be divided into multiple user stories.
+
+## Output artifacts (Definition of Done)
+
+> Beyond code, docs, and config changes, completing this issue must also deliver:
+
+- [ ] **Handbook knowledge update** — land the durable, team-readable knowledge from this
+      work into the bigstack-handbook cubecos kb (`kb/cubecos/…`) via
+      `/bigstack-core:save-to-handbook` (Topic / Runbook / Known-issue / ADR as fits).
