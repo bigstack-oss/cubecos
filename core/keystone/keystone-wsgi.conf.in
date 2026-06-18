@@ -2,9 +2,12 @@ Listen @BIND_ADDR@5000
 Listen @BIND_ADDR@5443
 
 <VirtualHost *:5000>
-    WSGIDaemonProcess keystone-public processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP}
+    # ADDED: python-home points to the root of your venv, matching 'source /opt/openstack-antelope/bin/activate'
+    WSGIDaemonProcess keystone-public processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP} python-home=/opt/openstack-antelope
     WSGIProcessGroup keystone-public
-    WSGIScriptAlias / /usr/bin/keystone-wsgi-public
+    
+    # MODIFIED: Changed path from /usr/bin to your venv bin path
+    WSGIScriptAlias / /opt/openstack-antelope/bin/keystone-wsgi-public
     WSGIApplicationGroup %{GLOBAL}
     WSGIPassAuthorization On
     LimitRequestBody 114688
@@ -14,7 +17,8 @@ Listen @BIND_ADDR@5443
     ErrorLog /var/log/httpd/keystone.log
     CustomLog /var/log/httpd/keystone_access.log combined
 
-    <Directory /usr/bin>
+    # MODIFIED: Updated directory block to grant Apache permissions to read from the venv path instead of /usr/bin
+    <Directory /opt/openstack-antelope/bin>
         <IfVersion >= 2.4>
             Require all granted
         </IfVersion>
@@ -26,9 +30,12 @@ Listen @BIND_ADDR@5443
 </VirtualHost>
 
 <VirtualHost *:5443>
-    WSGIDaemonProcess keystone-ssl processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP}
-    WSGIProcessGroup keystone-ssl;
-    WSGIScriptAlias / /usr/bin/keystone-wsgi-public
+    # ADDED: python-home points to the root of your venv
+    WSGIDaemonProcess keystone-ssl processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP} python-home=/opt/openstack-antelope
+    WSGIProcessGroup keystone-ssl
+    
+    # MODIFIED: Changed path from /usr/bin to your venv bin path
+    WSGIScriptAlias / /opt/openstack-antelope/bin/keystone-wsgi-public
     WSGIApplicationGroup %{GLOBAL}
     WSGIPassAuthorization On
 
@@ -43,7 +50,8 @@ Listen @BIND_ADDR@5443
     ErrorLog /var/log/httpd/keystone-ssl.log
     CustomLog /var/log/httpd/keystone-ssl_access.log combined
 
-    <Directory /usr/bin>
+    # MODIFIED: Updated directory block to match your venv path
+    <Directory /opt/openstack-antelope/bin>
         <IfVersion >= 2.4>
             Require all granted
         </IfVersion>
@@ -54,7 +62,8 @@ Listen @BIND_ADDR@5443
     </Directory>
 </VirtualHost>
 
-Alias /identity /usr/bin/keystone-wsgi-public
+# MODIFIED: Updated Alias entry point for /identity fallback mapping
+Alias /identity /opt/openstack-antelope/bin/keystone-wsgi-public
 <Location /identity>
     SetHandler wsgi-script
     Options +ExecCGI
