@@ -79,7 +79,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-nfs-ganesha5
 	$(Q)chroot $(ROOTDIR) sed \
-		-i '/\[centos-nfs-ganesha-5-source\]/,/^$/ {s|^baseurl=.*|baseurl=https://mirror.stream.centos.org/SIGs/9-stream/storage/source/nfsganesha-5/|}' \
+		-i '/\[centos-nfs-ganesha-5-source\]/,/^$$/ {s|^baseurl=.*|baseurl=https://mirror.stream.centos.org/SIGs/9-stream/storage/source/nfsganesha-5/|}' \
 		/etc/yum.repos.d/CentOS-NFS-Ganesha-5.repo
 
 # Disable module mariadb from CentOS Stream 9 - AppStream repo to avoid dependency conflicts after switching to MariaDB official repo
