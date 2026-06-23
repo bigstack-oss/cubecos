@@ -200,6 +200,11 @@ include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 $(shell for r in $(LOCKED_DNF); do echo $$r >> $(LOCKED_RPMS); done)
 $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
 
+# Component artifacts baked into the rootfs — prereqs so a component rebuild
+# forces a rootfs rebuild (with touch $@ below). Scoped to HEAVY_COMPONENTS, not
+# core/main (circular). Not covered: remote dnf/pip + bare-binary/dir deliverables.
+HEAVY_DELIVERABLES := $(wildcard $(foreach m,$(HEAVY_COMPONENTS),$(TOP_BLDDIR)/core/$(m)/*.rpm $(TOP_BLDDIR)/core/$(m)/*.tgz))
+
 ifneq ($(RC),)
 heavyfs_install::
 	$(Q)cp -f /etc/resolv.conf $(HEAVYFS)/etc/resolv.conf
@@ -219,12 +224,17 @@ rootfs.cgz:
 	$(Q)umount pkg
 	$(Q)rmdir pkg
 
-$(HEAVYFS): rootfs.cgz $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
+$(HEAVYFS): rootfs.cgz $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
 	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" heavyfs_install' $< $@, "  GEN     $@")
 	$(Q)cp -f /etc/resolv.conf $@/etc/resolv.conf
+	# mountrootfs leaves the dir's mtime frozen from the base rootfs; touch so it
+	# isn't rebuilt every run.
+	$(Q)touch $@
 else
-$(HEAVYFS): $(HEX_FULL_ROOTFS) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
+$(HEAVYFS): $(HEX_FULL_ROOTFS) $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
 	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
+	# touch: advance frozen dir mtime (see above).
+	$(Q)touch $@
 endif
 
 rootfs_install::

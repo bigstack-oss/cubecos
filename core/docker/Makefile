@@ -31,7 +31,7 @@ run-registry: $(REGISTRY_TAR)
 
 .PHONY: rm-registry
 rm-registry:
-	$(Q)podman rm -ivf registry >/dev/null
+	$(Q)podman rm -ivf registry $(QEND)
 
 .PHONY .IGNORE: push-image
 push-image:

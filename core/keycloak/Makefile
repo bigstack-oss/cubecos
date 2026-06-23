@@ -75,6 +75,8 @@ $(RPMBUILD_SOURCES): $(RPMBUILD_DIR) $(GIT_DIR) version
 	$(Q)mkdir -p $(RPMBUILD_DIR)/SOURCES
 	$(Q)mv $@.tgz $(RPMBUILD_DIR)/SOURCES/$(PKG_NAME)-`cat version`.tar.gz
 	$(Q)rm -r ./source
+	# touch so SOURCES's mtime advances; else remade every run into RPMS/login.rpm.
+	$(Q)touch $@
 
 # build the login rpm package
 $(RPMBUILD_RPMS): $(RPMBUILD_SOURCES) build_number keycloak_version
@@ -82,7 +84,7 @@ $(RPMBUILD_RPMS): $(RPMBUILD_SOURCES) build_number keycloak_version
 	$(Q)mkdir -p $(RPMBUILD_DIR)/RPMS/x86_64
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
-	$(call RUN_CMD_SILENT, \
+	$(call RUN_CMD_TIMED, \
 		cd $(GIT_DIR) && \
 		nvm use $(QEND) && \
 		cd - && \

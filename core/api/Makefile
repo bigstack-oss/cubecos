@@ -56,6 +56,9 @@ $(RPMBUILD_RPMS): $(RPMBUILD_SOURCES) build_number
 	$(call RUN_CMD_TIMED, \
 		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(RPMBUILD_DIR)" --define "version `cat version`" --define "build_number `cat build_number`" $(RPMBUILD_DIR)/SPECS/$(PKG_NAME).spec,\
 		"  BUILD   $(PKG_NAME)-`cat version`-1.el9.`cat build_number`.x86_64.rpm")
+	# rpmbuild writes into RPMS/x86_64/, so RPMS's own mtime never advances and it
+	# is remade every run; touch advances it (as SOURCES does above).
+	$(Q)touch $@
 
 # move the built rpm back to the local directory
 $(API_RPM): $(RPMBUILD_RPMS)
