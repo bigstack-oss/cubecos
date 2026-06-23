@@ -213,10 +213,6 @@ rootfs_install::
 	$(Q)echo "blacklist usb_storage" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 	$(Q)echo "install usb_storage /bin/true" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 
-# enable dns in the rootfs for downloading packages
-rootfs_install::
-	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-
 # note: install skyline pkgs first since it doesn't follow yoga constraint
 HEAVY_COMPONENTS += nvidia
 HEAVY_COMPONENTS += yq api ui skyline nginx
@@ -233,10 +229,6 @@ $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
 # forces a rootfs rebuild (with touch $@ below). Scoped to HEAVY_COMPONENTS, not
 # core/main (circular). Not covered: remote dnf/pip + bare-binary/dir deliverables.
 HEAVY_DELIVERABLES := $(wildcard $(foreach m,$(HEAVY_COMPONENTS),$(TOP_BLDDIR)/core/$(m)/*.rpm $(TOP_BLDDIR)/core/$(m)/*.tgz))
-
-# clean up dns configurations after downloading packages
-rootfs_install::
-	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 ifneq ($(RC),)
 heavyfs_install::
