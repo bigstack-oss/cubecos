@@ -549,29 +549,18 @@ gpu_pgpu_attached_instance_get()
 
 gpu_resource_set()
 {
-    local gpu_uuid="$1"
-    shift
+    local gpu_id="$1"
+    local new_type="$2"
+    local profiles="$3"
 
-    local new_type=""
-    local profiles=""
-    local has_profiles_option=0
-
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -type) new_type="$2"; shift 2 ;;
-            -profiles) profiles="$2"; has_profiles_option=1; shift 2 ;;
-            *) echo "Error: unknown option '$1'" >&2; exit 1 ;;
-        esac
-    done
-
-    if [ -z "$gpu_uuid" ]; then
-        echo "Error: GPU UUID is required" >&2
-        exit 1
+    if [ -z "$gpu_id" ]; then
+        echo "Error: gpu_id is required" >&2
+        return 1
     fi
 
     if [ -z "$new_type" ]; then
-        echo "Error: -type is required" >&2
-        exit 1
+        echo "Error: new_type is required" >&2
+        return 1
     fi
 
     case "$new_type" in
@@ -582,13 +571,25 @@ gpu_resource_set()
             ;;
     esac
 
-    if [ "$new_type" = "pgpu" ] && [ "$has_profiles_option" = "1" ]; then
-        echo "Error: -profiles is not allowed when type is pgpu" >&2
+    if [ "$new_type" = "pgpu" ] && [ -n "$profiles" ]; then
+        echo "Error: profiles is not allowed when new_type is pgpu" >&2
         exit 1
     fi
+    
+    if [[ "$new_type" == "sriovVgpu" || "$new_type" == "migBackedVgpu" ]]; then
+        if [ -z "$profiles" ]; then
+            echo "Error: profiles is required when new_type is sriovVgpu or migBackedVgpu" >&2
+            exit 1
+        fi
+        
+        echo "TODO: perform profiles argument validation."
+        # Schema: an array of profiles `{ id: number, count: number }[]`
+        # In addition to the format, we must also validate the existence
+        # and capacity constraints (for MIG-backed) of the provided profiles.
+    fi
 
-    if ! $NVIDIA_SMI --query-gpu=uuid --format=csv,noheader,nounits 2>/dev/null | grep -qF "$gpu_uuid"; then
-        echo "Error: GPU UUID '$gpu_uuid' not found" >&2
+    if ! $NVIDIA_SMI --query-gpu=uuid --format=csv,noheader,nounits 2>/dev/null | grep -qF "$gpu_id"; then
+        echo "Error: GPU UUID '$gpu_id' not found" >&2
         exit 1
     fi
 
@@ -598,21 +599,20 @@ gpu_resource_set()
     fi
 
     local gpu_config="[]"
-    local raw
-    raw=$(cat "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
-    if echo "$raw" | jq -e 'type == "array"' >/dev/null 2>&1; then
-        gpu_config="$raw"
+    local raw_config
+    raw_config=$(cat "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
+    if echo "$raw_config" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        gpu_config="$raw_config"
     fi
 
     local current_type
-    current_type=$(echo "$gpu_config" | jq -r --arg id "$gpu_uuid" \
+    current_type=$(echo "$gpu_config" | jq -r --arg id "$gpu_id" \
         'map(select(.id == $id)) | if length > 0 then .[0].type else "unset" end')
 
     local pci_bus_id
-    pci_bus_id=$($NVIDIA_SMI --query-gpu=uuid,pci.bus_id --format=csv,noheader,nounits 2>/dev/null | \
-        awk -F',' -v uuid="$gpu_uuid" 'index($1, uuid) {print $2}' | xargs)
+    pci_bus_id=$($NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null)
     if [ -z "$pci_bus_id" ]; then
-        echo "Error: could not get PCI bus ID for GPU $gpu_uuid" >&2
+        echo "Error: could not get PCI bus ID for GPU $gpu_id" >&2
         exit 1
     fi
 
@@ -625,7 +625,7 @@ gpu_resource_set()
             for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
                 if virsh dumpxml "$vm_id" 2>/dev/null | \
                     grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
-                    echo "Error: GPU card $gpu_uuid is in-use" >&2
+                    echo "Error: GPU card $gpu_id is in-use" >&2
                     exit 1
                 fi
             done
@@ -634,16 +634,16 @@ gpu_resource_set()
         if [ "$current_type" = "sriovVgpu" ]; then
             unset_sriov_vgpu "$pci_bus_id"
         elif [ "$current_type" = "migBackedVgpu" ]; then
-            unset_mig_backed_vgpu "$gpu_uuid"
+            unset_mig_backed_vgpu "$gpu_id"
         fi
 
         local new_config
         new_config=$(echo "$gpu_config" | jq -c \
-            --arg id "$gpu_uuid" \
+            --arg id "$gpu_id" \
             'map(select(.id != $id)) + [{id:$id, type:"pgpu", profiles:null}]')
 
         echo "$new_config" > "$GPU_CONFIG_FILE_PATH"
-        echo "Successfully update GPU $gpu_uuid to pgpu"
+        echo "Successfully update GPU $gpu_id to pgpu"
     else
         echo "Error: type '$new_type' is not yet implemented" >&2
         exit 1

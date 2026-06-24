@@ -21,6 +21,17 @@ Commit(bool modified, int dryLevel)
     }
 
     if (access(GPU_CONFIG_FILE, F_OK) != 0) {
+        /* Data in `config.json` is an array with the following data structure:
+        {
+          id: string
+          type: 'pgpu' | 'sriovVgpu' | 'migBackedVgpu'
+          profiles: {
+            id: number
+            count: number
+            alias: string
+          }[] | null
+        }
+        */
         HexUtilSystemF(0, 0, "echo '[]' > %s", GPU_CONFIG_FILE);
     }
 
