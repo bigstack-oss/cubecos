@@ -220,10 +220,11 @@ hex_cli_LIBS += $(PROJ_LIBDIR)/libcube_sdk.a
 
 PROGRAMS += hex_cli
 
-hex_crashd_SRCS = $(HEX_TOPDIR)/src/hex_crashd/crash_main.c
-hex_crashd_LIBS = $(HEX_SDK_LIB)
-hex_crashd_LDLIBS = $(HEX_SDK_LDLIBS)
-PROGRAMS += hex_crashd
+# NOTE: do not relist hex_crashd here. The hex submodule already builds it
+# (hex/src/Makefile: SUBDIRS += hex_crashd) with the same HEX_SDK libs and
+# installs it via hex_crashd.mk (included by hex_sdk.mk). Relisting it with an
+# absolute _SRCS path built it a second time AND, because OBJS = SRCS-with-.o,
+# wrote crash_main.o/.d into hex/src/hex_crashd (source-tree pollution).
 
 # Install hex command post scripts
 $(call PROJ_INSTALL_SCRIPT,,$(SRCDIR)/post-scripts/hex_translate/translate.post.sh,./etc/hex_translate/post.d/)
