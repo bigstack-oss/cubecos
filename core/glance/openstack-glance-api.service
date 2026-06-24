@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenStack Image Service (code-named Glance) API server
+After=syslog.target network.target
+
+[Service]
+LimitNOFILE=131072
+LimitNPROC=131072
+Type=simple
+User=glance
+ExecStart=/usr/bin/glance-api
+PrivateTmp=true
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

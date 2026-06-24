@@ -1,0 +1,38 @@
+{
+    "namespace": "OS::Compute::Libvirt",
+    "display_name": "libvirt Driver Options",
+    "description": "The libvirt compute driver options.  \n\nThese are properties that affect the libvirt compute driver and may be specified on flavors and images.  For a list of all hypervisors, see here: https://wiki.openstack.org/wiki/HypervisorSupportMatrix.",
+    "visibility": "public",
+    "protected": true,
+    "resource_type_associations": [
+        {
+            "name": "OS::Glance::Image",
+            "prefix": "hw_"
+        },
+        {
+            "name": "OS::Nova::Flavor",
+            "prefix": "hw:"
+        }
+    ],
+    "properties": {
+        "serial_port_count": {
+            "title": "Serial Port Count",
+            "description": "Specifies the count of serial ports that should be provided. If hw:serial_port_count is not set in the flavor's extra_specs, then any count is permitted. If hw:serial_port_count is set, then this provides the default serial port count. It is permitted to override the default serial port count, but only with a lower value.",
+            "type": "integer",
+            "minimum": 0
+        },
+        "boot_menu": {
+            "title": "Boot Menu",
+            "description": "If true, enables the BIOS bootmenu. In cases where both the image metadata and Extra Spec are set, the Extra Spec setting is used. This allows for flexibility in setting/overriding the default behavior as needed.",
+            "type": "string",
+            "enum": ["true", "false"]
+        },
+        "mem_encryption": {
+            "title": "Hardware Memory Encryption",
+            "description": "Enables encryption of guest memory at the hardware level, if there are compute hosts available which support this. See https://docs.openstack.org/nova/latest/admin/configuration/hypervisor-kvm.html#amd-sev-secure-encrypted-virtualization for details.",
+            "type": "string",
+            "enum": ["true", "false"]
+        }
+    },
+    "objects": []
+}
