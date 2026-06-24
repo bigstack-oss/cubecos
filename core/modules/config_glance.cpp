@@ -342,6 +342,7 @@ SetDatabaseConnection(
     uri << "mysql+pymysql://glance:" << dbPass << "@" << sharedId << "/glance";
 
     config["database"]["connection"] = uri.str();
+    config["database"]["mysql_wsrep_sync_wait"] = "1";
 }
 
 /**
