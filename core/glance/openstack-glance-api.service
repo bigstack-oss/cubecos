@@ -7,7 +7,8 @@ LimitNOFILE=131072
 LimitNPROC=131072
 Type=simple
 User=glance
-ExecStart=/usr/bin/glance-api
+# Point ExecStart to your venv binary and specify the configuration layout explicitly
+ExecStart=/opt/openstack-antelope/bin/glance-api --config-file /etc/glance/glance-api.conf
 PrivateTmp=true
 Restart=on-failure
 

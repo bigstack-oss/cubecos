@@ -5,7 +5,8 @@ After=syslog.target network.target
 [Service]
 Type=simple
 User=glance
-ExecStart=/usr/bin/glance-scrubber --daemon
+# Point ExecStart to your venv binary and specify the configuration layout explicitly
+ExecStart=/opt/openstack-antelope/bin/glance-scrubber --daemon --config-file /etc/glance/glance-scrubber.conf
 PrivateTmp=true
 Restart=on-failure
 
