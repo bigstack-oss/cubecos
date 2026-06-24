@@ -1,0 +1,43 @@
+{
+    "namespace": "OS::Compute::CPUPinning",
+    "display_name": "CPU Pinning",
+    "description": "This provides the preferred CPU pinning and CPU thread pinning policy to be used when pinning vCPU of the guest to pCPU of the host. See http://docs.openstack.org/admin-guide/compute-numa-cpu-pinning.html",
+    "visibility": "public",
+    "protected": true,
+    "resource_type_associations": [
+        {
+            "name": "OS::Glance::Image",
+            "prefix": "hw_"
+        },
+        {
+            "name": "OS::Cinder::Volume",
+            "prefix": "hw_",
+            "properties_target": "image"
+        },
+        {
+            "name": "OS::Nova::Flavor",
+            "prefix": "hw:"
+        }
+    ],
+    "properties": {
+        "cpu_policy": {
+            "title": "CPU Pinning policy",
+            "description": "Type of CPU pinning policy.",
+            "type": "string",
+            "enum": [
+              "shared",
+              "dedicated"
+            ]
+        },
+        "cpu_thread_policy": {
+            "title": "CPU Thread Pinning Policy.",
+            "description": "Type of CPU thread pinning policy.",
+            "type": "string",
+            "enum": [
+                "isolate",
+                "prefer",
+                "require"
+            ]
+        }
+    }
+}

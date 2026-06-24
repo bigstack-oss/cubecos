@@ -1,0 +1,9 @@
+/var/log/glance/*.log {
+    weekly
+    rotate 14
+    size 10M
+    missingok
+    compress
+    minsize 100k
+    copytruncate
+}

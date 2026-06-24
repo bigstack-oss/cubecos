@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenStack Image Service deferred image deletion service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=glance
+ExecStart=/usr/bin/glance-scrubber --daemon
+PrivateTmp=true
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
