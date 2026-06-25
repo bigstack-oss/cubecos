@@ -29,10 +29,10 @@ migrate_keystone_db()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "keystone-manage db_sync" keystone
+        su -s /bin/sh -c "/opt/openstack-antelope/bin/keystone-manage db_sync" keystone
 
-        keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
-        keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
+        /opt/openstack-antelope/bin/keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
+        /opt/openstack-antelope/bin/keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
         local id_url=$($MYSQL -u root -D keystone -e "SELECT id,url from endpoint where interface='admin'" | awk '/35357/{print $1" "$2}')
         local id=$(echo $id_url | awk '{print $1}')
         local url=$(echo $id_url | awk '{print $2}'| sed 's/35357/5000/g')
