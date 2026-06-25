@@ -14,7 +14,7 @@ if [ -f /etc/mongodb/admin-access.sh ] ; then
     source /etc/mongodb/admin-access.sh
 fi
 
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+PATH=/opt/openstack-antelope/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 
 # service status request timeout
 SRVTO=60
