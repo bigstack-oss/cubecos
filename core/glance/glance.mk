@@ -49,6 +49,8 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/glance/openstack-glance-scrubber.service $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/openstack-glance.logrotate $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/glance-sudoers $(ROOTDIR)/tmp/glance/
+	$(Q)cp -f $(COREDIR)/glance/glance_cinder_store.filters $(ROOTDIR)/tmp/glance/
+	$(Q)cp -f $(COREDIR)/glance/os-brick.filters $(ROOTDIR)/tmp/glance/
 
 # install system directories and files
 rootfs_install::
@@ -71,12 +73,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/log/glance
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/glance/glance-sudoers /etc/sudoers.d/glance
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/glance/rootwrap.d
-	$(Q)chroot $(ROOTDIR) bash -c "for filter in /usr/share/os-brick/rootwrap/*.filters; do \
-			test -f $$filter && ln -s $$filter /etc/glance/rootwrap.d \
-		done \
-		for filter in /usr/share/glance_store/*.filters; do \
-			test -f $$filter && ln -s $$filter /etc/glance/rootwrap.d \
-		done"
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance_cinder_store.filters /etc/glance/rootwrap.d
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/os-brick.filters /etc/glance/rootwrap.d
 
 # adjust file ownerships and permissions
 rootfs_install::
@@ -90,6 +88,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/glance/schema-image.json
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/glance/metadefs/*.json
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/logrotate.d/openstack-glance
+	$(Q)chroot $(ROOTDIR) chown root:root /etc/glance/rootwrap.d/glance_cinder_store.filters
+	$(Q)chroot $(ROOTDIR) chown root:root /etc/glance/rootwrap.d/os-brick.filters
 	$(Q)chroot $(ROOTDIR) chmod 0755 /var/lib/glance
 	$(Q)chroot $(ROOTDIR) chown glance:nobody /var/lib/glance
 	$(Q)chroot $(ROOTDIR) chmod 0750 /var/log/glance
