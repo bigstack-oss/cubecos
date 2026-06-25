@@ -63,7 +63,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance-image-import.conf.sample /etc/glance/glance-image-import.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-rootwrap.conf /etc/glance/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/schema-image.json /etc/glance/schema-image.json
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/metadefs/*.json /etc/glance/metadefs/
+	$(Q)chroot $(ROOTDIR) bash -c "install -p -D -m 640 /tmp/glance/metadefs/*.json /etc/glance/metadefs/"
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-api.service /usr/lib/systemd/system/openstack-glance-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-scrubber.service /usr/lib/systemd/system/openstack-glance-scrubber.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance.logrotate /etc/logrotate.d/openstack-glance
