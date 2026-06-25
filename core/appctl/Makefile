@@ -28,11 +28,11 @@ $(GIT_DIR):
 	$(Q)cd $@ && git lfs pull
 
 version: $(GIT_DIR)
-	$(Q)head -n 1 $(GIT_DIR)/VERSION >> version
+	$(Q)head -n 1 $(GIT_DIR)/VERSION > version
 
 build_number: $(GIT_DIR)
 	$(Q)cd $(GIT_DIR) && \
-		git rev-parse --short HEAD >> ../build_number
+		git rev-parse --short HEAD > ../build_number
 
 # prepare the rpm build directory
 $(RPMBUILD_DIR):
@@ -40,7 +40,8 @@ $(RPMBUILD_DIR):
 	$(Q)cd $(RPMBUILD_DIR) && mkdir BUILD SRPMS SPECS
 
 # make the source tarball
-$(RPMBUILD_SOURCES): $(RPMBUILD_DIR) $(GIT_DIR) version
+# RPMBUILD_DIR order-only: rule writes rpmbuild/SOURCES.tgz into it (bumps dir mtime).
+$(RPMBUILD_SOURCES): $(GIT_DIR) version | $(RPMBUILD_DIR)
 	$(Q)mkdir ./source
 	$(Q)cp -r $(GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)

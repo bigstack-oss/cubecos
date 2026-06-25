@@ -24,8 +24,6 @@ $(PROM_TOOL): $(PROM_SRC)
         make build,"  BUILD   $(PROM_BIN)")
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
-	# Binaries build into $(PROM_SRC)/, so target 'promtool' is never created and
-	# make reruns this every time; touch a stamp (rootfs_install uses the real ones).
 	$(Q)touch $@
 
 BUILD += $(PROM_TOOL)

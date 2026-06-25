@@ -27,11 +27,11 @@ $(GIT_DIR):
 		"  CLONE   $(GITHUB_URL)")
 
 version: $(GIT_DIR)
-	$(Q)head -n 1 $(GIT_DIR)/VERSION >> version
+	$(Q)head -n 1 $(GIT_DIR)/VERSION > version
 
 build_number: $(GIT_DIR)
 	$(Q)cd $(GIT_DIR) && \
-		git rev-parse --short HEAD >> ../build_number
+		git rev-parse --short HEAD > ../build_number
 
 # prepare the rpm build directory
 $(RPMBUILD_DIR):
@@ -39,7 +39,9 @@ $(RPMBUILD_DIR):
 	$(Q)cd $(RPMBUILD_DIR) && mkdir BUILD SRPMS SPECS
 
 # make the source tarball
-$(RPMBUILD_SOURCES): $(RPMBUILD_DIR) $(GIT_DIR) version
+# RPMBUILD_DIR is order-only (|): the rule writes rpmbuild/SOURCES.tgz into it,
+# bumping the dir's mtime every build, which would otherwise rebuild SOURCES forever.
+$(RPMBUILD_SOURCES): $(GIT_DIR) version | $(RPMBUILD_DIR)
 	$(Q)mkdir ./source
 	$(Q)cp -r $(GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)
@@ -56,8 +58,6 @@ $(RPMBUILD_RPMS): $(RPMBUILD_SOURCES) build_number
 	$(call RUN_CMD_TIMED, \
 		rpmbuild -bb --nodeps --define "_topdir $(CURDIR)/$(RPMBUILD_DIR)" --define "version `cat version`" --define "build_number `cat build_number`" $(RPMBUILD_DIR)/SPECS/$(PKG_NAME).spec,\
 		"  BUILD   $(PKG_NAME)-`cat version`-1.el9.`cat build_number`.x86_64.rpm")
-	# rpmbuild writes into RPMS/x86_64/, so RPMS's own mtime never advances and it
-	# is remade every run; touch advances it (as SOURCES does above).
 	$(Q)touch $@
 
 # move the built rpm back to the local directory

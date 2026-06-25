@@ -37,13 +37,13 @@ version: $(GIT_DIR)
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(GIT_DIR) && \
 		nvm use $(QEND) && \
-		node -p "require('./packages/cube-frontend-web-app/package.json').version" >> ../version
+		node -p "require('./packages/cube-frontend-web-app/package.json').version" > ../version
 	$(Q)# disable nvm
 	$(Q)sed -i '/^#/! s/^/#/' $$BASH_ENV
 
 build_number: $(GIT_DIR)
 	$(Q)cd $(GIT_DIR) && \
-		git rev-parse --short HEAD >> ../build_number
+		git rev-parse --short HEAD > ../build_number
 
 # prepare the rpm build directory
 $(RPMBUILD_DIR):
@@ -51,7 +51,8 @@ $(RPMBUILD_DIR):
 	$(Q)cd $(RPMBUILD_DIR) && mkdir BUILD SRPMS SPECS
 
 # make the source tarball
-$(RPMBUILD_SOURCES): $(RPMBUILD_DIR) $(GIT_DIR) version
+# RPMBUILD_DIR order-only: rule writes rpmbuild/SOURCES.tgz into it (bumps dir mtime).
+$(RPMBUILD_SOURCES): $(GIT_DIR) version | $(RPMBUILD_DIR)
 	$(Q)mkdir ./source
 	$(Q)cp -r $(GIT_DIR)/.git/ ./source/
 	$(Q)cd ./source && git checkout . $(QEND)
@@ -60,6 +61,7 @@ $(RPMBUILD_SOURCES): $(RPMBUILD_DIR) $(GIT_DIR) version
 	$(Q)mkdir -p $(RPMBUILD_DIR)/SOURCES
 	$(Q)mv $@.tgz $(RPMBUILD_DIR)/SOURCES/$(PKG_NAME)-`cat version`.tar.gz
 	$(Q)rm -r ./source
+	$(Q)touch $@
 
 # build the ui rpm package
 $(RPMBUILD_RPMS): $(RPMBUILD_SOURCES) build_number
