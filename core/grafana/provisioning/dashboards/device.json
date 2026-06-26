@@ -2815,6 +2815,80 @@
             "align": false,
             "alignLevel": null
           }
+        },
+        {
+          "id": 50,
+          "title": "GPU Utilization",
+          "type": "timeseries",
+          "datasource": "influxdb-telegraf",
+          "description": "Physical GPU compute workload % per card. Grouped by PCI ID and GPU model name.",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0, "max": 100,
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
+            }
+          },
+          "targets": [{
+            "datasource": "influxdb-telegraf",
+            "measurement": "gpu.host",
+            "policy": "def",
+            "resultFormat": "time_series",
+            "select": [[{"params":["util_gpu"],"type":"field"},{"params":[],"type":"mean"}]],
+            "tags": [{"key":"host","operator":"=~","value":"/^$GPU_HOST$/"}],
+            "groupBy": [
+              {"params":["$__interval"],"type":"time"},
+              {"params":["pciid"],"type":"tag"},
+              {"params":["name"],"type":"tag"},
+              {"params":["linear"],"type":"fill"}
+            ],
+            "alias": "$tag_name ($tag_pciid)"
+          }]
+        },
+        {
+          "id": 51,
+          "title": "GPU VRAM Usage",
+          "type": "timeseries",
+          "datasource": "influxdb-telegraf",
+          "description": "Physical GPU framebuffer (VRAM) used and total per card in MiB.",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+          "fieldConfig": {
+            "defaults": { "unit": "decmbytes", "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+            "overrides": [{
+              "matcher": {"id":"byRegexp","options":"^Total.*"},
+              "properties": [
+                {"id":"custom.lineStyle","value":{"dash":[10,10],"fill":"dash"}},
+                {"id":"color","value":{"fixedColor":"gray","mode":"fixed"}}
+              ]
+            }]
+          },
+          "targets": [
+            {
+              "datasource": "influxdb-telegraf",
+              "measurement": "gpu.host", "policy": "def", "resultFormat": "time_series",
+              "select": [[{"params":["mem_used"],"type":"field"},{"params":[],"type":"mean"}]],
+              "tags": [{"key":"host","operator":"=~","value":"/^$GPU_HOST$/"}],
+              "groupBy": [
+                {"params":["$__interval"],"type":"time"},
+                {"params":["pciid"],"type":"tag"},{"params":["name"],"type":"tag"},
+                {"params":["linear"],"type":"fill"}
+              ],
+              "alias": "Used — $tag_name ($tag_pciid)"
+            },
+            {
+              "datasource": "influxdb-telegraf",
+              "measurement": "gpu.host", "policy": "def", "resultFormat": "time_series",
+              "select": [[{"params":["mem_total"],"type":"field"},{"params":[],"type":"mean"}]],
+              "tags": [{"key":"host","operator":"=~","value":"/^$GPU_HOST$/"}],
+              "groupBy": [
+                {"params":["$__interval"],"type":"time"},
+                {"params":["pciid"],"type":"tag"},{"params":["name"],"type":"tag"},
+                {"params":["linear"],"type":"fill"}
+              ],
+              "alias": "Total — $tag_name ($tag_pciid)"
+            }
+          ]
         }
       ],
       "title": "System",
@@ -4294,6 +4368,29 @@
         "name": "HOST",
         "options": [],
         "query": "SHOW TAG VALUES FROM \"ipmi_sensor\" WITH KEY = \"host\"",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": "influxdb-telegraf",
+        "definition": "SHOW TAG VALUES FROM \"gpu.host\" WITH KEY = \"host\"",
+        "error": null,
+        "hide": 2,
+        "includeAll": false,
+        "label": "GPU Host",
+        "multi": false,
+        "name": "GPU_HOST",
+        "options": [],
+        "query": "SHOW TAG VALUES FROM \"gpu.host\" WITH KEY = \"host\"",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
