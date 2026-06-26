@@ -1,6 +1,7 @@
 // CUBE SDK
 
 #include <hex/log.h>
+#include <hex/parse.h>
 #include <hex/pidfile.h>
 #include <hex/filesystem.h>
 #include <hex/process.h>
@@ -64,6 +65,9 @@ static bool s_bConfigChanged = false;
 static bool s_bEndpointChanged = false;
 
 static CubeRole_e s_eCubeRole;
+// HA read directly from the raw setting; s_ha's operator bool() (m_new) defaults
+// unreliably when settings are parsed with isNew=false (e.g. restart_masakari).
+static bool s_haEnabled = false;
 
 // rotate daily and enable copytruncate
 static LogRotateConf log_conf("masakari", "/var/log/masakari/*.log", DAILY, 128, 0, true);
@@ -328,9 +332,11 @@ MasakariService(const bool enabled)
 
     if(IsCompute(s_eCubeRole)) {
         SystemdCommitService(enabled, IMON_NAME);
-        SystemdCommitService(enabled, PMON_NAME);
-        // hostmonitor needs corosync/pacemaker; only run it under HA
-        SystemdCommitService(enabled && s_ha, HMON_NAME);
+        // host/process monitors drive host-failure HA and need corosync/pacemaker;
+        // only run them under HA. processmonitor also revives hostmonitor via
+        // process_list.yaml, so it must be gated too or the flood returns.
+        SystemdCommitService(enabled && s_haEnabled, PMON_NAME);
+        SystemdCommitService(enabled && s_haEnabled, HMON_NAME);
     }
 
     return true;
@@ -390,6 +396,8 @@ static bool
 ParseCube(const char *name, const char *value, bool isNew)
 {
     ParseTune(name, value, isNew, 2);
+    if (std::string(name) == "cubesys.ha")
+        HexParseBool(value, &s_haEnabled);
     return true;
 }
 

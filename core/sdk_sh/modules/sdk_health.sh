@@ -2349,11 +2349,11 @@ health_masakari_check()
             fi
         done
         for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-            if ! is_remote_running $node masakari-processmonitor ; then
+            if [ "$T_cubesys_ha" = "true" ] && ! is_remote_running $node masakari-processmonitor ; then
                 ERR_MSG+="masakari-processmonitor on $node is not running\n"
                 ERR_CODE=5
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u masakari-processmonitor"
-            elif [ "$cubesys_ha" = "true" ] && ! is_remote_running $node masakari-hostmonitor ; then
+            elif [ "$T_cubesys_ha" = "true" ] && ! is_remote_running $node masakari-hostmonitor ; then
                 ERR_MSG+="masakari-hostmonitor on $node is not running\n"
                 ERR_CODE=6
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u masakari-hostmonitor"
@@ -2379,9 +2379,9 @@ _health_masakari_auto_repair()
         fi
     done
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node masakari-processmonitor ; then
+        if [ "$T_cubesys_ha" = "true" ] && ! is_remote_running $node masakari-processmonitor ; then
             remote_systemd_restart $node masakari-processmonitor
-        elif [ "$cubesys_ha" = "true" ] && ! is_remote_running $node masakari-hostmonitor ; then
+        elif [ "$T_cubesys_ha" = "true" ] && ! is_remote_running $node masakari-hostmonitor ; then
             remote_systemd_restart $node masakari-hostmonitor
         elif ! is_remote_running $node masakari-instancemonitor ; then
             remote_systemd_restart $node masakari-instancemonitor
