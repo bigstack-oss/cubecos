@@ -86,7 +86,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/glance/glance-image-import.conf
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/glance/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/glance/schema-image.json
-	$(Q)chroot $(ROOTDIR) chown root:glance /etc/glance/metadefs/*.json
+	$(Q)chroot $(ROOTDIR) bash -c "chown root:glance /etc/glance/metadefs/*.json"
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/logrotate.d/openstack-glance
 	$(Q)chroot $(ROOTDIR) chown root:root /etc/glance/rootwrap.d/glance_cinder_store.filters
 	$(Q)chroot $(ROOTDIR) chown root:root /etc/glance/rootwrap.d/os-brick.filters
