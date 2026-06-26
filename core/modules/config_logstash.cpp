@@ -346,6 +346,9 @@ Commit(bool modified, int dryLevel)
 
 CONFIG_MODULE(logstash, 0, 0, 0, 0, Commit);
 CONFIG_REQUIRES(logstash, kafka);
+// order logstash after its output sinks (influxdb/kapacitor)
+CONFIG_REQUIRES(logstash, influxdb);
+CONFIG_REQUIRES(logstash, kapacitor);
 
 // extra tunings
 CONFIG_OBSERVES(logstash, net, ParseNet, NotifyNet);
