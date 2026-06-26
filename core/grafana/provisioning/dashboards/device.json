@@ -4285,7 +4285,7 @@
           "value": "DESKTOP-ENMHMJG"
         },
         "datasource": "influxdb-telegraf",
-        "definition": "SHOW TAG VALUES FROM \"ipmi_sensor\" WITH KEY = \"hostname\"",
+        "definition": "SHOW TAG VALUES FROM \"ipmi_sensor\" WITH KEY = \"host\"",
         "error": null,
         "hide": 0,
         "includeAll": false,
@@ -4293,7 +4293,7 @@
         "multi": false,
         "name": "HOST",
         "options": [],
-        "query": "SHOW TAG VALUES FROM \"ipmi_sensor\" WITH KEY = \"hostname\"",
+        "query": "SHOW TAG VALUES FROM \"ipmi_sensor\" WITH KEY = \"host\"",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
