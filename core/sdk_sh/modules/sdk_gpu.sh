@@ -271,14 +271,12 @@ gpu_device_list()
 
     local gpu_csv
     gpu_csv=$($NVIDIA_SMI --query-gpu=uuid,name,pci.bus_id --format=csv,noheader,nounits 2>/dev/null)
-    if [ -z "$gpu_csv" ]; then
-        jq -c -n '[]'
-        return 0
-    fi
 
     local output="[]"
 
     while IFS=',' read -r uuid name pci_bus_id; do
+        [ -z "$uuid" ] && continue
+
         uuid=$(echo "$uuid" | xargs)
         name=$(echo "$name" | xargs)
         pci_bus_id=$(echo "$pci_bus_id" | xargs)
@@ -382,6 +380,58 @@ gpu_device_list()
             --argjson allocation "$allocation" \
             '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, status:$status, allocation:$allocation}]')
     done <<< "$gpu_csv"
+
+    # GPUs already bound to vfio-pci (type "pgpu") are no longer enumerable
+    # by nvidia-smi, so they're missing from $output above. Union them back
+    # in using the properties recorded in the config file.
+    local recorded_gpu_ids
+    recorded_gpu_ids=$(echo "$output" | jq -c '[.[].id]')
+
+    local pgpu_ids
+    pgpu_ids=$(echo "$gpu_config" | jq -c --argjson targetIds "$recorded_gpu_ids" \
+        '[.[] | select(($targetIds | index(.id)) == null)]')
+
+    while IFS= read -r entry; do
+        [ -z "$entry" ] || [ "$entry" = "null" ] && continue
+
+        local uuid name gpu_type pci_address
+        uuid=$(echo "$entry" | jq -r '.id')
+        name=$(echo "$entry" | jq -r '.name // "unknown"')
+        gpu_type=$(echo "$entry" | jq -r '.type')
+        pci_address=$(echo "$entry" | jq -r '.pciAddress // ""')
+
+        local status="idle"
+        local allocation='{"current":0,"total":1}'
+
+        if [ "$gpu_type" = "pgpu" ] && [ -n "$pci_address" ]; then
+            local pci_bus pci_slot
+            pci_bus=$(echo "$pci_address" | awk -F: '{print tolower($2)}')
+            pci_slot=$(echo "$pci_address" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
+
+            local in_use=0
+            for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
+                if virsh dumpxml "$vm_id" 2>/dev/null | \
+                    grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
+                    in_use=1
+                    break
+                fi
+            done
+
+            if [ "$in_use" = "1" ]; then
+                status="inUse"
+                allocation='{"current":1,"total":1}'
+            fi
+        fi
+
+        output=$(echo "$output" | jq -c \
+            --arg id "$uuid" \
+            --arg name "$name" \
+            --arg type "$gpu_type" \
+            --arg pciAddress "$pci_address" \
+            --arg status "$status" \
+            --argjson allocation "$allocation" \
+            '. + [{id:$id, name:$name, type:$type, supportTypes:["pgpu"], pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
+    done <<< "$(echo "$pgpu_ids" | jq -c '.[]' 2>/dev/null)"
 
     echo "$output"
 }
@@ -547,7 +597,9 @@ gpu_pgpu_attached_instance_get()
     echo "null"
 }
 
-gpu_resource_set()
+# Full validation for gpu_resource_set: gpu_id, new_type, profiles required-ness
+# for the given type, GPU existence, and in-use status.
+gpu_resource_set_check()
 {
     local gpu_id="$1"
     local new_type="$2"
@@ -567,108 +619,89 @@ gpu_resource_set()
         pgpu|sriovVgpu|migBackedVgpu) ;;
         *)
             echo "Error: invalid type '$new_type'. Must be one of: pgpu, sriovVgpu, migBackedVgpu" >&2
-            exit 1
+            return 1
             ;;
     esac
 
-    if [ "$new_type" = "pgpu" ] && [ -n "$profiles" ]; then
-        echo "Error: profiles is not allowed when new_type is pgpu" >&2
-        exit 1
-    fi
-    
     if [[ "$new_type" == "sriovVgpu" || "$new_type" == "migBackedVgpu" ]]; then
-        if [ -z "$profiles" ]; then
-            echo "Error: profiles is required when new_type is sriovVgpu or migBackedVgpu" >&2
-            exit 1
-        fi
-        
-        echo "TODO: perform profiles argument validation."
+        echo "TODO: perform profiles argument validation." >&2
         # Schema: an array of profiles `{ id: number, count: number }[]`
         # In addition to the format, we must also validate the existence
         # and capacity constraints (for MIG-backed) of the provided profiles.
     fi
 
-    if ! $NVIDIA_SMI --query-gpu=uuid --format=csv,noheader,nounits 2>/dev/null | grep -qF "$gpu_id"; then
-        echo "Error: GPU UUID '$gpu_id' not found" >&2
-        exit 1
+    local device
+    device=$(gpu_device_list | jq -c --arg id "$gpu_id" 'map(select(.id == $id)) | .[0] // null')
+
+    if [ "$device" = "null" ]; then
+        echo "Error: GPU UUID $gpu_id not found" >&2
+        return 1
     fi
 
-    if [ ! -f "$GPU_CONFIG_FILE_PATH" ]; then
-        echo "Error: GPU config file not found at $GPU_CONFIG_FILE_PATH" >&2
-        exit 1
+    if [ "$(echo "$device" | jq -r '.status')" = "inUse" ]; then
+        echo "Error: GPU $gpu_id is in-use" >&2
+        return 1
     fi
+}
 
-    local gpu_config="[]"
-    local raw_config
-    raw_config=$(cat "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
-    if echo "$raw_config" | jq -e 'type == "array"' >/dev/null 2>&1; then
-        gpu_config="$raw_config"
-    fi
+# Unsets whatever vGPU mode the GPU is currently configured for,
+# according to the config file, so it is free to be reconfigured.
+# This function does nothing if the target GPU is currently configured
+# as pGPU.
+gpu_unset_current_type()
+{
+    local gpu_id="$1"
 
     local current_type
-    current_type=$(echo "$gpu_config" | jq -r --arg id "$gpu_id" \
-        'map(select(.id == $id)) | if length > 0 then .[0].type else "unset" end')
+    current_type=$(jq -r --arg id "$gpu_id" \
+        'map(select(.id == $id)) | if length > 0 then .[0].type else "" end' \
+        "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
 
-    local pci_bus_id
-    pci_bus_id=$($NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null)
-    if [ -z "$pci_bus_id" ]; then
-        echo "Error: could not get PCI bus ID for GPU $gpu_id" >&2
-        exit 1
-    fi
-
-    if [ "$new_type" = "pgpu" ]; then
-        # Check if GPU is currently in-use by any VM
-        if [ "$current_type" = "pgpu" ]; then
-            local pci_bus pci_slot
-            pci_bus=$(echo "$pci_bus_id" | awk -F: '{print tolower($2)}')
-            pci_slot=$(echo "$pci_bus_id" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
-            for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
-                if virsh dumpxml "$vm_id" 2>/dev/null | \
-                    grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
-                    echo "Error: GPU card $gpu_id is in-use" >&2
-                    exit 1
-                fi
-            done
+    if [ "$current_type" = "sriovVgpu" ]; then
+        local pci_bus_id
+        pci_bus_id=$($NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null)
+        
+        # nvidia-smi uses 8-char domain (00000000:bb:ss.f); sysfs uses 4-char (0000:bb:ss.f)
+        local pci_addr
+        pci_addr=$(echo "$pci_bus_id" | sed 's/^[0-9a-fA-F]\{4\}//')
+        local numvfs_path="/sys/bus/pci/devices/${pci_addr}/sriov_numvfs"
+        if [ ! -f "$numvfs_path" ]; then
+            echo "Error: sriov_numvfs not found at $numvfs_path" >&2
+            exit 1
         fi
-
-        if [ "$current_type" = "sriovVgpu" ]; then
-            unset_sriov_vgpu "$pci_bus_id"
-        elif [ "$current_type" = "migBackedVgpu" ]; then
-            unset_mig_backed_vgpu "$gpu_id"
+        echo 0 > "$numvfs_path"
+    elif [ "$current_type" = "migBackedVgpu" ]; then
+        if ! $NVIDIA_SMI -i "$gpu_id" -mig 0; then
+            echo "Error: failed to disable MIG mode for GPU $gpu_id" >&2
+            exit 1
         fi
-
-        local new_config
-        new_config=$(echo "$gpu_config" | jq -c \
-            --arg id "$gpu_id" \
-            'map(select(.id != $id)) + [{id:$id, type:"pgpu", profiles:null}]')
-
-        echo "$new_config" > "$GPU_CONFIG_FILE_PATH"
-        echo "Successfully update GPU $gpu_id to pgpu"
-    else
-        echo "Error: type '$new_type' is not yet implemented" >&2
-        exit 1
     fi
 }
 
-unset_sriov_vgpu()
+# Binds the PCI device identified by PCI address to vfio-pci for PCI passthrough.
+# Pure sysfs operation - does not depend on nvidia-smi being able to see the
+# device, so it is safe to call during hex_config Commit() re-apply, after the
+# device is no longer enumerable by nvidia-smi.
+gpu_bind_vfio_pci()
 {
     # nvidia-smi uses 8-char domain (00000000:bb:ss.f); sysfs uses 4-char (0000:bb:ss.f)
-    local pci_addr
-    pci_addr=$(echo "$1" | sed 's/^[0-9a-fA-F]\{4\}//')
-    local numvfs_path="/sys/bus/pci/devices/${pci_addr}/sriov_numvfs"
-    if [ ! -f "$numvfs_path" ]; then
-        echo "Error: sriov_numvfs not found at $numvfs_path" >&2
-        exit 1
-    fi
-    echo 0 > "$numvfs_path"
-}
+    local sysfs_pci_addr
+    sysfs_pci_addr=$(echo "$1" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
 
-unset_mig_backed_vgpu()
-{
-    if ! $NVIDIA_SMI -i "$1" -mig 0; then
-        echo "Error: failed to disable MIG mode for GPU $1" >&2
-        exit 1
+    modprobe vfio-pci
+
+    local driver_path="/sys/bus/pci/devices/${sysfs_pci_addr}/driver"
+    if [ -e "$driver_path" ]; then
+        local current_driver
+        current_driver=$(basename "$(readlink -f "$driver_path")")
+        if [ "$current_driver" != "vfio-pci" ]; then
+            echo "$sysfs_pci_addr" > "/sys/bus/pci/drivers/${current_driver}/unbind" 2>/dev/null
+        fi
     fi
+
+    echo "$sysfs_pci_addr" > /sys/bus/pci/drivers/vfio-pci/bind 2>/dev/null
+
+    [ "$(basename "$(readlink -f "$driver_path" 2>/dev/null)" 2>/dev/null)" = "vfio-pci" ]
 }
 
 gpu_host_stats()
