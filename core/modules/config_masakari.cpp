@@ -329,7 +329,8 @@ MasakariService(const bool enabled)
     if(IsCompute(s_eCubeRole)) {
         SystemdCommitService(enabled, IMON_NAME);
         SystemdCommitService(enabled, PMON_NAME);
-        SystemdCommitService(enabled, HMON_NAME);
+        // hostmonitor needs corosync/pacemaker; only run it under HA
+        SystemdCommitService(enabled && s_ha, HMON_NAME);
     }
 
     return true;

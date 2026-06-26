@@ -2330,6 +2330,7 @@ health_masakari_report()
 
 health_masakari_check()
 {
+    source hex_tuning $SETTINGS_TXT cubesys.ha
     stale_api_check_repair masakari-api 15868 masakari-api python3
 
     $CURL -sf http://$HOSTNAME:15868 >/dev/null
@@ -2352,7 +2353,7 @@ health_masakari_check()
                 ERR_MSG+="masakari-processmonitor on $node is not running\n"
                 ERR_CODE=5
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u masakari-processmonitor"
-            elif ! is_remote_running $node masakari-hostmonitor ; then
+            elif [ "$cubesys_ha" = "true" ] && ! is_remote_running $node masakari-hostmonitor ; then
                 ERR_MSG+="masakari-hostmonitor on $node is not running\n"
                 ERR_CODE=6
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u masakari-hostmonitor"
@@ -2369,6 +2370,7 @@ health_masakari_check()
 
 _health_masakari_auto_repair()
 {
+    source hex_tuning $SETTINGS_TXT cubesys.ha
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node masakari-api ; then
             remote_systemd_restart $node masakari-api
@@ -2379,7 +2381,7 @@ _health_masakari_auto_repair()
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node masakari-processmonitor ; then
             remote_systemd_restart $node masakari-processmonitor
-        elif ! is_remote_running $node masakari-hostmonitor ; then
+        elif [ "$cubesys_ha" = "true" ] && ! is_remote_running $node masakari-hostmonitor ; then
             remote_systemd_restart $node masakari-hostmonitor
         elif ! is_remote_running $node masakari-instancemonitor ; then
             remote_systemd_restart $node masakari-instancemonitor
