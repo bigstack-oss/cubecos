@@ -360,6 +360,7 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         }
         else if (srvlist[i][SRV_CONN] == "mysql") {
             fprintf(fout, "  timeout client  10h\n");
+            fprintf(fout, "  timeout server  10h\n");
             fprintf(fout, "  option  mysql-check\n");
         }
 
