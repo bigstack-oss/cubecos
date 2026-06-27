@@ -5,7 +5,9 @@ import subprocess
 
 import monasca_agent.collector.checks as checks
 
-_LLC_ROW = re.compile(r'^\s*\d+\s+\d+\s')
+# a data row starts with the PID; the CORE column may be a number or "err"
+# (a multi-vCPU process spans cores), so don't require a numeric core.
+_LLC_ROW = re.compile(r'^\s*\d+\s+\S+\s')
 
 
 class RdtL3(checks.AgentCheck):
@@ -29,7 +31,7 @@ class RdtL3(checks.AgentCheck):
     def _llc_kb(self, pid):
         try:
             out = subprocess.check_output(
-                ['pqos', '-I', '-p', 'llc:%s' % pid, '-t', '1'],
+                ['sudo', '-n', 'pqos', '-I', '-p', 'llc:%s' % pid, '-t', '1'],
                 timeout=10, stderr=subprocess.DEVNULL).decode()
         except (OSError, subprocess.SubprocessError):
             return None
