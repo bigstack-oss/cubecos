@@ -86,6 +86,7 @@ static CubeRole_e s_eCubeRole;
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
+CONFIG_GLOBAL_STR_REF(OVERLAY_ADDR);
 CONFIG_GLOBAL_STR_REF(CTRL_IP);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_GLOBAL_STR_REF(EXTERNAL);
@@ -470,12 +471,25 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["libvirt"]["inject_password"] = "false";
         cfg["libvirt"]["inject_key"] = "false";
         cfg["libvirt"]["inject_partition"] = "-2";
-        cfg["libvirt"]["live_migration_flag"] = "\"VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST,VIR_MIGRATE_TUNNELLED\"";
+        // libvirt control channel over ssh (data uses the native channel)
         cfg["libvirt"]["live_migration_scheme"] = "ssh";
+        // send migration traffic over the overlay NIC when it exists (else my_ip)
+        std::string overlayAddr = G(OVERLAY_ADDR);
+        if (!overlayAddr.empty() && overlayAddr != "0.0.0.0")
+            cfg["libvirt"]["live_migration_inbound_addr"] = overlayAddr;
         cfg["libvirt"]["hw_disk_discard"] = "unmap";
         cfg["libvirt"]["snapshot_image_format"] = "raw";
         cfg["libvirt"]["volume_use_multipath"] = "true";
+        // post-copy: bounded convergence with no downtime (dest faults pages from source)
         cfg["libvirt"]["live_migration_permit_post_copy"] = "true";
+        // throttle guest CPU to help pre-copy converge before post-copy is needed
+        cfg["libvirt"]["live_migration_permit_auto_converge"] = "true";
+        // on timeout, force completion via post-copy instead of aborting the migration
+        cfg["libvirt"]["live_migration_timeout_action"] = "force_complete";
+        // deadline before timeout_action fires; per-GiB of guest RAM (15 * GiB).
+        // kept short so planned drains stay bounded/predictable (post-copy backstops
+        // sooner); the 2 GiB floor keeps tiny guests from being cut off too early.
+        cfg["libvirt"]["live_migration_completion_timeout"] = "15";
         std::string cpuVirtInstr = HexUtilPOpen("echo -n $(egrep -o '(vmx|svm)' /proc/cpuinfo | uniq)");
         if (cpuVirtInstr == "svm")
             cfg["libvirt"]["cpu_model_extra_flags"] = cpuVirtInstr;
