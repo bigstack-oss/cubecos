@@ -16,6 +16,10 @@ ROOTFS_PIP += monasca-persister
 ROOTFS_PIP += monasca-statsd
 ROOTFS_PIP += python-monascaclient
 
+# intel-cmt-cat provides pqos, used by the rdt_l3 agent plugin for per-VM L3
+# cache occupancy. Installed via the centralized dnf pass in core/heavyfs.
+ROOTFS_DNF += intel-cmt-cat
+
 # config file examples are copied from github repo: openstack-ansible-os_monasca
 # monasca common
 # ROOTFS_PIP_DL_FROM += https://github.com/openstack/monasca-common.git
@@ -61,6 +65,8 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/monasca/agent/conf.d.in/libvirt.yaml.in .$(MONASCA_CONF_DIR)/agent/conf.d.in
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/monasca/agent/conf.d.in/mcache.yaml.in .$(MONASCA_CONF_DIR)/agent/conf.d.in
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/monasca/agent/conf.d.in/http_check.yaml.in .$(MONASCA_CONF_DIR)/agent/conf.d.in
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/monasca/agent/conf.d.in/ipmi_sensors.yaml.in .$(MONASCA_CONF_DIR)/agent/conf.d.in
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/monasca/agent/conf.d.in/rdt_l3.yaml.in .$(MONASCA_CONF_DIR)/agent/conf.d.in
 	$(Q)chroot $(ROOTDIR) chmod 644 $(MONASCA_CONF_DIR)/agent/conf.d.in
 
 rootfs_install::

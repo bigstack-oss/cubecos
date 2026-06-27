@@ -35,6 +35,8 @@ static const char GROUP[] = "monasca";
 #define LIBVIRT_YAML "/etc/monasca/agent/conf.d.in/libvirt.yaml"
 #define MCACHE_YAML "/etc/monasca/agent/conf.d.in/mcache.yaml"
 #define HTTP_CHECK_YAML "/etc/monasca/agent/conf.d.in/http_check.yaml"
+#define IPMI_SENSORS_YAML "/etc/monasca/agent/conf.d.in/ipmi_sensors.yaml"
+#define RDT_L3_YAML "/etc/monasca/agent/conf.d.in/rdt_l3.yaml"
 
 #define CONF_D_DIR "/etc/monasca/agent/conf.d/"
 
@@ -179,7 +181,7 @@ SyncAgentConf()
     }
 
     if (IsCompute(s_eCubeRole)) {
-        HexSystemF(0, "cp -f %s " CONF_D_DIR, LIBVIRT_YAML);
+        HexSystemF(0, "cp -f %s %s %s " CONF_D_DIR, LIBVIRT_YAML, IPMI_SENSORS_YAML, RDT_L3_YAML);
     }
 
     return true;
@@ -197,6 +199,10 @@ WriteAgentConfTemplates(const std::string& ctrlIp, const std::string& sharedId, 
             HexLogError("failed to update %s", LIBVIRT_YAML);
             return false;
         }
+
+        // no @VARS@ in these; materialize .yaml from .yaml.in
+        HexSystemF(0, "cp -f %s %s", IPMI_SENSORS_YAML IN_EXT, IPMI_SENSORS_YAML);
+        HexSystemF(0, "cp -f %s %s", RDT_L3_YAML IN_EXT, RDT_L3_YAML);
     }
 
     if (IsControl(s_eCubeRole)) {

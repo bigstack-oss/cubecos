@@ -1,0 +1,10 @@
+init_config:
+
+instances:
+  - built_by: cube
+    # logical metric -> ipmitool sensor name; override per hardware
+    sensors:
+      host_outlet_temp: Outlet-TMP
+      host_inlet_temp: PSU1_Inlet_TEMP
+      host_airflow: FAN1-SPEED
+      host_power: PSU1_POUT
