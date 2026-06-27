@@ -1,0 +1,4 @@
+# The monasca collector runs as mon-agent (unprivileged). Let it read hardware
+# sensors over IPMI and Intel RDT cache occupancy via pqos for the Watcher
+# metric collectors (ipmi_sensors / rdt_l3 checks).
+mon-agent ALL=(root) NOPASSWD: /usr/bin/ipmitool, /usr/bin/pqos

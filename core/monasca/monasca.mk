@@ -71,6 +71,8 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)[ -d $(MONASCA_PATCHDIR) ] && cp -rf $(MONASCA_PATCHDIR)/* $(MONASCA_SRCDIR)/ || /bin/true
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/monasca/agent/monasca-agent.sudoers ./etc/sudoers.d/monasca-agent
+	$(Q)chroot $(ROOTDIR) chmod 440 /etc/sudoers.d/monasca-agent
 
 rootfs_install::
 	$(Q)$(COREDIR)/monasca/santize-monasca-log4j.sh $(BLDDIR)/heavy_rootfs/usr/local/lib/python3.9/site-packages/monasca_agent/collector/checks/libs

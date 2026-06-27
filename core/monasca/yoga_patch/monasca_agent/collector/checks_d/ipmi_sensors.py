@@ -27,7 +27,7 @@ class IpmiSensors(checks.AgentCheck):
         for metric, sensor in sensors.items():
             try:
                 out = subprocess.check_output(
-                    ['ipmitool', 'sensor', 'reading', sensor],
+                    ['sudo', '-n', 'ipmitool', 'sensor', 'reading', sensor],
                     timeout=15, stderr=subprocess.DEVNULL).decode()
                 value = float(out.split('|')[1].strip())
             except (OSError, subprocess.SubprocessError, IndexError, ValueError) as e:
