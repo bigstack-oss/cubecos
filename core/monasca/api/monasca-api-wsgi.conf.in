@@ -3,7 +3,7 @@ Listen @BIND_ADDR@8070
 TraceEnable off
 
 <VirtualHost *:8070>
-    WSGIDaemonProcess monasca-api processes=5 threads=1 user=monasca display-name=%{GROUP}
+    WSGIDaemonProcess monasca-api processes=8 threads=4 user=monasca display-name=%{GROUP}
     WSGIProcessGroup monasca-api
     WSGIApplicationGroup monasca-api
     WSGIScriptAlias / /usr/local/lib/python3.9/site-packages/monasca_api/api/wsgi.py

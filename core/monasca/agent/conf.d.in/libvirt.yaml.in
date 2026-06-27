@@ -27,4 +27,5 @@ init_config:
   vm_ping_check_enable: false
   vnic_collection_period: 0
 
-instances: []
+instances:
+  - built_by: cube

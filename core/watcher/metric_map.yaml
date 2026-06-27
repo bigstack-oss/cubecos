@@ -1,4 +1,12 @@
 monasca:
-  instance_cpu_usage: cpu.utilization_norm_perc
+  # per-instance metrics (queried by resource_id = instance uuid)
+  instance_cpu_usage: vm.cpu.utilization_perc
   instance_ram_usage: mem.used_gb
+  instance_l3_cache_usage: instance_l3_cache_usage
+  # per-host metrics (queried by hostname)
   host_cpu_usage: cpu.utilization_perc
+  host_ram_usage: mem.used_gb
+  host_outlet_temp: host_outlet_temp
+  host_inlet_temp: host_inlet_temp
+  host_airflow: host_airflow
+  host_power: host_power

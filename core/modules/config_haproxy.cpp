@@ -305,7 +305,7 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         { "heat_api_cfn", "8000", "http", "" },
         { "barbican_api", "9311", "http", "ctrl" },
         { "masakari_api", "15868", "http", "" },
-        { "monasca_api", "8070", "tcp", "notcpka" },
+        { "monasca_api", "8070", "tcp", "notcpka hsclose" },
         { "octavia_api", "9876", "tcp", "" },
         { "designate_api", "9001", "http", "ctrl" },
         { "watcher_api", "9322", "tcp", "ctrl" },
@@ -366,6 +366,11 @@ WriteConfig(bool ha, const std::string& ctrlVip,
 
         if (srvlist[i][SRV_OPTS].find("notcpka") == std::string::npos)
             fprintf(fout, "  option  tcpka\n");
+
+        // close the backend connection per response so haproxy never reuses a
+        // keepalive conn the backend httpd already timed out (RemoteDisconnected)
+        if (srvlist[i][SRV_OPTS].find("hsclose") != std::string::npos)
+            fprintf(fout, "  option  http-server-close\n");
 
         fprintf(fout, "  option  tcplog\n");
 
