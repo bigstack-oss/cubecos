@@ -124,53 +124,30 @@ class HandleHost(driver.DriverBase):
                 LOG.info("Works on pacemaker-remote.")
                 return 0
 
-        # Check whether the necessary parameters are set.
-        if CONF.host.corosync_multicast_interfaces is None or \
-            CONF.host.corosync_multicast_ports is None:
-            msg = ("corosync_multicast_interfaces or "
-                   "corosync_multicast_ports is not set.")
-            LOG.error("%s", msg)
-            return 2
-
-        # Check whether the corosync communication is normal.
-        corosync_multicast_interfaces = \
-            CONF.host.corosync_multicast_interfaces.split(',')
-        corosync_multicast_ports = \
-            CONF.host.corosync_multicast_ports.split(',')
-
-        if len(corosync_multicast_interfaces) != len(corosync_multicast_ports):
-            msg = ("Incorrect parameters corosync_multicast_interfaces or "
-                   "corosync_multicast_ports.")
-            LOG.error("%s", msg)
-            return 2
-
-        is_nic_normal = False
-        for num in range(0, len(corosync_multicast_interfaces)):
-            cmd_str = ("timeout %s tcpdump -n -c 1 -p -i %s port %s") \
-                % (CONF.host.tcpdump_timeout,
-                   corosync_multicast_interfaces[num],
-                   corosync_multicast_ports[num])
-            command = cmd_str.split()
-
-            try:
-                # Execute tcpdump command.
-                out, err = utils.execute(*command, run_as_root=True)
-
-                # If command doesn't raise exception, nic is normal.
-                msg = ("Corosync communication using '%s' is normal.") \
-                    % corosync_multicast_interfaces[num]
-                LOG.info("%s", msg)
-                is_nic_normal = True
-                break
-            except Exception:
-                msg = ("Corosync communication using '%s' is failed.") \
-                    % corosync_multicast_interfaces[num]
-                LOG.warning("%s", msg)
-
-        if is_nic_normal is False:
+        # Check corosync communication by querying corosync directly with
+        # corosync-cfgtool, instead of sniffing a packet on a configured
+        # interface with tcpdump. The packet sniff was multicast-era,
+        # timing-dependent and interface-sensitive (knet/unicast and a
+        # mismatched interface produced false failures while corosync was
+        # healthy); corosync-cfgtool reports ring/link health transport- and
+        # interface-independently.
+        try:
+            out, err = utils.execute('corosync-cfgtool', '-s',
+                                     run_as_root=True)
+        except Exception:
             LOG.error("Corosync communication is failed.")
             return 1
 
+        # Healthy when corosync responds and a link is up: knet shows peers
+        # 'connected'; udpu/multicast shows 'no faults'. A faulty ring or an
+        # isolated node (no connected peer) is a failure.
+        lowered = out.lower()
+        if 'faulty' in lowered or ('connected' not in lowered
+                                   and 'no faults' not in lowered):
+            LOG.error("Corosync communication is failed: %s", out)
+            return 1
+
+        LOG.info("Corosync communication is normal.")
         return 0
 
     def _check_host_status_by_crmadmin(self):
