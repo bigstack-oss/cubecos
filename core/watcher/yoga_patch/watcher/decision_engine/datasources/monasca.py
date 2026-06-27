@@ -169,23 +169,33 @@ class MonascaHelper(base.DataSourceBase):
 
     def get_host_ram_usage(self, resource, period,
                            aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'compute_node', 'host_ram_usage', period, aggregate,
+            granularity)
 
     def get_host_outlet_temp(self, resource, period,
                              aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'compute_node', 'host_outlet_temp', period, aggregate,
+            granularity)
 
     def get_host_inlet_temp(self, resource, period,
                             aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'compute_node', 'host_inlet_temp', period, aggregate,
+            granularity)
 
     def get_host_airflow(self, resource, period,
                          aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'compute_node', 'host_airflow', period, aggregate,
+            granularity)
 
     def get_host_power(self, resource, period,
                        aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'compute_node', 'host_power', period, aggregate,
+            granularity)
 
     def get_instance_cpu_usage(self, resource, period,
                                aggregate, granularity=None):
@@ -196,16 +206,24 @@ class MonascaHelper(base.DataSourceBase):
 
     def get_instance_ram_usage(self, resource, period,
                                aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'instance', 'instance_ram_usage', period, aggregate,
+            granularity)
 
     def get_instance_ram_allocated(self, resource, period,
                                    aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'instance', 'instance_ram_allocated', period, aggregate,
+            granularity)
 
     def get_instance_l3_cache_usage(self, resource, period,
                                     aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'instance', 'instance_l3_cache_usage', period, aggregate,
+            granularity)
 
     def get_instance_root_disk_size(self, resource, period,
                                     aggregate, granularity=None):
-        raise NotImplementedError
+        return self.statistic_aggregation(
+            resource, 'instance', 'instance_root_disk_size', period, aggregate,
+            granularity)
