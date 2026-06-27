@@ -75,12 +75,12 @@ RecreateTopic(bool ha, bool run, const std::string sharedId, const char* topic)
 
     const char cmd[] = "/opt/kafka/bin/kafka-topics.sh";
 
-    HexUtilSystemF(0, 0, "%s --delete --topic %s --bootstrap-server %s:9095 >/dev/null 2>&1",
-                         cmd, topic, sharedId.c_str());
-
+    // __consumer_offsets is managed by Kafka itself; leave it alone.
     if (std::string(topic) == "__consumer_offsets")
         return true;
 
+    // Ensure the topic exists with 6 partitions without deleting it first, so a
+    // re-apply (e.g. set_ready) doesn't drop existing topic data.
     HexUtilSystemF(0, 0, "%s --create --topic %s --partitions 6 --bootstrap-server %s:9095 --replication-factor %d --if-not-exists >/dev/null 2>&1",
                          cmd, topic, sharedId.c_str(), ha ? 2 : 1);
     HexUtilSystemF(0, 0, "%s --alter --topic %s --partitions 6 --bootstrap-server %s:9095 >/dev/null 2>&1",

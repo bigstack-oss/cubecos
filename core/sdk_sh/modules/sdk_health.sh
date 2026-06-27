@@ -1864,7 +1864,12 @@ _health_neutron_auto_repair()
 
 health_neutron_repair()
 {
-    cmd $HEX_CFG bootstrap neutron
+    # A full neutron bootstrap is expensive (~75s) and set_ready invokes this
+    # twice; only re-bootstrap when the OVN/neutron agents aren't already healthy.
+    local agent_alive="$($OPENSTACK network agent list -f value -c Alive 2>/dev/null)"
+    if [ -z "$agent_alive" ] || echo "$agent_alive" | grep -qi False ; then
+        cmd $HEX_CFG bootstrap neutron
+    fi
 
     $HEX_SDK ovn_neutron_db_sync
 

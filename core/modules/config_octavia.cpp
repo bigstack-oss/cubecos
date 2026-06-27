@@ -729,10 +729,8 @@ ClusterReadyMain(int argc, char **argv)
     if (!enabled)
         return EXIT_SUCCESS;
 
-    if (IsControl(s_eCubeRole)) {
-        std::string cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
-        HexUtilSystemF(0, 0, HEX_SDK " os_octavia_init %s", cidr.c_str());
-    }
+    // os_octavia_init runs on the cluster_start trigger (ReinitMain); skip the
+    // duplicate run here since set_ready fires cluster_ready then cluster_start.
 
     return EXIT_SUCCESS;
 }

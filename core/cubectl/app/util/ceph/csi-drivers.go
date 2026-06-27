@@ -39,25 +39,25 @@ var (
 		{
 			Registry: "registry.k8s.io",
 			Name:     "sig-storage/csi-snapshotter",
-			Tag:      "v7.0.0",
+			Tag:      "v8.2.0",
 			LocalTar: fmt.Sprintf("%s/ceph-csi-snapshotter.tar", CsiLocalStore),
 		},
 		{
 			Registry: "registry.k8s.io",
 			Name:     "sig-storage/csi-resizer",
-			Tag:      "v1.10.0",
+			Tag:      "v1.11.1",
 			LocalTar: fmt.Sprintf("%s/ceph-csi-resizer.tar", CsiLocalStore),
 		},
 		{
 			Registry: "registry.k8s.io",
 			Name:     "sig-storage/csi-provisioner",
-			Tag:      "v4.0.0",
+			Tag:      "v5.0.1",
 			LocalTar: fmt.Sprintf("%s/ceph-csi-provisioner.tar", CsiLocalStore),
 		},
 		{
 			Registry: "registry.k8s.io",
 			Name:     "sig-storage/csi-attacher",
-			Tag:      "v4.5.0",
+			Tag:      "v4.6.1",
 			LocalTar: fmt.Sprintf("%s/ceph-csi-attacher.tar", CsiLocalStore),
 		},
 		{
