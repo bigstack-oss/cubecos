@@ -3,7 +3,7 @@
 
 ROOTFS_DNF += qemu-img
 
-# install keystone
+# install glance
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
