@@ -1,7 +1,7 @@
 # Cube SDK
 # keystone installation
 
-ROOTFS_DNF += httpd python3-mod_wsgi mod_ssl mod_auth_mellon
+ROOTFS_DNF += httpd python3-mod_wsgi mod_ssl mod_auth_mellon openldap-devel
 
 KEYSTONE_CONF_DIR := /etc/keystone
 
