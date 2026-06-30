@@ -247,7 +247,7 @@ fbc_sess=%s,fbc_fps=%s,fbc_latency=%s\n" \
 #   type: "unset" | "pgpu" | "sriovVgpu" | "migBackedVgpu"
 #   supportTypes: ("pgpu" | "sriovVgpu" | "migBackedVgpu")[]
 #   pciAddress: string
-#   profileCountLimit: number | null
+#   sriovVgpuProfileCountLimit: number | null
 #   status: "unassigned" | "idle" | "inUse"
 #   allocation: {
 #     current: number
@@ -310,7 +310,7 @@ gpu_device_list()
                 --arg name "$name" \
                 --arg pciAddress "$pci_bus_id" \
                 --argjson supportTypes "$support_types" \
-                '. + [{ id: $id, name: $name, type:"unset", supportTypes: $supportTypes, pciAddress: $pciAddress, profileCountLimit: null, status: "unassigned", allocation: null }]')
+                '. + [{ id: $id, name: $name, type:"unset", supportTypes: $supportTypes, pciAddress: $pciAddress, sriovVgpuProfileCountLimit: null, status: "unassigned", allocation: null }]')
             continue
         fi
 
@@ -362,10 +362,10 @@ gpu_device_list()
             if [ "$gpu_type" = "sriovVgpu" ]; then
                 local pci_sysfs
                 pci_sysfs=$(echo "$pci_bus_id" | tr '[:upper:]' '[:lower:]' | cut -c5-)
-                local totalvfs
-                totalvfs=$(cat "/sys/bus/pci/devices/${pci_sysfs}/sriov_totalvfs" 2>/dev/null | tr -d '[:space:]')
-                if echo "$totalvfs" | grep -qE '^[0-9]+$'; then
-                    profile_count_limit="$totalvfs"
+                local sriov_totalvfs 
+                sriov_totalvfs=$(cat "/sys/bus/pci/devices/${pci_sysfs}/sriov_totalvfs" 2>/dev/null | tr -d '[:space:]')
+                if echo "$sriov_totalvfs" | grep -qE '^[0-9]+$'; then
+                    sriov_vgpu_profile_count_limit="$sriov_totalvfs"
                 fi
             fi
 
@@ -377,10 +377,10 @@ gpu_device_list()
             --arg type "$gpu_type" \
             --argjson supportTypes "$support_types" \
             --arg pciAddress "$pci_bus_id" \
-            --argjson profileCountLimit "$profile_count_limit" \
+            --argjson sriovVgpuProfileCountLimit "$sriov_vgpu_profile_count_limit" \
             --arg status "$status" \
             --argjson allocation "$allocation" \
-            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:$profileCountLimit, status:$status, allocation:$allocation}]')
+            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, status:$status, allocation:$allocation}]')
     done <<< "$gpu_csv"
 
     echo "$output"
