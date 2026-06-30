@@ -712,7 +712,7 @@ Commit(bool modified, int dryLevel)
         SystemdCommitService(enabled, NAME);
 
         // Wait kapacitor to start listening port 9092
-        HexUtilSystemF(0, 0, HEX_SDK " wait_for_service :: 9092 90");
+        HexUtilSystemF(0, 0, HEX_SDK " wait_for_service :: 9092 120");
 
         DeleteAllTasks();
         // Write task tick scritps to relay influxdb write requsts to HA peers

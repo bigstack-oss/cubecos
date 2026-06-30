@@ -250,6 +250,11 @@ rootfs_install::
 	# Only root should need to update these files
 	$(Q)find $(ROOTDIR)/etc/policies -name "*.yml" -exec chmod 644 {} \;
 
+# watchdog hardening drop-in (bound reboot stalls + reset on a systemd hang)
+rootfs_install::
+	$(Q)mkdir -p $(ROOTDIR)/etc/systemd/system.conf.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-watchdog.conf ./etc/systemd/system.conf.d
+
 # cube deterministic ssh key generation utility
 $(call PROJ_INSTALL_PROGRAM,,$(CORE_PKGDIR)/x86_64/oss/ssh-keydgen,./usr/sbin)
 
