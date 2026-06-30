@@ -500,6 +500,18 @@ void * ThreadClusterCheckRepairItem(void *thargs) {
     return NULL;
 }
 
+struct TierItemArg {
+    const CheckRepairItem* item;
+    int repair;
+    int result;
+};
+
+void * ThreadCheckRepairItemTier(void *thargs) {
+    TierItemArg* a = (TierItemArg*)thargs;
+    a->result = ClusterCheckRepairItem(*a->item, true, a->repair);
+    return NULL;
+}
+
 static int
 ClusterCheckRepairMain(int argc, const char** argv)
 {
@@ -526,6 +538,14 @@ ClusterCheckRepairMain(int argc, const char** argv)
         return CLI_SUCCESS;
     }
 
+    // Essential suite: only the live-migration path. Used as a health gate by
+    // rolling restart; not for rolling upgrade (mixed-version skew reports NG).
+    if (argc >= 2 && strcmp(argv[1], "essential") == 0) {
+        CliPrintf("Live-migration essential services%s:", repair ? " (check + repair)" : "");
+        HexSystemF(0, HEX_SDK " cluster_check_repair_essential %d", repair);
+        return CLI_SUCCESS;
+    }
+
     if (argc >= 2 && CliMatchCmdHelper(argc, argv, 1, CubeHasRole(R_CORE) ? E_SRVCMD : SRVCMD, &index, &service)) {
         CliPrintf("invalid service %s", service.c_str());
         return CLI_INVALID_ARGS;
@@ -544,23 +564,42 @@ ClusterCheckRepairMain(int argc, const char** argv)
 
     if (index >= 0) {
         ClusterCheckRepairItem(srv, true, repair);
-    } else if (repair) {
-        for (int i = 0 ; i < TOP ; i++) {
-            int ret = ClusterCheckRepairItem(s_services[i], true, repair);
-            if (ret != 0 && s_services[i].failthru == false) {
-                CliPrint("A critical service could not be repaired. Stop checking.");
-                break;
-            }
-        }
     } else {
-        pthread_t thread_id[TOP];
-        for (int i = 0 ; i < TOP ; i++) {
-            if (pthread_create(&thread_id[i], NULL, ThreadClusterCheckRepairItem, (void *)&s_services[i]) != 0) {
-                CliPrintf("Failed to start threads in parallel %ld, %s.", (long)thread_id[i], s_services[i].display.c_str());
-                return -1;
+        // 2-tier parallel: foundational groups (failthru==false) run in parallel,
+        // then the dependent groups (failthru==true) run in parallel. For
+        // check_repair, if a foundational group can't be repaired, stop before
+        // the dependent tier -- preserves the original failthru "stop on critical
+        // failure" semantics while parallelizing within each tier.
+        bool critical_failed = false;
+        for (int tier = 0 ; tier < 2 && !critical_failed ; tier++) {
+            bool foundational = (tier == 0);
+            std::vector<pthread_t> tids;
+            std::vector<TierItemArg*> args;
+            for (int i = 0 ; i < TOP ; i++) {
+                if (s_services[i].failthru == foundational)
+                    continue; // not this tier
+                TierItemArg* a = new TierItemArg{ &s_services[i], repair, 0 };
+                pthread_t tid;
+                if (pthread_create(&tid, NULL, ThreadCheckRepairItemTier, (void *)a) != 0) {
+                    CliPrintf("Failed to start thread for %s.", s_services[i].display.c_str());
+                    delete a;
+                    continue;
+                }
+                tids.push_back(tid);
+                args.push_back(a);
             }
+            for (size_t k = 0 ; k < tids.size() ; k++)
+                pthread_join(tids[k], NULL);
+            if (foundational && repair) {
+                for (size_t k = 0 ; k < args.size() ; k++)
+                    if (args[k]->result != 0)
+                        critical_failed = true;
+            }
+            for (size_t k = 0 ; k < args.size() ; k++)
+                delete args[k];
         }
-        for (int i = 0 ; i < TOP ; i++) pthread_join(thread_id[i], NULL);
+        if (critical_failed)
+            CliPrint("A critical service could not be repaired. Stop checking.");
     }
 
     return CLI_SUCCESS;
@@ -822,10 +861,11 @@ ClusterReadyMain(int argc, const char** argv)
     CliPrintf("[5/6] Strengthening password");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run hex_sdk cmd " HEX_CFG " cube_password_init");
 
-    CliPrintf("[6/6] Cluster check and repair");
+    CliPrintf("[6/6] Cluster check and repair started in the background.");
+    CliPrintf("      The box is ready to use now; the result will pop up here when it completes.");
     HexSpawn(0, HEX_SDK, "host_local_run", "hex_sdk", "-m force",  "health_neutron_repair", ZEROCHAR_PTR);
-    HexSpawn(0, HEX_SDK, "cmd", "-co", "hex_cli -c cluster check_repair", ZEROCHAR_PTR);
     HexSpawn(0, HEX_SDK, "cmd", "rm -f /tmp/health_*_error.count", ZEROCHAR_PTR);
+    HexSystemF(0, HEX_SDK " cluster_check_repair_async");
 
     CliPrintf("Done");
 
@@ -900,6 +940,89 @@ ClusterErrcodeDumpMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+static int
+ClusterRollingRestartMain(int argc, const char** argv)
+{
+    /*
+     * [0]="rolling_restart"
+     * [1]=[status|continue|abort]   control sub-commands (used alone)
+     * [1..]=<host> ...              explicit targets to start on; none = all
+     */
+    std::string sub = (argc == 2) ? argv[1] : "";
+
+    if (sub == "status") {
+        HexSystemF(0, HEX_SDK " power_roll_status");
+        return CLI_SUCCESS;
+    }
+
+    if (sub == "continue" || sub == "abort") {
+        HexSystemF(0, HEX_SDK " power_roll_decision %s", sub.c_str());
+        HexLogEvent(sub == "continue" ? "CLU00002I" : "CLU00003I",
+            "%s,category=cluster,sub=rolling_restart,action=%s",
+            CliEventAttrs().c_str(), sub.c_str());
+        return CLI_SUCCESS;
+    }
+
+    // dryrun [<host>...]: print the plan (node order + per-VM disposition) and
+    // change nothing. Read-only, so no readiness gate / confirmation.
+    if (argc >= 2 && std::string(argv[1]) == "dryrun") {
+        std::string targets;
+        for (int i = 2; i < argc; i++) {
+            if (!targets.empty()) targets += " ";
+            targets += argv[i];
+        }
+        HexSystemF(0, HEX_SDK " power_roll_plan %s", targets.c_str());
+        return CLI_SUCCESS;
+    }
+
+    // Fail fast: reject a NEW roll if one is already running/paused, before the
+    // dryrun + confirmation, so the operator isn't walked through a plan only to
+    // be refused at start. (status/continue/abort/dryrun above still work mid-roll.)
+    if (HexSystemF(0, HEX_SDK " power_roll_active") == 0) {
+        CliPrintf("A rolling restart is already in progress.");
+        CliPrintf("Run \"cluster rolling_restart status\" to follow it, or \"continue\"/\"abort\".");
+        return CLI_SUCCESS;
+    }
+
+    if (!ClusterReadyCheck())
+        return CLI_SUCCESS;
+
+    // Any remaining args are an explicit target list; none means whole cluster.
+    std::string hosts;
+    for (int i = 1; i < argc; i++) {
+        if (!hosts.empty())
+            hosts += " ";
+        hosts += argv[i];
+    }
+
+    // Always dryrun first: show the operator the real plan (which VMs migrate vs.
+    // get suspended+restored, in a highlighted section) so confirming is informed
+    // consent for that interruption. The roll then runs autonomously.
+    HexSystemF(0, HEX_SDK " power_roll_plan %s", hosts.c_str());
+    CliPrintf("");
+    CliPrintf("Confirming runs the roll autonomously: live-migrate what can move,");
+    CliPrintf("suspend+restore the highlighted VMs, reboot each node (master last).");
+    CliPrintf("It pauses for you only if a migratable VM unexpectedly fails.");
+    if (hosts.empty())
+        CliPrintf("Scope: every node in the cluster.");
+    else
+        CliPrintf("Scope: %s", hosts.c_str());
+    CliPrintf("If this node is included it will be rebooted during the roll, ending this session.");
+    CliPrintf("Job state is shared on cephfs, so follow progress from another node");
+    CliPrintf("(or the cluster VIP) with \"cluster rolling_restart status\".");
+    CliPrintf("If it pauses on a failure, resume with \"cluster rolling_restart continue\" or stop with \"abort\".");
+
+    if (!CliReadConfirmation())
+        return CLI_SUCCESS;
+
+    HexSystemF(0, HEX_SDK " power_roll_start %s", hosts.c_str());
+
+    HexLogEvent("CLU00001I", "%s,category=cluster,sub=rolling_restart,action=start,scope=%s",
+        CliEventAttrs().c_str(), hosts.empty() ? "all" : hosts.c_str());
+
+    return CLI_SUCCESS;
+}
+
 CLI_MODE(CLI_TOP_MODE, "cluster", "Work with cube cluster.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired());
 
@@ -938,6 +1061,10 @@ CLI_MODE_COMMAND("cluster", "poweroff", ClusterPoweroffMain, NULL,
 CLI_MODE_COMMAND("cluster", "powercycle", ClusterPowercycleMain, NULL,
     "power cycle all nodes in cube cluster.",
     "powercycle");
+
+CLI_MODE_COMMAND("cluster", "rolling_restart", ClusterRollingRestartMain, NULL,
+    "reboot nodes one at a time, evacuating workloads first.",
+    "rolling_restart [<host> ...|dryrun [<host> ...]|status|continue|abort]");
 
 CLI_MODE_COMMAND("cluster", "recreate", ClusterRecreateMain, NULL,
     "CAUTION! mark to recreate the cluster.",
