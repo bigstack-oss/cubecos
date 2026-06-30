@@ -18,6 +18,12 @@ CMP02001I: instance HA segment is created
 CMP02002I: instance HA segment is deleted
 CMP02003I: a compute node in maintenance mode is back to be in production
 
+CLU00001I: cluster rolling restart started
+CLU00002I: cluster rolling restart resumed
+CLU00003I: cluster rolling restart aborted
+CLU00004W: cluster rolling restart paused on failure
+CLU00005I: cluster rolling restart completed
+
 PLC00001I: cube node policy is successfully applied
 PLC00002I: cube cluster policy is successfully applied
 

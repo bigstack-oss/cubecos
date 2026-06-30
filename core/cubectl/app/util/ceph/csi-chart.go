@@ -10,13 +10,37 @@ import (
 	"helm.sh/helm/v3/pkg/cli/values"
 )
 
+// Bound each ceph call; retry to ride out mon/mgr still recovering on cold boot.
+const (
+	cephConnectTimeout  = "10"
+	cephReadyAttempts   = 30
+	subVolGroupAttempts = 5
+)
+
+// InitDefaultSubVolumeGroup creates the CSI cephfs subvolume group, waiting for
+// ceph to be reachable then retrying the idempotent create -- the mon/mgr may
+// still be recovering on a cold boot.
 func InitDefaultSubVolumeGroup() error {
-       _, outErr, err := util.ExecCmd("timeout", "30", "ceph", "fs", "subvolumegroup", "create", "cephfs", DefaultFsSubVolumeGroup)
-	if err != nil {
-		return errors.Wrapf(err, "Failed to init default sub volume group(%s): %s", DefaultFsSubVolumeGroup, outErr)
+	// Wait until a mon answers.
+	if err := util.Retry(func() error {
+		_, stderr, err := util.ExecCmd("ceph", "--connect-timeout", cephConnectTimeout, "-s")
+		if err != nil {
+			return errors.Wrapf(err, "ceph not reachable yet: %s", stderr)
+		}
+		return nil
+	}, cephReadyAttempts); err != nil {
+		return errors.Wrap(err, "ceph did not become reachable for subvolumegroup create")
 	}
 
-	return nil
+	// Create the subvolume group (idempotent); retry while the mgr volumes module comes up.
+	return util.Retry(func() error {
+		_, stderr, err := util.ExecCmd("ceph", "--connect-timeout", cephConnectTimeout,
+			"fs", "subvolumegroup", "create", "cephfs", DefaultFsSubVolumeGroup)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to init default sub volume group(%s): %s", DefaultFsSubVolumeGroup, stderr)
+		}
+		return nil
+	}, subVolGroupAttempts)
 }
 
 func customizeCsiFsValues() (*values.Options, error) {
