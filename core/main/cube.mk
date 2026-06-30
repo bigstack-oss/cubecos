@@ -145,6 +145,10 @@ hex_config_MODULES += config_ironic.o
 hex_config_MODULES += config_neutron.o
 hex_config_MODULES += config_nova.o
 hex_config_MODULES += config_cinder.o
+# linked after config_cinder.o: config_multipath observes CINDER_STORAGE_BACKEND,
+# so cinder's tuning must be static-initialized first (commit order is dependency-
+# resolved separately, so this does not affect when multipath commits)
+hex_config_MODULES += config_multipath.o
 hex_config_MODULES += config_glance.o
 hex_config_MODULES += config_swift.o
 hex_config_MODULES += config_heat.o

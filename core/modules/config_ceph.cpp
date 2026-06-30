@@ -47,8 +47,6 @@
 #define RESTFUL_PORT "8003"
 #define ISCSI_API_PORT "5010"
 
-static const char MULTIPATHD[] = "multipathd";
-static const char MULTIPATH_CONF[] = "/etc/multipath.conf";
 
 const static char NAME[] = "ceph";
 const static char USER[] = "ceph";
@@ -163,29 +161,6 @@ PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 // FIXME: circular issue
 // PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 2);
 static ConfigString s_adminCliPass("66K1ogIiRt5KnyHe");
-
-/**
- * Update device maps for multipath devices.
- */
-static bool
-updateDeviceMaps()
-{
-    SystemdCommitService(true, MULTIPATHD, true);
-
-    const ExecSyncResult r = ExecBashSync(
-        0,
-        false,
-        false,
-        {},
-        HEX_SDK " storage_update_device_maps");
-    if (r.exitCode != 0) {
-        HexLogError("failed to update device maps");
-        return false;
-    }
-
-    HexLogInfo("finished updating device maps");
-    return true;
-}
 
 /**
  * Partition all prepared OSD disks from the installation process.
@@ -549,7 +524,6 @@ SetupOsd(std::string hostname, std::string fsid)
     s_osdIds.clear();
     s_osdNewIds.clear();
 
-    updateDeviceMaps();
     activateRawOsds();
     activateLvmOsds();
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_map");
@@ -1332,10 +1306,6 @@ MountCephfsStore()
 static bool
 Init()
 {
-    if (access(MULTIPATH_CONF, F_OK) != 0) {
-        HexUtilSystemF(0, 0, "/usr/sbin/mpathconf --enable");
-    }
-
     // fail safe for creating ceph guest socket dir
     HexMakeDir(CLIENT_SOCK, "ceph", "ceph", 0755);
 

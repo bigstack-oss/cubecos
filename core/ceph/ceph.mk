@@ -25,9 +25,6 @@ CEPH_PATCHDIR := $(COREDIR)/ceph/$(OPENSTACK_RELEASE)_patch
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
 
 rootfs_install::
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/multipath.conf ./etc/
-
-rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl mask lvm2-monitor
 	$(Q)chroot $(ROOTDIR) systemctl disable ceph-crash libstoragemgmt
 	#$(Q)mv -f $(ROOTDIR)/etc/ceph/radosgw-sync.conf $(ROOTDIR)/etc/ceph/radosgw-sync.conf.example

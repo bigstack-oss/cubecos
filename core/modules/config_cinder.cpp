@@ -1082,7 +1082,6 @@ CONFIG_REQUIRES(cinder, memcache);
 CONFIG_REQUIRES(cinder, libvirtd);
 
 CONFIG_MIGRATE(cinder, "/etc/cube/cos/cinder");
-CONFIG_MIGRATE(cinder, "/etc/multipath/conf.d");
 CONFIG_MIGRATE(cinder, CINDER_BACKEND_DIR);
 CONFIG_MIGRATE(cinder, "/etc/cinder/external_storage_extra_configs");
 CONFIG_MIGRATE(cinder, CONF_DIR);
