@@ -14,6 +14,7 @@ rootfs_install::
 			keystone==23.0.2 \
 			python-keystoneclient \
 			PyMySQL \
+			"oslo.messaging[kafka]" \
 			python-ldap \
 			ldappool \
 			python-memcached"
