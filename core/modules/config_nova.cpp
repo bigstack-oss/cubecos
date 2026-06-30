@@ -490,6 +490,11 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         // kept short so planned drains stay bounded/predictable (post-copy backstops
         // sooner); the 2 GiB floor keeps tiny guests from being cut off too early.
         cfg["libvirt"]["live_migration_completion_timeout"] = "15";
+        // cap on concurrent outbound live-migrations per compute host. The
+        // rolling-restart drain reads and honors this value, so it is the single
+        // source of truth for migration parallelism. 3 overlaps migrations on a
+        // fast fabric; on a saturated link nova still serializes within the cap.
+        cfg["DEFAULT"]["max_concurrent_live_migrations"] = "3";
         std::string cpuVirtInstr = HexUtilPOpen("echo -n $(egrep -o '(vmx|svm)' /proc/cpuinfo | uniq)");
         if (cpuVirtInstr == "svm")
             cfg["libvirt"]["cpu_model_extra_flags"] = cpuVirtInstr;
