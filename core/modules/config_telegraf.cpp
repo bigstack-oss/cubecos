@@ -373,7 +373,7 @@ CONFIG_REQUIRES(telegraf, kafka);
 CONFIG_OBSERVES(telegraf, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(telegraf, kapacitor, ParseKapacitor, NotifyKapacitor);
 
-CONFIG_TRIGGER_WITH_SETTINGS(telegraf, "cluster_start", ClusterStartMain);
+CONFIG_TRIGGER_WITH_SETTINGS(telegraf, "node_start", ClusterStartMain);
 
 CONFIG_MIGRATE(telegraf, DEV_LIST);
 

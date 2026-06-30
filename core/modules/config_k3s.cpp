@@ -168,4 +168,4 @@ CONFIG_OBSERVES(k3s_last, nova, ParseNova, NotifyNova);
 // Inculde embedded etcd and all workloads and pv on k3s
 CONFIG_MIGRATE(k3s, "/var/lib/rancher/k3s");
 
-CONFIG_TRIGGER_WITH_SETTINGS(k3s_last, "cluster_start", ClusterStartMain);
+CONFIG_TRIGGER_WITH_SETTINGS(k3s_last, "node_start", ClusterStartMain);

@@ -257,6 +257,26 @@ cube_commit_done()
 
 cube_cluster_start()
 {
+    # New rolling-restart design: the per-node half runs on every node's boot;
+    # the master runs the cluster-wide half ONCE, after all nodes are up (the
+    # master is rolled last, so that lands at the end of the roll). Non-master /
+    # single-node-rejoin boots do only the per-node half.
+    cube_cluster_start_node
+    cube_cluster_start_cluster_if_master
+    # Boot-relay step: a node returning from a rolling restart finalizes itself
+    # (restore its suspended VMs, mark done) and kicks the next node. Called here
+    # so it runs on EVERY node's boot, decoupled from the bring-up's exit status
+    # -- relying on a chained call in bootstrap_cube_config let a single non-zero
+    # silently skip the advance and wedge the roll. Idempotent, so a duplicate
+    # call from the boot script is harmless. Via hex_sdk -- a bare call would be
+    # "command not found" (proj_functions doesn't source modules/, where
+    # power_roll_advance lives).
+    hex_sdk power_roll_advance "$HOSTNAME"
+}
+
+# Shared env for the split cube_cluster_start halves.
+_cube_cluster_start_env()
+{
     source /usr/sbin/hex_tuning /etc/settings.txt
     if [ "x$T_cubesys_control_hosts" = "x" ] ; then
         export MASTER_CONTROL=$T_cubesys_controller
@@ -264,9 +284,38 @@ cube_cluster_start()
     else
         export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
     fi
+}
 
+# Per-node half: runs on EVERY node's boot/recovery to bring this node's local
+# services into the cluster (node_start trigger + per-node fixups). Idempotent.
+cube_cluster_start_node()
+{
+    _cube_cluster_start_env
     Quiet -n ip neigh flush all
-    Quiet -n $HEX_SDK ceph_leave_maintenance # ensure storage is working (healing itself if necessary) before other actions
+    Quiet -n $HEX_SDK ceph_leave_maintenance # ensure storage is working before other actions
+    if [ "$VERBOSE" == "1" ] ; then
+        /usr/sbin/hex_config -p trigger node_start
+    else
+        /usr/sbin/hex_config trigger node_start
+    fi
+    # Reapply pacemaker scheduler props now the cluster is up (CIB may not have
+    # been ready when config_pacemaker set them).
+    Quiet -n pcs property set stonith-enabled=false pe-error-series-max="1000" pe-warn-series-max="1000" cluster-recheck-interval="5min"
+    cmd "$HEX_SDK network_ipt_serviceint" # customized iptables
+    Quiet -n $HEX_SDK ceph_osd_set_bucket_host # assign osds to customized ceph buckets
+    Quiet -n $HEX_SDK os_resume_hypervisor     # resume hypervisors disabled due to ins-ha
+    Quiet -n killall /usr/sbin/hex_banner # refresh console banner
+    ( $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ) || Quiet -n $HEX_SDK toggle_health_check ceph_osd
+    iptables-save > /run/iptables
+    touch $CLUSTER_SYNC
+}
+
+# Cluster-wide half: runs ONCE from the master when all nodes are up (master
+# rolled last => end of roll; or after a full bring-up). All ops idempotent.
+cube_cluster_start_cluster()
+{
+    _cube_cluster_start_env
+    touch /run/cube_cluster_wide.ran # marker: this node ran the cluster-wide half (expect: master only)
     if [ "$VERBOSE" == "1" ] ; then
         /usr/sbin/hex_config -p trigger cluster_start
     else
@@ -285,25 +334,13 @@ cube_cluster_start()
         [ ! -e /etc/glance/cirros-0.4.0-x86_64-disk.qcow2 ] || $HEX_SDK os_image_import /etc/glance cirros-0.4.0-x86_64-disk.qcow2 Cirros
         [ ! -e /etc/glance/alpine-tools.qcow2 ] || $HEX_SDK os_image_import /etc/glance alpine-tools.qcow2 Alpine
     fi
-    for i in $($OPENSTACK image list -f value | grep "Cirros queued" | cut -d " " -f1) ; do
-        [ $cnt -le 1 ] || $OPENSTACK image delete $i
-    done
     local cnt=0
     for i in $($OPENSTACK image list -f value | grep "Cirros active" | cut -d " " -f1) ; do
         ((cnt++))
         [ $cnt -le 1 ] || $OPENSTACK image delete $i
     done
 
-    touch $CLUSTER_SYNC
-
     cmd "$HEX_SDK migrate_fixpack"
-    cmd "$HEX_SDK network_ipt_serviceint" # customized iptables
-    Quiet -n $HEX_SDK ceph_osd_set_bucket_host # assign osds to customized ceph buckets
-    Quiet -n $HEX_SDK os_resume_hypervisor     # resume hypervisors disabled due to ins-ha
-    Quiet -n killall /usr/sbin/hex_banner # refresh console banner to display up-to-date cluster info.
-    # by default disable ceph_osd which in case of disk failures cannot be handled by software
-    ( $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ) || Quiet -n $HEX_SDK toggle_health_check ceph_osd
-    iptables-save > /run/iptables
     nohup bash -c "$HEX_SDK git_init" >/dev/null 2>&1 &
 
     $OPENSTACK ec2 credentials list --user admin -c Access -c Secret -f value 2>/dev/null | head -n 1 > /run/ec2.key
@@ -318,6 +355,29 @@ cube_cluster_start()
     fi
     keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
     Quiet -n cubectl node rsync /run/ec2.key
+}
+
+# Master-only, run-once gate for the cluster-wide half. The master waits until
+# every node has finished its per-node start (CLUSTER_SYNC marker), then runs
+# the cluster-wide half once. Since the master is rolled last, on a rolling
+# restart this fires at the end of the roll; on a full bring-up it fires once
+# all nodes are up. A non-master node -- or a single node rejoining a live
+# cluster -- never runs it (its boot path calls only cube_cluster_start_node).
+cube_cluster_start_cluster_if_master()
+{
+    _cube_cluster_start_env
+    [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] || return 0
+    local nodes=$(cubectl node list -j 2>/dev/null | jq -r '.[].hostname')
+    local _i n allup
+    for _i in $(seq 1 90) ; do
+        allup=1
+        for n in $nodes ; do
+            remote_run "$n" "[ -e $CLUSTER_SYNC ]" || { allup=0 ; break ; }
+        done
+        [ "$allup" = 1 ] && break
+        sleep 20
+    done
+    cube_cluster_start_cluster
 }
 
 cube_cluster_stop()
@@ -1019,6 +1079,63 @@ cluster_check()
             break
         fi
     done
+}
+
+# Live-migration essential service comps (rolling restart). Repairable only --
+# just the services the drain/live-migration path depends on. Used as a health
+# gate by rolling restart (same version both sides of the reboot); NOT for
+# rolling upgrade, where mixed-version skew makes these checks report NG as an
+# expected transient. Tier 1 (foundational: DB/MQ/auth/VIP/clock/mon) is checked
+# first; tier 2 (compute/network/data) in parallel after.
+ROLLING_ESSENTIAL_TIER1="mysql rabbitmq memcache httpd haproxy haproxy_ha clock ceph_mon"
+ROLLING_ESSENTIAL_TIER2="nova neutron ceph_osd ceph_mds"
+
+_essential_check_one()
+{
+    # $1=comp $2=repair(1|0). Returns 0 if healthy (after optional repair).
+    local c=$1 repair=$2
+    if _OVERRIDE_MAX_ERR=1 $HEX_SDK health_${c}_check >/dev/null 2>&1 ; then
+        printf ' %-14s ok\n' "$c"
+        return 0
+    fi
+    if [ "$repair" = "1" ] ; then
+        $HEX_SDK health_${c}_repair >/dev/null 2>&1
+        if _OVERRIDE_MAX_ERR=1 $HEX_SDK health_${c}_check >/dev/null 2>&1 ; then
+            printf ' %-14s repaired\n' "$c"
+            return 0
+        fi
+    fi
+    printf ' %-14s FAIL\n' "$c" >&2
+    return 1
+}
+
+cluster_check_repair_essential()
+{
+    # $1=repair (1) or check-only (0, default). Only the live-migration path.
+    # 2-tier: services within each tier run in parallel; tier 1 (foundational)
+    # completes before tier 2 (dependent).
+    local repair=${1:-0} rc=0 c p pids
+    for tier in "$ROLLING_ESSENTIAL_TIER1" "$ROLLING_ESSENTIAL_TIER2" ; do
+        pids=""
+        for c in $tier ; do
+            _essential_check_one "$c" "$repair" & pids="$pids $!"
+        done
+        for p in $pids ; do wait "$p" || rc=1 ; done
+    done
+    return $rc
+}
+
+cluster_check_repair_async()
+{
+    # Run the final cluster check_repair off the caller's critical path so the
+    # operator gets their prompt back immediately and can start using the box.
+    # The result is popped onto the console device(s) and broadcast (wall) when
+    # it finishes. Detached via setsid so it survives the parent CLI exiting.
+    setsid bash -c '
+        out=$(hex_cli -c cluster check_repair 2>&1)
+        con=$(hex_sdk GetKernelConsoleDevices)
+        { echo "" ; echo "===== cluster check_repair complete =====" ; echo "$out" ; echo "=========================================" ; } | tee $con 2>/dev/null | wall 2>/dev/null
+    ' </dev/null >/dev/null 2>&1 &
 }
 
 cluster_check_repair()

@@ -507,5 +507,5 @@ CONFIG_MODULE(haproxy, Init, Parse, 0, 0, Commit);
 CONFIG_OBSERVES(haproxy, cubesys, ParseCube, NotifyCube);
 CONFIG_REQUIRES(haproxy, pacemaker);
 
-CONFIG_TRIGGER_WITH_SETTINGS(haproxy, "cluster_start", ClusterStartMain);
+CONFIG_TRIGGER_WITH_SETTINGS(haproxy, "node_start", ClusterStartMain);
 

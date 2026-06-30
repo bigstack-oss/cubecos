@@ -89,33 +89,66 @@ RollingEvacuateAndReboot()
         # hex_sdk os_nova_instance_hardreboot $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i -e error -e nostate | cut -d" " -f1)
     fi
     if [ "x$upgrading" = "xfalse" ]; then
+        # If this boot follows a rolling restart, the cluster may take many
+        # minutes to become ready (single-node ceph/cephfs recovery). Wait so the
+        # VM restore + relay advance below run against a ready cluster instead of
+        # being skipped. Bounded; marker removed once consumed.
+        ROLLING_RECOVER=0
+        if [ -e /etc/appliance/state/rolling_restart_recover ] ; then
+            for _i in $(seq 1 90) ; do hex_sdk cube_cluster_ready && break ; sleep 20 ; done
+            rm -f /etc/appliance/state/rolling_restart_recover
+            ROLLING_RECOVER=1
+        fi
         if hex_sdk cube_cluster_ready ; then
             msg="Cluster checking and repairing"
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
             hex_sdk cmd "rm -f /tmp/health_*error.count"
-            hex_cli -c cluster check # kick off auto_repair
-            hex_cli -c cluster check_repair # safe net in case auto_repair is not enough
-            if hex_cli -c cluster check Storage | grep -i " ok " ; then
-                rsync -ar /var/lib/ceph /store/
+            # Normal boots only: the full 'cluster check' kicks per-service
+            # auto_repair. Rolling-restart boots SKIP it -- on a single node its
+            # ceph_mds auto_repair restarts the lone MDS while it is still settling,
+            # forcing a ~8 min cephfs replay that stalls recovery. The focused
+            # essential gate below covers the live-migration path instead.
+            if [ "$ROLLING_RECOVER" != "1" ] ; then
+                hex_cli -c cluster check # kick off auto_repair
             fi
-            msg="Cluster checked and repaired"
-            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-            hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
-            need_be_active_servers="$(cat /mnt/cephfs/nova/instances/active_running 2>/dev/null)"
-            if [ "x$need_be_active_servers" != "x" ] ; then
-                for i in $need_be_active_servers ; do
+            # Restore recorded VMs (always), synchronously, before the gate below.
+            # active_running holds one VM per line as "<id> [disposition]" --
+            # disposition recorded by the drain: suspended (resume), stopped
+            # (start), or empty/legacy (reset+hardreboot). Read line-by-line.
+            if [ -s /mnt/cephfs/nova/instances/active_running ] ; then
+                while read -r i disp _ ; do
+                    [ -z "$i" ] && continue
                     if hex_sdk os_nova_list id status powerstate |  grep -i "$i active running" ; then
                         continue
                     else
-                        hex_sdk os_nova_instance_reset $i
-                        hex_sdk os_nova_instance_hardreboot $i
-                        msg="Reset and booted non-active server: $i"
+                        hex_sdk power_vm_restore "$i" "$disp"
+                        msg="Restored server: $i ${disp:+($disp)}"
                         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
                     fi
-                done
+                done < /mnt/cephfs/nova/instances/active_running
             fi
+            # Normal boots only: ceph backup to /store. Skipped on rolling-restart
+            # boots -- the 'cluster check Storage' probe blocks on MDS replay.
+            if [ "$ROLLING_RECOVER" != "1" ] && hex_cli -c cluster check Storage | grep -i " ok " ; then
+                rsync -ar /var/lib/ceph /store/
+            fi
+            if [ "$ROLLING_RECOVER" = "1" ] ; then
+                # Rolling restart only needs the live-migration path verified --
+                # run the focused essential check+repair (fast, ~tens of seconds)
+                # instead of the full 28-group safe-net sweep.
+                hex_sdk cluster_check_repair_essential 1
+                msg="Cluster ready; live-migration essential services checked"
+            else
+                # Normal boot (powercycle, reboot, cold/crash recovery): the
+                # 'cluster check' above already kicked per-service auto_repair for
+                # anything NG, so a second full check_repair pass is redundant.
+                # Rely on auto_repair + systemd restart policies.
+                msg="Cluster ready"
+            fi
+            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+            hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
         else
             msg="Cluster check and repair skipped as not all nodes are bootstrapped and synced"
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
@@ -135,6 +168,9 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
     else
         echo "Starting auto bootstrap" >> $BOOTSTRAP_CUBE_MODE
+        # Boot-relay advance is driven by cube_cluster_start (power_roll_advance,
+        # idempotent, every boot) -- intentionally NOT chained onto the bring-up
+        # below, where a non-zero exit could silently skip it and wedge the roll.
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop

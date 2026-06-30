@@ -158,4 +158,4 @@ CONFIG_REQUIRES(libvirtd, cube_scan);
 // extra tunings
 CONFIG_OBSERVES(libvirtd, cubesys, ParseCube, NotifyCube);
 
-CONFIG_TRIGGER_WITH_SETTINGS(libvirtd, "cluster_start", ClusterStartMain);
+CONFIG_TRIGGER_WITH_SETTINGS(libvirtd, "node_start", ClusterStartMain);
