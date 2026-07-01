@@ -478,7 +478,8 @@ Commit(bool modified, int dryLevel)
         HexUtilSystemF(0, 0, "chown -R %s:%s %s", USER, GROUP, CKEY_DIR);
     }
 
-    // 4. keystone relies on httpd wsgi
+    // 4. keystone relies on httpd proxy and gunicorn
+    SystemdCommitService(IsControl(s_eCubeRole), "openstack-keystone");
     SystemdCommitService(IsControl(s_eCubeRole), "httpd");
     if (HexUtilSystemF(0, 0, HEX_SDK " wait_for_http_endpoint %s 5000 60", sharedId.c_str()) != 0) {
         return false;
