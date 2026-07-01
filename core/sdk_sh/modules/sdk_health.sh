@@ -2203,7 +2203,15 @@ _health_octavia_auto_repair()
 
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         if remote_run $node hex_sdk is_first_three_compute_node ; then
-            if ! is_remote_running $node octavia-worker ; then
+            # octavia-hm0 missing/down/unrouted (codes 5/6/7): lightweight bring-up
+            # on that node -- fast + idempotent (no port recreate, no reconfig, no
+            # service churn), so it's overlap-safe on the periodic auto_repair. The
+            # heavy reinit_octavia stays in health_octavia_repair (deliberate path).
+            if ! remote_run $node ovs-vsctl port-to-br octavia-hm0 >/dev/null 2>&1 \
+               || remote_run $node ip link show octavia-hm0 2>/dev/null | grep -q DOWN \
+               || ! remote_run $node route -n 2>/dev/null | grep -q octavia-hm0 ; then
+                Quiet -n remote_run $node hex_sdk os_octavia_hm0_up
+            elif ! is_remote_running $node octavia-worker ; then
                 remote_systemd_restart $node octavia-worker
             elif ! is_remote_running $node octavia-health-manager ; then
                 remote_systemd_restart $node octavia-health-manager
@@ -2214,10 +2222,22 @@ _health_octavia_auto_repair()
 
 health_octavia_repair()
 {
-    # master node should run first before other nodes
-    local master=$CUBE_NODE_CONTROL_HOSTNAMES
+    # Deliberate full repair: reinit_octavia on EVERY relevant node, not just
+    # master + the invoking node. Master runs first (it owns the shared lb-mgmt
+    # resources, and non-master node_init ssh's to it for the CIDR); then every
+    # other first-three-compute node runs in parallel. reinit_octavia is heavy
+    # (~2min/node incl. ReconfigMain), but this is the serialized, operator/roll
+    # -triggered path -- it can't overlap a periodic round, so the cost is fine.
+    local master=$CUBE_NODE_CONTROL_HOSTNAMES node pids=""
     Quiet -n remote_run $master $HEX_CFG reinit_octavia
-    cmd $HEX_CFG reinit_octavia
+    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+        [ "$node" = "$master" ] && continue
+        if remote_run $node hex_sdk is_first_three_compute_node ; then
+            Quiet -n remote_run $node $HEX_CFG reinit_octavia &
+            pids="$pids $!"
+        fi
+    done
+    for p in $pids ; do wait "$p" ; done
 }
 
 health_designate_report()

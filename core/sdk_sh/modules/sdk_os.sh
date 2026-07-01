@@ -1632,54 +1632,59 @@ os_octavia_node_init()
     fi
 
     local port_ip=$1
-    local cidr=$2
-    local port_id=
-    local subnet_id=
     local port_name="octavia-hmgr-port-$(hostname)"
 
     local init=$($OPENSTACK port list -f value | grep $port_name | grep ACTIVE | wc -l)
     if [ $init -eq 0 ] ; then
-        # sanitize dependent resources before re-creating Octavia
+        # sanitize dependent resources before re-creating the health-mgr port
         $OPENSTACK port list -f value | grep $port_name | cut -d' ' -f1 | xargs -i $OPENSTACK port delete {} || true
         /usr/bin/ovs-vsctl del-port br-int octavia-hm0 || true
 
-        port_id=$($OPENSTACK port create --security-group lb-hmgr-sec-grp --device-owner Octavia:health-mgr --host=$(hostname) -c id -f value --network lb-mgmt-net --fixed-ip subnet=lb-mgmt-subnet,ip-address=$port_ip $port_name 2>/dev/null)
-    else
-        port_id=$($OPENSTACK port list -f value | grep $port_name | awk '{print $1}')
-        # if port exists, honor original settings because it could be an upgraded cluster
-        port_ip=$($OPENSTACK port show $port_name | grep "fixed_ips.*ip_address" | awk -F"'" '{print $2}')
-        subnet_id=$($OPENSTACK port show $port_name | grep "fixed_ips.*ip_address" | awk -F"'" '{print $4}')
-        cidr=$($OPENSTACK subnet show $subnet_id | grep cidr | awk '{print $4}')
+        $OPENSTACK port create --security-group lb-hmgr-sec-grp --device-owner Octavia:health-mgr --host=$(hostname) --network lb-mgmt-net --fixed-ip subnet=lb-mgmt-subnet,ip-address=$port_ip $port_name >/dev/null 2>&1
     fi
 
-    if [ -z "$port_id" ] ; then
-        return 0
-    fi
-
-    local port_mac=$($OPENSTACK port show -c mac_address -f value $port_id)
-
-    if ! /usr/bin/ovs-vsctl port-to-br octavia-hm0 >/dev/null 2>&1 ; then
-        /usr/bin/ovs-vsctl -- --may-exist add-port br-int octavia-hm0 -- set Interface octavia-hm0 type=internal -- set Interface octavia-hm0 external-ids:iface-status=active -- set Interface octavia-hm0 external-ids:attached-mac=$port_mac -- set Interface octavia-hm0 external-ids:iface-id=$port_id -- set Interface octavia-hm0 external-ids:skip_cleanup=true
-    fi
-    if ! /sbin/ip link show octavia-hm0 | grep -q $port_mac ; then
-        /sbin/ip link set octavia-hm0 address $port_mac || true
-    fi
-    if /sbin/ip link show octavia-hm0 | grep -q DOWN ; then
-        /sbin/ip link set octavia-hm0 up || true
-    fi
-    if ! /sbin/ip addr show octavia-hm0 | grep -q $port_ip ; then
-        /sbin/ip addr add $port_ip dev octavia-hm0 || true
-    fi
-    if ! /usr/sbin/route -n | grep -q octavia-hm0 ; then
-        /sbin/ip route del $cidr dev octavia-hm0 || true
-        /sbin/ip route add $cidr dev octavia-hm0 || true
-    fi
+    # bring the interface up from the neutron port -- single source of the ovs/ip
+    # bring-up logic, shared with the lightweight auto-repair path.
+    os_octavia_hm0_up || return 0
 
     if ! systemctl status octavia-worker >/dev/null 2>&1 ; then
         systemctl start octavia-worker
     fi
     if ! systemctl status octavia-health-manager >/dev/null 2>&1 ; then
         systemctl start octavia-health-manager
+    fi
+}
+
+# Lightweight octavia-hm0 recovery: bring the health-manager interface back up
+# (ovs port + link + ip + route) from the EXISTING neutron port only. Unlike
+# reinit_octavia it does NOT recreate the port or run ReconfigMain/service
+# reconfig -- so it's ~seconds and idempotent, hence safe to call from the
+# periodic auto_repair. Returns non-zero (defer to full reinit_octavia) if the
+# node's neutron port is gone -- that heavier case belongs to deliberate repair.
+os_octavia_hm0_up()
+{
+    [ -f /run/cube_commit_done ] || return 0
+
+    local port_name="octavia-hmgr-port-$(hostname)"
+    local port_id=$($OPENSTACK port list -f value | grep "$port_name" | awk '{print $1}' | head -1)
+    [ -n "$port_id" ] || return 1                       # no port -> needs full reinit
+
+    local show=$($OPENSTACK port show "$port_id" 2>/dev/null)
+    local port_ip=$(echo "$show" | grep "fixed_ips.*ip_address" | awk -F"'" '{print $2}')
+    local subnet_id=$(echo "$show" | grep "fixed_ips.*ip_address" | awk -F"'" '{print $4}')
+    local port_mac=$(echo "$show" | awk '/ mac_address /{print $4}')
+    local cidr=$($OPENSTACK subnet show "$subnet_id" 2>/dev/null | awk '/ cidr /{print $4}')
+    [ -n "$port_ip" ] && [ -n "$port_mac" ] && [ -n "$cidr" ] || return 1
+
+    if ! /usr/bin/ovs-vsctl port-to-br octavia-hm0 >/dev/null 2>&1 ; then
+        /usr/bin/ovs-vsctl -- --may-exist add-port br-int octavia-hm0 -- set Interface octavia-hm0 type=internal -- set Interface octavia-hm0 external-ids:iface-status=active -- set Interface octavia-hm0 external-ids:attached-mac=$port_mac -- set Interface octavia-hm0 external-ids:iface-id=$port_id -- set Interface octavia-hm0 external-ids:skip_cleanup=true
+    fi
+    /sbin/ip link show octavia-hm0 | grep -q "$port_mac" || /sbin/ip link set octavia-hm0 address $port_mac || true
+    /sbin/ip link show octavia-hm0 | grep -q DOWN && /sbin/ip link set octavia-hm0 up || true
+    /sbin/ip addr show octavia-hm0 | grep -q "$port_ip" || /sbin/ip addr add $port_ip dev octavia-hm0 || true
+    if ! /usr/sbin/route -n | grep -q octavia-hm0 ; then
+        /sbin/ip route del $cidr dev octavia-hm0 2>/dev/null || true
+        /sbin/ip route add $cidr dev octavia-hm0 || true
     fi
 }
 
