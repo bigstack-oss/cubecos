@@ -72,6 +72,7 @@ CONFIG_TUNING_INT(CUBESYS_LOG_DEFAULT_RP, "cubesys.log.default.retention", TUNIN
 CONFIG_TUNING_INT(CUBESYS_CONNTABLE_MAX, "cubesys.conntable.max", TUNING_PUB, "Set max connection table size.", 262144, 0, INT_MAX);
 CONFIG_TUNING_INT(CUBESYS_ALERT_LEVEL, "cubesys.alert.level", TUNING_PUB, "Set health alert sensible level. (0: default, 1: highly sensitive)", 0, 0, INT_MAX);
 CONFIG_TUNING_BOOL(CUBESYS_PROBEUSB, "cubesys.probeusb", TUNING_PUB, "Set true to allow loading USB drivers.", false);
+CONFIG_TUNING_BOOL(CUBESYS_FW_RESTRICT_AMQP, "cubesys.fw.restrict_amqp", TUNING_PUB, "Set true to restrict AMQP (5672) to cluster nodes only. Mitigation for AMQP cleartext auth exposure.", false);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
