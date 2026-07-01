@@ -11,9 +11,19 @@ is_running()
     systemctl show -p SubState $1 | grep -q running
 }
 
+# True when $1 is this node; lets is_remote_* skip ssh-to-self.
+is_local_node()
+{
+    [ "$1" = "$HOSTNAME" ] || [ "$1" = "$(hostname -s)" ] || [ "$1" = "localhost" ] || [ "$1" = "127.0.0.1" ]
+}
+
 is_remote_running()
 {
-    ssh root@$1 $HEX_SDK is_running $2 >/dev/null 2>&1
+    if is_local_node "$1" ; then
+        is_running $2
+    else
+        ssh root@$1 $HEX_SDK is_running $2 >/dev/null 2>&1
+    fi
 }
 
 is_active()
@@ -23,7 +33,11 @@ is_active()
 
 is_remote_active()
 {
-    ssh root@$1 $HEX_SDK is_active $2 >/dev/null 2>&1
+    if is_local_node "$1" ; then
+        is_active $2
+    else
+        ssh root@$1 $HEX_SDK is_active $2 >/dev/null 2>&1
+    fi
 }
 
 is_centos()

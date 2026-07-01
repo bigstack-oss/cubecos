@@ -114,6 +114,11 @@ WriteSshConfig(void)
     fprintf(fout, "CheckHostIP no\n");
     fprintf(fout, "StrictHostKeyChecking no\n");
     fprintf(fout, "UserKnownHostsFile /dev/null\n");
+    // Multiplex repeated connections so health checks (one ssh per service per
+    // node) reuse a single session instead of flooding sshd/logind/sudo.
+    fprintf(fout, "ControlMaster auto\n");
+    fprintf(fout, "ControlPath /run/cube-ssh-%%C\n");
+    fprintf(fout, "ControlPersist 30s\n");
     fclose(fout);
 
     return true;
@@ -355,11 +360,14 @@ Commit(bool modified, int dryLevel)
         // https://github.com/cornfeedhobo/ssh-keydgen
         HexUtilSystemF(0, 0, "echo %s | /usr/sbin/ssh-keydgen -t rsa -f %s", s_seed.c_str(), KEYFILE);
         HexUtilSystemF(0, 0, "cat %s >> %s", KEYFILE_PUB, AUTHORIZED_KEYS);
-        WriteSshConfig();
         HexSetFileMode(KEYFILE, "root", "root", 0600);
         HexSetFileMode(KEYFILE_PUB, "root", "root", 0600);
         HexSetFileMode(AUTHORIZED_KEYS, "root", "root", 0644);
     }
+
+    // (Re)write ssh_config on every commit, not just at keygen, so config changes
+    // (e.g. ControlMaster) also land on reboot/upgrade. Idempotent.
+    WriteSshConfig();
 
     WriteModprobeUsbConfig();
     WriteLogRotateConf(log_conf);
