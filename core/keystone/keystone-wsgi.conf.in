@@ -1,74 +1,50 @@
 Listen @BIND_ADDR@5000
 Listen @BIND_ADDR@5443
 
+# ==========================================
+# Port 5000: Standard Public API Proxy
+# ==========================================
 <VirtualHost *:5000>
-    # ADDED: python-home points to the root of your venv, matching 'source /opt/openstack-antelope/bin/activate'
-    WSGIDaemonProcess keystone-public processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP} python-home=/opt/openstack-antelope
-    WSGIProcessGroup keystone-public
-    
-    # MODIFIED: Changed path from /usr/bin to your venv bin path
-    WSGIScriptAlias / /opt/openstack-antelope/bin/keystone-wsgi-public
-    WSGIApplicationGroup %{GLOBAL}
-    WSGIPassAuthorization On
-    LimitRequestBody 114688
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    ProxyPass / unix:/var/lib/keystone/keystone.socket|http://localhost/
+    ProxyPassReverse / unix:/var/lib/keystone/keystone.socket|http://localhost/
+
     <IfVersion >= 2.4>
       ErrorLogFormat "%{cu}t %M"
     </IfVersion>
     ErrorLog /var/log/httpd/keystone.log
     CustomLog /var/log/httpd/keystone_access.log combined
-
-    # MODIFIED: Updated directory block to grant Apache permissions to read from the venv path instead of /usr/bin
-    <Directory /opt/openstack-antelope/bin>
-        <IfVersion >= 2.4>
-            Require all granted
-        </IfVersion>
-        <IfVersion < 2.4>
-            Order allow,deny
-            Allow from all
-        </IfVersion>
-    </Directory>
 </VirtualHost>
 
+# ==========================================
+# Port 5443: Secure HTTPS / Keycloak SAML Proxy
+# ==========================================
 <VirtualHost *:5443>
-    # ADDED: python-home points to the root of your venv
-    WSGIDaemonProcess keystone-ssl processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP} python-home=/opt/openstack-antelope
-    WSGIProcessGroup keystone-ssl
-    
-    # MODIFIED: Changed path from /usr/bin to your venv bin path
-    WSGIScriptAlias / /opt/openstack-antelope/bin/keystone-wsgi-public
-    WSGIApplicationGroup %{GLOBAL}
-    WSGIPassAuthorization On
-
     SSLEngine on
     SSLCertificateFile /var/www/certs/server.cert
     SSLCertificateKeyFile /var/www/certs/server.key
 
-    LimitRequestBody 114688
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # Pass Mellon environment data down to the Gunicorn UNIX Socket
+    ProxyPass / unix:/var/lib/keystone/keystone.socket|http://localhost/
+    ProxyPassReverse / unix:/var/lib/keystone/keystone.socket|http://localhost/
+
     <IfVersion >= 2.4>
       ErrorLogFormat "%{cu}t %M"
     </IfVersion>
     ErrorLog /var/log/httpd/keystone-ssl.log
     CustomLog /var/log/httpd/keystone-ssl_access.log combined
-
-    # MODIFIED: Updated directory block to match your venv path
-    <Directory /opt/openstack-antelope/bin>
-        <IfVersion >= 2.4>
-            Require all granted
-        </IfVersion>
-        <IfVersion < 2.4>
-            Order allow,deny
-            Allow from all
-        </IfVersion>
-    </Directory>
 </VirtualHost>
 
-# MODIFIED: Updated Alias entry point for /identity fallback mapping
-Alias /identity /opt/openstack-antelope/bin/keystone-wsgi-public
+# ==========================================
+# Legacy Route Map /identity Translation
+# ==========================================
 <Location /identity>
-    SetHandler wsgi-script
-    Options +ExecCGI
-
-    WSGIProcessGroup keystone-public
-    WSGIApplicationGroup %{GLOBAL}
-    WSGIPassAuthorization On
+    ProxyPreserveHost On
+    ProxyPass unix:/var/lib/keystone/keystone.socket|http://localhost/
+    ProxyPassReverse unix:/var/lib/keystone/keystone.socket|http://localhost/
 </Location>

@@ -1,3 +1,4 @@
+# --- Root Mellon Session Engine Configuration ---
 <Location /v3>
     MellonEnable info
     MellonEndpointPath /v3/mellon/
@@ -9,18 +10,21 @@
     MellonMergeEnvVars On ";"
 </Location>
 
+# --- WebSSO Endpoint Mapping ---
 <Location /v3/auth/OS-FEDERATION/websso/mapped>
     AuthType Mellon
     MellonEnable auth
     Require valid-user
 </Location>
 
+# --- Horizon / Protocol WebSSO Mapping ---
 <Location /v3/auth/OS-FEDERATION/identity_providers/cube_idp/protocols/mapped/websso>
     AuthType Mellon
     MellonEnable auth
     Require valid-user
 </Location>
 
+# --- Native API Federated Authentication Mapping ---
 <Location /v3/OS-FEDERATION/identity_providers/cube_idp/protocols/mapped/auth>
     AuthType Mellon
     MellonEnable auth

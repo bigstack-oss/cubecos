@@ -1,0 +1,22 @@
+[Unit]
+Description=OpenStack Keystone Identity Service (Gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=keystone
+WorkingDirectory=/var/lib/keystone
+RuntimeDirectory=keystone
+RuntimeDirectoryMode=0775
+
+# Executes Gunicorn from the venv using Python 3.10
+# Point to the clean configuration file
+ExecStart=/opt/openstack-antelope/bin/gunicorn \
+    -c /opt/openstack-antelope/bin/keystone-gunicorn.py \
+    "keystone.server.wsgi:initialize_public_application()"
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -62,7 +62,7 @@ rabbitmq:x:115:
 memcache:x:116:
 uuidd:x:117:
 haclient:x:118:
-keystone:x:119:
+keystone:x:119:apache
 ssl-cert:x:120:
 glance:x:121:
 kvm:x:122:qemu
