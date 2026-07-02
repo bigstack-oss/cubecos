@@ -1,6 +1,7 @@
 // CUBE SDK
 
 #include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/pidfile.h>
 #include <hex/filesystem.h>
 #include <hex/process.h>
@@ -18,6 +19,8 @@
 
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
+
+static LogRotateConf log_conf("keystone", "/var/log/keystone/*.log", DAILY, 128, 0, true);
 
 // keystone config files
 #define DEF_EXT     ".def"
