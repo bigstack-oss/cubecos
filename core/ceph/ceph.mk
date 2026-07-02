@@ -50,6 +50,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)wget https://www.hdsentinel.com/hdslin/hdsentinel-020c-x64.zip
 	$(Q)unzip hdsentinel*.zip
+	$(Q)rm -f ./hdsentinel*.zip
 	$(Q)mv HDSentinel hdsentinel
 	$(Q)chmod 0755 hdsentinel
 	$(Q)mv -f hdsentinel $(ROOTDIR)/usr/sbin/
