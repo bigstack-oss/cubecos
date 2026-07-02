@@ -153,6 +153,13 @@ eval "ERR_DESC_$SRV[1]='api down'"
 eval "ERR_DESC_$SRV[2]='gw down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
+SRV="fc_link"
+eval "ERR_DESC_$SRV[1]='path redundancy degraded'"
+eval "ERR_DESC_$SRV[2]='path group down'"
+eval "ERR_DESC_$SRV[3]='multipathd not running'"
+eval "ERR_DESC_$SRV[4]='link errors / flapping'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
 SRV="nova"
 eval "ERR_DESC_$SRV[1]='endpoint unreachable'"
 eval "ERR_DESC_$SRV[2]='api timeout'"

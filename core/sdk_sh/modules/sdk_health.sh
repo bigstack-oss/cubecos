@@ -1590,6 +1590,397 @@ health_rbd_target_repair()
     done
 }
 
+# --- FC (external storage) link health ---------------------------------------
+# Fail-safe: FC external storage is optional. The cluster-level check gates on a
+# cinder FC backend being configured (iSCSI/NFS/none -> na); each node then self-
+# gates on having FC HBAs with FC paths / reachable FC targets. A node with an
+# idle FC HBA, or a cluster whose external storage is not FC, stays healthy (0).
+#
+# Return-code contract (the function's shell return status IS the error code the
+# CLI/UI show -- looked up in errcodes; same values for _status per-node and for
+# the aggregate _check which returns the worst code across nodes; 2>3>4>1>0):
+#   0  ok (healthy) OR n/a  -- all paths active; or FC not applicable here
+#                             (no FC backend / no HBA / no LUNs while link up)
+#   1  path redundancy degraded -- a path failed, each map keeps >=1 active path
+#   2  path group down          -- map with 0 active paths / all paths down /
+#                                  SAN unreachable (targets dropped)
+#   3  multipathd not running    -- daemon down while FC is in use
+#   4  link errors / flapping    -- HBA error counters climbing between polls
+# _repair / _node_repair are actions (return 0 on completion); the framework then
+# re-runs _check and that return code decides FIXED vs FAIL.
+FC_ERR_STATE=/run/fc_link_err       # per-host error-counter baseline for flap detection
+
+# control + compute nodes (unique) -- where external FC LUNs attach
+_fc_link_nodes()
+{
+    printf '%s\n' "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" \
+        | awk 'NF && !seen[$0]++'
+}
+
+# Scan health_fc_link_status on all control/compute nodes IN PARALLEL (bounded
+# pool) and emit "<node>\t<code>|<msg>" per line. Serial ssh fan-out is O(N)*~1.6s
+# and does not scale to hundreds of nodes; this makes it ~O(N/pool). A short file
+# cache lets check + report (same run) share one scan -- one fan-out, one sample.
+FC_SCAN_CACHE=/run/fc_link_scan.cache
+FC_SCAN_POOL=${FC_SCAN_POOL:-32}
+FC_SCAN_TTL=10
+_fc_scan_all()
+{
+    if [ -f "$FC_SCAN_CACHE" ] && \
+       [ $(( $(date +%s) - $(stat -c %Y "$FC_SCAN_CACHE" 2>/dev/null || echo 0) )) -lt $FC_SCAN_TTL ] ; then
+        cat "$FC_SCAN_CACHE" ; return
+    fi
+    local node tmp running=0
+    tmp="$(mktemp -d /tmp/fcscan.XXXXXX)" || return 1
+    for node in $(_fc_link_nodes) ; do
+        # sliding-window pool: cap concurrent ssh scans at FC_SCAN_POOL
+        if [ "$running" -ge "$FC_SCAN_POOL" ] ; then
+            wait -n
+            running=$(( running - 1 ))
+        fi
+        { printf '%s\t%s\n' "$node" "$(remote_run "$node" "$HEX_SDK health_fc_link_status" 2>/dev/null)" \
+            > "$tmp/$node" ; } &
+        running=$(( running + 1 ))
+    done
+    wait
+    cat "$tmp"/* 2>/dev/null > "${FC_SCAN_CACHE}.$$" && mv -f "${FC_SCAN_CACHE}.$$" "$FC_SCAN_CACHE"
+    rm -rf "$tmp"
+    cat "$FC_SCAN_CACHE" 2>/dev/null
+}
+
+# True if cinder has an FC (Fibre Channel) external backend configured. FC driver
+# classes end in *FCDriver / contain FibreChannel; drivers that pick transport at
+# runtime use storage_protocol = FC. iSCSI/NFS backends match neither -> the FC
+# check stays na for them. Run on the active control (where backend confs live).
+health_fc_backend_configured()
+{
+    local f
+    for f in /etc/cinder/backends/*.conf ; do
+        [ -e "$f" ] || continue
+        grep -iqE '^[[:space:]]*volume_driver[[:space:]]*=.*(fcdriver|fibre[_]?channel)' "$f" && return 0
+        grep -iqE '^[[:space:]]*storage_protocol[[:space:]]*=[[:space:]]*fc([[:space:]]|$)' "$f" && return 0
+    done
+    return 1
+}
+
+_fc_hosts_present()
+{
+    local h
+    for h in /sys/class/fc_host/host* ; do
+        [ -e "$h" ] && return 0
+    done
+    return 1
+}
+
+# Per-node detector. Prints "<code>|<msg>" and returns <code>.
+#   0 healthy/na  1 redundancy degraded  2 path group down  3 multipathd down
+#   4 link errors/flapping
+# "FC in use here" is decided from live state -- mapped FC paths and/or reachable
+# FCP target ports -- with no persistent marker, so it is correct after reboot
+# and never false-positives a node that has no FC LUN currently attached.
+health_fc_link_status()
+{
+    _fc_hosts_present || { echo "0|no FC HBA installed" ; return 0 ; }   # A0 advisory
+
+    local mpd=up
+    systemctl is-active multipathd >/dev/null 2>&1 || mpd=down
+
+    # FC target reachability (independent of multipathd): a zoned + up link shows
+    # its array ports as Online "FCP Target" rports even with zero LUNs mapped.
+    local r rst rroles online_targets=0 dropped=0
+    for r in /sys/class/fc_remote_ports/rport-* ; do
+        [ -e "$r/port_state" ] || continue
+        rst="$(cat "$r/port_state" 2>/dev/null)"
+        rroles="$(cat "$r/roles" 2>/dev/null)"
+        case "$rst" in
+            Online)                          [[ "$rroles" == *Target* ]] && online_targets=$((online_targets+1)) ;;
+            Blocked|"Not Present"|Marginal)  dropped=$((dropped+1)) ;;
+        esac
+    done
+
+    if [ "$mpd" = "down" ] ; then
+        if [ "$online_targets" -ge 1 ] || [ "$dropped" -ge 1 ] ; then
+            echo "3|multipathd inactive" ; return 3
+        fi
+        echo "0|" ; return 0                                       # no FC storage here -> na
+    fi
+
+    local fchosts=" $(for h in /sys/class/fc_host/host* ; do [ -e "$h" ] && echo -n "${h##*/host} " ; done)"
+    local total=0 active=0 failed=0 orphan=0 map hcil dmst devst wwpn host
+    local -A map_total map_active
+    local usedhosts=" " paths
+    # skip header; keep rows whose 2nd field is a real H:C:T:L
+    paths="$(/usr/sbin/multipathd show paths format '%m %i %t %o %r' 2>/dev/null \
+             | awk '$2 ~ /^[0-9]+:[0-9]+:[0-9]+:[0-9]+$/')"
+    while read -r map hcil dmst devst wwpn ; do
+        [ -n "$hcil" ] || continue
+        host="${hcil%%:*}"
+        case "$fchosts" in *" $host "*) ;; *) continue ;; esac    # FC hosts only
+        [ "$wwpn" = "[undef]" ] && continue                        # no live FC target
+        total=$((total+1))
+        case "$usedhosts" in *" $host "*) ;; *) usedhosts="$usedhosts$host " ;; esac
+        if [ "$map" = "[orphan]" ] || [ "$dmst" = "undef" ] ; then
+            orphan=$((orphan+1))
+        elif [ "$dmst" = "active" ] ; then
+            active=$((active+1))
+            map_active[$map]=$(( ${map_active[$map]:-0}+1 )) ; map_total[$map]=$(( ${map_total[$map]:-0}+1 ))
+        else
+            failed=$((failed+1)) ; map_total[$map]=$(( ${map_total[$map]:-0}+1 ))
+        fi
+    done <<< "$paths"
+
+    # Port link state + flap detection via error-counter deltas (non-blocking;
+    # the ~15s check cadence is the sampling window). The flap loop covers ALL
+    # FC ports -- a flapping port whose paths are already gone still climbs its
+    # counters -- while downhosts only flags ports that currently carry paths.
+    local n st downhosts="" flaphosts="" newstate="" now prev pts plf plsig plos
+    local vlf vlsig vlos lf lsig los dlf dlsig dlos elapsed
+    now="$(date +%s)"
+    for h in /sys/class/fc_host/host* ; do
+        n="${h##*/host}"
+        st="$(cat "$h/port_state" 2>/dev/null)"
+        case "$usedhosts" in *" $n "*) [ "$st" = "Online" ] || downhosts="$downhosts host$n:$st" ;; esac
+        vlf="$(cat "$h/statistics/link_failure_count" 2>/dev/null)"
+        vlsig="$(cat "$h/statistics/loss_of_signal_count" 2>/dev/null)"
+        vlos="$(cat "$h/statistics/loss_of_sync_count" 2>/dev/null)"
+        lf=$(( ${vlf:-0} )) ; lsig=$(( ${vlsig:-0} )) ; los=$(( ${vlos:-0} ))    # 0x.. hex ok
+        prev="$(grep "^$n " "$FC_ERR_STATE" 2>/dev/null)"
+        if [ -n "$prev" ] ; then
+            pts=$(echo "$prev" | awk '{print $2}') ; plf=$(echo "$prev" | awk '{print $3}')
+            plsig=$(echo "$prev" | awk '{print $4}') ; plos=$(echo "$prev" | awk '{print $5}')
+            elapsed=$(( now - pts ))
+            if [ "$elapsed" -ge 5 ] && [ "$elapsed" -le 300 ] ; then
+                dlf=$(( lf - plf )) ; dlsig=$(( lsig - plsig )) ; dlos=$(( los - plos ))
+                if [ "$dlf" -ge 1 ] || [ "$dlsig" -ge 1 ] || [ "$dlos" -ge 5 ] ; then
+                    flaphosts="$flaphosts host$n(Δlinkfail=$dlf,Δloss_sig=$dlsig,Δloss_sync=$dlos/${elapsed}s)"
+                fi
+                newstate="$newstate$n $now $lf $lsig $los"$'\n'
+            else
+                newstate="$newstate$prev"$'\n'                 # keep baseline if window off
+            fi
+        else
+            newstate="$newstate$n $now $lf $lsig $los"$'\n'    # first sample: baseline only
+        fi
+    done
+    printf '%s' "$newstate" > "$FC_ERR_STATE" 2>/dev/null
+
+    # No FC LUN mapped here: tell "SAN reachable, just no LUNs" (na) apart from
+    # "SAN unreachable" (outage) using target reachability -- not a stale marker.
+    if [ "$total" -eq 0 ] ; then
+        if [ "$online_targets" -ge 1 ] ; then
+            [ -n "$flaphosts" ] && { echo "4|FC link errors/flapping:$flaphosts" ; return 4 ; }
+            echo "0|" ; return 0
+        elif [ "$dropped" -ge 1 ] ; then
+            echo "2|FC storage unreachable (no online target; $dropped port(s) down)${flaphosts:+; flapping:$flaphosts}" ; return 2
+        fi
+        # A1: HBA present but not connected to any FC target -- advisory, not a fault
+        echo "0|FC HBA present but no reachable FC target (check cabling/zoning)" ; return 0
+    fi
+
+    # any map with zero active paths?
+    local m downmap=""
+    for m in "${!map_total[@]}" ; do
+        [ "${map_active[$m]:-0}" -eq 0 ] && downmap="$downmap $m"
+    done
+
+    local code=0 msg=""
+    if [ "$active" -eq 0 ] ; then
+        code=2 ; msg="no active FC path (total=$total failed=$failed orphan=$orphan)${downhosts:+; ports:$downhosts}${flaphosts:+; flapping:$flaphosts}"
+    elif [ -n "$downmap" ] ; then
+        code=2 ; msg="FC map(s) with no active path:$downmap${flaphosts:+; flapping:$flaphosts}"
+    elif [ -n "$flaphosts" ] ; then
+        code=4 ; msg="FC link errors/flapping:$flaphosts${downhosts:+; ports:$downhosts}"
+    elif [ "$failed" -gt 0 ] || [ "$orphan" -gt 0 ] || [ -n "$downhosts" ] ; then
+        code=1 ; msg="FC redundancy degraded (active=$active failed=$failed orphan=$orphan)${downhosts:+; ports:$downhosts}"
+    fi
+    echo "$code|$msg" ; return $code
+}
+
+# Per-node human-readable diagnostics (ports, error counters, maps).
+health_fc_link_detail()
+{
+    _fc_hosts_present || { echo "  [$HOSTNAME] no FC HBA" ; return 0 ; }
+    echo "  [$HOSTNAME]"
+    local h n
+    for h in /sys/class/fc_host/host* ; do
+        n="${h##*/host}"
+        printf "    fc_host%s  port=%s  state=%s  speed=%s\n" "$n" \
+            "$(cat "$h/port_name" 2>/dev/null)" "$(cat "$h/port_state" 2>/dev/null)" "$(cat "$h/speed" 2>/dev/null)"
+        local c v
+        for c in link_failure_count loss_of_sync_count loss_of_signal_count invalid_tx_word_count invalid_crc_count ; do
+            v="$(cat "$h/statistics/$c" 2>/dev/null)"
+            [ -n "$v" ] && printf "        %-22s %s\n" "$c" "$v"
+        done
+    done
+    echo "    -- multipath maps (non-active paths flagged) --"
+    /usr/sbin/multipathd show paths format '%m %i %t %o %r' 2>/dev/null \
+        | awk '$2 ~ /^[0-9]+:/ && $5 != "[undef]" && $3 != "active" {print "      "$0}'
+}
+
+health_fc_link_report()
+{
+    # Machine formats: emit the standard structured status only.
+    case "$FORMAT" in
+        json|shell|line|none) _health_report ${FUNCNAME[0]} ; return ;;
+    esac
+
+    # Human format: one self-drawn box -- per-node rows + a summary row, in a
+    # single consistent style -- with per-node detail as footnotes below.
+    local -a rn=() rc=() rd=() rm=()
+    local -A rank=( [0]=0 [1]=1 [4]=2 [3]=3 [2]=4 )
+    local agg=0 node rest code desc msg i
+
+    if _hex_function_ret remote_run "$(shared_id)" "${HEX_SDK} health_fc_backend_configured" ; then
+        while IFS=$'\t' read -r node rest ; do          # one parallel scan (cached)
+            [ -n "$node" ] || continue
+            code="${rest%%|*}" ; msg="${rest#*|}"
+            if [[ "$code" =~ ^[0-9]+$ ]] ; then
+                desc="$(health_errcode_lookup fc_link "$code")"
+                [ "${rank[$code]:-0}" -gt "${rank[$agg]:-0}" ] && agg="$code"
+            else
+                code="-" ; desc="node unreachable" ; msg=""
+            fi
+            rn+=("$node") ; rc+=("$code") ; rd+=("$desc") ; rm+=("$msg")
+        done <<< "$(_fc_scan_all)"
+    fi
+    local aggdesc ; aggdesc="$(health_errcode_lookup fc_link "$agg")"
+
+    # column widths (node fits "(summary)"; description fits longest desc)
+    local nw=9 dw=11
+    for i in "${!rn[@]}" ; do
+        [ "${#rn[i]}" -gt "$nw" ] && nw="${#rn[i]}"
+        [ "${#rd[i]}" -gt "$dw" ] && dw="${#rd[i]}"
+    done
+    [ "${#aggdesc}" -gt "$dw" ] && dw="${#aggdesc}"
+    [ "${#rn[@]}" -eq 0 ] && dw=19          # fit "n/a (no FC backend)"
+
+    local bar
+    bar="+$(printf '%*s' $((nw+2)) '' | tr ' ' -)+------+$(printf '%*s' $((dw+2)) '' | tr ' ' -)+"
+    echo "$bar"
+    printf "| %-*s | %4s | %-*s |\n" "$nw" "node" "code" "$dw" "description"
+    echo "$bar"
+    if [ "${#rn[@]}" -eq 0 ] ; then
+        printf "| %-*s | %4s | %-*s |\n" "$nw" "-" "-" "$dw" "n/a (no FC backend)"
+    else
+        for i in "${!rn[@]}" ; do
+            printf "| %-*s | %4s | %-*s |\n" "$nw" "${rn[i]}" "${rc[i]}" "$dw" "${rd[i]}"
+        done
+    fi
+    echo "$bar"
+    printf "| %-*s | %4s | %-*s |\n" "$nw" "(summary)" "$agg" "$dw" "$aggdesc"
+    echo "$bar"
+
+    # per-node detail footnotes (faults + A0/A1 advisories)
+    local shown=0
+    for i in "${!rn[@]}" ; do
+        if { [ "${rc[i]}" != "0" ] && [ "${rc[i]}" != "-" ] ; } || [ -n "${rm[i]}" ] ; then
+            [ "$shown" = 0 ] && { echo ; echo "detail:" ; shown=1 ; }
+            printf "  %-*s  %s\n" "$nw" "${rn[i]}" "${rm[i]:-${rd[i]}}"
+        fi
+    done
+
+    if [ "$VERBOSE" = "1" ] ; then
+        echo ; echo "per-port detail:"
+        local dnode
+        for dnode in $(_fc_link_nodes) ; do
+            remote_run $dnode "$HEX_SDK health_fc_link_detail" 2>/dev/null
+        done
+    fi
+}
+
+health_fc_link_check()
+{
+    # fail-safe: only evaluate when cinder has an FC external backend configured
+    # (iSCSI/NFS external storage, or none, leaves fc_link na even with FC HBAs)
+    if ! _hex_function_ret remote_run "$(shared_id)" "${HEX_SDK} health_fc_backend_configured" ; then
+        ERR_CODE=0
+        _health_fail_log
+        return
+    fi
+
+    local -A rank=( [0]=0 [1]=1 [4]=2 [3]=3 [2]=4 )
+    local bestrank=0 node rest code
+    local log=/var/log/fc_link_last.log ; : > "$log"
+    while IFS=$'\t' read -r node rest ; do             # one parallel scan (cached)
+        [ -n "$node" ] || continue
+        code="${rest%%|*}"
+        [[ "$code" =~ ^[0-9]+$ ]] || code=0            # unreachable/garbled -> skip (fail-safe)
+        printf '%s: %s\n' "$node" "$rest" >> "$log"
+        if [ "$code" -gt 0 ] ; then
+            ERR_MSG+="$node: ${rest#*|}\n"
+            [ "${rank[$code]:-0}" -gt "$bestrank" ] && { bestrank="${rank[$code]}" ; ERR_CODE=$code ; }
+        fi
+    done <<< "$(_fc_scan_all)"
+
+    # ERR_LOG is a cheap local file (tailed on failure), NOT another fan-out.
+    [ "$ERR_CODE" = "0" ] || ERR_LOG="$log"
+    _health_fail_log      # fires _health_fc_link_auto_repair for fixable codes
+}
+
+# affected control/compute nodes -- emits "<node> <code>" for code > 0 (uses the
+# shared parallel scan, so it's cheap when called right after the check).
+_fc_affected_nodes()
+{
+    local node rest code
+    while IFS=$'\t' read -r node rest ; do
+        [ -n "$node" ] || continue
+        code="${rest%%|*}"
+        [[ "$code" =~ ^[0-9]+$ ]] && [ "$code" -gt 0 ] && echo "$node $code"
+    done <<< "$(_fc_scan_all)"
+}
+
+# per-node recovery. arg1: gentle|full
+health_fc_link_node_repair()
+{
+    local mode="${1:-gentle}"
+    systemctl is-active multipathd >/dev/null 2>&1 || Quiet -n systemctl restart multipathd  # code 3
+    Quiet -n /usr/sbin/multipathd reconfigure
+    Quiet -n /usr/sbin/multipath -r
+    if [ "$mode" = "full" ] ; then
+        local h st
+        # non-disruptive SCSI rescan (pick up returned LUNs)
+        for h in /sys/class/scsi_host/host* ; do
+            [ -w "$h/scan" ] && echo "- - -" > "$h/scan" 2>/dev/null
+        done
+        # force re-login only on ports already down (no healthy I/O to disrupt)
+        for h in /sys/class/fc_host/host* ; do
+            st="$(cat "$h/port_state" 2>/dev/null)"
+            [ "$st" = "Linkdown" ] && [ -w "$h/issue_lip" ] && echo 1 > "$h/issue_lip" 2>/dev/null
+        done
+        sleep 5
+        Quiet -n /usr/sbin/multipath -r
+    fi
+}
+
+# Auto-repair -- fired from within the check by _health_fail_log when the check
+# returns nonzero. Acts ONLY on FIXABLE codes: 1 degraded / 2 path down (reinstate
+# returned paths) and 3 multipathd down (restart it). Code 4 (flapping / physical
+# link errors) is not software-repairable, so it is deliberately skipped and left
+# to surface for hardware attention.
+_health_fc_link_auto_repair()
+{
+    local node code
+    while read -r node code ; do
+        [ -n "$node" ] || continue
+        case "$code" in
+            1|2|3) remote_run $node "$HEX_SDK health_fc_link_node_repair gentle" ;;
+        esac
+    done <<< "$(_fc_affected_nodes)"
+}
+
+# Manual repair (cluster check_repair). Same fixable-code gating, but aggressive
+# (adds SCSI rescan + issue_lip on down ports). Code 4 stays hardware-only.
+health_fc_link_repair()
+{
+    local node code
+    while read -r node code ; do
+        [ -n "$node" ] || continue
+        case "$code" in
+            1|2|3) remote_run $node "$HEX_SDK health_fc_link_node_repair full" ;;
+        esac
+    done <<< "$(_fc_affected_nodes)"
+}
+
 health_nova_report()
 {
     [ "$VERBOSE" != "1" ] || $OPENSTACK compute service list
