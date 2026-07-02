@@ -23,6 +23,10 @@ rootfs_install::
 			gunicorn"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+	$(Q)ln -sf /opt/openstack-antelope/bin/keystone-manage /usr/bin/keystone-manage
+	$(Q)ln -sf /opt/openstack-antelope/bin/keystone-status /usr/bin/keystone-status
+	$(Q)ln -sf /opt/openstack-antelope/bin/keystone-wsgi-admin /usr/bin/keystone-wsgi-admin
+	$(Q)ln -sf /opt/openstack-antelope/bin/keystone-wsgi-public /usr/bin/keystone-wsgi-public
 
 # prepare the build directory
 rootfs_install::

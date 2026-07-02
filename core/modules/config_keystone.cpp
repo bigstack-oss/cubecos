@@ -138,14 +138,14 @@ SetupKeystone(std::string password, std::string sharedId, std::string external, 
     HexLogInfo("Init keystone");
 
     // Populate the Identity service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/opt/openstack-antelope/bin/keystone-manage db_sync\" keystone");
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/keystone-manage db_sync\" keystone");
 
     // Initialize Fernet key repositories
-    HexUtilSystemF(0, 0, "/opt/openstack-antelope/bin/keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone");
-    HexUtilSystemF(0, 0, "/opt/openstack-antelope/bin/keystone-manage credential_setup --keystone-user keystone --keystone-group keystone");
+    HexUtilSystemF(0, 0, "/usr/bin/keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone");
+    HexUtilSystemF(0, 0, "/usr/bin/keystone-manage credential_setup --keystone-user keystone --keystone-group keystone");
 
     // Bootstrap the Identity service
-    HexUtilSystemF(0, 0, "/opt/openstack-antelope/bin/keystone-manage bootstrap --bootstrap-password %s "
+    HexUtilSystemF(0, 0, "/usr/bin/keystone-manage bootstrap --bootstrap-password %s "
                          "--bootstrap-admin-url http://%s:5000/v3/ "
                          "--bootstrap-internal-url http://%s:5000/v3/ "
                          "--bootstrap-public-url http://%s:5000/v3/ "
