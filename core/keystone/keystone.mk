@@ -32,21 +32,10 @@ rootfs_install::
 # generate default configs
 rootfs_install::
 	$(Q)cp -f $(COREDIR)/keystone/config-generator.conf $(ROOTDIR)/tmp/keystone/
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		oslo-config-generator \
-			--config-file=/tmp/keystone/config-generator.conf \
-			--output-file=/tmp/keystone/keystone.conf.sample"
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		oslo-config-generator \
-			--config-file=/tmp/keystone/config-generator.conf \
-			--format yaml \
-			--output-file=/tmp/keystone/kestone-schema.yaml"
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		oslo-config-generator \
-			--config-file=/tmp/keystone/config-generator.conf \
-			--format json \
-			--output-file=/tmp/keystone/kestone-schema.json"
-	$(Q)chroot $(ROOTDIR) bash -c "echo \"{}\" > /tmp/keystone/policy.json"
+	$(Q)cp -f $(COREDIR)/keystone/keystone.conf.sample $(ROOTDIR)/tmp/keystone/
+	$(Q)cp -f $(COREDIR)/keystone/keystone-schema.yaml $(ROOTDIR)/tmp/keystone/
+	$(Q)cp -f $(COREDIR)/keystone/keystone-schema.json $(ROOTDIR)/tmp/keystone/
+	$(Q)cp -f $(COREDIR)/keystone/policy.json $(ROOTDIR)/tmp/keystone/
 	$(Q)cp -f $(COREDIR)/keystone/logging.conf.sample $(ROOTDIR)/tmp/keystone/
 	$(Q)cp -f $(COREDIR)/keystone/default_catalog.templates $(ROOTDIR)/tmp/keystone/
 	$(Q)cp -f $(COREDIR)/keystone/sso_callback_template.html $(ROOTDIR)/tmp/keystone/
@@ -63,8 +52,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/default_catalog.templates /etc/keystone/default_catalog.templates
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/sso_callback_template.html /etc/keystone/sso_callback_template.html
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/keystone
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/kestone-schema.yaml /usr/share/keystone/keystone-schema.yaml
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/kestone-schema.json /usr/share/keystone/keystone-schema.json
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/keystone-schema.yaml /usr/share/keystone/keystone-schema.yaml
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/keystone-schema.json /usr/share/keystone/keystone-schema.json
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/keystone/openstack-keystone.logrotate /etc/logrotate.d/openstack-keystone
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/lib/keystone
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/log/keystone
