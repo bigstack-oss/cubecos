@@ -20,9 +20,23 @@ ROOTFS_PIP += python-magic python3-saml xmlsec
 ROOTFS_DNF_NOARCH += python3-jaraco-text-3.2.0-6.el9s
 LOCKED_DNF += python3-jaraco-text-3.2.0-6.el9s
 
+# build ceph python bindings for python 3.10 used by openstack antelope
+ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
+
 CEPH_PATCHDIR := $(COREDIR)/ceph/$(OPENSTACK_RELEASE)_patch
 
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
+
+# build ceph python bindings for python 3.10 used by openstack antelope
+rootfs_install::
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install "Cython<3"
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/ceph
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/ceph/ceph-v17.2.6.tar.gz https://github.com/ceph/ceph/archive/refs/tags/v17.2.6.tar.gz
+	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/ceph/ceph-v17.2.6.tar.gz -C /usr/src/ceph
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rados && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/python setup.py install"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rbd && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/python setup.py install"
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl mask lvm2-monitor
