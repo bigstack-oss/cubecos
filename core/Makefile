@@ -36,4 +36,6 @@ SUBDIRS += modules
 # Building images
 SUBDIRS += main
 
+SUBDIRS += fixpacks
+
 include $(HEX_MAKEDIR)/hex_sdk.mk
