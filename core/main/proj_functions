@@ -356,13 +356,14 @@ cube_cluster_power()
     if [ "x${MASTER_CONTROL:-NOMASTER}" != "x$(hostname)" ] ; then
         remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_cluster_power $1"
     else
-        cmd "timeout $SRVSTO umount $CEPHFS_STORE_DIR" || true
+        # lazy umount: ceph is paused here, a blocking umount wedges in D-state
+        cmd "timeout $SRVSTO umount -l $CEPHFS_STORE_DIR" || true
         cmd "systemctl stop ceph-osd@*"
         cmd -c "systemctl stop ceph-mds@\$HOSTNAME"
         cmd -c "systemctl stop ceph-mgr@\$HOSTNAME"
         cmd -c "systemctl stop ceph-mon@\$HOSTNAME"
 
-        cmd -c "source /usr/sbin/hex_tuning /etc/settings.txt ; MASTER_CONTROL=\$T_cubesys_controller ; API_TOKEN=\$(cat /var/run/cube-cos-api/node_token) ; curl -X POST http://\$(hex_sdk mgmt_ip):8082/api/v1/datacenters/\$MASTER_CONTROL/nodes/drain -H \'Node: $HOSTNAME\' -H \'Authorization: Bearer \${API_TOKEN}\'"
+        cmd -c "source /usr/sbin/hex_tuning /etc/settings.txt ; MASTER_CONTROL=\$T_cubesys_controller ; API_TOKEN=\$(cat /var/run/cube-cos-api/node_token) ; curl --max-time 30 -X POST http://\$(hex_sdk mgmt_ip):8082/api/v1/datacenters/\$MASTER_CONTROL/nodes/drain -H \'Node: $HOSTNAME\' -H \'Authorization: Bearer \${API_TOKEN}\'"
         for N in $(cubectl node list -j | jq -r .[].hostname | tac) ; do
             timeout $SRVSTO $HEX_SDK remote_run $N "$PWRCMD" || true
         done
