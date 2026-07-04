@@ -317,6 +317,8 @@ _set_ipt_service_int()
     iptables -A $chain -p tcp --match multiport --dports 5900:5999 -j DROP # drop all direct vnc access, except for internal nodes
     iptables -A $chain -p tcp --dport 3306 -j DROP # drop Database Open Access (database-open-access 3306)
     iptables -A $chain -p tcp --dport 5672 -j DROP # drop AMQP Cleartext Authentication (amqp-cleartext-authentication 5672), except for internal nodes
+    iptables -A $chain -p tcp --dport 15672 -j DROP # drop RabbitMQ management UI/API (rabbitmq-management 15672), except for internal nodes
+    iptables -A $chain -p tcp --dport 25672 -j DROP # drop RabbitMQ Erlang distribution (erlang-distribution 25672), except for internal nodes
     iptables -A $chain -p icmp --icmp-type timestamp-request -j DROP # drop ICMP timestamp requests
 
     iptables -nv -L INPUT 2>/dev/null | grep -q $chain || iptables -A INPUT -j $chain
