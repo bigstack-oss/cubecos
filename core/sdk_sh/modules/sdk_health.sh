@@ -108,16 +108,21 @@ _health_fail_log()
     if [ "$ERR_CODE" == "0" ] ; then
         rm -f /tmp/health_${srv}_error.count
     else
-        let "count = $count + 1"
         echo "==============================" >> /var/log/health_${srv}_error.log
         echo $(date) >> /var/log/health_${srv}_error.log
-        echo "failed count: $count" >> /var/log/health_${srv}_error.log
         echo "error code: $ERR_CODE" >> /var/log/health_${srv}_error.log
         echo "error desc: $description" >> /var/log/health_${srv}_error.log
         echo -e "$ERR_MSG" $'\n' >> /var/log/health_${srv}_error.log
-        echo $count > /tmp/health_${srv}_error.count
-        if [ $count -lt $maxerr ] ; then
-            if cube_cluster_ready ; then
+        # Only spend the maxerr auto-repair budget on failures the system could act on.
+        # While the cluster is not ready the auto_repair below is skipped, so counting
+        # those rounds would exhaust maxerr and, once the cluster comes ready, permanently
+        # gate auto_repair off -- the count only resets on a passing check, which can't
+        # happen without the repair. So increment (and attempt) only when ready.
+        if cube_cluster_ready ; then
+            let "count = $count + 1"
+            echo "failed count: $count" >> /var/log/health_${srv}_error.log
+            echo $count > /tmp/health_${srv}_error.count
+            if [ $count -lt $maxerr ] ; then
                 local auto_repair_func="_health_${srv}_auto_repair"
                 if Quiet type $auto_repair_func 2>/dev/null ; then
                     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
