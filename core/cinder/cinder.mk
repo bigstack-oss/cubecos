@@ -1,8 +1,8 @@
 # Cube SDK
 # cinder installation
 
-ROOTFS_DNF += qemu-img cryptsetup lvm2 iscsi-initiator-utils device-mapper-multipath nvmetcli sudo sshpass
-ROOTFS_DNF_NOARCH += targetcli
+ROOTFS_DNF += qemu-img cryptsetup lvm2 iscsi-initiator-utils device-mapper-multipath sudo sshpass
+ROOTFS_DNF_NOARCH += nvmetcli targetcli
 
 CINDER_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/cinder
 CINDER_PATCHDIR := $(COREDIR)/cinder/$(NEXT_OPENSTACK_RELEASE)_patch
