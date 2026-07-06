@@ -955,6 +955,15 @@ ClusterRollingRestartMain(int argc, const char** argv)
         return CLI_SUCCESS;
     }
 
+    // status_watch: redraw roll status every 30s until Ctrl-C.
+    if (sub == "status_watch") {
+        HexSystemF(0, "while true ; do clear 2>/dev/null ; "
+                      "echo \"cluster rolling_restart status_watch  @ $(date '+%%F %%T')  "
+                      "(refresh 30s, Ctrl-C to exit)\" ; echo ; "
+                      "%s power_roll_status ; sleep 30 ; done", HEX_SDK);
+        return CLI_SUCCESS;
+    }
+
     if (sub == "continue" || sub == "abort") {
         HexSystemF(0, HEX_SDK " power_roll_decision %s", sub.c_str());
         HexLogEvent(sub == "continue" ? "CLU00002I" : "CLU00003I",
@@ -1064,7 +1073,7 @@ CLI_MODE_COMMAND("cluster", "powercycle", ClusterPowercycleMain, NULL,
 
 CLI_MODE_COMMAND("cluster", "rolling_restart", ClusterRollingRestartMain, NULL,
     "reboot nodes one at a time, evacuating workloads first.",
-    "rolling_restart [<host> ...|dryrun [<host> ...]|status|continue|abort]");
+    "rolling_restart [<host> ...|dryrun [<host> ...]|status|status_watch|continue|abort]");
 
 CLI_MODE_COMMAND("cluster", "recreate", ClusterRecreateMain, NULL,
     "CAUTION! mark to recreate the cluster.",
