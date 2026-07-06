@@ -698,6 +698,29 @@ power_vm_resume_async()
     done
 }
 
+# Shared cephfs record of VMs running before a cluster poweroff/powercycle, written
+# by cube_cluster_stop so the master can read it regardless of which node wrote it.
+CLUSTER_ACTIVE_RUNNING=$CEPHFS_NOVA_DIR/instances/active_running
+
+# Restore recorded VMs to their prior running state. Must run from the boot-end
+# check_repair (after nova/cinder/ceph and cephfs have recovered). Idempotent: skips
+# already-ACTIVE VMs, resets+re-drives the rest; clears the record once all are back.
+power_restore_recorded_vms()
+{
+    is_control_node || return 0
+    [ -s "$CLUSTER_ACTIVE_RUNNING" ] || return 0
+    local i disp st _pending=0
+    while read -r i disp _ ; do
+        [ -z "$i" ] && continue
+        st=$($OPENSTACK server show "$i" -f value -c status 2>/dev/null)
+        [ "$st" = ACTIVE ] && continue
+        [ "$st" = ERROR ] && os_nova_instance_reset "$i"
+        power_vm_restore "$i" "$disp"
+        _pending=1
+    done < "$CLUSTER_ACTIVE_RUNNING"
+    [ $_pending -eq 0 ] && rm -f "$CLUSTER_ACTIVE_RUNNING"
+}
+
 power_drain_host()
 {
     # Drain $from_host before a planned reboot. Migratable VMs are live-migrated

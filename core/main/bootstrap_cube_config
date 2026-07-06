@@ -116,11 +116,11 @@ RollingEvacuateAndReboot()
             if [ "$ROLLING_RECOVER" != "1" ] ; then
                 hex_cli -c cluster check # kick off auto_repair
             fi
-            # Restore recorded VMs (always), synchronously, before the gate below.
-            # active_running holds one VM per line as "<id> [disposition]" --
-            # disposition recorded by the drain: suspended (resume), stopped
-            # (start), or empty/legacy (reset+hardreboot). Read line-by-line.
-            if [ -s /mnt/cephfs/nova/instances/active_running ] ; then
+            # Rolling-restart only: restore recorded VMs now (services stay up). Poweroff/
+            # powercycle defers to boot-end check_repair (power_restore_recorded_vms).
+            # active_running: "<id> [disposition]" -- suspended (resume), stopped (start),
+            # or empty/legacy (reset+hardreboot).
+            if [ "$ROLLING_RECOVER" = "1" ] && [ -s /mnt/cephfs/nova/instances/active_running ] ; then
                 while read -r i disp _ ; do
                     [ -z "$i" ] && continue
                     if hex_sdk os_nova_list id status powerstate |  grep -i "$i active running" ; then
