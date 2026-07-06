@@ -1080,6 +1080,7 @@ CONFIG_MODULE(cinder, Init, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(cinder, keystone);
 CONFIG_REQUIRES(cinder, memcache);
 CONFIG_REQUIRES(cinder, libvirtd);
+CONFIG_REQUIRES(cinder, ceph);
 
 CONFIG_MIGRATE(cinder, "/etc/cube/cos/cinder");
 CONFIG_MIGRATE(cinder, CINDER_BACKEND_DIR);

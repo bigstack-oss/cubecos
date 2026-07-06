@@ -682,6 +682,7 @@ CONFIG_MODULE(monasca_setup, 0, 0, 0, 0, CommitLast);
 
 // startup sequence
 CONFIG_REQUIRES(monasca, memcache);
+CONFIG_REQUIRES(monasca, ceph);
 //CONFIG_REQUIRES(monasca, kafka);
 //CONFIG_REQUIRES(monasca, influxdb);
 

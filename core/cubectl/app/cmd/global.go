@@ -57,6 +57,29 @@ func getEtcdClient(addrs ...string) (*clientv3.Client, error) {
 	return cli, nil
 }
 
+// waitEtcdHealthy polls local etcd until it serves a request or the timeout elapses.
+func waitEtcdHealthy(timeout time.Duration) error {
+	cli, err := getEtcdClient("localhost")
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	deadline := time.Now().Add(timeout)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
+		_, err = cli.Get(ctx, "health")
+		cancel()
+		if err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errors.Wrap(err, "etcd did not become healthy in time")
+		}
+		time.Sleep(1 * time.Second)
+	}
+}
+
 func etcdMemberAdd(ctrlIPs []string, name string, myIp string) (uint64, error) {
 	cli, err := getEtcdClient(ctrlIPs...)
 	if err != nil {

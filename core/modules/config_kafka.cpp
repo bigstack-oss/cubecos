@@ -148,7 +148,8 @@ UpdateCfg(bool ha, const std::string hostname, const std::string sharedId,
         }
 
         kafkaCfg[GLOBAL_SEC]["listeners"] = "PLAINTEXT://" + ctrlIp + ":9095";
-        kafkaCfg[GLOBAL_SEC]["zookeeper.connect"] = sharedId + ":2181";
+        // use the node's local zookeeper, not the VIP (avoids haproxy hop / boot stalls).
+        kafkaCfg[GLOBAL_SEC]["zookeeper.connect"] = ctrlIp + ":2181";
         kafkaCfg[GLOBAL_SEC]["zookeeper.connection.timeout.ms"] = "60000";
         kafkaCfg[GLOBAL_SEC]["log.dirs"] = KAFKA_DIR;
         kafkaCfg[GLOBAL_SEC]["log.retention.bytes"] = "67108864";  // 64MB
@@ -258,13 +259,16 @@ Commit(bool modified, int dryLevel)
     WriteLogRotateConf(zk_log_conf);
 
     WriteConfig(KAFKA_CONF, SB_SEC_WFMT, '=', kafkaCfg);
+    // wait for local zookeeper to accept connections before starting kafka.
+    if (enabled)
+        HexUtilSystemF(0, 0, "%s wait_for_service %s 2181 60", HEX_SDK, myip.c_str());
     SystemdCommitService(enabled, KAFKA_NAME, true);
     WriteLogRotateConf(kafka_log_conf);
 
     // run update topics in non-master control nodes
     // master node zk may not have quorum in upgrade and cause a long run
     if (access(CUBE_MIGRATE, F_OK) == 0)
-        UpdateTopics(s_ha, enabled & !isMaster, sharedId);
+        UpdateTopics(s_ha, enabled & !isMaster, myip);
 
     return true;
 }
@@ -273,8 +277,8 @@ static int
 ClusterReadyMain(int argc, char **argv)
 {
     bool isCtrl = IsControl(s_eCubeRole);
-    std::string sharedId = G(SHARED_ID);
-    UpdateTopics(s_ha, isCtrl, sharedId);
+    std::string myip = G(MGMT_ADDR);            // topic ops on the local broker
+    UpdateTopics(s_ha, isCtrl, myip);
 
     return EXIT_SUCCESS;
 }
@@ -294,8 +298,8 @@ UpdateTopicMain(int argc, char **argv)
     }
 
     bool isCtrl = IsControl(s_eCubeRole);
-    std::string sharedId = G(SHARED_ID);
-    UpdateTopics(s_ha, isCtrl, sharedId);
+    std::string myip = G(MGMT_ADDR);            // topic ops on the local broker
+    UpdateTopics(s_ha, isCtrl, myip);
 
     return EXIT_SUCCESS;
 }
@@ -315,8 +319,8 @@ RecreateTopicMain(int argc, char **argv)
     }
 
     bool isCtrl = IsControl(s_eCubeRole);
-    std::string sharedId = G(SHARED_ID);
-    RecreateTopic(s_ha, isCtrl, sharedId, argv[1]);
+    std::string myip = G(MGMT_ADDR);            // topic op on the local broker
+    RecreateTopic(s_ha, isCtrl, myip, argv[1]);
 
     return EXIT_SUCCESS;
 }

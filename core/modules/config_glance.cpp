@@ -702,6 +702,7 @@ CONFIG_MODULE(glance, 0, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(glance, keystone);
 CONFIG_REQUIRES(glance, memcache);
 CONFIG_REQUIRES(glance, cinder);
+CONFIG_REQUIRES(glance, ceph);
 // extra tunings
 CONFIG_OBSERVES(glance, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(glance, rabbitmq, ParseRabbitMQ, NotifyMQ);

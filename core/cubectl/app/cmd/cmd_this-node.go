@@ -18,7 +18,12 @@ var ()
 
 func runThisnodeStart(cmd *cobra.Command, args []string) error {
 	if cubeSettings.IsRole(util.ROLE_CONTROL) {
-		if _, _, err := util.ExecCmd("systemctl", "start", "etcd"); err != nil {
+		// Start etcd non-blocking, then wait (bounded) for it to serve, so
+		// parallel node reboots form quorum instead of each blocking serially.
+		if _, _, err := util.ExecCmd("systemctl", "start", "--no-block", "etcd"); err != nil {
+			return errors.WithStack(err)
+		}
+		if err := waitEtcdHealthy(60 * time.Second); err != nil {
 			return errors.WithStack(err)
 		}
 	}

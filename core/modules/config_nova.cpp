@@ -906,6 +906,7 @@ CONFIG_MODULE(nova, Init, Parse, 0, 0, Commit);
 // startup sequence
 CONFIG_REQUIRES(nova, libvirtd);
 CONFIG_REQUIRES(nova, memcache);
+CONFIG_REQUIRES(nova, ceph);
 //CONFIG_REQUIRES(nova, glance);
 
 CONFIG_MIGRATE(nova, "/etc/nova/nova.d");
