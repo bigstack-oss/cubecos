@@ -1347,7 +1347,8 @@ _os_pre_failure_host_evacuation()
             cmd -c $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0
             cmd -c $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0
 
-            if [ $($OPENSTACK compute service list -f value -c Status -c State | grep -v -i "enabled up" | wc -l) -ge 1 ] ; then
+            # restart only "enabled down" services; leave "disabled" (drained/maintenance) hosts alone.
+            if [ $($OPENSTACK compute service list -f value -c Status -c State | grep -ci "enabled down") -ge 1 ] ; then
                 cmd -c systemctl restart openstack-nova-scheduler
                 cmd -c systemctl restart openstack-nova-conductor
                 cmd -p systemctl restart openstack-nova-compute

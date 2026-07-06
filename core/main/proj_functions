@@ -448,32 +448,6 @@ cube_cluster_power()
     fi
 }
 
-cube_node_repair()
-{
-    repair_pid=$(cat $CLUSTER_REPAIR 2>/dev/null)
-    if ps -p ${repair_pid:-NOPID} >/dev/null 2>&1 ; then
-        ps $repair_pid
-        ps -o etime $repair_pid
-        return 1
-    else
-        $HEX_SDK check_repair &
-        echo $! >$CLUSTER_REPAIR
-        wait $! && rm -f $CLUSTER_REPAIR
-    fi
-}
-
-cube_cluster_repair()
-{
-    source /usr/sbin/hex_tuning /etc/settings.txt
-    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
-        export MASTER_CONTROL=$T_cubesys_controller
-        [ -n "$MASTER_CONTROL" ] || MASTER_CONTROL=$T_net_hostname
-    else
-        export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
-    fi
-    remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_node_repair"
-}
-
 cube_remote_cluster_check()
 {
     # If this node is control (non moderator), return 1 to run CLI cluster check locally
@@ -1089,16 +1063,6 @@ cube_cluster_ppu()
     fi
 }
 
-cluster_check()
-{
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if is_remote_running $node influxdb ; then
-            VERBOSE=1 remote_run $node "HEX_HEALTH_LAST=1 hex_cli -c cluster check"
-            break
-        fi
-    done
-}
-
 # Live-migration essential service comps (rolling restart). Repairable only --
 # just the services the drain/live-migration path depends on. Used as a health
 # gate by rolling restart (same version both sides of the reboot); NOT for
@@ -1143,29 +1107,39 @@ cluster_check_repair_essential()
     return $rc
 }
 
+# Wait until every node has committed (CUBE_DONE marker), bounded by $1 seconds
+# (default 1500). Returns 0 when all committed, 1 on timeout.
+cube_wait_all_committed()
+{
+    local timeout=${1:-1500} waited=0 nodes n allup
+    nodes=$(cubectl node list -j 2>/dev/null | jq -r '.[].hostname')
+    [ -n "$nodes" ] || return 0
+    while [ $waited -lt $timeout ] ; do
+        allup=1
+        for n in $nodes ; do
+            remote_run "$n" "[ -e $CUBE_DONE ]" || { allup=0 ; break ; }
+        done
+        [ "$allup" = 1 ] && return 0
+        sleep 10 ; waited=$((waited+10))
+    done
+    return 1
+}
+
 cluster_check_repair_async()
 {
     # Run the final cluster check_repair off the caller's critical path so the
     # operator gets their prompt back immediately and can start using the box.
     # The result is popped onto the console device(s) and broadcast (wall) when
     # it finishes. Detached via setsid so it survives the parent CLI exiting.
+    # Held until all nodes have committed so it fires once on a settled cluster.
     setsid bash -c '
-        out=$(hex_cli -c cluster check_repair 2>&1)
+        hex_sdk cube_wait_all_committed 1500
+        out=$(hex_cli -c cluster check_repair 2>&1 | grep -av "Broken pipe")
         # Restore VMs recorded at cluster stop, now that services are healed.
         hex_sdk power_restore_recorded_vms
         con=$(hex_sdk GetKernelConsoleDevices)
         { echo "" ; echo "===== cluster check_repair complete =====" ; echo "$out" ; echo "=========================================" ; } | tee $con 2>/dev/null | wall 2>/dev/null
     ' </dev/null >/dev/null 2>&1 &
-}
-
-cluster_check_repair()
-{
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if is_remote_running $node influxdb ; then
-            VERBOSE=1 remote_run $node "HEX_HEALTH_LAST=1 hex_cli -c cluster check_repair"
-            break
-        fi
-    done
 }
 
 node_bootstrap_status()

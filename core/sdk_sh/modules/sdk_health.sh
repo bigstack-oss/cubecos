@@ -509,6 +509,10 @@ health_hacluster_check()
 
 _health_hacluster_auto_repair()
 {
+    # Skip auto-repair unless all control nodes are ready (avoid churn while corosync reforms).
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        remote_run $node "$HEX_SDK cube_node_ready" >/dev/null 2>&1 || return 0
+    done
     health_hacluster_repair
     if [ $ERR_CODE -eq 6 ] ; then
         health_ceph_mds_repair
@@ -544,7 +548,7 @@ health_hacluster_repair()
             elif [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
                 $HEX_SDK pacemaker_node_stop $node
             else
-                $HEX_SDK pacemaker_node_start $node
+                # Peer already in the ring: don't restart it, just reconcile vaw.
                 cmd -co "pcs resource remove vaw" # v3.0.0 or older doesn't have vaw, hindering VIP to start
             fi
         done
@@ -687,6 +691,28 @@ health_rabbitmq_check()
 
 health_rabbitmq_repair()
 {
+    local total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
+    local stats=$($HEX_CFG status_rabbitmq 2>/dev/null)
+    local running=$(echo "$stats" | jq -r '.running_nodes[]?' 2>/dev/null)
+    local running_cnt=$(echo "$running" | grep -c .)
+    local partition=$(echo "$stats" | jq -r '.partitions[]?' 2>/dev/null | grep -c .)
+    local seed=$(echo "$running" | head -1)
+
+    # Healthy core (running majority, no partition): rejoin only missing nodes, preserve state.
+    if [ "$running_cnt" -ge $(( total / 2 + 1 )) ] && [ "$partition" -eq 0 ] ; then
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            echo "$running" | grep -q "rabbit@$node$" && continue
+            remote_run $node "systemctl restart rabbitmq-server"
+            sleep 8
+            if ! $HEX_CFG status_rabbitmq 2>/dev/null | jq -r '.running_nodes[]?' | grep -q "rabbit@$node$" ; then
+                # stale/split mnesia: reset only this node and rejoin the core
+                remote_run $node "rabbitmqctl stop_app ; rabbitmqctl reset ; rabbitmqctl join_cluster $seed ; rabbitmqctl start_app"
+            fi
+        done
+        return 0
+    fi
+
+    # No healthy core (majority down or partitioned) -- full rebuild.
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         remote_systemd_stop $node rabbitmq-server
         remote_run $node rm -rf /var/lib/rabbitmq/mnesia/*
@@ -743,16 +769,33 @@ health_mysql_check()
 _health_mysql_repair()
 {
     local ts=$(date +%Y%m%d-%H%M%S)
-    local master=$CUBE_NODE_CONTROL_HOSTNAMES
 
-    cmd -c "hex_sdk remote_systemd_stop \$HOSTNAME mariadb ; killall -9 mariadbd ; rm -f /var/lib/mysql/mysql.sock"
+    # If a galera primary is still live, rejoin it instead of bootstrapping (avoids split-brain).
+    local primary=""
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if [ "$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'")" = "Primary" ] ; then
+            primary=$node ; break
+        fi
+    done
+
+    if [ -n "$primary" ] ; then
+        # rejoin every non-Synced node: clear wedged unit, disarm bootstrap, plain start
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            [ "$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_local_state_comment'\" 2>/dev/null | awk '{print \$2}'")" = "Synced" ] && continue
+            remote_run $node "systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; rm -f /var/lib/mysql/mysql.sock ; sed -i 's/safe_to_bootstrap: 1/safe_to_bootstrap: 0/' /var/lib/mysql/grastate.dat ; systemctl start mariadb"
+        done
+        return 0
+    fi
+
+    # No primary: bootstrap a fresh cluster from the last control node, rest join.
     cmd -c "cp -rp /var/lib/mysql /var/lib/mysql-\${HOSTNAME}-${ts}"
     local cnt=0
     for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
         ((cnt++))
         if [ $cnt -eq 1 ] ; then # last control node
-            remote_run $node "sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /var/lib/mysql/grastate.dat"
+            remote_run $node "systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /var/lib/mysql/grastate.dat"
             remote_run $node galera_new_cluster
+            remote_run $node "sed -i 's/safe_to_bootstrap: 1/safe_to_bootstrap: 0/' /var/lib/mysql/grastate.dat"
         else
             remote_systemd_start $node mariadb
         fi
@@ -761,7 +804,9 @@ _health_mysql_repair()
 
 health_mysql_repair()
 {
-    cmd -cor "timeout $SRVTO systemctl stop mariadb ; killall -9 mariadbd ; systemctl start mariadb"
+    # mariadb.service is SendSIGKILL=no, so a hung stop wedges the unit: try restart,
+    # else force-clear the wedge (kill + reset-failed) and start.
+    cmd -cor "timeout $SRVTO systemctl restart mariadb || { systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; systemctl start mariadb ; }"
     if ! health_mysql_check ; then
         # multiple attempts to fix is needed, especially after rolling-upgrade
         for i in 1 2 3 ; do
@@ -858,6 +903,15 @@ health_vip_repair()
     fi
     # if first time setup not completed or cluster in rolling upgrade process, ensure master node has VIP
     if [ ! -e /etc/appliance/state/configured ] || is_node_rolling_upgrade ; then
+        # Wait (<=60s) for stable all-online membership before moving the VIP.
+        for _w in $(seq 1 12) ; do
+            local _st=$(pcs status 2>/dev/null)
+            local _online=$(echo "$_st" | grep -i " online" | cut -d "[" -f2 | cut -d "]" -f1 | awk '{print NF}')
+            if [ "$_online" = "${#CUBE_NODE_CONTROL_HOSTNAMES[@]}" ] && ! echo "$_st" | grep -qiE "pending|in progress" ; then
+                break
+            fi
+            sleep 5
+        done
         local master=$CUBE_NODE_CONTROL_HOSTNAMES
         if remote_run $master "pcs resource status vip" | grep -q Started ; then
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -1257,16 +1311,32 @@ health_ceph_report()
     _health_report ${FUNCNAME[0]}
 }
 
+# Returns 0 if ceph has a blocking health check (data unavailable, capacity,
+# corruption, no quorum); 1 if only transient recovery checks are non-OK.
+_ceph_blocking_health()
+{
+    local stats="${1:-$($CEPH status -f json 2>/dev/null)}"
+    local c
+    for c in $(echo "$stats" | jq -r '.health.checks | keys[]' 2>/dev/null) ; do
+        case "$c" in
+            PG_AVAILABILITY|OSD_FULL|OSD_BACKFILLFULL|OSD_NEARFULL|\
+            POOL_FULL|POOL_NEAR_FULL|POOL_BACKFILLFULL|\
+            PG_BACKFILL_FULL|PG_RECOVERY_FULL|PG_DAMAGED|OSD_SCRUB_ERRORS|\
+            MON_DOWN|MON_CLOCK_SKEW|FS_WITH_FAILED_MDS|MDS_ALL_DOWN|MDS_DAMAGE)
+                return 0 ;;
+        esac
+    done
+    return 1
+}
+
 health_ceph_check()
 {
     local stats=$($CEPH status -f json)
     local service_stats="$(echo $stats | jq -r .health.status)"
 
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u ceph-mon@$HOSTNAME"
-    if [ "$service_stats" = "HEALTH_WARN" ] ; then
-        ERR_CODE=1
-    elif [ "$service_stats" = "HEALTH_ERR" ] ; then
-        ERR_CODE=2
+    if [ "$service_stats" != "HEALTH_OK" ] && _ceph_blocking_health "$stats" ; then
+        [ "$service_stats" = "HEALTH_ERR" ] && ERR_CODE=2 || ERR_CODE=1
     fi
 
     ERR_MSG="`$CEPH health detail`"
@@ -1498,13 +1568,15 @@ health_ceph_osd_check()
     local total=$(echo $stats | jq -r .osdmap.num_osds)
     local uposd=$(echo $stats | jq -r .osdmap.num_up_osds)
     local inosd=$(echo $stats | jq -r .osdmap.num_in_osds)
-    if [ "$total" != "$uposd" ] ; then
-        ERR_CODE=1
-    elif [ "$total" != "$inosd" ] ; then
-        ERR_CODE=2
-    elif cmd "$HEX_SDK ceph_osd_list" | sort -t. -n -k2 | egrep -q "warning|fail" ; then
+    if cmd "$HEX_SDK ceph_osd_list" | sort -t. -n -k2 | egrep -q "warning|fail" ; then
+        # device hardware fault -- always a fault, even mid-recovery
         ERR_CODE=3
         ERR_LOG="dmesg | grep -i -e fail -e error"
+    elif [ "$total" != "$uposd" ] ; then
+        # OSDs still rejoining -- only a fault if data is unavailable
+        _ceph_blocking_health "$stats" && ERR_CODE=1
+    elif [ "$total" != "$inosd" ] ; then
+        _ceph_blocking_health "$stats" && ERR_CODE=2
     fi
 
     ERR_MSG+="`$CEPH health detail`"
@@ -3408,6 +3480,22 @@ _health_neutron_deep_repair()
 
 _health_datapipe_deep_repair()
 {
+    # This wipes+rebuilds the datapipe, so gate it behind a cooldown to avoid
+    # thrashing a stack that is still converging after boot.
+    local _dp_marker=/run/cube_datapipe_deep_repair.ts _dp_cooldown=900
+    local _dp_now _dp_last
+    _dp_now=$(date +%s)
+    if [ -f "$_dp_marker" ] ; then
+        _dp_last=$(cat "$_dp_marker" 2>/dev/null) ; [ -n "$_dp_last" ] || _dp_last=0
+        if [ $((_dp_now - _dp_last)) -lt $_dp_cooldown ] ; then
+            return 0   # in cooldown: let the datapipe finish converging, don't thrash
+        fi
+    else
+        echo "$_dp_now" > "$_dp_marker" 2>/dev/null
+        return 0       # first call this boot: seed the timer, give it time to converge
+    fi
+    echo "$_dp_now" > "$_dp_marker" 2>/dev/null
+
     cmd -c systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
     Quiet -n sleep 10
     cmd -c "rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*"
