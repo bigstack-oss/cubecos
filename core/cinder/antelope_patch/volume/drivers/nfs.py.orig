@@ -160,6 +160,16 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             msg = _('nfs volume must be a valid raw or qcow2 image.')
             raise exception.InvalidVolume(reason=msg)
 
+        # Test if the size is accurate or if something tried to modify it
+        if info.virtual_size != volume.size * units.Gi:
+            LOG.error('The volume virtual_size does not match the size in '
+                      'cinder, aborting as we suspect an exploit. '
+                      'Virtual Size is %(vsize)s and real size is %(size)s',
+                      {'vsize': info.virtual_size, 'size': volume.size})
+            msg = _('The volume virtual_size does not match the size in '
+                    'cinder, aborting as we suspect an exploit.')
+            raise exception.InvalidVolume(reason=msg)
+
         conn_info['data']['format'] = info.file_format
         LOG.debug('NfsDriver: conn_info: %s', conn_info)
         return conn_info
@@ -473,6 +483,14 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         This method should rename the back-end volume name(id) on the
         destination host back to its original name(id) on the source host.
 
+        Due to this renaming, inheriting drivers may need to also re-associate
+        other entities (such as backend QoS) with the new name.  Alternatively
+        they could overwrite this method and raise NotImplemented.
+
+        In any case, driver's code should always use the volume OVO's 'name_id'
+        field instead of 'id' to get the volume's real UUID, as the renaming
+        could fail.
+
         :param ctxt: The context used to run the method update_migrated_volume
         :param volume: The original volume that was migrated to this backend
         :param new_volume: The migration volume object that was created on
@@ -528,13 +546,13 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
 
         self._stats = data
 
-    @coordination.synchronized('{self.driver_prefix}-{volume[id]}')
+    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def create_volume(self, volume):
         """Apply locking to the create volume operation."""
 
         return super(NfsDriver, self).create_volume(volume)
 
-    @coordination.synchronized('{self.driver_prefix}-{volume[id]}')
+    @coordination.synchronized('{self.driver_prefix}-{volume.id}')
     def delete_volume(self, volume):
         """Deletes a logical volume."""
 
