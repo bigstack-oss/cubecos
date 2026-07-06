@@ -383,8 +383,25 @@ cube_cluster_start_cluster_if_master()
 
 cube_cluster_stop()
 {
-    if timeout $SRVTO $HEX_SDK health_ceph_mds_check ; then
-        ! $HEX_SDK os_nova_list || $HEX_SDK os_nova_list id status powerstate | grep -i 'active running' | cut -d' ' -f1 > $CEPHFS_NOVA_DIR/instances/active_running
+    # Cleanly stop running VMs before nodes go down, recording each "stopped" to the
+    # shared cephfs record; power_restore_recorded_vms restarts them at boot-end.
+    # Gate on nova being queryable, NOT health_ceph_mds_check (can fail mid-shutdown
+    # and silently skip the snapshot).
+    local _vm _i _active
+    _active=$($HEX_SDK os_nova_list id status powerstate 2>/dev/null | grep -i 'active running' | cut -d' ' -f1)
+    if [ -n "$_active" ] && mountpoint -q /mnt/cephfs ; then
+        mkdir -p $CEPHFS_NOVA_DIR/instances
+        : > $CLUSTER_ACTIVE_RUNNING
+        for _vm in $_active ; do
+            [ "$($OPENSTACK server show "$_vm" -f value -c status 2>/dev/null)" = ERROR ] && os_nova_instance_reset "$_vm"
+            $OPENSTACK server stop "$_vm" >/dev/null 2>&1
+            echo "$_vm stopped" >> $CLUSTER_ACTIVE_RUNNING
+        done
+        # bounded wait for guests to reach SHUTOFF so the reboot does not hard-kill them
+        for _i in $(seq 1 20) ; do
+            [ -z "$($HEX_SDK os_nova_list id status powerstate 2>/dev/null | grep -i 'active running')" ] && break
+            sleep 3
+        done
     fi
     rm -f /var/lib/corosync/*
     rm -rf /var/lib/rabbitmq/mnesia/*
@@ -1134,6 +1151,8 @@ cluster_check_repair_async()
     # it finishes. Detached via setsid so it survives the parent CLI exiting.
     setsid bash -c '
         out=$(hex_cli -c cluster check_repair 2>&1)
+        # Restore VMs recorded at cluster stop, now that services are healed.
+        hex_sdk power_restore_recorded_vms
         con=$(hex_sdk GetKernelConsoleDevices)
         { echo "" ; echo "===== cluster check_repair complete =====" ; echo "$out" ; echo "=========================================" ; } | tee $con 2>/dev/null | wall 2>/dev/null
     ' </dev/null >/dev/null 2>&1 &
