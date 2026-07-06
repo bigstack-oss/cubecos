@@ -77,6 +77,9 @@ cmd()
     [ ${#_cmd_nodes[@]} -ne 0 ] || _cmd_nodes=( "${CUBE_NODE_LIST_HOSTNAMES[@]}" )
 
     [ "x$reverse" = "xfalse" ] || _cmd_nodes=( $(printf '%s\n' "${_cmd_nodes[@]}" | tac | tr '\n' ' ') )
+    # bound connect + liveness so a wedged remote can't block cmd() (timeout wrapper caps total).
+    local _ssh_opts="-o LogLevel=quiet -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+    local _ssh_to="${CMD_SSH_TIMEOUT:-600}"
     declare -A _cmd_nodes_pids=()
     declare -A _cmd_nodes_rets=()
     declare -A _cmd_nodes_logs=()
@@ -88,7 +91,7 @@ cmd()
             _cmd_nodes_logs[$_cmd_node]="$(mktemp -u /tmp/cmd_${node}.XXXX)"
             if [ "x$dryrun" = "xfalse" ] ; then
                 if is_sshable $_cmd_node ; then
-                    ssh -o LogLevel=quiet $_cmd_node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >${_cmd_nodes_logs[$_cmd_node]} 2>&1 &
+                    timeout $_ssh_to ssh $_ssh_opts $_cmd_node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >${_cmd_nodes_logs[$_cmd_node]} 2>&1 &
                 else
                     false &
                 fi
@@ -122,7 +125,7 @@ cmd()
             _cmd_node_log="$(mktemp -u /tmp/cmd_${node}.XXXX)"
             if [ "x$dryrun" = "xfalse" ] ; then
                 if is_sshable $_cmd_node ; then
-                    ssh -o LogLevel=quiet $_cmd_node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >$_cmd_node_log 2>&1
+                    timeout $_ssh_to ssh $_ssh_opts $_cmd_node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >$_cmd_node_log 2>&1
                     _cmd_node_ret=$?
                 else
                     _cmd_node_ret=1
