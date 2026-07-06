@@ -461,6 +461,7 @@ SetDatabaseConnection(
     uri << "mysql+pymysql://cinder:" << dbPass << "@" << sharedId << "/cinder";
 
     config["database"]["connection"] = uri.str();
+    config["database"]["mysql_wsrep_sync_wait"] = "1";
 }
 
 /**
