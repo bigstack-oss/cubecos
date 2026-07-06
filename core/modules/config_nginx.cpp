@@ -90,6 +90,7 @@ Commit(bool modified, int dryLevel)
 
     if (enabled) {
         SystemdCommitService(enabled, NGINX_NAME, true);
+        WriteLogRotateConf(log_conf);
     }
 
     return true;
