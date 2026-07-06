@@ -222,6 +222,18 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
 }
 
 
+static void
+WriteSecHeaders(FILE *fout)
+{
+    // X-XSS-Protection is deprecated but security scanners still require it,
+    // actual protection comes from nosniff and CSP
+    fprintf(fout, "  http-after-response set-header X-XSS-Protection \"1; mode=block\"\n");
+    fprintf(fout, "  http-after-response set-header X-Content-Type-Options \"nosniff\"\n");
+    fprintf(fout, "  http-after-response set-header Content-Security-Policy \"default-src 'none'; frame-ancestors 'none'\"\n");
+    fprintf(fout, "  http-after-response set-header X-Frame-Options \"DENY\"\n");
+    fprintf(fout, "  http-after-response set-header Referrer-Policy \"no-referrer\"\n");
+}
+
 static bool
 WriteConfig(bool ha, const std::string& ctrlVip,
             const std::string& ctrlHosts, const std::string& ctrlAddrs, const std::string& strfAddrs)
@@ -309,7 +321,7 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         { "octavia_api", "9876", "tcp", "" },
         { "designate_api", "9001", "http", "ctrl" },
         { "watcher_api", "9322", "tcp", "ctrl" },
-        { "cyborg_api", "6666", "tcp", "ctrl" },
+        { "cyborg_api", "6666", "tcp", "ctrl sechdr hsclose" },
         { "memcache", "11211", "tcp", "" },
         { "opensearch", "9200", "http", "ctrl" },
         { "rabbitmq", "5672", "tcp", " clitcpka" },
@@ -343,6 +355,13 @@ WriteConfig(bool ha, const std::string& ctrlVip,
             fprintf(fout, "  balance  roundrobin\n");
         else
             fprintf(fout, "  balance  source\n");
+
+        // backend services do not emit security headers themselves,
+        // inject them at the listener (requires http mode)
+        if (srvlist[i][SRV_OPTS].find("sechdr") != std::string::npos) {
+            fprintf(fout, "  mode  http\n");
+            WriteSecHeaders(fout);
+        }
 
         if (srvlist[i][SRV_CONN] == "tcp") {
             if (srvlist[i][SRV_OPTS].find("clitcpka") != std::string::npos) {
