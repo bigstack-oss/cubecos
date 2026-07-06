@@ -13,9 +13,12 @@
 #include <hex/dryrun.h>
 #include <hex/filesystem.h>
 #include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/pidfile.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
+
+static LogRotateConf log_conf("glance", "/var/log/glance/*.log", DAILY, 128, 0, true);
 
 static const char USER[] = "glance";
 static const char GROUP[] = "glance";
@@ -673,6 +676,7 @@ Commit(bool modified, int dryLevel)
 
     // start services
     SystemdCommitService(s_enabled, GA_NAME, true);
+    WriteLogRotateConf(log_conf);
 
     return true;
 }
