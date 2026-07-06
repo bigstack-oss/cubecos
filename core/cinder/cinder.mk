@@ -4,8 +4,8 @@
 ROOTFS_DNF += qemu-img cryptsetup lvm2 iscsi-initiator-utils device-mapper-multipath nvmetcli sudo sshpass
 ROOTFS_DNF_NOARCH += targetcli
 
-CINDER_SRCDIR := $(ROOTDIR)/usr/lib/python3.9/site-packages/cinder
-CINDER_PATCHDIR := $(COREDIR)/cinder/$(OPENSTACK_RELEASE)_patch
+CINDER_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/cinder
+CINDER_PATCHDIR := $(COREDIR)/cinder/$(NEXT_OPENSTACK_RELEASE)_patch
 
 CINDER_CONFDIR := $(ROOTDIR)/etc/cinder
 
