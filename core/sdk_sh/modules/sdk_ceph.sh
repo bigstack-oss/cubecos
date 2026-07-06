@@ -342,14 +342,50 @@ ceph_enter_maintenance()
     Quiet $CEPH osd set pause
 }
 
+# Wait (bounded) for all OSDs stably up. Gotcha: under `nodown` the osdmap
+# reads all-up while stale, so first wait for a real down before trusting it.
+ceph_wait_all_osds_up()
+{
+    local timeout=${1:-1800} i=0 saw_down=0 stable=0 need d t u
+    while [ $i -lt $timeout ] ; do
+        d=$($CEPH status -f json 2>/dev/null)
+        t=$(echo "$d" | jq -r .osdmap.num_osds 2>/dev/null)
+        u=$(echo "$d" | jq -r .osdmap.num_up_osds 2>/dev/null)
+        if [ -n "$t" ] && [ "$t" != "null" ] && [ -n "$u" ] ; then
+            if [ "$u" -lt "$t" ] ; then
+                saw_down=1 ; stable=0            # a real down: map is now truthful
+            else
+                stable=$((stable+1))
+                # after a real down, 20s stable is enough; else 60s to skip stale window
+                [ "$saw_down" = 1 ] && need=4 || need=12
+                [ $stable -ge $need ] && return 0
+            fi
+        fi
+        sleep 5 ; i=$((i+5))
+    done
+    return 0   # bounded: proceed even if not all up, never block boot
+}
+
+# Lift the data-movement suppressors, only once all OSDs are back (avoids
+# needless rebalance/backfill on a clean power-cycle).
+ceph_finish_maintenance()
+{
+    ceph_wait_all_osds_up 1800
+    sleep 15   # let PGs peer after the last OSD rejoined
+    Quiet $CEPH osd unset norecover
+    Quiet $CEPH osd unset norebalance
+    Quiet $CEPH osd unset nobackfill
+    Quiet $CEPH osd unset noout
+}
+
 ceph_leave_maintenance()
 {
+    # unblock client I/O immediately so the cluster is usable on boot
     Quiet $CEPH osd unset pause
     Quiet $CEPH osd unset nodown
-    Quiet $CEPH osd unset nobackfill
-    Quiet $CEPH osd unset norebalance
-    Quiet $CEPH osd unset norecover
-    Quiet $CEPH osd unset noout
+    # defer lifting noout/norebalance/nobackfill/norecover until all OSDs are
+    # back; backgrounded so it never gates the boot
+    nohup bash -c "$HEX_SDK ceph_finish_maintenance" >/dev/null 2>&1 &
 }
 
 ceph_maintenance_status()
