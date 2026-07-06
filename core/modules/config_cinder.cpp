@@ -462,6 +462,7 @@ SetDatabaseConnection(
     uri << "mysql+pymysql://cinder:" << dbPass << "@" << sharedId << "/cinder";
 
     config["database"]["connection"] = uri.str();
+    config["database"]["mysql_wsrep_sync_wait"] = "1";
     // reconnect on a lost DB connection (survive the set_ready VIP/galera reconfig)
     config["database"]["use_db_reconnect"] = "true";
     config["database"]["db_max_retries"] = "-1";
