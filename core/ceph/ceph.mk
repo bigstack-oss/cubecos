@@ -31,9 +31,9 @@ CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; e
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install "Cython<3"
-	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/ceph
 	$(Q)chroot $(ROOTDIR) wget -O /usr/src/ceph/ceph-v17.2.6.tar.gz https://github.com/ceph/ceph/archive/refs/tags/v17.2.6.tar.gz
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/ceph/ceph-v17.2.6.tar.gz -C /usr/src/ceph
 	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rados && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/python setup.py install"
 	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rbd && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/python setup.py install"
