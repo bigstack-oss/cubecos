@@ -1,0 +1,2541 @@
+[DEFAULT]
+
+#
+# From glance.cache
+#
+
+# DEPRECATED:
+# Allow users to add additional/custom properties to images.
+#
+# Glance defines a standard set of properties (in its schema) that
+# appear on every image. These properties are also known as
+# ``base properties``. In addition to these properties, Glance
+# allows users to add custom properties to images. These are known
+# as ``additional properties``.
+#
+# By default, this configuration option is set to ``True`` and users
+# are allowed to add additional properties. The number of additional
+# properties that can be added to an image can be controlled via
+# ``image_property_quota`` configuration option.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * image_property_quota
+#
+#  (boolean value)
+# This option is deprecated for removal since Ussuri.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option is redundant.  Control custom image property usage via the
+# 'image_property_quota' configuration option.  This option is scheduled
+# to be removed during the Victoria development cycle.
+#allow_additional_image_properties = true
+
+#
+# Secure hashing algorithm used for computing the 'os_hash_value' property.
+#
+# This option configures the Glance "multihash", which consists of two
+# image properties: the 'os_hash_algo' and the 'os_hash_value'.  The
+# 'os_hash_algo' will be populated by the value of this configuration
+# option, and the 'os_hash_value' will be populated by the hexdigest computed
+# when the algorithm is applied to the uploaded or imported image data.
+#
+# The value must be a valid secure hash algorithm name recognized by the
+# python 'hashlib' library.  You can determine what these are by examining
+# the 'hashlib.algorithms_available' data member of the version of the
+# library being used in your Glance installation.  For interoperability
+# purposes, however, we recommend that you use the set of secure hash
+# names supplied by the 'hashlib.algorithms_guaranteed' data member because
+# those algorithms are guaranteed to be supported by the 'hashlib' library
+# on all platforms.  Thus, any image consumer using 'hashlib' locally should
+# be able to verify the 'os_hash_value' of the image.
+#
+# The default value of 'sha512' is a performant secure hash algorithm.
+#
+# If this option is misconfigured, any attempts to store image data will fail.
+# For that reason, we recommend using the default value.
+#
+# Possible values:
+#     * Any secure hash algorithm name recognized by the Python 'hashlib'
+#       library
+#
+# Related options:
+#     * None
+#
+#  (string value)
+#hashing_algorithm = sha512
+
+#
+# Maximum number of image members per image.
+#
+# This limits the maximum of users an image can be shared with. Any negative
+# value is interpreted as unlimited.
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+#image_member_quota = 128
+
+#
+# Maximum number of properties allowed on an image.
+#
+# This enforces an upper limit on the number of additional properties an image
+# can have. Any negative value is interpreted as unlimited.
+#
+# NOTE: This won't have any impact if additional properties are disabled. Please
+# refer to ``allow_additional_image_properties``.
+#
+# Related options:
+#     * ``allow_additional_image_properties``
+#
+#  (integer value)
+#image_property_quota = 128
+
+#
+# Maximum number of tags allowed on an image.
+#
+# Any negative value is interpreted as unlimited.
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+#image_tag_quota = 128
+
+#
+# Maximum number of locations allowed on an image.
+#
+# Any negative value is interpreted as unlimited.
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+#image_location_quota = 10
+
+#
+# The default number of results to return for a request.
+#
+# Responses to certain API requests, like list images, may return
+# multiple items. The number of results returned can be explicitly
+# controlled by specifying the ``limit`` parameter in the API request.
+# However, if a ``limit`` parameter is not specified, this
+# configuration value will be used as the default number of results to
+# be returned for any API request.
+#
+# NOTES:
+#     * The value of this configuration option may not be greater than
+#       the value specified by ``api_limit_max``.
+#     * Setting this to a very large value may slow down database
+#       queries and increase response times. Setting this to a
+#       very low value may result in poor user experience.
+#
+# Possible values:
+#     * Any positive integer
+#
+# Related options:
+#     * api_limit_max
+#
+#  (integer value)
+# Minimum value: 1
+#limit_param_default = 25
+
+#
+# Maximum number of results that could be returned by a request.
+#
+# As described in the help text of ``limit_param_default``, some
+# requests may return multiple results. The number of results to be
+# returned are governed either by the ``limit`` parameter in the
+# request or the ``limit_param_default`` configuration option.
+# The value in either case, can't be greater than the absolute maximum
+# defined by this configuration option. Anything greater than this
+# value is trimmed down to the maximum value defined here.
+#
+# NOTE: Setting this to a very large value may slow down database
+#       queries and increase response times. Setting this to a
+#       very low value may result in poor user experience.
+#
+# Possible values:
+#     * Any positive integer
+#
+# Related options:
+#     * limit_param_default
+#
+#  (integer value)
+# Minimum value: 1
+#api_limit_max = 1000
+
+#
+# Show direct image location when returning an image.
+#
+# This configuration option indicates whether to show the direct image
+# location when returning image details to the user. The direct image
+# location is where the image data is stored in backend storage. This
+# image location is shown under the image property ``direct_url``.
+#
+# When multiple image locations exist for an image, the best location
+# is displayed based on the location strategy indicated by the
+# configuration option ``location_strategy``.
+#
+# NOTES:
+#     * Revealing image locations can present a GRAVE SECURITY RISK as
+#       image locations can sometimes include credentials. Hence, this
+#       is set to ``False`` by default. Set this to ``True`` with
+#       EXTREME CAUTION and ONLY IF you know what you are doing!
+#     * If an operator wishes to avoid showing any image location(s)
+#       to the user, then both this option and
+#       ``show_multiple_locations`` MUST be set to ``False``.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * show_multiple_locations
+#     * location_strategy
+#
+#  (boolean value)
+#show_image_direct_url = false
+
+# DEPRECATED:
+# Show all image locations when returning an image.
+#
+# This configuration option indicates whether to show all the image
+# locations when returning image details to the user. When multiple
+# image locations exist for an image, the locations are ordered based
+# on the location strategy indicated by the configuration opt
+# ``location_strategy``. The image locations are shown under the
+# image property ``locations``.
+#
+# NOTES:
+#     * Revealing image locations can present a GRAVE SECURITY RISK as
+#       image locations can sometimes include credentials. Hence, this
+#       is set to ``False`` by default. Set this to ``True`` with
+#       EXTREME CAUTION and ONLY IF you know what you are doing!
+#     * See https://wiki.openstack.org/wiki/OSSN/OSSN-0065 for more
+#       information.
+#     * If an operator wishes to avoid showing any image location(s)
+#       to the user, then both this option and
+#       ``show_image_direct_url`` MUST be set to ``False``.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * show_image_direct_url
+#     * location_strategy
+#
+#  (boolean value)
+# This option is deprecated for removal since Newton.
+# Its value may be silently ignored in the future.
+# Reason: Use of this option, deprecated since Newton, is a security risk and
+# will be removed once we figure out a way to satisfy those use cases that
+# currently require it.  An earlier announcement that the same functionality can
+# be achieved with greater granularity by using policies is incorrect.  You
+# cannot work around this option via policy configuration at the present time,
+# though that is the direction we believe the fix will take.  Please keep an eye
+# on the Glance release notes to stay up to date on progress in addressing this
+# issue.
+#show_multiple_locations = false
+
+#
+# Maximum size of image a user can upload in bytes.
+#
+# An image upload greater than the size mentioned here would result
+# in an image creation failure. This configuration option defaults to
+# 1099511627776 bytes (1 TiB).
+#
+# NOTES:
+#     * This value should only be increased after careful
+#       consideration and must be set less than or equal to
+#       8 EiB (9223372036854775808).
+#     * This value must be set with careful consideration of the
+#       backend storage capacity. Setting this to a very low value
+#       may result in a large number of image failures. And, setting
+#       this to a very large value may result in faster consumption
+#       of storage. Hence, this must be set according to the nature of
+#       images created and storage capacity available.
+#
+# Possible values:
+#     * Any positive number less than or equal to 9223372036854775808
+#
+#  (integer value)
+# Minimum value: 1
+# Maximum value: 9223372036854775808
+#image_size_cap = 1099511627776
+
+#
+# Maximum amount of image storage per tenant.
+#
+# This enforces an upper limit on the cumulative storage consumed by all images
+# of a tenant across all stores. This is a per-tenant limit.
+#
+# The default unit for this configuration option is Bytes. However, storage
+# units can be specified using case-sensitive literals ``B``, ``KB``, ``MB``,
+# ``GB`` and ``TB`` representing Bytes, KiloBytes, MegaBytes, GigaBytes and
+# TeraBytes respectively. Note that there should not be any space between the
+# value and unit. Value ``0`` signifies no quota enforcement. Negative values
+# are invalid and result in errors.
+#
+# This has no effect if ``use_keystone_limits`` is enabled.
+#
+# Possible values:
+#     * A string that is a valid concatenation of a non-negative integer
+#       representing the storage value and an optional string literal
+#       representing storage units as mentioned above.
+#
+# Related options:
+#     * use_keystone_limits
+#
+#  (string value)
+#user_storage_quota = 0
+
+#
+# Utilize per-tenant resource limits registered in Keystone.
+#
+# Enabling this feature will cause Glance to retrieve limits set in keystone
+# for resource consumption and enforce them against API users. Before turning
+# this on, the limits need to be registered in Keystone or all quotas will be
+# considered to be zero, and thus reject all new resource requests.
+#
+# These per-tenant resource limits are independent from the static
+# global ones configured in this config file. If this is enabled, the
+# relevant static global limits will be ignored.
+#  (boolean value)
+#use_keystone_limits = false
+
+#
+# Host address of the pydev server.
+#
+# Provide a string value representing the hostname or IP of the
+# pydev server to use for debugging. The pydev server listens for
+# debug connections on this address, facilitating remote debugging
+# in Glance.
+#
+# Possible values:
+#     * Valid hostname
+#     * Valid IP address
+#
+# Related options:
+#     * None
+#
+#  (host address value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#pydev_worker_debug_host = localhost
+
+#
+# Port number that the pydev server will listen on.
+#
+# Provide a port number to bind the pydev server to. The pydev
+# process accepts debug connections on this port and facilitates
+# remote debugging in Glance.
+#
+# Possible values:
+#     * A valid port number
+#
+# Related options:
+#     * None
+#
+#  (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#pydev_worker_debug_port = 5678
+
+#
+# AES key for encrypting store location metadata.
+#
+# Provide a string value representing the AES cipher to use for
+# encrypting Glance store metadata.
+#
+# NOTE: The AES key to use must be set to a random string of length
+# 16, 24 or 32 bytes.
+#
+# Possible values:
+#     * String value representing a valid AES key
+#
+# Related options:
+#     * None
+#
+#  (string value)
+#metadata_encryption_key = <None>
+
+#
+# Digest algorithm to use for digital signature.
+#
+# Provide a string value representing the digest algorithm to
+# use for generating digital signatures. By default, ``sha256``
+# is used.
+#
+# To get a list of the available algorithms supported by the version
+# of OpenSSL on your platform, run the command:
+# ``openssl list-message-digest-algorithms``.
+# Examples are 'sha1', 'sha256', and 'sha512'.
+#
+# NOTE: ``digest_algorithm`` is not related to Glance's image signing
+# and verification. It is only used to sign the universally unique
+# identifier (UUID) as a part of the certificate file and key file
+# validation.
+#
+# Possible values:
+#     * An OpenSSL message digest algorithm identifier
+#
+# Relation options:
+#     * None
+#
+#  (string value)
+#digest_algorithm = sha256
+
+#
+# The URL provides location where the temporary data will be stored
+#
+# This option is for Glance internal use only. Glance will save the
+# image data uploaded by the user to 'staging' endpoint during the
+# image import process.
+#
+# This option does not change the 'staging' API endpoint by any means.
+#
+# NOTE: It is discouraged to use same path as [task]/work_dir
+#
+# NOTE: 'file://<absolute-directory-path>' is the only option
+# api_image_import flow will support for now.
+#
+# NOTE: The staging path must be on shared filesystem available to all
+# Glance API nodes.
+#
+# Possible values:
+#     * String starting with 'file://' followed by absolute FS path
+#
+# Related options:
+#     * [task]/work_dir
+#
+#  (string value)
+#node_staging_uri = file:///tmp/staging/
+
+#
+#     List of enabled Image Import Methods
+#
+#     'glance-direct', 'copy-image' and 'web-download' are enabled by default.
+#     'glance-download' is available, but requires federated deployments.
+#
+#     Related options:
+#         * [DEFAULT]/node_staging_uri (list value)
+#enabled_import_methods = [glance-direct,web-download,copy-image]
+
+#
+# The URL to this worker.
+#
+# If this is set, other glance workers will know how to contact this one
+# directly if needed. For image import, a single worker stages the image
+# and other workers need to be able to proxy the import request to the
+# right one.
+#
+# If unset, this will be considered to be `public_endpoint`, which
+# normally would be set to the same value on all workers, effectively
+# disabling the proxying behavior.
+#
+# Possible values:
+#     * A URL by which this worker is reachable from other workers
+#
+# Related options:
+#     * public_endpoint
+#
+#  (string value)
+#worker_self_reference_url = <None>
+
+#
+# The relative path to sqlite file database that will be used for image cache
+# management.
+#
+# This is a relative path to the sqlite file database that tracks the age and
+# usage statistics of image cache. The path is relative to image cache base
+# directory, specified by the configuration option ``image_cache_dir``.
+#
+# This is a lightweight database with just one table.
+#
+# Possible values:
+#     * A valid relative path to sqlite file database
+#
+# Related options:
+#     * ``image_cache_dir``
+#
+#  (string value)
+#image_cache_sqlite_db = cache.db
+
+#
+# The driver to use for image cache management.
+#
+# This configuration option provides the flexibility to choose between the
+# different image-cache drivers available. An image-cache driver is responsible
+# for providing the essential functions of image-cache like write images to/read
+# images from cache, track age and usage of cached images, provide a list of
+# cached images, fetch size of the cache, queue images for caching and clean up
+# the cache, etc.
+#
+# The essential functions of a driver are defined in the base class
+# ``glance.image_cache.drivers.base.Driver``. All image-cache drivers (existing
+# and prospective) must implement this interface. Currently available drivers
+# are ``sqlite`` and ``xattr``. These drivers primarily differ in the way they
+# store the information about cached images:
+#
+# * The ``sqlite`` driver uses a sqlite database (which sits on every glance
+#   node locally) to track the usage of cached images.
+# * The ``xattr`` driver uses the extended attributes of files to store this
+#   information. It also requires a filesystem that sets ``atime`` on the files
+#   when accessed.
+#
+# Possible values:
+#     * sqlite
+#     * xattr
+#
+# Related options:
+#     * None
+#
+#  (string value)
+# Possible values:
+# sqlite - <No description provided>
+# xattr - <No description provided>
+#image_cache_driver = sqlite
+
+#
+# The upper limit on cache size, in bytes, after which the cache-pruner cleans
+# up the image cache.
+#
+# NOTE: This is just a threshold for cache-pruner to act upon. It is NOT a
+# hard limit beyond which the image cache would never grow. In fact, depending
+# on how often the cache-pruner runs and how quickly the cache fills, the image
+# cache can far exceed the size specified here very easily. Hence, care must be
+# taken to appropriately schedule the cache-pruner and in setting this limit.
+#
+# Glance caches an image when it is downloaded. Consequently, the size of the
+# image cache grows over time as the number of downloads increases. To keep the
+# cache size from becoming unmanageable, it is recommended to run the
+# cache-pruner as a periodic task. When the cache pruner is kicked off, it
+# compares the current size of image cache and triggers a cleanup if the image
+# cache grew beyond the size specified here. After the cleanup, the size of
+# cache is less than or equal to size specified here.
+#
+# Possible values:
+#     * Any non-negative integer
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 0
+#image_cache_max_size = 10737418240
+
+#
+# The amount of time, in seconds, an incomplete image remains in the cache.
+#
+# Incomplete images are images for which download is in progress. Please see the
+# description of configuration option ``image_cache_dir`` for more detail.
+# Sometimes, due to various reasons, it is possible the download may hang and
+# the incompletely downloaded image remains in the ``incomplete`` directory.
+# This configuration option sets a time limit on how long the incomplete images
+# should remain in the ``incomplete`` directory before they are cleaned up.
+# Once an incomplete image spends more time than is specified here, it'll be
+# removed by cache-cleaner on its next run.
+#
+# It is recommended to run cache-cleaner as a periodic task on the Glance API
+# nodes to keep the incomplete images from occupying disk space.
+#
+# Possible values:
+#     * Any non-negative integer
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 0
+#image_cache_stall_time = 86400
+
+#
+# Base directory for image cache.
+#
+# This is the location where image data is cached and served out of. All cached
+# images are stored directly under this directory. This directory also contains
+# three subdirectories, namely, ``incomplete``, ``invalid`` and ``queue``.
+#
+# The ``incomplete`` subdirectory is the staging area for downloading images. An
+# image is first downloaded to this directory. When the image download is
+# successful it is moved to the base directory. However, if the download fails,
+# the partially downloaded image file is moved to the ``invalid`` subdirectory.
+#
+# The ``queue``subdirectory is used for queuing images for download. This is
+# used primarily by the cache-prefetcher, which can be scheduled as a periodic
+# task like cache-pruner and cache-cleaner, to cache images ahead of their
+# usage.
+# Upon receiving the request to cache an image, Glance touches a file in the
+# ``queue`` directory with the image id as the file name. The cache-prefetcher,
+# when running, polls for the files in ``queue`` directory and starts
+# downloading them in the order they were created. When the download is
+# successful, the zero-sized file is deleted from the ``queue`` directory.
+# If the download fails, the zero-sized file remains and it'll be retried the
+# next time cache-prefetcher runs.
+#
+# Possible values:
+#     * A valid path
+#
+# Related options:
+#     * ``image_cache_sqlite_db``
+#
+#  (string value)
+#image_cache_dir = <None>
+
+#
+# From oslo.log
+#
+
+# If set to true, the logging level will be set to DEBUG instead of the default
+# INFO level. (boolean value)
+# Note: This option can be changed without restarting.
+#debug = false
+
+# The name of a logging configuration file. This file is appended to any
+# existing logging configuration files. For details about logging configuration
+# files, see the Python logging module documentation. Note that when logging
+# configuration files are used then all logging configuration is set in the
+# configuration file and other logging configuration options are ignored (for
+# example, log-date-format). (string value)
+# Note: This option can be changed without restarting.
+# Deprecated group/name - [DEFAULT]/log_config
+#log_config_append = <None>
+
+# Defines the format string for %%(asctime)s in log records. Default:
+# %(default)s . This option is ignored if log_config_append is set. (string
+# value)
+#log_date_format = %Y-%m-%d %H:%M:%S
+
+# (Optional) Name of log file to send logging output to. If no default is set,
+# logging will go to stderr as defined by use_stderr. This option is ignored if
+# log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logfile
+#log_file = <None>
+
+# (Optional) The base directory used for relative log_file  paths. This option
+# is ignored if log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logdir
+#log_dir = <None>
+
+# Uses logging handler designed to watch file system. When log file is moved or
+# removed this handler will open a new log file with specified path
+# instantaneously. It makes sense only if log_file option is specified and Linux
+# platform is used. This option is ignored if log_config_append is set. (boolean
+# value)
+#watch_log_file = false
+
+# Use syslog for logging. Existing syslog format is DEPRECATED and will be
+# changed later to honor RFC5424. This option is ignored if log_config_append is
+# set. (boolean value)
+#use_syslog = false
+
+# Enable journald for logging. If running in a systemd environment you may wish
+# to enable journal support. Doing so will use the journal native protocol which
+# includes structured metadata in addition to log messages.This option is
+# ignored if log_config_append is set. (boolean value)
+#use_journal = false
+
+# Syslog facility to receive log lines. This option is ignored if
+# log_config_append is set. (string value)
+#syslog_log_facility = LOG_USER
+
+# Use JSON formatting for logging. This option is ignored if log_config_append
+# is set. (boolean value)
+#use_json = false
+
+# Log output to standard error. This option is ignored if log_config_append is
+# set. (boolean value)
+#use_stderr = false
+
+# Log output to Windows Event Log. (boolean value)
+#use_eventlog = false
+
+# The amount of time before the log files are rotated. This option is ignored
+# unless log_rotation_type is set to "interval". (integer value)
+#log_rotate_interval = 1
+
+# Rotation interval type. The time of the last file change (or the time when the
+# service was started) is used when scheduling the next rotation. (string value)
+# Possible values:
+# Seconds - <No description provided>
+# Minutes - <No description provided>
+# Hours - <No description provided>
+# Days - <No description provided>
+# Weekday - <No description provided>
+# Midnight - <No description provided>
+#log_rotate_interval_type = days
+
+# Maximum number of rotated log files. (integer value)
+#max_logfile_count = 30
+
+# Log file maximum size in MB. This option is ignored if "log_rotation_type" is
+# not set to "size". (integer value)
+#max_logfile_size_mb = 200
+
+# Log rotation type. (string value)
+# Possible values:
+# interval - Rotate logs at predefined time intervals.
+# size - Rotate logs once they reach a predefined size.
+# none - Do not rotate log files.
+#log_rotation_type = none
+
+# Format string to use for log messages with context. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
+
+# Format string to use for log messages when context is undefined. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_default_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s
+
+# Additional data to append to log message when logging level for the message is
+# DEBUG. Used by oslo_log.formatters.ContextFormatter (string value)
+#logging_debug_format_suffix = %(funcName)s %(pathname)s:%(lineno)d
+
+# Prefix each line of exception output with this format. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_exception_prefix = %(asctime)s.%(msecs)03d %(process)d ERROR %(name)s %(instance)s
+
+# Defines the format string for %(user_identity)s that is used in
+# logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
+# (string value)
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
+
+# List of package logging levels in logger=LEVEL pairs. This option is ignored
+# if log_config_append is set. (list value)
+#default_log_levels = amqp=WARN,amqplib=WARN,boto=WARN,qpid=WARN,sqlalchemy=WARN,suds=INFO,oslo.messaging=INFO,oslo_messaging=INFO,iso8601=WARN,requests.packages.urllib3.connectionpool=WARN,urllib3.connectionpool=WARN,websocket=WARN,requests.packages.urllib3.util.retry=WARN,urllib3.util.retry=WARN,keystonemiddleware=WARN,routes.middleware=WARN,stevedore=WARN,taskflow=WARN,keystoneauth=WARN,oslo.cache=INFO,oslo_policy=INFO,dogpile.core.dogpile=INFO
+
+# Enables or disables publication of error events. (boolean value)
+#publish_errors = false
+
+# The format for an instance that is passed with the log message. (string value)
+#instance_format = "[instance: %(uuid)s] "
+
+# The format for an instance UUID that is passed with the log message. (string
+# value)
+#instance_uuid_format = "[instance: %(uuid)s] "
+
+# Interval, number of seconds, of log rate limiting. (integer value)
+#rate_limit_interval = 0
+
+# Maximum number of logged messages per rate_limit_interval. (integer value)
+#rate_limit_burst = 0
+
+# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG or
+# empty string. Logs with level greater or equal to rate_limit_except_level are
+# not filtered. An empty string means that all levels are filtered. (string
+# value)
+#rate_limit_except_level = CRITICAL
+
+# Enables or disables fatal status of deprecations. (boolean value)
+#fatal_deprecations = false
+
+
+[glance_store]
+
+#
+# From glance.store
+#
+
+# DEPRECATED:
+# List of enabled Glance stores.
+#
+# Register the storage backends to use for storing disk images
+# as a comma separated list. The default stores enabled for
+# storing disk images with Glance are ``file`` and ``http``.
+#
+# Possible values:
+#     * A comma separated list that could include:
+#         * file
+#         * http
+#         * swift
+#         * rbd
+#         * cinder
+#         * vmware
+#         * s3
+#
+# Related Options:
+#     * default_store
+#
+#  (list value)
+# This option is deprecated for removal since Rocky.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option is deprecated against new config option
+# ``enabled_backends`` which helps to configure multiple backend stores
+# of different schemes.
+#
+# This option is scheduled for removal in the U development
+# cycle.
+#stores = file,http
+
+# DEPRECATED:
+# The default scheme to use for storing images.
+#
+# Provide a string value representing the default scheme to use for
+# storing images. If not set, Glance uses ``file`` as the default
+# scheme to store images with the ``file`` store.
+#
+# NOTE: The value given for this configuration option must be a valid
+# scheme for a store registered with the ``stores`` configuration
+# option.
+#
+# Possible values:
+#     * file
+#     * filesystem
+#     * http
+#     * https
+#     * swift
+#     * swift+http
+#     * swift+https
+#     * swift+config
+#     * rbd
+#     * cinder
+#     * vsphere
+#     * s3
+#
+# Related Options:
+#     * stores
+#
+#  (string value)
+# Possible values:
+# file - <No description provided>
+# filesystem - <No description provided>
+# http - <No description provided>
+# https - <No description provided>
+# swift - <No description provided>
+# swift+http - <No description provided>
+# swift+https - <No description provided>
+# swift+config - <No description provided>
+# rbd - <No description provided>
+# cinder - <No description provided>
+# vsphere - <No description provided>
+# s3 - <No description provided>
+# This option is deprecated for removal since Rocky.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option is deprecated against new config option
+# ``default_backend`` which acts similar to ``default_store`` config
+# option.
+#
+# This option is scheduled for removal in the U development
+# cycle.
+#default_store = file
+
+#
+# Information to match when looking for cinder in the service catalog.
+#
+# When the ``cinder_endpoint_template`` is not set and any of
+# ``cinder_store_auth_address``, ``cinder_store_user_name``,
+# ``cinder_store_project_name``, ``cinder_store_password`` is not set,
+# cinder store uses this information to lookup cinder endpoint from the service
+# catalog in the current context. ``cinder_os_region_name``, if set, is taken
+# into consideration to fetch the appropriate endpoint.
+#
+# The service catalog can be listed by the ``openstack catalog list`` command.
+#
+# Possible values:
+#     * A string of of the following form:
+#       ``<service_type>:<service_name>:<interface>``
+#       At least ``service_type`` and ``interface`` should be specified.
+#       ``service_name`` can be omitted.
+#
+# Related options:
+#     * cinder_os_region_name
+#     * cinder_endpoint_template
+#     * cinder_store_auth_address
+#     * cinder_store_user_name
+#     * cinder_store_project_name
+#     * cinder_store_password
+#     * cinder_store_project_domain_name
+#     * cinder_store_user_domain_name
+#
+#  (string value)
+#cinder_catalog_info = volumev3::publicURL
+
+#
+# Override service catalog lookup with template for cinder endpoint.
+#
+# When this option is set, this value is used to generate cinder endpoint,
+# instead of looking up from the service catalog.
+# This value is ignored if ``cinder_store_auth_address``,
+# ``cinder_store_user_name``, ``cinder_store_project_name``, and
+# ``cinder_store_password`` are specified.
+#
+# If this configuration option is set, ``cinder_catalog_info`` will be ignored.
+#
+# Possible values:
+#     * URL template string for cinder endpoint, where ``%%(tenant)s`` is
+#       replaced with the current tenant (project) name.
+#       For example: ``http://cinder.openstack.example.org/v2/%%(tenant)s``
+#
+# Related options:
+#     * cinder_store_auth_address
+#     * cinder_store_user_name
+#     * cinder_store_project_name
+#     * cinder_store_password
+#     * cinder_store_project_domain_name
+#     * cinder_store_user_domain_name
+#     * cinder_catalog_info
+#
+#  (string value)
+#cinder_endpoint_template = <None>
+
+#
+# Region name to lookup cinder service from the service catalog.
+#
+# This is used only when ``cinder_catalog_info`` is used for determining the
+# endpoint. If set, the lookup for cinder endpoint by this node is filtered to
+# the specified region. It is useful when multiple regions are listed in the
+# catalog. If this is not set, the endpoint is looked up from every region.
+#
+# Possible values:
+#     * A string that is a valid region name.
+#
+# Related options:
+#     * cinder_catalog_info
+#
+#  (string value)
+# Deprecated group/name - [glance_store]/os_region_name
+#cinder_os_region_name = <None>
+
+#
+# Location of a CA certificates file used for cinder client requests.
+#
+# The specified CA certificates file, if set, is used to verify cinder
+# connections via HTTPS endpoint. If the endpoint is HTTP, this value is
+# ignored.
+# ``cinder_api_insecure`` must be set to ``True`` to enable the verification.
+#
+# Possible values:
+#     * Path to a ca certificates file
+#
+# Related options:
+#     * cinder_api_insecure
+#
+#  (string value)
+#cinder_ca_certificates_file = <None>
+
+#
+# Number of cinderclient retries on failed http calls.
+#
+# When a call failed by any errors, cinderclient will retry the call up to the
+# specified times after sleeping a few seconds.
+#
+# Possible values:
+#     * A positive integer
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 0
+#cinder_http_retries = 3
+
+#
+# Time period, in seconds, to wait for a cinder volume transition to
+# complete.
+#
+# When the cinder volume is created, deleted, or attached to the glance node to
+# read/write the volume data, the volume's state is changed. For example, the
+# newly created volume status changes from ``creating`` to ``available`` after
+# the creation process is completed. This specifies the maximum time to wait for
+# the status change. If a timeout occurs while waiting, or the status is changed
+# to an unexpected value (e.g. `error``), the image creation fails.
+#
+# Possible values:
+#     * A positive integer
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 0
+#cinder_state_transition_timeout = 300
+
+#
+# Allow to perform insecure SSL requests to cinder.
+#
+# If this option is set to True, HTTPS endpoint connection is verified using the
+# CA certificates file specified by ``cinder_ca_certificates_file`` option.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * cinder_ca_certificates_file
+#
+#  (boolean value)
+#cinder_api_insecure = false
+
+#
+# The address where the cinder authentication service is listening.
+#
+# When all of ``cinder_store_auth_address``, ``cinder_store_user_name``,
+# ``cinder_store_project_name``, and ``cinder_store_password`` options are
+# specified, the specified values are always used for the authentication.
+# This is useful to hide the image volumes from users by storing them in a
+# project/tenant specific to the image service. It also enables users to share
+# the image volume among other projects under the control of glance's ACL.
+#
+# If either of these options are not set, the cinder endpoint is looked up
+# from the service catalog, and current context's user and project are used.
+#
+# Possible values:
+#     * A valid authentication service address, for example:
+#       ``http://openstack.example.org/identity/v2.0``
+#
+# Related options:
+#     * cinder_store_user_name
+#     * cinder_store_password
+#     * cinder_store_project_name
+#     * cinder_store_project_domain_name
+#     * cinder_store_user_domain_name
+#
+#  (string value)
+#cinder_store_auth_address = <None>
+
+#
+# User name to authenticate against cinder.
+#
+# This must be used with all the following non-domain-related options.
+# If any of these are not specified (except domain-related options),
+# the user of the current context is used.
+#
+# Possible values:
+#     * A valid user name
+#
+# Related options:
+#     * cinder_store_auth_address
+#     * cinder_store_password
+#     * cinder_store_project_name
+#     * cinder_store_project_domain_name
+#     * cinder_store_user_domain_name
+#
+#  (string value)
+#cinder_store_user_name = <None>
+
+#
+# Domain of the user to authenticate against cinder.
+#
+# Possible values:
+#     * A valid domain name for the user specified by ``cinder_store_user_name``
+#
+# Related options:
+#     * cinder_store_auth_address
+#     * cinder_store_password
+#     * cinder_store_project_name
+#     * cinder_store_project_domain_name
+#     * cinder_store_user_name
+#
+#  (string value)
+#cinder_store_user_domain_name = Default
+
+#
+# Password for the user authenticating against cinder.
+#
+# This must be used with all the following related options.
+# If any of these are not specified (except domain-related options),
+# the user of the current context is used.
+#
+# Possible values:
+#     * A valid password for the user specified by ``cinder_store_user_name``
+#
+# Related options:
+#     * cinder_store_auth_address
+#     * cinder_store_user_name
+#     * cinder_store_project_name
+#     * cinder_store_project_domain_name
+#     * cinder_store_user_domain_name
+#
+#  (string value)
+#cinder_store_password = <None>
+
+#
+# Project name where the image volume is stored in cinder.
+#
+# If this configuration option is not set, the project in current context is
+# used.
+#
+# This must be used with all the following related options.
+# If any of these are not specified (except domain-related options),
+# the user of the current context is used.
+#
+# Possible values:
+#     * A valid project name
+#
+# Related options:
+#     * ``cinder_store_auth_address``
+#     * ``cinder_store_user_name``
+#     * ``cinder_store_password``
+#     * ``cinder_store_project_domain_name``
+#     * ``cinder_store_user_domain_name``
+#
+#  (string value)
+#cinder_store_project_name = <None>
+
+#
+# Domain of the project where the image volume is stored in cinder.
+#
+# Possible values:
+#     * A valid domain name of the project specified by
+#       ``cinder_store_project_name``
+#
+# Related options:
+#     * ``cinder_store_auth_address``
+#     * ``cinder_store_user_name``
+#     * ``cinder_store_password``
+#     * ``cinder_store_project_domain_name``
+#     * ``cinder_store_user_domain_name``
+#
+#  (string value)
+#cinder_store_project_domain_name = Default
+
+#
+# Path to the rootwrap configuration file to use for running commands as root.
+#
+# The cinder store requires root privileges to operate the image volumes (for
+# connecting to iSCSI/FC volumes and reading/writing the volume data, etc.).
+# The configuration file should allow the required commands by cinder store and
+# os-brick library.
+#
+# Possible values:
+#     * Path to the rootwrap config file
+#
+# Related options:
+#     * None
+#
+#  (string value)
+#rootwrap_config = /etc/glance/rootwrap.conf
+
+#
+# Volume type that will be used for volume creation in cinder.
+#
+# Some cinder backends can have several volume types to optimize storage usage.
+# Adding this option allows an operator to choose a specific volume type
+# in cinder that can be optimized for images.
+#
+# If this is not set, then the default volume type specified in the cinder
+# configuration will be used for volume creation.
+#
+# Possible values:
+#     * A valid volume type from cinder
+#
+# Related options:
+#     * None
+#
+# NOTE: You cannot use an encrypted volume_type associated with an NFS backend.
+# An encrypted volume stored on an NFS backend will raise an exception whenever
+# glance_store tries to write or access image data stored in that volume.
+# Consult your Cinder administrator to determine an appropriate volume_type.
+#
+#  (string value)
+#cinder_volume_type = <None>
+
+#
+# If this is set to True, attachment of volumes for image transfer will
+# be aborted when multipathd is not running. Otherwise, it will fallback
+# to single path.
+#
+# Possible values:
+#     * True or False
+#
+# Related options:
+#     * cinder_use_multipath
+#
+#  (boolean value)
+#cinder_enforce_multipath = false
+
+#
+# Flag to identify multipath is supported or not in the deployment.
+#
+# Set it to False if multipath is not supported.
+#
+# Possible values:
+#     * True or False
+#
+# Related options:
+#     * cinder_enforce_multipath
+#
+#  (boolean value)
+#cinder_use_multipath = false
+
+#
+# Directory where the NFS volume is mounted on the glance node.
+#
+# Possible values:
+#
+# * A string representing absolute path of mount point.
+#  (string value)
+#cinder_mount_point_base = /var/lib/glance/mnt
+
+#
+# If this is set to True, glance will perform an extend operation
+# on the attached volume. Only enable this option if the cinder
+# backend driver supports the functionality of extending online
+# (in-use) volumes. Supported from cinder microversion 3.42 and
+# onwards. By default, it is set to False.
+#
+# Possible values:
+#     * True or False
+#
+#  (boolean value)
+#cinder_do_extend_attached = false
+
+#
+# Directory to which the filesystem backend store writes images.
+#
+# Upon start up, Glance creates the directory if it doesn't already
+# exist and verifies write access to the user under which
+# ``glance-api`` runs. If the write access isn't available, a
+# ``BadStoreConfiguration`` exception is raised and the filesystem
+# store may not be available for adding new images.
+#
+# NOTE: This directory is used only when filesystem store is used as a
+# storage backend. Either ``filesystem_store_datadir`` or
+# ``filesystem_store_datadirs`` option must be specified in
+# ``glance-api.conf``. If both options are specified, a
+# ``BadStoreConfiguration`` will be raised and the filesystem store
+# may not be available for adding new images.
+#
+# Possible values:
+#     * A valid path to a directory
+#
+# Related options:
+#     * ``filesystem_store_datadirs``
+#     * ``filesystem_store_file_perm``
+#
+#  (string value)
+#filesystem_store_datadir = /var/lib/glance/images
+
+#
+# List of directories and their priorities to which the filesystem
+# backend store writes images.
+#
+# The filesystem store can be configured to store images in multiple
+# directories as opposed to using a single directory specified by the
+# ``filesystem_store_datadir`` configuration option. When using
+# multiple directories, each directory can be given an optional
+# priority to specify the preference order in which they should
+# be used. Priority is an integer that is concatenated to the
+# directory path with a colon where a higher value indicates higher
+# priority. When two directories have the same priority, the directory
+# with most free space is used. When no priority is specified, it
+# defaults to zero.
+#
+# More information on configuring filesystem store with multiple store
+# directories can be found at
+# https://docs.openstack.org/glance/latest/configuration/configuring.html
+#
+# NOTE: This directory is used only when filesystem store is used as a
+# storage backend. Either ``filesystem_store_datadir`` or
+# ``filesystem_store_datadirs`` option must be specified in
+# ``glance-api.conf``. If both options are specified, a
+# ``BadStoreConfiguration`` will be raised and the filesystem store
+# may not be available for adding new images.
+#
+# Possible values:
+#     * List of strings of the following form:
+#         * ``<a valid directory path>:<optional integer priority>``
+#
+# Related options:
+#     * ``filesystem_store_datadir``
+#     * ``filesystem_store_file_perm``
+#
+#  (multi valued)
+#filesystem_store_datadirs =
+
+#
+# Filesystem store metadata file.
+#
+# The path to a file which contains the metadata to be returned with any
+# location
+# associated with the filesystem store. Once this option is set, it is used for
+# new images created afterward only - previously existing images are not
+# affected.
+#
+# The file must contain a valid JSON object. The object should contain the keys
+# ``id`` and ``mountpoint``. The value for both keys should be a string.
+#
+# Possible values:
+#     * A valid path to the store metadata file
+#
+# Related options:
+#     * None
+#
+#  (string value)
+#filesystem_store_metadata_file = <None>
+
+#
+# File access permissions for the image files.
+#
+# Set the intended file access permissions for image data. This provides
+# a way to enable other services, e.g. Nova, to consume images directly
+# from the filesystem store. The users running the services that are
+# intended to be given access to could be made a member of the group
+# that owns the files created. Assigning a value less then or equal to
+# zero for this configuration option signifies that no changes be made
+# to the  default permissions. This value will be decoded as an octal
+# digit.
+#
+# For more information, please refer the documentation at
+# https://docs.openstack.org/glance/latest/configuration/configuring.html
+#
+# Possible values:
+#     * A valid file access permission
+#     * Zero
+#     * Any negative integer
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+#filesystem_store_file_perm = 0
+
+#
+# Chunk size, in bytes.
+#
+# The chunk size used when reading or writing image files. Raising this value
+# may improve the throughput but it may also slightly increase the memory usage
+# when handling a large number of requests.
+#
+# Possible Values:
+#     * Any positive integer value
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 1
+#filesystem_store_chunk_size = 65536
+
+#
+# Enable or not thin provisioning in this backend.
+#
+# This configuration option enable the feature of not really write null byte
+# sequences on the filesystem, the holes who can appear will automatically
+# be interpreted by the filesystem as null bytes, and do not really consume
+# your storage.
+# Enabling this feature will also speed up image upload and save network traffic
+# in addition to save space in the backend, as null bytes sequences are not
+# sent over the network.
+#
+# Possible Values:
+#     * True
+#     * False
+#
+# Related options:
+#     * None
+#
+#  (boolean value)
+#filesystem_thin_provisioning = false
+
+#
+# Path to the CA bundle file.
+#
+# This configuration option enables the operator to use a custom
+# Certificate Authority file to verify the remote server certificate. If
+# this option is set, the ``https_insecure`` option will be ignored and
+# the CA file specified will be used to authenticate the server
+# certificate and establish a secure connection to the server.
+#
+# Possible values:
+#     * A valid path to a CA file
+#
+# Related options:
+#     * https_insecure
+#
+#  (string value)
+#https_ca_certificates_file = <None>
+
+#
+# Set verification of the remote server certificate.
+#
+# This configuration option takes in a boolean value to determine
+# whether or not to verify the remote server certificate. If set to
+# True, the remote server certificate is not verified. If the option is
+# set to False, then the default CA truststore is used for verification.
+#
+# This option is ignored if ``https_ca_certificates_file`` is set.
+# The remote server certificate will then be verified using the file
+# specified using the ``https_ca_certificates_file`` option.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * https_ca_certificates_file
+#
+#  (boolean value)
+#https_insecure = true
+
+#
+# The http/https proxy information to be used to connect to the remote
+# server.
+#
+# This configuration option specifies the http/https proxy information
+# that should be used to connect to the remote server. The proxy
+# information should be a key value pair of the scheme and proxy, for
+# example, http:10.0.0.1:3128. You can also specify proxies for multiple
+# schemes by separating the key value pairs with a comma, for example,
+# http:10.0.0.1:3128, https:10.0.0.1:1080.
+#
+# Possible values:
+#     * A comma separated list of scheme:proxy pairs as described above
+#
+# Related options:
+#     * None
+#
+#  (dict value)
+#http_proxy_information =
+
+#
+# Size, in megabytes, to chunk RADOS images into.
+#
+# Provide an integer value representing the size in megabytes to chunk
+# Glance images into. The default chunk size is 8 megabytes. For optimal
+# performance, the value should be a power of two.
+#
+# When Ceph's RBD object storage system is used as the storage backend
+# for storing Glance images, the images are chunked into objects of the
+# size set using this option. These chunked objects are then stored
+# across the distributed block data store to use for Glance.
+#
+# Possible Values:
+#     * Any positive integer value
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 1
+#rbd_store_chunk_size = 8
+
+#
+# RADOS pool in which images are stored.
+#
+# When RBD is used as the storage backend for storing Glance images, the
+# images are stored by means of logical grouping of the objects (chunks
+# of images) into a ``pool``. Each pool is defined with the number of
+# placement groups it can contain. The default pool that is used is
+# 'images'.
+#
+# More information on the RBD storage backend can be found here:
+# http://ceph.com/planet/how-data-is-stored-in-ceph-cluster/
+#
+# Possible Values:
+#     * A valid pool name
+#
+# Related options:
+#     * None
+#
+#  (string value)
+#rbd_store_pool = images
+
+#
+# RADOS user to authenticate as.
+#
+# This configuration option takes in the RADOS user to authenticate as.
+# This is only needed when RADOS authentication is enabled and is
+# applicable only if the user is using Cephx authentication. If the
+# value for this option is not set by the user or is set to None, a
+# default value will be chosen, which will be based on the client.
+# section in rbd_store_ceph_conf.
+#
+# Possible Values:
+#     * A valid RADOS user
+#
+# Related options:
+#     * rbd_store_ceph_conf
+#
+#  (string value)
+#rbd_store_user = <None>
+
+#
+# Ceph configuration file path.
+#
+# This configuration option specifies the path to the Ceph configuration
+# file to be used. If the value for this option is not set by the user
+# or is set to the empty string, librados will read the standard ceph.conf
+# file by searching the default Ceph configuration file locations in
+# sequential order.  See the Ceph documentation for details.
+#
+# NOTE: If using Cephx authentication, this file should include a reference
+# to the right keyring in a client.<USER> section
+#
+# NOTE 2: If you leave this option empty (the default), the actual Ceph
+# configuration file used may change depending on what version of librados
+# is being used.  If it is important for you to know exactly which configuration
+# file is in effect, you may specify that file here using this option.
+#
+# Possible Values:
+#     * A valid path to a configuration file
+#
+# Related options:
+#     * rbd_store_user
+#
+#  (string value)
+#rbd_store_ceph_conf =
+
+# DEPRECATED:
+# Timeout value for connecting to Ceph cluster.
+#
+# This configuration option takes in the timeout value in seconds used
+# when connecting to the Ceph cluster i.e. it sets the time to wait for
+# glance-api before closing the connection. This prevents glance-api
+# hangups during the connection to RBD. If the value for this option
+# is set to less than or equal to 0, no timeout is set and the default
+# librados value is used.
+#
+# Possible Values:
+#     * Any integer value
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# This option is deprecated for removal since Zed.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option has not had any effect in years. Users willing to set a timeout
+# for
+# connecting to the Ceph cluster should use 'client_mount_timeout' in Ceph's
+# configuration file.
+#rados_connect_timeout = 0
+
+#
+# Enable or not thin provisioning in this backend.
+#
+# This configuration option enable the feature of not really write null byte
+# sequences on the RBD backend, the holes who can appear will automatically
+# be interpreted by Ceph as null bytes, and do not really consume your storage.
+# Enabling this feature will also speed up image upload and save network traffic
+# in addition to save space in the backend, as null bytes sequences are not
+# sent over the network.
+#
+# Possible Values:
+#     * True
+#     * False
+#
+# Related options:
+#     * None
+#
+#  (boolean value)
+#rbd_thin_provisioning = false
+
+#
+# The host where the S3 server is listening.
+#
+# This configuration option sets the host of the S3 or S3 compatible storage
+# Server. This option is required when using the S3 storage backend.
+# The host can contain a DNS name (e.g. s3.amazonaws.com, my-object-storage.com)
+# or an IP address (127.0.0.1).
+#
+# Possible values:
+#     * A valid DNS name
+#     * A valid IPv4 address
+#
+# Related Options:
+#     * s3_store_access_key
+#     * s3_store_secret_key
+#
+#  (string value)
+#s3_store_host = <None>
+
+#
+# The S3 region name.
+#
+# This parameter will set the region_name used by boto.
+# If this parameter is not set, we we will try to compute it from the
+# s3_store_host.
+#
+# Possible values:
+#     * A valid region name
+#
+# Related Options:
+#     * s3_store_host
+#
+#  (string value)
+#s3_store_region_name =
+
+#
+# The S3 query token access key.
+#
+# This configuration option takes the access key for authenticating with the
+# Amazon S3 or S3 compatible storage server. This option is required when using
+# the S3 storage backend.
+#
+# Possible values:
+#     * Any string value that is the access key for a user with appropriate
+#       privileges
+#
+# Related Options:
+#     * s3_store_host
+#     * s3_store_secret_key
+#
+#  (string value)
+#s3_store_access_key = <None>
+
+#
+# The S3 query token secret key.
+#
+# This configuration option takes the secret key for authenticating with the
+# Amazon S3 or S3 compatible storage server. This option is required when using
+# the S3 storage backend.
+#
+# Possible values:
+#     * Any string value that is a secret key corresponding to the access key
+#       specified using the ``s3_store_host`` option
+#
+# Related Options:
+#     * s3_store_host
+#     * s3_store_access_key
+#
+#  (string value)
+#s3_store_secret_key = <None>
+
+#
+# The S3 bucket to be used to store the Glance data.
+#
+# This configuration option specifies where the glance images will be stored
+# in the S3. If ``s3_store_create_bucket_on_put`` is set to true, it will be
+# created automatically even if the bucket does not exist.
+#
+# Possible values:
+#     * Any string value
+#
+# Related Options:
+#     * s3_store_create_bucket_on_put
+#     * s3_store_bucket_url_format
+#
+#  (string value)
+#s3_store_bucket = <None>
+
+#
+# Determine whether S3 should create a new bucket.
+#
+# This configuration option takes boolean value to indicate whether Glance
+# should
+# create a new bucket to S3 if it does not exist.
+#
+# Possible values:
+#     * Any Boolean value
+#
+# Related Options:
+#     * None
+#
+#  (boolean value)
+#s3_store_create_bucket_on_put = false
+
+#
+# The S3 calling format used to determine the object.
+#
+# This configuration option takes access model that is used to specify the
+# address of an object in an S3 bucket.
+#
+# NOTE:
+# In ``path``-style, the endpoint for the object looks like
+# 'https://s3.amazonaws.com/bucket/example.img'.
+# And in ``virtual``-style, the endpoint for the object looks like
+# 'https://bucket.s3.amazonaws.com/example.img'.
+# If you do not follow the DNS naming convention in the bucket name, you can
+# get objects in the path style, but not in the virtual style.
+#
+# Possible values:
+#     * Any string value of ``auto``, ``virtual``, or ``path``
+#
+# Related Options:
+#     * s3_store_bucket
+#
+#  (string value)
+#s3_store_bucket_url_format = auto
+
+#
+# What size, in MB, should S3 start chunking image files and do a multipart
+# upload in S3.
+#
+# This configuration option takes a threshold in MB to determine whether to
+# upload the image to S3 as is or to split it (Multipart Upload).
+#
+# Note: You can only split up to 10,000 images.
+#
+# Possible values:
+#     * Any positive integer value
+#
+# Related Options:
+#     * s3_store_large_object_chunk_size
+#     * s3_store_thread_pools
+#
+#  (integer value)
+#s3_store_large_object_size = 100
+
+#
+# What multipart upload part size, in MB, should S3 use when uploading parts.
+#
+# This configuration option takes the image split size in MB for Multipart
+# Upload.
+#
+# Note: You can only split up to 10,000 images.
+#
+# Possible values:
+#     * Any positive integer value (must be greater than or equal to 5M)
+#
+# Related Options:
+#     * s3_store_large_object_size
+#     * s3_store_thread_pools
+#
+#  (integer value)
+#s3_store_large_object_chunk_size = 10
+
+#
+# The number of thread pools to perform a multipart upload in S3.
+#
+# This configuration option takes the number of thread pools when performing a
+# Multipart Upload.
+#
+# Possible values:
+#     * Any positive integer value
+#
+# Related Options:
+#     * s3_store_large_object_size
+#     * s3_store_large_object_chunk_size
+#
+#  (integer value)
+#s3_store_thread_pools = 10
+
+#
+# Set verification of the server certificate.
+#
+# This boolean determines whether or not to verify the server
+# certificate. If this option is set to True, swiftclient won't check
+# for a valid SSL certificate when authenticating. If the option is set
+# to False, then the default CA truststore is used for verification.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * swift_store_cacert
+#
+#  (boolean value)
+#swift_store_auth_insecure = false
+
+#
+# Path to the CA bundle file.
+#
+# This configuration option enables the operator to specify the path to
+# a custom Certificate Authority file for SSL verification when
+# connecting to Swift.
+#
+# Possible values:
+#     * A valid path to a CA file
+#
+# Related options:
+#     * swift_store_auth_insecure
+#
+#  (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#swift_store_cacert = /etc/ssl/certs/ca-certificates.crt
+
+#
+# The region of Swift endpoint to use by Glance.
+#
+# Provide a string value representing a Swift region where Glance
+# can connect to for image storage. By default, there is no region
+# set.
+#
+# When Glance uses Swift as the storage backend to store images
+# for a specific tenant that has multiple endpoints, setting of a
+# Swift region with ``swift_store_region`` allows Glance to connect
+# to Swift in the specified region as opposed to a single region
+# connectivity.
+#
+# This option can be configured for both single-tenant and
+# multi-tenant storage.
+#
+# NOTE: Setting the region with ``swift_store_region`` is
+# tenant-specific and is necessary ``only if`` the tenant has
+# multiple endpoints across different regions.
+#
+# Possible values:
+#     * A string value representing a valid Swift region.
+#
+# Related Options:
+#     * None
+#
+#  (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#swift_store_region = RegionTwo
+
+#
+# The URL endpoint to use for Swift backend storage.
+#
+# Provide a string value representing the URL endpoint to use for
+# storing Glance images in Swift store. By default, an endpoint
+# is not set and the storage URL returned by ``auth`` is used.
+# Setting an endpoint with ``swift_store_endpoint`` overrides the
+# storage URL and is used for Glance image storage.
+#
+# NOTE: The URL should include the path up to, but excluding the
+# container. The location of an object is obtained by appending
+# the container and object to the configured URL.
+#
+# Possible values:
+#     * String value representing a valid URL path up to a Swift container
+#
+# Related Options:
+#     * None
+#
+#  (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#swift_store_endpoint = https://swift.openstack.example.org/v1/path_not_including_container_name
+
+#
+# Endpoint Type of Swift service.
+#
+# This string value indicates the endpoint type to use to fetch the
+# Swift endpoint. The endpoint type determines the actions the user will
+# be allowed to perform, for instance, reading and writing to the Store.
+# This setting is only used if swift_store_auth_version is greater than
+# 1.
+#
+# Possible values:
+#     * publicURL
+#     * adminURL
+#     * internalURL
+#
+# Related options:
+#     * swift_store_endpoint
+#
+#  (string value)
+# Possible values:
+# publicURL - <No description provided>
+# adminURL - <No description provided>
+# internalURL - <No description provided>
+#swift_store_endpoint_type = publicURL
+
+#
+# Type of Swift service to use.
+#
+# Provide a string value representing the service type to use for
+# storing images while using Swift backend storage. The default
+# service type is set to ``object-store``.
+#
+# NOTE: If ``swift_store_auth_version`` is set to 2, the value for
+# this configuration option needs to be ``object-store``. If using
+# a higher version of Keystone or a different auth scheme, this
+# option may be modified.
+#
+# Possible values:
+#     * A string representing a valid service type for Swift storage.
+#
+# Related Options:
+#     * None
+#
+#  (string value)
+#swift_store_service_type = object-store
+
+#
+# Name of single container to store images/name prefix for multiple containers
+#
+# When a single container is being used to store images, this configuration
+# option indicates the container within the Glance account to be used for
+# storing all images. When multiple containers are used to store images, this
+# will be the name prefix for all containers. Usage of single/multiple
+# containers can be controlled using the configuration option
+# ``swift_store_multiple_containers_seed``.
+#
+# When using multiple containers, the containers will be named after the value
+# set for this configuration option with the first N chars of the image UUID
+# as the suffix delimited by an underscore (where N is specified by
+# ``swift_store_multiple_containers_seed``).
+#
+# Example: if the seed is set to 3 and swift_store_container = ``glance``, then
+# an image with UUID ``fdae39a1-bac5-4238-aba4-69bcc726e848`` would be placed in
+# the container ``glance_fda``. All dashes in the UUID are included when
+# creating the container name but do not count toward the character limit, so
+# when N=10 the container name would be ``glance_fdae39a1-ba.``
+#
+# Possible values:
+#     * If using single container, this configuration option can be any string
+#       that is a valid swift container name in Glance's Swift account
+#     * If using multiple containers, this configuration option can be any
+#       string as long as it satisfies the container naming rules enforced by
+#       Swift. The value of ``swift_store_multiple_containers_seed`` should be
+#       taken into account as well.
+#
+# Related options:
+#     * ``swift_store_multiple_containers_seed``
+#     * ``swift_store_multi_tenant``
+#     * ``swift_store_create_container_on_put``
+#
+#  (string value)
+#swift_store_container = glance
+
+#
+# The size threshold, in MB, after which Glance will start segmenting image
+# data.
+#
+# Swift has an upper limit on the size of a single uploaded object. By default,
+# this is 5GB. To upload objects bigger than this limit, objects are segmented
+# into multiple smaller objects that are tied together with a manifest file.
+# For more detail, refer to
+# https://docs.openstack.org/swift/latest/overview_large_objects.html
+#
+# This configuration option specifies the size threshold over which the Swift
+# driver will start segmenting image data into multiple smaller files.
+# Currently, the Swift driver only supports creating Dynamic Large Objects.
+#
+# NOTE: This should be set by taking into account the large object limit
+# enforced by the Swift cluster in consideration.
+#
+# Possible values:
+#     * A positive integer that is less than or equal to the large object limit
+#       enforced by the Swift cluster in consideration.
+#
+# Related options:
+#     * ``swift_store_large_object_chunk_size``
+#
+#  (integer value)
+# Minimum value: 1
+#swift_store_large_object_size = 5120
+
+#
+# The maximum size, in MB, of the segments when image data is segmented.
+#
+# When image data is segmented to upload images that are larger than the limit
+# enforced by the Swift cluster, image data is broken into segments that are no
+# bigger than the size specified by this configuration option.
+# Refer to ``swift_store_large_object_size`` for more detail.
+#
+# For example: if ``swift_store_large_object_size`` is 5GB and
+# ``swift_store_large_object_chunk_size`` is 1GB, an image of size 6.2GB will be
+# segmented into 7 segments where the first six segments will be 1GB in size and
+# the seventh segment will be 0.2GB.
+#
+# Possible values:
+#     * A positive integer that is less than or equal to the large object limit
+#       enforced by Swift cluster in consideration.
+#
+# Related options:
+#     * ``swift_store_large_object_size``
+#
+#  (integer value)
+# Minimum value: 1
+#swift_store_large_object_chunk_size = 200
+
+#
+# Create container, if it doesn't already exist, when uploading image.
+#
+# At the time of uploading an image, if the corresponding container doesn't
+# exist, it will be created provided this configuration option is set to True.
+# By default, it won't be created. This behavior is applicable for both single
+# and multiple containers mode.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * None
+#
+#  (boolean value)
+#swift_store_create_container_on_put = false
+
+#
+# Store images in tenant's Swift account.
+#
+# This enables multi-tenant storage mode which causes Glance images to be stored
+# in tenant specific Swift accounts. If this is disabled, Glance stores all
+# images in its own account. More details multi-tenant store can be found at
+# https://wiki.openstack.org/wiki/GlanceSwiftTenantSpecificStorage
+#
+# NOTE: If using multi-tenant swift store, please make sure
+# that you do not set a swift configuration file with the
+# 'swift_store_config_file' option.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * swift_store_config_file
+#
+#  (boolean value)
+#swift_store_multi_tenant = false
+
+#
+# Seed indicating the number of containers to use for storing images.
+#
+# When using a single-tenant store, images can be stored in one or more than one
+# containers. When set to 0, all images will be stored in one single container.
+# When set to an integer value between 1 and 32, multiple containers will be
+# used to store images. This configuration option will determine how many
+# containers are created. The total number of containers that will be used is
+# equal to 16^N, so if this config option is set to 2, then 16^2=256 containers
+# will be used to store images.
+#
+# Please refer to ``swift_store_container`` for more detail on the naming
+# convention. More detail about using multiple containers can be found at
+# https://specs.openstack.org/openstack/glance-specs/specs/kilo/swift-store-
+# multiple-containers.html
+#
+# NOTE: This is used only when swift_store_multi_tenant is disabled.
+#
+# Possible values:
+#     * A non-negative integer less than or equal to 32
+#
+# Related options:
+#     * ``swift_store_container``
+#     * ``swift_store_multi_tenant``
+#     * ``swift_store_create_container_on_put``
+#
+#  (integer value)
+# Minimum value: 0
+# Maximum value: 32
+#swift_store_multiple_containers_seed = 0
+
+#
+# List of tenants that will be granted admin access.
+#
+# This is a list of tenants that will be granted read/write access on
+# all Swift containers created by Glance in multi-tenant mode. The
+# default value is an empty list.
+#
+# Possible values:
+#     * A comma separated list of strings representing UUIDs of Keystone
+#       projects/tenants
+#
+# Related options:
+#     * None
+#
+#  (list value)
+#swift_store_admin_tenants =
+
+#
+# SSL layer compression for HTTPS Swift requests.
+#
+# Provide a boolean value to determine whether or not to compress
+# HTTPS Swift requests for images at the SSL layer. By default,
+# compression is enabled.
+#
+# When using Swift as the backend store for Glance image storage,
+# SSL layer compression of HTTPS Swift requests can be set using
+# this option. If set to False, SSL layer compression of HTTPS
+# Swift requests is disabled. Disabling this option may improve
+# performance for images which are already in a compressed format,
+# for example, qcow2.
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related Options:
+#     * None
+#
+#  (boolean value)
+#swift_store_ssl_compression = true
+
+#
+# The number of times a Swift download will be retried before the
+# request fails.
+#
+# Provide an integer value representing the number of times an image
+# download must be retried before erroring out. The default value is
+# zero (no retry on a failed image download). When set to a positive
+# integer value, ``swift_store_retry_get_count`` ensures that the
+# download is attempted this many more times upon a download failure
+# before sending an error message.
+#
+# Possible values:
+#     * Zero
+#     * Positive integer value
+#
+# Related Options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 0
+#swift_store_retry_get_count = 0
+
+#
+# Time in seconds defining the size of the window in which a new
+# token may be requested before the current token is due to expire.
+#
+# Typically, the Swift storage driver fetches a new token upon the
+# expiration of the current token to ensure continued access to
+# Swift. However, some Swift transactions (like uploading image
+# segments) may not recover well if the token expires on the fly.
+#
+# Hence, by fetching a new token before the current token expiration,
+# we make sure that the token does not expire or is close to expiry
+# before a transaction is attempted. By default, the Swift storage
+# driver requests for a new token 60 seconds or less before the
+# current token expiration.
+#
+# Possible values:
+#     * Zero
+#     * Positive integer value
+#
+# Related Options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 0
+#swift_store_expire_soon_interval = 60
+
+#
+# Use trusts for multi-tenant Swift store.
+#
+# This option instructs the Swift store to create a trust for each
+# add/get request when the multi-tenant store is in use. Using trusts
+# allows the Swift store to avoid problems that can be caused by an
+# authentication token expiring during the upload or download of data.
+#
+# By default, ``swift_store_use_trusts`` is set to ``True``(use of
+# trusts is enabled). If set to ``False``, a user token is used for
+# the Swift connection instead, eliminating the overhead of trust
+# creation.
+#
+# NOTE: This option is considered only when
+# ``swift_store_multi_tenant`` is set to ``True``
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * swift_store_multi_tenant
+#
+#  (boolean value)
+#swift_store_use_trusts = true
+
+#
+# Buffer image segments before upload to Swift.
+#
+# Provide a boolean value to indicate whether or not Glance should
+# buffer image data to disk while uploading to swift. This enables
+# Glance to resume uploads on error.
+#
+# NOTES:
+# When enabling this option, one should take great care as this
+# increases disk usage on the API node. Be aware that depending
+# upon how the file system is configured, the disk space used
+# for buffering may decrease the actual disk space available for
+# the glance image cache.  Disk utilization will cap according to
+# the following equation:
+# (``swift_store_large_object_chunk_size`` * ``workers`` * 1000)
+#
+# Possible values:
+#     * True
+#     * False
+#
+# Related options:
+#     * swift_upload_buffer_dir
+#
+#  (boolean value)
+#swift_buffer_on_upload = false
+
+#
+# Reference to default Swift account/backing store parameters.
+#
+# Provide a string value representing a reference to the default set
+# of parameters required for using swift account/backing store for
+# image storage. The default reference value for this configuration
+# option is 'ref1'. This configuration option dereferences the
+# parameters and facilitates image storage in Swift storage backend
+# every time a new image is added.
+#
+# Possible values:
+#     * A valid string value
+#
+# Related options:
+#     * None
+#
+#  (string value)
+#default_swift_reference = ref1
+
+# DEPRECATED: Version of the authentication service to use. Valid versions are 2
+# and 3 for keystone and 1 (deprecated) for swauth and rackspace. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason:
+# The option 'auth_version' in the Swift back-end configuration file is
+# used instead.
+#swift_store_auth_version = 2
+
+# DEPRECATED: The address where the Swift authentication service is listening.
+# (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason:
+# The option 'auth_address' in the Swift back-end configuration file is
+# used instead.
+#swift_store_auth_address = <None>
+
+# DEPRECATED: The user to authenticate against the Swift authentication service.
+# (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason:
+# The option 'user' in the Swift back-end configuration file is set instead.
+#swift_store_user = <None>
+
+# DEPRECATED: Auth key for the user authenticating against the Swift
+# authentication service. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason:
+# The option 'key' in the Swift back-end configuration file is used
+# to set the authentication key instead.
+#swift_store_key = <None>
+
+#
+# Absolute path to the file containing the swift account(s)
+# configurations.
+#
+# Include a string value representing the path to a configuration
+# file that has references for each of the configured Swift
+# account(s)/backing stores. By default, no file path is specified
+# and customized Swift referencing is disabled. Configuring this
+# option is highly recommended while using Swift storage backend for
+# image storage as it avoids storage of credentials in the database.
+#
+# NOTE: Please do not configure this option if you have set
+# ``swift_store_multi_tenant`` to ``True``.
+#
+# Possible values:
+#     * String value representing an absolute path on the glance-api
+#       node
+#
+# Related options:
+#     * swift_store_multi_tenant
+#
+#  (string value)
+#swift_store_config_file = <None>
+
+#
+# Directory to buffer image segments before upload to Swift.
+#
+# Provide a string value representing the absolute path to the
+# directory on the glance node where image segments will be
+# buffered briefly before they are uploaded to swift.
+#
+# NOTES:
+#     * This is required only when the configuration option
+#       ``swift_buffer_on_upload`` is set to True.
+#     * This directory should be provisioned keeping in mind the
+#       ``swift_store_large_object_chunk_size`` and the maximum
+#       number of images that could be uploaded simultaneously by
+#       a given glance node.
+#
+# Possible values:
+#     * String value representing an absolute directory path
+#
+# Related options:
+#     * swift_buffer_on_upload
+#     * swift_store_large_object_chunk_size
+#
+#  (string value)
+#swift_upload_buffer_dir = <None>
+
+#
+# Address of the ESX/ESXi or vCenter Server target system.
+#
+# This configuration option sets the address of the ESX/ESXi or vCenter
+# Server target system. This option is required when using the VMware
+# storage backend. The address can contain an IP address (127.0.0.1) or
+# a DNS name (www.my-domain.com).
+#
+# Possible Values:
+#     * A valid IPv4 or IPv6 address
+#     * A valid DNS name
+#
+# Related options:
+#     * vmware_server_username
+#     * vmware_server_password
+#
+#  (host address value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#vmware_server_host = 127.0.0.1
+
+#
+# Server username.
+#
+# This configuration option takes the username for authenticating with
+# the VMware ESX/ESXi or vCenter Server. This option is required when
+# using the VMware storage backend.
+#
+# Possible Values:
+#     * Any string that is the username for a user with appropriate
+#       privileges
+#
+# Related options:
+#     * vmware_server_host
+#     * vmware_server_password
+#
+#  (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#vmware_server_username = root
+
+#
+# Server password.
+#
+# This configuration option takes the password for authenticating with
+# the VMware ESX/ESXi or vCenter Server. This option is required when
+# using the VMware storage backend.
+#
+# Possible Values:
+#     * Any string that is a password corresponding to the username
+#       specified using the "vmware_server_username" option
+#
+# Related options:
+#     * vmware_server_host
+#     * vmware_server_username
+#
+#  (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#vmware_server_password = vmware
+
+#
+# The number of VMware API retries.
+#
+# This configuration option specifies the number of times the VMware
+# ESX/VC server API must be retried upon connection related issues or
+# server API call overload. It is not possible to specify 'retry
+# forever'.
+#
+# Possible Values:
+#     * Any positive integer value
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 1
+#vmware_api_retry_count = 10
+
+#
+# Interval in seconds used for polling remote tasks invoked on VMware
+# ESX/VC server.
+#
+# This configuration option takes in the sleep time in seconds for polling an
+# on-going async task as part of the VMWare ESX/VC server API call.
+#
+# Possible Values:
+#     * Any positive integer value
+#
+# Related options:
+#     * None
+#
+#  (integer value)
+# Minimum value: 1
+#vmware_task_poll_interval = 5
+
+#
+# The directory where the glance images will be stored in the datastore.
+#
+# This configuration option specifies the path to the directory where the
+# glance images will be stored in the VMware datastore. If this option
+# is not set,  the default directory where the glance images are stored
+# is openstack_glance.
+#
+# Possible Values:
+#     * Any string that is a valid path to a directory
+#
+# Related options:
+#     * None
+#
+#  (string value)
+#vmware_store_image_dir = /openstack_glance
+
+#
+# Set verification of the ESX/vCenter server certificate.
+#
+# This configuration option takes a boolean value to determine
+# whether or not to verify the ESX/vCenter server certificate. If this
+# option is set to True, the ESX/vCenter server certificate is not
+# verified. If this option is set to False, then the default CA
+# truststore is used for verification.
+#
+# This option is ignored if the "vmware_ca_file" option is set. In that
+# case, the ESX/vCenter server certificate will then be verified using
+# the file specified using the "vmware_ca_file" option .
+#
+# Possible Values:
+#     * True
+#     * False
+#
+# Related options:
+#     * vmware_ca_file
+#
+#  (boolean value)
+# Deprecated group/name - [glance_store]/vmware_api_insecure
+#vmware_insecure = false
+
+#
+# Absolute path to the CA bundle file.
+#
+# This configuration option enables the operator to use a custom
+# Cerificate Authority File to verify the ESX/vCenter certificate.
+#
+# If this option is set, the "vmware_insecure" option will be ignored
+# and the CA file specified will be used to authenticate the ESX/vCenter
+# server certificate and establish a secure connection to the server.
+#
+# Possible Values:
+#     * Any string that is a valid absolute path to a CA file
+#
+# Related options:
+#     * vmware_insecure
+#
+#  (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#vmware_ca_file = /etc/ssl/certs/ca-certificates.crt
+
+#
+# The datastores where the image can be stored.
+#
+# This configuration option specifies the datastores where the image can
+# be stored in the VMWare store backend. This option may be specified
+# multiple times for specifying multiple datastores. The datastore name
+# should be specified after its datacenter path, separated by ":". An
+# optional weight may be given after the datastore name, separated again
+# by ":" to specify the priority. Thus, the required format becomes
+# <datacenter_path>:<datastore_name>:<optional_weight>.
+#
+# When adding an image, the datastore with highest weight will be
+# selected, unless there is not enough free space available in cases
+# where the image size is already known. If no weight is given, it is
+# assumed to be zero and the directory will be considered for selection
+# last. If multiple datastores have the same weight, then the one with
+# the most free space available is selected.
+#
+# Possible Values:
+#     * Any string of the format:
+#       <datacenter_path>:<datastore_name>:<optional_weight>
+#
+# Related options:
+#    * None
+#
+#  (multi valued)
+#vmware_datastores =
+
+
+[os_brick]
+
+#
+# From os_brick
+#
+
+# Directory to use for os-brick lock files. Defaults to
+# oslo_concurrency.lock_path which is a sensible default for compute nodes, but
+# not for HCI deployments or controllers where Glance uses Cinder as a backend,
+# as locks should use the same directory. (string value)
+#lock_path = <None>
+
+# Number of attempts for the multipath device to be ready for I/O after it was
+# created. Readiness is checked with ``multipath -C``. See related
+# ``wait_mpath_device_interval`` config option. Default value is 4. (integer
+# value)
+# Minimum value: 1
+#wait_mpath_device_attempts = 4
+
+# Interval value to wait for multipath device to be ready for I/O. Max number of
+# attempts is set in ``wait_mpath_device_attempts``. Time in seconds to wait for
+# each retry is ``base ^ attempt * interval``, so for 4 attempts (1 attempt 3
+# retries) and 1 second interval will yield: 2, 4 and 8 seconds. Note that there
+# is no wait before first attempt. Default value is 1. (integer value)
+# Minimum value: 1
+#wait_mpath_device_interval = 1
+
+
+[oslo_policy]
+
+#
+# From oslo.policy
+#
+
+# This option controls whether or not to enforce scope when evaluating policies.
+# If ``True``, the scope of the token used in the request is compared to the
+# ``scope_types`` of the policy being enforced. If the scopes do not match, an
+# ``InvalidScope`` exception will be raised. If ``False``, a message will be
+# logged informing operators that policies are being invoked with mismatching
+# scope. (boolean value)
+#enforce_scope = true
+
+# This option controls whether or not to use old deprecated defaults when
+# evaluating policies. If ``True``, the old deprecated defaults are not going to
+# be evaluated. This means if any existing token is allowed for old defaults but
+# is disallowed for new defaults, it will be disallowed. It is encouraged to
+# enable this flag along with the ``enforce_scope`` flag so that you can get the
+# benefits of new defaults and ``scope_type`` together. If ``False``, the
+# deprecated policy check string is logically OR'd with the new policy check
+# string, allowing for a graceful upgrade experience between releases with new
+# policies, which is the default behavior. (boolean value)
+#enforce_new_defaults = true
+
+# The relative or absolute path of a file that maps roles to permissions for a
+# given service. Relative paths must be specified in relation to the
+# configuration file setting this option. (string value)
+#policy_file = policy.yaml
+
+# Default rule. Enforced when a requested rule is not found. (string value)
+#policy_default_rule = default
+
+# Directories where policy configuration files are stored. They can be relative
+# to any directory in the search path defined by the config_dir option, or
+# absolute paths. The file defined by policy_file must exist for these
+# directories to be searched.  Missing or empty directories are ignored. (multi
+# valued)
+#policy_dirs = policy.d
+
+# Content Type to send and receive data for REST based policy check (string
+# value)
+# Possible values:
+# application/x-www-form-urlencoded - <No description provided>
+# application/json - <No description provided>
+#remote_content_type = application/x-www-form-urlencoded
+
+# server identity verification for REST based policy check (boolean value)
+#remote_ssl_verify_server_crt = false
+
+# Absolute path to ca cert file for REST based policy check (string value)
+#remote_ssl_ca_crt_file = <None>
+
+# Absolute path to client cert for REST based policy check (string value)
+#remote_ssl_client_crt_file = <None>
+
+# Absolute path client key file REST based policy check (string value)
+#remote_ssl_client_key_file = <None>
