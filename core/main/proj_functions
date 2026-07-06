@@ -272,6 +272,7 @@ cube_cluster_start()
     # "command not found" (proj_functions doesn't source modules/, where
     # power_roll_advance lives).
     hex_sdk power_roll_advance "$HOSTNAME"
+    hex_sdk power_bootup_mark done   # cluster bootup status: this node's boot bring-up complete
 }
 
 # Shared env for the split cube_cluster_start halves.
