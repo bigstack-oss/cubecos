@@ -1,0 +1,288 @@
+[DEFAULT]
+
+
+[glance_download_opts]
+
+#
+# From glance
+#
+
+#
+# Specify metadata prefix to be set on the target image when using
+# glance-download. All other properties coming from the source image won't be
+# set
+# on the target image. If specified metadata does not exist on the source image
+# it won't be set on the target image. Note you can't set the os_glance prefix
+# as it is reserved by glance, so the related properties won't be set on the
+# target image.
+#
+# Possible values:
+#     * List containing extra_properties prefixes: ['os_', 'architecture']
+#
+#  (list value)
+#extra_properties = [hw_,trait:,os_distro,os_secure_boot,os_type]
+
+
+[image_conversion]
+
+#
+# From glance
+#
+
+#
+# Desired output format for image conversion plugin.
+#
+# Provide a valid image format to which the conversion plugin
+# will convert the image before storing it to the back-end.
+#
+# Note, if the Image Conversion plugin for image import is defined, users
+# should only upload disk formats that are supported by `quemu-img` otherwise
+# the conversion and import will fail.
+#
+# Possible values:
+#     * qcow2
+#     * raw
+#     * vmdk
+#
+# Related Options:
+#     * disk_formats
+#  (string value)
+# Possible values:
+# qcow2 - <No description provided>
+# raw - <No description provided>
+# vmdk - <No description provided>
+#output_format = raw
+
+
+[image_import_opts]
+
+#
+# From glance
+#
+
+#
+# Image import plugins to be enabled for task processing.
+#
+# Provide list of strings reflecting to the task Objects
+# that should be included to the Image Import flow. The
+# task objects needs to be defined in the 'glance/async/
+# flows/plugins/*' and may be implemented by OpenStack
+# Glance project team, deployer or 3rd party.
+#
+# By default no plugins are enabled and to take advantage
+# of the plugin model the list of plugins must be set
+# explicitly in the glance-image-import.conf file.
+#
+# The allowed values for this option is comma separated
+# list of object names in between ``[`` and ``]``.
+#
+# Possible values:
+#     * no_op (only logs debug level message that the
+#       plugin has been executed)
+#     * Any provided Task object name to be included
+#       in to the flow.
+#  (list value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#image_import_plugins = [no_op]
+
+
+[import_filtering_opts]
+
+#
+# From glance
+#
+
+#
+# Specify the "whitelist" of allowed url schemes for web-download.
+#
+# This option provides whitelisting of uri schemes that will be allowed when
+# an end user imports an image using the web-download import method. The
+# whitelist has priority such that if there is also a blacklist defined for
+# schemes, the blacklist will be ignored.  Host and port filtering, however,
+# will be applied.
+#
+# See the Glance Administration Guide for more information.
+#
+# Possible values:
+#     * List containing normalized url schemes as they are returned from
+#       urllib.parse. For example ['ftp','https']
+#     * Hint: leave the whitelist empty if you want the disallowed_schemes
+#       blacklist to be processed
+#
+# Related options:
+#     * disallowed_schemes
+#     * allowed_hosts
+#     * disallowed_hosts
+#     * allowed_ports
+#     * disallowed_ports
+#
+#  (list value)
+#allowed_schemes = [http,https]
+
+#
+# Specify the "blacklist" of uri schemes disallowed for web-download.
+#
+# This option provides blacklisting of uri schemes that will be rejected when
+# an end user imports an image using the web-download import method.  Note
+# that if a scheme whitelist is defined using the 'allowed_schemes' option,
+# *this option will be ignored*.  Host and port filtering, however, will be
+# applied.
+#
+# See the Glance Administration Guide for more information.
+#
+# Possible values:
+#     * List containing normalized url schemes as they are returned from
+#       urllib.parse. For example ['ftp','https']
+#     * By default the list is empty
+#
+# Related options:
+#     * allowed_schemes
+#     * allowed_hosts
+#     * disallowed_hosts
+#     * allowed_ports
+#     * disallowed_ports
+#
+#  (list value)
+#disallowed_schemes = []
+
+#
+# Specify the "whitelist" of allowed target hosts for web-download.
+#
+# This option provides whitelisting of hosts that will be allowed when an end
+# user imports an image using the web-download import method. The whitelist
+# has priority such that if there is also a blacklist defined for hosts, the
+# blacklist will be ignored.  The uri must have already passed scheme
+# filtering before this host filter will be applied.  If the uri passes, port
+# filtering will then be applied.
+#
+# See the Glance Administration Guide for more information.
+#
+# Possible values:
+#     * List containing normalized hostname or ip like it would be returned
+#       in the urllib.parse netloc without the port
+#     * By default the list is empty
+#     * Hint: leave the whitelist empty if you want the disallowed_hosts
+#       blacklist to be processed
+#
+# Related options:
+#     * allowed_schemes
+#     * disallowed_schemes
+#     * disallowed_hosts
+#     * allowed_ports
+#     * disallowed_ports
+#
+#  (list value)
+#allowed_hosts = []
+
+#
+# Specify the "blacklist" of hosts disallowed for web-download.
+#
+# This option provides blacklisting of hosts that will be rejected when an end
+# user imports an image using the web-download import method.  Note that if a
+# host whitelist is defined using the 'allowed_hosts' option, *this option
+# will be ignored*.
+#
+# The uri must have already passed scheme filtering before this host filter
+# will be applied.  If the uri passes, port filtering will then be applied.
+#
+# See the Glance Administration Guide for more information.
+#
+# Possible values:
+#     * List containing normalized hostname or ip like it would be returned
+#       in the urllib.parse netloc without the port
+#     * By default the list is empty
+#
+# Related options:
+#     * allowed_schemes
+#     * disallowed_schemes
+#     * allowed_hosts
+#     * allowed_ports
+#     * disallowed_ports
+#
+#  (list value)
+#disallowed_hosts = []
+
+#
+# Specify the "whitelist" of allowed ports for web-download.
+#
+# This option provides whitelisting of ports that will be allowed when an end
+# user imports an image using the web-download import method.  The whitelist
+# has priority such that if there is also a blacklist defined for ports, the
+# blacklist will be ignored.  Note that scheme and host filtering have already
+# been applied by the time a uri hits the port filter.
+#
+# See the Glance Administration Guide for more information.
+#
+# Possible values:
+#     * List containing ports as they are returned from urllib.parse netloc
+#       field.  Thus the value is a list of integer values, for example
+#       [80, 443]
+#     * Hint: leave the whitelist empty if you want the disallowed_ports
+#       blacklist to be processed
+#
+# Related options:
+#     * allowed_schemes
+#     * disallowed_schemes
+#     * allowed_hosts
+#     * disallowed_hosts
+#     * disallowed_ports
+#  (list value)
+#allowed_ports = [80,443]
+
+#
+# Specify the "blacklist" of disallowed ports for web-download.
+#
+# This option provides blacklisting of target ports that will be rejected when
+# an end user imports an image using the web-download import method.  Note
+# that if a port whitelist is defined using the 'allowed_ports' option, *this
+# option will be ignored*.  Note that scheme and host filtering have already
+# been applied by the time a uri hits the port filter.
+#
+# See the Glance Administration Guide for more information.
+#
+# Possible values:
+#     * List containing ports as they are returned from urllib.parse netloc
+#       field.  Thus the value is a list of integer values, for example
+#       [22, 88]
+#     * By default this list is empty
+#
+# Related options:
+#     * allowed_schemes
+#     * disallowed_schemes
+#     * allowed_hosts
+#     * disallowed_hosts
+#     * allowed_ports
+#
+#  (list value)
+#disallowed_ports = []
+
+
+[inject_metadata_properties]
+
+#
+# From glance
+#
+
+#
+# Specify name of user roles to be ignored for injecting metadata
+# properties in the image.
+#
+# Possible values:
+#     * List containing user roles. For example: [admin,member]
+#
+#  (list value)
+#ignore_user_roles = admin
+
+#
+# Dictionary contains metadata properties to be injected in image.
+#
+# Possible values:
+#     * Dictionary containing key/value pairs. Key characters
+#     length should be <= 255. For example: k1:v1,k2:v2
+#
+#
+#  (dict value)
+#inject =
