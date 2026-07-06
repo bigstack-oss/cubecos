@@ -23,6 +23,7 @@ BootstrapAndClusterstart()
         msg="Bootstrapping CubeCOS"
         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
+        [ -e /etc/appliance/state/rolling_restart_recover ] && hex_sdk _power_roll_set_phase_ts "$(hostname)" bootstrapping   # rolling_restart phase timing
         bash -c "hex_config -p bootstrap standalone-done | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
             msg="Bootstrap error: $(journalctl | grep hex | egrep -i 'failed to commit')"
@@ -33,6 +34,7 @@ BootstrapAndClusterstart()
             msg="Starting cluster"
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
+            [ -e /etc/appliance/state/rolling_restart_recover ] && hex_sdk _power_roll_set_node_status "$(hostname)" finalizing   # rolling_restart: status + phase ts (until power_roll_advance -> done)
             bash -c "hex_sdk -v cube_cluster_start | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
             return 0
         fi

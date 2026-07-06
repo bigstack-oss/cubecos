@@ -18,25 +18,43 @@
 ROLLING_RESTART_DIR=/mnt/cephfs/rolling_restart
 ROLLING_RESTART_JOB=$ROLLING_RESTART_DIR/job.json
 
-_power_roll_set_str()
+# Locked read-modify-write of the shared job.json, retried across a cephfs/MDS
+# failover window. Temp name expanded once per attempt (avoids lost updates).
+_power_roll_write()
 {
-    jq --arg v "$2" ".$1=\$v" $ROLLING_RESTART_JOB > $ROLLING_RESTART_JOB.tmp && mv $ROLLING_RESTART_JOB.tmp $ROLLING_RESTART_JOB
+    local i t
+    for i in $(seq 1 30) ; do
+        t=$ROLLING_RESTART_JOB.tmp.$$.$i
+        if ( flock -w 15 200 || exit 3
+             jq "$@" $ROLLING_RESTART_JOB > "$t" && [ -s "$t" ] && mv "$t" $ROLLING_RESTART_JOB || { rm -f "$t" ; exit 4 ; }
+           ) 200>$ROLLING_RESTART_DIR/.lock 2>/dev/null ; then
+            return 0
+        fi
+        rm -f "$t" 2>/dev/null ; mkdir -p $ROLLING_RESTART_DIR 2>/dev/null ; sleep 2
+    done
+    return 1
 }
 
-_power_roll_set_raw()
-{
-    jq --argjson v "$2" ".$1=\$v" $ROLLING_RESTART_JOB > $ROLLING_RESTART_JOB.tmp && mv $ROLLING_RESTART_JOB.tmp $ROLLING_RESTART_JOB
-}
+_power_roll_set_str() { _power_roll_write --arg v "$2" ".$1=\$v" ; }
 
+_power_roll_set_raw() { _power_roll_write --argjson v "$2" ".$1=\$v" ; }
+
+# Set node status and stamp phase_ts[status]=now for per-phase durations.
 _power_roll_set_node_status()
 {
-    jq --arg h "$1" --arg s "$2" '(.nodes[]|select(.hostname==$h).status)=$s' $ROLLING_RESTART_JOB > $ROLLING_RESTART_JOB.tmp && mv $ROLLING_RESTART_JOB.tmp $ROLLING_RESTART_JOB
+    _power_roll_write --arg h "$1" --arg s "$2" --argjson ts "$(date +%s)" \
+        '(.nodes[]|select(.hostname==$h)) |= (.status=$s | .phase_ts=((.phase_ts//{}) + {($s):$ts}))'
 }
 
-_power_roll_set_node_num()
+# Stamp a phase timestamp without changing .status. No-op if no job exists.
+_power_roll_set_phase_ts()
 {
-    jq --arg h "$1" --argjson v "$3" "(.nodes[]|select(.hostname==\$h).$2)=\$v" $ROLLING_RESTART_JOB > $ROLLING_RESTART_JOB.tmp && mv $ROLLING_RESTART_JOB.tmp $ROLLING_RESTART_JOB
+    [ -e "$ROLLING_RESTART_JOB" ] || return 0
+    _power_roll_write --arg h "$1" --arg p "$2" --argjson ts "$(date +%s)" \
+        '(.nodes[]|select(.hostname==$h)) |= (.phase_ts=((.phase_ts//{}) + {($p):$ts}))'
 }
+
+_power_roll_set_node_num() { _power_roll_write --arg h "$1" --argjson v "$3" "(.nodes[]|select(.hostname==\$h).$2)=\$v" ; }
 
 _power_roll_pause()
 {
@@ -119,12 +137,19 @@ _power_roll_kick()
         return 1
     fi
 
-    _power_roll_set_node_status "$host" rebooting
     echo "rebooting $host"
     # Drop a local marker so the node's boot path waits for the cluster to be
     # ready (single-node ceph recovery can take ~20 min) before running the VM
     # restore + relay advance, instead of checking once early and skipping.
     ssh root@$ip "touch /etc/appliance/state/rolling_restart_recover ; echo YES | hex_cli -c reboot" >/dev/null 2>&1
+    # Wait (bounded) for the node to drop off the network before flipping to
+    # "rebooting", so the reachability-based "bootstrapping" inference can't misfire.
+    local _i
+    for _i in $(seq 1 120) ; do
+        ping -c1 -W2 "$ip" >/dev/null 2>&1 || break
+        sleep 2
+    done
+    _power_roll_set_node_status "$host" rebooting
     return 0
 }
 
@@ -383,8 +408,10 @@ power_roll_status()
     local now=$(date +%s)
     local window=${ROLLING_NODE_TIMEOUT:-3600}
     printf " %-20s %-18s %-9s %-10s %s\n" "node" "role" "status" "vms(m+p/tot)" "elapsed"
-    jq -r '.nodes[]|"\(.hostname)\t\(.role)\t\(.status)\t\(.started // 0)\t\(.finished // 0)\t\(.vms_total // 0)\t\(.vms_done // 0)\t\(.vms_paused // 0)"' $ROLLING_RESTART_JOB | \
-        while IFS=$'\t' read -r h r s st fin vt vd vp ; do
+    jq -r '.nodes[]|"\(.hostname)\t\(.role)\t\(.status)\t\(.started // 0)\t\(.finished // 0)\t\(.vms_total // 0)\t\(.vms_done // 0)\t\(.vms_paused // 0)\t\(.ip // "")"' $ROLLING_RESTART_JOB | \
+        while IFS=$'\t' read -r h r s st fin vt vd vp ip ; do
+            # a "rebooting" node that is back on the network is bootstrapping
+            [ "$s" = "rebooting" ] && [ -n "$ip" ] && ping -c1 -W1 "$ip" >/dev/null 2>&1 && s="bootstrapping"
             el="-"
             if [ "$st" -gt 0 ] ; then
                 end=$fin
@@ -400,6 +427,26 @@ power_roll_status()
             fi
             printf " %-20s %-18s %-9s %-10s %s\n" "$h" "$r" "$s" "$vms" "$el"
         done
+
+    # Per-node phase breakdown, each phase's own duration kept separately.
+    # '*' = still in progress, '-' = not reached.
+    _rollphase() { local a=$1 b=$2 ; [ "${a:-0}" -gt 0 ] 2>/dev/null || { echo "-" ; return ; } ; local e=$b ip=0 ; [ "${b:-0}" -gt 0 ] 2>/dev/null || { e=$now ; ip=1 ; } ; local s=$(( e - a )) ; [ $s -lt 0 ] && s=0 ; local o=$(printf '%dm%02ds' $(( s/60 )) $(( s%60 ))) ; [ $ip = 1 ] && o="${o}*" ; echo "$o" ; }
+    # A phase ends at the first later boundary that exists, so a lost intermediate
+    # stamp folds into the prior phase and self-corrects instead of ticking '*' forever.
+    _firstpos() { local x ; for x in "$@" ; do [ "${x:-0}" -gt 0 ] 2>/dev/null && { echo "$x" ; return ; } ; done ; echo 0 ; }
+    echo ""
+    printf " %-20s %-10s %-10s %-13s %-11s %-9s\n" "node" "draining" "rebooting" "bootstrapping" "finalizing" "total"
+    jq -r '.nodes[]|"\(.hostname)\t\(.started//0)\t\(.finished//0)\t\(.phase_ts.draining//0)\t\(.phase_ts.rebooting//0)\t\(.phase_ts.bootstrapping//0)\t\(.phase_ts.finalizing//0)\t\(.phase_ts.done//0)"' $ROLLING_RESTART_JOB | \
+        while IFS=$'\t' read -r h st fin dr rb bs fn dn ; do
+            d_ts=$dr ; [ "$d_ts" = 0 ] && d_ts=$st
+            e_ts=$dn ; [ "$e_ts" = 0 ] && e_ts=$fin
+            printf " %-20s %-10s %-10s %-13s %-11s %-9s\n" "$h" \
+                "$(_rollphase "$d_ts" "$(_firstpos "$rb" "$bs" "$fn" "$e_ts")")" \
+                "$(_rollphase "$rb" "$(_firstpos "$bs" "$fn" "$e_ts")")" \
+                "$(_rollphase "$bs" "$(_firstpos "$fn" "$e_ts")")" \
+                "$(_rollphase "$fn" "$e_ts")" \
+                "$(_rollphase "$d_ts" "$e_ts")"
+        done
 }
 
 power_roll_status_json()
@@ -413,7 +460,16 @@ power_roll_status_json()
         return 0
     fi
 
-    jq '
+    # "bootstrapping" is inferred, not stored: the inflight node is bootstrapping
+    # once it's back on the network, before it writes "finalizing".
+    local _inf _infip _boot=0
+    _inf=$(jq -r '.inflight // ""' "$ROLLING_RESTART_JOB")
+    if [ -n "$_inf" ] ; then
+        _infip=$(jq -r --arg h "$_inf" '.nodes[]|select(.hostname==$h)|.ip // ""' "$ROLLING_RESTART_JOB")
+        [ -n "$_infip" ] && ping -c1 -W1 "$_infip" >/dev/null 2>&1 && _boot=1
+    fi
+
+    jq --arg boot "$_boot" '
         (.inflight // "") as $inf
         | (.state // "") as $state
         | (.reason // "") as $reason
@@ -426,7 +482,9 @@ power_roll_status_json()
                 | (.vms_total // 0) as $vt
                 | (.vms_done // 0) as $vd
                 | (if .status == "draining" then "evacuting vms on host"
+                   elif (.status == "rebooting" and .hostname == $inf and $boot == "1") then "bootstrapping"
                    elif .status == "rebooting" then "rebooting"
+                   elif .status == "finalizing" then "finalizing"
                    elif .status == "done" then "succeeded"
                    else "pending" end) as $phase
                 | {
@@ -434,10 +492,11 @@ power_roll_status_json()
                     phase: $phase,
                     status: {
                         current: (if $failed then "failed" else $phase end),
-                        isProcessing: (((.status == "draining") or (.status == "rebooting")) and ($failed | not)),
+                        isProcessing: (((.status == "draining") or (.status == "rebooting") or (.status == "finalizing")) and ($failed | not)),
                         processPercent: (
                             if .status == "done" then 100
                             elif $failed then 0
+                            elif .status == "finalizing" then 90
                             elif .status == "rebooting" then 75
                             elif .status == "draining" then (if $vt > 0 then (($vd / $vt) * 50 | floor) else 25 end)
                             else 0 end),
@@ -453,8 +512,14 @@ power_roll_decision()
 {
     [ -e "$ROLLING_RESTART_JOB" ] || { echo "no rolling restart in progress" >&2 ; return 1 ; }
     local cur=$(jq -r .state $ROLLING_RESTART_JOB 2>/dev/null)
-    if [ "$cur" != "paused" ] ; then
-        echo "rolling restart is $cur, not paused -- \"$1\" applies only to a paused roll" >&2
+    # "continue" only applies to a paused roll; "abort" also works on a "running"
+    # roll (so a wedged/zombie roll whose driver died is still cleanable).
+    if [ "$1" = "continue" ] && [ "$cur" != "paused" ] ; then
+        echo "rolling restart is $cur, not paused -- \"continue\" applies only to a paused roll" >&2
+        return 1
+    fi
+    if [ "$1" = "abort" ] && [ "$cur" != "paused" ] && [ "$cur" != "running" ] ; then
+        echo "rolling restart is $cur -- nothing to abort" >&2
         return 1
     fi
 
@@ -475,6 +540,11 @@ power_roll_decision()
             power_roll_advance
             ;;
         abort)
+            # Re-enable the in-flight node's nova-compute (the drain may have left it
+            # disabled) so scheduling resumes.
+            local inflight=$(jq -r '.inflight // ""' $ROLLING_RESTART_JOB)
+            [ -n "$inflight" ] && Quiet -n $OPENSTACK compute service set --enable "$inflight" nova-compute
+            _power_roll_set_str inflight ""
             _power_roll_set_str state aborted
             echo "rolling restart aborted"
             ;;
