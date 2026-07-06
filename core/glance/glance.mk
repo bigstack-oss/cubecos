@@ -41,7 +41,6 @@ rootfs_install::
 	$(Q)cp -rf $(COREDIR)/glance/metadefs $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/openstack-glance-api.service $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/openstack-glance-scrubber.service $(ROOTDIR)/tmp/glance/
-	$(Q)cp -f $(COREDIR)/glance/openstack-glance.logrotate $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/glance-sudoers $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/glance_cinder_store.filters $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/os-brick.filters $(ROOTDIR)/tmp/glance/
@@ -62,7 +61,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) bash -c "install -p -D -m 640 /tmp/glance/metadefs/*.json /etc/glance/metadefs/"
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-api.service /usr/lib/systemd/system/openstack-glance-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-scrubber.service /usr/lib/systemd/system/openstack-glance-scrubber.service
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance.logrotate /etc/logrotate.d/openstack-glance
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/run/glance
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/log/glance
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/glance/glance-sudoers /etc/sudoers.d/glance
@@ -81,7 +79,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/glance/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) chown root:glance /etc/glance/schema-image.json
 	$(Q)chroot $(ROOTDIR) bash -c "chown root:glance /etc/glance/metadefs/*.json"
-	$(Q)chroot $(ROOTDIR) chown root:glance /etc/logrotate.d/openstack-glance
 	$(Q)chroot $(ROOTDIR) chown root:root /etc/glance/rootwrap.d/glance_cinder_store.filters
 	$(Q)chroot $(ROOTDIR) chown root:root /etc/glance/rootwrap.d/os-brick.filters
 	$(Q)chroot $(ROOTDIR) chmod 0755 /var/lib/glance
