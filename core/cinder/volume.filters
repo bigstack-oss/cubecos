@@ -1,0 +1,143 @@
+# cinder-rootwrap command filters for volume nodes
+# This file should be owned by (and only-writeable by) the root user
+
+[Filters]
+# cinder/volume/targets/iscsi.py: target_helper '--op' ...
+iscsictl: CommandFilter, iscsictl, root
+cinder-rtstool: CommandFilter, cinder-rtstool, root
+
+# LVM related show commands
+pvs: EnvFilter, env, root, LC_ALL=C, pvs
+vgs: EnvFilter, env, root, LC_ALL=C, vgs
+lvs: EnvFilter, env, root, LC_ALL=C, lvs
+lvdisplay: EnvFilter, env, root, LC_ALL=C, lvdisplay
+
+# -LVM related show commands with suppress fd warnings
+pvs2: EnvFilter, env, root, LC_ALL=C, LVM_SUPPRESS_FD_WARNINGS=, pvs
+vgs2: EnvFilter, env, root, LC_ALL=C, LVM_SUPPRESS_FD_WARNINGS=, vgs
+lvs2: EnvFilter, env, root, LC_ALL=C, LVM_SUPPRESS_FD_WARNINGS=, lvs
+lvdisplay2: EnvFilter, env, root, LC_ALL=C, LVM_SUPPRESS_FD_WARNINGS=, lvdisplay
+
+
+# -LVM related show commands conf var
+pvs3: EnvFilter, env, root, LC_ALL=C, LVM_SYSTEM_DIR=, pvs
+vgs3: EnvFilter, env, root, LC_ALL=C, LVM_SYSTEM_DIR=, vgs
+lvs3: EnvFilter, env, root, LC_ALL=C, LVM_SYSTEM_DIR=, lvs
+lvdisplay3: EnvFilter, env, root, LC_ALL=C, LVM_SYSTEM_DIR=, lvdisplay
+
+# -LVM conf var with suppress fd_warnings
+pvs4: EnvFilter, env, root, LC_ALL=C, LVM_SYSTEM_DIR=, LVM_SUPPRESS_FD_WARNINGS=, pvs
+vgs4: EnvFilter, env, root, LC_ALL=C, LVM_SYSTEM_DIR=, LVM_SUPPRESS_FD_WARNINGS=, vgs
+lvs4: EnvFilter, env, root, LC_ALL=C, LVM_SYSTEM_DIR=, LVM_SUPPRESS_FD_WARNINGS=, lvs
+lvdisplay4: EnvFilter, env, root, LC_ALL=C, LVM_SYSTEM_DIR=, LVM_SUPPRESS_FD_WARNINGS=, lvdisplay
+
+# os-brick library commands
+# os_brick.privileged.run_as_root oslo.privsep context
+# This line ties the superuser privs with the config files, context name,
+# and (implicitly) the actual python code invoked.
+privsep-rootwrap: RegExpFilter, privsep-helper, root, privsep-helper, --config-file, /etc/(?!\.\.).*, --privsep_context, os_brick.privileged.default, --privsep_sock_path, /tmp/.*
+
+# Privsep calls within cinder iteself
+privsep-rootwrap-sys_admin: RegExpFilter, privsep-helper, root, privsep-helper, --config-file, /etc/(?!\.\.).*, --privsep_context, cinder.privsep.sys_admin_pctxt, --privsep_sock_path, /tmp/.*
+
+# cinder/brick/local_dev/lvm.py: 'lvcreate', '-L', sizestr, '-n', volume_name,..
+# cinder/brick/local_dev/lvm.py: 'lvcreate', '-L', ...
+lvcreate: EnvFilter, env, root, LC_ALL=C, lvcreate
+lvcreate_lvmconf: EnvFilter, env, root, LVM_SYSTEM_DIR=, LC_ALL=C, lvcreate
+lvcreate_fdwarn: EnvFilter, env, root, LC_ALL=C, LVM_SUPPRESS_FD_WARNINGS=, lvcreate
+lvcreate_lvmconf_fdwarn: EnvFilter, env, root, LVM_SYSTEM_DIR=, LVM_SUPPRESS_FD_WARNINGS=, LC_ALL=C, lvcreate
+
+# cinder/volume/driver.py: 'dd', 'if=%s' % srcstr, 'of=%s' % deststr,...
+dd: CommandFilter, dd, root
+
+# cinder/volume/driver.py: 'lvremove', '-f', %s/%s % ...
+lvremove: CommandFilter, lvremove, root
+
+# cinder/brick/local_dev/lvm.py: 'lvextend', '-L' '%(new_size)s', '%(lv_name)s' ...
+# cinder/brick/local_dev/lvm.py: 'lvextend', '-L' '%(new_size)s', '%(thin_pool)s' ...
+lvextend: EnvFilter, env, root, LC_ALL=C, lvextend
+lvextend_lvmconf: EnvFilter, env, root, LVM_SYSTEM_DIR=, LC_ALL=C, lvextend
+lvextend_fdwarn: EnvFilter, env, root, LC_ALL=C, LVM_SUPPRESS_FD_WARNINGS=, lvextend
+lvextend_lvmconf_fdwarn: EnvFilter, env, root, LVM_SYSTEM_DIR=, LC_ALL=C, LVM_SUPPRESS_FD_WARNINGS=, lvextend
+
+# cinder/brick/local_dev/lvm.py: 'lvchange -a y -K <lv>'
+lvchange: CommandFilter, lvchange, root
+
+# cinder/volume/driver.py: 'iscsiadm', '-m', 'discovery', '-t',...
+# cinder/volume/driver.py: 'iscsiadm', '-m', 'node', '-T', ...
+iscsiadm: CommandFilter, iscsiadm, root
+
+# cinder/volume/utils.py: utils.temporary_chown(path, 0)
+chown: CommandFilter, chown, root
+
+# cinder/volume/utils.py: copy_volume(..., ionice='...')
+ionice_1: ChainingRegExpFilter, ionice, root, ionice, -c[0-3], -n[0-7]
+ionice_2: ChainingRegExpFilter, ionice, root, ionice, -c[0-3]
+
+# cinder/volume/utils.py: setup_blkio_cgroup()
+cgexec: ChainingRegExpFilter, cgexec, root, cgexec, -g, blkio:\S+
+
+# cinder/image/image_utils.py
+qemu-img: EnvFilter, env, root, LC_ALL=C, qemu-img
+qemu-img_convert: CommandFilter, qemu-img, root
+qzip: CommandFilter, qzip, root
+gzip: CommandFilter, gzip, root
+
+# cinder/volume/nfs.py
+stat: CommandFilter, stat, root
+mount: CommandFilter, mount, root
+df: CommandFilter, df, root
+du: CommandFilter, du, root
+truncate: CommandFilter, truncate, root
+chmod: CommandFilter, chmod, root
+rm: CommandFilter, rm, root
+
+# cinder/volume/drivers/netapp/dataontap/nfs_base.py:
+netapp_nfs_find: RegExpFilter, find, root, find, ^[/]*([^/\0]+(/+)?)*$, -maxdepth, \d+, -name, img-cache.*, -amin, \+\d+
+
+# cinder/backup/drivers/nfs.py
+# cinder/backup/drivers/glusterfs.py
+chgrp: CommandFilter, chgrp, root
+
+# cinder/brick/initiator/connector.py:
+ls: CommandFilter, ls, root
+multipath: CommandFilter, multipath, root
+multipathd: CommandFilter, multipathd, root
+
+# cinder/volume/drivers/ibm/gpfs.py
+# cinder/volume/drivers/netapp/dataontap/nfs_base.py
+mv: CommandFilter, mv, root
+
+# cinder/volume/drivers/ibm/gpfs.py
+cp: CommandFilter, cp, root
+mmgetstate: CommandFilter, mmgetstate, root
+mmclone: CommandFilter, mmclone, root
+mmlsattr: CommandFilter, mmlsattr, root
+mmchattr: CommandFilter, mmchattr, root
+mmlsconfig: CommandFilter, mmlsconfig, root
+mmlsfs: CommandFilter, mmlsfs, root
+mmlspool: CommandFilter, mmlspool, root
+mkfs: CommandFilter, mkfs, root
+mmcrfileset: CommandFilter, mmcrfileset, root
+mmlsfileset: CommandFilter, mmlsfileset, root
+mmlinkfileset: CommandFilter, mmlinkfileset, root
+mmunlinkfileset: CommandFilter, mmunlinkfileset, root
+mmdelfileset: CommandFilter, mmdelfileset, root
+
+# cinder/volume/drivers/ibm/gpfs.py
+# cinder/volume/drivers/ibm/ibmnas.py
+find_maxdepth_inum: RegExpFilter, find, root, find, ^[/]*([^/\0]+(/+)?)*$, -maxdepth, \d+, -ignore_readdir_race, -inum, \d+, -print0, -quit
+
+# cinder/volume/drivers/vzstorage.py
+pstorage-mount: CommandFilter, pstorage-mount, root
+pstorage: CommandFilter, pstorage, root
+ploop: CommandFilter, ploop, root
+
+# cinder/volume/drivers/quobyte.py
+mount.quobyte: CommandFilter, mount.quobyte, root
+umount.quobyte: CommandFilter, umount.quobyte, root
+
+# cinder/volume/drivers/dell_emc/powerstore/nfs.py
+dellfcopy: CommandFilter, dellfcopy, root
+
+cryptsetup: CommandFilter, cryptsetup, root
