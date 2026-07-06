@@ -23,6 +23,7 @@ BootstrapAndClusterstart()
         msg="Bootstrapping CubeCOS"
         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
+        hex_sdk power_bootup_mark bootstrapping   # cluster bootup status: entering the config commit
         [ -e /etc/appliance/state/rolling_restart_recover ] && hex_sdk _power_roll_set_phase_ts "$(hostname)" bootstrapping   # rolling_restart phase timing
         bash -c "hex_config -p bootstrap standalone-done | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
@@ -34,6 +35,7 @@ BootstrapAndClusterstart()
             msg="Starting cluster"
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
             hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
+            hex_sdk power_bootup_mark finalizing   # cluster bootup status: entering cluster_start (+ master check_repair)
             [ -e /etc/appliance/state/rolling_restart_recover ] && hex_sdk _power_roll_set_node_status "$(hostname)" finalizing   # rolling_restart: status + phase ts (until power_roll_advance -> done)
             bash -c "hex_sdk -v cube_cluster_start | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)"
             return 0
@@ -170,6 +172,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
         hex_sdk influx_event "${query},severity=\"I\" message=\"$msg\""
     else
         echo "Starting auto bootstrap" >> $BOOTSTRAP_CUBE_MODE
+        hex_sdk power_bootup_mark powering_up   # cluster bootup status: node entered boot bring-up (stamps kernel boot time)
         # Boot-relay advance is driven by cube_cluster_start (power_roll_advance,
         # idempotent, every boot) -- intentionally NOT chained onto the bring-up
         # below, where a non-zero exit could silently skip it and wedge the roll.

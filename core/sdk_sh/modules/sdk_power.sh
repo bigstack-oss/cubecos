@@ -258,6 +258,89 @@ power_roll_plan()
 # Exit 0 if a roll is currently running or paused. The CLI uses this to fail fast
 # (reject a new roll before the dryrun+confirm); power_roll_start re-checks under
 # a lock as the real mutex.
+# ===================== cluster bootup status =====================
+# Full cluster power-up has no driver and cephfs is down during boot, so each node
+# self-records its boot phase to a local /run file; power_bootup_status aggregates.
+# Phases: powering_up -> bootstrapping -> finalizing -> done (anchored to kernel boot).
+BOOTUP_STATUS_FILE=/run/cube_bootup_status
+
+# Record a boot-phase transition locally. Stamps kernel boot time once, then
+# appends "<phase> <epoch>".
+power_bootup_mark()
+{
+    local phase=$1
+    [ -n "$phase" ] || return 0
+    if [ ! -e "$BOOTUP_STATUS_FILE" ] ; then
+        local btime=$(awk '/^btime/{print $2}' /proc/stat 2>/dev/null)
+        [ -n "$btime" ] && echo "boot $btime" > "$BOOTUP_STATUS_FILE"
+    fi
+    echo "$phase $(date +%s)" >> "$BOOTUP_STATUS_FILE"
+}
+
+# Aggregate every node's local bootup record into a table. Unreachable nodes are
+# still powering up (POST/early boot); flags the least-progressed node.
+power_bootup_status()
+{
+    local now=$(date +%s)
+    # Read nodes into an array (not a while-read pipe): ssh below eats stdin and
+    # would drop every node after the first. </dev/null on the ssh calls too.
+    local nodelines line ; mapfile -t nodelines < <(cubectl node list -j 2>/dev/null | jq -r '.[]|"\(.hostname)\t\(.role)\t\(.ip.management)"')
+    local rows="" minidx=3 anyactive=0 h role ip
+    for line in "${nodelines[@]}" ; do
+        IFS=$'\t' read -r h role ip <<< "$line"
+        [ -z "$h" ] && continue
+        local content="" reach=0
+        local committed=0
+        if is_sshable "$ip" </dev/null >/dev/null 2>&1 ; then
+            reach=1
+            content=$(remote_run "$ip" "cat $BOOTUP_STATUS_FILE 2>/dev/null ; [ -e /run/cube_commit_done ] && echo __COMMITTED__" </dev/null)
+            echo "$content" | grep -q __COMMITTED__ && committed=1
+            content=$(printf '%s\n' "$content" | grep -v __COMMITTED__)
+        fi
+        local bt=$(echo "$content" | awk '$1=="boot"{print $2}' | tail -1)
+        local bs=$(echo "$content" | awk '$1=="bootstrapping"{print $2}' | tail -1)
+        local fn=$(echo "$content" | awk '$1=="finalizing"{print $2}' | tail -1)
+        local dn=$(echo "$content" | awk '$1=="done"{print $2}' | tail -1)
+        # Each phase's own duration, kept separately. Running phase shows now-<start>
+        # with trailing '*'; -1 => not reached yet (printed as '-').
+        local idx phase pu bsd fnd tot pu_p=0 bs_p=0 fn_p=0 tot_p=0
+        if [ "$reach" = 0 ] ; then
+            pu=-1 ; bsd=-1 ; fnd=-1 ; tot=-1 ; phase="powering_up" ; idx=0 ; anyactive=1
+        else
+            if   [ -n "$bs" ] ; then pu=$(( bs - ${bt:-$bs} ))
+            elif [ -n "$bt" ] ; then pu=$(( now - bt )) ; pu_p=1
+            else pu=-1 ; fi
+            if   [ -n "$fn" ] ; then bsd=$(( fn - bs ))
+            elif [ -n "$bs" ] ; then bsd=$(( now - bs )) ; bs_p=1
+            else bsd=-1 ; fi
+            if   [ -n "$dn" ] ; then fnd=$(( dn - fn ))
+            elif [ -n "$fn" ] ; then fnd=$(( now - fn )) ; fn_p=1
+            else fnd=-1 ; fi
+            if   [ -n "$dn" ] ; then phase="done" ; idx=3 ; tot=$(( dn - ${bt:-$dn} ))
+            elif [ -n "$fn" ] ; then phase="finalizing" ; idx=2 ; tot=$(( now - ${bt:-$fn} )) ; tot_p=1 ; anyactive=1
+            elif [ -n "$bs" ] ; then phase="bootstrapping" ; idx=1 ; tot=$(( now - ${bt:-$bs} )) ; tot_p=1 ; anyactive=1
+            elif [ -z "$bt" ] && [ "$committed" = 1 ] ; then phase="done" ; idx=3 ; tot=-1   # up, booted pre-instrumentation (no this-boot record)
+            else phase="powering_up" ; idx=0 ; anyactive=1 ; [ -n "$bt" ] && { tot=$(( now - bt )) ; tot_p=1 ; } || tot=-1 ; fi
+        fi
+        [ "$idx" -lt "$minidx" ] && minidx=$idx
+        rows="${rows}${h}\t${pu}\t${pu_p}\t${bsd}\t${bs_p}\t${fnd}\t${fn_p}\t${tot}\t${tot_p}\t${phase}\t${idx}\t${reach}\n"
+    done
+
+    local state="complete" ; [ "$anyactive" = 1 ] && state="in progress"
+    echo "state:    $state   (* = phase still in progress)"
+    echo ""
+    printf " %-14s %-11s %-13s %-11s %-11s %-14s %s\n" "node" "powering_up" "bootstrapping" "finalizing" "total" "phase" "note"
+    printf "%b" "$rows" | while IFS=$'\t' read -r h pu pup bsd bsp fnd fnp tot totp phase idx reach ; do
+        [ -z "$h" ] && continue
+        _c() { local s=$1 p=$2 ; [ "$s" -ge 0 ] 2>/dev/null || { echo "-" ; return ; } ; local o="$(( s/60 ))m$(printf %02d $(( s%60 )))s" ; [ "$p" = 1 ] && o="${o}*" ; echo "$o" ; }
+        local note=""
+        if [ "$reach" = 0 ] ; then note="<- unreachable (POST/early boot)"
+        elif [ "$state" = "in progress" ] && [ "$idx" = "$minidx" ] && [ "$phase" != done ] ; then note="<- watch (slowest)"
+        fi
+        printf " %-14s %-11s %-13s %-11s %-11s %-14s %s\n" "$h" "$(_c "$pu" "$pup")" "$(_c "$bsd" "$bsp")" "$(_c "$fnd" "$fnp")" "$(_c "$tot" "$totp")" "$phase" "$note"
+    done
+}
+
 power_roll_active()
 {
     # A node mid-roll-recovery hasn't mounted cephfs yet, so the shared job.json
