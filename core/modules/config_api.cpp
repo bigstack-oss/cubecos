@@ -114,6 +114,7 @@ Commit(bool modified, int dryLevel)
     }
 
     // start cube-cos-api
+    WriteLogRotateConf(log_conf);
     return SystemdCommitService(true, API_NAME, true);
 }
 
