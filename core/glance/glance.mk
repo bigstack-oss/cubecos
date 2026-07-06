@@ -17,6 +17,7 @@ rootfs_install::
 			pysendfile"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-manage /usr/bin/glance-manage
 
 # prepare the build directory
 rootfs_install::
