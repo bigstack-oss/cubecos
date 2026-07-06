@@ -145,10 +145,8 @@ RollingEvacuateAndReboot()
                 hex_sdk cluster_check_repair_essential 1
                 msg="Cluster ready; live-migration essential services checked"
             else
-                # Normal boot (powercycle, reboot, cold/crash recovery): the
-                # 'cluster check' above already kicked per-service auto_repair for
-                # anything NG, so a second full check_repair pass is redundant.
-                # Rely on auto_repair + systemd restart policies.
+                # Normal boot: 'cluster check' above kicks per-service auto_repair;
+                # master runs full check_repair centrally once all nodes ready.
                 msg="Cluster ready"
             fi
             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
@@ -181,6 +179,11 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                 echo "YES" | hex_cli -c cluster stop
             fi
             BootstrapAndClusterstart && RollingEvacuateAndReboot
+            # Master waits (bounded) for all nodes committed+synced, then runs one
+            # detached full check_repair -- the single full pass, healing what the
+            # per-node auto_repair/essential passes miss.
+            for _i in $(seq 1 90) ; do hex_sdk cube_cluster_ready && break ; sleep 20 ; done
+            hex_sdk cluster_check_repair_async
         elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" ] ; then
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop
