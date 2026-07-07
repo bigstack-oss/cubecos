@@ -14,10 +14,13 @@
 #include <hex/exec.hpp>
 #include <hex/filesystem.h>
 #include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/pidfile.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
 #include <mysql_util.h>
+
+static LogRotateConf log_conf("cinder", "/var/log/cinder/*.log", DAILY, 128, 0, true);
 
 static const char USER[] = "cinder";
 static const char GROUP[] = "cinder";
@@ -930,6 +933,7 @@ Commit(bool modified, int dryLevel)
 
     // start services
     StartCinderService(s_enabled, s_ha, IsBootstrap(), G(IS_MASTER));
+    WriteLogRotateConf(log_conf);
     // wait for services to be up
     std::stringstream enabledHostLine;
     enabledHostLine << BUILTIN_STORAGE_HOST << "@" << BUILTIN_STORAGE_BACKEND;
