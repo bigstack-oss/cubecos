@@ -27,6 +27,18 @@ rootfs_install::
 			pywbem"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder /usr/bin/cinder
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-3 /usr/bin/cinder-3
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-api /usr/bin/cinder-api
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-backup /usr/bin/cinder-backup
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-manage /usr/bin/cinder-manage
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-rootwrap /usr/bin/cinder-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-rtstool /usr/bin/cinder-rtstool
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-scheduler /usr/bin/cinder-scheduler
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-status /usr/bin/cinder-status
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-volume /usr/bin/cinder-volume
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-volume-usage-audit /usr/bin/cinder-volume-usage-audit
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/cinder-wsgi /usr/bin/cinder-wsgi
 
 # prepare the build directory
 rootfs_install::
