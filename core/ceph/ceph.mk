@@ -40,6 +40,8 @@ rootfs_install::
 	#$(Q)mv $(ROOTDIR)/lib/udev/rules.d/95-ceph-osd.rules $(ROOTDIR)/lib/udev/disabled/.
 	$(Q)rm -f $(ROOTDIR)/etc/ganesha/*
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/ganesha.conf ./etc/ganesha/
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/nfs-ganesha.service.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/nfs-ganesha-sigkill.conf ./etc/systemd/system/nfs-ganesha.service.d/
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cron
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/ceph
 

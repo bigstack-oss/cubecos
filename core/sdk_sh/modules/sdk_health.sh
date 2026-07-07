@@ -2406,7 +2406,7 @@ health_cinder_check()
     stale_api_check_repair openstack-cinder-api 8776 cinder-api python3
 
     local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'block-storage'" | jq .results[0].series[0].values[0][1])
-    local service_stats="$($OPENSTACK volume service list -f value -c Binary -c Status -c State 2>/dev/null)"
+    local service_stats="$($OPENSTACK volume service list -f value -c Binary -c Host -c Status -c State 2>/dev/null)"
     local scheduler_up=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i up | wc -l )
     local scheduler_down=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i down | wc -l )
     local volume_up=$(echo "$service_stats" | grep volume | grep -i enabled | grep -i up | wc -l )
@@ -2431,6 +2431,9 @@ health_cinder_check()
         ERR_CODE=5
     fi
 
+    # feed _health_cinder_auto_repair the down services ("Binary Host ... enabled
+    # down") so it can restart them; ceph health detail alone has no such lines.
+    ERR_MSG+=$'\n'"$(echo "$service_stats" | grep -iE 'enabled.*down')"
     ERR_MSG+="`$CEPH health detail`"
     _health_fail_log
 }
