@@ -75,6 +75,14 @@ EOF
     fi
 }
 
+# Auto_repair gate: repair every round below maxerr, then back off to every Nth
+# round instead of giving up forever. Args: <count> <maxerr> <backoff>.
+_health_repair_due()
+{
+    local count=$1 maxerr=$2 backoff=$3
+    [ "$count" -lt "$maxerr" ] || [ $(( (count - maxerr) % backoff )) -eq 0 ]
+}
+
 _health_fail_log()
 {
     local srv=$(caller 0 | cut -d" " -f2 | sed -e "s/^health_//" -e "s/_check$//")
@@ -93,6 +101,9 @@ _health_fail_log()
     if [ ${_OVERRIDE_MAX_ERR:-0} -gt 0 ] ; then
         maxerr=$_OVERRIDE_MAX_ERR
     fi
+
+    # backoff cadence past maxerr (see _health_repair_due)
+    local backoff=${_HEALTH_REPAIR_BACKOFF:-10}
 
     local count=0
     if [ -f /tmp/health_${srv}_error.count ] ; then
@@ -122,7 +133,7 @@ _health_fail_log()
             let "count = $count + 1"
             echo "failed count: $count" >> /var/log/health_${srv}_error.log
             echo $count > /tmp/health_${srv}_error.count
-            if [ $count -lt $maxerr ] ; then
+            if _health_repair_due "$count" "$maxerr" "$backoff" ; then
                 local auto_repair_func="_health_${srv}_auto_repair"
                 if Quiet type $auto_repair_func 2>/dev/null ; then
                     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
