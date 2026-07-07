@@ -263,16 +263,9 @@ cube_cluster_start()
     # single-node-rejoin boots do only the per-node half.
     cube_cluster_start_node
     cube_cluster_start_cluster_if_master
-    # Boot-relay step: a node returning from a rolling restart finalizes itself
-    # (restore its suspended VMs, mark done) and kicks the next node. Called here
-    # so it runs on EVERY node's boot, decoupled from the bring-up's exit status
-    # -- relying on a chained call in bootstrap_cube_config let a single non-zero
-    # silently skip the advance and wedge the roll. Idempotent, so a duplicate
-    # call from the boot script is harmless. Via hex_sdk -- a bare call would be
-    # "command not found" (proj_functions doesn't source modules/, where
-    # power_roll_advance lives).
-    hex_sdk power_roll_advance "$HOSTNAME"
-    hex_sdk power_bootup_mark done   # cluster bootup status: this node's boot bring-up complete
+    # power_roll_advance + power_bootup_mark done run per node in
+    # bootstrap_cube_config (each its own statement, never chained), not here:
+    # this tail is skipped on the master when a peer isn't sshable.
 }
 
 # Shared env for the split cube_cluster_start halves.
