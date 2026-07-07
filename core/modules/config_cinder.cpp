@@ -568,6 +568,7 @@ SetCeph(
     config[BUILTIN_STORAGE_BACKEND]["rados_connect_timeout"] = "-1";
     config[BUILTIN_STORAGE_BACKEND]["rbd_store_chunk_size"] = "4";
     config[BUILTIN_STORAGE_BACKEND]["rbd_max_clone_depth"] = "5";
+    config[BUILTIN_STORAGE_BACKEND]["enable_deferred_deletion"] = "true";
     config[BUILTIN_STORAGE_BACKEND]["rbd_flatten_volume_from_snapshot"] = "false";
     config[BUILTIN_STORAGE_BACKEND]["image_upload_use_cinder_backend"] = "true";
 }
