@@ -533,6 +533,16 @@ SetAuth(
     config["keystone_authtoken"]["password"] = cinderPass;
     config["keystone_authtoken"]["service_token_roles"] = "service";
     config["keystone_authtoken"]["service_token_roles_required"] = "true";
+
+    config["service_user"]["auth_type"] = "password";
+    config["service_user"]["auth_url"] = "http://" + sharedId + ":5000";
+    config["service_user"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
+    config["service_user"]["username"] = "cinder";
+    config["service_user"]["password"] = cinderPass;
+    config["service_user"]["project_name"] = "service";
+    config["service_user"]["project_domain_name"] = domain;
+    config["service_user"]["user_domain_name"] = domain;
+    config["service_user"]["send_service_user_token"] = "true";
 }
 
 /**
