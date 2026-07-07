@@ -16,3 +16,5 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/telegraf/telegraf-device-linux.conf.in $(ROOTDIR)/etc/telegraf/telegraf-device-linux.conf.in
 	$(Q)cp -f $(COREDIR)/telegraf/telegraf-device-win.conf.in $(ROOTDIR)/etc/telegraf/telegraf-device-win.conf.in
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/telegraf/telegraf_sudoers ./etc/sudoers.d/
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/telegraf.service.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/telegraf/telegraf-restart.conf ./etc/systemd/system/telegraf.service.d/
