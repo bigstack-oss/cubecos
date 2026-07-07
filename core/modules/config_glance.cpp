@@ -314,7 +314,7 @@ SetDefaults(Configs& config)
     config["DEFAULT"]["image_size_cap"] = TwoTiB;
     config["DEFAULT"]["node_staging_uri"] = "file:///mnt/cephfs/glance_tmp_transition";
 
-    config["oslo_concurrency"]["lock_path"] = "/var/lib/glance/locks";
+    config["os_brick"]["lock_path"] = "/var/lock/os_brick";
 
     // should be oslo_reports.log_dir, however, the current version does not support it
     config["DEFAULT"]["log_dir"] = "/var/log/glance";

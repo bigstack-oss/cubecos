@@ -438,7 +438,7 @@ SetDefaults(
     config["DEFAULT"]["enable_force_upload"] = "true";
     config["DEFAULT"]["allow_availability_zone_fallback"] = "true";
 
-    config["oslo_concurrency"]["lock_path"] = "/var/lib/cinder/tmp";
+    config["os_brick"]["lock_path"] = "/var/lock/os_brick";
     config["oslo_reports"]["log_dir"] = "/var/log/cinder";
 }
 
