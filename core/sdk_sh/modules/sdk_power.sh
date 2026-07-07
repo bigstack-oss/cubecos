@@ -46,12 +46,56 @@ _power_roll_set_node_status()
         '(.nodes[]|select(.hostname==$h)) |= (.status=$s | .phase_ts=((.phase_ts//{}) + {($s):$ts}))'
 }
 
-# Stamp a phase timestamp without changing .status. No-op if no job exists.
+# The raw phase_ts write. Also the entry point a peer or a spool-replay uses:
+# `hex_sdk _power_roll_write_phase_ts <host> <phase> <epoch>`.
+_power_roll_write_phase_ts()
+{
+    [ -e "$ROLLING_RESTART_JOB" ] || return 1
+    _power_roll_write --arg h "$1" --arg p "$2" --argjson ts "$3" \
+        '(.nodes[]|select(.hostname==$h)) |= (.phase_ts=((.phase_ts//{}) + {($p):$ts}))'
+}
+
+# Replay locally-buffered stamps to job.json once cephfs is reachable.
+_power_roll_flush_phase_ts_spool()
+{
+    local spool=$1 bh bp bts
+    [ -e "$spool" ] || return 0
+    while read -r bh bp bts ; do
+        [ -n "$bh" ] && _power_roll_write_phase_ts "$bh" "$bp" "$bts"
+    done < "$spool"
+    rm -f "$spool"
+}
+
+# First reachable control peer (not self) -- it has cephfs, so it can stamp for us.
+_power_roll_ts_peer()
+{
+    local self=$(hostname) n
+    for n in ${MASTER_CONTROL:-} $(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname' 2>/dev/null) ; do
+        [ "$n" = "$self" ] && continue
+        is_sshable "$n" 2>/dev/null && { echo "$n" ; return 0 ; }
+    done
+}
+
+# Stamp a phase timestamp without changing .status. job.json lives on cephfs, which
+# isn't mounted early in a node's own boot -- so capture the real ts now, then write
+# it directly (cephfs up), else delegate to an up peer that has cephfs, else spool
+# locally and flush on a later cephfs-up call. Never fatal: the delegate runs in a
+# subshell so a peer that Errors/exits (remote_run) can't kill the boot script.
 _power_roll_set_phase_ts()
 {
-    [ -e "$ROLLING_RESTART_JOB" ] || return 0
-    _power_roll_write --arg h "$1" --arg p "$2" --argjson ts "$(date +%s)" \
-        '(.nodes[]|select(.hostname==$h)) |= (.phase_ts=((.phase_ts//{}) + {($p):$ts}))'
+    local h=$1 p=$2 ts=$(date +%s)
+    local spool=${_POWER_ROLL_TS_SPOOL:-/run/roll_phase_ts.spool}
+    if [ -e "$ROLLING_RESTART_JOB" ] ; then
+        _power_roll_flush_phase_ts_spool "$spool"
+        _power_roll_write_phase_ts "$h" "$p" "$ts"
+        return 0
+    fi
+    local peer=$(_power_roll_ts_peer)
+    if [ -n "$peer" ] ; then
+        ( remote_run "$peer" "hex_sdk _power_roll_write_phase_ts $h $p $ts" ) >/dev/null 2>&1 && return 0
+    fi
+    echo "$h $p $ts" >> "$spool" 2>/dev/null
+    return 0
 }
 
 _power_roll_set_node_num() { _power_roll_write --arg h "$1" --argjson v "$3" "(.nodes[]|select(.hostname==\$h).$2)=\$v" ; }
