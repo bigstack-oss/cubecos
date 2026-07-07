@@ -47,6 +47,7 @@ rootfs_install::
 
 # generate default configurations using oslo-config-generator
 rootfs_install::
+	$(Q)cp -f $(COREDIR)/cinder/cinder-dist.conf $(ROOTDIR)/tmp/cinder/
 	$(Q)cp -f $(COREDIR)/cinder/cinder-config-generator.conf $(ROOTDIR)/tmp/cinder/
 	$(Q)cp -f $(COREDIR)/cinder/cinder.conf.sample $(ROOTDIR)/tmp/cinder/
 	$(Q)# copy statutory configuration templates from core directory
@@ -71,6 +72,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/cinder/rootwrap.d
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/run/cinder
 	$(Q)# install configurations
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/cinder-dist.conf /usr/share/cinder/cinder-dist.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/cinder.conf.sample /etc/cinder/cinder.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/api-paste.ini /etc/cinder/api-paste.ini
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/rootwrap.conf /etc/cinder/rootwrap.conf
@@ -87,6 +89,7 @@ rootfs_install::
 
 # adjust file ownerships and permissions
 rootfs_install::
+	$(Q)chroot $(ROOTDIR) chown root:cinder /usr/share/cinder/cinder-dist.conf
 	$(Q)chroot $(ROOTDIR) chown root:cinder /etc/cinder/cinder.conf
 	$(Q)chroot $(ROOTDIR) chown root:cinder /etc/cinder/api-paste.ini
 	$(Q)chroot $(ROOTDIR) chown root:cinder /etc/cinder/rootwrap.conf
