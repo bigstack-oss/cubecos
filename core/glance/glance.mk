@@ -17,7 +17,21 @@ rootfs_install::
 			pysendfile"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance /usr/bin/glance
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-3 /usr/bin/glance-3
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-api /usr/bin/glance-api
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-cache-cleaner /usr/bin/glance-cache-cleaner
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-cache-manage /usr/bin/glance-cache-manage
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-cache-prefetcher /usr/bin/glance-cache-prefetcher
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-cache-pruner /usr/bin/glance-cache-pruner
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-control /usr/bin/glance-control
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-manage /usr/bin/glance-manage
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-replicator /usr/bin/glance-replicator
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-rootwrap /usr/bin/glance-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-rootwrap-3 /usr/bin/glance-rootwrap-3
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-scrubber /usr/bin/glance-scrubber
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-status /usr/bin/glance-status
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-wsgi-api /usr/bin/glance-wsgi-api
 
 # prepare the build directory
 rootfs_install::
