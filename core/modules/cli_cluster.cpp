@@ -757,8 +757,11 @@ ClusterStartMain(int argc, const char** argv)
     CliPrintf("Starting cluster");
     HexSpawn(0, HEX_SDK, "cmd", HEX_SDK, "-v", "cube_cluster_start", ZEROCHAR_PTR);
 
-    // FIXME: workaround neutron services that aren't always in ready state
-    HexUtilSystemF(0, 0, HEX_SDK " health_neutron_repair");
+    // FIXME: workaround neutron services that aren't always in ready state.
+    // Disabled to verify it's still needed -- health_neutron_repair now waits for OVN
+    // metadata nb_cfg catch-up (#1094), and ClusterCheckRepairMain below repairs neutron
+    // anyway, so this pre-emptive call may be redundant.
+    // HexUtilSystemF(0, 0, HEX_SDK " health_neutron_repair");
 
     ClusterCheckRepairMain(1, &ACTION);
 
@@ -847,7 +850,9 @@ ClusterReadyMain(int argc, const char** argv)
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run " HEX_SDK " ceph_pool_replicate_init");
 
     CliPrintf("[2/6] Checking SDN services");
-    HexUtilSystemF(0, 0,  HEX_SDK " host_local_run " HEX_SDK " health_neutron_repair");
+    // Disabled to verify it's still needed (#1094): health_neutron_repair now waits for OVN
+    // metadata nb_cfg catch-up, and [6/6] cluster_check_repair_async repairs neutron anyway.
+    // HexUtilSystemF(0, 0,  HEX_SDK " host_local_run " HEX_SDK " health_neutron_repair");
 
     CliPrintf("[3/6] Configuring modules");
     if (cfgFlatExt)
@@ -863,7 +868,9 @@ ClusterReadyMain(int argc, const char** argv)
 
     CliPrintf("[6/6] Cluster check and repair started in the background.");
     CliPrintf("      The box is ready to use now; the result will pop up here when it completes.");
-    HexSpawn(0, HEX_SDK, "host_local_run", "hex_sdk", "-m force",  "health_neutron_repair", ZEROCHAR_PTR);
+    // Disabled to verify it's still needed (#1094): cluster_check_repair_async below already
+    // repairs neutron via check_repair, which now waits for OVN metadata nb_cfg catch-up.
+    // HexSpawn(0, HEX_SDK, "host_local_run", "hex_sdk", "-m force",  "health_neutron_repair", ZEROCHAR_PTR);
     HexSpawn(0, HEX_SDK, "cmd", "rm -f /tmp/health_*_error.count", ZEROCHAR_PTR);
     HexSystemF(0, HEX_SDK " cluster_check_repair_async");
 
