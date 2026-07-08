@@ -88,13 +88,18 @@ cmd()
     fi
     if [ "x$onebyone" = "xfalse" ] ; then
         for _cmd_node in "${_cmd_nodes[@]}" ; do
-            _cmd_nodes_logs[$_cmd_node]="$(mktemp -u /tmp/cmd_${node}.XXXX)"
+            # Minor fix: changed ${node} to ${_cmd_node} to correctly map the loop variable
+            _cmd_nodes_logs[$_cmd_node]="$(mktemp -u /tmp/cmd_${_cmd_node}.XXXX)"
+
             if [ "x$dryrun" = "xfalse" ] ; then
-                if is_sshable $_cmd_node ; then
-                    timeout $_ssh_to ssh $_ssh_opts $_cmd_node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >${_cmd_nodes_logs[$_cmd_node]} 2>&1 &
-                else
-                    false &
-                fi
+                # Wrapping is_sshable into the backgrounded execution block
+                {
+                    if is_sshable $_cmd_node ; then
+                        timeout $_ssh_to ssh $_ssh_opts $_cmd_node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@"
+                    else
+                        false
+                    fi
+                } >"${_cmd_nodes_logs[$_cmd_node]}" 2>&1 &
             else
                 echo "ssh -o LogLevel=quiet $_cmd_node $@" &
             fi
@@ -122,7 +127,8 @@ cmd()
         local cnt=0
         for _cmd_node in "${_cmd_nodes[@]}" ; do
             ((cnt++))
-            _cmd_node_log="$(mktemp -u /tmp/cmd_${node}.XXXX)"
+            # Minor fix here as well for onebyone mode
+            local _cmd_node_log="$(mktemp -u /tmp/cmd_${_cmd_node}.XXXX)"
             if [ "x$dryrun" = "xfalse" ] ; then
                 if is_sshable $_cmd_node ; then
                     timeout $_ssh_to ssh $_ssh_opts $_cmd_node "$(typeset -f ${1%% *} || echo true ); VERBOSE=$VERBOSE; $@" >$_cmd_node_log 2>&1

@@ -276,9 +276,7 @@ health_clock_report()
 
 health_clock_check()
 {
-    # this is a temporary fix since we are moving away cubectl in favor of cmd()
-    # however, we do not have real parallelism in cmd()
-    local times=$(cubectl node exec -np date "+%s" | sort)
+    local times=$(cmd -v "date +%s" | cut -d"|" -f3 | sed "/^$/d" | sort)
     local timea=$(echo "$times" | head -1)
     local timeb=$(echo "$times" | tail -1)
     local delta=$(expr ${timeb:-0} - ${timea:-0})
