@@ -10,6 +10,7 @@
 #include <hex/process_util.h>
 #include <hex/config_module.h>
 #include <hex/dryrun.h>
+#include <hex/tempfile.h>
 #include <third_party/json11.hpp>
 
 static const char GPU_CONFIG_DIR[]  = "/etc/cube/cos/gpu";
@@ -119,10 +120,22 @@ ResourceSetMain(int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
+        HexTempFile tmpFile;
+        if (tmpFile.fd() < 0) {
+            HexLogError("gpu_resource_set: failed to create a temporary file");
+            return EXIT_FAILURE;
+        }
+        tmpFile.close();
+
         if (HexUtilSystemF(0, 0,
-                "tmp=$(mktemp) && jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" "
-                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"pgpu\", pciAddress:$pciAddress, profiles:null}]' %s > \"$tmp\" && mv \"$tmp\" %s",
-                gpuId, name.c_str(), pciAddress.c_str(), GPU_CONFIG_FILE, GPU_CONFIG_FILE) != 0) {
+                "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" "
+                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"pgpu\", pciAddress:$pciAddress, profiles:null}]' %s > %s",
+                gpuId, name.c_str(), pciAddress.c_str(), GPU_CONFIG_FILE, tmpFile.path()) != 0) {
+            HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
+            return EXIT_FAILURE;
+        }
+
+        if (HexUtilSystemF(0, 0, "mv %s %s", tmpFile.path(), GPU_CONFIG_FILE) != 0) {
             HexLogError("gpu_resource_set: failed to persist GPU %s config", gpuId);
             return EXIT_FAILURE;
         }

@@ -433,6 +433,71 @@ gpu_device_list()
             '. + [{id:$id, name:$name, type:$type, supportTypes:["pgpu"], pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
     done <<< "$(echo "$pgpu_ids" | jq -c '.[]' 2>/dev/null)"
 
+    # The union above only catches vfio-pci-bound GPUs that config.json
+    # already knows about. A GPU can be bound to vfio-pci without a
+    # matching config record (e.g. bound outside of gpu_resource_set, or
+    # after the config file is lost/reset), and such a GPU is invisible to
+    # both nvidia-smi and the config-file union, so it would never be
+    # enumerated. Close that gap by searching the PCI bus directly (by
+    # NVIDIA vendor ID 10de) for devices actually held by vfio-pci.
+    local sysfs_addr
+    for sysfs_addr in $(lspci -Dnn -d 10de: 2>/dev/null | awk '{print $1}'); do
+        local driver_path="/sys/bus/pci/devices/${sysfs_addr}/driver"
+        [ -e "$driver_path" ] || continue
+        [ "$(basename "$(readlink -f "$driver_path")")" = "vfio-pci" ] || continue
+
+        # config.json/nvidia-smi use an 8-char PCI domain (00000000:bb:ss.f);
+        # lspci -D / sysfs use a 4-char domain (0000:bb:ss.f).
+        local already_listed
+        already_listed=$(echo "$output" | jq -r --arg addr "$sysfs_addr" \
+            '[.[] | select((.pciAddress // "" | ascii_downcase | .[4:]) == $addr)] | length')
+        [ "$already_listed" != "0" ] && continue
+
+        local entry
+        entry=$(echo "$gpu_config" | jq -c --arg addr "$sysfs_addr" \
+            '[.[] | select((.pciAddress // "" | ascii_downcase | .[4:]) == $addr)] | .[0] // empty')
+
+        local uuid name pci_address
+        if [ -n "$entry" ]; then
+            uuid=$(echo "$entry" | jq -r '.id')
+            name=$(echo "$entry" | jq -r '.name // "unknown"')
+            pci_address=$(echo "$entry" | jq -r '.pciAddress')
+        else
+            uuid="$sysfs_addr"
+            name=$(lspci -s "$sysfs_addr" | sed -E 's/^[0-9a-f:.]+ [^:]+: //')
+            [ -z "$name" ] && name="unknown"
+            pci_address="0000${sysfs_addr}"
+        fi
+
+        local pci_bus pci_slot
+        pci_bus=$(echo "$sysfs_addr" | awk -F: '{print tolower($2)}')
+        pci_slot=$(echo "$sysfs_addr" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
+
+        local in_use=0
+        for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
+            if virsh dumpxml "$vm_id" 2>/dev/null | \
+                grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
+                in_use=1
+                break
+            fi
+        done
+
+        local status="idle"
+        local allocation='{"current":0,"total":1}'
+        if [ "$in_use" = "1" ]; then
+            status="inUse"
+            allocation='{"current":1,"total":1}'
+        fi
+
+        output=$(echo "$output" | jq -c \
+            --arg id "$uuid" \
+            --arg name "$name" \
+            --arg pciAddress "$pci_address" \
+            --arg status "$status" \
+            --argjson allocation "$allocation" \
+            '. + [{id:$id, name:$name, type:"pgpu", supportTypes:["pgpu"], pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
+    done
+
     echo "$output"
 }
 
