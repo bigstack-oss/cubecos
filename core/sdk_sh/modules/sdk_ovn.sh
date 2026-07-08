@@ -265,3 +265,79 @@ ovn_bridge_sflow_disable()
 
     rm -f /etc/appliance/state/sflow_enabled
 }
+
+# --- OVN metadata liveness (nb_cfg progress) --------------------------------
+# Alive=False just means the agent's sb-cfg lags nb_cfg (normal while it re-syncs after a
+# reconnect). Track progress toward nb_cfg: catching-up self-heals, only a stuck (frozen)
+# sb-cfg needs a restart. All OVN reads are bulk -- a fixed 3 calls per pass regardless of
+# node count, since metadata runs on every compute. Mechanism/rationale in PR #1094.
+_ovn_nb_cfg() { ovn-nbctl --timeout=5 get NB_Global . nb_cfg 2>/dev/null ; }
+
+# One bulk snapshot of every chassis' metadata sb-cfg: "<hostname> <sbcfg>" per line.
+# Joins Chassis (name->hostname) with Chassis_Private (name->external_ids) on chassis name
+# -- two ovn-sbctl reads total, independent of node count. Empty if OVN can't be read.
+_ovn_metadata_sbcfg_all()
+{
+    local chassis priv
+    chassis=$(ovn-sbctl --timeout=5 -f csv --no-headings --columns=name,hostname list Chassis 2>/dev/null | tr -d '"')
+    priv=$(ovn-sbctl --timeout=5 -f csv --no-headings --columns=name,external_ids list Chassis_Private 2>/dev/null | tr -d '"')
+    [ -n "$chassis" ] && [ -n "$priv" ] || return 1
+    awk '
+        FNR==NR { i=index($0,","); host[substr($0,1,i-1)]=substr($0,i+1); next }
+        { i=index($0,","); nm=substr($0,1,i-1)
+          if (match($0,/neutron:ovn-metadata-sb-cfg=[0-9]+/)) {
+              s=substr($0,RSTART,RLENGTH); sub(/.*=/,"",s)
+              if (nm in host) print host[nm], s
+          }
+        }
+    ' <(printf '%s\n' "$chassis") <(printf '%s\n' "$priv")
+}
+
+# Classify the given metadata hosts from ONE bulk snapshot (3 ovn calls total, not per host).
+# Sets OVN_META_STUCK (frozen/unreadable -> restart) and OVN_META_CATCHING (advancing -> leave
+# alone). A per-host state file holds the last sb-cfg, to tell advancing from frozen.
+_ovn_metadata_classify()   # <hosts>
+{
+    OVN_META_STUCK=""; OVN_META_CATCHING=""
+    local target snap h cur last statef
+    declare -A _sb
+    target=$(_ovn_nb_cfg)
+    snap=$(_ovn_metadata_sbcfg_all)
+    while read -r h cur ; do [ -n "$h" ] && _sb[$h]=$cur ; done <<< "$snap"
+    for h in $1 ; do
+        cur=${_sb[$h]:-} ; statef=${_OVN_SBCFG_DIR:-/run}/health_neutron_sbcfg_$h
+        last=$(cat "$statef" 2>/dev/null)
+        [ -n "$cur" ] && echo "$cur" > "$statef"
+        if [ -z "$target" ] || [ -z "$cur" ] ; then OVN_META_STUCK+="$h "                    # can't tell -> repairable
+        elif [ "$cur" -ge "$target" ] 2>/dev/null ; then :                                    # caught up
+        elif [ -n "$last" ] && [ "$cur" -le "$last" ] 2>/dev/null ; then OVN_META_STUCK+="$h " # frozen
+        else OVN_META_CATCHING+="$h "                                                         # advancing / first-seen
+        fi
+    done
+}
+
+# Alive=False metadata agents that are stuck (frozen sb-cfg); records them in OVN_META_STUCK.
+_ovn_metadata_stuck_hosts()   # <service_stats>
+{
+    local hosts=$(echo "$1" | grep neutron-ovn-metadata-agent | grep -i False | awk '{print $3}')
+    _ovn_metadata_classify "$hosts"
+    [ -n "$OVN_META_STUCK" ]
+}
+
+# Wait only while progress is observable, capped by an absolute deadline. Each pass is a fixed
+# 3 bulk ovn calls, so it scales to 100+ metadata agents; a failed/timed-out read yields stuck
+# (not catching), so we bail instead of burning the budget. Manual repair() path only.
+_ovn_metadata_wait_caught_up()   # <timeout-secs, default 120>
+{
+    local timeout=${1:-120} deadline hosts
+    hosts=$($OPENSTACK network agent list -f value -c Binary -c Alive -c Host 2>/dev/null \
+            | grep neutron-ovn-metadata-agent | grep -i False | awk '{print $3}')
+    [ -n "$hosts" ] || return 0
+    deadline=$(( $(date +%s) + timeout ))
+    while [ "$(date +%s)" -lt "$deadline" ] ; do
+        _ovn_metadata_classify "$hosts"
+        [ -z "$OVN_META_CATCHING" ] && return 0
+        sleep 10
+    done
+    return 0
+}

@@ -7,6 +7,7 @@ if [ -z "$PROG" ] ; then
 fi
 
 source ${SDK_DIR}/modules/errcodes
+source ${SDK_DIR}/modules/sdk_ovn.sh   # _ovn_metadata_* helpers used by health_neutron_check/repair
 # _check is invoked by lmi which lacks persmissions to run
 # ssh commands like is_remote_running. Wrap it with /usr/sbin/hex_config sdk_run
 ERR_CODE=${ERR_CODE:-0}         # health_check error code
@@ -2285,7 +2286,8 @@ health_neutron_check()
         ERR_CODE=1
     elif [ -z "$service_stats" ] ; then
         ERR_CODE=2
-    elif [ "$metadata_up" == "0" -o "$metadata_down" != "0" ] ; then
+    elif _ovn_metadata_stuck_hosts "$service_stats" ; then
+        # only stuck agents; catching-up ones self-heal (hosts in OVN_META_STUCK)
         ERR_CODE=3
     elif [ "$vpn_up" == "0" -o "$vpn_down" != "0" ] ; then
         ERR_CODE=4
@@ -2326,6 +2328,12 @@ _health_neutron_auto_repair()
             $CEPH mgr module enable dashboard
         elif [ $ERR_CODE -eq 6 ] ; then
             Quiet -n cmd -c -- $HEX_SDK os_neutron_worker_scale
+        elif [ $ERR_CODE -eq 3 ] ; then
+            # restart only stuck agents; catching-up ones self-heal (no db_sync -- the
+            # agent re-syncs nb_cfg itself; a resource resync is irrelevant here).
+            for host in $OVN_META_STUCK ; do
+                remote_systemd_restart $host neutron-ovn-metadata-agent
+            done
         else
             $HEX_SDK ovn_neutron_db_sync
             readarray entry_array <<<"$(echo -n "$ERR_MSG" | awk '/False/{print $1" "$3}' | sort)"
@@ -2343,6 +2351,11 @@ _health_neutron_auto_repair()
 
 health_neutron_repair()
 {
+    # Wait for catching-up metadata agents to converge before escalating: the manual path
+    # must return a healthy agent, and the bootstrap/delete below would reset a still-
+    # catching-up agent's sync. (auto_repair just leaves it to self-heal.)
+    _ovn_metadata_wait_caught_up 120
+
     # A full neutron bootstrap is expensive (~75s) and set_ready invokes this
     # twice; only re-bootstrap when the OVN/neutron agents aren't already healthy.
     local agent_alive="$($OPENSTACK network agent list -f value -c Alive 2>/dev/null)"
