@@ -76,7 +76,7 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  group haproxy\n");
     fprintf(fout, "  log 127.0.0.1 syslog\n");
     fprintf(fout, "  tune.ssl.default-dh-param 2048\n");
-    fprintf(fout, "  ssl-default-bind-curves X25519:prime256v1:secp384r1\n");
+    fprintf(fout, "  ssl-default-bind-curves X25519MLKEM768:X25519:prime256v1:secp384r1\n");
     fprintf(fout, "  ssl-default-bind-ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305\n");
     fprintf(fout, "  ssl-default-bind-ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256\n");
     fprintf(fout, "  ssl-default-bind-options prefer-client-ciphers ssl-min-ver TLSv1.2 no-tls-tickets\n");
