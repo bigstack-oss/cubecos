@@ -296,14 +296,14 @@ ceph_mon_map_iplist()
     elif echo $iplist | grep -q 'v1' ; then
         iplist=$(monmaptool --print $MAPFILE | grep 6789 | awk -F' ' '{print $2}' | awk -F':' '{print $2}' | tr '\n' ',')
     fi
-    echo -n ${iplist:-1}
+    echo -n $iplist
 }
 
 ceph_mon_map_hosts()
 {
     ceph_mon_map_create $1
     local hosts=$(monmaptool --print $MAPFILE | grep 6789 | awk -F' ' '{print $3}' | cut -c 5- | tr '\n' ',')
-    echo -n ${hosts:-1}
+    echo -n $hosts
 }
 
 ceph_mds_map_iplist()

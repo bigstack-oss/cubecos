@@ -1744,6 +1744,13 @@ SyncConfigMain(int argc, char* argv[])
     std::string monIplist = HexUtilPOpen(HEX_SDK " ceph_mon_map_iplist %s", CONF);
     std::string mdsIplist = HexUtilPOpen(HEX_SDK " ceph_mds_map_iplist %s", CONF);
     std::string adminCliPass = GetSaltKey(s_saltkey, s_adminCliPass.newValue(), s_seed.newValue());
+
+    // no usable monmap (sdk returns "1" on failure): keep the existing conf
+    if (monHosts.length() == 0 || monIplist.find('.') == std::string::npos) {
+        HexLogWarning("sync_ceph_config: no monmap available, keeping %s", CONF);
+        return EXIT_SUCCESS;
+    }
+
     UpdateConfig(fsid, ctrl, ctrlIp, sharedId, monHosts, monIplist, pubNet, clstrNet, adminCliPass, s_perfTuned, mdsIplist);
 
     return EXIT_SUCCESS;

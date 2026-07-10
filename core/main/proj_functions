@@ -287,6 +287,8 @@ cube_cluster_start_node()
     _cube_cluster_start_env
     Quiet -n ip neigh flush all
     Quiet -n $HEX_SDK ceph_leave_maintenance # ensure storage is working before other actions
+    # re-render mon host from the live monmap (boot commit writes only the master mon IP)
+    Quiet -n /usr/sbin/hex_config sync_ceph_config
     if [ "$VERBOSE" == "1" ] ; then
         /usr/sbin/hex_config -p trigger node_start
     else
