@@ -339,6 +339,7 @@ UpdateSharedId(std::string sharedId)
         apiCfg["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
         apiCfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         apiCfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
+        apiCfg["keystone_authtoken"]["http_connect_timeout"] = "15";
 
         pstCfg["influxdb"]["ip_address"] = sharedId;
         pstCfg["zookeeper"]["uri"] = sharedId + ":2181";

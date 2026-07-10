@@ -388,6 +388,7 @@ UpdateSharedId(std::string sharedId, std::string ovnnb, std::string ovnsb)
         cfg["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
         cfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
+        cfg["keystone_authtoken"]["http_connect_timeout"] = "15";
         cfg["nova"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["octavia"]["base_url"] = "http://" + sharedId + ":9876";
         cfg["service_auth"]["auth_url"] = "http://" + sharedId + ":5000/v2.0";
@@ -457,6 +458,7 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         cfg["nova"]["project_domain_name"] = domain.c_str();
         cfg["nova"]["user_domain_name"] = domain.c_str();
         cfg["nova"]["region_name"] = region.c_str();
+        cfg["nova"]["timeout"] = "60";
         cfg["nova"]["project_name"] = "service";
         cfg["nova"]["username"] = "nova";
         cfg["nova"]["password"] = novapass.c_str();

@@ -1,21 +1,38 @@
 #!/bin/bash
 
 source /etc/admin-openrc.sh
-if ! hex_sdk cube_node_ready ; then
-    echo "=== $(date) SKIP: node not ready"
-elif ! openstack segment list -f value -c is_enabled | grep -q -i true ; then
-    echo "=== $(date) SKIP: instance ha not enabled "
-else
-    for i in {1..10} ; do
-        echo "=== $(date) CHECKING: neutron ($i)"
-        openstack network agent list
-        if openstack network agent list -f value -c Alive | grep -q -i false ; then
-            echo "=== $(date) REPAIRING: neutron"
-            hex_sdk -m force health_neutron_repair
-            echo "=== $(date) REPAIRED: neutron"
-            openstack network agent list
-            break
-        fi
+source /usr/sbin/hex_tuning /etc/settings.txt
+
+# The VIP just moved here: connections to the previous holder are blackholed
+# (no RST) and deadline-less clients hang on them. Kill the half-dead sockets
+# on every node; blocked threads reconnect (no service restarts needed).
+VIP=$T_cubesys_control_vip
+sweep_stale_flows()
+{
+    # nodes sweep in parallel: serial ssh costs N x timeout on large clusters
+    local n
+    for n in $(cubectl node list -j 2>/dev/null | jq -r '.[].hostname') ; do
+        echo "=== $(date) SWEEPING: $n"
+        timeout 30 ssh root@$n "
+            # NB/SB flows predate a fresh acquisition; ovsdb clients
+            # reconnect within seconds of the kill (agents revive in ~4s)
+            ss -K \"dst $VIP and ( dport = :6641 or dport = :6642 )\" >/dev/null 2>&1
+            stale=\$(ss -tnp state close-wait \"dst $VIP\" 2>/dev/null | tail -n +2)
+            if [ -n \"\$stale\" ] ; then
+                echo \"\$stale\"
+                ss -K state close-wait \"dst $VIP\" >/dev/null 2>&1
+                echo \"destroyed \$(echo \"\$stale\" | wc -l) close-wait flows\"
+            fi" 2>/dev/null &
     done
-    echo "=== $(date) DONE: vaw finished"
+    wait
+}
+# One sweep at VIP acquisition. It clears what timeouts can't do promptly:
+# the OVN NB/SB flows (ovsdb, not HTTP -- keystoneauth deadlines don't cover
+# them; killing them revives dead network agents in ~seconds) and any
+# already-CLOSE-WAIT API sockets. Anything still ESTABLISHED-but-blackholed
+# here self-heals via the 60s client/session deadlines, so no delayed passes
+# (a late sweep would risk destroying healthy CLOSE-WAIT churn to the VIP).
+if [ -n "$VIP" ] ; then
+    sweep_stale_flows
+    echo "=== $(date) DONE: vip flow sweep"
 fi

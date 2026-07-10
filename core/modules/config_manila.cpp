@@ -374,6 +374,7 @@ SetAuth(
 
     config["keystone_authtoken"]["auth_type"] = "password";
     config["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
+    config["keystone_authtoken"]["http_connect_timeout"] = "15";
     config["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
     config["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
     config["keystone_authtoken"]["project_domain_name"] = domain;

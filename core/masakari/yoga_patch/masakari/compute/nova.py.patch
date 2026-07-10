@@ -1,0 +1,25 @@
+--- masakari/compute/nova.py	2026-07-11 11:21:16.676763358 +0800
++++ masakari/compute/nova.py	2026-07-11 11:21:16.676763358 +0800
+@@ -85,6 +85,11 @@
+     @param timeout: Number of seconds to wait for an answer before raising a
+         Timeout exception (None to disable)
+     """
++    # deadline every nova call: a hung request on a blackholed connection
++    # (e.g. after a VIP failover) otherwise blocks recovery flows for ~10min
++    if timeout is None:
++        timeout = 60
++
+     nova_catalog_info = CONF.nova_catalog_admin_info
+     service_type, service_name, endpoint_type = nova_catalog_info.split(':')
+ 
+@@ -118,6 +123,10 @@
+     keystone_session = session_loader.load_from_options(
+         auth=auth, cacert=CONF.nova_ca_certificates_file,
+         insecure=CONF.nova_api_insecure)
++    # novaclient ignores its timeout kwarg when handed a session; the
++    # deadline must live on the session itself or requests block forever
++    # on dead connections (e.g. after a VIP failover or host death)
++    keystone_session.timeout = timeout
+ 
+     client_obj = nova_client.Client(
+         api_versions.APIVersion(NOVA_API_VERSION),

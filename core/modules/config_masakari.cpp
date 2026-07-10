@@ -219,6 +219,7 @@ UpdateSharedId(std::string sharedId)
         cfg["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
         cfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
+        cfg["keystone_authtoken"]["http_connect_timeout"] = "15";
         cfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
     }
 

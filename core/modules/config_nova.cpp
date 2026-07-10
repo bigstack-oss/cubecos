@@ -397,6 +397,14 @@ UpdateSharedId(std::string sharedId)
         cfg["glance"]["api_servers"] = "http://" + sharedId + ":9292";;
         cfg["neutron"]["url"] = "http://" + sharedId + ":9696";
         cfg["neutron"]["auth_url"] = "http://" + sharedId + ":5000";
+
+        // deadline VIP-backed sessions: a failover blackholes established connections
+        cfg["keystone_authtoken"]["http_connect_timeout"] = "15";
+        cfg["service_user"]["timeout"] = "60";
+        cfg["placement"]["timeout"] = "60";
+        cfg["glance"]["timeout"] = "60";
+        cfg["neutron"]["timeout"] = "60";
+        cfg["cinder"]["timeout"] = "60";
         cfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
 
         ironicCfg["ironic"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
@@ -404,6 +412,7 @@ UpdateSharedId(std::string sharedId)
         ironicCfg["ironic"]["memcached_servers"] = sharedId + ":11211";
 
         plaCfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000/v3";
+        plaCfg["keystone_authtoken"]["http_connect_timeout"] = "15";
         plaCfg["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
     }
 

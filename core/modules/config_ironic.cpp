@@ -333,12 +333,14 @@ UpdateSharedId(std::string sharedId)
         cfg["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
         cfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
+        cfg["keystone_authtoken"]["http_connect_timeout"] = "15";
         cfg["deploy"]["http_url"] = "http://" + sharedId + ":8484";
         cfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
 
         inspCfg["keystone_authtoken"]["memcached_servers"] = sharedId + ":11211";
         inspCfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         inspCfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
+        inspCfg["keystone_authtoken"]["http_connect_timeout"] = "15";
         inspCfg["coordination"]["backend_url"] = "memcached://" + sharedId + ":11211";
         inspCfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
 
