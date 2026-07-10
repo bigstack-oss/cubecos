@@ -49,5 +49,15 @@ rootfs_install::
 	$(Q)cp -f $(PIPS_DIR)/masakari-dashboard.git/masakaridashboard/local/local_settings.d/_50_masakari.py $(ROOTDIR)/$(HORIZON_DIR)/local/local_settings.d/
 	$(Q)chroot $(ROOTDIR) python3 /usr/share/openstack-dashboard/manage.py dump_default_policies --namespace masakari --output-file $(HORIZON_POLICY_DIR)/masakari.yaml 2>&1 > /dev/null
 
+# Apply the reviewable unified diffs to the pip-installed masakari sources.
+# Each patch sits at <PATCHDIR>/<rel>.py.patch and targets <SRCDIR>/<rel>.py;
+# a <rel>.py.orig alongside it is the pristine upstream file, kept only for
+# review. --forward makes re-runs idempotent; a failed hunk aborts the build
+# (so upstream drift is caught at build time, not shipped silently).
 rootfs_install::
-	$(Q)[ -d $(MASAKARI_PATCHDIR) ] && cp -rf $(MASAKARI_PATCHDIR)/* $(MASAKARI_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(MASAKARI_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(MASAKARI_PATCHDIR)/}; tgt=$(MASAKARI_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done

@@ -1,0 +1,46 @@
+--- masakari/engine/drivers/taskflow/instance_failure.py	2026-07-11 04:37:26.727435989 +0800
++++ masakari/engine/drivers/taskflow/instance_failure.py	2026-07-11 04:37:26.727435989 +0800
+@@ -44,13 +44,23 @@
+         instance = self.novaclient.get_server(self.context, instance_uuid)
+ 
+         ha_enabled_key = CONF.instance_failure.ha_enabled_instance_metadata_key
++        ha_enabled_raw = instance.metadata.get(ha_enabled_key)
++
++        # explicit HA_Enabled=False opts the instance out of auto-recovery
++        if ha_enabled_raw is not None and not strutils.bool_from_string(
++                ha_enabled_raw):
++            msg = ("Skipping recovery for instance: %(instance_uuid)s as it is"
++                   " explicitly tagged HA_Enabled=False") % {
++                'instance_uuid': instance_uuid}
++            LOG.info(msg)
++            self.update_details(msg, 1.0)
++            raise exception.SkipInstanceRecoveryException()
+ 
+         # If an instance is not HA_Enabled and "process_all_instances" config
+         # option is also disabled, then there is no need to take any recovery
+         # action.
+         if not CONF.instance_failure.process_all_instances and not (
+-                strutils.bool_from_string(
+-                    instance.metadata.get(ha_enabled_key, False))):
++                strutils.bool_from_string(ha_enabled_raw or False)):
+             msg = ("Skipping recovery for instance: %(instance_uuid)s as it is"
+                    " not Ha_Enabled") % {'instance_uuid': instance_uuid}
+             LOG.info(msg)
+@@ -109,7 +119,7 @@
+             }
+             self.update_details(msg, 1.0)
+             raise exception.InstanceRecoveryFailureException(
+-                message=msg)
++                message=msg) from None
+         finally:
+             # stop the periodic call, in case of exceptions or Timeout.
+             periodic_call.stop()
+@@ -178,7 +188,7 @@
+             }
+             self.update_details(msg, 1.0)
+             raise exception.InstanceRecoveryFailureException(
+-                message=msg)
++                message=msg) from None
+         finally:
+             # stop the periodic call, in case of exceptions or Timeout.
+             periodic_call.stop()

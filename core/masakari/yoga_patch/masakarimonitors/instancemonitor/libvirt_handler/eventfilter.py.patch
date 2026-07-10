@@ -1,0 +1,55 @@
+--- masakarimonitors/instancemonitor/libvirt_handler/eventfilter.py	2026-07-11 04:37:26.728435994 +0800
++++ masakarimonitors/instancemonitor/libvirt_handler/eventfilter.py	2026-07-11 04:37:26.728435994 +0800
+@@ -12,6 +12,7 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ 
++import queue
+ import socket
+ import sys
+ import threading
+@@ -36,6 +37,24 @@
+ 
+     def __init__(self):
+         self.callback = callback.Callback()
++        # CUBE: send notifications from a single worker thread instead of
++        # one thread per event; concurrent events raced on the shared SDK
++        # client and crashed eventlet (greenlet cross-thread switch).
++        self._event_queue = queue.Queue()
++        self._sender_thread = threading.Thread(
++            target=self._send_loop, name='notification_sender')
++        self._sender_thread.setDaemon(True)
++        self._sender_thread.start()
++
++    def _send_loop(self):
++        while True:
++            args = self._event_queue.get()
++            try:
++                self.callback.libvirt_event_callback(*args)
++            except Exception:
++                LOG.exception("Failed to process libvirt event: %s" % (args,))
++            finally:
++                self._event_queue.task_done()
+ 
+     def vir_event_filter(self, eventID, eventType, detail, uuID):
+         """Filter events from libvirt.
+@@ -66,14 +85,11 @@
+                 eventID_val = evft.eventID_dic[eventID]
+                 detail_val = evft.detail_dic[eventID][eventType][detail]
+ 
+-                # callback Thread Start
+-                thread = threading.Thread(
+-                    target=self.callback.libvirt_event_callback,
+-                    args=(eventID_val, detail_val,
+-                          uuID, noticeType,
+-                          hostname, currentTime)
+-                )
+-                thread.start()
++                # CUBE: enqueue for the sender thread (was: thread per event)
++                self._event_queue.put(
++                    (eventID_val, detail_val,
++                     uuID, noticeType,
++                     hostname, currentTime))
+             else:
+                 LOG.debug("Event Filter Unmatched.")
+ 

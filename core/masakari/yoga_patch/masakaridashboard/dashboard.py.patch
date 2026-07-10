@@ -1,0 +1,12 @@
+--- masakaridashboard/dashboard.py	2025-04-10 14:09:56.018108719 +0800
++++ masakaridashboard/dashboard.py	2025-04-10 14:09:56.018108719 +0800
+@@ -29,7 +29,8 @@
+     slug = "masakaridashboard"
+     name = _("Instance-ha")
+     panels = ('default', 'segments', 'hosts', 'notifications')
+-    default_panel = 'default'
++    #default_panel = 'default'
++    default_panel = 'segments'
+     policy_rules = (('instance-ha', 'context_is_admin'),)
+ 
+     def allowed(self, context):

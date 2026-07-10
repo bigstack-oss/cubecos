@@ -1,0 +1,41 @@
+--- masakari/engine/drivers/taskflow/host_failure.py	2026-07-11 04:37:26.727435989 +0800
++++ masakari/engine/drivers/taskflow/host_failure.py	2026-07-11 04:37:26.792436273 +0800
+@@ -77,8 +77,17 @@
+             ha_enabled_key = CONF.host_failure.ha_enabled_instance_metadata_key
+ 
+             for instance in instance_list:
++                ha_enabled_raw = instance.metadata.get(ha_enabled_key)
+                 is_instance_ha_enabled = strutils.bool_from_string(
+-                    instance.metadata.get(ha_enabled_key, False))
++                    ha_enabled_raw or False)
++
++                # explicit HA_Enabled=False opts the instance out of evacuation
++                if ha_enabled_raw is not None and not is_instance_ha_enabled:
++                    msg = ("Skipping evacuation of instance '%(instance_id)s'"
++                           ": HA_Enabled=False") % {'instance_id': instance.id}
++                    LOG.info(msg)
++                    self.update_details(msg, 0.4)
++                    continue
+                 if CONF.host_failure.ignore_instances_in_error_state and (
+                         getattr(instance, "OS-EXT-STS:vm_state") == "error"):
+                     if is_instance_ha_enabled:
+@@ -238,6 +247,19 @@
+             vm_state = getattr(instance, "OS-EXT-STS:vm_state")
+             task_state = getattr(instance, "OS-EXT-STS:task_state")
+ 
++            # rebuild in flight on a LIVE host: wait, do not corrupt it;
++            # rebuild still targeting the FAILED host: re-evacuate
++            inst_host = getattr(instance, "OS-EXT-SRV-ATTR:host", None)
++            if task_state in ['rebuilding', 'rebuild_block_device_mapping',
++                              'rebuild_spawning'] and inst_host and (
++                    inst_host != host_name):
++                LOG.info("Instance %(uuid)s evacuation already in progress on "
++                         "%(host)s (task_state=%(task_state)s), waiting",
++                         {'uuid': instance.id, 'host': inst_host,
++                          'task_state': task_state})
++                _wait_for_evacuation()
++                return
++
+             # Nova evacuates an instance only when vm_state is in active,
+             # stopped or error state. If an instance is in other than active,
+             # error and stopped vm_state, masakari resets the instance state

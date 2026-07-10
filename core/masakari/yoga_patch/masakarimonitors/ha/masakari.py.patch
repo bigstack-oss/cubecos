@@ -1,0 +1,30 @@
+--- masakarimonitors/ha/masakari.py	2026-07-11 04:37:26.728435994 +0800
++++ masakarimonitors/ha/masakari.py	2026-07-11 04:37:26.727435989 +0800
+@@ -12,6 +12,8 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ 
++import threading
++
+ import eventlet
+ from keystoneauth1 import loading as ks_loading
+ from openstack import connection
+@@ -28,12 +30,15 @@
+ 
+     def __init__(self):
+         self._masakari_client = None
++        # CUBE: serialize lazy client init across threads
++        self._client_lock = threading.Lock()
+ 
+     @property
+     def masakari_client(self):
+-        if not self._masakari_client:
+-            self._masakari_client = self._make_client()
+-        return self._masakari_client
++        with self._client_lock:
++            if not self._masakari_client:
++                self._masakari_client = self._make_client()
++            return self._masakari_client
+ 
+     def _make_client(self):
+         auth = ks_loading.load_auth_from_conf_options(CONF, 'api')

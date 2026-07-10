@@ -85,6 +85,7 @@ CONFIG_TUNING_BOOL(MASAKARI_DEBUG, "masakari.debug.enabled", TUNING_UNPUB, "Set 
 
 // public tunings
 CONFIG_TUNING_BOOL(MASAKARI_HOST_EVA_ALL, "masakari.host.evacuate_all", TUNING_PUB, "Set to true to enable evacuate all instances when host goes down.", true);
+CONFIG_TUNING_BOOL(MASAKARI_INST_PROCESS_ALL, "masakari.instance.process_all", TUNING_PUB, "Set to true to auto-recover every crashed instance (false: only instances tagged HA_Enabled=True).", true);
 CONFIG_TUNING_INT(MASAKARI_WAIT_PERIOD, "masakari.wait.period", TUNING_PUB, "Set wait period after service update", 0, 0, 99999);
 
 // using external tunings
@@ -105,6 +106,7 @@ PARSE_TUNING_BOOL(s_debug, MASAKARI_DEBUG);
 PARSE_TUNING_STR(s_masakariPass, MASAKARI_USERPASS);
 PARSE_TUNING_STR(s_dbPass, MASAKARI_DBPASS);
 PARSE_TUNING_BOOL(s_hostEvaAll, MASAKARI_HOST_EVA_ALL);
+PARSE_TUNING_BOOL(s_instProcessAll, MASAKARI_INST_PROCESS_ALL);
 PARSE_TUNING_INT(s_waitPeriod, MASAKARI_WAIT_PERIOD);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
@@ -262,7 +264,7 @@ UpdateDebug(bool enabled)
 
 
 static bool
-UpdateCfg(std::string region, std::string domain, std::string userPass, std::string hostname, std::string mgmtIf, bool hostEvaAll)
+UpdateCfg(std::string region, std::string domain, std::string userPass, std::string hostname, std::string mgmtIf, bool hostEvaAll, bool instProcessAll)
 {
     if(IsControl(s_eCubeRole)) {
         cfg["DEFAULT"]["enabled_apis"] = "masakari_api";
@@ -271,7 +273,7 @@ UpdateCfg(std::string region, std::string domain, std::string userPass, std::str
         cfg["DEFAULT"]["auth_strategy"] = "keystone";
         cfg["DEFAULT"]["process_unfinished_notifications_interval"] = "120";
         cfg["DEFAULT"]["retry_notification_new_status_interval"] = "60";
-        cfg["DEFAULT"]["wait_period_after_service_update"] = s_waitPeriod == 0 ? (IsEdge(s_eCubeRole) ? "30" : "180") : std::to_string(s_waitPeriod);
+        cfg["DEFAULT"]["wait_period_after_service_update"] = s_waitPeriod == 0 ? (IsEdge(s_eCubeRole) ? "30" : "60") : std::to_string(s_waitPeriod);
         cfg["DEFAULT"]["os_privileged_user_tenant"] = "service";
         cfg["DEFAULT"]["os_privileged_user_name"] = "masakari";
         cfg["DEFAULT"]["os_privileged_user_password"] = userPass;
@@ -280,7 +282,7 @@ UpdateCfg(std::string region, std::string domain, std::string userPass, std::str
         cfg["host_failure"]["add_reserved_host_to_aggregate"] = "false";
         cfg["host_failure"]["ignore_instances_in_error_state"] = "false";
 
-        cfg["instance_failure"]["process_all_instances"] = "false";
+        cfg["instance_failure"]["process_all_instances"] = instProcessAll ? "true" : "false";
 
         cfg["wsgi"]["api_paste_config"] = "/etc/masakari/api-paste.ini";
 
@@ -469,7 +471,7 @@ Commit(bool modified, int dryLevel)
 
     // update config file
     if (s_bConfigChanged) {
-        UpdateCfg(s_cubeRegion, s_cubeDomain, masakariPass, s_hostname, s_mgmt, s_hostEvaAll);
+        UpdateCfg(s_cubeRegion, s_cubeDomain, masakariPass, s_hostname, s_mgmt, s_hostEvaAll, s_instProcessAll);
         UpdateSharedId(sharedId);
         UpdateControllerIp(ctrlIp);
         UpdateDbConn(sharedId, dbPass);
