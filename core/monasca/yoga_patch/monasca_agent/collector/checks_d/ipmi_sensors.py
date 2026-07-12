@@ -1,8 +1,13 @@
 # Monasca agent check: host hardware sensors via IPMI.
 # Feeds Watcher thermal_optimization / airflow_optimization / saving_energy.
+import re
 import subprocess
 
 import monasca_agent.collector.checks as checks
+
+# first numeric token in a `sensor reading` value cell ("45", "36.500",
+# or a unit-bearing "12.3 degrees C" from other firmware)
+_NUM = re.compile(r'[-+]?[0-9]*\.?[0-9]+')
 
 
 class IpmiSensors(checks.AgentCheck):
@@ -24,13 +29,27 @@ class IpmiSensors(checks.AgentCheck):
     def check(self, instance):
         dimensions = self._set_dimensions(None, instance)
         sensors = instance.get('sensors') or self.DEFAULT_SENSORS
-        for metric, sensor in sensors.items():
-            try:
-                out = subprocess.check_output(
-                    ['sudo', '-n', 'ipmitool', 'sensor', 'reading', sensor],
-                    timeout=15, stderr=subprocess.DEVNULL).decode()
-                value = float(out.split('|')[1].strip())
-            except (OSError, subprocess.SubprocessError, IndexError, ValueError) as e:
-                self.log.debug('ipmi sensor %s unavailable: %s', sensor, e)
+        # one batched ipmitool call (one sudo) per cycle; a missing sensor is
+        # omitted from output and forces exit 1 while the rest still print, so
+        # parse stdout regardless of return code (do NOT gate on it)
+        try:
+            proc = subprocess.run(
+                ['sudo', '-n', 'ipmitool', 'sensor', 'reading'] + list(sensors.values()),
+                timeout=15, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            out = proc.stdout.decode()
+        except (OSError, subprocess.SubprocessError) as e:
+            self.log.debug('ipmi sensors unavailable: %s', e)
+            return
+        readings = {}
+        for line in out.splitlines():
+            name, sep, value = line.partition('|')
+            if not sep:
                 continue
-            self.gauge(metric, value, dimensions=dimensions)
+            m = _NUM.search(value)
+            if m:
+                readings[name.strip()] = float(m.group())
+        for metric, sensor in sensors.items():
+            if sensor in readings:
+                self.gauge(metric, readings[sensor], dimensions=dimensions)
+            else:
+                self.log.debug('ipmi sensor %s unavailable', sensor)

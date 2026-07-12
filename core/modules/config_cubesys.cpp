@@ -117,8 +117,11 @@ WriteSshConfig(void)
     // Multiplex repeated connections so health checks (one ssh per service per
     // node) reuse a single session instead of flooding sshd/logind/sudo.
     fprintf(fout, "ControlMaster auto\n");
+    // control socket is root-only in /run (tmpfs, cleared on reboot) on a
+    // single-tenant appliance; 120s outlives the ~40s health poll so masters
+    // don't expire between cycles.
     fprintf(fout, "ControlPath /run/cube-ssh-%%C\n");
-    fprintf(fout, "ControlPersist 30s\n");
+    fprintf(fout, "ControlPersist 120s\n");
     fclose(fout);
 
     return true;

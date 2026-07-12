@@ -6,3 +6,7 @@
 TAGS
 jail/ubi9.tar.gz
 triangle
+
+# Python bytecode
+__pycache__/
+*.pyc

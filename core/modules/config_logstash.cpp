@@ -83,6 +83,13 @@ WriteConfigs(const std::string &kafkaHosts)
 
     fprintf(fout, "filebeat.inputs:\n");
     fprintf(fout, "- type: filestream\n");
+    // native (inode) identity: no 1KB fingerprint floor, so sub-1KB writes
+    // ship; safe here -- these logs rotate via copytruncate (inode-stable)
+    fprintf(fout, "  file_identity.native: ~\n");
+    fprintf(fout, "  prospector.scanner.fingerprint.enabled: false\n");
+    // horizon_access is a byte-identical duplicate of access.log (both
+    // CustomLog targets); with native identity both copies would ship
+    fprintf(fout, "  prospector.scanner.exclude_files: ['horizon_access\\.log$']\n");
     fprintf(fout, "  paths:\n");
     fprintf(fout, "    - /var/log/messages\n");
     fprintf(fout, "    - /var/log/nova/*.log\n");
@@ -123,6 +130,10 @@ WriteConfigs(const std::string &kafkaHosts)
     fprintf(fout, "  max_message_bytes: 1000000\n");
     fprintf(fout, "\n");
 
+    // keep the per-30s metrics snapshots out of syslog
+    fprintf(fout, "logging.metrics.enabled: false\n");
+    fprintf(fout, "\n");
+
     fclose(fout);
 
     fout = fopen(AB_CONF, "w");
@@ -158,6 +169,10 @@ WriteConfigs(const std::string &kafkaHosts)
     fprintf(fout, "    reachable_only: false\n");
     fprintf(fout, "  required_acks: 1\n");
     fprintf(fout, "  max_message_bytes: 1000000\n");
+    fprintf(fout, "\n");
+
+    // keep the per-30s metrics snapshots out of syslog
+    fprintf(fout, "logging.metrics.enabled: false\n");
     fprintf(fout, "\n");
 
     fclose(fout);
