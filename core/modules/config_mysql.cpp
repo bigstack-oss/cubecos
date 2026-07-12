@@ -190,7 +190,8 @@ WriteConfig(const bool ha, const std::string& ctrl, const std::string& ctrlIp, c
         fprintf(fout, "wsrep_slave_threads = 32\n");
         fprintf(fout, "wsrep_slave_FK_checks = OFF\n");
         fprintf(fout, "wsrep_provider = /usr/lib64/galera/libgalera_smm.so\n");
-        fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=300M;pc.ignore_sb=TRUE\"\n");
+        // 4G keeps a rejoin on IST across a firmware-reboot-length outage (SST breaks on 10.6->10.11)
+        fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=4G;pc.ignore_sb=TRUE\"\n");
         fprintf(fout, "wsrep_cluster_name = \"cube_galera_cluster\"\n");
         fprintf(fout, "wsrep_cluster_address = \"gcomm://%s\"\n", ctrlAddrs.c_str());
         fprintf(fout, "wsrep_sst_method = rsync\n");
