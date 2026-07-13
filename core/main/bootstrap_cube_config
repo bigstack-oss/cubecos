@@ -68,6 +68,17 @@ RollingEvacuateAndReboot()
                 if [ "x$n_lastboot" = "xlast_boot = Never" -a "x$n_fwver" = "x$fwver" ] ; then
                     upgrading=true
                     echo "Starting auto rolling upgrade" >> $BOOTSTRAP_CUBE_MODE
+                    # Don't drain+reboot the next node until this node has rejoined
+                    # and the live-migration path is functional. Version-robust, so
+                    # a mixed N/N+1 SLURP window passes; pauses (never advances into
+                    # a broken cluster) if it can't confirm within the timeout.
+                    if ! hex_sdk live_migration_gate 300 "$N" ; then
+                        msg="Auto rolling upgrade paused: live-migration path not ready before draining $N"
+                        hex_sdk remote_run $n_ip "echo -n \"$msg\" >$BOOTSTRAP_CUBE_LOG"
+                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                        hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
+                        break
+                    fi
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
                         msg="Evacuating VMs on $N"
                         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
