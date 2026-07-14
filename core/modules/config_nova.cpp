@@ -5,6 +5,7 @@
 #include <thread>
 
 #include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/pidfile.h>
 #include <hex/filesystem.h>
 #include <hex/process.h>
@@ -22,6 +23,9 @@
 
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
+
+static LogRotateConf nova_log_conf("nova", "/var/log/nova/*.log", DAILY, 128, 0, true);
+static LogRotateConf placement_log_conf("placement", "/var/log/placement/*.log", DAILY, 128, 0, true);
 
 // nova config files
 #define DEF_EXT     ".def"
@@ -907,6 +911,8 @@ Commit(bool modified, int dryLevel)
 
     // 4. Service kickoff
     NovaService(s_enabled);
+    WriteLogRotateConf(nova_log_conf);
+    WriteLogRotateConf(placement_log_conf);
 
     return true;
 }

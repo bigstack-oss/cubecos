@@ -1,0 +1,255 @@
+# Default rule for most placement APIs.
+# Intended scope(s): project
+#"admin_api": "role:admin"
+
+# Default rule for service-to-service placement APIs.
+# Intended scope(s): project
+#"service_api": "role:service"
+
+# DEPRECATED
+# "rule:admin_api":"role:admin" has been deprecated since W in favor
+# of "service_api":"role:service".
+# Placement API policies are introducing new default roles with
+# scope_type capabilities. Old policies are deprecated and silently
+# going to be ignored in the placement 6.0.0 (Xena) release.
+# WARNING: A rule name change has been identified.
+#          This may be an artifact of new rules being
+#          included which require legacy fallback
+#          rules to ensure proper policy behavior.
+#          Alternatively, this may just be an alias.
+#          Please evaluate on a case by case basis
+#          keeping in mind the format for aliased
+#          rules is:
+#          "old_rule_name": "new_rule_name".
+# "rule:admin_api": "rule:service_api"
+
+# Default rule for most placement APIs.
+# Intended scope(s): project
+#"admin_or_service_api": "role:admin or role:service"
+
+# DEPRECATED
+# "rule:admin_api":"role:admin" has been deprecated since W in favor
+# of "admin_or_service_api":"role:admin or role:service".
+# Placement API policies are introducing new default roles with
+# scope_type capabilities. Old policies are deprecated and silently
+# going to be ignored in the placement 6.0.0 (Xena) release.
+# WARNING: A rule name change has been identified.
+#          This may be an artifact of new rules being
+#          included which require legacy fallback
+#          rules to ensure proper policy behavior.
+#          Alternatively, this may just be an alias.
+#          Please evaluate on a case by case basis
+#          keeping in mind the format for aliased
+#          rules is:
+#          "old_rule_name": "new_rule_name".
+# "rule:admin_api": "rule:admin_or_service_api"
+
+# Default rule for Project level reader APIs.
+#"project_reader_api": "role:reader and project_id:%(project_id)s"
+
+# DEPRECATED
+# "rule:admin_api":"role:admin" has been deprecated since W in favor
+# of "project_reader_api":"role:reader and project_id:%(project_id)s".
+# Placement API policies are introducing new default roles with
+# scope_type capabilities. Old policies are deprecated and silently
+# going to be ignored in the placement 6.0.0 (Xena) release.
+# WARNING: A rule name change has been identified.
+#          This may be an artifact of new rules being
+#          included which require legacy fallback
+#          rules to ensure proper policy behavior.
+#          Alternatively, this may just be an alias.
+#          Please evaluate on a case by case basis
+#          keeping in mind the format for aliased
+#          rules is:
+#          "old_rule_name": "new_rule_name".
+# "rule:admin_api": "rule:project_reader_api"
+
+# Default rule for project level reader APIs.
+# Intended scope(s): project
+#"admin_or_project_reader_or_service_api": "role:admin or rule:project_reader_api or role:service"
+
+# DEPRECATED
+# "rule:admin_api":"role:admin" has been deprecated since W in favor
+# of "admin_or_project_reader_or_service_api":"role:admin or
+# rule:project_reader_api or role:service".
+# Placement API policies are introducing new default roles with
+# scope_type capabilities. Old policies are deprecated and silently
+# going to be ignored in the placement 6.0.0 (Xena) release.
+# WARNING: A rule name change has been identified.
+#          This may be an artifact of new rules being
+#          included which require legacy fallback
+#          rules to ensure proper policy behavior.
+#          Alternatively, this may just be an alias.
+#          Please evaluate on a case by case basis
+#          keeping in mind the format for aliased
+#          rules is:
+#          "old_rule_name": "new_rule_name".
+# "rule:admin_api": "rule:admin_or_project_reader_or_service_api"
+
+# List resource providers.
+# GET  /resource_providers
+# Intended scope(s): project
+#"placement:resource_providers:list": "rule:admin_or_service_api"
+
+# Create resource provider.
+# POST  /resource_providers
+# Intended scope(s): project
+#"placement:resource_providers:create": "rule:admin_or_service_api"
+
+# Show resource provider.
+# GET  /resource_providers/{uuid}
+# Intended scope(s): project
+#"placement:resource_providers:show": "rule:admin_or_service_api"
+
+# Update resource provider.
+# PUT  /resource_providers/{uuid}
+# Intended scope(s): project
+#"placement:resource_providers:update": "rule:admin_or_service_api"
+
+# Delete resource provider.
+# DELETE  /resource_providers/{uuid}
+# Intended scope(s): project
+#"placement:resource_providers:delete": "rule:admin_or_service_api"
+
+# List resource classes.
+# GET  /resource_classes
+# Intended scope(s): project
+#"placement:resource_classes:list": "rule:admin_or_service_api"
+
+# Create resource class.
+# POST  /resource_classes
+# Intended scope(s): project
+#"placement:resource_classes:create": "rule:admin_or_service_api"
+
+# Show resource class.
+# GET  /resource_classes/{name}
+# Intended scope(s): project
+#"placement:resource_classes:show": "rule:admin_or_service_api"
+
+# Update resource class.
+# PUT  /resource_classes/{name}
+# Intended scope(s): project
+#"placement:resource_classes:update": "rule:admin_or_service_api"
+
+# Delete resource class.
+# DELETE  /resource_classes/{name}
+# Intended scope(s): project
+#"placement:resource_classes:delete": "rule:admin_or_service_api"
+
+# List resource provider inventories.
+# GET  /resource_providers/{uuid}/inventories
+# Intended scope(s): project
+#"placement:resource_providers:inventories:list": "rule:admin_or_service_api"
+
+# Create one resource provider inventory.
+# POST  /resource_providers/{uuid}/inventories
+# Intended scope(s): project
+#"placement:resource_providers:inventories:create": "rule:admin_or_service_api"
+
+# Show resource provider inventory.
+# GET  /resource_providers/{uuid}/inventories/{resource_class}
+# Intended scope(s): project
+#"placement:resource_providers:inventories:show": "rule:admin_or_service_api"
+
+# Update resource provider inventory.
+# PUT  /resource_providers/{uuid}/inventories
+# PUT  /resource_providers/{uuid}/inventories/{resource_class}
+# Intended scope(s): project
+#"placement:resource_providers:inventories:update": "rule:admin_or_service_api"
+
+# Delete resource provider inventory.
+# DELETE  /resource_providers/{uuid}/inventories
+# DELETE  /resource_providers/{uuid}/inventories/{resource_class}
+# Intended scope(s): project
+#"placement:resource_providers:inventories:delete": "rule:admin_or_service_api"
+
+# List resource provider aggregates.
+# GET  /resource_providers/{uuid}/aggregates
+# Intended scope(s): project
+#"placement:resource_providers:aggregates:list": "rule:admin_or_service_api"
+
+# Update resource provider aggregates.
+# PUT  /resource_providers/{uuid}/aggregates
+# Intended scope(s): project
+#"placement:resource_providers:aggregates:update": "rule:admin_or_service_api"
+
+# List resource provider usages.
+# GET  /resource_providers/{uuid}/usages
+# Intended scope(s): project
+#"placement:resource_providers:usages": "rule:admin_or_service_api"
+
+# List total resource usages for a given project.
+# GET  /usages
+# Intended scope(s): project
+#"placement:usages": "rule:admin_or_project_reader_or_service_api"
+
+# List traits.
+# GET  /traits
+# Intended scope(s): project
+#"placement:traits:list": "rule:admin_or_service_api"
+
+# Show trait.
+# GET  /traits/{name}
+# Intended scope(s): project
+#"placement:traits:show": "rule:admin_or_service_api"
+
+# Update trait.
+# PUT  /traits/{name}
+# Intended scope(s): project
+#"placement:traits:update": "rule:admin_or_service_api"
+
+# Delete trait.
+# DELETE  /traits/{name}
+# Intended scope(s): project
+#"placement:traits:delete": "rule:admin_or_service_api"
+
+# List resource provider traits.
+# GET  /resource_providers/{uuid}/traits
+# Intended scope(s): project
+#"placement:resource_providers:traits:list": "rule:admin_or_service_api"
+
+# Update resource provider traits.
+# PUT  /resource_providers/{uuid}/traits
+# Intended scope(s): project
+#"placement:resource_providers:traits:update": "rule:admin_or_service_api"
+
+# Delete resource provider traits.
+# DELETE  /resource_providers/{uuid}/traits
+# Intended scope(s): project
+#"placement:resource_providers:traits:delete": "rule:admin_or_service_api"
+
+# Manage allocations.
+# POST  /allocations
+# Intended scope(s): project
+#"placement:allocations:manage": "rule:admin_or_service_api"
+
+# List allocations.
+# GET  /allocations/{consumer_uuid}
+# Intended scope(s): project
+#"placement:allocations:list": "rule:admin_or_service_api"
+
+# Update allocations.
+# PUT  /allocations/{consumer_uuid}
+# Intended scope(s): project
+#"placement:allocations:update": "rule:admin_or_service_api"
+
+# Delete allocations.
+# DELETE  /allocations/{consumer_uuid}
+# Intended scope(s): project
+#"placement:allocations:delete": "rule:admin_or_service_api"
+
+# List resource provider allocations.
+# GET  /resource_providers/{uuid}/allocations
+# Intended scope(s): project
+#"placement:resource_providers:allocations:list": "rule:admin_or_service_api"
+
+# List allocation candidates.
+# GET  /allocation_candidates
+# Intended scope(s): project
+#"placement:allocation_candidates:list": "rule:admin_or_service_api"
+
+# Reshape Inventory and Allocations.
+# POST  /reshaper
+# Intended scope(s): project
+#"placement:reshaper:reshape": "rule:service_api"
+

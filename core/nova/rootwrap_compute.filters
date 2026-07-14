@@ -1,0 +1,9 @@
+# nova-rootwrap command filters for compute nodes
+# This file should be owned by (and only-writeable by) the root user
+
+[Filters]
+# os_brick.privileged.default oslo.privsep context
+privsep-rootwrap-os_brick: RegExpFilter, privsep-helper, root, privsep-helper, --config-file, /etc/(?!\.\.).*, --privsep_context, os_brick.privileged.default, --privsep_sock_path, /tmp/.*
+
+# nova.privsep.sys_admin_pctxt oslo.privsep context
+privsep-rootwrap-sys_admin: RegExpFilter, privsep-helper, root, privsep-helper, --config-file, /etc/(?!\.\.).*, --privsep_context, nova.privsep.sys_admin_pctxt, --privsep_sock_path, /tmp/.*

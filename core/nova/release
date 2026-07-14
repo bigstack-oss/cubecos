@@ -1,0 +1,4 @@
+[Nova]
+vendor = CubeCOS
+product = OpenStack Compute
+package = pip
