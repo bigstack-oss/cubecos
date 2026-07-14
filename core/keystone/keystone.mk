@@ -14,5 +14,9 @@ rootfs_install::
 	$(Q)cp -f $(ROOTDIR)/etc/keystone/keystone.conf $(ROOTDIR)/etc/keystone/keystone.conf.def
 	$(Q)[ -f $(ROOTDIR)/etc/httpd/conf.d/ssl.conf ] && mv $(ROOTDIR)/etc/httpd/conf.d/ssl.conf $(ROOTDIR)/etc/httpd/conf.d/ssl.conf.orig || /bin/true
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/keystone/ssl.conf ./etc/httpd/conf.d/
+# httpd ships a default welcome page; drop the config and its html so port 8080
+# serves no default content (cubecos-private#76)
+	$(Q)[ -f $(ROOTDIR)/etc/httpd/conf.d/welcome.conf ] && mv $(ROOTDIR)/etc/httpd/conf.d/welcome.conf $(ROOTDIR)/etc/httpd/conf.d/welcome.conf.orig || /bin/true
+	$(Q)rm -rf $(ROOTDIR)/usr/share/httpd/noindex
 # openssl 3.x requires no /dev/urandom for the written openssl command
 	$(Q)sed -i '/RANDFILE/d' $(ROOTDIR)/usr/libexec/mod_auth_mellon/mellon_create_metadata.sh
