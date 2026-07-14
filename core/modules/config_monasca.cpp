@@ -147,7 +147,9 @@ WriteAgentSetupDetectionConfigs()
     }
 
     fprintf(fout, "[client]\n");
-    fprintf(fout, "url=http://localhost:8080/server-status?auto\n");
+    // explicit IPv4 loopback: httpd binds 127.0.0.1 only, and "localhost" can
+    // resolve to ::1 first
+    fprintf(fout, "url=http://127.0.0.1:8080/server-status?auto\n");
     fclose(fout);
 
     fout = fopen(AGENT_MYSQL_CONF, "w");
