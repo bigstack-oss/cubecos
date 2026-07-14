@@ -1,0 +1,5592 @@
+[DEFAULT]
+
+#
+# From nova.conf
+#
+
+#
+# Availability zone for internal services. For more information, refer to the
+# documentation. (string value)
+#internal_service_availability_zone=internal
+
+#
+# Default availability zone for compute services. For more information, refer to
+# the documentation. (string value)
+#default_availability_zone=nova
+
+#
+# Default availability zone for instances. For more information, refer to the
+# documentation. (string value)
+#default_schedule_zone=<None>
+
+# Length of generated instance admin passwords (integer value)
+# Minimum value: 0
+#password_length=12
+
+#
+# Time period to generate instance usages for. It is possible to define optional
+# offset to given period by appending @ character followed by a number defining
+# offset. For more information, refer to the documentation. (string value)
+#instance_usage_audit_period=month
+
+#
+# Start and use a daemon that can run the commands that need to be run with
+# root privileges. This option is usually enabled on nodes that run nova compute
+# processes.
+#  (boolean value)
+#use_rootwrap_daemon=false
+
+#
+# Path to the rootwrap configuration file. For more information, refer to the
+# documentation. (string value)
+#rootwrap_config=/etc/nova/rootwrap.conf
+
+# Explicitly specify the temporary working directory (string value)
+#tempdir=<None>
+
+#
+# Defines which driver to use for controlling virtualization. For more
+# information, refer to the documentation. (string value)
+#compute_driver=<None>
+
+#
+# Allow destination machine to match source for resize. Useful when
+# testing in single-host environments. By default it is not allowed
+# to resize to the same host. Setting this option to true will add
+# the same host to the destination options. Also set to true
+# if you allow the ServerGroupAffinityFilter and need to resize. For changes to
+# this option to take effect, the nova-api service needs to be restarted.
+#  (boolean value)
+#allow_resize_to_same_host=false
+
+#
+# Image properties that should not be inherited from the instance
+# when taking a snapshot. For more information, refer to the documentation.
+# (list value)
+#non_inheritable_image_properties=cache_in_nova,bittorrent
+
+#
+# Maximum number of devices that will result in a local image being
+# created on the hypervisor node. For more information, refer to the
+# documentation. (integer value)
+#max_local_block_devices=3
+
+#
+# A comma-separated list of monitors that can be used for getting
+# compute metrics. You can use the alias/name from the setuptools
+# entry points for nova.compute.monitors.* namespaces. If no
+# namespace is supplied, the "cpu." namespace is assumed for
+# backwards-compatibility. For more information, refer to the documentation.
+# (list value)
+#compute_monitors =
+
+#
+# The default format an ephemeral_volume will be formatted with on creation. For
+# more information, refer to the documentation. (string value)
+#default_ephemeral_format=<None>
+
+#
+# Determine if instance should boot or fail on VIF plugging timeout. For more
+# information, refer to the documentation. (boolean value)
+#vif_plugging_is_fatal=true
+
+#
+# Timeout for Neutron VIF plugging event message arrival. For more information,
+# refer to the documentation. (integer value)
+# Minimum value: 0
+#vif_plugging_timeout=300
+
+#
+# Timeout for Accelerator Request (ARQ) bind event message arrival. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 1
+#arq_binding_timeout=300
+
+# Path to '/etc/network/interfaces' template. For more information, refer to the
+# documentation. (string value)
+#injected_network_template=$pybasedir/nova/virt/interfaces.template
+
+#
+# The image preallocation mode to use. For more information, refer to the
+# documentation. (string value)
+# Possible values:
+# none - No storage provisioning is done up front
+# space - Storage is fully allocated at instance start
+#preallocate_images=none
+
+#
+# Enable use of copy-on-write (cow) images. For more information, refer to the
+# documentation. (boolean value)
+#use_cow_images=true
+
+#
+# Force conversion of backing images to raw format. For more information, refer
+# to the documentation. (boolean value)
+#force_raw_images=true
+
+#
+# Name of the mkfs commands for ephemeral device. For more information, refer to
+# the documentation. (multi valued)
+#virt_mkfs =
+
+#
+# Enable resizing of filesystems via a block device. For more information, refer
+# to the documentation. (boolean value)
+#resize_fs_using_block_device=false
+
+# Amount of time, in seconds, to wait for NBD device start up (integer value)
+# Minimum value: 0
+#timeout_nbd=10
+
+#
+# Generic property to specify the pointer type. For more information, refer to
+# the documentation. (string value)
+# Possible values:
+# ps2mouse - Uses relative movement. Mouse connected by PS2
+# usbtablet - Uses absolute movement. Tablet connect by USB
+# <None> - Uses default behavior provided by drivers (mouse on PS2 for libvirt
+# x86)
+#pointer_model=usbtablet
+
+#
+# Timeout for reimaging a volume. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 1
+#reimage_timeout_per_gb=20
+
+# DEPRECATED:
+# Mask of host CPUs that can be used for ``VCPU`` resources. For more
+# information, refer to the documentation. (string value)
+# This option is deprecated for removal since 20.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option has been superseded by the ``[compute] cpu_dedicated_set`` and
+# ``[compute] cpu_shared_set`` options, which allow things like the co-existence
+# of pinned and unpinned instances on the same host (for the libvirt driver).
+#vcpu_pin_set=<None>
+
+#
+# Number of huge/large memory pages to reserved per NUMA host cell. For more
+# information, refer to the documentation. (dict value)
+#reserved_huge_pages=<None>
+
+#
+# Amount of disk resources in MB to make them always available to host. The
+# disk usage gets reported back to the scheduler from nova-compute running
+# on the compute nodes. To prevent the disk resources from being considered
+# as available, this option can be used to reserve disk space for that host. For
+# more information, refer to the documentation. (integer value)
+# Minimum value: 0
+#reserved_host_disk_mb=0
+
+#
+# Amount of memory in MB to reserve for the host so that it is always available
+# to host processes. The host resources usage is reported back to the scheduler
+# continuously from nova-compute running on the compute node. To prevent the
+# host
+# memory from being considered as available, this option is used to reserve
+# memory for the host. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: 0
+#reserved_host_memory_mb=512
+
+#
+# Number of host CPUs to reserve for host processes. For more information, refer
+# to the documentation. (integer value)
+# Minimum value: 0
+#reserved_host_cpus=0
+
+#
+# Virtual CPU to physical CPU allocation ratio. For more information, refer to
+# the documentation. (floating point value)
+# Minimum value: 0.0
+#cpu_allocation_ratio=<None>
+
+#
+# Virtual RAM to physical RAM allocation ratio. For more information, refer to
+# the documentation. (floating point value)
+# Minimum value: 0.0
+#ram_allocation_ratio=<None>
+
+#
+# Virtual disk to physical disk allocation ratio. For more information, refer to
+# the documentation. (floating point value)
+# Minimum value: 0.0
+#disk_allocation_ratio=<None>
+
+#
+# Initial virtual CPU to physical CPU allocation ratio. For more information,
+# refer to the documentation. (floating point value)
+# Minimum value: 0.0
+#initial_cpu_allocation_ratio=4.0
+
+#
+# Initial virtual RAM to physical RAM allocation ratio. For more information,
+# refer to the documentation. (floating point value)
+# Minimum value: 0.0
+#initial_ram_allocation_ratio=1.0
+
+#
+# Initial virtual disk to physical disk allocation ratio. For more information,
+# refer to the documentation. (floating point value)
+# Minimum value: 0.0
+#initial_disk_allocation_ratio=1.0
+
+#
+# Console proxy host to be used to connect to instances on this host. It is the
+# publicly visible name for the console host. For more information, refer to the
+# documentation. (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#console_host=<current_hostname>
+
+#
+# Name of the network to be used to set access IPs for instances. If there are
+# multiple IPs to choose from, an arbitrary one will be chosen. For more
+# information, refer to the documentation. (string value)
+#default_access_ip_network_name=<None>
+
+#
+# Specifies where instances are stored on the hypervisor's disk.
+# It can point to locally attached storage or a directory on NFS. For more
+# information, refer to the documentation. (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#instances_path=$state_path/instances
+
+#
+# This option enables periodic compute.instance.exists notifications. Each
+# compute node must be configured to generate system usage data. These
+# notifications are consumed by OpenStack Telemetry service.
+#  (boolean value)
+#instance_usage_audit=false
+
+#
+# Maximum number of 1 second retries in live_migration. It specifies number
+# of retries to iptables when it complains. It happens when an user continuously
+# sends live-migration request to same host leading to concurrent request
+# to iptables. For more information, refer to the documentation. (integer value)
+# Minimum value: 0
+#live_migration_retry_count=30
+
+#
+# This option specifies whether to start guests that were running before the
+# host rebooted. It ensures that all of the instances on a Nova compute node
+# resume their state each time the compute node boots or restarts.
+#  (boolean value)
+#resume_guests_state_on_host_boot=false
+
+#
+# Number of times to retry network allocation. It is required to attempt network
+# allocation retries if the virtual interface plug fails. For more information,
+# refer to the documentation. (integer value)
+# Minimum value: 0
+#network_allocate_retries=0
+
+#
+# Limits the maximum number of instance builds to run concurrently by
+# nova-compute. Compute service can attempt to build an infinite number of
+# instances, if asked to do so. This limit is enforced to avoid building
+# unlimited instance concurrently on a compute node. This value can be set
+# per compute node. For more information, refer to the documentation. (integer
+# value)
+# Minimum value: 0
+#max_concurrent_builds=10
+
+#
+# Maximum number of instance snapshot operations to run concurrently.
+# This limit is enforced to prevent snapshots overwhelming the
+# host/network/storage and causing failure. This value can be set per
+# compute node. For more information, refer to the documentation. (integer
+# value)
+# Minimum value: 0
+#max_concurrent_snapshots=5
+
+#
+# Maximum number of live migrations to run concurrently. This limit is enforced
+# to avoid outbound live migrations overwhelming the host/network and causing
+# failures. It is not recommended that you change this unless you are very sure
+# that doing so is safe and stable in your environment. For more information,
+# refer to the documentation. (integer value)
+# Minimum value: 0
+#max_concurrent_live_migrations=1
+
+#
+# The number of times to check for a volume to be "available" before attaching
+# it during server create. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: 0
+#block_device_allocate_retries=60
+
+#
+# Number of greenthreads available for use to sync power states. For more
+# information, refer to the documentation. (integer value)
+#sync_power_state_pool_size=1000
+
+#
+# Interval to sync power states between the database and the hypervisor. For
+# more information, refer to the documentation. (integer value)
+#sync_power_state_interval=600
+
+#
+# Interval between instance network information cache updates. For more
+# information, refer to the documentation. (integer value)
+#heal_instance_info_cache_interval=60
+
+#
+# Interval for reclaiming deleted instances. For more information, refer to the
+# documentation. (integer value)
+#reclaim_instance_interval=0
+
+#
+# Interval for gathering volume usages. For more information, refer to the
+# documentation. (integer value)
+#volume_usage_poll_interval=0
+
+#
+# Interval for polling shelved instances to offload. For more information, refer
+# to the documentation. (integer value)
+#shelved_poll_interval=3600
+
+#
+# Time before a shelved instance is eligible for removal from a host. For more
+# information, refer to the documentation. (integer value)
+#shelved_offload_time=0
+
+#
+# Interval for retrying failed instance file deletes. For more information,
+# refer to the documentation. (integer value)
+#instance_delete_interval=300
+
+#
+# Interval (in seconds) between block device allocation retries on failures. For
+# more information, refer to the documentation. (integer value)
+# Minimum value: 0
+#block_device_allocate_retries_interval=3
+
+#
+# Interval between sending the scheduler a list of current instance UUIDs to
+# verify that its view of instances is in sync with nova. For more information,
+# refer to the documentation. (integer value)
+#scheduler_instance_sync_interval=120
+
+#
+# Interval for updating compute resources. For more information, refer to the
+# documentation. (integer value)
+#update_resources_interval=0
+
+#
+# Time interval after which an instance is hard rebooted automatically. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 0
+#reboot_timeout=0
+
+#
+# Maximum time in seconds that an instance can take to build. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 0
+#instance_build_timeout=0
+
+#
+# Interval to wait before un-rescuing an instance stuck in RESCUE. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 0
+#rescue_timeout=0
+
+#
+# Automatically confirm resizes after N seconds. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: 0
+#resize_confirm_window=0
+
+#
+# Total time to wait in seconds for an instance to perform a clean
+# shutdown. For more information, refer to the documentation. (integer value)
+# Minimum value: 0
+#shutdown_timeout=60
+
+#
+# The compute service periodically checks for instances that have been
+# deleted in the database but remain running on the compute node. The
+# above option enables action to be taken when such instances are
+# identified. For more information, refer to the documentation. (string value)
+# Possible values:
+# reap - Powers down the instances and deletes them
+# log - Logs warning message about deletion of the resource
+# shutdown - Powers down instances and marks them as non-bootable which can be
+# later used for debugging/analysis
+# noop - Takes no action
+#running_deleted_instance_action=reap
+
+#
+# Time interval in seconds to wait between runs for the clean up action.
+# If set to 0, above check will be disabled. If "running_deleted_instance
+# _action" is set to "log" or "reap", a value greater than 0 must be set. For
+# more information, refer to the documentation. (integer value)
+#running_deleted_instance_poll_interval=1800
+
+#
+# Time interval in seconds to wait for the instances that have
+# been marked as deleted in database to be eligible for cleanup. For more
+# information, refer to the documentation. (integer value)
+#running_deleted_instance_timeout=0
+
+#
+# The number of times to attempt to reap an instance's files. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 1
+#maximum_instance_delete_attempts=5
+
+#
+# Sets the scope of the check for unique instance names. For more information,
+# refer to the documentation. (string value)
+# Possible values:
+# '' - An empty value means that no uniqueness check is done and duplicate names
+# are possible
+# project - The instance name check is done only for instances within the same
+# project
+# global - The instance name check is done for all instances regardless of the
+# project
+#osapi_compute_unique_server_name_scope =
+
+#
+# Enable new nova-compute services on this host automatically. For more
+# information, refer to the documentation. (boolean value)
+#enable_new_services=true
+
+#
+# Template string to be used to generate instance names. For more information,
+# refer to the documentation. (string value)
+#instance_name_template=instance-%08x
+
+#
+# Number of times to retry live-migration before failing. For more information,
+# refer to the documentation. (integer value)
+# Minimum value: -1
+#migrate_max_retries=-1
+
+# DEPRECATED:
+# Config drive format. For more information, refer to the documentation. (string
+# value)
+# Possible values:
+# iso9660 - A file system image standard that is widely supported across
+# operating systems.
+# vfat - Provided for legacy reasons and to enable live migration with the
+# libvirt driver and non-shared storage
+# This option is deprecated for removal since 19.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option was originally added as a workaround for bug in libvirt, #1246201,
+# that was resolved in libvirt v1.2.17. As a result, this option is no longer
+# necessary or useful.
+#config_drive_format=iso9660
+
+#
+# Force injection to take place on a config drive. For more information, refer
+# to the documentation. (boolean value)
+#force_config_drive=false
+
+#
+# Name or path of the tool used for ISO image creation. For more information,
+# refer to the documentation. (string value)
+#mkisofs_cmd=genisoimage
+
+#
+# The IP address which the host is using to connect to the management network.
+# For more information, refer to the documentation. (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#my_ip=<host_ipv4>
+
+#
+# The IP address which is used to connect to the block storage network. For more
+# information, refer to the documentation. (string value)
+#my_block_storage_ip=$my_ip
+
+#
+# Hostname, FQDN or IP address of this host. For more information, refer to the
+# documentation. (host domain value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#host=<current_hostname>
+
+#
+# This option determines whether the network setup information is injected into
+# the VM before it is booted. While it was originally designed to be used only
+# by nova-network, it is also used by the vmware virt driver to control whether
+# network information is injected into a VM. The libvirt virt driver also uses
+# it
+# when we use config_drive to configure network to control whether network
+# information is injected into a VM.
+#  (boolean value)
+#flat_injected=false
+
+#
+# Filename that will be used for storing websocket frames received
+# and sent by a proxy service (like VNC, spice, serial) running on this host.
+# If this is not set, no recording will be done.
+#  (string value)
+#record=<None>
+
+# Run as a background process (boolean value)
+#daemon=false
+
+#
+# Disallow non-encrypted connections. For more information, refer to the
+# documentation. (boolean value)
+#ssl_only=false
+
+# Set to True if source host is addressed with IPv6 (boolean value)
+#source_is_ipv6=false
+
+#
+# Path to SSL certificate file. For more information, refer to the
+# documentation. (string value)
+#cert=self.pem
+
+#
+# SSL key file (if separate from cert). For more information, refer to the
+# documentation. (string value)
+#key=<None>
+
+#
+# Path to directory with content which will be served by a web server.
+#  (string value)
+#web=/usr/share/spice-html5
+
+#
+# The directory where the Nova python modules are installed. For more
+# information, refer to the documentation. (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#pybasedir=<Path>
+
+#
+# The top-level directory for maintaining Nova's state. For more information,
+# refer to the documentation. (string value)
+#state_path=$pybasedir
+
+#
+# This option allows setting an alternate timeout value for RPC calls
+# that have the potential to take a long time. If set, RPC calls to
+# other services will use this value for the timeout (in seconds)
+# instead of the global rpc_response_timeout value. For more information, refer
+# to the documentation. (integer value)
+#long_rpc_timeout=1800
+
+#
+# Number of seconds indicating how frequently the state of services on a
+# given hypervisor is reported. Nova needs to know this to determine the
+# overall health of the deployment. For more information, refer to the
+# documentation. (integer value)
+#report_interval=10
+
+#
+# Maximum time in seconds since last check-in for up service. For more
+# information, refer to the documentation. (integer value)
+#service_down_time=60
+
+#
+# Enable periodic tasks. For more information, refer to the documentation.
+# (boolean value)
+#periodic_enable=true
+
+#
+# Number of seconds to randomly delay when starting the periodic task
+# scheduler to reduce stampeding. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#periodic_fuzzy_delay=60
+
+# List of APIs to be enabled by default (list value)
+#enabled_apis=osapi_compute,metadata
+
+#
+# List of APIs with enabled SSL. For more information, refer to the
+# documentation. (list value)
+#enabled_ssl_apis =
+
+#
+# IP address on which the OpenStack API will listen. For more information, refer
+# to the documentation. (string value)
+#osapi_compute_listen=0.0.0.0
+
+#
+# Port on which the OpenStack API will listen. For more information, refer to
+# the documentation. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#osapi_compute_listen_port=8774
+
+#
+# Number of workers for OpenStack API service. The default will be the number
+# of CPUs available. For more information, refer to the documentation. (integer
+# value)
+# Minimum value: 1
+#osapi_compute_workers=<None>
+
+#
+# IP address on which the metadata API will listen. For more information, refer
+# to the documentation. (string value)
+#metadata_listen=0.0.0.0
+
+#
+# Port on which the metadata API will listen. For more information, refer to the
+# documentation. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#metadata_listen_port=8775
+
+#
+# Number of workers for metadata service. If not specified the number of
+# available CPUs will be used. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: 1
+#metadata_workers=<None>
+
+#
+# This option specifies the driver to be used for the servicegroup service. For
+# more information, refer to the documentation. (string value)
+# Possible values:
+# db - Database ServiceGroup driver
+# mc - Memcache ServiceGroup driver
+#servicegroup_driver=db
+
+#
+# From oslo.messaging
+#
+
+# Size of RPC connection pool (integer value)
+# Minimum value: 1
+#rpc_conn_pool_size=30
+
+# The pool size limit for connections expiration policy (integer value)
+#conn_pool_min_size=2
+
+# The time-to-live in sec of idle connections in the pool (integer value)
+#conn_pool_ttl=1200
+
+# Size of executor thread pool when executor is threading or eventlet (integer
+# value)
+# Deprecated group/name - [DEFAULT]/rpc_thread_pool_size
+#executor_thread_pool_size=64
+
+# Seconds to wait for a response from a call (integer value)
+#rpc_response_timeout=60
+
+# The network address and optional user credentials for connecting to the
+# messaging backend, in URL format. The expected format is. For more
+# information, refer to the documentation. (string value)
+#transport_url=rabbit://
+
+# The default exchange under which topics are scoped. May be overridden by an
+# exchange name specified in the transport_url option (string value)
+#control_exchange=nova
+
+# Add an endpoint to answer to ping calls. Endpoint is named
+# oslo_rpc_server_ping (boolean value)
+#rpc_ping_enabled=false
+
+#
+# From oslo.service.periodic_task
+#
+
+# Some periodic tasks can be run in a separate process. Should we run them here?
+# (boolean value)
+#run_external_periodic_tasks=true
+
+#
+# From oslo.service.service
+#
+
+# Enable eventlet backdoor.  Acceptable values are 0, <port>, and <start>:<end>,
+# where 0 results in listening on a random tcp port number; <port> results in
+# listening on the specified port number (and not enabling backdoor if that port
+# is in use); and <start>:<end> results in listening on the smallest unused port
+# number within the specified range of port numbers.  The chosen port is
+# displayed in the service's log file (string value)
+#backdoor_port=<None>
+
+# Enable eventlet backdoor, using the provided path as a unix socket that can
+# receive connections. This option is mutually exclusive with 'backdoor_port' in
+# that only one should be provided. If both are provided then the existence of
+# this option overrides the usage of that option. Inside the path {pid} will be
+# replaced with the PID of the current process (string value)
+#backdoor_socket=<None>
+
+# Enables or disables logging values of all registered options when starting a
+# service (at DEBUG level) (boolean value)
+#log_options=true
+
+# Specify a timeout after which a gracefully shutdown server will exit. Zero
+# value means endless wait (integer value)
+#graceful_shutdown_timeout=60
+
+
+[api]
+#
+# Options under this group are used to define Nova API.
+
+#
+# From nova.conf
+#
+
+# DEPRECATED:
+# Determine the strategy to use for authentication.
+#  (string value)
+# Possible values:
+# keystone - Use keystone for authentication.
+# noauth2 - Designed for testing only, as it does no actual credential checking.
+# 'noauth2' provides administrative credentials only if 'admin' is specified as
+# the username.
+# This option is deprecated for removal since 21.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# The only non-default choice, ``noauth2``, is for internal development and
+# testing purposes only and should not be used in deployments. This option and
+# its middleware, NoAuthMiddleware[V2_18], will be removed in a future release.
+#auth_strategy=keystone
+
+# DEPRECATED:
+# When True, the 'X-Forwarded-For' header is treated as the canonical remote
+# address. When False (the default), the 'remote_address' header is used. For
+# more information, refer to the documentation. (boolean value)
+# This option is deprecated for removal since 26.0.0.
+# Its value may be silently ignored in the future.
+# Reason: This feature is duplicate of the HTTPProxyToWSGI middleware in
+# oslo.middleware
+#use_forwarded_for=false
+
+#
+# When gathering the existing metadata for a config drive, the EC2-style
+# metadata is returned for all versions that don't appear in this option.
+# As of the Liberty release, the available versions are. For more information,
+# refer to the documentation. (string value)
+#config_drive_skip_versions=1.0 2007-01-19 2007-03-01 2007-08-29 2007-10-10 2007-12-15 2008-02-01 2008-09-01
+
+#
+# A list of vendordata providers. For more information, refer to the
+# documentation. (list value)
+#vendordata_providers=StaticJSON
+
+#
+# A list of targets for the dynamic vendordata provider. These targets are of
+# the form ``<name>@<url>``. For more information, refer to the documentation.
+# (list value)
+#vendordata_dynamic_targets =
+
+#
+# Path to an optional certificate file or CA bundle to verify dynamic
+# vendordata REST services ssl certificates against. For more information, refer
+# to the documentation. (string value)
+#vendordata_dynamic_ssl_certfile =
+
+#
+# Maximum wait time for an external REST service to connect. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 3
+#vendordata_dynamic_connect_timeout=5
+
+#
+# Maximum wait time for an external REST service to return data once connected.
+# For more information, refer to the documentation. (integer value)
+# Minimum value: 0
+#vendordata_dynamic_read_timeout=5
+
+#
+# Should failures to fetch dynamic vendordata be fatal to instance boot?. For
+# more information, refer to the documentation. (boolean value)
+#vendordata_dynamic_failure_fatal=false
+
+#
+# This option is the time (in seconds) to cache metadata. When set to 0,
+# metadata caching is disabled entirely; this is generally not recommended for
+# performance reasons. Increasing this setting should improve response times
+# of the metadata API when under heavy load. Higher values may increase memory
+# usage, and result in longer times for host metadata changes to take effect.
+#  (integer value)
+# Minimum value: 0
+#metadata_cache_expiration=15
+
+#
+# Indicates that the nova-metadata API service has been deployed per-cell, so
+# that we can have better performance and data isolation in a multi-cell
+# deployment. Users should consider the use of this configuration depending on
+# how neutron is setup. If you have networks that span cells, you might need to
+# run nova-metadata API service globally. If your networks are segmented along
+# cell boundaries, then you can run nova-metadata API service per cell. When
+# running nova-metadata API service per cell, you should also configure each
+# Neutron metadata-agent to point to the corresponding nova-metadata API
+# service.
+#  (boolean value)
+#local_metadata_per_cell=false
+
+#
+# Domain name used to configure FQDN for instances. For more information, refer
+# to the documentation. (string value)
+#dhcp_domain=novalocal
+
+#
+# Cloud providers may store custom data in vendor data file that will then be
+# available to the instances via the metadata service, and to the rendering of
+# config-drive. The default class for this, JsonFileVendorData, loads this
+# information from a JSON file, whose path is configured by this option. If
+# there is no path set by this option, the class returns an empty dictionary.
+# For more information, refer to the documentation. (string value)
+#vendordata_jsonfile_path=<None>
+
+#
+# As a query can potentially return many thousands of items, you can limit the
+# maximum number of items in a single response by setting this option.
+#  (integer value)
+# Minimum value: 0
+# Deprecated group/name - [DEFAULT]/osapi_max_limit
+#max_limit=1000
+
+#
+# This string is prepended to the normal URL that is returned in links to the
+# OpenStack Compute API. If it is empty (the default), the URLs are returned
+# unchanged. For more information, refer to the documentation. (string value)
+# Deprecated group/name - [DEFAULT]/osapi_compute_link_prefix
+#compute_link_prefix=<None>
+
+#
+# This string is prepended to the normal URL that is returned in links to
+# Glance resources. If it is empty (the default), the URLs are returned
+# unchanged. For more information, refer to the documentation. (string value)
+# Deprecated group/name - [DEFAULT]/osapi_glance_link_prefix
+#glance_link_prefix=<None>
+
+#
+# When enabled, this will cause the API to only query cell databases
+# in which the tenant has mapped instances. This requires an additional
+# (fast) query in the API database before each list, but also
+# (potentially) limits the number of cell databases that must be queried
+# to provide the result. If you have a small number of cells, or tenants
+# are likely to have instances in all cells, then this should be
+# False. If you have many cells, especially if you confine tenants to a
+# small subset of those cells, this should be True.
+#  (boolean value)
+#instance_list_per_project_cells=false
+
+#
+# This controls the method by which the API queries cell databases in
+# smaller batches during large instance list operations. If batching is
+# performed, a large instance list operation will request some fraction
+# of the overall API limit from each cell database initially, and will
+# re-request that same batch size as records are consumed (returned)
+# from each cell as necessary. Larger batches mean less chattiness
+# between the API and the database, but potentially more wasted effort
+# processing the results from the database which will not be returned to
+# the user. Any strategy will yield a batch size of at least 100 records,
+# to avoid a user causing many tiny database queries in their request. For more
+# information, refer to the documentation. (string value)
+# Possible values:
+# distributed - Divide the limit requested by the user by the number of cells in
+# the system. This requires counting the cells in the system initially, which
+# will not be refreshed until service restart or SIGHUP. The actual batch size
+# will be increased by 10% over the result of ($limit / $num_cells).
+# fixed - Request fixed-size batches from each cell, as defined by
+# ``instance_list_cells_batch_fixed_size``. If the limit is smaller than the
+# batch size, the limit will be used instead. If you do not wish batching to be
+# used at all, setting the fixed size equal to the ``max_limit`` value will
+# cause only one request per cell database to be issued.
+#instance_list_cells_batch_strategy=distributed
+
+#
+# This controls the batch size of instances requested from each cell
+# database if ``instance_list_cells_batch_strategy``` is set to ``fixed``.
+# This integral value will define the limit issued to each cell every time
+# a batch of instances is requested, regardless of the number of cells in
+# the system or any other factors. Per the general logic called out in
+# the documentation for ``instance_list_cells_batch_strategy``, the
+# minimum value for this is 100 records per batch. For more information, refer
+# to the documentation. (integer value)
+# Minimum value: 100
+#instance_list_cells_batch_fixed_size=100
+
+#
+# When set to False, this will cause the API to return a 500 error if there is
+# an
+# infrastructure failure like non-responsive cells. If you want the API to skip
+# the down cells and return the results from the up cells set this option to
+# True. For more information, refer to the documentation. (boolean value)
+#list_records_by_skipping_down_cells=true
+
+#
+# When True, the TenantNetworkController will query the Neutron API to get the
+# default networks to use. For more information, refer to the documentation.
+# (boolean value)
+#use_neutron_default_nets=false
+
+#
+# Tenant ID for getting the default network from Neutron API (also referred in
+# some places as the 'project ID') to use. For more information, refer to the
+# documentation. (string value)
+#neutron_default_tenant_id=default
+
+#
+# Enables returning of the instance password by the relevant server API calls
+# such as create, rebuild, evacuate, or rescue. If the hypervisor does not
+# support password injection, then the password returned will not be correct,
+# so if your hypervisor does not support password injection, set this to False.
+#  (boolean value)
+#enable_instance_password=true
+
+
+[api_database]
+#
+# The *Nova API Database* is a separate database which is used for information
+# which is used across *cells*. This database is mandatory since the Mitaka
+# release (13.0.0).
+#
+# This group should **not** be configured for the ``nova-compute`` service.
+
+#
+# From nova.conf
+#
+
+# If True, SQLite uses synchronous mode (boolean value)
+#sqlite_synchronous=true
+
+# The back end to use for the database (string value)
+# Deprecated group/name - [DEFAULT]/db_backend
+#backend=sqlalchemy
+
+# The SQLAlchemy connection string to use to connect to the database (string
+# value)
+# Deprecated group/name - [DEFAULT]/sql_connection
+# Deprecated group/name - [DATABASE]/sql_connection
+# Deprecated group/name - [sql]/connection
+#connection=<None>
+
+# The SQLAlchemy connection string to use to connect to the slave database
+# (string value)
+#slave_connection=<None>
+
+# The SQL mode to be used for MySQL sessions. This option, including the
+# default, overrides any server-set SQL mode. To use whatever SQL mode is set by
+# the server configuration, set this to no value. Example: mysql_sql_mode=
+# (string value)
+#mysql_sql_mode=TRADITIONAL
+
+# For Galera only, configure wsrep_sync_wait causality checks on new
+# connections.  Default is None, meaning don't configure any setting (integer
+# value)
+#mysql_wsrep_sync_wait=<None>
+
+# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
+# (NDB) (boolean value)
+# This option is deprecated for removal since 12.1.0.
+# Its value may be silently ignored in the future.
+# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
+# and will be removed in a future release.
+#mysql_enable_ndb=false
+
+# Connections which have been present in the connection pool longer than this
+# number of seconds will be replaced with a new one the next time they are
+# checked out from the pool (integer value)
+#connection_recycle_time=3600
+
+# Maximum number of SQL connections to keep open in a pool. Setting a value of 0
+# indicates no limit (integer value)
+#max_pool_size=5
+
+# Maximum number of database connection retries during startup. Set to -1 to
+# specify an infinite retry count (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_retries
+# Deprecated group/name - [DATABASE]/sql_max_retries
+#max_retries=10
+
+# Interval between retries of opening a SQL connection (integer value)
+# Deprecated group/name - [DEFAULT]/sql_retry_interval
+# Deprecated group/name - [DATABASE]/reconnect_interval
+#retry_interval=10
+
+# If set, use this value for max_overflow with SQLAlchemy (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_overflow
+# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
+#max_overflow=50
+
+# Verbosity of SQL debugging information: 0=None, 100=Everything (integer value)
+# Minimum value: 0
+# Maximum value: 100
+# Deprecated group/name - [DEFAULT]/sql_connection_debug
+#connection_debug=0
+
+# Add Python stack traces to SQL as comment strings (boolean value)
+# Deprecated group/name - [DEFAULT]/sql_connection_trace
+#connection_trace=false
+
+# If set, use this value for pool_timeout with SQLAlchemy (integer value)
+# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
+#pool_timeout=<None>
+
+# Seconds between retries of a database transaction (integer value)
+#db_retry_interval=1
+
+# If True, increases the interval between retries of a database operation up to
+# db_max_retry_interval (boolean value)
+#db_inc_retry_interval=true
+
+# If db_inc_retry_interval is set, the maximum seconds between retries of a
+# database operation (integer value)
+#db_max_retry_interval=10
+
+# Maximum retries in case of connection error or deadlock error before error is
+# raised. Set to -1 to specify an infinite retry count (integer value)
+#db_max_retries=20
+
+# Optional URL parameters to append onto the connection URL at connect time;
+# specify as param1=value1&param2=value2& (string value)
+#connection_parameters =
+
+
+[barbican]
+
+#
+# From nova.conf
+#
+
+# Use this endpoint to connect to Barbican, for example:
+# "http://localhost:9311/" (string value)
+#barbican_endpoint=<None>
+
+# Version of the Barbican API, for example: "v1" (string value)
+#barbican_api_version=<None>
+
+# Use this endpoint to connect to Keystone (string value)
+# Deprecated group/name - [key_manager]/auth_url
+#auth_endpoint=http://localhost/identity/v3
+
+# Number of seconds to wait before retrying poll for key creation completion
+# (integer value)
+#retry_delay=1
+
+# Number of times to retry poll for key creation completion (integer value)
+#number_of_retries=60
+
+# Specifies if insecure TLS (https) requests. If False, the server's certificate
+# will not be validated, if True, we can set the verify_ssl_path config
+# meanwhile (boolean value)
+#verify_ssl=true
+
+# A path to a bundle or CA certs to check against, or None for requests to
+# attempt to locate and use certificates which verify_ssh is True. If verify_ssl
+# is False, this is ignored (string value)
+#verify_ssl_path=<None>
+
+# Specifies the type of endpoint.  Allowed values are: public, private, and
+# admin (string value)
+# Possible values:
+# public - <No description provided>
+# internal - <No description provided>
+# admin - <No description provided>
+#barbican_endpoint_type=public
+
+# Specifies the region of the chosen endpoint (string value)
+#barbican_region_name=<None>
+
+#
+# When True, if sending a user token to a REST API, also send a service token.
+# For more information, refer to the documentation. (boolean value)
+#send_service_user_token=false
+
+
+[barbican_service_user]
+
+#
+# From nova.conf
+#
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [barbican_service_user]/auth_plugin
+#auth_type=<None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section=<None>
+
+
+[cache]
+
+#
+# From nova.conf
+#
+
+# Prefix for building the configuration dictionary for the cache region. This
+# should not need to be changed unless there is another dogpile.cache region
+# with the same configuration name (string value)
+#config_prefix=cache.oslo
+
+# Default TTL, in seconds, for any cached item in the dogpile.cache region. This
+# applies to any cached method that doesn't have an explicit cache expiration
+# time defined for it (integer value)
+#expiration_time=600
+
+# Cache backend module. For eventlet-based or environments with hundreds of
+# threaded servers, Memcache with pooling (oslo_cache.memcache_pool) is
+# recommended. For environments with less than 100 threaded servers, Memcached
+# (dogpile.cache.memcached) or Redis (dogpile.cache.redis) is recommended. Test
+# environments with a single instance of the server can use the
+# dogpile.cache.memory backend (string value)
+# Possible values:
+# oslo_cache.memcache_pool - <No description provided>
+# oslo_cache.dict - <No description provided>
+# oslo_cache.mongo - <No description provided>
+# oslo_cache.etcd3gw - <No description provided>
+# dogpile.cache.pymemcache - <No description provided>
+# dogpile.cache.memcached - <No description provided>
+# dogpile.cache.pylibmc - <No description provided>
+# dogpile.cache.bmemcached - <No description provided>
+# dogpile.cache.dbm - <No description provided>
+# dogpile.cache.redis - <No description provided>
+# dogpile.cache.memory - <No description provided>
+# dogpile.cache.memory_pickle - <No description provided>
+# dogpile.cache.null - <No description provided>
+#backend=dogpile.cache.null
+
+# Arguments supplied to the backend module. Specify this option once per
+# argument to be passed to the dogpile.cache backend. Example format:
+# "<argname>:<value>" (multi valued)
+#backend_argument =
+
+# Proxy classes to import that will affect the way the dogpile.cache backend
+# functions. See the dogpile.cache documentation on changing-backend-behavior
+# (list value)
+#proxies =
+
+# Global toggle for caching (boolean value)
+#enabled=false
+
+# Extra debugging from the cache backend (cache keys, get/set/delete/etc calls).
+# This is only really useful if you need to see the specific cache-backend
+# get/set/delete calls with the keys/values.  Typically this should be left set
+# to false (boolean value)
+#debug_cache_backend=false
+
+# Memcache servers in the format of "host:port". This is used by backends
+# dependent on Memcached.If ``dogpile.cache.memcached`` or
+# ``oslo_cache.memcache_pool`` is used and a given host refer to an IPv6 or a
+# given domain refer to IPv6 then you should prefix the given address withthe
+# address family (``inet6``) (e.g ``inet6[::1]:11211``,
+# ``inet6:[fd12:3456:789a:1::1]:11211``,
+# ``inet6:[controller-0.internalapi]:11211``). If the address family is not
+# given then these backends will use the default ``inet`` address family which
+# corresponds to IPv4 (list value)
+#memcache_servers=localhost:11211
+
+# Number of seconds memcached server is considered dead before it is tried
+# again. (dogpile.cache.memcache and oslo_cache.memcache_pool backends only)
+# (integer value)
+#memcache_dead_retry=300
+
+# Timeout in seconds for every call to a server. (dogpile.cache.memcache and
+# oslo_cache.memcache_pool backends only) (floating point value)
+#memcache_socket_timeout=1.0
+
+# Max total number of open connections to every memcached server.
+# (oslo_cache.memcache_pool backend only) (integer value)
+#memcache_pool_maxsize=10
+
+# Number of seconds a connection to memcached is held unused in the pool before
+# it is closed. (oslo_cache.memcache_pool backend only) (integer value)
+#memcache_pool_unused_timeout=60
+
+# Number of seconds that an operation will wait to get a memcache client
+# connection (integer value)
+#memcache_pool_connection_get_timeout=10
+
+# Global toggle if memcache will be flushed on reconnect.
+# (oslo_cache.memcache_pool backend only) (boolean value)
+#memcache_pool_flush_on_reconnect=false
+
+# Enable the SASL(Simple Authentication and SecurityLayer) if the SASL_enable is
+# true, else disable (boolean value)
+#memcache_sasl_enabled=false
+
+# the user name for the memcached which SASL enabled (string value)
+#memcache_username =
+
+# the password for the memcached which SASL enabled (string value)
+#memcache_password =
+
+# Global toggle for TLS usage when comunicating with the caching servers
+# (boolean value)
+#tls_enabled=false
+
+# Path to a file of concatenated CA certificates in PEM format necessary to
+# establish the caching servers' authenticity. If tls_enabled is False, this
+# option is ignored (string value)
+#tls_cafile=<None>
+
+# Path to a single file in PEM format containing the client's certificate as
+# well as any number of CA certificates needed to establish the certificate's
+# authenticity. This file is only required when client side authentication is
+# necessary. If tls_enabled is False, this option is ignored (string value)
+#tls_certfile=<None>
+
+# Path to a single file containing the client's private key in. Otherwise the
+# private key will be taken from the file specified in tls_certfile. If
+# tls_enabled is False, this option is ignored (string value)
+#tls_keyfile=<None>
+
+# Set the available ciphers for sockets created with the TLS context. It should
+# be a string in the OpenSSL cipher list format. If not specified, all OpenSSL
+# enabled ciphers will be available (string value)
+#tls_allowed_ciphers=<None>
+
+# Global toggle for the socket keepalive of dogpile's pymemcache backend
+# (boolean value)
+#enable_socket_keepalive=false
+
+# The time (in seconds) the connection needs to remain idle before TCP starts
+# sending keepalive probes. Should be a positive integer most greater than zero
+# (integer value)
+# Minimum value: 0
+#socket_keepalive_idle=1
+
+# The time (in seconds) between individual keepalive probes. Should be a
+# positive integer greater than zero (integer value)
+# Minimum value: 0
+#socket_keepalive_interval=1
+
+# The maximum number of keepalive probes TCP should send before dropping the
+# connection. Should be a positive integer greater than zero (integer value)
+# Minimum value: 0
+#socket_keepalive_count=1
+
+# Enable retry client mechanisms to handle failure. Those mechanisms can be used
+# to wrap all kind of pymemcache clients. The wrapper allows you to define how
+# many attempts to make and how long to wait between attemots (boolean value)
+#enable_retry_client=false
+
+# Number of times to attempt an action before failing (integer value)
+# Minimum value: 1
+#retry_attempts=2
+
+# Number of seconds to sleep between each attempt (floating point value)
+#retry_delay=0
+
+# Amount of times a client should be tried before it is marked dead and removed
+# from the pool in the HashClient's internal mechanisms (integer value)
+# Minimum value: 1
+#hashclient_retry_attempts=2
+
+# Time in seconds that should pass between retry attempts in the HashClient's
+# internal mechanisms (floating point value)
+#hashclient_retry_delay=1
+
+# Time in seconds before attempting to add a node back in the pool in the
+# HashClient's internal mechanisms (floating point value)
+#dead_timeout=60
+
+
+[cinder]
+
+#
+# From nova.conf
+#
+
+#
+# Info to match when looking for cinder in the service catalog. For more
+# information, refer to the documentation. (string value)
+#catalog_info=volumev3::publicURL
+
+#
+# If this option is set then it will override service catalog lookup with
+# this template for cinder endpoint. For more information, refer to the
+# documentation. (string value)
+#endpoint_template=<None>
+
+#
+# Region name of this node. This is used when picking the URL in the service
+# catalog. For more information, refer to the documentation. (string value)
+#os_region_name=<None>
+
+#
+# Number of times cinderclient should retry on any failed http call.
+# 0 means connection is attempted only once. Setting it to any positive integer
+# means that on failure connection is retried that many times e.g. setting it
+# to 3 means total attempts to connect will be 4. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: 0
+#http_retries=3
+
+#
+# Allow attach between instance and volume in different availability zones. For
+# more information, refer to the documentation. (boolean value)
+#cross_az_attach=true
+
+#
+# Enable DEBUG logging with cinderclient and os_brick independently of the rest
+# of Nova.
+#  (boolean value)
+#debug=false
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [cinder]/auth_plugin
+#auth_type=<None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section=<None>
+
+# Authentication URL (string value)
+#auth_url=<None>
+
+# Scope for system operations (string value)
+#system_scope=<None>
+
+# Domain ID to scope to (string value)
+#domain_id=<None>
+
+# Domain name to scope to (string value)
+#domain_name=<None>
+
+# Project ID to scope to (string value)
+#project_id=<None>
+
+# Project name to scope to (string value)
+#project_name=<None>
+
+# Domain ID containing project (string value)
+#project_domain_id=<None>
+
+# Domain name containing project (string value)
+#project_domain_name=<None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id=<None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will be used for both
+# the user and project domain in v3 and ignored in v2 authentication (string
+# value)
+#default_domain_id=<None>
+
+# Optional domain name to use with v3 API and v2 parameters. It will be used for
+# both the user and project domain in v3 and ignored in v2 authentication
+# (string value)
+#default_domain_name=<None>
+
+# User ID (string value)
+#user_id=<None>
+
+# Username (string value)
+# Deprecated group/name - [cinder]/user_name
+#username=<None>
+
+# User's domain id (string value)
+#user_domain_id=<None>
+
+# User's domain name (string value)
+#user_domain_name=<None>
+
+# User's password (string value)
+#password=<None>
+
+# Tenant ID (string value)
+#tenant_id=<None>
+
+# Tenant Name (string value)
+#tenant_name=<None>
+
+
+[compute]
+
+#
+# From nova.conf
+#
+
+#
+# Enables reporting of build failures to the scheduler. For more information,
+# refer to the documentation. (integer value)
+#consecutive_build_service_disable_threshold=10
+
+#
+# Time to wait in seconds before resending an ACPI shutdown signal to
+# instances. For more information, refer to the documentation. (integer value)
+# Minimum value: 1
+#shutdown_retry_interval=10
+
+#
+# Interval for updating nova-compute-side cache of the compute node resource
+# provider's inventories, aggregates, and traits. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: 0
+# Note: This option can be changed without restarting.
+#resource_provider_association_refresh=300
+
+#
+# Mask of host CPUs that can be used for ``VCPU`` resources and offloaded
+# emulator threads. For more information, refer to the documentation. (string
+# value)
+#cpu_shared_set=<None>
+
+#
+# Mask of host CPUs that can be used for ``PCPU`` resources. For more
+# information, refer to the documentation. (string value)
+#cpu_dedicated_set=<None>
+
+#
+# Determine if the source compute host should wait for a ``network-vif-plugged``
+# event from the (neutron) networking service before starting the actual
+# transfer
+# of the guest to the destination compute host. For more information, refer to
+# the documentation. (boolean value)
+#live_migration_wait_for_vif_plug=true
+
+#
+# Number of concurrent disk-IO-intensive operations (glance image downloads,
+# image format conversions, etc.) that we will do in parallel.  If this is set
+# too high then response time suffers.
+# The default value of 0 means no limit.
+#   (integer value)
+# Minimum value: 0
+#max_concurrent_disk_ops=0
+
+#
+# Maximum number of disk devices allowed to attach to a single server. Note
+# that the number of disks supported by an server depends on the bus used. For
+# example, the ``ide`` disk bus is limited to 4 attached devices. The configured
+# maximum is enforced during server create, rebuild, evacuate, unshelve, live
+# migrate, and attach volume. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: -1
+#max_disk_devices_to_attach=-1
+
+#
+# Location of YAML files containing resource provider configuration data. For
+# more information, refer to the documentation. (string value)
+#provider_config_location=/etc/nova/provider_config/
+
+#
+# A list of image formats that should not be advertised as supported by this
+# compute node. For more information, refer to the documentation. (list value)
+#image_type_exclude_list =
+
+#
+# A list of strings describing allowed VMDK "create-type" subformats
+# that will be allowed. This is recommended to only include
+# single-file-with-sparse-header variants to avoid potential host file
+# exposure due to processing named extents. If this list is empty, then no
+# form of VMDK image will be allowed.
+#  (list value)
+#vmdk_allowed_types=streamOptimized,monolithicSparse
+
+#
+# This option controls allocation strategy used to choose NUMA cells on host for
+# placing VM's NUMA cells (for VMs with defined numa topology). By
+# default host's NUMA cell with more resources consumed will be chosen last for
+# placing attempt. When the packing_host_numa_cells_allocation_strategy variable
+# is set to ``False``, host's NUMA cell with more resources available will be
+# used. When set to ``True`` cells with some usage will be packed with VM's cell
+# until it will be completely exhausted, before a new free host's cell will be
+# used. For more information, refer to the documentation. (boolean value)
+#packing_host_numa_cells_allocation_strategy=false
+
+
+[conductor]
+#
+# Options under this group are used to define Conductor's communication,
+# which manager should be act as a proxy between computes and database,
+# and finally, how many worker processes will be used.
+
+#
+# From nova.conf
+#
+
+#
+# Number of workers for OpenStack Conductor service. The default will be the
+# number of CPUs available.
+#  (integer value)
+#workers=<None>
+
+
+[console]
+#
+# Options under this group allow to tune the configuration of the console proxy
+# service.
+#
+# Note: in configuration of every compute is a ``console_host`` option,
+# which allows to select the console proxy service to connect to.
+
+#
+# From nova.conf
+#
+
+#
+# Adds list of allowed origins to the console websocket proxy to allow
+# connections from other origin hostnames.
+# Websocket proxy matches the host header with the origin header to
+# prevent cross-site requests. This list specifies if any there are
+# values other than host are allowed in the origin header. For more information,
+# refer to the documentation. (list value)
+# Deprecated group/name - [DEFAULT]/console_allowed_origins
+#allowed_origins =
+
+#
+# OpenSSL cipher preference string that specifies what ciphers to allow for TLS
+# connections from clients.  For example. For more information, refer to the
+# documentation. (string value)
+#ssl_ciphers=<None>
+
+#
+# Minimum allowed SSL/TLS protocol version. For more information, refer to the
+# documentation. (string value)
+# Possible values:
+# default - Use the underlying system OpenSSL defaults
+# tlsv1_1 - Require TLS v1.1 or greater for TLS connections
+# tlsv1_2 - Require TLS v1.2 or greater for TLS connections
+# tlsv1_3 - Require TLS v1.3 or greater for TLS connections
+#ssl_minimum_version=default
+
+
+[consoleauth]
+
+#
+# From nova.conf
+#
+
+#
+# The lifetime of a console auth token (in seconds). For more information, refer
+# to the documentation. (integer value)
+# Minimum value: 0
+# Deprecated group/name - [DEFAULT]/console_token_ttl
+#token_ttl=600
+
+
+[cyborg]
+#
+# Configuration options for Cyborg (accelerator as a service).
+
+#
+# From nova.conf
+#
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# The default service_type for endpoint URL discovery (string value)
+#service_type=accelerator
+
+# The default service_name for endpoint URL discovery (string value)
+#service_name=<None>
+
+# List of interfaces, in order of preference, for endpoint URL (list value)
+#valid_interfaces=internal,public
+
+# The default region_name for endpoint URL discovery (string value)
+#region_name=<None>
+
+# Always use this endpoint URL for requests for this client. NOTE: The
+# unversioned endpoint should be specified here; to request a particular API
+# version, use the `version`, `min-version`, and/or `max-version` options
+# (string value)
+#endpoint_override=<None>
+
+# The maximum number of retries that should be attempted for connection errors
+# (integer value)
+#connect_retries=<None>
+
+# Delay (in seconds) between two retries for connection errors. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#connect_retry_delay=<None>
+
+# The maximum number of retries that should be attempted for retriable HTTP
+# status codes (integer value)
+#status_code_retries=<None>
+
+# Delay (in seconds) between two retries for retriable status codes. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#status_code_retry_delay=<None>
+
+
+[database]
+#
+# The *Nova Database* is the primary database which is used for information
+# local to a *cell*.
+#
+# This group should **not** be configured for the ``nova-compute`` service.
+
+#
+# From nova.conf
+#
+
+# If True, SQLite uses synchronous mode (boolean value)
+#sqlite_synchronous=true
+
+# The back end to use for the database (string value)
+# Deprecated group/name - [DEFAULT]/db_backend
+#backend=sqlalchemy
+
+# The SQLAlchemy connection string to use to connect to the database (string
+# value)
+# Deprecated group/name - [DEFAULT]/sql_connection
+# Deprecated group/name - [DATABASE]/sql_connection
+# Deprecated group/name - [sql]/connection
+#connection=<None>
+
+# The SQLAlchemy connection string to use to connect to the slave database
+# (string value)
+#slave_connection=<None>
+
+# The SQL mode to be used for MySQL sessions. This option, including the
+# default, overrides any server-set SQL mode. To use whatever SQL mode is set by
+# the server configuration, set this to no value. Example: mysql_sql_mode=
+# (string value)
+#mysql_sql_mode=TRADITIONAL
+
+# For Galera only, configure wsrep_sync_wait causality checks on new
+# connections.  Default is None, meaning don't configure any setting (integer
+# value)
+#mysql_wsrep_sync_wait=<None>
+
+# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
+# (NDB) (boolean value)
+# This option is deprecated for removal since 12.1.0.
+# Its value may be silently ignored in the future.
+# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
+# and will be removed in a future release.
+#mysql_enable_ndb=false
+
+# Connections which have been present in the connection pool longer than this
+# number of seconds will be replaced with a new one the next time they are
+# checked out from the pool (integer value)
+#connection_recycle_time=3600
+
+# Maximum number of SQL connections to keep open in a pool. Setting a value of 0
+# indicates no limit (integer value)
+#max_pool_size=5
+
+# Maximum number of database connection retries during startup. Set to -1 to
+# specify an infinite retry count (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_retries
+# Deprecated group/name - [DATABASE]/sql_max_retries
+#max_retries=10
+
+# Interval between retries of opening a SQL connection (integer value)
+# Deprecated group/name - [DEFAULT]/sql_retry_interval
+# Deprecated group/name - [DATABASE]/reconnect_interval
+#retry_interval=10
+
+# If set, use this value for max_overflow with SQLAlchemy (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_overflow
+# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
+#max_overflow=50
+
+# Verbosity of SQL debugging information: 0=None, 100=Everything (integer value)
+# Minimum value: 0
+# Maximum value: 100
+# Deprecated group/name - [DEFAULT]/sql_connection_debug
+#connection_debug=0
+
+# Add Python stack traces to SQL as comment strings (boolean value)
+# Deprecated group/name - [DEFAULT]/sql_connection_trace
+#connection_trace=false
+
+# If set, use this value for pool_timeout with SQLAlchemy (integer value)
+# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
+#pool_timeout=<None>
+
+# Seconds between retries of a database transaction (integer value)
+#db_retry_interval=1
+
+# If True, increases the interval between retries of a database operation up to
+# db_max_retry_interval (boolean value)
+#db_inc_retry_interval=true
+
+# If db_inc_retry_interval is set, the maximum seconds between retries of a
+# database operation (integer value)
+#db_max_retry_interval=10
+
+# Maximum retries in case of connection error or deadlock error before error is
+# raised. Set to -1 to specify an infinite retry count (integer value)
+#db_max_retries=20
+
+# Optional URL parameters to append onto the connection URL at connect time;
+# specify as param1=value1&param2=value2& (string value)
+#connection_parameters =
+
+
+[devices]
+
+#
+# From nova.conf
+#
+
+#
+# The mdev types enabled in the compute node. For more information, refer to the
+# documentation. (list value)
+# Deprecated group/name - [devices]/enabled_vgpu_types
+#enabled_mdev_types =
+
+
+[ephemeral_storage_encryption]
+
+#
+# From nova.conf
+#
+
+#
+# Enables/disables LVM ephemeral storage encryption.
+#  (boolean value)
+#enabled=false
+
+#
+# Cipher-mode string to be used. For more information, refer to the
+# documentation. (string value)
+#cipher=aes-xts-plain64
+
+#
+# Encryption key length in bits. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 1
+#key_size=512
+
+
+[filter_scheduler]
+
+#
+# From nova.conf
+#
+
+#
+# Size of subset of best hosts selected by scheduler. For more information,
+# refer to the documentation. (integer value)
+# Minimum value: 1
+#host_subset_size=1
+
+#
+# The number of instances that can be actively performing IO on a host. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 0
+#max_io_ops_per_host=8
+
+#
+# Maximum number of instances that can exist on a host. For more information,
+# refer to the documentation. (integer value)
+# Minimum value: 1
+#max_instances_per_host=50
+
+#
+# Enable querying of individual hosts for instance information. For more
+# information, refer to the documentation. (boolean value)
+#track_instance_changes=true
+
+#
+# Filters that the scheduler can use. For more information, refer to the
+# documentation. (multi valued)
+#available_filters=nova.scheduler.filters.all_filters
+
+#
+# Filters that the scheduler will use. For more information, refer to the
+# documentation. (list value)
+#enabled_filters=ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter
+
+#
+# Weighers that the scheduler will use. For more information, refer to the
+# documentation. (list value)
+#weight_classes=nova.scheduler.weights.all_weighers
+
+#
+# RAM weight multipler ratio. For more information, refer to the documentation.
+# (floating point value)
+#ram_weight_multiplier=1.0
+
+#
+# CPU weight multiplier ratio. For more information, refer to the documentation.
+# (floating point value)
+#cpu_weight_multiplier=1.0
+
+#
+# Disk weight multipler ratio. For more information, refer to the documentation.
+# (floating point value)
+#disk_weight_multiplier=1.0
+
+#
+# IO operations weight multipler ratio. For more information, refer to the
+# documentation. (floating point value)
+#io_ops_weight_multiplier=-1.0
+
+#
+# PCI device affinity weight multiplier. For more information, refer to the
+# documentation. (floating point value)
+# Minimum value: 0.0
+#pci_weight_multiplier=1.0
+
+#
+# Multiplier used for weighing hosts for group soft-affinity. For more
+# information, refer to the documentation. (floating point value)
+# Minimum value: 0.0
+#soft_affinity_weight_multiplier=1.0
+
+#
+# Multiplier used for weighing hosts for group soft-anti-affinity. For more
+# information, refer to the documentation. (floating point value)
+# Minimum value: 0.0
+#soft_anti_affinity_weight_multiplier=1.0
+
+#
+# Multiplier used for weighing hosts that have had recent build failures. For
+# more information, refer to the documentation. (floating point value)
+#build_failure_weight_multiplier=1000000.0
+
+#
+# Multiplier used for weighing hosts during a cross-cell move. For more
+# information, refer to the documentation. (floating point value)
+#cross_cell_move_weight_multiplier=1000000.0
+
+#
+# Enable spreading the instances between hosts with the same best weight. For
+# more information, refer to the documentation. (boolean value)
+#shuffle_best_same_weighed_hosts=false
+
+#
+# The default architecture to be used when using the image properties filter.
+# For more information, refer to the documentation. (string value)
+# Possible values:
+# alpha - <No description provided>
+# armv6 - <No description provided>
+# armv7l - <No description provided>
+# armv7b - <No description provided>
+# aarch64 - <No description provided>
+# cris - <No description provided>
+# i686 - <No description provided>
+# ia64 - <No description provided>
+# lm32 - <No description provided>
+# m68k - <No description provided>
+# microblaze - <No description provided>
+# microblazeel - <No description provided>
+# mips - <No description provided>
+# mipsel - <No description provided>
+# mips64 - <No description provided>
+# mips64el - <No description provided>
+# openrisc - <No description provided>
+# parisc - <No description provided>
+# parisc64 - <No description provided>
+# ppc - <No description provided>
+# ppcle - <No description provided>
+# ppc64 - <No description provided>
+# ppc64le - <No description provided>
+# ppcemb - <No description provided>
+# s390 - <No description provided>
+# s390x - <No description provided>
+# sh4 - <No description provided>
+# sh4eb - <No description provided>
+# sparc - <No description provided>
+# sparc64 - <No description provided>
+# unicore32 - <No description provided>
+# x86_64 - <No description provided>
+# xtensa - <No description provided>
+# xtensaeb - <No description provided>
+#image_properties_default_architecture=<None>
+
+#
+# List of UUIDs for images that can only be run on certain hosts. For more
+# information, refer to the documentation. (list value)
+#isolated_images =
+
+#
+# List of hosts that can only run certain images. For more information, refer to
+# the documentation. (list value)
+#isolated_hosts =
+
+#
+# Prevent non-isolated images from being built on isolated hosts. For more
+# information, refer to the documentation. (boolean value)
+#restrict_isolated_hosts_to_isolated_images=true
+
+#
+# Image property namespace for use in the host aggregate. For more information,
+# refer to the documentation. (string value)
+#aggregate_image_properties_isolation_namespace=<None>
+
+#
+# Separator character(s) for image property namespace and name. For more
+# information, refer to the documentation. (string value)
+#aggregate_image_properties_isolation_separator=.
+
+#
+# Enable scheduling and claiming PCI devices in Placement. For more information,
+# refer to the documentation. (boolean value)
+#pci_in_placement=false
+
+
+[glance]
+# Configuration options for the Image service
+
+#
+# From nova.conf
+#
+
+# DEPRECATED:
+# List of glance api servers endpoints available to nova. For more information,
+# refer to the documentation. (list value)
+# This option is deprecated for removal since 21.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# Support for image service configuration via standard keystoneauth1 Adapter
+# options was added in the 17.0.0 Queens release. The api_servers option was
+# retained temporarily to allow consumers time to cut over to a real load
+# balancing solution.
+#api_servers=<None>
+
+#
+# Enable glance operation retries. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#num_retries=3
+
+#
+# Enable image signature verification. For more information, refer to the
+# documentation. (boolean value)
+#verify_glance_signatures=false
+
+# DEPRECATED:
+# Enable certificate validation for image signature verification. For more
+# information, refer to the documentation. (boolean value)
+# This option is deprecated for removal since 16.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option is intended to ease the transition for deployments leveraging
+# image signature verification. The intended state long-term is for signature
+# verification and certificate validation to always happen together.
+#enable_certificate_validation=false
+
+#
+# List of certificate IDs for certificates that should be trusted. For more
+# information, refer to the documentation. (list value)
+#default_trusted_certificate_ids =
+
+#
+# Enable Glance image downloads directly via RBD. For more information, refer to
+# the documentation. (boolean value)
+#enable_rbd_download=false
+
+#
+# The RADOS client name for accessing Glance images stored as rbd volumes. For
+# more information, refer to the documentation. (string value)
+#rbd_user =
+
+#
+# The RADOS client timeout in seconds when initially connecting to the cluster.
+# For more information, refer to the documentation. (integer value)
+#rbd_connect_timeout=5
+
+#
+# The RADOS pool in which the Glance images are stored as rbd volumes. For more
+# information, refer to the documentation. (string value)
+#rbd_pool =
+
+#
+# Path to the ceph configuration file to use. For more information, refer to the
+# documentation. (string value)
+#rbd_ceph_conf =
+
+# Enable or disable debug logging with glanceclient (boolean value)
+#debug=false
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# The default service_type for endpoint URL discovery (string value)
+#service_type=image
+
+# The default service_name for endpoint URL discovery (string value)
+#service_name=<None>
+
+# List of interfaces, in order of preference, for endpoint URL (list value)
+#valid_interfaces=internal,public
+
+# The default region_name for endpoint URL discovery (string value)
+#region_name=<None>
+
+# Always use this endpoint URL for requests for this client. NOTE: The
+# unversioned endpoint should be specified here; to request a particular API
+# version, use the `version`, `min-version`, and/or `max-version` options
+# (string value)
+#endpoint_override=<None>
+
+# The maximum number of retries that should be attempted for connection errors
+# (integer value)
+#connect_retries=<None>
+
+# Delay (in seconds) between two retries for connection errors. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#connect_retry_delay=<None>
+
+# The maximum number of retries that should be attempted for retriable HTTP
+# status codes (integer value)
+#status_code_retries=<None>
+
+# Delay (in seconds) between two retries for retriable status codes. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#status_code_retry_delay=<None>
+
+
+[guestfs]
+#
+# libguestfs is a set of tools for accessing and modifying virtual
+# machine (VM) disk images. You can use this for viewing and editing
+# files inside guests, scripting changes to VMs, monitoring disk
+# used/free statistics, creating guests, P2V, V2V, performing backups,
+# cloning VMs, building VMs, formatting disks and resizing disks.
+
+#
+# From nova.conf
+#
+
+#
+# Enable/disables guestfs logging. For more information, refer to the
+# documentation. (boolean value)
+#debug=false
+
+
+[hyperv]
+#
+# The hyperv feature allows you to configure the Hyper-V hypervisor
+# driver to be used within an OpenStack deployment.
+
+#
+# From nova.conf
+#
+
+#
+# Dynamic memory ratio. For more information, refer to the documentation.
+# (floating point value)
+#dynamic_memory_ratio=1.0
+
+#
+# Enable instance metrics collection. For more information, refer to the
+# documentation. (boolean value)
+#enable_instance_metrics_collection=false
+
+#
+# Instances path share. For more information, refer to the documentation.
+# (string value)
+#instances_path_share =
+
+#
+# Limit CPU features. For more information, refer to the documentation. (boolean
+# value)
+#limit_cpu_features=false
+
+#
+# Mounted disk query retry count. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#mounted_disk_query_retry_count=10
+
+#
+# Mounted disk query retry interval. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#mounted_disk_query_retry_interval=5
+
+#
+# Power state check timeframe. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: 0
+#power_state_check_timeframe=60
+
+#
+# Power state event polling interval. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#power_state_event_polling_interval=2
+
+#
+# qemu-img command. For more information, refer to the documentation. (string
+# value)
+#qemu_img_cmd=qemu-img.exe
+
+#
+# External virtual switch name. For more information, refer to the
+# documentation. (string value)
+#vswitch_name=<None>
+
+#
+# Wait soft reboot seconds. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: 0
+#wait_soft_reboot_seconds=60
+
+#
+# Mount config drive as a CD drive. For more information, refer to the
+# documentation. (boolean value)
+#config_drive_cdrom=false
+
+#
+# Inject password to config drive. For more information, refer to the
+# documentation. (boolean value)
+#config_drive_inject_password=false
+
+#
+# Volume attach retry count. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: 0
+#volume_attach_retry_count=10
+
+#
+# Volume attach retry interval. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#volume_attach_retry_interval=5
+
+#
+# Enable RemoteFX feature. For more information, refer to the documentation.
+# (boolean value)
+#enable_remotefx=false
+
+#
+# Use multipath connections when attaching iSCSI or FC disks. For more
+# information, refer to the documentation. (boolean value)
+#use_multipath_io=false
+
+#
+# List of iSCSI initiators that will be used for establishing iSCSI sessions.
+# For more information, refer to the documentation. (list value)
+#iscsi_initiator_list =
+
+
+[image_cache]
+#
+# A collection of options specific to image caching.
+
+#
+# From nova.conf
+#
+
+#
+# Number of seconds to wait between runs of the image cache manager. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/image_cache_manager_interval
+#manager_interval=2400
+
+#
+# Location of cached images. For more information, refer to the documentation.
+# (string value)
+# Deprecated group/name - [DEFAULT]/image_cache_subdirectory_name
+#subdirectory_name=_base
+
+#
+# Should unused base images be removed?. For more information, refer to the
+# documentation. (boolean value)
+#remove_unused_base_images=true
+
+#
+# Unused unresized base images younger than this will not be removed.
+#  (integer value)
+#remove_unused_original_minimum_age_seconds=86400
+
+#
+# Unused resized base images younger than this will not be removed.
+#  (integer value)
+#remove_unused_resized_minimum_age_seconds=3600
+
+#
+# Maximum number of compute hosts to trigger image precaching in parallel. For
+# more information, refer to the documentation. (integer value)
+# Minimum value: 1
+#precache_concurrency=1
+
+
+[ironic]
+#
+# Configuration options for Ironic driver (Bare Metal).
+# If using the Ironic driver following options must be set:
+#
+# * auth_type
+# * auth_url
+# * project_name
+# * username
+# * password
+# * project_domain_id or project_domain_name
+# * user_domain_id or user_domain_name
+
+#
+# From nova.conf
+#
+
+#
+# The number of times to retry when a request conflicts.
+# If set to 0, only try once, no retries. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#api_max_retries=60
+
+#
+# The number of seconds to wait before retrying the request. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 0
+#api_retry_interval=2
+
+# Timeout (seconds) to wait for node serial console state changed. Set to 0 to
+# disable timeout (integer value)
+# Minimum value: 0
+#serial_console_state_timeout=10
+
+# Case-insensitive key to limit the set of nodes that may be managed by this
+# service to the set of nodes in Ironic which have a matching conductor_group
+# property. If unset, all available nodes will be eligible to be managed by this
+# service. Note that setting this to the empty string (``""``) will match the
+# default conductor group, and is different than leaving the option unset
+# (string value)
+# Note: This option can be changed without restarting.
+#partition_key=<None>
+
+# List of hostnames for all nova-compute services (including this host) with
+# this partition_key config value. Nodes matching the partition_key value will
+# be distributed between all services specified here. If partition_key is unset,
+# this option is ignored (list value)
+# Note: This option can be changed without restarting.
+#peer_list =
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [ironic]/auth_plugin
+#auth_type=<None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section=<None>
+
+# Authentication URL (string value)
+#auth_url=<None>
+
+# Scope for system operations (string value)
+#system_scope=<None>
+
+# Domain ID to scope to (string value)
+#domain_id=<None>
+
+# Domain name to scope to (string value)
+#domain_name=<None>
+
+# Project ID to scope to (string value)
+#project_id=<None>
+
+# Project name to scope to (string value)
+#project_name=<None>
+
+# Domain ID containing project (string value)
+#project_domain_id=<None>
+
+# Domain name containing project (string value)
+#project_domain_name=<None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id=<None>
+
+# User ID (string value)
+#user_id=<None>
+
+# Username (string value)
+# Deprecated group/name - [ironic]/user_name
+#username=<None>
+
+# User's domain id (string value)
+#user_domain_id=<None>
+
+# User's domain name (string value)
+#user_domain_name=<None>
+
+# User's password (string value)
+#password=<None>
+
+# The default service_type for endpoint URL discovery (string value)
+#service_type=baremetal
+
+# The default service_name for endpoint URL discovery (string value)
+#service_name=<None>
+
+# List of interfaces, in order of preference, for endpoint URL (list value)
+#valid_interfaces=internal,public
+
+# The default region_name for endpoint URL discovery (string value)
+#region_name=<None>
+
+# Always use this endpoint URL for requests for this client. NOTE: The
+# unversioned endpoint should be specified here; to request a particular API
+# version, use the `version`, `min-version`, and/or `max-version` options
+# (string value)
+#endpoint_override=<None>
+
+# The maximum number of retries that should be attempted for connection errors
+# (integer value)
+#connect_retries=<None>
+
+# Delay (in seconds) between two retries for connection errors. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#connect_retry_delay=<None>
+
+# The maximum number of retries that should be attempted for retriable HTTP
+# status codes (integer value)
+#status_code_retries=<None>
+
+# Delay (in seconds) between two retries for retriable status codes. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#status_code_retry_delay=<None>
+
+
+[key_manager]
+
+#
+# From nova.conf
+#
+
+#
+# Fixed key returned by key manager, specified in hex. For more information,
+# refer to the documentation. (string value)
+#fixed_key=<None>
+
+# Specify the key manager implementation. Options are "barbican" and "vault".
+# Default is  "barbican". Will support the  values earlier set using
+# [key_manager]/api_class for some time (string value)
+# Deprecated group/name - [key_manager]/api_class
+#backend=barbican
+
+# The type of authentication credential to create. Possible values are 'token',
+# 'password', 'keystone_token', and 'keystone_password'. Required if no context
+# is passed to the credential factory (string value)
+#auth_type=<None>
+
+# Token for authentication. Required for 'token' and 'keystone_token' auth_type
+# if no context is passed to the credential factory (string value)
+#token=<None>
+
+# Username for authentication. Required for 'password' auth_type. Optional for
+# the 'keystone_password' auth_type (string value)
+#username=<None>
+
+# Password for authentication. Required for 'password' and 'keystone_password'
+# auth_type (string value)
+#password=<None>
+
+# Use this endpoint to connect to Keystone (string value)
+#auth_url=<None>
+
+# User ID for authentication. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#user_id=<None>
+
+# User's domain ID for authentication. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#user_domain_id=<None>
+
+# User's domain name for authentication. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#user_domain_name=<None>
+
+# Trust ID for trust scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#trust_id=<None>
+
+# Domain ID for domain scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#domain_id=<None>
+
+# Domain name for domain scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#domain_name=<None>
+
+# Project ID for project scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#project_id=<None>
+
+# Project name for project scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#project_name=<None>
+
+# Project's domain ID for project. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#project_domain_id=<None>
+
+# Project's domain name for project. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#project_domain_name=<None>
+
+# Allow fetching a new token if the current one is going to expire. Optional for
+# 'keystone_token' and 'keystone_password' auth_type (boolean value)
+#reauthenticate=true
+
+
+[keystone]
+# Configuration options for the identity service
+
+#
+# From nova.conf
+#
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [keystone]/auth_plugin
+#auth_type=<None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section=<None>
+
+# Authentication URL (string value)
+#auth_url=<None>
+
+# Scope for system operations (string value)
+#system_scope=<None>
+
+# Domain ID to scope to (string value)
+#domain_id=<None>
+
+# Domain name to scope to (string value)
+#domain_name=<None>
+
+# Project ID to scope to (string value)
+#project_id=<None>
+
+# Project name to scope to (string value)
+#project_name=<None>
+
+# Domain ID containing project (string value)
+#project_domain_id=<None>
+
+# Domain name containing project (string value)
+#project_domain_name=<None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id=<None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will be used for both
+# the user and project domain in v3 and ignored in v2 authentication (string
+# value)
+#default_domain_id=<None>
+
+# Optional domain name to use with v3 API and v2 parameters. It will be used for
+# both the user and project domain in v3 and ignored in v2 authentication
+# (string value)
+#default_domain_name=<None>
+
+# User ID (string value)
+#user_id=<None>
+
+# Username (string value)
+# Deprecated group/name - [keystone]/user_name
+#username=<None>
+
+# User's domain id (string value)
+#user_domain_id=<None>
+
+# User's domain name (string value)
+#user_domain_name=<None>
+
+# User's password (string value)
+#password=<None>
+
+# Tenant ID (string value)
+#tenant_id=<None>
+
+# Tenant Name (string value)
+#tenant_name=<None>
+
+# The default service_type for endpoint URL discovery (string value)
+#service_type=identity
+
+# The default service_name for endpoint URL discovery (string value)
+#service_name=<None>
+
+# List of interfaces, in order of preference, for endpoint URL (list value)
+#valid_interfaces=internal,public
+
+# The default region_name for endpoint URL discovery (string value)
+#region_name=<None>
+
+# Always use this endpoint URL for requests for this client. NOTE: The
+# unversioned endpoint should be specified here; to request a particular API
+# version, use the `version`, `min-version`, and/or `max-version` options
+# (string value)
+#endpoint_override=<None>
+
+# The maximum number of retries that should be attempted for connection errors
+# (integer value)
+#connect_retries=<None>
+
+# Delay (in seconds) between two retries for connection errors. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#connect_retry_delay=<None>
+
+# The maximum number of retries that should be attempted for retriable HTTP
+# status codes (integer value)
+#status_code_retries=<None>
+
+# Delay (in seconds) between two retries for retriable status codes. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#status_code_retry_delay=<None>
+
+
+[libvirt]
+#
+# Libvirt options allows cloud administrator to configure related
+# libvirt hypervisor driver to be used within an OpenStack deployment.
+#
+# Almost all of the libvirt config options are influence by ``virt_type`` config
+# which describes the virtualization type (or so called domain type) libvirt
+# should use for specific features such as live migration, snapshot.
+
+#
+# From nova.conf
+#
+
+#
+# The ID of the image to boot from to rescue data from a corrupted instance. For
+# more information, refer to the documentation. (string value)
+#rescue_image_id=<None>
+
+#
+# The ID of the kernel (AKI) image to use with the rescue image. For more
+# information, refer to the documentation. (string value)
+#rescue_kernel_id=<None>
+
+#
+# The ID of the RAM disk (ARI) image to use with the rescue image. For more
+# information, refer to the documentation. (string value)
+#rescue_ramdisk_id=<None>
+
+#
+# Describes the virtualization type (or so called domain type) libvirt should
+# use. For more information, refer to the documentation. (string value)
+# Possible values:
+# kvm - <No description provided>
+# lxc - <No description provided>
+# qemu - <No description provided>
+# parallels - <No description provided>
+#virt_type=kvm
+
+#
+# Overrides the default libvirt URI of the chosen virtualization type. For more
+# information, refer to the documentation. (string value)
+#connection_uri =
+
+#
+# Allow the injection of an admin password for instance only at ``create`` and
+# ``rebuild`` process. For more information, refer to the documentation.
+# (boolean value)
+#inject_password=false
+
+#
+# Allow the injection of an SSH key at boot time. For more information, refer to
+# the documentation. (boolean value)
+#inject_key=false
+
+#
+# Determines how the file system is chosen to inject data into it. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: -2
+#inject_partition=-2
+
+#
+# URI scheme for live migration used by the source of live migration traffic.
+# For more information, refer to the documentation. (string value)
+#live_migration_scheme=<None>
+
+#
+# IP address used as the live migration address for this host. For more
+# information, refer to the documentation. (host domain value)
+#live_migration_inbound_addr=<None>
+
+# DEPRECATED:
+# Live migration target URI used by the source of live migration traffic. For
+# more information, refer to the documentation. (string value)
+# This option is deprecated for removal since 15.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# live_migration_uri is deprecated for removal in favor of two other options
+# that
+# allow to change live migration scheme and target URI:
+# ``live_migration_scheme``
+# and ``live_migration_inbound_addr`` respectively.
+#live_migration_uri=<None>
+
+# DEPRECATED:
+# Enable tunnelled migration. For more information, refer to the documentation.
+# (boolean value)
+# This option is deprecated for removal since 23.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# The "tunnelled live migration" has two inherent limitations: it cannot
+# handle live migration of disks in a non-shared storage setup; and it has
+# a huge performance cost.  Both these problems are solved by
+# ``live_migration_with_native_tls`` (requires a pre-configured TLS
+# environment), which is the recommended approach for securing all live
+# migration streams.
+#live_migration_tunnelled=false
+
+#
+# Maximum bandwidth(in MiB/s) to be used during migration. For more information,
+# refer to the documentation. (integer value)
+#live_migration_bandwidth=0
+
+#
+# Target maximum period of time Nova will try to keep the instance paused
+# during the last part of the memory copy, in *milliseconds*. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 100
+#live_migration_downtime=500
+
+#
+# Number of incremental steps to reach max downtime value. For more information,
+# refer to the documentation. (integer value)
+# Minimum value: 3
+#live_migration_downtime_steps=10
+
+#
+# Time to wait, in seconds, between each step increase of the migration
+# downtime. For more information, refer to the documentation. (integer value)
+# Minimum value: 3
+#live_migration_downtime_delay=75
+
+#
+# Time to wait, in seconds, for migration to successfully complete transferring
+# data before aborting the operation. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+# Note: This option can be changed without restarting.
+#live_migration_completion_timeout=800
+
+#
+# This option will be used to determine what action will be taken against a
+# VM after ``live_migration_completion_timeout`` expires. By default, the live
+# migrate operation will be aborted after completion timeout. If it is set to
+# ``force_complete``, the compute service will either pause the VM or trigger
+# post-copy depending on if post copy is enabled and available
+# (``live_migration_permit_post_copy`` is set to True). For more information,
+# refer to the documentation. (string value)
+# Possible values:
+# abort - <No description provided>
+# force_complete - <No description provided>
+# Note: This option can be changed without restarting.
+#live_migration_timeout_action=abort
+
+#
+# This option allows nova to switch an on-going live migration to post-copy
+# mode, i.e., switch the active VM to the one on the destination node before the
+# migration is complete, therefore ensuring an upper bound on the memory that
+# needs to be transferred. Post-copy requires libvirt>=1.3.3 and QEMU>=2.5.0.
+# For more information, refer to the documentation. (boolean value)
+#live_migration_permit_post_copy=false
+
+#
+# This option allows nova to start live migration with auto converge on. For
+# more information, refer to the documentation. (boolean value)
+#live_migration_permit_auto_converge=false
+
+#
+# Determine the snapshot image format when sending to the image service. For
+# more information, refer to the documentation. (string value)
+# Possible values:
+# raw - RAW disk format
+# qcow2 - KVM default disk format
+# vmdk - VMWare default disk format
+# vdi - VirtualBox default disk format
+#snapshot_image_format=<None>
+
+#
+# Use QEMU-native TLS encryption when live migrating. For more information,
+# refer to the documentation. (boolean value)
+#live_migration_with_native_tls=false
+
+#
+# Override the default disk prefix for the devices attached to an instance. For
+# more information, refer to the documentation. (string value)
+#disk_prefix=<None>
+
+# Number of seconds to wait for instance to shut down after soft reboot request
+# is made. We fall back to hard reboot if instance does not shutdown within this
+# window (integer value)
+#wait_soft_reboot_seconds=120
+
+#
+# Is used to set the CPU mode an instance should have. For more information,
+# refer to the documentation. (string value)
+# Possible values:
+# host-model - Clone the host CPU feature flags
+# host-passthrough - Use the host CPU model exactly
+# custom - Use the CPU model in ``[libvirt]cpu_models``
+# none - Don't set a specific CPU model. For instances with ``[libvirt]
+# virt_type`` as KVM/QEMU, the default CPU model from QEMU will be used, which
+# provides a basic set of CPU features that are compatible with most hosts
+#cpu_mode=<None>
+
+#
+# An ordered list of CPU models the host supports. For more information, refer
+# to the documentation. (list value)
+# Deprecated group/name - [libvirt]/cpu_model
+#cpu_models =
+
+#
+# Enable or disable guest CPU flags. For more information, refer to the
+# documentation. (list value)
+#cpu_model_extra_flags =
+
+# Location where libvirt driver will store snapshots before uploading them to
+# image service (string value)
+#snapshots_directory=$instances_path/snapshots
+
+#
+# Specific cache modes to use for different disk types. For more information,
+# refer to the documentation. (list value)
+#disk_cachemodes =
+
+#
+# The path to an RNG (Random Number Generator) device that will be used as
+# the source of entropy on the host.  Since libvirt 1.3.4, any path (that
+# returns random numbers when read) is accepted.  The recommended source
+# of entropy is ``/dev/urandom`` -- it is non-blocking, therefore
+# relatively fast; and avoids the limitations of ``/dev/random``, which is
+# a legacy interface.  For more details (and comparison between different
+# RNG sources), refer to the "Usage" section in the Linux kernel API
+# documentation for ``[u]random``:
+# http://man7.org/linux/man-pages/man4/urandom.4.html and
+# http://man7.org/linux/man-pages/man7/random.7.html.
+#  (string value)
+#rng_dev_path=/dev/urandom
+
+# For qemu or KVM guests, set this option to specify a default machine type per
+# host architecture. You can find a list of supported machine types in your
+# environment by checking the output of the :command:`virsh capabilities`
+# command. The format of the value for this config option is ``host-
+# arch=machine-type``. For example: ``x86_64=machinetype1,armv7l=machinetype2``
+# (list value)
+#hw_machine_type=<None>
+
+#
+# The data source used to the populate the host "serial" UUID exposed to guest
+# in the virtual BIOS. All choices except ``unique`` will change the serial when
+# migrating the instance to another host. Changing the choice of this option
+# will
+# also affect existing instances on this host once they are stopped and started
+# again. It is recommended to use the default choice (``unique``) since that
+# will
+# not change when an instance is migrated. However, if you have a need for
+# per-host serials in addition to per-instance serial numbers, then consider
+# restricting flavors via host aggregates.
+#  (string value)
+# Possible values:
+# none - A serial number entry is not added to the guest domain xml.
+# os - A UUID serial number is generated from the host ``/etc/machine-id`` file.
+# hardware - A UUID for the host hardware as reported by libvirt. This is
+# typically from the host SMBIOS data, unless it has been overridden in
+# ``libvirtd.conf``.
+# auto - Uses the "os" source if possible, else "hardware".
+# unique - Uses instance UUID as the serial number.
+#sysinfo_serial=unique
+
+# A number of seconds to memory usage statistics period. Zero or negative value
+# mean to disable memory usage statistics (integer value)
+#mem_stats_period_seconds=10
+
+# List of uid targets and ranges.Syntax is guest-uid:host-uid:count. Maximum of
+# 5 allowed (list value)
+#uid_maps =
+
+# List of guid targets and ranges.Syntax is guest-gid:host-gid:count. Maximum of
+# 5 allowed (list value)
+#gid_maps =
+
+# In a realtime host context vCPUs for guest will run in that scheduling
+# priority. Priority depends on the host kernel (usually 1-99) (integer value)
+#realtime_scheduler_priority=1
+
+#
+# Performance events to monitor and collect statistics for. For more
+# information, refer to the documentation. (list value)
+#enabled_perf_events =
+
+#
+# The number of PCIe ports an instance will get. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: 0
+# Maximum value: 28
+#num_pcie_ports=0
+
+#
+# Available capacity in MiB for file-backed memory. For more information, refer
+# to the documentation. (integer value)
+# Minimum value: 0
+#file_backed_memory=0
+
+#
+# Maximum number of guests with encrypted memory which can run
+# concurrently on this compute host. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#num_memory_encrypted_guests=<None>
+
+#
+# Maximum number of attempts the driver tries to detach a device in libvirt. For
+# more information, refer to the documentation. (integer value)
+# Minimum value: 1
+#device_detach_attempts=8
+
+#
+# Maximum number of seconds the driver waits for the success or the failure
+# event from libvirt for a given device detach attempt before it re-trigger the
+# detach. For more information, refer to the documentation. (integer value)
+# Minimum value: 1
+#device_detach_timeout=20
+
+#
+# VM Images format. For more information, refer to the documentation. (string
+# value)
+# Possible values:
+# raw - <No description provided>
+# flat - <No description provided>
+# qcow2 - <No description provided>
+# lvm - <No description provided>
+# rbd - <No description provided>
+# ploop - <No description provided>
+# default - <No description provided>
+#images_type=default
+
+#
+# LVM Volume Group that is used for VM images, when you specify images_type=lvm.
+# For more information, refer to the documentation. (string value)
+#images_volume_group=<None>
+
+# DEPRECATED:
+# Create sparse logical volumes (with virtualsize) if this flag is set to True.
+#  (boolean value)
+# This option is deprecated for removal since 18.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# Sparse logical volumes is a feature that is not tested hence not supported.
+# LVM logical volumes are preallocated by default. If you want thin
+# provisioning,
+# use Cinder thin-provisioned volumes.
+#sparse_logical_volumes=false
+
+# The RADOS pool in which rbd volumes are stored (string value)
+#images_rbd_pool=rbd
+
+# Path to the ceph configuration file to use (string value)
+#images_rbd_ceph_conf =
+
+#
+# The name of the Glance store that represents the rbd cluster in use by
+# this node. If set, this will allow Nova to request that Glance copy an
+# image from an existing non-local store into the one named by this option
+# before booting so that proper Copy-on-Write behavior is maintained. For more
+# information, refer to the documentation. (string value)
+#images_rbd_glance_store_name =
+
+#
+# The interval in seconds with which to poll Glance after asking for it
+# to copy an image to the local rbd store. This affects how often we ask
+# Glance to report on copy completion, and thus should be short enough that
+# we notice quickly, but not too aggressive that we generate undue load on
+# the Glance server. For more information, refer to the documentation. (integer
+# value)
+#images_rbd_glance_copy_poll_interval=15
+
+#
+# The overall maximum time we will wait for Glance to complete an image
+# copy to our local rbd store. This should be long enough to allow large
+# images to be copied over the network link between our local store and the
+# one where images typically reside. The downside of setting this too long
+# is just to catch the case where the image copy is stalled or proceeding too
+# slowly to be useful. Actual errors will be reported by Glance and noticed
+# according to the poll interval. For more information, refer to the
+# documentation. (integer value)
+#images_rbd_glance_copy_timeout=600
+
+#
+# Discard option for nova managed disks. For more information, refer to the
+# documentation. (string value)
+# Possible values:
+# ignore - <No description provided>
+# unmap - <No description provided>
+#hw_disk_discard=<None>
+
+#
+# Method used to wipe ephemeral disks when they are deleted. Only takes effect
+# if LVM is set as backing storage. For more information, refer to the
+# documentation. (string value)
+# Possible values:
+# zero - Overwrite volumes with zeroes
+# shred - Overwrite volumes repeatedly
+# none - Do not wipe deleted volumes
+#volume_clear=zero
+
+#
+# Size of area in MiB, counting from the beginning of the allocated volume,
+# that will be cleared using method set in ``volume_clear`` option. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 0
+#volume_clear_size=0
+
+#
+# Enable snapshot compression for ``qcow2`` images. For more information, refer
+# to the documentation. (boolean value)
+#snapshot_compression=false
+
+# Use virtio for bridge interfaces with KVM/QEMU (boolean value)
+#use_virtio_for_bridges=true
+
+#
+# Use multipath connection of the iSCSI or FC volume. For more information,
+# refer to the documentation. (boolean value)
+# Deprecated group/name - [libvirt]/iscsi_use_multipath
+#volume_use_multipath=false
+
+#
+# Number of times to scan given storage protocol to find volume.
+#  (integer value)
+# Deprecated group/name - [libvirt]/num_iscsi_scan_tries
+#num_volume_scan_tries=5
+
+#
+# Number of times to rediscover AoE target to find volume. For more information,
+# refer to the documentation. (integer value)
+#num_aoe_discover_tries=3
+
+#
+# The iSCSI transport iface to use to connect to target in case offload support
+# is desired. For more information, refer to the documentation. (string value)
+# Deprecated group/name - [libvirt]/iscsi_transport
+#iscsi_iface=<None>
+
+#
+# Number of times to scan iSER target to find volume. For more information,
+# refer to the documentation. (integer value)
+#num_iser_scan_tries=5
+
+#
+# Use multipath connection of the iSER volume. For more information, refer to
+# the documentation. (boolean value)
+#iser_use_multipath=false
+
+#
+# The RADOS client name for accessing rbd(RADOS Block Devices) volumes. For more
+# information, refer to the documentation. (string value)
+#rbd_user=<None>
+
+#
+# The libvirt UUID of the secret for the rbd_user volumes.
+#  (string value)
+#rbd_secret_uuid=<None>
+
+#
+# The RADOS client timeout in seconds when initially connecting to the cluster.
+#  (integer value)
+#rbd_connect_timeout=5
+
+#
+# Number of seconds to wait between each consecutive retry to destroy a
+# RBD volume. For more information, refer to the documentation. (integer value)
+# Minimum value: 0
+#rbd_destroy_volume_retry_interval=5
+
+#
+# Number of retries to destroy a RBD volume. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#rbd_destroy_volume_retries=12
+
+#
+# Directory where the NFS volume is mounted on the compute node.
+# The default is 'mnt' directory of the location where nova's Python module
+# is installed. For more information, refer to the documentation. (string value)
+#nfs_mount_point_base=$state_path/mnt
+
+#
+# Mount options passed to the NFS client. See section of the nfs man page
+# for details. For more information, refer to the documentation. (string value)
+#nfs_mount_options=<None>
+
+#
+# Directory where the Quobyte volume is mounted on the compute node. For more
+# information, refer to the documentation. (string value)
+#quobyte_mount_point_base=$state_path/mnt
+
+# Path to a Quobyte Client configuration file (string value)
+#quobyte_client_cfg=<None>
+
+#
+# Directory where the SMBFS shares are mounted on the compute node.
+#  (string value)
+#smbfs_mount_point_base=$state_path/mnt
+
+#
+# Mount options passed to the SMBFS client. For more information, refer to the
+# documentation. (string value)
+#smbfs_mount_options =
+
+#
+# libvirt's transport method for remote file operations. For more information,
+# refer to the documentation. (string value)
+# Possible values:
+# ssh - <No description provided>
+# rsync - <No description provided>
+#remote_filesystem_transport=ssh
+
+#
+# Directory where the Virtuozzo Storage clusters are mounted on the compute
+# node. For more information, refer to the documentation. (string value)
+#vzstorage_mount_point_base=$state_path/mnt
+
+#
+# Mount owner user name. For more information, refer to the documentation.
+# (string value)
+#vzstorage_mount_user=stack
+
+#
+# Mount owner group name. For more information, refer to the documentation.
+# (string value)
+#vzstorage_mount_group=qemu
+
+#
+# Mount access mode. For more information, refer to the documentation. (string
+# value)
+#vzstorage_mount_perms=0770
+
+#
+# Path to vzstorage client log. For more information, refer to the
+# documentation. (string value)
+#vzstorage_log_path=/var/log/vstorage/%(cluster_name)s/nova.log.gz
+
+#
+# Path to the SSD cache file. For more information, refer to the documentation.
+# (string value)
+#vzstorage_cache_path=<None>
+
+#
+# Extra mount options for pstorage-mount. For more information, refer to the
+# documentation. (list value)
+#vzstorage_mount_opts =
+
+#
+# Configure virtio rx queue size. For more information, refer to the
+# documentation. (integer value)
+# Possible values:
+# 256 - <No description provided>
+# 512 - <No description provided>
+# 1024 - <No description provided>
+#rx_queue_size=<None>
+
+#
+# Configure virtio tx queue size. For more information, refer to the
+# documentation. (integer value)
+# Possible values:
+# 256 - <No description provided>
+# 512 - <No description provided>
+# 1024 - <No description provided>
+#tx_queue_size=<None>
+
+#
+# The maximum number of virtio queue pairs that can be enabled
+# when creating a multiqueue guest. The number of virtio queues
+# allocated will be the lesser of the CPUs requested by the guest
+# and the max value defined. By default, this value is set to none
+# meaning the legacy limits based on the reported kernel
+# major version will be used.
+#  (integer value)
+# Minimum value: 1
+#max_queues=<None>
+
+#
+# Number of times to rediscover NVMe target to find volume. For more
+# information, refer to the documentation. (integer value)
+#num_nvme_discover_tries=5
+
+#
+# Configure persistent memory(pmem) namespaces. For more information, refer to
+# the documentation. (list value)
+#pmem_namespaces =
+
+#
+# Enable emulated TPM (Trusted Platform Module) in guests.
+#  (boolean value)
+#swtpm_enabled=false
+
+#
+# User that swtpm binary runs as. For more information, refer to the
+# documentation. (string value)
+#swtpm_user=tss
+
+#
+# Group that swtpm binary runs as. For more information, refer to the
+# documentation. (string value)
+#swtpm_group=tss
+
+# Use libvirt to manage CPU cores performance (boolean value)
+#cpu_power_management=false
+
+# Tuning strategy to reduce CPU power consumption when unused (string value)
+# Possible values:
+# cpu_state - <No description provided>
+# governor - <No description provided>
+#cpu_power_management_strategy=cpu_state
+
+# Governor to use in order to reduce CPU power consumption (string value)
+#cpu_power_governor_low=powersave
+
+# Governor to use in order to have best CPU performance (string value)
+#cpu_power_governor_high=performance
+
+
+[metrics]
+#
+# Configuration options for metrics
+#
+# Options under this group allow to adjust how values assigned to metrics are
+# calculated.
+
+#
+# From nova.conf
+#
+
+#
+# Multiplier used for weighing hosts based on reported metrics. For more
+# information, refer to the documentation. (floating point value)
+#weight_multiplier=1.0
+
+#
+# Mapping of metric to weight modifier. For more information, refer to the
+# documentation. (list value)
+#weight_setting =
+
+#
+# Whether metrics are required. For more information, refer to the
+# documentation. (boolean value)
+#required=true
+
+#
+# Default weight for unavailable metrics. For more information, refer to the
+# documentation. (floating point value)
+#weight_of_unavailable=-10000.0
+
+
+[mks]
+#
+# Nova compute node uses WebMKS, a desktop sharing protocol to provide
+# instance console access to VM's created by VMware hypervisors.
+#
+# Related options:
+#
+# Following options must be set to provide console access.
+#
+# * mksproxy_base_url
+# * enabled
+
+#
+# From nova.conf
+#
+
+#
+# Location of MKS web console proxy. For more information, refer to the
+# documentation. (uri value)
+#mksproxy_base_url=http://127.0.0.1:6090/
+
+#
+# Enables graphical console access for virtual machines.
+#  (boolean value)
+#enabled=false
+
+
+[neutron]
+#
+# Configuration options for neutron (network connectivity as a service).
+
+#
+# From nova.conf
+#
+
+#
+# Default name for the Open vSwitch integration bridge. For more information,
+# refer to the documentation. (string value)
+#ovs_bridge=br-int
+
+#
+# Default name for the floating IP pool. For more information, refer to the
+# documentation. (string value)
+#default_floating_pool=nova
+
+#
+# Integer value representing the number of seconds to wait before querying
+# Neutron for extensions.  After this number of seconds the next time Nova
+# needs to create a resource in Neutron it will requery Neutron for the
+# extensions that it has loaded.  Setting value to 0 will refresh the
+# extensions with no wait.
+#  (integer value)
+# Minimum value: 0
+#extension_sync_interval=600
+
+#
+# List of physnets present on this host. For more information, refer to the
+# documentation. (list value)
+#physnets =
+
+#
+# Number of times neutronclient should retry on any failed http call. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 0
+#http_retries=3
+
+#
+# When set to True, this option indicates that Neutron will be used to proxy
+# metadata requests and resolve instance ids. Otherwise, the instance ID must be
+# passed to the metadata request in the 'X-Instance-ID' header. For more
+# information, refer to the documentation. (boolean value)
+#service_metadata_proxy=false
+
+#
+# This option holds the shared secret string used to validate proxy requests to
+# Neutron metadata requests. In order to be used, the
+# 'X-Metadata-Provider-Signature' header must be supplied in the request. For
+# more information, refer to the documentation. (string value)
+#metadata_proxy_shared_secret =
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [neutron]/auth_plugin
+#auth_type=<None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section=<None>
+
+# Authentication URL (string value)
+#auth_url=<None>
+
+# Scope for system operations (string value)
+#system_scope=<None>
+
+# Domain ID to scope to (string value)
+#domain_id=<None>
+
+# Domain name to scope to (string value)
+#domain_name=<None>
+
+# Project ID to scope to (string value)
+#project_id=<None>
+
+# Project name to scope to (string value)
+#project_name=<None>
+
+# Domain ID containing project (string value)
+#project_domain_id=<None>
+
+# Domain name containing project (string value)
+#project_domain_name=<None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id=<None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will be used for both
+# the user and project domain in v3 and ignored in v2 authentication (string
+# value)
+#default_domain_id=<None>
+
+# Optional domain name to use with v3 API and v2 parameters. It will be used for
+# both the user and project domain in v3 and ignored in v2 authentication
+# (string value)
+#default_domain_name=<None>
+
+# User ID (string value)
+#user_id=<None>
+
+# Username (string value)
+# Deprecated group/name - [neutron]/user_name
+#username=<None>
+
+# User's domain id (string value)
+#user_domain_id=<None>
+
+# User's domain name (string value)
+#user_domain_name=<None>
+
+# User's password (string value)
+#password=<None>
+
+# Tenant ID (string value)
+#tenant_id=<None>
+
+# Tenant Name (string value)
+#tenant_name=<None>
+
+# The default service_type for endpoint URL discovery (string value)
+#service_type=network
+
+# The default service_name for endpoint URL discovery (string value)
+#service_name=<None>
+
+# List of interfaces, in order of preference, for endpoint URL (list value)
+#valid_interfaces=internal,public
+
+# The default region_name for endpoint URL discovery (string value)
+#region_name=<None>
+
+# Always use this endpoint URL for requests for this client. NOTE: The
+# unversioned endpoint should be specified here; to request a particular API
+# version, use the `version`, `min-version`, and/or `max-version` options
+# (string value)
+#endpoint_override=<None>
+
+# The maximum number of retries that should be attempted for connection errors
+# (integer value)
+#connect_retries=<None>
+
+# Delay (in seconds) between two retries for connection errors. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#connect_retry_delay=<None>
+
+# The maximum number of retries that should be attempted for retriable HTTP
+# status codes (integer value)
+#status_code_retries=<None>
+
+# Delay (in seconds) between two retries for retriable status codes. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#status_code_retry_delay=<None>
+
+
+[notifications]
+#
+# Most of the actions in Nova which manipulate the system state generate
+# notifications which are posted to the messaging component (e.g. RabbitMQ) and
+# can be consumed by any service outside the OpenStack. More technical details
+# at https://docs.openstack.org/nova/latest/reference/notifications.html
+
+#
+# From nova.conf
+#
+
+#
+# If set, send compute.instance.update notifications on
+# instance state changes. For more information, refer to the documentation.
+# (string value)
+# Possible values:
+# <None> - no notifications
+# vm_state - Notifications are sent with VM state transition information in the
+# ``old_state`` and ``state`` fields. The ``old_task_state`` and
+# ``new_task_state`` fields will be set to the current task_state of the
+# instance
+# vm_and_task_state - Notifications are sent with VM and task state transition
+# information
+#notify_on_state_change=<None>
+
+# Default notification level for outgoing notifications (string value)
+# Possible values:
+# DEBUG - <No description provided>
+# INFO - <No description provided>
+# WARN - <No description provided>
+# ERROR - <No description provided>
+# CRITICAL - <No description provided>
+# Deprecated group/name - [DEFAULT]/default_notification_level
+#default_level=INFO
+
+#
+# Specifies which notification format shall be emitted by nova. For more
+# information, refer to the documentation. (string value)
+# Possible values:
+# both - Both the legacy unversioned and the new versioned notifications are
+# emitted
+# versioned - Only the new versioned notifications are emitted
+# unversioned - Only the legacy unversioned notifications are emitted
+#notification_format=unversioned
+
+#
+# Specifies the topics for the versioned notifications issued by nova. For more
+# information, refer to the documentation. (list value)
+#versioned_notifications_topics=versioned_notifications
+
+#
+# If enabled, include block device information in the versioned notification
+# payload. Sending block device information is disabled by default as providing
+# that information can incur some overhead on the system since the information
+# may need to be loaded from the database.
+#  (boolean value)
+#bdms_in_notifications=false
+
+
+[oslo_concurrency]
+
+#
+# From oslo.concurrency
+#
+
+# Enables or disables inter-process locks (boolean value)
+#disable_process_locking=false
+
+# Directory to use for lock files.  For security, the specified directory should
+# only be writable by the user running the processes that need locking. Defaults
+# to environment variable OSLO_LOCK_PATH. If external locks are used, a lock
+# path must be set (string value)
+#lock_path=<None>
+
+
+[oslo_messaging_amqp]
+
+#
+# From oslo.messaging
+#
+
+# Name for the AMQP container. must be globally unique. Defaults to a generated
+# UUID (string value)
+#container_name=<None>
+
+# Timeout for inactive connections (in seconds) (integer value)
+#idle_timeout=0
+
+# Debug: dump AMQP frames to stdout (boolean value)
+#trace=false
+
+# Attempt to connect via SSL. If no other ssl-related parameters are given, it
+# will use the system's CA-bundle to verify the server's certificate (boolean
+# value)
+#ssl=false
+
+# CA certificate PEM file used to verify the server's certificate (string value)
+#ssl_ca_file =
+
+# Self-identifying certificate PEM file for client authentication (string value)
+#ssl_cert_file =
+
+# Private key PEM file used to sign ssl_cert_file certificate (optional) (string
+# value)
+#ssl_key_file =
+
+# Password for decrypting ssl_key_file (if encrypted) (string value)
+#ssl_key_password=<None>
+
+# By default SSL checks that the name in the server's certificate matches the
+# hostname in the transport_url. In some configurations it may be preferable to
+# use the virtual hostname instead, for example if the server uses the Server
+# Name Indication TLS extension (rfc6066) to provide a certificate per virtual
+# host. Set ssl_verify_vhost to True if the server's SSL certificate uses the
+# virtual host name instead of the DNS name (boolean value)
+#ssl_verify_vhost=false
+
+# Space separated list of acceptable SASL mechanisms (string value)
+#sasl_mechanisms =
+
+# Path to directory that contains the SASL configuration (string value)
+#sasl_config_dir =
+
+# Name of configuration file (without .conf suffix) (string value)
+#sasl_config_name =
+
+# SASL realm to use if no realm present in username (string value)
+#sasl_default_realm =
+
+# Seconds to pause before attempting to re-connect (integer value)
+# Minimum value: 1
+#connection_retry_interval=1
+
+# Increase the connection_retry_interval by this many seconds after each
+# unsuccessful failover attempt (integer value)
+# Minimum value: 0
+#connection_retry_backoff=2
+
+# Maximum limit for connection_retry_interval + connection_retry_backoff
+# (integer value)
+# Minimum value: 1
+#connection_retry_interval_max=30
+
+# Time to pause between re-connecting an AMQP 1.0 link that failed due to a
+# recoverable error (integer value)
+# Minimum value: 1
+#link_retry_delay=10
+
+# The maximum number of attempts to re-send a reply message which failed due to
+# a recoverable error (integer value)
+# Minimum value: -1
+#default_reply_retry=0
+
+# The deadline for an rpc reply message delivery (integer value)
+# Minimum value: 5
+#default_reply_timeout=30
+
+# The deadline for an rpc cast or call message delivery. Only used when caller
+# does not provide a timeout expiry (integer value)
+# Minimum value: 5
+#default_send_timeout=30
+
+# The deadline for a sent notification message delivery. Only used when caller
+# does not provide a timeout expiry (integer value)
+# Minimum value: 5
+#default_notify_timeout=30
+
+# The duration to schedule a purge of idle sender links. Detach link after
+# expiry (integer value)
+# Minimum value: 1
+#default_sender_link_timeout=600
+
+# Indicates the addressing mode used by the driver.
+# Permitted values:
+# 'legacy'   - use legacy non-routable addressing
+# 'routable' - use routable addresses
+# 'dynamic'  - use legacy addresses if the message bus does not support routing
+# otherwise use routable addressing (string value)
+#addressing_mode=dynamic
+
+# Enable virtual host support for those message buses that do not natively
+# support virtual hosting (such as qpidd). When set to true the virtual host
+# name will be added to all message bus addresses, effectively creating a
+# private 'subnet' per virtual host. Set to False if the message bus supports
+# virtual hosting using the 'hostname' field in the AMQP 1.0 Open performative
+# as the name of the virtual host (boolean value)
+#pseudo_vhost=true
+
+# address prefix used when sending to a specific server (string value)
+#server_request_prefix=exclusive
+
+# address prefix used when broadcasting to all servers (string value)
+#broadcast_prefix=broadcast
+
+# address prefix when sending to any server in group (string value)
+#group_request_prefix=unicast
+
+# Address prefix for all generated RPC addresses (string value)
+#rpc_address_prefix=openstack.org/om/rpc
+
+# Address prefix for all generated Notification addresses (string value)
+#notify_address_prefix=openstack.org/om/notify
+
+# Appended to the address prefix when sending a fanout message. Used by the
+# message bus to identify fanout messages (string value)
+#multicast_address=multicast
+
+# Appended to the address prefix when sending to a particular RPC/Notification
+# server. Used by the message bus to identify messages sent to a single
+# destination (string value)
+#unicast_address=unicast
+
+# Appended to the address prefix when sending to a group of consumers. Used by
+# the message bus to identify messages that should be delivered in a round-robin
+# fashion across consumers (string value)
+#anycast_address=anycast
+
+# Exchange name used in notification addresses.
+# Exchange name resolution precedence:
+# Target.exchange if set
+# else default_notification_exchange if set
+# else control_exchange if set
+# else 'notify' (string value)
+#default_notification_exchange=<None>
+
+# Exchange name used in RPC addresses.
+# Exchange name resolution precedence:
+# Target.exchange if set
+# else default_rpc_exchange if set
+# else control_exchange if set
+# else 'rpc' (string value)
+#default_rpc_exchange=<None>
+
+# Window size for incoming RPC Reply messages (integer value)
+# Minimum value: 1
+#reply_link_credit=200
+
+# Window size for incoming RPC Request messages (integer value)
+# Minimum value: 1
+#rpc_server_credit=100
+
+# Window size for incoming Notification messages (integer value)
+# Minimum value: 1
+#notify_server_credit=100
+
+# Send messages of this type pre-settled.
+# Pre-settled messages will not receive acknowledgement
+# from the peer. Note well: pre-settled messages may be
+# silently discarded if the delivery fails.
+# Permitted values:
+# 'rpc-call' - send RPC Calls pre-settled
+# 'rpc-reply'- send RPC Replies pre-settled
+# 'rpc-cast' - Send RPC Casts pre-settled
+# 'notify'   - Send Notifications pre-settled
+#  (multi valued)
+#pre_settled=rpc-cast
+#pre_settled=rpc-reply
+
+
+[oslo_messaging_kafka]
+
+#
+# From oslo.messaging
+#
+
+# Max fetch bytes of Kafka consumer (integer value)
+#kafka_max_fetch_bytes=1048576
+
+# Default timeout(s) for Kafka consumers (floating point value)
+#kafka_consumer_timeout=1.0
+
+# DEPRECATED: Pool Size for Kafka Consumers (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#pool_size=10
+
+# DEPRECATED: The pool size limit for connections expiration policy (integer
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#conn_pool_min_size=2
+
+# DEPRECATED: The time-to-live in sec of idle connections in the pool (integer
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#conn_pool_ttl=1200
+
+# Group id for Kafka consumer. Consumers in one group will coordinate message
+# consumption (string value)
+#consumer_group=oslo_messaging_consumer
+
+# Upper bound on the delay for KafkaProducer batching in seconds (floating point
+# value)
+#producer_batch_timeout=0.0
+
+# Size of batch for the producer async send (integer value)
+#producer_batch_size=16384
+
+# The compression codec for all data generated by the producer. If not set,
+# compression will not be used. Note that the allowed values of this depend on
+# the kafka version (string value)
+# Possible values:
+# none - <No description provided>
+# gzip - <No description provided>
+# snappy - <No description provided>
+# lz4 - <No description provided>
+# zstd - <No description provided>
+#compression_codec=none
+
+# Enable asynchronous consumer commits (boolean value)
+#enable_auto_commit=false
+
+# The maximum number of records returned in a poll call (integer value)
+#max_poll_records=500
+
+# Protocol used to communicate with brokers (string value)
+# Possible values:
+# PLAINTEXT - <No description provided>
+# SASL_PLAINTEXT - <No description provided>
+# SSL - <No description provided>
+# SASL_SSL - <No description provided>
+#security_protocol=PLAINTEXT
+
+# Mechanism when security protocol is SASL (string value)
+#sasl_mechanism=PLAIN
+
+# CA certificate PEM file used to verify the server certificate (string value)
+#ssl_cafile =
+
+# Client certificate PEM file used for authentication (string value)
+#ssl_client_cert_file =
+
+# Client key PEM file used for authentication (string value)
+#ssl_client_key_file =
+
+# Client key password file used for authentication (string value)
+#ssl_client_key_password =
+
+
+[oslo_messaging_notifications]
+
+#
+# From oslo.messaging
+#
+
+# The Drivers(s) to handle sending notifications. Possible values are messaging,
+# messagingv2, routing, log, test, noop (multi valued)
+# Deprecated group/name - [DEFAULT]/notification_driver
+#driver =
+
+# A URL representing the messaging driver to use for notifications. If not set,
+# we fall back to the same configuration used for RPC (string value)
+# Deprecated group/name - [DEFAULT]/notification_transport_url
+#transport_url=<None>
+
+# AMQP topic used for OpenStack notifications (list value)
+# Deprecated group/name - [rpc_notifier2]/topics
+# Deprecated group/name - [DEFAULT]/notification_topics
+#topics=notifications
+
+# The maximum number of attempts to re-send a notification message which failed
+# to be delivered due to a recoverable error. 0 - No retry, -1 - indefinite
+# (integer value)
+#retry=-1
+
+
+[oslo_messaging_rabbit]
+
+#
+# From oslo.messaging
+#
+
+# Use durable queues in AMQP. If rabbit_quorum_queue is enabled, queues will be
+# durable and this value will be ignored (boolean value)
+#amqp_durable_queues=false
+
+# Auto-delete queues in AMQP (boolean value)
+#amqp_auto_delete=false
+
+# Connect over SSL (boolean value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_use_ssl
+#ssl=false
+
+# SSL version to use (valid only if SSL enabled). Valid values are TLSv1 and
+# SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be available on some
+# distributions (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_version
+#ssl_version =
+
+# SSL key file (valid only if SSL enabled) (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_keyfile
+#ssl_key_file =
+
+# SSL cert file (valid only if SSL enabled) (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_certfile
+#ssl_cert_file =
+
+# SSL certification authority file (valid only if SSL enabled) (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
+#ssl_ca_file =
+
+# Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
+# Python support. This is available in Python 3.9 in all environments and may
+# have been backported to older Python versions on select environments. If the
+# Python executable used does not support OpenSSL FIPS mode, an exception will
+# be raised (boolean value)
+#ssl_enforce_fips_mode=false
+
+# Run the health check heartbeat thread through a native python thread by
+# default. If this option is equal to False then the health check heartbeat will
+# inherit the execution model from the parent process. For example if the parent
+# process has monkey patched the stdlib by using eventlet/greenlet then the
+# heartbeat will be run through a green thread. This option should be set to
+# True only for the wsgi services (boolean value)
+#heartbeat_in_pthread=false
+
+# How long to wait (in seconds) before reconnecting in response to an AMQP
+# consumer cancel notification (floating point value)
+# Minimum value: 0.0
+# Maximum value: 4.5
+#kombu_reconnect_delay=1.0
+
+# EXPERIMENTAL: Possible values are: gzip, bz2. If not set compression will not
+# be used. This option may not be available in future versions (string value)
+#kombu_compression=<None>
+
+# How long to wait a missing client before abandoning to send it its replies.
+# This value should not be longer than rpc_response_timeout (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_reconnect_timeout
+#kombu_missing_consumer_retry_timeout=60
+
+# Determines how the next RabbitMQ node is chosen in case the one we are
+# currently connected to becomes unavailable. Takes effect only if more than one
+# RabbitMQ node is provided in config (string value)
+# Possible values:
+# round-robin - <No description provided>
+# shuffle - <No description provided>
+#kombu_failover_strategy=round-robin
+
+# The RabbitMQ login method (string value)
+# Possible values:
+# PLAIN - <No description provided>
+# AMQPLAIN - <No description provided>
+# EXTERNAL - <No description provided>
+# RABBIT-CR-DEMO - <No description provided>
+#rabbit_login_method=AMQPLAIN
+
+# How frequently to retry connecting with RabbitMQ (integer value)
+#rabbit_retry_interval=1
+
+# How long to backoff for between retries when connecting to RabbitMQ (integer
+# value)
+#rabbit_retry_backoff=2
+
+# Maximum interval of RabbitMQ connection retries. Default is 30 seconds
+# (integer value)
+#rabbit_interval_max=30
+
+# Try to use HA queues in RabbitMQ (x-ha-policy: all). If you change this
+# option, you must wipe the RabbitMQ database. In RabbitMQ 3.0, queue mirroring
+# is no longer controlled by the x-ha-policy argument when declaring a queue. If
+# you just want to make sure that all queues (except those with auto-generated
+# names) are mirrored across all nodes, run: "rabbitmqctl set_policy HA
+# '^(?!amq\.).*' '{"ha-mode": "all"}' " (boolean value)
+#rabbit_ha_queues=false
+
+# Use quorum queues in RabbitMQ (x-queue-type: quorum). The quorum queue is a
+# modern queue type for RabbitMQ implementing a durable, replicated FIFO queue
+# based on the Raft consensus algorithm. It is available as of RabbitMQ 3.8.0.
+# If set this option will conflict with the HA queues (``rabbit_ha_queues``) aka
+# mirrored queues, in other words the HA queues should be disabled, quorum
+# queues durable by default so the amqp_durable_queues opion is ignored when
+# this option enabled (boolean value)
+#rabbit_quorum_queue=false
+
+# Each time a message is redelivered to a consumer, a counter is incremented.
+# Once the redelivery count exceeds the delivery limit the message gets dropped
+# or dead-lettered (if a DLX exchange has been configured) Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit
+# (integer value)
+#rabbit_quorum_delivery_limit=0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of messages in the quorum queue. Used only when rabbit_quorum_queue is
+# enabled, Default 0 which means dont set a limit (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_length
+#rabbit_quorum_max_memory_length=0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of memory bytes used by the quorum queue. Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit
+# (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_bytes
+#rabbit_quorum_max_memory_bytes=0
+
+# Positive integer representing duration in seconds for queue TTL (x-expires).
+# Queues which are unused for the duration of the TTL are automatically deleted.
+# The parameter affects only reply and fanout queues (integer value)
+# Minimum value: 1
+#rabbit_transient_queues_ttl=1800
+
+# Specifies the number of messages to prefetch. Setting to zero allows unlimited
+# messages (integer value)
+#rabbit_qos_prefetch_count=0
+
+# Number of seconds after which the Rabbit broker is considered down if
+# heartbeat's keep-alive fails (0 disables heartbeat) (integer value)
+#heartbeat_timeout_threshold=60
+
+# How often times during the heartbeat_timeout_threshold we check the heartbeat
+# (integer value)
+#heartbeat_rate=2
+
+# DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag for direct
+# send. The direct send is used as reply, so the MessageUndeliverable exception
+# is raised in case the client queue does not exist.MessageUndeliverable
+# exception will be used to loop for a timeout to lets a chance to sender to
+# recover.This flag is deprecated and it will not be possible to deactivate this
+# functionality anymore (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Mandatory flag no longer deactivable.
+#direct_mandatory_flag=true
+
+# Enable x-cancel-on-ha-failover flag so that rabbitmq server will cancel and
+# notify consumerswhen queue is down (boolean value)
+#enable_cancel_on_failover=false
+
+
+[oslo_policy]
+
+#
+# From oslo.policy
+#
+
+# This option controls whether or not to enforce scope when evaluating policies.
+# If ``True``, the scope of the token used in the request is compared to the
+# ``scope_types`` of the policy being enforced. If the scopes do not match, an
+# ``InvalidScope`` exception will be raised. If ``False``, a message will be
+# logged informing operators that policies are being invoked with mismatching
+# scope (boolean value)
+#enforce_scope=true
+
+# This option controls whether or not to use old deprecated defaults when
+# evaluating policies. If ``True``, the old deprecated defaults are not going to
+# be evaluated. This means if any existing token is allowed for old defaults but
+# is disallowed for new defaults, it will be disallowed. It is encouraged to
+# enable this flag along with the ``enforce_scope`` flag so that you can get the
+# benefits of new defaults and ``scope_type`` together. If ``False``, the
+# deprecated policy check string is logically OR'd with the new policy check
+# string, allowing for a graceful upgrade experience between releases with new
+# policies, which is the default behavior (boolean value)
+#enforce_new_defaults=true
+
+# The relative or absolute path of a file that maps roles to permissions for a
+# given service. Relative paths must be specified in relation to the
+# configuration file setting this option (string value)
+#policy_file=policy.yaml
+
+# Default rule. Enforced when a requested rule is not found (string value)
+#policy_default_rule=default
+
+# Directories where policy configuration files are stored. They can be relative
+# to any directory in the search path defined by the config_dir option, or
+# absolute paths. The file defined by policy_file must exist for these
+# directories to be searched.  Missing or empty directories are ignored (multi
+# valued)
+#policy_dirs=policy.d
+
+# Content Type to send and receive data for REST based policy check (string
+# value)
+# Possible values:
+# application/x-www-form-urlencoded - <No description provided>
+# application/json - <No description provided>
+#remote_content_type=application/x-www-form-urlencoded
+
+# server identity verification for REST based policy check (boolean value)
+#remote_ssl_verify_server_crt=false
+
+# Absolute path to ca cert file for REST based policy check (string value)
+#remote_ssl_ca_crt_file=<None>
+
+# Absolute path to client cert for REST based policy check (string value)
+#remote_ssl_client_crt_file=<None>
+
+# Absolute path client key file REST based policy check (string value)
+#remote_ssl_client_key_file=<None>
+
+
+[oslo_reports]
+
+#
+# From oslo.reports
+#
+
+# Path to a log directory where to create a file (string value)
+#log_dir=<None>
+
+# The path to a file to watch for changes to trigger the reports, instead of
+# signals. Setting this option disables the signal trigger for the reports. If
+# application is running as a WSGI application it is recommended to use this
+# instead of signals (string value)
+#file_event_handler=<None>
+
+# How many seconds to wait between polls when file_event_handler is set (integer
+# value)
+#file_event_handler_interval=1
+
+
+[pci]
+
+#
+# From nova.conf
+#
+
+#
+# An alias for a PCI passthrough device requirement. For more information, refer
+# to the documentation. (multi valued)
+# Deprecated group/name - [DEFAULT]/pci_alias
+#alias =
+
+#
+# Specify the PCI devices available to VMs. For more information, refer to the
+# documentation. (multi valued)
+# Deprecated group/name - [pci]/passthrough_whitelist
+# Deprecated group/name - [DEFAULT]/pci_passthrough_whitelist
+#device_spec =
+
+#
+# Enable PCI resource inventory reporting to Placement. If it is enabled then
+# the
+# nova-compute service will report PCI resource inventories to Placement
+# according to the [pci]device_spec configuration and the PCI devices reported
+# by the hypervisor. Once it is enabled it cannot be disabled any more. In a
+# future release the default of this config will be change to True. For more
+# information, refer to the documentation. (boolean value)
+#report_in_placement=false
+
+
+[placement]
+
+#
+# From nova.conf
+#
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [placement]/auth_plugin
+#auth_type=<None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section=<None>
+
+# Authentication URL (string value)
+#auth_url=<None>
+
+# Scope for system operations (string value)
+#system_scope=<None>
+
+# Domain ID to scope to (string value)
+#domain_id=<None>
+
+# Domain name to scope to (string value)
+#domain_name=<None>
+
+# Project ID to scope to (string value)
+#project_id=<None>
+
+# Project name to scope to (string value)
+#project_name=<None>
+
+# Domain ID containing project (string value)
+#project_domain_id=<None>
+
+# Domain name containing project (string value)
+#project_domain_name=<None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id=<None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will be used for both
+# the user and project domain in v3 and ignored in v2 authentication (string
+# value)
+#default_domain_id=<None>
+
+# Optional domain name to use with v3 API and v2 parameters. It will be used for
+# both the user and project domain in v3 and ignored in v2 authentication
+# (string value)
+#default_domain_name=<None>
+
+# User ID (string value)
+#user_id=<None>
+
+# Username (string value)
+# Deprecated group/name - [placement]/user_name
+#username=<None>
+
+# User's domain id (string value)
+#user_domain_id=<None>
+
+# User's domain name (string value)
+#user_domain_name=<None>
+
+# User's password (string value)
+#password=<None>
+
+# Tenant ID (string value)
+#tenant_id=<None>
+
+# Tenant Name (string value)
+#tenant_name=<None>
+
+# The default service_type for endpoint URL discovery (string value)
+#service_type=placement
+
+# The default service_name for endpoint URL discovery (string value)
+#service_name=<None>
+
+# List of interfaces, in order of preference, for endpoint URL (list value)
+#valid_interfaces=internal,public
+
+# The default region_name for endpoint URL discovery (string value)
+#region_name=<None>
+
+# Always use this endpoint URL for requests for this client. NOTE: The
+# unversioned endpoint should be specified here; to request a particular API
+# version, use the `version`, `min-version`, and/or `max-version` options
+# (string value)
+#endpoint_override=<None>
+
+# The maximum number of retries that should be attempted for connection errors
+# (integer value)
+#connect_retries=<None>
+
+# Delay (in seconds) between two retries for connection errors. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#connect_retry_delay=<None>
+
+# The maximum number of retries that should be attempted for retriable HTTP
+# status codes (integer value)
+#status_code_retries=<None>
+
+# Delay (in seconds) between two retries for retriable status codes. If not set,
+# exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
+# used (floating point value)
+#status_code_retry_delay=<None>
+
+
+[privsep]
+# Configuration options for the oslo.privsep daemon. Note that this group name
+# can be changed by the consuming service. Check the service's docs to see if
+# this is the case.
+
+#
+# From oslo.privsep
+#
+
+# User that the privsep daemon should run as (string value)
+#user=<None>
+
+# Group that the privsep daemon should run as (string value)
+#group=<None>
+
+# List of Linux capabilities retained by the privsep daemon (list value)
+#capabilities =
+
+# The number of threads available for privsep to concurrently run processes.
+# Defaults to the number of CPU cores in the system (integer value)
+# Minimum value: 1
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#thread_pool_size=multiprocessing.cpu_count()
+
+# Command to invoke to start the privsep daemon if not using the "fork" method.
+# If not specified, a default is generated using "sudo privsep-helper" and
+# arguments designed to recreate the current configuration. This command must
+# accept suitable --privsep_context and --privsep_sock_path arguments (string
+# value)
+#helper_command=<None>
+
+# Logger name to use for this privsep context.  By default all contexts log with
+# oslo_privsep.daemon (string value)
+#logger_name=oslo_privsep.daemon
+
+
+[profiler]
+
+#
+# From osprofiler
+#
+
+#
+# Enable the profiling for all services on this node. For more information,
+# refer to the documentation. (boolean value)
+# Deprecated group/name - [profiler]/profiler_enabled
+#enabled=false
+
+#
+# Enable SQL requests profiling in services. For more information, refer to the
+# documentation. (boolean value)
+#trace_sqlalchemy=false
+
+#
+# Secret key(s) to use for encrypting context data for performance profiling.
+# For more information, refer to the documentation. (string value)
+#hmac_keys=SECRET_KEY
+
+#
+# Connection string for a notifier backend. For more information, refer to the
+# documentation. (string value)
+#connection_string=messaging://
+
+#
+# Document type for notification indexing in elasticsearch.
+#  (string value)
+#es_doc_type=notification
+
+#
+# This parameter is a time value parameter (for example: es_scroll_time=2m),
+# indicating for how long the nodes that participate in the search will maintain
+# relevant resources in order to continue and support it.
+#  (string value)
+#es_scroll_time=2m
+
+#
+# Elasticsearch splits large requests in batches. This parameter defines
+# maximum size of each batch (for example: es_scroll_size=10000).
+#  (integer value)
+#es_scroll_size=10000
+
+#
+# Redissentinel provides a timeout option on the connections.
+# This parameter defines that timeout (for example: socket_timeout=0.1).
+#  (floating point value)
+#socket_timeout=0.1
+
+#
+# Redissentinel uses a service name to identify a master redis service.
+# This parameter defines the name (for example:
+# ``sentinal_service_name=mymaster``).
+#  (string value)
+#sentinel_service_name=mymaster
+
+#
+# Enable filter traces that contain error/exception to a separated place. For
+# more information, refer to the documentation. (boolean value)
+#filter_error_trace=false
+
+
+[quota]
+#
+# Quota options allow to manage quotas in openstack deployment.
+
+#
+# From nova.conf
+#
+
+#
+# The number of instances allowed per project. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_instances
+#instances=10
+
+#
+# The number of instance cores or vCPUs allowed per project. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_cores
+#cores=20
+
+#
+# The number of megabytes of instance RAM allowed per project. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_ram
+#ram=51200
+
+#
+# The number of metadata items allowed per instance. For more information, refer
+# to the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_metadata_items
+#metadata_items=128
+
+#
+# The number of injected files allowed. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_injected_files
+#injected_files=5
+
+#
+# The number of bytes allowed per injected file. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_injected_file_content_bytes
+#injected_file_content_bytes=10240
+
+#
+# The maximum allowed injected file path length. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_injected_file_path_length
+#injected_file_path_length=255
+
+#
+# The maximum number of key pairs allowed per user. For more information, refer
+# to the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_key_pairs
+#key_pairs=100
+
+#
+# The maximum number of server groups per project. For more information, refer
+# to the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_server_groups
+#server_groups=10
+
+#
+# The maximum number of servers per server group. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: -1
+# Deprecated group/name - [DEFAULT]/quota_server_group_members
+#server_group_members=10
+
+#
+# Provides abstraction for quota checks. Users can configure a specific
+# driver to use for quota checks.
+#  (string value)
+# Possible values:
+# nova.quota.DbQuotaDriver - Stores quota limit information in the database and
+# relies on the ``quota_*`` configuration options for default quota limit
+# values. Counts quota usage on-demand.
+# nova.quota.NoopQuotaDriver - Ignores quota and treats all resources as
+# unlimited.
+# nova.quota.UnifiedLimitsDriver - Do not use. Still being developed.
+#driver=nova.quota.DbQuotaDriver
+
+#
+# Recheck quota after resource creation to prevent allowing quota to be
+# exceeded. For more information, refer to the documentation. (boolean value)
+#recheck_quota=true
+
+#
+# Enable the counting of quota usage from the placement service. For more
+# information, refer to the documentation. (boolean value)
+#count_usage_from_placement=false
+
+
+[rdp]
+#
+# Options under this group enable and configure Remote Desktop Protocol (
+# RDP) related features.
+#
+# This group is only relevant to Hyper-V users.
+
+#
+# From nova.conf
+#
+
+#
+# Enable Remote Desktop Protocol (RDP) related features. For more information,
+# refer to the documentation. (boolean value)
+#enabled=false
+
+#
+# The URL an end user would use to connect to the RDP HTML5 console proxy.
+# The console proxy service is called with this token-embedded URL and
+# establishes the connection to the proper instance. For more information, refer
+# to the documentation. (uri value)
+#html5_proxy_base_url=http://127.0.0.1:6083/
+
+
+[remote_debug]
+
+#
+# From nova.conf
+#
+
+#
+# Debug host (IP or name) to connect to. For more information, refer to the
+# documentation. (host address value)
+#host=<None>
+
+#
+# Debug port to connect to. For more information, refer to the documentation.
+# (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#port=<None>
+
+
+[scheduler]
+
+#
+# From nova.conf
+#
+
+#
+# The maximum number of schedule attempts. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 1
+#max_attempts=3
+
+#
+# Periodic task interval. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: -1
+#discover_hosts_in_cells_interval=-1
+
+#
+# The maximum number of placement results to request. For more information,
+# refer to the documentation. (integer value)
+# Minimum value: 1
+#max_placement_results=1000
+
+#
+# Number of workers for the nova-scheduler service. For more information, refer
+# to the documentation. (integer value)
+# Minimum value: 0
+#workers=<None>
+
+#
+# Enable the scheduler to filter compute hosts affined to routed network segment
+# aggregates. For more information, refer to the documentation. (boolean value)
+#query_placement_for_routed_network_aggregates=false
+
+#
+# Restrict tenants to specific placement aggregates. For more information, refer
+# to the documentation. (boolean value)
+#limit_tenants_to_placement_aggregate=false
+
+#
+# Require a placement aggregate association for all tenants. For more
+# information, refer to the documentation. (boolean value)
+#placement_aggregate_required_for_tenants=false
+
+# DEPRECATED:
+# Use placement to determine availability zones. For more information, refer to
+# the documentation. (boolean value)
+# This option is deprecated for removal since 24.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# Since the introduction of placement pre-filters in 18.0.0 (Rocky), we have
+# supported tracking Availability Zones either natively in placement or using
+# the
+# legacy ``AvailabilityZoneFilter`` scheduler filter. In 24.0.0 (Xena), the
+# filter-based approach has been deprecated for removal in favor of the
+# placement-based approach. As a result, this config option has also been
+# deprecated and will be removed when the ``AvailabilityZoneFilter`` filter is
+# removed.
+#query_placement_for_availability_zone=true
+
+#
+# Use placement to determine host support for the instance's image type. For
+# more information, refer to the documentation. (boolean value)
+#query_placement_for_image_type_support=false
+
+#
+# Restrict use of aggregates to instances with matching metadata. For more
+# information, refer to the documentation. (boolean value)
+#enable_isolated_aggregate_filtering=false
+
+#
+# Use placement to filter hosts based on image metadata. For more information,
+# refer to the documentation. (boolean value)
+#image_metadata_prefilter=false
+
+
+[serial_console]
+#
+# The serial console feature allows you to connect to a guest in case a
+# graphical console like VNC, RDP or SPICE is not available. This is only
+# currently supported for the libvirt, Ironic and hyper-v drivers.
+
+#
+# From nova.conf
+#
+
+#
+# Enable the serial console feature. For more information, refer to the
+# documentation. (boolean value)
+#enabled=false
+
+#
+# A range of TCP ports a guest can use for its backend. For more information,
+# refer to the documentation. (string value)
+#port_range=10000:20000
+
+#
+# The URL an end user would use to connect to the ``nova-serialproxy`` service.
+# For more information, refer to the documentation. (uri value)
+#base_url=ws://127.0.0.1:6083/
+
+#
+# The IP address to which proxy clients (like ``nova-serialproxy``) should
+# connect to get the serial console of an instance. For more information, refer
+# to the documentation. (string value)
+#proxyclient_address=127.0.0.1
+
+#
+# The IP address which is used by the ``nova-serialproxy`` service to listen
+# for incoming requests. For more information, refer to the documentation.
+# (string value)
+#serialproxy_host=0.0.0.0
+
+#
+# The port number which is used by the ``nova-serialproxy`` service to listen
+# for incoming requests. For more information, refer to the documentation. (port
+# value)
+# Minimum value: 0
+# Maximum value: 65535
+#serialproxy_port=6083
+
+
+[service_user]
+#
+# Configuration options for service to service authentication using a service
+# token. These options allow sending a service token along with the user's token
+# when contacting external REST APIs.
+
+#
+# From nova.conf
+#
+
+#
+# When True, if sending a user token to a REST API, also send a service token.
+# For more information, refer to the documentation. (boolean value)
+#send_service_user_token=false
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [service_user]/auth_plugin
+#auth_type=<None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section=<None>
+
+# Authentication URL (string value)
+#auth_url=<None>
+
+# Scope for system operations (string value)
+#system_scope=<None>
+
+# Domain ID to scope to (string value)
+#domain_id=<None>
+
+# Domain name to scope to (string value)
+#domain_name=<None>
+
+# Project ID to scope to (string value)
+#project_id=<None>
+
+# Project name to scope to (string value)
+#project_name=<None>
+
+# Domain ID containing project (string value)
+#project_domain_id=<None>
+
+# Domain name containing project (string value)
+#project_domain_name=<None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id=<None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will be used for both
+# the user and project domain in v3 and ignored in v2 authentication (string
+# value)
+#default_domain_id=<None>
+
+# Optional domain name to use with v3 API and v2 parameters. It will be used for
+# both the user and project domain in v3 and ignored in v2 authentication
+# (string value)
+#default_domain_name=<None>
+
+# User ID (string value)
+#user_id=<None>
+
+# Username (string value)
+# Deprecated group/name - [service_user]/user_name
+#username=<None>
+
+# User's domain id (string value)
+#user_domain_id=<None>
+
+# User's domain name (string value)
+#user_domain_name=<None>
+
+# User's password (string value)
+#password=<None>
+
+# Tenant ID (string value)
+#tenant_id=<None>
+
+# Tenant Name (string value)
+#tenant_name=<None>
+
+
+[spice]
+#
+# SPICE console feature allows you to connect to a guest virtual machine.
+# SPICE is a replacement for fairly limited VNC protocol.
+#
+# Following requirements must be met in order to use SPICE:
+#
+# * Virtualization driver must be libvirt
+# * spice.enabled set to True
+# * vnc.enabled set to False
+# * update html5proxy_base_url
+# * update server_proxyclient_address
+
+#
+# From nova.conf
+#
+
+#
+# Enable SPICE related features. For more information, refer to the
+# documentation. (boolean value)
+#enabled=false
+
+#
+# Enable the SPICE guest agent support on the instances. For more information,
+# refer to the documentation. (boolean value)
+#agent_enabled=true
+
+#
+# Location of the SPICE HTML5 console proxy. For more information, refer to the
+# documentation. (uri value)
+#html5proxy_base_url=http://127.0.0.1:6082/spice_auto.html
+
+#
+# The  address where the SPICE server running on the instances should listen.
+# For more information, refer to the documentation. (string value)
+#server_listen=127.0.0.1
+
+#
+# The address used by ``nova-spicehtml5proxy`` client to connect to instance
+# console. For more information, refer to the documentation. (string value)
+#server_proxyclient_address=127.0.0.1
+
+#
+# IP address or a hostname on which the ``nova-spicehtml5proxy`` service
+# listens for incoming requests. For more information, refer to the
+# documentation. (host address value)
+#html5proxy_host=0.0.0.0
+
+#
+# Port on which the ``nova-spicehtml5proxy`` service listens for incoming
+# requests. For more information, refer to the documentation. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#html5proxy_port=6082
+
+#
+# Configure the SPICE image compression (lossless).
+#  (string value)
+# Possible values:
+# auto_glz - enable image compression mode to choose between glz and quic
+# algorithm, based on image properties
+# auto_lz - enable image compression mode to choose between lz and quic
+# algorithm, based on image properties
+# quic - enable image compression based on the SFALIC algorithm
+# glz - enable image compression using lz with history based global dictionary
+# lz - enable image compression with the Lempel-Ziv algorithm
+# off - disable image compression
+# Advanced Option: intended for advanced users and not used
+# by the majority of users, and might have a significant
+# effect on stability and/or performance.
+#image_compression=<None>
+
+#
+# Configure the SPICE wan image compression (lossy for slow links).
+#  (string value)
+# Possible values:
+# auto - enable JPEG image compression automatically
+# never - disable JPEG image compression
+# always - enable JPEG image compression
+# Advanced Option: intended for advanced users and not used
+# by the majority of users, and might have a significant
+# effect on stability and/or performance.
+#jpeg_compression=<None>
+
+#
+# Configure the SPICE wan image compression (lossless for slow links).
+#  (string value)
+# Possible values:
+# auto - enable zlib image compression automatically
+# never - disable zlib image compression
+# always - enable zlib image compression
+# Advanced Option: intended for advanced users and not used
+# by the majority of users, and might have a significant
+# effect on stability and/or performance.
+#zlib_compression=<None>
+
+#
+# Enable the SPICE audio stream compression (using celt).
+#  (boolean value)
+# Advanced Option: intended for advanced users and not used
+# by the majority of users, and might have a significant
+# effect on stability and/or performance.
+#playback_compression=<None>
+
+#
+# Configure the SPICE video stream detection and (lossy) compression.
+#  (string value)
+# Possible values:
+# filter - SPICE server adds additional filters to decide if video streaming
+# should be activated
+# all - any fast-refreshing window can be encoded into a video stream
+# off - no video detection and (lossy) compression is performed
+# Advanced Option: intended for advanced users and not used
+# by the majority of users, and might have a significant
+# effect on stability and/or performance.
+#streaming_mode=<None>
+
+
+[upgrade_levels]
+#
+# upgrade_levels options are used to set version cap for RPC
+# messages sent between different nova services.
+#
+# By default all services send messages using the latest version
+# they know about.
+#
+# The compute upgrade level is an important part of rolling upgrades
+# where old and new nova-compute services run side by side.
+#
+# The other options can largely be ignored, and are only kept to
+# help with a possible future backport issue.
+
+#
+# From nova.conf
+#
+
+#
+# Compute RPC API version cap. For more information, refer to the documentation.
+# (string value)
+#compute=<None>
+
+# DEPRECATED:
+# Cert RPC API version cap. For more information, refer to the documentation.
+# (string value)
+# This option is deprecated for removal since 18.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# The nova-cert service was removed in 16.0.0 (Pike) so this option
+# is no longer used.
+#cert=<None>
+
+#
+# Scheduler RPC API version cap. For more information, refer to the
+# documentation. (string value)
+#scheduler=<None>
+
+#
+# Conductor RPC API version cap. For more information, refer to the
+# documentation. (string value)
+#conductor=<None>
+
+#
+# Base API RPC API version cap. For more information, refer to the
+# documentation. (string value)
+#baseapi=<None>
+
+
+[vault]
+
+#
+# From nova.conf
+#
+
+# root token for vault (string value)
+#root_token_id=<None>
+
+# AppRole role_id for authentication with vault (string value)
+#approle_role_id=<None>
+
+# AppRole secret_id for authentication with vault (string value)
+#approle_secret_id=<None>
+
+# Mountpoint of KV store in Vault to use, for example: secret (string value)
+#kv_mountpoint=secret
+
+# Version of KV store in Vault to use, for example: 2 (integer value)
+#kv_version=2
+
+# Use this endpoint to connect to Vault, for example: "http://127.0.0.1:8200"
+# (string value)
+#vault_url=http://127.0.0.1:8200
+
+# Absolute path to ca cert file (string value)
+#ssl_ca_crt_file=<None>
+
+# SSL Enabled/Disabled (boolean value)
+#use_ssl=false
+
+# Vault Namespace to use for all requests to Vault. Vault Namespaces feature is
+# available only in Vault Enterprise (string value)
+#namespace=<None>
+
+
+[vendordata_dynamic_auth]
+#
+# Options within this group control the authentication of the vendordata
+# subsystem of the metadata API server (and config drive) with external systems.
+
+#
+# From nova.conf
+#
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile=<None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile=<None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile=<None>
+
+# Verify HTTPS connections (boolean value)
+#insecure=false
+
+# Timeout value for http requests (integer value)
+#timeout=<None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing=false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers=false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [vendordata_dynamic_auth]/auth_plugin
+#auth_type=<None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section=<None>
+
+# Authentication URL (string value)
+#auth_url=<None>
+
+# Scope for system operations (string value)
+#system_scope=<None>
+
+# Domain ID to scope to (string value)
+#domain_id=<None>
+
+# Domain name to scope to (string value)
+#domain_name=<None>
+
+# Project ID to scope to (string value)
+#project_id=<None>
+
+# Project name to scope to (string value)
+#project_name=<None>
+
+# Domain ID containing project (string value)
+#project_domain_id=<None>
+
+# Domain name containing project (string value)
+#project_domain_name=<None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id=<None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will be used for both
+# the user and project domain in v3 and ignored in v2 authentication (string
+# value)
+#default_domain_id=<None>
+
+# Optional domain name to use with v3 API and v2 parameters. It will be used for
+# both the user and project domain in v3 and ignored in v2 authentication
+# (string value)
+#default_domain_name=<None>
+
+# User ID (string value)
+#user_id=<None>
+
+# Username (string value)
+# Deprecated group/name - [vendordata_dynamic_auth]/user_name
+#username=<None>
+
+# User's domain id (string value)
+#user_domain_id=<None>
+
+# User's domain name (string value)
+#user_domain_name=<None>
+
+# User's password (string value)
+#password=<None>
+
+# Tenant ID (string value)
+#tenant_id=<None>
+
+# Tenant Name (string value)
+#tenant_name=<None>
+
+
+[vmware]
+#
+# Related options:
+# Following options must be set in order to launch VMware-based
+# virtual machines.
+#
+# * compute_driver: Must use vmwareapi.VMwareVCDriver.
+# * vmware.host_username
+# * vmware.host_password
+# * vmware.cluster_name
+
+#
+# From nova.conf
+#
+
+#
+# This option should be configured only when using the NSX-MH Neutron
+# plugin. This is the name of the integration bridge on the ESXi server
+# or host. This should not be set for any other Neutron plugin. Hence
+# the default value is not set. For more information, refer to the
+# documentation. (string value)
+#integration_bridge=<None>
+
+#
+# Set this value if affected by an increased network latency causing
+# repeated characters when typing in a remote console.
+#  (integer value)
+# Minimum value: 0
+#console_delay_seconds=<None>
+
+#
+# Identifies the remote system where the serial port traffic will
+# be sent. For more information, refer to the documentation. (string value)
+#serial_port_service_uri=<None>
+
+#
+# Identifies a proxy service that provides network access to the
+# serial_port_service_uri. For more information, refer to the documentation.
+# (uri value)
+#serial_port_proxy_uri=<None>
+
+#
+# Specifies the directory where the Virtual Serial Port Concentrator is
+# storing console log files. It should match the 'serial_log_dir' config
+# value of VSPC.
+#  (string value)
+#serial_log_dir=/opt/vmware/vspc
+
+#
+# Hostname or IP address for connection to VMware vCenter host (host address
+# value)
+#host_ip=<None>
+
+# Port for connection to VMware vCenter host (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#host_port=443
+
+# Username for connection to VMware vCenter host (string value)
+#host_username=<None>
+
+# Password for connection to VMware vCenter host (string value)
+#host_password=<None>
+
+#
+# Specifies the CA bundle file to be used in verifying the vCenter
+# server certificate.
+#  (string value)
+#ca_file=<None>
+
+#
+# If true, the vCenter server certificate is not verified. If false,
+# then the default CA truststore is used for verification. For more information,
+# refer to the documentation. (boolean value)
+#insecure=false
+
+# Name of a VMware Cluster ComputeResource (string value)
+#cluster_name=<None>
+
+#
+# Regular expression pattern to match the name of datastore. For more
+# information, refer to the documentation. (string value)
+#datastore_regex=<None>
+
+#
+# Time interval in seconds to poll remote tasks invoked on
+# VMware VC server.
+#  (floating point value)
+#task_poll_interval=0.5
+
+#
+# Number of times VMware vCenter server API must be retried on connection
+# failures, e.g. socket error, etc.
+#  (integer value)
+# Minimum value: 0
+#api_retry_count=10
+
+#
+# This option specifies VNC starting port. For more information, refer to the
+# documentation. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#vnc_port=5900
+
+#
+# Total number of VNC ports.
+#  (integer value)
+# Minimum value: 0
+#vnc_port_total=10000
+
+#
+# Keymap for VNC. For more information, refer to the documentation. (string
+# value)
+#vnc_keymap=en-us
+
+#
+# This option enables/disables the use of linked clone. For more information,
+# refer to the documentation. (boolean value)
+#use_linked_clone=true
+
+#
+# This option sets the http connection pool size. For more information, refer to
+# the documentation. (integer value)
+# Minimum value: 10
+#connection_pool_size=10
+
+#
+# This option enables or disables storage policy based placement
+# of instances. For more information, refer to the documentation. (boolean
+# value)
+#pbm_enabled=false
+
+#
+# This option specifies the PBM service WSDL file location URL. For more
+# information, refer to the documentation. (string value)
+#pbm_wsdl_location=<None>
+
+#
+# This option specifies the default policy to be used. For more information,
+# refer to the documentation. (string value)
+#pbm_default_policy=<None>
+
+#
+# This option specifies the limit on the maximum number of objects to
+# return in a single result. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: 0
+#maximum_objects=100
+
+#
+# This option adds a prefix to the folder where cached images are stored. For
+# more information, refer to the documentation. (string value)
+#cache_prefix=<None>
+
+
+[vnc]
+#
+# Virtual Network Computer (VNC) can be used to provide remote desktop
+# console access to instances for tenants and/or administrators.
+
+#
+# From nova.conf
+#
+
+#
+# Enable VNC related features. For more information, refer to the documentation.
+# (boolean value)
+# Deprecated group/name - [DEFAULT]/vnc_enabled
+#enabled=true
+
+#
+# The IP address or hostname on which an instance should listen to for
+# incoming VNC connection requests on this node.
+#  (host address value)
+#server_listen=127.0.0.1
+
+#
+# Private, internal IP address or hostname of VNC console proxy. For more
+# information, refer to the documentation. (host address value)
+#server_proxyclient_address=127.0.0.1
+
+#
+# Public address of noVNC VNC console proxy. For more information, refer to the
+# documentation. (uri value)
+#novncproxy_base_url=http://127.0.0.1:6080/vnc_auto.html
+
+#
+# IP address that the noVNC console proxy should bind to. For more information,
+# refer to the documentation. (string value)
+#novncproxy_host=0.0.0.0
+
+#
+# Port that the noVNC console proxy should bind to. For more information, refer
+# to the documentation. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#novncproxy_port=6080
+
+#
+# The authentication schemes to use with the compute node. For more information,
+# refer to the documentation. (list value)
+#auth_schemes=none
+
+# The path to the client certificate PEM file (for x509). For more information,
+# refer to the documentation. (string value)
+#vencrypt_client_key=<None>
+
+# The path to the client key file (for x509). For more information, refer to the
+# documentation. (string value)
+#vencrypt_client_cert=<None>
+
+# The path to the CA certificate PEM file. For more information, refer to the
+# documentation. (string value)
+#vencrypt_ca_certs=<None>
+
+
+[workarounds]
+#
+# A collection of workarounds used to mitigate bugs or issues found in system
+# tools (e.g. Libvirt or QEMU) or Nova itself under certain conditions. These
+# should only be enabled in exceptional circumstances. All options are linked
+# against bug IDs, where more information on the issue can be found.
+
+#
+# From nova.conf
+#
+
+#
+# Use sudo instead of rootwrap. For more information, refer to the
+# documentation. (boolean value)
+#disable_rootwrap=false
+
+# DEPRECATED:
+# Disable live snapshots when using the libvirt driver. For more information,
+# refer to the documentation. (boolean value)
+# This option is deprecated for removal since 19.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option was added to work around issues with libvirt 1.2.2. We no longer
+# support this version of libvirt, which means this workaround is no longer
+# necessary. It will be removed in a future release.
+#disable_libvirt_livesnapshot=false
+
+#
+# Enable handling of events emitted from compute drivers. For more information,
+# refer to the documentation. (boolean value)
+#handle_virt_lifecycle_events=true
+
+#
+# Disable the server group policy check upcall in compute. For more information,
+# refer to the documentation. (boolean value)
+#disable_group_policy_check_upcall=false
+
+# DEPRECATED:
+# Enable live migration of instances with NUMA topologies. For more information,
+# refer to the documentation. (boolean value)
+# This option is deprecated for removal since 20.0.0.
+# Its value may be silently ignored in the future.
+# Reason: This option was added to mitigate known issues
+# when live migrating instances with a NUMA topology with the libvirt driver.
+# Those issues are resolved in Train. Clouds using the libvirt driver and fully
+# upgraded to Train support NUMA-aware live migration. This option will be
+# removed in a future release.
+#enable_numa_live_migration=false
+
+#
+# Ensure the instance directory is removed during clean up when using rbd. For
+# more information, refer to the documentation. (boolean value)
+#ensure_libvirt_rbd_instance_dir_cleanup=false
+
+# DEPRECATED:
+# Disable fallback request for VCPU allocations when using pinned instances. For
+# more information, refer to the documentation. (boolean value)
+# This option is deprecated for removal since 20.0.0.
+# Its value may be silently ignored in the future.
+#disable_fallback_pcpu_query=false
+
+#
+# When booting from an image on a ceph-backed compute node, if the image does
+# not
+# already reside on the ceph cluster (as would be the case if glance is
+# also using the same cluster), nova will download the image from glance and
+# upload it to ceph itself. If using multiple ceph clusters, this may cause nova
+# to unintentionally duplicate the image in a non-COW-able way in the local
+# ceph deployment, wasting space. For more information, refer to the
+# documentation. (boolean value)
+#never_download_image_if_on_rbd=false
+
+#
+# If it is set to True then the libvirt driver will reserve DISK_GB resource for
+# the images stored in the image cache. If the
+# :oslo.config:option:`DEFAULT.instances_path` is on different disk partition
+# than the image cache directory then the driver will not reserve resource for
+# the cache. For more information, refer to the documentation. (boolean value)
+#reserve_disk_resource_for_image_cache=false
+
+#
+# With some kernels initializing the guest apic can result in a kernel hang that
+# renders the guest unusable. This happens as a result of a kernel bug. In most
+# cases the correct fix it to update the guest image kernel to one that is
+# patched however in some cases this is not possible. This workaround allows the
+# emulation of an apic to be disabled per host however it is not recommended to
+# use outside of a CI or developer cloud.
+#  (boolean value)
+#libvirt_disable_apic=false
+
+#
+# The libvirt virt driver implements power on and hard reboot by tearing down
+# every vif of the instance being rebooted then plug them again. By default nova
+# does not wait for network-vif-plugged event from neutron before it lets the
+# instance run. This can cause the instance to requests the IP via DHCP before
+# the neutron backend has a chance to set up the networking backend after the
+# vif
+# plug. For more information, refer to the documentation. (list value)
+#wait_for_vif_plugged_event_during_hard_reboot =
+
+#
+# If it is set to True the libvirt driver will  try as a best effort to send
+# the announce-self command to the QEMU monitor so that it generates RARP frames
+# to update network switches in the post live migration phase on the
+# destination. For more information, refer to the documentation. (boolean value)
+#enable_qemu_monitor_announce_self=false
+
+#
+# The total number of times to send the announce_self command to the QEMU
+# monitor when enable_qemu_monitor_announce_self is enabled. For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 1
+#qemu_monitor_announce_self_count=3
+
+#
+# The number of seconds to wait before re-sending the announce_self
+# command to the QEMU monitor. For more information, refer to the documentation.
+# (integer value)
+# Minimum value: 1
+#qemu_monitor_announce_self_interval=1
+
+#
+# If this is set, the normal safety check for old compute services will be
+# treated as a warning instead of an error. This is only to be enabled to
+# facilitate a Fast-Forward upgrade where new control services are being started
+# before compute nodes have been able to update their service record. In an FFU,
+# the service records in the database will be more than one version old until
+# the compute nodes start up, but control services need to be online first.
+#  (boolean value)
+#disable_compute_service_check_for_ffu=false
+
+#
+# When using unified limits, use VCPU + PCPU for VCPU quota usage. For more
+# information, refer to the documentation. (boolean value)
+#unified_limits_count_pcpu_as_vcpu=false
+
+#
+# With the libvirt driver, during live migration, skip comparing guest CPU
+# with the destination host. When using QEMU >= 2.9 and libvirt >=
+# 4.4.0, libvirt will do the correct thing with respect to checking CPU
+# compatibility on the destination host during live migration.
+#  (boolean value)
+#skip_cpu_compare_on_dest=false
+
+#
+# This will skip the CPU comparison call at the startup of Compute
+# service and lets libvirt handle it.
+#  (boolean value)
+#skip_cpu_compare_at_startup=false
+
+#
+# When this is enabled, it will skip version-checking of hypervisors
+# during live migration.
+#  (boolean value)
+#skip_hypervisor_version_check_on_lm=false
+
+#
+# This may be useful if you use the Ironic driver, but don't have
+# automatic cleaning enabled in Ironic. Nova, by default, will mark
+# Ironic nodes as reserved as soon as they are in use. When you free
+# the Ironic node (by deleting the nova instance) it takes a while
+# for Nova to un-reserve that Ironic node in placement. Usually this
+# is a good idea, because it avoids placement providing an Ironic
+# as a valid candidate when it is still being cleaned.
+# Howerver, if you don't use automatic cleaning, it can cause an
+# extra delay before and Ironic node is available for building a
+# new Nova instance.
+#  (boolean value)
+#skip_reserve_in_use_ironic_nodes=false
+
+#
+# This disables the additional deep image inspection that the compute node does
+# when downloading from glance. This includes backing-file, data-file, and
+# known-features detection *before* passing the image to qemu-img. Generally,
+# this inspection should be enabled for maximum safety, but this workaround
+# option allows disabling it if there is a compatibility concern.
+#  (boolean value)
+#disable_deep_image_inspection=false
+
+
+[wsgi]
+#
+# Options under this group are used to configure WSGI (Web Server Gateway
+# Interface). WSGI is used to serve API requests.
+
+#
+# From nova.conf
+#
+
+#
+# This option represents a file name for the paste.deploy config for nova-api.
+# For more information, refer to the documentation. (string value)
+#api_paste_config=api-paste.ini
+
+# DEPRECATED:
+# It represents a python format string that is used as the template to generate
+# log lines. The following values can be formatted into it: client_ip,
+# date_time, request_line, status_code, body_length, wall_seconds. For more
+# information, refer to the documentation. (string value)
+# This option is deprecated for removal since 16.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option only works when running nova-api under eventlet, and
+# encodes very eventlet specific pieces of information. Starting in Pike
+# the preferred model for running nova-api is under uwsgi or apache
+# mod_wsgi.
+#wsgi_log_format=%(client_ip)s "%(request_line)s" status: %(status_code)s len: %(body_length)s time: %(wall_seconds).7f
+
+#
+# This option specifies the HTTP header used to determine the protocol scheme
+# for the original request, even if it was removed by a SSL terminating proxy.
+# For more information, refer to the documentation. (string value)
+#secure_proxy_ssl_header=<None>
+
+#
+# This option allows setting path to the CA certificate file that should be used
+# to verify connecting clients. For more information, refer to the
+# documentation. (string value)
+#ssl_ca_file=<None>
+
+#
+# This option allows setting path to the SSL certificate of API server. For more
+# information, refer to the documentation. (string value)
+#ssl_cert_file=<None>
+
+#
+# This option specifies the path to the file where SSL private key of API
+# server is stored when SSL is in effect. For more information, refer to the
+# documentation. (string value)
+#ssl_key_file=<None>
+
+#
+# This option sets the value of TCP_KEEPIDLE in seconds for each server socket.
+# It specifies the duration of time to keep connection active. TCP generates a
+# KEEPALIVE transmission for an application that requests to keep connection
+# active. Not supported on OS X. For more information, refer to the
+# documentation. (integer value)
+# Minimum value: 0
+#tcp_keepidle=600
+
+#
+# This option specifies the size of the pool of greenthreads used by wsgi.
+# It is possible to limit the number of concurrent connections using this
+# option.
+#  (integer value)
+# Minimum value: 0
+# Deprecated group/name - [DEFAULT]/wsgi_default_pool_size
+#default_pool_size=1000
+
+#
+# This option specifies the maximum line size of message headers to be accepted.
+# max_header_line may need to be increased when using large tokens (typically
+# those generated by the Keystone v3 API with big service catalogs). For more
+# information, refer to the documentation. (integer value)
+# Minimum value: 0
+#max_header_line=16384
+
+#
+# This option allows using the same TCP connection to send and receive multiple
+# HTTP requests/responses, as opposed to opening a new one for every single
+# request/response pair. HTTP keep-alive indicates HTTP connection reuse. For
+# more information, refer to the documentation. (boolean value)
+# Deprecated group/name - [DEFAULT]/wsgi_keep_alive
+#keep_alive=true
+
+#
+# This option specifies the timeout for client connections' socket operations.
+# If an incoming connection is idle for this number of seconds it will be
+# closed. It indicates timeout on individual read/writes on the socket
+# connection. To wait forever set to 0.
+#  (integer value)
+# Minimum value: 0
+#client_socket_timeout=900
+
+
+[zvm]
+#
+# zvm options allows cloud administrator to configure related
+# z/VM hypervisor driver to be used within an OpenStack deployment.
+#
+# zVM options are used when the compute_driver is set to use
+# zVM (compute_driver=zvm.ZVMDriver)
+
+#
+# From nova.conf
+#
+
+#
+# URL to be used to communicate with z/VM Cloud Connector.
+#  (uri value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#cloud_connector_url=http://zvm.example.org:8080/
+
+#
+# CA certificate file to be verified in httpd server with TLS enabled. For more
+# information, refer to the documentation. (string value)
+#ca_file=<None>
+
+#
+# The path at which images will be stored (snapshot, deploy, etc). For more
+# information, refer to the documentation. (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#image_tmp_path=$state_path/images
+
+#
+# Timeout (seconds) to wait for an instance to start. For more information,
+# refer to the documentation. (integer value)
+#reachable_timeout=300
