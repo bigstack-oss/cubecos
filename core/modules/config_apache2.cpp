@@ -14,6 +14,10 @@
 #include <hex/process.h>
 #include <hex/process_util.h>
 
+// httpd's only consumers are local: haproxy's openstack_horizon backend and the
+// monasca agent's server-status check. Binding loopback keeps 8080 off the
+// management network, where vulnerability scanners were reaching it.
+#define HTTP_ADDR "127.0.0.1"
 #define HTTP_PORT 8080
 
 static const char NAME[] = "httpd";
@@ -65,6 +69,24 @@ WriteSiteConf(const char* hostname, const bool debug)
         "ErrorLog /var/log/httpd/error.log\n",
         "CustomLog /var/log/httpd/access.log combined\n",
         std::string("LogLevel ") + (debug ? "debug" : "info") + "\n",
+
+        // Suppress the version banner here rather than relying on
+        // keystone's ssl.conf, which also sets these. Same values, so the
+        // duplication is inert.
+        "ServerTokens Prod\n",
+        "ServerSignature Off\n",
+        "TraceEnable Off\n",
+
+        // Stock httpd.conf grants Indexes on the DocumentRoot, and welcome.conf
+        // (removed from the image) carried the only "Options -Indexes" covering
+        // "/". DocumentRoot holds nothing -- /var/www is used for certs only --
+        // so deny it outright and serve a bare 403.
+        "<Directory \"/var/www/html\">\n",
+        "    Options -Indexes\n",
+        "    AllowOverride None\n",
+        "    Require all denied\n",
+        "</Directory>\n",
+
         std::string("<VirtualHost *:") + std::to_string(HTTP_PORT) + ">\n",
         "</VirtualHost>\n",
     };
@@ -151,7 +173,8 @@ Init()
 {
     if (HexSystemF(
             0,
-            "sed -e \"s/Listen 80/Listen %d/\" %s > %s",
+            "sed -e \"s/Listen 80/Listen %s:%d/\" %s > %s",
+            HTTP_ADDR,
             HTTP_PORT,
             ORIG,
             CONF)
