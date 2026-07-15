@@ -1,7 +1,10 @@
 // CUBE SDK
 
+#include <cctype>
+#include <cmath>
 #include <cstring>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <unistd.h>
 #include <hex/log.h>
@@ -40,6 +43,102 @@ FindGpuDevice(const char* gpuId)
     }
 
     return json11::Json();
+}
+
+// Validates the profiles argument for sriovVgpu/migBackedVgpu:
+// - format: a non-empty JSON array of { id, count } objects with unique
+//   non-negative-integer ids and positive-integer counts
+// - existence: every id must be an available profile of the requested type
+//   on this GPU, as reported by gpu_vgpu_profile_list
+// - capacity (SR-IOV only): each vGPU instance occupies one VF, so the
+//   total requested count must fit within the PF's sriov_totalvfs
+static bool
+ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profiles, const std::string& pciAddress)
+{
+    std::string jsonError;
+    const json11::Json parsed = json11::Json::parse(profiles, jsonError);
+
+    if (!jsonError.empty() || !parsed.is_array() || parsed.array_items().empty()) {
+        HexLogError("gpu_resource_set: profiles must be a non-empty JSON array of { id, count } objects");
+        return false;
+    }
+
+    std::set<int> requestedIds;
+    long requestedTotal = 0;
+
+    for (const json11::Json& profile : parsed.array_items()) {
+        if (!profile.is_object() || !profile["id"].is_number() || !profile["count"].is_number()) {
+            HexLogError("gpu_resource_set: each profile must be an object with a numeric id and count");
+            return false;
+        }
+
+        const double id = profile["id"].number_value();
+        const double count = profile["count"].number_value();
+
+        if (id != std::floor(id) || id < 0) {
+            HexLogError("gpu_resource_set: profile id must be a non-negative integer");
+            return false;
+        }
+
+        if (count != std::floor(count) || count < 1) {
+            HexLogError("gpu_resource_set: profile count must be a positive integer");
+            return false;
+        }
+
+        if (!requestedIds.insert((int)id).second) {
+            HexLogError("gpu_resource_set: duplicate profile id %d", (int)id);
+            return false;
+        }
+
+        requestedTotal += (long)count;
+    }
+
+    const std::string profileListJson = HexUtilPOpen(HEX_SDK " gpu_vgpu_profile_list %s", gpuId);
+
+    const json11::Json profileList = json11::Json::parse(profileListJson, jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("gpu_resource_set: failed to list vGPU profiles for GPU %s", gpuId);
+        return false;
+    }
+
+    const char* listKey = (strcmp(newType, "sriovVgpu") == 0) ? "sriov" : "migBacked";
+
+    std::set<int> availableIds;
+    for (const json11::Json& profile : profileList[listKey].array_items()) {
+        if (profile["id"].is_number()) {
+            availableIds.insert((int)profile["id"].number_value());
+        }
+    }
+
+    for (const int id : requestedIds) {
+        if (availableIds.find(id) == availableIds.end()) {
+            HexLogError("gpu_resource_set: profile id %d is not a valid %s profile for GPU %s", id, newType, gpuId);
+            return false;
+        }
+    }
+
+    if (strcmp(newType, "sriovVgpu") == 0 && pciAddress.size() > 4) {
+        // nvidia-smi reports an 8-char PCI domain (00000000:bb:ss.f) while
+        // sysfs uses a 4-char one (0000:bb:ss.f).
+        std::string sysfsAddr = pciAddress.substr(4);
+        for (size_t i = 0; i < sysfsAddr.size(); i++) {
+            sysfsAddr[i] = tolower(sysfsAddr[i]);
+        }
+
+        // Skip the capacity check if sriov_totalvfs is unreadable.
+        std::ifstream totalVfsStream("/sys/bus/pci/devices/" + sysfsAddr + "/sriov_totalvfs");
+        long totalVfs = 0;
+        if ((totalVfsStream >> totalVfs) && requestedTotal > totalVfs) {
+            HexLogError("gpu_resource_set: requested %ld vGPU(s) exceeds the %ld VF(s) available on GPU %s",
+                        requestedTotal, totalVfs, gpuId);
+            return false;
+        }
+    }
+
+    // TODO(#905): validate MIG-backed capacity constraints (per-profile
+    // vmCountLimit and the device VRAM budget).
+
+    return true;
 }
 
 static void
@@ -106,6 +205,13 @@ ResourceSetMain(int argc, char* argv[])
     const std::string pciAddress = device["pciAddress"].is_string() ? device["pciAddress"].string_value() : "";
     if (name.empty() || pciAddress.empty()) {
         HexLogError("gpu_resource_set: GPU %s is missing name/pciAddress in the config file", gpuId);
+        return EXIT_FAILURE;
+    }
+
+    // Validate profiles before gpu_unset_current_type below so that a bad
+    // request cannot tear down the GPU's existing configuration.
+    if ((strcmp(newType, "sriovVgpu") == 0 || strcmp(newType, "migBackedVgpu") == 0) &&
+        !ValidateVgpuProfiles(gpuId, newType, profiles, pciAddress)) {
         return EXIT_FAILURE;
     }
 

@@ -688,12 +688,9 @@ gpu_resource_set_check()
             ;;
     esac
 
-    if [[ "$new_type" == "sriovVgpu" || "$new_type" == "migBackedVgpu" ]]; then
-        echo "TODO: perform profiles argument validation." >&2
-        # Schema: an array of profiles `{ id: number, count: number }[]`
-        # In addition to the format, we must also validate the existence
-        # and capacity constraints (for MIG-backed) of the provided profiles.
-    fi
+    # The profiles argument (format, profile-id existence, capacity) is
+    # validated by `hex_config gpu_resource_set` (config_gpu.cpp), which owns
+    # the gpu_resource_set business logic.
 
     local device
     device=$(gpu_device_list | jq -c --arg id "$gpu_id" 'map(select(.id == $id)) | .[0] // null')
