@@ -10,7 +10,7 @@ KAFKA_VER := 3.9.2
 KAFKA_TGZ := kafka_2.13-$(KAFKA_VER).tgz
 
 $(ARCS_DIR)/$(KAFKA_TGZ):
-	$(Q)wget https://downloads.apache.org/kafka/$(KAFKA_VER)/$(KAFKA_TGZ) -O $@
+	$(Q)wget https://archive.apache.org/dist/kafka/$(KAFKA_VER)/$(KAFKA_TGZ) -O $@
 
 rootfs_install:: $(ARCS_DIR)/$(KAFKA_TGZ)
 	$(Q)chroot $(ROOTDIR) mkdir -p $(KAFKA_BIN_DIR) $(KAFKA_APP_DIR) $(KAFKA_LOG_DIR) $(KAFKA_RUN_DIR)
