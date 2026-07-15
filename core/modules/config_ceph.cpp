@@ -33,6 +33,7 @@
 
 #define MAKRER_POOL "/etc/appliance/state/ceph_osd_pool_done"
 #define MAKRER_CEPHFS "/etc/appliance/state/cephfs_done"
+#define MAKRER_MANILA_CEPHFS "/etc/appliance/state/manila_cephfs_done"
 #define MAKRER_RESTFUL "/etc/appliance/state/ceph_restful_done"
 #define MAKRER_AUTOSCALE "/etc/appliance/state/ceph_autoscale_done"
 #define MAKRER_MSGR2 "/etc/appliance/state/ceph_msgr2_done"
@@ -66,6 +67,7 @@ const static char DUMMY_KEYRING[] = "/etc/ceph/ceph.client.None.keyring";
 const static char ADMIN_KEYRING[] = "/etc/ceph/ceph.client.admin.keyring";
 const static char K8S_KEYRING[] = "/etc/ceph/ceph.client.k8s.keyring";
 const static char CEPHFS_CLIENT_AUTHKEY[] = "/etc/ceph/admin.key";
+const static char MANILA_CEPH_KEYRING[] = "/etc/ceph/ceph.client.manila.keyring";
 
 static const char FSID[] = "c6e64c49-09cf-463b-9d1c-b6645b4b3b85";
 
@@ -79,6 +81,10 @@ static const char CEPHFS_METADATA_POOL[] = "cephfs_metadata";
 static const char CEPHFS_NAME[] = "cephfs";
 static const char CEPHFS_DEFAULT_SUB_VOLUME_GROUP[] = "cephfs_default_sub_volume_group";
 static const char CEPHFS_STORE_DIR[] = "/mnt/cephfs";
+
+static const char MANILA_CEPHFS_DATA_POOL[] = "manila_cephfs_data";
+static const char MANILA_CEPHFS_METADATA_POOL[] = "manila_cephfs_metadata";
+static const char MANILA_CEPHFS_NAME[] = "manila_cephfsnative";
 
 static const char SRV_KEY[] = "/var/www/certs/server.key";
 static const char SRV_CRT[] = "/var/www/certs/server.cert";
@@ -136,6 +142,7 @@ CONFIG_TUNING_SPEC_STR(CUBESYS_SEED);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_SALTKEY);
 CONFIG_TUNING_SPEC_STR(KEYSTONE_ADMIN_CLI_PASS);
+CONFIG_TUNING_SPEC_BOOL(MANILA_CEPHFSNATIVE_ENABLED);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_debugEnabled, CEPH_DEBUG_ENABLED);
@@ -157,6 +164,7 @@ PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 1);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
+PARSE_TUNING_X_BOOL(s_manilaCephfsnativeEnabled, MANILA_CEPHFSNATIVE_ENABLED, 3);
 
 // FIXME: circular issue
 // PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 2);
@@ -661,6 +669,36 @@ SetupFS()
     return true;
 }
 
+static bool
+SetupManilaCephFS()
+{
+    if (!IsControl(s_eCubeRole))
+        return true;
+
+    if (!s_manilaCephfsnativeEnabled)
+        return true;
+
+    if (access(MAKRER_MANILA_CEPHFS, F_OK) == 0)
+        return true;
+
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s cephfs", MANILA_CEPHFS_DATA_POOL);
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s cephfs", MANILA_CEPHFS_METADATA_POOL);
+
+    HexUtilSystemF(0, 0, "timeout 10 ceph fs new %s %s %s",
+        MANILA_CEPHFS_NAME, MANILA_CEPHFS_METADATA_POOL, MANILA_CEPHFS_DATA_POOL);
+    HexUtilSystemF(0, 0, "timeout 10 ceph fs set %s allow_new_snaps true", MANILA_CEPHFS_NAME);
+
+    HexUtilSystemF(0, 0, "timeout 10 ceph auth get-or-create client.manila "
+                         "mon 'allow r' mgr 'allow rw' mds 'allow *' "
+                         "osd 'allow rw pool=%s, allow rw pool=%s' -o %s",
+        MANILA_CEPHFS_DATA_POOL, MANILA_CEPHFS_METADATA_POOL, MANILA_CEPH_KEYRING);
+    HexUtilSystemF(0, 0, "chmod 0600 %s", MANILA_CEPH_KEYRING);
+
+    HexSystemF(0, "touch " MAKRER_MANILA_CEPHFS);
+
+    return true;
+}
+
 static bool SetupISCSI()
 {
     struct stat ms;
@@ -865,13 +903,14 @@ UpdateConfig(
         fprintf(fout, "rgw usage max shards = 32\n");
         fprintf(fout, "rgw usage max user shards = 1\n");
 
-        // manila share
-        // FIXME: Check if manila is enabled
-        fprintf(fout, "[client.manila]\n");
-        fprintf(fout, "client mount uid = 0\n");
-        fprintf(fout, "client mount gid = 0\n");
-        fprintf(fout, "log file = /var/log/ceph/ceph-client.manila.log\n");
-        fprintf(fout, "admin socket = /var/run/ceph/guests/ceph-$name.$pid.asok\n");
+        // manila share (CephFS-native backend)
+        if (s_manilaCephfsnativeEnabled) {
+            fprintf(fout, "[client.manila]\n");
+            fprintf(fout, "client mount uid = 0\n");
+            fprintf(fout, "client mount gid = 0\n");
+            fprintf(fout, "log file = /var/log/ceph/ceph-client.manila.log\n");
+            fprintf(fout, "admin socket = /var/run/ceph/guests/ceph-$name.$pid.asok\n");
+        }
     }
 
     if (IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
@@ -1372,6 +1411,21 @@ NotifyKeystone(bool modified)
     s_bKeystoneModified = IsModifiedTune(2);
 }
 
+static bool s_bManilaModified = false;
+
+static bool
+ParseManila(const char* name, const char* value, bool isNew)
+{
+    ParseTune(name, value, isNew, 3);
+    return true;
+}
+
+static void
+NotifyManila(bool modified)
+{
+    s_bManilaModified = IsModifiedTune(3);
+}
+
 static bool
 Validate()
 {
@@ -1522,7 +1576,7 @@ Commit(bool modified, int dryLevel)
         if (!monEnabled)
             RemoveMon(s_hostname.c_str());
 
-        if (!SetupPools() || !SetupFS() || !SetupMgr(s_hostname)
+        if (!SetupPools() || !SetupFS() || !SetupManilaCephFS() || !SetupMgr(s_hostname)
             || !SetupMds(s_hostname) || !SetupRgw(s_hostname.c_str())
             || !SetupOsd(s_hostname, fsid) || !SetupISCSI())
             return false;
@@ -1895,11 +1949,14 @@ CONFIG_REQUIRES(ceph_dashboard_idp, keycloak);
 CONFIG_OBSERVES(ceph, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(ceph, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(ceph, keystone, ParseKeystone, NotifyKeystone);
+CONFIG_OBSERVES(ceph, manila, ParseManila, NotifyManila);
 
 CONFIG_MIGRATE(ceph, "/etc/cube/cos/ceph");
 CONFIG_MIGRATE(ceph, "/var/lib/ceph");
 CONFIG_MIGRATE(ceph, MAKRER_POOL);
 CONFIG_MIGRATE(ceph, MAKRER_CEPHFS);
+CONFIG_MIGRATE(ceph, MAKRER_MANILA_CEPHFS);
+CONFIG_MIGRATE(ceph, MANILA_CEPH_KEYRING);
 CONFIG_MIGRATE(ceph, MAKRER_CLIENT);
 CONFIG_MIGRATE(ceph, ADMIN_KEYRING);
 CONFIG_MIGRATE(ceph, K8S_KEYRING);
