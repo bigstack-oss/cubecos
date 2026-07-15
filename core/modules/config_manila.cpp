@@ -56,7 +56,7 @@ CONFIG_TUNING_BOOL(MANILA_CEPHFSNATIVE_ENABLED, "manila.cephfsnative.enabled", T
 CONFIG_TUNING_BOOL(MANILA_NETAPP_ENABLED, "manila.netapp.enabled", TUNING_PUB, "Set to true to enable the NetApp Manila share backend.", false);
 CONFIG_TUNING_STR(MANILA_NETAPP_SERVER, "manila.netapp.server", TUNING_PUB, "Set the NetApp management LIF hostname or IP.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(MANILA_NETAPP_USERNAME, "manila.netapp.username", TUNING_PUB, "Set the NetApp management username.", "", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(MANILA_NETAPP_PASSWORD, "manila.netapp.password", TUNING_PUB, "Set the NetApp management password.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MANILA_NETAPP_PASSWORD, "manila.netapp.password", TUNING_UNPUB, "Set the NetApp management password.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(MANILA_NETAPP_VSERVER, "manila.netapp.vserver", TUNING_PUB, "Set the NetApp vserver (SVM) name.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(MANILA_NETAPP_AGGREGATE, "manila.netapp.aggregate", TUNING_PUB, "Set the NetApp aggregate name.", "", ValidateRegex, DFT_REGEX_STR);
 

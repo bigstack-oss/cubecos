@@ -689,9 +689,9 @@ SetupManilaCephFS()
     HexUtilSystemF(0, 0, "timeout 10 ceph fs set %s allow_new_snaps true", MANILA_CEPHFS_NAME);
 
     HexUtilSystemF(0, 0, "timeout 10 ceph auth get-or-create client.manila "
-                         "mon 'allow r' mgr 'allow rw' mds 'allow *' "
+                         "mon 'allow r' mgr 'allow rw' mds 'allow rw fsname=%s' "
                          "osd 'allow rw pool=%s, allow rw pool=%s' -o %s",
-        MANILA_CEPHFS_DATA_POOL, MANILA_CEPHFS_METADATA_POOL, MANILA_CEPH_KEYRING);
+        MANILA_CEPHFS_NAME, MANILA_CEPHFS_DATA_POOL, MANILA_CEPHFS_METADATA_POOL, MANILA_CEPH_KEYRING);
     HexUtilSystemF(0, 0, "chmod 0600 %s", MANILA_CEPH_KEYRING);
 
     HexSystemF(0, "touch " MAKRER_MANILA_CEPHFS);
