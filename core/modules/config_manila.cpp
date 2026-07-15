@@ -52,6 +52,13 @@ CONFIG_TUNING_STR(MANILA_DBPASS, "manila.db.password", TUNING_UNPUB, "Set manila
 // public tunings
 CONFIG_TUNING_BOOL(MANILA_DEBUG, "manila.debug.enabled", TUNING_PUB, "Set to true to enable manila verbose log.", false);
 CONFIG_TUNING_STR(MANILA_VOLUME_TYPE, "manila.volume.type", TUNING_PUB, "Set manila backend volume type.", BUILTIN_VOLUME_TYPE, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_BOOL(MANILA_CEPHFSNATIVE_ENABLED, "manila.cephfsnative.enabled", TUNING_PUB, "Set to true to enable the CephFS-native Manila share backend.", false);
+CONFIG_TUNING_BOOL(MANILA_NETAPP_ENABLED, "manila.netapp.enabled", TUNING_PUB, "Set to true to enable the NetApp Manila share backend.", false);
+CONFIG_TUNING_STR(MANILA_NETAPP_SERVER, "manila.netapp.server", TUNING_PUB, "Set the NetApp management LIF hostname or IP.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MANILA_NETAPP_USERNAME, "manila.netapp.username", TUNING_PUB, "Set the NetApp management username.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MANILA_NETAPP_PASSWORD, "manila.netapp.password", TUNING_PUB, "Set the NetApp management password.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MANILA_NETAPP_VSERVER, "manila.netapp.vserver", TUNING_PUB, "Set the NetApp vserver (SVM) name.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MANILA_NETAPP_AGGREGATE, "manila.netapp.aggregate", TUNING_PUB, "Set the NetApp aggregate name.", "", ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
@@ -72,6 +79,13 @@ PARSE_TUNING_BOOL(s_debug, MANILA_DEBUG);
 PARSE_TUNING_STR(s_manilaPass, MANILA_USERPASS);
 PARSE_TUNING_STR(s_dbPass, MANILA_DBPASS);
 PARSE_TUNING_STR(s_volumeType, MANILA_VOLUME_TYPE);
+PARSE_TUNING_BOOL(s_cephfsnativeEnabled, MANILA_CEPHFSNATIVE_ENABLED);
+PARSE_TUNING_BOOL(s_netappEnabled, MANILA_NETAPP_ENABLED);
+PARSE_TUNING_STR(s_netappServer, MANILA_NETAPP_SERVER);
+PARSE_TUNING_STR(s_netappUsername, MANILA_NETAPP_USERNAME);
+PARSE_TUNING_STR(s_netappPassword, MANILA_NETAPP_PASSWORD);
+PARSE_TUNING_STR(s_netappVserver, MANILA_NETAPP_VSERVER);
+PARSE_TUNING_STR(s_netappAggregate, MANILA_NETAPP_AGGREGATE);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 2);
