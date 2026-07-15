@@ -2113,6 +2113,40 @@ os_manila_init()
     #fi
 }
 
+# Creates a share type per enabled backend and binds it to that backend
+# via the share_backend_name extra-spec (the mechanism spike #960
+# verified end-to-end). Idempotent — safe to call on every cluster_start,
+# not just first boot, so a toggle flipped after initial bootstrap still
+# takes effect on the next commit + restart.
+# params:
+# $1: cephfsnative backend enabled (1/0)
+# $2: netapp backend enabled (1/0)
+os_manila_backend_types_init()
+{
+    if ! is_control_node ; then
+        return 0
+    fi
+
+    local cephfsnative_enabled=$1
+    local netapp_enabled=$2
+
+    if [ "$cephfsnative_enabled" = "1" ] ; then
+        local cephfs_type_id=$(manila type-list | awk '/ cephfs_share_type /{print $2}')
+        if [ -z "$cephfs_type_id" ] ; then
+            manila type-create --snapshot_support true --create_share_from_snapshot_support true cephfs_share_type false
+            manila type-key cephfs_share_type set share_backend_name=CEPHFSNATIVE
+        fi
+    fi
+
+    if [ "$netapp_enabled" = "1" ] ; then
+        local netapp_type_id=$(manila type-list | awk '/ netapp_share_type /{print $2}')
+        if [ -z "$netapp_type_id" ] ; then
+            manila type-create --snapshot_support true --create_share_from_snapshot_support true netapp_share_type false
+            manila type-key netapp_share_type set share_backend_name=NETAPP
+        fi
+    fi
+}
+
 os_ironic_deploy_kernel_import()
 {
     local kernel=$1/$2

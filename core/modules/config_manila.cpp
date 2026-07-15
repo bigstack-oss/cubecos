@@ -825,6 +825,10 @@ ClusterStartMain(int argc, char** argv)
             HexSystemF(0, "touch " INIT_DONE);
         }
 
+        HexUtilSystemF(0, 0, HEX_SDK " os_manila_backend_types_init %d %d",
+            s_cephfsnativeEnabled ? 1 : 0,
+            s_netappEnabled ? 1 : 0);
+
         // post actions for db migration
         HexUtilSystemF(0, 0, HEX_SDK " migrate_manila_db_post");
     }
