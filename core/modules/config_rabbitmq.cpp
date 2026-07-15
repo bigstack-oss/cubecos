@@ -229,11 +229,10 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
         }
     }
 
-    // Feature-flag enable is IRREVERSIBLE and makes the cluster reject nodes that
-    // don't support a newly-enabled flag. Only enable when the RabbitMQ cluster is
-    // version-uniform (never mid-roll): all-old (pre-roll) enables the current
-    // stable flags = correct prep; all-new (post-roll) graduates the new flags.
-    if (enabled && ha && HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0)
+    // feature-flag enable is irreversible: during an UPGRADE (migration marker)
+    // enable only once version-uniform; FTS enables via the cluster_ready trigger
+    if (enabled && ha && access(CUBE_MIGRATE, F_OK) == 0 &&
+        HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0)
         HexUtilSystemF(0, 0, CONTROL_FMT "enable_feature_flag all", hostname.c_str());
 
     return true;
@@ -410,6 +409,19 @@ GPassMain(int argc, char* argv[])
     return EXIT_SUCCESS;
 }
 
+static int
+ClusterReadyMain(int argc, char **argv)
+{
+    // FTS set_ready: enable stable flags explicitly; the version-uniform guard
+    // keeps a mid-roll set_ready re-run from enabling on a mixed cluster
+    if (s_ha && IsControl(s_eCubeRole) &&
+        HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0)
+        HexUtilSystemF(0, 0, CONTROL_FMT "enable_feature_flag all",
+                       s_hostname.newValue().c_str());
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_COMMAND_WITH_SETTINGS(rabbitmq_guest_password, GPassMain, GPassUsage);
 CONFIG_COMMAND(status_rabbitmq, StatusMain, StatusUsage);
 CONFIG_COMMAND_WITH_SETTINGS(restart_rabbitmq, RestartMain, RestartUsage);
@@ -420,6 +432,7 @@ CONFIG_REQUIRES(rabbitmq, cluster);
 // extra tunings
 CONFIG_OBSERVES(rabbitmq, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(rabbitmq, cubesys, ParseCube, NotifyCube);
+CONFIG_TRIGGER_WITH_SETTINGS(rabbitmq, "cluster_ready", ClusterReadyMain);
 
 CONFIG_MIGRATE(rabbitmq, SETUP_MARK);
 CONFIG_MIGRATE(rabbitmq, "/var/lib/rabbitmq");
