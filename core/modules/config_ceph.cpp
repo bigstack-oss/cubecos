@@ -1471,6 +1471,7 @@ CommitCheck(bool modified, int dryLevel)
         | s_bNetModified
         | s_bCubeModified
         | s_bKeystoneModified
+        | s_bManilaModified
         | G_MOD(IS_MASTER)
         | G_MOD(CTRL_IP)
         | G_MOD(SHARED_ID)
