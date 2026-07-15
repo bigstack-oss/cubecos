@@ -267,6 +267,7 @@ InitConfig(Configs& config)
 {
     std::vector<std::string> sections = std::vector<std::string> {
         "DEFAULT",
+        "cephfsnative",
         "cinder",
         "cors",
         "database",
@@ -520,6 +521,24 @@ SetDriverGeneric(
 }
 
 /**
+ * Set the CephFS-native driver. Talks directly to the dedicated
+ * "manila_cephfsnative" filesystem provisioned by the ceph module
+ * (config_ceph.cpp::SetupManilaCephFS) — no service VM, no Cinder volume.
+ */
+static void
+SetDriverCephFSNative(Configs& config)
+{
+    config["cephfsnative"]["share_backend_name"] = "CEPHFSNATIVE";
+    config["cephfsnative"]["share_driver"] = "manila.share.drivers.cephfs.driver.CephFSDriver";
+    config["cephfsnative"]["driver_handles_share_servers"] = "false";
+    config["cephfsnative"]["cephfs_conf_path"] = "/etc/ceph/ceph.conf";
+    config["cephfsnative"]["cephfs_auth_id"] = "manila";
+    config["cephfsnative"]["cephfs_cluster_name"] = "ceph";
+    config["cephfsnative"]["cephfs_filesystem_name"] = "manila_cephfsnative";
+    config["cephfsnative"]["cephfs_protocol_helper_type"] = "CEPHFS";
+}
+
+/**
  * Set up Manila service.
  * The function should be run after Keystone service is running.
  */
@@ -692,6 +711,17 @@ Commit(bool modified, int dryLevel)
             SetDriverGeneric(config, mgmtCidr, BUILTIN_VOLUME_TYPE);
         }
 
+        std::stringstream backends;
+        backends << "generic";
+
+        if (s_cephfsnativeEnabled) {
+            backends << ",cephfsnative";
+            SetDriverCephFSNative(config);
+            config["DEFAULT"]["enabled_share_protocols"] = "NFS,CIFS,CEPHFS";
+        }
+
+        config["DEFAULT"]["enabled_share_backends"] = backends.str();
+
         WriteConfig(CONF, SB_SEC_WFMT, '=', config);
     }
 
@@ -776,6 +806,7 @@ CONFIG_REQUIRES(manila, memcache);
 CONFIG_REQUIRES(manila, neutron);
 CONFIG_REQUIRES(manila, nova);
 CONFIG_REQUIRES(manila, cinder);
+CONFIG_REQUIRES(manila, ceph);
 
 // extra tunings
 CONFIG_OBSERVES(manila, rabbitmq, ParseRabbitMQ, NotifyMQ);
