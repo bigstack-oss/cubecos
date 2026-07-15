@@ -275,6 +275,7 @@ InitConfig(Configs& config)
         "glance",
         "healthcheck",
         "keystone_authtoken",
+        "netapp",
         "neutron",
         "nova",
         "oslo_concurrency",
@@ -539,6 +540,32 @@ SetDriverCephFSNative(Configs& config)
 }
 
 /**
+ * Set the NetApp driver. Config-surface only — no real array has been
+ * validated against this yet (see design spec Risks). Values come
+ * straight from admin-supplied tunings, unvalidated beyond the existing
+ * regex helpers.
+ */
+static void
+SetDriverNetapp(
+    Configs& config,
+    const std::string server,
+    const std::string username,
+    const std::string password,
+    const std::string vserver,
+    const std::string aggregate)
+{
+    config["netapp"]["share_backend_name"] = "NETAPP";
+    config["netapp"]["share_driver"] = "manila.share.drivers.netapp.common.NetAppDriver";
+    config["netapp"]["driver_handles_share_servers"] = "false";
+    config["netapp"]["netapp_storage_family"] = "ontap_cluster";
+    config["netapp"]["netapp_server_hostname"] = server;
+    config["netapp"]["netapp_login"] = username;
+    config["netapp"]["netapp_password"] = password;
+    config["netapp"]["netapp_vserver"] = vserver;
+    config["netapp"]["netapp_aggregate_name_search_pattern"] = aggregate;
+}
+
+/**
  * Set up Manila service.
  * The function should be run after Keystone service is running.
  */
@@ -718,6 +745,11 @@ Commit(bool modified, int dryLevel)
             backends << ",cephfsnative";
             SetDriverCephFSNative(config);
             config["DEFAULT"]["enabled_share_protocols"] = "NFS,CIFS,CEPHFS";
+        }
+
+        if (s_netappEnabled) {
+            backends << ",netapp";
+            SetDriverNetapp(config, s_netappServer, s_netappUsername, s_netappPassword, s_netappVserver, s_netappAggregate);
         }
 
         config["DEFAULT"]["enabled_share_backends"] = backends.str();
