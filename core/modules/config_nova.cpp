@@ -405,7 +405,6 @@ UpdateSharedId(std::string sharedId)
         cfg["service_user"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["service_user"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["placement"]["auth_url"] = "http://" + sharedId + ":5000/v3";
-        cfg["glance"]["api_servers"] = "http://" + sharedId + ":9292";;
         cfg["neutron"]["url"] = "http://" + sharedId + ":9696";
         cfg["neutron"]["auth_url"] = "http://" + sharedId + ":5000";
 
