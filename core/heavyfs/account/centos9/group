@@ -98,7 +98,7 @@ radvd:x:75:
 dnsmasq:x:980:
 rpc:x:32:
 gluster:x:979:
-placement:x:978:
+placement:x:978:apache
 chrony:x:976:
 libstoragemgmt:x:975:
 apache:x:48:

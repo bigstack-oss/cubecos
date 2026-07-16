@@ -52,6 +52,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/placement-api /usr/bin/placement-api
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/placement-manage /usr/bin/placement-manage
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/placement-status /usr/bin/placement-status
+	$(Q)# Link the uWSGI binary for Placement WSGI
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/uwsgi /usr/bin/uwsgi
 
 # prepare the build directory
 rootfs_install::
@@ -185,3 +187,13 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /var/lib/nova/instances
 	$(Q)chroot $(ROOTDIR) mkdir -p /var/lib/nova/instances
 	$(Q)chroot $(ROOTDIR) chown nova:nova /var/lib/nova/instances
+
+rootfs_install::
+	$(Q)cp -f $(COREDIR)/nova/placement-uwsgi.ini $(ROOTDIR)/etc/placement/placement-uwsgi.ini
+	$(Q)chroot $(ROOTDIR) chown root:placement /etc/placement/placement-uwsgi.ini
+	$(Q)chroot $(ROOTDIR) chmod 0640 /etc/placement/placement-uwsgi.ini
+	$(Q)cp -f $(COREDIR)/nova/openstack-placement-api.service $(ROOTDIR)/usr/lib/systemd/system/openstack-placement-api.service
+	$(Q)chroot $(ROOTDIR) chmod 0644 /usr/lib/systemd/system/openstack-placement-api.service
+	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/lib/placement
+	$(Q)chroot $(ROOTDIR) chown placement:apache /var/lib/placement
+	$(Q)chroot $(ROOTDIR) chmod 770 /var/lib/placement
