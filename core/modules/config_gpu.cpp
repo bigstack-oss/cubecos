@@ -4,8 +4,10 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <set>
 #include <sstream>
+#include <vector>
 #include <unistd.h>
 #include <hex/log.h>
 #include <hex/filesystem.h>
@@ -18,6 +20,104 @@
 
 static const char GPU_CONFIG_DIR[]  = "/etc/cube/cos/gpu";
 static const char GPU_CONFIG_FILE[] = "/etc/cube/cos/gpu/config.json";
+static const char NVIDIA_SMI[]      = "/usr/bin/nvidia-smi";
+static const char NVIDIA_SRIOV[]    = "/usr/lib/nvidia/sriov-manage";
+static const char PCI_DEVICES_DIR[] = "/sys/bus/pci/devices";
+static const char NOVA_GPU_CONF[]   = "/etc/nova/nova.d/gpu.conf";
+
+// nvidia-smi reports an 8-char PCI domain (00000000:bb:ss.f) while sysfs
+// uses a 4-char one (0000:bb:ss.f). Addresses already in sysfs form are
+// returned unchanged (lowercased).
+static std::string
+SysfsPciAddr(const std::string& pciAddress)
+{
+    std::string addr = pciAddress;
+
+    if (addr.find(':') == 8) {
+        addr = addr.substr(4);
+    }
+
+    for (size_t i = 0; i < addr.size(); i++) {
+        addr[i] = tolower(addr[i]);
+    }
+
+    return addr;
+}
+
+static bool
+WriteSysfs(const std::string& path, const std::string& value)
+{
+    std::ofstream stream(path);
+    if (!stream.is_open()) {
+        return false;
+    }
+    stream << value;
+    stream.flush();
+    return stream.good();
+}
+
+// Expands validated profiles ({id, count}[]) into the per-VF assignment
+// plan: one profile id per VF slot, in request order.
+static std::vector<int>
+BuildVfAssignmentPlan(const json11::Json& profiles)
+{
+    std::vector<int> plan;
+
+    for (const json11::Json& profile : profiles.array_items()) {
+        const int id = (int)profile["id"].number_value();
+        const int count = (int)profile["count"].number_value();
+        for (int i = 0; i < count; i++) {
+            plan.push_back(id);
+        }
+    }
+
+    return plan;
+}
+
+// Best-effort teardown after a failed apply: clear any vGPU types assigned
+// so far, then release the VFs, so no half-configured GPU is left behind.
+static void
+TeardownSriov(const std::string& sysfsAddr, size_t assignedVfs)
+{
+    for (size_t i = 0; i < assignedVfs; i++) {
+        WriteSysfs(std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr +
+                   "/virtfn" + std::to_string(i) + "/nvidia/current_vgpu_type", "0");
+    }
+
+    WriteSysfs(std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr + "/sriov_numvfs", "0");
+}
+
+// Enables the PF's VFs and writes each requested profile id into that many
+// VFs' current_vgpu_type - the write is what actually carves the vGPU.
+// profiles must already be validated. sriov-manage -e is idempotent for an
+// already-enabled GPU (verified on cn13, 2026-07-17), so this is safe to
+// re-run from boot-time Commit().
+static bool
+ApplySriovVgpu(const std::string& pciAddress, const json11::Json& profiles)
+{
+    const std::string sysfsAddr = SysfsPciAddr(pciAddress);
+
+    if (HexUtilSystemF(0, 0, "%s -e %s", NVIDIA_SRIOV, sysfsAddr.c_str()) != 0) {
+        HexLogError("gpu_resource_set: failed to enable VFs on %s", sysfsAddr.c_str());
+        return false;
+    }
+
+    const std::vector<int> plan = BuildVfAssignmentPlan(profiles);
+
+    for (size_t vf = 0; vf < plan.size(); vf++) {
+        const std::string typePath = std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr +
+            "/virtfn" + std::to_string(vf) + "/nvidia/current_vgpu_type";
+
+        if (!WriteSysfs(typePath, std::to_string(plan[vf]))) {
+            HexLogError("gpu_resource_set: failed to set vGPU type %d on %s/virtfn%d",
+                        plan[vf], sysfsAddr.c_str(), (int)vf);
+            TeardownSriov(sysfsAddr, vf);
+            return false;
+        }
+    }
+
+    return true;
+}
 
 // Looks up GPU gpuId via gpu_device_list, the single source of truth for
 // GPU id/name/type/pciAddress - it already unions live nvidia-smi data with
@@ -117,16 +217,11 @@ ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profile
         }
     }
 
-    if (strcmp(newType, "sriovVgpu") == 0 && pciAddress.size() > 4) {
-        // nvidia-smi reports an 8-char PCI domain (00000000:bb:ss.f) while
-        // sysfs uses a 4-char one (0000:bb:ss.f).
-        std::string sysfsAddr = pciAddress.substr(4);
-        for (size_t i = 0; i < sysfsAddr.size(); i++) {
-            sysfsAddr[i] = tolower(sysfsAddr[i]);
-        }
+    if (strcmp(newType, "sriovVgpu") == 0 && !pciAddress.empty()) {
+        const std::string sysfsAddr = SysfsPciAddr(pciAddress);
 
         // Skip the capacity check if sriov_totalvfs is unreadable.
-        std::ifstream totalVfsStream("/sys/bus/pci/devices/" + sysfsAddr + "/sriov_totalvfs");
+        std::ifstream totalVfsStream(std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr + "/sriov_totalvfs");
         long totalVfs = 0;
         if ((totalVfsStream >> totalVfs) && requestedTotal > totalVfs) {
             HexLogError("gpu_resource_set: requested %ld vGPU(s) exceeds the %ld VF(s) available on GPU %s",
