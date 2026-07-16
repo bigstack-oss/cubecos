@@ -48,6 +48,7 @@ static const char CERTDIR[] = "/var/lib/nova/certs";
 static const char NOVA_SSH[] = "/var/lib/nova/.ssh";
 static const char NOVA_CEPH_LOG[] = "/var/log/qemu/";
 
+static const char PLACEMENT_API_NAME[] = "openstack-placement-api";
 static const char API_NAME[] = "openstack-nova-api";
 static const char SCHL_NAME[] = "openstack-nova-scheduler";
 static const char CNTR_NAME[] = "openstack-nova-conductor";
@@ -634,6 +635,7 @@ static bool
 NovaService(bool enabled)
 {
     if (IsControl(s_eCubeRole)) {
+        SystemdCommitService(enabled, PLACEMENT_API_NAME, true);
         SystemdCommitService(enabled, CNTR_NAME, true);    // nova-conductor
         SystemdCommitService(enabled, SCHL_NAME, true);    // nova-scheduler
         SystemdCommitService(enabled, VNCP_NAME, true);    // nova-novncproxy

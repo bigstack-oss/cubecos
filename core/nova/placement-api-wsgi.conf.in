@@ -1,28 +1,37 @@
 Listen @BIND_ADDR@8778
 
+# ==========================================
+# Port 8778: Standard Placement API Proxy
+# ==========================================
 <VirtualHost *:8778>
-  WSGIProcessGroup placement-api
-  WSGIApplicationGroup %{GLOBAL}
-  WSGIPassAuthorization On
-  WSGIDaemonProcess placement-api processes=3 threads=1 user=placement group=placement
-  WSGIScriptAlias / /usr/bin/placement-api
-  <IfVersion >= 2.4>
-    ErrorLogFormat "%M"
-  </IfVersion>
-  ErrorLog /var/log/placement/placement-api.log
-  #SSLEngine On
-  #SSLCertificateFile ...
-  #SSLCertificateKeyFile ...
-  <Directory /usr/bin>
-    Require all granted
-  </Directory>
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # Forward all traffic to the Placement uWSGI UNIX socket
+    # Using random 127.0.0.x address to prevent Apache from keeping
+    # the connection to the wrong proxy destination
+    ProxyPass / unix:/var/lib/placement/placement.socket|http://127.0.0.1/
+    ProxyPassReverse / unix:/var/lib/placement/placement.socket|http://127.0.0.1/
+
+    <IfVersion >= 2.4>
+      ErrorLogFormat "%{cu}t %M"
+    </IfVersion>
+    
+    ErrorLog /var/log/httpd/placement-api_error.log
+    CustomLog /var/log/httpd/placement-api_access.log combined
+    
+    #SSLEngine On
+    #SSLCertificateFile ...
+    #SSLCertificateKeyFile ...
 </VirtualHost>
 
-Alias /placement-api /usr/bin/placement-api
+# ==========================================
+# Legacy Route Map /placement-api Translation
+# ==========================================
 <Location /placement-api>
-  SetHandler wsgi-script
-  Options +ExecCGI
-  WSGIProcessGroup placement-api
-  WSGIApplicationGroup %{GLOBAL}
-  WSGIPassAuthorization On
+    ProxyPreserveHost On
+    # Using random 127.0.0.x address to prevent Apache from keeping
+    # the connection to the wrong proxy destination
+    ProxyPass unix:/var/lib/placement/placement.socket|http://127.0.0.1/
+    ProxyPassReverse unix:/var/lib/placement/placement.socket|http://127.0.0.1/
 </Location>

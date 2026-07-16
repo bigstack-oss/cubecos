@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenStack Placement API
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=placement
+Group=placement
+# Point this directly to the uwsgi binary in your Antelope venv
+ExecStart=/usr/bin/uwsgi --ini /etc/placement/placement-uwsgi.ini
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
