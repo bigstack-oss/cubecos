@@ -184,21 +184,10 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject):
                 #     - "parent_ifname": the netdev name of the parent (PF)
                 #        device of a VF
                 #     - "mac_address": the MAC address of the PF
-                #     - "managed": "true"/"false" if the device is managed by
-                #       hypervisor
                 extra_info = self.extra_info
                 data = v if isinstance(v, str) else jsonutils.dumps(v)
                 extra_info.update({k: data})
                 self.extra_info = extra_info
-
-        # Remove the "managed" key if it was set previously
-        # As with the previous case, we must explicitly assign to
-        # self.extra_info so that obj_what_changed detects the modification
-        # and triggers a save later.
-        if "managed" not in dev_dict and "managed" in self.extra_info:
-            extra_info = self.extra_info
-            del extra_info["managed"]
-            self.extra_info = extra_info
 
     def __init__(self, *args, **kwargs):
         super(PciDevice, self).__init__(*args, **kwargs)
@@ -587,11 +576,24 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject):
         return caps.get('vpd', {}).get('card_serial_number')
 
     @property
+    def sriov_cap(self):
+        caps_json = self.extra_info.get('capabilities', '{}')
+        caps = jsonutils.loads(caps_json)
+        return caps.get('sriov', {})
+
+    @property
     def mac_address(self):
         """The MAC address of the PF physical device or None if the device is
         not a PF or if the MAC is not available.
         """
         return self.extra_info.get('mac_address')
+
+    @property
+    def network_caps(self):
+        """PCI device network capabilities or empty list if not available"""
+        caps_json = self.extra_info.get('capabilities', '{}')
+        caps = jsonutils.loads(caps_json)
+        return caps.get('network', [])
 
 
 @base.NovaObjectRegistry.register

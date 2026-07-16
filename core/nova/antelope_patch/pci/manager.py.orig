@@ -69,7 +69,7 @@ class PciDevTracker(object):
         """
         self.stale: ty.Dict[str, objects.PciDevice] = {}
         self.node_id: str = compute_node.id
-        self.dev_filter = whitelist.Whitelist(CONF.pci.passthrough_whitelist)
+        self.dev_filter = whitelist.Whitelist(CONF.pci.device_spec)
         numa_topology = compute_node.numa_topology
         if numa_topology:
             # For legacy reasons, the NUMATopology is stored as a JSON blob.
@@ -133,7 +133,7 @@ class PciDevTracker(object):
             try:
                 if self.dev_filter.device_assignable(dev):
                     devices.append(dev)
-            except exception.PciConfigInvalidWhitelist as e:
+            except exception.PciConfigInvalidSpec as e:
                 # The raised exception is misleading as the problem is not with
                 # the whitelist config but with the host PCI device reported by
                 # libvirt. The code that matches the host PCI device to the
@@ -164,7 +164,7 @@ class PciDevTracker(object):
                     # parse whitelist config with
                     # devspec.PciAddressSpec._set_pci_dev_info()
                     str(e).replace(
-                        'Invalid PCI devices Whitelist config:', 'The'))
+                        'Invalid [pci]device_spec config:', 'The'))
 
         self._set_hvdevs(devices)
 
@@ -224,7 +224,7 @@ class PciDevTracker(object):
                     LOG.warning("Unable to remove device with status "
                                 "'%(status)s' and ownership %(instance_uuid)s "
                                 "because of %(pci_exception)s. "
-                                "Check your [pci]passthrough_whitelist "
+                                "Check your [pci]device_spec "
                                 "configuration to make sure this allocated "
                                 "device is whitelisted. If you have removed "
                                 "the device from the whitelist intentionally "
@@ -407,7 +407,7 @@ class PciDevTracker(object):
         for dev in self.pci_devs:
             if (dev.status == fields.PciDeviceStatus.ALLOCATED and
                     dev.instance_uuid == instance['uuid']):
-                self._free_device(dev)
+                self._free_device(dev, instance)
 
     def free_instance_claims(
         self, context: ctx.RequestContext, instance: 'objects.Instance',
@@ -423,7 +423,7 @@ class PciDevTracker(object):
         for dev in self.pci_devs:
             if (dev.status == fields.PciDeviceStatus.CLAIMED and
                     dev.instance_uuid == instance['uuid']):
-                self._free_device(dev)
+                self._free_device(dev, instance)
 
     def free_instance(
         self, context: ctx.RequestContext, instance: 'objects.Instance',
@@ -465,8 +465,8 @@ class PciDevTracker(object):
 
         The caller should hold the COMPUTE_RESOURCE_SEMAPHORE lock
         """
-        existed = set(inst['uuid'] for inst in instances)
-        existed |= set(mig['instance_uuid'] for mig in migrations)
+        existed = set(inst.uuid for inst in instances)
+        existed |= set(mig.instance_uuid for mig in migrations)
 
         # need to copy keys, because the dict is modified in the loop body
         for uuid in list(self.claims):
@@ -480,24 +480,3 @@ class PciDevTracker(object):
                 devs = self.allocations.pop(uuid, [])
                 for dev in devs:
                     self._free_device(dev)
-
-
-def get_instance_pci_devs(
-    inst: 'objects.Instance', request_id: str = None,
-) -> ty.List['objects.PciDevice']:
-    """Get the devices allocated to one or all requests for an instance.
-
-    - For generic PCI request, the request id is None.
-    - For sr-iov networking, the request id is a valid uuid
-    - There are a couple of cases where all the PCI devices allocated to an
-      instance need to be returned. Refer to libvirt driver that handles
-      soft_reboot and hard_boot of 'xen' instances.
-    """
-    pci_devices = inst.pci_devices
-    if pci_devices is None:
-        return []
-
-    return [
-        device for device in pci_devices if
-        device.request_id == request_id or request_id == 'all'
-    ]

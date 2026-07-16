@@ -44,7 +44,7 @@ class Whitelist(object):
 
         :param whitelist_spec: A JSON string for a dictionary or list thereof.
             Each dictionary specifies the pci device properties requirement.
-            See the definition of ``passthrough_whitelist`` in
+            See the definition of ``device_spec`` in
             ``nova.conf.pci`` for details and examples.
         """
         if whitelist_spec:
@@ -62,18 +62,18 @@ class Whitelist(object):
             try:
                 dev_spec = jsonutils.loads(jsonspec)
             except ValueError:
-                raise exception.PciConfigInvalidWhitelist(
+                raise exception.PciConfigInvalidSpec(
                           reason=_("Invalid entry: '%s'") % jsonspec)
             if isinstance(dev_spec, dict):
                 dev_spec = [dev_spec]
             elif not isinstance(dev_spec, list):
-                raise exception.PciConfigInvalidWhitelist(
+                raise exception.PciConfigInvalidSpec(
                           reason=_("Invalid entry: '%s'; "
                                    "Expecting list or dict") % jsonspec)
 
             for ds in dev_spec:
                 if not isinstance(ds, dict):
-                    raise exception.PciConfigInvalidWhitelist(
+                    raise exception.PciConfigInvalidSpec(
                               reason=_("Invalid entry: '%s'; "
                                        "Expecting dict") % ds)
 
