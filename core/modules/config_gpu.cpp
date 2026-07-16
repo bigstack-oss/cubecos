@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -117,6 +118,74 @@ ApplySriovVgpu(const std::string& pciAddress, const json11::Json& profiles)
     }
 
     return true;
+}
+
+// Parses `nvidia-smi vgpu -s -v` output into a map of vGPU type id (decimal)
+// -> full type name. Blocks look like:
+//   vGPU Type ID                      : 0x5ef
+//       Name                          : NVIDIA RTX Pro 6000 Blackwell DC-3Q
+static std::map<int, std::string>
+ParseVgpuTypeNames(const std::string& smiOutput)
+{
+    std::map<int, std::string> names;
+    std::istringstream stream(smiOutput);
+    std::string line;
+    int currentId = -1;
+
+    while (std::getline(stream, line)) {
+        const size_t colon = line.find(':');
+        if (colon == std::string::npos) {
+            continue;
+        }
+
+        std::string key = line.substr(0, colon);
+        key.erase(0, key.find_first_not_of(" \t"));
+        key.erase(key.find_last_not_of(" \t") + 1);
+
+        std::string value = line.substr(colon + 1);
+        value.erase(0, value.find_first_not_of(" \t"));
+        value.erase(value.find_last_not_of(" \t\r") + 1);
+
+        if (key == "vGPU Type ID") {
+            currentId = (int)strtol(value.c_str(), NULL, 16);
+        } else if (key == "Name" && currentId >= 0 && !value.empty()) {
+            names[currentId] = value;
+            currentId = -1;
+        }
+    }
+
+    return names;
+}
+
+static std::map<int, std::string>
+GetVgpuTypeNames(const char* gpuId)
+{
+    return ParseVgpuTypeNames(HexUtilPOpen("%s vgpu -s -v -i %s", NVIDIA_SMI, gpuId));
+}
+
+// Derives the Nova PCI alias for a profile following the #894 convention:
+// lowercase the full vGPU type name, map non-alphanumerics to '_' (squeezing
+// repeats), then append "_<id>".
+// e.g. "NVIDIA H100 1-10C" + 100 -> "nvidia_h100_1_10c_100"
+static std::string
+ProfileAlias(const std::string& fullName, int profileId)
+{
+    std::string alias;
+
+    for (size_t i = 0; i < fullName.size(); i++) {
+        const unsigned char c = fullName[i];
+        if (isalnum(c)) {
+            alias += tolower(c);
+        } else if (!alias.empty() && alias.back() != '_') {
+            alias += '_';
+        }
+    }
+
+    if (alias.empty() || alias.back() != '_') {
+        alias += '_';
+    }
+
+    return alias + std::to_string(profileId);
 }
 
 // Looks up GPU gpuId via gpu_device_list, the single source of truth for
