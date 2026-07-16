@@ -895,11 +895,10 @@ UpdateConfig(
 
     // bluestore osd perf tuning
     if (perfTuned) {
-        fprintf(fout, "bluestore cache autotune = 0\n");
+        fprintf(fout, "bluestore cache autotune = 0\n");    // off: autotune's PriorityCache mem_avail assert aborts OSDs during unclean-shutdown recovery
         fprintf(fout, "bluestore cache kv ratio = 0.2\n");
         fprintf(fout, "bluestore cache meta ratio = 0.8\n");
-        fprintf(fout, "bluestore cache size ssd = 8G\n");
-        fprintf(fout, "bluestore csum type = none\n");
+        fprintf(fout, "bluestore csum type = crc32c\n");     // corruption detection on for tenant data
         fprintf(fout, "bluestore extent map shard max size = 200\n");
         fprintf(fout, "bluestore extent map shard min size = 50\n");
         fprintf(fout, "bluestore extent map shard target size = 100\n");
@@ -921,14 +920,14 @@ UpdateConfig(
                       "flusher_threads=8,"
                       "compaction_readahead_size=2MB\n");
         fprintf(fout, "osd map share max epochs = 100\n");
-        fprintf(fout, "osd max backfills = 5\n");
-        fprintf(fout, "osd memory target = 2147483648\n");
+        fprintf(fout, "osd max backfills = 1\n");           // Ceph default; protect client IO during recovery
+        fprintf(fout, "osd memory target = 4294967296\n");  // 4G, now effective under autotune; tune to node RAM
         fprintf(fout, "osd op num shards = 8\n");
         fprintf(fout, "osd op num threads per shard = 2\n");
-        fprintf(fout, "osd min pg log entries = 10\n");
-        fprintf(fout, "osd max pg log entries = 10\n");
-        fprintf(fout, "osd pg log dups tracked = 10\n");
-        fprintf(fout, "osd pg log trim min = 10\n");
+        fprintf(fout, "osd min pg log entries = 500\n");    // enough for log-recovery on brief blips, not full backfill
+        fprintf(fout, "osd max pg log entries = 500\n");
+        fprintf(fout, "osd pg log dups tracked = 500\n");
+        fprintf(fout, "osd pg log trim min = 100\n");
         fprintf(fout, "osd bench small size max iops = 1000000\n");
     }
 
