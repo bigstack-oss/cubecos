@@ -611,6 +611,22 @@ ResourceSetMain(int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
+        // Switching a card away from sriovVgpu must also drop its stale
+        // alias/whitelist entries from the Nova drop-in (regenerated from
+        // the just-updated truth file). Nodes that never had a drop-in are
+        // left untouched.
+        if (access(NOVA_GPU_CONF, F_OK) == 0) {
+            if (!WriteNovaGpuConf()) {
+                HexLogError("gpu_resource_set: failed to regenerate %s for GPU %s", NOVA_GPU_CONF, gpuId);
+                return EXIT_FAILURE;
+            }
+
+            if (HexUtilSystemF(0, 0, HEX_CFG " restart_nova") != 0) {
+                HexLogError("gpu_resource_set: failed to restart nova services for GPU %s", gpuId);
+                return EXIT_FAILURE;
+            }
+        }
+
         HexLogInfo("gpu_resource_set: successfully updated GPU %s to pgpu", gpuId);
         return EXIT_SUCCESS;
     } else if (strcmp(newType, "sriovVgpu") == 0) {
@@ -786,7 +802,9 @@ Commit(bool modified, int dryLevel)
     // The drop-in's content derives solely from config.json, which does not
     // change across reboots, so no nova restart is needed here -
     // regeneration is self-healing only (e.g. after a lost/stale gpu.conf).
-    if (hasSriovVgpu && !WriteNovaGpuConf()) {
+    // Also regenerate when a drop-in exists but no sriovVgpu entry remains,
+    // so entries of cards switched away from sriovVgpu don't linger.
+    if ((hasSriovVgpu || access(NOVA_GPU_CONF, F_OK) == 0) && !WriteNovaGpuConf()) {
         return false;
     }
 
