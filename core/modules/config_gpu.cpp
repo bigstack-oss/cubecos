@@ -120,6 +120,29 @@ ApplySriovVgpu(const std::string& pciAddress, const json11::Json& profiles)
     return true;
 }
 
+// A PF counts as applied when its VFs are enabled and at least one VF
+// already carries a vGPU type.
+static bool
+SriovVgpuApplied(const std::string& sysfsAddr)
+{
+    std::ifstream numvfsStream(std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr + "/sriov_numvfs");
+    long numvfs = 0;
+    if (!(numvfsStream >> numvfs) || numvfs <= 0) {
+        return false;
+    }
+
+    for (long i = 0; i < numvfs; i++) {
+        std::ifstream typeStream(std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr +
+                                 "/virtfn" + std::to_string(i) + "/nvidia/current_vgpu_type");
+        long vgpuType = 0;
+        if ((typeStream >> vgpuType) && vgpuType != 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Parses `nvidia-smi vgpu -s -v` output into a map of vGPU type id (decimal)
 // -> full type name. Blocks look like:
 //   vGPU Type ID                      : 0x5ef
@@ -710,6 +733,8 @@ Commit(bool modified, int dryLevel)
         return false;
     }
 
+    bool hasSriovVgpu = false;
+
     for (const json11::Json& entry : gpuConfig.array_items()) {
         if (!entry["id"].is_string() || !entry["type"].is_string()) {
             continue;
@@ -734,8 +759,35 @@ Commit(bool modified, int dryLevel)
                 HexLogError("Failed to re-apply pgpu passthrough binding for GPU %s", id.c_str());
                 return false;
             }
+        } else if (type == "sriovVgpu") {
+            if (!entry["pciAddress"].is_string() || entry["pciAddress"].string_value().empty()) {
+                HexLogError("GPU %s has type sriovVgpu but no recorded pciAddress; cannot re-apply partitioning", id.c_str());
+                return false;
+            }
+
+            const std::string pciAddress = entry["pciAddress"].string_value();
+
+            // VF enablement and per-VF vGPU types are sysfs state and do
+            // not survive a reboot. Skip GPUs that still carry an applied
+            // layout - this also keeps runtime commits from disturbing
+            // vGPUs attached to running VMs.
+            if (!SriovVgpuApplied(SysfsPciAddr(pciAddress))) {
+                if (!ApplySriovVgpu(pciAddress, entry["profiles"])) {
+                    HexLogError("Failed to re-apply sriovVgpu partitioning for GPU %s", id.c_str());
+                    return false;
+                }
+            }
+
+            hasSriovVgpu = true;
         }
-        // TODO: re-apply sriovVgpu / migBackedVgpu once gpu_resource_set supports them.
+        // TODO(#905): re-apply migBackedVgpu once gpu_resource_set supports it.
+    }
+
+    // The drop-in's content derives solely from config.json, which does not
+    // change across reboots, so no nova restart is needed here -
+    // regeneration is self-healing only (e.g. after a lost/stale gpu.conf).
+    if (hasSriovVgpu && !WriteNovaGpuConf()) {
+        return false;
     }
 
     return true;
