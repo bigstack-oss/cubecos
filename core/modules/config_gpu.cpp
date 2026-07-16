@@ -591,9 +591,76 @@ ResourceSetMain(int argc, char* argv[])
         HexLogInfo("gpu_resource_set: successfully updated GPU %s to pgpu", gpuId);
         return EXIT_SUCCESS;
     } else if (strcmp(newType, "sriovVgpu") == 0) {
-        // TODO
+        // Existence of every requested id was confirmed by
+        // ValidateVgpuProfiles above; parse cannot fail here.
+        std::string jsonError;
+        const json11::Json requested = json11::Json::parse(profiles, jsonError);
+
+        // Enrich the requested {id, count} pairs with name/alias for
+        // persistence (#894 schema: {id, name, count, alias}).
+        const std::map<int, std::string> typeNames = GetVgpuTypeNames(gpuId);
+
+        json11::Json::array persistedProfiles;
+        for (const json11::Json& profile : requested.array_items()) {
+            const int id = (int)profile["id"].number_value();
+
+            const std::map<int, std::string>::const_iterator nameIt = typeNames.find(id);
+            if (nameIt == typeNames.end()) {
+                HexLogError("gpu_resource_set: failed to resolve the vGPU type name of profile %d on GPU %s",
+                            id, gpuId);
+                return EXIT_FAILURE;
+            }
+
+            persistedProfiles.push_back(json11::Json::object {
+                { "id", id },
+                { "name", nameIt->second },
+                { "count", (int)profile["count"].number_value() },
+                { "alias", ProfileAlias(nameIt->second, id) },
+            });
+        }
+
+        if (!ApplySriovVgpu(pciAddress, requested)) {
+            HexLogError("gpu_resource_set: failed to apply SR-IOV vGPU partitioning on GPU %s", gpuId);
+            return EXIT_FAILURE;
+        }
+
+        HexTempFile tmpFile;
+        if (tmpFile.fd() < 0) {
+            HexLogError("gpu_resource_set: failed to create a temporary file");
+            return EXIT_FAILURE;
+        }
+        tmpFile.close();
+
+        const std::string profilesDump = json11::Json(persistedProfiles).dump();
+
+        if (HexUtilSystemF(0, 0,
+                "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson profiles '%s' "
+                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"sriovVgpu\", pciAddress:$pciAddress, profiles:$profiles}]' %s > %s",
+                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(),
+                GPU_CONFIG_FILE, tmpFile.path()) != 0) {
+            HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
+            return EXIT_FAILURE;
+        }
+
+        if (HexUtilSystemF(0, 0, "mv %s %s", tmpFile.path(), GPU_CONFIG_FILE) != 0) {
+            HexLogError("gpu_resource_set: failed to persist GPU %s config", gpuId);
+            return EXIT_FAILURE;
+        }
+
+        if (!WriteNovaGpuConf()) {
+            HexLogError("gpu_resource_set: failed to regenerate %s for GPU %s", NOVA_GPU_CONF, gpuId);
+            return EXIT_FAILURE;
+        }
+
+        if (HexUtilSystemF(0, 0, HEX_CFG " restart_nova") != 0) {
+            HexLogError("gpu_resource_set: failed to restart nova services for GPU %s", gpuId);
+            return EXIT_FAILURE;
+        }
+
+        HexLogInfo("gpu_resource_set: successfully updated GPU %s to sriovVgpu", gpuId);
+        return EXIT_SUCCESS;
     } else if (strcmp(newType, "migBackedVgpu") == 0) {
-        // TODO
+        // TODO(#905)
     }
 
     HexLogError("gpu_resource_set: unhandled type %s", newType);
