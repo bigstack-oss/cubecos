@@ -324,6 +324,7 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/nova_api";
 
         cfg["api_database"]["connection"] = dbconn;
+        cfg["api_database"]["mysql_wsrep_sync_wait"] = "1";
 
         dbconn = "mysql+pymysql://nova:";
         dbconn += password;
@@ -332,6 +333,7 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/nova";
 
         cfg["database"]["connection"] = dbconn;
+        cfg["database"]["mysql_wsrep_sync_wait"] = "1";
 
         dbconn = "mysql+pymysql://placement:";
         dbconn += password;
@@ -340,6 +342,7 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/placement";
 
         plaCfg["placement_database"]["connection"] = dbconn;
+        plaCfg["placement_database"]["mysql_wsrep_sync_wait"] = "1";
     }
 
     return true;
