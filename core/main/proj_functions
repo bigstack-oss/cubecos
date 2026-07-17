@@ -1086,7 +1086,7 @@ _essential_check_one()
     return 1
 }
 
-# live_migration_gate [timeout_secs] [drain_host]
+# live_migration_gate [timeout_secs] [drain_host] [repair]
 #
 # Block until the live-migration drain path is FUNCTIONAL, so the rolling relay
 # can safely take the next node down. Same precondition for rolling restart and
@@ -1098,11 +1098,17 @@ _essential_check_one()
 # node from migration-target counts. keystone/haproxy/vip/memcached are covered
 # transitively by the authenticated $OPENSTACK calls; glance/cyborg are not on the
 # live-migration path. Returns 0 when a live migration can run; 1 on timeout.
+#
+# With 'repair' as $3 (absorbs the old _os_pre_failure_host_evacuation prep):
+# checks ALWAYS run first; a failed check triggers its matching surgical,
+# version-tolerant repair ONCE, then re-checks -- a healthy pass has zero side
+# effects. Heavier same-version repairs stay in cluster_check_repair_essential
+# (rolling restart only).
 live_migration_gate()
 {
     is_control_node || return 0
     source /etc/admin-openrc.sh 2>/dev/null
-    local deadline=$((SECONDS + ${1:-300})) drain=${2:-__none__} why=
+    local deadline=$((SECONDS + ${1:-300})) drain=${2:-__none__} repair=${3:-} why= repaired=
 
     while [ $SECONDS -lt $deadline ] ; do
         why=
@@ -1131,6 +1137,42 @@ live_migration_gate()
         [ -z "$why" ] && { $OPENSTACK network agent list -f value -c Alive 2>/dev/null | grep -qi true || why=neutron ; }
 
         [ -z "$why" ] && return 0
+        # repair mode: fix what the failed check names, once per cause, then
+        # re-check immediately. ceph/ceph-osd-down get no repair -- OSD rejoin
+        # is time-based and the rolling noout guard already prevents churn.
+        if [ "$repair" = "repair" ] ; then
+            case " $repaired " in
+                *" $why "*) : ;;    # already repaired this cause; just wait
+                *)
+                    repaired="$repaired $why"
+                    Quiet -n influx_event "insert health,component=live_migration_gate,node=$HOSTNAME,code=0 description=\"repairing\",detail=\"$why\""
+                    case $why in
+                        galera)   Quiet -n $HEX_SDK -m force health_mysql_repair ;;
+                        rabbitmq) Quiet -n $HEX_CLI -c cluster check_repair MsgQueue ;;
+                        nova-conductor|nova-scheduler|no-migration-target|cinder-volume)
+                            # wedged API workers (backed-up recv-Q) and
+                            # enabled-down services are what an authenticated
+                            # $OPENSTACK probe fails on
+                            cmd -c $HEX_SDK stale_api_check_repair openstack-nova-api 8774 nova-api python3 0
+                            cmd -c $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0
+                            if [ $($OPENSTACK compute service list -f value -c Status -c State 2>/dev/null | grep -ci "enabled down") -ge 1 ] ; then
+                                cmd -c systemctl restart openstack-nova-scheduler
+                                cmd -c systemctl restart openstack-nova-conductor
+                                cmd -p systemctl restart openstack-nova-compute
+                            fi
+                            ;;
+                        neutron)
+                            cmd -c $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0
+                            if [ $($OPENSTACK network agent list -f value -c ID -c Alive 2>/dev/null | grep -v -i true | wc -l) -ge 1 ] ; then
+                                $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
+                                cmd -c "timeout $SRVLTO systemctl restart neutron-server neutron-ovn-metadata-agent neutron-ovn-vpn-agent"
+                            fi
+                            ;;
+                    esac
+                    continue
+                    ;;
+            esac
+        fi
         sleep 5
     done
     echo "live_migration_gate: live-migration path not ready ($why)" >&2
