@@ -3,7 +3,7 @@
 include ../../build.mk
 
 FIRST_RELEASE_VERSION := v3.0.0-rc1
-SUPPORTED_FIRMWARES   ?= 3.0.0 3.1.0
+SUPPORTED_FIRMWARES   ?= 3.1.0
 FIXPACK_ID            ?= v3.1.0-002
 
 ifeq ($(COMMITSINCE),)
@@ -49,12 +49,6 @@ secfix: secfixdraft
 	$(Q)sed -i "s/SUPPORTED_FIRMWARES=.*/SUPPORTED_FIRMWARES=\"$(SUPPORTED_FIRMWARES)\"/" $</fixpack.info
 	$(Q)sed -i "s/FIXPACK_ID=.*/FIXPACK_ID=\"$(FIXPACK_ID)\"/" $</fixpack.info
 	$(Q)sed -i "s/FIXPACK_NAME=.*/FIXPACK_NAME=\"$(FIXPACK_ID)\"/" $</fixpack.info
-	$(Q)sed -i "s/^exit 0.*//" $</post_install.sh
-	$(Q)echo "cubectl node rsync /usr/lib/modules" >>$</post_install.sh
-	$(Q)echo "cubectl node rsync /usr/lib/firmware" >>$</post_install.sh
-	$(Q)echo "cubectl node rsync /boot/Part1" >>$</post_install.sh
-	$(Q)echo "cubectl node rsync /boot/Part2" >>$</post_install.sh
-	$(Q)echo "exit 0" >>$</post_install.sh
 	$(call RUN_CMD,$(SHELL) $(HEX_SCRIPTSDIR)/makehotfix -C -p 20M $< $(FIXPACK_ID).fixpack,"  GEN     $@ $(FIXPACK_ID).fixpack")
 	$(Q)md5sum $(FIXPACK_ID).fixpack >$(FIXPACK_ID).fixpack.md5
 
