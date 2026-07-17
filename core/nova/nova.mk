@@ -6,8 +6,8 @@
 
 # Core hypervisor and system dependencies from the Antelope spec
 ROOTFS_DNF += libvirt-11.10.0-14.el9 libvirt-devel-11.10.0-14.el9 dosfstools python3-libvirt ksmtuned virt-v2v qemu-kvm ipmitool openssh-clients rsync xorriso sudo
-# handled elsewhere: iptables novnc
-ROOTFS_DNF_NOARCH += iptables-services
+# handled elsewhere: iptables
+ROOTFS_DNF_NOARCH += iptables-services novnc
 
 NOVA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/nova
 NOVA_PATCHDIR := $(COREDIR)/nova/$(NEXT_OPENSTACK_RELEASE)_patch
