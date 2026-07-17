@@ -1334,37 +1334,6 @@ os_evac_upgrade_prepare()
     fi
 }
 
-_os_pre_failure_host_evacuation()
-{
-    if [ "$1" == "upgrade" ] ; then
-        # os_evac_upgrade_prepare
-        $HEX_CLI -c cluster check_repair MsgQueue >/tmp/upgrade_rabbitmq.log 2>&1
-        $HEX_SDK health_mysql_check || $HEX_SDK -m force health_mysql_repair
-
-        if $HEX_SDK health_rabbitmq_check ; then
-            # clear stale api for nova, neutron, and cinder
-            cmd -c $HEX_SDK stale_api_check_repair openstack-nova-api 8774 nova-api python3 0
-            cmd -c $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0
-            cmd -c $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0
-
-            # restart only "enabled down" services; leave "disabled" (drained/maintenance) hosts alone.
-            if [ $($OPENSTACK compute service list -f value -c Status -c State | grep -ci "enabled down") -ge 1 ] ; then
-                cmd -c systemctl restart openstack-nova-scheduler
-                cmd -c systemctl restart openstack-nova-conductor
-                cmd -p systemctl restart openstack-nova-compute
-            fi
-
-            if [ $($OPENSTACK network agent list -f value -c ID -c Alive | grep -v -i true | wc -l) -ge 1 ] ; then
-                $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
-                cmd -c "$SRVLTO systemctl restart neutron-server neutron-ovn-metadata-agent neutron-ovn-vpn-agent"
-            fi
-            $HEX_SDK health_neutron_check || Error "neutron is not Ok"
-        else
-            Error "rabbitmq is not Ok"
-        fi
-    fi
-}
-
 os_pre_failure_host_evacuation()
 {
     local host=$1
@@ -1374,13 +1343,9 @@ os_pre_failure_host_evacuation()
     # hostmonitor won't cold-evacuate (rebuild) it while it's deliberately down
     os_segment_host_maintenance "$host" True
 
-    for i in 1 2 3 ; do
-        if _os_pre_failure_host_evacuation $env ; then
-            break
-        else
-            sleep 30
-        fi
-    done
+    # repair+verify the live-migration path (self-gating, fast no-op when
+    # healthy); best-effort -- the drain proceeds regardless
+    [ "$env" == "upgrade" ] && $HEX_SDK live_migration_gate 120 "$host" repair
     nova host-evacuate-live $host
 }
 
@@ -1399,13 +1364,9 @@ os_pre_failure_host_evacuation_sequential()
     local srv_cnt=${#server_list_array[@]}
     local cnt=0
 
-    for i in 1 2 3 ; do
-        if _os_pre_failure_host_evacuation $env ; then
-            break
-        else
-            sleep 10
-        fi
-    done
+    # live-migration path readiness/repair is the caller's job: the rolling
+    # relay runs 'live_migration_gate <t> <host> repair' on the master control
+    # right before this drain
     for sid in ${server_list_array[@]} ; do
         to_host=${host_array[$((cnt++ % $num_host))]}
         old_state_json=$($OPENSTACK server show $sid -f json)

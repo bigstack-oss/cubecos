@@ -778,7 +778,6 @@ power_drain_host()
     # surprise -> reported via a non-zero return so the caller pauses the roll for
     # an operator. Host-scoped analog of os_pre_failure_host_evacuation_sequential.
     local from_host=${1:-$HOSTNAME}
-    local env=${2:-default}
     local server_list_array=( $($OPENSTACK server list --host "$from_host" --all-projects --status ACTIVE -f value -c ID) )
     local host_array=($(cubectl node -r compute list -j | jq -r .[].hostname | grep -v $from_host))
     local num_host=${#host_array[@]}
@@ -788,13 +787,13 @@ power_drain_host()
         return 1
     fi
 
-    for i in 1 2 3 ; do
-        if _os_pre_failure_host_evacuation $env ; then
-            break
-        else
-            sleep 10
-        fi
-    done
+    # repair+verify the live-migration path. This is the only gate covering
+    # the FIRST drain of a roll (no boot has happened yet) and drains released
+    # by a compute-node boot (the boot-path gate is an is_control_node no-op
+    # there); it runs on the master via power_node_evacuate, so it always
+    # gates. Best-effort -- the drain proceeds regardless and reacts only to
+    # nova's per-migration verdicts.
+    Quiet -n $HEX_SDK live_migration_gate 120 "$from_host" repair
 
     # Honor nova's concurrency cap. nova owns each migration's convergence
     # (completion_timeout -> force_complete -> post-copy guarantees completion),
@@ -902,7 +901,7 @@ power_node_evacuate()
     _power_roll_drain_poll "$host" "$total" "$sentinel" "$allstart" &
     local poll_pid=$!
 
-    power_drain_host $host upgrade
+    power_drain_host $host
     local rc=$?
     rm -f $sentinel ; kill $poll_pid 2>/dev/null ; wait $poll_pid 2>/dev/null
 
