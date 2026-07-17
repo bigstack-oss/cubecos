@@ -95,6 +95,12 @@ func commitCluster() error {
 			}
 			zap.L().Info("Cert data synced from cube-controller")
 
+			// wipe leftovers before mirroring the controller's terraform state:
+			// stale dirs collide with incoming symlinks (rsync code 23)
+			if err := os.RemoveAll(terraformWorkDir); err != nil {
+				return errors.WithStack(err)
+			}
+
 			if _, outErr, err := util.ExecCmd("cubectl", "node", "rsync",
 				cubeSettings.GetControllerIp()+":"+terraformWorkDir,
 			); err != nil {

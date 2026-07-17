@@ -84,6 +84,7 @@ func runConfigCommand(cmd *cobra.Command, args []string) error {
 		modules = args
 	}
 
+	var failed []string
 	for _, name := range modules {
 		if mod, ok := modMap[name]; ok {
 			var cmdFunc func() error
@@ -104,7 +105,12 @@ func runConfigCommand(cmd *cobra.Command, args []string) error {
 				zap.L().Debug("Executing module", zap.String("module", name), zap.String("command", cmd.Name()))
 				if err := cmdFunc(); err != nil {
 					if cmd.Name() == "commit" || cmd.Name() == "check" {
-						return err
+						// One module failing must not skip the rest: e.g. a failed
+						// 'cluster' commit must still let 'host' write /etc/hosts.
+						// Record and continue; report the aggregate at the end.
+						zap.L().Error("module failed; continuing", zap.String("module", name), zap.Error(err))
+						failed = append(failed, name)
+						continue
 					}
 
 					zap.L().Warn(err.Error())
@@ -116,6 +122,10 @@ func runConfigCommand(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("%s module not found", name)
 		}
 
+	}
+
+	if len(failed) > 0 {
+		return fmt.Errorf("modules failed: %v", failed)
 	}
 
 	return nil
