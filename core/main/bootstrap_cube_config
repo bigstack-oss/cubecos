@@ -218,7 +218,18 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
             # detached full check_repair -- the single full pass, healing what the
             # per-node auto_repair/essential passes miss.
             for _i in $(seq 1 90) ; do hex_sdk cube_cluster_ready && break ; sleep 20 ; done
-            hex_sdk cluster_check_repair_async
+            # Only fire the disruptive full check_repair when the cluster is
+            # actually ready. If the bounded wait above timed out (a node still
+            # coming up / a concurrent set_ready), skip it -- a health repair on
+            # a still-converging cluster can restart pacemaker/VIP and break
+            # in-flight bring-up -- and tell the operator to run it themselves.
+            if hex_sdk cube_cluster_ready ; then
+                hex_sdk cluster_check_repair_async
+            else
+                msg="Cluster not ready: automatic check_repair skipped. Run \"cluster check_repair\" yourself once the cluster is ready."
+                echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
+            fi
         elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" ] ; then
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop

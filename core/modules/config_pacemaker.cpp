@@ -216,10 +216,6 @@ Commit(bool modified, int dryLevel)
 
     WriteLogRotateConf(log_conf);
 
-    // vip could be missing when corosync doesn't form quorum between system reboots
-    if (IsControl(s_eCubeRole))
-        HexUtilSystemF(0, 0, HEX_SDK " -m force health_vip_repair");
-
     return true;
 }
 

@@ -633,6 +633,14 @@ health_hacluster_repair()
             fi
         done
     elif [ $(cmd -cv "pcs status 2>/dev/null | grep \"vip.*St\"" | cut -d"|" -f3 | sort -u | wc -l) -gt 1 ] ; then
+        # Split VIP can be a transient during convergence (a node just (re)joined
+        # and the CIB is still re-settling). Skip the disruptive restart while
+        # pacemaker is mid-transition; a later check_repair pass handles it if the
+        # split is real.
+        if ! $HEX_SDK pacemaker_settled ; then
+            Log "hacluster: cluster mid-transition (DC not S_IDLE) - deferring VIP restart, likely transient"
+            return 0
+        fi
         cmd -co $HEX_SDK pacemaker_node_restart
         for i in 1 2 3 4 5 ; do
             if ! is_vip_active || ! is_vip_reachable ; then

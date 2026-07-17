@@ -121,6 +121,19 @@ pacemaker_cluster_restart()
     Quiet -n pcs resource clear vip
 }
 
+# 0 only when pacemaker is settled (DC idle, nothing mid-transition) --
+# distinguishes a genuine fault from a cluster still converging
+pacemaker_settled()
+{
+    local dc state
+    dc=$(crmadmin -D 2>/dev/null | awk '{print $NF}')
+    [ -n "$dc" ] || return 1
+    state=$(crmadmin -S "$dc" 2>/dev/null | grep -oE 'S_[A-Z_]+')
+    [ "$state" = "S_IDLE" ] || return 1
+    pcs status 2>/dev/null | grep -qiE 'Starting|Stopping|Promoting|Demoting|Pending' && return 1
+    return 0
+}
+
 pacemaker()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
