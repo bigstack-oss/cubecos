@@ -44,6 +44,8 @@ _power_roll_set_node_status()
 {
     _power_roll_write --arg h "$1" --arg s "$2" --argjson ts "$(date +%s)" \
         '(.nodes[]|select(.hostname==$h)) |= (.status=$s | .phase_ts=((.phase_ts//{}) + {($s):$ts}))'
+    log_info "rolling_restart: node $1 -> $2"
+    /usr/sbin/hex_log_event -e CLU00009I "interface=system,host=$1,category=cluster,sub=rolling_restart,action=phase,phase=$2"
 }
 
 # The raw phase_ts write. Also the entry point a peer or a spool-replay uses:
@@ -319,6 +321,8 @@ power_bootup_mark()
         [ -n "$btime" ] && echo "boot $btime" > "$BOOTUP_STATUS_FILE"
     fi
     echo "$phase $(date +%s)" >> "$BOOTUP_STATUS_FILE"
+    log_info "cluster bootup: $HOSTNAME -> $phase"
+    /usr/sbin/hex_log_event -e CLU00009I "interface=system,host=$HOSTNAME,category=cluster,sub=cluster_bootup,action=phase,phase=$phase"
 }
 
 # Aggregate every node's local bootup record into a table. Unreachable nodes are
@@ -766,6 +770,7 @@ power_record_running_vms()
     : > "$CLUSTER_ACTIVE_RUNNING.tmp"
     for _vm in $_active ; do echo "$_vm stopped" >> "$CLUSTER_ACTIVE_RUNNING.tmp" ; done
     mv -f "$CLUSTER_ACTIVE_RUNNING.tmp" "$CLUSTER_ACTIVE_RUNNING"
+    log_info "cluster power: recorded $(printf '%s\n' $_active | grep -c .) running VMs for boot-end restore"
 }
 
 # Restore recorded VMs to their prior running state. Must run from the boot-end
@@ -775,15 +780,22 @@ power_restore_recorded_vms()
 {
     is_control_node || return 0
     [ -s "$CLUSTER_ACTIVE_RUNNING" ] || return 0
-    local i disp st _pending=0
+    local i disp st _pending=0 _total=0 _restarted=0
     while read -r i disp _ ; do
         [ -z "$i" ] && continue
+        _total=$((_total+1))
         st=$($OPENSTACK server show "$i" -f value -c status 2>/dev/null)
         [ "$st" = ACTIVE ] && continue
         [ "$st" = ERROR ] && os_nova_instance_reset "$i"
+        log_info "cluster bootup: restoring VM $i (disposition=${disp:-hardreboot}, was status=${st:-unknown})"
         power_vm_restore "$i" "$disp"
+        _restarted=$((_restarted+1))
         _pending=1
     done < "$CLUSTER_ACTIVE_RUNNING"
+    [ $_total -gt 0 ] && {
+        log_info "cluster bootup: VM restore -- $_restarted restarted, $((_total-_restarted)) already active, of $_total recorded"
+        /usr/sbin/hex_log_event -e CLU00010I "interface=system,host=$HOSTNAME,category=cluster,sub=cluster_bootup,action=vm_restore,recorded=$_total,restarted=$_restarted,already_active=$((_total-_restarted))"
+    }
     [ $_pending -eq 0 ] && rm -f "$CLUSTER_ACTIVE_RUNNING"
 }
 
@@ -847,6 +859,11 @@ power_drain_host()
         fi
     done
 
+    # Event marks the step; the per-VM log_info/log_error lines below carry the detail.
+    local _t0=$(date +%s) _nmig=$(( ${#server_list_array[@]} - ${#pending[@]} )) _migrated=0
+    log_info "rolling_restart drain: starting on $from_host (${#server_list_array[@]} VMs: ${#pending[@]} migratable, $_nmig suspend+restore, maxconc=$maxconc)"
+    /usr/sbin/hex_log_event -e CLU00007I "interface=system,host=$from_host,category=cluster,sub=rolling_restart,action=drain_start,total=${#server_list_array[@]},migratable=${#pending[@]},nonmigratable=$_nmig"
+
     # Concurrent pool: up to $maxconc migrations in flight. nova bounds each one's
     # duration (force_complete/post-copy); the drain waits for nova's outcome and
     # never stops a migration itself.
@@ -854,21 +871,28 @@ power_drain_host()
     while [ ${#pending[@]} -gt 0 ] || [ ${#started[@]} -gt 0 ] ; do
         while [ ${#started[@]} -lt "$maxconc" ] && [ ${#pending[@]} -gt 0 ] ; do
             sid=${pending[0]} ; pending=("${pending[@]:1}")
+            # Capture task_state (fast DB read, no API load) so a rejection's cause is
+            # visible in the log: a non-None task_state points at a re-migrated-too-soon race.
+            local _tsb=$($MYSQL -u root -N -D nova -e "SELECT task_state FROM instances WHERE uuid='$sid'" 2>/dev/null)
             # Retry a rejected request (transient "no valid host" is common under
             # burst); capture the error to the log instead of swallowing it.
             local _mtry _merr _mok=0
             for _mtry in 1 2 3 ; do
                 if _merr=$(nova live-migration "$sid" 2>&1) ; then _mok=1 ; break ; fi
                 echo "$(date +%s) migrate-retry $sid attempt=$_mtry: ${_merr//$'\n'/ }" >> "$tlog"
+                log_warning "rolling_restart drain: live-migration of $sid off $from_host attempt=$_mtry rejected (task_state=${_tsb:-None}): ${_merr//$'\n'/ }"
                 sleep 5
             done
             if [ "$_mok" = 1 ] ; then
                 started[$sid]=$(date +%s)
                 echo "${started[$sid]} start $sid (inflight ${#started[@]}/${maxconc})" >> "$tlog"
                 echo "migrating $sid off $from_host"
+                log_info "rolling_restart drain: migrating $sid off $from_host (task_state_before=${_tsb:-None}, inflight ${#started[@]}/${maxconc})"
             else
                 stuck+=("$sid")   # rejected after retries -- reason logged above
                 echo "$(date +%s) reject $sid (after 3 attempts): ${_merr//$'\n'/ }" >> "$tlog"
+                log_error "rolling_restart drain: live-migration of $sid off $from_host REJECTED after 3 attempts (task_state=${_tsb:-None}): ${_merr//$'\n'/ }"
+                /usr/sbin/hex_log_event -e CLU00006W "interface=system,host=$from_host,category=cluster,sub=rolling_restart,action=migrate_rejected,vm=$sid,phase=request,task_state=${_tsb:-None},inflight=${#started[@]},reason=${_merr//[,$'\n']/ }"
             fi
         done
         sleep 5
@@ -877,9 +901,12 @@ power_drain_host()
             st=$($MYSQL -u root -N -D nova -e "SELECT status FROM migrations WHERE instance_uuid='$sid' ORDER BY id DESC LIMIT 1" 2>/dev/null)
             if [ -n "$host" ] && [ "$host" != "$from_host" ] ; then
                 echo "$(date +%s) done $sid -> $host ($(( $(date +%s) - ${started[$sid]} ))s)" >> "$tlog"
-                unset 'started[$sid]'
+                log_info "rolling_restart drain: $sid migrated $from_host -> $host in $(( $(date +%s) - ${started[$sid]} ))s"
+                _migrated=$((_migrated+1)) ; unset 'started[$sid]'
             elif [ "x$st" = "xerror" -o "x$st" = "xfailed" -o "x$st" = "xcancelled" ] ; then
                 echo "$(date +%s) error $sid ($st)" >> "$tlog"
+                log_error "rolling_restart drain: nova reported migration of $sid off $from_host as '$st' (convergence)"
+                /usr/sbin/hex_log_event -e CLU00006W "interface=system,host=$from_host,category=cluster,sub=rolling_restart,action=migrate_rejected,vm=$sid,phase=convergence,nova_status=$st"
                 stuck+=("$sid") ; unset 'started[$sid]'
             fi
             # otherwise still in flight -> nova converges/force-completes it; keep waiting.
@@ -891,9 +918,13 @@ power_drain_host()
     if [ ${#stuck[@]} -gt 0 ] ; then
         printf '%s\n' "${stuck[@]}" > "${ROLLING_RESTART_DIR:-/tmp}/.stuck.${from_host}"
         echo "could not live-migrate off $from_host (stuck/error, needs operator): ${stuck[*]}" >&2
+        log_error "rolling_restart drain: $from_host NOT drained after $(( $(date +%s) - _t0 ))s -- migrated=$_migrated stuck=${#stuck[@]} (${stuck[*]})"
+        /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_restart,action=drain_done,result=incomplete,migrated=$_migrated,stuck=${#stuck[@]},elapsed=$(( $(date +%s) - _t0 ))"
         return 1
     fi
     rm -f "${ROLLING_RESTART_DIR:-/tmp}/.stuck.${from_host}"
+    log_info "rolling_restart drain: $from_host drained in $(( $(date +%s) - _t0 ))s (migrated=$_migrated, suspended=$_nmig)"
+    /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_restart,action=drain_done,result=ok,migrated=$_migrated,suspended=$_nmig,elapsed=$(( $(date +%s) - _t0 ))"
     return 0
 }
 

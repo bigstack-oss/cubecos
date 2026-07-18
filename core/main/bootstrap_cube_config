@@ -241,6 +241,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                 msg="Cluster not ready: automatic check_repair skipped. Run \"cluster check_repair\" yourself once the cluster is ready."
                 echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                 hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
+                logger -p user.warning -t bootstrap_cube_config "cluster bootup: boot-end check_repair skipped -- cluster not ready on $(hostname)"
             fi
         elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" ] ; then
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then

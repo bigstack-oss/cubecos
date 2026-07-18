@@ -1346,7 +1346,16 @@ os_pre_failure_host_evacuation()
     # repair+verify the live-migration path (self-gating, fast no-op when
     # healthy); best-effort -- the drain proceeds regardless
     [ "$env" == "upgrade" ] && $HEX_SDK live_migration_gate 120 "$host" repair
-    nova host-evacuate-live $host
+    local _t0=$(date +%s) _herr
+    log_info "rolling_upgrade drain: host-evacuate-live starting on $host"
+    /usr/sbin/hex_log_event -e CLU00007I "interface=system,host=$host,category=cluster,sub=rolling_upgrade,action=drain_start,mode=host-evacuate-live"
+    if _herr=$(nova host-evacuate-live $host 2>&1) ; then
+        log_info "rolling_upgrade drain: host-evacuate-live done on $host in $(( $(date +%s) - _t0 ))s"
+        /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$host,category=cluster,sub=rolling_upgrade,action=drain_done,mode=host-evacuate-live,elapsed=$(( $(date +%s) - _t0 ))"
+    else
+        log_error "rolling_upgrade drain: host-evacuate-live on $host reported errors: ${_herr//$'\n'/ }"
+        /usr/sbin/hex_log_event -e CLU00006W "interface=system,host=$host,category=cluster,sub=rolling_upgrade,action=migrate_rejected,mode=host-evacuate-live,reason=${_herr//[,$'\n']/ }"
+    fi
 }
 
 os_pre_failure_host_evacuation_sequential()
@@ -1364,6 +1373,11 @@ os_pre_failure_host_evacuation_sequential()
     local srv_cnt=${#server_list_array[@]}
     local cnt=0
 
+    # Event marks the step; per-VM log_info/log_error lines below carry the detail.
+    local _t0=$(date +%s) _failed=0
+    log_info "rolling_upgrade drain: starting on $from_host ($srv_cnt VMs, $num_host targets)"
+    /usr/sbin/hex_log_event -e CLU00007I "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=drain_start,total=$srv_cnt,targets=$num_host"
+
     # live-migration path readiness/repair is the caller's job: the rolling
     # relay runs 'live_migration_gate <t> <host> repair' on the master control
     # right before this drain
@@ -1374,8 +1388,15 @@ os_pre_failure_host_evacuation_sequential()
         old_status=$(echo $old_state_json | jq -r .status)
         old_power=$(echo $old_state_json | jq -r .power_state)
         success=true
+        local _tsb=$($MYSQL -u root -N -D nova -e "SELECT task_state FROM instances WHERE uuid='$sid'" 2>/dev/null)
         echo "migrating $sid($old_status) from $from_host to $to_host"
-        nova live-migration $sid $to_host
+        log_info "rolling_upgrade drain: migrating $sid from $from_host to $to_host (task_state_before=${_tsb:-None})"
+        local _lmerr
+        if ! _lmerr=$(nova live-migration $sid $to_host 2>&1) ; then
+            _failed=$((_failed+1))
+            log_error "rolling_upgrade drain: live-migration of $sid ($from_host -> $to_host) REJECTED (task_state=${_tsb:-None}): ${_lmerr//$'\n'/ }"
+            /usr/sbin/hex_log_event -e CLU00006W "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=migrate_rejected,vm=$sid,phase=request,task_state=${_tsb:-None},target=$to_host,reason=${_lmerr//[,$'\n']/ }"
+        fi
         for i in {1..15} ; do
             sleep 5
             new_state_json=$($OPENSTACK server show $sid -f json)
@@ -1403,6 +1424,8 @@ os_pre_failure_host_evacuation_sequential()
         done
     done
 
+    log_info "rolling_upgrade drain: $from_host done in $(( $(date +%s) - _t0 ))s ($srv_cnt VMs, rejected=$_failed)"
+    /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=drain_done,total=$srv_cnt,rejected=$_failed,elapsed=$(( $(date +%s) - _t0 ))"
     if [ "x$success" = "xtrue" ] ; then
         return 0
     else

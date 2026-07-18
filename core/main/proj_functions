@@ -1104,7 +1104,7 @@ live_migration_gate()
 {
     is_control_node || return 0
     source /etc/admin-openrc.sh 2>/dev/null
-    local deadline=$((SECONDS + ${1:-300})) drain=${2:-__none__} repair=${3:-} why= repaired=
+    local deadline=$((SECONDS + ${1:-300})) drain=${2:-__none__} repair=${3:-} why= repaired= _g0=$SECONDS
 
     while [ $SECONDS -lt $deadline ] ; do
         why=
@@ -1132,7 +1132,15 @@ live_migration_gate()
         [ -z "$why" ] && { $OPENSTACK volume service list --service cinder-volume -f value -c State 2>/dev/null | grep -qi up || why=cinder-volume ; }
         [ -z "$why" ] && { $OPENSTACK network agent list -f value -c Alive 2>/dev/null | grep -qi true || why=neutron ; }
 
-        [ -z "$why" ] && return 0
+        if [ -z "$why" ] ; then
+            # Only log a meaningful pass (it had to wait or repair) -- an instant
+            # no-op pass is the common case and would be noise.
+            if [ -n "$repaired" ] || [ $((SECONDS - _g0)) -ge 3 ] ; then
+                log_info "live_migration_gate: path ready for $drain after $((SECONDS - _g0))s${repaired:+ (repaired:$repaired)}"
+                /usr/sbin/hex_log_event -e CLU00011I "interface=system,host=$drain,category=cluster,action=gate_passed,waited=$((SECONDS - _g0)),repaired=${repaired// /+}"
+            fi
+            return 0
+        fi
         # repair mode: fix what the failed check names, once per cause, then
         # re-check immediately. ceph/ceph-osd-down get no repair -- OSD rejoin
         # is time-based and the rolling noout guard already prevents churn.
@@ -1141,6 +1149,7 @@ live_migration_gate()
                 *" $why "*) : ;;    # already repaired this cause; just wait
                 *)
                     repaired="$repaired $why"
+                    log_warning "live_migration_gate: $drain blocked on '$why', attempting repair"
                     Quiet -n influx_event "insert health,component=live_migration_gate,node=$HOSTNAME,code=0 description=\"repairing\",detail=\"$why\""
                     case $why in
                         galera)   Quiet -n $HEX_SDK -m force health_mysql_repair ;;
@@ -1171,6 +1180,8 @@ live_migration_gate()
         fi
         sleep 5
     done
+    log_error "live_migration_gate: path for $drain NOT ready after $((SECONDS - _g0))s, blocked on: ${why:-unknown}"
+    /usr/sbin/hex_log_event -e CLU00012W "interface=system,host=$drain,category=cluster,action=gate_timeout,blocked_on=${why:-unknown},waited=$((SECONDS - _g0))"
     echo "live_migration_gate: live-migration path not ready ($why)" >&2
     return 1
 }

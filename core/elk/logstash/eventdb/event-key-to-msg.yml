@@ -23,6 +23,13 @@ CLU00002I: cluster rolling restart resumed
 CLU00003I: cluster rolling restart aborted
 CLU00004W: cluster rolling restart paused on failure
 CLU00005I: cluster rolling restart completed
+CLU00006W: cluster live-migration rejected during host drain
+CLU00007I: cluster host drain started
+CLU00008I: cluster host drain completed
+CLU00009I: cluster node phase transition
+CLU00010I: cluster bootup VM restore summary
+CLU00011I: cluster live-migration gate passed
+CLU00012W: cluster live-migration gate timed out
 
 PLC00001I: cube node policy is successfully applied
 PLC00002I: cube cluster policy is successfully applied
