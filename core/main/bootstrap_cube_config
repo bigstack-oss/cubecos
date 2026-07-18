@@ -43,6 +43,17 @@ BootstrapAndClusterstart()
     fi
 }
 
+# A non-zero bootstrap must NOT let the script march on into cluster_start / the
+# ready-wait -- that turns a single failed module into a whole-cluster hang
+# (the master never creates its marker, so every other node waits on it). Surface
+# the failure and abort this node's bring-up.
+AbortBootstrap()
+{
+    msg="Bootstrap failed on $(hostname); aborting cluster bring-up. Fix the failing module, then re-run."
+    echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+    hex_sdk influx_event "${query},severity=\"E\" message=\"$msg\""
+}
+
 RollingEvacuateAndReboot()
 {
     # auto rolling evac and reboot in ppu update
@@ -209,7 +220,8 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
                 echo "YES" | hex_cli -c cluster stop
             fi
-            BootstrapAndClusterstart && RollingEvacuateAndReboot
+            BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
+            RollingEvacuateAndReboot
             # Advance the roll relay + mark bootup 'done' here per node, not in
             # cube_cluster_start's tail (skipped on the master). See kb note.
             hex_sdk power_roll_advance "$HOSTNAME"
@@ -243,7 +255,8 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                     ((cnt++))
                     sleep 60
                 done
-                BootstrapAndClusterstart && RollingEvacuateAndReboot
+                BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
+                RollingEvacuateAndReboot
                 hex_sdk power_roll_advance "$HOSTNAME"
                 hex_sdk power_bootup_mark done   # this node's bring-up complete
                 :> $BOOTSTRAP_CUBE_MODE
@@ -259,7 +272,8 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                     ((cnt++))
                     sleep 60
                 done
-                BootstrapAndClusterstart && RollingEvacuateAndReboot
+                BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
+                RollingEvacuateAndReboot
                 hex_sdk power_roll_advance "$HOSTNAME"
                 hex_sdk power_bootup_mark done   # this node's bring-up complete
                 :> $BOOTSTRAP_CUBE_MODE
