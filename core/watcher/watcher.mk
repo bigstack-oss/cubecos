@@ -25,3 +25,7 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)[ -d $(WATCHER_PATCHDIR) ] && cp -rf $(WATCHER_PATCHDIR)/* $(WATCHER_SRCDIR)/ || /bin/true
+	# register the CubeCOS allocation_balance strategy entry point (idempotent)
+	$(Q)for ep in $(WATCHER_SRCDIR)/python_watcher-*.egg-info/entry_points.txt ; do \
+		grep -q '^allocation_balance =' $$ep || sed -i '/^\[watcher_strategies\]/a allocation_balance = watcher.decision_engine.strategy.strategies.allocation_balance:AllocationBalance' $$ep ; \
+	done
