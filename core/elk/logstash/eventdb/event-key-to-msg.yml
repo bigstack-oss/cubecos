@@ -31,6 +31,23 @@ CLU00010I: cluster bootup VM restore summary
 CLU00011I: cluster live-migration gate passed
 CLU00012W: cluster live-migration gate timed out
 
+BSP00001I: node bootstrap started
+BSP00002I: cluster start initiated
+BSP00003W: bootstrap commit failed
+BSP00004E: bootstrap aborted, cluster bring-up halted
+BSP00005I: cluster check and repair started
+BSP00006I: cluster bootstrap ready
+BSP00007I: cluster check_repair skipped, nodes not all synced
+BSP00008W: boot-end check_repair skipped, cluster not ready
+BSP00009I: auto bootstrap disabled
+BSP00010I: waiting for upstream node to finish bootstrapping
+BSP00011I: instance restored on boot
+
+RUG00001W: rolling upgrade paused, live-migration path not ready
+RUG00002I: evacuating instances for rolling upgrade
+RUG00003W: rolling upgrade aborted, evacuation failures
+RUG00004I: rebooting node for rolling upgrade
+
 PLC00001I: cube node policy is successfully applied
 PLC00002I: cube cluster policy is successfully applied
 
