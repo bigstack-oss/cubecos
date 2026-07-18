@@ -198,6 +198,13 @@ Commit(bool modified, int dryLevel)
         if (isMaster) {
             if (access(CONFIGURED_FILE, F_OK) != 0)
                 HexUtilSystemF(0, 0, "ip addr add %s dev %s label %s", sharedId.c_str(), mgmtIf.c_str(), mgmtIf.c_str());
+            else {
+                // configured reboot/powercycle: bring pacemaker up so its vip
+                // resource re-adds the VIP (corosync may not have quorum yet, but
+                // a lone master is quorate and starts its resources).
+                SystemdCommitService(enabled, NAME);
+                HexUtilSystemF(0, 0, HEX_SDK " pacemaker_node_start");
+            }
         }
         else {
             HexUtilSystemF(0, 0, HEX_SDK " pacemaker_node_stop");
