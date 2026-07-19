@@ -76,6 +76,15 @@ static bool s_bCubeModified = false;
 static bool s_bNeutronModified = false;
 static bool s_bIronicModified = false;
 
+// cinder's external-backend setting, matched as a literal rather than via
+// CONFIG_TUNING_SPEC_STR(CINDER_STORAGE_BACKEND): config_cinder parses nova's
+// spec at static-init, so referencing cinder's spec here would be a circular
+// cross-TU dependency that crashes hex_config at startup under any link order.
+static const char CINDER_BACKEND_PREFIX[] = "cinder.storage.backend.";
+static bool s_bExtBackendOld = false;
+static bool s_bExtBackendNew = false;
+static bool s_bStorageBackendModified = false;
+
 static bool s_bDbPassChanged = false;
 static bool s_bPlaDbPassChanged = false;
 static bool s_bConfigChanged = false;
@@ -488,7 +497,9 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
             cfg["libvirt"]["live_migration_inbound_addr"] = overlayAddr;
         cfg["libvirt"]["hw_disk_discard"] = "unmap";
         cfg["libvirt"]["snapshot_image_format"] = "raw";
-        cfg["libvirt"]["volume_use_multipath"] = "true";
+        // only external FC/iSCSI backends use multipath; leaving it on makes
+        // every live migration probe multipathd
+        cfg["libvirt"]["volume_use_multipath"] = s_bExtBackendNew ? "true" : "false";
         // post-copy: bounded convergence with no downtime (dest faults pages from source)
         cfg["libvirt"]["live_migration_permit_post_copy"] = "true";
         // throttle guest CPU to help pre-copy converge before post-copy is needed
@@ -731,6 +742,21 @@ ParseIronic(const char *name, const char *value, bool isNew)
     return true;
 }
 
+// a non-empty cinder.storage.backend.<N>.name means an external backend exists;
+// the built-in ceph backend is not listed there
+static bool
+ParseCinder(const char *name, const char *value, bool isNew)
+{
+    if (strncmp(name, CINDER_BACKEND_PREFIX, sizeof(CINDER_BACKEND_PREFIX) - 1) == 0 &&
+        value != NULL && value[0] != '\0') {
+        if (isNew)
+            s_bExtBackendNew = true;
+        else
+            s_bExtBackendOld = true;
+    }
+    return true;
+}
+
 static void
 NotifyNet(bool modified)
 {
@@ -762,6 +788,13 @@ NotifyIronic(bool modified)
     s_bIronicModified = IsModifiedTune(4);
 }
 
+static void
+NotifyCinder(bool modified)
+{
+    // rewrite nova.conf when a SAN backend is added or removed
+    s_bStorageBackendModified = (s_bExtBackendOld != s_bExtBackendNew);
+}
+
 static bool
 CommitCheck(bool modified, int dryLevel)
 {
@@ -775,6 +808,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bConfigChanged = modified | s_bNetModified | s_bMqModified |
                 s_bCubeModified | s_bNeutronModified | s_bIronicModified |
+                s_bStorageBackendModified |
                G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
 
     s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
@@ -926,6 +960,8 @@ CONFIG_OBSERVES(nova, rabbitmq, ParseRabbitMQ, NotifyMQ);
 CONFIG_OBSERVES(nova, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(nova, neutron, ParseNeutron, NotifyNeutron);
 CONFIG_OBSERVES(nova, ironic, ParseIronic, NotifyIronic);
+// observe cinder's external-storage backends: multipath is only needed for FC/iSCSI
+CONFIG_OBSERVES(nova, cinder, ParseCinder, NotifyCinder);
 
 CONFIG_TRIGGER_WITH_SETTINGS(nova, "cluster_start", ClusterStartMain);
 
