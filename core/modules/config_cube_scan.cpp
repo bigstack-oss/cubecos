@@ -519,6 +519,9 @@ CONFIG_OBSERVES(cube_scan, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(cube_scan, cubesys, ParseCube, NotifyCube);
 
 CONFIG_REQUIRES(cube_scan, standalone);
+// owns CTRL_IP / SHARED_ID / EXTERNAL / MGMT_ADDR, which other modules read when
+// writing their configs -- must commit even for a scoped module range
+CONFIG_PROVIDES_GLOBALS(cube_scan);
 
 CONFIG_MODULE(cube_last, 0, 0, 0, 0, CommitLast);
 CONFIG_REQUIRES(cube_last, monasca_setup);
