@@ -50,7 +50,7 @@ ParseNet(const char* name, const char* value, bool isNew)
 {
     const char* p = 0;
 
-    if (HexMatchPrefix(name, NET_IF_MTU.format.c_str(), &p)) {
+    if (HexMatchPrefix(name, NET_IF_MTU().format.c_str(), &p)) {
         ConfigUInt& m = s_Mtu[p];
         m.parse(value, isNew);
     }

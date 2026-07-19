@@ -654,7 +654,7 @@ ParseNet(const char *name, const char *value, bool isNew)
     if (strcmp(name, NET_HOSTNAME) == 0) {
         s_hostname.parse(value, isNew);
     }
-    else if (HexMatchPrefix(name, NET_IF_MTU.format.c_str(), &p)) {
+    else if (HexMatchPrefix(name, NET_IF_MTU().format.c_str(), &p)) {
         ConfigUInt& m = s_Mtu[p];
         m.parse(value, isNew);
     }

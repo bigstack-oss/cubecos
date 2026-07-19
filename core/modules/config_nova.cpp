@@ -76,13 +76,6 @@ static bool s_bCubeModified = false;
 static bool s_bNeutronModified = false;
 static bool s_bIronicModified = false;
 
-// cinder's external-backend setting, matched as a literal rather than via
-// CONFIG_TUNING_SPEC_STR(CINDER_STORAGE_BACKEND): config_cinder parses nova's
-// spec at static-init, so referencing cinder's spec here would be a circular
-// cross-TU dependency that crashes hex_config at startup under any link order.
-static const char CINDER_BACKEND_PREFIX[] = "cinder.storage.backend.";
-static bool s_bExtBackendOld = false;
-static bool s_bExtBackendNew = false;
 static bool s_bStorageBackendModified = false;
 
 static bool s_bDbPassChanged = false;
@@ -132,6 +125,7 @@ CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
 CONFIG_TUNING_SPEC_STR(NEUTRON_USERPASS);
 CONFIG_TUNING_SPEC_STR(NEUTRON_METAPASS);
 CONFIG_TUNING_SPEC_STR(IRONIC_USERPASS);
+CONFIG_TUNING_SPEC_STR(CINDER_STORAGE_BACKEND);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, NOVA_ENABLED);
@@ -158,6 +152,7 @@ PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 2);
 PARSE_TUNING_X_STR(s_neutronPass, NEUTRON_USERPASS, 3);
 PARSE_TUNING_X_STR(s_metaPass, NEUTRON_METAPASS, 3);
 PARSE_TUNING_X_STR(s_ironicPass, IRONIC_USERPASS, 4);
+PARSE_TUNING_X_STR_ARRAY(s_storageBackends, CINDER_STORAGE_BACKEND, 5);
 
 // depends on mysqld (called inside commit())
 static bool
@@ -428,6 +423,19 @@ UpdateSharedId(std::string sharedId)
     return true;
 }
 
+// True when an operator added an external storage backend; the built-in ceph
+// backend is not in this list.
+static bool
+HasExternalStorageBackend()
+{
+    for (std::vector<ConfigString>::const_iterator it = s_storageBackends.begin();
+         it != s_storageBackends.end(); it++) {
+        if (it->newValue().length() > 0)
+            return true;
+    }
+    return false;
+}
+
 static bool
 UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::string hwType,
           std::string novaPass, std::string placePass, std::string neutronPass, std::string metaPass,
@@ -499,7 +507,7 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["libvirt"]["snapshot_image_format"] = "raw";
         // only external FC/iSCSI backends use multipath; leaving it on makes
         // every live migration probe multipathd
-        cfg["libvirt"]["volume_use_multipath"] = s_bExtBackendNew ? "true" : "false";
+        cfg["libvirt"]["volume_use_multipath"] = HasExternalStorageBackend() ? "true" : "false";
         // post-copy: bounded convergence with no downtime (dest faults pages from source)
         cfg["libvirt"]["live_migration_permit_post_copy"] = "true";
         // throttle guest CPU to help pre-copy converge before post-copy is needed
@@ -742,18 +750,10 @@ ParseIronic(const char *name, const char *value, bool isNew)
     return true;
 }
 
-// a non-empty cinder.storage.backend.<N>.name means an external backend exists;
-// the built-in ceph backend is not listed there
 static bool
 ParseCinder(const char *name, const char *value, bool isNew)
 {
-    if (strncmp(name, CINDER_BACKEND_PREFIX, sizeof(CINDER_BACKEND_PREFIX) - 1) == 0 &&
-        value != NULL && value[0] != '\0') {
-        if (isNew)
-            s_bExtBackendNew = true;
-        else
-            s_bExtBackendOld = true;
-    }
+    ParseTune(name, value, isNew, 5);
     return true;
 }
 
@@ -792,7 +792,7 @@ static void
 NotifyCinder(bool modified)
 {
     // rewrite nova.conf when a SAN backend is added or removed
-    s_bStorageBackendModified = (s_bExtBackendOld != s_bExtBackendNew);
+    s_bStorageBackendModified = s_storageBackends.modified();
 }
 
 static bool
