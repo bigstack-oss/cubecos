@@ -2761,17 +2761,29 @@ ceph_dashboard_idp_config()
 
 ceph_mount_cephfs()
 {
-    if $CEPH -s >/dev/null ; then
-        for i in {1..3} ; do
-            if [ $(mount | grep $CEPHFS_STORE_DIR | wc -l) -gt 0 ] ; then
-                timeout $SRVSTO umount $CEPHFS_STORE_DIR 2>/dev/null || umount -l $CEPHFS_STORE_DIR 2>/dev/null
-            fi
-            if [ $(mount | grep $CEPHFS_STORE_DIR | wc -l) -lt 1 ] ; then
-                timeout $SRVSTO mount -t ceph :/ $CEPHFS_STORE_DIR -o name=admin,secretfile=/etc/ceph/admin.key >/dev/null 2>&1 && break
-            fi
-            sleep 5
-        done
+    # The cephfs kernel mount needs the admin secretfile (/etc/ceph/admin.key).
+    # On a firmware-upgraded (PPU) node the migrated MAKRER_CLIENT makes config
+    # skip client setup, so derive the secretfile from the (migrated) admin
+    # keyring if it is missing -- else the mount fails "unable to read secretfile".
+    if [ ! -s /etc/ceph/admin.key ] && [ -s /etc/ceph/ceph.client.admin.keyring ] ; then
+        ceph-authtool -p /etc/ceph/ceph.client.admin.keyring > /etc/ceph/admin.key 2>/dev/null && chmod 0600 /etc/ceph/admin.key
     fi
+    mountpoint -q $CEPHFS_STORE_DIR && return 0
+    # A cold PPU boot races ahead of the cluster reforming; wait (bounded) for
+    # ceph + a serviceable MDS before mounting, then retry and verify.
+    local _deadline=$((SECONDS + 300)) i
+    while [ $SECONDS -lt $_deadline ] ; do
+        $CEPH -s >/dev/null 2>&1 && $CEPH mds stat 2>/dev/null | grep -q up:active && break
+        sleep 5
+    done
+    for i in {1..6} ; do
+        mountpoint -q $CEPHFS_STORE_DIR && return 0
+        timeout $SRVSTO mount -t ceph :/ $CEPHFS_STORE_DIR -o name=admin,secretfile=/etc/ceph/admin.key >/dev/null 2>&1
+        mountpoint -q $CEPHFS_STORE_DIR && return 0
+        sleep 10
+    done
+    log_error "ceph_mount_cephfs: cephfs not mounted after retries on $(hostname)"
+    return 1
 }
 
 ceph_node_group_list()

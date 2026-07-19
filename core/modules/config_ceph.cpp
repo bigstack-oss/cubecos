@@ -1901,6 +1901,10 @@ CONFIG_MIGRATE(ceph, MAKRER_POOL);
 CONFIG_MIGRATE(ceph, MAKRER_CEPHFS);
 CONFIG_MIGRATE(ceph, MAKRER_CLIENT);
 CONFIG_MIGRATE(ceph, ADMIN_KEYRING);
+// MAKRER_CLIENT (migrated above) makes InitCephClient skip client setup on the
+// new partition, so the cephfs mount secretfile derived from ADMIN_KEYRING must
+// be carried over too -- else /etc/ceph/admin.key is absent and cephfs won't mount.
+CONFIG_MIGRATE(ceph, CEPHFS_CLIENT_AUTHKEY);
 CONFIG_MIGRATE(ceph, K8S_KEYRING);
 
 CONFIG_SUPPORT_COMMAND(HEX_SDK " ceph_status details");
