@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenStack Neutron OVN Agent
+After=syslog.target network.target openvswitch.service
+PartOf=network.service
+Requires=openvswitch.service
+
+[Service]
+Type=simple
+User=neutron
+PermissionsStartOnly=true
+ExecStart=/usr/bin/neutron-ovn-agent --config-file /etc/neutron/plugins/ml2/ovn_agent.ini --config-dir /etc/neutron/conf.d/neutron-ovn-agent --log-file /var/log/neutron/neutron-ovn-agent.log
+PrivateTmp=false
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenStack Neutron (RPC only) Server
+After=syslog.target network.target
+
+[Service]
+Type=notify
+User=neutron
+ExecStart=/usr/bin/neutron-rpc-server --config-file /usr/share/neutron/neutron-dist.conf --config-dir /usr/share/neutron/server --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugin.ini --config-dir /etc/neutron/conf.d/common --config-dir /etc/neutron/conf.d/neutron-rpc-server --log-file /var/log/neutron/rpc-server.log
+PrivateTmp=true
+NotifyAccess=all
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
