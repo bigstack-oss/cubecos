@@ -341,3 +341,47 @@ _ovn_metadata_wait_caught_up()   # <timeout-secs, default 120>
     done
     return 0
 }
+
+# hand the OVN SB master to a peer before this host reboots (moving the VIP
+# moves the master -- it is colocated with the promoted ovndb_servers)
+ovn_sb_evacuate_host()
+{
+    local host=${1:-$(hostname)}
+    # single node: nowhere to hand the master to
+    [ "$(cubectl node list 2>/dev/null | wc -l)" -le 1 ] && return 0
+
+    # 'pcs status' prints:  * Promoted: [ sky141 ]   (and a separate Unpromoted line,
+    # which must not match here). Take the first host inside the brackets.
+    local promoted=$(pcs status 2>/dev/null \
+                     | sed -n 's/.*\* Promoted: \[ *\([^]]*\)\].*/\1/p' | awk '{print $1}')
+    [ -n "$promoted" ] || return 0
+    [ "$promoted" = "$host" ] || return 0
+
+    local target=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname' 2>/dev/null \
+                   | grep -v "^$host$" | head -1)
+    [ -n "$target" ] || return 0
+
+    log_info "ovn_sb_evacuate_host: moving OVN SB master + VIP off $host to $target before reboot"
+    Quiet -n timeout 60 pcs resource move vip "$target"
+
+    # Settled = every chassis has acked the current nb_cfg, i.e. all OVSDB
+    # clients have reconnected to the new master and caught up.
+    local i nb acks settled=0
+    for i in $(seq 1 60) ; do
+        nb=$(_ovn_nb_cfg)
+        acks=$(_ovn_metadata_sbcfg_all | awk '{print $2}')
+        if [ -n "$nb" ] && [ -n "$acks" ] \
+           && ! echo "$acks" | awk -v t="$nb" '$1 < t {f=1} END{exit !f}' ; then
+            settled=1 ; break
+        fi
+        sleep 2
+    done
+    Quiet -n timeout 30 pcs resource clear vip
+
+    if [ "$settled" = 1 ] ; then
+        log_info "ovn_sb_evacuate_host: SB master on $target; all chassis acked nb_cfg=$nb"
+    else
+        log_warning "ovn_sb_evacuate_host: chassis did not all ack nb_cfg=$nb within 120s (acks: $(echo $acks | tr '\n' ' '))"
+    fi
+    return 0
+}

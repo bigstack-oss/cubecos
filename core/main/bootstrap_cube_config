@@ -142,6 +142,8 @@ RollingEvacuateAndReboot()
                     # hand off the active cephfs MDS before $N goes down, else cephfs
                     # stalls for the whole node-down window (co-located mon defers failover)
                     hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_mds_evacuate_host $N"
+                    # likewise hand off the OVN SB master before $N goes down
+                    hex_sdk remote_run $MASTER_CONTROL "hex_sdk ovn_sb_evacuate_host $N"
                     hex_sdk remote_run $n_ip "echo YES | hex_cli -c reboot"
                     break
                 fi

@@ -840,6 +840,8 @@ power_drain_host()
     # Via $HEX_SDK so the sub-invocation sources sdk_ceph (this module runs under
     # MOD=power, which does not source sdk_ceph -- a bare call is undefined).
     Quiet -n $HEX_SDK ceph_mds_evacuate_host "$from_host"
+    # Same for the OVN SB master (see ovn_sb_evacuate_host).
+    Quiet -n $HEX_SDK ovn_sb_evacuate_host "$from_host"
 
     # Honor nova's concurrency cap. nova owns each migration's convergence
     # (completion_timeout -> force_complete -> post-copy guarantees completion),

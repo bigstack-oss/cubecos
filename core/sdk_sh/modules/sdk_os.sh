@@ -1348,6 +1348,9 @@ os_pre_failure_host_evacuation()
     # Via $HEX_SDK so the sub-invocation sources sdk_ceph (this module runs under
     # MOD=os, which does not source sdk_ceph -- a bare call is undefined).
     $HEX_SDK ceph_mds_evacuate_host "$host"
+    # Same reasoning for the OVN SB master: hand it over while this node is
+    # still alive, so OVSDB clients get a clean close instead of a vanished VIP.
+    $HEX_SDK ovn_sb_evacuate_host "$host"
 
     # repair+verify the live-migration path (self-gating, fast no-op when
     # healthy); best-effort -- the drain proceeds regardless
