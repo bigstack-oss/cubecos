@@ -3,6 +3,7 @@ Description=OpenStack Nova Conductor Server
 After=syslog.target network.target
 
 [Service]
+LimitNOFILE=infinity
 Type=notify
 NotifyAccess=all
 Restart=always
