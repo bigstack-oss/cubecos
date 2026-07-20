@@ -1,16 +1,18 @@
 # systemd unit example
 [Unit]
 Description=RabbitMQ broker
-After=network.target epmd@0.0.0.0.socket
-Wants=network.target epmd@0.0.0.0.socket
+After=syslog.target network.target epmd@0.0.0.0.socket
+Wants=syslog.target network.target epmd@0.0.0.0.socket
 
 [Service]
 Type=notify
 User=rabbitmq
 Group=rabbitmq
+UMask=0027
 NotifyAccess=all
 TimeoutStartSec=3600
-LimitNOFILE=16384
+LimitNOFILE=65536
+
 # Note:
 # You *may* wish to add the following to automatically restart RabbitMQ
 # in the event of a failure. systemd service restarts are not a
@@ -20,9 +22,10 @@ LimitNOFILE=16384
 # Restart=on-failure
 # RestartSec=10
 WorkingDirectory=/var/lib/rabbitmq
-ExecStart=/usr/lib/rabbitmq/bin/rabbitmq-server
-ExecStop=/usr/lib/rabbitmq/bin/rabbitmqctl stop
-ExecStop=/bin/sh -c "while ps -p $MAINPID >/dev/null 2>&1; do sleep 1; done"
+ExecStart=/usr/sbin/rabbitmq-server
+ExecStop=/usr/sbin/rabbitmqctl shutdown
+# See rabbitmq/rabbitmq-server-release#51
+SuccessExitStatus=69
 
 [Install]
 WantedBy=multi-user.target
