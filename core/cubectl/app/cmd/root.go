@@ -80,7 +80,10 @@ func RootExecute() int {
 	if err := RootCmd.Execute(); err != nil {
 		var fields []zap.Field
 		if rootOpts.stacktrace {
-			fields = append(fields, zap.String("errstack", fmt.Sprintf("%+v", err.(stackTracer).StackTrace())))
+			// comma-ok: plain errors carry no StackTrace()
+			if st, ok := err.(stackTracer); ok {
+				fields = append(fields, zap.String("errstack", fmt.Sprintf("%+v", st.StackTrace())))
+			}
 		}
 
 		zap.L().Error(fmt.Sprintf("%v", err), fields...)
