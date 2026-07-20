@@ -136,14 +136,6 @@ rootfs_install::
 # python3-xmlsec
 PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel python-xmlsec
 
-# erlang 26.2.5-1.el9 doesn't work with rabbitmq
-ERLANG_VER := 24.3.4.2-1.el9s
-ERLANG += erlang-asn1-$(ERLANG_VER) erlang-compiler-$(ERLANG_VER) erlang-crypto-$(ERLANG_VER) erlang-eldap-$(ERLANG_VER) erlang-erts-$(ERLANG_VER) erlang-inets-$(ERLANG_VER) erlang-kernel-$(ERLANG_VER) erlang-mnesia-$(ERLANG_VER) erlang-os_mon-$(ERLANG_VER)
-ERLANG += erlang-public_key-$(ERLANG_VER) erlang-runtime_tools-$(ERLANG_VER) erlang-sasl-$(ERLANG_VER) erlang-snmp-$(ERLANG_VER) erlang-ssl-$(ERLANG_VER) erlang-stdlib-$(ERLANG_VER) erlang-syntax_tools-$(ERLANG_VER) erlang-tools-$(ERLANG_VER) erlang-xmerl-$(ERLANG_VER)
-LOCKED_DNF += $(ERLANG)
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) dnf -y install $(ERLANG)
-
 # ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm
 RUBY := ruby-3.0.7-166.el9
 LOCKED_DNF += $(RUBY)
