@@ -110,13 +110,23 @@ Commit(bool modified, int dryLevel)
     if (!enabled)
         return true;
 
+    // multipathd may still be starting its path checkers; wait until it
+    // answers before issuing map operations
+    int i;
+    for (i = 0; i < 30; i++) {
+        if (HexUtilSystemF(0, 0, "/usr/sbin/multipathd show status >/dev/null 2>&1") == 0)
+            break;
+        sleep(2);
+    }
+    if (i == 30)
+        HexLogWarning("multipathd not responding after 60s; refreshing maps anyway");
+
     // Reload /etc/multipath.conf so the overrides{} take effect, then refresh maps.
     HexUtilSystemF(0, 0, "/usr/sbin/multipathd reconfigure");
 
-    if (HexUtilSystemF(0, 0, "/usr/sbin/hex_sdk storage_update_device_maps") != 0) {
-        HexLogError("failed to update multipath device maps");
-        return false;
-    }
+    // best-effort: a failed map refresh must not abort the whole commit
+    if (HexUtilSystemF(0, 0, "/usr/sbin/hex_sdk storage_update_device_maps") != 0)
+        HexLogWarning("failed to update multipath device maps; continuing");
 
     return true;
 }
