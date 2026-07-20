@@ -1,0 +1,326 @@
+[DEFAULT]
+
+#
+# From neutron.base.agent
+#
+
+# DEPRECATED: Name of Open vSwitch bridge to use (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This variable is a duplicate of OVS.integration_bridge. To be removed
+# in W.
+#ovs_integration_bridge = br-int
+
+# Uses veth for an OVS interface or not. Support kernels with limited namespace
+# support (e.g. RHEL 6.5) and rate limiting on router's gateway port so long as
+# ovs_use_veth is set to True. (boolean value)
+#ovs_use_veth = false
+
+# The driver used to manage the virtual interface. (string value)
+#interface_driver = <None>
+
+# Maximum seconds to wait for a response from an RPC call. (integer value)
+#rpc_response_max_timeout = 600
+
+#
+# From neutron.dhcp.agent
+#
+
+# The DHCP agent will resync its state with Neutron to recover from any
+# transient notification or RPC errors. The interval is maximum number of
+# seconds between attempts. The resync can be done more often based on the
+# events triggered. (integer value)
+#resync_interval = 5
+
+# Throttle the number of resync state events between the local DHCP state and
+# Neutron to only once per 'resync_throttle' seconds. The value of throttle
+# introduces a minimum interval between resync state events. Otherwise the
+# resync may end up in a busy-loop. The value must be less than
+# resync_interval. (integer value)
+#resync_throttle = 1
+
+# The driver used to manage the DHCP server. (string value)
+#dhcp_driver = neutron.agent.linux.dhcp.Dnsmasq
+
+# The DHCP server can assist with providing metadata support on isolated
+# networks. Setting this value to True will cause the DHCP server to append
+# specific host routes to the DHCP request. The metadata service will only be
+# activated when the subnet does not contain any router port. The guest
+# instance must be configured to request host routes via DHCP (Option 121).
+# This option doesn't have any effect when force_metadata is set to True.
+# (boolean value)
+#enable_isolated_metadata = false
+
+# In some cases the Neutron router is not present to provide the metadata IP
+# but the DHCP server can be used to provide this info. Setting this value will
+# force the DHCP server to append specific host routes to the DHCP request. If
+# this option is set, then the metadata service will be activated for all the
+# networks. (boolean value)
+#force_metadata = false
+
+# Allows for serving metadata requests coming from a dedicated metadata access
+# network whose CIDR is 169.254.169.254/16 (or larger prefix), and is connected
+# to a Neutron router from which the VMs send metadata:1 request. In this case
+# DHCP Option 121 will not be injected in VMs, as they will be able to reach
+# 169.254.169.254 through a router. This option requires
+# enable_isolated_metadata = True. (boolean value)
+#enable_metadata_network = false
+
+# Number of threads to use during sync process. Should not exceed connection
+# pool size configured on server. (integer value)
+#num_sync_threads = 4
+
+# Time to sleep between reloading the DHCP allocations. This will only be
+# invoked if the value is not 0. If a network has N updates in X seconds then
+# we will reload once with the port changes in the X seconds and not N times.
+# (integer value)
+# Minimum value: 0
+#bulk_reload_interval = 0
+
+# Location to store DHCP server config files. (string value)
+#dhcp_confs = $state_path/dhcp
+
+# Override the default dnsmasq settings with this file. (string value)
+#dnsmasq_config_file =
+
+# Comma-separated list of the DNS servers which will be used as forwarders.
+# (list value)
+#dnsmasq_dns_servers =
+
+# Base log dir for dnsmasq logging. The log contains DHCP and DNS log
+# information and is useful for debugging issues with either DHCP or DNS. If
+# this section is null, disable dnsmasq log. (string value)
+#dnsmasq_base_log_dir = <None>
+
+# Enables the dnsmasq service to provide name resolution for instances via DNS
+# resolvers on the host running the DHCP agent. Effectively removes the '--no-
+# resolv' option from the dnsmasq process arguments. Adding custom DNS
+# resolvers to the 'dnsmasq_dns_servers' option disables this feature. (boolean
+# value)
+#dnsmasq_local_resolv = false
+
+# Limit number of leases to prevent a denial-of-service. (integer value)
+#dnsmasq_lease_max = 16777216
+
+# Use broadcast in DHCP replies. (boolean value)
+#dhcp_broadcast_reply = false
+
+# Enable dhcp-host entry with list of addresses when port has multiple IPv6
+# addresses in the same subnet. (boolean value)
+#dnsmasq_enable_addr6_list = false
+
+#
+# From oslo.log
+#
+
+# If set to true, the logging level will be set to DEBUG instead of the default
+# INFO level. (boolean value)
+# Note: This option can be changed without restarting.
+#debug = false
+
+# The name of a logging configuration file. This file is appended to any
+# existing logging configuration files. For details about logging configuration
+# files, see the Python logging module documentation. Note that when logging
+# configuration files are used then all logging configuration is set in the
+# configuration file and other logging configuration options are ignored (for
+# example, log-date-format). (string value)
+# Note: This option can be changed without restarting.
+# Deprecated group/name - [DEFAULT]/log_config
+#log_config_append = <None>
+
+# Defines the format string for %%(asctime)s in log records. Default:
+# %(default)s . This option is ignored if log_config_append is set. (string
+# value)
+#log_date_format = %Y-%m-%d %H:%M:%S
+
+# (Optional) Name of log file to send logging output to. If no default is set,
+# logging will go to stderr as defined by use_stderr. This option is ignored if
+# log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logfile
+#log_file = <None>
+
+# (Optional) The base directory used for relative log_file  paths. This option
+# is ignored if log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logdir
+#log_dir = <None>
+
+# Uses logging handler designed to watch file system. When log file is moved or
+# removed this handler will open a new log file with specified path
+# instantaneously. It makes sense only if log_file option is specified and
+# Linux platform is used. This option is ignored if log_config_append is set.
+# (boolean value)
+#watch_log_file = false
+
+# Use syslog for logging. Existing syslog format is DEPRECATED and will be
+# changed later to honor RFC5424. This option is ignored if log_config_append
+# is set. (boolean value)
+#use_syslog = false
+
+# Enable journald for logging. If running in a systemd environment you may wish
+# to enable journal support. Doing so will use the journal native protocol
+# which includes structured metadata in addition to log messages.This option is
+# ignored if log_config_append is set. (boolean value)
+#use_journal = false
+
+# Syslog facility to receive log lines. This option is ignored if
+# log_config_append is set. (string value)
+#syslog_log_facility = LOG_USER
+
+# Use JSON formatting for logging. This option is ignored if log_config_append
+# is set. (boolean value)
+#use_json = false
+
+# Log output to standard error. This option is ignored if log_config_append is
+# set. (boolean value)
+#use_stderr = false
+
+# Log output to Windows Event Log. (boolean value)
+#use_eventlog = false
+
+# The amount of time before the log files are rotated. This option is ignored
+# unless log_rotation_type is set to "interval". (integer value)
+#log_rotate_interval = 1
+
+# Rotation interval type. The time of the last file change (or the time when
+# the service was started) is used when scheduling the next rotation. (string
+# value)
+# Possible values:
+# Seconds - <No description provided>
+# Minutes - <No description provided>
+# Hours - <No description provided>
+# Days - <No description provided>
+# Weekday - <No description provided>
+# Midnight - <No description provided>
+#log_rotate_interval_type = days
+
+# Maximum number of rotated log files. (integer value)
+#max_logfile_count = 30
+
+# Log file maximum size in MB. This option is ignored if "log_rotation_type" is
+# not set to "size". (integer value)
+#max_logfile_size_mb = 200
+
+# Log rotation type. (string value)
+# Possible values:
+# interval - Rotate logs at predefined time intervals.
+# size - Rotate logs once they reach a predefined size.
+# none - Do not rotate log files.
+#log_rotation_type = none
+
+# Format string to use for log messages with context. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
+
+# Format string to use for log messages when context is undefined. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_default_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s
+
+# Additional data to append to log message when logging level for the message
+# is DEBUG. Used by oslo_log.formatters.ContextFormatter (string value)
+#logging_debug_format_suffix = %(funcName)s %(pathname)s:%(lineno)d
+
+# Prefix each line of exception output with this format. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_exception_prefix = %(asctime)s.%(msecs)03d %(process)d ERROR %(name)s %(instance)s
+
+# Defines the format string for %(user_identity)s that is used in
+# logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
+# (string value)
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
+
+# List of package logging levels in logger=LEVEL pairs. This option is ignored
+# if log_config_append is set. (list value)
+#default_log_levels = amqp=WARN,amqplib=WARN,boto=WARN,qpid=WARN,sqlalchemy=WARN,suds=INFO,oslo.messaging=INFO,oslo_messaging=INFO,iso8601=WARN,requests.packages.urllib3.connectionpool=WARN,urllib3.connectionpool=WARN,websocket=WARN,requests.packages.urllib3.util.retry=WARN,urllib3.util.retry=WARN,keystonemiddleware=WARN,routes.middleware=WARN,stevedore=WARN,taskflow=WARN,keystoneauth=WARN,oslo.cache=INFO,oslo_policy=INFO,dogpile.core.dogpile=INFO
+
+# Enables or disables publication of error events. (boolean value)
+#publish_errors = false
+
+# The format for an instance that is passed with the log message. (string
+# value)
+#instance_format = "[instance: %(uuid)s] "
+
+# The format for an instance UUID that is passed with the log message. (string
+# value)
+#instance_uuid_format = "[instance: %(uuid)s] "
+
+# Interval, number of seconds, of log rate limiting. (integer value)
+#rate_limit_interval = 0
+
+# Maximum number of logged messages per rate_limit_interval. (integer value)
+#rate_limit_burst = 0
+
+# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG
+# or empty string. Logs with level greater or equal to rate_limit_except_level
+# are not filtered. An empty string means that all levels are filtered. (string
+# value)
+#rate_limit_except_level = CRITICAL
+
+# Enables or disables fatal status of deprecations. (boolean value)
+#fatal_deprecations = false
+
+
+[agent]
+
+#
+# From neutron.az.agent
+#
+
+# Availability zone of this node (string value)
+#availability_zone = nova
+
+#
+# From neutron.base.agent
+#
+
+# Seconds between nodes reporting state to server; should be less than
+# agent_down_time, best if it is half or less than agent_down_time. (floating
+# point value)
+#report_interval = 30
+
+# Log agent heartbeats (boolean value)
+#log_agent_heartbeats = false
+
+
+[ovs]
+
+#
+# From neutron.base.agent
+#
+
+# The connection string for the OVSDB backend. Will be used for all ovsdb
+# commands and by ovsdb-client when monitoring (string value)
+#ovsdb_connection = tcp:127.0.0.1:6640
+
+# The SSL private key file to use when interacting with OVSDB. Required when
+# using an "ssl:" prefixed ovsdb_connection (string value)
+#ssl_key_file = <None>
+
+# The SSL certificate file to use when interacting with OVSDB. Required when
+# using an "ssl:" prefixed ovsdb_connection (string value)
+#ssl_cert_file = <None>
+
+# The Certificate Authority (CA) certificate to use when interacting with
+# OVSDB.  Required when using an "ssl:" prefixed ovsdb_connection (string
+# value)
+#ssl_ca_cert_file = <None>
+
+# Enable OVSDB debug logs (boolean value)
+#ovsdb_debug = false
+
+# Timeout in seconds for ovsdb commands. If the timeout expires, ovsdb commands
+# will fail with ALARMCLOCK error. (integer value)
+#ovsdb_timeout = 10
+
+# The maximum number of MAC addresses to learn on a bridge managed by the
+# Neutron OVS agent. Values outside a reasonable range (10 to 1,000,000) might
+# be overridden by Open vSwitch according to the documentation. (integer value)
+#bridge_mac_table_size = 50000
+
+# Enable IGMP snooping for integration bridge. If this option is set to True,
+# support for Internet Group Management Protocol (IGMP) is enabled in
+# integration bridge. Setting this option to True will also enable Open vSwitch
+# mcast-snooping-disable-flood-unregistered flag. This option will disable
+# flooding of unregistered multicast packets to all ports. The switch will send
+# unregistered multicast packets only to ports connected to multicast routers.
+# (boolean value)
+#igmp_snooping_enable = false

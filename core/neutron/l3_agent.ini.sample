@@ -1,0 +1,413 @@
+[DEFAULT]
+
+#
+# From neutron.base.agent
+#
+
+# DEPRECATED: Name of Open vSwitch bridge to use (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This variable is a duplicate of OVS.integration_bridge. To be removed
+# in W.
+#ovs_integration_bridge = br-int
+
+# Uses veth for an OVS interface or not. Support kernels with limited namespace
+# support (e.g. RHEL 6.5) and rate limiting on router's gateway port so long as
+# ovs_use_veth is set to True. (boolean value)
+#ovs_use_veth = false
+
+# The driver used to manage the virtual interface. (string value)
+#interface_driver = <None>
+
+# Maximum seconds to wait for a response from an RPC call. (integer value)
+#rpc_response_max_timeout = 600
+
+#
+# From neutron.l3.agent
+#
+
+# The working mode for the agent. Allowed modes are: 'legacy' - this preserves
+# the existing behavior where the L3 agent is deployed on a centralized
+# networking node to provide L3 services like DNAT, and SNAT. Use this mode if
+# you do not want to adopt DVR. 'dvr' - this mode enables DVR functionality and
+# must be used for an L3 agent that runs on a compute host. 'dvr_snat' - this
+# enables centralized SNAT support in conjunction with DVR.  This mode must be
+# used for an L3 agent running on a centralized node (or in single-host
+# deployments, e.g. devstack). dvr_snat mode is not supported on a compute
+# host. 'dvr_no_external' - this mode enables only East/West DVR routing
+# functionality for a L3 agent that runs on a compute host, the North/South
+# functionality such as DNAT and SNAT will be provided by the centralized
+# network node that is running in 'dvr_snat' mode. This mode should be used
+# when there is no external network connectivity on the compute host. (string
+# value)
+# Possible values:
+# dvr - <No description provided>
+# dvr_snat - <No description provided>
+# legacy - <No description provided>
+# dvr_no_external - <No description provided>
+#agent_mode = legacy
+
+# TCP Port used by Neutron metadata namespace proxy. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#metadata_port = 9697
+
+# Indicates that this L3 agent should also handle routers that do not have an
+# external network gateway configured. This option should be True only for a
+# single agent in a Neutron deployment, and may be False for all agents if all
+# routers must have an external network gateway. (boolean value)
+#handle_internal_only_routers = true
+
+# With IPv6, the network used for the external gateway does not need to have an
+# associated subnet, since the automatically assigned link-local address (LLA)
+# can be used. However, an IPv6 gateway address is needed for use as the next-
+# hop for the default route. If no IPv6 gateway address is configured here,
+# (and only then) the neutron router will be configured to get its default
+# route from router advertisements (RAs) from the upstream router; in which
+# case the upstream router must also be configured to send these RAs. The
+# ipv6_gateway, when configured, should be the LLA of the interface on the
+# upstream router. If a next-hop using a global unique address (GUA) is
+# desired, it needs to be done via a subnet allocated to the network and not
+# through this parameter.  (string value)
+#ipv6_gateway =
+
+# Driver used for ipv6 prefix delegation. This needs to be an entry point
+# defined in the neutron.agent.linux.pd_drivers namespace. See setup.cfg for
+# entry points included with the neutron source. (string value)
+#prefix_delegation_driver = dibbler
+
+# Allow running metadata proxy. (boolean value)
+#enable_metadata_proxy = true
+
+# Iptables mangle mark used to mark metadata valid requests. This mark will be
+# masked with 0xffff so that only the lower 16 bits will be used. (string
+# value)
+#metadata_access_mark = 0x1
+
+# Iptables mangle mark used to mark ingress from external network. This mark
+# will be masked with 0xffff so that only the lower 16 bits will be used.
+# (string value)
+#external_ingress_mark = 0x2
+
+# The username passed to radvd, used to drop root privileges and change user ID
+# to username and group ID to the primary group of username. If no user
+# specified (by default), the user executing the L3 agent will be passed. If
+# "root" specified, because radvd is spawned as root, no "username" parameter
+# will be passed. (string value)
+#radvd_user =
+
+# Delete all routers on L3 agent shutdown. For L3 HA routers it includes a
+# shutdown of keepalived and the state change monitor. NOTE: Setting to True
+# could affect the data plane when stopping or restarting the L3 agent.
+# (boolean value)
+#cleanup_on_shutdown = false
+
+# Seconds between running periodic tasks. (integer value)
+#periodic_interval = 40
+
+# Number of separate API worker processes for service. If not specified, the
+# default is equal to the number of CPUs available for best performance, capped
+# by potential RAM usage. (integer value)
+#api_workers = <None>
+
+# Number of RPC worker processes for service. If not specified, the default is
+# equal to half the number of API workers. (integer value)
+#rpc_workers = <None>
+
+# Number of RPC worker processes dedicated to state reports queue. (integer
+# value)
+#rpc_state_report_workers = 1
+
+# Range of seconds to randomly delay when starting the periodic task scheduler
+# to reduce stampeding. (Disable by setting to 0) (integer value)
+#periodic_fuzzy_delay = 5
+
+# Location to store keepalived config files (string value)
+#ha_confs_path = $state_path/ha_confs
+
+# VRRP authentication type (string value)
+# Possible values:
+# AH - <No description provided>
+# PASS - <No description provided>
+#ha_vrrp_auth_type = PASS
+
+# VRRP authentication password (string value)
+#ha_vrrp_auth_password = <None>
+
+# The advertisement interval in seconds (integer value)
+#ha_vrrp_advert_int = 2
+
+# Number of concurrent threads for keepalived server connection requests. More
+# threads create a higher CPU load on the agent node. (integer value)
+# Minimum value: 1
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#ha_keepalived_state_change_server_threads = (1 + <num_of_cpus>) / 2
+
+# The VRRP health check interval in seconds. Values > 0 enable VRRP health
+# checks. Setting it to 0 disables VRRP health checks. Recommended value is 5.
+# This will cause pings to be sent to the gateway IP address(es) - requires
+# ICMP_ECHO_REQUEST to be enabled on the gateway(s). If a gateway fails, all
+# routers will be reported as primary, and a primary election will be repeated
+# in a round-robin fashion, until one of the routers restores the gateway
+# connection. (integer value)
+#ha_vrrp_health_check_interval = 0
+
+# Location to store IPv6 PD files. (string value)
+#pd_confs = $state_path/pd
+
+# A decimal value as Vendor's Registered Private Enterprise Number as required
+# by RFC3315 DUID-EN. (string value)
+#vendor_pen = 8888
+
+# Location to store IPv6 RA config files (string value)
+#ra_confs = $state_path/ra
+
+# MinRtrAdvInterval setting for radvd.conf (integer value)
+#min_rtr_adv_interval = 30
+
+# MaxRtrAdvInterval setting for radvd.conf (integer value)
+#max_rtr_adv_interval = 100
+
+#
+# From oslo.log
+#
+
+# If set to true, the logging level will be set to DEBUG instead of the default
+# INFO level. (boolean value)
+# Note: This option can be changed without restarting.
+#debug = false
+
+# The name of a logging configuration file. This file is appended to any
+# existing logging configuration files. For details about logging configuration
+# files, see the Python logging module documentation. Note that when logging
+# configuration files are used then all logging configuration is set in the
+# configuration file and other logging configuration options are ignored (for
+# example, log-date-format). (string value)
+# Note: This option can be changed without restarting.
+# Deprecated group/name - [DEFAULT]/log_config
+#log_config_append = <None>
+
+# Defines the format string for %%(asctime)s in log records. Default:
+# %(default)s . This option is ignored if log_config_append is set. (string
+# value)
+#log_date_format = %Y-%m-%d %H:%M:%S
+
+# (Optional) Name of log file to send logging output to. If no default is set,
+# logging will go to stderr as defined by use_stderr. This option is ignored if
+# log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logfile
+#log_file = <None>
+
+# (Optional) The base directory used for relative log_file  paths. This option
+# is ignored if log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logdir
+#log_dir = <None>
+
+# Uses logging handler designed to watch file system. When log file is moved or
+# removed this handler will open a new log file with specified path
+# instantaneously. It makes sense only if log_file option is specified and
+# Linux platform is used. This option is ignored if log_config_append is set.
+# (boolean value)
+#watch_log_file = false
+
+# Use syslog for logging. Existing syslog format is DEPRECATED and will be
+# changed later to honor RFC5424. This option is ignored if log_config_append
+# is set. (boolean value)
+#use_syslog = false
+
+# Enable journald for logging. If running in a systemd environment you may wish
+# to enable journal support. Doing so will use the journal native protocol
+# which includes structured metadata in addition to log messages.This option is
+# ignored if log_config_append is set. (boolean value)
+#use_journal = false
+
+# Syslog facility to receive log lines. This option is ignored if
+# log_config_append is set. (string value)
+#syslog_log_facility = LOG_USER
+
+# Use JSON formatting for logging. This option is ignored if log_config_append
+# is set. (boolean value)
+#use_json = false
+
+# Log output to standard error. This option is ignored if log_config_append is
+# set. (boolean value)
+#use_stderr = false
+
+# Log output to Windows Event Log. (boolean value)
+#use_eventlog = false
+
+# The amount of time before the log files are rotated. This option is ignored
+# unless log_rotation_type is set to "interval". (integer value)
+#log_rotate_interval = 1
+
+# Rotation interval type. The time of the last file change (or the time when
+# the service was started) is used when scheduling the next rotation. (string
+# value)
+# Possible values:
+# Seconds - <No description provided>
+# Minutes - <No description provided>
+# Hours - <No description provided>
+# Days - <No description provided>
+# Weekday - <No description provided>
+# Midnight - <No description provided>
+#log_rotate_interval_type = days
+
+# Maximum number of rotated log files. (integer value)
+#max_logfile_count = 30
+
+# Log file maximum size in MB. This option is ignored if "log_rotation_type" is
+# not set to "size". (integer value)
+#max_logfile_size_mb = 200
+
+# Log rotation type. (string value)
+# Possible values:
+# interval - Rotate logs at predefined time intervals.
+# size - Rotate logs once they reach a predefined size.
+# none - Do not rotate log files.
+#log_rotation_type = none
+
+# Format string to use for log messages with context. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
+
+# Format string to use for log messages when context is undefined. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_default_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s
+
+# Additional data to append to log message when logging level for the message
+# is DEBUG. Used by oslo_log.formatters.ContextFormatter (string value)
+#logging_debug_format_suffix = %(funcName)s %(pathname)s:%(lineno)d
+
+# Prefix each line of exception output with this format. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_exception_prefix = %(asctime)s.%(msecs)03d %(process)d ERROR %(name)s %(instance)s
+
+# Defines the format string for %(user_identity)s that is used in
+# logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
+# (string value)
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
+
+# List of package logging levels in logger=LEVEL pairs. This option is ignored
+# if log_config_append is set. (list value)
+#default_log_levels = amqp=WARN,amqplib=WARN,boto=WARN,qpid=WARN,sqlalchemy=WARN,suds=INFO,oslo.messaging=INFO,oslo_messaging=INFO,iso8601=WARN,requests.packages.urllib3.connectionpool=WARN,urllib3.connectionpool=WARN,websocket=WARN,requests.packages.urllib3.util.retry=WARN,urllib3.util.retry=WARN,keystonemiddleware=WARN,routes.middleware=WARN,stevedore=WARN,taskflow=WARN,keystoneauth=WARN,oslo.cache=INFO,oslo_policy=INFO,dogpile.core.dogpile=INFO
+
+# Enables or disables publication of error events. (boolean value)
+#publish_errors = false
+
+# The format for an instance that is passed with the log message. (string
+# value)
+#instance_format = "[instance: %(uuid)s] "
+
+# The format for an instance UUID that is passed with the log message. (string
+# value)
+#instance_uuid_format = "[instance: %(uuid)s] "
+
+# Interval, number of seconds, of log rate limiting. (integer value)
+#rate_limit_interval = 0
+
+# Maximum number of logged messages per rate_limit_interval. (integer value)
+#rate_limit_burst = 0
+
+# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG
+# or empty string. Logs with level greater or equal to rate_limit_except_level
+# are not filtered. An empty string means that all levels are filtered. (string
+# value)
+#rate_limit_except_level = CRITICAL
+
+# Enables or disables fatal status of deprecations. (boolean value)
+#fatal_deprecations = false
+
+
+[agent]
+
+#
+# From neutron.az.agent
+#
+
+# Availability zone of this node (string value)
+#availability_zone = nova
+
+#
+# From neutron.base.agent
+#
+
+# Seconds between nodes reporting state to server; should be less than
+# agent_down_time, best if it is half or less than agent_down_time. (floating
+# point value)
+#report_interval = 30
+
+# Log agent heartbeats (boolean value)
+#log_agent_heartbeats = false
+
+#
+# From neutron.l3.agent
+#
+
+# Extensions list to use (list value)
+#extensions =
+
+
+[network_log]
+
+#
+# From neutron.l3.agent
+#
+
+# Maximum packets logging per second. (integer value)
+# Minimum value: 100
+#rate_limit = 100
+
+# Maximum number of packets per rate_limit. (integer value)
+# Minimum value: 25
+#burst_limit = 25
+
+# Output logfile path on agent side, default syslog file. (string value)
+#local_output_log_base = <None>
+
+
+[ovs]
+
+#
+# From neutron.base.agent
+#
+
+# The connection string for the OVSDB backend. Will be used for all ovsdb
+# commands and by ovsdb-client when monitoring (string value)
+#ovsdb_connection = tcp:127.0.0.1:6640
+
+# The SSL private key file to use when interacting with OVSDB. Required when
+# using an "ssl:" prefixed ovsdb_connection (string value)
+#ssl_key_file = <None>
+
+# The SSL certificate file to use when interacting with OVSDB. Required when
+# using an "ssl:" prefixed ovsdb_connection (string value)
+#ssl_cert_file = <None>
+
+# The Certificate Authority (CA) certificate to use when interacting with
+# OVSDB.  Required when using an "ssl:" prefixed ovsdb_connection (string
+# value)
+#ssl_ca_cert_file = <None>
+
+# Enable OVSDB debug logs (boolean value)
+#ovsdb_debug = false
+
+# Timeout in seconds for ovsdb commands. If the timeout expires, ovsdb commands
+# will fail with ALARMCLOCK error. (integer value)
+#ovsdb_timeout = 10
+
+# The maximum number of MAC addresses to learn on a bridge managed by the
+# Neutron OVS agent. Values outside a reasonable range (10 to 1,000,000) might
+# be overridden by Open vSwitch according to the documentation. (integer value)
+#bridge_mac_table_size = 50000
+
+# Enable IGMP snooping for integration bridge. If this option is set to True,
+# support for Internet Group Management Protocol (IGMP) is enabled in
+# integration bridge. Setting this option to True will also enable Open vSwitch
+# mcast-snooping-disable-flood-unregistered flag. This option will disable
+# flooding of unregistered multicast packets to all ports. The switch will send
+# unregistered multicast packets only to ports connected to multicast routers.
+# (boolean value)
+#igmp_snooping_enable = false

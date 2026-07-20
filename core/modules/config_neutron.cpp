@@ -140,7 +140,8 @@ static ConfigString s_novaPass("8YdO3T0l3qaEgdjT");
 PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 4);
 PARSE_TUNING_X_STR(s_ironicPass, IRONIC_USERPASS, 5);
 
-static LogRotateConf log_conf("ovn", "/var/log/ovn/*.log", DAILY, 128, 0, true);
+static LogRotateConf ovn_log_conf("ovn", "/var/log/ovn/*.log", DAILY, 128, 0, true);
+static LogRotateConf neutron_log_conf("neutron", "/var/log/neutron/*.log", DAILY, 128, 0, true);
 
 typedef std::map<std::string, std::string> IfaceMap;
 static IfaceMap label2port;
@@ -847,7 +848,8 @@ Commit(bool modified, int dryLevel)
     HexUtilSystemF(0, 0, HEX_SDK " migrate_neutron_ovn_sync");
 
     NeutronService(s_enabled);
-    WriteLogRotateConf(log_conf);
+    WriteLogRotateConf(ovn_log_conf);
+    WriteLogRotateConf(neutron_log_conf);
 
     // stop force run ovn-northd since it will later be managed by pacemaker in HA mode
     if (forceRun && s_ha && isMaster)

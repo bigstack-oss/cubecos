@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenStack Neutron OVN Metadata Agent
+After=syslog.target network.target openvswitch.service
+Requires=openvswitch.service
+
+[Service]
+Type=simple
+User=neutron
+PermissionsStartOnly=true
+ExecStart=/usr/bin/neutron-ovn-metadata-agent --config-file /etc/neutron/neutron_ovn_metadata_agent.ini --config-dir /etc/neutron/conf.d/neutron-ovn-metadata-agent --log-file /var/log/neutron/neutron-ovn-metadata-agent.log
+PrivateTmp=false
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+# (TODO) - Backwards compatibility in systemd service
+Alias=networking-ovn-metadata-agent.service

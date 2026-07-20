@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenStack Neutron macvtap L2 agent
+After=syslog.target
+
+[Service]
+Type=simple
+User=neutron
+ExecStart=/usr/bin/neutron-macvtap-agent --config-file /usr/share/neutron/neutron-dist.conf --config-file /etc/neutron/neutron.conf --config-dir /etc/neutron/conf.d/common --config-dir /etc/neutron/conf.d/neutron-macvtap-agent --log-file /var/log/neutron/macvtap-agent.log
+PrivateTmp=true
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
