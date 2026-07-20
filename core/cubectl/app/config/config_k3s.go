@@ -706,6 +706,18 @@ func syncDefaultStorageClass() error {
 	return nil
 }
 
+// True only when both the unit and the binary are present; a half-finished
+// install (binary copied, install.sh failed) must still count as not installed.
+func k3sIsInstalled() bool {
+	if _, err := os.Stat(k3sServiceFile); err != nil {
+		return false
+	}
+	if _, err := os.Stat(k3sBinPath); err != nil {
+		return false
+	}
+	return true
+}
+
 func commitK3s() error {
 	if cubeSettings.GetRole() == "undef" {
 		return nil
@@ -715,7 +727,9 @@ func commitK3s() error {
 		return nil
 	}
 
-	if _, err := os.Stat(k3sEtcdDir); os.IsNotExist(err) || commitOpts.force || isMigration() {
+	// absence of the unit/binary is the signal: k3sEtcdDir is CONFIG_MIGRATE'd,
+	// so it exists on an upgraded partition even without k3s installed
+	if _, err := os.Stat(k3sEtcdDir); os.IsNotExist(err) || commitOpts.force || isMigration() || !k3sIsInstalled() {
 		util.ExecCmd("cp", "-f", k3sDataDir+K3sBin, k3sBinPath)
 
 		os.MkdirAll(path.Dir(k3sRegistriesFile), 0755)

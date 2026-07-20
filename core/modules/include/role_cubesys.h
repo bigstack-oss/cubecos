@@ -5,7 +5,9 @@
 #ifndef CUBESYS_H
 #define CUBESYS_H
 
-#define CUBE_MIGRATE "/run/cube_migration"
+// persistent, NOT /run: consumed by CommitLast only after a fully successful
+// commit; a tmpfs marker lost at reboot skipped every migration-gated retry
+#define CUBE_MIGRATE "/etc/appliance/state/cube_migration"
 #define CONTROL_REJOIN "/run/control_rejoin"
 
 #define DOMAIN_DEF "default"

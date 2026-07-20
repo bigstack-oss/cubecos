@@ -8,7 +8,7 @@ fi
 
 migrate_prepare()
 {
-    touch /run/cube_migration
+    touch $STATE_DIR/cube_migration
 }
 
 migrate_fixpack()

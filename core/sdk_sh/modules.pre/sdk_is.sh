@@ -196,9 +196,44 @@ is_sshable()
     return $ret
 }
 
+# Cluster-wide "a roll is in progress" marker. On cephfs so every node sees the
+# same answer and it survives an A/B partition switch. Set/cleared by the roll
+# brackets (ceph_enter_rolling/ceph_leave_rolling for upgrades, power_roll for
+# restarts) -- defined here in modules.pre so any module can call it.
+CLUSTER_ROLLING_MARKER=${CLUSTER_ROLLING_MARKER:-/mnt/cephfs/.cluster_rolling}
+# Ignore a marker older than this: a roll that died without clearing it must not
+# disable auto-repair forever.
+CLUSTER_ROLLING_MARKER_TTL=${CLUSTER_ROLLING_MARKER_TTL:-21600}   # 6h
+
+cluster_rolling_marker_set()
+{
+    mountpoint -q /mnt/cephfs 2>/dev/null || return 0
+    date +%s > $CLUSTER_ROLLING_MARKER 2>/dev/null
+    return 0
+}
+
+cluster_rolling_marker_clear()
+{
+    rm -f $CLUSTER_ROLLING_MARKER 2>/dev/null
+    return 0
+}
+
+cluster_rolling_marker_active()
+{
+    [ -f "$CLUSTER_ROLLING_MARKER" ] || return 1
+    local age=$(( $(date +%s) - $(stat -c %Y "$CLUSTER_ROLLING_MARKER" 2>/dev/null || echo 0) ))
+    [ "$age" -lt "$CLUSTER_ROLLING_MARKER_TTL" ]
+}
+
 is_node_rolling_upgrade()
 {
     local ret=1
+    # Explicit marker: covers the whole roll, including the first node's drain --
+    # before any node has rebooted there is no firmware skew and the log says
+    # "evacuating", so neither heuristic below fires yet.
+    if cluster_rolling_marker_active ; then
+        ret=0
+    fi
     if cmd -v "cat /run/cube_bootstrap.log" | grep -q -e 'Rebooting' -e 'rolling upgrade' ; then
         $HEX_SDK cube_cluster_ready || ret=0
     fi

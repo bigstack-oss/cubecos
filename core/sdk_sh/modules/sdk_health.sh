@@ -130,7 +130,12 @@ _health_fail_log()
         # those rounds would exhaust maxerr and, once the cluster comes ready, permanently
         # gate auto_repair off -- the count only resets on a passing check, which can't
         # happen without the repair. So increment (and attempt) only when ready.
-        if cube_cluster_ready ; then
+        #
+        # Same reasoning during a rolling restart/upgrade: nodes are deliberately
+        # down, so services legitimately read "down" and repairing them fights the
+        # roll (a nova-compute restart mid-drain fails the in-flight migration).
+        # The roll owns service state while it runs.
+        if cube_cluster_ready && ! is_node_rolling_upgrade ; then
             let "count = $count + 1"
             echo "failed count: $count" >> /var/log/health_${srv}_error.log
             echo $count > /tmp/health_${srv}_error.count
@@ -604,7 +609,7 @@ health_hacluster_repair()
             fi
         done
         hex_sdk cmd -c "systemctl restart haproxy haproxy-ha"
-    elif [ ! -e /etc/appliance/state/configured ] || [ -e /run/cube_migration ] ; then
+    elif [ ! -e /etc/appliance/state/configured ] || [ -e /etc/appliance/state/cube_migration ] ; then
         for i in 1 2 3 ; do
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
                 if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then

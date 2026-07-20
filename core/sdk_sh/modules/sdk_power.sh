@@ -106,6 +106,7 @@ _power_roll_pause()
 {
     _power_roll_set_str reason "$1"
     _power_roll_set_str state paused
+    cluster_rolling_marker_clear
     echo "rolling restart paused: $1" >&2
     /usr/sbin/hex_log_event -e CLU00004W "interface=system,host=$HOSTNAME,category=cluster,sub=rolling_restart,action=pause,reason=$1"
 }
@@ -407,6 +408,9 @@ power_roll_active()
 power_roll_start()
 {
     mkdir -p $ROLLING_RESTART_DIR
+    # The roll owns service state while it runs; background auto-repair must not
+    # restart services on a node being drained/rebooted.
+    cluster_rolling_marker_set
 
     # Serialize start across nodes: the check-and-claim must be atomic so two
     # operators triggering from different hosts can't both create a job. The
@@ -507,6 +511,7 @@ power_roll_advance()
     local next=$(jq -r 'first(.nodes[]|select(.status=="pending")|.hostname) // ""' $ROLLING_RESTART_JOB)
     if [ -z "$next" ] ; then
         _power_roll_set_str state done
+        cluster_rolling_marker_clear
         echo "rolling restart complete"
         /usr/sbin/hex_log_event -e CLU00005I "interface=system,host=$HOSTNAME,category=cluster,sub=rolling_restart,action=complete"
         return 0
@@ -668,6 +673,7 @@ power_roll_decision()
             _power_roll_set_str inflight ""
             _power_roll_set_str reason ""
             _power_roll_set_str state running
+            cluster_rolling_marker_set
             power_roll_advance
             ;;
         abort)

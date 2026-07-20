@@ -388,19 +388,11 @@ ceph_leave_maintenance()
     nohup bash -c "$HEX_SDK ceph_finish_maintenance" >/dev/null 2>&1 &
 }
 
-# Guard for a ROLLING op (upgrade/restart), distinct from the whole-cluster
-# maintenance above. Give a rebooting node's OSDs a long grace before ceph marks
-# them 'out' and re-replicates their PGs during the fragile degraded window.
-# Uses mon_osd_down_out_interval (a persistent config value) rather than the
-# 'noout' flag on purpose: cube_cluster_start_node runs ceph_leave_maintenance on
-# EVERY node's boot and would clear noout mid-roll, whereas this config survives.
-# A genuinely-dead OSD is still marked out after the grace (self-limiting), and
-# client I/O is never paused. Idempotent -- safe to (re)set each relay step.
-# Before a node in a rolling reboot goes down, hand its active cephfs MDS to a
-# standby. In a converged cluster the MDS's co-located mon dies with it, so the
-# survivors apply mds_beacon_mon_down_grace (~60s) before promoting a standby --
-# a multi-minute cephfs stall on every rolling reboot. A proactive failover while
-# the node is still up costs ~5-10s.
+# rolling-op guard: raise mon_osd_down_out_interval so a rebooting node's OSDs
+# stay 'in' (no re-replication churn, I/O keeps flowing). Config value, not
+# 'noout' -- ceph_leave_maintenance on every boot would clear noout mid-roll.
+# hand the active MDS to a standby before the node goes down; the co-located
+# mon dying otherwise defers failover ~60s (a multi-minute cephfs stall)
 ceph_mds_evacuate_host()
 {
     local host=${1:-$(hostname)}
@@ -426,6 +418,9 @@ ceph_mds_evacuate_host()
 ceph_enter_rolling()
 {
     Quiet $CEPH config set global mon_osd_down_out_interval 3600
+    # Mark the cluster as rolling so background auto-repair stands down; the roll
+    # owns service state while it runs. Idempotent, re-set at each relay step.
+    cluster_rolling_marker_set
 }
 
 # Lift the rolling guard -- revert to the ceph default (600s). Instant (no wait),
@@ -433,11 +428,10 @@ ceph_enter_rolling()
 # resume.
 ceph_leave_rolling()
 {
+    cluster_rolling_marker_clear
     Quiet $CEPH config rm global mon_osd_down_out_interval
-    # After a ceph-version upgrade, pin require-osd-release to the release all
-    # OSDs now run (ceph's required post-upgrade finalization). Guarded: only when
-    # every OSD is on one release and it is not already set -- a no-op on a
-    # same-version roll and on the per-node calls before the last node completes.
+    # post-upgrade finalization: pin require-osd-release once every OSD runs
+    # one release and it is not already set; a no-op otherwise
     if [ "$($CEPH osd versions 2>/dev/null | grep -cE 'ceph version')" = 1 ] ; then
         local rel=$($CEPH osd versions 2>/dev/null | grep -oE '\) [a-z]+ \(stable\)' | sed -E 's/.* ([a-z]+) .*/\1/' | head -1)
         if [ -n "$rel" ] && ! $CEPH osd dump 2>/dev/null | grep -q "require_osd_release $rel" ; then
@@ -2798,10 +2792,8 @@ ceph_dashboard_idp_config()
 
 ceph_mount_cephfs()
 {
-    # The cephfs kernel mount needs the admin secretfile (/etc/ceph/admin.key).
-    # On a firmware-upgraded (PPU) node the migrated MAKRER_CLIENT makes config
-    # skip client setup, so derive the secretfile from the (migrated) admin
-    # keyring if it is missing -- else the mount fails "unable to read secretfile".
+    # derive the cephfs secretfile from the migrated admin keyring when PPU
+    # migration made config skip client setup (else the mount fails)
     if [ ! -s /etc/ceph/admin.key ] && [ -s /etc/ceph/ceph.client.admin.keyring ] ; then
         ceph-authtool -p /etc/ceph/ceph.client.admin.keyring > /etc/ceph/admin.key 2>/dev/null && chmod 0600 /etc/ceph/admin.key
     fi

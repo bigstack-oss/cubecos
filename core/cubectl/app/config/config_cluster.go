@@ -13,7 +13,7 @@ import (
 const (
 	revisionFile    = "/etc/revision"
 	rejoinMarker    = "/run/control_rejoin"
-	migrationMarker = "/run/cube_migration"
+	migrationMarker = "/etc/appliance/state/cube_migration"
 )
 
 func isJoined() bool {
