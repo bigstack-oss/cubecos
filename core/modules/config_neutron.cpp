@@ -443,7 +443,6 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         cfg["oslo_concurrency"]["lock_path"] = RUNDIR;
         cfg["DEFAULT"]["core_plugin"] = "neutron.plugins.ml2.plugin.Ml2Plugin";
         cfg["DEFAULT"]["service_plugins"] = "neutron.services.ovn_l3.plugin.OVNL3RouterPlugin,ovn-vpnaas,neutron.services.qos.qos_plugin.QoSPlugin";
-        cfg["DEFAULT"]["allow_overlapping_ips"] = "true";
         cfg["DEFAULT"]["notify_nova_on_port_status_changes"] = "true";
         cfg["DEFAULT"]["notify_nova_on_port_data_changes"] = "true";
         cfg["DEFAULT"]["dns_domain"] = "cube.local.";
