@@ -240,20 +240,11 @@ rootfs_install::
 
 # install custom files and VPNaaS components
 rootfs_install::
-	$(Q)cp -f $(PIPS_DIR)/neutron-vpnaas-dashboard.git/neutron_vpnaas_dashboard/enabled/_7100*.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
-	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
-	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/neutron_vpnaas.conf /usr/share/neutron/server/neutron_vpnaas.conf
-	$(Q)# Note: The netns wrapper symlink target is updated to the venv bin path
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-vpn-netns-wrapper /usr/sbin/neutron-vpn-netns-wrapper
 	$(Q)cp -f $(NEUTRON_CONFDIR)/neutron.conf $(NEUTRON_CONFDIR)/neutron.conf.def
+	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
 	$(Q)cp -f $(NEUTRON_CONFDIR)/plugins/ml2/ml2_conf.ini $(NEUTRON_CONFDIR)/plugins/ml2/ml2_conf.ini.def
 	$(Q)cp -f $(NEUTRON_CONFDIR)/neutron_ovn_metadata_agent.ini $(NEUTRON_CONFDIR)/plugins/networking-ovn/networking-ovn-metadata-agent.ini.def
-	$(Q)echo "neutron ALL = (root) NOPASSWD: /bin/privsep-helper" >> $(ROOTDIR)/etc/sudoers.d/neutron
-	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/neutron/neutron_vpnaas.conf ./etc/neutron/neutron_vpnaas.conf.def
-	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/neutron/vpn_agent.ini ./etc/neutron/vpn_agent.ini.def
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/ovn-plugin.filters ./usr/share/neutron/rootwrap/
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/vpnaas.filters ./usr/share/neutron/rootwrap/
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/neutron-ovn-vpn-agent.service ./lib/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/ovn-controller.service ./lib/systemd/system
 	$(Q)$(INSTALL_PROGRAM) $(ROOTDIR) $(OVN_PATCHDIR)/ovn-northd ./usr/bin/
 
@@ -262,3 +253,17 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)for ns in $$(find $(ROOTDIR)/usr/lib/systemd/system/*neutron*.service) ; do sed -i /^Timeout*/d $$ns ; done
+
+# for neutron-vpnaas
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/neutron_vpnaas.conf /usr/share/neutron/server/neutron_vpnaas.conf
+	$(Q)# Note: The netns wrapper symlink target is updated to the venv bin path
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-vpn-netns-wrapper /usr/sbin/neutron-vpn-netns-wrapper
+	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/neutron/neutron_vpnaas.conf ./etc/neutron/neutron_vpnaas.conf.def
+	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/neutron/vpn_agent.ini ./etc/neutron/vpn_agent.ini.def
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/vpnaas.filters ./usr/share/neutron/rootwrap/
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/neutron-ovn-vpn-agent.service ./lib/systemd/system
+
+# for neutron-vpnaas-dashboard
+rootfs_install::
+	$(Q)cp -f $(PIPS_DIR)/neutron-vpnaas-dashboard.git/neutron_vpnaas_dashboard/enabled/_7100*.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
