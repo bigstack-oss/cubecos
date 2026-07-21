@@ -229,6 +229,13 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
         }
     }
 
+    // Feature-flag enable is IRREVERSIBLE and makes the cluster reject nodes that
+    // don't support a newly-enabled flag. Only enable when the RabbitMQ cluster is
+    // version-uniform (never mid-roll): all-old (pre-roll) enables the current
+    // stable flags = correct prep; all-new (post-roll) graduates the new flags.
+    if (enabled && ha && HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0)
+        HexUtilSystemF(0, 0, CONTROL_FMT "enable_feature_flag all", hostname.c_str());
+
     return true;
 }
 

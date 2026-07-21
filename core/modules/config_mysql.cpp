@@ -121,26 +121,34 @@ UpdateCheck()
     if (!IsControl(s_eCubeRole))
         return true;
 
-    if (access(BACKDIR, F_OK) == 0) {
-        std::vector<const char*> command;
-        command.push_back("/usr/bin/mysql_upgrade");
-        command.push_back("-u");
-        command.push_back("root");
-        command.push_back("--skip-write-binlog");
-        command.push_back(0);
+    // No pending upgrade: BACKDIR is created only by the migrate hook and removed
+    // after a successful mysql_upgrade, so a missing BACKDIR means FTS or a normal
+    // reconfig -- nothing to do, and skip the version-uniformity probe entirely.
+    if (access(BACKDIR, F_OK) != 0)
+        return true;
 
-        if (HexSpawnVQ(0, NO_STDOUT | NO_STDERR, (char* const*)&command[0]) == 0) {
-            HexSpawn(0, "/bin/rm", "-rf", BACKDIR, NULL);
-            HexLogInfo("upgrade database successfully");
-            return true;
-        }
-        else {
-            HexLogError("failed to upgrade database");
-            return false;
-        }
+    // Defer the system-table upgrade while the Galera cluster is mixed-version:
+    // mysql_upgrade DDL replicates to not-yet-upgraded peers. Run it only once
+    // every control node is on the same MariaDB version. Version uniformity, not
+    // firmware, is the correct gate for web-scale.
+    if (HexSystemF(0, HEX_SDK " os_mariadb_version_uniform") != 0)
+        return true;
+
+    std::vector<const char*> command;
+    command.push_back("/usr/bin/mysql_upgrade");
+    command.push_back("-u");
+    command.push_back("root");
+    command.push_back("--skip-write-binlog");
+    command.push_back(0);
+
+    if (HexSpawnVQ(0, NO_STDOUT | NO_STDERR, (char* const*)&command[0]) == 0) {
+        HexSpawn(0, "/bin/rm", "-rf", BACKDIR, NULL);
+        HexLogInfo("upgrade database successfully");
+        return true;
     }
 
-    return true;
+    HexLogError("failed to upgrade database");
+    return false;
 }
 
 static bool
