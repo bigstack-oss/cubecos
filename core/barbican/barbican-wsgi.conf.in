@@ -3,20 +3,15 @@ Listen @BIND_ADDR@9311
 TraceEnable off
 
 <VirtualHost *:9311>
-    ## Logging
-    ErrorLog "/var/log/httpd/barbican_wsgi_main_error_ssl.log"
-    LogLevel info
-    ServerSignature Off
-    CustomLog "/var/log/httpd/barbican_wsgi_main_access_ssl.log" combined
+    ProxyPreserveHost On
+    ProxyRequests Off
 
-    WSGIApplicationGroup %{GLOBAL}
-    WSGIDaemonProcess barbican-api display-name=barbican-api group=barbican processes=2 threads=8 user=barbican
-    WSGIProcessGroup barbican-api
-    WSGIScriptAlias / "/usr/lib/python3.9/site-packages/barbican/api/app.wsgi"
-    WSGIPassAuthorization On
+    ProxyPass / unix:/var/lib/barbican/barbican.socket|http://127.0.0.2/
+    ProxyPassReverse / unix:/var/lib/barbican/barbican.socket|http://127.0.0.2/
 
-    <Directory usr/lib/python3.9/site-packages/barbican>
-        Require all granted
-    </Directory>
-
+    <IfVersion >= 2.4>
+      ErrorLogFormat "%{cu}t %M"
+    </IfVersion>
+    ErrorLog "/var/log/httpd/barbican_proxy_error.log"
+    CustomLog "/var/log/httpd/barbican_proxy_access.log" combined
 </VirtualHost>

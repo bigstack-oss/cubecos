@@ -1,0 +1,13 @@
+[Unit]
+Description=Openstack Barbican Retry daemon
+After=syslog.target network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/barbican-retry
+User=barbican
+Group=barbican
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
