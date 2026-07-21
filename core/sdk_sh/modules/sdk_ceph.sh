@@ -388,6 +388,27 @@ ceph_leave_maintenance()
     nohup bash -c "$HEX_SDK ceph_finish_maintenance" >/dev/null 2>&1 &
 }
 
+# Guard for a ROLLING op (upgrade/restart), distinct from the whole-cluster
+# maintenance above. Give a rebooting node's OSDs a long grace before ceph marks
+# them 'out' and re-replicates their PGs during the fragile degraded window.
+# Uses mon_osd_down_out_interval (a persistent config value) rather than the
+# 'noout' flag on purpose: cube_cluster_start_node runs ceph_leave_maintenance on
+# EVERY node's boot and would clear noout mid-roll, whereas this config survives.
+# A genuinely-dead OSD is still marked out after the grace (self-limiting), and
+# client I/O is never paused. Idempotent -- safe to (re)set each relay step.
+ceph_enter_rolling()
+{
+    Quiet $CEPH config set global mon_osd_down_out_interval 3600
+}
+
+# Lift the rolling guard -- revert to the ceph default (600s). Instant (no wait),
+# so it's safe to call on completion, pause or abort; the relay re-sets it on
+# resume.
+ceph_leave_rolling()
+{
+    Quiet $CEPH config rm global mon_osd_down_out_interval
+}
+
 ceph_maintenance_status()
 {
     if $($CEPH osd stat | grep -q noout) ; then

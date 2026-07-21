@@ -53,11 +53,6 @@ RollingEvacuateAndReboot()
     local query="insert system,category=RUG,severity=I,key=RUG00001I,service=rolling_upgrade,host=$HOSTNAME,metadata\"rolling upgrade to $(hex_cli -c firmware list | grep -i active | cut -d' ' -f2)\""
     if [ -e "$cluster_info" -a "x$inst_type" = "xPPU" ] ; then
         for N in $(cat $cluster_info | jq -r .[].hostname) ; do
-            # Cube dashboard topN misses partial info after rolling upgrades
-            if [ "x$last_n" = "x$T_net_hostname" ] ; then
-                hex_cli -c cluster repair kafka
-            fi
-
             if [ "x$prev_n" = "x$T_net_hostname" ] ; then
                 n_role=$(cat $cluster_info | jq -r ".[] | select(.hostname == \"$N\") | .role")
                 n_ip=$(cat $cluster_info | jq -r ".[] | select(.hostname == \"$N\") | .ip.management")
@@ -68,6 +63,11 @@ RollingEvacuateAndReboot()
                 if [ "x$n_lastboot" = "xlast_boot = Never" -a "x$n_fwver" = "x$fwver" ] ; then
                     upgrading=true
                     echo "Starting auto rolling upgrade" >> $BOOTSTRAP_CUBE_MODE
+                    # Guard ceph for the roll: keep the rebooting node's OSDs from
+                    # being marked out (no re-replication churn) without pausing I/O.
+                    # Idempotent -- re-set each relay step; cleared when the last
+                    # node completes below.
+                    hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_enter_rolling"
                     # Don't drain+reboot the next node until this node has rejoined
                     # and the live-migration path is functional. Version-robust, so
                     # a mixed N/N+1 SLURP window passes; pauses (never advances into
@@ -77,6 +77,7 @@ RollingEvacuateAndReboot()
                         hex_sdk remote_run $n_ip "echo -n \"$msg\" >$BOOTSTRAP_CUBE_LOG"
                         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                         hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
+                        hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_leave_rolling"
                         break
                     fi
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
@@ -88,6 +89,7 @@ RollingEvacuateAndReboot()
                             hex_sdk remote_run $n_ip "echo -n \"$msg\" >$BOOTSTRAP_CUBE_LOG"
                             echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg on $N" $'\r' | $(hex_sdk GetKernelConsoleDevices)
                             hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
+                            hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_leave_rolling"
                             break
                         fi
                     fi
@@ -100,6 +102,11 @@ RollingEvacuateAndReboot()
             fi
             prev_n=$N
         done
+        # Roll complete once the last node has booted -- lift the ceph rolling
+        # guard (unset noout, once every OSD is back up).
+        if [ "x$last_n" = "x$T_net_hostname" ] ; then
+            hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_leave_rolling"
+        fi
         # While next node (in case of having VIP) is being rebooted, we are unable to establish connection to http://${vip}:5000
         # hex_sdk os_nova_instance_hardreboot $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i -e error -e nostate | cut -d" " -f1)
     fi
