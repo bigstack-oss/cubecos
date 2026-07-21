@@ -1083,23 +1083,48 @@ _essential_check_one()
 }
 
 # live_migration_gate [timeout_secs] [drain_host] [repair]
-#
-# Block until the live-migration drain path is FUNCTIONAL, so the rolling relay
-# can safely take the next node down. Same precondition for rolling restart and
-# rolling upgrade -- both drain via live migration.
-#
-# Version-ROBUST: asserts function + cluster membership, never version uniformity
-# (mixed N/N+1 is expected and healthy under SLURP + mixed-version-safe DB/MQ).
-# Accepts quorate-but-degraded during the reboot window and excludes the draining
-# node from migration-target counts. keystone/haproxy/vip/memcached are covered
-# transitively by the authenticated $OPENSTACK calls; glance/cyborg are not on the
-# live-migration path. Returns 0 when a live migration can run; 1 on timeout.
-#
-# With 'repair' as $3 (absorbs the old _os_pre_failure_host_evacuation prep):
-# checks ALWAYS run first; a failed check triggers its matching surgical,
-# version-tolerant repair ONCE, then re-checks -- a healthy pass has zero side
-# effects. Heavier same-version repairs stay in cluster_check_repair_essential
-# (rolling restart only).
+# Block until the live-migration drain path is functional (version-robust:
+# never asserts uniformity; excludes the draining node from target counts).
+# With 'repair': a failed check triggers its surgical repair once, then
+# re-checks -- a healthy pass has zero side effects. 0 = ready, 1 = timeout.
+# Repair the one cause the gate named, at most once per cause per run. Causes
+# with no branch (ceph, ceph-osd-down, drain-host-nova-down) are wait-only on
+# purpose.
+_live_migration_repair()
+{
+    local why=$1 _h
+
+    case $why in
+        galera)   Quiet -n $HEX_SDK -m force health_mysql_repair ;;
+        rabbitmq) Quiet -n $HEX_CLI -c cluster check_repair MsgQueue ;;
+        nova-conductor|nova-scheduler|no-migration-target|cinder-volume)
+            # wedged API workers (backed-up recv-Q) and enabled-down services are
+            # what an authenticated $OPENSTACK probe fails on
+            cmd -c $HEX_SDK stale_api_check_repair openstack-nova-api 8774 nova-api python3 0
+            cmd -c $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0
+            if [ $($OPENSTACK compute service list -f value -c Status -c State 2>/dev/null | grep -ci "enabled down") -ge 1 ] ; then
+                cmd -c systemctl restart openstack-nova-scheduler
+                cmd -c systemctl restart openstack-nova-conductor
+                cmd -p systemctl restart openstack-nova-compute
+            fi
+            ;;
+        no-storage-ready-target)
+            # a compute node can be nova-compute "up" yet have no cephfs mounted
+            # (PPU-upgraded node) -> not a usable migration target. Mount it.
+            for _h in $($OPENSTACK compute service list --service nova-compute -f value -c Host -c State 2>/dev/null | awk '$2=="up"{print $1}') ; do
+                remote_run "$_h" 'mountpoint -q /mnt/cephfs' >/dev/null 2>&1 || remote_run "$_h" "$HEX_SDK ceph_mount_cephfs"
+            done
+            ;;
+        neutron)
+            cmd -c $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0
+            if [ $($OPENSTACK network agent list -f value -c ID -c Alive 2>/dev/null | grep -v -i true | wc -l) -ge 1 ] ; then
+                $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
+                cmd -c "timeout $SRVLTO systemctl restart neutron-server neutron-ovn-metadata-agent neutron-ovn-vpn-agent"
+            fi
+            ;;
+    esac
+}
+
 live_migration_gate()
 {
     is_control_node || return 0
@@ -1112,10 +1137,8 @@ live_migration_gate()
         $HEX_SDK health_mysql_check    >/dev/null 2>&1 || why=galera
         [ -z "$why" ] && { $HEX_SDK health_rabbitmq_check >/dev/null 2>&1 || why=rabbitmq ; }
         [ -z "$why" ] && { $CEPH health 2>/dev/null | grep -qiE 'HEALTH_ERR|inactive|incomplete|peering|stale' && why=ceph ; }
-        # Wait for the just-rebooted node's OSDs to rejoin before draining the
-        # next one -- an in-but-down OSD (num_in > num_up) means the prior node
-        # hasn't fully returned. Tolerates degraded/recovering (so ceph can
-        # upgrade); does NOT require active+clean.
+        # wait for the rebooted node's OSDs to rejoin (in-but-down = not back);
+        # tolerates degraded/recovering, does not require active+clean
         [ -z "$why" ] && {
             local _ndown=$($CEPH status -f json 2>/dev/null | jq -r '.osdmap | (.num_in_osds // 0) - (.num_up_osds // 0)' 2>/dev/null)
             [ "${_ndown:-0}" -gt 0 ] 2>/dev/null && why=ceph-osd-down
@@ -1125,12 +1148,8 @@ live_migration_gate()
         [ -z "$why" ] && { $OPENSTACK compute service list --service nova-conductor -f value -c State 2>/dev/null | grep -qi up || why=nova-conductor ; }
         [ -z "$why" ] && { $OPENSTACK compute service list --service nova-scheduler -f value -c State 2>/dev/null | grep -qi up || why=nova-scheduler ; }
         [ -z "$why" ] && {
-            # >=1 live-migration target that is a different host, nova-compute up,
-            # AND has cephfs mounted. nova-compute "up" alone is not enough: a
-            # PPU-upgraded node can heartbeat up while its instance storage
-            # (/mnt/cephfs -> /var/lib/nova/instances) is unmounted, and every
-            # migration to it then fails the shared-storage check. Refuse to
-            # advance the roll onto a storage-blind target -> pause instead.
+            # a target needs nova-compute up AND cephfs mounted -- an upgraded
+            # node can heartbeat up while its instance storage is unmounted
             local _h tgt=0
             for _h in $($OPENSTACK compute service list --service nova-compute -f value -c Host -c State 2>/dev/null | awk '$2=="up"{print $1}') ; do
                 [ "$_h" = "$drain" ] && continue
@@ -1138,11 +1157,8 @@ live_migration_gate()
             done
             [ "$tgt" -ge 1 ] || why=no-storage-ready-target
         }
-        # The SOURCE host must be able to perform the migrations. The target loop
-        # above skips $drain, so the gate could pass while the draining host's own
-        # nova-compute was down -- e.g. just restarted underneath us -- and the
-        # first migration then fails silently, stranding a VM. Wait for it; never
-        # restart it (restarting it is what caused that failure).
+        # the SOURCE host must be up in nova too (the target loop skips it);
+        # wait for it, never restart it
         [ -z "$why" ] && [ "$drain" != "__none__" ] && {
             $OPENSTACK compute service list --service nova-compute --host "$drain" -f value -c State 2>/dev/null \
                 | grep -qi up || why=drain-host-nova-down
@@ -1169,37 +1185,7 @@ live_migration_gate()
                     repaired="$repaired $why"
                     log_warning "live_migration_gate: $drain blocked on '$why', attempting repair"
                     Quiet -n influx_event "insert health,component=live_migration_gate,node=$HOSTNAME,code=0 description=\"repairing\",detail=\"$why\""
-                    case $why in
-                        galera)   Quiet -n $HEX_SDK -m force health_mysql_repair ;;
-                        rabbitmq) Quiet -n $HEX_CLI -c cluster check_repair MsgQueue ;;
-                        nova-conductor|nova-scheduler|no-migration-target|cinder-volume)
-                            # wedged API workers (backed-up recv-Q) and
-                            # enabled-down services are what an authenticated
-                            # $OPENSTACK probe fails on
-                            cmd -c $HEX_SDK stale_api_check_repair openstack-nova-api 8774 nova-api python3 0
-                            cmd -c $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0
-                            if [ $($OPENSTACK compute service list -f value -c Status -c State 2>/dev/null | grep -ci "enabled down") -ge 1 ] ; then
-                                cmd -c systemctl restart openstack-nova-scheduler
-                                cmd -c systemctl restart openstack-nova-conductor
-                                cmd -p systemctl restart openstack-nova-compute
-                            fi
-                            ;;
-                        no-storage-ready-target)
-                            # a compute node can be nova-compute "up" yet have no
-                            # cephfs mounted (PPU-upgraded node) -> not a usable
-                            # migration target. Mount it so the roll can proceed.
-                            for _h in $($OPENSTACK compute service list --service nova-compute -f value -c Host -c State 2>/dev/null | awk '$2=="up"{print $1}') ; do
-                                remote_run "$_h" 'mountpoint -q /mnt/cephfs' >/dev/null 2>&1 || remote_run "$_h" "$HEX_SDK ceph_mount_cephfs"
-                            done
-                            ;;
-                        neutron)
-                            cmd -c $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0
-                            if [ $($OPENSTACK network agent list -f value -c ID -c Alive 2>/dev/null | grep -v -i true | wc -l) -ge 1 ] ; then
-                                $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
-                                cmd -c "timeout $SRVLTO systemctl restart neutron-server neutron-ovn-metadata-agent neutron-ovn-vpn-agent"
-                            fi
-                            ;;
-                    esac
+                    _live_migration_repair "$why"
                     continue
                     ;;
             esac

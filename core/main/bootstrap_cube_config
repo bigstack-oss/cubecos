@@ -53,182 +53,81 @@ AbortBootstrap()
     hex_log_event -e BSP00004E "interface=system,host=$HOSTNAME,service=bootstrap"
 }
 
-RollingEvacuateAndReboot()
+PostBootRecovery()
 {
-    # auto rolling evac and reboot in ppu update
-    local inst_type=$(hex_sdk firmware_get_info $(hex_sdk firmware_get_active) | grep "install_type" | cut -d"=" -f2 | xargs)
-    local cluster_info=/store/ppu/cluster-info.json
-    local upgrading=false
-    local last_n=$(cat $cluster_info 2>/dev/null | jq -r .[].hostname | tail -1)
-    if [ -e "$cluster_info" -a "x$inst_type" = "xPPU" ] ; then
-        for N in $(cat $cluster_info | jq -r .[].hostname) ; do
-            if [ "x$prev_n" = "x$T_net_hostname" ] ; then
-                n_role=$(cat $cluster_info | jq -r ".[] | select(.hostname == \"$N\") | .role")
-                n_ip=$(cat $cluster_info | jq -r ".[] | select(.hostname == \"$N\") | .ip.management")
-                # Probe the successor. 5s was too tight for ssh+hex_sdk on a node
-                # that is itself still settling; an empty result made next_entry
-                # arithmetic yield slot 1 (the ACTIVE one), whose last_boot is a
-                # real timestamp -- so a slow probe read as "already done" and the
-                # roll stopped silently. Retry, then treat an unreadable successor
-                # as a pause, never as "nothing to do".
-                n_probe_rc=1
-                for _try in 1 2 3 ; do
-                    n_next_raw="$(timeout 20 hex_sdk remote_run $n_ip "grub2-editenv list | grep next_entry | cut -d'=' -f2" 2>/dev/null)"
-                    n_info="$(timeout 20 hex_sdk remote_run $n_ip hex_sdk firmware_get_info $(( ${n_next_raw:-0} + 1 )) 2>/dev/null)"
-                    [ -n "$n_next_raw" ] && [ -n "$n_info" ] && { n_probe_rc=0 ; break ; }
-                    sleep 5
-                done
-                if [ $n_probe_rc -ne 0 ] ; then
-                    msg="Auto rolling upgrade paused: cannot read firmware state of $N"
-                    hex_sdk remote_run $n_ip "echo -n \"$msg\" >$BOOTSTRAP_CUBE_LOG" 2>/dev/null
-                    echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-                    hex_log_event -e RUG00001W "interface=system,host=$HOSTNAME,service=rolling_upgrade,node=$N"
-                    hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_leave_rolling"
-                    break
-                fi
-                n_nextactive=$(( ${n_next_raw:-0} + 1 ))
-                n_lastboot="$(echo "$n_info" | grep last_boot)"
-                # firmware_version is the marketing string ("Cube Appliance 3.1.10")
-                # and is identical across slots, so it cannot distinguish builds.
-                # The grub env carries the real identity (PART<n>TITLE=CUBE_..._<sha>).
-                n_fwver="$(timeout 20 hex_sdk remote_run $n_ip "grub2-editenv list | grep -E '^PART${n_nextactive}TITLE=' | cut -d'=' -f2" 2>/dev/null)"
-                fwver="$(grub2-editenv list 2>/dev/null | grep -E "^PART$(hex_sdk firmware_get_active)TITLE=" | cut -d'=' -f2)"
-                # Always record what the probe saw: the no-action branch used to be
-                # completely silent, so a roll that stopped here left no evidence.
-                logger -t rolling_upgrade "successor $N probe: slot=$n_nextactive last_boot='$n_lastboot' title='$n_fwver' mine='$fwver'"
-                if [ "x$n_lastboot" = "xlast_boot = Never" -a "x$n_fwver" = "x$fwver" ] ; then
-                    upgrading=true
-                    echo "Starting auto rolling upgrade" >> $BOOTSTRAP_CUBE_MODE
-                    # Guard ceph for the roll: keep the rebooting node's OSDs from
-                    # being marked out (no re-replication churn) without pausing I/O.
-                    # Idempotent -- re-set each relay step; cleared when the last
-                    # node completes below.
-                    hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_enter_rolling"
-                    # Don't drain+reboot the next node until this node has rejoined
-                    # and the live-migration path is functional. Version-robust, so
-                    # a mixed N/N+1 SLURP window passes; pauses (never advances into
-                    # a broken cluster) if it can't confirm within the timeout.
-                    # repair mode = the surgical pre-drain repairs (formerly
-                    # _os_pre_failure_host_evacuation); run on the master control
-                    # so it gates even when the booting node is a compute node.
-                    if ! hex_sdk remote_run $MASTER_CONTROL "hex_sdk live_migration_gate 300 $N repair" ; then
-                        msg="Auto rolling upgrade paused: live-migration path not ready before draining $N"
-                        hex_sdk remote_run $n_ip "echo -n \"$msg\" >$BOOTSTRAP_CUBE_LOG"
-                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-                        hex_log_event -e RUG00001W "interface=system,host=$HOSTNAME,service=rolling_upgrade,node=$N"
-                        hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_leave_rolling"
-                        break
-                    fi
-                    if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
-                        # Wording matters: is_node_rolling_upgrade greps this log for
-                        # 'rolling upgrade'/'Rebooting'. The drain is the longest phase
-                        # (minutes), so without the prefix the cluster reads as "not
-                        # rolling" for its whole duration.
-                        msg="rolling upgrade: evacuating VMs on $N"
-                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-                        hex_log_event -e RUG00002I "interface=system,host=$HOSTNAME,service=rolling_upgrade,node=$N"
-                        if ! hex_sdk remote_run $MASTER_CONTROL "hex_sdk os_pre_failure_host_evacuation_sequential $N upgrade" ; then
-                            msg="Auto rolling upgrade aborted due to evacuation failures"
-                            hex_sdk remote_run $n_ip "echo -n \"$msg\" >$BOOTSTRAP_CUBE_LOG"
-                            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg on $N" $'\r' | $(hex_sdk GetKernelConsoleDevices)
-                            hex_log_event -e RUG00003W "interface=system,host=$HOSTNAME,service=rolling_upgrade,node=$N"
-                            hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_leave_rolling"
-                            break
-                        fi
-                    fi
-                    msg="Rebooting $N"
-                    echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-                    hex_log_event -e RUG00004I "interface=system,host=$HOSTNAME,service=rolling_upgrade,node=$N"
-                    # hand off the active cephfs MDS before $N goes down, else cephfs
-                    # stalls for the whole node-down window (co-located mon defers failover)
-                    hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_mds_evacuate_host $N"
-                    # likewise hand off the OVN SB master before $N goes down
-                    hex_sdk remote_run $MASTER_CONTROL "hex_sdk ovn_sb_evacuate_host $N"
-                    hex_sdk remote_run $n_ip "echo YES | hex_cli -c reboot"
-                    break
-                fi
-            fi
-            prev_n=$N
-        done
-        # Roll complete once the last node has booted -- lift the ceph rolling
-        # guard (unset noout, once every OSD is back up).
-        if [ "x$last_n" = "x$T_net_hostname" ] ; then
-            hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_leave_rolling"
-        fi
-        # While next node (in case of having VIP) is being rebooted, we are unable to establish connection to http://${vip}:5000
-        # hex_sdk os_nova_instance_hardreboot $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i -e error -e nostate | cut -d" " -f1)
+    # One path for every boot. Whether this node came up as part of a roll -- and
+    # of which kind -- comes from the shared job on cephfs, not from local
+    # markers: /run is tmpfs and the A/B root partition is replaced by the very
+    # upgrade we would be trying to detect.
+    #
+    # The relay itself is NOT here. power_roll_advance, called by each node
+    # branch right after this returns, finalizes this node and kicks the next
+    # one -- for a restart and an upgrade alike. An upgrade needs no separate
+    # relay because hex_install already pointed next_entry at the staged slot,
+    # so the reboot power_roll_advance issues boots the new firmware.
+    local roll_kind=$(hex_sdk power_roll_kind_active 2>/dev/null)
+    local rolling=0
+    [ -n "$roll_kind" ] && rolling=1
+
+    # A roll boot can take many minutes to reach a ready cluster (single-node
+    # ceph/cephfs recovery). Wait, so the work below runs against a ready
+    # cluster instead of being skipped.
+    if [ "$rolling" = "1" ] ; then
+        for _i in $(seq 1 90) ; do hex_sdk cube_cluster_ready && break ; sleep 20 ; done
     fi
-    if [ "x$upgrading" = "xfalse" ]; then
-        # If this boot follows a rolling restart, the cluster may take many
-        # minutes to become ready (single-node ceph/cephfs recovery). Wait so the
-        # VM restore + relay advance below run against a ready cluster instead of
-        # being skipped. Bounded; marker removed once consumed.
-        ROLLING_RECOVER=0
-        if [ -e /etc/appliance/state/rolling_restart_recover ] ; then
-            for _i in $(seq 1 90) ; do hex_sdk cube_cluster_ready && break ; sleep 20 ; done
-            rm -f /etc/appliance/state/rolling_restart_recover
-            ROLLING_RECOVER=1
+
+    if hex_sdk cube_cluster_ready ; then
+        msg="Cluster checking and repairing"
+        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+        hex_log_event -e BSP00005I "interface=system,host=$HOSTNAME,service=bootstrap"
+        hex_sdk cmd "rm -f /tmp/health_*error.count"
+        # Normal boots only: the full 'cluster check' kicks per-service
+        # auto_repair. Roll boots SKIP it -- on a single node its ceph_mds
+        # auto_repair restarts the lone MDS while it is still settling, forcing a
+        # ~8 min cephfs replay. The focused gate below covers the migration path.
+        if [ "$rolling" != "1" ] ; then
+            hex_cli -c cluster check
         fi
-        if hex_sdk cube_cluster_ready ; then
-            msg="Cluster checking and repairing"
-            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-            hex_log_event -e BSP00005I "interface=system,host=$HOSTNAME,service=bootstrap"
-            hex_sdk cmd "rm -f /tmp/health_*error.count"
-            # Normal boots only: the full 'cluster check' kicks per-service
-            # auto_repair. Rolling-restart boots SKIP it -- on a single node its
-            # ceph_mds auto_repair restarts the lone MDS while it is still settling,
-            # forcing a ~8 min cephfs replay that stalls recovery. The focused
-            # essential gate below covers the live-migration path instead.
-            if [ "$ROLLING_RECOVER" != "1" ] ; then
-                hex_cli -c cluster check # kick off auto_repair
-            fi
-            # Rolling-restart only: restore recorded VMs now (services stay up). Poweroff/
-            # powercycle defers to boot-end check_repair (power_restore_recorded_vms).
-            # active_running: "<id> [disposition]" -- suspended (resume), stopped (start),
-            # or empty/legacy (reset+hardreboot).
-            if [ "$ROLLING_RECOVER" = "1" ] && [ -s /mnt/cephfs/nova/instances/active_running ] ; then
-                while read -r i disp _ ; do
-                    [ -z "$i" ] && continue
-                    if hex_sdk os_nova_list id status powerstate |  grep -i "$i active running" ; then
-                        continue
-                    else
-                        hex_sdk power_vm_restore "$i" "$disp"
-                        msg="Restored server: $i ${disp:+($disp)}"
-                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-                        hex_log_event -e BSP00011I "interface=system,host=$HOSTNAME,service=bootstrap,vm=$i,disposition=${disp:-hardreboot}"
-                    fi
-                done < /mnt/cephfs/nova/instances/active_running
-            fi
-            # Normal boots only: ceph backup to /store. Skipped on rolling-restart
-            # boots -- the 'cluster check Storage' probe blocks on MDS replay.
-            if [ "$ROLLING_RECOVER" != "1" ] && hex_cli -c cluster check Storage | grep -i " ok " ; then
-                rsync -ar /var/lib/ceph /store/
-            fi
-            if [ "$ROLLING_RECOVER" = "1" ] ; then
-                # Rolling restart only needs the live-migration path verified before
-                # this node releases the relay to drain the next one (same gate the
-                # rolling-upgrade relay uses). Checks always run first, so a healthy
-                # roll passes in seconds with zero side effects; a failed check
-                # triggers its surgical repair inside the gate (which emits a health
-                # event per repaired cause, plus CLU00011I once the path is ready).
-                # Still not ready -> pause (state=paused makes the later
-                # power_roll_advance a no-op).
-                if ! hex_sdk live_migration_gate 180 "" repair ; then
-                    hex_sdk _power_roll_pause "live-migration path not ready before releasing the next node"
+        # Roll boots: restore VMs this node suspended for its reboot. Only a
+        # restart ever suspends (an upgrade refuses and pauses instead), so this
+        # is a no-op on an upgrade -- the record is empty.
+        if [ "$rolling" = "1" ] && [ -s /mnt/cephfs/nova/instances/active_running ] ; then
+            while read -r i disp _ ; do
+                [ -z "$i" ] && continue
+                if hex_sdk os_nova_list id status powerstate | grep -i "$i active running" ; then
+                    continue
+                else
+                    hex_sdk power_vm_restore "$i" "$disp"
+                    msg="Restored server: $i ${disp:+($disp)}"
+                    echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                    hex_log_event -e BSP00011I "interface=system,host=$HOSTNAME,service=bootstrap,vm=$i,disposition=${disp:-hardreboot}"
                 fi
-                msg="Cluster ready; live-migration path verified"
-            else
-                # Normal boot: 'cluster check' above kicks per-service auto_repair;
-                # master runs full check_repair centrally once all nodes ready.
-                msg="Cluster ready"
-            fi
-            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-            hex_log_event -e BSP00006I "interface=system,host=$HOSTNAME,service=bootstrap,recover=$ROLLING_RECOVER"
-        else
-            msg="Cluster check and repair skipped as not all nodes are bootstrapped and synced"
-            echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
-            hex_log_event -e BSP00007I "interface=system,host=$HOSTNAME,service=bootstrap"
+            done < /mnt/cephfs/nova/instances/active_running
         fi
+        # Normal boots only: ceph backup to /store. Skipped on roll boots -- the
+        # 'cluster check Storage' probe blocks on MDS replay.
+        if [ "$rolling" != "1" ] && hex_cli -c cluster check Storage | grep -i " ok " ; then
+            rsync -ar /var/lib/ceph /store/
+        fi
+        if [ "$rolling" = "1" ] ; then
+            # Verify the live-migration path before this node releases the relay
+            # to drain the next one. Checks run first, so a healthy roll passes in
+            # seconds; a failed check triggers its surgical repair inside the
+            # gate. Still not ready -> pause (state=paused makes the following
+            # power_roll_advance a no-op).
+            if ! hex_sdk live_migration_gate 180 "" repair ; then
+                hex_sdk _power_roll_pause "live-migration path not ready before releasing the next node"
+            fi
+            msg="Cluster ready; live-migration path verified"
+        else
+            msg="Cluster ready"
+        fi
+        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+        hex_log_event -e BSP00006I "interface=system,host=$HOSTNAME,service=bootstrap,roll=${roll_kind:-none}"
+    else
+        msg="Cluster check and repair skipped as not all nodes are bootstrapped and synced"
+        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+        hex_log_event -e BSP00007I "interface=system,host=$HOSTNAME,service=bootstrap"
     fi
 }
 
@@ -252,7 +151,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                 echo "YES" | hex_cli -c cluster stop
             fi
             BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
-            RollingEvacuateAndReboot
+            PostBootRecovery
             # Advance the roll relay + mark bootup 'done' here per node, not in
             # cube_cluster_start's tail (skipped on the master). See kb note.
             hex_sdk power_roll_advance "$HOSTNAME"
@@ -287,7 +186,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                     sleep 60
                 done
                 BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
-                RollingEvacuateAndReboot
+                PostBootRecovery
                 hex_sdk power_roll_advance "$HOSTNAME"
                 hex_sdk power_bootup_mark done   # this node's bring-up complete
                 :> $BOOTSTRAP_CUBE_MODE
@@ -304,7 +203,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                     sleep 60
                 done
                 BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
-                RollingEvacuateAndReboot
+                PostBootRecovery
                 hex_sdk power_roll_advance "$HOSTNAME"
                 hex_sdk power_bootup_mark done   # this node's bring-up complete
                 :> $BOOTSTRAP_CUBE_MODE

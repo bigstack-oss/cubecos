@@ -30,15 +30,15 @@ _power_roll_write(){ local h p ts; while [ $# -gt 0 ]; do case "$1" in
     *) shift;; esac; done; echo "$h $p $ts" >> "$WRITES"; }
 
 # 1. write_phase_ts: writes when job exists; no-op + rc1 when it doesn't
-ROLLING_RESTART_JOB=$(mktemp); : > "$WRITES"
+ROLLING_JOB=$(mktemp); : > "$WRITES"
 _power_roll_write_phase_ts n1 bootstrapping 100
 chk "write(job present)" "$(cat "$WRITES")" "n1 bootstrapping 100"
-rm -f "$ROLLING_RESTART_JOB"; : > "$WRITES"
+rm -f "$ROLLING_JOB"; : > "$WRITES"
 _power_roll_write_phase_ts n1 bootstrapping 100; chk "write(job absent) rc1" "$?" "1"
 chk "write(job absent) noop" "$(cat "$WRITES")" ""
 
 # 2. flush spool: replays every buffered stamp in order, then removes the spool
-ROLLING_RESTART_JOB=$(mktemp); : > "$WRITES"; SPOOL=$(mktemp)
+ROLLING_JOB=$(mktemp); : > "$WRITES"; SPOOL=$(mktemp)
 printf 'a bootstrapping 10\nb finalizing 20\n' > "$SPOOL"
 _power_roll_flush_phase_ts_spool "$SPOOL"
 chk "flush replays"  "$(tr '\n' ';' < "$WRITES")" "a bootstrapping 10;b finalizing 20;"
@@ -47,14 +47,14 @@ chk "flush clears"   "$([ -e "$SPOOL" ] && echo y || echo n)" "n"
 # 3. set_phase_ts branch selection (spool path overridden for the test)
 export _POWER_ROLL_TS_SPOOL=$(mktemp -u)
 # 3a. cephfs up -> direct write, no delegation, no spool
-ROLLING_RESTART_JOB=$(mktemp); : > "$WRITES"; rm -f "$_POWER_ROLL_TS_SPOOL"
+ROLLING_JOB=$(mktemp); : > "$WRITES"; rm -f "$_POWER_ROLL_TS_SPOOL"
 _power_roll_ts_peer(){ echo PEER; }; remote_run(){ echo "DELEGATED" >> "$WRITES"; return 0; }
 _power_roll_set_phase_ts n1 bootstrapping
 chk "3a direct write"    "$(awk '{print $1,$2}' "$WRITES")" "n1 bootstrapping"
 chk "3a no delegation"   "$(grep -c DELEGATED "$WRITES")" "0"
 chk "3a no spool"        "$([ -e "$_POWER_ROLL_TS_SPOOL" ] && echo y || echo n)" "n"
 # 3b. cephfs down + peer reachable + delegate ok -> delegated, no local spool
-rm -f "$ROLLING_RESTART_JOB" "$_POWER_ROLL_TS_SPOOL"; : > "$WRITES"
+rm -f "$ROLLING_JOB" "$_POWER_ROLL_TS_SPOOL"; : > "$WRITES"
 _power_roll_set_phase_ts n1 bootstrapping
 chk "3b delegated"       "$(grep -c DELEGATED "$WRITES")" "1"
 chk "3b no spool"        "$([ -e "$_POWER_ROLL_TS_SPOOL" ] && echo y || echo n)" "n"
