@@ -17,6 +17,11 @@
 
 ROLLING_DIR=/mnt/cephfs/rolling
 ROLLING_JOB=$ROLLING_DIR/job.json
+# Local "this boot belongs to a roll" marker. MUST live on /store, not on / --
+# the root filesystem is the A/B slot, so a marker written there is invisible
+# after an upgrade boots the other slot. /store is a separate partition and
+# survives the swap, and unlike cephfs it is readable before cluster bring-up.
+ROLLING_RECOVER_MARKER=${ROLLING_RECOVER_MARKER:-/store/rolling_recover}
 
 # Locked read-modify-write of the shared job.json, retried across a cephfs/MDS
 # failover window. Temp name expanded once per attempt (avoids lost updates).
@@ -189,10 +194,14 @@ _power_roll_kick()
     fi
 
     echo "rebooting $host"
+    # A node kicking ITSELF (upgrade order puts the master first, and the roll is
+    # usually started there) is killed by the reboot below, so it can never reach
+    # the status flip after the wait-for-down loop. Set it up front in that case.
+    [ "x$host" = "x$HOSTNAME" ] && _power_roll_set_node_status "$host" rebooting
     # Drop a local marker so the node's boot path waits for the cluster to be
     # ready (single-node ceph recovery can take ~20 min) before running the VM
     # restore + relay advance, instead of checking once early and skipping.
-    ssh root@$ip "touch /etc/appliance/state/rolling_restart_recover ; echo YES | hex_cli -c reboot" >/dev/null 2>&1
+    ssh root@$ip "touch $ROLLING_RECOVER_MARKER ; echo YES | hex_cli -c reboot" >/dev/null 2>&1
     # Wait (bounded) for the node to drop off the network before flipping to
     # "rebooting", so the reachability-based "bootstrapping" inference can't misfire.
     local _i
@@ -242,8 +251,11 @@ _power_capacity_fits_elsewhere()
 power_roll_plan()
 {
     # Dry run: print the roll plan -- node order and, per VM, what would happen
-    # (live-migrate vs pause+restore) -- and change nothing. Mirrors the node
-    # ordering in power_roll_start.
+    # (live-migrate vs pause+restore) -- and change nothing. Takes the kind so it
+    # mirrors power_roll_start's ordering exactly; a plan that showed a different
+    # order than the roll will use would make the operator's confirmation
+    # meaningless.
+    local kind=${1:-restart} ; shift 2>/dev/null
     local want="$*"
     local master=$(cubectl node list | head -n1 | awk -F',' '{print $1}')
     local ncompute=$(cubectl node -r compute list -j | jq -r '.[].hostname' | grep -c .)
@@ -252,15 +264,25 @@ power_roll_plan()
     # All active VMs, one DB query: "uuid host ram_mb vcpu name" (no per-VM API).
     local allvms=$($MYSQL -u root -N -D nova -e \
         "SELECT uuid, host, memory_mb, vcpus, display_name FROM instances WHERE deleted = 0 AND vm_state = 'active'" 2>/dev/null)
-    local order=$(cubectl node list -j | jq -r --arg want "$want" '
+    local order=$(cubectl node list -j | jq -r --arg want "$want" --arg m "$master" --arg kind "$kind" '
         ($want | split(" ") | map(select(length > 0))) as $sel
         | [ .[] | select(($sel|length)==0 or (.hostname as $h | $sel | index($h))) ]
-        | sort_by(
-            (if (.role|test("compute")) then 0 elif (.role|test("storage")) then 1 else 2 end))
+        | if $kind == "upgrade" then
+              sort_by((if .hostname==$m then 0 else 1 end),
+                      (if (.role|test("control")) then 0 elif (.role|test("storage")) then 1 else 2 end))
+          else
+              sort_by((if (.role|test("compute")) then 0 elif (.role|test("storage")) then 1 else 2 end),
+                      (if .hostname==$m then 1 else 0 end))
+          end
         | .[] | .hostname + " " + .role')
 
-    echo "Rolling restart plan (dry run) -- no changes will be made."
-    echo "Order: compute -> storage -> control; master ($master) rolled last."
+    if [ "$kind" = upgrade ] ; then
+        echo "Rolling update plan (dry run) -- no changes will be made."
+        echo "Order: master ($master) first -> control -> storage -> compute."
+    else
+        echo "Rolling restart plan (dry run) -- no changes will be made."
+        echo "Order: compute -> storage -> control; master ($master) rolled last."
+    fi
     echo
     local host role id vmhost ram vcpu name hostvms reason
     local interrupt=""   # cannot-migrate VMs, collected for the highlighted section
@@ -401,7 +423,7 @@ power_roll_active()
     # before reboot, cleared at boot once the cluster is ready) covers that
     # window, so the running roll is detected even on the node being rebooted.
     # The shared job state covers every other node.
-    [ -e /etc/appliance/state/rolling_restart_recover ] && return 0
+    [ -e $ROLLING_RECOVER_MARKER ] && return 0
     [ -e "$ROLLING_JOB" ] || return 1
     case "$(jq -r .state "$ROLLING_JOB" 2>/dev/null)" in
         running|paused) return 0 ;;
@@ -428,10 +450,18 @@ _power_roll_resolve_pkg()
 _power_roll_stage_all()
 {
     local pkg=$1 h rc=0
+    local -A _pids=()
+    # Stage every node at once. Each writes its own inactive slot from a
+    # read-only package on shared cephfs, so there is nothing to serialize --
+    # doing them in turn just multiplies the wait before the roll can start.
     for h in $(jq -r '.nodes[].hostname' $ROLLING_JOB 2>/dev/null) ; do
         echo "staging $(basename $pkg) on $h"
         _power_roll_set_node_status "$h" staging
-        if remote_run "$h" "hex_install -v update $pkg" >/dev/null 2>&1 ; then
+        remote_run "$h" "hex_install -v update $pkg" >/dev/null 2>&1 &
+        _pids[$h]=$!
+    done
+    for h in "${!_pids[@]}" ; do
+        if wait "${_pids[$h]}" ; then
             _power_roll_set_node_status "$h" pending
         else
             log_error "rolling_upgrade: staging $pkg failed on $h"
@@ -555,7 +585,15 @@ power_roll_start()
 # reboot, whereas /run and the A/B root partition do not.
 power_roll_kind_active()
 {
-    [ -e "$ROLLING_JOB" ] || return 0
+    # cephfs may not be mounted this early. Fall back to the local kick marker,
+    # which is always readable: it cannot name the kind, but "some roll is in
+    # progress" is what every caller actually branches on. Guessing "no roll"
+    # here would run the full cluster check on a node whose MDS is still
+    # settling -- the exact thing the roll path skips it to avoid.
+    if [ ! -r "$ROLLING_JOB" ] ; then
+        [ -e $ROLLING_RECOVER_MARKER ] && echo restart
+        return 0
+    fi
     [ "$(jq -r .state $ROLLING_JOB 2>/dev/null)" = "running" ] || return 0
     jq -e --arg h "$HOSTNAME" 'any(.nodes[]; .hostname==$h)' $ROLLING_JOB >/dev/null 2>&1 || return 0
     _power_roll_kind
@@ -593,7 +631,7 @@ power_roll_advance()
         # Consume the local kick marker. It is what the early boot path (before
         # cephfs is up) uses to know this boot belongs to a roll; left behind it
         # would make every later boot look like one.
-        rm -f /etc/appliance/state/rolling_restart_recover
+        rm -f $ROLLING_RECOVER_MARKER
         _power_roll_set_str inflight ""
     fi
 
@@ -606,6 +644,10 @@ power_roll_advance()
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
+        # The full check_repair pass belongs here -- when the ROLL is done --
+        # not when a single node's boot is done. Running it mid-roll evaluates a
+        # cluster with a node deliberately down and tries to "repair" it.
+        Quiet -n $HEX_SDK cluster_check_repair_async
         echo "rolling $(_power_roll_kind) complete"
         /usr/sbin/hex_log_event -e CLU00005I "interface=system,host=$HOSTNAME,category=cluster,sub=rolling_$(_power_roll_kind),action=complete"
         return 0
@@ -617,7 +659,7 @@ power_roll_advance()
 power_roll_status()
 {
     if [ ! -e "$ROLLING_JOB" ] ; then
-        echo "no rolling restart job found"
+        echo "no rolling job found"
         return 0
     fi
 
@@ -711,21 +753,29 @@ power_roll_status_json()
                 | (($state == "paused") and (.hostname == $inf)) as $failed
                 | (.vms_total // 0) as $vt
                 | (.vms_done // 0) as $vd
-                | (if .status == "draining" then "evacuting vms on host"
-                   elif (.status == "rebooting" and .hostname == $inf and $boot == "1") then "bootstrapping"
-                   elif .status == "rebooting" then "rebooting"
-                   elif .status == "finalizing" then "finalizing"
+                # $phase is what the UI DISPLAYS: keep it identical to the words
+                # "cluster rolling_update status" prints, so the two views never
+                # disagree about what a node is doing. The one addition is
+                # "bootstrapping", which the CLI infers the same way (an inflight
+                # node that answers ping is past the reboot).
+                | (if (.status == "rebooting" and .hostname == $inf and $boot == "1") then "bootstrapping"
+                   else (.status // "pending") end) as $phase
+                # $current keeps the API's own vocabulary -- the UI's completion
+                # logic keys off "succeeded"/"failed", so it is NOT the label.
+                | (if $failed then "failed"
                    elif .status == "done" then "succeeded"
-                   else "pending" end) as $phase
+                   elif .status == "stage_failed" then "failed"
+                   else $phase end) as $current
                 | {
                     host: .hostname,
                     phase: $phase,
                     status: {
-                        current: (if $failed then "failed" else $phase end),
-                        isProcessing: (((.status == "draining") or (.status == "rebooting") or (.status == "finalizing")) and ($failed | not)),
+                        current: $current,
+                        isProcessing: (((.status == "staging") or (.status == "draining") or (.status == "rebooting") or (.status == "finalizing")) and ($failed | not)),
                         processPercent: (
                             if .status == "done" then 100
-                            elif $failed then 0
+                            elif $failed or .status == "stage_failed" then 0
+                            elif .status == "staging" then 10
                             elif .status == "finalizing" then 90
                             elif .status == "rebooting" then 75
                             elif .status == "draining" then (if $vt > 0 then (($vd / $vt) * 50 | floor) else 25 end)
@@ -740,16 +790,16 @@ power_roll_status_json()
 
 power_roll_decision()
 {
-    [ -e "$ROLLING_JOB" ] || { echo "no rolling restart in progress" >&2 ; return 1 ; }
+    [ -e "$ROLLING_JOB" ] || { echo "no rolling job in progress" >&2 ; return 1 ; }
     local cur=$(jq -r .state $ROLLING_JOB 2>/dev/null)
     # "continue" only applies to a paused roll; "abort" also works on a "running"
     # roll (so a wedged/zombie roll whose driver died is still cleanable).
     if [ "$1" = "continue" ] && [ "$cur" != "paused" ] ; then
-        echo "rolling restart is $cur, not paused -- \"continue\" applies only to a paused roll" >&2
+        echo "rolling $(_power_roll_kind) is $cur, not paused -- \"continue\" applies only to a paused roll" >&2
         return 1
     fi
     if [ "$1" = "abort" ] && [ "$cur" != "paused" ] && [ "$cur" != "running" ] ; then
-        echo "rolling restart is $cur -- nothing to abort" >&2
+        echo "rolling $(_power_roll_kind) is $cur -- nothing to abort" >&2
         return 1
     fi
 
@@ -777,7 +827,13 @@ power_roll_decision()
             [ -n "$inflight" ] && Quiet -n $OPENSTACK compute service set --enable "$inflight" nova-compute
             _power_roll_set_str inflight ""
             _power_roll_set_str state aborted
-            echo "rolling restart aborted"
+            # Release the cluster-wide guards the roll took. Without this an
+            # abort leaves background auto-repair stood down (until the marker
+            # TTL) and mon_osd_down_out_interval pinned at 3600 -- the roll is
+            # over, so neither should outlive it.
+            cluster_rolling_marker_clear
+            Quiet -n $HEX_SDK ceph_leave_rolling
+            echo "rolling $(_power_roll_kind) aborted"
             ;;
         *)
             echo "usage: power_roll_decision continue|abort" >&2
@@ -1003,11 +1059,23 @@ power_drain_host()
             # Retry a rejected request (transient "no valid host" is common under
             # burst); capture the error to the log instead of swallowing it.
             local _mtry _merr _mok=0
-            for _mtry in 1 2 3 ; do
+            # A VM that is still finishing an INBOUND migration -- one the
+            # previous node's drain just moved here -- is rejected with 409
+            # "task_state migrating". That is transient by definition and only
+            # needs waiting out, unlike a real rejection (no valid host, etc).
+            # Give it a longer, more patient budget so a node that received VMs
+            # moments ago can still be drained.
+            for _mtry in $(seq 1 12) ; do
                 if _merr=$(nova live-migration "$sid" 2>&1) ; then _mok=1 ; break ; fi
                 echo "$(date +%s) migrate-retry $sid attempt=$_mtry: ${_merr//$'\n'/ }" >> "$tlog"
-                log_warning "rolling_restart drain: live-migration of $sid off $from_host attempt=$_mtry rejected (task_state=${_tsb:-None}): ${_merr//$'\n'/ }"
-                sleep 5
+                log_warning "rolling_$_kind drain: live-migration of $sid off $from_host attempt=$_mtry rejected (task_state=${_tsb:-None}): ${_merr//$'\n'/ }"
+                case "$_merr" in
+                    *"task_state migrating"*|*"task_state"*"migrat"*)
+                        sleep 15 ;;   # inbound migration settling; wait it out
+                    *)
+                        [ $_mtry -ge 3 ] && break   # a real rejection: fail fast
+                        sleep 5 ;;
+                esac
             done
             if [ "$_mok" = 1 ] ; then
                 started[$sid]=$(date +%s)

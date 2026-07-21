@@ -955,11 +955,8 @@ ClusterErrcodeDumpMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-// Shared driver for both rolls. They are the same operation: drain a node,
-// hand off MDS/OVN, reboot it, resume on the far side. An upgrade only adds a
-// staging step (hex_install points next_entry at the staged slot, so the very
-// same reboot boots the new firmware). Keeping one handler keeps the two verbs
-// from drifting apart.
+// one handler for both verbs -- same operation; an upgrade only adds staging
+// (next_entry makes the same reboot boot the new firmware)
 static int
 ClusterRollMain(const char* kind, int argc, const char** argv)
 {
@@ -1004,7 +1001,7 @@ ClusterRollMain(const char* kind, int argc, const char** argv)
             if (!targets.empty()) targets += " ";
             targets += argv[i];
         }
-        HexSystemF(0, HEX_SDK " power_roll_plan %s", targets.c_str());
+        HexSystemF(0, HEX_SDK " power_roll_plan %s %s", kind, targets.c_str());
         return CLI_SUCCESS;
     }
 
@@ -1041,7 +1038,7 @@ ClusterRollMain(const char* kind, int argc, const char** argv)
     // Always dryrun first: show the operator the real plan (which VMs migrate vs.
     // get suspended+restored, in a highlighted section) so confirming is informed
     // consent for that interruption. The roll then runs autonomously.
-    HexSystemF(0, HEX_SDK " power_roll_plan %s", hosts.c_str());
+    HexSystemF(0, HEX_SDK " power_roll_plan %s %s", kind, hosts.c_str());
     CliPrintf("");
     if (upgrade) {
         CliPrintf("Confirming stages %s on every node, then rolls the cluster:", version.c_str());
