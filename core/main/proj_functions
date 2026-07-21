@@ -1086,6 +1086,49 @@ _essential_check_one()
     return 1
 }
 
+# live_migration_gate [timeout_secs] [drain_host]
+#
+# Block until the live-migration drain path is FUNCTIONAL, so the rolling relay
+# can safely take the next node down. Same precondition for rolling restart and
+# rolling upgrade -- both drain via live migration.
+#
+# Version-ROBUST: asserts function + cluster membership, never version uniformity
+# (mixed N/N+1 is expected and healthy under SLURP + mixed-version-safe DB/MQ).
+# Accepts quorate-but-degraded during the reboot window and excludes the draining
+# node from migration-target counts. keystone/haproxy/vip/memcached are covered
+# transitively by the authenticated $OPENSTACK calls; glance/cyborg are not on the
+# live-migration path. Returns 0 when a live migration can run; 1 on timeout.
+live_migration_gate()
+{
+    is_control_node || return 0
+    source /etc/admin-openrc.sh 2>/dev/null
+    local deadline=$((SECONDS + ${1:-300})) drain=${2:-__none__} why=
+
+    while [ $SECONDS -lt $deadline ] ; do
+        why=
+        # version-SAFE cluster membership (true/false regardless of version)
+        $HEX_SDK health_mysql_check    >/dev/null 2>&1 || why=galera
+        [ -z "$why" ] && { $HEX_SDK health_rabbitmq_check >/dev/null 2>&1 || why=rabbitmq ; }
+        [ -z "$why" ] && { $CEPH health 2>/dev/null | grep -qiE 'HEALTH_ERR|inactive|incomplete|peering|stale' && why=ceph ; }
+
+        # FUNCTIONAL backends a live migration touches (NOT version-strict)
+        [ -z "$why" ] && { $OPENSTACK compute service list --service nova-conductor -f value -c State 2>/dev/null | grep -qi up || why=nova-conductor ; }
+        [ -z "$why" ] && { $OPENSTACK compute service list --service nova-scheduler -f value -c State 2>/dev/null | grep -qi up || why=nova-scheduler ; }
+        [ -z "$why" ] && {
+            # >=1 live migration target that is not the node being drained
+            local tgt=$($OPENSTACK compute service list --service nova-compute -f value -c Host -c State 2>/dev/null | awk -v d="$drain" '$2=="up" && $1!=d {c++} END{print c+0}')
+            [ "${tgt:-0}" -ge 1 ] || why=no-migration-target
+        }
+        [ -z "$why" ] && { $OPENSTACK volume service list --service cinder-volume -f value -c State 2>/dev/null | grep -qi up || why=cinder-volume ; }
+        [ -z "$why" ] && { $OPENSTACK network agent list -f value -c Alive 2>/dev/null | grep -qi true || why=neutron ; }
+
+        [ -z "$why" ] && return 0
+        sleep 5
+    done
+    echo "live_migration_gate: live-migration path not ready ($why)" >&2
+    return 1
+}
+
 cluster_check_repair_essential()
 {
     # $1=repair (1) or check-only (0, default). Only the live-migration path.
