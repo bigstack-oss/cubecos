@@ -99,7 +99,12 @@ EnableCephInfluxPlugin(bool update, const std::string sharedId)
     HexLogInfo("updating influxdb ceph plugin");
 
     if (stat(MAKRER, &ms) != 0) {
-        HexSystemF(0, "timeout 10 ceph mgr module enable influx 2>/dev/null");
+        // mark done only when the enable actually landed, so a transient
+        // mgr-not-ready failure is retried on the next commit
+        if (HexSystemF(0, "timeout 10 ceph mgr module enable influx 2>/dev/null") != 0) {
+            HexLogWarning("ceph mgr not ready to enable influx plugin; will retry on next commit");
+            return true;
+        }
         HexSystemF(0, "touch " MAKRER);
     }
 
@@ -107,9 +112,9 @@ EnableCephInfluxPlugin(bool update, const std::string sharedId)
     // or master node runs restart when other nodes are down (cluster start)
     // NOTE: timeout of HexSystemF doesn't work in this case
     //       since parent doesn't kill child process when timeout occurs
-    HexSystemF(0, "timeout 10 ceph influx config-set interval %d >/dev/null", INFLUX_INTERVAL);
-    HexSystemF(0, "timeout 10 ceph influx config-set hostname %s >/dev/null", sharedId.c_str());
-    HexSystemF(0, "timeout 10 ceph influx config-set port 8086 >/dev/null");
+    HexSystemF(0, "timeout 10 ceph influx config-set interval %d >/dev/null 2>&1", INFLUX_INTERVAL);
+    HexSystemF(0, "timeout 10 ceph influx config-set hostname %s >/dev/null 2>&1", sharedId.c_str());
+    HexSystemF(0, "timeout 10 ceph influx config-set port 8086 >/dev/null 2>&1");
 
     return true;
 }
@@ -228,6 +233,9 @@ ClusterReadyMain(int argc, char **argv)
 
 CONFIG_MODULE(influxdb, 0, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(influxdb, ceph_dashboard_idp);
+// the influx mgr plugin needs a functioning ceph mgr; without this the
+// dataflow scheduler commits influxdb while ceph is still bootstrapping
+CONFIG_REQUIRES(influxdb, ceph);
 
 // extra tunings
 CONFIG_OBSERVES(influxdb, cubesys, ParseCube, NotifyCube);
