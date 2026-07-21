@@ -91,6 +91,9 @@ rootfs_install::
 		/opt/openstack-antelope/bin/python setup.py install"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+	$(Q)# Link binaries
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-ovn-vpn-agent /usr/bin/neutron-ovn-vpn-agent
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-vpn-netns-wrapper /usr/bin/neutron-vpn-netns-wrapper
 
 # generate default configurations and stage files
 rootfs_install::
@@ -241,7 +244,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/neutron
 
-# install custom files and VPNaaS components
+# install custom files
 rootfs_install::
 	$(Q)cp -f $(NEUTRON_CONFDIR)/neutron.conf $(NEUTRON_CONFDIR)/neutron.conf.def
 	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
