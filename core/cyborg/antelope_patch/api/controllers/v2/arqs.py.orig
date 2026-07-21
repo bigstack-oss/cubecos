@@ -51,15 +51,16 @@ class ARQ(base.APIBase):
     hostname = wtypes.text
     """The host name to which the ARQ is bound, if any"""
 
-    device_rp_uuid = wtypes.text
+    device_rp_uuid = types.uuid
     """The UUID of the bound device RP, if any"""
 
-    instance_uuid = wtypes.text
+    instance_uuid = types.uuid
     """The UUID of the instance associated with this ARQ, if any"""
-    project_id = wtypes.text
+    project_id = types.uuid
     """The UUID of the instance project_id associated with this ARQ, if any"""
 
     attach_handle_type = wtypes.text
+    attach_handle_uuid = wtypes.text
     attach_handle_info = {wtypes.text: wtypes.text}
 
     links = wsme.wsattr([link.Link], readonly=True)
@@ -135,9 +136,18 @@ class ARQsController(base.CyborgController):
 
         extarq_list = []
         for group_id, group in enumerate(devprof.groups):
-            accel_resources = [
-                int(val) for key, val in group.items()
-                if key.startswith('resources')]
+            accel_resources = []
+            # If the device profile requires the Xilinx fpga, the number of
+            # resources should multiply by 2 cause that end user can program
+            # the device only when both MGMT and USER PF are bound to
+            # instance.
+            if group.get("trait:CUSTOM_FPGA_XILINX") == "required":
+                accel_resources = [int(group.get("resources:FPGA"))] * 2
+            else:
+                accel_resources = [
+                    int(val) for key, val in group.items()
+                    if key.startswith('resources')]
+
             # If/when we introduce non-accelerator resources, like
             # device-local memory, the key search above needs to be
             # made specific to accelerator resources only.
@@ -160,7 +170,7 @@ class ARQsController(base.CyborgController):
         return ret
 
     @authorize_wsgi.authorize_wsgi("cyborg:arq", "get_one")
-    @expose.expose(ARQ, wtypes.text)
+    @expose.expose(ARQ, types.uuid)
     def get_one(self, uuid):
         """Get a single ARQ by UUID."""
         context = pecan.request.context
@@ -207,7 +217,7 @@ class ARQsController(base.CyborgController):
         return ret
 
     @authorize_wsgi.authorize_wsgi("cyborg:arq", "delete", False)
-    @expose.expose(None, wtypes.text, wtypes.text,
+    @expose.expose(None, wtypes.text, types.uuid,
                    status_code=HTTPStatus.NO_CONTENT)
     def delete(self, arqs=None, instance=None):
         """Delete one or more ARQS.
@@ -331,8 +341,8 @@ class ARQsController(base.CyborgController):
         # So, for bind requests, we first check that no ARQs are already
         # associated with the instance specified in the binding.
         patch = list(patch_list.values())[0]
-        #if patch[0]['op'] == 'add':
-        #    self._check_if_already_bound(context, valid_fields)
+        if patch[0]['op'] == 'add':
+            self._check_if_already_bound(context, valid_fields)
 
         pecan.request.conductor_api.arq_apply_patch(
             context, patch_list, valid_fields)
