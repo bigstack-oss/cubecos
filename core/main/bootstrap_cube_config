@@ -68,6 +68,17 @@ RollingEvacuateAndReboot()
                 if [ "x$n_lastboot" = "xlast_boot = Never" -a "x$n_fwver" = "x$fwver" ] ; then
                     upgrading=true
                     echo "Starting auto rolling upgrade" >> $BOOTSTRAP_CUBE_MODE
+                    # Don't drain+reboot the next node until this node has rejoined
+                    # and the live-migration path is functional. Version-robust, so
+                    # a mixed N/N+1 SLURP window passes; pauses (never advances into
+                    # a broken cluster) if it can't confirm within the timeout.
+                    if ! hex_sdk live_migration_gate 300 "$N" ; then
+                        msg="Auto rolling upgrade paused: live-migration path not ready before draining $N"
+                        hex_sdk remote_run $n_ip "echo -n \"$msg\" >$BOOTSTRAP_CUBE_LOG"
+                        echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                        hex_sdk influx_event "${query},severity=\"W\" message=\"$msg\""
+                        break
+                    fi
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
                         msg="Evacuating VMs on $N"
                         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
@@ -139,11 +150,22 @@ RollingEvacuateAndReboot()
                 rsync -ar /var/lib/ceph /store/
             fi
             if [ "$ROLLING_RECOVER" = "1" ] ; then
-                # Rolling restart only needs the live-migration path verified --
-                # run the focused essential check+repair (fast, ~tens of seconds)
-                # instead of the full 28-group safe-net sweep.
-                hex_sdk cluster_check_repair_essential 1
-                msg="Cluster ready; live-migration essential services checked"
+                # Rolling restart only needs the live-migration path verified before
+                # this node releases the relay to drain the next one (same gate the
+                # rolling-upgrade relay uses). Gate FIRST: on a healthy roll it passes
+                # in seconds and we skip the essential check+repair entirely. Only if
+                # it can't confirm do we spend time repairing, then re-gate; still not
+                # ready -> pause (state=paused makes the later power_roll_advance a
+                # no-op). Emit the duration + whether repair was needed for tuning.
+                lmg_t0=$SECONDS ; lmg_repaired=0
+                if ! hex_sdk live_migration_gate 60 ; then
+                    lmg_repaired=1
+                    hex_sdk cluster_check_repair_essential 1
+                    hex_sdk live_migration_gate 120 \
+                        || hex_sdk _power_roll_pause "live-migration path not ready before releasing the next node"
+                fi
+                hex_sdk influx_event "${query},severity=\"I\" message=\"live-migration gate ${lmg_repaired:+with repair }verified in $((SECONDS-lmg_t0))s\""
+                msg="Cluster ready; live-migration path verified"
             else
                 # Normal boot: 'cluster check' above kicks per-service auto_repair;
                 # master runs full check_repair centrally once all nodes ready.
