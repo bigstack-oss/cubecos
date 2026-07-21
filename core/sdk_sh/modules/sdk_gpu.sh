@@ -728,24 +728,19 @@ gpu_unset_current_type()
         # doesn't match the (lowercase) sysfs directory name.
         local pci_addr
         pci_addr=$(echo "$pci_bus_id" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
-        local pf_dir="/sys/bus/pci/devices/${pci_addr}"
-        local numvfs_path="${pf_dir}/sriov_numvfs"
-        if [ ! -f "$numvfs_path" ]; then
-            echo "Error: sriov_numvfs not found at $numvfs_path" >&2
-            exit 1
-        fi
 
-        # Each VF's vGPU type must be cleared before sriov_numvfs can be
-        # zeroed - the driver rejects the numvfs write otherwise (confirmed
-        # on cn13 hardware: leaves the PF with no driver bound if skipped).
-        # Mirrors TeardownSriov's teardown order in config_gpu.cpp.
-        local vf_dir
-        for vf_dir in "${pf_dir}"/virtfn*; do
-            [ -e "${vf_dir}/nvidia/current_vgpu_type" ] && echo 0 > "${vf_dir}/nvidia/current_vgpu_type" 2>/dev/null
-        done
-
-        if ! echo 0 > "$numvfs_path"; then
-            echo "Error: failed to zero sriov_numvfs at $numvfs_path" >&2
+        # Zeroing sriov_numvfs by writing to the sysfs file directly (even
+        # with each VF's vGPU type pre-cleared) is rejected by the driver -
+        # confirmed on cn13 hardware: "write error: No such file or
+        # directory" every time, regardless of VF state. Disabling VFs
+        # requires going through sriov-manage, which requests the driver's
+        # unbindLock (temporarily detaches/reattaches the PF's own driver
+        # binding) before touching sriov_numvfs - a raw sysfs write skips
+        # that handshake and the driver refuses it. sriov-manage -d also
+        # clears each VF's vGPU type internally, so no separate cleanup
+        # loop is needed here.
+        if ! $NVIDIA_SRIOV -d "$pci_addr"; then
+            echo "Error: failed to disable SR-IOV VFs on $pci_addr" >&2
             exit 1
         fi
     elif [ "$current_type" = "migBackedVgpu" ]; then
