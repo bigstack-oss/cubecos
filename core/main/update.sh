@@ -12,6 +12,10 @@ cp /etc/libvirt/secrets/* /store/ppu/libvirt/secrets/
 if [ "$FIRST_CTRLHOST" == "$(hostname)" ]; then
     # Backup mysql
     hex_sdk support_mysql_backup_create
+    # Guard ceph for the whole rolling upgrade BEFORE any node reboots (covers the
+    # first node too); the relay re-sets it per step and clears it on
+    # completion/pause/abort.
+    hex_sdk ceph_enter_rolling
 fi
 
 

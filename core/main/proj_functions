@@ -1110,6 +1110,14 @@ live_migration_gate()
         $HEX_SDK health_mysql_check    >/dev/null 2>&1 || why=galera
         [ -z "$why" ] && { $HEX_SDK health_rabbitmq_check >/dev/null 2>&1 || why=rabbitmq ; }
         [ -z "$why" ] && { $CEPH health 2>/dev/null | grep -qiE 'HEALTH_ERR|inactive|incomplete|peering|stale' && why=ceph ; }
+        # Wait for the just-rebooted node's OSDs to rejoin before draining the
+        # next one -- an in-but-down OSD (num_in > num_up) means the prior node
+        # hasn't fully returned. Tolerates degraded/recovering (so ceph can
+        # upgrade); does NOT require active+clean.
+        [ -z "$why" ] && {
+            local _ndown=$($CEPH status -f json 2>/dev/null | jq -r '.osdmap | (.num_in_osds // 0) - (.num_up_osds // 0)' 2>/dev/null)
+            [ "${_ndown:-0}" -gt 0 ] 2>/dev/null && why=ceph-osd-down
+        }
 
         # FUNCTIONAL backends a live migration touches (NOT version-strict)
         [ -z "$why" ] && { $OPENSTACK compute service list --service nova-conductor -f value -c State 2>/dev/null | grep -qi up || why=nova-conductor ; }
