@@ -1343,10 +1343,8 @@ os_pre_failure_host_evacuation()
     # hostmonitor won't cold-evacuate (rebuild) it while it's deliberately down
     os_segment_host_maintenance "$host" True
 
-    # hand off the active cephfs MDS before the host goes down (symmetric with VM
-    # evacuation) -- a co-located mon dying would otherwise defer failover ~60s.
-    # Via $HEX_SDK so the sub-invocation sources sdk_ceph (this module runs under
-    # MOD=os, which does not source sdk_ceph -- a bare call is undefined).
+    # hand off the active MDS before the host goes down; via $HEX_SDK because
+    # MOD=os does not source sdk_ceph (a bare call is a silent no-op)
     $HEX_SDK ceph_mds_evacuate_host "$host"
     # Same reasoning for the OVN SB master: hand it over while this node is
     # still alive, so OVSDB clients get a clean close instead of a vanished VIP.
@@ -2611,10 +2609,8 @@ os_maintain_segment_hosts()
     done
 }
 
-# Put ONE segment host into masakari maintenance so a PLANNED reboot isn't treated
-# as a host failure (per-host analog of os_maintain_segment_hosts). Without this,
-# hostmonitor cold-evacuates (rebuilds) a deliberately-rebooting node -- a hard
-# kill that also leaves grastate seqno=-1 -> forced Galera SST.
+# put ONE segment host into masakari maintenance so a PLANNED reboot is not
+# cold-evacuated as a host failure
 os_segment_host_maintenance()   # $1=host  $2=True|False (default True)
 {
     local host=$1 flag=${2:-True}
@@ -2624,17 +2620,12 @@ os_segment_host_maintenance()   # $1=host  $2=True|False (default True)
     done
 }
 
-# 0 (uniform) only if every control node reports the same MariaDB major.minor --
-# the safe precondition to run mysql_upgrade (its system-table DDL replicates
-# cluster-wide). Firmware version (is_node_rolling_upgrade) is the wrong signal at
-# web-scale: Galera runs only on control, so storage/compute firmware skew must
-# NOT block, and control-tier version skew MUST block.
+# 0 (uniform) only if every control node reports the same MariaDB major.minor
+# -- the precondition for mysql_upgrade; a control-tier signal, not firmware
 os_mariadb_version_uniform()
 {
-    # Fail-safe: EVERY control node must be reachable AND report the same
-    # major.minor. An unreachable node is "unknown", not "absent" -- treating it
-    # as absent could report a mid-roll cluster as uniform and let mysql_upgrade
-    # replicate system-table DDL to a still-old member. Any miss => not uniform.
+    # fail-safe: every control node must be reachable AND matching;
+    # unreachable = unknown, any miss => not uniform
     local hosts h v vers=
     hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
     [ -n "$hosts" ] || return 1
@@ -2651,11 +2642,8 @@ os_mariadb_version_uniform()
 # nodes that don't support a newly-enabled flag).
 os_rabbitmq_version_uniform()
 {
-    # Fail-safe: EVERY control node must be reachable AND report the same
-    # major.minor. An unreachable node is "unknown", not "absent" -- treating it
-    # as absent could report a mid-roll cluster as uniform and enable feature
-    # flags the still-old node can't support, stranding it on rejoin. Any miss
-    # => not uniform. remote_run's is_sshable bounds each probe to ~3s.
+    # fail-safe: every control node must be reachable AND matching;
+    # unreachable = unknown, any miss => not uniform
     local hosts h v vers=
     hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
     [ -n "$hosts" ] || return 1

@@ -130,12 +130,9 @@ _health_fail_log()
         # those rounds would exhaust maxerr and, once the cluster comes ready, permanently
         # gate auto_repair off -- the count only resets on a passing check, which can't
         # happen without the repair. So increment (and attempt) only when ready.
-        #
-        # Same reasoning during a rolling restart/upgrade: nodes are deliberately
-        # down, so services legitimately read "down" and repairing them fights the
-        # roll (a nova-compute restart mid-drain fails the in-flight migration).
-        # The roll owns service state while it runs.
-        if cube_cluster_ready && ! is_node_rolling_upgrade ; then
+        # likewise during a roll: nodes are deliberately down and the roll owns
+        # service state; repairing fights it
+        if cube_cluster_ready && ! is_cluster_rolling ; then
             let "count = $count + 1"
             echo "failed count: $count" >> /var/log/health_${srv}_error.log
             echo $count > /tmp/health_${srv}_error.count
@@ -444,12 +441,9 @@ health_etcd_repair()
         # etcd is down on $node -- try a plain restart first.
         remote_systemd_restart $node etcd
 
-        # Escalate after repeated failures: a member down long enough falls outside
-        # the leader's compacted raft log and can NEVER catch up via restart -- it
-        # must be wiped and re-added. 'cubectl this-node reset' clears the local etcd
-        # data/config; 'join' does etcd member add + start (initial-cluster-state=
-        # existing). Guard hard: only a minority member, with quorum intact WITHOUT
-        # it, and only if the node is reachable.
+        # escalate after repeated failures: a member outside the compacted raft
+        # log can never catch up via restart -- wipe + re-add (reset && join).
+        # Only a minority member, quorum intact without it, node reachable.
         local cnt=$(( $(cat "$cntf" 2>/dev/null || echo 0) + 1 ))
         echo "$cnt" > "$cntf"
         if [ "$cnt" -ge 3 ] && [ "$total" -ge 3 ] && [ "$online" -ge $(( total / 2 + 1 )) ] \
@@ -573,10 +567,8 @@ health_hacluster_repair()
     local num_ctrl=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local last_ctrl=${CUBE_NODE_CONTROL_HOSTNAMES[$((num_ctrl - 1))]}
 
-    # Self-heal: an older repair path created a REVERSED 'vip with vaw' colocation
-    # (colocation-vip-vaw-INFINITY) that pins the VIP onto vaw and can strand it on
-    # every node. Remove it so the VIP places independently; 'vaw with vip' keeps
-    # vaw following the VIP.
+    # self-heal: remove the legacy REVERSED 'vip with vaw' colocation that pins
+    # the VIP onto vaw and can strand it on every node
     if pcs constraint --full 2>/dev/null | grep -q "colocation-vip-vaw-INFINITY" ; then
         pcs constraint delete colocation-vip-vaw-INFINITY >/dev/null 2>&1
         pcs resource cleanup vip >/dev/null 2>&1
@@ -589,7 +581,7 @@ health_hacluster_repair()
         fi
     done
 
-    if is_node_rolling_upgrade ; then
+    if is_cluster_rolling ; then
         echo 99 > /tmp/health_vip_error.count # disable auto repair
         echo 99 > /tmp/health_hacluster_error.count # disable auto repair
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -638,10 +630,8 @@ health_hacluster_repair()
             fi
         done
     elif [ $(cmd -cv "pcs status 2>/dev/null | grep \"vip.*St\"" | cut -d"|" -f3 | sort -u | wc -l) -gt 1 ] ; then
-        # Split VIP can be a transient during convergence (a node just (re)joined
-        # and the CIB is still re-settling). Skip the disruptive restart while
-        # pacemaker is mid-transition; a later check_repair pass handles it if the
-        # split is real.
+        # a split VIP can be transient while the CIB re-settles; skip the
+        # disruptive restart mid-transition (a later pass handles a real split)
         if ! $HEX_SDK pacemaker_settled ; then
             Log "hacluster: cluster mid-transition (DC not S_IDLE) - deferring VIP restart, likely transient"
             return 0
@@ -966,7 +956,7 @@ health_vip_repair()
         done
     fi
     # if first time setup not completed or cluster in rolling upgrade process, ensure master node has VIP
-    if [ ! -e /etc/appliance/state/configured ] || is_node_rolling_upgrade ; then
+    if [ ! -e /etc/appliance/state/configured ] || is_cluster_rolling ; then
         # Wait (<=60s) for stable all-online membership before moving the VIP.
         for _w in $(seq 1 12) ; do
             local _st=$(pcs status 2>/dev/null)

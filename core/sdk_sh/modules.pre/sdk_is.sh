@@ -196,10 +196,8 @@ is_sshable()
     return $ret
 }
 
-# Cluster-wide "a roll is in progress" marker. On cephfs so every node sees the
-# same answer and it survives an A/B partition switch. Set/cleared by the roll
-# brackets (ceph_enter_rolling/ceph_leave_rolling for upgrades, power_roll for
-# restarts) -- defined here in modules.pre so any module can call it.
+# cluster-wide roll marker on cephfs (survives the A/B switch); set/cleared by
+# the roll brackets -- in modules.pre so any module can call it
 CLUSTER_ROLLING_MARKER=${CLUSTER_ROLLING_MARKER:-/mnt/cephfs/.cluster_rolling}
 # Ignore a marker older than this: a roll that died without clearing it must not
 # disable auto-repair forever.
@@ -225,20 +223,24 @@ cluster_rolling_marker_active()
     [ "$age" -lt "$CLUSTER_ROLLING_MARKER_TTL" ]
 }
 
-is_node_rolling_upgrade()
+is_cluster_rolling()
 {
-    local ret=1
-    # Explicit marker: covers the whole roll, including the first node's drain --
-    # before any node has rebooted there is no firmware skew and the log says
-    # "evacuating", so neither heuristic below fires yet.
-    if cluster_rolling_marker_active ; then
-        ret=0
+    # the cephfs roll job is the authority; ask it first (also skips the
+    # ssh-fanout fallbacks below). "paused" does not count as rolling --
+    # _power_roll_pause clears the marker so background repair returns.
+    local _job=${ROLLING_JOB:-/mnt/cephfs/rolling/job.json}
+    if [ -r "$_job" ] ; then
+        [ "$(jq -r '.state // ""' "$_job" 2>/dev/null)" = "running" ] && return 0
+        return 1
     fi
+
+    # Fallbacks, used only when the job is unreadable -- i.e. cephfs is not
+    # mounted yet, early in boot. They can only add false positives (suppressing
+    # repair when no roll is running), never mask a roll that is.
+    local ret=1
+    [ -e ${ROLLING_RECOVER_MARKER:-/store/rolling_recover} ] && ret=0
     if cmd -v "cat /run/cube_bootstrap.log" | grep -q -e 'Rebooting' -e 'rolling upgrade' ; then
         $HEX_SDK cube_cluster_ready || ret=0
-    fi
-    if [ $(cmd -v "hex_cli -c firmware list | grep -i active" | cut -d"|" -f3 | cut -d" " -f2 | sort -u | sed "/^$/d" | wc -l) -gt 1 ] ; then
-        ret=0
     fi
 
     return $ret
