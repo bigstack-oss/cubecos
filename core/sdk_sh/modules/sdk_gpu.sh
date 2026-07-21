@@ -739,10 +739,30 @@ gpu_unset_current_type()
         # that handshake and the driver refuses it. sriov-manage -d also
         # clears each VF's vGPU type internally, so no separate cleanup
         # loop is needed here.
-        if ! $NVIDIA_SRIOV -d "$pci_addr"; then
-            echo "Error: failed to disable SR-IOV VFs on $pci_addr" >&2
-            exit 1
-        fi
+        #
+        # sriov-manage can transiently fail to obtain that unbindLock if
+        # another NVML client (e.g. cube-cos-api's GPU status API) holds the
+        # device open at that exact moment - retry briefly to absorb that
+        # race. A failure that isn't this specific message is not retried
+        # and fails immediately.
+        local attempt output rc
+        for attempt in 1 2 3 4 5; do
+            output=$($NVIDIA_SRIOV -d "$pci_addr" 2>&1)
+            rc=$?
+            if [ $rc -eq 0 ]; then
+                break
+            fi
+            if ! echo "$output" | grep -q "Cannot obtain unbindLock"; then
+                echo "Error: failed to disable SR-IOV VFs on $pci_addr: $output" >&2
+                exit 1
+            fi
+            if [ "$attempt" = "5" ]; then
+                echo "Error: failed to disable SR-IOV VFs on $pci_addr: unbindLock still busy after 5 attempts" >&2
+                exit 1
+            fi
+            echo "Warning: unbindLock busy for $pci_addr, retrying ($attempt/5)" >&2
+            sleep 1
+        done
     elif [ "$current_type" = "migBackedVgpu" ]; then
         if ! $NVIDIA_SMI -i "$gpu_id" -mig 0; then
             echo "Error: failed to disable MIG mode for GPU $gpu_id" >&2

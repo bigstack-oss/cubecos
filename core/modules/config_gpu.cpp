@@ -75,17 +75,57 @@ BuildVfAssignmentPlan(const json11::Json& profiles)
     return plan;
 }
 
-// Best-effort teardown after a failed apply: clear any vGPU types assigned
-// so far, then release the VFs, so no half-configured GPU is left behind.
-static void
-TeardownSriov(const std::string& sysfsAddr, size_t assignedVfs)
+// sriov-manage briefly requests the NVIDIA driver's unbindLock before
+// enabling/disabling VFs. If another NVML client (e.g. cube-cos-api's GPU
+// status API) happens to hold the device open at that exact moment, the
+// request is transiently refused with "Cannot obtain unbindLock" - retrying
+// briefly clears up that race. A failure that isn't this specific message
+// (bad address, driver unloaded, etc.) is not retried and fails immediately.
+static bool
+RunSriovManageWithRetry(const char* op, const std::string& sysfsAddr)
 {
-    for (size_t i = 0; i < assignedVfs; i++) {
-        WriteSysfs(std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr +
-                   "/virtfn" + std::to_string(i) + "/nvidia/current_vgpu_type", "0");
+    static const int MAX_ATTEMPTS = 5;
+
+    for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const std::string output = HexUtilPOpen(
+            "%s %s %s 2>&1; echo HEX_RC:$?", NVIDIA_SRIOV, op, sysfsAddr.c_str());
+
+        const size_t marker = output.rfind("HEX_RC:");
+        const int rc = (marker != std::string::npos) ? atoi(output.c_str() + marker + 7) : -1;
+
+        if (rc == 0) {
+            return true;
+        }
+
+        if (output.find("Cannot obtain unbindLock") == std::string::npos) {
+            HexLogError("gpu_resource_set: sriov-manage %s %s failed: %s",
+                        op, sysfsAddr.c_str(), output.c_str());
+            return false;
+        }
+
+        if (attempt == MAX_ATTEMPTS) {
+            HexLogError("gpu_resource_set: sriov-manage %s %s: unbindLock still busy after %d attempts",
+                        op, sysfsAddr.c_str(), MAX_ATTEMPTS);
+            return false;
+        }
+
+        HexLogWarning("gpu_resource_set: sriov-manage %s %s: unbindLock busy, retrying (%d/%d)",
+                       op, sysfsAddr.c_str(), attempt, MAX_ATTEMPTS);
+        sleep(1);
     }
 
-    WriteSysfs(std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr + "/sriov_numvfs", "0");
+    return false;
+}
+
+// Best-effort teardown after a failed apply: releases the VFs via
+// sriov-manage -d, which also clears each VF's current_vgpu_type
+// internally. A raw sysfs write to sriov_numvfs is rejected by the driver
+// unconditionally (confirmed on cn13 hardware) - disabling VFs must go
+// through sriov-manage's unbindLock handshake, same as enabling them.
+static void
+TeardownSriov(const std::string& sysfsAddr)
+{
+    RunSriovManageWithRetry("-d", sysfsAddr);
 }
 
 // Enables the PF's VFs and writes each requested profile id into that many
@@ -98,8 +138,7 @@ ApplySriovVgpu(const std::string& pciAddress, const json11::Json& profiles)
 {
     const std::string sysfsAddr = SysfsPciAddr(pciAddress);
 
-    if (HexUtilSystemF(0, 0, "%s -e %s", NVIDIA_SRIOV, sysfsAddr.c_str()) != 0) {
-        HexLogError("gpu_resource_set: failed to enable VFs on %s", sysfsAddr.c_str());
+    if (!RunSriovManageWithRetry("-e", sysfsAddr)) {
         return false;
     }
 
@@ -112,7 +151,7 @@ ApplySriovVgpu(const std::string& pciAddress, const json11::Json& profiles)
         if (!WriteSysfs(typePath, std::to_string(plan[vf]))) {
             HexLogError("gpu_resource_set: failed to set vGPU type %d on %s/virtfn%d",
                         plan[vf], sysfsAddr.c_str(), (int)vf);
-            TeardownSriov(sysfsAddr, vf);
+            TeardownSriov(sysfsAddr);
             return false;
         }
     }
