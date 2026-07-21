@@ -1138,6 +1138,15 @@ live_migration_gate()
             done
             [ "$tgt" -ge 1 ] || why=no-storage-ready-target
         }
+        # The SOURCE host must be able to perform the migrations. The target loop
+        # above skips $drain, so the gate could pass while the draining host's own
+        # nova-compute was down -- e.g. just restarted underneath us -- and the
+        # first migration then fails silently, stranding a VM. Wait for it; never
+        # restart it (restarting it is what caused that failure).
+        [ -z "$why" ] && [ "$drain" != "__none__" ] && {
+            $OPENSTACK compute service list --service nova-compute --host "$drain" -f value -c State 2>/dev/null \
+                | grep -qi up || why=drain-host-nova-down
+        }
         [ -z "$why" ] && { $OPENSTACK volume service list --service cinder-volume -f value -c State 2>/dev/null | grep -qi up || why=cinder-volume ; }
         [ -z "$why" ] && { $OPENSTACK network agent list -f value -c Alive 2>/dev/null | grep -qi true || why=neutron ; }
 

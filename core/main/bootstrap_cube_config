@@ -65,10 +65,37 @@ RollingEvacuateAndReboot()
             if [ "x$prev_n" = "x$T_net_hostname" ] ; then
                 n_role=$(cat $cluster_info | jq -r ".[] | select(.hostname == \"$N\") | .role")
                 n_ip=$(cat $cluster_info | jq -r ".[] | select(.hostname == \"$N\") | .ip.management")
-                n_nextactive=$(( `timeout 5 hex_sdk remote_run $n_ip "grub2-editenv list | grep next_entry | cut -d'=' -f2"` + 1 ))
-                n_lastboot="$(timeout 5 hex_sdk remote_run $n_ip hex_sdk firmware_get_info $n_nextactive | grep last_boot)"
-                n_fwver="$(timeout 5 hex_sdk remote_run $n_ip hex_sdk firmware_get_info $n_nextactive | grep firmware_version)"
-                fwver="$(hex_sdk firmware_get_info `hex_sdk firmware_get_active` | grep firmware_version)"
+                # Probe the successor. 5s was too tight for ssh+hex_sdk on a node
+                # that is itself still settling; an empty result made next_entry
+                # arithmetic yield slot 1 (the ACTIVE one), whose last_boot is a
+                # real timestamp -- so a slow probe read as "already done" and the
+                # roll stopped silently. Retry, then treat an unreadable successor
+                # as a pause, never as "nothing to do".
+                n_probe_rc=1
+                for _try in 1 2 3 ; do
+                    n_next_raw="$(timeout 20 hex_sdk remote_run $n_ip "grub2-editenv list | grep next_entry | cut -d'=' -f2" 2>/dev/null)"
+                    n_info="$(timeout 20 hex_sdk remote_run $n_ip hex_sdk firmware_get_info $(( ${n_next_raw:-0} + 1 )) 2>/dev/null)"
+                    [ -n "$n_next_raw" ] && [ -n "$n_info" ] && { n_probe_rc=0 ; break ; }
+                    sleep 5
+                done
+                if [ $n_probe_rc -ne 0 ] ; then
+                    msg="Auto rolling upgrade paused: cannot read firmware state of $N"
+                    hex_sdk remote_run $n_ip "echo -n \"$msg\" >$BOOTSTRAP_CUBE_LOG" 2>/dev/null
+                    echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
+                    hex_log_event -e RUG00001W "interface=system,host=$HOSTNAME,service=rolling_upgrade,node=$N"
+                    hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_leave_rolling"
+                    break
+                fi
+                n_nextactive=$(( ${n_next_raw:-0} + 1 ))
+                n_lastboot="$(echo "$n_info" | grep last_boot)"
+                # firmware_version is the marketing string ("Cube Appliance 3.1.10")
+                # and is identical across slots, so it cannot distinguish builds.
+                # The grub env carries the real identity (PART<n>TITLE=CUBE_..._<sha>).
+                n_fwver="$(timeout 20 hex_sdk remote_run $n_ip "grub2-editenv list | grep -E '^PART${n_nextactive}TITLE=' | cut -d'=' -f2" 2>/dev/null)"
+                fwver="$(grub2-editenv list 2>/dev/null | grep -E "^PART$(hex_sdk firmware_get_active)TITLE=" | cut -d'=' -f2)"
+                # Always record what the probe saw: the no-action branch used to be
+                # completely silent, so a roll that stopped here left no evidence.
+                logger -t rolling_upgrade "successor $N probe: slot=$n_nextactive last_boot='$n_lastboot' title='$n_fwver' mine='$fwver'"
                 if [ "x$n_lastboot" = "xlast_boot = Never" -a "x$n_fwver" = "x$fwver" ] ; then
                     upgrading=true
                     echo "Starting auto rolling upgrade" >> $BOOTSTRAP_CUBE_MODE
@@ -93,7 +120,11 @@ RollingEvacuateAndReboot()
                         break
                     fi
                     if [ "x$n_role" = "xcontrol-converged" -o "x$n_role" = "xedge-core" -o "x$n_role" = "xcompute" ] ; then
-                        msg="Evacuating VMs on $N"
+                        # Wording matters: is_node_rolling_upgrade greps this log for
+                        # 'rolling upgrade'/'Rebooting'. The drain is the longest phase
+                        # (minutes), so without the prefix the cluster reads as "not
+                        # rolling" for its whole duration.
+                        msg="rolling upgrade: evacuating VMs on $N"
                         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                         hex_log_event -e RUG00002I "interface=system,host=$HOSTNAME,service=rolling_upgrade,node=$N"
                         if ! hex_sdk remote_run $MASTER_CONTROL "hex_sdk os_pre_failure_host_evacuation_sequential $N upgrade" ; then

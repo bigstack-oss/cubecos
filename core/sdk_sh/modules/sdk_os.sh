@@ -1373,14 +1373,16 @@ os_pre_failure_host_evacuation_sequential()
     # hostmonitor doesn't cold-evacuate it while it's deliberately down
     os_segment_host_maintenance "$from_host" True
 
-    local server_list_array=( $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i 'active running' | cut -d' ' -f1) )
+    # Only the VMs on the host being drained. os_nova_list is cluster-wide, so
+    # this used to migrate every VM in the cluster on every drain.
+    local server_list_array=( $($OPENSTACK server list --host "$from_host" --all-projects --status ACTIVE -f value -c ID 2>/dev/null) )
     local host_array=($(cubectl node -r compute list -j | jq -r .[].hostname | grep -v $from_host))
     local num_host=${#host_array[@]}
     local srv_cnt=${#server_list_array[@]}
     local cnt=0
 
     # Event marks the step; per-VM log_info/log_error lines below carry the detail.
-    local _t0=$(date +%s) _failed=0
+    local _t0=$(date +%s) _failed=0 _drain_ok=true _errleft=0
     log_info "rolling_upgrade drain: starting on $from_host ($srv_cnt VMs, $num_host targets)"
     /usr/sbin/hex_log_event -e CLU00007I "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=drain_start,total=$srv_cnt,targets=$num_host"
 
@@ -1393,11 +1395,20 @@ os_pre_failure_host_evacuation_sequential()
         old_host=$(echo $old_state_json | jq -r .hypervisor_hostname)
         old_status=$(echo $old_state_json | jq -r .status)
         old_power=$(echo $old_state_json | jq -r .power_state)
-        success=true
         local _tsb=$($MYSQL -u root -N -D nova -e "SELECT task_state FROM instances WHERE uuid='$sid'" 2>/dev/null)
+        local _lmerr _att _pw
+        # nova accepts live-migration asynchronously, so a conductor failure lands
+        # after the request succeeded. Retry once when that leaves a spurious ERROR.
+        for _att in 1 2 ; do
+        success=true
+        if [ $_att -gt 1 ] ; then
+            log_info "rolling_upgrade drain: $sid left in ERROR by attempt $((_att-1)) but still running; resetting state and retrying"
+            /usr/sbin/hex_log_event -e CLU00006W "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=migrate_retry,vm=$sid,phase=async,attempt=$_att,target=$to_host"
+            Quiet -n nova reset-state --active $sid
+            sleep 10
+        fi
         echo "migrating $sid($old_status) from $from_host to $to_host"
         log_info "rolling_upgrade drain: migrating $sid from $from_host to $to_host (task_state_before=${_tsb:-None})"
-        local _lmerr
         if ! _lmerr=$(nova live-migration $sid $to_host 2>&1) ; then
             _failed=$((_failed+1))
             log_error "rolling_upgrade drain: live-migration of $sid ($from_host -> $to_host) REJECTED (task_state=${_tsb:-None}): ${_lmerr//$'\n'/ }"
@@ -1427,19 +1438,52 @@ os_pre_failure_host_evacuation_sequential()
                 [ "x$new_status" = "xERROR" -o "x$new_host" != "x$to_host" ] && success=false
             fi
         done
+        [ "x$success" = "xtrue" ] && break
+        # Retry only the spurious case: nova says ERROR but the domain never
+        # stopped. Anything else is a real failure -- leave it for the caller.
+        new_status=$($OPENSTACK server show $sid -f value -c status 2>/dev/null)
+        _pw=$($OPENSTACK server show $sid -f value -c OS-EXT-STS:power_state 2>/dev/null)
+        [ "x$new_status" = "xERROR" -a "x$old_status" = "xACTIVE" -a "x$_pw" = "xRunning" ] || break
+        done
+        if [ "x$success" != "xtrue" ] ; then
+            _drain_ok=false
+            [ "x$($OPENSTACK server show $sid -f value -c status 2>/dev/null)" = "xERROR" ] && _errleft=$((_errleft+1))
+        fi
     done
 
     # Verify the host is actually empty. A migration that never converged must
     # NOT be reported as success, and the relay must not reboot a non-empty host.
     local _remain=$($OPENSTACK server list --all-projects --host "$from_host" -f value -c ID 2>/dev/null | grep -c .)
-    log_info "rolling_upgrade drain: $from_host done in $(( $(date +%s) - _t0 ))s ($srv_cnt VMs, rejected=$_failed, remaining=$_remain)"
-    /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=drain_done,total=$srv_cnt,rejected=$_failed,remaining=$_remain,elapsed=$(( $(date +%s) - _t0 ))"
+    log_info "rolling_upgrade drain: $from_host done in $(( $(date +%s) - _t0 ))s ($srv_cnt VMs, rejected=$_failed, error_left=$_errleft, remaining=$_remain)"
+    /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=drain_done,total=$srv_cnt,rejected=$_failed,error_left=$_errleft,remaining=$_remain,elapsed=$(( $(date +%s) - _t0 ))"
     if [ "${_remain:-0}" -gt 0 ] ; then
         log_error "rolling_upgrade drain: $from_host NOT fully evacuated -- $_remain VM(s) remain; refusing to signal success"
+        _os_drain_release "$from_host"
         return 1
     fi
-    [ "x$success" = "xtrue" ] && return 0
+    # A VM this drain left in ERROR is off the host but broken -- $_remain cannot
+    # see it, so fail explicitly rather than let the relay reboot on a clean count.
+    if [ "${_errleft:-0}" -gt 0 ] ; then
+        log_error "rolling_upgrade drain: $from_host evacuated but $_errleft VM(s) left in ERROR; refusing to signal success"
+        _os_drain_release "$from_host"
+        return 1
+    fi
+    [ "x$_drain_ok" = "xtrue" ] && return 0
+    _os_drain_release "$from_host"
     return 1
+}
+
+# Undo the drain-side state when the drain FAILS and the host therefore stays up.
+# Only on the abort paths: on success the host is about to reboot, and masakari
+# maintenance must stay set so hostmonitor doesn't cold-evacuate a node that is
+# deliberately down. Left set, it silently removes the node from HA protection
+# and keeps nova from scheduling to it.
+_os_drain_release()
+{
+    local host=$1
+    os_segment_host_maintenance "$host" False
+    Quiet -n $OPENSTACK compute service set --enable "$host" nova-compute
+    log_info "rolling drain: released $host (maintenance off, nova-compute enabled) after failed drain"
 }
 
 os_cinder_volume_service_remove()
