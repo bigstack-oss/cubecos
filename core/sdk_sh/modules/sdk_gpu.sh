@@ -722,16 +722,32 @@ gpu_unset_current_type()
     if [ "$current_type" = "sriovVgpu" ]; then
         local pci_bus_id
         pci_bus_id=$($NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null)
-        
-        # nvidia-smi uses 8-char domain (00000000:bb:ss.f); sysfs uses 4-char (0000:bb:ss.f)
+
+        # nvidia-smi uses 8-char domain (00000000:bb:ss.f); sysfs uses 4-char
+        # lowercase (0000:bb:ss.f) - the uppercase hex nvidia-smi reports
+        # doesn't match the (lowercase) sysfs directory name.
         local pci_addr
-        pci_addr=$(echo "$pci_bus_id" | sed 's/^[0-9a-fA-F]\{4\}//')
-        local numvfs_path="/sys/bus/pci/devices/${pci_addr}/sriov_numvfs"
+        pci_addr=$(echo "$pci_bus_id" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+        local pf_dir="/sys/bus/pci/devices/${pci_addr}"
+        local numvfs_path="${pf_dir}/sriov_numvfs"
         if [ ! -f "$numvfs_path" ]; then
             echo "Error: sriov_numvfs not found at $numvfs_path" >&2
             exit 1
         fi
-        echo 0 > "$numvfs_path"
+
+        # Each VF's vGPU type must be cleared before sriov_numvfs can be
+        # zeroed - the driver rejects the numvfs write otherwise (confirmed
+        # on cn13 hardware: leaves the PF with no driver bound if skipped).
+        # Mirrors TeardownSriov's teardown order in config_gpu.cpp.
+        local vf_dir
+        for vf_dir in "${pf_dir}"/virtfn*; do
+            [ -e "${vf_dir}/nvidia/current_vgpu_type" ] && echo 0 > "${vf_dir}/nvidia/current_vgpu_type" 2>/dev/null
+        done
+
+        if ! echo 0 > "$numvfs_path"; then
+            echo "Error: failed to zero sriov_numvfs at $numvfs_path" >&2
+            exit 1
+        fi
     elif [ "$current_type" = "migBackedVgpu" ]; then
         if ! $NVIDIA_SMI -i "$gpu_id" -mig 0; then
             echo "Error: failed to disable MIG mode for GPU $gpu_id" >&2
