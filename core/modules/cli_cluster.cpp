@@ -655,6 +655,10 @@ ClusterPoweroffMain(int argc, const char** argv)
     GetIpList(cfg[GLOBAL_SEC]["control"], &iplist);
     masterctl = iplist[0];
 
+    // Record running VMs up front, while the API is healthy -- the per-host stop
+    // below can't reliably do it mid-teardown (see power_record_running_vms).
+    HexSystemF(0, "ssh root@%s '%s power_record_running_vms'", masterctl.c_str(), HEX_SDK);
+
     for (auto& ip : reverse(iplist)) {
         CliPrintf("mark control host %s down", ip.c_str());
         HexSystemF(0, "ssh root@%s '%s cube_cluster_stop' 2>/dev/null", ip.c_str(), HEX_SDK);
@@ -688,6 +692,10 @@ ClusterPowercycleMain(int argc, const char** argv)
     LoadMap(&cfg);
     GetIpList(cfg[GLOBAL_SEC]["control"], &iplist);
     masterctl = iplist[0];
+
+    // Record running VMs up front, while the API is healthy -- the per-host stop
+    // below can't reliably do it mid-teardown (see power_record_running_vms).
+    HexSystemF(0, "ssh root@%s '%s power_record_running_vms'", masterctl.c_str(), HEX_SDK);
 
     for (auto& ip : reverse(iplist)) {
         CliPrintf("mark control host %s down", ip.c_str());

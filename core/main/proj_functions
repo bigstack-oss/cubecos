@@ -378,19 +378,15 @@ cube_cluster_start_cluster_if_master()
 
 cube_cluster_stop()
 {
-    # Cleanly stop running VMs before nodes go down, recording each "stopped" to the
-    # shared cephfs record; power_restore_recorded_vms restarts them at boot-end.
-    # Gate on nova being queryable, NOT health_ceph_mds_check (can fail mid-shutdown
-    # and silently skip the snapshot).
+    # Cleanly stop running VMs before nodes go down. The restore record is written
+    # up front by power_record_running_vms (called by the poweroff/powercycle CLI);
+    # this just stops whatever is still running so the reboot does not hard-kill it.
     local _vm _i _active
     _active=$($HEX_SDK os_nova_list id status powerstate 2>/dev/null | grep -i 'active running' | cut -d' ' -f1)
-    if [ -n "$_active" ] && mountpoint -q /mnt/cephfs ; then
-        mkdir -p $CEPHFS_NOVA_DIR/instances
-        : > $CLUSTER_ACTIVE_RUNNING
+    if [ -n "$_active" ] ; then
         for _vm in $_active ; do
             [ "$($OPENSTACK server show "$_vm" -f value -c status 2>/dev/null)" = ERROR ] && os_nova_instance_reset "$_vm"
             $OPENSTACK server stop "$_vm" >/dev/null 2>&1
-            echo "$_vm stopped" >> $CLUSTER_ACTIVE_RUNNING
         done
         # bounded wait for guests to reach SHUTOFF so the reboot does not hard-kill them
         for _i in $(seq 1 20) ; do

@@ -743,8 +743,30 @@ power_vm_resume_async()
 }
 
 # Shared cephfs record of VMs running before a cluster poweroff/powercycle, written
-# by cube_cluster_stop so the master can read it regardless of which node wrote it.
+# up front by power_record_running_vms so the master can read it at boot-end.
 CLUSTER_ACTIVE_RUNNING=$CEPHFS_NOVA_DIR/instances/active_running
+
+# Record the running VMs for boot-end restore, up front and before any teardown --
+# where the API is healthy and reliably lists every VM. Recording reactively inside
+# the per-host cube_cluster_stop (during shutdown, under API load) let the nova query
+# blip empty and silently skip the record, leaving power_restore_recorded_vms nothing
+# to restore. Retry the query and write atomically so a transient miss can't lose it.
+power_record_running_vms()
+{
+    is_control_node || return 0
+    mountpoint -q /mnt/cephfs || return 0
+    local _active _try _vm
+    for _try in 1 2 3 4 5 ; do
+        _active=$($HEX_SDK os_nova_list id status powerstate 2>/dev/null | grep -i 'active running' | cut -d' ' -f1)
+        [ -n "$_active" ] && break
+        sleep 3
+    done
+    [ -n "$_active" ] || return 0
+    mkdir -p "$CEPHFS_NOVA_DIR/instances"
+    : > "$CLUSTER_ACTIVE_RUNNING.tmp"
+    for _vm in $_active ; do echo "$_vm stopped" >> "$CLUSTER_ACTIVE_RUNNING.tmp" ; done
+    mv -f "$CLUSTER_ACTIVE_RUNNING.tmp" "$CLUSTER_ACTIVE_RUNNING"
+}
 
 # Restore recorded VMs to their prior running state. Must run from the boot-end
 # check_repair (after nova/cinder/ceph and cephfs have recovered). Idempotent: skips
@@ -832,13 +854,21 @@ power_drain_host()
     while [ ${#pending[@]} -gt 0 ] || [ ${#started[@]} -gt 0 ] ; do
         while [ ${#started[@]} -lt "$maxconc" ] && [ ${#pending[@]} -gt 0 ] ; do
             sid=${pending[0]} ; pending=("${pending[@]:1}")
-            if nova live-migration "$sid" 2>/dev/null ; then
+            # Retry a rejected request (transient "no valid host" is common under
+            # burst); capture the error to the log instead of swallowing it.
+            local _mtry _merr _mok=0
+            for _mtry in 1 2 3 ; do
+                if _merr=$(nova live-migration "$sid" 2>&1) ; then _mok=1 ; break ; fi
+                echo "$(date +%s) migrate-retry $sid attempt=$_mtry: ${_merr//$'\n'/ }" >> "$tlog"
+                sleep 5
+            done
+            if [ "$_mok" = 1 ] ; then
                 started[$sid]=$(date +%s)
                 echo "${started[$sid]} start $sid (inflight ${#started[@]}/${maxconc})" >> "$tlog"
                 echo "migrating $sid off $from_host"
             else
-                stuck+=("$sid")   # request rejected (e.g. no valid host)
-                echo "$(date +%s) reject $sid" >> "$tlog"
+                stuck+=("$sid")   # rejected after retries -- reason logged above
+                echo "$(date +%s) reject $sid (after 3 attempts): ${_merr//$'\n'/ }" >> "$tlog"
             fi
         done
         sleep 5
