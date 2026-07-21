@@ -42,6 +42,7 @@ BSP00008W: boot-end check_repair skipped, cluster not ready
 BSP00009I: auto bootstrap disabled
 BSP00010I: waiting for upstream node to finish bootstrapping
 BSP00011I: instance restored on boot
+BSP00012I: stale ERROR instance reset to active
 
 RUG00001W: rolling upgrade paused, live-migration path not ready
 RUG00002I: evacuating instances for rolling upgrade

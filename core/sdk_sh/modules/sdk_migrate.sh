@@ -196,7 +196,7 @@ migrate_nova_db_post()
         mkdir -p ${CEPHFS_NOVA_DIR}/instances
         chown -R nova:nova ${CEPHFS_NOVA_DIR}
         chmod -R 0755 ${CEPHFS_NOVA_DIR}
-        find /mnt/target/var/lib/nova/instances/* -maxdepth 1 -type d | grep -v -e locks -e compute_nodes -e _base | xargs -i cp -rpf {} /mnt/cephfs/nova/instances/
+        find /mnt/target/var/lib/nova/instances/* -maxdepth 1 -type d | grep -v -e locks -e compute_nodes -e _base | xargs -i cp -rpf {} /var/lib/nova/instances/
     fi
 
     if [ -f $STATE_DIR/nova_db_post_migrated ] ; then

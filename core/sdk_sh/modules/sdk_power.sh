@@ -17,10 +17,8 @@
 
 ROLLING_DIR=/mnt/cephfs/rolling
 ROLLING_JOB=$ROLLING_DIR/job.json
-# Local "this boot belongs to a roll" marker. MUST live on /store, not on / --
-# the root filesystem is the A/B slot, so a marker written there is invisible
-# after an upgrade boots the other slot. /store is a separate partition and
-# survives the swap, and unlike cephfs it is readable before cluster bring-up.
+# local roll marker on /store: / is the A/B slot (invisible after an upgrade
+# boots the other slot) and cephfs is not readable this early
 ROLLING_RECOVER_MARKER=${ROLLING_RECOVER_MARKER:-/store/rolling_recover}
 
 # Locked read-modify-write of the shared job.json, retried across a cephfs/MDS
@@ -48,6 +46,25 @@ _power_roll_set_raw() { _power_roll_write --argjson v "$2" ".$1=\$v" ; }
 # Kind of the roll currently described by job.json ("restart"/"upgrade"), for
 # shared log lines and events that must name the right operation.
 _power_roll_kind() { jq -r '.kind // "restart"' $ROLLING_JOB 2>/dev/null || echo restart ; }
+
+# resolve the dispatch node via the cluster VIP: a static first-node pick keeps
+# addressing exactly the host an upgrade reboots first
+_power_roll_master()
+{
+    local _vip _h=""
+
+    source hex_tuning $SETTINGS_TXT cubesys.control.vip
+    _vip=$T_cubesys_control_vip
+    if [ "x$_vip" = "x" ] ; then
+        # non-HA: no VIP, the controller is the only control node
+        source hex_tuning $SETTINGS_TXT cubesys.controller.ip
+        _vip=$T_cubesys_controller_ip
+    fi
+
+    [ -n "$_vip" ] && _h=$(remote_run "$_vip" "hostname" </dev/null 2>/dev/null | tr -d ' \r\n')
+    [ -n "$_h" ] && { echo "$_h" ; return 0 ; }
+    cubectl node list | head -n1 | awk -F',' '{print $1}'
+}
 
 _power_roll_set_node_status()
 {
@@ -156,7 +173,7 @@ _power_roll_kick()
     local host=$1
     local role=$(jq -r --arg h "$host" '.nodes[]|select(.hostname==$h)|.role' $ROLLING_JOB)
     local ip=$(jq -r --arg h "$host" '.nodes[]|select(.hostname==$h)|.ip' $ROLLING_JOB)
-    local master=$(cubectl node list | head -n1 | awk -F',' '{print $1}')
+    local master=$(_power_roll_master)
 
     # Never take a second node down while another is still away.
     if ! $HEX_SDK cube_cluster_ready ; then
@@ -194,22 +211,21 @@ _power_roll_kick()
     fi
 
     echo "rebooting $host"
-    # A node kicking ITSELF (upgrade order puts the master first, and the roll is
-    # usually started there) is killed by the reboot below, so it can never reach
-    # the status flip after the wait-for-down loop. Set it up front in that case.
-    [ "x$host" = "x$HOSTNAME" ] && _power_roll_set_node_status "$host" rebooting
+    # write "rebooting" BEFORE the reboot for every host: losing the
+    # orchestrator after a late write wedges the job on "draining"
+    _power_roll_set_node_status "$host" rebooting
     # Drop a local marker so the node's boot path waits for the cluster to be
     # ready (single-node ceph recovery can take ~20 min) before running the VM
     # restore + relay advance, instead of checking once early and skipping.
     ssh root@$ip "touch $ROLLING_RECOVER_MARKER ; echo YES | hex_cli -c reboot" >/dev/null 2>&1
-    # Wait (bounded) for the node to drop off the network before flipping to
-    # "rebooting", so the reachability-based "bootstrapping" inference can't misfire.
+    # Bounded wait for the node to drop off the network. Status is already
+    # "rebooting"; this only paces the relay so the reachability-based
+    # "bootstrapping" inference can't misfire while the node is still answering.
     local _i
     for _i in $(seq 1 120) ; do
         ping -c1 -W2 "$ip" >/dev/null 2>&1 || break
         sleep 2
     done
-    _power_roll_set_node_status "$host" rebooting
     return 0
 }
 
@@ -250,14 +266,11 @@ _power_capacity_fits_elsewhere()
 
 power_roll_plan()
 {
-    # Dry run: print the roll plan -- node order and, per VM, what would happen
-    # (live-migrate vs pause+restore) -- and change nothing. Takes the kind so it
-    # mirrors power_roll_start's ordering exactly; a plan that showed a different
-    # order than the roll will use would make the operator's confirmation
-    # meaningless.
+    # dry run: print node order + per-VM action, change nothing; takes the kind
+    # so the plan mirrors power_roll_start's ordering exactly
     local kind=${1:-restart} ; shift 2>/dev/null
     local want="$*"
-    local master=$(cubectl node list | head -n1 | awk -F',' '{print $1}')
+    local master=$(_power_roll_master)
     local ncompute=$(cubectl node -r compute list -j | jq -r '.[].hostname' | grep -c .)
     local nonmig=$(_power_nonmigratable_vms)       # one DB query: passthrough VMs
     local cap=$(_power_host_free_capacity)         # one DB query: per-host free ram/vcpu
@@ -473,12 +486,9 @@ _power_roll_stage_all()
 }
 
 # power_roll_start <kind> [<host>... | <pkg>]
-#   restart : reboot each node into the SAME slot. Args are optional targets.
-#   upgrade : stage <pkg> into every node's inactive slot first, then run the
-#             identical roll -- hex_install points next_entry at the new slot,
-#             so the ordinary reboot below boots the upgraded firmware. The
-#             drain, gates, evacuation, resume and status paths are shared;
-#             staging is the only step an upgrade adds.
+#   restart : reboot each node into the SAME slot (optional host targets)
+#   upgrade : stage <pkg> into every inactive slot, then the identical roll --
+#             staging is the only step an upgrade adds
 power_roll_start()
 {
     local kind=${1:-restart} ; shift 2>/dev/null
@@ -524,13 +534,10 @@ power_roll_start()
         local want="$*"
 
         # Order: compute -> storage -> control, with the master control node last.
-        local master=$(cubectl node list | head -n1 | awk -F',' '{print $1}')
-        # Node order differs by kind, deliberately:
-        #   restart : compute -> storage -> control, master LAST. Keep the control
-        #             plane (VIP, OVN SB, DB) up as long as possible.
-        #   upgrade : master FIRST -> control -> storage -> compute. Per spike:
-        #             get the control plane onto the new firmware up front so the
-        #             mixed-version window across it is as short as possible.
+        local master=$(_power_roll_master)
+        # order differs by kind: restart = compute->storage->control, master
+        # LAST (control plane up longest); upgrade = master FIRST (shortest
+        # mixed-version window)
         local nodes=$(cubectl node list -j | jq -c --arg m "$master" --arg want "$want" --arg kind "$kind" '
             ($want | split(" ") | map(select(length > 0))) as $sel
             | [ .[]
@@ -585,11 +592,8 @@ power_roll_start()
 # reboot, whereas /run and the A/B root partition do not.
 power_roll_kind_active()
 {
-    # cephfs may not be mounted this early. Fall back to the local kick marker,
-    # which is always readable: it cannot name the kind, but "some roll is in
-    # progress" is what every caller actually branches on. Guessing "no roll"
-    # here would run the full cluster check on a node whose MDS is still
-    # settling -- the exact thing the roll path skips it to avoid.
+    # cephfs may not be mounted this early; fall back to the local kick marker
+    # -- guessing "no roll" would run the full cluster check on a settling MDS
     if [ ! -r "$ROLLING_JOB" ] ; then
         [ -e $ROLLING_RECOVER_MARKER ] && echo restart
         return 0
@@ -608,13 +612,13 @@ power_roll_advance()
     [ -e "$ROLLING_JOB" ] || return 0
     [ "$(jq -r .state $ROLLING_JOB 2>/dev/null)" = "running" ] || return 0
 
-    local master=$(cubectl node list | head -n1 | awk -F',' '{print $1}')
+    local master=$(_power_roll_master)
     local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB)
 
     if [ -n "$inflight" ] && [ "x$inflight" = "x$booted" ] ; then
         # Restore the VMs this node suspended/stopped for its reboot (downtime
         # acknowledged at confirm time). Dispatch to the master (holds creds).
-        local arun="$CEPHFS_NOVA_DIR/instances/active_running" vm disp
+        local arun="$CLUSTER_ACTIVE_RUNNING" vm disp
         if [ -s "$arun" ] ; then
             while read -r vm disp _ ; do
                 [ -z "$vm" ] && continue
@@ -628,10 +632,16 @@ power_roll_advance()
         esac
         _power_roll_set_node_num "$booted" finished $(date +%s)
         _power_roll_set_node_status "$booted" done
+        # reconcile as each node lands (a drain that lost its orchestrator never
+        # reaches roll end); only VMs with a running domain are reset
+        Quiet -n $HEX_SDK power_vm_reconcile_error_state "$booted"
         # Consume the local kick marker. It is what the early boot path (before
         # cephfs is up) uses to know this boot belongs to a roll; left behind it
         # would make every later boot look like one.
         rm -f $ROLLING_RECOVER_MARKER
+        # Same reasoning for the drain record: stale, it would scope the next
+        # roll's reconcile against VMs this roll moved.
+        rm -f "${ROLLING_DIR:-/tmp}/.drained.${booted}"
         _power_roll_set_str inflight ""
     fi
 
@@ -753,11 +763,8 @@ power_roll_status_json()
                 | (($state == "paused") and (.hostname == $inf)) as $failed
                 | (.vms_total // 0) as $vt
                 | (.vms_done // 0) as $vd
-                # $phase is what the UI DISPLAYS: keep it identical to the words
-                # "cluster rolling_update status" prints, so the two views never
-                # disagree about what a node is doing. The one addition is
-                # "bootstrapping", which the CLI infers the same way (an inflight
-                # node that answers ping is past the reboot).
+                # $phase is what the UI displays -- keep it identical to the CLI
+                # status words ("bootstrapping" is inferred the same way)
                 | (if (.status == "rebooting" and .hostname == $inf and $boot == "1") then "bootstrapping"
                    else (.status // "pending") end) as $phase
                 # $current keeps the API's own vocabulary -- the UI's completion
@@ -827,10 +834,8 @@ power_roll_decision()
             [ -n "$inflight" ] && Quiet -n $OPENSTACK compute service set --enable "$inflight" nova-compute
             _power_roll_set_str inflight ""
             _power_roll_set_str state aborted
-            # Release the cluster-wide guards the roll took. Without this an
-            # abort leaves background auto-repair stood down (until the marker
-            # TTL) and mon_osd_down_out_interval pinned at 3600 -- the roll is
-            # over, so neither should outlive it.
+            # release the guards the roll took (auto-repair standdown marker,
+            # mon_osd_down_out_interval) -- neither should outlive the roll
             cluster_rolling_marker_clear
             Quiet -n $HEX_SDK ceph_leave_rolling
             echo "rolling $(_power_roll_kind) aborted"
@@ -902,9 +907,66 @@ power_vm_resume_async()
     done
 }
 
+# reset nova-ERROR VMs whose domain is actually running on the recorded host
+# (stale records from a killed orchestrator); anything else is logged for a human
+power_vm_reconcile_error_state()
+{
+    local scope_host=${1:-} dryrun=${2:-} _id _host _running _state _reset=0 _real=0 _skip=0
+
+    local _errs=$($OPENSTACK server list --all-projects --status ERROR \
+                    -f value -c ID -c Host 2>/dev/null)
+    [ -z "$_errs" ] && return 0
+
+    # Scope to the VMs the named host's drain actually moved. Without a drain
+    # record there is nothing attributable to this node, so do nothing rather
+    # than fall back to touching every ERROR VM in the cluster.
+    if [ -n "$scope_host" ] ; then
+        local _drained="${ROLLING_DIR:-/tmp}/.drained.${scope_host}"
+        if [ ! -s "$_drained" ] ; then
+            log_info "vm_reconcile: no drain record for $scope_host, nothing to reconcile"
+            return 0
+        fi
+        _errs=$(echo "$_errs" | grep -Ff <(cut -d' ' -f1 "$_drained") - 2>/dev/null)
+        [ -z "$_errs" ] && return 0
+    fi
+
+    # uuid<space>host for every running domain, gathered once per compute node
+    _running=$(for _h in $(cubectl node list -r compute -j 2>/dev/null | jq -r '.[].hostname' 2>/dev/null) ; do
+                   remote_run "$_h" "virsh list --uuid --state-running 2>/dev/null" </dev/null \
+                     | grep -oE '[0-9a-f-]{36}' | sed "s/\$/ $_h/"
+               done)
+
+    while read -r _id _host ; do
+        [ -z "$_id" ] && continue
+        _state=$(echo "$_running" | awk -v i="$_id" '$1==i{print $2}')
+        if [ -z "$_state" ] ; then
+            log_warning "vm_reconcile: $_id ERROR and no running domain -- real failure, left alone"
+            _real=$((_real+1))
+        elif [ "x$_state" != "x$_host" ] ; then
+            log_warning "vm_reconcile: $_id running on $_state but nova says $_host -- left alone"
+            _skip=$((_skip+1))
+        elif [ -n "$dryrun" ] ; then
+            log_info "vm_reconcile: would reset $_id (running on $_state, stale ERROR)"
+            _reset=$((_reset+1))
+        else
+            if Quiet -n $OPENSTACK server set --state active "$_id" ; then
+                log_info "vm_reconcile: reset $_id to active (domain running on $_state)"
+                hex_log_event -e BSP00012I "interface=system,host=$HOSTNAME,service=power,vm=$_id"
+                _reset=$((_reset+1))
+            else
+                log_warning "vm_reconcile: reset failed for $_id"
+            fi
+        fi
+    done <<< "$_errs"
+
+    log_info "vm_reconcile: $_reset stale, $_real real failure(s), $_skip host-mismatch"
+    return 0
+}
+
 # Shared cephfs record of VMs running before a cluster poweroff/powercycle, written
 # up front by power_record_running_vms so the master can read it at boot-end.
-CLUSTER_ACTIVE_RUNNING=$CEPHFS_NOVA_DIR/instances/active_running
+# Lives with the roll job, not under nova/instances -- instances_path is local now.
+CLUSTER_ACTIVE_RUNNING=$ROLLING_DIR/active_running
 
 # Record the running VMs for boot-end restore, up front and before any teardown --
 # where the API is healthy and reliably lists every VM. Recording reactively inside
@@ -1005,7 +1067,7 @@ power_drain_host()
     local tlog=${ROLLING_DIR:-/tmp}/drain_timing.${from_host}.log
     : > "$tlog"
 
-    local arun="$CEPHFS_NOVA_DIR/instances/active_running" disp
+    local arun="$CLUSTER_ACTIVE_RUNNING" disp
     mkdir -p "$(dirname "$arun")" ; : > "$arun"
 
     # Partition: non-migratable VMs are suspended + recorded for restore on boot
@@ -1042,6 +1104,9 @@ power_drain_host()
     fi
 
     # Event marks the step; the per-VM log_info/log_error lines below carry the detail.
+    # The VMs this drain touches. Recorded up front so the post-boot reconcile can
+    # scope itself to them instead of every ERROR VM in the cluster.
+    [ ${#server_list_array[@]} -gt 0 ] && printf '%s\n' "${server_list_array[@]}" > "${ROLLING_DIR:-/tmp}/.drained.${from_host}"
     local _t0=$(date +%s) _nmig=$(( ${#server_list_array[@]} - ${#pending[@]} )) _migrated=0
     log_info "rolling_$_kind drain: starting on $from_host (${#server_list_array[@]} VMs: ${#pending[@]} migratable, $_nmig suspend+restore, maxconc=$maxconc)"
     /usr/sbin/hex_log_event -e CLU00007I "interface=system,host=$from_host,category=cluster,sub=rolling_$_kind,action=drain_start,total=${#server_list_array[@]},migratable=${#pending[@]},nonmigratable=$_nmig"
@@ -1136,7 +1201,7 @@ power_node_evacuate()
     local others=$(cubectl node -r compute list -j | jq -r '.[].hostname' | grep -v "^$host$" | grep -c .)
     if [ "$others" -eq 0 ] ; then
         mkdir -p $CEPHFS_NOVA_DIR/instances
-        $OPENSTACK server list --host "$host" --all-projects --status ACTIVE -f value -c ID > $CEPHFS_NOVA_DIR/instances/active_running
+        $OPENSTACK server list --host "$host" --all-projects --status ACTIVE -f value -c ID > $CLUSTER_ACTIVE_RUNNING
         return 0
     fi
 

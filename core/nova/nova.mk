@@ -35,4 +35,5 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /var/lib/nova/instances
-	$(Q)chroot $(ROOTDIR) ln -sf /mnt/cephfs/nova/instances /var/lib/nova/instances
+	$(Q)chroot $(ROOTDIR) mkdir -p /var/lib/nova/instances
+	$(Q)chroot $(ROOTDIR) chown nova:nova /var/lib/nova/instances

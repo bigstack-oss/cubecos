@@ -42,10 +42,8 @@ BootstrapAndClusterstart()
     fi
 }
 
-# A non-zero bootstrap must NOT let the script march on into cluster_start / the
-# ready-wait -- that turns a single failed module into a whole-cluster hang
-# (the master never creates its marker, so every other node waits on it). Surface
-# the failure and abort this node's bring-up.
+# a failed bootstrap aborts this node's bring-up -- marching into cluster_start
+# turns one failed module into a whole-cluster hang on the ready-wait
 AbortBootstrap()
 {
     msg="Bootstrap failed on $(hostname); aborting cluster bring-up. Fix the failing module, then re-run."
@@ -55,16 +53,9 @@ AbortBootstrap()
 
 PostBootRecovery()
 {
-    # One path for every boot. Whether this node came up as part of a roll -- and
-    # of which kind -- comes from the shared job on cephfs, not from local
-    # markers: /run is tmpfs and the A/B root partition is replaced by the very
-    # upgrade we would be trying to detect.
-    #
-    # The relay itself is NOT here. power_roll_advance, called by each node
-    # branch right after this returns, finalizes this node and kicks the next
-    # one -- for a restart and an upgrade alike. An upgrade needs no separate
-    # relay because hex_install already pointed next_entry at the staged slot,
-    # so the reboot power_roll_advance issues boots the new firmware.
+    # One path for every boot: roll membership + kind come from the shared job
+    # on cephfs, not local markers. The relay itself is power_roll_advance,
+    # called right after this returns -- same for restart and upgrade.
     local roll_kind=$(hex_sdk power_roll_kind_active 2>/dev/null)
     local rolling=0
     [ -n "$roll_kind" ] && rolling=1
@@ -81,17 +72,15 @@ PostBootRecovery()
         echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
         hex_log_event -e BSP00005I "interface=system,host=$HOSTNAME,service=bootstrap"
         hex_sdk cmd "rm -f /tmp/health_*error.count"
-        # Normal boots only: the full 'cluster check' kicks per-service
-        # auto_repair. Roll boots SKIP it -- on a single node its ceph_mds
-        # auto_repair restarts the lone MDS while it is still settling, forcing a
-        # ~8 min cephfs replay. The focused gate below covers the migration path.
+        # normal boots only: 'cluster check' kicks auto_repair, which on a roll
+        # boot would restart a settling MDS; the gate below covers the roll
         if [ "$rolling" != "1" ] ; then
             hex_cli -c cluster check
         fi
         # Roll boots: restore VMs this node suspended for its reboot. Only a
         # restart ever suspends (an upgrade refuses and pauses instead), so this
         # is a no-op on an upgrade -- the record is empty.
-        if [ "$rolling" = "1" ] && [ -s /mnt/cephfs/nova/instances/active_running ] ; then
+        if [ "$rolling" = "1" ] && [ -s /mnt/cephfs/rolling/active_running ] ; then
             while read -r i disp _ ; do
                 [ -z "$i" ] && continue
                 if hex_sdk os_nova_list id status powerstate | grep -i "$i active running" ; then
@@ -102,7 +91,7 @@ PostBootRecovery()
                     echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                     hex_log_event -e BSP00011I "interface=system,host=$HOSTNAME,service=bootstrap,vm=$i,disposition=${disp:-hardreboot}"
                 fi
-            done < /mnt/cephfs/nova/instances/active_running
+            done < /mnt/cephfs/rolling/active_running
         fi
         # Normal boots only: ceph backup to /store. Skipped on roll boots -- the
         # 'cluster check Storage' probe blocks on MDS replay.
@@ -110,11 +99,8 @@ PostBootRecovery()
             rsync -ar /var/lib/ceph /store/
         fi
         if [ "$rolling" = "1" ] ; then
-            # Verify the live-migration path before this node releases the relay
-            # to drain the next one. Checks run first, so a healthy roll passes in
-            # seconds; a failed check triggers its surgical repair inside the
-            # gate. Still not ready -> pause (state=paused makes the following
-            # power_roll_advance a no-op).
+            # gate (with in-gate repair) before releasing the relay to drain the
+            # next node; still not ready -> pause (power_roll_advance no-ops)
             if ! hex_sdk live_migration_gate 180 "" repair ; then
                 hex_sdk _power_roll_pause "live-migration path not ready before releasing the next node"
             fi
@@ -160,15 +146,9 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
             # detached full check_repair -- the single full pass, healing what the
             # per-node auto_repair/essential passes miss.
             for _i in $(seq 1 90) ; do hex_sdk cube_cluster_ready && break ; sleep 20 ; done
-            # Only fire the disruptive full check_repair when the cluster is
-            # actually ready. If the bounded wait above timed out (a node still
-            # coming up / a concurrent set_ready), skip it -- a health repair on
-            # a still-converging cluster can restart pacemaker/VIP and break
-            # in-flight bring-up -- and tell the operator to run it themselves.
-            # Skip while a roll is still running: this fires when THIS node's
-            # boot finishes, but other nodes are still being drained/rebooted, so
-            # a full pass would evaluate a deliberately-degraded cluster and try
-            # to repair it. power_roll_advance runs it when the roll completes.
+            # fire the disruptive full check_repair only when the cluster is
+            # ready AND no roll is running (power_roll_advance runs it at roll
+            # completion); otherwise skip and tell the operator
             if hex_sdk cube_cluster_ready && [ -z "$(hex_sdk power_roll_kind_active 2>/dev/null)" ] ; then
                 hex_sdk cluster_check_repair_async
             else
