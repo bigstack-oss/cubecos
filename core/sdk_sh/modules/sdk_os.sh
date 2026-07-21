@@ -1370,6 +1370,10 @@ os_pre_failure_host_evacuation()
     local host=$1
     local env=${2:-default}
 
+    # planned reboot: mark the host in masakari maintenance BEFORE draining so
+    # hostmonitor won't cold-evacuate (rebuild) it while it's deliberately down
+    os_segment_host_maintenance "$host" True
+
     for i in 1 2 3 ; do
         if _os_pre_failure_host_evacuation $env ; then
             break
@@ -1384,6 +1388,11 @@ os_pre_failure_host_evacuation_sequential()
 {
     local from_host=${1:-$HOSTNAME}
     local env=${2:-default}
+
+    # planned reboot (rolling upgrade relay): suppress masakari for the host so
+    # hostmonitor doesn't cold-evacuate it while it's deliberately down
+    os_segment_host_maintenance "$from_host" True
+
     local server_list_array=( $(hex_sdk os_nova_list ID STATUS POWERSTATE | grep -i 'active running' | cut -d' ' -f1) )
     local host_array=($(cubectl node -r compute list -j | jq -r .[].hostname | grep -v $from_host))
     local num_host=${#host_array[@]}
@@ -2681,6 +2690,62 @@ os_maintain_segment_hosts()
             $OPENSTACK segment host update $u $n --on_maintenance True
         done
     done
+}
+
+# Put ONE segment host into masakari maintenance so a PLANNED reboot isn't treated
+# as a host failure (per-host analog of os_maintain_segment_hosts). Without this,
+# hostmonitor cold-evacuates (rebuilds) a deliberately-rebooting node -- a hard
+# kill that also leaves grastate seqno=-1 -> forced Galera SST.
+os_segment_host_maintenance()   # $1=host  $2=True|False (default True)
+{
+    local host=$1 flag=${2:-True}
+    for u in $($OPENSTACK segment list -f value -c uuid) ; do
+        $OPENSTACK segment host list $u -f value -c name 2>/dev/null | grep -qx "$host" && \
+            $OPENSTACK segment host update $u $host --on_maintenance $flag
+    done
+}
+
+# 0 (uniform) only if every control node reports the same MariaDB major.minor --
+# the safe precondition to run mysql_upgrade (its system-table DDL replicates
+# cluster-wide). Firmware version (is_node_rolling_upgrade) is the wrong signal at
+# web-scale: Galera runs only on control, so storage/compute firmware skew must
+# NOT block, and control-tier version skew MUST block.
+os_mariadb_version_uniform()
+{
+    # Fail-safe: EVERY control node must be reachable AND report the same
+    # major.minor. An unreachable node is "unknown", not "absent" -- treating it
+    # as absent could report a mid-roll cluster as uniform and let mysql_upgrade
+    # replicate system-table DDL to a still-old member. Any miss => not uniform.
+    local hosts h v vers=
+    hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
+    [ -n "$hosts" ] || return 1
+    for h in $hosts ; do
+        v=$(remote_run "$h" "mysql -N -e 'SELECT VERSION()' 2>/dev/null" | cut -d- -f1 | cut -d. -f1,2)
+        [ -n "$v" ] || return 1
+        vers="$vers $v"
+    done
+    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
+}
+
+# 0 (uniform) only if every control node reports the same RabbitMQ minor -- the
+# safe precondition to enable feature flags (enabling is IRREVERSIBLE and strands
+# nodes that don't support a newly-enabled flag).
+os_rabbitmq_version_uniform()
+{
+    # Fail-safe: EVERY control node must be reachable AND report the same
+    # major.minor. An unreachable node is "unknown", not "absent" -- treating it
+    # as absent could report a mid-roll cluster as uniform and enable feature
+    # flags the still-old node can't support, stranding it on rejoin. Any miss
+    # => not uniform. remote_run's is_sshable bounds each probe to ~3s.
+    local hosts h v vers=
+    hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
+    [ -n "$hosts" ] || return 1
+    for h in $hosts ; do
+        v=$(remote_run "$h" "rabbitmqctl version 2>/dev/null" | cut -d. -f1,2)
+        [ -n "$v" ] || return 1
+        vers="$vers $v"
+    done
+    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
 }
 
 os_device_profile_create()
