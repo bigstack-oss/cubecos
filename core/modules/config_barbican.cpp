@@ -1,6 +1,7 @@
 // CUBE SDK
 
 #include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/pidfile.h>
 #include <hex/filesystem.h>
 #include <hex/process.h>
@@ -17,6 +18,8 @@
 
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
+
+static LogRotateConf log_conf("barbican", "/var/log/barbican/*.log", DAILY, 128, 0, true);
 
 static const char USER[] = "barbican";
 static const char GROUP[] = "barbican";
@@ -391,6 +394,7 @@ Commit(bool modified, int dryLevel)
         UpdateEndpoint(sharedId, external, s_cubeRegion.newValue());
 
     // barbican-api service run along with httpd
+    WriteLogRotateConf(log_conf);
 
     return true;
 }

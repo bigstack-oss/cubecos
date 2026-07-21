@@ -1,0 +1,19 @@
+[Unit]
+Description=Openstack Barbican API server
+After=syslog.target network.target
+Before=httpd.service
+
+[Service]
+PIDFile=/run/barbican/pid
+User=barbican
+Group=barbican
+RuntimeDirectory=barbican
+RuntimeDirectoryMode=770
+ExecStart=/opt/openstack-antelope/bin/gunicorn --pid /run/barbican/pid -c /etc/barbican/gunicorn-config.py --paste /etc/barbican/barbican-api-paste.ini
+ExecReload=/usr/bin/kill -s HUP $MAINPID
+ExecStop=/usr/bin/kill -s TERM $MAINPID
+StandardError=syslog
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

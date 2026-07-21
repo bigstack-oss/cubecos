@@ -1,0 +1,1652 @@
+[DEFAULT]
+
+#
+# From barbican.common.config
+#
+
+# Role used to identify an authenticated user as administrator.
+# (string value)
+#admin_role = admin
+
+# Allow unauthenticated users to access the API with read-only
+# privileges. This only applies when using ContextMiddleware. (boolean
+# value)
+#allow_anonymous_access = false
+
+# Maximum allowed http request size against the barbican-api. (integer
+# value)
+#max_allowed_request_size_in_bytes = 25000
+
+# Maximum allowed secret size in bytes. (integer value)
+#max_allowed_secret_in_bytes = 20000
+
+# Host name, for use in HATEOAS-style references Note: Typically this
+# would be the load balanced endpoint that clients would use to
+# communicate back with this service. If a deployment wants to derive
+# host from wsgi request instead then make this blank. Blank is needed
+# to override default config value which is 'http://localhost:9311'
+# (string value)
+#host_href = http://localhost:9311
+
+# SQLAlchemy connection string for the reference implementation
+# registry server. Any valid SQLAlchemy connection string is fine.
+# See:
+# http://www.sqlalchemy.org/docs/05/reference/sqlalchemy/connections.html#sqlalchemy.create_engine.
+# Note: For absolute addresses, use '////' slashes after 'sqlite:'.
+# (string value)
+#sql_connection = sqlite:///barbican.sqlite
+
+# Period in seconds after which SQLAlchemy should reestablish its
+# connection to the database. MySQL uses a default `wait_timeout` of 8
+# hours, after which it will drop idle connections. This can result in
+# 'MySQL Gone Away' exceptions. If you notice this, you can lower this
+# value to ensure that SQLAlchemy reconnects before MySQL can drop the
+# connection. (integer value)
+#sql_idle_timeout = 3600
+
+# Maximum number of database connection retries during startup. Set to
+# -1 to specify an infinite retry count. (integer value)
+#sql_max_retries = 60
+
+# Interval between retries of opening a SQL connection. (integer
+# value)
+#sql_retry_interval = 1
+
+# Create the Barbican database on service startup. (boolean value)
+#db_auto_create = false
+
+# Maximum page size for the 'limit' paging URL parameter. (integer
+# value)
+#max_limit_paging = 100
+
+# Default page size for the 'limit' paging URL parameter. (integer
+# value)
+#default_limit_paging = 10
+
+# Accepts a class imported from the sqlalchemy.pool module, and
+# handles the details of building the pool for you. If commented out,
+# SQLAlchemy will select based on the database dialect. Other options
+# are QueuePool (for SQLAlchemy-managed connections) and NullPool (to
+# disabled SQLAlchemy management of connections). See
+# http://docs.sqlalchemy.org/en/latest/core/pooling.html for more
+# details (string value)
+#sql_pool_class = QueuePool
+
+# Show SQLAlchemy pool-related debugging output in logs (sets DEBUG
+# log level output) if specified. (boolean value)
+#sql_pool_logging = false
+
+# Size of pool used by SQLAlchemy. This is the largest number of
+# connections that will be kept persistently in the pool. Can be set
+# to 0 to indicate no size limit. To disable pooling, use a NullPool
+# with sql_pool_class instead. Comment out to allow SQLAlchemy to
+# select the default. (integer value)
+#sql_pool_size = 5
+
+# # The maximum overflow size of the pool used by SQLAlchemy. When the
+# number of checked-out connections reaches the size set in
+# sql_pool_size, additional connections will be returned up to this
+# limit. It follows then that the total number of simultaneous
+# connections the pool will allow is sql_pool_size +
+# sql_pool_max_overflow. Can be set to -1 to indicate no overflow
+# limit, so no limit will be placed on the total number of concurrent
+# connections. Comment out to allow SQLAlchemy to select the default.
+# (integer value)
+#sql_pool_max_overflow = 10
+
+# Enable eventlet backdoor.  Acceptable values are 0, <port>, and
+# <start>:<end>, where 0 results in listening on a random tcp port
+# number; <port> results in listening on the specified port number
+# (and not enabling backdoor if that port is in use); and
+# <start>:<end> results in listening on the smallest unused port
+# number within the specified range of port numbers.  The chosen port
+# is displayed in the service's log file. (string value)
+#backdoor_port = <None>
+
+# Enable eventlet backdoor, using the provided path as a unix socket
+# that can receive connections. This option is mutually exclusive with
+# 'backdoor_port' in that only one should be provided. If both are
+# provided then the existence of this option overrides the usage of
+# that option. Inside the path {pid} will be replaced with the PID of
+# the current process. (string value)
+#backdoor_socket = <None>
+
+#
+# From oslo.log
+#
+
+# If set to true, the logging level will be set to DEBUG instead of
+# the default INFO level. (boolean value)
+# Note: This option can be changed without restarting.
+#debug = false
+
+# The name of a logging configuration file. This file is appended to
+# any existing logging configuration files. For details about logging
+# configuration files, see the Python logging module documentation.
+# Note that when logging configuration files are used then all logging
+# configuration is set in the configuration file and other logging
+# configuration options are ignored (for example, log-date-format).
+# (string value)
+# Note: This option can be changed without restarting.
+# Deprecated group/name - [DEFAULT]/log_config
+#log_config_append = <None>
+
+# Defines the format string for %%(asctime)s in log records. Default:
+# %(default)s . This option is ignored if log_config_append is set.
+# (string value)
+#log_date_format = %Y-%m-%d %H:%M:%S
+
+# (Optional) Name of log file to send logging output to. If no default
+# is set, logging will go to stderr as defined by use_stderr. This
+# option is ignored if log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logfile
+#log_file = <None>
+
+# (Optional) The base directory used for relative log_file  paths.
+# This option is ignored if log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logdir
+#log_dir = <None>
+
+# Uses logging handler designed to watch file system. When log file is
+# moved or removed this handler will open a new log file with
+# specified path instantaneously. It makes sense only if log_file
+# option is specified and Linux platform is used. This option is
+# ignored if log_config_append is set. (boolean value)
+#watch_log_file = false
+
+# Use syslog for logging. Existing syslog format is DEPRECATED and
+# will be changed later to honor RFC5424. This option is ignored if
+# log_config_append is set. (boolean value)
+#use_syslog = false
+
+# Enable journald for logging. If running in a systemd environment you
+# may wish to enable journal support. Doing so will use the journal
+# native protocol which includes structured metadata in addition to
+# log messages.This option is ignored if log_config_append is set.
+# (boolean value)
+#use_journal = false
+
+# Syslog facility to receive log lines. This option is ignored if
+# log_config_append is set. (string value)
+#syslog_log_facility = LOG_USER
+
+# Use JSON formatting for logging. This option is ignored if
+# log_config_append is set. (boolean value)
+#use_json = false
+
+# Log output to standard error. This option is ignored if
+# log_config_append is set. (boolean value)
+#use_stderr = false
+
+# Log output to Windows Event Log. (boolean value)
+#use_eventlog = false
+
+# The amount of time before the log files are rotated. This option is
+# ignored unless log_rotation_type is set to "interval". (integer
+# value)
+#log_rotate_interval = 1
+
+# Rotation interval type. The time of the last file change (or the
+# time when the service was started) is used when scheduling the next
+# rotation. (string value)
+# Possible values:
+# Seconds - <No description provided>
+# Minutes - <No description provided>
+# Hours - <No description provided>
+# Days - <No description provided>
+# Weekday - <No description provided>
+# Midnight - <No description provided>
+#log_rotate_interval_type = days
+
+# Maximum number of rotated log files. (integer value)
+#max_logfile_count = 30
+
+# Log file maximum size in MB. This option is ignored if
+# "log_rotation_type" is not set to "size". (integer value)
+#max_logfile_size_mb = 200
+
+# Log rotation type. (string value)
+# Possible values:
+# interval - Rotate logs at predefined time intervals.
+# size - Rotate logs once they reach a predefined size.
+# none - Do not rotate log files.
+#log_rotation_type = none
+
+# Format string to use for log messages with context. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
+
+# Format string to use for log messages when context is undefined.
+# Used by oslo_log.formatters.ContextFormatter (string value)
+#logging_default_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s
+
+# Additional data to append to log message when logging level for the
+# message is DEBUG. Used by oslo_log.formatters.ContextFormatter
+# (string value)
+#logging_debug_format_suffix = %(funcName)s %(pathname)s:%(lineno)d
+
+# Prefix each line of exception output with this format. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_exception_prefix = %(asctime)s.%(msecs)03d %(process)d ERROR %(name)s %(instance)s
+
+# Defines the format string for %(user_identity)s that is used in
+# logging_context_format_string. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
+
+# List of package logging levels in logger=LEVEL pairs. This option is
+# ignored if log_config_append is set. (list value)
+#default_log_levels = amqp=WARN,amqplib=WARN,boto=WARN,qpid=WARN,sqlalchemy=WARN,suds=INFO,oslo.messaging=INFO,oslo_messaging=INFO,iso8601=WARN,requests.packages.urllib3.connectionpool=WARN,urllib3.connectionpool=WARN,websocket=WARN,requests.packages.urllib3.util.retry=WARN,urllib3.util.retry=WARN,keystonemiddleware=WARN,routes.middleware=WARN,stevedore=WARN,taskflow=WARN,keystoneauth=WARN,oslo.cache=INFO,oslo_policy=INFO,dogpile.core.dogpile=INFO
+
+# Enables or disables publication of error events. (boolean value)
+#publish_errors = false
+
+# The format for an instance that is passed with the log message.
+# (string value)
+#instance_format = "[instance: %(uuid)s] "
+
+# The format for an instance UUID that is passed with the log message.
+# (string value)
+#instance_uuid_format = "[instance: %(uuid)s] "
+
+# Interval, number of seconds, of log rate limiting. (integer value)
+#rate_limit_interval = 0
+
+# Maximum number of logged messages per rate_limit_interval. (integer
+# value)
+#rate_limit_burst = 0
+
+# Log level name used by rate limiting: CRITICAL, ERROR, INFO,
+# WARNING, DEBUG or empty string. Logs with level greater or equal to
+# rate_limit_except_level are not filtered. An empty string means that
+# all levels are filtered. (string value)
+#rate_limit_except_level = CRITICAL
+
+# Enables or disables fatal status of deprecations. (boolean value)
+#fatal_deprecations = false
+
+#
+# From oslo.messaging
+#
+
+# Size of RPC connection pool. (integer value)
+# Minimum value: 1
+#rpc_conn_pool_size = 30
+
+# The pool size limit for connections expiration policy (integer
+# value)
+#conn_pool_min_size = 2
+
+# The time-to-live in sec of idle connections in the pool (integer
+# value)
+#conn_pool_ttl = 1200
+
+# Size of executor thread pool when executor is threading or eventlet.
+# (integer value)
+# Deprecated group/name - [DEFAULT]/rpc_thread_pool_size
+#executor_thread_pool_size = 64
+
+# Seconds to wait for a response from a call. (integer value)
+#rpc_response_timeout = 60
+
+# The network address and optional user credentials for connecting to
+# the messaging backend, in URL format. The expected format is:
+#
+# driver://[user:pass@]host:port[,[userN:passN@]hostN:portN]/virtual_host?query
+#
+# Example: rabbit://rabbitmq:password@127.0.0.1:5672//
+#
+# For full details on the fields in the URL see the documentation of
+# oslo_messaging.TransportURL at
+# https://docs.openstack.org/oslo.messaging/latest/reference/transport.html
+# (string value)
+#transport_url = rabbit://
+
+# The default exchange under which topics are scoped. May be
+# overridden by an exchange name specified in the transport_url
+# option. (string value)
+#control_exchange = openstack
+
+# Add an endpoint to answer to ping calls. Endpoint is named
+# oslo_rpc_server_ping (boolean value)
+#rpc_ping_enabled = false
+
+#
+# From oslo.service.periodic_task
+#
+
+# Some periodic tasks can be run in a separate process. Should we run
+# them here? (boolean value)
+#run_external_periodic_tasks = true
+
+#
+# From oslo.service.service
+#
+
+# Enable eventlet backdoor.  Acceptable values are 0, <port>, and
+# <start>:<end>, where 0 results in listening on a random tcp port
+# number; <port> results in listening on the specified port number
+# (and not enabling backdoor if that port is in use); and
+# <start>:<end> results in listening on the smallest unused port
+# number within the specified range of port numbers.  The chosen port
+# is displayed in the service's log file. (string value)
+#backdoor_port = <None>
+
+# Enable eventlet backdoor, using the provided path as a unix socket
+# that can receive connections. This option is mutually exclusive with
+# 'backdoor_port' in that only one should be provided. If both are
+# provided then the existence of this option overrides the usage of
+# that option. Inside the path {pid} will be replaced with the PID of
+# the current process. (string value)
+#backdoor_socket = <None>
+
+# Enables or disables logging values of all registered options when
+# starting a service (at DEBUG level). (boolean value)
+#log_options = true
+
+# Specify a timeout after which a gracefully shutdown server will
+# exit. Zero value means endless wait. (integer value)
+#graceful_shutdown_timeout = 60
+
+#
+# From oslo.service.wsgi
+#
+
+# File name for the paste.deploy config for api service (string value)
+#api_paste_config = api-paste.ini
+
+# A python format string that is used as the template to generate log
+# lines. The following values can beformatted into it: client_ip,
+# date_time, request_line, status_code, body_length, wall_seconds.
+# (string value)
+#wsgi_log_format = %(client_ip)s "%(request_line)s" status: %(status_code)s  len: %(body_length)s time: %(wall_seconds).7f
+
+# Sets the value of TCP_KEEPIDLE in seconds for each server socket.
+# Not supported on OS X. (integer value)
+#tcp_keepidle = 600
+
+# Size of the pool of greenthreads used by wsgi (integer value)
+#wsgi_default_pool_size = 100
+
+# Maximum line size of message headers to be accepted. max_header_line
+# may need to be increased when using large tokens (typically those
+# generated when keystone is configured to use PKI tokens with big
+# service catalogs). (integer value)
+#max_header_line = 16384
+
+# If False, closes the client socket connection explicitly. (boolean
+# value)
+#wsgi_keep_alive = true
+
+# Timeout for client connections' socket operations. If an incoming
+# connection is idle for this number of seconds it will be closed. A
+# value of '0' means wait forever. (integer value)
+#client_socket_timeout = 900
+
+# True if the server should send exception tracebacks to the clients
+# on 500 errors. If False, the server will respond with empty bodies.
+# (boolean value)
+#wsgi_server_debug = false
+
+
+[audit_middleware_notifications]
+
+#
+# From keystonemiddleware.audit
+#
+
+# Indicate whether to use oslo_messaging as the notifier. If set to
+# False, the local logger will be used as the notifier. If set to
+# True, the oslo_messaging package must also be present. Otherwise,
+# the local will be used instead. (boolean value)
+#use_oslo_messaging = true
+
+# The Driver to handle sending notifications. Possible values are
+# messaging, messagingv2, routing, log, test, noop. If not specified,
+# then value from oslo_messaging_notifications conf section is used.
+# (string value)
+#driver = <None>
+
+# List of AMQP topics used for OpenStack notifications. If not
+# specified, then value from  oslo_messaging_notifications conf
+# section is used. (list value)
+#topics = <None>
+
+# A URL representing messaging driver to use for notification. If not
+# specified, we fall back to the same configuration used for RPC.
+# (string value)
+#transport_url = <None>
+
+
+[certificate]
+
+#
+# From barbican.certificate.plugin
+#
+
+# Extension namespace to search for plugins. (string value)
+#namespace = barbican.certificate.plugin
+
+# List of certificate plugins to load. (multi valued)
+#enabled_certificate_plugins = simple_certificate
+
+
+[certificate_event]
+
+#
+# From barbican.certificate.plugin
+#
+
+# Extension namespace to search for eventing plugins. (string value)
+#namespace = barbican.certificate.event.plugin
+
+# List of certificate plugins to load. (multi valued)
+#enabled_certificate_event_plugins = simple_certificate_event
+
+
+[cors]
+
+#
+# From oslo.middleware.cors
+#
+
+# Indicate whether this resource may be shared with the domain
+# received in the requests "origin" header. Format:
+# "<protocol>://<host>[:<port>]", no trailing slash. Example:
+# https://horizon.example.com (list value)
+#allowed_origin = <None>
+
+# Indicate that the actual request can include user credentials
+# (boolean value)
+#allow_credentials = true
+
+# Indicate which headers are safe to expose to the API. Defaults to
+# HTTP Simple Headers. (list value)
+#expose_headers = X-Auth-Token,X-Openstack-Request-Id,X-Project-Id,X-Identity-Status,X-User-Id,X-Storage-Token,X-Domain-Id,X-User-Domain-Id,X-Project-Domain-Id,X-Roles
+
+# Maximum cache age of CORS preflight requests. (integer value)
+#max_age = 3600
+
+# Indicate which methods can be used during the actual request. (list
+# value)
+#allow_methods = GET,PUT,POST,DELETE,PATCH
+
+# Indicate which header field names may be used during the actual
+# request. (list value)
+#allow_headers = X-Auth-Token,X-Openstack-Request-Id,X-Project-Id,X-Identity-Status,X-User-Id,X-Storage-Token,X-Domain-Id,X-User-Domain-Id,X-Project-Domain-Id,X-Roles
+
+
+[crypto]
+
+#
+# From barbican.plugin.crypto
+#
+
+# Extension namespace to search for plugins. (string value)
+#namespace = barbican.crypto.plugin
+
+# List of crypto plugins to load. (multi valued)
+#enabled_crypto_plugins = simple_crypto
+
+
+[dogtag_plugin]
+
+#
+# From barbican.plugin.dogtag
+#
+
+# Path to PEM file for authentication (string value)
+#pem_path = /etc/barbican/kra_admin_cert.pem
+
+# Hostname for the Dogtag instance (string value)
+#dogtag_host = localhost
+
+# Port for the Dogtag instance (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#dogtag_port = 8443
+
+# Path to the NSS certificate database (string value)
+#nss_db_path = /etc/barbican/alias
+
+# Password for the NSS certificate databases (string value)
+#nss_password = <None>
+
+# Profile for simple CMC requests (string value)
+#simple_cmc_profile = caOtherCert
+
+# List of automatically approved enrollment profiles (string value)
+#auto_approved_profiles = caServerCert
+
+# Time in days for CA entries to expire (integer value)
+#ca_expiration_time = 1
+
+# Working directory for Dogtag plugin (string value)
+#plugin_working_dir = /etc/barbican/dogtag
+
+# User friendly plugin name (string value)
+#plugin_name = Dogtag KRA
+
+# Retries when storing or generating secrets (integer value)
+#retries = 3
+
+
+[healthcheck]
+
+#
+# From oslo.middleware.healthcheck
+#
+
+# DEPRECATED: The path to respond to healtcheck requests on. (string
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+#path = /healthcheck
+
+# Show more detailed information as part of the response. Security
+# note: Enabling this option may expose sensitive details about the
+# service being monitored. Be sure to verify that it will not violate
+# your security policies. (boolean value)
+#detailed = false
+
+# Additional backends that can perform health checks and report that
+# information back as part of a request. (list value)
+#backends =
+
+# Check the presence of a file to determine if an application is
+# running on a port. Used by DisableByFileHealthcheck plugin. (string
+# value)
+#disable_by_file_path = <None>
+
+# Check the presence of a file based on a port to determine if an
+# application is running on a port. Expects a "port:path" list of
+# strings. Used by DisableByFilesPortsHealthcheck plugin. (list value)
+#disable_by_file_paths =
+
+
+[keystone_authtoken]
+
+#
+# From keystonemiddleware.auth_token
+#
+
+# Complete "public" Identity API endpoint. This endpoint should not be
+# an "admin" endpoint, as it should be accessible by all end users.
+# Unauthenticated clients are redirected to this endpoint to
+# authenticate. Although this endpoint should ideally be unversioned,
+# client support in the wild varies. If you're using a versioned v2
+# endpoint here, then this should *not* be the same endpoint the
+# service user utilizes for validating tokens, because normal end
+# users may not be able to reach that endpoint. (string value)
+# Deprecated group/name - [keystone_authtoken]/auth_uri
+#www_authenticate_uri = <None>
+
+# DEPRECATED: Complete "public" Identity API endpoint. This endpoint
+# should not be an "admin" endpoint, as it should be accessible by all
+# end users. Unauthenticated clients are redirected to this endpoint
+# to authenticate. Although this endpoint should ideally be
+# unversioned, client support in the wild varies. If you're using a
+# versioned v2 endpoint here, then this should *not* be the same
+# endpoint the service user utilizes for validating tokens, because
+# normal end users may not be able to reach that endpoint. This option
+# is deprecated in favor of www_authenticate_uri and will be removed
+# in the S release. (string value)
+# This option is deprecated for removal since Queens.
+# Its value may be silently ignored in the future.
+# Reason: The auth_uri option is deprecated in favor of
+# www_authenticate_uri and will be removed in the S  release.
+#auth_uri = <None>
+
+# API version of the Identity API endpoint. (string value)
+#auth_version = <None>
+
+# Interface to use for the Identity API endpoint. Valid values are
+# "public", "internal" (default) or "admin". (string value)
+#interface = internal
+
+# Do not handle authorization requests within the middleware, but
+# delegate the authorization decision to downstream WSGI components.
+# (boolean value)
+#delay_auth_decision = false
+
+# Request timeout value for communicating with Identity API server.
+# (integer value)
+#http_connect_timeout = <None>
+
+# How many times are we trying to reconnect when communicating with
+# Identity API Server. (integer value)
+#http_request_max_retries = 3
+
+# Request environment key where the Swift cache object is stored. When
+# auth_token middleware is deployed with a Swift cache, use this
+# option to have the middleware share a caching backend with swift.
+# Otherwise, use the ``memcached_servers`` option instead. (string
+# value)
+#cache = <None>
+
+# Required if identity server requires client certificate (string
+# value)
+#certfile = <None>
+
+# Required if identity server requires client certificate (string
+# value)
+#keyfile = <None>
+
+# A PEM encoded Certificate Authority to use when verifying HTTPs
+# connections. Defaults to system CAs. (string value)
+#cafile = <None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure = false
+
+# The region in which the identity server can be found. (string value)
+#region_name = <None>
+
+# Optionally specify a list of memcached server(s) to use for caching.
+# If left undefined, tokens will instead be cached in-process. (list
+# value)
+# Deprecated group/name - [keystone_authtoken]/memcache_servers
+#memcached_servers = <None>
+
+# In order to prevent excessive effort spent validating tokens, the
+# middleware caches previously-seen tokens for a configurable duration
+# (in seconds). Set to -1 to disable caching completely. (integer
+# value)
+#token_cache_time = 300
+
+# (Optional) If defined, indicate whether token data should be
+# authenticated or authenticated and encrypted. If MAC, token data is
+# authenticated (with HMAC) in the cache. If ENCRYPT, token data is
+# encrypted and authenticated in the cache. If the value is not one of
+# these options or empty, auth_token will raise an exception on
+# initialization. (string value)
+# Possible values:
+# None - <No description provided>
+# MAC - <No description provided>
+# ENCRYPT - <No description provided>
+#memcache_security_strategy = None
+
+# (Optional, mandatory if memcache_security_strategy is defined) This
+# string is used for key derivation. (string value)
+#memcache_secret_key = <None>
+
+# (Optional) Number of seconds memcached server is considered dead
+# before it is tried again. (integer value)
+#memcache_pool_dead_retry = 300
+
+# (Optional) Maximum total number of open connections to every
+# memcached server. (integer value)
+#memcache_pool_maxsize = 10
+
+# (Optional) Socket timeout in seconds for communicating with a
+# memcached server. (integer value)
+#memcache_pool_socket_timeout = 3
+
+# (Optional) Number of seconds a connection to memcached is held
+# unused in the pool before it is closed. (integer value)
+#memcache_pool_unused_timeout = 60
+
+# (Optional) Number of seconds that an operation will wait to get a
+# memcached client connection from the pool. (integer value)
+#memcache_pool_conn_get_timeout = 10
+
+# (Optional) Use the advanced (eventlet safe) memcached client pool.
+# (boolean value)
+#memcache_use_advanced_pool = true
+
+# (Optional) Indicate whether to set the X-Service-Catalog header. If
+# False, middleware will not ask for service catalog on token
+# validation and will not set the X-Service-Catalog header. (boolean
+# value)
+#include_service_catalog = true
+
+# Used to control the use and type of token binding. Can be set to:
+# "disabled" to not check token binding. "permissive" (default) to
+# validate binding information if the bind type is of a form known to
+# the server and ignore it if not. "strict" like "permissive" but if
+# the bind type is unknown the token will be rejected. "required" any
+# form of token binding is needed to be allowed. Finally the name of a
+# binding method that must be present in tokens. (string value)
+#enforce_token_bind = permissive
+
+# A choice of roles that must be present in a service token. Service
+# tokens are allowed to request that an expired token can be used and
+# so this check should tightly control that only actual services
+# should be sending this token. Roles here are applied as an ANY check
+# so any role in this list must be present. For backwards
+# compatibility reasons this currently only affects the allow_expired
+# check. (list value)
+#service_token_roles = service
+
+# For backwards compatibility reasons we must let valid service tokens
+# pass that don't pass the service_token_roles check as valid. Setting
+# this true will become the default in a future release and should be
+# enabled if possible. (boolean value)
+#service_token_roles_required = false
+
+# The name or type of the service as it appears in the service
+# catalog. This is used to validate tokens that have restricted access
+# rules. (string value)
+#service_type = <None>
+
+# Authentication type to load (string value)
+# Deprecated group/name - [keystone_authtoken]/auth_plugin
+#auth_type = <None>
+
+# Config Section from which to load plugin specific options (string
+# value)
+#auth_section = <None>
+
+
+[keystone_notifications]
+
+#
+# From barbican.common.config
+#
+
+# True enables keystone notification listener  functionality. (boolean
+# value)
+#enable = false
+
+# The default exchange under which topics are scoped. May be
+# overridden by an exchange name specified in the transport_url
+# option. (string value)
+#control_exchange = keystone
+
+# Keystone notification queue topic name. This name needs to match one
+# of values mentioned in Keystone deployment's 'notification_topics'
+# configuration e.g.    notification_topics=notifications,
+# barbican_notificationsMultiple servers may listen on a topic and
+# messages will be dispatched to one of the servers in a round-robin
+# fashion. That's why Barbican service should have its own dedicated
+# notification queue so that it receives all of Keystone
+# notifications. Alternatively if the chosen oslo.messaging backend
+# supports listener pooling (for example rabbitmq), setting a non-
+# default 'pool_name' option should be preferred. (string value)
+#topic = notifications
+
+# Pool name for notifications listener. Setting this to a distinctive
+# value will allow barbican notifications listener to receive its own
+# copy of all messages from the topic without without interfering with
+# other services listening on the same topic. This feature is
+# supported only by some oslo.messaging backends (in particilar by
+# rabbitmq) and for those it is preferrable to use it instead of
+# separate notification topic for barbican. (string value)
+#pool_name = <None>
+
+# True enables requeue feature in case of notification processing
+# error. Enable this only when underlying transport supports this
+# feature. (boolean value)
+#allow_requeue = false
+
+# Version of tasks invoked via notifications (string value)
+#version = 1.0
+
+# Define the number of max threads to be used for notification server
+# processing functionality. (integer value)
+#thread_pool_size = 10
+
+
+[kmip_plugin]
+
+#
+# From barbican.plugin.secret_store.kmip
+#
+
+# Username for authenticating with KMIP server (string value)
+#username = <None>
+
+# Password for authenticating with KMIP server (string value)
+#password = <None>
+
+# Address of the KMIP server (string value)
+#host = localhost
+
+# Port for the KMIP server (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#port = 5696
+
+# SSL version, maps to the module ssl's constants (string value)
+#ssl_version = PROTOCOL_TLSv1_2
+
+# File path to concatenated "certification authority" certificates
+# (string value)
+#ca_certs = <None>
+
+# File path to local client certificate (string value)
+#certfile = <None>
+
+# File path to local client certificate keyfile (string value)
+#keyfile = <None>
+
+# Only support PKCS#1 encoding of asymmetric keys (boolean value)
+#pkcs1_only = false
+
+# User friendly plugin name (string value)
+#plugin_name = KMIP HSM
+
+
+[oslo_messaging_amqp]
+
+#
+# From oslo.messaging
+#
+
+# Name for the AMQP container. must be globally unique. Defaults to a
+# generated UUID (string value)
+#container_name = <None>
+
+# Timeout for inactive connections (in seconds) (integer value)
+#idle_timeout = 0
+
+# Debug: dump AMQP frames to stdout (boolean value)
+#trace = false
+
+# Attempt to connect via SSL. If no other ssl-related parameters are
+# given, it will use the system's CA-bundle to verify the server's
+# certificate. (boolean value)
+#ssl = false
+
+# CA certificate PEM file used to verify the server's certificate
+# (string value)
+#ssl_ca_file =
+
+# Self-identifying certificate PEM file for client authentication
+# (string value)
+#ssl_cert_file =
+
+# Private key PEM file used to sign ssl_cert_file certificate
+# (optional) (string value)
+#ssl_key_file =
+
+# Password for decrypting ssl_key_file (if encrypted) (string value)
+#ssl_key_password = <None>
+
+# By default SSL checks that the name in the server's certificate
+# matches the hostname in the transport_url. In some configurations it
+# may be preferable to use the virtual hostname instead, for example
+# if the server uses the Server Name Indication TLS extension
+# (rfc6066) to provide a certificate per virtual host. Set
+# ssl_verify_vhost to True if the server's SSL certificate uses the
+# virtual host name instead of the DNS name. (boolean value)
+#ssl_verify_vhost = false
+
+# Space separated list of acceptable SASL mechanisms (string value)
+#sasl_mechanisms =
+
+# Path to directory that contains the SASL configuration (string
+# value)
+#sasl_config_dir =
+
+# Name of configuration file (without .conf suffix) (string value)
+#sasl_config_name =
+
+# SASL realm to use if no realm present in username (string value)
+#sasl_default_realm =
+
+# Seconds to pause before attempting to re-connect. (integer value)
+# Minimum value: 1
+#connection_retry_interval = 1
+
+# Increase the connection_retry_interval by this many seconds after
+# each unsuccessful failover attempt. (integer value)
+# Minimum value: 0
+#connection_retry_backoff = 2
+
+# Maximum limit for connection_retry_interval +
+# connection_retry_backoff (integer value)
+# Minimum value: 1
+#connection_retry_interval_max = 30
+
+# Time to pause between re-connecting an AMQP 1.0 link that failed due
+# to a recoverable error. (integer value)
+# Minimum value: 1
+#link_retry_delay = 10
+
+# The maximum number of attempts to re-send a reply message which
+# failed due to a recoverable error. (integer value)
+# Minimum value: -1
+#default_reply_retry = 0
+
+# The deadline for an rpc reply message delivery. (integer value)
+# Minimum value: 5
+#default_reply_timeout = 30
+
+# The deadline for an rpc cast or call message delivery. Only used
+# when caller does not provide a timeout expiry. (integer value)
+# Minimum value: 5
+#default_send_timeout = 30
+
+# The deadline for a sent notification message delivery. Only used
+# when caller does not provide a timeout expiry. (integer value)
+# Minimum value: 5
+#default_notify_timeout = 30
+
+# The duration to schedule a purge of idle sender links. Detach link
+# after expiry. (integer value)
+# Minimum value: 1
+#default_sender_link_timeout = 600
+
+# Indicates the addressing mode used by the driver.
+# Permitted values:
+# 'legacy'   - use legacy non-routable addressing
+# 'routable' - use routable addresses
+# 'dynamic'  - use legacy addresses if the message bus does not
+# support routing otherwise use routable addressing (string value)
+#addressing_mode = dynamic
+
+# Enable virtual host support for those message buses that do not
+# natively support virtual hosting (such as qpidd). When set to true
+# the virtual host name will be added to all message bus addresses,
+# effectively creating a private 'subnet' per virtual host. Set to
+# False if the message bus supports virtual hosting using the
+# 'hostname' field in the AMQP 1.0 Open performative as the name of
+# the virtual host. (boolean value)
+#pseudo_vhost = true
+
+# address prefix used when sending to a specific server (string value)
+#server_request_prefix = exclusive
+
+# address prefix used when broadcasting to all servers (string value)
+#broadcast_prefix = broadcast
+
+# address prefix when sending to any server in group (string value)
+#group_request_prefix = unicast
+
+# Address prefix for all generated RPC addresses (string value)
+#rpc_address_prefix = openstack.org/om/rpc
+
+# Address prefix for all generated Notification addresses (string
+# value)
+#notify_address_prefix = openstack.org/om/notify
+
+# Appended to the address prefix when sending a fanout message. Used
+# by the message bus to identify fanout messages. (string value)
+#multicast_address = multicast
+
+# Appended to the address prefix when sending to a particular
+# RPC/Notification server. Used by the message bus to identify
+# messages sent to a single destination. (string value)
+#unicast_address = unicast
+
+# Appended to the address prefix when sending to a group of consumers.
+# Used by the message bus to identify messages that should be
+# delivered in a round-robin fashion across consumers. (string value)
+#anycast_address = anycast
+
+# Exchange name used in notification addresses.
+# Exchange name resolution precedence:
+# Target.exchange if set
+# else default_notification_exchange if set
+# else control_exchange if set
+# else 'notify' (string value)
+#default_notification_exchange = <None>
+
+# Exchange name used in RPC addresses.
+# Exchange name resolution precedence:
+# Target.exchange if set
+# else default_rpc_exchange if set
+# else control_exchange if set
+# else 'rpc' (string value)
+#default_rpc_exchange = <None>
+
+# Window size for incoming RPC Reply messages. (integer value)
+# Minimum value: 1
+#reply_link_credit = 200
+
+# Window size for incoming RPC Request messages (integer value)
+# Minimum value: 1
+#rpc_server_credit = 100
+
+# Window size for incoming Notification messages (integer value)
+# Minimum value: 1
+#notify_server_credit = 100
+
+# Send messages of this type pre-settled.
+# Pre-settled messages will not receive acknowledgement
+# from the peer. Note well: pre-settled messages may be
+# silently discarded if the delivery fails.
+# Permitted values:
+# 'rpc-call' - send RPC Calls pre-settled
+# 'rpc-reply'- send RPC Replies pre-settled
+# 'rpc-cast' - Send RPC Casts pre-settled
+# 'notify'   - Send Notifications pre-settled
+#  (multi valued)
+#pre_settled = rpc-cast
+#pre_settled = rpc-reply
+
+
+[oslo_messaging_kafka]
+
+#
+# From oslo.messaging
+#
+
+# Max fetch bytes of Kafka consumer (integer value)
+#kafka_max_fetch_bytes = 1048576
+
+# Default timeout(s) for Kafka consumers (floating point value)
+#kafka_consumer_timeout = 1.0
+
+# DEPRECATED: Pool Size for Kafka Consumers (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#pool_size = 10
+
+# DEPRECATED: The pool size limit for connections expiration policy
+# (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#conn_pool_min_size = 2
+
+# DEPRECATED: The time-to-live in sec of idle connections in the pool
+# (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#conn_pool_ttl = 1200
+
+# Group id for Kafka consumer. Consumers in one group will coordinate
+# message consumption (string value)
+#consumer_group = oslo_messaging_consumer
+
+# Upper bound on the delay for KafkaProducer batching in seconds
+# (floating point value)
+#producer_batch_timeout = 0.0
+
+# Size of batch for the producer async send (integer value)
+#producer_batch_size = 16384
+
+# The compression codec for all data generated by the producer. If not
+# set, compression will not be used. Note that the allowed values of
+# this depend on the kafka version (string value)
+# Possible values:
+# none - <No description provided>
+# gzip - <No description provided>
+# snappy - <No description provided>
+# lz4 - <No description provided>
+# zstd - <No description provided>
+#compression_codec = none
+
+# Enable asynchronous consumer commits (boolean value)
+#enable_auto_commit = false
+
+# The maximum number of records returned in a poll call (integer
+# value)
+#max_poll_records = 500
+
+# Protocol used to communicate with brokers (string value)
+# Possible values:
+# PLAINTEXT - <No description provided>
+# SASL_PLAINTEXT - <No description provided>
+# SSL - <No description provided>
+# SASL_SSL - <No description provided>
+#security_protocol = PLAINTEXT
+
+# Mechanism when security protocol is SASL (string value)
+#sasl_mechanism = PLAIN
+
+# CA certificate PEM file used to verify the server certificate
+# (string value)
+#ssl_cafile =
+
+# Client certificate PEM file used for authentication. (string value)
+#ssl_client_cert_file =
+
+# Client key PEM file used for authentication. (string value)
+#ssl_client_key_file =
+
+# Client key password file used for authentication. (string value)
+#ssl_client_key_password =
+
+
+[oslo_messaging_notifications]
+
+#
+# From oslo.messaging
+#
+
+# The Drivers(s) to handle sending notifications. Possible values are
+# messaging, messagingv2, routing, log, test, noop (multi valued)
+# Deprecated group/name - [DEFAULT]/notification_driver
+#driver =
+
+# A URL representing the messaging driver to use for notifications. If
+# not set, we fall back to the same configuration used for RPC.
+# (string value)
+# Deprecated group/name - [DEFAULT]/notification_transport_url
+#transport_url = <None>
+
+# AMQP topic used for OpenStack notifications. (list value)
+# Deprecated group/name - [rpc_notifier2]/topics
+# Deprecated group/name - [DEFAULT]/notification_topics
+#topics = notifications
+
+# The maximum number of attempts to re-send a notification message
+# which failed to be delivered due to a recoverable error. 0 - No
+# retry, -1 - indefinite (integer value)
+#retry = -1
+
+
+[oslo_messaging_rabbit]
+
+#
+# From oslo.messaging
+#
+
+# Use durable queues in AMQP. If rabbit_quorum_queue is enabled,
+# queues will be durable and this value will be ignored. (boolean
+# value)
+#amqp_durable_queues = false
+
+# Auto-delete queues in AMQP. (boolean value)
+#amqp_auto_delete = false
+
+# Connect over SSL. (boolean value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_use_ssl
+#ssl = false
+
+# SSL version to use (valid only if SSL enabled). Valid values are
+# TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be
+# available on some distributions. (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_version
+#ssl_version =
+
+# SSL key file (valid only if SSL enabled). (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_keyfile
+#ssl_key_file =
+
+# SSL cert file (valid only if SSL enabled). (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_certfile
+#ssl_cert_file =
+
+# SSL certification authority file (valid only if SSL enabled).
+# (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
+#ssl_ca_file =
+
+# Global toggle for enforcing the OpenSSL FIPS mode. This feature
+# requires Python support. This is available in Python 3.9 in all
+# environments and may have been backported to older Python versions
+# on select environments. If the Python executable used does not
+# support OpenSSL FIPS mode, an exception will be raised. (boolean
+# value)
+#ssl_enforce_fips_mode = false
+
+# Run the health check heartbeat thread through a native python thread
+# by default. If this option is equal to False then the health check
+# heartbeat will inherit the execution model from the parent process.
+# For example if the parent process has monkey patched the stdlib by
+# using eventlet/greenlet then the heartbeat will be run through a
+# green thread. This option should be set to True only for the wsgi
+# services. (boolean value)
+#heartbeat_in_pthread = false
+
+# How long to wait (in seconds) before reconnecting in response to an
+# AMQP consumer cancel notification. (floating point value)
+# Minimum value: 0.0
+# Maximum value: 4.5
+#kombu_reconnect_delay = 1.0
+
+# EXPERIMENTAL: Possible values are: gzip, bz2. If not set compression
+# will not be used. This option may not be available in future
+# versions. (string value)
+#kombu_compression = <None>
+
+# How long to wait a missing client before abandoning to send it its
+# replies. This value should not be longer than rpc_response_timeout.
+# (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_reconnect_timeout
+#kombu_missing_consumer_retry_timeout = 60
+
+# Determines how the next RabbitMQ node is chosen in case the one we
+# are currently connected to becomes unavailable. Takes effect only if
+# more than one RabbitMQ node is provided in config. (string value)
+# Possible values:
+# round-robin - <No description provided>
+# shuffle - <No description provided>
+#kombu_failover_strategy = round-robin
+
+# The RabbitMQ login method. (string value)
+# Possible values:
+# PLAIN - <No description provided>
+# AMQPLAIN - <No description provided>
+# EXTERNAL - <No description provided>
+# RABBIT-CR-DEMO - <No description provided>
+#rabbit_login_method = AMQPLAIN
+
+# How frequently to retry connecting with RabbitMQ. (integer value)
+#rabbit_retry_interval = 1
+
+# How long to backoff for between retries when connecting to RabbitMQ.
+# (integer value)
+#rabbit_retry_backoff = 2
+
+# Maximum interval of RabbitMQ connection retries. Default is 30
+# seconds. (integer value)
+#rabbit_interval_max = 30
+
+# Try to use HA queues in RabbitMQ (x-ha-policy: all). If you change
+# this option, you must wipe the RabbitMQ database. In RabbitMQ 3.0,
+# queue mirroring is no longer controlled by the x-ha-policy argument
+# when declaring a queue. If you just want to make sure that all
+# queues (except those with auto-generated names) are mirrored across
+# all nodes, run: "rabbitmqctl set_policy HA '^(?!amq\.).*' '{"ha-
+# mode": "all"}' " (boolean value)
+#rabbit_ha_queues = false
+
+# Use quorum queues in RabbitMQ (x-queue-type: quorum). The quorum
+# queue is a modern queue type for RabbitMQ implementing a durable,
+# replicated FIFO queue based on the Raft consensus algorithm. It is
+# available as of RabbitMQ 3.8.0. If set this option will conflict
+# with the HA queues (``rabbit_ha_queues``) aka mirrored queues, in
+# other words the HA queues should be disabled, quorum queues durable
+# by default so the amqp_durable_queues opion is ignored when this
+# option enabled. (boolean value)
+#rabbit_quorum_queue = false
+
+# Each time a message is redelivered to a consumer, a counter is
+# incremented. Once the redelivery count exceeds the delivery limit
+# the message gets dropped or dead-lettered (if a DLX exchange has
+# been configured) Used only when rabbit_quorum_queue is enabled,
+# Default 0 which means dont set a limit. (integer value)
+#rabbit_quorum_delivery_limit = 0
+
+# By default all messages are maintained in memory if a quorum queue
+# grows in length it can put memory pressure on a cluster. This option
+# can limit the number of messages in the quorum queue. Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a
+# limit. (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_length
+#rabbit_quorum_max_memory_length = 0
+
+# By default all messages are maintained in memory if a quorum queue
+# grows in length it can put memory pressure on a cluster. This option
+# can limit the number of memory bytes used by the quorum queue. Used
+# only when rabbit_quorum_queue is enabled, Default 0 which means dont
+# set a limit. (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_bytes
+#rabbit_quorum_max_memory_bytes = 0
+
+# Positive integer representing duration in seconds for queue TTL
+# (x-expires). Queues which are unused for the duration of the TTL are
+# automatically deleted. The parameter affects only reply and fanout
+# queues. (integer value)
+# Minimum value: 1
+#rabbit_transient_queues_ttl = 1800
+
+# Specifies the number of messages to prefetch. Setting to zero allows
+# unlimited messages. (integer value)
+#rabbit_qos_prefetch_count = 0
+
+# Number of seconds after which the Rabbit broker is considered down
+# if heartbeat's keep-alive fails (0 disables heartbeat). (integer
+# value)
+#heartbeat_timeout_threshold = 60
+
+# How often times during the heartbeat_timeout_threshold we check the
+# heartbeat. (integer value)
+#heartbeat_rate = 2
+
+# DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag
+# for direct send. The direct send is used as reply, so the
+# MessageUndeliverable exception is raised in case the client queue
+# does not exist.MessageUndeliverable exception will be used to loop
+# for a timeout to lets a chance to sender to recover.This flag is
+# deprecated and it will not be possible to deactivate this
+# functionality anymore (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Mandatory flag no longer deactivable.
+#direct_mandatory_flag = true
+
+# Enable x-cancel-on-ha-failover flag so that rabbitmq server will
+# cancel and notify consumerswhen queue is down (boolean value)
+#enable_cancel_on_failover = false
+
+
+[oslo_middleware]
+
+#
+# From oslo.middleware.http_proxy_to_wsgi
+#
+
+# Whether the application is behind a proxy or not. This determines if
+# the middleware should parse the headers or not. (boolean value)
+#enable_proxy_headers_parsing = false
+
+
+[oslo_policy]
+
+#
+# From oslo.policy
+#
+
+# This option controls whether or not to enforce scope when evaluating
+# policies. If ``True``, the scope of the token used in the request is
+# compared to the ``scope_types`` of the policy being enforced. If the
+# scopes do not match, an ``InvalidScope`` exception will be raised.
+# If ``False``, a message will be logged informing operators that
+# policies are being invoked with mismatching scope. (boolean value)
+#enforce_scope = false
+
+# This option controls whether or not to use old deprecated defaults
+# when evaluating policies. If ``True``, the old deprecated defaults
+# are not going to be evaluated. This means if any existing token is
+# allowed for old defaults but is disallowed for new defaults, it will
+# be disallowed. It is encouraged to enable this flag along with the
+# ``enforce_scope`` flag so that you can get the benefits of new
+# defaults and ``scope_type`` together. If ``False``, the deprecated
+# policy check string is logically OR'd with the new policy check
+# string, allowing for a graceful upgrade experience between releases
+# with new policies, which is the default behavior. (boolean value)
+#enforce_new_defaults = false
+
+# The relative or absolute path of a file that maps roles to
+# permissions for a given service. Relative paths must be specified in
+# relation to the configuration file setting this option. (string
+# value)
+#policy_file = policy.yaml
+
+# Default rule. Enforced when a requested rule is not found. (string
+# value)
+#policy_default_rule = default
+
+# Directories where policy configuration files are stored. They can be
+# relative to any directory in the search path defined by the
+# config_dir option, or absolute paths. The file defined by
+# policy_file must exist for these directories to be searched.
+# Missing or empty directories are ignored. (multi valued)
+#policy_dirs = policy.d
+
+# Content Type to send and receive data for REST based policy check
+# (string value)
+# Possible values:
+# application/x-www-form-urlencoded - <No description provided>
+# application/json - <No description provided>
+#remote_content_type = application/x-www-form-urlencoded
+
+# server identity verification for REST based policy check (boolean
+# value)
+#remote_ssl_verify_server_crt = false
+
+# Absolute path to ca cert file for REST based policy check (string
+# value)
+#remote_ssl_ca_crt_file = <None>
+
+# Absolute path to client cert for REST based policy check (string
+# value)
+#remote_ssl_client_crt_file = <None>
+
+# Absolute path client key file REST based policy check (string value)
+#remote_ssl_client_key_file = <None>
+
+
+[p11_crypto_plugin]
+
+#
+# From barbican.plugin.crypto.p11
+#
+
+# Path to vendor PKCS11 library (string value)
+#library_path = <None>
+
+# Token serial number used to identify the token to be used. (string
+# value)
+#token_serial_number = <None>
+
+# DEPRECATED: Use token_labels instead. Token label used to identify
+# the token to be used. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+#token_label = <None>
+
+# List of labels for one or more tokens to be used. Typically this is
+# a single label, but some HSM devices may require more than one label
+# for Load Balancing or High Availability configurations. (list value)
+#token_labels = <None>
+
+# Password to login to PKCS11 session (string value)
+#login = <None>
+
+# Master KEK label (as stored in the HSM) (string value)
+#mkek_label = <None>
+
+# Master KEK length in bytes. (integer value)
+#mkek_length = <None>
+
+# Master HMAC Key label (as stored in the HSM) (string value)
+#hmac_label = <None>
+
+# (Optional) HSM Slot ID that contains the token device to be used.
+# (integer value)
+#slot_id = 1
+
+# Flag for Read/Write Sessions (boolean value)
+#rw_session = true
+
+# Project KEK length in bytes. (integer value)
+#pkek_length = 32
+
+# Project KEK Cache Time To Live, in seconds (integer value)
+#pkek_cache_ttl = 900
+
+# Project KEK Cache Item Limit (integer value)
+#pkek_cache_limit = 100
+
+# Secret encryption mechanism (string value)
+# Deprecated group/name - [p11_crypto_plugin]/algorithm
+#encryption_mechanism = CKM_AES_CBC
+
+# HMAC Key Type (string value)
+#hmac_key_type = CKK_AES
+
+# HMAC Key Generation Algorithm (string value)
+#hmac_keygen_mechanism = CKM_AES_KEY_GEN
+
+# HMAC key wrap mechanism (string value)
+#hmac_keywrap_mechanism = CKM_SHA256_HMAC
+
+# File to pull entropy for seeding RNG (string value)
+#seed_file =
+
+# Amount of data to read from file for seed (integer value)
+#seed_length = 32
+
+# User friendly plugin name (string value)
+#plugin_name = PKCS11 HSM
+
+# Generate IVs for CKM_AES_GCM mechanism. (boolean value)
+# Deprecated group/name - [p11_crypto_plugin]/generate_iv
+#aes_gcm_generate_iv = true
+
+# Always set CKA_SENSITIVE=CK_TRUE including CKA_EXTRACTABLE=CK_TRUE
+# keys. (boolean value)
+#always_set_cka_sensitive = true
+
+# Enable CKF_OS_LOCKING_OK flag when initializing the PKCS#11 client
+# library. (boolean value)
+#os_locking_ok = false
+
+
+[queue]
+
+#
+# From barbican.common.config
+#
+
+# True enables queuing, False invokes workers synchronously (boolean
+# value)
+#enable = false
+
+# Queue namespace (string value)
+#namespace = barbican
+
+# Queue topic name (string value)
+#topic = barbican.workers
+
+# Version of tasks invoked via queue (string value)
+#version = 1.1
+
+# Server name for RPC task processing server (string value)
+#server_name = barbican.queue
+
+# Number of asynchronous worker processes (integer value)
+#asynchronous_workers = 1
+
+
+[quotas]
+
+#
+# From barbican.common.config
+#
+
+# Number of secrets allowed per project (integer value)
+#quota_secrets = -1
+
+# Number of orders allowed per project (integer value)
+#quota_orders = -1
+
+# Number of containers allowed per project (integer value)
+#quota_containers = -1
+
+# Number of consumers allowed per project (integer value)
+#quota_consumers = -1
+
+# Number of CAs allowed per project (integer value)
+#quota_cas = -1
+
+
+[retry_scheduler]
+
+#
+# From barbican.common.config
+#
+
+# Seconds (float) to wait before starting retry scheduler (floating
+# point value)
+#initial_delay_seconds = 10.0
+
+# Seconds (float) to wait between periodic schedule events (floating
+# point value)
+#periodic_interval_max_seconds = 10.0
+
+
+[secretstore]
+
+#
+# From barbican.plugin.secret_store
+#
+
+# Extension namespace to search for plugins. (string value)
+#namespace = barbican.secretstore.plugin
+
+# List of secret store plugins to load. (multi valued)
+#enabled_secretstore_plugins = store_crypto
+
+# Flag to enable multiple secret store plugin backend support. Default
+# is False (boolean value)
+#enable_multiple_secret_stores = false
+
+# List of suffix to use for looking up plugins which are supported
+# with multiple backend support. (list value)
+#stores_lookup_suffix = <None>
+
+
+[simple_crypto_plugin]
+
+#
+# From barbican.plugin.crypto.simple
+#
+
+# Key encryption key to be used by Simple Crypto Plugin (string value)
+#kek = dGhpcnR5X3R3b19ieXRlX2tleWJsYWhibGFoYmxhaGg=
+
+# User friendly plugin name (string value)
+#plugin_name = Software Only Crypto
+
+
+[snakeoil_ca_plugin]
+
+#
+# From barbican.certificate.plugin.snakeoil
+#
+
+# Path to CA certificate file (string value)
+#ca_cert_path = <None>
+
+# Path to CA certificate key file (string value)
+#ca_cert_key_path = <None>
+
+# Path to CA certificate chain file (string value)
+#ca_cert_chain_path = <None>
+
+# Path to CA chain pkcs7 file (string value)
+#ca_cert_pkcs7_path = <None>
+
+# Directory in which to store certs/keys for subcas (string value)
+#subca_cert_key_directory = /etc/barbican/snakeoil-cas
+
+
+[ssl]
+
+#
+# From oslo.service.sslutils
+#
+
+# CA certificate file to use to verify connecting clients. (string
+# value)
+# Deprecated group/name - [DEFAULT]/ssl_ca_file
+#ca_file = <None>
+
+# Certificate file to use when starting the server securely. (string
+# value)
+# Deprecated group/name - [DEFAULT]/ssl_cert_file
+#cert_file = <None>
+
+# Private key file to use when starting the server securely. (string
+# value)
+# Deprecated group/name - [DEFAULT]/ssl_key_file
+#key_file = <None>
+
+# SSL version to use (valid only if SSL enabled). Valid values are
+# TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be
+# available on some distributions. (string value)
+#version = <None>
+
+# Sets the list of available ciphers. value should be a string in the
+# OpenSSL cipher list format. (string value)
+#ciphers = <None>
+
+
+[vault_plugin]
+
+#
+# From barbican.plugin.secret_store.vault
+#
+
+# root token for vault (string value)
+#root_token_id = <None>
+
+# AppRole role_id for authentication with vault (string value)
+#approle_role_id = <None>
+
+# AppRole secret_id for authentication with vault (string value)
+#approle_secret_id = <None>
+
+# Mountpoint of KV store in Vault to use, for example: secret (string
+# value)
+#kv_mountpoint = secret
+
+# Use this endpoint to connect to Vault, for example:
+# "http://127.0.0.1:8200" (string value)
+#vault_url = http://127.0.0.1:8200
+
+# Absolute path to ca cert file (string value)
+#ssl_ca_crt_file = <None>
+
+# SSL Enabled/Disabled (boolean value)
+#use_ssl = false

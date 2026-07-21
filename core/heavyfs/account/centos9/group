@@ -77,7 +77,7 @@ grafana:x:131:
 named:x:140:
 zookeeper:x:132:
 opensearch:x:133:
-barbican:x:135:
+barbican:x:135:apache
 manila:x:136:
 octavia:x:138:
 designate:x:139:
