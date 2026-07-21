@@ -134,24 +134,24 @@ rootfs_install::
 # install system directories and production files
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/neutron/rootwrap
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/rootwrap.filters /usr/share/neutron/rootwrap/rootwrap.filters
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/rootwrap.filters /usr/share/neutron/rootwrap/rootwrap.filters
 	$(Q)# install base configurations
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/neutron
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/api-paste.ini /etc/neutron/api-paste.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/rootwrap.conf /etc/neutron/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/api-paste.ini /etc/neutron/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/rootwrap.conf /etc/neutron/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/neutron/plugins/ml2
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/neutron.conf.sample /etc/neutron/neutron.conf
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/ovn.ini.sample /etc/neutron/ovn.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/dhcp_agent.ini.sample /etc/neutron/dhcp_agent.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/l3_agent.ini.sample /etc/neutron/l3_agent.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/metadata_agent.ini.sample /etc/neutron/metadata_agent.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/metering_agent.ini.sample /etc/neutron/metering_agent.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/neutron_ovn_metadata_agent.ini.sample /etc/neutron/neutron_ovn_metadata_agent.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/linuxbridge_agent.ini.sample /etc/neutron/plugins/ml2/linuxbridge_agent.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/ml2_conf.ini.sample /etc/neutron/plugins/ml2/ml2_conf.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/openvswitch_agent.ini.sample /etc/neutron/plugins/ml2/openvswitch_agent.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/sriov_agent.ini.sample /etc/neutron/plugins/ml2/sriov_agent.ini
-	$(Q)cp -f $(ROOTDIR)/tmp/neutron/ovn_agent.ini.sample /etc/neutron/plugins/ml2/ovn_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/neutron.conf.sample /etc/neutron/neutron.conf
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/ovn.ini.sample /etc/neutron/ovn.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/dhcp_agent.ini.sample /etc/neutron/dhcp_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/l3_agent.ini.sample /etc/neutron/l3_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/metadata_agent.ini.sample /etc/neutron/metadata_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/metering_agent.ini.sample /etc/neutron/metering_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/neutron_ovn_metadata_agent.ini.sample /etc/neutron/neutron_ovn_metadata_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/linuxbridge_agent.ini.sample /etc/neutron/plugins/ml2/linuxbridge_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/ml2_conf.ini.sample /etc/neutron/plugins/ml2/ml2_conf.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/openvswitch_agent.ini.sample /etc/neutron/plugins/ml2/openvswitch_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/sriov_agent.ini.sample /etc/neutron/plugins/ml2/sriov_agent.ini
+	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/ovn_agent.ini.sample /etc/neutron/plugins/ml2/ovn_agent.ini
 	$(Q)# for the backward compatibility, now networking-ovn is merged into neutron
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/neutron/plugins/networking-ovn
 	$(Q)chroot $(ROOTDIR) ln -s /etc/neutron/neutron_ovn_metadata_agent.ini /etc/neutron/plugins/networking-ovn/networking-ovn-metadata-agent.ini
