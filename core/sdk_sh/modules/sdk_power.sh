@@ -829,6 +829,12 @@ power_drain_host()
     # nova's per-migration verdicts.
     Quiet -n $HEX_SDK live_migration_gate 120 "$from_host" repair
 
+    # Hand off the active cephfs MDS before this host reboots (symmetric with VM
+    # evacuation): the co-located mon dying defers failover ~60s, stalling cephfs.
+    # Via $HEX_SDK so the sub-invocation sources sdk_ceph (this module runs under
+    # MOD=power, which does not source sdk_ceph -- a bare call is undefined).
+    Quiet -n $HEX_SDK ceph_mds_evacuate_host "$from_host"
+
     # Honor nova's concurrency cap. nova owns each migration's convergence
     # (completion_timeout -> force_complete -> post-copy guarantees completion),
     # so the drain never imposes its own deadline or aborts a migration -- it

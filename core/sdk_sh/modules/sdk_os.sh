@@ -1343,6 +1343,12 @@ os_pre_failure_host_evacuation()
     # hostmonitor won't cold-evacuate (rebuild) it while it's deliberately down
     os_segment_host_maintenance "$host" True
 
+    # hand off the active cephfs MDS before the host goes down (symmetric with VM
+    # evacuation) -- a co-located mon dying would otherwise defer failover ~60s.
+    # Via $HEX_SDK so the sub-invocation sources sdk_ceph (this module runs under
+    # MOD=os, which does not source sdk_ceph -- a bare call is undefined).
+    $HEX_SDK ceph_mds_evacuate_host "$host"
+
     # repair+verify the live-migration path (self-gating, fast no-op when
     # healthy); best-effort -- the drain proceeds regardless
     [ "$env" == "upgrade" ] && $HEX_SDK live_migration_gate 120 "$host" repair
@@ -1414,23 +1420,26 @@ os_pre_failure_host_evacuation_sequential()
             elif [ $i -ge 15 ] ; then
                 success=false
             else
-                if [ "x$new_host" = "x$to_host" -o "x$new_status" = "xERROR" ] ; then
-                    if [ "x$old_status" != "x$new_status" -o "x$old_power" != "x$new_power" -o "x$new_status" = "xERROR" ] ; then
-                        os_nova_instance_reset $sid
-                        os_nova_instance_hardreboot $sid
-                    fi
-                fi
+                # A VM that hasn't converged by now stays put. Do NOT hard-reboot
+                # it to "drain" it -- that is unacknowledged tenant downtime and it
+                # doesn't move the VM off the host anyway. Mark the drain failed so
+                # the relay pauses instead of rebooting a host that still has VMs.
+                [ "x$new_status" = "xERROR" -o "x$new_host" != "x$to_host" ] && success=false
             fi
         done
     done
 
-    log_info "rolling_upgrade drain: $from_host done in $(( $(date +%s) - _t0 ))s ($srv_cnt VMs, rejected=$_failed)"
-    /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=drain_done,total=$srv_cnt,rejected=$_failed,elapsed=$(( $(date +%s) - _t0 ))"
-    if [ "x$success" = "xtrue" ] ; then
-        return 0
-    else
+    # Verify the host is actually empty. A migration that never converged must
+    # NOT be reported as success, and the relay must not reboot a non-empty host.
+    local _remain=$($OPENSTACK server list --all-projects --host "$from_host" -f value -c ID 2>/dev/null | grep -c .)
+    log_info "rolling_upgrade drain: $from_host done in $(( $(date +%s) - _t0 ))s ($srv_cnt VMs, rejected=$_failed, remaining=$_remain)"
+    /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_upgrade,action=drain_done,total=$srv_cnt,rejected=$_failed,remaining=$_remain,elapsed=$(( $(date +%s) - _t0 ))"
+    if [ "${_remain:-0}" -gt 0 ] ; then
+        log_error "rolling_upgrade drain: $from_host NOT fully evacuated -- $_remain VM(s) remain; refusing to signal success"
         return 1
     fi
+    [ "x$success" = "xtrue" ] && return 0
+    return 1
 }
 
 os_cinder_volume_service_remove()

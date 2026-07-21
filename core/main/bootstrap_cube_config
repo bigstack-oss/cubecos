@@ -108,6 +108,9 @@ RollingEvacuateAndReboot()
                     msg="Rebooting $N"
                     echo -n "$space_filler">$(hex_sdk GetKernelConsoleDevices) ; echo -n "$msg" $'\r' | tee $BOOTSTRAP_CUBE_LOG $(hex_sdk GetKernelConsoleDevices)
                     hex_log_event -e RUG00004I "interface=system,host=$HOSTNAME,service=rolling_upgrade,node=$N"
+                    # hand off the active cephfs MDS before $N goes down, else cephfs
+                    # stalls for the whole node-down window (co-located mon defers failover)
+                    hex_sdk remote_run $MASTER_CONTROL "hex_sdk ceph_mds_evacuate_host $N"
                     hex_sdk remote_run $n_ip "echo YES | hex_cli -c reboot"
                     break
                 fi

@@ -396,6 +396,33 @@ ceph_leave_maintenance()
 # EVERY node's boot and would clear noout mid-roll, whereas this config survives.
 # A genuinely-dead OSD is still marked out after the grace (self-limiting), and
 # client I/O is never paused. Idempotent -- safe to (re)set each relay step.
+# Before a node in a rolling reboot goes down, hand its active cephfs MDS to a
+# standby. In a converged cluster the MDS's co-located mon dies with it, so the
+# survivors apply mds_beacon_mon_down_grace (~60s) before promoting a standby --
+# a multi-minute cephfs stall on every rolling reboot. A proactive failover while
+# the node is still up costs ~5-10s.
+ceph_mds_evacuate_host()
+{
+    local host=${1:-$(hostname)}
+    # single-node cluster: no standby to fail over to (cephfs unavoidably goes
+    # down with the sole node's reboot), so there is nothing to evacuate
+    [ "$(cubectl node list 2>/dev/null | wc -l)" -le 1 ] && return 0
+    local active=$($CEPH mds stat 2>/dev/null | grep -oE '\{[0-9]+=[^=]+=up:active' | sed -E 's/.*=([^=]+)=up:active/\1/' | head -1)
+    [ -n "$active" ] || return 0
+    if [ "$active" = "$host" ] && $CEPH mds stat 2>/dev/null | grep -q up:standby ; then
+        log_info "ceph_mds_evacuate_host: failing active MDS $active off $host before reboot"
+        Quiet $CEPH mds fail "$active"
+        local i now
+        for i in $(seq 1 30) ; do
+            now=$($CEPH mds stat 2>/dev/null | grep -oE '\{[0-9]+=[^=]+=up:active' | sed -E 's/.*=([^=]+)=up:active/\1/' | head -1)
+            [ -n "$now" ] && [ "$now" != "$host" ] && { log_info "ceph_mds_evacuate_host: MDS active on $now"; return 0 ; }
+            sleep 1
+        done
+        log_warning "ceph_mds_evacuate_host: no standby took over within 30s"
+    fi
+    return 0
+}
+
 ceph_enter_rolling()
 {
     Quiet $CEPH config set global mon_osd_down_out_interval 3600
@@ -407,6 +434,16 @@ ceph_enter_rolling()
 ceph_leave_rolling()
 {
     Quiet $CEPH config rm global mon_osd_down_out_interval
+    # After a ceph-version upgrade, pin require-osd-release to the release all
+    # OSDs now run (ceph's required post-upgrade finalization). Guarded: only when
+    # every OSD is on one release and it is not already set -- a no-op on a
+    # same-version roll and on the per-node calls before the last node completes.
+    if [ "$($CEPH osd versions 2>/dev/null | grep -cE 'ceph version')" = 1 ] ; then
+        local rel=$($CEPH osd versions 2>/dev/null | grep -oE '\) [a-z]+ \(stable\)' | sed -E 's/.* ([a-z]+) .*/\1/' | head -1)
+        if [ -n "$rel" ] && ! $CEPH osd dump 2>/dev/null | grep -q "require_osd_release $rel" ; then
+            Quiet $CEPH osd require-osd-release "$rel" --yes-i-really-mean-it
+        fi
+    fi
 }
 
 ceph_maintenance_status()

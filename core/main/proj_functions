@@ -1125,9 +1125,18 @@ live_migration_gate()
         [ -z "$why" ] && { $OPENSTACK compute service list --service nova-conductor -f value -c State 2>/dev/null | grep -qi up || why=nova-conductor ; }
         [ -z "$why" ] && { $OPENSTACK compute service list --service nova-scheduler -f value -c State 2>/dev/null | grep -qi up || why=nova-scheduler ; }
         [ -z "$why" ] && {
-            # >=1 live migration target that is not the node being drained
-            local tgt=$($OPENSTACK compute service list --service nova-compute -f value -c Host -c State 2>/dev/null | awk -v d="$drain" '$2=="up" && $1!=d {c++} END{print c+0}')
-            [ "${tgt:-0}" -ge 1 ] || why=no-migration-target
+            # >=1 live-migration target that is a different host, nova-compute up,
+            # AND has cephfs mounted. nova-compute "up" alone is not enough: a
+            # PPU-upgraded node can heartbeat up while its instance storage
+            # (/mnt/cephfs -> /var/lib/nova/instances) is unmounted, and every
+            # migration to it then fails the shared-storage check. Refuse to
+            # advance the roll onto a storage-blind target -> pause instead.
+            local _h tgt=0
+            for _h in $($OPENSTACK compute service list --service nova-compute -f value -c Host -c State 2>/dev/null | awk '$2=="up"{print $1}') ; do
+                [ "$_h" = "$drain" ] && continue
+                remote_run "$_h" 'mountpoint -q /mnt/cephfs' >/dev/null 2>&1 && tgt=$((tgt+1))
+            done
+            [ "$tgt" -ge 1 ] || why=no-storage-ready-target
         }
         [ -z "$why" ] && { $OPENSTACK volume service list --service cinder-volume -f value -c State 2>/dev/null | grep -qi up || why=cinder-volume ; }
         [ -z "$why" ] && { $OPENSTACK network agent list -f value -c Alive 2>/dev/null | grep -qi true || why=neutron ; }
@@ -1165,6 +1174,14 @@ live_migration_gate()
                                 cmd -c systemctl restart openstack-nova-conductor
                                 cmd -p systemctl restart openstack-nova-compute
                             fi
+                            ;;
+                        no-storage-ready-target)
+                            # a compute node can be nova-compute "up" yet have no
+                            # cephfs mounted (PPU-upgraded node) -> not a usable
+                            # migration target. Mount it so the roll can proceed.
+                            for _h in $($OPENSTACK compute service list --service nova-compute -f value -c Host -c State 2>/dev/null | awk '$2=="up"{print $1}') ; do
+                                remote_run "$_h" 'mountpoint -q /mnt/cephfs' >/dev/null 2>&1 || remote_run "$_h" "$HEX_SDK ceph_mount_cephfs"
+                            done
                             ;;
                         neutron)
                             cmd -c $HEX_SDK stale_api_check_repair neutron-server 9696 neutron-server server 0
