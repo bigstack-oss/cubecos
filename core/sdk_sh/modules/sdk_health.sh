@@ -423,9 +423,35 @@ health_etcd_check()
 
 health_etcd_repair()
 {
+    # Cluster view: a reseed is only safe for a MINORITY member while the rest keep
+    # quorum. online = members reporting healthy (the down one is excluded).
+    local total online
+    total=$($ETCDCTL member list 2>/dev/null | wc -l)
+    online=$($ETCDCTL endpoint health --cluster 2>/dev/null | grep -c healthy)
+
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node etcd ; then
-            remote_systemd_restart $node etcd
+        local cntf=/tmp/health_etcd_${node}_reseed.count
+        if is_remote_running $node etcd ; then
+            rm -f "$cntf"
+            continue
+        fi
+
+        # etcd is down on $node -- try a plain restart first.
+        remote_systemd_restart $node etcd
+
+        # Escalate after repeated failures: a member down long enough falls outside
+        # the leader's compacted raft log and can NEVER catch up via restart -- it
+        # must be wiped and re-added. 'cubectl this-node reset' clears the local etcd
+        # data/config; 'join' does etcd member add + start (initial-cluster-state=
+        # existing). Guard hard: only a minority member, with quorum intact WITHOUT
+        # it, and only if the node is reachable.
+        local cnt=$(( $(cat "$cntf" 2>/dev/null || echo 0) + 1 ))
+        echo "$cnt" > "$cntf"
+        if [ "$cnt" -ge 3 ] && [ "$total" -ge 3 ] && [ "$online" -ge $(( total / 2 + 1 )) ] \
+           && remote_run $node true >/dev/null 2>&1 ; then
+            echo "health_etcd_repair: reseeding etcd member $node (restart failed x$cnt, quorum $online/$total holds)" >&2
+            Quiet -n remote_run $node "cubectl this-node reset && cubectl this-node join"
+            rm -f "$cntf"
         fi
     done
 }
@@ -541,6 +567,16 @@ health_hacluster_repair()
     local master=$CUBE_NODE_CONTROL_HOSTNAMES
     local num_ctrl=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local last_ctrl=${CUBE_NODE_CONTROL_HOSTNAMES[$((num_ctrl - 1))]}
+
+    # Self-heal: an older repair path created a REVERSED 'vip with vaw' colocation
+    # (colocation-vip-vaw-INFINITY) that pins the VIP onto vaw and can strand it on
+    # every node. Remove it so the VIP places independently; 'vaw with vip' keeps
+    # vaw following the VIP.
+    if pcs constraint --full 2>/dev/null | grep -q "colocation-vip-vaw-INFINITY" ; then
+        pcs constraint delete colocation-vip-vaw-INFINITY >/dev/null 2>&1
+        pcs resource cleanup vip >/dev/null 2>&1
+    fi
+
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if remote_run $node "[ -e /etc/pacemaker/authkey ]" ; then
             Quiet -n remote_run $node "timeout $SRVSTO cubectl node rsync -r compute /etc/pacemaker/authkey"
@@ -554,9 +590,12 @@ health_hacluster_repair()
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$last_ctrl" ] ; then
                 $HEX_SDK pacemaker_node_start $node
-                cmd -co "pcs resource create vaw systemd:vaw op monitor interval=\"30s\""
-                cmd -co "pcs constraint colocation add vip with vaw score=INFINITY"
+                cmd -co "pcs resource create vaw systemd:vaw op monitor interval=\"30s\" op start on-fail=\"ignore\" meta failure-timeout=\"60s\""
+                cmd -co "pcs constraint colocation add vaw with vip score=INFINITY"
                 cmd -co "pcs constraint order vip then vaw"
+                for ctrl in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+                    cmd -co "pcs constraint location vaw prefers $ctrl --force"
+                done
             elif [ "x$node" = "x$HOSTNAME" -a "x$node" = "x$master" ] ; then
                 $HEX_SDK pacemaker_node_stop $node
             else
