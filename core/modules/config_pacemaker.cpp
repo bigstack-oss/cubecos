@@ -80,11 +80,9 @@ SetupCluster(const bool enabled, const bool ha, std::string sharedId, const std:
 
         HexUtilSystemF(0, 0, "pcs resource create vip ocf:heartbeat:IPaddr2 "
                        "ip=\"%s\" op monitor interval=\"30s\"", sharedId.c_str());
-        if ( HexSystemF(0, "hex_sdk is_node_rolling_upgrade") != 0 ) {
-            HexUtilSystemF(0, 0, "pcs resource create vaw systemd:vaw op monitor interval=\"0\" op start timeout=\"600s\" op stop timeout=\"600s\"");
-            HexUtilSystemF(0, 0, "pcs constraint colocation add vaw with vip INFINITY");
-            HexUtilSystemF(0, 0, "pcs constraint order vip then vaw");
-        }
+        HexUtilSystemF(0, 0, "pcs resource create vaw systemd:vaw op monitor interval=\"0\" op start timeout=\"600s\" on-fail=\"ignore\" op stop timeout=\"600s\" meta failure-timeout=\"60s\"");
+        HexUtilSystemF(0, 0, "pcs constraint colocation add vaw with vip INFINITY");
+        HexUtilSystemF(0, 0, "pcs constraint order vip then vaw");
         HexUtilSystemF(0, 0, "pcs resource create haproxy systemd:haproxy-ha op monitor interval=\"1s\"");
         HexUtilSystemF(0, 0, "pcs constraint colocation add haproxy with vip score=INFINITY");
         HexUtilSystemF(0, 0, "pcs constraint order vip then haproxy");
@@ -98,6 +96,7 @@ SetupCluster(const bool enabled, const bool ha, std::string sharedId, const std:
 
         for (auto host : hosts) {
             HexUtilSystemF(0, 0, "pcs constraint location vip prefers %s --force", host.c_str());
+            HexUtilSystemF(0, 0, "pcs constraint location vaw prefers %s --force", host.c_str());
             HexUtilSystemF(0, 0, "pcs constraint location haproxy prefers %s --force", host.c_str());
             HexUtilSystemF(0, 0, "pcs constraint location cinder-volume prefers %s --force", host.c_str());
             HexUtilSystemF(0, 0, "pcs constraint location ovndb_servers-clone prefers %s --force", host.c_str());
