@@ -1,6 +1,56 @@
 [DEFAULT]
 
 #
+# From cyborg
+#
+
+# Used if there is a formatting error when generating an
+# exception message (a programming error). If True, raise an
+# exception; if False, use the unformatted message. (boolean
+# value)
+#fatal_exception_format_errors = false
+
+# Name of this node. This can be an opaque identifier. It is
+# not necessarily a hostname, FQDN, or IP address. However,
+# the node name must be valid within an AMQP key, and if using
+# ZeroMQ, a valid hostname, FQDN, or IP address. (host address
+# value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#host = localhost
+
+# Default interval (in seconds) for running periodic tasks.
+# (integer value)
+#periodic_interval = 60
+
+# This option specifies the size of the pool of threads used
+# by API to do async jobs.It is possible to limit the number
+# of concurrent connections using this option. (integer value)
+#thread_pool_size = 10
+
+# This option specifies the timeout of async job for ARQ bind.
+# (integer value)
+#bind_timeout = 60
+
+# Directory where the cyborg python module is installed.
+# (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#pybasedir = /usr/lib/python/site-packages/cyborg/cyborg
+
+# Directory where cyborg binaries are installed. (string
+# value)
+#bindir = $pybasedir/bin
+
+# Top-level directory for maintaining cyborg's state. (string
+# value)
+#state_path = $pybasedir
+
+#
 # From oslo.log
 #
 
@@ -71,7 +121,10 @@
 # log_config_append is set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This
@@ -107,7 +160,7 @@
 
 # Format string to use for log messages with context. Used by
 # oslo_log.formatters.ContextFormatter (string value)
-#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user_identity)s] %(instance)s%(message)s
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
 
 # Format string to use for log messages when context is
 # undefined. Used by oslo_log.formatters.ContextFormatter
@@ -126,7 +179,7 @@
 # Defines the format string for %(user_identity)s that is used
 # in logging_context_format_string. Used by
 # oslo_log.formatters.ContextFormatter (string value)
-#logging_user_identity_format = %(user)s %(project)s %(domain)s %(user_domain)s %(project_domain)s
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
 
 # List of package logging levels in logger=LEVEL pairs. This
 # option is ignored if log_config_append is set. (list value)
@@ -249,7 +302,69 @@
 #graceful_shutdown_timeout = 60
 
 
+[agent]
+
+#
+# From cyborg
+#
+
+# The accelerator drivers enabled on this agent. Such as
+# intel_fpga_driver, inspur_fpga_driver,nvidia_gpu_driver,
+# intel_qat_driver,inspur_nvme_ssd_driver, xilinx_fpga_driver,
+# etc. (list value)
+#enabled_drivers = fake_driver
+
+
+[api]
+
+#
+# From cyborg
+#
+
+# The IP address on which cyborg-api listens. (host address
+# value)
+#host_ip = 127.0.0.1
+
+# The TCP port on which cyborg-api listens. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#port = 6666
+
+# Number of workers for OpenStack Cyborg API service. The
+# default is equal to the number of CPUs available if that can
+# be determined, else a default worker count of 1 is returned.
+# (integer value)
+#api_workers = <None>
+
+# Enable the integrated stand-alone API to service requests
+# via HTTPS instead of HTTP. If there is a front-end service
+# performing HTTPS offloading from the service, this option
+# should be False; note, you will want to change public API
+# endpoint to represent SSL termination URL with
+# 'public_endpoint' option. (boolean value)
+#enable_ssl_api = false
+
+# Public URL to use when building the links to the API
+# resources (for example, "https://cyborg.rocks:6666"). If
+# None the links will be built using the request's host URL.
+# If the API is operating behind a proxy, you will want to
+# change this to represent the proxy's URL. Defaults to None.
+# (string value)
+#public_endpoint = <None>
+
+# Configuration file for WSGI definition of API. (string
+# value)
+#api_paste_config = api-paste.ini
+
+
 [database]
+
+#
+# From cyborg
+#
+
+# MySQL engine to use. (string value)
+#mysql_engine = InnoDB
 
 #
 # From oslo.db
@@ -280,9 +395,10 @@
 # value)
 #mysql_sql_mode = TRADITIONAL
 
-# If True, transparently enables support for handling MySQL
-# Cluster (NDB). (boolean value)
-#mysql_enable_ndb = false
+# For Galera only, configure wsrep_sync_wait causality checks
+# on new connections.  Default is None, meaning don't
+# configure any setting. (integer value)
+#mysql_wsrep_sync_wait = <None>
 
 # Connections which have been present in the connection pool
 # longer than this number of seconds will be replaced with a
@@ -356,6 +472,314 @@
 # connect time; specify as param1=value1&param2=value2&...
 # (string value)
 #connection_parameters =
+
+
+[glance]
+# Configuration options for the Image service
+
+#
+# From cyborg
+#
+
+#
+# Enable glance operation retries.
+#
+# Specifies the number of retries when uploading / downloading
+# an image to / from glance. 0 means no retries.
+#  (integer value)
+# Minimum value: 0
+#num_retries = 0
+
+#
+# Enable image signature verification.
+#
+# cyborg uses the image signature metadata from glance and
+# verifies the signature
+# of a signed image while downloading that image. If the image
+# signature cannot
+# be verified or if the image signature metadata is either
+# incomplete or
+# unavailable, then cyborg will not boot the image and instead
+# will place the
+# instance into an error state. This provides end users with
+# stronger assurances
+# of the integrity of the image data they are using to create
+# servers.
+#
+# Related options:
+#
+# * The options in the `key_manager` group, as the key_manager
+# is used
+#   for the signature validation.
+# * Both enable_certificate_validation and
+# default_trusted_certificate_ids
+#   below depend on this option being enabled.
+#  (boolean value)
+#verify_glance_signatures = false
+
+# DEPRECATED:
+# Enable certificate validation for image signature
+# verification.
+#
+# During image signature verification cyborg will first verify
+# the validity of
+# the image's signing certificate using the set of trusted
+# certificates
+# associated with the instance. If certificate validation
+# fails, signature
+# verification will not be performed and the instance will be
+# placed into an
+# error state. This provides end users with stronger
+# assurances that the image
+# data is unmodified and trustworthy. If left disabled, image
+# signature
+# verification can still occur but the end user will not have
+# any assurance that
+# the signing certificate used to generate the image signature
+# is still
+# trustworthy.
+#
+# Related options:
+#
+# * This option only takes effect if verify_glance_signatures
+# is enabled.
+# * The value of default_trusted_certificate_ids may be used
+# when this option
+#   is enabled.
+#  (boolean value)
+# This option is deprecated for removal since 16.0.0.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option is intended to ease the transition for
+# deployments leveraging
+# image signature verification. The intended state long-term
+# is for signature
+# verification and certificate validation to always happen
+# together.
+#enable_certificate_validation = false
+
+#
+# List of certificate IDs for certificates that should be
+# trusted.
+#
+# May be used as a default list of trusted certificate IDs for
+# certificate
+# validation. The value of this option will be ignored if the
+# user provides a
+# list of trusted certificate IDs with an instance API
+# request. The value of
+# this option will be persisted with the instance data if
+# signature verification
+# and certificate validation are enabled and if the user did
+# not provide an
+# alternative list. If left empty when certificate validation
+# is enabled the
+# user must provide a list of trusted certificate IDs
+# otherwise certificate
+# validation will fail.
+#
+# Related options:
+#
+# * The value of this option may be used if both
+# verify_glance_signatures and
+#   enable_certificate_validation are enabled.
+#  (list value)
+#default_trusted_certificate_ids =
+
+# Enable or disable debug logging with glanceclient. (boolean
+# value)
+#debug = false
+
+# PEM encoded Certificate Authority to use when verifying
+# HTTPs connections. (string value)
+#cafile = <None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile = <None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile = <None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure = false
+
+# Timeout value for http requests (integer value)
+#timeout = <None>
+
+# Collect per-API call timing information. (boolean value)
+#collect_timing = false
+
+# Log requests to multiple loggers. (boolean value)
+#split_loggers = false
+
+# The default service_type for endpoint URL discovery. (string
+# value)
+#service_type = image
+
+# The default service_name for endpoint URL discovery. (string
+# value)
+#service_name = <None>
+
+# List of interfaces, in order of preference, for endpoint
+# URL. (list value)
+#valid_interfaces = internal,public
+
+# The default region_name for endpoint URL discovery. (string
+# value)
+#region_name = <None>
+
+# Always use this endpoint URL for requests for this client.
+# NOTE: The unversioned endpoint should be specified here; to
+# request a particular API version, use the `version`, `min-
+# version`, and/or `max-version` options. (string value)
+#endpoint_override = <None>
+
+# The maximum number of retries that should be attempted for
+# connection errors. (integer value)
+#connect_retries = <None>
+
+# Delay (in seconds) between two retries for connection
+# errors. If not set, exponential retry starting with 0.5
+# seconds up to a maximum of 60 seconds is used. (floating
+# point value)
+#connect_retry_delay = <None>
+
+# The maximum number of retries that should be attempted for
+# retriable HTTP status codes. (integer value)
+#status_code_retries = <None>
+
+# Delay (in seconds) between two retries for retriable status
+# codes. If not set, exponential retry starting with 0.5
+# seconds up to a maximum of 60 seconds is used. (floating
+# point value)
+#status_code_retry_delay = <None>
+
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
+
+
+[gpu_devices]
+# This is used to config vGPU types for nvidia GPU devices.
+#
+
+#
+# From cyborg
+#
+
+#
+# The vGPU types enabled in the compute node.
+#
+# Cyborg supports multiple vGPU types in one host. Usually, a
+# single physical
+# GPU can only set one vgpu type. Some pGPUs (e.g. NVIDIA GRID
+# K1) support
+# multiple vGPU types.
+#
+# If more than one single vGPU type are provided, then for
+# each
+# *vGPU type*, you must add an additional section
+# ``[vgpu_$(VGPU_TYPE)]`` with
+# a single configuration option ``device_addresses`` to assign
+# this type to
+# the target physical GPU(s). PGPUs should be configured
+# explictly now, we will
+# improve this after we implement the enable/disable
+# interface.
+#
+# If the same PCI address is provided for two different types,
+# cyborg-agent will
+# return an InvalidGPUConfig exception at restart.
+#
+# An example is as the following::
+#
+#     [gpu_devices]
+#     enabled_vgpu_types = nvidia-35, nvidia-36
+#
+#     [vgpu_nvidia-35]
+#     device_addresses = 0000:84:00.0,0000:85:00.0
+#
+#     [vgpu_nvidia-36]
+#     device_addresses = 0000:86:00.0
+#
+#  (list value)
+#enabled_vgpu_types =
+
+
+[keystone]
+# Configuration options for the identity service
+
+#
+# From cyborg
+#
+
+# PEM encoded Certificate Authority to use when verifying
+# HTTPs connections. (string value)
+#cafile = <None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile = <None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile = <None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure = false
+
+# Timeout value for http requests (integer value)
+#timeout = <None>
+
+# Collect per-API call timing information. (boolean value)
+#collect_timing = false
+
+# Log requests to multiple loggers. (boolean value)
+#split_loggers = false
+
+# The default service_type for endpoint URL discovery. (string
+# value)
+#service_type = identity
+
+# The default service_name for endpoint URL discovery. (string
+# value)
+#service_name = <None>
+
+# List of interfaces, in order of preference, for endpoint
+# URL. (list value)
+#valid_interfaces = internal,public
+
+# The default region_name for endpoint URL discovery. (string
+# value)
+#region_name = <None>
+
+# Always use this endpoint URL for requests for this client.
+# NOTE: The unversioned endpoint should be specified here; to
+# request a particular API version, use the `version`, `min-
+# version`, and/or `max-version` options. (string value)
+#endpoint_override = <None>
+
+# The maximum number of retries that should be attempted for
+# connection errors. (integer value)
+#connect_retries = <None>
+
+# Delay (in seconds) between two retries for connection
+# errors. If not set, exponential retry starting with 0.5
+# seconds up to a maximum of 60 seconds is used. (floating
+# point value)
+#connect_retry_delay = <None>
+
+# The maximum number of retries that should be attempted for
+# retriable HTTP status codes. (integer value)
+#status_code_retries = <None>
+
+# Delay (in seconds) between two retries for retriable status
+# codes. If not set, exponential retry starting with 0.5
+# seconds up to a maximum of 60 seconds is used. (floating
+# point value)
+#status_code_retry_delay = <None>
+
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
 
 
 [keystone_authtoken]
@@ -540,6 +964,160 @@
 # Config Section from which to load plugin specific options
 # (string value)
 #auth_section = <None>
+
+
+[nic_devices]
+# This is used to config specific nic devices.
+#
+
+#
+# From cyborg
+#
+
+#   (list value)
+#enabled_nic_types =
+
+
+[nova]
+
+#
+# From cyborg
+#
+
+# PEM encoded Certificate Authority to use when verifying
+# HTTPs connections. (string value)
+#cafile = <None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile = <None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile = <None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure = false
+
+# Timeout value for http requests (integer value)
+#timeout = <None>
+
+# Collect per-API call timing information. (boolean value)
+#collect_timing = false
+
+# Log requests to multiple loggers. (boolean value)
+#split_loggers = false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [nova]/auth_plugin
+#auth_type = <None>
+
+# Config Section from which to load plugin specific options
+# (string value)
+#auth_section = <None>
+
+# Authentication URL (string value)
+#auth_url = <None>
+
+# Scope for system operations (string value)
+#system_scope = <None>
+
+# Domain ID to scope to (string value)
+#domain_id = <None>
+
+# Domain name to scope to (string value)
+#domain_name = <None>
+
+# Project ID to scope to (string value)
+#project_id = <None>
+
+# Project name to scope to (string value)
+#project_name = <None>
+
+# Domain ID containing project (string value)
+#project_domain_id = <None>
+
+# Domain name containing project (string value)
+#project_domain_name = <None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id = <None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will
+# be used for both the user and project domain in v3 and
+# ignored in v2 authentication. (string value)
+#default_domain_id = <None>
+
+# Optional domain name to use with v3 API and v2 parameters.
+# It will be used for both the user and project domain in v3
+# and ignored in v2 authentication. (string value)
+#default_domain_name = <None>
+
+# User ID (string value)
+#user_id = <None>
+
+# Username (string value)
+# Deprecated group/name - [nova]/user_name
+#username = <None>
+
+# User's domain id (string value)
+#user_domain_id = <None>
+
+# User's domain name (string value)
+#user_domain_name = <None>
+
+# User's password (string value)
+#password = <None>
+
+# Tenant ID (string value)
+#tenant_id = <None>
+
+# Tenant Name (string value)
+#tenant_name = <None>
+
+# The default service_type for endpoint URL discovery. (string
+# value)
+#service_type = compute
+
+# The default service_name for endpoint URL discovery. (string
+# value)
+#service_name = <None>
+
+# List of interfaces, in order of preference, for endpoint
+# URL. (list value)
+#valid_interfaces = internal,public
+
+# The default region_name for endpoint URL discovery. (string
+# value)
+#region_name = <None>
+
+# Always use this endpoint URL for requests for this client.
+# NOTE: The unversioned endpoint should be specified here; to
+# request a particular API version, use the `version`, `min-
+# version`, and/or `max-version` options. (string value)
+#endpoint_override = <None>
+
+# The maximum number of retries that should be attempted for
+# connection errors. (integer value)
+#connect_retries = <None>
+
+# Delay (in seconds) between two retries for connection
+# errors. If not set, exponential retry starting with 0.5
+# seconds up to a maximum of 60 seconds is used. (floating
+# point value)
+#connect_retry_delay = <None>
+
+# The maximum number of retries that should be attempted for
+# retriable HTTP status codes. (integer value)
+#status_code_retries = <None>
+
+# Delay (in seconds) between two retries for retriable status
+# codes. If not set, exponential retry starting with 0.5
+# seconds up to a maximum of 60 seconds is used. (floating
+# point value)
+#status_code_retry_delay = <None>
+
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
 
 
 [oslo_messaging_amqp]
@@ -908,14 +1486,23 @@
 # Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
 #ssl_ca_file =
 
+# Global toggle for enforcing the OpenSSL FIPS mode. This
+# feature requires Python support. This is available in Python
+# 3.9 in all environments and may have been backported to
+# older Python versions on select environments. If the Python
+# executable used does not support OpenSSL FIPS mode, an
+# exception will be raised. (boolean value)
+#ssl_enforce_fips_mode = false
+
 # Run the health check heartbeat thread through a native
 # python thread by default. If this option is equal to False
 # then the health check heartbeat will inherit the execution
 # model from the parent process. For example if the parent
 # process has monkey patched the stdlib by using
 # eventlet/greenlet then the heartbeat will be run through a
-# green thread. (boolean value)
-#heartbeat_in_pthread = true
+# green thread. This option should be set to True only for the
+# wsgi services. (boolean value)
+#heartbeat_in_pthread = false
 
 # How long to wait (in seconds) before reconnecting in
 # response to an AMQP consumer cancel notification. (floating
@@ -948,6 +1535,7 @@
 # Possible values:
 # PLAIN - <No description provided>
 # AMQPLAIN - <No description provided>
+# EXTERNAL - <No description provided>
 # RABBIT-CR-DEMO - <No description provided>
 #rabbit_login_method = AMQPLAIN
 
@@ -984,11 +1572,40 @@
 # this option enabled. (boolean value)
 #rabbit_quorum_queue = false
 
+# Each time a message is redelivered to a consumer, a counter
+# is incremented. Once the redelivery count exceeds the
+# delivery limit the message gets dropped or dead-lettered (if
+# a DLX exchange has been configured) Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont
+# set a limit. (integer value)
+#rabbit_quorum_delivery_limit = 0
+
+# By default all messages are maintained in memory if a quorum
+# queue grows in length it can put memory pressure on a
+# cluster. This option can limit the number of messages in the
+# quorum queue. Used only when rabbit_quorum_queue is enabled,
+# Default 0 which means dont set a limit. (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_length
+#rabbit_quorum_max_memory_length = 0
+
+# By default all messages are maintained in memory if a quorum
+# queue grows in length it can put memory pressure on a
+# cluster. This option can limit the number of memory bytes
+# used by the quorum queue. Used only when rabbit_quorum_queue
+# is enabled, Default 0 which means dont set a limit. (integer
+# value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_bytes
+#rabbit_quorum_max_memory_bytes = 0
+
 # Positive integer representing duration in seconds for queue
 # TTL (x-expires). Queues which are unused for the duration of
 # the TTL are automatically deleted. The parameter affects
-# only reply and fanout queues. (integer value)
-# Minimum value: 1
+# only reply and fanout queues. Setting 0 as value will
+# disable the x-expires. If doing so, make sure you have a
+# rabbitmq policy to delete the queues or you deployment will
+# create an infinite number of queue over time. (integer
+# value)
+# Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
 # Specifies the number of messages to prefetch. Setting to
@@ -1002,7 +1619,7 @@
 
 # How often times during the heartbeat_timeout_threshold we
 # check the heartbeat. (integer value)
-#heartbeat_rate = 2
+#heartbeat_rate = 3
 
 # DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ
 # mandatory flag for direct send. The direct send is used as
@@ -1093,6 +1710,256 @@
 # Absolute path client key file REST based policy check
 # (string value)
 #remote_ssl_client_key_file = <None>
+
+
+[placement]
+
+#
+# From cyborg
+#
+
+# PEM encoded Certificate Authority to use when verifying
+# HTTPs connections. (string value)
+#cafile = <None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile = <None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile = <None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure = false
+
+# Timeout value for http requests (integer value)
+#timeout = <None>
+
+# Collect per-API call timing information. (boolean value)
+#collect_timing = false
+
+# Log requests to multiple loggers. (boolean value)
+#split_loggers = false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [placement]/auth_plugin
+#auth_type = <None>
+
+# Config Section from which to load plugin specific options
+# (string value)
+#auth_section = <None>
+
+# Authentication URL (string value)
+#auth_url = <None>
+
+# Scope for system operations (string value)
+#system_scope = <None>
+
+# Domain ID to scope to (string value)
+#domain_id = <None>
+
+# Domain name to scope to (string value)
+#domain_name = <None>
+
+# Project ID to scope to (string value)
+#project_id = <None>
+
+# Project name to scope to (string value)
+#project_name = <None>
+
+# Domain ID containing project (string value)
+#project_domain_id = <None>
+
+# Domain name containing project (string value)
+#project_domain_name = <None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id = <None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will
+# be used for both the user and project domain in v3 and
+# ignored in v2 authentication. (string value)
+#default_domain_id = <None>
+
+# Optional domain name to use with v3 API and v2 parameters.
+# It will be used for both the user and project domain in v3
+# and ignored in v2 authentication. (string value)
+#default_domain_name = <None>
+
+# User ID (string value)
+#user_id = <None>
+
+# Username (string value)
+# Deprecated group/name - [placement]/user_name
+#username = <None>
+
+# User's domain id (string value)
+#user_domain_id = <None>
+
+# User's domain name (string value)
+#user_domain_name = <None>
+
+# User's password (string value)
+#password = <None>
+
+# Tenant ID (string value)
+#tenant_id = <None>
+
+# Tenant Name (string value)
+#tenant_name = <None>
+
+# The default service_type for endpoint URL discovery. (string
+# value)
+#service_type = placement
+
+# The default service_name for endpoint URL discovery. (string
+# value)
+#service_name = <None>
+
+# List of interfaces, in order of preference, for endpoint
+# URL. (list value)
+#valid_interfaces = internal,public
+
+# The default region_name for endpoint URL discovery. (string
+# value)
+#region_name = <None>
+
+# Always use this endpoint URL for requests for this client.
+# NOTE: The unversioned endpoint should be specified here; to
+# request a particular API version, use the `version`, `min-
+# version`, and/or `max-version` options. (string value)
+#endpoint_override = <None>
+
+# The maximum number of retries that should be attempted for
+# connection errors. (integer value)
+#connect_retries = <None>
+
+# Delay (in seconds) between two retries for connection
+# errors. If not set, exponential retry starting with 0.5
+# seconds up to a maximum of 60 seconds is used. (floating
+# point value)
+#connect_retry_delay = <None>
+
+# The maximum number of retries that should be attempted for
+# retriable HTTP status codes. (integer value)
+#status_code_retries = <None>
+
+# Delay (in seconds) between two retries for retriable status
+# codes. If not set, exponential retry starting with 0.5
+# seconds up to a maximum of 60 seconds is used. (floating
+# point value)
+#status_code_retry_delay = <None>
+
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
+
+
+[service_user]
+#
+# Configuration options for service to service authentication
+# using a service
+# token. These options allow sending a service token along
+# with the user's token
+# when contacting external REST APIs.
+
+#
+# From cyborg
+#
+
+#
+# When True, if sending a user token to a REST API, also send
+# a service token.
+#  (boolean value)
+#send_service_user_token = false
+
+# PEM encoded Certificate Authority to use when verifying
+# HTTPs connections. (string value)
+#cafile = <None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile = <None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile = <None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure = false
+
+# Timeout value for http requests (integer value)
+#timeout = <None>
+
+# Collect per-API call timing information. (boolean value)
+#collect_timing = false
+
+# Log requests to multiple loggers. (boolean value)
+#split_loggers = false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [service_user]/auth_plugin
+#auth_type = <None>
+
+# Config Section from which to load plugin specific options
+# (string value)
+#auth_section = <None>
+
+# Authentication URL (string value)
+#auth_url = <None>
+
+# Scope for system operations (string value)
+#system_scope = <None>
+
+# Domain ID to scope to (string value)
+#domain_id = <None>
+
+# Domain name to scope to (string value)
+#domain_name = <None>
+
+# Project ID to scope to (string value)
+#project_id = <None>
+
+# Project name to scope to (string value)
+#project_name = <None>
+
+# Domain ID containing project (string value)
+#project_domain_id = <None>
+
+# Domain name containing project (string value)
+#project_domain_name = <None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id = <None>
+
+# Optional domain ID to use with v3 and v2 parameters. It will
+# be used for both the user and project domain in v3 and
+# ignored in v2 authentication. (string value)
+#default_domain_id = <None>
+
+# Optional domain name to use with v3 API and v2 parameters.
+# It will be used for both the user and project domain in v3
+# and ignored in v2 authentication. (string value)
+#default_domain_name = <None>
+
+# User ID (string value)
+#user_id = <None>
+
+# Username (string value)
+# Deprecated group/name - [service_user]/user_name
+#username = <None>
+
+# User's domain id (string value)
+#user_domain_id = <None>
+
+# User's domain name (string value)
+#user_domain_name = <None>
+
+# User's password (string value)
+#password = <None>
+
+# Tenant ID (string value)
+#tenant_id = <None>
+
+# Tenant Name (string value)
+#tenant_name = <None>
 
 
 [ssl]
