@@ -398,10 +398,10 @@ power_bootup_status()
             if   [ -n "$bs" ] ; then pu=$(( bs - ${bt:-$bs} ))
             elif [ -n "$bt" ] ; then pu=$(( now - bt )) ; pu_p=1
             else pu=-1 ; fi
-            if   [ -n "$fn" ] ; then bsd=$(( fn - bs ))
+            if   [ -n "$fn" ] ; then bsd=$(( fn - ${bs:-$fn} ))
             elif [ -n "$bs" ] ; then bsd=$(( now - bs )) ; bs_p=1
             else bsd=-1 ; fi
-            if   [ -n "$dn" ] ; then fnd=$(( dn - fn ))
+            if   [ -n "$dn" ] ; then fnd=$(( dn - ${fn:-$dn} ))
             elif [ -n "$fn" ] ; then fnd=$(( now - fn )) ; fn_p=1
             else fnd=-1 ; fi
             if   [ -n "$dn" ] ; then phase="done" ; idx=3 ; tot=$(( dn - ${bt:-$dn} ))
