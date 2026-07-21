@@ -187,7 +187,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/run/neutron
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/neutron/kill_scripts
 	$(Q)# install dist conf
-	$(Q)install -p -D -m 640 /tmp/neutron/neutron-dist.conf /usr/share/neutron/neutron-dist.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/neutron/neutron-dist.conf /usr/share/neutron/neutron-dist.conf
 	$(Q)# create and populate configuration directory for L3 agent that is not accessible for user modification
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/share/neutron/l3_agent
 	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/l3_agent.ini /usr/share/neutron/l3_agent/l3_agent.conf
