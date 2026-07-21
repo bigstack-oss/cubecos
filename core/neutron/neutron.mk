@@ -74,6 +74,8 @@ rootfs_install::
 
 # set up forked neutron-vpnaas projects
 rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(NEUTRON_VPNAAS_REPO_URL) /tmp/neutron/neutron-vpnaas
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
 		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
@@ -87,6 +89,8 @@ rootfs_install::
 		--no-build-isolation
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/neutron/neutron-vpnaas-dashboard && \
 		/opt/openstack-antelope/bin/python setup.py install"
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 # generate default configurations and stage files
 rootfs_install::
