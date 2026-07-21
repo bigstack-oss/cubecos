@@ -268,5 +268,6 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/neutron-ovn-vpn-agent.service ./lib/systemd/system
 
 # for neutron-vpnaas-dashboard
-rootfs_install::
-	$(Q)cp -f $(PIPS_DIR)/neutron-vpnaas-dashboard.git/neutron_vpnaas_dashboard/enabled/_7100*.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
+# rootfs_install::
+# 	$(Q)# FIXME: need to update the Horizon panel path after upgrading Horizon
+# 	$(Q)cp -f $(PIPS_DIR)/neutron-vpnaas-dashboard.git/neutron_vpnaas_dashboard/enabled/_7100*.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
