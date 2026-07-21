@@ -154,9 +154,9 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/ovn_agent.ini.sample /etc/neutron/plugins/ml2/ovn_agent.ini
 	$(Q)# for the backward compatibility, now networking-ovn is merged into neutron
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/neutron/plugins/networking-ovn
-	$(Q)chroot $(ROOTDIR) ln -s /etc/neutron/neutron_ovn_metadata_agent.ini /etc/neutron/plugins/networking-ovn/networking-ovn-metadata-agent.ini
-	$(Q)chroot $(ROOTDIR) ln -s /etc/neutron/ovn.ini /etc/neutron/plugins/networking-ovn/networking-ovn.ini
-	$(Q)chroot $(ROOTDIR) ln -s /usr/bin/neutron-ovn-metadata-agent /usr/bin/networking-ovn-metadata-agent
+	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/neutron_ovn_metadata_agent.ini /etc/neutron/plugins/networking-ovn/networking-ovn-metadata-agent.ini
+	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/ovn.ini /etc/neutron/plugins/networking-ovn/networking-ovn.ini
+	$(Q)chroot $(ROOTDIR) ln -sf /usr/bin/neutron-ovn-metadata-agent /usr/bin/networking-ovn-metadata-agent
 	$(Q)# install security configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/neutron/neutron-sudoers /etc/sudoers.d/neutron
 	$(Q)# install systemd unit files
@@ -177,7 +177,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/neutron/neutron-server.service /usr/lib/systemd/system/neutron-server.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/neutron/neutron-sriov-nic-agent.service /usr/lib/systemd/system/neutron-sriov-nic-agent.service
 	$(Q)# for the backward compatibility
-	$(Q)ln -s /usr/lib/systemd/system/neutron-ovn-metadata-agent.service /usr/lib/systemd/system/networking-ovn-metadata-agent.service
+	$(Q)chroot $(ROOTDIR) ln -sf /usr/lib/systemd/system/neutron-ovn-metadata-agent.service /usr/lib/systemd/system/networking-ovn-metadata-agent.service
 	$(Q)# install helper scripts
 	$(Q)chroot $(ROOTDIR) install -p -D -m 755 /tmp/neutron/neutron-enable-bridge-firewall.sh /usr/bin/neutron-enable-bridge-firewall.sh
 	$(Q)# setup directories
@@ -190,7 +190,7 @@ rootfs_install::
 	$(Q)install -p -D -m 640 /tmp/neutron/neutron-dist.conf /usr/share/neutron/neutron-dist.conf
 	$(Q)# create and populate configuration directory for L3 agent that is not accessible for user modification
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/share/neutron/l3_agent
-	$(Q)chroot $(ROOTDIR) ln -s /etc/neutron/l3_agent.ini /usr/share/neutron/l3_agent/l3_agent.conf
+	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/l3_agent.ini /usr/share/neutron/l3_agent/l3_agent.conf
 	$(Q)# create dist configuration directory for neutron-server (may be filled by advanced services)
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/share/neutron/server
 	$(Q)# create configuration directories for all services that can be populated by users with custom *.conf files
