@@ -56,6 +56,14 @@ filter {
   ruby {
     code => "event.set('[event][timestamp]', event.get('@timestamp').to_i * 1000)"
   }
+  # drop redundant category= from attrs (dup of the event-key category tag;
+  # influxdb rejects duplicate tags); it stays in metadata
+  mutate {
+    gsub => [
+      "attrs", "(^|,)category=[^,]*", "",
+      "attrs", "^,", ""
+    ]
+  }
   if [event][metadata] {
     mutate {
       add_field => {
