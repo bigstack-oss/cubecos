@@ -130,7 +130,6 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/neutron/neutron-server.service $(ROOTDIR)/tmp/neutron/
 	$(Q)cp -f $(COREDIR)/neutron/neutron-sriov-nic-agent.service $(ROOTDIR)/tmp/neutron/
 	$(Q)cp -f $(COREDIR)/neutron/neutron-enable-bridge-firewall.sh $(ROOTDIR)/tmp/neutron/
-	$(Q)cp -f $(COREDIR)/neutron/neutron-l2-agent-sysctl.conf $(ROOTDIR)/tmp/neutron/
 
 # install system directories and production files
 rootfs_install::
