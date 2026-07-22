@@ -291,6 +291,15 @@ http {
         access_log /var/log/cube-cos-ui/cube-cos-ui-nginx-access.log ui;
         error_log /var/log/cube-cos-ui/cube-cos-ui-nginx-error.log;
 
+        # SPA cache contract: everything mutable under its URL (index.html,
+        # favicon, dist-root files) revalidates every load; hashed bundles
+        # never change under their name and cache forever
+        add_header Cache-Control "no-cache";
+
+        location /assets/ {
+            add_header Cache-Control "public, max-age=31536000, immutable";
+        }
+
         location / {
             # health check endpoint for HAProxy
             if ($request_method = OPTIONS) {
