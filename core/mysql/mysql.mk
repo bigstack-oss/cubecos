@@ -6,7 +6,8 @@
 MARIADB_VER := 10.5.29-3.el9_7
 # rpmfind.net is often not responsive
 # MARIADB_URL := https://rpmfind.net/linux/centos-stream/9-stream/AppStream/x86_64/os/Packages
-MARIADB_URL := https://ftp.icm.edu.pl/packages/linux-rocky/9/devel/x86_64/os/Packages/m
+# ftp.icm.edu.pl went unreachable too; the CDN keeps rotated pins in /vault
+MARIADB_URL := https://dl.rockylinux.org/pub/rocky/9/devel/x86_64/os/Packages/m
 MARIADB_LOCKED_RPMS := mariadb-$(MARIADB_VER) mariadb-backup-$(MARIADB_VER) mariadb-common-$(MARIADB_VER) mariadb-errmsg-$(MARIADB_VER)
 MARIADB_LOCKED_RPMS += mariadb-gssapi-server-$(MARIADB_VER) mariadb-server-$(MARIADB_VER) mariadb-server-galera-$(MARIADB_VER) mariadb-server-utils-$(MARIADB_VER)
 LOCKED_DNF += $(MARIADB_LOCKED_RPMS)
