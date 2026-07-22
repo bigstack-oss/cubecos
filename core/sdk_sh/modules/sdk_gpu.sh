@@ -389,7 +389,7 @@ gpu_device_list()
 
     local pgpu_ids
     pgpu_ids=$(echo "$gpu_config" | jq -c --argjson targetIds "$recorded_gpu_ids" \
-        '[.[] | select(($targetIds | index(.id)) == null)]')
+        '[.[] | select((.id as $id | $targetIds | index($id)) == null)]')
 
     while IFS= read -r entry; do
         [ -z "$entry" ] || [ "$entry" = "null" ] && continue
