@@ -857,28 +857,26 @@ ClusterReadyMain(int argc, const char** argv)
     CliPrintf("[1/6] Updating storage replication rule");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run " HEX_SDK " ceph_pool_replicate_init");
 
-    CliPrintf("[2/6] Checking SDN services");
-    // Disabled to verify it's still needed (#1094): health_neutron_repair now waits for OVN
-    // metadata nb_cfg catch-up, and [6/6] cluster_check_repair_async repairs neutron anyway.
-    // HexUtilSystemF(0, 0,  HEX_SDK " host_local_run " HEX_SDK " health_neutron_repair");
-
-    CliPrintf("[3/6] Configuring modules");
+    CliPrintf("[2/6] Configuring modules");
     if (cfgFlatExt)
         HexSpawn(0, HEX_CFG, "-p", "trigger", "cluster_ready", cidr.c_str(), gw.c_str(), iplist.c_str(), ZEROCHAR_PTR);
     else
         HexSpawn(0, HEX_CFG, "-p", "trigger", "cluster_ready", ZEROCHAR_PTR);
 
-    CliPrintf("[4/6] Starting cluster");
+    CliPrintf("[3/6] Starting cluster");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run hex_sdk cmd " HEX_SDK " cube_cluster_start");
+
+    // the cluster is guaranteed complete here -- never import at boot, where a
+    // still-forming ceph wedges the upload (#1139)
+    CliPrintf("[4/6] Importing builtin images");
+    if (HexUtilSystemF(0, 0, HEX_SDK " cube_import_builtin_images") != 0)
+        CliPrintf("      Warning: built-in image import failed; re-run 'cluster set_ready' to retry.");
 
     CliPrintf("[5/6] Strengthening password");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run hex_sdk cmd " HEX_CFG " cube_password_init");
 
     CliPrintf("[6/6] Cluster check and repair started in the background.");
     CliPrintf("      The box is ready to use now; the result will pop up here when it completes.");
-    // Disabled to verify it's still needed (#1094): cluster_check_repair_async below already
-    // repairs neutron via check_repair, which now waits for OVN metadata nb_cfg catch-up.
-    // HexSpawn(0, HEX_SDK, "host_local_run", "hex_sdk", "-m force",  "health_neutron_repair", ZEROCHAR_PTR);
     HexSpawn(0, HEX_SDK, "cmd", "rm -f /tmp/health_*_error.count", ZEROCHAR_PTR);
     HexSystemF(0, HEX_SDK " cluster_check_repair_async");
 

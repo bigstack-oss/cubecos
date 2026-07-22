@@ -323,19 +323,6 @@ cube_cluster_start_cluster()
     # ready yet, leaving single-node flooding STONITH errors + unbounded pe-error.
     Quiet -n pcs property set stonith-enabled=false pe-error-series-max="1000" pe-warn-series-max="1000" cluster-recheck-interval="5min"
 
-    if $OPENSTACK image list -f value | grep -q "Cirros active" ; then
-        cmd rm -f /etc/glance/cirros-0.4.0-x86_64-disk.qcow2
-        cmd rm -f /etc/glance/alpine-tools.qcow2
-    else
-        [ ! -e /etc/glance/cirros-0.4.0-x86_64-disk.qcow2 ] || $HEX_SDK os_image_import /etc/glance cirros-0.4.0-x86_64-disk.qcow2 Cirros
-        [ ! -e /etc/glance/alpine-tools.qcow2 ] || $HEX_SDK os_image_import /etc/glance alpine-tools.qcow2 Alpine
-    fi
-    local cnt=0
-    for i in $($OPENSTACK image list -f value | grep "Cirros active" | cut -d " " -f1) ; do
-        ((cnt++))
-        [ $cnt -le 1 ] || $OPENSTACK image delete $i
-    done
-
     cmd "$HEX_SDK migrate_fixpack"
     nohup bash -c "$HEX_SDK git_init" >/dev/null 2>&1 &
 
@@ -374,6 +361,29 @@ cube_cluster_start_cluster_if_master()
         sleep 20
     done
     cube_cluster_start_cluster
+}
+
+# import the builtin glance images (Cirros, Alpine); set_ready-only -- never at
+# boot, where a still-forming ceph wedges the upload (#1139). Idempotent.
+cube_import_builtin_images()
+{
+    if $OPENSTACK image list -f value | grep -q "Cirros active" ; then
+        cmd rm -f /etc/glance/cirros-0.4.0-x86_64-disk.qcow2
+        cmd rm -f /etc/glance/alpine-tools.qcow2
+        return 0
+    fi
+    # heal an interrupted earlier attempt: a queued/saving record wedges the name
+    for i in $($OPENSTACK image list -f value | grep -E "(Cirros|Alpine) (queued|saving)" | cut -d" " -f1) ; do
+        $OPENSTACK image delete $i
+    done
+    [ ! -e /etc/glance/cirros-0.4.0-x86_64-disk.qcow2 ] || $HEX_SDK os_image_import /etc/glance cirros-0.4.0-x86_64-disk.qcow2 Cirros
+    [ ! -e /etc/glance/alpine-tools.qcow2 ] || $HEX_SDK os_image_import /etc/glance alpine-tools.qcow2 Alpine
+
+    # verify the import actually landed
+    if ! $OPENSTACK image list -f value | grep -q "Cirros active" ; then
+        echo "Error: built-in image Cirros could not be imported" >&2
+        return 1
+    fi
 }
 
 cube_cluster_stop()

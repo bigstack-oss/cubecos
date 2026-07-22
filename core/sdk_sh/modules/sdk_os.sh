@@ -775,8 +775,11 @@ os_image_import()
     local _distro=${7:-linux}
     local properties=${8:---property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi --property hw_machine_type=q35 --property hw_video_model=vga}
 
-    # prevent duplicated importing
+    # prevent duplicated importing; a marker older than 2h is a leak from a
+    # killed import (only the success/quota paths remove it) -- sweep the leak
+    # so a retry of this same import is not blocked forever
     local mf_importing="/run/${FUNCNAME[0]}_${file}_${name}_${pool}"
+    cmd find $mf_importing -mmin +120 -delete >/dev/null 2>&1
     if  cmd -v ls $mf_importing | grep -q "|0|" ; then
         Error "Image is being imported. If this is not the case, remove $mf_importing on all nodes"
     else
