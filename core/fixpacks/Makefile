@@ -44,12 +44,13 @@ fixpack: $(FIXPACK)
 
 secfixdraft:
 	$(call RUN_CMD_SILENT,$(SHELL) $(HEX_SCRIPTSDIR)/makesecfixdraft $@,"  GEN     $@")
+	$(Q)sed -i "s/SUPPORTED_FIRMWARES=.*/SUPPORTED_FIRMWARES=\"$(SUPPORTED_FIRMWARES)\"/" $@/fixpack.info
+	$(Q)sed -i "s/FIXPACK_ID=.*/FIXPACK_ID=\"$(FIXPACK_ID)\"/" $@/fixpack.info
+	$(Q)sed -i "s/FIXPACK_NAME=.*/FIXPACK_NAME=\"$(FIXPACK_ID)\"/" $@/fixpack.info
+	$(call RUN_CMD,$(SHELL) $(HEX_SCRIPTSDIR)/makehotfix -C -p 20M $@ $(FIXPACK_ID).fixpack,"  GEN     $@ $(FIXPACK_ID).fixpack")
+	$(Q)md5sum $(FIXPACK_ID).fixpack >$(FIXPACK_ID).fixpack.md5
 
 secfix: secfixdraft
-	$(Q)sed -i "s/SUPPORTED_FIRMWARES=.*/SUPPORTED_FIRMWARES=\"$(SUPPORTED_FIRMWARES)\"/" $</fixpack.info
-	$(Q)sed -i "s/FIXPACK_ID=.*/FIXPACK_ID=\"$(FIXPACK_ID)\"/" $</fixpack.info
-	$(Q)sed -i "s/FIXPACK_NAME=.*/FIXPACK_NAME=\"$(FIXPACK_ID)\"/" $</fixpack.info
-	$(call RUN_CMD,$(SHELL) $(HEX_SCRIPTSDIR)/makehotfix -C -p 20M $< $(FIXPACK_ID).fixpack,"  GEN     $@ $(FIXPACK_ID).fixpack")
-	$(Q)md5sum $(FIXPACK_ID).fixpack >$(FIXPACK_ID).fixpack.md5
+	$(Q)true
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
