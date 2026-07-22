@@ -1,0 +1,6 @@
+[Unit]
+Description=CubeCOS rolling update/restart stall watchdog
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/hex_sdk power_roll_watchdog

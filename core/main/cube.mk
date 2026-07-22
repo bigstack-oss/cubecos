@@ -258,6 +258,11 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/systemd/system.conf.d
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-watchdog.conf ./etc/systemd/system.conf.d
 
+# roll stall watchdog -- installed disabled; the roll arms/disarms it
+rootfs_install::
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/hex-roll-watchdog.service ./lib/systemd/system
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/hex-roll-watchdog.timer ./lib/systemd/system
+
 # cube deterministic ssh key generation utility
 $(call PROJ_INSTALL_PROGRAM,,$(CORE_PKGDIR)/x86_64/oss/ssh-keydgen,./usr/sbin)
 

@@ -25,11 +25,13 @@ ROLLING_RECOVER_MARKER=${ROLLING_RECOVER_MARKER:-/store/rolling_recover}
 # failover window. Temp name expanded once per attempt (avoids lost updates).
 _power_roll_write()
 {
-    local i t
+    # every write stamps .heartbeat -- the watchdog's liveness signal
+    local i t filter="${@: -1}"
+    set -- "${@:1:$(($#-1))}"
     for i in $(seq 1 30) ; do
         t=$ROLLING_JOB.tmp.$$.$i
         if ( flock -w 15 200 || exit 3
-             jq "$@" $ROLLING_JOB > "$t" && [ -s "$t" ] && mv "$t" $ROLLING_JOB || { rm -f "$t" ; exit 4 ; }
+             jq "$@" --argjson __hb "$(date +%s)" "($filter) | .heartbeat=\$__hb" $ROLLING_JOB > "$t" && [ -s "$t" ] && mv "$t" $ROLLING_JOB || { rm -f "$t" ; exit 4 ; }
            ) 200>$ROLLING_DIR/.lock 2>/dev/null ; then
             return 0
         fi
@@ -132,7 +134,8 @@ _power_roll_pause()
 {
     _power_roll_set_str reason "$1"
     _power_roll_set_str state paused
-    cluster_rolling_marker_clear
+    # release the roll's cluster guards; "continue" re-takes them
+    Quiet -n $HEX_SDK ceph_leave_rolling
     echo "rolling $(_power_roll_kind) paused: $1" >&2
     /usr/sbin/hex_log_event -e CLU00004W "interface=system,host=$HOSTNAME,category=cluster,sub=rolling_$(_power_roll_kind),action=pause,reason=$1"
 }
@@ -190,7 +193,19 @@ _power_roll_kick()
 
     _power_roll_set_str inflight "$host"
     _power_roll_set_node_num "$host" started $(date +%s)
-    _power_roll_set_raw deadline $(( $(date +%s) + ${ROLLING_NODE_TIMEOUT:-3600} ))
+
+    # node deadline scales with the VMs to drain (virsh on the target -- no
+    # OpenStack on the kick path); ROLLING_NODE_TIMEOUT is the floor
+    local _budget=${ROLLING_NODE_TIMEOUT:-2700}
+    case "$role" in
+        *compute*|control-converged|edge-core)
+            local _nvms=$(remote_run $host "virsh list --uuid --state-running 2>/dev/null | grep -c ." </dev/null 2>/dev/null | tr -dc 0-9)
+            if [ -n "$_nvms" ] && [ "$_nvms" -gt 0 ] && [ $(( 1500 + _nvms * 120 )) -gt $_budget ] ; then
+                _budget=$(( 1500 + _nvms * 120 ))
+            fi
+            ;;
+    esac
+    _power_roll_set_raw deadline $(( $(date +%s) + _budget ))
 
     case "$role" in
         *compute*|control-converged|edge-core)
@@ -584,7 +599,27 @@ power_roll_start()
     else
         echo "follow progress with \"cluster rolling_$kind status\"."
     fi
+    # arm only now that the job exists (a tick seeing no job self-stops)
+    _power_roll_watchdog_arm
     power_roll_advance
+}
+
+# Arm/disarm the stall watchdog on control-capable nodes (the only possible
+# VIP holders). Runtime start/stop only; the boot path re-arms mid-roll.
+_power_roll_watchdog_arm()
+{
+    local _h
+    for _h in $(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname' 2>/dev/null) ; do
+        ( remote_run "$_h" "systemctl start hex-roll-watchdog.timer" ) >/dev/null 2>&1
+    done
+}
+
+_power_roll_watchdog_disarm()
+{
+    local _h
+    for _h in $(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname' 2>/dev/null) ; do
+        ( remote_run "$_h" "systemctl stop hex-roll-watchdog.timer" ) >/dev/null 2>&1
+    done
 }
 
 # Kind of the roll this node is currently part of, or empty. The boot path uses
@@ -611,6 +646,9 @@ power_roll_advance()
 
     [ -e "$ROLLING_JOB" ] || return 0
     [ "$(jq -r .state $ROLLING_JOB 2>/dev/null)" = "running" ] || return 0
+
+    # a control node booting mid-roll re-arms its own timer
+    is_control_node && Quiet -n systemctl start hex-roll-watchdog.timer
 
     local master=$(_power_roll_master)
     local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB)
@@ -654,6 +692,7 @@ power_roll_advance()
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
+        _power_roll_watchdog_disarm
         # The full check_repair pass belongs here -- when the ROLL is done --
         # not when a single node's boot is done. Running it mid-roll evaluates a
         # cluster with a node deliberately down and tries to "repair" it.
@@ -688,7 +727,7 @@ power_roll_status()
     fi
     echo ""
     local now=$(date +%s)
-    local window=${ROLLING_NODE_TIMEOUT:-3600}
+    local window=${ROLLING_NODE_TIMEOUT:-2700}
     printf " %-20s %-18s %-9s %-10s %s\n" "node" "role" "status" "vms(m+p/tot)" "elapsed"
     jq -r '.nodes[]|"\(.hostname)\t\(.role)\t\(.status)\t\(.started // 0)\t\(.finished // 0)\t\(.vms_total // 0)\t\(.vms_done // 0)\t\(.vms_paused // 0)\t\(.ip // "")"' $ROLLING_JOB | \
         while IFS=$'\t' read -r h r s st fin vt vd vp ip ; do
@@ -824,7 +863,9 @@ power_roll_decision()
             _power_roll_set_str inflight ""
             _power_roll_set_str reason ""
             _power_roll_set_str state running
-            cluster_rolling_marker_set
+            # re-take the guards the pause released
+            Quiet -n $HEX_SDK ceph_enter_rolling
+            _power_roll_watchdog_arm
             power_roll_advance
             ;;
         abort)
@@ -838,6 +879,7 @@ power_roll_decision()
             # mon_osd_down_out_interval) -- neither should outlive the roll
             cluster_rolling_marker_clear
             Quiet -n $HEX_SDK ceph_leave_rolling
+            _power_roll_watchdog_disarm
             echo "rolling $(_power_roll_kind) aborted"
             ;;
         *)
@@ -961,6 +1003,64 @@ power_vm_reconcile_error_state()
 
     log_info "vm_reconcile: $_reset stale, $_real real failure(s), $_skip host-mismatch"
     return 0
+}
+
+# Roll stall enforcement (hex-roll-watchdog.timer, armed only during a roll):
+# pause past the node deadline, or on heartbeat silence in write-constant
+# phases (reboot/boot phases are deadline-only). Only the VIP holder acts;
+# a trip also runs the per-node stale-ERROR reconcile.
+power_roll_watchdog()
+{
+    is_control_node || return 0
+
+    # Every ticking node stops its own timer when its roll is gone (paused
+    # stays armed; "continue" re-arms). Only the VIP holder acts below.
+    local _state=""
+    [ -e "$ROLLING_JOB" ] && _state=$(jq -r '.state // ""' $ROLLING_JOB 2>/dev/null)
+    [ "$_state" = "paused" ] && return 0
+    [ "$_state" != "running" ] && Quiet -n systemctl stop hex-roll-watchdog.timer
+
+    # Everything past here is a single actor's job: only the VIP holder acts.
+    local _vip
+    source hex_tuning $SETTINGS_TXT cubesys.control.vip
+    _vip=$T_cubesys_control_vip
+    [ -n "$_vip" ] || return 0                        # non-HA: boot paths own recovery
+    ip -o addr show 2>/dev/null | grep -qw "$_vip" || return 0
+
+    if [ "$_state" != "running" ] ; then
+        # sweep the roll's stale osd-out pin (an admin's own value is left alone)
+        if timeout 20 ceph config dump 2>/dev/null | grep -qE 'mon_osd_down_out_interval[[:space:]]+3600\b' ; then
+            log_warning "roll_watchdog: stale mon_osd_down_out_interval=3600 with no active roll -- clearing"
+            Quiet -n $HEX_SDK ceph_leave_rolling
+        fi
+        return 0
+    fi
+
+    local now=$(date +%s)
+    local deadline=$(jq -r '.deadline // 0' $ROLLING_JOB)
+    local hb=$(jq -r '.heartbeat // 0' $ROLLING_JOB)
+    local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB)
+    local phase=""
+    [ -n "$inflight" ] && phase=$(jq -r --arg h "$inflight" '.nodes[]|select(.hostname==$h)|.status // ""' $ROLLING_JOB)
+
+    if [ "$deadline" -gt 0 ] && [ "$now" -gt "$deadline" ] ; then
+        log_warning "roll_watchdog: $inflight over deadline by $(( now - deadline ))s (phase: ${phase:-unknown})"
+        _power_roll_pause "watchdog: $inflight exceeded its ${ROLLING_NODE_TIMEOUT:-2700}s node deadline (phase: ${phase:-unknown})"
+        [ -n "$inflight" ] && Quiet -n $HEX_SDK power_vm_reconcile_error_state "$inflight"
+        return 0
+    fi
+
+    local quiet=0
+    case "$phase" in
+        draining) quiet=600 ;;
+        staging)  quiet=900 ;;
+        *)        return 0 ;;
+    esac
+    if [ "$hb" -gt 0 ] && [ $(( now - hb )) -gt $quiet ] ; then
+        log_warning "roll_watchdog: heartbeat silent $(( now - hb ))s while $inflight is $phase"
+        _power_roll_pause "watchdog: no orchestrator heartbeat for $(( now - hb ))s while $inflight is $phase"
+        Quiet -n $HEX_SDK power_vm_reconcile_error_state "$inflight"
+    fi
 }
 
 # Shared cephfs record of VMs running before a cluster poweroff/powercycle, written

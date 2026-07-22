@@ -1,0 +1,9 @@
+[Unit]
+Description=Periodic CubeCOS roll stall check
+
+[Timer]
+OnBootSec=120
+OnUnitActiveSec=60
+
+[Install]
+WantedBy=timers.target
