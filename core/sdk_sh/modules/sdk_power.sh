@@ -137,7 +137,8 @@ _power_roll_pause()
     # release the roll's cluster guards; "continue" re-takes them
     Quiet -n $HEX_SDK ceph_leave_rolling
     echo "rolling $(_power_roll_kind) paused: $1" >&2
-    /usr/sbin/hex_log_event -e CLU00004W "interface=system,host=$HOSTNAME,category=cluster,sub=rolling_$(_power_roll_kind),action=pause,reason=$1"
+    # strip commas/newlines: attrs are comma-separated k=v (as CLU00006W does)
+    /usr/sbin/hex_log_event -e CLU00004W "interface=system,host=$HOSTNAME,category=cluster,sub=rolling_$(_power_roll_kind),action=pause,reason=${1//[,$'\n']/ }"
 }
 
 _power_roll_drain_poll()
