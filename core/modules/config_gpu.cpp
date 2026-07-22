@@ -529,10 +529,16 @@ ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profile
     if (strcmp(newType, "sriovVgpu") == 0 && !pciAddress.empty()) {
         const std::string sysfsAddr = SysfsPciAddr(pciAddress);
 
-        // Skip the capacity check if sriov_totalvfs is unreadable.
+        // An unreadable sriov_totalvfs fails the check rather than skipping
+        // it - a missing/unreadable required precondition is not the same
+        // as "capacity confirmed sufficient".
         std::ifstream totalVfsStream(std::string(PCI_DEVICES_DIR) + "/" + sysfsAddr + "/sriov_totalvfs");
         long totalVfs = 0;
-        if ((totalVfsStream >> totalVfs) && requestedTotal > totalVfs) {
+        if (!(totalVfsStream >> totalVfs)) {
+            HexLogError("gpu_resource_set: could not read sriov_totalvfs for GPU %s", gpuId);
+            return false;
+        }
+        if (requestedTotal > totalVfs) {
             HexLogError("gpu_resource_set: requested %ld vGPU(s) exceeds the %ld VF(s) available on GPU %s",
                         requestedTotal, totalVfs, gpuId);
             return false;
