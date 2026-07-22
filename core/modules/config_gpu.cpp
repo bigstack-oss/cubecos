@@ -88,10 +88,10 @@ RunSriovManageWithRetry(const char* op, const std::string& sysfsAddr)
 
     for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         const std::string output = HexUtilPOpen(
-            "%s %s %s 2>&1; echo HEX_RC:$?", NVIDIA_SRIOV, op, sysfsAddr.c_str());
+            "%s %s %s 2>&1; echo |__HEX_RC_$?__|", NVIDIA_SRIOV, op, sysfsAddr.c_str());
 
-        const size_t marker = output.rfind("HEX_RC:");
-        const int rc = (marker != std::string::npos) ? atoi(output.c_str() + marker + 7) : -1;
+        const size_t marker = output.rfind("|__HEX_RC_");
+        const int rc = (marker != std::string::npos) ? atoi(output.c_str() + marker + 10) : -1;
 
         if (rc == 0) {
             return true;
