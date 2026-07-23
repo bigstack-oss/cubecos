@@ -480,6 +480,21 @@ _power_roll_stage_all()
 {
     local pkg=$1 h rc=0
     local -A _pids=()
+    # Preflight: every node reads the pkg from shared cephfs, and a wedged
+    # cephfs client (MDS-evicted after the large pkg write, mount returns
+    # EACCES) fails its stage mid-flight. Verify mount+pkg per node first,
+    # self-heal once via ceph_mount_cephfs, and pause BEFORE staging if a
+    # node still can't see the package.
+    for h in $(jq -r '.nodes[].hostname' $ROLLING_JOB 2>/dev/null) ; do
+        if ! remote_run "$h" "mountpoint -q /mnt/cephfs && test -r $pkg" </dev/null >/dev/null 2>&1 ; then
+            log_warning "stage preflight: cephfs/pkg not readable on $h, running ceph_mount_cephfs"
+            remote_run "$h" "$HEX_SDK ceph_mount_cephfs" </dev/null >/dev/null 2>&1
+            if ! remote_run "$h" "mountpoint -q /mnt/cephfs && test -r $pkg" </dev/null >/dev/null 2>&1 ; then
+                _power_roll_pause "cephfs not mounted or $(basename $pkg) not readable on $h; nothing was staged"
+                return 1
+            fi
+        fi
+    done
     # Stage every node at once. Each writes its own inactive slot from a
     # read-only package on shared cephfs, so there is nothing to serialize --
     # doing them in turn just multiplies the wait before the roll can start.
