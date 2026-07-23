@@ -99,27 +99,21 @@ rootfs_install::
 	$(Q)rm -rf $(ROOTDIR)/kernel-$(KERNEL_VERS)
 
 # qemu-kvm-17:9.1.0-27.el9 is not compatible with 17:9.1.0-20 (v3.0.0)
-# QEMU_VER := -17:9.1.0-24.el9
-QEMU_VER :=
-QEMU_LOCKED_RPMS := qemu-kvm$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-gpu-pci$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-gpu$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-device-display-virtio-vga$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-device-usb-redirect$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-device-usb-host$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-guest-agent$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-block-rbd$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-block-blkio$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-common$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-core$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-img$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-audio-pa$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-pr-helper$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-tools$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-ui-egl-headless$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-ui-opengl$(QEMU_VER)
-QEMU_LOCKED_RPMS += qemu-kvm-docs$(QEMU_VER)
+# Pinned NVR: live-migration-compatible with 3.1.0's qemu. Never unpin -- an
+# unpinned build floats to build-day c9s. Rig validation + drift: cubecos#1150.
+QEMU_VER := -17:10.1.0-22.el9
+# Filename NVR (no epoch); kojihub keeps builds the c9s mirror rotates away, so an
+# air-gapped rebuild resolves the exact NVR (same pattern as mysql.mk).
+QEMU_NVR := 10.1.0-22.el9
+QEMU_URL := https://kojihub.stream.centos.org/kojifiles/packages/qemu-kvm/10.1.0/22.el9/x86_64
+QEMU_PKGS := qemu-kvm qemu-kvm-device-display-virtio-gpu-pci qemu-kvm-device-display-virtio-gpu
+QEMU_PKGS += qemu-kvm-device-display-virtio-vga qemu-kvm-device-usb-redirect qemu-kvm-device-usb-host
+QEMU_PKGS += qemu-guest-agent qemu-kvm-block-rbd qemu-kvm-block-blkio qemu-kvm-common qemu-kvm-core
+QEMU_PKGS += qemu-img qemu-kvm-audio-pa qemu-pr-helper qemu-kvm-tools qemu-kvm-ui-egl-headless
+QEMU_PKGS += qemu-kvm-ui-opengl qemu-kvm-docs
+QEMU_LOCKED_RPMS := $(foreach p,$(QEMU_PKGS),$(p)$(QEMU_VER))
 LOCKED_DNF += $(QEMU_LOCKED_RPMS)
+$(foreach p,$(QEMU_PKGS),$(eval ROOTFS_DNF_DL_FROM += $(QEMU_URL)/$(p)-$(QEMU_NVR).x86_64.rpm))
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
