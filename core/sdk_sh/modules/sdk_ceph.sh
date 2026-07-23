@@ -2807,10 +2807,8 @@ ceph_mount_cephfs()
     done
     for i in {1..6} ; do
         mountpoint -q $CEPHFS_STORE_DIR && return 0
-        # recover_session=clean: an MDS-evicted (blocklisted) kernel client
-        # reconnects with a clean session instead of failing every op with
-        # EACCES until someone remounts -- eviction happens under heavy write
-        # + cap churn (e.g. staging an 11G pkg right before a roll).
+        # recover_session=clean: an MDS-evicted client reconnects cleanly instead
+        # of EACCES-ing every op until remount (see PR for the eviction scenario).
         timeout $SRVSTO mount -t ceph :/ $CEPHFS_STORE_DIR -o name=admin,secretfile=/etc/ceph/admin.key,recover_session=clean >/dev/null 2>&1
         mountpoint -q $CEPHFS_STORE_DIR && return 0
         sleep 10

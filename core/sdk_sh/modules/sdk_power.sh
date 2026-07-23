@@ -480,11 +480,9 @@ _power_roll_stage_all()
 {
     local pkg=$1 h rc=0
     local -A _pids=()
-    # Preflight: every node reads the pkg from shared cephfs, and a wedged
-    # cephfs client (MDS-evicted after the large pkg write, mount returns
-    # EACCES) fails its stage mid-flight. Verify mount+pkg per node first,
-    # self-heal once via ceph_mount_cephfs, and pause BEFORE staging if a
-    # node still can't see the package.
+    # Preflight: verify each node can read the pkg from cephfs, self-heal once via
+    # ceph_mount_cephfs, and pause before staging if it still can't -- a wedged
+    # cephfs client would otherwise fail its stage mid-flight.
     for h in $(jq -r '.nodes[].hostname' $ROLLING_JOB 2>/dev/null) ; do
         if ! remote_run "$h" "mountpoint -q /mnt/cephfs && test -r $pkg" </dev/null >/dev/null 2>&1 ; then
             log_warning "stage preflight: cephfs/pkg not readable on $h, running ceph_mount_cephfs"
@@ -850,6 +848,17 @@ power_roll_status_json()
         }' $ROLLING_JOB
 }
 
+# 0 if node $1's ACTIVE firmware already matches the roll target (commit in
+# .version) -- it upgraded before/during a pause. Unreachable/mismatch => 1.
+_power_roll_node_on_target()
+{
+    local node=$1 target
+    target=$(jq -r '.version // ""' $ROLLING_JOB 2>/dev/null | grep -oE '[0-9a-f]{7,}' | tail -1)
+    [ -n "$target" ] || return 1
+    is_sshable "$node" || return 1
+    remote_run "$node" "hex_cli -c firmware list 2>/dev/null | grep -i active" </dev/null 2>/dev/null | grep -q "$target"
+}
+
 power_roll_decision()
 {
     [ -e "$ROLLING_JOB" ] || { echo "no rolling job in progress" >&2 ; return 1 ; }
@@ -867,20 +876,31 @@ power_roll_decision()
 
     case "$1" in
         continue)
-            # Reset the node that failed back to a clean pending so the resume
-            # re-kicks it first (its status is draining/rebooting, not pending).
             local stuck=$(jq -r '.inflight // ""' $ROLLING_JOB)
             if [ -n "$stuck" ] ; then
-                _power_roll_set_node_status "$stuck" pending
-                _power_roll_set_node_num "$stuck" started 0
-                _power_roll_set_node_num "$stuck" vms_total 0
-                _power_roll_set_node_num "$stuck" vms_done 0
+                if _power_roll_node_on_target "$stuck" ; then
+                    # already on target -- record done, don't re-drain+reboot it.
+                    log_info "continue: $stuck already on target firmware -- marking done"
+                    _power_roll_set_node_status "$stuck" done
+                    _power_roll_set_node_num "$stuck" finished $(date +%s)
+                else
+                    # unfinished: reset to pending so the resume re-kicks it first.
+                    _power_roll_set_node_status "$stuck" pending
+                    _power_roll_set_node_num "$stuck" started 0
+                    _power_roll_set_node_num "$stuck" vms_total 0
+                    _power_roll_set_node_num "$stuck" vms_done 0
+                fi
             fi
             _power_roll_set_str inflight ""
             _power_roll_set_str reason ""
+            # Zero the stale deadline before state=running so a watchdog tick can't
+            # re-pause on it (watchdog skips deadline=0; next _kick sets a fresh one).
+            _power_roll_set_raw deadline 0
             _power_roll_set_str state running
-            # re-take the guards the pause released
+            # re-take the guards the pause released; disarm the stale watchdog
+            # timer before re-arming so it can't fire on old state.
             Quiet -n $HEX_SDK ceph_enter_rolling
+            _power_roll_watchdog_disarm
             _power_roll_watchdog_arm
             power_roll_advance
             ;;
