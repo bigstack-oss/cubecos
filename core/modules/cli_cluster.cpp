@@ -899,6 +899,134 @@ ClusterErrcodeDumpMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+// one handler for both verbs -- same operation; an upgrade only adds staging
+// (next_entry makes the same reboot boot the new firmware)
+static int
+ClusterRollMain(const char* kind, int argc, const char** argv)
+{
+    const bool upgrade = (std::string(kind) == "upgrade");
+    const std::string verb = upgrade ? "rolling_update" : "rolling_restart";
+
+    /*
+     * [0]=<verb>
+     * [1]=[status|status_watch|continue|abort]   control sub-commands (alone)
+     * [1..]=<host> ...   (restart) explicit targets; none = all
+     * [1]=<version>      (update)  package to roll out
+     */
+    std::string sub = (argc == 2) ? argv[1] : "";
+
+    if (sub == "status") {
+        HexSystemF(0, HEX_SDK " power_roll_status");
+        return CLI_SUCCESS;
+    }
+
+    // status_watch: redraw roll status every 30s until Ctrl-C.
+    if (sub == "status_watch") {
+        HexSystemF(0, "while true ; do clear 2>/dev/null ; "
+                      "echo \"cluster %s status_watch  @ $(date '+%%F %%T')  "
+                      "(refresh 30s, Ctrl-C to exit)\" ; echo ; "
+                      "%s power_roll_status ; sleep 30 ; done", verb.c_str(), HEX_SDK);
+        return CLI_SUCCESS;
+    }
+
+    if (sub == "continue" || sub == "abort") {
+        HexSystemF(0, HEX_SDK " power_roll_decision %s", sub.c_str());
+        HexLogEvent(sub == "continue" ? "CLU00002I" : "CLU00003I",
+            "%s,category=cluster,sub=%s,action=%s",
+            CliEventAttrs().c_str(), verb.c_str(), sub.c_str());
+        return CLI_SUCCESS;
+    }
+
+    // dryrun: print the plan (node order + per-VM disposition) and change
+    // nothing. Read-only, so no readiness gate / confirmation.
+    if (argc >= 2 && std::string(argv[1]) == "dryrun") {
+        std::string targets;
+        for (int i = 2; i < argc && !upgrade; i++) {
+            if (!targets.empty()) targets += " ";
+            targets += argv[i];
+        }
+        HexSystemF(0, HEX_SDK " power_roll_plan %s %s", kind, targets.c_str());
+        return CLI_SUCCESS;
+    }
+
+    // Reject a NEW roll if one is already running/paused (status/continue/abort/
+    // dryrun above still work mid-roll).
+    if (HexSystemF(0, HEX_SDK " power_roll_active") == 0) {
+        CliPrintf("A roll is already in progress.");
+        CliPrintf("Run \"cluster %s status\" to follow it, or \"continue\"/\"abort\".", verb.c_str());
+        return CLI_SUCCESS;
+    }
+
+    if (!ClusterReadyCheck())
+        return CLI_SUCCESS;
+
+    // restart: remaining args are an explicit target list (none = whole cluster).
+    // update:  a single package/version, rolled out to every node.
+    std::string hosts, version;
+    if (upgrade) {
+        if (argc < 2) {
+            CliPrintf("usage: cluster rolling_update <version>|dryrun|status|status_watch|continue|abort");
+            HexSystemF(0, "ls -1 /var/update/*.pkg 2>/dev/null | sed 's|.*/|  available: |' || true");
+            return CLI_SUCCESS;
+        }
+        version = argv[1];
+    } else {
+        for (int i = 1; i < argc; i++) {
+            if (!hosts.empty())
+                hosts += " ";
+            hosts += argv[i];
+        }
+    }
+
+    // Dryrun first so the operator confirms against the real plan (which VMs
+    // migrate vs. suspend+restore); the roll then runs autonomously.
+    HexSystemF(0, HEX_SDK " power_roll_plan %s %s", kind, hosts.c_str());
+    CliPrintf("");
+    if (upgrade) {
+        CliPrintf("Confirming stages %s on every node, then rolls the cluster:", version.c_str());
+        CliPrintf("live-migrate what can move, suspend+restore the highlighted VMs,");
+        CliPrintf("reboot each node into the new firmware (master last).");
+        CliPrintf("No node is rebooted unless every node staged successfully.");
+        CliPrintf("Scope: every node in the cluster.");
+    } else {
+        CliPrintf("Confirming runs the roll autonomously: live-migrate what can move,");
+        CliPrintf("suspend+restore the highlighted VMs, reboot each node (master last).");
+        CliPrintf("It pauses for you only if a migratable VM unexpectedly fails.");
+        if (hosts.empty())
+            CliPrintf("Scope: every node in the cluster.");
+        else
+            CliPrintf("Scope: %s", hosts.c_str());
+    }
+    CliPrintf("If this node is included it will be rebooted during the roll, ending this session.");
+    CliPrintf("Job state is shared on cephfs, so follow progress from another node");
+    CliPrintf("(or the cluster VIP) with \"cluster %s status\".", verb.c_str());
+    CliPrintf("If it pauses on a failure, resume with \"cluster %s continue\" or stop with \"abort\".", verb.c_str());
+
+    if (!CliReadConfirmation())
+        return CLI_SUCCESS;
+
+    HexSystemF(0, HEX_SDK " power_roll_start %s %s", kind,
+               upgrade ? version.c_str() : hosts.c_str());
+
+    HexLogEvent("CLU00001I", "%s,category=cluster,sub=%s,action=start,scope=%s",
+        CliEventAttrs().c_str(), verb.c_str(),
+        upgrade ? version.c_str() : (hosts.empty() ? "all" : hosts.c_str()));
+
+    return CLI_SUCCESS;
+}
+
+static int
+ClusterRollingRestartMain(int argc, const char** argv)
+{
+    return ClusterRollMain("restart", argc, argv);
+}
+
+static int
+ClusterRollingUpdateMain(int argc, const char** argv)
+{
+    return ClusterRollMain("upgrade", argc, argv);
+}
+
 CLI_MODE(CLI_TOP_MODE, "cluster", "Work with cube cluster.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired());
 
@@ -957,3 +1085,11 @@ CLI_MODE_COMMAND("cluster", "set_role_password", ClusterSetRolePasswordMain, NUL
 CLI_MODE_COMMAND("cluster", "errcode_dump", ClusterErrcodeDumpMain, NULL,
     "dump all error codes defined for cluster.",
     "errcode_dump");
+
+CLI_MODE_COMMAND("cluster", "rolling_restart", ClusterRollingRestartMain, NULL,
+    "reboot nodes one at a time, evacuating workloads first.",
+    "rolling_restart [<host> ...|dryrun [<host> ...]|status|status_watch|continue|abort]");
+
+CLI_MODE_COMMAND("cluster", "rolling_update", ClusterRollingUpdateMain, NULL,
+    "Roll a firmware update through the cluster one node at a time.",
+    "rolling_update [<version>|dryrun|status|status_watch|continue|abort]");
