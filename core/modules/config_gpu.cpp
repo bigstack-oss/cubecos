@@ -821,9 +821,13 @@ Commit(bool modified, int dryLevel)
                 return false;
             }
         } else if (type == "sriovVgpu") {
+            // GPU is optional hardware: a single card's sysfs state being
+            // unreadable or an apply hiccup should not fail Commit() for
+            // the whole node and force a reboot. Log and move on to the
+            // next entry instead.
             if (!entry["pciAddress"].is_string() || entry["pciAddress"].string_value().empty()) {
                 HexLogError("GPU %s has type sriovVgpu but no recorded pciAddress; cannot re-apply partitioning", id.c_str());
-                return false;
+                continue;
             }
 
             const std::string pciAddress = entry["pciAddress"].string_value();
@@ -835,7 +839,7 @@ Commit(bool modified, int dryLevel)
             if (!SriovVgpuApplied(SysfsPciAddr(pciAddress))) {
                 if (!ApplySriovVgpu(pciAddress, entry["profiles"])) {
                     HexLogError("Failed to re-apply sriovVgpu partitioning for GPU %s", id.c_str());
-                    return false;
+                    continue;
                 }
             }
 
@@ -849,8 +853,11 @@ Commit(bool modified, int dryLevel)
     // regeneration is self-healing only (e.g. after a lost/stale gpu.conf).
     // Also regenerate when a drop-in exists but no sriovVgpu entry remains,
     // so entries of cards switched away from sriovVgpu don't linger.
+    //
+    // A regen failure here means Nova's GPU scheduling info may be stale,
+    // not that the node's policy apply should fail and force a reboot.
     if ((hasSriovVgpu || access(NOVA_GPU_CONF, F_OK) == 0) && !WriteNovaGpuConf()) {
-        return false;
+        HexLogError("Failed to regenerate %s", NOVA_GPU_CONF);
     }
 
     return true;
