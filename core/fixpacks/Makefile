@@ -16,7 +16,7 @@ FIXPACK_DRAFT         := $(COMMITSINCE)_$(COMMITUNTIL)
 FIXPACK               := $(shell ls -d */ 2>/dev/null | sed "s;/;;" | xargs -i echo {}.fixpack)
 
 BUILD    += secfix
-PKGCLEAN += $(FIXPACK)* $(FIXPACK_DRAFT)* $(COMMITSINCE) secfixdraft *.out
+PKGCLEAN += *.fixpack *.out
 
 export PROJ_GUARDED_BIN
 
