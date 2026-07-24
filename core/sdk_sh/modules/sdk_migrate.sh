@@ -22,6 +22,15 @@ migrate_fixpack()
     touch $STATE_DIR/fixpack_migrated
 }
 
+migrate_git()
+{
+    # Init this node's config-history /.git (per-slot root fs) during per-node
+    # bring-up, before it's marked synced, so the first ceph_mds check can't race
+    # the init. Per-slot marker + idempotent git_init => reboots skip. See #1163.
+    [ -f $STATE_DIR/git_migrated ] && return 0
+    $HEX_SDK git_init && touch $STATE_DIR/git_migrated
+}
+
 migrate_keystone_db()
 {
     if [ -f $STATE_DIR/keystone_db_migrated ] ; then
