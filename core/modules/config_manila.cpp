@@ -52,7 +52,6 @@ CONFIG_TUNING_STR(MANILA_DBPASS, "manila.db.password", TUNING_UNPUB, "Set manila
 // public tunings
 CONFIG_TUNING_BOOL(MANILA_DEBUG, "manila.debug.enabled", TUNING_PUB, "Set to true to enable manila verbose log.", false);
 CONFIG_TUNING_STR(MANILA_VOLUME_TYPE, "manila.volume.type", TUNING_PUB, "Set manila backend volume type.", BUILTIN_VOLUME_TYPE, ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(MANILA_SHARE_BACKEND, "manila.share.backend.%d.volume_type", TUNING_PUB, "Set an additional Cinder volume type Manila should serve as a share backend.", "", ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
@@ -66,6 +65,7 @@ CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
 CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 CONFIG_TUNING_SPEC_STR(KEYSTONE_ADMIN_CLI_PASS);
 CONFIG_TUNING_SPEC_STR(CINDER_VOLUME_TYPE_DEFAULT);
+CONFIG_TUNING_SPEC_STR(CINDER_STORAGE_BACKEND);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, MANILA_ENABLED);
@@ -73,7 +73,6 @@ PARSE_TUNING_BOOL(s_debug, MANILA_DEBUG);
 PARSE_TUNING_STR(s_manilaPass, MANILA_USERPASS);
 PARSE_TUNING_STR(s_dbPass, MANILA_DBPASS);
 PARSE_TUNING_STR(s_volumeType, MANILA_VOLUME_TYPE);
-PARSE_TUNING_STR_ARRAY(s_shareBackends, MANILA_SHARE_BACKEND);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 2);
@@ -85,6 +84,7 @@ PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 2);
 PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 2);
 PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 3);
 PARSE_TUNING_X_STR(s_cinderVolumeTypeDefault, CINDER_VOLUME_TYPE_DEFAULT, 4);
+PARSE_TUNING_X_STR_ARRAY(s_shareBackends, CINDER_STORAGE_BACKEND, 4);
 
 static bool s_bSetup = true;
 
@@ -525,9 +525,11 @@ SetDriverGeneric(
 }
 
 /**
- * Collect the configured additional share-backend names (the Cinder
- * volume-type names from manila.share.backend.%d.volume_type), skipping
- * empty entries and names reserved by the default backend.
+ * Collect the configured additional share-backend names -- mirrors
+ * Cinder's own additional storage backends (cinder.storage.backend.%d.name,
+ * the same tuning Glance and Nova already observe for their own Cinder
+ * integration), skipping empty entries and names reserved by the default
+ * backend.
  */
 static std::vector<std::string>
 GetConfiguredShareBackendNames(const TuningStringArray& shareBackends)
@@ -550,9 +552,8 @@ GetConfiguredShareBackendNames(const TuningStringArray& shareBackends)
 }
 
 /**
- * Set the enabled generic share backends: the built-in default plus any
- * additional Cinder volume types configured in
- * manila.share.backend.%d.volume_type.
+ * Set the enabled generic share backends: the built-in default plus one
+ * backend per additional Cinder storage backend (cinder.storage.backend.%d.name).
  */
 static void
 SetShareBackends(
