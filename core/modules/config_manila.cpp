@@ -287,7 +287,6 @@ SetDefaults(Configs& config)
 {
     config["DEFAULT"]["api_paste_config"] = "/etc/manila/api-paste.ini";
     config["DEFAULT"]["default_share_type"] = "tenant_share_type";
-    config["DEFAULT"]["enabled_share_backends"] = "generic";
     config["DEFAULT"]["enabled_share_protocols"] = "NFS,CIFS";
     config["DEFAULT"]["rootwrap_config"] = "/etc/manila/rootwrap.conf";
     config["DEFAULT"]["share_name_template"] = "share-%s";
@@ -483,30 +482,91 @@ SetGlanceInfo(
 }
 
 /**
- * Set the generic driver.
+ * Set a generic share driver backend section.
+ *
+ * sectionName is the manila.conf section (and enabled_share_backends member);
+ * shareBackendName is the driver's "share_backend_name" value used by Manila's
+ * scheduler to route a share type's "share_backend_name" extra-spec to this
+ * backend. They coincide for additional backends (both equal the configured
+ * Cinder volume-type name) but differ for the pre-existing default backend
+ * (section "generic", share_backend_name "GENERIC" -- unchanged from before
+ * this feature, to keep manila.conf byte-for-byte identical when no
+ * additional backends are configured).
  */
 static void
 SetDriverGeneric(
     Configs& config,
+    const std::string sectionName,
+    const std::string shareBackendName,
     const std::string networkCidr,
     const std::string volumeType)
 {
-    config["generic"]["share_backend_name"] = "GENERIC";
-    config["generic"]["share_driver"] = "manila.share.drivers.generic.GenericShareDriver";
-    config["generic"]["driver_handles_share_servers"] = "true";
-    config["generic"]["interface_driver"] = "manila.network.linux.interface.OVSInterfaceDriver";
-    config["generic"]["connect_share_server_to_tenant_network"] = "true";
-    config["generic"]["service_image_name"] = "manila-service-image";
-    config["generic"]["service_instance_flavor_id"] = "653443";
-    config["generic"]["service_instance_user"] = "manila";
-    config["generic"]["service_instance_password"] = "manila";
+    config[sectionName]["share_backend_name"] = shareBackendName;
+    config[sectionName]["share_driver"] = "manila.share.drivers.generic.GenericShareDriver";
+    config[sectionName]["driver_handles_share_servers"] = "true";
+    config[sectionName]["interface_driver"] = "manila.network.linux.interface.OVSInterfaceDriver";
+    config[sectionName]["connect_share_server_to_tenant_network"] = "true";
+    config[sectionName]["service_image_name"] = "manila-service-image";
+    config[sectionName]["service_instance_flavor_id"] = "653443";
+    config[sectionName]["service_instance_user"] = "manila";
+    config[sectionName]["service_instance_password"] = "manila";
 
-    config["generic"]["service_network_cidr"] = networkCidr;
+    config[sectionName]["service_network_cidr"] = networkCidr;
     int mask = std::stoi(hex_string_util::split(networkCidr, '/')[1]) + 7;
     mask = std::min(mask, 32);
-    config["generic"]["service_network_division_mask"] = std::to_string(mask);
+    config[sectionName]["service_network_division_mask"] = std::to_string(mask);
 
-    config["generic"]["cinder_volume_type"] = volumeType;
+    config[sectionName]["cinder_volume_type"] = volumeType;
+}
+
+/**
+ * Collect the configured additional share-backend names (the Cinder
+ * volume-type names from manila.share.backend.%d.volume_type), skipping
+ * empty entries and names reserved by the default backend.
+ */
+static std::vector<std::string>
+GetConfiguredShareBackendNames(const TuningStringArray& shareBackends)
+{
+    std::vector<std::string> names;
+
+    for (std::vector<ConfigString>::const_iterator it = shareBackends.begin(); it != shareBackends.end(); it++) {
+        std::string name = it->newValue();
+        if (name.length() == 0) {
+            continue;
+        }
+        if (name == "generic" || name == "tenant_share_type") {
+            HexLogWarning("manila share backend name \"%s\" is reserved, skipping", name.c_str());
+            continue;
+        }
+        names.push_back(name);
+    }
+
+    return names;
+}
+
+/**
+ * Set the enabled generic share backends: the built-in default plus any
+ * additional Cinder volume types configured in
+ * manila.share.backend.%d.volume_type.
+ */
+static void
+SetShareBackends(
+    Configs& config,
+    const std::string mgmtCidr,
+    const std::string defaultVolumeType,
+    const TuningStringArray& shareBackends)
+{
+    SetDriverGeneric(config, "generic", "GENERIC", mgmtCidr, defaultVolumeType);
+
+    std::stringstream enabledBackendLine;
+    enabledBackendLine << "generic";
+
+    for (const std::string& backendName : GetConfiguredShareBackendNames(shareBackends)) {
+        SetDriverGeneric(config, backendName, backendName, mgmtCidr, backendName);
+        enabledBackendLine << "," << backendName;
+    }
+
+    config["DEFAULT"]["enabled_share_backends"] = enabledBackendLine.str();
 }
 
 /**
@@ -674,13 +734,15 @@ Commit(bool modified, int dryLevel)
         SetNeutronInfo(config, sharedId, s_cubeRegion, s_cubeDomain, adminCliPass);
         SetGlanceInfo(config, sharedId, s_cubeRegion, s_cubeDomain, adminCliPass);
 
+        std::string defaultVolumeType;
         if (s_volumeType.length() > 0 && s_volumeType.newValue() != BUILTIN_VOLUME_TYPE) {
-            SetDriverGeneric(config, mgmtCidr, s_volumeType);
+            defaultVolumeType = s_volumeType.newValue();
         } else if (s_cinderVolumeTypeDefault.newValue() != "") {
-            SetDriverGeneric(config, mgmtCidr, s_cinderVolumeTypeDefault);
+            defaultVolumeType = s_cinderVolumeTypeDefault.newValue();
         } else {
-            SetDriverGeneric(config, mgmtCidr, BUILTIN_VOLUME_TYPE);
+            defaultVolumeType = BUILTIN_VOLUME_TYPE;
         }
+        SetShareBackends(config, mgmtCidr, defaultVolumeType, s_shareBackends);
 
         WriteConfig(CONF, SB_SEC_WFMT, '=', config);
     }
