@@ -2042,6 +2042,50 @@ os_manila_init()
     #fi
 }
 
+# Create/prune one Manila share type per additional Cinder volume type
+# Manila should serve as a generic-driver backend.
+#
+# params:
+# $1: space-separated list of currently-configured additional Cinder
+#     volume-type names (already filtered of empty/reserved entries by
+#     the caller)
+os_manila_backend_types_init()
+{
+    local configured_types="$1"
+
+    if ! is_control_node ; then
+        return 0
+    fi
+
+    # bind the pre-existing default share type to the default backend
+    # explicitly, so it can no longer be scheduled onto any additional
+    # backend below (idempotent -- harmless to set on every call)
+    manila type-key tenant_share_type set share_backend_name=GENERIC
+
+    # create: idempotent check-then-create, same shape as os_volume_type_create
+    for vt in $configured_types ; do
+        if ! manila type-list -f value -c Name | grep -qx "$vt" ; then
+            manila type-create --snapshot_support true --create_share_from_snapshot_support true "$vt" true
+            manila type-key "$vt" set share_backend_name="$vt"
+        fi
+    done
+
+    # prune: delete share types no longer configured, unless shares still
+    # reference them (refuse-if-in-use, mirrors cinder_is_volume_type_in_use)
+    for existing in $(manila type-list -f value -c Name | grep -v '^tenant_share_type$') ; do
+        if echo " $configured_types " | grep -q " $existing " ; then
+            continue
+        fi
+
+        if $OPENSTACK share list --all-tenants --share-type "$existing" -f value -c ID | grep -q . ; then
+            echo "skip delete: share type $existing still has shares"
+            continue
+        fi
+
+        manila type-delete "$existing"
+    done
+}
+
 os_ironic_deploy_kernel_import()
 {
     local kernel=$1/$2

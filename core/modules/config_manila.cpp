@@ -189,11 +189,15 @@ CommitCheck(bool modified, int dryLevel)
     s_bDbPassChanged = s_dbPass.modified()
         || s_bCubeModified;
 
+    s_bShareBackendsChanged = s_shareBackends.modified()
+        || s_volumeType.modified();
+
     s_bConfigChanged = modified
         || s_bMqModified
         || s_bCubeModified
         || s_bKeystoneModified
         || s_bCinderModified
+        || s_bShareBackendsChanged
         || G_MOD(MGMT_ADDR)
         || G_MOD(SHARED_ID);
 
@@ -203,7 +207,8 @@ CommitCheck(bool modified, int dryLevel)
 
     return s_bDbPassChanged
         || s_bConfigChanged
-        || s_bEndpointChanged;
+        || s_bEndpointChanged
+        || s_bShareBackendsChanged;
 }
 
 /**
@@ -764,6 +769,16 @@ Commit(bool modified, int dryLevel)
 
     // start services
     StartManilaService(s_enabled);
+
+    // create/prune additional share-backend types whenever the configured
+    // list changes
+    if (IsControl(s_eCubeRole) && s_bShareBackendsChanged) {
+        std::stringstream typesLine;
+        for (const std::string& name : GetConfiguredShareBackendNames(s_shareBackends)) {
+            typesLine << name << " ";
+        }
+        HexUtilSystemF(0, 0, HEX_SDK " os_manila_backend_types_init \"%s\"", typesLine.str().c_str());
+    }
 
     return true;
 }
