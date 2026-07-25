@@ -87,8 +87,12 @@ RunSriovManageWithRetry(const char* op, const std::string& sysfsAddr)
     static const int MAX_ATTEMPTS = 5;
 
     for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // The exit-code marker must be single-token to the shell: the '|'
+        // characters are quoted so sh treats it as a literal echo argument,
+        // not as pipes. Unquoted, "echo |__HEX_RC_$?__|" is a syntax error and
+        // the whole line aborts before sriov-manage ever runs.
         const std::string output = HexUtilPOpen(
-            "%s %s %s 2>&1; echo |__HEX_RC_$?__|", NVIDIA_SRIOV, op, sysfsAddr.c_str());
+            "%s %s %s 2>&1; echo \"|__HEX_RC_$?__|\"", NVIDIA_SRIOV, op, sysfsAddr.c_str());
 
         const size_t marker = output.rfind("|__HEX_RC_");
         const int rc = (marker != std::string::npos) ? atoi(output.c_str() + marker + 10) : -1;
