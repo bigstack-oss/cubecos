@@ -396,7 +396,7 @@ UpdateSharedId(std::string sharedId, std::string ovnnb, std::string ovnsb)
         cfg["service_auth"]["auth_url"] = "http://" + sharedId + ":5000/v2.0";
         cfg["designate"]["url"] = "http://" + sharedId + ":9001/v2";
         cfg["designate"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
-        cfg["designate"]["admin_auth_url"] = "http://" + sharedId + ":5000";
+        cfg["designate"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
 
         ml2Cfg["ovn"]["ovn_nb_connection"] = ovnnb;
@@ -464,9 +464,7 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         cfg["nova"]["username"] = "nova";
         cfg["nova"]["password"] = novapass.c_str();
 
-        cfg["designate"]["admin_username"] = "neutron";
-        cfg["designate"]["admin_password"] = password;
-        cfg["designate"]["admin_tenant_name"] = "service";
+        cfg["designate"]["auth_type"] = "password";
         cfg["designate"]["project_domain_id"] = domain;
         cfg["designate"]["user_domain_id"] = domain;
         cfg["designate"]["project_name"] = "service";
