@@ -24,13 +24,19 @@ NEUTRON_VPNAAS_REPO_URL := https://github.com/bigstack-oss/neutron-vpnaas.git
 NEUTRON_VPNAAS_DASHBOARD_REPO_URL := https://github.com/openstack/neutron-vpnaas-dashboard.git
 
 # install neutron inside the python 3.10 virtual environment
+# NOTE: never pip install the standalone 'networking-ovn' package here — its
+# OVN ML2 driver was merged into neutron since Ussuri, and installing both
+# registers two conflicting 'ovn' entry points that crash-loop neutron-server
+# on Antelope. networking-baremetal provides the 'baremetal' ML2 driver that
+# config_neutron.cpp always references; unlike on RPM, pip won't pull it in
+# transitively, so it must stay listed explicitly below.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
 		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		neutron==22.2.1 \
-		networking-ovn"
+		networking-baremetal"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
