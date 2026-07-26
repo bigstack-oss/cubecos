@@ -314,7 +314,13 @@ gpu_device_list()
 
         local status="idle"
         local allocation
-        local profile_count_limit="null"
+        # Must match the name used below and in the jq call at the end of this
+        # loop. It was declared as profile_count_limit while the sriovVgpu
+        # branch assigned (and the jq call read) sriov_vgpu_profile_count_limit,
+        # so on any other type the latter was an unset, non-local variable:
+        # --argjson got an empty string and the whole gpu_device_list jq failed.
+        # Being non-local also let one card's limit leak into the next.
+        local sriov_vgpu_profile_count_limit="null"
 
         if [ "$gpu_type" = "pgpu" ]; then
             local pci_bus pci_slot
@@ -375,7 +381,7 @@ gpu_device_list()
             --arg type "$gpu_type" \
             --argjson supportTypes "$support_types" \
             --arg pciAddress "$pci_bus_id" \
-            --argjson sriovVgpuProfileCountLimit "$sriov_vgpu_profile_count_limit" \
+            --argjson sriovVgpuProfileCountLimit "${sriov_vgpu_profile_count_limit:-null}" \
             --arg status "$status" \
             --argjson allocation "$allocation" \
             '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, status:$status, allocation:$allocation}]')
@@ -497,6 +503,16 @@ gpu_device_list()
             --argjson allocation "$allocation" \
             '. + [{id:$id, name:$name, type:"pgpu", supportTypes:["pgpu"], pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
     done
+
+    # Every step above rebuilds $output through jq, so a single failed jq call
+    # (e.g. --argjson handed an empty variable) collapses it to an empty string
+    # and the accumulated devices are gone. Emitting that as-is with exit 0
+    # tells the caller "this node has no GPUs", which is indistinguishable from
+    # the truth and silently wrong - cube-cos-api would drop every card.
+    if ! echo "$output" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        echo "Error: gpu_device_list: built a malformed device list; refusing to report it as an empty one" >&2
+        return 1
+    fi
 
     echo "$output"
 }
