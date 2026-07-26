@@ -130,16 +130,26 @@ DoHttp(const HttpRequest& req)
         bodyString = "-d '" + req.body + "'";
     }
 
+    // form the time-bound string; empty keeps curl's default (unbounded)
+    std::stringstream timeoutString;
+    if (req.connectTimeoutSecs > 0) {
+        timeoutString << "--connect-timeout " << req.connectTimeoutSecs << " ";
+    }
+    if (req.maxTimeSecs > 0) {
+        timeoutString << "--max-time " << req.maxTimeSecs << " ";
+    }
+
     // send the request via curl
     bool isCurlSuccessful = false;
     if (req.url.scheme == "http") {
         isCurlSuccessful = HexUtilSystemF(
                                0,
                                0,
-                               "curl --silent --show-error "
+                               "curl --silent --show-error %s"
                                "--output %s --write-out \"%%{http_code}\" "
                                "--request %s \"%s\" "
                                "%s %s >%s 2>%s",
+                               timeoutString.str().c_str(),
                                outputFile.fileName.c_str(),
                                req.method.c_str(),
                                req.url.String().c_str(),
@@ -152,10 +162,11 @@ DoHttp(const HttpRequest& req)
         isCurlSuccessful = HexUtilSystemF(
                                0,
                                0,
-                               "curl --insecure --silent --show-error "
+                               "curl --insecure --silent --show-error %s"
                                "--output %s --write-out \"%%{http_code}\" "
                                "--request %s \"%s\" "
                                "%s %s >%s 2>%s",
+                               timeoutString.str().c_str(),
                                outputFile.fileName.c_str(),
                                req.method.c_str(),
                                req.url.String().c_str(),

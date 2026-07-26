@@ -12,6 +12,10 @@ static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.x
 static const std::string KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET = "admin-password";
 static const std::string KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE
     = "/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars";
+static const int SAML_METADATA_STUCK_NOTIFY_SECS = 600;
+// operator escape hatch: touching this releases the saml metadata gate below
+// (one-shot; consumed when honored). /run is tmpfs so it cannot outlive a boot.
+static const char SAML_METADATA_GATE_RELEASE[] = "/run/cube_keycloak_saml_gate_release";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -314,6 +318,8 @@ checkKeycloakEndpoint(const std::string& endpointIp)
     for (int i = 0; i < 15; i++) {
         const HttpRequest req = {
             .url = url,
+            .connectTimeoutSecs = 10,
+            .maxTimeSecs = 60,
         };
         const HttpResponse res = GetHttp(req);
 
@@ -383,46 +389,44 @@ downloadKeycloakSamlMetadata(const std::string& endpointIp)
     Url url = Url(host, "/auth/realms/master/protocol/saml/descriptor");
     url.scheme = "https";
 
-    // retry 120 times
+    // single time-bounded attempt: the commit gate loop owns the retry policy
+    // and must regain control quickly enough to notify the console on schedule
     bool isDownloadSuccessful = false;
     bool isCopySuccessful = false;
-    for (int i = 0; i < 120; i++) {
-        const HttpRequest req = {
-            .url = url,
-        };
-        const HttpResponse res = GetHttp(req);
+    const HttpRequest req = {
+        .url = url,
+        .connectTimeoutSecs = 10,
+        .maxTimeSecs = 60,
+    };
+    const HttpResponse res = GetHttp(req);
 
-        if (res.error.length() > 0) {
-            HexLogError("failed to send the http request");
+    if (res.error.length() > 0) {
+        HexLogError("failed to send the http request");
+    } else {
+        if (!isHttpResponseSuccessful(res)) {
+            HexLogError("failed to download keycloak saml metadata");
         } else {
-            if (!isHttpResponseSuccessful(res)) {
-                HexLogError("failed to download keycloak saml metadata");
-            } else {
-                isDownloadSuccessful = true;
+            isDownloadSuccessful = true;
 
-                std::string fsError;
-                isCopySuccessful = CopyFile(
-                    fsError,
-                    res.outputFileName,
-                    KEYCLOAK_SAML_METADATA_FILE);
-            }
-        }
-
-        CleanupHttpResponse(res);
-
-        if (isDownloadSuccessful) {
-            HexLogInfo("downloaded keycloak saml metadata");
-            break;
-        } else {
-            sleep(1);
+            std::string fsError;
+            isCopySuccessful = CopyFile(
+                fsError,
+                res.outputFileName,
+                KEYCLOAK_SAML_METADATA_FILE);
         }
     }
+
+    CleanupHttpResponse(res);
 
     if (isDownloadSuccessful && !isCopySuccessful) {
         HexLogError("failed to persist keycloak saml metadata");
     }
 
-    return isDownloadSuccessful && isCopySuccessful;
+    if (isDownloadSuccessful && isCopySuccessful) {
+        HexLogInfo("downloaded keycloak saml metadata");
+        return true;
+    }
+    return false;
 }
 
 static bool
@@ -499,28 +503,68 @@ Commit(bool modified, int dryLevel)
     }
 
     if (isKeycloakUpdated) {
-        // check if the Keycloak endpoint is reachable
+        // check if the Keycloak endpoint is reachable; an unreachable endpoint is
+        // one way the saml metadata cannot be downloaded, so do not bail out --
+        // defer the cube-groups terraform and fall through to the gate below
         std::string sharedId = G(SHARED_ID);
+        bool isCubeGroupsApplied = false;
         if (!checkKeycloakEndpoint(sharedId)) {
             HexLogError("keycloak endpoint is not ready");
-
-            // let other modules to commit
-            return true;
+        } else {
+            // create default cube groups
+            if (!ExecTerraform(
+                    "apply",
+                    "keycloak",
+                    { "cube_controller=" + sharedId },
+                    { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
+                HexLogError("failed to create default cube groups via terraform");
+            }
+            isCubeGroupsApplied = true;
         }
 
-        // create default cube groups
-        if (!ExecTerraform(
-                "apply",
-                "keycloak",
-                { "cube_controller=" + sharedId },
-                { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
-            HexLogError("failed to create default cube groups via terraform");
+        // pull down the saml metadata and save it to /etc/keycloak/saml-metadata.xml.
+        // keystone_idp, rancher and the ceph dashboard all configure SSO from this
+        // file, so never proceed without it: retry forever and notify the console
+        // every SAML_METADATA_STUCK_NOTIFY_SECS while stuck. An operator can
+        // release the gate by touching SAML_METADATA_GATE_RELEASE (one-shot).
+        time_t lastNotify = time(NULL);
+        while (!hasKeycloakSamlMetadataFile()) {
+            if (downloadKeycloakSamlMetadata(sharedId))
+                break;
+            HexLogError("failed to download the saml metadata from keycloak");
+
+            if (access(SAML_METADATA_GATE_RELEASE, F_OK) == 0) {
+                unlink(SAML_METADATA_GATE_RELEASE);
+                HexLogWarning("saml metadata gate released by operator via %s;"
+                              " proceeding without %s (SSO will be degraded)",
+                              SAML_METADATA_GATE_RELEASE, KEYCLOAK_SAML_METADATA_FILE);
+                break;
+            }
+
+            if (time(NULL) - lastNotify >= SAML_METADATA_STUCK_NOTIFY_SECS) {
+                HexLogWarning("keycloak saml metadata download is stuck; notified the console");
+                HexSystemF(0,
+                    "echo 'CUBE: setup is waiting for the keycloak SAML metadata"
+                    " (https://%s:%d/auth/realms/master/protocol/saml/descriptor)"
+                    " and cannot proceed until it is downloaded."
+                    " Check keycloak and k3s."
+                    " To skip and continue with degraded SSO, run: touch %s' > /dev/console",
+                    sharedId.c_str(), K3S_INGRESS_HTTPS_PORT, SAML_METADATA_GATE_RELEASE);
+                lastNotify = time(NULL);
+            }
+
+            sleep(10);
         }
 
-        // pull down the saml metadata and save it to /etc/keycloak/saml-metadata.xml
-        if (!hasKeycloakSamlMetadataFile()) {
-            if (!downloadKeycloakSamlMetadata(sharedId)) {
-                HexLogError("failed to download the saml metadata from keycloak");
+        // create default cube groups, deferred from above when the endpoint check
+        // failed; a successful metadata download implies the endpoint answers now
+        if (!isCubeGroupsApplied) {
+            if (!ExecTerraform(
+                    "apply",
+                    "keycloak",
+                    { "cube_controller=" + sharedId },
+                    { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
+                HexLogError("failed to create default cube groups via terraform");
             }
         }
     }

@@ -14,6 +14,11 @@ struct HttpRequest {
     Url url;
     std::map<std::string, std::string> header;
     std::string body;
+    /**
+     * curl time bounds in seconds; 0 keeps curl's default (unbounded).
+     */
+    int connectTimeoutSecs = 0;
+    int maxTimeSecs = 0;
 };
 
 struct HttpResponse {
