@@ -768,6 +768,28 @@ gpu_unset_current_type()
             echo "Error: failed to disable MIG mode for GPU $gpu_id" >&2
             exit 1
         fi
+    elif [ "$current_type" = "pgpu" ]; then
+        # Hand the card back from vfio-pci to the nvidia driver. Without this
+        # the card stays bound to vfio-pci (and keeps its sticky
+        # driver_override), so switching it to sriovVgpu/migBackedVgpu next
+        # fails: nvidia-smi cannot see a vfio-bound device.
+        #
+        # The address comes from config.json, not nvidia-smi: a pgpu is bound
+        # to vfio-pci and therefore invisible to nvidia-smi, so the
+        # --query-gpu lookup used for sriovVgpu above would return nothing here.
+        local pgpu_pci_address
+        pgpu_pci_address=$(jq -r --arg id "$gpu_id" \
+            'map(select(.id == $id)) | if length > 0 then (.[0].pciAddress // "") else "" end' \
+            "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
+
+        if [ -z "$pgpu_pci_address" ]; then
+            echo "Error: GPU $gpu_id has type pgpu but no recorded pciAddress; cannot release it from vfio-pci" >&2
+            exit 1
+        fi
+
+        if ! gpu_unbind_vfio_pci "$pgpu_pci_address"; then
+            exit 1
+        fi
     fi
 }
 
@@ -775,26 +797,120 @@ gpu_unset_current_type()
 # Pure sysfs operation - does not depend on nvidia-smi being able to see the
 # device, so it is safe to call during hex_config Commit() re-apply, after the
 # device is no longer enumerable by nvidia-smi.
+#
+# driver_override is what makes the bind work at all: vfio-pci carries no id
+# table entry matching an NVIDIA display device, so writing the address to
+# vfio-pci/bind is refused (confirmed on cn13: the device's driver_override was
+# (null) and /sys/bus/pci/drivers/vfio-pci/ held zero device ids). The unbind
+# ahead of it still succeeded, so the card was left bound to *no* driver, and
+# because both writes discarded stderr the caller only saw a bare exit 1.
+# Setting driver_override first tells the PCI core which driver the device must
+# use; drivers_probe then binds it. If the bind still fails, roll the device
+# back to the driver it had rather than leaving it stranded.
 gpu_bind_vfio_pci()
 {
     # nvidia-smi uses 8-char domain (00000000:bb:ss.f); sysfs uses 4-char (0000:bb:ss.f)
     local sysfs_pci_addr
     sysfs_pci_addr=$(echo "$1" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
 
-    modprobe vfio-pci
+    local device_path="/sys/bus/pci/devices/${sysfs_pci_addr}"
+    if [ ! -d "$device_path" ]; then
+        echo "Error: gpu_bind_vfio_pci: no PCI device at $sysfs_pci_addr" >&2
+        return 1
+    fi
 
-    local driver_path="/sys/bus/pci/devices/${sysfs_pci_addr}/driver"
+    if ! modprobe vfio-pci; then
+        echo "Error: gpu_bind_vfio_pci: failed to load the vfio-pci module" >&2
+        return 1
+    fi
+
+    local driver_path="${device_path}/driver"
+    local previous_driver=""
     if [ -e "$driver_path" ]; then
-        local current_driver
-        current_driver=$(basename "$(readlink -f "$driver_path")")
-        if [ "$current_driver" != "vfio-pci" ]; then
-            echo "$sysfs_pci_addr" > "/sys/bus/pci/drivers/${current_driver}/unbind" 2>/dev/null
+        previous_driver=$(basename "$(readlink -f "$driver_path")")
+        # Already where we want it - nothing to do. Keeps Commit() re-apply
+        # idempotent instead of pointlessly cycling a live passthrough device.
+        if [ "$previous_driver" = "vfio-pci" ]; then
+            return 0
         fi
     fi
 
-    echo "$sysfs_pci_addr" > /sys/bus/pci/drivers/vfio-pci/bind 2>/dev/null
+    if ! echo "vfio-pci" > "${device_path}/driver_override"; then
+        echo "Error: gpu_bind_vfio_pci: failed to set driver_override on $sysfs_pci_addr" >&2
+        return 1
+    fi
 
-    [ "$(basename "$(readlink -f "$driver_path" 2>/dev/null)" 2>/dev/null)" = "vfio-pci" ]
+    if [ -n "$previous_driver" ]; then
+        if ! echo "$sysfs_pci_addr" > "/sys/bus/pci/drivers/${previous_driver}/unbind"; then
+            echo "Error: gpu_bind_vfio_pci: failed to unbind $sysfs_pci_addr from $previous_driver" >&2
+            echo "" > "${device_path}/driver_override"
+            return 1
+        fi
+    fi
+
+    echo "$sysfs_pci_addr" > /sys/bus/pci/drivers_probe
+
+    if [ "$(basename "$(readlink -f "$driver_path" 2>/dev/null)" 2>/dev/null)" = "vfio-pci" ]; then
+        return 0
+    fi
+
+    # Bind failed and the device is now driverless. Put it back rather than
+    # leaving the GPU stranded (which is what used to happen, silently).
+    echo "Error: gpu_bind_vfio_pci: $sysfs_pci_addr did not bind to vfio-pci; restoring ${previous_driver:-its original driver}" >&2
+    echo "" > "${device_path}/driver_override"
+    echo "$sysfs_pci_addr" > /sys/bus/pci/drivers_probe
+
+    local restored
+    restored=$(basename "$(readlink -f "$driver_path" 2>/dev/null)" 2>/dev/null)
+    if [ -z "$restored" ] || [ "$restored" = "driver" ]; then
+        echo "Error: gpu_bind_vfio_pci: $sysfs_pci_addr is left with no driver bound; recover with: echo $sysfs_pci_addr > /sys/bus/pci/drivers_probe" >&2
+    fi
+
+    return 1
+}
+
+# Releases a PCI device from vfio-pci and lets its native driver claim it again.
+# The driver_override set by gpu_bind_vfio_pci is sticky: without clearing it the
+# device re-binds to vfio-pci on every probe, so a card switched away from pgpu
+# would never come back to the nvidia driver.
+gpu_unbind_vfio_pci()
+{
+    local sysfs_pci_addr
+    sysfs_pci_addr=$(echo "$1" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+
+    local device_path="/sys/bus/pci/devices/${sysfs_pci_addr}"
+    if [ ! -d "$device_path" ]; then
+        echo "Error: gpu_unbind_vfio_pci: no PCI device at $sysfs_pci_addr" >&2
+        return 1
+    fi
+
+    local driver_path="${device_path}/driver"
+    local current_driver=""
+    if [ -e "$driver_path" ]; then
+        current_driver=$(basename "$(readlink -f "$driver_path")")
+    fi
+
+    if [ -e "${device_path}/driver_override" ]; then
+        echo "" > "${device_path}/driver_override"
+    fi
+
+    if [ "$current_driver" = "vfio-pci" ]; then
+        if ! echo "$sysfs_pci_addr" > /sys/bus/pci/drivers/vfio-pci/unbind; then
+            echo "Error: gpu_unbind_vfio_pci: failed to unbind $sysfs_pci_addr from vfio-pci" >&2
+            return 1
+        fi
+    fi
+
+    echo "$sysfs_pci_addr" > /sys/bus/pci/drivers_probe
+
+    local bound
+    bound=$(basename "$(readlink -f "$driver_path" 2>/dev/null)" 2>/dev/null)
+    if [ -z "$bound" ] || [ "$bound" = "driver" ] || [ "$bound" = "vfio-pci" ]; then
+        echo "Error: gpu_unbind_vfio_pci: $sysfs_pci_addr did not return to its native driver (now: ${bound:-none})" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 gpu_host_stats()

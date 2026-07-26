@@ -602,13 +602,9 @@ ResourceSetMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    if (HexUtilSystemF(0, 0, HEX_SDK " gpu_resource_set_check %s %s %s", gpuId, newType, profiles) != 0) {
-        HexLogError("gpu_resource_set: pre-condition check failed for GPU %s", gpuId);
-        return EXIT_FAILURE;
-    }
-
-    // Existence already confirmed by gpu_resource_set_validate above; this
-    // is purely to fetch name/pciAddress for binding and persisting.
+    // Read the device up front: releasing a pgpu from vfio-pci below has to
+    // happen before the pre-condition check, so name/pciAddress/type are
+    // needed earlier than the binding and persisting steps that follow.
     const json11::Json device = FindGpuDevice(gpuId);
     if (!device.is_object()) {
         HexLogError("gpu_resource_set: GPU %s not found", gpuId);
@@ -622,15 +618,49 @@ ResourceSetMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    // Validate profiles before gpu_unset_current_type below so that a bad
+    const std::string currentType = device["type"].is_string() ? device["type"].string_value() : "";
+
+    // A pgpu is bound to vfio-pci, which makes it invisible to nvidia-smi -
+    // and both checks below read the card's supported vGPU types through
+    // nvidia-smi, so on a pgpu they would reject every profile as unsupported.
+    // Hand the card back to its native driver first, and re-bind it if the
+    // checks fail, so a rejected request still leaves it exactly as it was.
+    const bool releasedFromVfio = (currentType == "pgpu" && strcmp(newType, "pgpu") != 0);
+    if (releasedFromVfio &&
+        HexUtilSystemF(0, 0, HEX_SDK " gpu_unbind_vfio_pci %s", pciAddress.c_str()) != 0) {
+        HexLogError("gpu_resource_set: failed to release GPU %s from vfio-pci for validation", gpuId);
+        return EXIT_FAILURE;
+    }
+
+    // Both checks run before gpu_unset_current_type below so that a bad
     // request cannot tear down the GPU's existing configuration.
-    if ((strcmp(newType, "sriovVgpu") == 0 || strcmp(newType, "migBackedVgpu") == 0) &&
-        !ValidateVgpuProfiles(gpuId, newType, profiles, pciAddress)) {
+    const bool preChecksPassed =
+        HexUtilSystemF(0, 0, HEX_SDK " gpu_resource_set_check %s %s %s", gpuId, newType, profiles) == 0 &&
+        (strcmp(newType, "pgpu") == 0 ||
+         ValidateVgpuProfiles(gpuId, newType, profiles, pciAddress));
+
+    if (!preChecksPassed) {
+        HexLogError("gpu_resource_set: pre-condition check failed for GPU %s", gpuId);
+
+        if (releasedFromVfio &&
+            HexUtilSystemF(0, 0, HEX_SDK " gpu_bind_vfio_pci %s", pciAddress.c_str()) != 0) {
+            HexLogError("gpu_resource_set: GPU %s also failed to re-bind to vfio-pci; it is left out of passthrough despite still being recorded as pgpu", gpuId);
+        }
+
         return EXIT_FAILURE;
     }
 
     if (HexUtilSystemF(0, 0, HEX_SDK " gpu_unset_current_type %s", gpuId) != 0) {
         HexLogError("gpu_resource_set: failed to unset current type for GPU %s", gpuId);
+
+        // Same rollback as the failed-checks path above: the card is still
+        // recorded as pgpu, so put it back into passthrough rather than
+        // leaving the record and the hardware disagreeing.
+        if (releasedFromVfio &&
+            HexUtilSystemF(0, 0, HEX_SDK " gpu_bind_vfio_pci %s", pciAddress.c_str()) != 0) {
+            HexLogError("gpu_resource_set: GPU %s also failed to re-bind to vfio-pci; it is left out of passthrough despite still being recorded as pgpu", gpuId);
+        }
+
         return EXIT_FAILURE;
     }
 
