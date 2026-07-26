@@ -176,8 +176,10 @@ Commit(bool modified, int dryLevel)
     if (s_bConfigChanged) {
         std::string sharedId = G(SHARED_ID);
         std::string cachesrvs = "'" + sharedId + ":11211'";
-        std::vector<std::string> tzv = hex_string_util::split(s_timezone.newValue(), '/');
-        std::string tz = tzv[0] + "\\/" + tzv[1];
+        // escape every '/' as '\/' for the django conf; safe for slashless zones (e.g. UTC)
+        std::string tz = s_timezone.newValue();
+        for (size_t pos = 0; (pos = tz.find('/', pos)) != std::string::npos; pos += 2)
+            tz.replace(pos, 1, "\\/");
         WriteDjangoConf(sharedId.c_str(), cachesrvs.c_str(), dbPass.c_str(), tz.c_str());
     }
 
