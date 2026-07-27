@@ -1082,7 +1082,17 @@ health_httpd_check()
         done
 
         if ! is_edge_node ; then
-            $CURL -sf http://$node:9311 >/dev/null
+            # barbican(9311) is gunicorn behind the httpd reverse proxy, a dead
+            # gunicorn answers 503 which curl reports as 22, so probe the unit too
+            if ! is_remote_running $node openstack-barbican-api ; then
+                ERR_CODE=$i
+                ERR_MSG+="openstack-barbican-api on $node is not running\n"
+            fi
+            if ! is_remote_running $node openstack-barbican-keystone-listener ; then
+                ERR_CODE=$i
+                ERR_MSG+="openstack-barbican-keystone-listener on $node is not running\n"
+            fi
+            $CURL -sf http://$node:9311/healthcheck >/dev/null
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
                 ERR_CODE=$i
                 ERR_MSG+="http port 9311 on $node doesn't respond\n"
@@ -1115,10 +1125,18 @@ health_httpd_repair()
         done
 
         if ! is_edge_node ; then
-            # barbican(9311)
-            $CURL -sf http://$node:9311 >/dev/null
+            # barbican(9311), httpd only proxies it so restarting httpd cannot
+            # bring the port back, the gunicorn unit behind the socket has to
+            if ! is_remote_running $node openstack-barbican-api ; then
+                remote_systemd_restart $node openstack-barbican-api
+            fi
+            if ! is_remote_running $node openstack-barbican-keystone-listener ; then
+                remote_systemd_restart $node openstack-barbican-keystone-listener
+            fi
+            $CURL -sf http://$node:9311/healthcheck >/dev/null
             # 0: ok, 22: http error (page not found)
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
+                remote_systemd_restart $node openstack-barbican-api
                 remote_systemd_restart $node httpd
             fi
         fi
