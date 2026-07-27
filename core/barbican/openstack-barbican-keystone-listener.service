@@ -1,5 +1,5 @@
 [Unit]
-Description=Openstack Barbican worker daemon
+Description=Openstack Barbican Keystone listener daemon
 After=syslog.target network.target
 
 [Service]

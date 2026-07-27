@@ -12,7 +12,7 @@ RuntimeDirectoryMode=770
 ExecStart=/opt/openstack-antelope/bin/gunicorn --pid /run/barbican/pid -c /etc/barbican/gunicorn-config.py --paste /etc/barbican/barbican-api-paste.ini
 ExecReload=/usr/bin/kill -s HUP $MAINPID
 ExecStop=/usr/bin/kill -s TERM $MAINPID
-StandardError=syslog
+StandardError=journal
 Restart=on-failure
 
 [Install]
