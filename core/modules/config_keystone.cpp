@@ -549,6 +549,9 @@ CONFIG_REQUIRES(keystone, mysql);
 CONFIG_REQUIRES(keystone, haproxy);
 
 CONFIG_REQUIRES(keystone_idp, keycloak);
+// SetupIdp drives keystone's API (identity provider/mapping/group/role/protocol
+// creation), so the running keystone is a hard prerequisite, not a timing accident
+CONFIG_REQUIRES(keystone_idp, keystone);
 
 // extra tunings
 CONFIG_OBSERVES(keystone, cubesys, ParseCube, NotifyCube);
