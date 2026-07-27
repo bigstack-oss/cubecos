@@ -4,6 +4,12 @@
 BARBICAN_CONFDIR := $(ROOTDIR)/etc/barbican
 
 # install barbican inside the python 3.10 virtual environment
+# PyKMIP: the kmip_secret_store plugin imports it unconditionally, oslo-config-generator
+#   fails without it even when the plugin is unused
+# PyMySQL: config_barbican.cpp writes a mysql+pymysql:// sql_connection
+# oslo.messaging[kafka]: config_barbican.cpp points the notification transport at kafka
+# neither of the last two is a barbican requirement, pip won't pull them in transitively,
+# so they must stay listed here even though the shared venv happens to already carry them
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -13,7 +19,9 @@ rootfs_install::
 		python-barbicanclient \
 		python-keystoneclient \
 		gunicorn \
-		PyKMIP"
+		PyKMIP \
+		PyMySQL \
+		\"oslo.messaging[kafka]\""
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/barbican-db-manage /usr/bin/barbican-db-manage
