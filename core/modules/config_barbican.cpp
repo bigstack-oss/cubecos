@@ -13,6 +13,7 @@
 #include <hex/dryrun.h>
 
 #include <cube/config_file.h>
+#include <cube/systemd_util.h>
 #include <cluster.hpp>
 #include <constant.hpp>
 
@@ -31,11 +32,11 @@ static const char GROUP[] = "barbican";
 // barbican common
 static const char RUNDIR[] = "/run/barbican";
 
-// barbican-api
-static const char API_NAME[] = "barbican-api";
+// barbican-api, gunicorn behind the httpd reverse proxy
+static const char API_NAME[] = "openstack-barbican-api";
 
-// barbican-engine
-static const char ENGINE_NAME[] = "barbican-engine";
+// barbican-keystone-listener
+static const char KSL_NAME[] = "openstack-barbican-keystone-listener";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
@@ -182,16 +183,6 @@ UpdateDbConn(std::string sharedId, std::string password)
 }
 
 static bool
-UpdateControllerIp(std::string ctrlIp)
-{
-    if(IsControl(s_eCubeRole)) {
-        cfg["DEFAULT"]["bind_host"] = ctrlIp;
-    }
-
-    return true;
-}
-
-static bool
 UpdateSharedId(std::string sharedId)
 {
     if(IsControl(s_eCubeRole)) {
@@ -206,20 +197,22 @@ UpdateSharedId(std::string sharedId)
     return true;
 }
 
+// barbican hands its *rpc* transport to get_notification_server(), so the keystone
+// listener consumes notifications from DEFAULT/transport_url rather than from
+// oslo_messaging_notifications/transport_url. oslo.messaging warns about it, but that
+// is upstream behaviour. Cube's keystone publishes notifications to kafka, so this has
+// to be the kafka endpoint or the listener never sees a project deletion and a deleted
+// project's secrets are never reaped.
+//
+// Nothing else in barbican needs the rpc transport here: queue/enable stays at its
+// default of false, which makes the api invoke workers synchronously in-process. If
+// queue/enable is ever turned on, this must move back to RabbitMqServers() first, the
+// oslo.messaging kafka driver does not implement rpc.
 static bool
-UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::string ctrlAddrs)
+UpdateMqConn(std::string sharedId)
 {
     if (IsControl(s_eCubeRole)) {
-        std::string dbconn = RabbitMqServers(ha, sharedId, password, ctrlAddrs);
-        cfg["DEFAULT"]["transport_url"] = dbconn;
-        cfg["DEFAULT"]["rpc_response_timeout"] = "1200";
-
-        if (ha) {
-            cfg["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
-            cfg["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
-            cfg["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
-            cfg["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
-        }
+        cfg["DEFAULT"]["transport_url"] = "kafka://" + sharedId + ":9095";
     }
 
     return true;
@@ -238,10 +231,10 @@ static bool
 UpdateCfg(std::string domain, std::string userPass, std::string cryptoPass)
 {
     if(IsControl(s_eCubeRole)) {
-        cfg["DEFAULT"]["bind_port"] = "9311";
+        // bind_host/bind_port/backlog were dropped upstream before yoga and do not
+        // exist in barbican 16.0.2, gunicorn owns the socket now
         cfg["DEFAULT"]["log_dir"] = "/var/log/barbican";
-        cfg["DEFAULT"]["backlog"] = "4096";
-        cfg["DEFAULT"]["max_allowed_secret_in_bytes"] = "10000";
+        cfg["DEFAULT"]["max_allowed_secret_in_bytes"] = "20000";
         cfg["DEFAULT"]["max_allowed_request_size_in_bytes"] = "1000000";
         cfg["DEFAULT"]["db_auto_create"] = "false";
 
@@ -351,13 +344,11 @@ Commit(bool modified, int dryLevel)
     if (IsUndef(s_eCubeRole) || IsEdge(s_eCubeRole) || !CommitCheck(modified, dryLevel))
         return true;
 
-    std::string ctrlIp = G(CTRL_IP);
     std::string sharedId = G(SHARED_ID);
     std::string external = G(EXTERNAL);
 
     std::string barbicanPass = GetSaltKey(s_saltkey, s_barbicanPass.newValue(), s_seed.newValue());
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
-    std::string mqPass = GetSaltKey(s_saltkey, s_mqPass.newValue(), s_seed.newValue());
     std::string cryptoPass = GetSaltBytesInBase64(s_saltkey, 32, s_cryptoPass.newValue(), s_seed.newValue());
 
     SetupCheck();
@@ -374,9 +365,8 @@ Commit(bool modified, int dryLevel)
     if (s_bConfigChanged) {
         UpdateCfg(s_cubeDomain.newValue(), barbicanPass, cryptoPass);
         UpdateSharedId(sharedId);
-        UpdateControllerIp(ctrlIp);
         UpdateDbConn(sharedId, dbPass);
-        UpdateMqConn(s_ha, sharedId, mqPass, s_ctrlAddrs.newValue());
+        UpdateMqConn(sharedId);
         UpdateDebug(s_debug.newValue());
 
         WriteConfig(CONF, SB_SEC_WFMT, '=', cfg);
@@ -393,7 +383,12 @@ Commit(bool modified, int dryLevel)
     if (s_bEndpointChanged)
         UpdateEndpoint(sharedId, external, s_cubeRegion.newValue());
 
-    // barbican-api service run along with httpd
+    // barbican-api no longer runs inside httpd as a mod_wsgi daemon, httpd only
+    // reverse proxies 9311 to the gunicorn unix socket, so start it ourselves
+    bool enabled = s_enabled && IsControl(s_eCubeRole);
+    SystemdCommitService(enabled, API_NAME, true);
+    // reaps a project's secrets and containers when keystone deletes the project
+    SystemdCommitService(enabled, KSL_NAME, true);
     WriteLogRotateConf(log_conf);
 
     return true;
