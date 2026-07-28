@@ -370,12 +370,12 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass)
 
         cfg["service:api"].clear();
         cfg["service:api"]["auth_strategy"] = "keystone";
-        cfg["service:api"]["enable_api_v1"] = "true";
-        cfg["service:api"]["enabled_extensions_v1"] = "quotas, reports";
         cfg["service:api"]["enable_api_v2"] = "true";
-        cfg["service:api"]["enabled_extensions_v2"] = "quotas, reports";
-
-        cfg["service:worker"]["enabled"] = "true";
+        // quotas and reports are only reachable through the admin API now: the v2
+        // extension namespace no longer registers them, so keeping them under
+        // enabled_extensions_v2 just makes stevedore fail to load them.
+        cfg["service:api"]["enable_api_admin"] = "true";
+        cfg["service:api"]["enabled_extensions_admin"] = "quotas, reports";
 
         cfg["oslo_messaging_notifications"]["driver"] = "messagingv2";
     }
