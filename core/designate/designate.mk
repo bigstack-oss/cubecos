@@ -22,7 +22,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/designate
 	$(Q)chroot $(ROOTDIR) mkdir -p /tmp/designate
 
-# install cyborg inside the python 3.10 virtual environment
+# install designate inside the python 3.10 virtual environment
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -38,6 +38,13 @@ rootfs_install::
 		-r /tmp/designate/designate-dashboard/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/designate/designate-dashboard && \
 		/opt/openstack-antelope/bin/python setup.py install"
+	$(Q)# The horizon plugin has to live in the system python as well: horizon runs
+	$(Q)# under python3.9, so the enabled/*.py files below resolve designatedashboard
+	$(Q)# there. A venv-only install makes ADD_INSTALLED_APPS fail to import and
+	$(Q)# takes down the whole dashboard, not just the DNS panels.
+	$(Q)# Remove once horizon itself moves into the venv.
+	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/designate/designate-dashboard && \
+		/usr/bin/python3 -m pip install --no-deps ."
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
