@@ -65,6 +65,7 @@ PROJ_BASE_ROOTFS = $(CURDIR)/rootfs
 include $(SRCDIR)/cube.mk
 
 ROOT_COMPONENTS += cubectl
+ROOT_COMPONENTS += phone-home-agent
 include $(shell for m in $(ROOT_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 
 # cube finalizer
@@ -94,6 +95,15 @@ pxeserver_ramdisk_install::
 	$(Q)sed -i "s/hex/cube/" $(ROOTDIR)/etc/settings.sys
 	$(Q)sed -i 1,6d $(ROOTDIR)/etc/settings.sys
 	$(Q)echo "Welcome to $(PROJ_LONGNAME) pxe installer" > $(ROOTDIR)/etc/motd
+	@# Zero-touch driver: SPA + snapshot generator + deploy orchestrator on :3001;
+	@# generated snapshots also export to /var/ftpboot for `snapshot pull url`.
+	$(Q)if [ -f $(TOP_BLDDIR)/core/phone-home-agent/cube-cos-driver ]; then \
+		mkdir -p $(ROOTDIR)/usr/local/bin $(ROOTDIR)/var/lib/cube-cos-driver && \
+		cp -f $(TOP_BLDDIR)/core/phone-home-agent/cube-cos-driver $(ROOTDIR)/usr/local/bin/ && \
+		chmod 755 $(ROOTDIR)/usr/local/bin/cube-cos-driver && \
+		cp -f $(COREDIR)/phone-home-agent/cube-cos-driver.service $(ROOTDIR)/usr/lib/systemd/system/ && \
+		chroot $(ROOTDIR) systemctl enable cube-cos-driver.service ; \
+	else echo "  WARN    cube-cos-driver not built; pxeserver ships without the zero-touch driver" ; fi
 
 pxeserver_iso_ramdisk_install::
 	$(Q)sed -i "s/Hex Appliance/$(PROJ_LONGNAME)/" $(ROOTDIR)/etc/settings.sys
@@ -102,6 +112,14 @@ pxeserver_iso_ramdisk_install::
 	$(Q)sed -i "s/hex/cube/" $(ROOTDIR)/etc/settings.sys
 	$(Q)sed -i 1,6d $(ROOTDIR)/etc/settings.sys
 	$(Q)echo "Welcome to $(PROJ_LONGNAME) pxe installer" > $(ROOTDIR)/etc/motd
+	@# Zero-touch driver (same as pxeserver_ramdisk_install)
+	$(Q)if [ -f $(TOP_BLDDIR)/core/phone-home-agent/cube-cos-driver ]; then \
+		mkdir -p $(ROOTDIR)/usr/local/bin $(ROOTDIR)/var/lib/cube-cos-driver && \
+		cp -f $(TOP_BLDDIR)/core/phone-home-agent/cube-cos-driver $(ROOTDIR)/usr/local/bin/ && \
+		chmod 755 $(ROOTDIR)/usr/local/bin/cube-cos-driver && \
+		cp -f $(COREDIR)/phone-home-agent/cube-cos-driver.service $(ROOTDIR)/usr/lib/systemd/system/ && \
+		chroot $(ROOTDIR) systemctl enable cube-cos-driver.service ; \
+	else echo "  WARN    cube-cos-driver not built; pxeserver ships without the zero-touch driver" ; fi
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
 

@@ -1,0 +1,19 @@
+[Unit]
+Description=CubeCOS phone-home snapshot agent (zero-touch first boot)
+After=network-online.target
+Wants=network-online.target
+# Only runs while the node is unconfigured; once FTS writes the marker it stays
+# inert across reboots.
+ConditionPathExists=!/etc/appliance/state/configured
+
+[Service]
+Type=simple
+# Server URL resolution order: --server flag / DRIVER_SERVER env (this file),
+# then driver_server= on the kernel cmdline, then the pxeserver default.
+EnvironmentFile=-/etc/cube/phone-home-agent.env
+ExecStart=/usr/local/bin/phone-home-agent
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

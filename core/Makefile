@@ -8,6 +8,7 @@ include ../build.mk
 SUBDIRS += api
 SUBDIRS += ui
 SUBDIRS += cubectl
+SUBDIRS += phone-home-agent
 SUBDIRS += appctl
 SUBDIRS += telegraf
 SUBDIRS += yq

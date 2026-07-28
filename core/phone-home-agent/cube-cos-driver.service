@@ -1,0 +1,12 @@
+[Unit]
+Description=CubeCOS zero-touch driver (snapshot generator + deploy orchestrator)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/cube-cos-driver --port 3001 --data-dir /var/lib/cube-cos-driver --export-dir /var/ftpboot
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
