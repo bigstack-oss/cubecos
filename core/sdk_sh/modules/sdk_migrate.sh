@@ -309,7 +309,7 @@ migrate_designate_db()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "/usr/local/bin/designate-manage database sync" designate
+        su -s /bin/sh -c "/usr/bin/designate-manage database sync" designate
     fi
 
     touch $STATE_DIR/designate_db_migrated
