@@ -42,16 +42,16 @@ rootfs_install::
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-agent /usr/bin/designate-agent
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-api /usr/bin/designate-api
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-api-wsgi /usr/bin/designate-api-wsgi
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-central /usr/bin/designate-central
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-manage /usr/bin/designate-manage
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-mdns /usr/bin/designate-mdns
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-producer /usr/bin/designate-producer
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-rootwrap /usr/bin/designate-rootwrap
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-sink /usr/bin/designate-sink
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-status /usr/bin/designate-status
-    $(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-worker /usr/bin/designate-worker
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-api /usr/bin/designate-api
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-api-wsgi /usr/bin/designate-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-central /usr/bin/designate-central
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-manage /usr/bin/designate-manage
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-mdns /usr/bin/designate-mdns
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-producer /usr/bin/designate-producer
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-rootwrap /usr/bin/designate-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-sink /usr/bin/designate-sink
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-status /usr/bin/designate-status
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/designate-worker /usr/bin/designate-worker
 
 # install custom files
 # for designate
