@@ -73,7 +73,10 @@ rootfs_install::
 	$(Q)cp -f $(ROOTDIR)/tmp/designate/designate/etc/designate/api-paste.ini $(ROOTDIR)$(DESIGNATE_CONF_DIR)/api-paste.ini
 	$(Q)cp -f $(ROOTDIR)/tmp/designate/designate/etc/designate/rootwrap.conf.sample $(ROOTDIR)$(DESIGNATE_CONF_DIR)/rootwrap.conf
 	$(Q)cp -rf $(ROOTDIR)/tmp/designate/designate/etc/designate/rootwrap.d $(ROOTDIR)$(DESIGNATE_CONF_DIR)/
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/designate/designate.conf.sample .$(DESIGNATE_CONF_DIR)/designate.conf.def
+	$(Q)# -f: treat the destination as the full target path. Without it the install
+	$(Q)# script takes designate.conf.def for a directory and drops the sample
+	$(Q)# inside it, so config_designate.cpp's LoadConfig() finds nothing to read.
+	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/designate/designate.conf.sample .$(DESIGNATE_CONF_DIR)/designate.conf.def
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/designate/designate_sudoers ./etc/sudoers.d/
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/designate/designate-api.service ./lib/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/designate/designate-agent.service ./lib/systemd/system
