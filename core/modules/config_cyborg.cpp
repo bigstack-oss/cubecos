@@ -216,7 +216,6 @@ UpdateSharedId(std::string sharedId)
         cfg["keystone_authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["http_connect_timeout"] = "15";
-        cfg["service_catalog"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["placement"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["placement"]["timeout"] = "60";
         cfg["nova"]["auth_url"] = "http://" + sharedId + ":5000";
@@ -241,17 +240,9 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
 {
     if(IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
         cfg["DEFAULT"]["log_dir"] = LOGDIR;
-        cfg["DEFAULT"]["auth_strategy"] = "keystone";
 
         cfg["agent"]["enabled_drivers"] = "nvidia_gpu_driver";
 
-        cfg["service_catalog"].clear();
-        cfg["service_catalog"]["auth_type"] = "password";
-        cfg["service_catalog"]["project_domain_name"] = domain;
-        cfg["service_catalog"]["user_domain_name"] = domain;
-        cfg["service_catalog"]["project_name"] = "service";
-        cfg["service_catalog"]["username"] = "cyborg";
-        cfg["service_catalog"]["password"] = userPass;
         // TEMPORARY: cyborg runs out of the antelope venv but oslo.privsep
         // resolves its default "sudo privsep-helper" off PATH, which finds the
         // leftover /usr/bin/privsep-helper from the pre-venv packages. That one
@@ -269,7 +260,6 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         cfg["placement"]["project_name"] = "service";
         cfg["placement"]["username"] = "placement";
         cfg["placement"]["password"] = plaPass;
-        cfg["placement"]["auth_section"] = "keystone_authtoken";
 
         cfg["nova"].clear();
         cfg["nova"]["auth_type"] = "password";
@@ -278,7 +268,6 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         cfg["nova"]["project_name"] = "service";
         cfg["nova"]["username"] = "nova";
         cfg["nova"]["password"] = novaPass;
-        cfg["nova"]["auth_section"] = "keystone_authtoken";
 
         cfg["keystone_authtoken"].clear();
         cfg["keystone_authtoken"]["auth_type"] = "password";
