@@ -127,7 +127,7 @@ PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 2);
 static bool
 UpdatePool()
 {
-    HexUtilSystemF(0, 30, "su -s /bin/sh -c \"/usr/local/bin/designate-manage pool update\" %s", USER);
+    HexUtilSystemF(0, 30, "su -s /bin/sh -c \"/usr/bin/designate-manage pool update\" %s", USER);
     return true;
 }
 
@@ -250,7 +250,7 @@ SetupService(std::string domain, std::string userPass)
 
     HexLogInfo("Setting up designate");
 
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/local/bin/designate-manage database sync\" %s", USER);
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/designate-manage database sync\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
