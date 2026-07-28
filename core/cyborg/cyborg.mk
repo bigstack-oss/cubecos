@@ -36,6 +36,12 @@ rootfs_install::
 		-r /tmp/cyborg/python-cyborgclient/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/cyborg/python-cyborgclient && \
 		/opt/openstack-antelope/bin/python setup.py install"
+	$(Q)# The osc plugin has to live in the system python as well: /usr/bin/openstack
+	$(Q)# runs under python3.9 and only sees entry points installed there, so a
+	$(Q)# venv-only client silently drops the "openstack accelerator ..." commands.
+	$(Q)# Remove once python-openstackclient itself moves into the venv.
+	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/cyborg/python-cyborgclient && \
+		/usr/bin/python3 setup.py install"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
