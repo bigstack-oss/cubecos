@@ -202,7 +202,7 @@ static bool
 UpdateMyIp(std::string myip)
 {
     if(IsControl(s_eCubeRole)) {
-        cfg["api"]["host_ip "] = myip;
+        cfg["api"]["host_ip"] = myip;
     }
 
     return true;
