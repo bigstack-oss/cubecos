@@ -249,6 +249,15 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         cfg["service_catalog"]["project_name"] = "service";
         cfg["service_catalog"]["username"] = "cyborg";
         cfg["service_catalog"]["password"] = userPass;
+        // TEMPORARY: cyborg runs out of the antelope venv but oslo.privsep
+        // resolves its default "sudo privsep-helper" off PATH, which finds the
+        // leftover /usr/bin/privsep-helper from the pre-venv packages. That one
+        // runs under the system python and cannot import cyborg, so it exits 1
+        // and every device discovery fails with FailedToDropPrivileges. Cyborg
+        // ships no rootwrap, so unlike cinder/glance we cannot fix this through
+        // rootwrap exec_dirs and have to pin the helper explicitly.
+        // Remove once the system-python console scripts are gone.
+        cfg["cyborg_sys_admin"]["helper_command"] = "sudo /opt/openstack-antelope/bin/privsep-helper";
 
         cfg["placement"].clear();
         cfg["placement"]["auth_type"] = "password";
