@@ -15,6 +15,8 @@ WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch
 
 rootfs_install::
 	$(Q)cp -f $(PIPS_DIR)/watcher-dashboard.git/watcher_dashboard/local/enabled/_310*.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
+	$(Q)# horizon.mk creates this directory, but horizon is installed after watcher now
+	$(Q)mkdir -p $(ROOTDIR)/$(HORIZON_DIR)/conf
 	$(Q)cp -f $(PIPS_DIR)/watcher-dashboard.git/watcher_dashboard/conf/watcher_policy.json $(ROOTDIR)/$(HORIZON_DIR)/conf/
 
 rootfs_install::
