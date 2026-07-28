@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenStack Heat Engine Service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=heat
+# See openstack-heat-api.service for why only /etc/heat/heat.conf is loaded.
+ExecStart=/usr/bin/heat-engine --config-file /etc/heat/heat.conf
+Restart=on-failure
+# Upstream (RDO) sets this so only the main process is signalled; the engine
+# forks workers that manage their own lifecycle.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

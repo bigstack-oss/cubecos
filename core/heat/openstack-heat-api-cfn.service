@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenStack Heat CloudFormation API Service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=heat
+# See openstack-heat-api.service for why only /etc/heat/heat.conf is loaded.
+ExecStart=/usr/bin/heat-api-cfn --config-file /etc/heat/heat.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
