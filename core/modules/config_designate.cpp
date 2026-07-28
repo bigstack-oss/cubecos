@@ -296,6 +296,7 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/designate";
 
         cfg["storage:sqlalchemy"]["connection"] = dbconn;
+        cfg["storage:sqlalchemy"]["mysql_wsrep_sync_wait"] = "1";
     }
 
     return true;
