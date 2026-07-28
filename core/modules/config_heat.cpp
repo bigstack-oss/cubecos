@@ -1,6 +1,7 @@
 // CUBE SDK
 
 #include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/pidfile.h>
 #include <hex/filesystem.h>
 #include <hex/process.h>
@@ -18,6 +19,8 @@
 
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
+
+static LogRotateConf log_conf("heat", "/var/log/heat/*.log", DAILY, 128, 0, true);
 
 static const char USER[] = "heat";
 static const char GROUP[] = "heat";
@@ -192,6 +195,7 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/heat";
 
         cfg["database"]["connection"] = dbconn;
+        cfg["database"]["mysql_wsrep_sync_wait"] = "1";
     }
 
     return true;
@@ -434,6 +438,7 @@ Commit(bool modified, int dryLevel)
         UpdateEndpoint(sharedId, external, s_cubeRegion.newValue());
 
     // 4. Service kickoff
+    WriteLogRotateConf(log_conf);
     HeatService(s_enabled);
 
     return true;
