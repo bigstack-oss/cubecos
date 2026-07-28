@@ -45,7 +45,7 @@
 #default_soa_minimum = 3600
 
 # Supported record types (list value)
-#supported_record_type = A,AAAA,CNAME,MX,SRV,TXT,SPF,NS,PTR,SSHFP,SOA,NAPTR,CAA
+#supported_record_type = A,AAAA,CNAME,MX,SRV,TXT,SPF,NS,PTR,SSHFP,SOA,NAPTR,CAA,CERT
 
 # Number of backlog requests to configure the socket with (integer value)
 #backlog = 4096
@@ -153,7 +153,7 @@
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
-# unless log_rotation_type is setto "interval". (integer value)
+# unless log_rotation_type is set to "interval". (integer value)
 #log_rotate_interval = 1
 
 # Rotation interval type. The time of the last file change (or the time when the
@@ -183,7 +183,7 @@
 
 # Format string to use for log messages with context. Used by
 # oslo_log.formatters.ContextFormatter (string value)
-#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user_identity)s] %(instance)s%(message)s
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
 
 # Format string to use for log messages when context is undefined. Used by
 # oslo_log.formatters.ContextFormatter (string value)
@@ -200,7 +200,7 @@
 # Defines the format string for %(user_identity)s that is used in
 # logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
 # (string value)
-#logging_user_identity_format = %(user)s %(tenant)s %(domain)s %(user_domain)s %(project_domain)s
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
 
 # List of package logging levels in logger=LEVEL pairs. This option is ignored
 # if log_config_append is set. (list value)
@@ -236,6 +236,7 @@
 #
 
 # Size of RPC connection pool. (integer value)
+# Minimum value: 1
 #rpc_conn_pool_size = 30
 
 # The pool size limit for connections expiration policy (integer value)
@@ -268,6 +269,10 @@
 # The default exchange under which topics are scoped. May be overridden by an
 # exchange name specified in the transport_url option. (string value)
 #control_exchange = designate
+
+# Add an endpoint to answer to ping calls. Endpoint is named
+# oslo_rpc_server_ping (boolean value)
+#rpc_ping_enabled = false
 
 #
 # From oslo.service.periodic_task
@@ -337,6 +342,10 @@
 # wait forever. (integer value)
 #client_socket_timeout = 900
 
+# True if the server should send exception tracebacks to the clients on 500
+# errors. If False, the server will respond with empty bodies. (boolean value)
+#wsgi_server_debug = false
+
 
 [backend:agent:bind9]
 
@@ -344,22 +353,47 @@
 # From designate.conf
 #
 
-# RNDC Host (string value)
+# DEPRECATED: RNDC Host (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #rndc_host = 127.0.0.1
 
-# RNDC Port (integer value)
+# DEPRECATED: RNDC Port (integer value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #rndc_port = 953
 
-# RNDC Config File (string value)
+# DEPRECATED: RNDC Config File (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #rndc_config_file = <None>
 
-# RNDC Key File (string value)
+# DEPRECATED: RNDC Key File (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #rndc_key_file = <None>
 
-# Path where zone files are stored (string value)
+# DEPRECATED: RNDC command timeout (integer value)
+# Minimum value: 0
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
+#rndc_timeout = 0
+
+# DEPRECATED: Path where zone files are stored (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #zone_file_path = $state_path/zones
 
-# Host to query when finding zones (string value)
+# DEPRECATED: Host to query when finding zones (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #query_destination = 127.0.0.1
 
 
@@ -369,10 +403,16 @@
 # From designate.conf
 #
 
-# Name of the affected provider (string value)
+# DEPRECATED: Name of the affected provider (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #name = fake
 
-# Path to Denominator configuration file (string value)
+# DEPRECATED: Path to Denominator configuration file (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #config_file = /etc/denominator.conf
 
 
@@ -382,19 +422,35 @@
 # From designate.conf
 #
 
-# tcpclient executable path or rootwrap command name (string value)
+# DEPRECATED: tcpclient executable path or rootwrap command name (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #tcpclient_cmd_name = tcpclient
 
-# axfr-get executable path or rootwrap command name (string value)
+# DEPRECATED: axfr-get executable path or rootwrap command name (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #axfr_get_cmd_name = axfr-get
 
-# tinydns-data executable path or rootwrap command name (string value)
+# DEPRECATED: tinydns-data executable path or rootwrap command name (string
+# value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #tinydns_data_cmd_name = tinydns-data
 
-# TinyDNS data directory (string value)
+# DEPRECATED: TinyDNS data directory (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #tinydns_datadir = /var/lib/djbdns
 
-# Host to query when finding zones (string value)
+# DEPRECATED: Host to query when finding zones (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #query_destination = 127.0.0.1
 
 
@@ -404,13 +460,22 @@
 # From designate.conf
 #
 
-# gdnsd executable path or rootwrap command name (string value)
+# DEPRECATED: gdnsd executable path or rootwrap command name (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #gdnsd_cmd_name = gdnsd
 
-# gdnsd configuration directory path (string value)
+# DEPRECATED: gdnsd configuration directory path (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #confdir_path = /etc/gdnsd
 
-# Host to query when finding zones (string value)
+# DEPRECATED: Host to query when finding zones (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #query_destination = 127.0.0.1
 
 
@@ -420,21 +485,17 @@
 # From designate.conf
 #
 
-# knotc executable path or rootwrap command name (string value)
+# DEPRECATED: knotc executable path or rootwrap command name (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #knotc_cmd_name = knotc
 
-# Host to query when finding zones (string value)
+# DEPRECATED: Host to query when finding zones (string value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #query_destination = 127.0.0.1
-
-
-[backend:akamai]
-
-#
-# From designate.conf
-#
-
-# Akamai EnhancedDNS WSDL URL (string value)
-#enhanceddns_wsdl = file:///root/workspace/build-cube/designate/designate/resources/wsdl/EnhancedDNS.xml
 
 
 [backend:dynect]
@@ -544,7 +605,7 @@
 
 # Number of seconds between heartbeats for distributed coordination. (floating
 # point value)
-#heartbeat_interval = 1.0
+#heartbeat_interval = 5.0
 
 # Number of seconds between checks to see if group membership has changed
 # (floating point value)
@@ -577,7 +638,7 @@
 
 # Indicate which header field names may be used during the actual request. (list
 # value)
-#allow_headers = X-Auth-Token,X-Auth-Sudo-Tenant-ID,X-Auth-Sudo-Project-ID,X-Auth-All-Projects,X-Designate-Edit-Managed-Records,OpenStack-DNS-Hide-Counts
+#allow_headers = X-Auth-Token,X-Auth-Sudo-Tenant-ID,X-Auth-Sudo-Project-ID,X-Auth-All-Projects,X-Designate-Edit-Managed-Records,X-Designate-Hard-Delete,OpenStack-DNS-Hide-Counts
 
 
 [database]
@@ -610,24 +671,26 @@
 # (string value)
 #mysql_sql_mode = TRADITIONAL
 
-# If True, transparently enables support for handling MySQL Cluster (NDB).
-# (boolean value)
+# For Galera only, configure wsrep_sync_wait causality checks on new
+# connections.  Default is None, meaning don't configure any setting. (integer
+# value)
+#mysql_wsrep_sync_wait = <None>
+
+# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
+# (NDB). (boolean value)
+# This option is deprecated for removal since 12.1.0.
+# Its value may be silently ignored in the future.
+# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
+# and will be removed in a future release.
 #mysql_enable_ndb = false
 
 # Connections which have been present in the connection pool longer than this
 # number of seconds will be replaced with a new one the next time they are
 # checked out from the pool. (integer value)
-# Deprecated group/name - [DATABASE]/idle_timeout
-# Deprecated group/name - [database]/idle_timeout
-# Deprecated group/name - [DEFAULT]/sql_idle_timeout
-# Deprecated group/name - [DATABASE]/sql_idle_timeout
-# Deprecated group/name - [sql]/idle_timeout
 #connection_recycle_time = 3600
 
 # Maximum number of SQL connections to keep open in a pool. Setting a value of 0
 # indicates no limit. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_pool_size
-# Deprecated group/name - [DATABASE]/sql_max_pool_size
 #max_pool_size = 5
 
 # Maximum number of database connection retries during startup. Set to -1 to
@@ -908,8 +971,8 @@
 #auth_version = <None>
 
 # Interface to use for the Identity API endpoint. Valid values are "public",
-# "internal" or "admin"(default). (string value)
-#interface = admin
+# "internal" (default) or "admin". (string value)
+#interface = internal
 
 # Do not handle authorization requests within the middleware, but delegate the
 # authorization decision to downstream WSGI components. (boolean value)
@@ -990,9 +1053,9 @@
 # client connection from the pool. (integer value)
 #memcache_pool_conn_get_timeout = 10
 
-# (Optional) Use the advanced (eventlet safe) memcached client pool. The
-# advanced pool will only work under python 2.x. (boolean value)
-#memcache_use_advanced_pool = false
+# (Optional) Use the advanced (eventlet safe) memcached client pool. (boolean
+# value)
+#memcache_use_advanced_pool = true
 
 # (Optional) Indicate whether to set the X-Service-Catalog header. If False,
 # middleware will not ask for service catalog on token validation and will not
@@ -1032,22 +1095,6 @@
 
 # Config Section from which to load plugin specific options (string value)
 #auth_section = <None>
-
-
-[monasca:statsd]
-
-#
-# From designate.conf
-#
-
-# enable (boolean value)
-#enabled = false
-
-# UDP port (integer value)
-#port = 8125
-
-# hostname (string value)
-#hostname = 127.0.0.1
 
 
 [network_api:neutron]
@@ -1363,6 +1410,15 @@
 # CA certificate PEM file used to verify the server certificate (string value)
 #ssl_cafile =
 
+# Client certificate PEM file used for authentication. (string value)
+#ssl_client_cert_file =
+
+# Client key PEM file used for authentication. (string value)
+#ssl_client_key_file =
+
+# Client key password file used for authentication. (string value)
+#ssl_client_key_password =
+
 
 [oslo_messaging_notifications]
 
@@ -1397,7 +1453,8 @@
 # From oslo.messaging
 #
 
-# Use durable queues in AMQP. (boolean value)
+# Use durable queues in AMQP. If rabbit_quorum_queue is enabled, queues will be
+# durable and this value will be ignored. (boolean value)
 #amqp_durable_queues = false
 
 # Auto-delete queues in AMQP. (boolean value)
@@ -1425,15 +1482,25 @@
 # Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
 #ssl_ca_file =
 
-# EXPERIMENTAL: Run the health check heartbeat threadthrough a native python
-# thread. By default if thisoption isn't provided the  health check heartbeat
-# willinherit the execution model from the parent process. Byexample if the
-# parent process have monkey patched thestdlib by using eventlet/greenlet then
-# the heartbeatwill be run through a green thread. (boolean value)
+# Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
+# Python support. This is available in Python 3.9 in all environments and may
+# have been backported to older Python versions on select environments. If the
+# Python executable used does not support OpenSSL FIPS mode, an exception will
+# be raised. (boolean value)
+#ssl_enforce_fips_mode = false
+
+# Run the health check heartbeat thread through a native python thread by
+# default. If this option is equal to False then the health check heartbeat will
+# inherit the execution model from the parent process. For example if the parent
+# process has monkey patched the stdlib by using eventlet/greenlet then the
+# heartbeat will be run through a green thread. This option should be set to
+# True only for the wsgi services. (boolean value)
 #heartbeat_in_pthread = false
 
-# How long to wait before reconnecting in response to an AMQP consumer cancel
-# notification. (floating point value)
+# How long to wait (in seconds) before reconnecting in response to an AMQP
+# consumer cancel notification. (floating point value)
+# Minimum value: 0.0
+# Maximum value: 4.5
 #kombu_reconnect_delay = 1.0
 
 # EXPERIMENTAL: Possible values are: gzip, bz2. If not set compression will not
@@ -1457,6 +1524,7 @@
 # Possible values:
 # PLAIN - <No description provided>
 # AMQPLAIN - <No description provided>
+# EXTERNAL - <No description provided>
 # RABBIT-CR-DEMO - <No description provided>
 #rabbit_login_method = AMQPLAIN
 
@@ -1479,6 +1547,35 @@
 # '^(?!amq\.).*' '{"ha-mode": "all"}' " (boolean value)
 #rabbit_ha_queues = false
 
+# Use quorum queues in RabbitMQ (x-queue-type: quorum). The quorum queue is a
+# modern queue type for RabbitMQ implementing a durable, replicated FIFO queue
+# based on the Raft consensus algorithm. It is available as of RabbitMQ 3.8.0.
+# If set this option will conflict with the HA queues (``rabbit_ha_queues``) aka
+# mirrored queues, in other words the HA queues should be disabled, quorum
+# queues durable by default so the amqp_durable_queues opion is ignored when
+# this option enabled. (boolean value)
+#rabbit_quorum_queue = false
+
+# Each time a message is redelivered to a consumer, a counter is incremented.
+# Once the redelivery count exceeds the delivery limit the message gets dropped
+# or dead-lettered (if a DLX exchange has been configured) Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit.
+# (integer value)
+#rabbit_quorum_delivery_limit = 0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of messages in the quorum queue. Used only when rabbit_quorum_queue is
+# enabled, Default 0 which means dont set a limit. (integer value)
+#rabbit_quroum_max_memory_length = 0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of memory bytes used by the quorum queue. Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit.
+# (integer value)
+#rabbit_quroum_max_memory_bytes = 0
+
 # Positive integer representing duration in seconds for queue TTL (x-expires).
 # Queues which are unused for the duration of the TTL are automatically deleted.
 # The parameter affects only reply and fanout queues. (integer value)
@@ -1497,10 +1594,20 @@
 # (integer value)
 #heartbeat_rate = 2
 
-# Enable/Disable the RabbitMQ mandatory flag for direct send. The direct send is
-# used as reply,so the MessageUndeliverable exception is raised in case the
-# client queue does not exist. (integer value)
-#direct_mandatory_flag = True
+# DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag for direct
+# send. The direct send is used as reply, so the MessageUndeliverable exception
+# is raised in case the client queue does not exist.MessageUndeliverable
+# exception will be used to loop for a timeout to lets a chance to sender to
+# recover.This flag is deprecated and it will not be possible to deactivate this
+# functionality anymore (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Mandatory flag no longer deactivable.
+#direct_mandatory_flag = true
+
+# Enable x-cancel-on-ha-failover flag so that rabbitmq server will cancel and
+# notify consumerswhen queue is down (boolean value)
+#enable_cancel_on_failover = false
 
 
 [oslo_middleware]
@@ -1525,6 +1632,9 @@
 # middleware should parse the headers or not. (boolean value)
 #enable_proxy_headers_parsing = false
 
+# HTTP basic auth password file. (string value)
+#http_basic_auth_user_file = /etc/htpasswd
+
 
 [oslo_policy]
 
@@ -1540,10 +1650,21 @@
 # scope. (boolean value)
 #enforce_scope = false
 
+# This option controls whether or not to use old deprecated defaults when
+# evaluating policies. If ``True``, the old deprecated defaults are not going to
+# be evaluated. This means if any existing token is allowed for old defaults but
+# is disallowed for new defaults, it will be disallowed. It is encouraged to
+# enable this flag along with the ``enforce_scope`` flag so that you can get the
+# benefits of new defaults and ``scope_type`` together. If ``False``, the
+# deprecated policy check string is logically OR'd with the new policy check
+# string, allowing for a graceful upgrade experience between releases with new
+# policies, which is the default behavior. (boolean value)
+#enforce_new_defaults = false
+
 # The relative or absolute path of a file that maps roles to permissions for a
 # given service. Relative paths must be specified in relation to the
 # configuration file setting this option. (string value)
-#policy_file = policy.json
+#policy_file = policy.yaml
 
 # Default rule. Enforced when a requested rule is not found. (string value)
 #policy_default_rule = default
@@ -1573,6 +1694,26 @@
 
 # Absolute path client key file REST based policy check (string value)
 #remote_ssl_client_key_file = <None>
+
+
+[oslo_reports]
+
+#
+# From oslo.reports
+#
+
+# Path to a log directory where to create a file (string value)
+#log_dir = <None>
+
+# The path to a file to watch for changes to trigger the reports, instead of
+# signals. Setting this option disables the signal trigger for the reports. If
+# application is running as a WSGI application it is recommended to use this
+# instead of signals. (string value)
+#file_event_handler = <None>
+
+# How many seconds to wait between polls when file_event_handler is set (integer
+# value)
+#file_event_handler_interval = 1
 
 
 [producer_task:delayed_notify]
@@ -1672,35 +1813,67 @@
 # From designate.conf
 #
 
-# Number of agent worker processes to spawn (integer value)
+# DEPRECATED: Number of agent worker processes to spawn (integer value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #workers = <None>
 
-# Number of agent greenthreads to spawn (integer value)
+# DEPRECATED: Number of agent greenthreads to spawn (integer value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #threads = 1000
 
-# Agent host:port pairs to listen on (list value)
+# DEPRECATED: Agent host:port pairs to listen on (list value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #listen = 0.0.0.0:5358
 
-# The Agent TCP Backlog (integer value)
+# DEPRECATED: The Agent TCP Backlog (integer value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #tcp_backlog = 100
 
-# Agent TCP Receive Timeout (floating point value)
+# DEPRECATED: Agent TCP Receive Timeout (floating point value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #tcp_recv_timeout = 0.5
 
-# List of IP addresses allowed to NOTIFY The Agent (list value)
+# DEPRECATED: List of IP addresses allowed to NOTIFY The Agent (list value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #allow_notify =
 
-# List of masters for the Agent, format ip:port (list value)
+# DEPRECATED: List of masters for the Agent, format ip:port (list value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #masters =
 
-# The backend driver to use, e.g. bind9, djbdns, knot2 (string value)
+# DEPRECATED: The backend driver to use, e.g. bind9, djbdns, knot2 (string
+# value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #backend_driver = bind9
 
-# An IP address to be used to fetch zones transferred in (string value)
+# DEPRECATED: An IP address to be used to fetch zones transferred in (string
+# value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #transfer_source = <None>
 
-# Delay after a NOTIFY arrives for a zone that the Agent will pause and drop
-# subsequent NOTIFYs for that zone (floating point value)
+# DEPRECATED: Delay after a NOTIFY arrives for a zone that the Agent will pause
+# and drop subsequent NOTIFYs for that zone (floating point value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: The agent framework is deprecated.
 #notify_delay = 0.0
 
 
@@ -1717,7 +1890,7 @@
 #threads = 1000
 
 # Enable host request headers (boolean value)
-#enable_host_header = false
+#enable_host_header = true
 
 # the url used as the base for all API responses,This should consist of the
 # scheme (http/https),the hostname, port, and any paths that are addedto the
@@ -1734,16 +1907,24 @@
 # The strategy to use for auth. Supports noauth or keystone (string value)
 #auth_strategy = keystone
 
-# enable-api-v2 which enable in a future (boolean value)
+# Enable the Designate V2 API (boolean value)
 #enable_api_v2 = true
 
 # enable-api-admin (boolean value)
 #enable_api_admin = false
 
-# Maximum line size of message headers to be accepted. max_header_line may need
-# to be increased when using large tokens (typically those generated by the
-# Keystone v3 API with big service catalogs). (integer value)
+# DEPRECATED: Maximum line size of message headers to be accepted.
+# max_header_line may need to be increased when using large tokens (typically
+# those generated by the Keystone v3 API with big service catalogs). (integer
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This parameter has had no effect since Train. Use [DEFAULT]
+# max_header_line instead.
 #max_header_line = 16384
+
+# Pecan HTML Debug Interface (boolean value)
+#pecan_debug = false
 
 # Enabled API Extensions for the V2 API (list value)
 #enabled_extensions_v2 =
@@ -1775,13 +1956,21 @@
 # Role allowed to bypass maintaince mode (string value)
 #maintenance_mode_role = admin
 
-# The HTTP Header that will be used to determine which the original request
-# protocol scheme was, even if it was removed by an SSL terminating proxy.
-# (string value)
+# DEPRECATED: The HTTP Header that will be used to determine which the original
+# request protocol scheme was, even if it was removed by an SSL terminating
+# proxy. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This parameter has had no effect since SSLMiddleware was replaced by
+# http_proxy_to_wsgi
 #secure_proxy_ssl_header = X-Forwarded-Proto
 
-# A scheme that will be used to override the request protocol scheme, even if it
-# was set by an SSL terminating proxy. (string value)
+# DEPRECATED: A scheme that will be used to override the request protocol
+# scheme, even if it was set by an SSL terminating proxy. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This parameter has had no effect since SSLMiddleware was replaced by
+# http_proxy_to_wsgi
 #override_proto = <None>
 
 
@@ -1799,9 +1988,6 @@
 
 # The storage driver to use (string value)
 #storage_driver = sqlalchemy
-
-# Enabled Notification Handlers (list value)
-#enabled_notification_handlers =
 
 # Maximum zone name length (integer value)
 #max_zone_name_len = 255
@@ -1850,8 +2036,11 @@
 # mDNS TCP Receive Timeout (floating point value)
 #tcp_recv_timeout = 0.5
 
-# Send all traffic over TCP (boolean value)
-#all_tcp = false
+# DEPRECATED: Send all traffic over TCP (integer value)
+# This option is deprecated for removal since Zed.
+# Its value may be silently ignored in the future.
+# Reason: This parameter should now be configured inservice:worker instead
+#all_tcp = <None>
 
 # Enforce all incoming queries (including AXFR) are TSIG signed (boolean value)
 #query_enforce_tsig = false
@@ -1865,8 +2054,11 @@
 # RPC topic name for mdns (string value)
 #topic = mdns
 
-# Timeout in seconds for XFR's. (integer value)
-#xfr_timeout = 10
+# DEPRECATED: Timeout in seconds for XFR's. (integer value)
+# This option is deprecated for removal since Zed.
+# Its value may be silently ignored in the future.
+# Reason: This parameter should now be configured inservice:worker instead
+#xfr_timeout = <None>
 
 
 [service:producer]
@@ -1950,18 +2142,27 @@
 # The time to wait before sending the first request to a server (integer value)
 #poll_delay = 5
 
-# DEPRECATED: Whether to allow worker to send NOTIFYs, this will noop NOTIFYs in
-# mdns if true (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: This option is being removed to reduce complexity
-#notify = true
-
 # Whether to allow synchronous zone exports (boolean value)
 #export_synchronous = true
 
 # RPC topic name for worker (string value)
 #topic = worker
+
+# Timeout in seconds for XFR's. (integer value)
+#xfr_timeout = 10
+
+# The maximum number of times to retry fetching a zones serial. (integer value)
+#serial_max_retries = 3
+
+# The time to wait before retrying a zone serial request. (integer value)
+#serial_retry_delay = 1
+
+# Timeout in seconds before giving up on fetching a zones serial. (integer
+# value)
+#serial_timeout = 1
+
+# Send all traffic over TCP (boolean value)
+#all_tcp = false
 
 
 [ssl]
@@ -2022,24 +2223,26 @@
 # (string value)
 #mysql_sql_mode = TRADITIONAL
 
-# If True, transparently enables support for handling MySQL Cluster (NDB).
-# (boolean value)
+# For Galera only, configure wsrep_sync_wait causality checks on new
+# connections.  Default is None, meaning don't configure any setting. (integer
+# value)
+#mysql_wsrep_sync_wait = <None>
+
+# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
+# (NDB). (boolean value)
+# This option is deprecated for removal since 12.1.0.
+# Its value may be silently ignored in the future.
+# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
+# and will be removed in a future release.
 #mysql_enable_ndb = false
 
 # Connections which have been present in the connection pool longer than this
 # number of seconds will be replaced with a new one the next time they are
 # checked out from the pool. (integer value)
-# Deprecated group/name - [DATABASE]/idle_timeout
-# Deprecated group/name - [database]/idle_timeout
-# Deprecated group/name - [DEFAULT]/sql_idle_timeout
-# Deprecated group/name - [DATABASE]/sql_idle_timeout
-# Deprecated group/name - [sql]/idle_timeout
 #connection_recycle_time = 3600
 
 # Maximum number of SQL connections to keep open in a pool. Setting a value of 0
 # indicates no limit. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_pool_size
-# Deprecated group/name - [DATABASE]/sql_max_pool_size
 #max_pool_size = 5
 
 # Maximum number of database connection retries during startup. Set to -1 to
