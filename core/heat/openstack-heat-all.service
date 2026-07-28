@@ -1,0 +1,19 @@
+[Unit]
+# NOT enabled by CubeCOS. heat-all runs api + api-cfn + engine in a single
+# process; hex_config drives the three separate units instead (see
+# HeatService() in core/modules/config_heat.cpp). The unit is shipped only to
+# keep the file layout aligned with the RDO packaging, which keeps the next
+# release hop's diff cheap -- same reason glance ships openstack-glance-scrubber.
+Description=OpenStack Heat All-in-One Service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=heat
+# See openstack-heat-api.service for why only /etc/heat/heat.conf is loaded.
+ExecStart=/usr/bin/heat-all --config-file /etc/heat/heat.conf
+Restart=on-failure
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
