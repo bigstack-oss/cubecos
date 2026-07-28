@@ -154,7 +154,7 @@ migrate_heat_db()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "heat-manage db_sync" heat
+        su -s /bin/sh -c "/usr/bin/heat-manage db_sync" heat
     fi
 
     touch $STATE_DIR/heat_db_migrated

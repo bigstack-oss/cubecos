@@ -126,7 +126,7 @@ SetupHeat(std::string domain, std::string userPass, std::string adminPass)
     HexLogInfo("Setting up heat");
 
     // Populate the heat service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"heat-manage db_sync\" %s", USER);
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/heat-manage db_sync\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
