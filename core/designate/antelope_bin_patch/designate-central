@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/opt/openstack-antelope/bin/python
 # PBR Generated from 'console_scripts'
 
 import sys
