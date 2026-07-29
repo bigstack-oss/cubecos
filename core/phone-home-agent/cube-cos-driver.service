@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/cube-cos-driver --port 3001 --data-dir /var/lib/cube-cos-driver --export-dir /var/ftpboot
+ExecStart=/usr/local/bin/cube-cos-driver --port 3001 --data-dir /var/lib/cube-cos-driver --export-dir /var/ftpboot --pxe-root /var/ftpboot
 Restart=on-failure
 RestartSec=5
 
