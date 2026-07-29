@@ -31,6 +31,11 @@ rootfs_install::
 
 # masakari-api and masakari-engine
 MASAKARI_REPO_URL := https://github.com/openstack/masakari.git
+# FIXME: drop the installation in python 3.9 after wrapping up the whole upgrade of openstack.
+# masakari owns the "masakari" oslo.policy.policies entry point, and horizon's
+# dump_default_policies below runs under python 3.9. Without this the namespace
+# is not found, that command exits 1 and the build fails.
+ROOTFS_PIP_DL_FROM += $(MASAKARI_REPO_URL)
 
 # install masakari-api and masakari-engine inside the python 3.10 virtual environment
 rootfs_install::
