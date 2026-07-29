@@ -4,8 +4,39 @@
 # spice html5 proxy doesn't work well, improve in the future
 # $(call PROJ_INSTALL_APT,,dosfstools nova-api nova-conductor nova-consoleauth nova-novncproxy nova-spicehtml5proxy spice-html5 spice-vdagent nova-scheduler nova-placement-api nova-compute)
 
+# libvirt is held at 11.10.0-14.el9. A version in ROOTFS_DNF alone does not hold
+# it: installdnf runs `dnf download --resolve` and then localinstalls whatever
+# landed in RPMS, and python3-libvirt and virt-v2v require the sonames
+# libvirt.so.0 / libvirt-lxc.so.0 rather than a package version. Every release in
+# the repos (-4/-12/-13/-14/-16) provides those sonames identically, so the
+# download pulls -16 for part of the tree next to the -14 the pin asked for.
+# installdnf's duplicate pass then keeps the *newer* file of each pair unless the
+# older one is listed in locked_rpms.txt, i.e. unless it is in LOCKED_DNF -- so
+# the -14 subpackages get deleted and localinstall dies with
+# "cannot install both libvirt-client-11.10.0-16.el9 from @commandline and
+# libvirt-client-11.10.0-14.el9 from appstream".
+#
+# So the whole tree has to be listed, the way core/heavyfs/Makefile does it for
+# qemu and core/pacemaker/pacemaker.mk for pacemaker. ROOTFS_DNF installs, and
+# LOCKED_DNF is what makes the duplicate pass drop -16 instead of -14.
+LIBVIRT_VER := -11.10.0-14.el9
+LIBVIRT_LOCKED_RPMS := libvirt$(LIBVIRT_VER) libvirt-libs$(LIBVIRT_VER) libvirt-devel$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-client$(LIBVIRT_VER) libvirt-client-qemu$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon$(LIBVIRT_VER) libvirt-daemon-common$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-lock$(LIBVIRT_VER) libvirt-daemon-log$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-proxy$(LIBVIRT_VER) libvirt-daemon-plugin-lockd$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-config-network$(LIBVIRT_VER) libvirt-daemon-config-nwfilter$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-driver-interface$(LIBVIRT_VER) libvirt-daemon-driver-network$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-driver-nodedev$(LIBVIRT_VER) libvirt-daemon-driver-nwfilter$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-driver-qemu$(LIBVIRT_VER) libvirt-daemon-driver-secret$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-driver-storage$(LIBVIRT_VER) libvirt-daemon-driver-storage-core$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-driver-storage-disk$(LIBVIRT_VER) libvirt-daemon-driver-storage-iscsi$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-driver-storage-logical$(LIBVIRT_VER) libvirt-daemon-driver-storage-mpath$(LIBVIRT_VER)
+LIBVIRT_LOCKED_RPMS += libvirt-daemon-driver-storage-rbd$(LIBVIRT_VER) libvirt-daemon-driver-storage-scsi$(LIBVIRT_VER)
+LOCKED_DNF += $(LIBVIRT_LOCKED_RPMS)
+
 # Core hypervisor and system dependencies from the Antelope spec
-ROOTFS_DNF += libvirt-11.10.0-14.el9 libvirt-devel-11.10.0-14.el9 dosfstools python3-libvirt ksmtuned virt-v2v qemu-kvm ipmitool openssh-clients rsync xorriso sudo
+ROOTFS_DNF += $(LIBVIRT_LOCKED_RPMS) dosfstools python3-libvirt ksmtuned virt-v2v qemu-kvm ipmitool openssh-clients rsync xorriso sudo
 # handled elsewhere: iptables
 ROOTFS_DNF_NOARCH += iptables-services novnc
 
