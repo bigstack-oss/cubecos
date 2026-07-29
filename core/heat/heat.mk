@@ -1,9 +1,20 @@
 # Cube SDK
 # heat installation
 
-# No extra rootfs packages are needed. The RDO spec's only non-python Requires
-# was shadow-utils, for the heat user and group, and
-# core/heavyfs/account/centos9 already carries heat statically.
+# The heat service itself comes from pip below, but the client has to stay an
+# RPM under the *system* python: /usr/bin/openstack is `#!/usr/bin/python3`
+# (3.9), and its `orchestration` subcommand is an entry point owned by
+# python-heatclient ([openstack.cli.extension] orchestration =
+# heatclient.osc.plugin). The copy pip puts in the 3.10 venv is invisible to
+# that CLI. hex_sdk's health_heat_check() runs
+# `openstack orchestration service list`, so without this RPM `cluster check`
+# reports Orchestration NG (errcode 3, "engine down") even when heat-engine is
+# perfectly healthy. It used to arrive as an openstack-heat-* dependency.
+ROOTFS_DNF_NOARCH += python3-heatclient
+#
+# Nothing else is needed: the RDO spec's only non-python Requires was
+# shadow-utils, for the heat user and group, and core/heavyfs/account/centos9
+# already carries heat statically.
 #
 # openstack-heat-ui, the Horizon dashboard plugin, is deliberately no longer
 # installed: Horizon imports it and Horizon still runs on the system python 3.9,
