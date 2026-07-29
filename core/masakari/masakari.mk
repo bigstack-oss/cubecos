@@ -161,3 +161,7 @@ rootfs_install::
 				|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
 		done; \
 	done
+
+# clean up the build directory
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) rm -rf /tmp/masakari
