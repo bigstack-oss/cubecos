@@ -23,11 +23,14 @@ lachesis_prometheus_targets()
     # `cubectl node list compute` does not filter, and matching "compute" as a
     # substring would miss control-converged. Roles here mirror IsCompute() in
     # core/modules/include/role_cubesys.h.
+    #
+    # One group per node so instance carries the hostname rather than ip:port;
+    # the dashboards populate their node picker from label_values(up, instance).
     cubectl node list -j 2>/dev/null | jq -c --arg port "$port" '
-        [ { targets: [ .[]
-              | select(.role == "compute" or .role == "control-converged" or .role == "edge-core")
-              | .ip.management + ":" + $port ],
-            labels: {} } ]' > "$out.tmp" || { rm -f "$out.tmp" ; return 1 ; }
+        [ .[]
+          | select(.role == "compute" or .role == "control-converged" or .role == "edge-core")
+          | { targets: [ .ip.management + ":" + $port ],
+              labels: { instance: .hostname } } ]' > "$out.tmp" || { rm -f "$out.tmp" ; return 1 ; }
 
     mv -f "$out.tmp" "$out"
 }
