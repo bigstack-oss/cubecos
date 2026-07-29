@@ -5,7 +5,8 @@ ARG WEAK_DEP=0
 FROM quay.io/centos/centos:stream9 AS tier1
 ENV LANG=C.UTF-8
 ENV HEX_VER=hex2.0
-ENV GOLANG_VER=1.24.2
+# 1.25.x required by lachesis' go.mod; bumping recompiles every Go component
+ENV GOLANG_VER=1.25.12
 ENV HEX_ARCH=x86_64
 ENV DEVOPS_ENV=__JAIL__
 ENV TZ=Asia/Taipei
@@ -74,17 +75,23 @@ ARG HEX_TEST="qemu-kvm-core telnet net-tools iproute iputils expect nmap-ncat dn
 # extra packages for building projects
 ARG HEX_EXTRA="sudo kpartx python3-pip python3-devel java-21-openjdk java-21-openjdk-devel ruby ruby-devel rpm-build rubygems squashfs-tools podman podman-docker skopeo buildah toilet linux-firmware"
 
+# eBPF toolchain for components that compile BPF C (lachesis). clang is the only
+# compiler with a BPF target. kernel-headers is declared explicitly because BPF
+# builds reference /usr/include/{linux,asm,asm-generic} by path. bpftool is
+# diagnostic only.
+ARG HEX_BPF="clang llvm libbpf-devel kernel-headers bpftool"
+
 RUN echo "hex" > /etc/machine-id
 RUN echo "_WEAK_DEP=$WEAK_DEP" >> /etc/hex.manifest
 
 ###### install packages with WEAK_DEP == 0
 FROM tier2 AS tier2_weak_dep_0
-RUN dnf install -y $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
+RUN dnf install -y $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF
 # Jenkins is with java 21
 RUN alternatives --set java java-21-openjdk.x86_64
 ###### install packages with WEAK_DEP == 1
 FROM tier2 AS tier2_weak_dep_1
-RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
+RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF
 
 ######## tier3
 FROM tier2_weak_dep_${WEAK_DEP} AS tier3
