@@ -188,7 +188,7 @@ HEAVY_COMPONENTS += yq api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
 HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift multipath
 HEAVY_COMPONENTS += heat horizon octavia barbican manila designate masakari monasca watcher cyborg
-HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl
+HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl lachesis
 
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 $(shell for r in $(LOCKED_DNF); do echo $$r >> $(LOCKED_RPMS); done)

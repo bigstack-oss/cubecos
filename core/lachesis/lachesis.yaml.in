@@ -1,0 +1,18 @@
+# CubeCOS-managed config for the lachesis telemetry agent.
+# Rendered to lachesis.yaml by config_lachesis on every commit -- do not hand-edit
+# the rendered file. @NAME@ tokens are substituted there.
+# Only values CubeCOS must decide appear here; the agent defaults the rest.
+
+version: "1"
+
+neutron:
+  enabled: true
+  # written by config_keystone on every role, so present on compute too
+  credentials_file: /etc/admin-openrc.sh
+
+kafka:
+  # live Neutron notifications, so metadata refreshes in seconds
+  enabled: true
+  brokers:
+    - "@CONTROL_VIP@:9095"
+  topic: notifications.info

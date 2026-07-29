@@ -10,6 +10,7 @@ SUBDIRS += ui
 SUBDIRS += cubectl
 SUBDIRS += phone-home-agent
 SUBDIRS += appctl
+SUBDIRS += lachesis
 SUBDIRS += telegraf
 SUBDIRS += yq
 SUBDIRS += prometheus
