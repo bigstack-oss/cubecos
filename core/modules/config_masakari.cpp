@@ -195,6 +195,11 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/masakari";
 
         cfg["database"]["connection"] = dbconn;
+        cfg["database"]["mysql_wsrep_sync_wait"] = "1";
+        // Deliberately not set on [taskflow]: that connection string is handed to
+        // taskflow.persistence.backends.fetch(), which builds its own SQLAlchemy
+        // engine instead of going through oslo.db's enginefacade, so the option
+        // would be silently ignored there.
         cfg["taskflow"]["connection"] = dbconn;
     }
 
