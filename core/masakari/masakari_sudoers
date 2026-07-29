@@ -1,3 +1,4 @@
 Defaults:masakari !requiretty
 
 masakari ALL = (root) NOPASSWD: /usr/bin/privsep-helper *
+masakari ALL = (root) NOPASSWD: /opt/openstack-antelope/bin/privsep-helper *
