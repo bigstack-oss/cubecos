@@ -7,8 +7,13 @@ MASAKARI_APP_DIR := /var/lib/masakari
 MASAKARI_LOG_DIR := /var/log/masakari
 MASAKARI_RUN_DIR := /var/run/masakari
 
-MASAKARI_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages
-MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch
+# masakarimonitors is patched inside the antelope venv, but masakaridashboard is
+# patched in the system python because horizon runs there. See the two install
+# rules below.
+MASAKARI_MONITORS_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/masakarimonitors
+MASAKARI_MONITORS_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch/masakarimonitors
+MASAKARI_DASHBOARD_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages/masakaridashboard
+MASAKARI_DASHBOARD_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch/masakaridashboard
 
 # prepare the build directory
 rootfs_install::
@@ -125,4 +130,5 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) python3 /usr/share/openstack-dashboard/manage.py dump_default_policies --namespace masakari --output-file $(HORIZON_POLICY_DIR)/masakari.yaml 2>&1 > /dev/null
 
 rootfs_install::
-	$(Q)[ -d $(MASAKARI_PATCHDIR) ] && cp -rf $(MASAKARI_PATCHDIR)/* $(MASAKARI_SRCDIR)/ || /bin/true
+	$(Q)[ -d $(MASAKARI_MONITORS_PATCHDIR) ] && cp -rf $(MASAKARI_MONITORS_PATCHDIR)/* $(MASAKARI_MONITORS_SRCDIR)/ || /bin/true
+	$(Q)[ -d $(MASAKARI_DASHBOARD_PATCHDIR) ] && cp -rf $(MASAKARI_DASHBOARD_PATCHDIR)/* $(MASAKARI_DASHBOARD_SRCDIR)/ || /bin/true
