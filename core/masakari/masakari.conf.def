@@ -233,10 +233,10 @@
 #os_system_scope = <None>
 
 # Directory where the masakari python module is installed (string value)
-#pybasedir = /root/masakari
+#pybasedir = /home/zuul/src/opendev.org/openstack/masakari
 
 # Directory where masakari binaries are installed (string value)
-#bindir = /root/masakari/.tox/genconfig/local/bin
+#bindir = /home/zuul/src/opendev.org/openstack/masakari/.tox/docs/local/bin
 
 # Top-level directory for maintaining masakari's state (string value)
 #state_path = $pybasedir
@@ -248,7 +248,7 @@
 #
 # * String with hostname, FQDN or IP address. Default is hostname of this host.
 #  (host address value)
-#host = unconfigured
+#host = np0035295927
 
 # Full class name for the Manager for masakari engine (string value)
 #engine_manager = masakari.engine.manager.MasakariManager
@@ -383,7 +383,7 @@
 
 # Format string to use for log messages with context. Used by
 # oslo_log.formatters.ContextFormatter (string value)
-#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user_identity)s] %(instance)s%(message)s
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
 
 # Format string to use for log messages when context is undefined. Used by
 # oslo_log.formatters.ContextFormatter (string value)
@@ -400,7 +400,7 @@
 # Defines the format string for %(user_identity)s that is used in
 # logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
 # (string value)
-#logging_user_identity_format = %(user)s %(project)s %(domain)s %(user_domain)s %(project_domain)s
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
 
 # List of package logging levels in logger=LEVEL pairs. This option is ignored
 # if log_config_append is set. (list value)
@@ -539,6 +539,20 @@
 #wsgi_server_debug = false
 
 
+[coordination]
+
+#
+# From masakari.conf
+#
+
+# The backend URL to use for distributed coordination.By default it's None which
+# means that coordination is disabled. The coordination is implemented for
+# distributed lock management and was tested with etcd.Coordination doesn't work
+# for file driver because lock files aren't removed after lock releasing.
+# (string value)
+#backend_url = <None>
+
+
 [cors]
 
 #
@@ -598,8 +612,17 @@
 # (string value)
 #mysql_sql_mode = TRADITIONAL
 
-# If True, transparently enables support for handling MySQL Cluster (NDB).
-# (boolean value)
+# For Galera only, configure wsrep_sync_wait causality checks on new
+# connections.  Default is None, meaning don't configure any setting. (integer
+# value)
+#mysql_wsrep_sync_wait = <None>
+
+# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
+# (NDB). (boolean value)
+# This option is deprecated for removal since 12.1.0.
+# Its value may be silently ignored in the future.
+# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
+# and will be removed in a future release.
 #mysql_enable_ndb = false
 
 # Connections which have been present in the connection pool longer than this
@@ -1362,12 +1385,20 @@
 # Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
 #ssl_ca_file =
 
+# Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
+# Python support. This is available in Python 3.9 in all environments and may
+# have been backported to older Python versions on select environments. If the
+# Python executable used does not support OpenSSL FIPS mode, an exception will
+# be raised. (boolean value)
+#ssl_enforce_fips_mode = false
+
 # Run the health check heartbeat thread through a native python thread by
 # default. If this option is equal to False then the health check heartbeat will
 # inherit the execution model from the parent process. For example if the parent
 # process has monkey patched the stdlib by using eventlet/greenlet then the
-# heartbeat will be run through a green thread. (boolean value)
-#heartbeat_in_pthread = true
+# heartbeat will be run through a green thread. This option should be set to
+# True only for the wsgi services. (boolean value)
+#heartbeat_in_pthread = false
 
 # How long to wait (in seconds) before reconnecting in response to an AMQP
 # consumer cancel notification. (floating point value)
@@ -1396,6 +1427,7 @@
 # Possible values:
 # PLAIN - <No description provided>
 # AMQPLAIN - <No description provided>
+# EXTERNAL - <No description provided>
 # RABBIT-CR-DEMO - <No description provided>
 #rabbit_login_method = AMQPLAIN
 
@@ -1426,6 +1458,26 @@
 # queues durable by default so the amqp_durable_queues opion is ignored when
 # this option enabled. (boolean value)
 #rabbit_quorum_queue = false
+
+# Each time a message is redelivered to a consumer, a counter is incremented.
+# Once the redelivery count exceeds the delivery limit the message gets dropped
+# or dead-lettered (if a DLX exchange has been configured) Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit.
+# (integer value)
+#rabbit_quorum_delivery_limit = 0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of messages in the quorum queue. Used only when rabbit_quorum_queue is
+# enabled, Default 0 which means dont set a limit. (integer value)
+#rabbit_quroum_max_memory_length = 0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of memory bytes used by the quorum queue. Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit.
+# (integer value)
+#rabbit_quroum_max_memory_bytes = 0
 
 # Positive integer representing duration in seconds for queue TTL (x-expires).
 # Queues which are unused for the duration of the TTL are automatically deleted.
@@ -1515,7 +1567,7 @@
 # The relative or absolute path of a file that maps roles to permissions for a
 # given service. Relative paths must be specified in relation to the
 # configuration file setting this option. (string value)
-#policy_file = policy.json
+#policy_file = policy.yaml
 
 # Default rule. Enforced when a requested rule is not found. (string value)
 #policy_default_rule = default

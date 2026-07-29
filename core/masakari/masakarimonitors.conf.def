@@ -38,10 +38,14 @@
 #
 # * String with hostname, FQDN or IP address. Default is hostname of this host.
 #  (string value)
-#host = hostname
+# Deprecated group/name - [DEFAULT]/host
+#hostname = centos9-jail
 
 # Full class name for the Manager for instancemonitor. (string value)
 #instancemonitor_manager = masakarimonitors.instancemonitor.instance.InstancemonitorManager
+
+# Full class name for introspectiveinstancemonitor. (string value)
+#introspectiveinstancemonitor_manager = masakarimonitors.introspectiveinstancemonitor.instance.IntrospectiveInstanceMonitorManager
 
 # Full class name for the Manager for processmonitor. (string value)
 #processmonitor_manager = masakarimonitors.processmonitor.process.ProcessmonitorManager
@@ -118,7 +122,7 @@
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
-# unless log_rotation_type is setto "interval". (integer value)
+# unless log_rotation_type is set to "interval". (integer value)
 #log_rotate_interval = 1
 
 # Rotation interval type. The time of the last file change (or the time when the
@@ -148,7 +152,7 @@
 
 # Format string to use for log messages with context. Used by
 # oslo_log.formatters.ContextFormatter (string value)
-#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user_identity)s] %(instance)s%(message)s
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
 
 # Format string to use for log messages when context is undefined. Used by
 # oslo_log.formatters.ContextFormatter (string value)
@@ -165,7 +169,7 @@
 # Defines the format string for %(user_identity)s that is used in
 # logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
 # (string value)
-#logging_user_identity_format = %(user)s %(tenant)s %(domain)s %(user_domain)s %(project_domain)s
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
 
 # List of package logging levels in logger=LEVEL pairs. This option is ignored
 # if log_config_append is set. (list value)
@@ -199,7 +203,7 @@
 
 [api]
 #
-# Configration options for sending notifications.
+# Configuration options for sending notifications.
 
 #
 # From masakarimonitors.conf
@@ -240,7 +244,7 @@
 # Domain name containing project (string value)
 #project_domain_name = <None>
 
-# Trust ID (string value)
+# ID of the trust to use as a trustee use (string value)
 #trust_id = <None>
 
 # Optional domain ID to use with v3 and v2 parameters. It will be used for both
@@ -282,6 +286,25 @@
 # Trial interval of time of the notification processing is error(in seconds).
 # (integer value)
 #retry_interval = 10
+
+
+[consul]
+
+#
+# From masakarimonitors.conf
+#
+
+# Addr for local consul agent in management datacenter. (string value)
+#agent_manage = <None>
+
+# Addr for local consul agent in tenant datacenter. (string value)
+#agent_tenant = <None>
+
+# Addr for local consul agent in storage datacenter. (string value)
+#agent_storage = <None>
+
+# Config file for consul health action matrix. (string value)
+#matrix_config_file = <None>
 
 
 [cors]
@@ -356,7 +379,15 @@
 # Monitoring interval(in seconds) of node status. (integer value)
 #monitoring_interval = 60
 
-# Number of retries for send a notification in processmonitor. (integer value)
+#
+# Monitoring probes to collect before making the decision to send Masakari
+# notification about the node status. If and only if ``monitoring_samples``
+# consecutive reports have the same status, will the Masakari notification
+# be sent.
+#  (integer value)
+#monitoring_samples = 1
+
+# Number of retries for send a notification in hostmonitor. (integer value)
 #api_retry_max = 12
 
 # Trial interval of time of the notification processing is error(in seconds).
@@ -374,6 +405,10 @@
 # If ipmi RA is not set in pacemaker, this value should be set True.
 #  (boolean value)
 #disable_ipmi_check = false
+
+# Only monitor pacemaker-remotes, ignore the status of full cluster members.
+# (boolean value)
+#restrict_to_remotes = false
 
 # Timeout value(in seconds) of the ipmitool command. (integer value)
 #ipmi_timeout = 5
@@ -413,6 +448,61 @@
 #  (string value)
 #corosync_multicast_ports = <None>
 
+#
+# Using this option, one can avoid systemd checks that would establish whether
+# this hostmonitor is running alongside Corosync and Pacemaker (the ``cluster``
+# stack) or Pacemaker Remote (the ``remote`` stack).
+#
+# The default (``autodetect``) ensures backward compatibility and means systemd
+# is used to check the stack.
+#  (string value)
+# Possible values:
+# autodetect - <No description provided>
+# cluster - <No description provided>
+# remote - <No description provided>
+#pacemaker_node_type = autodetect
+
+
+[introspectiveinstancemonitor]
+
+#
+# From masakarimonitors.conf
+#
+
+#
+# Guest monitoring interval of VM status (in seconds).
+# * The value should not be too low as there should not be false negative
+# * for reporting QEMU_GUEST_AGENT failures
+# * VM needs time to do powering-off.
+# * guest_monitoring_interval should be greater than
+# * the time to SHUTDOWN VM gracefully.
+# * e.g. | 565da9ba-3c0c-4087-83ca | iim1 | ACTIVE | powering-off | Running
+#  (integer value)
+#guest_monitoring_interval = 10
+
+# Guest monitoring timeout (in seconds). (integer value)
+#guest_monitoring_timeout = 2
+
+# Failure threshold before sending notification. (integer value)
+#guest_monitoring_failure_threshold = 3
+
+#
+# * The file path of qemu guest agent sock.
+# * Please use Python raw string notation as regular expressions.
+# e.g.  r'/var/lib/libvirt/qemu/org\.qemu\.guest_agent\..*\.instance-.*\.sock'
+#  (string value)
+#qemu_guest_agent_sock_path = /var/lib/libvirt/qemu/org\.qemu\.guest_agent\..*\.instance-.*\.sock
+
+
+[libvirt]
+
+#
+# From masakarimonitors.conf
+#
+
+# Override the default libvirt URI. (string value)
+#connection_uri = qemu:///system
+
 
 [oslo_middleware]
 
@@ -435,6 +525,9 @@
 # Whether the application is behind a proxy or not. This determines if the
 # middleware should parse the headers or not. (boolean value)
 #enable_proxy_headers_parsing = false
+
+# HTTP basic auth password file. (string value)
+#http_basic_auth_user_file = /etc/htpasswd
 
 
 [process]
