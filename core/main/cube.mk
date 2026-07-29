@@ -41,6 +41,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_health.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_hwdetect.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_k3s.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_kafka.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_lachesis.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_logs.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_memcache.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_migrate.sh
@@ -178,6 +179,7 @@ hex_config_MODULES += config_logstash.o
 hex_config_MODULES += config_kafka.o
 hex_config_MODULES += config_prometheus.o
 hex_config_MODULES += config_gpu.o
+hex_config_MODULES += config_lachesis.o
 
 PROGRAMS += hex_config
 
