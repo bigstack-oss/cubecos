@@ -137,3 +137,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)[ -d $(MASAKARI_MONITORS_PATCHDIR) ] && cp -rf $(MASAKARI_MONITORS_PATCHDIR)/* $(MASAKARI_MONITORS_SRCDIR)/ || /bin/true
 	$(Q)[ -d $(MASAKARI_DASHBOARD_PATCHDIR) ] && cp -rf $(MASAKARI_DASHBOARD_PATCHDIR)/* $(MASAKARI_DASHBOARD_SRCDIR)/ || /bin/true
+
+# clean up the build directory
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) rm -rf /tmp/masakari
