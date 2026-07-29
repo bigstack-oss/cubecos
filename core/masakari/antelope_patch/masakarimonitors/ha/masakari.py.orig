@@ -74,10 +74,8 @@ class SendNotification(object):
 
             except Exception as e:
                 if isinstance(e, exceptions.HttpException):
-                    if e.status_code == 409:
-                        msg = ("Stop retrying to send a notification because "
-                               "same notification have been already sent.")
-                        LOG.info("%s", msg)
+                    if e.status_code in [400, 409]:
+                        LOG.info(e)
                         break
 
                 if retry_count < api_retry_max:

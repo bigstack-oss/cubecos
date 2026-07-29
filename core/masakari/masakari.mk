@@ -7,8 +7,17 @@ MASAKARI_APP_DIR := /var/lib/masakari
 MASAKARI_LOG_DIR := /var/log/masakari
 MASAKARI_RUN_DIR := /var/run/masakari
 
-MASAKARI_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages
-MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch
+# masakari and masakarimonitors are patched inside the antelope venv, but
+# masakaridashboard is patched in the system python because horizon runs there.
+# The python 3.9 masakari copy is deliberately left unpatched: it exists only so
+# horizon's dump_default_policies can resolve the "masakari" oslo.policy.policies
+# entry point, and no service runs out of it. See the install rule below.
+MASAKARI_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/masakari
+MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch/masakari
+MASAKARI_MONITORS_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/masakarimonitors
+MASAKARI_MONITORS_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch/masakarimonitors
+MASAKARI_DASHBOARD_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages/masakaridashboard
+MASAKARI_DASHBOARD_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch/masakaridashboard
 
 # prepare the build directory
 rootfs_install::
@@ -129,10 +138,21 @@ rootfs_install::
 # a <rel>.py.orig alongside it is the pristine upstream file, kept only for
 # review. --forward makes re-runs idempotent; a failed hunk aborts the build
 # (so upstream drift is caught at build time, not shipped silently).
+# One loop, one <patchdir>:<srcdir> pair per source tree, because the three
+# trees do not share an interpreter yet.
+MASAKARI_PATCH_PAIRS := \
+	$(MASAKARI_PATCHDIR):$(MASAKARI_SRCDIR) \
+	$(MASAKARI_MONITORS_PATCHDIR):$(MASAKARI_MONITORS_SRCDIR) \
+	$(MASAKARI_DASHBOARD_PATCHDIR):$(MASAKARI_DASHBOARD_SRCDIR)
+
 rootfs_install::
-	$(Q)set -e; for p in $$(find $(MASAKARI_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
-		rel=$${p#$(MASAKARI_PATCHDIR)/}; tgt=$(MASAKARI_SRCDIR)/$${rel%.patch}; \
-		echo "  PATCH $${rel%.patch}"; \
-		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
-			|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	$(Q)set -e; for pair in $(MASAKARI_PATCH_PAIRS); do \
+		patchdir=$${pair%%:*}; srcdir=$${pair#*:}; \
+		[ -d "$$patchdir" ] || continue; \
+		for p in $$(find "$$patchdir" -name '*.py.patch' | sort); do \
+			rel=$${p#$$patchdir/}; tgt=$$srcdir/$${rel%.patch}; \
+			echo "  PATCH $${tgt#$(ROOTDIR)}"; \
+			patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+				|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+		done; \
 	done

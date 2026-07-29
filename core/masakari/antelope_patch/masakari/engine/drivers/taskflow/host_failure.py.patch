@@ -1,6 +1,6 @@
---- masakari/engine/drivers/taskflow/host_failure.py	2026-07-11 04:37:26.727435989 +0800
-+++ masakari/engine/drivers/taskflow/host_failure.py	2026-07-11 04:37:26.792436273 +0800
-@@ -77,8 +77,17 @@
+--- masakari/engine/drivers/taskflow/host_failure.py	2026-08-14 17:30:00.000000000 +0800
++++ masakari/engine/drivers/taskflow/host_failure.py	2026-08-14 17:30:00.000000000 +0800
+@@ -79,8 +79,17 @@
              ha_enabled_key = CONF.host_failure.ha_enabled_instance_metadata_key
  
              for instance in instance_list:
@@ -19,7 +19,7 @@
                  if CONF.host_failure.ignore_instances_in_error_state and (
                          getattr(instance, "OS-EXT-STS:vm_state") == "error"):
                      if is_instance_ha_enabled:
-@@ -238,6 +247,19 @@
+@@ -265,6 +274,29 @@
              vm_state = getattr(instance, "OS-EXT-STS:vm_state")
              task_state = getattr(instance, "OS-EXT-STS:task_state")
  
@@ -28,12 +28,22 @@
 +            inst_host = getattr(instance, "OS-EXT-SRV-ATTR:host", None)
 +            if task_state in ['rebuilding', 'rebuild_block_device_mapping',
 +                              'rebuild_spawning'] and inst_host and (
-+                    inst_host != host_name):
++                    inst_host != vmove.source_host):
 +                LOG.info("Instance %(uuid)s evacuation already in progress on "
 +                         "%(host)s (task_state=%(task_state)s), waiting",
 +                         {'uuid': instance.id, 'host': inst_host,
 +                          'task_state': task_state})
++                _update_vmove(
++                    vmove,
++                    status=fields.VMoveStatus.ONGOING,
++                    start_time=timeutils.utcnow())
 +                _wait_for_evacuation()
++                instance = self.novaclient.get_server(context, instance_uuid)
++                _update_vmove(
++                    vmove,
++                    status=fields.VMoveStatus.SUCCEEDED,
++                    dest_host=getattr(
++                        instance, "OS-EXT-SRV-ATTR:hypervisor_hostname"))
 +                return
 +
              # Nova evacuates an instance only when vm_state is in active,
