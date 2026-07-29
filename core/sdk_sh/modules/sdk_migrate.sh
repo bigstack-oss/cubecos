@@ -218,8 +218,8 @@ migrate_ironic_db()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "ironic-dbsync --config-file /etc/ironic/ironic.conf upgrade" ironic
-        su -s /bin/sh -c "ironic-inspector-dbsync --config-file /etc/ironic-inspector/inspector.conf upgrade" ironic-inspector
+        su -s /bin/sh -c "/usr/bin/ironic-dbsync --config-file /etc/ironic/ironic.conf upgrade" ironic
+        su -s /bin/sh -c "/usr/bin/ironic-inspector-dbsync --config-file /etc/ironic-inspector/inspector.conf upgrade" ironic-inspector
     fi
 
     touch $STATE_DIR/ironic_db_migrated
