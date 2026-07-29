@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenStack Ironic Neutron Agent
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=neutron
+PermissionsStartOnly=true
+TimeoutStartSec=0
+Restart=on-failure
+ExecStart=/usr/bin/ironic-neutron-agent --config-dir /etc/neutron --config-file /etc/neutron/plugins/ml2/ironic_neutron_agent.ini --log-file /var/log/neutron/ironic-neutron-agent.log
+PrivateTmp=true
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+

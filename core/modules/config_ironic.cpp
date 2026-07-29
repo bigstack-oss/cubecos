@@ -10,6 +10,7 @@
 #include <hex/config_tuning.h>
 #include <hex/config_global.h>
 #include <hex/dryrun.h>
+#include <hex/logrotate.h>
 
 #include <cube/systemd_util.h>
 #include <cube/config_file.h>
@@ -18,6 +19,9 @@
 
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
+
+static LogRotateConf ironic_log_conf("ironic", "/var/log/ironic/*.log", DAILY, 128, 0, true);
+static LogRotateConf inspector_log_conf("ironic-inspector", "/var/log/ironic-inspector/*.log", DAILY, 128, 0, true);
 
 static const char USER[] = "ironic";
 static const char GROUP[] = "ironic";
@@ -234,8 +238,8 @@ SetupIronic(std::string domain, std::string ironicPass, std::string inspPass)
     HexLogInfo("Setting up ironic");
 
     // Populate the ironic services database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"ironic-dbsync --config-file " CONF " create_schema\" %s", USER);
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"ironic-inspector-dbsync --config-file " INSP_CONF " upgrade\" %s", INSP_USER);
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/ironic-dbsync --config-file " CONF " create_schema\" %s", USER);
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/ironic-inspector-dbsync --config-file " INSP_CONF " upgrade\" %s", INSP_USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
@@ -302,6 +306,7 @@ UpdateDbConn(std::string sharedId, std::string password, std::string inspPass)
         dbconn += "/ironic";
 
         cfg["database"]["connection"] = dbconn;
+        cfg["database"]["mysql_wsrep_sync_wait"] = "1";
 
         dbconn = "mysql+pymysql://ironic-inspector:";
         dbconn += inspPass;
@@ -310,6 +315,7 @@ UpdateDbConn(std::string sharedId, std::string password, std::string inspPass)
         dbconn += "/ironic_inspector";
 
         inspCfg["database"]["connection"] = dbconn;
+        inspCfg["database"]["mysql_wsrep_sync_wait"] = "1";
     }
 
     return true;
@@ -638,6 +644,9 @@ Commit(bool modified, int dryLevel)
 
     // service kickoff
     IronicService(s_enabled, s_deployEnabled);
+
+    WriteLogRotateConf(ironic_log_conf);
+    WriteLogRotateConf(inspector_log_conf);
 
     return true;
 }

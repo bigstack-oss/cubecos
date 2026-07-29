@@ -1,0 +1,2 @@
+Defaults:ironic-inspector !requiretty
+ironic-inspector ALL=(root) NOPASSWD: /usr/bin/ironic-inspector-rootwrap /etc/ironic-inspector/rootwrap.conf *

@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenStack Ironic Conductor service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=ironic
+ExecStart=/usr/bin/ironic-conductor
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
