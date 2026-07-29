@@ -212,9 +212,9 @@ HEAVY_COMPONENTS += yq api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
 HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift multipath
 # note: horizon goes last so its collectstatic/compress sees the dashboard plugins
-# that designate, masakari, manila and watcher drop into local/enabled at install
-# time. RPM-installed plugins (heat, octavia, ironic) land theirs in the dnf phase
-# and are collected either way; the source-installed ones are not.
+# that designate, masakari and watcher drop into local/enabled at install time.
+# RPM-installed plugins (heat, octavia, ironic, manila) land theirs in the dnf
+# phase and are collected either way; the source-installed ones are not.
 HEAVY_COMPONENTS += heat octavia barbican manila designate masakari monasca watcher cyborg horizon
 HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl lachesis
 
