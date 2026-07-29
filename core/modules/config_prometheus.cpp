@@ -1,6 +1,8 @@
 // CUBE SDK
 
 #include <hex/log.h>
+#include <hex/process.h>
+#include <hex/process_util.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/config_global.h>
@@ -19,6 +21,9 @@ static const char NAME[] = "prometheus";
 #define TSDB_RP "90d"
 
 #define CONF "/etc/prometheus/prometheus.yml"
+#define LACHESIS_TARGETS "/etc/prometheus/targets/lachesis.json"
+// the agent applies kernel deltas every 10s; the 60s global is coarse for it
+#define LACHESIS_SCRAPE_INTERVAL "30s"
 #define SCRAPE_INTERVAL "60s"
 #define EVA_INTERVAL "60s"
 #define QUERY_LOG "/var/log/prometheus/query.log"
@@ -84,6 +89,15 @@ WriteConf(bool ha, const std::string& sharedId)
     else
         fprintf(fout, "    - targets: ['%s:9283']\n", sharedId.c_str());
 
+    // lachesis, one agent per compute node. file_sd not static_configs: this
+    // module does not re-commit when compute membership changes, and prometheus
+    // reloads file_sd on its own. A missing file is not an error.
+    fprintf(fout, "  - job_name: 'lachesis-agent'\n");
+    fprintf(fout, "    scrape_interval: " LACHESIS_SCRAPE_INTERVAL "\n");
+    fprintf(fout, "    file_sd_configs:\n");
+    fprintf(fout, "    - files:\n");
+    fprintf(fout, "      - '" LACHESIS_TARGETS "'\n");
+
     fclose(fout);
 
     return true;
@@ -128,6 +142,10 @@ Commit(bool modified, int dryLevel)
     if (enabled) {
         WriteDefaultConf();
         WriteConf(s_ha, sharedId);
+
+        // seed the target list; non-fatal, and bounded so a wedged etcd
+        // cannot hang the commit
+        HexUtilSystemF(0, 30, HEX_SDK " lachesis_prometheus_targets");
 
         log_conf.postRotateCmds = "killall -HUP prometheus";
         WriteLogRotateConf(log_conf);
