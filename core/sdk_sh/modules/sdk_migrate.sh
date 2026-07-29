@@ -258,7 +258,7 @@ migrate_masakari_db()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "/usr/local/bin/masakari-manage db sync" masakari
+        su -s /bin/sh -c "/usr/bin/masakari-manage db sync" masakari
     fi
 
     touch $STATE_DIR/masakari_db_migrated

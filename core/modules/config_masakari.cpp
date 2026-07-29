@@ -146,7 +146,7 @@ SetupMasakari(std::string domain, std::string userPass)
     HexLogInfo("Setting up masakari");
 
     // Populate the masakari service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/local/bin/masakari-manage db sync\" %s", USER);
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/masakari-manage db sync\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
