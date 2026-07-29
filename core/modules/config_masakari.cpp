@@ -300,7 +300,9 @@ UpdateCfg(std::string region, std::string domain, std::string userPass, std::str
 
     if (IsCompute(s_eCubeRole)) {
         monCfg["DEFAULT"]["log_dir"] = "/var/log/masakari";
-        monCfg["DEFAULT"]["host"] = hostname;
+        // "host" clashes with the name of the [host] section and has been a
+        // deprecated alias for "hostname" since masakari-monitors 9.0.0.
+        monCfg["DEFAULT"]["hostname"] = hostname;
 
         // TEMPORARY: masakari-monitors runs out of the antelope venv but
         // oslo.privsep resolves its default "sudo privsep-helper" off sudo's
