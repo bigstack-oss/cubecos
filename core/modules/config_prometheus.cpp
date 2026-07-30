@@ -1,6 +1,10 @@
 // CUBE SDK
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <hex/log.h>
+#include <hex/filesystem.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
 #include <hex/config_module.h>
@@ -22,6 +26,7 @@ static const char NAME[] = "prometheus";
 
 #define CONF "/etc/prometheus/prometheus.yml"
 #define LACHESIS_TARGETS "/etc/prometheus/targets/lachesis.json"
+#define LACHESIS_TARGETS_CRON "/etc/cron.d/lachesis_targets"
 // the agent applies kernel deltas every 10s; the 60s global is coarse for it
 #define LACHESIS_SCRAPE_INTERVAL "30s"
 #define SCRAPE_INTERVAL "60s"
@@ -103,6 +108,34 @@ WriteConf(bool ha, const std::string& sharedId)
     return true;
 }
 
+// same shape as glance's export-sync and influxdb's curator cron jobs
+static bool
+WriteLachesisTargetsCronJob(void)
+{
+    int fd = open(LACHESIS_TARGETS_CRON, O_CREAT | O_WRONLY | O_TRUNC,
+                  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        HexLogError("Unable to open file %s", LACHESIS_TARGETS_CRON);
+        return false;
+    }
+    FILE* fout = fdopen(fd, "w");
+    if (!fout) {
+        HexLogError("Unable to write lachesis target cron job: %s", LACHESIS_TARGETS_CRON);
+        close(fd);
+        return false;
+    }
+
+    fprintf(fout, "* * * * * root " HEX_SDK " lachesis_prometheus_targets\n");
+    fclose(fout);
+
+    if (HexSetFileMode(LACHESIS_TARGETS_CRON, "root", "root", 0644) != 0) {
+        HexLogError("Unable to set file %s mode/permission", LACHESIS_TARGETS_CRON);
+        return false;
+    }
+
+    return true;
+}
+
 static bool
 ParseCube(const char *name, const char *value, bool isNew)
 {
@@ -147,8 +180,16 @@ Commit(bool modified, int dryLevel)
         // cannot hang the commit
         HexUtilSystemF(0, 30, HEX_SDK " lachesis_prometheus_targets");
 
+        // membership changes (node join/remove) do not re-commit this module,
+        // so a cron keeps the list current; the generator only rewrites the
+        // file when membership actually changed
+        WriteLachesisTargetsCronJob();
+
         log_conf.postRotateCmds = "killall -HUP prometheus";
         WriteLogRotateConf(log_conf);
+    }
+    else {
+        unlink(LACHESIS_TARGETS_CRON);
     }
 
     SystemdCommitService(enabled, NAME);
