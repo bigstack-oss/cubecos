@@ -476,6 +476,30 @@ UpdateCfg(std::string domain, std::string ironicPass, std::string inspPass)
     return true;
 }
 
+// MGMT_ADDR, SHARED_ID and EXTERNAL are published by config_cube_scan's ParseNew(),
+// which only runs when cube_scan itself is being committed -- from its own Commit()
+// or from NotifyCube(). A commit that touches nothing but ironic.enabled leaves
+// cube_scan unmodified, so it is skipped and these globals keep the compiled-in
+// defaults "0.0.0.0" / "0.0.0.0" / "" (config_cube_scan.cpp:36,55,56).
+//
+// ironic is the only OpenStack service that ships disabled, so it is the only one
+// whose first real config write happens after bootstrap -- every other service had
+// its conf written during bootstrap, when the globals were valid, and is not
+// rewritten afterwards. Writing the defaults out would put "@0.0.0.0/ironic" in the
+// database URI and "http://:6385" in the keystone catalog, leaving the conductor in
+// a DB retry loop and the API unreachable.
+//
+// ironic.conf.def carries neither the connection nor the auth URLs -- they are
+// produced here -- so the safe response is to leave the previously written conf and
+// endpoints alone rather than regenerate them from placeholder addresses.
+static bool
+ClusterAddrsResolved(const std::string& myip, const std::string& sharedId, const std::string& external)
+{
+    return !myip.empty() && myip != "0.0.0.0" &&
+           !sharedId.empty() && sharedId != "0.0.0.0" &&
+           !external.empty();
+}
+
 static bool
 IronicService(const bool enabled, const bool deploy)
 {
@@ -613,8 +637,17 @@ Commit(bool modified, int dryLevel)
         MysqlUtilUpdateDbPass(INSP_USER, inspDbPass.c_str());
     }
 
+    // see ClusterAddrsResolved(): every value below is derived from the cluster
+    // addresses, so regenerating them from placeholders would overwrite a working
+    // config with an unusable one
+    bool addrsResolved = ClusterAddrsResolved(myip, sharedId, external);
+    if (!addrsResolved)
+        HexLogWarning("cluster addresses unresolved (mgmt %s, shared %s, external \"%s\"): "
+                      "keeping the existing ironic config and endpoints",
+                      myip.c_str(), sharedId.c_str(), external.c_str());
+
     // update config file
-    if (s_bConfigChanged) {
+    if (s_bConfigChanged && addrsResolved) {
         UpdateCfg(s_cubeDomain.newValue(), ironicPass, inspPass);
         UpdateSharedId(sharedId);
         UpdateMyIp(myip);
@@ -637,7 +670,7 @@ Commit(bool modified, int dryLevel)
     HexUtilSystemF(0, 0, HEX_SDK " migrate_ironic_db");
 
     // configuring openstack end point
-    if (s_bEndpointChanged)
+    if (s_bEndpointChanged && addrsResolved)
         UpdateEndpoint(sharedId, external, s_cubeRegion.newValue());
 
     CronConfigSync(s_deployEnabled);
