@@ -3292,6 +3292,46 @@ health_telegraf_repair()
     done
 }
 
+health_lachesis_report()
+{
+    _health_report ${FUNCNAME[0]}
+}
+
+health_lachesis_check()
+{
+    # the agent logs to a file (systemd append:), not the journal
+    ERR_LOG="/var/log/lachesis/lachesis.log"
+
+    # CUBE_NODE_COMPUTE_HOSTNAMES is role-bitmask filtered (-r compute), i.e.
+    # compute + control-converged + edge-core: exactly the nodes with an agent
+    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node lachesis ; then
+            ERR_CODE=1
+            ERR_MSG+="lachesis on $node is not running\n"
+        elif ! remote_run $node "curl -sf -m 5 -o /dev/null http://localhost:9090/metrics" >/dev/null 2>&1 ; then
+            ERR_CODE=2
+            ERR_MSG+="lachesis on $node is not serving metrics\n"
+        fi
+    done
+
+    _health_fail_log
+}
+
+health_lachesis_repair()
+{
+    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node lachesis || \
+           ! remote_run $node "curl -sf -m 5 -o /dev/null http://localhost:9090/metrics" >/dev/null 2>&1 ; then
+            remote_systemd_restart $node lachesis
+        fi
+    done
+}
+
+_health_lachesis_auto_repair()
+{
+    health_lachesis_repair
+}
+
 health_influxdb_report()
 {
     _health_report ${FUNCNAME[0]}

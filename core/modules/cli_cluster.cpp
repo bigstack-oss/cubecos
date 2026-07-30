@@ -141,6 +141,7 @@ CompMap s_comps = {
     { "monasca", { 0, Q } },
     { "watcher", { 0, Q, R_CTRL_NOT_EDGE } },
     { "telegraf", { 0, Q } },
+    { "lachesis", { 0, Q } },
     { "influxdb", { 0, Q } },
     { "kapacitor", { 0, Q } },
     { "grafana", { 0, Q } },
@@ -190,7 +191,7 @@ CheckRepairItem s_services[] = {
     { S[InstanceHa], "masakari", true },
     { S[BusinessLogic], "watcher", true, R_CTRL_NOT_EDGE },
     { S[DataPipe], "zookeeper,kafka", true },
-    { S[Metrics], "monasca,telegraf,grafana", true },
+    { S[Metrics], "monasca,telegraf,grafana,lachesis", true },
     { S[LogAnalytics], "filebeat,auditbeat,logstash,opensearch,opensearch-dashboards", true },
     { S[Notifications], "influxdb,kapacitor", true },
     { S[Node], "node", true, R_ALL, BLVL_STD }

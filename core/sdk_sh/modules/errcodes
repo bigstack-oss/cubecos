@@ -309,6 +309,11 @@ SRV="telegraf"
 eval "ERR_DESC_$SRV[1]='daemon down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
+SRV="lachesis"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='metrics not responding'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
 SRV="influxdb"
 eval "ERR_DESC_$SRV[1]='daemon down'"
 eval "ERR_DESC_$SRV[2]='port not responding'"
