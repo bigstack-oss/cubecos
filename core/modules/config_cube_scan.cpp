@@ -310,7 +310,9 @@ ParseNew(void)
             return false;
     }
 
-    bool isCtrl = IsControl(s_eCubeRole);
+    // ParseOld() already derives this from the tuning; keep the two symmetric so the
+    // shared id does not silently change shape depending on whether NotifyCube() ran
+    bool isCtrl = IsControl(r);
     bool isMaster = IsMaster(isCtrl, mgmtAddr, s_ctrlAddrs.newValue());
     std::string ctrl = GetController(isCtrl, s_hostname.newValue(), s_controller.newValue());
     std::string ctrlIp = isCtrl ? mgmtAddr : s_controllerIp.newValue();
@@ -427,10 +429,14 @@ Prepare(bool modified, int dryLevel)
 static bool
 Commit(bool modified, int dryLevel)
 {
-    if (IsUndef(s_eCubeRole))
-        return true;
-
+    // read the role straight from the tuning rather than from s_eCubeRole, which is
+    // only ever assigned in NotifyCube() -- and that observer does not fire when the
+    // commit leaves cubesys untouched. Bailing out on the unset static skipped
+    // ParseNew() entirely, so every G(...) below stayed at its compiled-in default.
     CubeRole_e r = GetCubeRole(s_cubeRole.newValue());
+
+    if (IsUndef(r))
+        return true;
 
     if (IfProviderReq(r)) {
         // in case provider interface is disabled in policy
