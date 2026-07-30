@@ -13,7 +13,7 @@ convention:
   - chore    # Miscellaneous commits e.g. modifying `.gitignore`
   - merge
   - revert
-  commitScopes: ["cinder", "glance", "heat", "keystone", "neutron", "nova", "sbom","security","watcher","hex_sdk","cubectl","etcd","keycloak","make","build","new","docker","deps","readme","bump","haproxy","ci","tests","docs","ui","api","ceph","hex_install","app frameworks","rancher","k3s","bootstrap","sec","rc","gpu","git","elk","hex_fixpack_install","terraform","prometheus","kernel","skyline","jail","hex_cli","hex_config","telegraf","mongodb","fixpack_history","cve-2026-21721","pcs","provider","changelog","rolling-upgrade","senlin","appctl","cube_sdk_library","app","kapacitor","httpd","log","appfw","alert","hex_translate","license","ci","pr","oci image","linux","typo"]
+  commitScopes: ["cinder", "glance", "heat", "ironic", "keystone", "neutron", "nova", "sbom","security","watcher","hex_sdk","cubectl","etcd","keycloak","make","build","new","docker","deps","readme","bump","haproxy","ci","tests","docs","ui","api","ceph","hex_install","app frameworks","rancher","k3s","bootstrap","sec","rc","gpu","git","elk","hex_fixpack_install","terraform","prometheus","kernel","skyline","jail","hex_cli","hex_config","telegraf","mongodb","fixpack_history","cve-2026-21721","pcs","provider","changelog","rolling-upgrade","senlin","appctl","cube_sdk_library","app","kapacitor","httpd","log","appfw","alert","hex_translate","license","ci","pr","oci image","linux","typo"]
 changelog:
   commitTypes:
   - feat
