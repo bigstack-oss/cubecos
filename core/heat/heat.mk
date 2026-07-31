@@ -24,13 +24,16 @@ ROOTFS_DNF_NOARCH += python3-heatclient
 
 HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 
+# the release is needed twice: once to pin the wheel, once for [revision] heat_revision
+HEAT_VER := 20.0.1
+
 # install heat
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
 		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			openstack-heat==20.0.1"
+			openstack-heat==$(HEAT_VER)"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link the six console scripts heat declares. The venv also gains
@@ -101,8 +104,20 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/heat
 
+# heat-dist.conf is not shipped (see openstack-heat-api.service), and everything it
+# carried is either dead, already written by config_heat.cpp, or a restatement of the
+# option's own default -- except one line. The RDO spec appends
+# "[revision] heat_revision=%{version}" to that file at build time, and heat serves the
+# value from heat/api/openstack/v1/build_info.py, so without it
+# GET /v1/{tenant}/build_info reports the "unknown" default instead of the release. Fill
+# the key in here rather than editing heat.conf.sample, which has to stay byte-identical
+# to what oslo-config-generator produces.
+rootfs_install::
+	$(Q)sed -i '/^\[revision\]$$/a heat_revision = $(HEAT_VER)' $(HEAT_CONFDIR)/heat.conf
+
 # hex_config reads this baseline and regenerates /etc/heat/heat.conf from it, so
 # it has to be taken after the install step above has replaced the file the RPMs
-# used to provide.
+# used to provide. LoadConfig() parses real key/values out of the .def too, not just
+# section names, which is what carries heat_revision into every regenerated heat.conf.
 rootfs_install::
 	$(Q)cp -f $(HEAT_CONFDIR)/heat.conf $(HEAT_CONFDIR)/heat.conf.def
