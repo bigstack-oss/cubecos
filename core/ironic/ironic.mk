@@ -82,6 +82,15 @@ rootfs_install::
 	$(Q)# install rootwrap configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/ironic/rootwrap.conf $(IRONIC_CONF_DIR)/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/ironic/ironic-utils.filters $(IRONIC_CONF_DIR)/rootwrap.d/ironic-utils.filters
+	$(Q)# ironic-lib carries a second filter set as wheel data, which RDO relocates in
+	$(Q)# python-ironic-lib.spec rather than in the ironic spec -- easy to lose when only
+	$(Q)# the service's own spec is ported. It authorises the commands
+	$(Q)# ironic_lib/disk_utils.py and ironic_lib/disk_partitioner.py run with
+	$(Q)# run_as_root=True (blkid, blockdev, lsblk, qemu-img, wipefs, sgdisk, partprobe,
+	$(Q)# mkfs, dd, parted, ...), so ironic-rootwrap denies all of them if it is absent.
+	$(Q)# Take it from the venv prefix instead of checking it in, so it tracks whatever
+	$(Q)# ironic-lib the pinned ironic resolves to.
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /opt/openstack-antelope/etc/ironic/rootwrap.d/ironic-lib.filters $(IRONIC_CONF_DIR)/rootwrap.d/ironic-lib.filters
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/ironic/inspector-rootwrap.conf $(IRONIC_INSP_CONF_DIR)/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/ironic/ironic-inspector.filters $(IRONIC_INSP_CONF_DIR)/rootwrap.d/ironic-inspector.filters
 	$(Q)# install security configurations
@@ -113,6 +122,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chmod 0640 $(IRONIC_CONF_DIR)/ironic.conf
 	$(Q)chroot $(ROOTDIR) chown root:ironic $(IRONIC_CONF_DIR)/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) chown root:root $(IRONIC_CONF_DIR)/rootwrap.d/ironic-utils.filters
+	$(Q)chroot $(ROOTDIR) chown root:root $(IRONIC_CONF_DIR)/rootwrap.d/ironic-lib.filters
 	$(Q)chroot $(ROOTDIR) chown root:ironic-inspector $(IRONIC_INSP_CONF_DIR)
 	$(Q)chroot $(ROOTDIR) chown root:ironic-inspector $(IRONIC_INSP_CONF_DIR)/inspector.conf
 	$(Q)chroot $(ROOTDIR) chmod 0640 $(IRONIC_INSP_CONF_DIR)/inspector.conf
