@@ -5,8 +5,11 @@ After=syslog.target network.target
 [Service]
 Type=simple
 User=octavia
-ExecStart=/usr/local/bin/octavia-housekeeping --config-file /etc/octavia/octavia.conf --log-file /var/log/octavia/housekeeping.log
+ExecStart=/usr/bin/octavia-housekeeping --config-file /usr/share/octavia/octavia-dist.conf --config-file /etc/octavia/octavia.conf --config-dir /etc/octavia/conf.d/common --config-dir /etc/octavia/conf.d/octavia-housekeeping --log-file /var/log/octavia/housekeeping.log
 PrivateTmp=true
+NotifyAccess=all
+KillMode=process
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
