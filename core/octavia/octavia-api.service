@@ -5,12 +5,11 @@ After=syslog.target network.target
 [Service]
 Type=simple
 User=octavia
-
-StandardOutput=append:/var/log/octavia/octavia-api.log
-StandardError=append:/var/log/octavia/octavia-api.log
-
-ExecStart=/bin/sh -c '/usr/local/bin/octavia-api --config-file /etc/octavia/octavia.conf --log-file /var/log/octavia/api.log >> /var/log/octavia/access.log 2>&1'
+ExecStart=/usr/bin/octavia-api --config-file /usr/share/octavia/octavia-dist.conf --config-file /etc/octavia/octavia.conf --config-dir /etc/octavia/conf.d/common --config-dir /etc/octavia/conf.d/octavia-api --log-file /var/log/octavia/api.log
 PrivateTmp=true
+NotifyAccess=all
+KillMode=process
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
