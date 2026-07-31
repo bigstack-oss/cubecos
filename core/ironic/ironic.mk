@@ -10,6 +10,14 @@ IRONIC_INSP_CONF_DIR := /etc/ironic-inspector
 # qemu-img, mtools, dosfstools and xorriso are what the conductor shells out to
 # for image conversion and config-drive creation. They used to arrive through
 # other components' RPM sets, which is not something ironic should rely on.
+#
+# pykickstart, the remaining Requires of RDO's openstack-ironic-conductor, is left
+# out for the same reason python3-dracclient and python3-scciclient are: it is only
+# reached through the anaconda deploy interface, and config_ironic.cpp pins
+# enabled_deploy_interfaces to "direct" and rewrites it on every Commit(). ironic
+# only names it in an error string, so both ironic.common.pxe_utils and
+# ironic.drivers.modules.deploy_utils import fine without it and anyone who does
+# enable anaconda gets "Please install pykickstart package to enable ...".
 ROOTFS_DNF += tftp-server ipmitool qemu-img mtools dosfstools xorriso
 ROOTFS_DNF_NOARCH += syslinux-tftpboot
 
