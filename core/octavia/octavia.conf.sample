@@ -1,0 +1,2392 @@
+[DEFAULT]
+
+#
+# From cotyledon
+#
+
+# Enables or disables logging values of all registered options when starting a
+# service (at DEBUG level) (boolean value)
+# Note: This option can be changed without restarting.
+#log_options = true
+
+# Specify a timeout after which a gracefully shutdown server will exit. Zero
+# value means endless wait (integer value)
+# Note: This option can be changed without restarting.
+#graceful_shutdown_timeout = 60
+
+#
+# From octavia
+#
+
+# The hostname Octavia is running on (hostname value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#host = <server-hostname.example.com>
+
+# Name of the controller plugin to use (string value)
+#octavia_plugins = hot_plug_plugin
+
+#
+# From oslo.log
+#
+
+# If set to true, the logging level will be set to DEBUG instead of the default
+# INFO level (boolean value)
+# Note: This option can be changed without restarting.
+#debug = false
+
+# The name of a logging configuration file. This file is appended to any
+# existing logging configuration files. For details about logging configuration
+# files, see the Python logging module documentation. Note that when logging
+# configuration files are used then all logging configuration is set in the
+# configuration file and other logging configuration options are ignored (for
+# example, log-date-format) (string value)
+# Note: This option can be changed without restarting.
+# Deprecated group/name - [DEFAULT]/log_config
+#log_config_append = <None>
+
+# Defines the format string for %%(asctime)s in log records. Default:
+# %(default)s . This option is ignored if log_config_append is set (string
+# value)
+#log_date_format = %Y-%m-%d %H:%M:%S
+
+# (Optional) Name of log file to send logging output to. If no default is set,
+# logging will go to stderr as defined by use_stderr. This option is ignored if
+# log_config_append is set (string value)
+# Deprecated group/name - [DEFAULT]/logfile
+#log_file = <None>
+
+# (Optional) The base directory used for relative log_file  paths. This option
+# is ignored if log_config_append is set (string value)
+# Deprecated group/name - [DEFAULT]/logdir
+#log_dir = <None>
+
+# Uses logging handler designed to watch file system. When log file is moved or
+# removed this handler will open a new log file with specified path
+# instantaneously. It makes sense only if log_file option is specified and
+# Linux platform is used. This option is ignored if log_config_append is set
+# (boolean value)
+#watch_log_file = false
+
+# Use syslog for logging. Existing syslog format is DEPRECATED and will be
+# changed later to honor RFC5424. This option is ignored if log_config_append
+# is set (boolean value)
+#use_syslog = false
+
+# Enable journald for logging. If running in a systemd environment you may wish
+# to enable journal support. Doing so will use the journal native protocol
+# which includes structured metadata in addition to log messages.This option is
+# ignored if log_config_append is set (boolean value)
+#use_journal = false
+
+# Syslog facility to receive log lines. This option is ignored if
+# log_config_append is set (string value)
+#syslog_log_facility = LOG_USER
+
+# Use JSON formatting for logging. This option is ignored if log_config_append
+# is set (boolean value)
+#use_json = false
+
+# Log output to standard error. This option is ignored if log_config_append is
+# set (boolean value)
+#use_stderr = false
+
+# Log output to Windows Event Log (boolean value)
+#use_eventlog = false
+
+# The amount of time before the log files are rotated. This option is ignored
+# unless log_rotation_type is set to "interval" (integer value)
+#log_rotate_interval = 1
+
+# Rotation interval type. The time of the last file change (or the time when
+# the service was started) is used when scheduling the next rotation (string
+# value)
+# Possible values:
+# Seconds - <No description provided>
+# Minutes - <No description provided>
+# Hours - <No description provided>
+# Days - <No description provided>
+# Weekday - <No description provided>
+# Midnight - <No description provided>
+#log_rotate_interval_type = days
+
+# Maximum number of rotated log files (integer value)
+#max_logfile_count = 30
+
+# Log file maximum size in MB. This option is ignored if "log_rotation_type" is
+# not set to "size" (integer value)
+#max_logfile_size_mb = 200
+
+# Log rotation type (string value)
+# Possible values:
+# interval - Rotate logs at predefined time intervals.
+# size - Rotate logs once they reach a predefined size.
+# none - Do not rotate log files.
+#log_rotation_type = none
+
+# Format string to use for log messages with context. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
+
+# Format string to use for log messages when context is undefined. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_default_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s
+
+# Additional data to append to log message when logging level for the message
+# is DEBUG. Used by oslo_log.formatters.ContextFormatter (string value)
+#logging_debug_format_suffix = %(funcName)s %(pathname)s:%(lineno)d
+
+# Prefix each line of exception output with this format. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_exception_prefix = %(asctime)s.%(msecs)03d %(process)d ERROR %(name)s %(instance)s
+
+# Defines the format string for %(user_identity)s that is used in
+# logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
+# (string value)
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
+
+# List of package logging levels in logger=LEVEL pairs. This option is ignored
+# if log_config_append is set (list value)
+#default_log_levels = amqp=WARN,amqplib=WARN,boto=WARN,qpid=WARN,sqlalchemy=WARN,suds=INFO,oslo.messaging=INFO,oslo_messaging=INFO,iso8601=WARN,requests.packages.urllib3.connectionpool=WARN,urllib3.connectionpool=WARN,websocket=WARN,requests.packages.urllib3.util.retry=WARN,urllib3.util.retry=WARN,keystonemiddleware=WARN,routes.middleware=WARN,stevedore=WARN,taskflow=WARN,keystoneauth=WARN,oslo.cache=INFO,oslo_policy=INFO,dogpile.core.dogpile=INFO
+
+# Enables or disables publication of error events (boolean value)
+#publish_errors = false
+
+# The format for an instance that is passed with the log message (string value)
+#instance_format = "[instance: %(uuid)s] "
+
+# The format for an instance UUID that is passed with the log message (string
+# value)
+#instance_uuid_format = "[instance: %(uuid)s] "
+
+# Interval, number of seconds, of log rate limiting (integer value)
+#rate_limit_interval = 0
+
+# Maximum number of logged messages per rate_limit_interval (integer value)
+#rate_limit_burst = 0
+
+# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG
+# or empty string. Logs with level greater or equal to rate_limit_except_level
+# are not filtered. An empty string means that all levels are filtered (string
+# value)
+#rate_limit_except_level = CRITICAL
+
+# Enables or disables fatal status of deprecations (boolean value)
+#fatal_deprecations = false
+
+#
+# From oslo.messaging
+#
+
+# Size of RPC connection pool (integer value)
+# Minimum value: 1
+#rpc_conn_pool_size = 30
+
+# The pool size limit for connections expiration policy (integer value)
+#conn_pool_min_size = 2
+
+# The time-to-live in sec of idle connections in the pool (integer value)
+#conn_pool_ttl = 1200
+
+# Size of executor thread pool when executor is threading or eventlet (integer
+# value)
+# Deprecated group/name - [DEFAULT]/rpc_thread_pool_size
+#executor_thread_pool_size = 64
+
+# Seconds to wait for a response from a call (integer value)
+#rpc_response_timeout = 60
+
+# The network address and optional user credentials for connecting to the
+# messaging backend, in URL format. The expected format is. For more
+# information, refer to the documentation. (string value)
+#transport_url = rabbit://
+
+# The default exchange under which topics are scoped. May be overridden by an
+# exchange name specified in the transport_url option (string value)
+#control_exchange = octavia
+
+# Add an endpoint to answer to ping calls. Endpoint is named
+# oslo_rpc_server_ping (boolean value)
+#rpc_ping_enabled = false
+
+
+[amphora_agent]
+
+#
+# From octavia
+#
+
+# The ca which signed the client certificates (string value)
+#agent_server_ca = /etc/octavia/certs/client_ca.pem
+
+# The server certificate for the agent server to use (string value)
+#agent_server_cert = /etc/octavia/certs/server.pem
+
+# The directory where new network interfaces are located (string value)
+#agent_server_network_dir = <None>
+
+# DEPRECATED: The file where the network interfaces are located. Specifying
+# this will override any value set for agent_server_network_dir (string value)
+# This option is deprecated for removal since Xena.
+# Its value may be silently ignored in the future.
+# Reason: New amphora interface management does not support single interface
+# file.
+#agent_server_network_file = <None>
+
+# The time in seconds to allow a request from the controller to run before
+# terminating the socket (integer value)
+#agent_request_read_timeout = 180
+
+# Minimum TLS protocol for communication with the amphora agent (string value)
+# Possible values:
+# SSLv3 - <No description provided>
+# TLSv1 - <No description provided>
+# TLSv1.1 - <No description provided>
+# TLSv1.2 - <No description provided>
+# TLSv1.3 - <No description provided>
+#agent_tls_protocol = TLSv1.2
+
+# List of log server ip and port pairs for Administrative logs. Additional
+# hosts are backup to the primary server. If none is specified remote logging
+# is disabled. Example 127.0.0.1:10514, 192.168.0.1:10514 (list value)
+#admin_log_targets = <None>
+
+# List of log server ip and port pairs for tenant traffic logs. Additional
+# hosts are backup to the primary server. If none is specified remote logging
+# is disabled. Example 127.0.0.1:10514, 192.168.0.1:10514 (list value)
+#tenant_log_targets = <None>
+
+# LOG_LOCAL facility number to use for user traffic logs (integer value)
+# Minimum value: 0
+# Maximum value: 7
+#user_log_facility = 0
+
+# LOG_LOCAL facility number to use for amphora processes logs (integer value)
+# Minimum value: 0
+# Maximum value: 7
+#administrative_log_facility = 1
+
+# The log forwarding transport protocol. One of UDP or TCP (string value)
+# Possible values:
+# TCP - <No description provided>
+# UDP - <No description provided>
+#log_protocol = UDP
+
+# The maximum attempts to retry connecting to the logging host (integer value)
+#log_retry_count = 5
+
+# The time, in seconds, to wait between retries connecting to the logging host
+# (integer value)
+#log_retry_interval = 2
+
+# The queue size (messages) to buffer log messages (integer value)
+#log_queue_size = 10000
+
+# Custom logging configuration template (string value)
+#logging_template_override = <None>
+
+# When True, the amphora will forward all of the system logs (except tenant
+# traffic logs) to the admin log target(s). When False, only amphora specific
+# admin logs will be forwarded (boolean value)
+#forward_all_logs = false
+
+# When True, no logs will be written to the amphora filesystem. When False, log
+# files will be written to the local filesystem (boolean value)
+#disable_local_log_storage = false
+
+# The amphora ID (string value)
+#amphora_id = <None>
+
+# DEPRECATED: The UDP API backend for amphora agent (string value)
+# This option is deprecated for removal since Wallaby.
+# Its value may be silently ignored in the future.
+# Reason: amphora-agent will not support any other backend than keepalived_lvs.
+#amphora_udp_driver = keepalived_lvs
+
+
+[api_settings]
+
+#
+# From octavia
+#
+
+# The host IP to bind to (IP address value)
+#bind_host = 127.0.0.1
+
+# The port to bind to (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#bind_port = 9876
+
+# The auth strategy for API requests (string value)
+# Possible values:
+# noauth - <No description provided>
+# keystone - <No description provided>
+# testing - <No description provided>
+#auth_strategy = keystone
+
+# Allow the usage of pagination (boolean value)
+#allow_pagination = true
+
+# Allow the usage of sorting (boolean value)
+#allow_sorting = true
+
+# Allow the usage of filtering (boolean value)
+#allow_filtering = true
+
+# Allow the usage of field selection (boolean value)
+#allow_field_selection = true
+
+# The maximum number of items returned in a single response. The string
+# 'infinite' or a negative integer value means 'no limit' (string value)
+#pagination_max_limit = 1000
+
+# Base URI for the API for use in pagination links. This will be autodetected
+# from the request if not overridden here (string value)
+#api_base_uri = <None>
+
+# Allow users to create TLS Terminated listeners? (boolean value)
+#allow_tls_terminated_listeners = true
+
+# Allow users to create PING type Health Monitors? (boolean value)
+#allow_ping_health_monitors = true
+
+# Allow users to create PROMETHEUS type listeners? (boolean value)
+#allow_prometheus_listeners = true
+
+# A comma separated list of dictionaries of the enabled provider driver names
+# and descriptions. Must match the driver name in the octavia.api.drivers
+# entrypoint (dict value)
+#enabled_provider_drivers = amphora:The Octavia Amphora driver.,octavia:Deprecated alias of the Octavia Amphora driver.
+
+# Default provider driver (string value)
+#default_provider_driver = amphora
+
+# The minimum health monitor delay interval for the UDP-CONNECT Health Monitor
+# type. A negative integer value means 'no limit' (integer value)
+#udp_connect_min_interval_health_monitor = 3
+
+# When True, the oslo middleware healthcheck endpoint is enabled in the Octavia
+# API (boolean value)
+#healthcheck_enabled = false
+
+# The interval healthcheck plugins should cache results, in seconds (integer
+# value)
+#healthcheck_refresh_interval = 5
+
+# Default OpenSSL cipher string (colon-separated) for new TLS-enabled listeners
+# (string value)
+#default_listener_ciphers = TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256
+
+# Default OpenSSL cipher string (colon-separated) for new TLS-enabled pools
+# (string value)
+#default_pool_ciphers = TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256
+
+# Colon separated list of OpenSSL ciphers. Usage of these ciphers will be
+# blocked (string value)
+# Deprecated group/name - [api_settings]/tls_cipher_blacklist
+#tls_cipher_prohibit_list =
+
+# List of TLS versions to use for new TLS-enabled listeners (list value)
+#default_listener_tls_versions = TLSv1.2,TLSv1.3
+
+# List of TLS versions to use for new TLS-enabled pools (list value)
+#default_pool_tls_versions = TLSv1.2,TLSv1.3
+
+# Minimum allowed TLS version for listeners and pools (string value)
+# Possible values:
+# SSLv3 - <No description provided>
+# TLSv1 - <No description provided>
+# TLSv1.1 - <No description provided>
+# TLSv1.2 - <No description provided>
+# TLSv1.3 - <No description provided>
+# <None> - <No description provided>
+#minimum_tls_version = <None>
+
+# List of ALPN protocols to use for new TLS-enabled listeners (list value)
+#default_listener_alpn_protocols = h2,http/1.1,http/1.0
+
+# List of ALPN protocols to use for new TLS-enabled pools (list value)
+#default_pool_alpn_protocols = h2,http/1.1,http/1.0
+
+
+[audit]
+
+#
+# From octavia
+#
+
+# Enable auditing of API requests (boolean value)
+#enabled = false
+
+# Path to audit map file for octavia-api service. Used only when API audit is
+# enabled (string value)
+#audit_map_file = /etc/octavia/octavia_api_audit_map.conf
+
+# Comma separated list of REST API HTTP methods to be ignored during audit. For
+# example: auditing will not be done on any GET or POST requests if this is set
+# to "GET,POST". It is used only when API audit is enabled (string value)
+#ignore_req_list =
+
+
+[audit_middleware_notifications]
+
+#
+# From keystonemiddleware.audit
+#
+
+# Indicate whether to use oslo_messaging as the notifier. If set to False, the
+# local logger will be used as the notifier. If set to True, the oslo_messaging
+# package must also be present. Otherwise, the local will be used instead
+# (boolean value)
+#use_oslo_messaging = true
+
+# The Driver to handle sending notifications. Possible values are messaging,
+# messagingv2, routing, log, test, noop. If not specified, then value from
+# oslo_messaging_notifications conf section is used (string value)
+#driver = <None>
+
+# List of AMQP topics used for OpenStack notifications. If not specified, then
+# value from  oslo_messaging_notifications conf section is used (list value)
+#topics = <None>
+
+# A URL representing messaging driver to use for notification. If not
+# specified, we fall back to the same configuration used for RPC (string value)
+#transport_url = <None>
+
+
+[barbican]
+
+#
+# From castellan.config
+#
+
+# Use this endpoint to connect to Barbican, for example:
+# "http://localhost:9311/" (string value)
+#barbican_endpoint = <None>
+
+# Version of the Barbican API, for example: "v1" (string value)
+#barbican_api_version = <None>
+
+# Use this endpoint to connect to Keystone (string value)
+# Deprecated group/name - [key_manager]/auth_url
+#auth_endpoint = http://localhost/identity/v3
+
+# Number of seconds to wait before retrying poll for key creation completion
+# (integer value)
+#retry_delay = 1
+
+# Number of times to retry poll for key creation completion (integer value)
+#number_of_retries = 60
+
+# Specifies if insecure TLS (https) requests. If False, the server's
+# certificate will not be validated, if True, we can set the verify_ssl_path
+# config meanwhile (boolean value)
+#verify_ssl = true
+
+# A path to a bundle or CA certs to check against, or None for requests to
+# attempt to locate and use certificates which verify_ssh is True. If
+# verify_ssl is False, this is ignored (string value)
+#verify_ssl_path = <None>
+
+# Specifies the type of endpoint.  Allowed values are: public, private, and
+# admin (string value)
+# Possible values:
+# public - <No description provided>
+# internal - <No description provided>
+# admin - <No description provided>
+#barbican_endpoint_type = public
+
+# Specifies the region of the chosen endpoint (string value)
+#barbican_region_name = <None>
+
+#
+# When True, if sending a user token to a REST API, also send a service token.
+# For more information, refer to the documentation. (boolean value)
+#send_service_user_token = false
+
+
+[barbican_service_user]
+
+#
+# From castellan.config
+#
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile = <None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile = <None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile = <None>
+
+# Verify HTTPS connections (boolean value)
+#insecure = false
+
+# Timeout value for http requests (integer value)
+#timeout = <None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing = false
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers = false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [barbican_service_user]/auth_plugin
+#auth_type = <None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section = <None>
+
+
+[certificates]
+
+#
+# From octavia
+#
+
+# Name of the cert manager to use (string value)
+#cert_manager = barbican_cert_manager
+
+# Name of the cert generator to use (string value)
+#cert_generator = local_cert_generator
+
+# Name of the Barbican authentication method to use (string value)
+#barbican_auth = barbican_acl_auth
+
+# The name of the certificate service in the keystone catalog (string value)
+#service_name = <None>
+
+# A new endpoint to override the endpoint in the keystone catalog (string
+# value)
+#endpoint = <None>
+
+# Region in Identity service catalog to use for communication with the barbican
+# service (string value)
+#region_name = <None>
+
+# The endpoint_type to be used for barbican service (string value)
+#endpoint_type = publicURL
+
+# CA certificates file path for the key manager service (such as Barbican)
+# (string value)
+#ca_certificates_file = <None>
+
+# Disable certificate validation on SSL connections  (boolean value)
+#insecure = false
+
+# Absolute path to the CA Certificate for signing. Defaults to
+# env[OS_OCTAVIA_TLS_CA_CERT] (string value)
+#ca_certificate = /etc/ssl/certs/ssl-cert-snakeoil.pem
+
+# Absolute path to the Private Key for signing. Defaults to
+# env[OS_OCTAVIA_TLS_CA_KEY] (string value)
+#ca_private_key = /etc/ssl/private/ssl-cert-snakeoil.key
+
+# Passphrase for the Private Key. Defaults to env[OS_OCTAVIA_CA_KEY_PASS] or
+# None (string value)
+#ca_private_key_passphrase = <None>
+
+# Passphrase for encrypting Amphora Certificates and Private Keys. Must be 32,
+# base64(url) compatible, characters long. Defaults to
+# env[TLS_PASS_AMPS_DEFAULT] or insecure-key-do-not-use-this-key (string value)
+#server_certs_key_passphrase = insecure-key-do-not-use-this-key
+
+# Certificate signing digest. Defaults to env[OS_OCTAVIA_CA_SIGNING_DIGEST] or
+# "sha256" (string value)
+#signing_digest = sha256
+
+# The validity time for the Amphora Certificates (in seconds) (integer value)
+#cert_validity_time = 2592000
+
+
+[cinder]
+
+#
+# From octavia
+#
+
+# The name of the cinder service in the keystone catalog (string value)
+#service_name = <None>
+
+# A new endpoint to override the endpoint in the keystone catalog (string
+# value)
+#endpoint = <None>
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack services (string value)
+#region_name = <None>
+
+# Endpoint interface in identity service to use (string value)
+#endpoint_type = publicURL
+
+# CA certificates file path (string value)
+#ca_certificates_file = <None>
+
+# Availability zone to use for creating Volume (string value)
+#availability_zone = <None>
+
+# Disable certificate validation on SSL connections (boolean value)
+#insecure = false
+
+# Size of volume, in GB, for Amphora instance (integer value)
+#volume_size = 16
+
+# Type of volume for Amphorae volume root disk (string value)
+#volume_type = <None>
+
+# Interval time to wait volume is created in available state (integer value)
+#volume_create_retry_interval = 5
+
+# Timeout to wait for volume creation success (integer value)
+#volume_create_timeout = 300
+
+# Maximum number of retries to create volume (integer value)
+#volume_create_max_retries = 5
+
+
+[compute]
+
+#
+# From octavia
+#
+
+# The maximum attempts to retry an action with the compute service (integer
+# value)
+#max_retries = 15
+
+# Seconds to wait before retrying an action with the compute service (integer
+# value)
+#retry_interval = 1
+
+# The seconds to backoff retry attempts (integer value)
+#retry_backoff = 1
+
+# The maximum interval in seconds between retry attempts (integer value)
+#retry_max = 10
+
+
+[controller_worker]
+
+#
+# From octavia
+#
+
+# Number of workers for the controller-worker service (integer value)
+# Minimum value: 1
+#workers = 1
+
+# Retry attempts to wait for Amphora to become active (integer value)
+#amp_active_retries = 30
+
+# Seconds to wait between checks on whether an Amphora has become active
+# (integer value)
+#amp_active_wait_sec = 10
+
+# Nova instance flavor id for the Amphora (string value)
+#amp_flavor_id =
+
+# Glance image tag for the Amphora image to boot. Use this option to be able to
+# update the image without reconfiguring Octavia (string value)
+#amp_image_tag =
+
+# Restrict glance image selection to a specific owner ID.  This is a
+# recommended security setting (string value)
+#amp_image_owner_id =
+
+# Optional SSH keypair name, in nova, that will be used for the authorized_keys
+# inside the amphora (string value)
+#amp_ssh_key_name =
+
+# The timezone to use in the Amphora as represented in /usr/share/zoneinfo
+# (string value)
+#amp_timezone = UTC
+
+# List of networks to attach to the Amphorae. All networks defined in the list
+# will be attached to each amphora (list value)
+#amp_boot_network_list =
+
+# List of security groups to attach to the Amphora (list value)
+#amp_secgroup_list =
+
+# Client CA for the amphora agent to use (string value)
+#client_ca = /etc/octavia/certs/ca_01.pem
+
+# Name of the amphora driver to use (string value)
+#amphora_driver = amphora_haproxy_rest_driver
+
+# Name of the compute driver to use (string value)
+#compute_driver = compute_nova_driver
+
+# Name of the network driver to use (string value)
+#network_driver = allowed_address_pairs_driver
+
+# Name of the volume driver to use (string value)
+# Possible values:
+# volume_noop_driver - <No description provided>
+# volume_cinder_driver - <No description provided>
+#volume_driver = volume_noop_driver
+
+# Name of the image driver to use (string value)
+# Possible values:
+# image_noop_driver - <No description provided>
+# image_glance_driver - <No description provided>
+#image_driver = image_glance_driver
+
+# Name of the distributor driver to use (string value)
+#distributor_driver = distributor_noop_driver
+
+# List of drivers for updating amphora statistics (list value)
+# Deprecated group/name - [health_manager]/stats_update_driver
+#statistics_drivers = stats_db
+
+# Load balancer topology configuration. SINGLE - One amphora per load balancer.
+# ACTIVE_STANDBY - Two amphora per load balancer (string value)
+# Possible values:
+# ACTIVE_STANDBY - <No description provided>
+# SINGLE - <No description provided>
+# Note: This option can be changed without restarting.
+#loadbalancer_topology = SINGLE
+
+# DEPRECATED: If True, build cloud-init user-data that is passed to the config
+# drive on Amphora boot instead of personality files. If False, utilize
+# personality files (boolean value)
+# This option is deprecated for removal since Antelope(2023.1).
+# Its value may be silently ignored in the future.
+# Reason: User_data nova option is not used and is  too small to replace the
+# config_drive.
+#user_data_config_drive = false
+
+# Number of times an amphora delete should be retried (integer value)
+#amphora_delete_retries = 5
+
+# Time, in seconds, between amphora delete retries (integer value)
+#amphora_delete_retry_interval = 5
+
+# Enable octavia event notifications. See oslo_messaging_notifications section
+# for additional requirements (boolean value)
+#event_notifications = true
+
+# The number of times the database action will be attempted (integer value)
+#db_commit_retry_attempts = 2000
+
+# The initial delay before a retry attempt (integer value)
+#db_commit_retry_initial_delay = 1
+
+# The time to backoff retry attempts (integer value)
+#db_commit_retry_backoff = 1
+
+# The maximum amount of time to wait between retry attempts (integer value)
+#db_commit_retry_max = 5
+
+
+[cors]
+
+#
+# From oslo.middleware.cors
+#
+
+# Indicate whether this resource may be shared with the domain received in the
+# requests "origin" header. Format: "<protocol>://<host>[:<port>]", no trailing
+# slash. Example: https://horizon.example.com (list value)
+#allowed_origin = <None>
+
+# Indicate that the actual request can include user credentials (boolean value)
+#allow_credentials = true
+
+# Indicate which headers are safe to expose to the API. Defaults to HTTP Simple
+# Headers (list value)
+#expose_headers =
+
+# Maximum cache age of CORS preflight requests (integer value)
+#max_age = 3600
+
+# Indicate which methods can be used during the actual request (list value)
+#allow_methods = OPTIONS,GET,HEAD,POST,PUT,DELETE,TRACE,PATCH
+
+# Indicate which header field names may be used during the actual request (list
+# value)
+#allow_headers =
+
+
+[database]
+
+#
+# From oslo.db
+#
+
+# If True, SQLite uses synchronous mode (boolean value)
+#sqlite_synchronous = true
+
+# The back end to use for the database (string value)
+# Deprecated group/name - [DEFAULT]/db_backend
+#backend = sqlalchemy
+
+# The SQLAlchemy connection string to use to connect to the database (string
+# value)
+# Deprecated group/name - [DEFAULT]/sql_connection
+# Deprecated group/name - [DATABASE]/sql_connection
+# Deprecated group/name - [sql]/connection
+#connection = <None>
+
+# The SQLAlchemy connection string to use to connect to the slave database
+# (string value)
+#slave_connection = <None>
+
+# The SQL mode to be used for MySQL sessions. This option, including the
+# default, overrides any server-set SQL mode. To use whatever SQL mode is set
+# by the server configuration, set this to no value. Example: mysql_sql_mode=
+# (string value)
+#mysql_sql_mode = TRADITIONAL
+
+# For Galera only, configure wsrep_sync_wait causality checks on new
+# connections.  Default is None, meaning don't configure any setting (integer
+# value)
+#mysql_wsrep_sync_wait = <None>
+
+# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
+# (NDB) (boolean value)
+# This option is deprecated for removal since 12.1.0.
+# Its value may be silently ignored in the future.
+# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
+# and will be removed in a future release.
+#mysql_enable_ndb = false
+
+# Connections which have been present in the connection pool longer than this
+# number of seconds will be replaced with a new one the next time they are
+# checked out from the pool (integer value)
+#connection_recycle_time = 3600
+
+# Maximum number of SQL connections to keep open in a pool. Setting a value of
+# 0 indicates no limit (integer value)
+#max_pool_size = 5
+
+# Maximum number of database connection retries during startup. Set to -1 to
+# specify an infinite retry count (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_retries
+# Deprecated group/name - [DATABASE]/sql_max_retries
+#max_retries = 10
+
+# Interval between retries of opening a SQL connection (integer value)
+# Deprecated group/name - [DEFAULT]/sql_retry_interval
+# Deprecated group/name - [DATABASE]/reconnect_interval
+#retry_interval = 10
+
+# If set, use this value for max_overflow with SQLAlchemy (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_overflow
+# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
+#max_overflow = 50
+
+# Verbosity of SQL debugging information: 0=None, 100=Everything (integer
+# value)
+# Minimum value: 0
+# Maximum value: 100
+# Deprecated group/name - [DEFAULT]/sql_connection_debug
+#connection_debug = 0
+
+# Add Python stack traces to SQL as comment strings (boolean value)
+# Deprecated group/name - [DEFAULT]/sql_connection_trace
+#connection_trace = false
+
+# If set, use this value for pool_timeout with SQLAlchemy (integer value)
+# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
+#pool_timeout = <None>
+
+# Enable the experimental use of database reconnect on connection lost (boolean
+# value)
+#use_db_reconnect = false
+
+# Seconds between retries of a database transaction (integer value)
+#db_retry_interval = 1
+
+# If True, increases the interval between retries of a database operation up to
+# db_max_retry_interval (boolean value)
+#db_inc_retry_interval = true
+
+# If db_inc_retry_interval is set, the maximum seconds between retries of a
+# database operation (integer value)
+#db_max_retry_interval = 10
+
+# Maximum retries in case of connection error or deadlock error before error is
+# raised. Set to -1 to specify an infinite retry count (integer value)
+#db_max_retries = 20
+
+# Optional URL parameters to append onto the connection URL at connect time;
+# specify as param1=value1&param2=value2& (string value)
+#connection_parameters =
+
+
+[driver_agent]
+
+#
+# From octavia
+#
+
+# Path to the driver status unix domain socket file (string value)
+#status_socket_path = /var/run/octavia/status.sock
+
+# Path to the driver statistics unix domain socket file (string value)
+#stats_socket_path = /var/run/octavia/stats.sock
+
+# Path to the driver get unix domain socket file (string value)
+#get_socket_path = /var/run/octavia/get.sock
+
+# Time, in seconds, to wait for a status update request (integer value)
+#status_request_timeout = 5
+
+# Maximum number of concurrent processes to use servicing status updates
+# (integer value)
+#status_max_processes = 50
+
+# Time, in seconds, to wait for a statistics update request (integer value)
+#stats_request_timeout = 5
+
+# Maximum number of concurrent processes to use servicing statistics updates
+# (integer value)
+#stats_max_processes = 50
+
+# Time, in seconds, to wait for a get request (integer value)
+#get_request_timeout = 5
+
+# Maximum number of concurrent processes to use servicing get requests (integer
+# value)
+#get_max_processes = 50
+
+# Percentage of max_processes (both status and stats) in use to start logging
+# warning messages about an overloaded driver-agent (floating point value)
+# Minimum value: 0.01
+# Maximum value: 0.99
+#max_process_warning_percent = 0.75
+
+# The time, in seconds, to wait for provider agents to shutdown after the exit
+# event has been set (integer value)
+#provider_agent_shutdown_timeout = 60
+
+# List of enabled provider agents. The driver-agent will launch these agents at
+# startup (list value)
+#enabled_provider_agents =
+
+
+[glance]
+
+#
+# From octavia
+#
+
+# The name of the glance service in the keystone catalog (string value)
+#service_name = <None>
+
+# A new endpoint to override the endpoint in the keystone catalog (string
+# value)
+#endpoint = <None>
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack services (string value)
+#region_name = <None>
+
+# Endpoint interface in identity service to use (string value)
+#endpoint_type = publicURL
+
+# CA certificates file path (string value)
+#ca_certificates_file = <None>
+
+# Disable certificate validation on SSL connections  (boolean value)
+#insecure = false
+
+
+[haproxy_amphora]
+
+#
+# From octavia
+#
+
+# Base directory for amphora files (string value)
+#base_path = /var/lib/octavia
+
+# Base directory for cert storage (string value)
+#base_cert_dir = /var/lib/octavia/certs
+
+# Custom haproxy template (string value)
+#haproxy_template = <None>
+
+# Set this to False to disable connection logging (boolean value)
+#connection_logging = true
+
+# Retry threshold for connecting to amphorae (integer value)
+#connection_max_retries = 120
+
+# Retry timeout between connection attempts in seconds (integer value)
+#connection_retry_interval = 5
+
+# Retry threshold for connecting to active amphorae (integer value)
+#active_connection_max_retries = 15
+
+# Retry timeout between connection attempts in seconds for active amphora
+# (integer value)
+# Deprecated group/name - [haproxy_amphora]/active_connection_rety_interval
+#active_connection_retry_interval = 2
+
+# Retry threshold for connecting to an amphora in failover (integer value)
+#failover_connection_max_retries = 2
+
+# Retry timeout between connection attempts in seconds for amphora in failover
+# (integer value)
+#failover_connection_retry_interval = 5
+
+# Number of amphorae that could be built per controller worker, simultaneously
+# (integer value)
+#build_rate_limit = -1
+
+# Retry threshold for waiting for a build slot for an amphorae (integer value)
+#build_active_retries = 120
+
+# Retry timeout between build attempts in seconds (integer value)
+#build_retry_interval = 5
+
+# Size of the HAProxy stick table. Accepts k, m, g suffixes (string value)
+#haproxy_stick_size = 10k
+
+# Log format string for user flow logging (string value)
+#user_log_format = {{ project_id }} {{ lb_id }} %f %ci %cp %t %{+Q}r %ST %B %U %[ssl_c_verify] %{+Q}[ssl_c_s_dn] %b %s %Tt %tsc
+
+# The host IP to bind to (IP address value)
+#bind_host = ::
+
+# The port to bind to (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#bind_port = 9443
+
+# Network interface through which to reach amphora, only required if using IPv6
+# link local addresses (string value)
+#lb_network_interface = o-hm0
+
+# The full path to haproxy (string value)
+#haproxy_cmd = /usr/sbin/haproxy
+
+# The respawn count for haproxy's upstart script (integer value)
+#respawn_count = 2
+
+# The respawn interval for haproxy's upstart script (integer value)
+#respawn_interval = 2
+
+# The time in seconds to wait for a REST API to connect (floating point value)
+#rest_request_conn_timeout = 10
+
+# The time in seconds to wait for a REST API response (floating point value)
+#rest_request_read_timeout = 60
+
+# Frontend client inactivity timeout (integer value)
+#timeout_client_data = 50000
+
+# Backend member connection timeout (integer value)
+#timeout_member_connect = 5000
+
+# Backend member inactivity timeout (integer value)
+#timeout_member_data = 50000
+
+# Time to wait for TCP packets for content inspection (integer value)
+#timeout_tcp_inspect = 0
+
+# The client certificate to talk to the agent (string value)
+#client_cert = /etc/octavia/certs/client.pem
+
+# The ca which signed the server certificates (string value)
+#server_ca = /etc/octavia/certs/server_ca.pem
+
+# DEPRECATED: If False, use sysvinit (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This is now automatically discovered  and configured.
+#use_upstart = true
+
+# The number of times the database action will be attempted (integer value)
+#api_db_commit_retry_attempts = 15
+
+# The initial delay before a retry attempt (integer value)
+#api_db_commit_retry_initial_delay = 1
+
+# The time to backoff retry attempts (integer value)
+#api_db_commit_retry_backoff = 1
+
+# The maximum amount of time to wait between retry attempts (integer value)
+#api_db_commit_retry_max = 5
+
+# Default connection_limit for listeners, used when setting "-1" or when
+# unsetting connection_limit with the listener API (integer value)
+#default_connection_limit = 50000
+
+
+[health_manager]
+
+#
+# From octavia
+#
+
+# IP address the controller will listen on for heart beats (IP address value)
+#bind_ip = 127.0.0.1
+
+# Port number the controller will listen on for heart beats (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#bind_port = 5555
+
+# Number of threads performing amphora failovers (integer value)
+#failover_threads = 10
+
+# Number of processes for amphora health update (integer value)
+#health_update_threads = <None>
+
+# Number of processes for amphora stats update (integer value)
+#stats_update_threads = <None>
+
+# key used to validate amphora sending the message (string value)
+# Note: This option can be changed without restarting.
+#heartbeat_key = <None>
+
+# Interval, in seconds, to wait before failing over an amphora (integer value)
+#heartbeat_timeout = 60
+
+# Sleep time between health checks in seconds (integer value)
+#health_check_interval = 3
+
+#  sets the value of the heartbeat recv buffer (integer value)
+#sock_rlimit = 0
+
+# Stop failovers if the count of simultaneously failed amphora reaches this
+# number. This may prevent large scale accidental failover events, like in the
+# case of network failures or read-only database issues (integer value)
+#failover_threshold = <None>
+
+# List of controller ip and port pairs for the heartbeat receivers. Example
+# 127.0.0.1:5555, 192.168.0.1:5555 (list value)
+# Note: This option can be changed without restarting.
+#controller_ip_port_list =
+
+# Sleep time between sending heartbeats (integer value)
+# Note: This option can be changed without restarting.
+#heartbeat_interval = 10
+
+# DEPRECATED: Driver for updating amphora health system (string value)
+# This option is deprecated for removal since Victoria.
+# Its value may be silently ignored in the future.
+# Reason: This driver interface was removed.
+#health_update_driver = health_db
+
+
+[healthcheck]
+
+#
+# From oslo.middleware.healthcheck
+#
+
+# DEPRECATED: The path to respond to healtcheck requests on (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+#path = /healthcheck
+
+# Show more detailed information as part of the response. Security note:
+# Enabling this option may expose sensitive details about the service being
+# monitored. Be sure to verify that it will not violate your security policies
+# (boolean value)
+#detailed = false
+
+# Additional backends that can perform health checks and report that
+# information back as part of a request (list value)
+#backends =
+
+# Check the presence of a file to determine if an application is running on a
+# port. Used by DisableByFileHealthcheck plugin (string value)
+#disable_by_file_path = <None>
+
+# Check the presence of a file based on a port to determine if an application
+# is running on a port. Expects a "port:path" list of strings. Used by
+# DisableByFilesPortsHealthcheck plugin (list value)
+#disable_by_file_paths =
+
+
+[house_keeping]
+
+#
+# From octavia
+#
+
+# DB cleanup interval in seconds (integer value)
+#cleanup_interval = 30
+
+# Amphora expiry age in seconds (integer value)
+#amphora_expiry_age = 604800
+
+# Load balancer expiry age in seconds (integer value)
+#load_balancer_expiry_age = 604800
+
+# Certificate check interval in seconds (integer value)
+#cert_interval = 3600
+
+# Seconds until certificate expiration (integer value)
+#cert_expiry_buffer = 1209600
+
+# Number of threads performing amphora certificate rotation (integer value)
+#cert_rotate_threads = 10
+
+
+[keepalived_vrrp]
+
+#
+# From octavia
+#
+
+# Amphora role and priority advertisement interval in seconds (integer value)
+#vrrp_advert_int = 1
+
+# VRRP health check script run interval in seconds (integer value)
+#vrrp_check_interval = 5
+
+# Number of successive failures before transition to a fail state (integer
+# value)
+#vrrp_fail_count = 2
+
+# Number of consecutive successes before transition to a success state (integer
+# value)
+#vrrp_success_count = 2
+
+# Time in seconds between gratuitous ARP announcements from the MASTER (integer
+# value)
+#vrrp_garp_refresh_interval = 5
+
+# Number of gratuitous ARP announcements to make on each refresh interval
+# (integer value)
+#vrrp_garp_refresh_count = 2
+
+
+[key_manager]
+
+#
+# From castellan.config
+#
+
+# Specify the key manager implementation. Options are "barbican" and "vault".
+# Default is  "barbican". Will support the  values earlier set using
+# [key_manager]/api_class for some time (string value)
+# Deprecated group/name - [key_manager]/api_class
+#backend = barbican
+
+# The type of authentication credential to create. Possible values are 'token',
+# 'password', 'keystone_token', and 'keystone_password'. Required if no context
+# is passed to the credential factory (string value)
+#auth_type = <None>
+
+# Token for authentication. Required for 'token' and 'keystone_token' auth_type
+# if no context is passed to the credential factory (string value)
+#token = <None>
+
+# Username for authentication. Required for 'password' auth_type. Optional for
+# the 'keystone_password' auth_type (string value)
+#username = <None>
+
+# Password for authentication. Required for 'password' and 'keystone_password'
+# auth_type (string value)
+#password = <None>
+
+# Use this endpoint to connect to Keystone (string value)
+#auth_url = <None>
+
+# User ID for authentication. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#user_id = <None>
+
+# User's domain ID for authentication. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#user_domain_id = <None>
+
+# User's domain name for authentication. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#user_domain_name = <None>
+
+# Trust ID for trust scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#trust_id = <None>
+
+# Domain ID for domain scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#domain_id = <None>
+
+# Domain name for domain scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#domain_name = <None>
+
+# Project ID for project scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#project_id = <None>
+
+# Project name for project scoping. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#project_name = <None>
+
+# Project's domain ID for project. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#project_domain_id = <None>
+
+# Project's domain name for project. Optional for 'keystone_token' and
+# 'keystone_password' auth_type (string value)
+#project_domain_name = <None>
+
+# Allow fetching a new token if the current one is going to expire. Optional
+# for 'keystone_token' and 'keystone_password' auth_type (boolean value)
+#reauthenticate = true
+
+
+[keystone_authtoken]
+
+#
+# From keystonemiddleware.auth_token
+#
+
+# Complete "public" Identity API endpoint. This endpoint should not be an
+# "admin" endpoint, as it should be accessible by all end users.
+# Unauthenticated clients are redirected to this endpoint to authenticate.
+# Although this endpoint should ideally be unversioned, client support in the
+# wild varies. If you're using a versioned v2 endpoint here, then this should
+# *not* be the same endpoint the service user utilizes for validating tokens,
+# because normal end users may not be able to reach that endpoint (string
+# value)
+# Deprecated group/name - [keystone_authtoken]/auth_uri
+#www_authenticate_uri = <None>
+
+# DEPRECATED: Complete "public" Identity API endpoint. This endpoint should not
+# be an "admin" endpoint, as it should be accessible by all end users.
+# Unauthenticated clients are redirected to this endpoint to authenticate.
+# Although this endpoint should ideally be unversioned, client support in the
+# wild varies. If you're using a versioned v2 endpoint here, then this should
+# *not* be the same endpoint the service user utilizes for validating tokens,
+# because normal end users may not be able to reach that endpoint. This option
+# is deprecated in favor of www_authenticate_uri and will be removed in the S
+# release (string value)
+# This option is deprecated for removal since Queens.
+# Its value may be silently ignored in the future.
+# Reason: The auth_uri option is deprecated in favor of www_authenticate_uri
+# and will be removed in the S  release.
+#auth_uri = <None>
+
+# API version of the Identity API endpoint (string value)
+#auth_version = <None>
+
+# Interface to use for the Identity API endpoint. Valid values are "public",
+# "internal" (default) or "admin" (string value)
+#interface = internal
+
+# Do not handle authorization requests within the middleware, but delegate the
+# authorization decision to downstream WSGI components (boolean value)
+#delay_auth_decision = false
+
+# Request timeout value for communicating with Identity API server (integer
+# value)
+#http_connect_timeout = <None>
+
+# How many times are we trying to reconnect when communicating with Identity
+# API Server (integer value)
+#http_request_max_retries = 3
+
+# Request environment key where the Swift cache object is stored. When
+# auth_token middleware is deployed with a Swift cache, use this option to have
+# the middleware share a caching backend with swift. Otherwise, use the
+# ``memcached_servers`` option instead (string value)
+#cache = <None>
+
+# Required if identity server requires client certificate (string value)
+#certfile = <None>
+
+# Required if identity server requires client certificate (string value)
+#keyfile = <None>
+
+# A PEM encoded Certificate Authority to use when verifying HTTPs connections.
+# Defaults to system CAs (string value)
+#cafile = <None>
+
+# Verify HTTPS connections (boolean value)
+#insecure = false
+
+# The region in which the identity server can be found (string value)
+#region_name = <None>
+
+# Optionally specify a list of memcached server(s) to use for caching. If left
+# undefined, tokens will instead be cached in-process (list value)
+# Deprecated group/name - [keystone_authtoken]/memcache_servers
+#memcached_servers = <None>
+
+# In order to prevent excessive effort spent validating tokens, the middleware
+# caches previously-seen tokens for a configurable duration (in seconds). Set
+# to -1 to disable caching completely (integer value)
+#token_cache_time = 300
+
+# (Optional) If defined, indicate whether token data should be authenticated or
+# authenticated and encrypted. If MAC, token data is authenticated (with HMAC)
+# in the cache. If ENCRYPT, token data is encrypted and authenticated in the
+# cache. If the value is not one of these options or empty, auth_token will
+# raise an exception on initialization (string value)
+# Possible values:
+# None - <No description provided>
+# MAC - <No description provided>
+# ENCRYPT - <No description provided>
+#memcache_security_strategy = None
+
+# (Optional, mandatory if memcache_security_strategy is defined) This string is
+# used for key derivation (string value)
+#memcache_secret_key = <None>
+
+# (Optional) Number of seconds memcached server is considered dead before it is
+# tried again (integer value)
+#memcache_pool_dead_retry = 300
+
+# (Optional) Maximum total number of open connections to every memcached server
+# (integer value)
+#memcache_pool_maxsize = 10
+
+# (Optional) Socket timeout in seconds for communicating with a memcached
+# server (integer value)
+#memcache_pool_socket_timeout = 3
+
+# (Optional) Number of seconds a connection to memcached is held unused in the
+# pool before it is closed (integer value)
+#memcache_pool_unused_timeout = 60
+
+# (Optional) Number of seconds that an operation will wait to get a memcached
+# client connection from the pool (integer value)
+#memcache_pool_conn_get_timeout = 10
+
+# (Optional) Use the advanced (eventlet safe) memcached client pool (boolean
+# value)
+#memcache_use_advanced_pool = true
+
+# (Optional) Indicate whether to set the X-Service-Catalog header. If False,
+# middleware will not ask for service catalog on token validation and will not
+# set the X-Service-Catalog header (boolean value)
+#include_service_catalog = true
+
+# Used to control the use and type of token binding. Can be set to: "disabled"
+# to not check token binding. "permissive" (default) to validate binding
+# information if the bind type is of a form known to the server and ignore it
+# if not. "strict" like "permissive" but if the bind type is unknown the token
+# will be rejected. "required" any form of token binding is needed to be
+# allowed. Finally the name of a binding method that must be present in tokens
+# (string value)
+#enforce_token_bind = permissive
+
+# A choice of roles that must be present in a service token. Service tokens are
+# allowed to request that an expired token can be used and so this check should
+# tightly control that only actual services should be sending this token. Roles
+# here are applied as an ANY check so any role in this list must be present.
+# For backwards compatibility reasons this currently only affects the
+# allow_expired check (list value)
+#service_token_roles = service
+
+# For backwards compatibility reasons we must let valid service tokens pass
+# that don't pass the service_token_roles check as valid. Setting this true
+# will become the default in a future release and should be enabled if possible
+# (boolean value)
+#service_token_roles_required = false
+
+# The name or type of the service as it appears in the service catalog. This is
+# used to validate tokens that have restricted access rules (string value)
+#service_type = <None>
+
+# Authentication type to load (string value)
+# Deprecated group/name - [keystone_authtoken]/auth_plugin
+#auth_type = <None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section = <None>
+
+
+[networking]
+
+#
+# From octavia
+#
+
+# The maximum attempts to retry an action with the networking service (integer
+# value)
+#max_retries = 15
+
+# Seconds to wait before retrying an action with the networking service
+# (integer value)
+#retry_interval = 1
+
+# The seconds to backoff retry attempts (integer value)
+#retry_backoff = 1
+
+# The maximum interval in seconds between retry attempts (integer value)
+#retry_max = 10
+
+# Seconds to wait for a port to detach from an amphora (integer value)
+#port_detach_timeout = 300
+
+# Can users supply a network_id for their VIP? (boolean value)
+#allow_vip_network_id = true
+
+# Can users supply a subnet_id for their VIP? (boolean value)
+#allow_vip_subnet_id = true
+
+# Can users supply a port_id for their VIP? (boolean value)
+#allow_vip_port_id = true
+
+# List of network_ids that are valid for VIP creation. If this field is empty,
+# no validation is performed (list value)
+#valid_vip_networks = <None>
+
+# List of IP addresses reserved from being used for member addresses. IPv6
+# addresses should be in expanded, uppercase form (list value)
+#reserved_ips = 169.254.169.254
+
+# When True, users can use network resources they cannot normally see as VIP or
+# member subnets. Making this True may allow users to access resources on
+# subnets they do not normally have access to via neutron RBAC policies
+# (boolean value)
+#allow_invisible_resource_usage = false
+
+
+[neutron]
+
+#
+# From octavia
+#
+
+# The name of the neutron service in the keystone catalog (string value)
+#service_name = <None>
+
+# A new endpoint to override the endpoint in the keystone catalog (string
+# value)
+#endpoint = <None>
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack services (string value)
+#region_name = <None>
+
+# Endpoint interface in identity service to use (string value)
+#endpoint_type = publicURL
+
+# CA certificates file path (string value)
+#ca_certificates_file = <None>
+
+# Disable certificate validation on SSL connections  (boolean value)
+#insecure = false
+
+
+[nova]
+
+#
+# From octavia
+#
+
+# The name of the nova service in the keystone catalog (string value)
+#service_name = <None>
+
+# A new endpoint to override the endpoint in the keystone catalog (string
+# value)
+#endpoint = <None>
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack services (string value)
+#region_name = <None>
+
+# Endpoint interface in identity service to use (string value)
+#endpoint_type = publicURL
+
+# CA certificates file path (string value)
+#ca_certificates_file = <None>
+
+# Disable certificate validation on SSL connections (boolean value)
+#insecure = false
+
+# Flag to indicate if nova anti-affinity feature is turned on. This option is
+# only used when creating amphorae in ACTIVE_STANDBY topology (boolean value)
+#enable_anti_affinity = false
+
+# Sets the anti-affinity policy for nova (string value)
+# Possible values:
+# anti-affinity - <No description provided>
+# soft-anti-affinity - <No description provided>
+#anti_affinity_policy = anti-affinity
+
+# If non-zero, generate a random name of the length provided for each amphora,
+# in the format "a[A-Z0-9]*". Otherwise, the default name format will be used:
+# "amphora-{UUID}" (integer value)
+#random_amphora_name_length = 0
+
+# Availability zone to use for creating Amphorae (string value)
+#availability_zone = <None>
+
+
+[oslo_messaging]
+
+#
+# From octavia
+#
+
+# Topic (i.e. Queue) Name (string value)
+#topic = <None>
+
+
+[oslo_messaging_amqp]
+
+#
+# From oslo.messaging
+#
+
+# Name for the AMQP container. must be globally unique. Defaults to a generated
+# UUID (string value)
+#container_name = <None>
+
+# Timeout for inactive connections (in seconds) (integer value)
+#idle_timeout = 0
+
+# Debug: dump AMQP frames to stdout (boolean value)
+#trace = false
+
+# Attempt to connect via SSL. If no other ssl-related parameters are given, it
+# will use the system's CA-bundle to verify the server's certificate (boolean
+# value)
+#ssl = false
+
+# CA certificate PEM file used to verify the server's certificate (string
+# value)
+#ssl_ca_file =
+
+# Self-identifying certificate PEM file for client authentication (string
+# value)
+#ssl_cert_file =
+
+# Private key PEM file used to sign ssl_cert_file certificate (optional)
+# (string value)
+#ssl_key_file =
+
+# Password for decrypting ssl_key_file (if encrypted) (string value)
+#ssl_key_password = <None>
+
+# By default SSL checks that the name in the server's certificate matches the
+# hostname in the transport_url. In some configurations it may be preferable to
+# use the virtual hostname instead, for example if the server uses the Server
+# Name Indication TLS extension (rfc6066) to provide a certificate per virtual
+# host. Set ssl_verify_vhost to True if the server's SSL certificate uses the
+# virtual host name instead of the DNS name (boolean value)
+#ssl_verify_vhost = false
+
+# Space separated list of acceptable SASL mechanisms (string value)
+#sasl_mechanisms =
+
+# Path to directory that contains the SASL configuration (string value)
+#sasl_config_dir =
+
+# Name of configuration file (without .conf suffix) (string value)
+#sasl_config_name =
+
+# SASL realm to use if no realm present in username (string value)
+#sasl_default_realm =
+
+# Seconds to pause before attempting to re-connect (integer value)
+# Minimum value: 1
+#connection_retry_interval = 1
+
+# Increase the connection_retry_interval by this many seconds after each
+# unsuccessful failover attempt (integer value)
+# Minimum value: 0
+#connection_retry_backoff = 2
+
+# Maximum limit for connection_retry_interval + connection_retry_backoff
+# (integer value)
+# Minimum value: 1
+#connection_retry_interval_max = 30
+
+# Time to pause between re-connecting an AMQP 1.0 link that failed due to a
+# recoverable error (integer value)
+# Minimum value: 1
+#link_retry_delay = 10
+
+# The maximum number of attempts to re-send a reply message which failed due to
+# a recoverable error (integer value)
+# Minimum value: -1
+#default_reply_retry = 0
+
+# The deadline for an rpc reply message delivery (integer value)
+# Minimum value: 5
+#default_reply_timeout = 30
+
+# The deadline for an rpc cast or call message delivery. Only used when caller
+# does not provide a timeout expiry (integer value)
+# Minimum value: 5
+#default_send_timeout = 30
+
+# The deadline for a sent notification message delivery. Only used when caller
+# does not provide a timeout expiry (integer value)
+# Minimum value: 5
+#default_notify_timeout = 30
+
+# The duration to schedule a purge of idle sender links. Detach link after
+# expiry (integer value)
+# Minimum value: 1
+#default_sender_link_timeout = 600
+
+# Indicates the addressing mode used by the driver.
+# Permitted values:
+# 'legacy'   - use legacy non-routable addressing
+# 'routable' - use routable addresses
+# 'dynamic'  - use legacy addresses if the message bus does not support routing
+# otherwise use routable addressing (string value)
+#addressing_mode = dynamic
+
+# Enable virtual host support for those message buses that do not natively
+# support virtual hosting (such as qpidd). When set to true the virtual host
+# name will be added to all message bus addresses, effectively creating a
+# private 'subnet' per virtual host. Set to False if the message bus supports
+# virtual hosting using the 'hostname' field in the AMQP 1.0 Open performative
+# as the name of the virtual host (boolean value)
+#pseudo_vhost = true
+
+# address prefix used when sending to a specific server (string value)
+#server_request_prefix = exclusive
+
+# address prefix used when broadcasting to all servers (string value)
+#broadcast_prefix = broadcast
+
+# address prefix when sending to any server in group (string value)
+#group_request_prefix = unicast
+
+# Address prefix for all generated RPC addresses (string value)
+#rpc_address_prefix = openstack.org/om/rpc
+
+# Address prefix for all generated Notification addresses (string value)
+#notify_address_prefix = openstack.org/om/notify
+
+# Appended to the address prefix when sending a fanout message. Used by the
+# message bus to identify fanout messages (string value)
+#multicast_address = multicast
+
+# Appended to the address prefix when sending to a particular RPC/Notification
+# server. Used by the message bus to identify messages sent to a single
+# destination (string value)
+#unicast_address = unicast
+
+# Appended to the address prefix when sending to a group of consumers. Used by
+# the message bus to identify messages that should be delivered in a round-
+# robin fashion across consumers (string value)
+#anycast_address = anycast
+
+# Exchange name used in notification addresses.
+# Exchange name resolution precedence:
+# Target.exchange if set
+# else default_notification_exchange if set
+# else control_exchange if set
+# else 'notify' (string value)
+#default_notification_exchange = <None>
+
+# Exchange name used in RPC addresses.
+# Exchange name resolution precedence:
+# Target.exchange if set
+# else default_rpc_exchange if set
+# else control_exchange if set
+# else 'rpc' (string value)
+#default_rpc_exchange = <None>
+
+# Window size for incoming RPC Reply messages (integer value)
+# Minimum value: 1
+#reply_link_credit = 200
+
+# Window size for incoming RPC Request messages (integer value)
+# Minimum value: 1
+#rpc_server_credit = 100
+
+# Window size for incoming Notification messages (integer value)
+# Minimum value: 1
+#notify_server_credit = 100
+
+# Send messages of this type pre-settled.
+# Pre-settled messages will not receive acknowledgement
+# from the peer. Note well: pre-settled messages may be
+# silently discarded if the delivery fails.
+# Permitted values:
+# 'rpc-call' - send RPC Calls pre-settled
+# 'rpc-reply'- send RPC Replies pre-settled
+# 'rpc-cast' - Send RPC Casts pre-settled
+# 'notify'   - Send Notifications pre-settled
+#  (multi valued)
+#pre_settled = rpc-cast
+#pre_settled = rpc-reply
+
+
+[oslo_messaging_kafka]
+
+#
+# From oslo.messaging
+#
+
+# Max fetch bytes of Kafka consumer (integer value)
+#kafka_max_fetch_bytes = 1048576
+
+# Default timeout(s) for Kafka consumers (floating point value)
+#kafka_consumer_timeout = 1.0
+
+# DEPRECATED: Pool Size for Kafka Consumers (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#pool_size = 10
+
+# DEPRECATED: The pool size limit for connections expiration policy (integer
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#conn_pool_min_size = 2
+
+# DEPRECATED: The time-to-live in sec of idle connections in the pool (integer
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#conn_pool_ttl = 1200
+
+# Group id for Kafka consumer. Consumers in one group will coordinate message
+# consumption (string value)
+#consumer_group = oslo_messaging_consumer
+
+# Upper bound on the delay for KafkaProducer batching in seconds (floating
+# point value)
+#producer_batch_timeout = 0.0
+
+# Size of batch for the producer async send (integer value)
+#producer_batch_size = 16384
+
+# The compression codec for all data generated by the producer. If not set,
+# compression will not be used. Note that the allowed values of this depend on
+# the kafka version (string value)
+# Possible values:
+# none - <No description provided>
+# gzip - <No description provided>
+# snappy - <No description provided>
+# lz4 - <No description provided>
+# zstd - <No description provided>
+#compression_codec = none
+
+# Enable asynchronous consumer commits (boolean value)
+#enable_auto_commit = false
+
+# The maximum number of records returned in a poll call (integer value)
+#max_poll_records = 500
+
+# Protocol used to communicate with brokers (string value)
+# Possible values:
+# PLAINTEXT - <No description provided>
+# SASL_PLAINTEXT - <No description provided>
+# SSL - <No description provided>
+# SASL_SSL - <No description provided>
+#security_protocol = PLAINTEXT
+
+# Mechanism when security protocol is SASL (string value)
+#sasl_mechanism = PLAIN
+
+# CA certificate PEM file used to verify the server certificate (string value)
+#ssl_cafile =
+
+# Client certificate PEM file used for authentication (string value)
+#ssl_client_cert_file =
+
+# Client key PEM file used for authentication (string value)
+#ssl_client_key_file =
+
+# Client key password file used for authentication (string value)
+#ssl_client_key_password =
+
+
+[oslo_messaging_notifications]
+
+#
+# From oslo.messaging
+#
+
+# The Drivers(s) to handle sending notifications. Possible values are
+# messaging, messagingv2, routing, log, test, noop (multi valued)
+# Deprecated group/name - [DEFAULT]/notification_driver
+#driver =
+
+# A URL representing the messaging driver to use for notifications. If not set,
+# we fall back to the same configuration used for RPC (string value)
+# Deprecated group/name - [DEFAULT]/notification_transport_url
+#transport_url = <None>
+
+# AMQP topic used for OpenStack notifications (list value)
+# Deprecated group/name - [rpc_notifier2]/topics
+# Deprecated group/name - [DEFAULT]/notification_topics
+#topics = notifications
+
+# The maximum number of attempts to re-send a notification message which failed
+# to be delivered due to a recoverable error. 0 - No retry, -1 - indefinite
+# (integer value)
+#retry = -1
+
+
+[oslo_messaging_rabbit]
+
+#
+# From oslo.messaging
+#
+
+# Use durable queues in AMQP. If rabbit_quorum_queue is enabled, queues will be
+# durable and this value will be ignored (boolean value)
+#amqp_durable_queues = false
+
+# Auto-delete queues in AMQP (boolean value)
+#amqp_auto_delete = false
+
+# Connect over SSL (boolean value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_use_ssl
+#ssl = false
+
+# SSL version to use (valid only if SSL enabled). Valid values are TLSv1 and
+# SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be available on some
+# distributions (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_version
+#ssl_version =
+
+# SSL key file (valid only if SSL enabled) (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_keyfile
+#ssl_key_file =
+
+# SSL cert file (valid only if SSL enabled) (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_certfile
+#ssl_cert_file =
+
+# SSL certification authority file (valid only if SSL enabled) (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
+#ssl_ca_file =
+
+# Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
+# Python support. This is available in Python 3.9 in all environments and may
+# have been backported to older Python versions on select environments. If the
+# Python executable used does not support OpenSSL FIPS mode, an exception will
+# be raised (boolean value)
+#ssl_enforce_fips_mode = false
+
+# Run the health check heartbeat thread through a native python thread by
+# default. If this option is equal to False then the health check heartbeat
+# will inherit the execution model from the parent process. For example if the
+# parent process has monkey patched the stdlib by using eventlet/greenlet then
+# the heartbeat will be run through a green thread. This option should be set
+# to True only for the wsgi services (boolean value)
+#heartbeat_in_pthread = false
+
+# How long to wait (in seconds) before reconnecting in response to an AMQP
+# consumer cancel notification (floating point value)
+# Minimum value: 0.0
+# Maximum value: 4.5
+#kombu_reconnect_delay = 1.0
+
+# EXPERIMENTAL: Possible values are: gzip, bz2. If not set compression will not
+# be used. This option may not be available in future versions (string value)
+#kombu_compression = <None>
+
+# How long to wait a missing client before abandoning to send it its replies.
+# This value should not be longer than rpc_response_timeout (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_reconnect_timeout
+#kombu_missing_consumer_retry_timeout = 60
+
+# Determines how the next RabbitMQ node is chosen in case the one we are
+# currently connected to becomes unavailable. Takes effect only if more than
+# one RabbitMQ node is provided in config (string value)
+# Possible values:
+# round-robin - <No description provided>
+# shuffle - <No description provided>
+#kombu_failover_strategy = round-robin
+
+# The RabbitMQ login method (string value)
+# Possible values:
+# PLAIN - <No description provided>
+# AMQPLAIN - <No description provided>
+# EXTERNAL - <No description provided>
+# RABBIT-CR-DEMO - <No description provided>
+#rabbit_login_method = AMQPLAIN
+
+# How frequently to retry connecting with RabbitMQ (integer value)
+#rabbit_retry_interval = 1
+
+# How long to backoff for between retries when connecting to RabbitMQ (integer
+# value)
+#rabbit_retry_backoff = 2
+
+# Maximum interval of RabbitMQ connection retries. Default is 30 seconds
+# (integer value)
+#rabbit_interval_max = 30
+
+# Try to use HA queues in RabbitMQ (x-ha-policy: all). If you change this
+# option, you must wipe the RabbitMQ database. In RabbitMQ 3.0, queue mirroring
+# is no longer controlled by the x-ha-policy argument when declaring a queue.
+# If you just want to make sure that all queues (except those with auto-
+# generated names) are mirrored across all nodes, run: "rabbitmqctl set_policy
+# HA '^(?!amq\.).*' '{"ha-mode": "all"}' " (boolean value)
+#rabbit_ha_queues = false
+
+# Use quorum queues in RabbitMQ (x-queue-type: quorum). The quorum queue is a
+# modern queue type for RabbitMQ implementing a durable, replicated FIFO queue
+# based on the Raft consensus algorithm. It is available as of RabbitMQ 3.8.0.
+# If set this option will conflict with the HA queues (``rabbit_ha_queues``)
+# aka mirrored queues, in other words the HA queues should be disabled, quorum
+# queues durable by default so the amqp_durable_queues opion is ignored when
+# this option enabled (boolean value)
+#rabbit_quorum_queue = false
+
+# Each time a message is redelivered to a consumer, a counter is incremented.
+# Once the redelivery count exceeds the delivery limit the message gets dropped
+# or dead-lettered (if a DLX exchange has been configured) Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit
+# (integer value)
+#rabbit_quorum_delivery_limit = 0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of messages in the quorum queue. Used only when rabbit_quorum_queue is
+# enabled, Default 0 which means dont set a limit (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_length
+#rabbit_quorum_max_memory_length = 0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of memory bytes used by the quorum queue. Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit
+# (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_bytes
+#rabbit_quorum_max_memory_bytes = 0
+
+# Positive integer representing duration in seconds for queue TTL (x-expires).
+# Queues which are unused for the duration of the TTL are automatically
+# deleted. The parameter affects only reply and fanout queues (integer value)
+# Minimum value: 1
+#rabbit_transient_queues_ttl = 1800
+
+# Specifies the number of messages to prefetch. Setting to zero allows
+# unlimited messages (integer value)
+#rabbit_qos_prefetch_count = 0
+
+# Number of seconds after which the Rabbit broker is considered down if
+# heartbeat's keep-alive fails (0 disables heartbeat) (integer value)
+#heartbeat_timeout_threshold = 60
+
+# How often times during the heartbeat_timeout_threshold we check the heartbeat
+# (integer value)
+#heartbeat_rate = 2
+
+# DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag for
+# direct send. The direct send is used as reply, so the MessageUndeliverable
+# exception is raised in case the client queue does not
+# exist.MessageUndeliverable exception will be used to loop for a timeout to
+# lets a chance to sender to recover.This flag is deprecated and it will not be
+# possible to deactivate this functionality anymore (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Mandatory flag no longer deactivable.
+#direct_mandatory_flag = true
+
+# Enable x-cancel-on-ha-failover flag so that rabbitmq server will cancel and
+# notify consumerswhen queue is down (boolean value)
+#enable_cancel_on_failover = false
+
+
+[oslo_middleware]
+
+#
+# From oslo.middleware.http_proxy_to_wsgi
+#
+
+# Whether the application is behind a proxy or not. This determines if the
+# middleware should parse the headers or not (boolean value)
+#enable_proxy_headers_parsing = false
+
+
+[oslo_policy]
+
+#
+# From oslo.policy
+#
+
+# This option controls whether or not to enforce scope when evaluating
+# policies. If ``True``, the scope of the token used in the request is compared
+# to the ``scope_types`` of the policy being enforced. If the scopes do not
+# match, an ``InvalidScope`` exception will be raised. If ``False``, a message
+# will be logged informing operators that policies are being invoked with
+# mismatching scope (boolean value)
+#enforce_scope = false
+
+# This option controls whether or not to use old deprecated defaults when
+# evaluating policies. If ``True``, the old deprecated defaults are not going
+# to be evaluated. This means if any existing token is allowed for old defaults
+# but is disallowed for new defaults, it will be disallowed. It is encouraged
+# to enable this flag along with the ``enforce_scope`` flag so that you can get
+# the benefits of new defaults and ``scope_type`` together. If ``False``, the
+# deprecated policy check string is logically OR'd with the new policy check
+# string, allowing for a graceful upgrade experience between releases with new
+# policies, which is the default behavior (boolean value)
+#enforce_new_defaults = false
+
+# The relative or absolute path of a file that maps roles to permissions for a
+# given service. Relative paths must be specified in relation to the
+# configuration file setting this option (string value)
+#policy_file = policy.yaml
+
+# Default rule. Enforced when a requested rule is not found (string value)
+#policy_default_rule = default
+
+# Directories where policy configuration files are stored. They can be relative
+# to any directory in the search path defined by the config_dir option, or
+# absolute paths. The file defined by policy_file must exist for these
+# directories to be searched.  Missing or empty directories are ignored (multi
+# valued)
+#policy_dirs = policy.d
+
+# Content Type to send and receive data for REST based policy check (string
+# value)
+# Possible values:
+# application/x-www-form-urlencoded - <No description provided>
+# application/json - <No description provided>
+#remote_content_type = application/x-www-form-urlencoded
+
+# server identity verification for REST based policy check (boolean value)
+#remote_ssl_verify_server_crt = false
+
+# Absolute path to ca cert file for REST based policy check (string value)
+#remote_ssl_ca_crt_file = <None>
+
+# Absolute path to client cert for REST based policy check (string value)
+#remote_ssl_client_crt_file = <None>
+
+# Absolute path client key file REST based policy check (string value)
+#remote_ssl_client_key_file = <None>
+
+
+[quotas]
+
+#
+# From octavia
+#
+
+# Default per project load balancer quota (integer value)
+#default_load_balancer_quota = -1
+
+# Default per project listener quota (integer value)
+#default_listener_quota = -1
+
+# Default per project member quota (integer value)
+#default_member_quota = -1
+
+# Default per project pool quota (integer value)
+#default_pool_quota = -1
+
+# Default per project health monitor quota (integer value)
+#default_health_monitor_quota = -1
+
+# Default per project l7policy quota (integer value)
+#default_l7policy_quota = -1
+
+# Default per project l7rule quota (integer value)
+#default_l7rule_quota = -1
+
+
+[service_auth]
+
+#
+# From octavia
+#
+
+# Authentication URL (string value)
+#auth_url = <None>
+
+# Authentication type to load (string value)
+# Deprecated group/name - [service_auth]/auth_plugin
+#auth_type = <None>
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections
+# (string value)
+#cafile = <None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile = <None>
+
+# Collect per-API call timing information (boolean value)
+#collect_timing = false
+
+# Optional domain ID to use with v3 and v2 parameters. It will be used for both
+# the user and project domain in v3 and ignored in v2 authentication (string
+# value)
+#default_domain_id = <None>
+
+# Optional domain name to use with v3 API and v2 parameters. It will be used
+# for both the user and project domain in v3 and ignored in v2 authentication
+# (string value)
+#default_domain_name = <None>
+
+# Domain ID to scope to (string value)
+#domain_id = <None>
+
+# Domain name to scope to (string value)
+#domain_name = <None>
+
+# Verify HTTPS connections (boolean value)
+#insecure = false
+
+# PEM encoded client certificate key file (string value)
+#keyfile = <None>
+
+# User's password (string value)
+#password = <None>
+
+# Domain ID containing project (string value)
+#project_domain_id = <None>
+
+# Domain name containing project (string value)
+#project_domain_name = <None>
+
+# Project ID to scope to (string value)
+# Deprecated group/name - [service_auth]/tenant_id
+#project_id = <None>
+
+# Project name to scope to (string value)
+# Deprecated group/name - [service_auth]/tenant_name
+#project_name = <None>
+
+# Log requests to multiple loggers (boolean value)
+#split_loggers = false
+
+# Scope for system operations (string value)
+#system_scope = <None>
+
+# Tenant ID (string value)
+#tenant_id = <None>
+
+# Tenant Name (string value)
+#tenant_name = <None>
+
+# Timeout value for http requests (integer value)
+#timeout = <None>
+
+# ID of the trust to use as a trustee use (string value)
+#trust_id = <None>
+
+# User's domain id (string value)
+#user_domain_id = <None>
+
+# User's domain name (string value)
+#user_domain_name = <None>
+
+# User id (string value)
+#user_id = <None>
+
+# Username (string value)
+# Deprecated group/name - [service_auth]/user_name
+#username = <None>
+
+
+[task_flow]
+
+#
+# From octavia
+#
+
+# TaskFlow engine to use (string value)
+# Possible values:
+# serial - Runs all tasks on a single thread
+# parallel - Schedules tasks onto different threads to allow for running non-
+# dependent tasks simultaneously
+#engine = parallel
+
+# The maximum number of workers (integer value)
+#max_workers = 5
+
+# If True, disables the controller worker taskflow flows from reverting.  This
+# will leave resources in an inconsistent state and should only be used for
+# debugging purposes (boolean value)
+#disable_revert = false
+
+# Persistence database, which will be used to store tasks states. Database
+# connection url with db name (string value)
+#persistence_connection = sqlite://
+
+# If True, enables TaskFlow jobboard (boolean value)
+#jobboard_enabled = false
+
+# Jobboard backend driver that will monitor job state (string value)
+# Possible values:
+# redis_taskflow_driver - Driver that will use Redis to store job states.
+# zookeeper_taskflow_driver - Driver that will use Zookeeper to store job
+# states.
+#jobboard_backend_driver = redis_taskflow_driver
+
+# Jobboard backend server host(s) (list value)
+#jobboard_backend_hosts = 127.0.0.1
+
+# Jobboard backend server port (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#jobboard_backend_port = 6379
+
+# Jobboard backend server password (string value)
+#jobboard_backend_password =
+
+# Jobboard name that should be used to store taskflow job id and claims for it
+# (string value)
+#jobboard_backend_namespace = octavia_jobboard
+
+# Sentinel name if it is used for Redis (string value)
+#jobboard_redis_sentinel = <None>
+
+# Redis jobboard backend ssl configuration options (dict value)
+#jobboard_redis_backend_ssl_options = ssl:False,ssl_ca_certs:None,ssl_cert_reqs:required,ssl_certfile:None,ssl_keyfile:None
+
+# Zookeeper jobboard backend ssl configuration options (dict value)
+#jobboard_zookeeper_ssl_options = certfile:None,keyfile:None,keyfile_password:None,use_ssl:False,verify_certs:True
+
+# For backends like redis claiming jobs requiring setting the expiry - how many
+# seconds the claim should be retained for (integer value)
+#jobboard_expiration_time = 30
+
+# If for analysis required saving logbooks info, set this parameter to True. By
+# default remove logbook from persistence backend when job completed (boolean
+# value)
+#jobboard_save_logbook = false
+
+
+[vault]
+
+#
+# From castellan.config
+#
+
+# root token for vault (string value)
+#root_token_id = <None>
+
+# AppRole role_id for authentication with vault (string value)
+#approle_role_id = <None>
+
+# AppRole secret_id for authentication with vault (string value)
+#approle_secret_id = <None>
+
+# Mountpoint of KV store in Vault to use, for example: secret (string value)
+#kv_mountpoint = secret
+
+# Version of KV store in Vault to use, for example: 2 (integer value)
+#kv_version = 2
+
+# Use this endpoint to connect to Vault, for example: "http://127.0.0.1:8200"
+# (string value)
+#vault_url = http://127.0.0.1:8200
+
+# Absolute path to ca cert file (string value)
+#ssl_ca_crt_file = <None>
+
+# SSL Enabled/Disabled (boolean value)
+#use_ssl = false
+
+# Vault Namespace to use for all requests to Vault. Vault Namespaces feature is
+# available only in Vault Enterprise (string value)
+#namespace = <None>
