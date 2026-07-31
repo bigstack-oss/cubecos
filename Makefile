@@ -2,6 +2,7 @@ ifneq (x$(DEVOPS_ENV),x__JAIL__)
 include jail/cntrjail.mk
 ifneq (,$(wildcard */jenkins/jenkins.mk))
 include */jenkins/jenkins.mk
+include */jenkins/defectdojo.mk
 endif
 .DEFAULT_GOAL := help
 
