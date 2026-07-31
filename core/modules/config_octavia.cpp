@@ -201,6 +201,7 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/octavia";
 
         cfg["database"]["connection"] = dbconn;
+        cfg["database"]["mysql_wsrep_sync_wait"] = "1";
     }
 
     return true;
