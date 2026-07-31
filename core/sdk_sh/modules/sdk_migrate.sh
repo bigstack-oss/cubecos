@@ -322,7 +322,7 @@ migrate_octavia_db()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "octavia-db-manage upgrade head" octavia
+        su -s /bin/sh -c "/usr/bin/octavia-db-manage upgrade head" octavia
     fi
 
     touch $STATE_DIR/octavia_db_migrated
