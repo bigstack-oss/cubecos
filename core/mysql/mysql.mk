@@ -34,6 +34,13 @@ ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(GALERA_RPM).x86_64.rpm
 ROOTFS_DNF += rsync
 ROOTFS_DNF_NOARCH += python3-PyMySQL
 
+# config_mysql.cpp points log_error at /var/log/mariadb/mysql_error.log, but nothing
+# created that directory: the MariaDB.org rpms ship no /var/log/mariadb (the distro
+# mariadb package does, and we do not install it). mariadbd could not open its error log
+# and fell back to stderr, so the database had no error log on disk at all.
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) install -d -m 750 -o mysql -g mysql /var/log/mariadb
+
 rootfs_install::
 	$(Q)# /etc/my.cnf.d/galera.cnf came from centos stream 9 appstream repo, mariadb repo mariadb does not have this default config
 	$(Q)# mv $(ROOTDIR)/etc/my.cnf.d/galera.cnf $(ROOTDIR)/etc/my.cnf.d/galera.cnf.orig

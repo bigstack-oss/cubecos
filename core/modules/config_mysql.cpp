@@ -43,7 +43,9 @@ static bool s_bNetModified = false;
 static CubeRole_e s_eCubeRole;
 
 // rotate daily and enable copytruncate
-static LogRotateConf log_conf("mysql", "/var/log/mysql/*.log", DAILY, 128, 0, true);
+// the glob has to match ERROR_LOG above: mariadb logs to /var/log/mariadb, never
+// /var/log/mysql, so the old pattern matched nothing and missingok silently swallowed it
+static LogRotateConf log_conf("mysql", "/var/log/mariadb/*.log", DAILY, 128, 0, true);
 
 // external global variables
 CONFIG_GLOBAL_BOOL_REF(IS_MASTER);
