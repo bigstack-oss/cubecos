@@ -263,6 +263,7 @@ eval "ERR_DESC_$SRV[3]='persister down'"
 eval "ERR_DESC_$SRV[4]='collector down'"
 eval "ERR_DESC_$SRV[5]='forwarder down'"
 eval "ERR_DESC_$SRV[6]='statsd down'"
+eval "ERR_DESC_$SRV[7]='api down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="watcher"
