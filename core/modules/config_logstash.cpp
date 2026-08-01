@@ -97,6 +97,9 @@ WriteConfigs(const std::string &kafkaHosts)
     fprintf(fout, "    - /var/log/masakari/*.log\n");
     fprintf(fout, "    - /var/log/httpd/*.log\n");
     fprintf(fout, "    - /var/log/ceph/ceph.log\n");
+    // mariadb only reaches this list directly: it writes log_error to its own file, so
+    // nothing of it passes through journald and /var/log/messages above
+    fprintf(fout, "    - /var/log/mariadb/*.log\n");
 #if 0 /* uncomment until logstash supports its log processing */
     fprintf(fout, "    - /var/log/pacemaker.log\n");
     fprintf(fout, "    - /var/log/httpd/*.log\n");
