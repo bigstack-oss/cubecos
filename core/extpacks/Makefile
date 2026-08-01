@@ -14,7 +14,7 @@ PKGCLEAN += $(PROJ_EXT)
 NAS := $(TOP_BLDDIR)/nas
 
 AMPHORA := $(TOP_BLDDIR)/../amphora-x64-haproxy_antelope.qcow2
-MANILA  := $(TOP_BLDDIR)/../manila-service-image_yoga.qcow2
+MANILA  := $(TOP_BLDDIR)/../manila-service-image_antelope.qcow2
 RANCHER := $(TOP_BLDDIR)/../rancher-cluster-image-rke2-v1.32.4.raw
 EXTPACK := $(AMPHORA) $(MANILA) $(RANCHER)
 EXTPACK_MD5 := $(shell for E in $(EXTPACK); do echo $${E}.md5 ; done)
@@ -38,11 +38,11 @@ $(AMPHORA).md5: $(AMPHORA)
 	$(Q)diff $@ $(NAS)/app-image/antelope/amphora-x64-haproxy_antelope.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/antelope/amphora-x64-haproxy_antelope.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
 
 $(MANILA): $(NAS)
-	$(Q)cp $</app-image/yoga/manila-service-image_yoga.qcow2 $@
+	$(Q)cp $</app-image/antelope/manila-service-image_antelope.qcow2 $@
 
 .PHONY: $(MANILA).md5
 $(MANILA).md5: $(MANILA)
-	$(Q)diff $@ $(NAS)/app-image/yoga/manila-service-image_yoga.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/yoga/manila-service-image_yoga.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
+	$(Q)diff $@ $(NAS)/app-image/antelope/manila-service-image_antelope.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/antelope/manila-service-image_antelope.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
 
 $(RANCHER): $(NAS)
 	$(Q)cp $</app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw $@
