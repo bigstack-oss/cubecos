@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenStack Manila API Server
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=manila
+# manila comes from pip inside /opt/openstack-antelope; /usr/bin/manila-api is the
+# symlink manila.mk creates into that venv. /usr/share/manila/manila-dist.conf is
+# no longer passed: it was an RDO source file, and its only line that ever reached
+# manila was [database] max_pool_size (its first section is spelled [default], not
+# [DEFAULT], so oslo.config dropped the whole group). config_manila.cpp writes that
+# key into manila.conf now.
+ExecStart=/usr/bin/manila-api --config-file /etc/manila/manila.conf --logfile /var/log/manila/api.log
+
+[Install]
+WantedBy=multi-user.target

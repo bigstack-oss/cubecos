@@ -1,0 +1,9 @@
+Defaults:manila !requiretty
+
+manila ALL = (root) NOPASSWD: /usr/bin/manila-rootwrap /etc/manila/rootwrap.conf *
+# The venv path is what [manila_sys_admin] helper_command in manila.conf points at:
+# sudo's secure_path does not contain /opt/openstack-antelope/bin, so the bare
+# `sudo privsep-helper` default would resolve to the system python 3.9 helper and
+# fail to import manila. Only the lvm and glusterfs drivers reach privsep, and
+# config_manila.cpp pins the backend to generic, so this is a safety net.
+manila ALL = (root) NOPASSWD: /opt/openstack-antelope/bin/privsep-helper *

@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenStack Manila Scheduler
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=manila
+ExecStart=/usr/bin/manila-scheduler --config-file /etc/manila/manila.conf --logfile /var/log/manila/scheduler.log
+
+[Install]
+WantedBy=multi-user.target
