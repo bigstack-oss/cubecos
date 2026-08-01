@@ -2424,6 +2424,12 @@ health_monasca_check()
             ERR_MSG+="monasca-persister on $node is not running\n"
             ERR_CODE=3
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-persister"
+        # monasca-api used to be hosted in-process by httpd, so httpd's own
+        # health covered it. It is a gunicorn service of its own now.
+        elif ! is_remote_running $node monasca-api ; then
+            ERR_MSG+="monasca-api on $node is not running\n"
+            ERR_CODE=7
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-api"
         fi
     done
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
@@ -2450,6 +2456,8 @@ _health_monasca_auto_repair()
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node monasca-persister ; then
             remote_systemd_restart $node monasca-persister
+        elif ! is_remote_running $node monasca-api ; then
+            remote_systemd_restart $node monasca-api
         fi
     done
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
