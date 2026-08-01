@@ -1,0 +1,23 @@
+[Unit]
+Description=monasca-api openstack service
+After=syslog.target network.target
+Before=httpd.service
+
+[Service]
+Type=simple
+User=monasca
+Group=monasca
+
+StandardOutput=append:/var/log/monasca/monasca-api.log
+StandardError=append:/var/log/monasca/monasca-api.log
+
+# monasca-api is a paste application. --paste loads the pipeline out of
+# api-config.ini; the server settings, including the unix socket that httpd
+# reverse-proxies port 8070 onto, come from gunicorn-config.py.
+ExecStart=/opt/openstack-antelope/bin/gunicorn -c /etc/monasca/gunicorn-config.py --paste /etc/monasca/api-config.ini
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

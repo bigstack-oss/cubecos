@@ -9,7 +9,7 @@ Group=monasca
 StandardOutput=append:/var/log/monasca/monasca-persister.log
 StandardError=append:/var/log/monasca/monasca-persister.log
 
-ExecStart=/usr/local/bin/monasca-persister --config-file /etc/monasca/persister.conf --log-file /var/log/monasca/persister.log
+ExecStart=/usr/bin/monasca-persister --config-file /etc/monasca/persister.conf --log-file /var/log/monasca/persister.log
 
 # Give a reasonable amount of time for the server to start up/shut down
 TimeoutSec=120

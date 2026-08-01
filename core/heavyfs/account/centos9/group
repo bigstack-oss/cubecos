@@ -82,7 +82,7 @@ manila:x:136:
 octavia:x:138:
 designate:x:139:
 mon-agent:x:990:
-monasca:x:991:
+monasca:x:991:apache
 masakari:x:992:
 logstash:x:994:
 telegraf:x:995:
