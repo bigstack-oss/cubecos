@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenStack Manila Data Server
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=manila
+ExecStart=/usr/bin/manila-data --config-file /etc/manila/manila.conf --logfile /var/log/manila/data.log
+
+[Install]
+WantedBy=multi-user.target
