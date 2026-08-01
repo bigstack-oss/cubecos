@@ -39,7 +39,8 @@ ROOTFS_DNF_NOARCH += python3-PyMySQL
 # mariadb package does, and we do not install it). mariadbd could not open its error log
 # and fell back to stderr, so the database had no error log on disk at all.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) install -d -m 750 -o mysql -g mysql /var/log/mariadb
+	$(Q)chroot $(ROOTDIR) install -d -m 750 /var/log/mariadb
+	$(Q)chroot $(ROOTDIR) chown mysql:mysql /var/log/mariadb
 
 rootfs_install::
 	$(Q)# /etc/my.cnf.d/galera.cnf came from centos stream 9 appstream repo, mariadb repo mariadb does not have this default config
