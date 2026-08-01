@@ -266,6 +266,7 @@ InitConfig(Configs& config)
         "glance",
         "healthcheck",
         "keystone_authtoken",
+        "manila_sys_admin",
         "neutron",
         "nova",
         "oslo_concurrency",
@@ -296,6 +297,15 @@ SetDefaults(Configs& config)
     config["DEFAULT"]["share_name_template"] = "share-%s";
 
     config["oslo_concurrency"]["lock_path"] = "/var/lock/manila";
+
+    // oslo.privsep's default helper_command is a bare "sudo privsep-helper", and
+    // sudo's secure_path does not include /opt/openstack-antelope/bin, so it would
+    // resolve to the system python 3.9 helper and die with ModuleNotFoundError:
+    // manila. Only the lvm and glusterfs drivers reach privsep and
+    // enabled_share_backends is pinned to generic above, so this never fires today
+    // -- it is here so it does not become a latent bug the day a backend changes.
+    // /etc/sudoers.d/manila authorises exactly this path.
+    config["manila_sys_admin"]["helper_command"] = "sudo /opt/openstack-antelope/bin/privsep-helper";
 }
 
 /**
@@ -330,6 +340,14 @@ SetDatabaseConnection(
     uri << "mysql+pymysql://manila:" << dbPass << "@" << sharedId << "/manila";
 
     config["database"]["connection"] = uri.str();
+
+    // The only key /usr/share/manila/manila-dist.conf ever contributed. Its own
+    // [default] section was misspelled -- oslo.config wants [DEFAULT] -- so every
+    // other line in that file was silently dropped, and the remaining two, database
+    // connection and oslo_concurrency lock_path, are overridden by manila.conf,
+    // which the units load afterwards. The file is not shipped any more, so carry
+    // the value here rather than lose the pool size to oslo.db's default of 5.
+    config["database"]["max_pool_size"] = "40";
 
     // manila reads its own writes through a galera cluster, so the connection has
     // to wait for the write set to apply. Every service migrated to the antelope
