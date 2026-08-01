@@ -89,4 +89,4 @@ class Cpu(checks.AgentCheck):
             cpu_freq = float(cpu_freq_output.group(2))
             data['cpu.frequency_mhz'] = cpu_freq
         except Exception:
-            log.exception('Cannot extract CPU max MHz information using lscpu')
+            log.exception('Cannot extract CPU MHz information using lscpu')
