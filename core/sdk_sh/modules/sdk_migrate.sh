@@ -271,7 +271,7 @@ migrate_monasca_db()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "/usr/local/bin/monasca_db upgrade" monasca
+        su -s /bin/sh -c "/usr/bin/monasca_db upgrade" monasca
     fi
 
     touch $STATE_DIR/monasca_db_migrated

@@ -261,7 +261,7 @@ SetupMonasca(std::string domain, std::string userPass)
     HexLogInfo("Setting up monasca");
 
     // Populate the monasca service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/local/bin/monasca_db upgrade\" %s", USER);
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/monasca_db upgrade\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
@@ -416,7 +416,7 @@ MonascaAgentSetup(const bool enabled)
     HexSystemF(0, "rm -rf /etc/monasca/agent/conf.d/*");
     WriteAgentSetupDetectionConfigs();
     std::string env = ". " + std::string(OPENRC) + " &&";
-    HexUtilSystemF(0, 0, "%s /usr/local/bin/monasca-setup -u $OS_USERNAME -p $OS_PASSWORD "
+    HexUtilSystemF(0, 0, "%s /usr/bin/monasca-setup -u $OS_USERNAME -p $OS_PASSWORD "
                          "--project_name $OS_PROJECT_NAME --project_domain_name $OS_PROJECT_DOMAIN_NAME "
                          "--user_domain_name $OS_USER_DOMAIN_NAME --keystone_url $OS_AUTH_URL", env.c_str());
     HexSystemF(0, "mv %s.good %s", AGENT_CONF, AGENT_CONF);
@@ -456,6 +456,10 @@ static bool
 MonascaService(const bool enabled)
 {
     if(IsControl(s_eCubeRole)) {
+        // monasca-api is no longer hosted in-process by mod_wsgi: it runs out of
+        // the antelope venv under gunicorn and httpd only reverse-proxies it, so
+        // it needs a service of its own now.
+        SystemdCommitService(enabled, API_NAME);
         SystemdCommitService(enabled, PST_NAME);
     }
 

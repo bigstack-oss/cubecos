@@ -13,7 +13,7 @@ Restart=always
 StandardOutput=append:/var/log/monasca/monasca-forwarder.log
 StandardError=append:/var/log/monasca/monasca-forwarder.log
 
-ExecStart=/usr/local/bin/monasca-forwarder
+ExecStart=/usr/bin/monasca-forwarder
 
 [Install]
 WantedBy=multi-user.target

@@ -3,21 +3,24 @@ Listen @BIND_ADDR@8070
 TraceEnable off
 
 <VirtualHost *:8070>
-    WSGIDaemonProcess monasca-api processes=8 threads=4 user=monasca display-name=%{GROUP}
-    WSGIProcessGroup monasca-api
-    WSGIApplicationGroup monasca-api
-    WSGIScriptAlias / /usr/local/lib/python3.9/site-packages/monasca_api/api/wsgi.py
-    WSGIApplicationGroup %{GLOBAL}
+    ProxyPreserveHost On
+    ProxyRequests Off
 
-    WSGIPassAuthorization On
+    # Forward all traffic to the monasca-api gunicorn UNIX socket. The
+    # application moved into the python 3.10 venv and mod_wsgi is built against
+    # the system python 3.9, so httpd can only proxy it, not host it in-process.
+    # Using a random 127.0.0.x address to prevent Apache from keeping the
+    # connection to the wrong proxy destination.
+    ProxyPass / unix:/var/lib/monasca/monasca-api.socket|http://127.0.0.3/
+    ProxyPassReverse / unix:/var/lib/monasca/monasca-api.socket|http://127.0.0.3/
+
+    <IfVersion >= 2.4>
+      ErrorLogFormat "%{cu}t %M"
+    </IfVersion>
 
     LogLevel info
     ErrorLog /var/log/httpd/monasca-api_error.log
     CustomLog /var/log/httpd/monasca-api.log combined
-
-    <Directory /usr/local/lib/python3.9/site-packages/monasca_api>
-      Require all granted
-    </Directory>
 
     SetEnv no-gzip 1
 

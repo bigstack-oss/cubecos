@@ -102,7 +102,7 @@ types-paramiko===2.11.6
 immutables===0.19
 python-swiftclient===4.2.0
 pyOpenSSL===22.1.0
-monasca-common===3.7.0
+monasca-common===3.8.0
 zeroconf===0.39.1
 scipy===1.9.1
 python-gnupg===0.5.0
@@ -324,7 +324,7 @@ XStatic-moment===2.8.4.3
 autopage===0.5.1
 sqlalchemy-migrate===0.13.0
 gitdb===4.0.9
-python-monascaclient===2.7.0
+python-monascaclient===2.8.0
 ldap3===2.9.1
 requests-ntlm===1.1.0
 sphinx-rtd-theme===0.5.1
@@ -576,7 +576,7 @@ gitdb2===4.0.2
 requests-kerberos===0.14.0
 itsdangerous===2.1.2
 XStatic-jquery-ui===1.13.0.1
-monasca-statsd===2.6.0
+monasca-statsd===2.7.0
 python-dateutil===2.8.2
 virtualenv===20.16.5
 colorama===0.4.5
