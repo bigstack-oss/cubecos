@@ -257,7 +257,7 @@ migrate_manila_db()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "manila-manage db sync" manila
+        su -s /bin/sh -c "/usr/bin/manila-manage db sync" manila
     fi
 
     touch $STATE_DIR/manila_db_migrated
