@@ -547,7 +547,7 @@ SetupService(const std::string domain, const std::string userPass)
     HexUtilSystemF(
         0,
         0,
-        "su -s /bin/sh -c \"manila-manage db sync\" %s",
+        "su -s /bin/sh -c \"/usr/bin/manila-manage db sync\" %s",
         USER);
 
     // prepare env settings
