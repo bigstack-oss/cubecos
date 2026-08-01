@@ -12,10 +12,16 @@
 #include <hex/dryrun.h>
 #include <hex/filesystem.h>
 #include <hex/log.h>
+#include <hex/logrotate.h>
 #include <hex/pidfile.h>
 #include <hex/process.h>
 #include <hex/process_util.h>
 #include <hex/string_util.h>
+
+// manila no longer arrives as an rpm, so /etc/logrotate.d/openstack-manila -- which
+// python3-manila owned -- is gone. Declare the rotation through hex instead, the
+// same way cinder, heat and ironic do.
+static LogRotateConf log_conf("manila", "/var/log/manila/*.log", DAILY, 128, 0, true);
 
 // config files
 #define CONF "/etc/manila/manila.conf"
@@ -331,6 +337,11 @@ SetDatabaseConnection(
     uri << "mysql+pymysql://manila:" << dbPass << "@" << sharedId << "/manila";
 
     config["database"]["connection"] = uri.str();
+
+    // manila reads its own writes through a galera cluster, so the connection has
+    // to wait for the write set to apply. Every service migrated to the antelope
+    // venv so far carries this.
+    config["database"]["mysql_wsrep_sync_wait"] = "1";
 }
 
 /**
@@ -769,6 +780,7 @@ Commit(bool modified, int dryLevel)
     }
 
     // start services
+    WriteLogRotateConf(log_conf);
     StartManilaService(s_enabled);
 
     // create/prune additional share-backend types whenever the configured
