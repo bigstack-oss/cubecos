@@ -28,10 +28,12 @@ class AbstractInfluxdbRepository(abstract_repository.AbstractRepository, metacla
         super(AbstractInfluxdbRepository, self).__init__()
         self.conf = cfg.CONF
         self._influxdb_client = influxdb.InfluxDBClient(
-            self.conf.influxdb.ip_address,
-            self.conf.influxdb.port,
-            self.conf.influxdb.user,
-            self.conf.influxdb.password)
+            host=self.conf.influxdb.ip_address,
+            port=self.conf.influxdb.port,
+            username=self.conf.influxdb.user,
+            password=self.conf.influxdb.password,
+            ssl=self.conf.influxdb.ssl,
+            verify_ssl=self.conf.influxdb.verify_ssl)
         if self.conf.influxdb.db_per_tenant:
             self.data_points_class = data_points.DataPointsAsDict
         else:
