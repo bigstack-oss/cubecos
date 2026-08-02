@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenStack Watcher Decision Engine service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=watcher
+ExecStart=/usr/bin/watcher-decision-engine  --config-file /etc/watcher/watcher.conf --log-file /var/log/watcher/decision-engine.log
+PrivateTmp=true
+NotifyAccess=all
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
