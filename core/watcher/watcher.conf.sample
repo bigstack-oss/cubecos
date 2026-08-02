@@ -1,0 +1,1977 @@
+[DEFAULT]
+
+#
+# From oslo.log
+#
+
+# If set to true, the logging level will be set to DEBUG instead of the default
+# INFO level. (boolean value)
+# Note: This option can be changed without restarting.
+#debug = false
+
+# The name of a logging configuration file. This file is appended to any
+# existing logging configuration files. For details about logging configuration
+# files, see the Python logging module documentation. Note that when logging
+# configuration files are used then all logging configuration is set in the
+# configuration file and other logging configuration options are ignored (for
+# example, log-date-format). (string value)
+# Note: This option can be changed without restarting.
+# Deprecated group/name - [DEFAULT]/log_config
+#log_config_append = <None>
+
+# Defines the format string for %%(asctime)s in log records. Default:
+# %(default)s . This option is ignored if log_config_append is set. (string
+# value)
+#log_date_format = %Y-%m-%d %H:%M:%S
+
+# (Optional) Name of log file to send logging output to. If no default is set,
+# logging will go to stderr as defined by use_stderr. This option is ignored if
+# log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logfile
+#log_file = <None>
+
+# (Optional) The base directory used for relative log_file  paths. This option
+# is ignored if log_config_append is set. (string value)
+# Deprecated group/name - [DEFAULT]/logdir
+#log_dir = <None>
+
+# Uses logging handler designed to watch file system. When log file is moved or
+# removed this handler will open a new log file with specified path
+# instantaneously. It makes sense only if log_file option is specified and
+# Linux platform is used. This option is ignored if log_config_append is set.
+# (boolean value)
+#watch_log_file = false
+
+# Use syslog for logging. Existing syslog format is DEPRECATED and will be
+# changed later to honor RFC5424. This option is ignored if log_config_append
+# is set. (boolean value)
+#use_syslog = false
+
+# Enable journald for logging. If running in a systemd environment you may wish
+# to enable journal support. Doing so will use the journal native protocol
+# which includes structured metadata in addition to log messages.This option is
+# ignored if log_config_append is set. (boolean value)
+#use_journal = false
+
+# Syslog facility to receive log lines. This option is ignored if
+# log_config_append is set. (string value)
+#syslog_log_facility = LOG_USER
+
+# Use JSON formatting for logging. This option is ignored if log_config_append
+# is set. (boolean value)
+#use_json = false
+
+# Log output to standard error. This option is ignored if log_config_append is
+# set. (boolean value)
+#use_stderr = false
+
+# Log output to Windows Event Log. (boolean value)
+#use_eventlog = false
+
+# The amount of time before the log files are rotated. This option is ignored
+# unless log_rotation_type is set to "interval". (integer value)
+#log_rotate_interval = 1
+
+# Rotation interval type. The time of the last file change (or the time when
+# the service was started) is used when scheduling the next rotation. (string
+# value)
+# Possible values:
+# Seconds - <No description provided>
+# Minutes - <No description provided>
+# Hours - <No description provided>
+# Days - <No description provided>
+# Weekday - <No description provided>
+# Midnight - <No description provided>
+#log_rotate_interval_type = days
+
+# Maximum number of rotated log files. (integer value)
+#max_logfile_count = 30
+
+# Log file maximum size in MB. This option is ignored if "log_rotation_type" is
+# not set to "size". (integer value)
+#max_logfile_size_mb = 200
+
+# Log rotation type. (string value)
+# Possible values:
+# interval - Rotate logs at predefined time intervals.
+# size - Rotate logs once they reach a predefined size.
+# none - Do not rotate log files.
+#log_rotation_type = none
+
+# Format string to use for log messages with context. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_context_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(global_request_id)s %(request_id)s %(user_identity)s] %(instance)s%(message)s
+
+# Format string to use for log messages when context is undefined. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_default_format_string = %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s
+
+# Additional data to append to log message when logging level for the message
+# is DEBUG. Used by oslo_log.formatters.ContextFormatter (string value)
+#logging_debug_format_suffix = %(funcName)s %(pathname)s:%(lineno)d
+
+# Prefix each line of exception output with this format. Used by
+# oslo_log.formatters.ContextFormatter (string value)
+#logging_exception_prefix = %(asctime)s.%(msecs)03d %(process)d ERROR %(name)s %(instance)s
+
+# Defines the format string for %(user_identity)s that is used in
+# logging_context_format_string. Used by oslo_log.formatters.ContextFormatter
+# (string value)
+#logging_user_identity_format = %(user)s %(project)s %(domain)s %(system_scope)s %(user_domain)s %(project_domain)s
+
+# List of package logging levels in logger=LEVEL pairs. This option is ignored
+# if log_config_append is set. (list value)
+#default_log_levels = amqp=WARN,amqplib=WARN,boto=WARN,qpid=WARN,sqlalchemy=WARN,suds=INFO,oslo.messaging=INFO,oslo_messaging=INFO,iso8601=WARN,requests.packages.urllib3.connectionpool=WARN,urllib3.connectionpool=WARN,websocket=WARN,requests.packages.urllib3.util.retry=WARN,urllib3.util.retry=WARN,keystonemiddleware=WARN,routes.middleware=WARN,stevedore=WARN,taskflow=WARN,keystoneauth=WARN,oslo.cache=INFO,oslo_policy=INFO,dogpile.core.dogpile=INFO
+
+# Enables or disables publication of error events. (boolean value)
+#publish_errors = false
+
+# The format for an instance that is passed with the log message. (string
+# value)
+#instance_format = "[instance: %(uuid)s] "
+
+# The format for an instance UUID that is passed with the log message. (string
+# value)
+#instance_uuid_format = "[instance: %(uuid)s] "
+
+# Interval, number of seconds, of log rate limiting. (integer value)
+#rate_limit_interval = 0
+
+# Maximum number of logged messages per rate_limit_interval. (integer value)
+#rate_limit_burst = 0
+
+# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG
+# or empty string. Logs with level greater or equal to rate_limit_except_level
+# are not filtered. An empty string means that all levels are filtered. (string
+# value)
+#rate_limit_except_level = CRITICAL
+
+# Enables or disables fatal status of deprecations. (boolean value)
+#fatal_deprecations = false
+
+#
+# From oslo.messaging
+#
+
+# Size of RPC connection pool. (integer value)
+# Minimum value: 1
+#rpc_conn_pool_size = 30
+
+# The pool size limit for connections expiration policy (integer value)
+#conn_pool_min_size = 2
+
+# The time-to-live in sec of idle connections in the pool (integer value)
+#conn_pool_ttl = 1200
+
+# Size of executor thread pool when executor is threading or eventlet. (integer
+# value)
+# Deprecated group/name - [DEFAULT]/rpc_thread_pool_size
+#executor_thread_pool_size = 64
+
+# Seconds to wait for a response from a call. (integer value)
+#rpc_response_timeout = 60
+
+# The network address and optional user credentials for connecting to the
+# messaging backend, in URL format. The expected format is:
+#
+# driver://[user:pass@]host:port[,[userN:passN@]hostN:portN]/virtual_host?query
+#
+# Example: rabbit://rabbitmq:password@127.0.0.1:5672//
+#
+# For full details on the fields in the URL see the documentation of
+# oslo_messaging.TransportURL at
+# https://docs.openstack.org/oslo.messaging/latest/reference/transport.html
+# (string value)
+#transport_url = rabbit://
+
+# The default exchange under which topics are scoped. May be overridden by an
+# exchange name specified in the transport_url option. (string value)
+#control_exchange = openstack
+
+# Add an endpoint to answer to ping calls. Endpoint is named
+# oslo_rpc_server_ping (boolean value)
+#rpc_ping_enabled = false
+
+#
+# From oslo.service.periodic_task
+#
+
+# Some periodic tasks can be run in a separate process. Should we run them
+# here? (boolean value)
+#run_external_periodic_tasks = true
+
+#
+# From oslo.service.service
+#
+
+# Enable eventlet backdoor.  Acceptable values are 0, <port>, and
+# <start>:<end>, where 0 results in listening on a random tcp port number;
+# <port> results in listening on the specified port number (and not enabling
+# backdoor if that port is in use); and <start>:<end> results in listening on
+# the smallest unused port number within the specified range of port numbers.
+# The chosen port is displayed in the service's log file. (string value)
+#backdoor_port = <None>
+
+# Enable eventlet backdoor, using the provided path as a unix socket that can
+# receive connections. This option is mutually exclusive with 'backdoor_port'
+# in that only one should be provided. If both are provided then the existence
+# of this option overrides the usage of that option. Inside the path {pid} will
+# be replaced with the PID of the current process. (string value)
+#backdoor_socket = <None>
+
+# Enables or disables logging values of all registered options when starting a
+# service (at DEBUG level). (boolean value)
+#log_options = true
+
+# Specify a timeout after which a gracefully shutdown server will exit. Zero
+# value means endless wait. (integer value)
+#graceful_shutdown_timeout = 60
+
+#
+# From oslo.service.wsgi
+#
+
+# File name for the paste.deploy config for api service (string value)
+#api_paste_config = api-paste.ini
+
+# A python format string that is used as the template to generate log lines.
+# The following values can beformatted into it: client_ip, date_time,
+# request_line, status_code, body_length, wall_seconds. (string value)
+#wsgi_log_format = %(client_ip)s "%(request_line)s" status: %(status_code)s  len: %(body_length)s time: %(wall_seconds).7f
+
+# Sets the value of TCP_KEEPIDLE in seconds for each server socket. Not
+# supported on OS X. (integer value)
+#tcp_keepidle = 600
+
+# Size of the pool of greenthreads used by wsgi (integer value)
+#wsgi_default_pool_size = 100
+
+# Maximum line size of message headers to be accepted. max_header_line may need
+# to be increased when using large tokens (typically those generated when
+# keystone is configured to use PKI tokens with big service catalogs). (integer
+# value)
+#max_header_line = 16384
+
+# If False, closes the client socket connection explicitly. (boolean value)
+#wsgi_keep_alive = true
+
+# Timeout for client connections' socket operations. If an incoming connection
+# is idle for this number of seconds it will be closed. A value of '0' means
+# wait forever. (integer value)
+#client_socket_timeout = 900
+
+# True if the server should send exception tracebacks to the clients on 500
+# errors. If False, the server will respond with empty bodies. (boolean value)
+#wsgi_server_debug = false
+
+#
+# From watcher
+#
+
+# This option enables or disables user authentication via keystone. Default
+# value is True. (boolean value)
+#enable_authentication = true
+
+# Make exception message format errors fatal. (boolean value)
+#fatal_exception_format_errors = false
+
+# Directory where the watcher python module is installed. (string value)
+
+# Directory where watcher binaries are installed. (string value)
+#bindir = $pybasedir/bin
+
+# Top-level directory for maintaining watcher's state. (string value)
+#state_path = $pybasedir
+
+# Seconds between running periodic tasks. (integer value)
+# Note: This option can be changed without restarting.
+#periodic_interval = 60
+
+# Name of this node. This can be an opaque identifier. It is not necessarily a
+# hostname, FQDN, or IP address. However, the node name must be valid within an
+# AMQP key. (host address value)
+#host = cc1
+
+# Maximum time since last check-in for up service. (integer value)
+#service_down_time = 90
+
+
+[api]
+
+#
+# From watcher
+#
+
+# The port for the watcher API server (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#port = 9322
+
+# The listen IP address for the watcher API server (host address value)
+#host = 127.0.0.1
+
+# The maximum number of items returned in a single response from a collection
+# resource (integer value)
+#max_limit = 1000
+
+# Number of workers for Watcher API service. The default is equal to the number
+# of CPUs available if that can be determined, else a default worker count of 1
+# is returned. (integer value)
+# Minimum value: 1
+#workers = <None>
+
+# Enable the integrated stand-alone API to service requests via HTTPS instead
+# of HTTP. If there is a front-end service performing HTTPS offloading from the
+# service, this option should be False; note, you will want to change public
+# API endpoint to represent SSL termination URL with 'public_endpoint' option.
+# (boolean value)
+#enable_ssl_api = false
+
+# This option enables or disables webhook request authentication via keystone.
+# Default value is True. (boolean value)
+#enable_webhooks_auth = true
+
+
+[cache]
+
+#
+# From oslo.cache
+#
+
+# Prefix for building the configuration dictionary for the cache region. This
+# should not need to be changed unless there is another dogpile.cache region
+# with the same configuration name. (string value)
+#config_prefix = cache.oslo
+
+# Default TTL, in seconds, for any cached item in the dogpile.cache region.
+# This applies to any cached method that doesn't have an explicit cache
+# expiration time defined for it. (integer value)
+#expiration_time = 600
+
+# Cache backend module. For eventlet-based or environments with hundreds of
+# threaded servers, Memcache with pooling (oslo_cache.memcache_pool) is
+# recommended. For environments with less than 100 threaded servers, Memcached
+# (dogpile.cache.memcached) or Redis (dogpile.cache.redis) is recommended. Test
+# environments with a single instance of the server can use the
+# dogpile.cache.memory backend. (string value)
+# Possible values:
+# oslo_cache.memcache_pool - <No description provided>
+# oslo_cache.dict - <No description provided>
+# oslo_cache.mongo - <No description provided>
+# oslo_cache.etcd3gw - <No description provided>
+# dogpile.cache.pymemcache - <No description provided>
+# dogpile.cache.memcached - <No description provided>
+# dogpile.cache.pylibmc - <No description provided>
+# dogpile.cache.bmemcached - <No description provided>
+# dogpile.cache.dbm - <No description provided>
+# dogpile.cache.redis - <No description provided>
+# dogpile.cache.memory - <No description provided>
+# dogpile.cache.memory_pickle - <No description provided>
+# dogpile.cache.null - <No description provided>
+#backend = dogpile.cache.null
+
+# Arguments supplied to the backend module. Specify this option once per
+# argument to be passed to the dogpile.cache backend. Example format:
+# "<argname>:<value>". (multi valued)
+#backend_argument =
+
+# Proxy classes to import that will affect the way the dogpile.cache backend
+# functions. See the dogpile.cache documentation on changing-backend-behavior.
+# (list value)
+#proxies =
+
+# Global toggle for caching. (boolean value)
+#enabled = false
+
+# Extra debugging from the cache backend (cache keys, get/set/delete/etc
+# calls). This is only really useful if you need to see the specific cache-
+# backend get/set/delete calls with the keys/values.  Typically this should be
+# left set to false. (boolean value)
+#debug_cache_backend = false
+
+# Memcache servers in the format of "host:port". This is used by backends
+# dependent on Memcached.If ``dogpile.cache.memcached`` or
+# ``oslo_cache.memcache_pool`` is used and a given host refer to an IPv6 or a
+# given domain refer to IPv6 then you should prefix the given address withthe
+# address family (``inet6``) (e.g ``inet6[::1]:11211``,
+# ``inet6:[fd12:3456:789a:1::1]:11211``,
+# ``inet6:[controller-0.internalapi]:11211``). If the address family is not
+# given then these backends will use the default ``inet`` address family which
+# corresponds to IPv4 (list value)
+#memcache_servers = localhost:11211
+
+# Number of seconds memcached server is considered dead before it is tried
+# again. (dogpile.cache.memcache and oslo_cache.memcache_pool backends only).
+# (integer value)
+#memcache_dead_retry = 300
+
+# Timeout in seconds for every call to a server. (dogpile.cache.memcache and
+# oslo_cache.memcache_pool backends only). (floating point value)
+#memcache_socket_timeout = 1.0
+
+# Max total number of open connections to every memcached server.
+# (oslo_cache.memcache_pool backend only). (integer value)
+#memcache_pool_maxsize = 10
+
+# Number of seconds a connection to memcached is held unused in the pool before
+# it is closed. (oslo_cache.memcache_pool backend only). (integer value)
+#memcache_pool_unused_timeout = 60
+
+# Number of seconds that an operation will wait to get a memcache client
+# connection. (integer value)
+#memcache_pool_connection_get_timeout = 10
+
+# Global toggle if memcache will be flushed on reconnect.
+# (oslo_cache.memcache_pool backend only). (boolean value)
+#memcache_pool_flush_on_reconnect = false
+
+# Enable the SASL(Simple Authentication and SecurityLayer) if the SASL_enable
+# is true, else disable. (boolean value)
+#memcache_sasl_enabled = false
+
+# the user name for the memcached which SASL enabled (string value)
+#memcache_username =
+
+# the password for the memcached which SASL enabled (string value)
+#memcache_password =
+
+# Global toggle for TLS usage when comunicating with the caching servers.
+# (boolean value)
+#tls_enabled = false
+
+# Path to a file of concatenated CA certificates in PEM format necessary to
+# establish the caching servers' authenticity. If tls_enabled is False, this
+# option is ignored. (string value)
+#tls_cafile = <None>
+
+# Path to a single file in PEM format containing the client's certificate as
+# well as any number of CA certificates needed to establish the certificate's
+# authenticity. This file is only required when client side authentication is
+# necessary. If tls_enabled is False, this option is ignored. (string value)
+#tls_certfile = <None>
+
+# Path to a single file containing the client's private key in. Otherwise the
+# private key will be taken from the file specified in tls_certfile. If
+# tls_enabled is False, this option is ignored. (string value)
+#tls_keyfile = <None>
+
+# Set the available ciphers for sockets created with the TLS context. It should
+# be a string in the OpenSSL cipher list format. If not specified, all OpenSSL
+# enabled ciphers will be available. (string value)
+#tls_allowed_ciphers = <None>
+
+# Global toggle for the socket keepalive of dogpile's pymemcache backend
+# (boolean value)
+#enable_socket_keepalive = false
+
+# The time (in seconds) the connection needs to remain idle before TCP starts
+# sending keepalive probes. Should be a positive integer most greater than
+# zero. (integer value)
+# Minimum value: 0
+#socket_keepalive_idle = 1
+
+# The time (in seconds) between individual keepalive probes. Should be a
+# positive integer greater than zero. (integer value)
+# Minimum value: 0
+#socket_keepalive_interval = 1
+
+# The maximum number of keepalive probes TCP should send before dropping the
+# connection. Should be a positive integer greater than zero. (integer value)
+# Minimum value: 0
+#socket_keepalive_count = 1
+
+# Enable retry client mechanisms to handle failure. Those mechanisms can be
+# used to wrap all kind of pymemcache clients. The wrapper allows you to define
+# how many attempts to make and how long to wait between attemots. (boolean
+# value)
+#enable_retry_client = false
+
+# Number of times to attempt an action before failing. (integer value)
+# Minimum value: 1
+#retry_attempts = 2
+
+# Number of seconds to sleep between each attempt. (floating point value)
+#retry_delay = 0
+
+# Amount of times a client should be tried before it is marked dead and removed
+# from the pool in the HashClient's internal mechanisms. (integer value)
+# Minimum value: 1
+#hashclient_retry_attempts = 2
+
+# Time in seconds that should pass between retry attempts in the HashClient's
+# internal mechanisms. (floating point value)
+#hashclient_retry_delay = 1
+
+# Time in seconds before attempting to add a node back in the pool in the
+# HashClient's internal mechanisms. (floating point value)
+#dead_timeout = 60
+
+
+[ceilometer_client]
+
+#
+# From watcher
+#
+
+# DEPRECATED: Version of Ceilometer API to use in ceilometerclient. (string
+# value)
+# This option is deprecated for removal since 1.13.0.
+# Its value may be silently ignored in the future.
+# Reason:
+#                Ceilometer API is deprecated since Ocata release.
+#                Any related configuration options are deprecated too.
+#
+#api_version = 2
+
+# DEPRECATED: Type of endpoint to use in ceilometerclient. Supported values:
+# internalURL, publicURL, adminURL. The default is internalURL. (string value)
+# This option is deprecated for removal since 1.13.0.
+# Its value may be silently ignored in the future.
+# Reason:
+#                Ceilometer API is deprecated since Ocata release.
+#                Any related configuration options are deprecated too.
+#
+#endpoint_type = internalURL
+
+# DEPRECATED: Region in Identity service catalog to use for communication with
+# the OpenStack service. (string value)
+# This option is deprecated for removal since 1.13.0.
+# Its value may be silently ignored in the future.
+# Reason:
+#                Ceilometer API is deprecated since Ocata release.
+#                Any related configuration options are deprecated too.
+#
+#region_name = <None>
+
+
+[cinder_client]
+
+#
+# From watcher
+#
+
+# Version of Cinder API to use in cinderclient. (string value)
+#api_version = 3
+
+# Type of endpoint to use in cinderclient. Supported values: internalURL,
+# publicURL, adminURL. The default is publicURL. (string value)
+#endpoint_type = publicURL
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[collector]
+
+#
+# From watcher
+#
+
+#
+# The cluster data model plugin names.
+#
+# Supported in-tree collectors include:
+#
+# * ``compute`` - data model collector for nova
+# * ``storage`` - data model collector for cinder
+# * ``baremetal`` - data model collector for ironic
+#
+# Custom data model collector plugins can be defined with the
+# ``watcher_cluster_data_model_collectors`` extension point.
+#  (list value)
+#collector_plugins = compute
+
+# Number of retries before giving up on external service calls. (integer value)
+#api_call_retries = 10
+
+# Time before retry after failed call to external service. (integer value)
+#api_query_timeout = 1
+
+
+[database]
+
+#
+# From oslo.db
+#
+
+# If True, SQLite uses synchronous mode. (boolean value)
+#sqlite_synchronous = true
+
+# The back end to use for the database. (string value)
+# Deprecated group/name - [DEFAULT]/db_backend
+#backend = sqlalchemy
+
+# The SQLAlchemy connection string to use to connect to the database. (string
+# value)
+# Deprecated group/name - [DEFAULT]/sql_connection
+# Deprecated group/name - [DATABASE]/sql_connection
+# Deprecated group/name - [sql]/connection
+#connection = <None>
+
+# The SQLAlchemy connection string to use to connect to the slave database.
+# (string value)
+#slave_connection = <None>
+
+# The SQL mode to be used for MySQL sessions. This option, including the
+# default, overrides any server-set SQL mode. To use whatever SQL mode is set
+# by the server configuration, set this to no value. Example: mysql_sql_mode=
+# (string value)
+#mysql_sql_mode = TRADITIONAL
+
+# For Galera only, configure wsrep_sync_wait causality checks on new
+# connections.  Default is None, meaning don't configure any setting. (integer
+# value)
+#mysql_wsrep_sync_wait = <None>
+
+# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
+# (NDB). (boolean value)
+# This option is deprecated for removal since 12.1.0.
+# Its value may be silently ignored in the future.
+# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
+# and will be removed in a future release.
+#mysql_enable_ndb = false
+
+# Connections which have been present in the connection pool longer than this
+# number of seconds will be replaced with a new one the next time they are
+# checked out from the pool. (integer value)
+#connection_recycle_time = 3600
+
+# Maximum number of SQL connections to keep open in a pool. Setting a value of
+# 0 indicates no limit. (integer value)
+#max_pool_size = 5
+
+# Maximum number of database connection retries during startup. Set to -1 to
+# specify an infinite retry count. (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_retries
+# Deprecated group/name - [DATABASE]/sql_max_retries
+#max_retries = 10
+
+# Interval between retries of opening a SQL connection. (integer value)
+# Deprecated group/name - [DEFAULT]/sql_retry_interval
+# Deprecated group/name - [DATABASE]/reconnect_interval
+#retry_interval = 10
+
+# If set, use this value for max_overflow with SQLAlchemy. (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_overflow
+# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
+#max_overflow = 50
+
+# Verbosity of SQL debugging information: 0=None, 100=Everything. (integer
+# value)
+# Minimum value: 0
+# Maximum value: 100
+# Deprecated group/name - [DEFAULT]/sql_connection_debug
+#connection_debug = 0
+
+# Add Python stack traces to SQL as comment strings. (boolean value)
+# Deprecated group/name - [DEFAULT]/sql_connection_trace
+#connection_trace = false
+
+# If set, use this value for pool_timeout with SQLAlchemy. (integer value)
+# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
+#pool_timeout = <None>
+
+# Enable the experimental use of database reconnect on connection lost.
+# (boolean value)
+#use_db_reconnect = false
+
+# Seconds between retries of a database transaction. (integer value)
+#db_retry_interval = 1
+
+# If True, increases the interval between retries of a database operation up to
+# db_max_retry_interval. (boolean value)
+#db_inc_retry_interval = true
+
+# If db_inc_retry_interval is set, the maximum seconds between retries of a
+# database operation. (integer value)
+#db_max_retry_interval = 10
+
+# Maximum retries in case of connection error or deadlock error before error is
+# raised. Set to -1 to specify an infinite retry count. (integer value)
+#db_max_retries = 20
+
+# Optional URL parameters to append onto the connection URL at connect time;
+# specify as param1=value1&param2=value2&... (string value)
+#connection_parameters =
+
+#
+# From watcher
+#
+
+# MySQL engine to use. (string value)
+#mysql_engine = InnoDB
+
+
+[glance_client]
+
+#
+# From watcher
+#
+
+# Version of Glance API to use in glanceclient. (string value)
+#api_version = 2
+
+# Type of endpoint to use in glanceclient. Supported values: internalURL,
+# publicURL, adminURL. The default is publicURL. (string value)
+#endpoint_type = publicURL
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[gnocchi_client]
+
+#
+# From watcher
+#
+
+# Version of Gnocchi API to use in gnocchiclient. (string value)
+#api_version = 1
+
+# Type of endpoint to use in gnocchi client. Supported values: internal,
+# public, admin. The default is public. (string value)
+#endpoint_type = public
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[grafana_client]
+# See https://docs.openstack.org/watcher/latest/datasources/grafana.html for
+# details on how these options are used.
+
+#
+# From watcher
+#
+
+# Authentication token to gain access (string value)
+#token = <None>
+
+# First part of the url (including https:// or http://) up until project id
+# part. Example: https://secure.org/api/datasource/proxy/ (string value)
+#base_url = <None>
+
+# Mapping of datasource metrics to grafana project ids. Dictionary values
+# should be positive integers. Example: 7465 (dict value)
+#project_id_map = host_airflow:None,host_cpu_usage:None,host_inlet_temp:None,host_outlet_temp:None,host_power:None,host_ram_usage:None,instance_cpu_usage:None,instance_l3_cache_usage:None,instance_ram_allocated:None,instance_ram_usage:None,instance_root_disk_size:None
+
+# Mapping of datasource metrics to grafana databases. Values should be strings.
+# Example: influx_production (dict value)
+#database_map = host_airflow:None,host_cpu_usage:None,host_inlet_temp:None,host_outlet_temp:None,host_power:None,host_ram_usage:None,instance_cpu_usage:None,instance_l3_cache_usage:None,instance_ram_allocated:None,instance_ram_usage:None,instance_root_disk_size:None
+
+# Mapping of datasource metrics to resource attributes. For a complete list of
+# available attributes see
+# https://docs.openstack.org/watcher/latest/datasources/grafana.html#attribute
+# Values should be strings. Example: hostname (dict value)
+#attribute_map = host_airflow:None,host_cpu_usage:None,host_inlet_temp:None,host_outlet_temp:None,host_power:None,host_ram_usage:None,instance_cpu_usage:None,instance_l3_cache_usage:None,instance_ram_allocated:None,instance_ram_usage:None,instance_root_disk_size:None
+
+# Mapping of datasource metrics to grafana translators. Values should be
+# strings. Example: influxdb (dict value)
+#translator_map = host_airflow:None,host_cpu_usage:None,host_inlet_temp:None,host_outlet_temp:None,host_power:None,host_ram_usage:None,instance_cpu_usage:None,instance_l3_cache_usage:None,instance_ram_allocated:None,instance_ram_usage:None,instance_root_disk_size:None
+
+# Mapping of datasource metrics to grafana queries. Values should be strings
+# for which the .format method will transform it. The transformation offers
+# five parameters to the query labeled {0} to {4}. {0} will be replaced with
+# the aggregate, {1} with the resource attribute, {2} with the period, {3} with
+# the granularity and {4} with translator specifics for InfluxDB this will be
+# the retention period. These queries will need to be constructed using tools
+# such as Postman. Example: SELECT cpu FROM {4}.cpu_percent WHERE host == '{1}'
+# AND time > now()-{2}s (dict value)
+#query_map = host_airflow:None,host_cpu_usage:None,host_inlet_temp:None,host_outlet_temp:None,host_power:None,host_ram_usage:None,instance_cpu_usage:None,instance_l3_cache_usage:None,instance_ram_allocated:None,instance_ram_usage:None,instance_root_disk_size:None
+
+
+[grafana_translators]
+
+#
+# From watcher
+#
+
+# Keys are the names of retention periods in InfluxDB and the values should
+# correspond with the maximum time they can retain in seconds. Example:
+# {'one_day': 86400} (dict value)
+#retention_periods = five_years:31556952,one_month:2592000,one_week:604800
+
+
+[ironic_client]
+
+#
+# From watcher
+#
+
+# Version of Ironic API to use in ironicclient. (string value)
+#api_version = 1
+
+# Type of endpoint to use in ironicclient. Supported values: internalURL,
+# publicURL, adminURL. The default is publicURL. (string value)
+#endpoint_type = publicURL
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[keystone_authtoken]
+
+#
+# From keystonemiddleware.auth_token
+#
+
+# Complete "public" Identity API endpoint. This endpoint should not be an
+# "admin" endpoint, as it should be accessible by all end users.
+# Unauthenticated clients are redirected to this endpoint to authenticate.
+# Although this endpoint should ideally be unversioned, client support in the
+# wild varies. If you're using a versioned v2 endpoint here, then this should
+# *not* be the same endpoint the service user utilizes for validating tokens,
+# because normal end users may not be able to reach that endpoint. (string
+# value)
+# Deprecated group/name - [keystone_authtoken]/auth_uri
+#www_authenticate_uri = <None>
+
+# DEPRECATED: Complete "public" Identity API endpoint. This endpoint should not
+# be an "admin" endpoint, as it should be accessible by all end users.
+# Unauthenticated clients are redirected to this endpoint to authenticate.
+# Although this endpoint should ideally be unversioned, client support in the
+# wild varies. If you're using a versioned v2 endpoint here, then this should
+# *not* be the same endpoint the service user utilizes for validating tokens,
+# because normal end users may not be able to reach that endpoint. This option
+# is deprecated in favor of www_authenticate_uri and will be removed in the S
+# release. (string value)
+# This option is deprecated for removal since Queens.
+# Its value may be silently ignored in the future.
+# Reason: The auth_uri option is deprecated in favor of www_authenticate_uri
+# and will be removed in the S  release.
+#auth_uri = <None>
+
+# API version of the Identity API endpoint. (string value)
+#auth_version = <None>
+
+# Interface to use for the Identity API endpoint. Valid values are "public",
+# "internal" (default) or "admin". (string value)
+#interface = internal
+
+# Do not handle authorization requests within the middleware, but delegate the
+# authorization decision to downstream WSGI components. (boolean value)
+#delay_auth_decision = false
+
+# Request timeout value for communicating with Identity API server. (integer
+# value)
+#http_connect_timeout = <None>
+
+# How many times are we trying to reconnect when communicating with Identity
+# API Server. (integer value)
+#http_request_max_retries = 3
+
+# Request environment key where the Swift cache object is stored. When
+# auth_token middleware is deployed with a Swift cache, use this option to have
+# the middleware share a caching backend with swift. Otherwise, use the
+# ``memcached_servers`` option instead. (string value)
+#cache = <None>
+
+# Required if identity server requires client certificate (string value)
+#certfile = <None>
+
+# Required if identity server requires client certificate (string value)
+#keyfile = <None>
+
+# A PEM encoded Certificate Authority to use when verifying HTTPs connections.
+# Defaults to system CAs. (string value)
+#cafile = <None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure = false
+
+# The region in which the identity server can be found. (string value)
+#region_name = <None>
+
+# Optionally specify a list of memcached server(s) to use for caching. If left
+# undefined, tokens will instead be cached in-process. (list value)
+# Deprecated group/name - [keystone_authtoken]/memcache_servers
+#memcached_servers = <None>
+
+# In order to prevent excessive effort spent validating tokens, the middleware
+# caches previously-seen tokens for a configurable duration (in seconds). Set
+# to -1 to disable caching completely. (integer value)
+#token_cache_time = 300
+
+# (Optional) If defined, indicate whether token data should be authenticated or
+# authenticated and encrypted. If MAC, token data is authenticated (with HMAC)
+# in the cache. If ENCRYPT, token data is encrypted and authenticated in the
+# cache. If the value is not one of these options or empty, auth_token will
+# raise an exception on initialization. (string value)
+# Possible values:
+# None - <No description provided>
+# MAC - <No description provided>
+# ENCRYPT - <No description provided>
+#memcache_security_strategy = None
+
+# (Optional, mandatory if memcache_security_strategy is defined) This string is
+# used for key derivation. (string value)
+#memcache_secret_key = <None>
+
+# (Optional) Number of seconds memcached server is considered dead before it is
+# tried again. (integer value)
+#memcache_pool_dead_retry = 300
+
+# (Optional) Maximum total number of open connections to every memcached
+# server. (integer value)
+#memcache_pool_maxsize = 10
+
+# (Optional) Socket timeout in seconds for communicating with a memcached
+# server. (integer value)
+#memcache_pool_socket_timeout = 3
+
+# (Optional) Number of seconds a connection to memcached is held unused in the
+# pool before it is closed. (integer value)
+#memcache_pool_unused_timeout = 60
+
+# (Optional) Number of seconds that an operation will wait to get a memcached
+# client connection from the pool. (integer value)
+#memcache_pool_conn_get_timeout = 10
+
+# (Optional) Use the advanced (eventlet safe) memcached client pool. (boolean
+# value)
+#memcache_use_advanced_pool = true
+
+# (Optional) Indicate whether to set the X-Service-Catalog header. If False,
+# middleware will not ask for service catalog on token validation and will not
+# set the X-Service-Catalog header. (boolean value)
+#include_service_catalog = true
+
+# Used to control the use and type of token binding. Can be set to: "disabled"
+# to not check token binding. "permissive" (default) to validate binding
+# information if the bind type is of a form known to the server and ignore it
+# if not. "strict" like "permissive" but if the bind type is unknown the token
+# will be rejected. "required" any form of token binding is needed to be
+# allowed. Finally the name of a binding method that must be present in tokens.
+# (string value)
+#enforce_token_bind = permissive
+
+# A choice of roles that must be present in a service token. Service tokens are
+# allowed to request that an expired token can be used and so this check should
+# tightly control that only actual services should be sending this token. Roles
+# here are applied as an ANY check so any role in this list must be present.
+# For backwards compatibility reasons this currently only affects the
+# allow_expired check. (list value)
+#service_token_roles = service
+
+# For backwards compatibility reasons we must let valid service tokens pass
+# that don't pass the service_token_roles check as valid. Setting this true
+# will become the default in a future release and should be enabled if
+# possible. (boolean value)
+#service_token_roles_required = false
+
+# The name or type of the service as it appears in the service catalog. This is
+# used to validate tokens that have restricted access rules. (string value)
+#service_type = <None>
+
+# Authentication type to load (string value)
+# Deprecated group/name - [keystone_authtoken]/auth_plugin
+#auth_type = <None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section = <None>
+
+
+[keystone_client]
+
+#
+# From watcher
+#
+
+# Type of endpoint to use in keystoneclient. (string value)
+# Possible values:
+# internal - <No description provided>
+# public - <No description provided>
+# admin - <No description provided>
+#interface = admin
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[monasca_client]
+
+#
+# From watcher
+#
+
+# Version of Monasca API to use in monascaclient. (string value)
+#api_version = 2_0
+
+# Type of interface used for monasca endpoint. Supported values: internal,
+# public, admin. The default is internal. (string value)
+#interface = internal
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[neutron_client]
+
+#
+# From watcher
+#
+
+# Version of Neutron API to use in neutronclient. (string value)
+#api_version = 2.0
+
+# Type of endpoint to use in neutronclient. Supported values: internalURL,
+# publicURL, adminURL. The default is publicURL. (string value)
+#endpoint_type = publicURL
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[nova_client]
+
+#
+# From watcher
+#
+
+#
+# Version of Nova API to use in novaclient.
+#
+# Minimum required version: 2.56
+#
+# Certain Watcher features depend on a minimum version of the compute
+# API being available which is enforced with this option. See
+# https://docs.openstack.org/nova/latest/reference/api-microversion-
+# history.html
+# for the compute API microversion history.
+#  (string value)
+#api_version = 2.56
+
+# Type of endpoint to use in novaclient. Supported values: internalURL,
+# publicURL, adminURL. The default is publicURL. (string value)
+#endpoint_type = publicURL
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[oslo_concurrency]
+
+#
+# From oslo.concurrency
+#
+
+# Enables or disables inter-process locks. (boolean value)
+#disable_process_locking = false
+
+# Directory to use for lock files.  For security, the specified directory
+# should only be writable by the user running the processes that need locking.
+# Defaults to environment variable OSLO_LOCK_PATH. If external locks are used,
+# a lock path must be set. (string value)
+#lock_path = <None>
+
+
+[oslo_messaging_amqp]
+
+#
+# From oslo.messaging
+#
+
+# Name for the AMQP container. must be globally unique. Defaults to a generated
+# UUID (string value)
+#container_name = <None>
+
+# Timeout for inactive connections (in seconds) (integer value)
+#idle_timeout = 0
+
+# Debug: dump AMQP frames to stdout (boolean value)
+#trace = false
+
+# Attempt to connect via SSL. If no other ssl-related parameters are given, it
+# will use the system's CA-bundle to verify the server's certificate. (boolean
+# value)
+#ssl = false
+
+# CA certificate PEM file used to verify the server's certificate (string
+# value)
+#ssl_ca_file =
+
+# Self-identifying certificate PEM file for client authentication (string
+# value)
+#ssl_cert_file =
+
+# Private key PEM file used to sign ssl_cert_file certificate (optional)
+# (string value)
+#ssl_key_file =
+
+# Password for decrypting ssl_key_file (if encrypted) (string value)
+#ssl_key_password = <None>
+
+# By default SSL checks that the name in the server's certificate matches the
+# hostname in the transport_url. In some configurations it may be preferable to
+# use the virtual hostname instead, for example if the server uses the Server
+# Name Indication TLS extension (rfc6066) to provide a certificate per virtual
+# host. Set ssl_verify_vhost to True if the server's SSL certificate uses the
+# virtual host name instead of the DNS name. (boolean value)
+#ssl_verify_vhost = false
+
+# Space separated list of acceptable SASL mechanisms (string value)
+#sasl_mechanisms =
+
+# Path to directory that contains the SASL configuration (string value)
+#sasl_config_dir =
+
+# Name of configuration file (without .conf suffix) (string value)
+#sasl_config_name =
+
+# SASL realm to use if no realm present in username (string value)
+#sasl_default_realm =
+
+# Seconds to pause before attempting to re-connect. (integer value)
+# Minimum value: 1
+#connection_retry_interval = 1
+
+# Increase the connection_retry_interval by this many seconds after each
+# unsuccessful failover attempt. (integer value)
+# Minimum value: 0
+#connection_retry_backoff = 2
+
+# Maximum limit for connection_retry_interval + connection_retry_backoff
+# (integer value)
+# Minimum value: 1
+#connection_retry_interval_max = 30
+
+# Time to pause between re-connecting an AMQP 1.0 link that failed due to a
+# recoverable error. (integer value)
+# Minimum value: 1
+#link_retry_delay = 10
+
+# The maximum number of attempts to re-send a reply message which failed due to
+# a recoverable error. (integer value)
+# Minimum value: -1
+#default_reply_retry = 0
+
+# The deadline for an rpc reply message delivery. (integer value)
+# Minimum value: 5
+#default_reply_timeout = 30
+
+# The deadline for an rpc cast or call message delivery. Only used when caller
+# does not provide a timeout expiry. (integer value)
+# Minimum value: 5
+#default_send_timeout = 30
+
+# The deadline for a sent notification message delivery. Only used when caller
+# does not provide a timeout expiry. (integer value)
+# Minimum value: 5
+#default_notify_timeout = 30
+
+# The duration to schedule a purge of idle sender links. Detach link after
+# expiry. (integer value)
+# Minimum value: 1
+#default_sender_link_timeout = 600
+
+# Indicates the addressing mode used by the driver.
+# Permitted values:
+# 'legacy'   - use legacy non-routable addressing
+# 'routable' - use routable addresses
+# 'dynamic'  - use legacy addresses if the message bus does not support routing
+# otherwise use routable addressing (string value)
+#addressing_mode = dynamic
+
+# Enable virtual host support for those message buses that do not natively
+# support virtual hosting (such as qpidd). When set to true the virtual host
+# name will be added to all message bus addresses, effectively creating a
+# private 'subnet' per virtual host. Set to False if the message bus supports
+# virtual hosting using the 'hostname' field in the AMQP 1.0 Open performative
+# as the name of the virtual host. (boolean value)
+#pseudo_vhost = true
+
+# address prefix used when sending to a specific server (string value)
+#server_request_prefix = exclusive
+
+# address prefix used when broadcasting to all servers (string value)
+#broadcast_prefix = broadcast
+
+# address prefix when sending to any server in group (string value)
+#group_request_prefix = unicast
+
+# Address prefix for all generated RPC addresses (string value)
+#rpc_address_prefix = openstack.org/om/rpc
+
+# Address prefix for all generated Notification addresses (string value)
+#notify_address_prefix = openstack.org/om/notify
+
+# Appended to the address prefix when sending a fanout message. Used by the
+# message bus to identify fanout messages. (string value)
+#multicast_address = multicast
+
+# Appended to the address prefix when sending to a particular RPC/Notification
+# server. Used by the message bus to identify messages sent to a single
+# destination. (string value)
+#unicast_address = unicast
+
+# Appended to the address prefix when sending to a group of consumers. Used by
+# the message bus to identify messages that should be delivered in a round-
+# robin fashion across consumers. (string value)
+#anycast_address = anycast
+
+# Exchange name used in notification addresses.
+# Exchange name resolution precedence:
+# Target.exchange if set
+# else default_notification_exchange if set
+# else control_exchange if set
+# else 'notify' (string value)
+#default_notification_exchange = <None>
+
+# Exchange name used in RPC addresses.
+# Exchange name resolution precedence:
+# Target.exchange if set
+# else default_rpc_exchange if set
+# else control_exchange if set
+# else 'rpc' (string value)
+#default_rpc_exchange = <None>
+
+# Window size for incoming RPC Reply messages. (integer value)
+# Minimum value: 1
+#reply_link_credit = 200
+
+# Window size for incoming RPC Request messages (integer value)
+# Minimum value: 1
+#rpc_server_credit = 100
+
+# Window size for incoming Notification messages (integer value)
+# Minimum value: 1
+#notify_server_credit = 100
+
+# Send messages of this type pre-settled.
+# Pre-settled messages will not receive acknowledgement
+# from the peer. Note well: pre-settled messages may be
+# silently discarded if the delivery fails.
+# Permitted values:
+# 'rpc-call' - send RPC Calls pre-settled
+# 'rpc-reply'- send RPC Replies pre-settled
+# 'rpc-cast' - Send RPC Casts pre-settled
+# 'notify'   - Send Notifications pre-settled
+#  (multi valued)
+#pre_settled = rpc-cast
+#pre_settled = rpc-reply
+
+
+[oslo_messaging_kafka]
+
+#
+# From oslo.messaging
+#
+
+# Max fetch bytes of Kafka consumer (integer value)
+#kafka_max_fetch_bytes = 1048576
+
+# Default timeout(s) for Kafka consumers (floating point value)
+#kafka_consumer_timeout = 1.0
+
+# DEPRECATED: Pool Size for Kafka Consumers (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#pool_size = 10
+
+# DEPRECATED: The pool size limit for connections expiration policy (integer
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#conn_pool_min_size = 2
+
+# DEPRECATED: The time-to-live in sec of idle connections in the pool (integer
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Driver no longer uses connection pool.
+#conn_pool_ttl = 1200
+
+# Group id for Kafka consumer. Consumers in one group will coordinate message
+# consumption (string value)
+#consumer_group = oslo_messaging_consumer
+
+# Upper bound on the delay for KafkaProducer batching in seconds (floating
+# point value)
+#producer_batch_timeout = 0.0
+
+# Size of batch for the producer async send (integer value)
+#producer_batch_size = 16384
+
+# The compression codec for all data generated by the producer. If not set,
+# compression will not be used. Note that the allowed values of this depend on
+# the kafka version (string value)
+# Possible values:
+# none - <No description provided>
+# gzip - <No description provided>
+# snappy - <No description provided>
+# lz4 - <No description provided>
+# zstd - <No description provided>
+#compression_codec = none
+
+# Enable asynchronous consumer commits (boolean value)
+#enable_auto_commit = false
+
+# The maximum number of records returned in a poll call (integer value)
+#max_poll_records = 500
+
+# Protocol used to communicate with brokers (string value)
+# Possible values:
+# PLAINTEXT - <No description provided>
+# SASL_PLAINTEXT - <No description provided>
+# SSL - <No description provided>
+# SASL_SSL - <No description provided>
+#security_protocol = PLAINTEXT
+
+# Mechanism when security protocol is SASL (string value)
+#sasl_mechanism = PLAIN
+
+# CA certificate PEM file used to verify the server certificate (string value)
+#ssl_cafile =
+
+# Client certificate PEM file used for authentication. (string value)
+#ssl_client_cert_file =
+
+# Client key PEM file used for authentication. (string value)
+#ssl_client_key_file =
+
+# Client key password file used for authentication. (string value)
+#ssl_client_key_password =
+
+
+[oslo_messaging_notifications]
+
+#
+# From oslo.messaging
+#
+
+# The Drivers(s) to handle sending notifications. Possible values are
+# messaging, messagingv2, routing, log, test, noop (multi valued)
+# Deprecated group/name - [DEFAULT]/notification_driver
+#driver =
+
+# A URL representing the messaging driver to use for notifications. If not set,
+# we fall back to the same configuration used for RPC. (string value)
+# Deprecated group/name - [DEFAULT]/notification_transport_url
+#transport_url = <None>
+
+# AMQP topic used for OpenStack notifications. (list value)
+# Deprecated group/name - [rpc_notifier2]/topics
+# Deprecated group/name - [DEFAULT]/notification_topics
+#topics = notifications
+
+# The maximum number of attempts to re-send a notification message which failed
+# to be delivered due to a recoverable error. 0 - No retry, -1 - indefinite
+# (integer value)
+#retry = -1
+
+
+[oslo_messaging_rabbit]
+
+#
+# From oslo.messaging
+#
+
+# Use durable queues in AMQP. If rabbit_quorum_queue is enabled, queues will be
+# durable and this value will be ignored. (boolean value)
+#amqp_durable_queues = false
+
+# Auto-delete queues in AMQP. (boolean value)
+#amqp_auto_delete = false
+
+# Connect over SSL. (boolean value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_use_ssl
+#ssl = false
+
+# SSL version to use (valid only if SSL enabled). Valid values are TLSv1 and
+# SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be available on some
+# distributions. (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_version
+#ssl_version =
+
+# SSL key file (valid only if SSL enabled). (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_keyfile
+#ssl_key_file =
+
+# SSL cert file (valid only if SSL enabled). (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_certfile
+#ssl_cert_file =
+
+# SSL certification authority file (valid only if SSL enabled). (string value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
+#ssl_ca_file =
+
+# Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
+# Python support. This is available in Python 3.9 in all environments and may
+# have been backported to older Python versions on select environments. If the
+# Python executable used does not support OpenSSL FIPS mode, an exception will
+# be raised. (boolean value)
+#ssl_enforce_fips_mode = false
+
+# Run the health check heartbeat thread through a native python thread by
+# default. If this option is equal to False then the health check heartbeat
+# will inherit the execution model from the parent process. For example if the
+# parent process has monkey patched the stdlib by using eventlet/greenlet then
+# the heartbeat will be run through a green thread. This option should be set
+# to True only for the wsgi services. (boolean value)
+#heartbeat_in_pthread = false
+
+# How long to wait (in seconds) before reconnecting in response to an AMQP
+# consumer cancel notification. (floating point value)
+# Minimum value: 0.0
+# Maximum value: 4.5
+#kombu_reconnect_delay = 1.0
+
+# EXPERIMENTAL: Possible values are: gzip, bz2. If not set compression will not
+# be used. This option may not be available in future versions. (string value)
+#kombu_compression = <None>
+
+# How long to wait a missing client before abandoning to send it its replies.
+# This value should not be longer than rpc_response_timeout. (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/kombu_reconnect_timeout
+#kombu_missing_consumer_retry_timeout = 60
+
+# Determines how the next RabbitMQ node is chosen in case the one we are
+# currently connected to becomes unavailable. Takes effect only if more than
+# one RabbitMQ node is provided in config. (string value)
+# Possible values:
+# round-robin - <No description provided>
+# shuffle - <No description provided>
+#kombu_failover_strategy = round-robin
+
+# The RabbitMQ login method. (string value)
+# Possible values:
+# PLAIN - <No description provided>
+# AMQPLAIN - <No description provided>
+# EXTERNAL - <No description provided>
+# RABBIT-CR-DEMO - <No description provided>
+#rabbit_login_method = AMQPLAIN
+
+# How frequently to retry connecting with RabbitMQ. (integer value)
+#rabbit_retry_interval = 1
+
+# How long to backoff for between retries when connecting to RabbitMQ. (integer
+# value)
+#rabbit_retry_backoff = 2
+
+# Maximum interval of RabbitMQ connection retries. Default is 30 seconds.
+# (integer value)
+#rabbit_interval_max = 30
+
+# Try to use HA queues in RabbitMQ (x-ha-policy: all). If you change this
+# option, you must wipe the RabbitMQ database. In RabbitMQ 3.0, queue mirroring
+# is no longer controlled by the x-ha-policy argument when declaring a queue.
+# If you just want to make sure that all queues (except those with auto-
+# generated names) are mirrored across all nodes, run: "rabbitmqctl set_policy
+# HA '^(?!amq\.).*' '{"ha-mode": "all"}' " (boolean value)
+#rabbit_ha_queues = false
+
+# Use quorum queues in RabbitMQ (x-queue-type: quorum). The quorum queue is a
+# modern queue type for RabbitMQ implementing a durable, replicated FIFO queue
+# based on the Raft consensus algorithm. It is available as of RabbitMQ 3.8.0.
+# If set this option will conflict with the HA queues (``rabbit_ha_queues``)
+# aka mirrored queues, in other words the HA queues should be disabled, quorum
+# queues durable by default so the amqp_durable_queues opion is ignored when
+# this option enabled. (boolean value)
+#rabbit_quorum_queue = false
+
+# Each time a message is redelivered to a consumer, a counter is incremented.
+# Once the redelivery count exceeds the delivery limit the message gets dropped
+# or dead-lettered (if a DLX exchange has been configured) Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit.
+# (integer value)
+#rabbit_quorum_delivery_limit = 0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of messages in the quorum queue. Used only when rabbit_quorum_queue is
+# enabled, Default 0 which means dont set a limit. (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_length
+#rabbit_quorum_max_memory_length = 0
+
+# By default all messages are maintained in memory if a quorum queue grows in
+# length it can put memory pressure on a cluster. This option can limit the
+# number of memory bytes used by the quorum queue. Used only when
+# rabbit_quorum_queue is enabled, Default 0 which means dont set a limit.
+# (integer value)
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_bytes
+#rabbit_quorum_max_memory_bytes = 0
+
+# Positive integer representing duration in seconds for queue TTL (x-expires).
+# Queues which are unused for the duration of the TTL are automatically
+# deleted. The parameter affects only reply and fanout queues. (integer value)
+# Minimum value: 1
+#rabbit_transient_queues_ttl = 1800
+
+# Specifies the number of messages to prefetch. Setting to zero allows
+# unlimited messages. (integer value)
+#rabbit_qos_prefetch_count = 0
+
+# Number of seconds after which the Rabbit broker is considered down if
+# heartbeat's keep-alive fails (0 disables heartbeat). (integer value)
+#heartbeat_timeout_threshold = 60
+
+# How often times during the heartbeat_timeout_threshold we check the
+# heartbeat. (integer value)
+#heartbeat_rate = 2
+
+# DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag for
+# direct send. The direct send is used as reply, so the MessageUndeliverable
+# exception is raised in case the client queue does not
+# exist.MessageUndeliverable exception will be used to loop for a timeout to
+# lets a chance to sender to recover.This flag is deprecated and it will not be
+# possible to deactivate this functionality anymore (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Mandatory flag no longer deactivable.
+#direct_mandatory_flag = true
+
+# Enable x-cancel-on-ha-failover flag so that rabbitmq server will cancel and
+# notify consumerswhen queue is down (boolean value)
+#enable_cancel_on_failover = false
+
+
+[oslo_policy]
+
+#
+# From oslo.policy
+#
+
+# This option controls whether or not to enforce scope when evaluating
+# policies. If ``True``, the scope of the token used in the request is compared
+# to the ``scope_types`` of the policy being enforced. If the scopes do not
+# match, an ``InvalidScope`` exception will be raised. If ``False``, a message
+# will be logged informing operators that policies are being invoked with
+# mismatching scope. (boolean value)
+#enforce_scope = false
+
+# This option controls whether or not to use old deprecated defaults when
+# evaluating policies. If ``True``, the old deprecated defaults are not going
+# to be evaluated. This means if any existing token is allowed for old defaults
+# but is disallowed for new defaults, it will be disallowed. It is encouraged
+# to enable this flag along with the ``enforce_scope`` flag so that you can get
+# the benefits of new defaults and ``scope_type`` together. If ``False``, the
+# deprecated policy check string is logically OR'd with the new policy check
+# string, allowing for a graceful upgrade experience between releases with new
+# policies, which is the default behavior. (boolean value)
+#enforce_new_defaults = false
+
+# The relative or absolute path of a file that maps roles to permissions for a
+# given service. Relative paths must be specified in relation to the
+# configuration file setting this option. (string value)
+#policy_file = policy.json
+
+# Default rule. Enforced when a requested rule is not found. (string value)
+#policy_default_rule = default
+
+# Directories where policy configuration files are stored. They can be relative
+# to any directory in the search path defined by the config_dir option, or
+# absolute paths. The file defined by policy_file must exist for these
+# directories to be searched.  Missing or empty directories are ignored. (multi
+# valued)
+#policy_dirs = policy.d
+
+# Content Type to send and receive data for REST based policy check (string
+# value)
+# Possible values:
+# application/x-www-form-urlencoded - <No description provided>
+# application/json - <No description provided>
+#remote_content_type = application/x-www-form-urlencoded
+
+# server identity verification for REST based policy check (boolean value)
+#remote_ssl_verify_server_crt = false
+
+# Absolute path to ca cert file for REST based policy check (string value)
+#remote_ssl_ca_crt_file = <None>
+
+# Absolute path to client cert for REST based policy check (string value)
+#remote_ssl_client_crt_file = <None>
+
+# Absolute path client key file REST based policy check (string value)
+#remote_ssl_client_key_file = <None>
+
+
+[oslo_reports]
+
+#
+# From oslo.reports
+#
+
+# Path to a log directory where to create a file (string value)
+#log_dir = <None>
+
+# The path to a file to watch for changes to trigger the reports, instead of
+# signals. Setting this option disables the signal trigger for the reports. If
+# application is running as a WSGI application it is recommended to use this
+# instead of signals. (string value)
+#file_event_handler = <None>
+
+# How many seconds to wait between polls when file_event_handler is set
+# (integer value)
+#file_event_handler_interval = 1
+
+
+[placement_client]
+# Configuration options for connecting to the placement API service
+
+#
+# From watcher
+#
+
+# microversion of placement API when using placement service. (string value)
+#api_version = 1.29
+
+# Type of endpoint when using placement service. (string value)
+# Possible values:
+# internal - <No description provided>
+# public - <No description provided>
+# admin - <No description provided>
+#interface = public
+
+# Region in Identity service catalog to use for communication with the
+# OpenStack service. (string value)
+#region_name = <None>
+
+
+[watcher_applier]
+
+#
+# From watcher
+#
+
+# Number of workers for applier, default value is 1. (integer value)
+# Minimum value: 1
+#workers = 1
+
+# The topic name used for control events, this topic used for rpc call  (string
+# value)
+#conductor_topic = watcher.applier.control
+
+# The identifier used by watcher module on the message broker (string value)
+#publisher_id = watcher.applier.api
+
+# Select the engine to use to execute the workflow (string value)
+#workflow_engine = taskflow
+
+# If set True, the failed actionplan will rollback when executing. Defaule
+# value is False. (boolean value)
+#rollback_when_actionplan_failed = false
+
+
+[watcher_clients_auth]
+
+#
+# From watcher
+#
+
+# PEM encoded Certificate Authority to use when verifying HTTPs connections.
+# (string value)
+#cafile = <None>
+
+# PEM encoded client certificate cert file (string value)
+#certfile = <None>
+
+# PEM encoded client certificate key file (string value)
+#keyfile = <None>
+
+# Verify HTTPS connections. (boolean value)
+#insecure = false
+
+# Timeout value for http requests (integer value)
+#timeout = <None>
+
+# Collect per-API call timing information. (boolean value)
+#collect_timing = false
+
+# Log requests to multiple loggers. (boolean value)
+#split_loggers = false
+
+# Authentication type to load (string value)
+# Deprecated group/name - [watcher_clients_auth]/auth_plugin
+#auth_type = <None>
+
+# Config Section from which to load plugin specific options (string value)
+#auth_section = <None>
+
+
+[watcher_cluster_data_model_collectors.baremetal]
+
+#
+# From watcher
+#
+
+# The time interval (in seconds) between each synchronization of the model
+# (integer value)
+#period = 3600
+
+
+[watcher_cluster_data_model_collectors.compute]
+
+#
+# From watcher
+#
+
+# The time interval (in seconds) between each synchronization of the model
+# (integer value)
+#period = 3600
+
+
+[watcher_cluster_data_model_collectors.storage]
+
+#
+# From watcher
+#
+
+# The time interval (in seconds) between each synchronization of the model
+# (integer value)
+#period = 3600
+
+
+[watcher_datasources]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. If one of strategy
+# metric is not available in the first datasource, the next datasource will be
+# chosen. This is the default for all strategies unless a strategy has a
+# specific override. (list value)
+#datasources = gnocchi,ceilometer,monasca,grafana
+
+# How many times Watcher is trying to query again (integer value)
+# Minimum value: 1
+# Note: This option can be changed without restarting.
+#query_max_retries = 10
+
+# How many seconds Watcher should wait to do query again (integer value)
+# Minimum value: 0
+# Note: This option can be changed without restarting.
+#query_timeout = 1
+
+
+[watcher_decision_engine]
+
+#
+# From watcher
+#
+
+# The topic name used for control events, this topic used for RPC calls (string
+# value)
+#conductor_topic = watcher.decision.control
+
+# The exchange and topic names from which notification events will be listened
+# to. The exchange should be specified to get an ability to use pools. (list
+# value)
+#notification_topics = nova.versioned_notifications,watcher.watcher_notifications
+
+# The identifier used by the Watcher module on the message broker (string
+# value)
+#publisher_id = watcher.decision.api
+
+# The maximum number of threads that can be used to execute audits in parallel.
+# (integer value)
+#max_audit_workers = 2
+
+# The maximum number of threads that can be used to execute general tasks in
+# parallel. The number of general workers will not increase depending on the
+# number of audit workers! (integer value)
+#max_general_workers = 4
+
+# An expiry timespan(hours). Watcher invalidates any action plan for which its
+# creation time -whose number of hours has been offset by this value- is older
+# that the current time. (integer value)
+# Note: This option can be changed without restarting.
+#action_plan_expiry = 24
+
+# Interval (in seconds) for checking action plan expiry. (integer value)
+# Note: This option can be changed without restarting.
+#check_periodic_interval = 1800
+
+# Path to metric map yaml formatted file.  The file contains a map per
+# datasource whose keys are the metric names as recognized by watcher and the
+# value is the real name of the metric in the datasource. For example::
+#
+#   monasca:
+#     instance_cpu_usage: VM_CPU
+#   gnocchi:
+#     instance_cpu_usage: cpu_vm_util
+#
+# This file is optional. (string value)
+#metric_map_path = /etc/watcher/metric_map.yaml
+
+# Interval (in seconds) for checking newly created continuous audits. (integer
+# value)
+# Note: This option can be changed without restarting.
+#continuous_audit_interval = 10
+
+
+[watcher_planner]
+
+#
+# From watcher
+#
+
+# The selected planner used to schedule the actions (string value)
+#planner = weight
+
+
+[watcher_planners.weight]
+
+#
+# From watcher
+#
+
+# These weights are used to schedule the actions. Action Plan will be build in
+# accordance with sets of actions ordered by descending weights.Two action
+# types cannot have the same weight.  (dict value)
+#weights = change_node_power_state:9,change_nova_service_state:50,migrate:30,nop:70,resize:20,sleep:40,turn_host_to_acpi_s3_state:10,volume_migrate:60
+
+# Number of actions to be run in parallel on a per action type basis. (dict
+# value)
+#parallelization = change_node_power_state:2,change_nova_service_state:1,migrate:2,nop:1,resize:2,sleep:1,turn_host_to_acpi_s3_state:2,volume_migrate:2
+
+
+[watcher_planners.workload_stabilization]
+
+#
+# From watcher
+#
+
+# These weights are used to schedule the actions (dict value)
+#weights = change_nova_service_state:4,migrate:2,nop:5,resize:1,sleep:3,turn_host_to_acpi_s3_state:0
+
+
+[watcher_strategies.basic]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+# Check optimize metadata field in instance before migration (boolean value)
+#check_optimize_metadata = false
+
+
+[watcher_strategies.node_resource_consolidation]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+
+[watcher_strategies.noisy_neighbor]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+
+[watcher_strategies.outlet_temperature]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+
+[watcher_strategies.storage_capacity_balance]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+# exclude pools (list value)
+#ex_pools = local_vstorage
+
+
+[watcher_strategies.uniform_airflow]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+
+[watcher_strategies.vm_workload_consolidation]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+
+[watcher_strategies.workload_balance]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+
+[watcher_strategies.workload_stabilization]
+
+#
+# From watcher
+#
+
+# Datasources to use in order to query the needed metrics. This option
+# overrides the global preference. options: ['gnocchi', 'ceilometer',
+# 'monasca', 'grafana'] (list value)
+#datasources = <None>
+
+
+[watcher_workflow_engines.taskflow]
+
+#
+# From watcher
+#
+
+# Number of workers for taskflow engine to execute actions. (integer value)
+# Minimum value: 1
+#max_workers = 12
+
+# The execution rule for linked actions,the key is strategy name and value
+# ALWAYS means all actions will be executed,value ANY means if previous action
+# executes success, the next action will be ignored.None means ALWAYS. (dict
+# value)
+#action_execution_rule =

@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenStack Watcher Applier service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=watcher
+ExecStart=/usr/bin/watcher-applier  --config-file /etc/watcher/watcher.conf --log-file /var/log/watcher/applier.log
+PrivateTmp=true
+NotifyAccess=all
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+
