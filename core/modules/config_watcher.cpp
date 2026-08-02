@@ -171,6 +171,12 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/watcher";
 
         cfg["database"]["connection"] = dbconn;
+
+        // watcher reads its own writes through a galera cluster, so the connection has
+        // to wait for the write set to apply. Every service migrated to the antelope
+        // venv so far carries this; the option only exists from oslo.db 12.1.0, which
+        // is why it could not be set while watcher ran on yoga.
+        cfg["database"]["mysql_wsrep_sync_wait"] = "1";
     }
 
     return true;
