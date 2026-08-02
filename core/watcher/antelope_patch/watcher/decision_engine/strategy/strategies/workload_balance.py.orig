@@ -149,26 +149,17 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
                     try:
                         # NOTE: skip exclude instance when migrating
                         if instance.watcher_exclude:
-                            LOG.info("Instance is excluded by scope, "
+                            LOG.debug("Instance is excluded by scope, "
                                       "skipped: %s", instance.uuid)
                             continue
                         # select the first active VM to migrate
                         if (instance.state !=
                                 element.InstanceState.ACTIVE.value):
-                            LOG.info("Instance not active, skipped: %s",
+                            LOG.debug("Instance not active, skipped: %s",
                                       instance.uuid)
                             continue
-
-                        workload = workload_cache.get(instance.uuid)
-                        if workload is None:
-                            LOG.info(
-                               "No workload in cache for instance %s, "
-                               "available cache keys: %s",
-                               instance.uuid, list(workload_cache.keys())
-                            )
-                            continue
-
-                        current_delta = (delta_workload - workload)
+                        current_delta = (
+                            delta_workload - workload_cache[instance.uuid])
                         if 0 <= current_delta < min_delta:
                             min_delta = current_delta
                             instance_id = instance.uuid
@@ -193,7 +184,6 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
         # filter nodes without enough resource
         destination_hosts = []
         src_instance_workload = workload_cache[instance_to_migrate.uuid]
-
         for instance_data in hosts:
             host = instance_data['compute_node']
             workload = instance_data['workload']
@@ -202,21 +192,14 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
             if (free_res['vcpu'] >= required_cores and
                     free_res['memory'] >= required_mem and
                     free_res['disk'] >= required_disk):
-                if self._meter == 'instance_cpu_usage':
-                    metric = 'cpu'
-                    usage = src_instance_workload + workload
-                    usage_percent = usage / host.vcpus * 100
-                    limit = self.threshold / 100 * host.vcpus
-                    if usage < limit:
-                        destination_hosts.append(instance_data)
-                if self._meter == 'instance_ram_usage':
-                    metric = 'memory'
-                    usage = src_instance_workload + workload
-                    usage_percent = usage / host.memory * 100
-                    limit = self.threshold / 100 * host.memory
-                    if usage < limit:
-                        destination_hosts.append(instance_data)
-                LOG.info(f"Host {host.hostname} evaluated as destination for {instance_to_migrate.uuid}. Host usage for {metric} would be {usage_percent}. The threshold is: {self.threshold}. selected: {usage < limit}")
+                if (self._meter == 'instance_cpu_usage' and
+                    ((src_instance_workload + workload) <
+                     self.threshold / 100 * host.vcpus)):
+                    destination_hosts.append(instance_data)
+                if (self._meter == 'instance_ram_usage' and
+                    ((src_instance_workload + workload) <
+                     self.threshold / 100 * host.memory)):
+                    destination_hosts.append(instance_data)
 
         return destination_hosts
 
@@ -257,9 +240,10 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
                               instance.uuid, self._meter)
                     continue
                 if self._meter == 'instance_cpu_usage':
-                    workload_cache[instance.uuid] = (util * instance.vcpus / 100)
+                    workload_cache[instance.uuid] = (util *
+                                                     instance.vcpus / 100)
                 else:
-                    workload_cache[instance.uuid] = (util * 1024.0)
+                    workload_cache[instance.uuid] = util
                 node_workload += workload_cache[instance.uuid]
                 LOG.debug("VM (%s): %s %f", instance.uuid, self._meter,
                           util)
@@ -270,12 +254,6 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
             else:
                 node_util = node_workload / node.memory * 100
 
-            if self._meter == 'instance_cpu_usage':
-                host_metric = 'host_cpu_usage_percent'
-            else:
-                host_metric = 'host_ram_usage_percent'
-
-
             instance_data = {
                 'compute_node': node, self._meter: node_util,
                 'workload': node_workload}
@@ -284,9 +262,6 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
                 overload_hosts.append(instance_data)
             else:
                 nonoverload_hosts.append(instance_data)
-            LOG.info(f"Host usage for {node_id}: {host_metric} is "
-                      f"{node_util}. Higher than threshold {self.threshold}: "
-                      f"{node_util >= self.threshold}")
 
         avg_workload = 0
         if cluster_size != 0:
