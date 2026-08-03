@@ -16,16 +16,20 @@ ROOTFS_DNF_NOARCH += python3-heatclient
 # shadow-utils, for the heat user and group, and core/heavyfs/account/centos9
 # already carries heat statically.
 #
-# openstack-heat-ui, the Horizon dashboard plugin, is deliberately no longer
-# installed: Horizon imports it and Horizon still runs on the system python 3.9,
-# so it cannot follow heat into the 3.10 venv. Restoring the Orchestration panel
-# belongs to #609 (Upgrade Horizon from Yoga to Antelope), whose acceptance
-# criteria already cover "Ensure other panels are functioning on the dashboard".
+# openstack-heat-ui, the Horizon dashboard plugin, is replaced by the
+# heat-dashboard wheel installed further down. It was dropped when heat moved to
+# pip because horizon was still on python 3.9; #609 moved horizon into the venv, so
+# the Orchestration panels come back here.
 
 HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 
 # the release is needed twice: once to pin the wheel, once for [revision] heat_revision
 HEAT_VER := 20.0.1
+
+# https://releases.openstack.org/antelope/index.html -- last numeric 2023.1
+# revision. Horizon plugins are not in the antelope upper-constraints (that file
+# only covers libraries), so the pin has to be explicit.
+HEAT_DASHBOARD_VER := 9.0.0
 
 # install heat
 rootfs_install::
@@ -121,3 +125,16 @@ rootfs_install::
 # section names, which is what carries heat_revision into every regenerated heat.conf.
 rootfs_install::
 	$(Q)cp -f $(HEAT_CONFDIR)/heat.conf $(HEAT_CONFDIR)/heat.conf.def
+
+# install the heat web ui plugin, the openstack-heat-ui rpm's replacement.
+# Registering its panels, settings snippet and policy files is core/horizon's job:
+# every dashboard action lives there, because horizon is built last and is what runs
+# collectstatic and compress.
+rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		heat-dashboard==$(HEAT_DASHBOARD_VER)
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
