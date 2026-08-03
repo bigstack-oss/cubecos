@@ -83,6 +83,22 @@ git_server_init()
     remote_run $master_control "$HEX_SDK _git_server_init"
 }
 
+GIT_SUID_MODES=/run/git_suid_modes
+
+_git_suid_save()
+{
+    # git tracks only the exec bit; snapshot setuid/setgid modes before any checkout
+    find / -xdev \( -perm -4000 -o -perm -2000 \) -type f -printf '%m %p\n' 2>/dev/null > $GIT_SUID_MODES
+}
+
+_git_suid_restore()
+{
+    local m p
+    while read m p ; do
+        [ -f "$p" ] && cmd chmod $m "$p"
+    done < $GIT_SUID_MODES
+}
+
 _git_client_init()
 {
     $HEX_SDK cube_node_ready || return 0
@@ -100,10 +116,12 @@ _git_client_init()
     Quiet -n $GIT remote add $project ssh://root@$(shared_ip)${cube_git_dir}
     if [ -e "/.gitignore" ] ; then
         if $GIT fetch ; then
+            _git_suid_save
             Quiet -n $GIT branch --track $branch $project/$branch
             Quiet -n $GIT add -A
             Quiet -n $GIT stash
             Quiet -n $GIT pull $project $branch --rebase
+            _git_suid_restore
         else
             Error "git server (on VIP node) is not ready"
         fi
@@ -128,18 +146,12 @@ git_init()
 git_push()
 {
     local msg="${@:-n/a}"
-    local mf_suid=$(mktemp -u /mnt/cephfs/backup/${FUNCNAME[0]}.XXXX)
-    declare -A bins
 
     if git -P status | grep -q modified ; then
         cmd $HEX_SDK git_client_init
-        for bin in $(find ${PATH//:/ } -type f -perm /4000 ) ; do
-            bins[${bin}]=$(stat --printf='%a' $bin)
-        done
+        _git_suid_save
         ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "$GIT stash ; $GIT pull" ) >/dev/null
-        for bin in ${!bins[@]} ; do
-            cmd chmod ${bins[$bin]} $bin
-        done
+        _git_suid_restore
         Quiet -n $GIT -P log -3
     else
         Error "nothing is pushed"
