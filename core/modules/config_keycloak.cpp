@@ -287,19 +287,24 @@ updateKeycloak()
         nodeCount = 1;
     }
 
-    const ExecSyncResult r = ExecBashSync(
-        0,
-        false,
-        false,
-        {},
-        std::string()
-            + "/usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml "
-            + "upgrade --install " + CHART_RELEASE_NAME + " " + KEYCLOAK_CHARTS + " "
-            + "-f " + KEYCLOAK_CHART_VALUES + " "
-            + "-n " + APP_NAMESPACE + " "
-            + "--create-namespace "
-            + "--set replicas=" + std::to_string(nodeCount));
-    return (r.exitCode == 0);
+    const std::string cmd = std::string()
+        + "/usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml "
+        + "upgrade --install " + CHART_RELEASE_NAME + " " + KEYCLOAK_CHARTS + " "
+        + "-f " + KEYCLOAK_CHART_VALUES + " "
+        + "-n " + APP_NAMESPACE + " "
+        + "--create-namespace "
+        + "--set replicas=" + std::to_string(nodeCount);
+
+    // parallel control-node applies race on the same helm release; retry the
+    // transient "another operation in progress" lock
+    for (int attempt = 0; attempt < 6; attempt++) {
+        const ExecSyncResult r = ExecBashSync(0, false, false, {}, cmd);
+        if (r.exitCode == 0)
+            return true;
+        HexLogWarning("keycloak helm upgrade failed (attempt %d/6); retrying", attempt + 1);
+        sleep(15);
+    }
+    return false;
 }
 
 /**
@@ -483,89 +488,67 @@ Commit(bool modified, int dryLevel)
     bool isKeycloakUpdated = false;
     if ((s_bApplianceModified || !checkKeycloak())
         && isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
-        // update keycloak and roll out pods
+        // scale keycloak to one pod per control host + roll out
         HexLogInfo("update keycloak");
-        if (!updateKeycloak()) {
-            HexLogError("failed to update keycloak");
+        if (updateKeycloak()) {
+            HexLogInfo("updated keycloak");
+            isKeycloakUpdated = true;
 
-            // let other modules to commit
-            return true;
-        }
-        HexLogInfo("updated keycloak");
-        isKeycloakUpdated = true;
-
-        // check the roll out status of pods
-        if (!K3sWatchRollOut(APP, APP_NAMESPACE, "3m")) {
-            HexLogError("failed to see all pods rolled out");
+            // check the roll out status of pods
+            if (!K3sWatchRollOut(APP, APP_NAMESPACE, "3m")) {
+                HexLogError("failed to see all pods rolled out");
+            } else {
+                HexLogInfo("keycloak pods were all rolled out");
+            }
         } else {
-            HexLogInfo("keycloak pods were all rolled out");
+            // a lost scale-up race is self-healing (the winner sets replicas);
+            // don't early-return, or we'd skip the metadata gate below
+            HexLogError("failed to update keycloak (scale race?); continuing to saml metadata gate");
         }
     }
 
-    if (isKeycloakUpdated) {
-        // check if the Keycloak endpoint is reachable; an unreachable endpoint is
-        // one way the saml metadata cannot be downloaded, so do not bail out --
-        // defer the cube-groups terraform and fall through to the gate below
-        std::string sharedId = G(SHARED_ID);
-        bool isCubeGroupsApplied = false;
-        if (!checkKeycloakEndpoint(sharedId)) {
-            HexLogError("keycloak endpoint is not ready");
-        } else {
-            // create default cube groups
-            if (!ExecTerraform(
-                    "apply",
-                    "keycloak",
-                    { "cube_controller=" + sharedId },
-                    { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
-                HexLogError("failed to create default cube groups via terraform");
-            }
-            isCubeGroupsApplied = true;
+    // always gate on the SAML metadata file (SSO reads it): the commit must not
+    // report success without it. Needs only keycloak reachable, not this node's
+    // own upgrade. Retry until present, or the operator releases the gate.
+    std::string sharedId = G(SHARED_ID);
+    time_t lastNotify = time(NULL);
+    while (!hasKeycloakSamlMetadataFile()) {
+        if (downloadKeycloakSamlMetadata(sharedId))
+            break;
+        HexLogError("failed to download the saml metadata from keycloak");
+
+        if (access(SAML_METADATA_GATE_RELEASE, F_OK) == 0) {
+            unlink(SAML_METADATA_GATE_RELEASE);
+            HexLogWarning("saml metadata gate released by operator via %s;"
+                          " proceeding without %s (SSO will be degraded)",
+                          SAML_METADATA_GATE_RELEASE, KEYCLOAK_SAML_METADATA_FILE);
+            break;
         }
 
-        // pull down the saml metadata and save it to /etc/keycloak/saml-metadata.xml.
-        // keystone_idp, rancher and the ceph dashboard all configure SSO from this
-        // file, so never proceed without it: retry forever and notify the console
-        // every SAML_METADATA_STUCK_NOTIFY_SECS while stuck. An operator can
-        // release the gate by touching SAML_METADATA_GATE_RELEASE (one-shot).
-        time_t lastNotify = time(NULL);
-        while (!hasKeycloakSamlMetadataFile()) {
-            if (downloadKeycloakSamlMetadata(sharedId))
-                break;
-            HexLogError("failed to download the saml metadata from keycloak");
-
-            if (access(SAML_METADATA_GATE_RELEASE, F_OK) == 0) {
-                unlink(SAML_METADATA_GATE_RELEASE);
-                HexLogWarning("saml metadata gate released by operator via %s;"
-                              " proceeding without %s (SSO will be degraded)",
-                              SAML_METADATA_GATE_RELEASE, KEYCLOAK_SAML_METADATA_FILE);
-                break;
-            }
-
-            if (time(NULL) - lastNotify >= SAML_METADATA_STUCK_NOTIFY_SECS) {
-                HexLogWarning("keycloak saml metadata download is stuck; notified the console");
-                HexSystemF(0,
-                    "echo 'CUBE: setup is waiting for the keycloak SAML metadata"
-                    " (https://%s:%d/auth/realms/master/protocol/saml/descriptor)"
-                    " and cannot proceed until it is downloaded."
-                    " Check keycloak and k3s."
-                    " To skip and continue with degraded SSO, run: touch %s' > /dev/console",
-                    sharedId.c_str(), K3S_INGRESS_HTTPS_PORT, SAML_METADATA_GATE_RELEASE);
-                lastNotify = time(NULL);
-            }
-
-            sleep(10);
+        if (time(NULL) - lastNotify >= SAML_METADATA_STUCK_NOTIFY_SECS) {
+            HexLogWarning("keycloak saml metadata download is stuck; notified the console");
+            HexSystemF(0,
+                "echo 'CUBE: setup is waiting for the keycloak SAML metadata"
+                " (https://%s:%d/auth/realms/master/protocol/saml/descriptor)"
+                " and cannot proceed until it is downloaded."
+                " Check keycloak and k3s."
+                " To skip and continue with degraded SSO, run: touch %s' > /dev/console",
+                sharedId.c_str(), K3S_INGRESS_HTTPS_PORT, SAML_METADATA_GATE_RELEASE);
+            lastNotify = time(NULL);
         }
 
-        // create default cube groups, deferred from above when the endpoint check
-        // failed; a successful metadata download implies the endpoint answers now
-        if (!isCubeGroupsApplied) {
-            if (!ExecTerraform(
-                    "apply",
-                    "keycloak",
-                    { "cube_controller=" + sharedId },
-                    { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
-                HexLogError("failed to create default cube groups via terraform");
-            }
+        sleep(10);
+    }
+
+    // create default cube groups (owned by the node that scaled keycloak),
+    // gated on the endpoint being reachable. Idempotent.
+    if (isKeycloakUpdated && checkKeycloakEndpoint(sharedId)) {
+        if (!ExecTerraform(
+                "apply",
+                "keycloak",
+                { "cube_controller=" + sharedId },
+                { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
+            HexLogError("failed to create default cube groups via terraform");
         }
     }
 
