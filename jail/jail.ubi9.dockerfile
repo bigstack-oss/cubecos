@@ -89,7 +89,7 @@ RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
 ######## tier3
 FROM tier2_weak_dep_${WEAK_DEP} AS tier3
 # kernel packages
-ARG KER_VER="6.12.93"
+ARG KER_VER="6.12.100"
 ARG KER_REL="1.el9"
 ARG KER_ARC="x86_64"
 ARG HEX_KERNEL="kernel-${KER_VER}-${KER_REL} kernel-core-${KER_VER}-${KER_REL} kernel-modules-${KER_VER}-${KER_REL} kernel-devel-${KER_VER}-${KER_REL}"
