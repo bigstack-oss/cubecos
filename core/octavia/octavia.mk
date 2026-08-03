@@ -29,6 +29,21 @@ ROOTFS_DNF_NOARCH += python3-octaviaclient
 OCTAVIA_CONF_DIR := /etc/octavia
 OCTAVIA_CONFDIR := $(ROOTDIR)$(OCTAVIA_CONF_DIR)
 
+# TODO(#609): openstack-octavia-ui is temporarily commented out rather than replaced
+# by the octavia-dashboard wheel. Every other dashboard plugin moved into the python
+# 3.10 venv when horizon did, but the octavia *service* is still being upgraded to
+# antelope by another developer on a separate branch. Installing octavia-dashboard
+# 11.0.1 now would put 2023.1 Load Balancer panels in front of a yoga octavia api,
+# and leaving the yoga rpm in place would put a python 3.9 plugin in front of a venv
+# horizon, which cannot import it. So the panels are off for the moment.
+#
+# To restore, once that branch merges:
+#   1. add OCTAVIA_DASHBOARD_VER := 11.0.1 and pip install octavia-dashboard into the
+#      venv here, the way manila.mk installs manila-ui;
+#   2. uncomment the octavia_dashboard enabled/*.py copy in core/horizon/horizon.mk,
+#      which is where every dashboard action lives.
+# ROOTFS_DNF_NOARCH += openstack-octavia-ui
+
 # install octavia
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
