@@ -55,22 +55,16 @@ rootfs_install::
 
 # install the watcher web ui plugin
 #
-# The horizon plugin has to live in the system python as well: horizon runs under
-# python3.9, so the enabled/*.py files below resolve watcher_dashboard there. A
-# venv-only install makes ADD_INSTALLED_APPS fail to import and takes down the whole
-# dashboard, not just the optimization panels. Remove once horizon itself moves into
-# the venv.
+# venv-only since #609: horizon runs in the python 3.10 venv now, so that is where
+# the panels registered by core/horizon/horizon.mk resolve watcher_dashboard. The
+# dashboard and the client both come from the clone's requirements.txt under the
+# antelope constraint, which resolves python-watcherclient to 4.1.0.
 #
-# The dashboard therefore goes into both interpreters, and so does the client. In
-# the venv both come from the clone's requirements.txt under the antelope
-# constraint, which resolves python-watcherclient to 4.1.0. In the system python the
-# dashboard is installed with --no-deps, so yoga's horizon dependency set is left
-# untouched, and python-watcherclient is then installed explicitly at the same 4.1.0
-# -- it owns the "optimize" osc plugin entry point that /usr/bin/openstack, itself
-# still `#!/usr/bin/python3`, resolves, and hex_sdk's health_watcher_check() drives
-# `openstack optimize service list` through it. Until now it arrived in 3.9 only as
-# a transitive requirement of the dashboard, so dropping ROOTFS_PIP_DL_FROM would
-# otherwise have taken it away.
+# python-watcherclient is *also* installed into the system python 3.9, and that one
+# stays: it owns the "optimize" osc plugin entry point that /usr/bin/openstack,
+# itself still `#!/usr/bin/python3`, resolves, and hex_sdk's health_watcher_check()
+# drives `openstack optimize service list` through it. It used to arrive in 3.9 as a
+# transitive requirement of the dashboard, which no longer installs there.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -80,18 +74,10 @@ rootfs_install::
 		-r /tmp/watcher/watcher-dashboard/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/watcher/watcher-dashboard && \
 		/opt/openstack-antelope/bin/python setup.py install"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/watcher/watcher-dashboard && \
-		/usr/bin/python3 -m pip install --no-deps ."
 	$(Q)chroot $(ROOTDIR) /usr/bin/python3 -m pip install --no-deps \
 		python-watcherclient==$(WATCHER_CLIENT_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-
-rootfs_install::
-	$(Q)cp -f $(ROOTDIR)/tmp/watcher/watcher-dashboard/watcher_dashboard/local/enabled/_310*.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
-	$(Q)# horizon.mk creates this directory, but horizon is installed after watcher now
-	$(Q)mkdir -p $(ROOTDIR)/$(HORIZON_DIR)/conf
-	$(Q)cp -f $(ROOTDIR)/tmp/watcher/watcher-dashboard/watcher_dashboard/conf/watcher_policy.json $(ROOTDIR)/$(HORIZON_DIR)/conf/
 
 # install system directories and files
 #
