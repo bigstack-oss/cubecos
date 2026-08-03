@@ -1,9 +1,12 @@
 # Cube SDK
 # keystone installation
 
-# mod_wsgi is for other services still running with Python 3.9
+# python3-mod_wsgi is gone: horizon was the last in-process wsgi application, and
+# #609 moved it behind a gunicorn socket like keystone, barbican, placement and
+# monasca-api already were. Nothing under /etc/httpd/conf.d carries a WSGI
+# directive any more, so httpd starts without the module.
 # mod_ssl and mod_auth_mellon for the SAML2 integration with Keycloak as IDP
-ROOTFS_DNF += httpd python3-mod_wsgi mod_ssl mod_auth_mellon openldap-devel
+ROOTFS_DNF += httpd mod_ssl mod_auth_mellon openldap-devel
 
 KEYSTONE_CONF_DIR := /etc/keystone
 
