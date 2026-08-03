@@ -70,6 +70,7 @@ static const char DBPASS[] = "hhyCDG3IdNmcQaJo";
 CONFIG_GLOBAL_STR_REF(CTRL_IP);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_GLOBAL_STR_REF(EXTERNAL);
+CONFIG_GLOBAL_BOOL_REF(IS_MASTER);
 
 // private tunings
 CONFIG_TUNING_BOOL(CINDER_ENABLED, "cinder.enabled", TUNING_UNPUB, "Set to true to enable cinder.", true);
@@ -779,14 +780,16 @@ SetServiceEndpoints(
  * Start Cinder services.
  */
 static void
-StartCinderService(const bool enabled, const bool isHa, const bool isBootstrap)
+StartCinderService(const bool enabled, const bool isHa, const bool isBootstrap, const bool isMaster)
 {
     SystemdCommitService(enabled, API_NAME); // cinder-api
     SystemdCommitService(enabled, SCHL_NAME); // cinder-scheduler
     SystemdCommitService(enabled, BAK_NAME); // cinder-backup
     if (!isHa) {
         SystemdCommitService(enabled, VOL_NAME); // cinder-volume
-    } else if (!isBootstrap) {
+    } else if (!isBootstrap && isMaster) {
+        // cinder-volume is a pacemaker singleton; restart it master-only so
+        // concurrent peers don't race the CIB target-role.
         HexUtilSystemF(0, 0, "pcs resource restart cinder-volume");
     }
 }
@@ -919,7 +922,7 @@ Commit(bool modified, int dryLevel)
     }
 
     // start services
-    StartCinderService(s_enabled, s_ha, IsBootstrap());
+    StartCinderService(s_enabled, s_ha, IsBootstrap(), G(IS_MASTER));
     // wait for services to be up
     std::stringstream enabledHostLine;
     enabledHostLine << BUILTIN_STORAGE_HOST << "@" << BUILTIN_STORAGE_BACKEND;
@@ -961,7 +964,7 @@ RestartMain(int argc, char* argv[])
     if (!IsControl(s_eCubeRole)) {
         return EXIT_SUCCESS;
     }
-    StartCinderService(s_enabled, s_ha, IsBootstrap());
+    StartCinderService(s_enabled, s_ha, IsBootstrap(), G(IS_MASTER));
 
     return EXIT_SUCCESS;
 }
