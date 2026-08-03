@@ -1493,10 +1493,11 @@ Commit(bool modified, int dryLevel)
             if (HexParseIP(masterIp.c_str(), AF_INET, &v4addr))
                 break;
             else {
-                HexLogWarning("invalid bootstrap ip address, try again");
-                sleep(1);
+                // wait out the master's mon bootstrap (~10 min) instead of failing
+                HexLogWarning("ceph bootstrap mon ip not ready from %s (retry %d), waiting for master's mon", peer.c_str(), retry);
+                sleep(5);
             }
-        } while (retry++ < 10);
+        } while (retry++ < 120);
 
         if (!HexParseIP(masterIp.c_str(), AF_INET, &v4addr)) {
             HexLogError("failed to get ceph monintor bootstrap ip");
