@@ -12,12 +12,18 @@ MARIADB_URL := https://archive.mariadb.org/yum/10.6/rocky9-amd64/rpms
 
 # Official MariaDB package list
 # Note: we dropped errmsg and server-utils as they are now bundled
+# MariaDB-devel carries mysql.h and mariadb_config. core/horizon/horizon.mk builds
+# the mysqlclient wheel from source -- upstream publishes wheels for windows only --
+# and django.db.backends.mysql needs it for horizon's session store. It has to come
+# from this MariaDB.org build rather than appstream's mariadb-connector-c-devel,
+# because MariaDB-shared obsoletes mariadb-connector-c, which that package requires.
 MARIADB_LOCKED_RPMS := MariaDB-client-$(MARIADB_VER) \
                        MariaDB-server-$(MARIADB_VER) \
                        MariaDB-common-$(MARIADB_VER) \
                        MariaDB-shared-$(MARIADB_VER) \
                        MariaDB-backup-$(MARIADB_VER) \
-                       MariaDB-gssapi-server-$(MARIADB_VER)
+                       MariaDB-gssapi-server-$(MARIADB_VER) \
+                       MariaDB-devel-$(MARIADB_VER)
 
 # Galera library is versioned differently than the database engine
 GALERA_RPM := galera-4-$(GALERA_VER)
@@ -31,7 +37,8 @@ $(foreach mariadb_rpm,$(MARIADB_LOCKED_RPMS),$(eval ROOTFS_DNF_DL_FROM += $(MARI
 # Map URL for Galera package
 ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(GALERA_RPM).x86_64.rpm
 
-ROOTFS_DNF += rsync
+# zlib-devel pairs with MariaDB-devel above: mysqlclient links against libz.
+ROOTFS_DNF += rsync zlib-devel
 ROOTFS_DNF_NOARCH += python3-PyMySQL
 
 # config_mysql.cpp points log_error at /var/log/mariadb/mysql_error.log, but nothing
