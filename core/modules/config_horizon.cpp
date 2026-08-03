@@ -10,12 +10,18 @@
 #include <hex/dryrun.h>
 
 #include <cluster.hpp>
+#include <cube/systemd_util.h>
 
 #include "mysql_util.h"
 #include "include/role_cubesys.h"
 
 static const char USER[] = "horizon";
 static const char DBPASS[] = "ZdDtndK8NmBklLyg";
+
+// The dashboard, gunicorn behind the httpd reverse proxy. Horizon used to run
+// in-process under mod_wsgi, so httpd starting was all it took; it lives in the
+// python 3.10 venv now and has a unit of its own to bring up.
+static const char NAME[] = "openstack-dashboard";
 
 static const char DJANGO_CONF_IN[] = "/etc/openstack-dashboard/local_settings.in";
 static const char DJANGO_CONF[] = "/etc/openstack-dashboard/local_settings";
@@ -77,7 +83,9 @@ SetupService()
 
     HexLogInfo("Setting up horizon");
 
-    HexUtilSystemF(0, 0, "/usr/bin/python3 /usr/share/openstack-dashboard/manage.py migrate --noinput 2>/dev/null");
+    // horizon lives in the python 3.10 venv now; /usr/bin/python3 (3.9) can no
+    // longer import openstack_dashboard or any of its plugins.
+    HexUtilSystemF(0, 0, "/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py migrate --noinput 2>/dev/null");
 
     return true;
 }
@@ -183,6 +191,13 @@ Commit(bool modified, int dryLevel)
 
     if (!s_bSetup)
         SetupService();
+
+    // openstack-dashboard.service reruns collectstatic and compress as ExecStartPre,
+    // so this has to happen after WriteDjangoConf() above: WEBROOT and STATIC_URL are
+    // baked into the compressed output. config_apache2 requires this module, which is
+    // what keeps httpd starting after the socket exists.
+    bool enabled = IsControl(s_eCubeRole);
+    SystemdCommitService(enabled, NAME, true);
 
     return true;
 }
