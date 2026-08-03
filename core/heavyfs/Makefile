@@ -15,7 +15,12 @@ OSP_LOCAL_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages/
 OSP_PATCHDIR := $(SRCDIR)/$(OPENSTACK_RELEASE)_patch
 
 HORIZON_APP_DIR := /usr/share/openstack-dashboard
-HORIZON_DIR := $(HORIZON_APP_DIR)/openstack_dashboard
+# horizon moved into the python 3.10 venv in #609. $(HORIZON_APP_DIR) still holds
+# manage.py, the collected static tree and an openstack_dashboard symlink for
+# compatibility, but HORIZON_DIR has to name the real package directory: that symlink
+# points at an absolute path inside the image, so a plain cp from the build host would
+# follow it out to the *host* root instead of into $(ROOTDIR).
+HORIZON_DIR := $(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/openstack_dashboard
 HORIZON_ETCDIR := /etc/openstack-dashboard
 HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
 

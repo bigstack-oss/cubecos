@@ -14,7 +14,7 @@
 
 import os
 
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from openstack_dashboard.settings import HORIZON_CONFIG
 
@@ -23,10 +23,6 @@ import warnings
 warnings.filterwarnings(action="ignore", category=DeprecationWarning)
 warnings.filterwarnings(action="ignore", category=UserWarning)
 warnings.filterwarnings(action="ignore", category=FutureWarning)
-
-from django.utils.deprecation import RemovedInDjango40Warning
-
-warnings.filterwarnings(action="ignore", category=RemovedInDjango40Warning)
 
 DEBUG = False
 
@@ -39,7 +35,12 @@ DEBUG = False
 # with `python manage.py compress`
 # See https://django-compressor.readthedocs.io/en/latest/usage/#offline-compression
 # for more information
-#COMPRESS_OFFLINE = not DEBUG
+#
+# horizon.mk runs `manage.py compress --force` at build time, so the offline
+# manifest is always present and nothing should ever be compressed per-request.
+# The openstack-dashboard rpm used to force this in settings.py; the pypi wheel
+# does not, so it has to be stated here.
+COMPRESS_OFFLINE = True
 
 # If horizon is running in production (DEBUG is False), set this
 # with the list of host/domain names that the application can serve.
@@ -94,6 +95,11 @@ OPENSTACK_ENABLE_PASSWORD_RETRIEVE = True
 
 LOCAL_PATH = '/tmp'
 
+# Horizon derives STATIC_ROOT from the package location, which is now inside the
+# python 3.10 venv. httpd serves /horizon/static straight off the filesystem, so
+# pin the collectstatic destination to the path openstack-dashboard.conf aliases.
+STATIC_ROOT = '/usr/share/openstack-dashboard/static'
+
 # Set custom secret key:
 # You can either set it to a specific value or you can let horizon generate a
 # default secret key that is unique on this machine, e.i. regardless of the
@@ -135,14 +141,14 @@ DATABASES = {
 
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
         'LOCATION': '@CACHE_SERVERS@',
     },
 }
 
 #CACHES = {
 #    'default': {
-#        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+#        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
 #        'LOCATION': '127.0.0.1:11211',
 #    },
 #}
