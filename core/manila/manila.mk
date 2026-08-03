@@ -1,15 +1,16 @@
 # Cube SDK
 # manila installation
 
-# openstack-manila-ui and python3-manilaclient stay yoga rpms under the *system*
-# python 3.9, and only those two. Horizon runs there and imports manila_ui, so the
-# Shares panels cannot follow the manila service into the 3.10 venv; manila_ui in
-# turn imports manilaclient, which also owns /usr/bin/manila -- hex_sdk calls it in
-# health_manila_check(), os_manila_init() and migrate_manila_db_post() -- and the
-# "share" osc plugin entry point that /usr/bin/openstack, itself still
-# `#!/usr/bin/python3`, resolves. Both drop out once horizon moves into the venv,
-# which is #609. A yoga 3.3.2 client against the 16.3.0 api is fine: it negotiates
-# its own microversion and every call above predates yoga.
+# python3-manilaclient stays a yoga rpm under the *system* python 3.9. It owns
+# /usr/bin/manila -- hex_sdk calls it in health_manila_check(), os_manila_init()
+# and migrate_manila_db_post() -- and the "share" osc plugin entry point that
+# /usr/bin/openstack, itself still `#!/usr/bin/python3`, resolves. A yoga 3.3.2
+# client against the 16.3.0 api is fine: it negotiates its own microversion and
+# every call above predates yoga.
+#
+# openstack-manila-ui is replaced by the manila-ui wheel installed further down.
+# #609 moved horizon into the 3.10 venv, so the Shares panels can follow the manila
+# service in there.
 #
 # openstack-manila and openstack-manila-share are what the pip install below
 # replaces. Non-python Requires of those two that are deliberately not restated:
@@ -22,7 +23,7 @@
 #                 rewrites it on every Commit(), and the generic driver's
 #                 CIFSHelper runs its `net conf` calls through _ssh_exec() inside
 #                 the service instance, never on the host.
-ROOTFS_DNF_NOARCH += openstack-manila-ui python3-manilaclient
+ROOTFS_DNF_NOARCH += python3-manilaclient
 
 # https://releases.openstack.org/antelope/index.html#antelope-manila
 MANILA_VER := 16.3.0
@@ -36,7 +37,10 @@ MANILA_RUN_DIR := /var/run/manila
 MANILA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python$(NEXT_PYTHON_VER)/site-packages/manila
 MANILA_PATCHDIR := $(COREDIR)/manila/$(NEXT_OPENSTACK_RELEASE)_patch
 
-OPENSTACK_DASHBOARD := $(ROOTDIR)/usr/share/openstack-dashboard/openstack_dashboard
+# https://releases.openstack.org/antelope/index.html -- last numeric 2023.1
+# revision. Horizon plugins are not in the antelope upper-constraints (that file
+# only covers libraries), so the pin has to be explicit.
+MANILA_UI_VER := 9.0.1
 
 # install manila inside the python 3.10 virtual environment
 rootfs_install::
@@ -59,6 +63,20 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-share /usr/bin/manila-share
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-status /usr/bin/manila-status
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-wsgi /usr/bin/manila-wsgi
+
+# install the manila web ui plugin, the openstack-manila-ui rpm's replacement.
+# Registering its panels and policy files is core/horizon's job, where every
+# dashboard action lives -- including the copy of
+# core/manila/local/local_settings.d/_90_manila_shares.py, which overrides the
+# snippet manila_ui ships under the same name.
+rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		manila-ui==$(MANILA_UI_VER)
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 rootfs_install::
 	$(Q)[ -d $(MANILA_PATCHDIR) ] && cp -rf $(MANILA_PATCHDIR)/* $(MANILA_SRCDIR)/ || /bin/true
@@ -133,4 +151,3 @@ rootfs_install::
 	$(Q)# empty file is what keeps the two from fighting; feeding it the antelope
 	$(Q)# sample would only add [oslo_reports].
 	$(Q)touch $(ROOTDIR)$(MANILA_CONF_DIR)/manila.conf.def
-	$(Q)cp -f $(COREDIR)/manila/local/local_settings.d/_90_manila_shares.py $(OPENSTACK_DASHBOARD)/local/local_settings.d/
