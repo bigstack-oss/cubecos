@@ -7,17 +7,14 @@ MASAKARI_APP_DIR := /var/lib/masakari
 MASAKARI_LOG_DIR := /var/log/masakari
 MASAKARI_RUN_DIR := /var/run/masakari
 
-# masakari and masakarimonitors are patched inside the antelope venv, but
-# masakaridashboard is patched in the system python because horizon runs there.
-# The python 3.9 masakari copy is deliberately left unpatched: it exists only so
-# horizon's dump_default_policies can resolve the "masakari" oslo.policy.policies
-# entry point, and no service runs out of it. See the install rule below.
-MASAKARI_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/masakari
-MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch/masakari
-MASAKARI_MONITORS_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/masakarimonitors
-MASAKARI_MONITORS_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch/masakarimonitors
-MASAKARI_DASHBOARD_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages/masakaridashboard
-MASAKARI_DASHBOARD_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch/masakaridashboard
+# masakari, masakarimonitors and masakaridashboard are all patched inside the
+# antelope venv now: #609 moved horizon there, so the dashboard no longer has a
+# python 3.9 copy and the per-tree patch pairs collapse back to one directory.
+# The dashboard patch matters -- upstream sets default_panel = 'default', a panel
+# whose urls.py has no index, so an unpatched masakaridashboard makes the sidebar
+# raise NoReverseMatch and every page 500s.
+MASAKARI_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
+MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch
 
 # prepare the build directory
 rootfs_install::
@@ -31,11 +28,9 @@ rootfs_install::
 
 # masakari-api and masakari-engine
 MASAKARI_REPO_URL := https://github.com/openstack/masakari.git
-# FIXME: drop the installation in python 3.9 after wrapping up the whole upgrade of openstack.
-# masakari owns the "masakari" oslo.policy.policies entry point, and horizon's
-# dump_default_policies below runs under python 3.9. Without this the namespace
-# is not found, that command exits 1 and the build fails.
-ROOTFS_PIP_DL_FROM += $(MASAKARI_REPO_URL)
+# The python 3.9 copy is gone. It only existed so horizon's dump_default_policies
+# could resolve the "masakari" oslo.policy.policies entry point; that command runs
+# under the venv python now (#609), where the venv's own masakari provides it.
 
 # install masakari-api and masakari-engine inside the python 3.10 virtual environment
 rootfs_install::
@@ -111,8 +106,6 @@ rootfs_install::
 
 # masakari web ui plugin
 MASAKARI_DASHBOARD_REPO_URL := https://github.com/openstack/masakari-dashboard.git
-# FIXME: drop the installation in python 3.9 after wrapping up the whole upgrade of openstack
-ROOTFS_PIP_DL_FROM += $(MASAKARI_DASHBOARD_REPO_URL)
 
 # install masakari web ui plugin inside the python 3.10 virtual environment
 rootfs_install::
@@ -127,39 +120,17 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
-# FIXME: need to update the Horizon panel path after upgrading Horizon
-# rootfs_install::
-# 	$(Q)cp -f $(ROOTDIR)/tmp/masakari/masakari-dashboard/masakaridashboard/local/enabled/_50_masakaridashboard.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
-# 	$(Q)cp -f $(ROOTDIR)/tmp/masakari/masakari-dashboard/masakaridashboard/local/local_settings.d/_50_masakari.py $(ROOTDIR)/$(HORIZON_DIR)/local/local_settings.d/
-# 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py dump_default_policies --namespace masakari --output-file $(HORIZON_POLICY_DIR)/masakari.yaml 2>&1 > /dev/null
-
-rootfs_install::
-	$(Q)cp -f $(PIPS_DIR)/masakari-dashboard.git/masakaridashboard/local/enabled/_50_masakaridashboard.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
-	$(Q)cp -f $(PIPS_DIR)/masakari-dashboard.git/masakaridashboard/local/local_settings.d/_50_masakari.py $(ROOTDIR)/$(HORIZON_DIR)/local/local_settings.d/
-	$(Q)chroot $(ROOTDIR) python3 /usr/share/openstack-dashboard/manage.py dump_default_policies --namespace masakari --output-file $(HORIZON_POLICY_DIR)/masakari.yaml 2>&1 > /dev/null
-
 # Apply the reviewable unified diffs to the pip-installed masakari sources.
 # Each patch sits at <PATCHDIR>/<rel>.py.patch and targets <SRCDIR>/<rel>.py;
 # a <rel>.py.orig alongside it is the pristine upstream file, kept only for
 # review. --forward makes re-runs idempotent; a failed hunk aborts the build
 # (so upstream drift is caught at build time, not shipped silently).
-# One loop, one <patchdir>:<srcdir> pair per source tree, because the three
-# trees do not share an interpreter yet.
-MASAKARI_PATCH_PAIRS := \
-	$(MASAKARI_PATCHDIR):$(MASAKARI_SRCDIR) \
-	$(MASAKARI_MONITORS_PATCHDIR):$(MASAKARI_MONITORS_SRCDIR) \
-	$(MASAKARI_DASHBOARD_PATCHDIR):$(MASAKARI_DASHBOARD_SRCDIR)
-
 rootfs_install::
-	$(Q)set -e; for pair in $(MASAKARI_PATCH_PAIRS); do \
-		patchdir=$${pair%%:*}; srcdir=$${pair#*:}; \
-		[ -d "$$patchdir" ] || continue; \
-		for p in $$(find "$$patchdir" -name '*.py.patch' | sort); do \
-			rel=$${p#$$patchdir/}; tgt=$$srcdir/$${rel%.patch}; \
-			echo "  PATCH $${tgt#$(ROOTDIR)}"; \
-			patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
-				|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
-		done; \
+	$(Q)set -e; for p in $$(find $(MASAKARI_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(MASAKARI_PATCHDIR)/}; tgt=$(MASAKARI_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
 	done
 
 # clean up the build directory
