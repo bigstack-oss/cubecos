@@ -703,6 +703,8 @@ ReinitMain(int argc, char* argv[])
     if (G(IS_MASTER)) {
         std::string cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
         HexUtilSystemF(0, 0, HEX_SDK " os_octavia_init %s", cidr.c_str());
+        // cluster_start is master-only; drive per-node octavia init on the peers
+        HexUtilSystemF(0, 0, HEX_SDK " os_octavia_init_peers");
     }
     if (IsCompute(s_eCubeRole)) {
         std::string sharedId = G(SHARED_ID);

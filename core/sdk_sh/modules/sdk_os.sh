@@ -1555,6 +1555,19 @@ os_octavia_init()
     fi
 }
 
+# Master drives reinit_octavia on each other first-three-compute node so the
+# peers create their health-mgr port + o-hm0 (cluster_start is master-only; a
+# non-master reinit skips the master-only network setup). Idempotent.
+os_octavia_init_peers()
+{
+    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+        [ "$node" = "$(hostname)" ] && continue
+        if remote_run $node hex_sdk is_first_three_compute_node ; then
+            Quiet -n remote_run $node hex_config reinit_octavia
+        fi
+    done
+}
+
 os_octavia_node_init()
 {
     if [ ! -f /run/cube_commit_done  ] ; then
