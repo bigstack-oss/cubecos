@@ -4,6 +4,11 @@
 IRONIC_CONF_DIR := /etc/ironic
 IRONIC_INSP_CONF_DIR := /etc/ironic-inspector
 
+# https://releases.openstack.org/antelope/index.html -- last numeric 2023.1
+# revision. Horizon plugins are not in the antelope upper-constraints (that file
+# only covers libraries), so the pin has to be explicit.
+IRONIC_UI_VER := 6.1.0
+
 # System requirements formerly pulled in by the openstack-ironic RPMs.
 # ipmitool backs enabled_hardware_types=ipmi / enabled_management_interfaces=ipmitool
 # (RDO only listed it as a weak dependency, so pip gives us nothing here);
@@ -12,7 +17,9 @@ IRONIC_INSP_CONF_DIR := /etc/ironic-inspector
 # other components' RPM sets, which is not something ironic should rely on.
 #
 # pykickstart, the remaining Requires of RDO's openstack-ironic-conductor, is left
-# out for the same reason python3-dracclient and python3-scciclient are: it is only
+# out for the same reason python3-dracclient and python3-scciclient are. (Note that
+# openstack-ironic-ui, dropped alongside those two, *is* back -- see the ironic-ui
+# install further down.) It is only
 # reached through the anaconda deploy interface, and config_ironic.cpp pins
 # enabled_deploy_interfaces to "direct" and rewrites it on every Commit(). ironic
 # only names it in an error string, so both ironic.common.pxe_utils and
@@ -52,6 +59,21 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
 	$(Q)# provided by networking-baremetal, installed with neutron
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
+
+# install the ironic web ui plugin
+#
+# openstack-ironic-ui was dropped when ironic moved to pip, because horizon was still
+# on python 3.9 and could not import a package from the venv (#609 deferred it).
+# horizon is in the venv now, so the Bare Metal Provisioning panel comes back.
+# Registering the panel is core/horizon's job, where every dashboard action lives.
+rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		ironic-ui==$(IRONIC_UI_VER)
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 # prepare the build directory
 rootfs_install::
