@@ -276,7 +276,7 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/vpnaas.filters ./usr/share/neutron/rootwrap/
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/neutron-ovn-vpn-agent.service ./lib/systemd/system
 
-# for neutron-vpnaas-dashboard
-# rootfs_install::
-# 	$(Q)# FIXME: need to update the Horizon panel path after upgrading Horizon
-# 	$(Q)cp -f $(PIPS_DIR)/neutron-vpnaas-dashboard.git/neutron_vpnaas_dashboard/enabled/_7100*.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
+# The neutron-vpnaas-dashboard VPN panel is registered by core/horizon/horizon.mk,
+# where every dashboard action lives. It was never registered before #609: horizon ran
+# under python 3.9 while the plugin was installed venv-only, so ADD_INSTALLED_APPS
+# would have failed to import and taken the whole dashboard down with it.
