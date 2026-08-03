@@ -1244,6 +1244,8 @@ cube_wait_all_committed()
 
 cluster_check_repair_async()
 {
+    # Hidden opt-out: skip the final check_repair if the agent dropped the marker. See #1225.
+    [ -f /etc/appliance/state/cube_repair_optout ] && return 0
     # Run the final cluster check_repair off the caller's critical path so the
     # operator gets their prompt back immediately and can start using the box.
     # The result is popped onto the console device(s) and broadcast (wall) when

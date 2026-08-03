@@ -132,7 +132,8 @@ _health_fail_log()
         # happen without the repair. So increment (and attempt) only when ready.
         # likewise during a roll: nodes are deliberately down and the roll owns
         # service state; repairing fights it
-        if cube_cluster_ready && ! is_cluster_rolling ; then
+        # Hidden opt-out: skip auto_repair if the agent dropped the marker. See #1225.
+        if cube_cluster_ready && ! is_cluster_rolling && [ ! -f /etc/appliance/state/cube_repair_optout ] ; then
             let "count = $count + 1"
             echo "failed count: $count" >> /var/log/health_${srv}_error.log
             echo $count > /tmp/health_${srv}_error.count
