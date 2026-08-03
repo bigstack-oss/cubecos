@@ -1,0 +1,49 @@
+[Unit]
+Description=OpenStack Horizon Dashboard (Gunicorn)
+After=syslog.target network.target
+# memcached backs both CACHES and the cached_db session engine.
+After=memcached.service
+# httpd serves /horizon/static off STATIC_ROOT and proxies everything else to the
+# socket below, so it has to come up after collectstatic has run.
+Before=httpd.service
+
+[Service]
+Type=simple
+User=apache
+Group=apache
+
+StandardOutput=append:/var/log/horizon/horizon.log
+StandardError=append:/var/log/horizon/horizon.log
+
+# httpd proxies /horizon onto the socket root, so the application has to be told
+# what prefix it is mounted under. gunicorn picks SCRIPT_NAME up from the
+# environment; WSGIScriptAlias used to supply it.
+Environment=SCRIPT_NAME=/horizon
+
+# These two used to be ExecStartPre on httpd.service, via a drop-in the
+# openstack-dashboard rpm shipped at
+# /usr/lib/systemd/system/httpd.service.d/openstack-dashboard.conf. They have to
+# move here for two reasons: the rpm (and therefore the drop-in) is gone, and
+# they ran under /usr/bin/python3, which can no longer import the dashboard or
+# its plugins now that both live in the python 3.10 venv.
+#
+# They are kept rather than left to the build because config_horizon.cpp
+# rewrites local_settings on every Commit() -- WEBROOT and STATIC_URL are
+# baked into the compressed output.
+#
+# The "+" prefix runs them as root instead of User= above: STATIC_ROOT is a
+# root-owned tree and --clear has to unlink what is already there. They inherited
+# root the same way when they hung off httpd.service, which also starts as root.
+ExecStartPre=+/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py collectstatic --noinput --clear -v0
+ExecStartPre=+/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py compress --force -v0
+TimeoutStartSec=5min
+
+ExecStart=/opt/openstack-antelope/bin/gunicorn \
+    -c /etc/openstack-dashboard/gunicorn-config.py \
+    openstack_dashboard.wsgi:application
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
