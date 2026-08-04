@@ -69,8 +69,12 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)# --no-build-isolation: ironic-ui pulls horizon, whose sdist-only XStatic
+	$(Q)# dependencies cannot be built against a current setuptools. See the note by
+	$(Q)# the venv bootstrap in core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
 		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		--no-build-isolation \
 		ironic-ui==$(IRONIC_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
