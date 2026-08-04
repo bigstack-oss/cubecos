@@ -199,6 +199,31 @@ rootfs_install::
 	$(Q)cp -f $(NEXT_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)/opt/openstack-antelope/
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) wheel
 
+# NOTE: setuptools in this venv is pinned to 65.7.0 by the constraints file -- the
+# version antelope's own upper-constraints names -- because setuptools 82 deleted
+# pkg_resources and the 2023-era services still import it (see cubecos#607/#1080).
+#
+# That pin does *not* reach pip's PEP-517 build environments. pip builds every sdist
+# in a throwaway overlay and resolves the default backend requirement
+# "setuptools>=40.8.0" against the live index, so an sdist gets whatever setuptools
+# exists today (83.0.0 at the time of writing) no matter what -c says. Verified: with
+# PIP_CONSTRAINT set as well, the overlay still installs 83.0.0.
+#
+# The consequence, for anything installing horizon: nine of its dependencies are
+# sdist-only, and seven of those are XStatic packages whose setup.py imports a
+# pkg_resources-declared namespace, so they die in the overlay with
+# "ModuleNotFoundError: No module named 'pkg_resources'". The fix is
+# --no-build-isolation, which builds against this venv's own 65.7.0 instead. It is
+# spelled out on each pip install that needs it rather than turned on venv-wide,
+# because the requirement is not universal -- mysqlclient 2.2.8 is the counter-example
+# and needs a setuptools *newer* than 65.7.0, so it keeps the default isolation.
+#
+# One ordering caveat: with --no-build-isolation an XStatic sdist can only be built
+# while no other XStatic package is installed yet, or the installed pkg_resources
+# namespace shadows the source tree and setup.py fails with "cannot import name ...
+# from 'xstatic.pkg' (unknown location)". A single pip invocation is fine -- pip
+# builds every sdist before installing any of them.
+
 # Allow admin to be sudoers
 rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/sudoers.d

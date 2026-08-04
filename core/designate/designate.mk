@@ -33,8 +33,10 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/designate/designate && \
 		/opt/openstack-antelope/bin/python setup.py install"
 	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(DESIGNATE_DASHBOARD_REPO_URL) /tmp/designate/designate-dashboard
+	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
 		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		--no-build-isolation \
 		-r /tmp/designate/designate-dashboard/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/designate/designate-dashboard && \
 		/opt/openstack-antelope/bin/python setup.py install"

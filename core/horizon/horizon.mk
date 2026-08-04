@@ -41,12 +41,25 @@ $(PROJ_HEAVYFS): $(COREDIR)/horizon/local_settings.in $(CUBE_THEME_SRCS)
 #   - pymemcache backs the PyMemcacheCache cache backend. python-memcached is in
 #     the venv already, but MemcachedCache is removed in django 4.1 and there is
 #     no reason to move onto a dead backend now.
+#
+# These are two pip invocations rather than one because the two halves want opposite
+# build environments, and a single command can only have one. See the note by the venv
+# bootstrap in core/heavyfs/Makefile for the whole story.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)# horizon's sdist-only XStatic dependencies import a pkg_resources-declared
+	$(Q)# namespace from setup.py, so they have to be built against this venv's
+	$(Q)# setuptools 65.7.0 -- a current setuptools has no pkg_resources at all.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
 		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			horizon==$(HORIZON_VER) \
+			--no-build-isolation \
+			horizon==$(HORIZON_VER)"
+	$(Q)# mysqlclient is the counter-example: it is also a source build, but its
+	$(Q)# pyproject.toml is newer than setuptools 65.7.0 can parse, so it keeps pip's
+	$(Q)# default build isolation and gets a current setuptools of its own.
+	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			mysqlclient==$(MYSQLCLIENT_VER) \
 			pymemcache"
 	$(Q)# clean up dns configurations after downloading packages

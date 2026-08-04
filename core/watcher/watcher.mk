@@ -69,8 +69,10 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(WATCHER_DASHBOARD_TAG) --depth 1 $(WATCHER_DASHBOARD_REPO_URL) /tmp/watcher/watcher-dashboard
+	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
 		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		--no-build-isolation \
 		-r /tmp/watcher/watcher-dashboard/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/watcher/watcher-dashboard && \
 		/opt/openstack-antelope/bin/python setup.py install"
