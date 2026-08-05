@@ -3,6 +3,20 @@
 
 ROOTFS_DNF += bind bind-utils
 
+# python3-designateclient stays a yoga rpm under the *system* python 3.9. It owns the
+# "dns" osc plugin entry point that /usr/bin/openstack -- still `#!/usr/bin/python3` --
+# resolves, and hex_sdk's health_designate_check() drives
+# `openstack dns service list` through it, counting the api/central/worker/producer/mdns
+# rows that report UP.
+#
+# It has to be named here because it used to arrive in 3.9 only as a side effect of the
+# yoga horizon closure that #609 removed. Nothing in this tree ever asked for it, so it
+# disappeared silently and `cluster check` reported "DNSaaS NG [ designate(9 api not all
+# up) ]" while every designate unit was active -- the check could not run its query at
+# all. Every other service hex_sdk drives this way already names its client explicitly:
+# heat and manila and octavia as rpms, watcher as an explicit pip install.
+ROOTFS_DNF_NOARCH += python3-designateclient
+
 NAMED_CONF_FILES := /etc/named*
 NAMED_APP_DIR := /var/named
 
