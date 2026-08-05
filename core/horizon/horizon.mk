@@ -163,8 +163,9 @@ rootfs_install::
 	$(Q)cp -f $(HORIZON_VENV_SP)/watcher_dashboard/conf/watcher_policy.json $(ROOTDIR)/$(HORIZON_DIR)/conf/
 	$(Q)# neutron-vpnaas-dashboard
 	$(Q)cp -f $(HORIZON_VENV_SP)/neutron_vpnaas_dashboard/enabled/_7100_project_vpn_panel.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
-	$(Q)# TODO(#609): octavia-dashboard, see core/octavia/octavia.mk.
-	$(Q)# cp -f $(HORIZON_VENV_SP)/octavia_dashboard/enabled/_1482_project_load_balancer_panel.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
+	$(Q)# octavia-dashboard
+	$(Q)cp -f $(HORIZON_VENV_SP)/octavia_dashboard/enabled/_1482_project_load_balancer_panel.py $(ROOTDIR)/$(HORIZON_DIR)/local/enabled/
+	$(Q)cp -f $(HORIZON_VENV_SP)/octavia_dashboard/local_settings.d/_1499_load_balancer_settings.py $(ROOTDIR)/$(HORIZON_DIR)/local/local_settings.d/
 
 # The yaml files under $(HORIZON_POLICY_DIR) that local_settings.in's
 # DEFAULT_POLICY_FILES points at came from the openstack-dashboard rpm, and the
@@ -174,7 +175,7 @@ rootfs_install::
 # manage.py only exists once the step above has installed it.
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 $(HORIZON_POLICY_DIR)
-	$(Q)for ns in keystone nova cinder glance neutron masakari ; do \
+	$(Q)for ns in keystone nova cinder glance neutron masakari octavia ; do \
 		chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py \
 			dump_default_policies --namespace $$ns \
 			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml 2>&1 > /dev/null ; \

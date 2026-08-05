@@ -124,6 +124,9 @@ DEFAULT_POLICY_FILES = {
     'image': '/etc/openstack-dashboard/default_policies/glance.yaml',
     'network': '/etc/openstack-dashboard/default_policies/neutron.yaml',
     'instance-ha': '/etc/openstack-dashboard/default_policies/masakari.yaml',
+    # octavia-dashboard's _1499 snippet registers POLICY_FILES['load-balancer'] but
+    # ships no octavia_policy.yaml to back it, so the defaults have to come from here.
+    'load-balancer': '/etc/openstack-dashboard/default_policies/octavia.yaml',
 }
 
 DATABASES = {
