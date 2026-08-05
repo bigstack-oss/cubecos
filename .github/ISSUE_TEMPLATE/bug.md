@@ -53,6 +53,21 @@ Insert content here.
  - Browser [e.g. stock browser, safari]
  - Version [e.g. 22]
 
+## QA Verification
+
+> How QA verifies this issue is actually fixed — write **checkable claims**: the exact
+> command or click path plus the expected outcome. "Verify it works" is not a checkable
+> claim. These claims are what the Qase test suite is generated from, so write them for a
+> reader who has not seen the code.
+
+| # | Command / steps | Expected outcome |
+|---|---|---|
+| 1 | `...` | `...` |
+
+- [ ] **QA Status declared at Done** — when this issue reaches `Done`, set the board's
+      `QA Status` field to `Not needed` or `Ready to QA`. Never leave it empty on a Done
+      ticket; `In QA` / `Verified` are QA's own transitions.
+
 ## Output artifacts (Definition of Done)
 
 > Beyond code, docs, and config changes, completing this issue must also deliver:

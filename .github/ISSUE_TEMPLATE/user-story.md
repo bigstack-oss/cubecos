@@ -31,6 +31,21 @@ As a **[type of user]**, I want **[some goal]** so that **[some reason]**.
 >| 5 | High | High complexity; difficult to implement, requiring significant time and effort.
 >| 8 | Very High | Extreme complexity or high uncertainty. If possible, this should be divided into multiple user stories.
 
+## QA Verification
+
+> How QA verifies this story once it ships — write **checkable claims**: the exact
+> command or click path plus the expected outcome. "Verify it works" is not a checkable
+> claim. These claims are what the Qase test suite is generated from, so write them for a
+> reader who has not seen the code.
+
+| # | Command / steps | Expected outcome |
+|---|---|---|
+| 1 | `...` | `...` |
+
+- [ ] **QA Status declared at Done** — when this issue reaches `Done`, set the board's
+      `QA Status` field to `Not needed` or `Ready to QA`. Never leave it empty on a Done
+      ticket; `In QA` / `Verified` are QA's own transitions.
+
 ## Output artifacts (Definition of Done)
 
 > Beyond code, docs, and config changes, completing this issue must also deliver:
