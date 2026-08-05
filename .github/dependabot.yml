@@ -1,0 +1,9 @@
+version: 2
+updates:
+  # Deliberately scoped to GitHub Actions only. Every other dependency in this
+  # repo (RPM specs, pip requirements, the hex submodule) is version-managed by
+  # the build and release process, not by dependabot.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
