@@ -1,4 +1,5 @@
 Defaults:masakari !requiretty
 
+# /usr/bin/privsep-helper is a symlink to the venv helper as of the Horizon hop, so
+# the second rule that used to authorise the venv path directly is redundant.
 masakari ALL = (root) NOPASSWD: /usr/bin/privsep-helper *
-masakari ALL = (root) NOPASSWD: /opt/openstack-antelope/bin/privsep-helper *
