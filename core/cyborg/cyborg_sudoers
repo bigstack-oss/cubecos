@@ -1,8 +1,7 @@
 Defaults:cyborg !requiretty
 
-# TEMPORARY: cyborg runs out of the antelope venv, so [cyborg_sys_admin]
-# helper_command pins the venv privsep-helper. The system-python
-# /usr/bin/privsep-helper cannot import cyborg, so it is deliberately not
-# allowed here. Drop the venv path once the system-python console scripts
-# are gone and /usr/bin/privsep-helper is the venv one again.
-cyborg ALL = (root) NOPASSWD: /opt/openstack-antelope/bin/privsep-helper *
+# This is what [cyborg_sys_admin] helper_command in cyborg.conf points at.
+# /usr/bin/privsep-helper is a symlink to the venv helper as of the Horizon hop, so
+# the venv path this used to authorise is no longer needed -- the condition that
+# comment was waiting for ("once /usr/bin/privsep-helper is the venv one again") is met.
+cyborg ALL = (root) NOPASSWD: /usr/bin/privsep-helper *

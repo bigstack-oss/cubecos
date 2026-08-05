@@ -298,14 +298,13 @@ SetDefaults(Configs& config)
 
     config["oslo_concurrency"]["lock_path"] = "/var/lock/manila";
 
-    // oslo.privsep's default helper_command is a bare "sudo privsep-helper", and
-    // sudo's secure_path does not include /opt/openstack-antelope/bin, so it would
-    // resolve to the system python 3.9 helper and die with ModuleNotFoundError:
-    // manila. Only the lvm and glusterfs drivers reach privsep and
+    // /usr/bin/privsep-helper is a symlink to the venv helper as of the Horizon hop --
+    // core/nova/nova.mk creates it, now that no service runs privsep under the system
+    // python. Only the lvm and glusterfs drivers reach privsep and
     // enabled_share_backends is pinned to generic above, so this never fires today
     // -- it is here so it does not become a latent bug the day a backend changes.
     // /etc/sudoers.d/manila authorises exactly this path.
-    config["manila_sys_admin"]["helper_command"] = "sudo /opt/openstack-antelope/bin/privsep-helper";
+    config["manila_sys_admin"]["helper_command"] = "sudo /usr/bin/privsep-helper";
 }
 
 /**

@@ -306,17 +306,15 @@ UpdateCfg(std::string region, std::string domain, std::string userPass, std::str
         // deprecated alias for "hostname" since masakari-monitors 9.0.0.
         monCfg["DEFAULT"]["hostname"] = hostname;
 
-        // TEMPORARY: masakari-monitors runs out of the antelope venv but
-        // oslo.privsep resolves its default "sudo privsep-helper" off sudo's
-        // secure_path, which finds the leftover /usr/bin/privsep-helper from the
-        // pre-venv packages. That one runs under the system python and cannot
-        // import masakarimonitors, so it exits 1 and every root command in
-        // hostmonitor (cibadmin, crm_mon, corosync-cfgtool) fails with
-        // FailedToDropPrivileges. masakari-monitors ships no rootwrap, so unlike
-        // cinder/glance we cannot fix this through rootwrap exec_dirs and have to
-        // pin the helper explicitly, the same way cyborg does.
-        // Remove once the system-python console scripts are gone.
-        monCfg["masakarimonitors_privileged"]["helper_command"] = "sudo /opt/openstack-antelope/bin/privsep-helper";
+        // masakari-monitors runs out of the antelope venv and ships no rootwrap, so
+        // unlike cinder/glance the helper cannot be resolved through rootwrap
+        // exec_dirs and has to be named here. /usr/bin/privsep-helper is a symlink to
+        // the venv helper as of the Horizon hop -- core/nova/nova.mk creates it, now
+        // that no service runs privsep under the system python. It used to be a
+        // pre-venv system-python binary that could not import masakarimonitors, which
+        // made every root command in hostmonitor (cibadmin, crm_mon,
+        // corosync-cfgtool) fail with FailedToDropPrivileges.
+        monCfg["masakarimonitors_privileged"]["helper_command"] = "sudo /usr/bin/privsep-helper";
 
         monCfg["api"].clear();
         monCfg["api"]["region"] = region;
