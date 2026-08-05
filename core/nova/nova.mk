@@ -58,7 +58,8 @@ rootfs_install::
 			osc-placement \
 			osprofiler \
 			uwsgi \
-			libvirt-python"
+			libvirt-python \
+			oslo.privsep"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link Nova binaries
@@ -85,6 +86,37 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/placement-status /usr/bin/placement-status
 	$(Q)# Link the uWSGI binary for Placement WSGI
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/uwsgi /usr/bin/uwsgi
+
+# Link the venv's privsep-helper into /usr/bin.
+#
+# oslo.privsep escalates by running `sudo privsep-helper`, resolved off sudo's
+# secure_path (/sbin:/bin:/usr/sbin:/usr/bin), which never contains the venv's bin --
+# so the bare name has to exist there. It is listed in the pip install above rather
+# than left transitive for the same reason python3-designateclient is named in
+# core/designate/designate.mk: a dependency nothing asks for is one that disappears
+# silently.
+#
+# This link was deliberately deferred until every privsep user had moved into the
+# venv, because /usr/bin/privsep-helper used to be a *python 3.9* binary owned by
+# python3-oslo-privsep, shared by every rootwrap caller:
+#
+#   # rpm -qf /usr/bin/privsep-helper
+#   python3-oslo-privsep-2.7.0-1.el9s.noarch
+#   # dnf repoquery --installed --whatrequires python3-oslo-privsep
+#   openstack-ironic-common, python3-cinder-common, python3-glance-store,
+#   python3-manila, python3-neutron, python3-nova, python3-os-brick, python3-os-vif
+#
+# Pointing it at the 3.10 helper while any of those still ran on 3.9 would have
+# broken them. All eight have since moved, python3-oslo-privsep is no longer
+# installed, and `python3 -c "import oslo_privsep"` fails on the system python --
+# so there is no 3.9 consumer left and the link is now unambiguously correct.
+#
+# It is also load-bearing: with no /usr/bin/privsep-helper at all,
+# neutron-ovn-metadata-agent crash-looped on
+# "FailedToDropPrivileges: privsep helper command exited non-zero (96)" and
+# `cluster check` reported "Network NG [ neutron(3 metadata not all up) ]".
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/privsep-helper /usr/bin/privsep-helper
 
 # prepare the build directory
 rootfs_install::
