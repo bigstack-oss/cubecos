@@ -17,10 +17,12 @@
 # while the bootstrap paths above failed.
 ROOTFS_DNF_NOARCH += python3-octaviaclient
 #
-# openstack-octavia-ui, the Horizon dashboard plugin, is deliberately no longer
-# installed: Horizon imports it and Horizon still runs on the system python 3.9,
-# so it cannot follow octavia into the 3.10 venv. Restoring the Load Balancer
-# panel belongs to #609 (Upgrade Horizon from Yoga to Antelope).
+# openstack-octavia-ui, the Horizon dashboard plugin, is replaced by the
+# octavia-dashboard wheel installed further down. It was dropped when octavia moved
+# to pip because Horizon still ran on the system python 3.9 and could not import a
+# package from the 3.10 venv; #609 moved Horizon into the venv, so the Load Balancer
+# panel comes back. Registering it is core/horizon's job, where every dashboard
+# action lives.
 #
 # The octavia user and group are carried statically by
 # core/heavyfs/account/centos9 (uid/gid 138), so the RDO spec's shadow-utils
@@ -29,20 +31,11 @@ ROOTFS_DNF_NOARCH += python3-octaviaclient
 OCTAVIA_CONF_DIR := /etc/octavia
 OCTAVIA_CONFDIR := $(ROOTDIR)$(OCTAVIA_CONF_DIR)
 
-# TODO(#609): openstack-octavia-ui is temporarily commented out rather than replaced
-# by the octavia-dashboard wheel. Every other dashboard plugin moved into the python
-# 3.10 venv when horizon did, but the octavia *service* is still being upgraded to
-# antelope by another developer on a separate branch. Installing octavia-dashboard
-# 11.0.1 now would put 2023.1 Load Balancer panels in front of a yoga octavia api,
-# and leaving the yoga rpm in place would put a python 3.9 plugin in front of a venv
-# horizon, which cannot import it. So the panels are off for the moment.
-#
-# To restore, once that branch merges:
-#   1. add OCTAVIA_DASHBOARD_VER := 11.0.1 and pip install octavia-dashboard into the
-#      venv here, the way manila.mk installs manila-ui;
-#   2. uncomment the octavia_dashboard enabled/*.py copy in core/horizon/horizon.mk,
-#      which is where every dashboard action lives.
-# ROOTFS_DNF_NOARCH += openstack-octavia-ui
+# https://releases.openstack.org/antelope/index.html -- last numeric 2023.1 revision,
+# and the dashboard that pairs with the octavia 12.0.1 installed below. Horizon
+# plugins are not in the antelope upper-constraints (that file only covers
+# libraries), so the pin has to be explicit.
+OCTAVIA_DASHBOARD_VER := 11.0.1
 
 # install octavia
 rootfs_install::
@@ -71,6 +64,22 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-db-manage /usr/bin/octavia-db-manage
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-driver-agent /usr/bin/octavia-driver-agent
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-status /usr/bin/octavia-status
+
+# install the octavia web ui plugin, the openstack-octavia-ui rpm's replacement.
+# Registering its panel and settings snippet is core/horizon's job, where every
+# dashboard action lives -- including the generated default_policies/octavia.yaml,
+# because the snippet octavia-dashboard ships registers
+# POLICY_FILES['load-balancer'] but no file to back it.
+rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		--no-build-isolation \
+		octavia-dashboard==$(OCTAVIA_DASHBOARD_VER)
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 # prepare the build directory
 rootfs_install::
