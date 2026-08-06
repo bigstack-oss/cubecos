@@ -175,6 +175,23 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python3.10 ]
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip3.10 ]
 
+# install python 3.11 for openstack caracal
+rootfs_install::
+	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
+	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
+	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
+	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
+	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(CARACAL_PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(CARACAL_PYTHON_PATCH_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz
+	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz -C /usr/src/python-$(CARACAL_PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER) && ./configure --enable-optimizations"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER) && make altinstall"
+	$(Q)umount -l $(ROOTDIR)/dev || true
+	$(Q)# ensure python 3.11 is successfully built
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(CARACAL_PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(CARACAL_PYTHON_VER) ]
+
 # set up the execution context for openstack antelope
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /opt/openstack-antelope
