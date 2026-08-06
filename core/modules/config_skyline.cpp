@@ -97,7 +97,7 @@ SetupService(std::string domain, std::string userPass)
 
     HexLogInfo("Setting up skyline");
 
-    HexUtilSystemF(0, 0, "cd /usr/local/lib/python3.9/site-packages/skyline_apiserver && /usr/local/bin/alembic -c db/alembic/alembic.ini upgrade head 2>/dev/null");
+    HexUtilSystemF(0, 0, "cd /opt/openstack-caracal/lib/python3.11/site-packages/skyline_apiserver && /opt/openstack-caracal/bin/alembic -c db/alembic/alembic.ini upgrade head 2>/dev/null");
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
