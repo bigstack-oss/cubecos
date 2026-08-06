@@ -78,7 +78,7 @@ http {
         server_name _;
         listen @MGMT_ADDR@:9999 ssl http2 default_server;
 
-        root /usr/local/lib/python3.9/site-packages/skyline_console/static;
+        root /opt/openstack-caracal/lib/python3.11/site-packages/skyline_console/static;
         # Add index.php to the list if you are using PHP
         index index.html;
         error_page 497 https://$http_host$request_uri;
