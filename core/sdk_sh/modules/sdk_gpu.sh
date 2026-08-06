@@ -726,6 +726,63 @@ gpu_resource_set_check()
 # according to the config file, so it is free to be reconfigured.
 # This function does nothing if the target GPU is currently configured
 # as pGPU.
+# Releases one PF's SR-IOV VFs through sriov-manage, retrying briefly on
+# unbindLock contention. Returns 0 on success, 1 on failure.
+#
+# Zeroing sriov_numvfs by writing to the sysfs file directly (even with each
+# VF's vGPU type pre-cleared) is rejected by the driver - confirmed on cn13
+# hardware: "write error: No such file or directory" every time, regardless of
+# VF state. Disabling VFs requires going through sriov-manage, which requests
+# the driver's unbindLock (temporarily detaches/reattaches the PF's own driver
+# binding) before touching sriov_numvfs - a raw sysfs write skips that
+# handshake and the driver refuses it. sriov-manage -d also clears each VF's
+# vGPU type internally, so no separate cleanup loop is needed.
+#
+# sriov-manage can transiently fail to obtain that unbindLock if another NVML
+# client (e.g. cube-cos-api's GPU status API) holds the device open at that
+# exact moment - retry briefly to absorb that race. A failure that isn't this
+# specific message is not retried and fails immediately.
+#
+# Unlike gpu_vf_disable() near the top of this file, this touches only the
+# given PF: it never rebinds anything to vfio-pci and never writes
+# modprobe.d persistence.
+gpu_sriov_disable_vfs()
+{
+    local pci_addr="$1"
+
+    local attempt output rc
+    for attempt in 1 2 3 4 5; do
+        output=$($NVIDIA_SRIOV -d "$pci_addr" 2>&1)
+        rc=$?
+        if [ $rc -eq 0 ]; then
+            return 0
+        fi
+        if ! echo "$output" | grep -q "Cannot obtain unbindLock"; then
+            echo "Error: failed to disable SR-IOV VFs on $pci_addr: $output" >&2
+            return 1
+        fi
+        if [ "$attempt" = "5" ]; then
+            echo "Error: failed to disable SR-IOV VFs on $pci_addr: unbindLock still busy after 5 attempts" >&2
+            return 1
+        fi
+        echo "Warning: unbindLock busy for $pci_addr, retrying ($attempt/5)" >&2
+        sleep 1
+    done
+
+    return 1
+}
+
+# Renders the sysfs form of a GPU's PCI address: nvidia-smi reports an 8-char
+# domain in uppercase hex (00000000:BB:SS.F) but the sysfs directory name uses
+# a 4-char lowercase one (0000:bb:ss.f).
+gpu_sysfs_pci_addr()
+{
+    local gpu_id="$1"
+
+    $NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null \
+        | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]'
+}
+
 gpu_unset_current_type()
 {
     local gpu_id="$1"
@@ -736,50 +793,36 @@ gpu_unset_current_type()
         "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
 
     if [ "$current_type" = "sriovVgpu" ]; then
-        local pci_bus_id
-        pci_bus_id=$($NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null)
-
-        # nvidia-smi uses 8-char domain (00000000:bb:ss.f); sysfs uses 4-char
-        # lowercase (0000:bb:ss.f) - the uppercase hex nvidia-smi reports
-        # doesn't match the (lowercase) sysfs directory name.
         local pci_addr
-        pci_addr=$(echo "$pci_bus_id" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+        pci_addr=$(gpu_sysfs_pci_addr "$gpu_id")
 
-        # Zeroing sriov_numvfs by writing to the sysfs file directly (even
-        # with each VF's vGPU type pre-cleared) is rejected by the driver -
-        # confirmed on cn13 hardware: "write error: No such file or
-        # directory" every time, regardless of VF state. Disabling VFs
-        # requires going through sriov-manage, which requests the driver's
-        # unbindLock (temporarily detaches/reattaches the PF's own driver
-        # binding) before touching sriov_numvfs - a raw sysfs write skips
-        # that handshake and the driver refuses it. sriov-manage -d also
-        # clears each VF's vGPU type internally, so no separate cleanup
-        # loop is needed here.
-        #
-        # sriov-manage can transiently fail to obtain that unbindLock if
-        # another NVML client (e.g. cube-cos-api's GPU status API) holds the
-        # device open at that exact moment - retry briefly to absorb that
-        # race. A failure that isn't this specific message is not retried
-        # and fails immediately.
-        local attempt output rc
-        for attempt in 1 2 3 4 5; do
-            output=$($NVIDIA_SRIOV -d "$pci_addr" 2>&1)
-            rc=$?
-            if [ $rc -eq 0 ]; then
-                break
-            fi
-            if ! echo "$output" | grep -q "Cannot obtain unbindLock"; then
-                echo "Error: failed to disable SR-IOV VFs on $pci_addr: $output" >&2
-                exit 1
-            fi
-            if [ "$attempt" = "5" ]; then
-                echo "Error: failed to disable SR-IOV VFs on $pci_addr: unbindLock still busy after 5 attempts" >&2
-                exit 1
-            fi
-            echo "Warning: unbindLock busy for $pci_addr, retrying ($attempt/5)" >&2
-            sleep 1
-        done
+        if ! gpu_sriov_disable_vfs "$pci_addr"; then
+            exit 1
+        fi
     elif [ "$current_type" = "migBackedVgpu" ]; then
+        # A MIG-backed card carries the same VF/current_vgpu_type shape as an
+        # SR-IOV one, so its VFs are released the same way - and they must be
+        # released *first*. With VFs still enabled the driver refuses to turn
+        # MIG mode off ("Unable to disable MIG Mode for GPU ...: In use by
+        # another client", confirmed on cn13 2026-08-04), which left a
+        # MIG-backed card permanently stuck on its first configuration: no
+        # re-carve, no switch back to pgpu/sriovVgpu.
+        #
+        # sriov-manage -d rebinds the driver, and that also destroys every GPU
+        # instance on the card, so no explicit -dci/-dgi pass is needed before
+        # -mig 0.
+        local mig_pci_addr
+        mig_pci_addr=$(gpu_sysfs_pci_addr "$gpu_id")
+
+        if [ -z "$mig_pci_addr" ]; then
+            echo "Error: GPU $gpu_id has type migBackedVgpu but nvidia-smi reported no PCI address" >&2
+            exit 1
+        fi
+
+        if ! gpu_sriov_disable_vfs "$mig_pci_addr"; then
+            exit 1
+        fi
+
         if ! $NVIDIA_SMI -i "$gpu_id" -mig 0; then
             echo "Error: failed to disable MIG mode for GPU $gpu_id" >&2
             exit 1
