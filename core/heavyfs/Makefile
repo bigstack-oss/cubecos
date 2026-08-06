@@ -225,6 +225,22 @@ rootfs_install::
 # from 'xstatic.pkg' (unknown location)". A single pip invocation is fine -- pip
 # builds every sdist before installing any of them.
 
+# set up the execution context for openstack caracal
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p $(CARACAL_OPENSTACK_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) python$(CARACAL_PYTHON_VER) -m venv $(CARACAL_OPENSTACK_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip setuptools"
+	$(Q)cp -f $(CARACAL_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) wheel
+
+# NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
+# upper-constraints.txt copied down verbatim -- unlike the antelope file, which carries
+# six local deltas for services we build from source. Nothing is pinned here yet because
+# skyline is the only planned occupant and it does not follow yoga's or antelope's
+# constraints. Upstream does not pin setuptools, so `pip install --upgrade setuptools`
+# above leaves this venv on whatever setuptools is current; if a future occupant needs
+# pkg_resources (pbr does), pin setuptools here the way antelope pins 65.7.0.
+
 # Allow admin to be sudoers
 rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/sudoers.d
