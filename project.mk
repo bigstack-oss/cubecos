@@ -51,3 +51,16 @@ NEXT_OPS_GITHUB_BRANCH_02 := unmaintained/2023.1
 NEXT_PYTHON_VER := 3.10
 NEXT_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
 NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(NEXT_OPENSTACK_HOME_DIR)/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+
+# openstack caracal -- a second isolated runtime, kept apart from the antelope venv so
+# that caracal-era components do not drag their dependency versions into the 2023.1
+# services. skyline is the first occupant: its forks branch off upstream master at
+# 4.0.1 (apiserver) and 4.0.0.0rc1 (console), i.e. caracal, not antelope.
+CARACAL_OPENSTACK_RELEASE := caracal
+CARACAL_OPENSTACK_HOME_DIR := /opt/openstack-$(CARACAL_OPENSTACK_RELEASE)
+CARACAL_OPS_GITHUB_BRANCH_01 := stable/2024.1
+CARACAL_OPS_GITHUB_BRANCH_02 := unmaintained/2024.1
+CARACAL_PYTHON_VER := 3.11
+CARACAL_PYTHON_PATCH_VER := 3.11.15
+CARACAL_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(CARACAL_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(CARACAL_OPENSTACK_HOME_DIR)/os-$(CARACAL_OPENSTACK_RELEASE)-pip-upper-constraints.txt
