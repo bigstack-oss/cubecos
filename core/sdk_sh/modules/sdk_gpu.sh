@@ -561,9 +561,20 @@ gpu_vgpu_profile_list()
     # SR-IOV vGPU profiles
     local sriov_profiles="[]"
 
-    # Maps a MIG GPU Instance Profile ID -> MIG-backed vGPU type name ("XX-YY-ZZ"),
-    # used below to name the corresponding mig -lgip profile.
-    local mig_profile_name_map="{}"
+    # MIG-backed vGPU profiles - one entry per vGPU *type*, not per GPU instance
+    # profile. Both lists are therefore built from the same `vgpu -s -v` output
+    # and mean the same thing field for field.
+    #
+    # This list used to be built from `mig -lgip` and keyed by GPU Instance
+    # Profile ID, which cannot express what the operator actually picks: one GI
+    # profile exposes many vGPU types (47 exposes 19 on cn13's RTX PRO 6000
+    # Blackwell, DC-1-2Q through DC-1-24C), so a single id left the type - and
+    # with it the framebuffer size and the Q/A/B/C mode - undetermined, and the
+    # code picked one on the operator's behalf. `mig -lgip` also lists partition
+    # shapes that have no MIG-backed vGPU type at all (8 of the 11 it reports on
+    # that card), so the list offered choices that could never be applied.
+    # Verified on cn13 2026-08-04; see spec.md §2c/§5b (#905).
+    local mig_profiles="[]"
 
     local vgpu_output
     vgpu_output=$($NVIDIA_SMI vgpu -s -v -i "$gpu_id" 2>/dev/null)
@@ -575,25 +586,29 @@ gpu_vgpu_profile_list()
         local decimal_id
         decimal_id=$(awk -v v="$vgpu_type_id_hex" 'BEGIN{print strtonum(v)}')
 
-        local block profile_name fb_memory_mib gpu_instance_profile_id
+        local block profile_name fb_memory_mib max_instances
         block=$(echo "$vgpu_output" | grep -A 20 "vGPU Type ID *: $vgpu_type_id_hex\$")
         # `Name                              : NVIDIA RTX Pro 6000 Blackwell DC-1-24Q`
         profile_name=$(echo "$block" | grep "Name" | head -1 | awk '{print $NF}')
         # `FB Memory                         : 24576 MiB`
         fb_memory_mib=$(echo "$block" | grep "FB Memory" | head -1 | awk '{print $4}')
-        # `GPU Instance Profile ID           : 47`
-        # This column is present only for MIG-backed vGPUs and does not exist for SR-IOV vGPUs.
-        gpu_instance_profile_id=$(echo "$block" | grep "GPU Instance Profile ID" | head -1 | awk '{print $NF}')
+        # `Max Instances                     : 4` - how many of this type the
+        # whole card can host. Anchored on the colon so it cannot match
+        # `Max Instances Per VM` or `Max Instances Per GI`, which both contain
+        # this string. Absent on SR-IOV types, which carry no such limit.
+        max_instances=$(echo "$block" | \
+            grep -E "^[[:space:]]*Max Instances[[:space:]]*:" | head -1 | awk '{print $NF}')
+        [ -z "$max_instances" ] && max_instances="null"
 
-        # MIG-backed vGPU types (name "XX-YY-ZZ") are already covered by the `mig -lgip` command below.
-        # Record their name for later use and skip.
+        # MIG-backed type names carry a slice count ("DC-1-3Q"); SR-IOV
+        # time-sliced ones do not ("DC-3Q").
         if echo "$profile_name" | grep -qE "$MIG_PROFILE_NAME_REGEX"; then
-            if [ -n "$gpu_instance_profile_id" ]; then
-                mig_profile_name_map=$(echo "$mig_profile_name_map" | jq -c \
-                    --arg id "$gpu_instance_profile_id" \
-                    --arg name "$profile_name" \
-                    '. + {($id): $name}')
-            fi
+            mig_profiles=$(echo "$mig_profiles" | jq -c \
+                --argjson id "$decimal_id" \
+                --arg name "$profile_name" \
+                --argjson vram_mib "$fb_memory_mib" \
+                --argjson vmCountLimit "$max_instances" \
+                '. + [{ id: $id, name: $name, vramMiB: $vram_mib, vmCountLimit: $vmCountLimit }]')
             continue
         fi
         if ! echo "$profile_name" | grep -qE "$SRIOV_PROFILE_NAME_REGEX"; then
@@ -607,34 +622,6 @@ gpu_vgpu_profile_list()
             --argjson vram_mib "$fb_memory_mib" \
             '. + [{ id: $id, name: $name, vramMiB: $vram_mib, vmCountLimit: null }]')
     done
-
-    # MIG GPU instance profiles
-    local mig_profiles="[]"
-    local mig_output
-    mig_output=$($NVIDIA_SMI mig -lgip -i "$gpu_id" 2>/dev/null)
-
-    while read -r _gpu_idx _mig_text profile_name profile_id instances memory_gib _rest; do
-        [ -z "$profile_id" ] && continue
-
-        local instances_total
-        instances_total=${instances#*/}
-
-        local vram_mib
-        vram_mib=$(awk -v g="$memory_gib" 'BEGIN{printf "%.2f", g * 1024}')
-
-        local name
-        name=$(echo "$mig_profile_name_map" | jq -r \
-            --arg id "$profile_id" \
-            --arg fallback "MIG $profile_name" \
-            '.[$id] // $fallback')
-
-        mig_profiles=$(echo "$mig_profiles" | jq -c \
-            --argjson id "$profile_id" \
-            --arg name "$name" \
-            --argjson vram "$vram_mib" \
-            --argjson vmCountLimit "$instances_total" \
-            '. + [{ id: $id, name: $name, vramMiB: $vram, vmCountLimit: $vmCountLimit }]')
-    done <<< "$(echo "$mig_output" | grep -E '^\|\s+[0-9]+\s+MIG\s+[0-9]+g\.' | tr -d '|')"
 
     jq -c -n \
         --argjson sriovProfiles "$sriov_profiles" \
