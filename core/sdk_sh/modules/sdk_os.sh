@@ -2055,6 +2055,48 @@ os_manila_init()
     #fi
 }
 
+MANILA_SVC_NET=manila_service_network
+
+# Delete all but the oldest manila_service_network (converge to exactly one,
+# never zero). Echoes the surviving id.
+os_manila_service_network_dedup()
+{
+    local oldest ids id
+    ids=$($OPENSTACK network list --name $MANILA_SVC_NET -f value -c ID)
+    oldest=$(for id in $ids ; do
+                echo "$($OPENSTACK network show $id -f value -c created_at) $id"
+             done | sort | head -1 | awk '{print $2}')
+    for id in $ids ; do
+        [ "$id" = "$oldest" ] && continue
+        $OPENSTACK port list --network $id -f value -c ID | xargs -i $OPENSTACK port delete {} 2>/dev/null
+        $OPENSTACK network delete $id 2>/dev/null
+    done
+    echo "$oldest"
+}
+
+# ExecStartPre for openstack-manila-share: the first compute node ensures exactly
+# one service network before the daemon's workers start; other nodes no-op
+# (master-first ordering covers them, so no peer wait). See #1195.
+os_manila_service_network_ensure()
+{
+    is_first_compute_node || return 0
+    local count i
+    # Converge to exactly one: create, then dedup + settle-verify (a create that
+    # times out on the client can still land, so don't trust its exit code).
+    count=$($OPENSTACK network list --name $MANILA_SVC_NET -f value -c ID 2>/dev/null | grep -c .)
+    [ "$count" -gt 1 ] && os_manila_service_network_dedup >/dev/null
+    [ "$count" -eq 0 ] && $OPENSTACK network create $MANILA_SVC_NET >/dev/null 2>&1
+    for i in 1 2 3 ; do
+        sleep 3
+        count=$($OPENSTACK network list --name $MANILA_SVC_NET -f value -c ID 2>/dev/null | grep -c .)
+        [ "$count" -gt 1 ] && os_manila_service_network_dedup >/dev/null
+    done
+    count=$($OPENSTACK network list --name $MANILA_SVC_NET -f value -c ID 2>/dev/null | grep -c .)
+    [ "$count" -eq 1 ] && return 0
+    echo "$MANILA_SVC_NET: not exactly one after converge (count=$count) — retry" >&2
+    return 1
+}
+
 # Create/prune one Manila share type per additional Cinder volume type
 # Manila should serve as a generic-driver backend.
 #

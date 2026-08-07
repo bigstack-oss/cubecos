@@ -5,8 +5,15 @@ After=syslog.target network.target
 [Service]
 Type=simple
 User=manila
+TimeoutStartSec=180
 ExecCondition=/usr/sbin/hex_sdk is_first_three_compute_node
+# First compute node pre-creates exactly one service network before the daemon's
+# workers start (root); other nodes are a no-op. Prevents the lazy-create race.
+ExecStartPre=+/usr/sbin/hex_sdk os_manila_service_network_ensure
 ExecStart=/usr/bin/manila-share --config-file /usr/share/manila/manila-dist.conf --config-file /etc/manila/manila.conf --logfile /var/log/manila/share.log
+# Retry a pre-start that failed because neutron wasn't ready yet.
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target

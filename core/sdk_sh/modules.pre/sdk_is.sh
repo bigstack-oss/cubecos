@@ -110,6 +110,15 @@ is_first_three_compute_node()
     fi
 }
 
+is_first_compute_node()
+{
+    if cubectl node list -r compute -j | jq -r .[].hostname | head -1 | grep -q $(hostname); then
+        return 0
+    else
+        return 1
+    fi
+}
+
 is_node_repairing()
 {
     if [ -e /run/cube_cluster_repairing ]; then

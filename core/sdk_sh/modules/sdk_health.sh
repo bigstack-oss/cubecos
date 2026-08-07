@@ -2564,10 +2564,7 @@ health_manila_check()
 _health_manila_auto_repair()
 {
     if [ $($OPENSTACK network list | grep manila_service_network | wc -l) -gt 1 ] ; then
-        for NID in $($OPENSTACK network list -f value -c ID -c Name | grep manila_service_network | cut -d' ' -f1) ; do
-            $OPENSTACK port list --network $NID -f value -c ID | xargs -i $OPENSTACK port delete {}
-            $OPENSTACK network delete $NID
-        done
+        $HEX_SDK os_manila_service_network_dedup >/dev/null
     fi
     readarray entry_array <<<"$(echo "$ERR_MSG" | awk '/enabled.*down/{print $4" "$6}' | sort)"
     declare -p entry_array > /dev/null
