@@ -55,6 +55,8 @@ const static char GROUP[] = "ceph";
 const static char CONF[] = "/etc/ceph/ceph.conf";
 const static char ISCSI_GW_CONF[] = "/etc/ceph/iscsi-gateway.cfg";
 const static char NFS_GANESHA_CONF[] = "/etc/ganesha/ganesha.conf";
+// RADOS pool for the ganesha rados_cluster grace DB (matches RADOS_KV pool).
+const static char GANESHA_RECOV_POOL[] = "cephfs_data";
 const static char CONF_DEF[] = "/etc/default/ceph";
 const static char APP_DIR[] = "/var/lib/ceph";
 const static char CLIENT_SOCK[] = "/var/run/ceph/guests/";
@@ -512,6 +514,11 @@ SetupMds(std::string hostname)
     }
     if (HexSystemF(0, "sed -i 's/@BIND_ADDR@/%s/' %s", myIp.c_str(), NFS_GANESHA_CONF) != 0) {
         HexLogError("failed to update %s", NFS_GANESHA_CONF);
+        return false;
+    }
+    // rados_cluster nodeid = hostname (stable across a same-hostname rejoin).
+    if (HexSystemF(0, "sed -i 's/@NODEID@/%s/' %s", hostname.c_str(), NFS_GANESHA_CONF) != 0) {
+        HexLogError("failed to update ganesha nodeid in %s", NFS_GANESHA_CONF);
         return false;
     }
 
@@ -1017,6 +1024,8 @@ RemoveMon(const char* hostname)
 {
     HexUtilSystemF(0, 0, "timeout 60 ceph mon remove %s", hostname);
     RemoveMonData(hostname);
+    // Drop the node from the grace DB on permanent removal (a rejoin re-adds itself in SetupMds).
+    HexUtilSystemF(0, 0, "ganesha-rados-grace -p %s remove %s", GANESHA_RECOV_POOL, hostname);
     HexLogInfo("ceph-mon@%s removed", hostname);
 
     return true;
@@ -1297,6 +1306,8 @@ MountCephfsStore()
         HexSetFileMode("/mnt/cephfs/nova/instances", "nova", "nova", 0755);
 
         HexUtilSystemF(0, 0, "systemctl start ceph-umountfs");
+        // Register this node in the grace DB before ganesha joins (idempotent; also covers a same-hostname rejoin). See #1231.
+        HexUtilSystemF(0, 0, "ganesha-rados-grace -p %s add %s", GANESHA_RECOV_POOL, s_hostname.c_str());
         HexUtilSystemF(0, 0, "systemctl start nfs-ganesha");
     }
 
