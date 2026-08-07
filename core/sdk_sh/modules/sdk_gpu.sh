@@ -188,6 +188,220 @@ gpu_default_type_get()
     $HEX_SDK gpu_supported_type_list | head -n 1
 }
 
+# Slices `nvidia-smi -q` / `nvidia-smi vgpu -q` (on stdin) into whole records and
+# prints those containing $2, for the human-readable (non-line) output format.
+# A record runs from its header line to the next line at or above the header's
+# indent, so unlike a fixed `grep -A <n>` window it is never truncated and never
+# bleeds into the next record. Matching on the record body rather than on a
+# parsed id keeps both callers' filters working: a pciid appears in the GPU
+# header, a VM UUID inside the vGPU record.
+#   $1  record header regex   $2  substring filter (empty = all)   $3  prefix line
+gpu_stats_record()
+{
+    awk -v root_re="$1" -v want="$2" -v prefix="$3" '
+    function emit(   ) {
+        if (buf != "" && (want == "" || index(buf, want))) {
+            if (prefix != "") printf "%s\n", prefix
+            printf "%s\n\n", buf
+        }
+        buf = ""
+    }
+    $0 ~ root_re { emit(); root_ind = match($0, /[^ ]/) - 1; buf = $0; next }
+    buf != "" {
+        if ($0 !~ /^[ \t]*$/ && match($0, /[^ \t]/) - 1 <= root_ind) { emit(); next }
+        buf = buf "\n" $0
+    }
+    END { emit() }'
+}
+
+# Turns `nvidia-smi -q` / `nvidia-smi vgpu -q` (on stdin) into InfluxDB line
+# protocol, one line per GPU (mode "host") or per vGPU instance (mode "vm").
+#
+# nvidia-smi prints a human-readable tree, so every field has to be located by
+# some anchor. Three are stacked here, each covering what the others cannot:
+#
+#   1. Record boundary - an unindented `GPU <pciid>` / a `vGPU ID` line. Every
+#      record is parsed, validated and printed on its own, so a card whose data
+#      is unusable can never take the other cards (or the whole batch) down with
+#      it. Telegraf's parser aborts the *entire* exec output on the first bad
+#      line, which is how one MIG-enabled card used to blank out a node's GPU
+#      panels completely (confirmed on cn13, 2026-08-07).
+#
+#   2. Path tail match, shallowest wins. Leaf names repeat all over the output
+#      (`Total`, `Used`, `Free`, `Active Sessions`), and whole sections repeat
+#      too: a MIG-enabled card carries a nested `MIG Device/FB Memory Usage`
+#      whose Total is the GPU instance's framebuffer, not the card's. Matching
+#      the path tail (`FB Memory Usage/Total`) finds the field even if nvidia-smi
+#      wraps the tree in another level, and preferring the shallowest match keeps
+#      the nested MIG copy from winning. Paths come from a running indent stack,
+#      so no indent width (4/8/12) is assumed anywhere.
+#
+#   3. Unit check. Memory must read MiB, utilization %, counters no unit at all.
+#      Without this a future nvidia-smi switching to GiB would be recorded as if
+#      it were MiB - a silently wrong value, which is worse than a missing one.
+#
+# Anything that fails a check is dropped as a single field (never written as
+# `key=N/A`, which is not valid line protocol) and reported on stderr naming the
+# exact path, so a format change shows up in the telegraf log instead of as a
+# blank dashboard.
+#   $1  mode: host|vm      $2  id filter (empty = all)
+gpu_stats_parse()
+{
+    local mode=$1
+    local want=$2
+    local spec order root_re
+
+    if [ "$mode" = "host" ]; then
+        root_re='^GPU [0-9A-Fa-f]'
+        order='mem_total,mem_free,mem_used,b1m_total,b1m_free,b1m_used,util_gpu,util_mem,util_encoder,util_decoder,encode_sess,encode_fps,encode_latency,fbc_sess,fbc_fps,fbc_latency'
+        spec='FB Memory Usage/Total|mem_total|MiB
+FB Memory Usage/Free|mem_free|MiB
+FB Memory Usage/Used|mem_used|MiB
+BAR1 Memory Usage/Total|b1m_total|MiB
+BAR1 Memory Usage/Free|b1m_free|MiB
+BAR1 Memory Usage/Used|b1m_used|MiB
+Utilization/GPU|util_gpu|%
+Utilization/Memory|util_mem|%
+Utilization/Encoder|util_encoder|%
+Utilization/Decoder|util_decoder|%
+Encoder Stats/Active Sessions|encode_sess|
+Encoder Stats/Average FPS|encode_fps|
+Encoder Stats/Average Latency|encode_latency|
+FBC Stats/Active Sessions|fbc_sess|
+FBC Stats/Average FPS|fbc_fps|
+FBC Stats/Average Latency|fbc_latency|'
+    else
+        root_re='^[ \t]*vGPU ID[ \t]+:'
+        order='mem_total,mem_free,mem_used,util_gpu,util_mem,util_encoder,util_decoder,encode_sess,encode_fps,encode_latency,fbc_sess,fbc_fps,fbc_latency'
+        spec='FB Memory Usage/Total|mem_total|MiB
+FB Memory Usage/Free|mem_free|MiB
+FB Memory Usage/Used|mem_used|MiB
+Utilization/GPU|util_gpu|%
+Utilization/Memory|util_mem|%
+Utilization/Encoder|util_encoder|%
+Utilization/Decoder|util_decoder|%
+Encoder Stats/Active Sessions|encode_sess|
+Encoder Stats/Average FPS|encode_fps|
+Encoder Stats/Average Latency|encode_latency|
+FBC Stats/Active Sessions|fbc_sess|
+FBC Stats/Average FPS|fbc_fps|
+FBC Stats/Average Latency|fbc_latency|'
+    fi
+
+    awk -v host="$HOSTNAME" -v mode="$mode" -v want="$want" \
+        -v root_re="$root_re" -v spec="$spec" -v order="$order" '
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    function warn(m) { print (mode == "host" ? "gpu_host_stats" : "gpu_vm_stats") ": " m > "/dev/stderr" }
+
+    # Longest-suffix lookup: "MIG Device/FB Memory Usage/Total" and
+    # "FB Memory Usage/Total" both resolve to the same field, and the caller
+    # keeps whichever came from the shallower path.
+    function match_field(path,   k, plen, klen) {
+        if (path in want_field) return path
+        plen = length(path)
+        for (k in want_field) {
+            klen = length(k)
+            if (plen > klen && substr(path, plen - klen + 1) == k &&
+                substr(path, plen - klen, 1) == "/") return k
+        }
+        return ""
+    }
+    function tail_is(path, label,   plen, llen) {
+        if (path == label) return 1
+        plen = length(path); llen = length(label)
+        return (plen > llen && substr(path, plen - llen + 1) == label &&
+                substr(path, plen - llen, 1) == "/")
+    }
+    function record(path, raw,   n, tok, key, field, unit, depth) {
+        key = match_field(path)
+        if (key == "") return
+        field = want_field[key]; unit = want_unit[key]
+        depth = split(path, tok, "/")
+        if (field in vals_depth && vals_depth[field] <= depth) return
+        n = split(raw, tok, /[ \t]+/)
+        if (tok[1] !~ /^[0-9]+(\.[0-9]+)?$/) {
+            warn(id ": " path " is not a number (" raw "), field dropped"); return
+        }
+        if (unit == "" && n > 1) {
+            warn(id ": " path " has an unexpected unit " tok[2] ", field dropped"); return
+        }
+        if (unit != "" && tok[2] != unit) {
+            warn(id ": " path " is in " (n > 1 ? tok[2] : "no unit") " but MiB/% was expected, field dropped"); return
+        }
+        vals[field] = tok[1]; vals_depth[field] = depth
+    }
+    function flush(   i, n, ord, f, line, missing, parts) {
+        if (id != "" && (want == "" || id == want)) {
+            n = split(order, ord, ",")
+            f = ""; missing = ""
+            for (i = 1; i <= n; i++) {
+                if (ord[i] in vals) f = f (f == "" ? "" : ",") ord[i] "=" vals[ord[i]]
+                else missing = missing (missing == "" ? "" : " ") ord[i]
+            }
+            if (missing != "") warn(id ": missing field(s): " missing)
+            if (f == "") warn(id ": no usable field, record dropped")
+            else if (mode == "vm" && uuid == "") warn(id ": no VM UUID, record dropped")
+            else {
+                gsub(/ /, "-", name)
+                if (mode == "host") line = "gpu.host,host=" host ",name=" name ",pciid=" id " " f
+                else                line = "gpu.vm,gid=" id ",name=" name ",vm_uuid=" uuid " " f
+                # Line protocol separates tags from fields with exactly one
+                # space; anything else means a value carried a space through and
+                # telegraf would reject the whole batch.
+                if (split(line, parts, / /) == 2) print line
+                else warn(id ": malformed line protocol, record dropped")
+            }
+        }
+        id = ""; name = ""; uuid = ""; top = 0
+        delete vals; delete vals_depth; delete stack_ind; delete stack_lbl
+    }
+
+    BEGIN {
+        n = split(spec, rows, "\n")
+        for (i = 1; i <= n; i++) {
+            split(rows[i], c, "|")
+            want_field[c[1]] = c[2]; want_unit[c[1]] = c[3]
+        }
+    }
+
+    $0 ~ root_re {
+        flush()
+        if (mode == "host") id = $2
+        else { id = $0; sub(/^[^:]*:[ \t]*/, "", id); id = trim(id) }
+        root_ind = match($0, /[^ ]/) - 1
+        next
+    }
+    id == "" { next }
+    /^[ \t]*$/ { next }
+
+    {
+        ind = match($0, /[^ \t]/) - 1
+        if (ind <= root_ind) { flush(); next }
+        body = substr($0, ind + 1)
+        if (index(body, " : ")) {
+            key = trim(substr(body, 1, index(body, " : ") - 1))
+            raw = trim(substr(body, index(body, " : ") + 3))
+        } else {
+            key = trim(body); raw = ""
+        }
+
+        while (top > 0 && stack_ind[top] >= ind) top--
+        top++; stack_ind[top] = ind; stack_lbl[top] = key
+        path = stack_lbl[1]
+        for (i = 2; i <= top; i++) path = path "/" stack_lbl[i]
+
+        if (raw == "") next
+        if (mode == "host" && tail_is(path, "Product Name")) { if (name == "") name = raw; next }
+        if (mode == "vm") {
+            if (tail_is(path, "VM UUID"))   { if (uuid == "") uuid = raw; next }
+            if (tail_is(path, "vGPU Name")) { if (name == "") name = raw; next }
+        }
+        record(path, raw)
+    }
+
+    END { flush() }'
+}
+
 gpu_vm_stats()
 {
     if ! gpu_is_installed; then
@@ -195,49 +409,15 @@ gpu_vm_stats()
     fi
 
     local vid=$1
-    local stats=$($NVIDIA_SMI vgpu -q)
 
-    for v in $(echo "$stats" | grep "VM UUID" | awk '{print $4}') ; do
-        if [ -z "$v" ]; then
-            continue
-        elif [ -n "$vid" -a "$vid" != "$v" ]; then
-            continue
-        fi
-        local vm_stats=$(echo "$stats" | grep "VM UUID.*$v" -A 29 -B 1)
-        if [ "$FORMAT" == "line" ]; then
-            local gid=$(echo "$vm_stats" | grep "vGPU ID" | awk '{print $4}')
-            local name=$(echo "$vm_stats" | grep "vGPU Name" | cut -d' ' -f 32- | tr " " "-")
-            local mem=$(echo "$vm_stats" | grep "FB Memory Usage" -A 3)
-            local mem_total=$(echo "$mem" | grep Total | awk '{print $3}')
-            local mem_used=$(echo "$mem" | grep Used | awk '{print $3}')
-            local mem_free=$(echo "$mem" | grep Free | awk '{print $3}')
-            local util=$(echo "$vm_stats" | grep Utilization -A 4)
-            local util_gpu=$(echo "$util" | grep -iw Gpu | awk '{print $3}')
-            local util_mem=$(echo "$util" | grep Memory | awk '{print $3}')
-            local util_encoder=$(echo "$util" | grep Encoder | awk '{print $3}')
-            local util_decoder=$(echo "$util" | grep Decoder | awk '{print $3}')
-            local encode=$(echo "$vm_stats" | grep "Encoder Stats" -A 3)
-            local encode_sess=$(echo "$encode" | grep "Active Sessions" | awk '{print $4}')
-            local encode_fps=$(echo "$encode" | grep "Average FPS" | awk '{print $4}')
-            local encode_latency=$(echo "$encode" | grep "Average Latency" | awk '{print $4}')
-            local fbc=$(echo "$vm_stats" | grep "FBC Stats" -A 3)
-            local fbc_sess=$(echo "$fbc" | grep "Active Sessions" | awk '{print $4}')
-            local fbc_fps=$(echo "$fbc" | grep "Average FPS" | awk '{print $4}')
-            local fbc_latency=$(echo "$fbc" | grep "Average Latency" | awk '{print $4}')
-            printf \
-                "gpu.vm,gid=%s,name=%s,vm_uuid=%s \
-mem_total=%s,mem_free=%s,mem_used=%s,\
-util_gpu=%s,util_mem=%s,util_encoder=%s,util_decoder=%s,\
-encode_sess=%s,encode_fps=%s,encode_latency=%s,\
-fbc_sess=%s,fbc_fps=%s,fbc_latency=%s\n" \
-                "$gid" "$name" "$v" "$mem_total" "$mem_free" "$mem_used" \
-                "$util_gpu" "$util_mem" "$util_encoder" "$util_decoder" \
-                "$encode_sess" "$encode_fps" "$encode_latency" \
-                "$fbc_sess" "$fbc_fps" "$fbc_latency"
-        else
-            printf "%s\n\n" "$vm_stats"
-        fi
-    done
+    if [ "$FORMAT" == "line" ]; then
+        # A vGPU record is keyed by vGPU ID, so the caller's VM UUID filter is
+        # applied to the parsed output rather than by slicing the text first.
+        $NVIDIA_SMI vgpu -q | gpu_stats_parse vm | \
+            awk -v vid="$vid" 'vid == "" || index($0, "vm_uuid=" vid)'
+    else
+        $NVIDIA_SMI vgpu -q | gpu_stats_record '^[ \t]*vGPU ID[ \t]+:' "$vid"
+    fi
 }
 
 # Returns a stringified JSON array conforming to the following schema:
@@ -966,54 +1146,10 @@ gpu_host_stats()
     fi
 
     local pciid=$1
-    local stats=$($NVIDIA_SMI -q)
 
-    for p in $(echo "$stats" | grep "^GPU" | awk '{print $2}') ; do
-        if [ -z "$p" ]; then
-            continue
-        elif [ -n "$pciid" -a "$pciid" != "$p" ]; then
-            continue
-        fi
-        local gpu_stats=$(echo "$stats" | grep "GPU $p" -A 197)
-        if [ "$FORMAT" == "line" ]; then
-            local name=$(echo "$gpu_stats" | grep "Product Name" | cut -d' ' -f 33- | tr " " "-")
-            local mem=$(echo "$gpu_stats" | grep "FB Memory Usage" -A 4)
-            local mem_total=$(echo "$mem" | grep Total | awk '{print $3}')
-            local mem_used=$(echo "$mem" | grep Used | awk '{print $3}')
-            local mem_free=$(echo "$mem" | grep Free | awk '{print $3}')
-            local b1m=$(echo "$gpu_stats" | grep "BAR1 Memory Usage" -A 3)
-            local b1m_total=$(echo "$b1m" | grep Total | awk '{print $3}')
-            local b1m_used=$(echo "$b1m" | grep Used | awk '{print $3}')
-            local b1m_free=$(echo "$b1m" | grep Free | awk '{print $3}')
-            local util=$(echo "$gpu_stats" | grep Utilization -A 4)
-            local util_gpu=$(echo "$util" | grep -iw Gpu | awk '{print $3}')
-            local util_mem=$(echo "$util" | grep Memory | awk '{print $3}')
-            local util_encoder=$(echo "$util" | grep Encoder | awk '{print $3}')
-            local util_decoder=$(echo "$util" | grep Decoder | awk '{print $3}')
-            local encode=$(echo "$gpu_stats" | grep "Encoder Stats" -A 3)
-            local encode_sess=$(echo "$encode" | grep "Active Sessions" | awk '{print $4}')
-            local encode_fps=$(echo "$encode" | grep "Average FPS" | awk '{print $4}')
-            local encode_latency=$(echo "$encode" | grep "Average Latency" | awk '{print $4}')
-            local fbc=$(echo "$gpu_stats" | grep "FBC Stats" -A 3)
-            local fbc_sess=$(echo "$fbc" | grep "Active Sessions" | awk '{print $4}')
-            local fbc_fps=$(echo "$fbc" | grep "Average FPS" | awk '{print $4}')
-            local fbc_latency=$(echo "$fbc" | grep "Average Latency" | awk '{print $4}')
-            printf \
-                "gpu.host,host=%s,name=%s,pciid=%s \
-mem_total=%s,mem_free=%s,mem_used=%s,\
-b1m_total=%s,b1m_free=%s,b1m_used=%s,\
-util_gpu=%s,util_mem=%s,util_encoder=%s,util_decoder=%s,\
-encode_sess=%s,encode_fps=%s,encode_latency=%s,\
-fbc_sess=%s,fbc_fps=%s,fbc_latency=%s\n" \
-                "$HOSTNAME" "$name" "$p" \
-                "$mem_total" "$mem_free" "$mem_used" \
-                "$b1m_total" "$b1m_free" "$b1m_used" \
-                "$util_gpu" "$util_mem" "$util_encoder" "$util_decoder" \
-                "$encode_sess" "$encode_fps" "$encode_latency" \
-                "$fbc_sess" "$fbc_fps" "$fbc_latency"
-        else
-            printf "%s\n" "$HOSTNAME"
-            printf "%s\n\n" "$gpu_stats"
-        fi
-    done
+    if [ "$FORMAT" == "line" ]; then
+        $NVIDIA_SMI -q | gpu_stats_parse host "$pciid"
+    else
+        $NVIDIA_SMI -q | gpu_stats_record '^GPU [0-9A-Fa-f]' "$pciid" "$HOSTNAME"
+    fi
 }
