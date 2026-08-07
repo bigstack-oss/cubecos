@@ -241,7 +241,13 @@ SetupIdp(std::string name, std::string password, std::string sharedId, std::stri
                              env.c_str(), OPENSTACK_CLI);
         HexUtilSystemF(0, 0, "%s %s group create cube_users",
                              env.c_str(), OPENSTACK_CLI);
+        // federated users land in cube_users, so bind both roles: member is what upstream
+        // policies are written against, _member_ stays for clusters and tooling that still
+        // expect it. the implied role makes _member_ grant member anyway, but binding it
+        // directly keeps the group correct if that implication is ever retired.
         HexUtilSystemF(0, 0, "%s %s role add --group cube_users --project admin _member_",
+                             env.c_str(), OPENSTACK_CLI);
+        HexUtilSystemF(0, 0, "%s %s role add --group cube_users --project admin member",
                              env.c_str(), OPENSTACK_CLI);
         HexUtilSystemF(0, 0, "%s %s federation protocol create mapped --mapping cube_idp_mapping --identity-provider cube_idp",
                              env.c_str(), OPENSTACK_CLI);
