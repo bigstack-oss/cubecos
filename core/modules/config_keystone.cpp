@@ -168,10 +168,15 @@ SetupPublicAdminUser(std::string name, std::string password, std::string sharedI
     // Configure the administrative account
     std::string env = GetOpenstackEnv(name, password, sharedId, domain);
 
-    // create _member_ and delete member role for backward-compatible
+    // create _member_ for backward-compatibility with clusters whose users hold it.
+    // `member` is deliberately kept now: keystone-manage bootstrap creates admin/member/
+    // reader plus the member->reader implication, and deleting member took that whole
+    // chain with it, so every upstream "new default" policy keyed on role:member could
+    // never match -- see cubecos#216. os_keystone_legacy_member_role_setup restores the
+    // chain and bridges _member_ onto member; it is idempotent, so it also repairs a
+    // cluster upgraded from a release that did delete the role.
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role create _member_" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
-    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role set --no-immutable member" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
-    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role delete member" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_keystone_legacy_member_role_setup");
 
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role add --user admin --domain %s admin" RETRY_FMT_F,
                          env.c_str(), OPENSTACK_CLI, domain.c_str());

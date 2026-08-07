@@ -1079,6 +1079,111 @@ os_keystone_idp_config()
           "-var-file=${TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD}"
 }
 
+# Restore the modern role chain and bridge the legacy _member_ role onto it.
+#
+# keystone-manage bootstrap creates admin/member/reader and the member->reader
+# implication. CubeCOS used to delete `member` right after bootstrap, which also removed
+# that implication, so no upstream "new default" policy keyed on role:member could ever
+# match and _member_ users lost access in Skyline (cubecos#216).
+#
+# This restores member (+ member->reader) and adds _member_ -> member, so every existing
+# _member_ assignment grants member and reader at token issue with no assignment changes.
+# Idempotent -- safe on every commit and on clusters upgraded from older releases.
+os_keystone_legacy_member_role_setup()
+{
+    local prior implied
+
+    if ! $OPENSTACK role show member >/dev/null 2>&1 ; then
+        Quiet -n $OPENSTACK role create member
+    fi
+    if ! $OPENSTACK role show reader >/dev/null 2>&1 ; then
+        Quiet -n $OPENSTACK role create reader
+    fi
+
+    # "<prior id> <prior name> <implied id> <implied name>" per line
+    local existing=$($OPENSTACK implied role list -f value 2>/dev/null | awk '{print $2" "$4}')
+
+    for pair in "member reader" "_member_ member" ; do
+        prior=${pair% *}
+        implied=${pair#* }
+        if ! echo "$existing" | grep -qx "$prior $implied" ; then
+            Quiet -n $OPENSTACK implied role create $prior --implied-role $implied
+        fi
+    done
+
+    $OPENSTACK implied role list -f value | awk '{print $2" implies "$4}'
+}
+
+# Dry run for os_keystone_migrate_legacy_member_role: show what still holds _member_.
+os_keystone_legacy_member_role_report()
+{
+    if ! $OPENSTACK role show _member_ >/dev/null 2>&1 ; then
+        echo "Legacy role _member_ does not exist; nothing to migrate."
+        return 0
+    fi
+
+    echo "Principals holding the legacy _member_ role:"
+    $OPENSTACK role assignment list --role _member_ --names -f value -c User -c Group -c Project -c Domain |
+        sed 's/^/  /'
+    echo "Principals already holding member:"
+    $OPENSTACK role assignment list --role member --names -f value -c User -c Group -c Project -c Domain 2>/dev/null |
+        sed 's/^/  /'
+}
+
+# Give every principal holding the legacy _member_ role an equivalent `member`
+# assignment, so the implied-role bridge above stops being load-bearing. Handles both
+# user and group assignments, project- and domain-scoped. Idempotent: `role add` on an
+# assignment that already exists is a no-op.
+os_keystone_migrate_legacy_member_role()
+{
+    local total=0 added=0 skipped=0
+
+    if ! $OPENSTACK role show _member_ >/dev/null 2>&1 ; then
+        echo "Legacy role _member_ does not exist; nothing to migrate."
+        return 0
+    fi
+    if ! $OPENSTACK role show member >/dev/null 2>&1 ; then
+        echo "Role member does not exist; run os_keystone_legacy_member_role_setup first." >&2
+        return 1
+    fi
+
+    local assignments=$($OPENSTACK role assignment list --role _member_ --names -f json)
+
+    while read -r line ; do
+        [ -n "$line" ] || continue
+        total=$((total + 1))
+
+        local user=$(echo "$line" | jq -r '.User // empty')
+        local group=$(echo "$line" | jq -r '.Group // empty')
+        local project=$(echo "$line" | jq -r '.Project // empty')
+        local domain=$(echo "$line" | jq -r '.Domain // empty')
+
+        local actor=""
+        [ -n "$user" ] && actor="--user ${user%@*} --user-domain ${user#*@}"
+        [ -n "$group" ] && actor="--group ${group%@*} --group-domain ${group#*@}"
+
+        local scope=""
+        [ -n "$project" ] && scope="--project ${project%@*} --project-domain ${project#*@}"
+        [ -n "$domain" ] && scope="--domain ${domain%@*}"
+
+        if [ -z "$actor" ] || [ -z "$scope" ] ; then
+            echo "  skip: unsupported assignment $line"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
+        if $OPENSTACK role add $actor $scope member ; then
+            echo "  ok:   member <- ${user:-$group} on ${project:-$domain}"
+            added=$((added + 1))
+        else
+            echo "  fail: ${user:-$group} on ${project:-$domain}" >&2
+            skipped=$((skipped + 1))
+        fi
+    done <<< "$(echo "$assignments" | jq -c '.[]')"
+
+    echo "Legacy _member_ assignments: $total, member granted: $added, skipped: $skipped"
+}
+
 os_endpoint_url_set()
 {
     local srv=$1
