@@ -175,7 +175,12 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 OPENSTACK_HOST = "@SHARED_ID@"
 OPENSTACK_KEYSTONE_URL = "http://%s:5000/v3" % OPENSTACK_HOST
-OPENSTACK_KEYSTONE_DEFAULT_ROLE = "_member_"
+# the role horizon grants when a user is added to a project. member is the modern
+# equivalent of the legacy _member_ and implies reader, so new users land on the roles
+# upstream policies are written against instead of growing the _member_ population
+# that cubecos#216 is about. Existing _member_ holders keep working via the implied
+# role wired up in config_keystone.
+OPENSTACK_KEYSTONE_DEFAULT_ROLE = "member"
 
 OPENSTACK_IMAGE_BACKEND = {
     'image_formats': [
