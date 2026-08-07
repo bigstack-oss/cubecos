@@ -24,11 +24,27 @@ migrate_fixpack()
 
 migrate_git()
 {
-    # Init this node's config-history /.git (per-slot root fs) during per-node
-    # bring-up, before it's marked synced, so the first ceph_mds check can't race
-    # the init. Per-slot marker + idempotent git_init => reboots skip. See #1163.
+    # Init this node's config-history /.git, detached, and mark migrated only
+    # after git_init actually works (not on a pre-ready no-op). See #1195.
     [ -f $STATE_DIR/git_migrated ] && return 0
-    $HEX_SDK git_init && touch $STATE_DIR/git_migrated
+    setsid $HEX_SDK _migrate_git_bg </dev/null >/dev/null 2>&1 &
+}
+
+# Retry (detached, bounded ~10 min) until cube_node_ready and git_init works,
+# then set the marker. Never marks on a no-op.
+_migrate_git_bg()
+{
+    local _i
+    for _i in $(seq 1 120) ; do
+        if $HEX_SDK cube_node_ready ; then
+            $HEX_SDK git_init
+            if git -C / log -1 >/dev/null 2>&1 ; then
+                touch $STATE_DIR/git_migrated
+                return 0
+            fi
+        fi
+        sleep 5
+    done
 }
 
 migrate_keystone_db()

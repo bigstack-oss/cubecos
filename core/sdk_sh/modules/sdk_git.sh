@@ -49,11 +49,14 @@ _git_server_init()
         mkdir -p $cube_git_dir
         GIT_DIR=$cube_git_dir $GIT init --bare -b $branch
         $GIT config --global user.email "${HOSTNAME}@${ipaddr}"
+        # Disable git auto-maintenance -- it hangs on the /-worktree repo. #1195
+        $GIT config --global maintenance.auto false
         git_ignore_file
 
         Quiet -n pushd /
         Quiet -n git init -b $branch
-        Quiet -n $GIT remote add $project ssh://root@$(shared_ip)${cube_git_dir}
+        # local cephfs path, not ssh://VIP (stalls during set_ready reconfig). #1195
+        Quiet -n $GIT remote add $project ${cube_git_dir}
         if [ -e "/.gitignore" ] ; then
             if ! git log -1 >/dev/null 2>&1 ; then
                 Quiet -n git add -A
@@ -109,11 +112,14 @@ _git_client_init()
     local branch=master
 
     Quiet -n $GIT config --global user.email "${HOSTNAME}@${ipaddr}"
+    # Disable git auto-maintenance -- it hangs on the /-worktree repo. #1195
+    Quiet -n $GIT config --global maintenance.auto false
     Quiet -n git_ignore_file
 
     Quiet -n pushd /
     Quiet -n $GIT init -b $branch
-    Quiet -n $GIT remote add $project ssh://root@$(shared_ip)${cube_git_dir}
+    # local cephfs path, not ssh://VIP (stalls during set_ready reconfig). #1195
+    Quiet -n $GIT remote add $project ${cube_git_dir}
     if [ -e "/.gitignore" ] ; then
         if $GIT fetch ; then
             _git_suid_save
