@@ -49,8 +49,6 @@ openstack:
   - admin
   system_project: service
   system_project_domain: @DOMAIN@
-  system_reader_roles:
-  - _member_
   system_user_domain: @DOMAIN@
   system_user_name: skyline
   system_user_password: @SKYLINE_SERVICE_PASSWORD@
