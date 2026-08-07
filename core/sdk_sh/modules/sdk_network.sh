@@ -345,3 +345,29 @@ network_ipt_restore()
 {
     [ ! -e /run/iptables ] || iptables-restore < /run/iptables
 }
+
+# Air-gap simulation (validation): drop the node's egress to public dests so any
+# install step reaching the internet fails; allow loopback + all private /
+# link-local / multicast (driver + intra-cluster stay reachable). Driver-set via
+# the airgap_sim marker; clear cluster-wide with
+# `cubectl exec -p 'hex_sdk airgap_sim_clear'`. Idempotent.
+airgap_sim_apply()
+{
+    touch /etc/appliance/state/airgap_sim
+    iptables -nL CUBE_AIRGAP >/dev/null 2>&1 && iptables -F CUBE_AIRGAP || iptables -N CUBE_AIRGAP
+    iptables -A CUBE_AIRGAP -o lo -j RETURN
+    local net
+    for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 224.0.0.0/4 ; do
+        iptables -A CUBE_AIRGAP -d $net -j RETURN
+    done
+    iptables -A CUBE_AIRGAP -j DROP
+    iptables -C OUTPUT -j CUBE_AIRGAP 2>/dev/null || iptables -I OUTPUT 1 -j CUBE_AIRGAP
+}
+
+airgap_sim_clear()
+{
+    rm -f /etc/appliance/state/airgap_sim
+    while iptables -C OUTPUT -j CUBE_AIRGAP 2>/dev/null ; do iptables -D OUTPUT -j CUBE_AIRGAP ; done
+    iptables -F CUBE_AIRGAP 2>/dev/null
+    iptables -X CUBE_AIRGAP 2>/dev/null
+}
