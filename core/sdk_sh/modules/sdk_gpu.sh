@@ -251,6 +251,10 @@ gpu_stats_parse()
     local want=$2
     local spec order root_re
 
+    # nvidia-smi has printed the utilization leaf both ways: the collector was
+    # originally written against "Gpu" and lost util_gpu entirely once a driver
+    # started printing "GPU" (c85db777). Both spellings map to the same field so
+    # that neither generation of the output silently drops the metric.
     if [ "$mode" = "host" ]; then
         root_re='^GPU [0-9A-Fa-f]'
         order='mem_total,mem_free,mem_used,b1m_total,b1m_free,b1m_used,util_gpu,util_mem,util_encoder,util_decoder,encode_sess,encode_fps,encode_latency,fbc_sess,fbc_fps,fbc_latency'
@@ -261,6 +265,7 @@ BAR1 Memory Usage/Total|b1m_total|MiB
 BAR1 Memory Usage/Free|b1m_free|MiB
 BAR1 Memory Usage/Used|b1m_used|MiB
 Utilization/GPU|util_gpu|%
+Utilization/Gpu|util_gpu|%
 Utilization/Memory|util_mem|%
 Utilization/Encoder|util_encoder|%
 Utilization/Decoder|util_decoder|%
@@ -277,6 +282,7 @@ FBC Stats/Average Latency|fbc_latency|'
 FB Memory Usage/Free|mem_free|MiB
 FB Memory Usage/Used|mem_used|MiB
 Utilization/GPU|util_gpu|%
+Utilization/Gpu|util_gpu|%
 Utilization/Memory|util_mem|%
 Utilization/Encoder|util_encoder|%
 Utilization/Decoder|util_decoder|%
