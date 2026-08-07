@@ -500,7 +500,7 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         ml2Cfg["ovn"]["ovn_l3_scheduler"] = "leastloaded";
         ml2Cfg["ovn"]["ovn_metadata_enabled"] = "true";
         ml2Cfg["ovn"]["enable_distributed_floating_ip"] = "true";
-        ml2Cfg["ovn"]["ovsdb_probe_interval"] = "600000";
+        ml2Cfg["ovn"]["ovsdb_probe_interval"] = "60000";
         ml2Cfg["ovn"]["ovn_dhcp4_global_options"] = "classless_static_route:{169.254.169.254/32}";
 
         vpnaasCfg["service_providers"]["service_provider"] = "VPN:openswan:neutron_vpnaas.services.vpn.service_drivers.ovn_ipsec.IPsecOvnVPNDriver:default";
