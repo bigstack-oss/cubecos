@@ -203,6 +203,7 @@ hex_cli_MODULES += cli_iaas_image.o
 hex_cli_MODULES += cli_iaas_volume.o
 hex_cli_MODULES += cli_iaas_volume_backend.o
 hex_cli_MODULES += cli_iaas_volume_meta.o
+hex_cli_MODULES += cli_iaas_identity.o
 hex_cli_MODULES += cli_boot.o
 hex_cli_MODULES += cli_boot_mode.o
 hex_cli_MODULES += cli_cluster.o
