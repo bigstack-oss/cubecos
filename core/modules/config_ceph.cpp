@@ -855,7 +855,9 @@ UpdateConfig(
         fprintf(fout, "rgw keystone admin password = %s\n", adminCliPass.c_str());
         fprintf(fout, "rgw keystone admin project = admin\n");
         fprintf(fout, "rgw keystone admin domain = default\n");
-        fprintf(fout, "rgw keystone accepted roles = _member_, admin\n");
+        // member is the modern equivalent of _member_; both are accepted while legacy
+        // clusters still carry _member_ assignments (see cubecos#216)
+        fprintf(fout, "rgw keystone accepted roles = _member_, member, admin\n");
         fprintf(fout, "rgw keystone token cache size = 0\n");
         fprintf(fout, "rgw keystone revocation interval = 0\n");
         fprintf(fout, "rgw keystone implicit tenants = false\n");
