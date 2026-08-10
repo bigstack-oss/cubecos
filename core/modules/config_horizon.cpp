@@ -8,6 +8,7 @@
 #include <hex/string_util.h>
 #include <hex/process_util.h>
 #include <hex/dryrun.h>
+#include <hex/logrotate.h>
 
 #include <cluster.hpp>
 #include <cube/systemd_util.h>
@@ -22,6 +23,14 @@ static const char DBPASS[] = "ZdDtndK8NmBklLyg";
 // in-process under mod_wsgi, so httpd starting was all it took; it lives in the
 // python 3.10 venv now and has a unit of its own to bring up.
 static const char NAME[] = "openstack-dashboard";
+
+// Nothing rotates /var/log/horizon on its own any more. gunicorn's stdout/stderr and
+// horizon's own LOGGING console handler both land in horizon.log, which the unit
+// appends to; that output used to go to /var/log/httpd/horizon_error.log and was
+// covered by httpd's logrotate, and the openstack-dashboard rpm's
+// /etc/logrotate.d/openstack-dashboard went with the rpm. Declare it through hex
+// instead, the same way manila, cinder, heat and ironic do.
+static LogRotateConf log_conf("horizon", "/var/log/horizon/*.log", DAILY, 128, 0, true);
 
 static const char DJANGO_CONF_IN[] = "/etc/openstack-dashboard/local_settings.in";
 static const char DJANGO_CONF[] = "/etc/openstack-dashboard/local_settings";
@@ -198,8 +207,16 @@ Commit(bool modified, int dryLevel)
     // so this has to happen after WriteDjangoConf() above: WEBROOT and STATIC_URL are
     // baked into the compressed output. config_apache2 requires this module, which is
     // what keeps httpd starting after the socket exists.
-    bool enabled = IsControl(s_eCubeRole);
-    SystemdCommitService(enabled, NAME, true);
+    //
+    // Unconditionally true rather than IsControl(s_eCubeRole): the guard at the top of
+    // Commit() has already returned for every non-control role. That does mean a
+    // *demoted* control node never reaches SystemdCommitService(false, ...) and keeps
+    // the dashboard enabled -- config_apache2.cpp has the identical shape for httpd, so
+    // the two want fixing together rather than leaving the proxy enabled in front of a
+    // disabled backend.
+    SystemdCommitService(true, NAME, true);
+
+    WriteLogRotateConf(log_conf);
 
     return true;
 }
