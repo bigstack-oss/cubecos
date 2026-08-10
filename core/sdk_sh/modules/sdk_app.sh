@@ -174,9 +174,13 @@ app_import()
     local tmpdir=$(mktemp -d -t $(basename $app_pigz).XXXXXXXX)
     tar -I pigz -xf $app_pigz -C $tmpdir
 
-    (cd $tmpdir && ENV_PROJ_NAME=$app_fw ./import.sh $skip_flag) || true
+    # Propagate import.sh's exit code -- swallowing it with `|| true` reported a
+    # failed chart push (empty registry) as "app installed successfully".
+    local rc=0
+    (cd $tmpdir && ENV_PROJ_NAME=$app_fw ./import.sh $skip_flag) || rc=$?
 
     rm -rf $tmpdir
+    return $rc
 }
 
 # params:
