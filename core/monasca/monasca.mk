@@ -33,13 +33,12 @@ MONASCA_API_VER := 11.0.0
 MONASCA_AGENT_VER := 10.0.0
 MONASCA_PERSISTER_VER := 9.0.0
 
-# FIXME: drop once watcher moves into the antelope venv. watcher is still the
-# python 3.9 rpm under /usr/lib/python3.9, and watcher/common/clients.py does
-# "from monascaclient import client" for the monasca datasource that
-# config_watcher.cpp selects. Nothing else needs monasca in the system python.
-# Version comes from the yoga constraint file (2.5.0), unchanged by the venv
-# move; the venv gets the bobcat client from the antelope constraint file.
-ROOTFS_PIP += python-monascaclient
+# NOTE: python-monascaclient used to be installed into the system python 3.9 as well
+# (ROOTFS_PIP), for watcher/common/clients.py's "from monascaclient import client" --
+# the monasca datasource config_watcher.cpp selects -- back when watcher was the python
+# 3.9 rpm. watcher has been a venv install since the antelope migration and the osc cli
+# joined it, so nothing outside the venv imports monascaclient any more and that install
+# is gone. The venv gets the bobcat client (2.8.0) from the antelope constraint file.
 
 # intel-cmt-cat provides pqos, used by the rdt_l3 agent plugin for per-VM L3
 # cache occupancy. Installed via the centralized dnf pass in core/heavyfs.
@@ -83,13 +82,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/monasca-statsd /usr/bin/monasca-statsd
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/monasca-status /usr/bin/monasca-status
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/monasca_db /usr/bin/monasca_db
-	$(Q)# The system python still holds python-monascaclient for watcher, and
-	$(Q)# /usr/local/bin precedes /usr/bin in PATH, so its 2.5.0 console script
-	$(Q)# would shadow the venv client for anything calling a bare "monasca"
-	$(Q)# (sdk_os.sh metric-name-list, operators). Point it at the venv one; the
-	$(Q)# library itself stays importable where watcher needs it. Drop together
-	$(Q)# with the ROOTFS_PIP entry above.
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/monasca /usr/local/bin/monasca
 
 # monasca-persister
 rootfs_install::
