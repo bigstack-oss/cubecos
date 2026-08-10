@@ -9,6 +9,21 @@ HORIZON_VER := 23.1.1
 # leave it floating.
 MYSQLCLIENT_VER := 2.2.8
 
+# The dashboard layout. These used to live in core/heavyfs/Makefile, from the days
+# when the openstack-dashboard rpm made the application directory a shared concern;
+# nothing outside this file reads them any more, so they belong here.
+#
+# $(HORIZON_APP_DIR) holds manage.py, the collected static tree and an
+# openstack_dashboard symlink for compatibility. $(HORIZON_DIR) has to name the real
+# package directory rather than that symlink: the symlink stores an absolute in-image
+# path, so a plain cp from the build host would follow it out to the *host* root
+# instead of into $(ROOTDIR).
+HORIZON_APP_DIR := /usr/share/openstack-dashboard
+HORIZON_VENV_SITE_PACKAGES := $(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
+HORIZON_DIR := $(HORIZON_VENV_SITE_PACKAGES)/openstack_dashboard
+HORIZON_ETCDIR := /etc/openstack-dashboard
+HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
+
 HORIZON_THEME_DIR := $(HORIZON_DIR)/themes
 CUBE_THEME_SRCDIR := $(COREDIR)/horizon/theme
 CUBE_THEME_DSTDIR := $(HORIZON_THEME_DIR)/cube
@@ -16,11 +31,12 @@ CUBE_THEME_DSTDIR := $(HORIZON_THEME_DIR)/cube
 HORIZON_LOG_DIR := /var/log/horizon
 HORIZON_APP_STATE_DIR := /var/lib/openstack-dashboard
 
-# Where each dashboard plugin ends up in the venv. Every plugin is pip installed by
-# the component that owns it -- heat-dashboard by heat.mk, ironic-ui by ironic.mk,
-# manila-ui by manila.mk, designate/masakari/watcher/neutron-vpnaas from git by
-# theirs -- and all of them land here.
-HORIZON_VENV_SP := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
+# The same site-packages directory as seen from the build host. Every dashboard plugin
+# is pip installed by the component that owns it -- heat-dashboard by heat.mk,
+# ironic-ui by ironic.mk, manila-ui by manila.mk, octavia-dashboard by octavia.mk, and
+# designate/masakari/watcher/neutron-vpnaas from git by theirs -- and all of them land
+# here for the collection step below to pick up.
+HORIZON_VENV_SP := $(ROOTDIR)$(HORIZON_VENV_SITE_PACKAGES)
 
 CUBE_THEME_SRCS := $(shell find $(CUBE_THEME_SRCDIR) -type f 2>/dev/null)
 
@@ -82,7 +98,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 $(HORIZON_APP_DIR)
 	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/horizon/manage.py .$(HORIZON_APP_DIR)/manage.py
 	$(Q)chroot $(ROOTDIR) chmod 755 $(HORIZON_APP_DIR)/manage.py
-	$(Q)chroot $(ROOTDIR) ln -sfn $(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/horizon $(HORIZON_APP_DIR)/horizon
+	$(Q)chroot $(ROOTDIR) ln -sfn $(HORIZON_VENV_SITE_PACKAGES)/horizon $(HORIZON_APP_DIR)/horizon
 	$(Q)chroot $(ROOTDIR) ln -sfn $(HORIZON_DIR) $(HORIZON_APP_DIR)/openstack_dashboard
 
 # settings
