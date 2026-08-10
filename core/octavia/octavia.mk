@@ -1,21 +1,23 @@
 # Cube SDK
 # octavia installation
 
-# The octavia services come from pip below, but the client has to stay an RPM
-# under the *system* python: /usr/bin/openstack is `#!/usr/bin/python3` (3.9),
-# and its `loadbalancer` subcommand is a stevedore entry point owned by
-# python3-octaviaclient. The copy pip puts in the 3.10 venv is invisible to that
-# CLI. core/sdk_sh/modules/sdk_os.sh drives octavia entirely through it --
-# `loadbalancer list` (L404), the four flavorprofile/flavor pairs created at
-# bootstrap (L1580-L1602) and `loadbalancer delete --cascade` (L1835) -- so
-# without this RPM the load balancer bootstrap and teardown paths break.
-# It used to arrive as an openstack-octavia-* dependency.
+# python-octaviaclient owns the `loadbalancer` subcommand, a stevedore entry point.
+# core/sdk_sh/modules/sdk_os.sh drives octavia entirely through it -- `loadbalancer
+# list` (L404), the four flavorprofile/flavor pairs created at bootstrap
+# (L1580-L1602) and `loadbalancer delete --cascade` (L1835) -- so without it the load
+# balancer bootstrap and teardown paths break.
+#
+# It used to be the yoga python3-octaviaclient rpm under the *system* python 3.9,
+# because /usr/bin/openstack was `#!/usr/bin/python3` and an entry point is only
+# visible to the interpreter it was installed under. core/heavyfs moved the CLI into
+# the 3.10 venv, so the plugin follows it: it is named on the pip install below.
+# This rpm was also the only hard Requires on python3-openstackclient anywhere in the
+# tree, so dropping it here is what lets core/heavyfs stop installing the yoga CLI.
 #
 # NOTE: unlike heat, health_octavia_check() is *not* what depends on this.
 # It checks systemd units, the monasca http_status metric and the octavia-hm0
 # OVN port, never the OSC CLI -- so `cluster check` would have stayed green
 # while the bootstrap paths above failed.
-ROOTFS_DNF_NOARCH += python3-octaviaclient
 #
 # openstack-octavia-ui, the Horizon dashboard plugin, is replaced by the
 # octavia-dashboard wheel installed further down. It was dropped when octavia moved
@@ -46,10 +48,13 @@ rootfs_install::
 	$(Q)# amphora_driver/v2/driver.py imports octavia_lib.api.drivers), and that
 	$(Q)# is the provider this deployment uses. The RPM pulled it in as
 	$(Q)# python3-octavia-lib; pip will not, so it is listed explicitly.
+	$(Q)# python-octaviaclient is the "loadbalancer" osc plugin, named explicitly
+	$(Q)# rather than left transitive -- see the note at the top of this file.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
 		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			octavia==12.0.1 \
-			octavia-lib"
+			octavia-lib \
+			python-octaviaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link the seven console scripts that run on the controller. The venv
