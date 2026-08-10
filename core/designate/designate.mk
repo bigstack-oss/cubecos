@@ -3,19 +3,22 @@
 
 ROOTFS_DNF += bind bind-utils
 
-# python3-designateclient stays a yoga rpm under the *system* python 3.9. It owns the
-# "dns" osc plugin entry point that /usr/bin/openstack -- still `#!/usr/bin/python3` --
-# resolves, and hex_sdk's health_designate_check() drives
-# `openstack dns service list` through it, counting the api/central/worker/producer/mdns
-# rows that report UP.
+# python-designateclient owns the "dns" osc plugin entry point, which hex_sdk's
+# health_designate_check() drives as `openstack dns service list`, counting the
+# api/central/worker/producer/mdns rows that report UP. It is installed into the 3.10
+# venv further down, in its own pip call between the service and the dashboard.
 #
-# It has to be named here because it used to arrive in 3.9 only as a side effect of the
-# yoga horizon closure that #609 removed. Nothing in this tree ever asked for it, so it
-# disappeared silently and `cluster check` reported "DNSaaS NG [ designate(9 api not all
-# up) ]" while every designate unit was active -- the check could not run its query at
-# all. Every other service hex_sdk drives this way already names its client explicitly:
-# heat and manila and octavia as rpms, watcher as an explicit pip install.
-ROOTFS_DNF_NOARCH += python3-designateclient
+# It used to be the yoga python3-designateclient rpm under the *system* python 3.9,
+# because /usr/bin/openstack was itself `#!/usr/bin/python3` and a stevedore entry point
+# is only visible to the interpreter it was installed under. core/heavyfs moved the cli
+# into the venv, so the plugin follows it and the rpm is gone.
+#
+# It is still named explicitly rather than left to designate-dashboard's requirements,
+# for the same reason it had to be named as an rpm: it once arrived only as a side effect
+# of the yoga horizon closure that #609 removed, and when that closure went so did the
+# client, silently. `cluster check` then reported "DNSaaS NG [ designate(9 api not all
+# up) ]" while every designate unit was active, because the check could not run its query
+# at all.
 
 NAMED_CONF_FILES := /etc/named*
 NAMED_APP_DIR := /var/named
@@ -46,6 +49,10 @@ rootfs_install::
 		-r /tmp/designate/designate/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/designate/designate && \
 		/opt/openstack-antelope/bin/python setup.py install"
+	$(Q)# the "dns" osc plugin, named explicitly -- see the note at the top of this file
+	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		python-designateclient
 	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(DESIGNATE_DASHBOARD_REPO_URL) /tmp/designate/designate-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
