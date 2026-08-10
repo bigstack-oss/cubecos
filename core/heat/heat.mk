@@ -1,16 +1,22 @@
 # Cube SDK
 # heat installation
 
-# The heat service itself comes from pip below, but the client has to stay an
-# RPM under the *system* python: /usr/bin/openstack is `#!/usr/bin/python3`
-# (3.9), and its `orchestration` subcommand is an entry point owned by
-# python-heatclient ([openstack.cli.extension] orchestration =
-# heatclient.osc.plugin). The copy pip puts in the 3.10 venv is invisible to
-# that CLI. hex_sdk's health_heat_check() runs
-# `openstack orchestration service list`, so without this RPM `cluster check`
-# reports Orchestration NG (errcode 3, "engine down") even when heat-engine is
-# perfectly healthy. It used to arrive as an openstack-heat-* dependency.
-ROOTFS_DNF_NOARCH += python3-heatclient
+# python-heatclient owns the `orchestration` subcommand ([openstack.cli.extension]
+# orchestration = heatclient.osc.plugin), which hex_sdk's health_heat_check() runs
+# as `openstack orchestration service list`. Without it `cluster check` reports
+# Orchestration NG (errcode 3, "engine down") even when heat-engine is perfectly
+# healthy.
+#
+# It used to be the yoga python3-heatclient rpm under the *system* python, because
+# /usr/bin/openstack was `#!/usr/bin/python3` (3.9) and the copy pip put in the 3.10
+# venv was invisible to it -- an entry point is only visible to the interpreter it
+# was installed under. core/heavyfs moved the CLI into the venv, so the plugin
+# follows it: it is named on the pip install below instead, next to the service.
+#
+# Dropping the rpm also drops /usr/bin/heat{,-3}, the deprecated heatclient CLI. That
+# is not a regression to recover: the venv has its own bin/heat and this file has
+# always left it unlinked on purpose (see the console-script note below), so the rpm
+# was the only reason the tree shipped it at all.
 #
 # Nothing else is needed: the RDO spec's only non-python Requires was
 # shadow-utils, for the heat user and group, and core/heavyfs/account/centos9
@@ -35,9 +41,12 @@ HEAT_DASHBOARD_VER := 9.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)# python-heatclient is the "orchestration" osc plugin, named explicitly rather
+	$(Q)# than left transitive -- see the note at the top of this file.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
 		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			openstack-heat==$(HEAT_VER)"
+			openstack-heat==$(HEAT_VER) \
+			python-heatclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link the six console scripts heat declares. The venv also gains
