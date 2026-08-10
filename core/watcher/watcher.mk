@@ -3,7 +3,6 @@
 
 # https://releases.openstack.org/antelope/index.html#antelope-watcher
 WATCHER_VER := 10.0.0
-WATCHER_CLIENT_VER := 4.1.0
 
 WATCHER_CONF_DIR := /etc/watcher
 WATCHER_APP_DIR := /var/cache/watcher
@@ -60,11 +59,17 @@ rootfs_install::
 # dashboard and the client both come from the clone's requirements.txt under the
 # antelope constraint, which resolves python-watcherclient to 4.1.0.
 #
-# python-watcherclient is *also* installed into the system python 3.9, and that one
-# stays: it owns the "optimize" osc plugin entry point that /usr/bin/openstack,
-# itself still `#!/usr/bin/python3`, resolves, and hex_sdk's health_watcher_check()
-# drives `openstack optimize service list` through it. It used to arrive in 3.9 as a
-# transitive requirement of the dashboard, which no longer installs there.
+# python-watcherclient owns the "optimize" osc plugin entry point, which hex_sdk's
+# health_watcher_check() drives as `openstack optimize service list`. It used to be
+# installed a second time into the system python 3.9 as well, because
+# /usr/bin/openstack was `#!/usr/bin/python3` and could only see entry points there;
+# core/heavyfs moved the cli into this venv, so that second install is gone and the
+# venv copy is the only one.
+#
+# The 3.9 install also owned /usr/local/bin/watcher, which is where the client's own
+# cli came from -- /usr/bin held only the watcher-* service scripts linked above. Since
+# /usr/local/bin precedes /usr/bin in the PATH hex_sdk sets, the replacement is a
+# /usr/bin/watcher symlink into the venv, the same shape core/monasca uses.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -76,10 +81,11 @@ rootfs_install::
 		-r /tmp/watcher/watcher-dashboard/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/watcher/watcher-dashboard && \
 		/opt/openstack-antelope/bin/python setup.py install"
-	$(Q)chroot $(ROOTDIR) /usr/bin/python3 -m pip install --no-deps \
-		python-watcherclient==$(WATCHER_CLIENT_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+	$(Q)# the client's own cli, replacing the /usr/local/bin/watcher the 3.9 install
+	$(Q)# used to leave behind
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/watcher /usr/bin/watcher
 
 # install system directories and files
 #
