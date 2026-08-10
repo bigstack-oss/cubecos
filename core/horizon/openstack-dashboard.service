@@ -32,9 +32,18 @@ Environment=SCRIPT_NAME=/horizon
 # baked into the compressed output.
 #
 # The "+" prefix runs them as root instead of User= above: STATIC_ROOT is a
-# root-owned tree and --clear has to unlink what is already there. They inherited
-# root the same way when they hung off httpd.service, which also starts as root.
-ExecStartPre=+/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py collectstatic --noinput --clear -v0
+# root-owned tree. They inherited root the same way when they hung off
+# httpd.service, which also starts as root.
+#
+# Deliberately *without* --clear. httpd serves /horizon/static straight off
+# STATIC_ROOT and is a separate unit, so emptying that tree first means httpd 404s
+# every asset for as long as the collect takes -- and Restart=on-failure below turns
+# a gunicorn crash-loop into a repeated teardown of all 51MB. Before=httpd.service
+# only orders boot, it does nothing for a bare `systemctl restart
+# openstack-dashboard`. collectstatic overwrites what it collects, so --clear only
+# buys the removal of files a plugin has stopped shipping, which is not worth a
+# window where the dashboard has no assets.
+ExecStartPre=+/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py collectstatic --noinput -v0
 ExecStartPre=+/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py compress --force -v0
 TimeoutStartSec=5min
 
