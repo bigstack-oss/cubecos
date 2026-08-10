@@ -144,7 +144,7 @@ LOCKED_DNF += $(OPENSSL)
 # PYTHON3-NUMPY-F2PY := python3-numpy-f2py-1:1.20.1-5.el9
 # LOCKED_DNF += $(PYTHON3-NUMPY-F2PY)
 
-$(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-openstackclient python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) perf arp-scan")
+$(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) perf arp-scan")
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) python3 -m pip install -U pip
@@ -230,6 +230,38 @@ rootfs_install::
 # namespace shadows the source tree and setup.py fails with "cannot import name ...
 # from 'xstatic.pkg' (unknown location)". A single pip invocation is fine -- pip
 # builds every sdist before installing any of them.
+
+# install the openstack cli inside the python 3.10 virtual environment
+#
+# /usr/bin/openstack was the python3-openstackclient rpm, so it ran as
+# `#!/usr/bin/python3` (3.9). That shebang is what pinned half a dozen osc plugins
+# to the system python: a plugin is an [openstack.cli.extension] stevedore entry
+# point, and entry points are only visible to the interpreter they were installed
+# under, so the copies pip put in this venv were invisible to the cli and every
+# plugin had to be held in 3.9 as well -- as an rpm (designate, heat, manila,
+# octavia) or as a second pip install (cyborg, watcher, monasca). Each of those
+# carried a comment saying it could go once the cli moved; this is that move, and
+# with it python 3.9 holds no openstack cli at all.
+#
+# Measured on jim-1cc: 977 commands under the 3.9 cli against 1574 here, because
+# the venv resolves plugins 3.9 never had -- `openstack baremetal ...` among them,
+# which used to fall through to osc's did-you-mean list.
+#
+# No version is pinned. python-openstackclient is a client, so
+# os-antelope-pip-upper-constraints.txt already carries it (6.2.1) and naming it
+# again here could only drift from that file.
+#
+# The rpm also owned /usr/bin/openstack-3, the Fedora python3 alias. Nothing in this
+# tree calls it and no other venv console script is aliased that way, so it is not
+# recreated.
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		python-openstackclient
+	$(Q)# Link the cli. hex_sdk reaches it by absolute path ($$OPENSTACK in
+	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/openstack), so
+	$(Q)# this symlink is what carries every caller over.
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
 
 # set up the execution context for openstack caracal
 rootfs_install::
