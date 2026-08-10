@@ -1,12 +1,18 @@
 # Cube SDK
 # manila installation
 
-# python3-manilaclient stays a yoga rpm under the *system* python 3.9. It owns
-# /usr/bin/manila -- hex_sdk calls it in health_manila_check(), os_manila_init()
-# and migrate_manila_db_post() -- and the "share" osc plugin entry point that
-# /usr/bin/openstack, itself still `#!/usr/bin/python3`, resolves. A yoga 3.3.2
-# client against the 16.3.0 api is fine: it negotiates its own microversion and
-# every call above predates yoga.
+# python-manilaclient owns two things this tree drives: /usr/bin/manila, which hex_sdk
+# calls in health_manila_check(), os_manila_init() and migrate_manila_db_post(), and
+# the "share" osc plugin entry point.
+#
+# It used to be the yoga python3-manilaclient rpm under the *system* python 3.9,
+# because /usr/bin/openstack was itself `#!/usr/bin/python3` and an entry point is
+# only visible to the interpreter it was installed under. core/heavyfs moved the cli
+# into the 3.10 venv, so the plugin follows it: it is named on the pip install below
+# and /usr/bin/manila is relinked into the venv the way every other console script
+# here already is. That also retires the yoga-client-against-antelope-api pairing the
+# rpm forced -- 4.4.2 is the client antelope's own upper-constraints names for the
+# 16.3.0 api installed here.
 #
 # openstack-manila-ui is replaced by the manila-ui wheel installed further down.
 # #609 moved horizon into the 3.10 venv, so the Shares panels can follow the manila
@@ -23,7 +29,6 @@
 #                 rewrites it on every Commit(), and the generic driver's
 #                 CIFSHelper runs its `net conf` calls through _ssh_exec() inside
 #                 the service instance, never on the host.
-ROOTFS_DNF_NOARCH += python3-manilaclient
 
 # https://releases.openstack.org/antelope/index.html#antelope-manila
 MANILA_VER := 16.3.0
@@ -46,15 +51,23 @@ MANILA_UI_VER := 9.0.1
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)# python-manilaclient is the "share" osc plugin and owns /usr/bin/manila,
+	$(Q)# named explicitly -- see the note at the top of this file.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
 		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			manila==$(MANILA_VER)"
+			manila==$(MANILA_VER) \
+			python-manilaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries. This is exactly the set the rpms put in /usr/bin, which is
 	$(Q)# every console_script manila declares except manila-all -- the RDO spec
 	$(Q)# deletes that one before packaging ("files unneeded in production"), so it
 	$(Q)# is left unlinked here as well.
+	$(Q)# manila is the client's cli, not the service's: $$MANILA in
+	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/manila, the path
+	$(Q)# python3-manilaclient used to own. The rpm also shipped /usr/bin/manila-3,
+	$(Q)# the Fedora python3 alias, which nothing calls and which is not recreated.
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila /usr/bin/manila
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-api /usr/bin/manila-api
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-data /usr/bin/manila-data
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-manage /usr/bin/manila-manage
