@@ -2773,7 +2773,13 @@ os_light_osc()
         rm -f /tmp/os.rc
         ln -sf /usr/bin/osc /usr/local/bin/openstack
     elif [ "x$1" = "xoff" ] ; then
-        ln -sf /usr/bin/$OPENSTACK /usr/local/bin/openstack
+        # remove the override rather than relink it. $OPENSTACK is
+        # "timeout <n> /usr/bin/openstack", so "/usr/bin/$OPENSTACK" expanded to three
+        # words and ln failed with "target '/usr/local/bin/openstack' is not a
+        # directory", leaving the container symlink in place. /usr/bin/openstack is the
+        # openstack cli in the antelope venv and /usr/local/bin only ever held this
+        # override, so unlinking it is what restores the real client.
+        rm -f /usr/local/bin/openstack
         docker rm -f osc >/dev/null 2>&1 || true
     else
         echo "usage: $0 os_light_osc on|off"
