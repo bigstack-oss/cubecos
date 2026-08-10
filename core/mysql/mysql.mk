@@ -38,6 +38,14 @@ $(foreach mariadb_rpm,$(MARIADB_LOCKED_RPMS),$(eval ROOTFS_DNF_DL_FROM += $(MARI
 ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(GALERA_RPM).x86_64.rpm
 
 # zlib-devel pairs with MariaDB-devel above: mysqlclient links against libz.
+#
+# Neither needs stripping in a trailing rootfs_install::. core/main/cube-post.mk
+# already autoremoves every installed package matching "devel|headers" (all but
+# python3-devel) from the rootfs as its final cleanup, so both go there, and the
+# toolchain goes with them -- erasing glibc-devel takes gcc, gcc-c++ and
+# libstdc++-devel out as dependents. Only the runtime halves are left for
+# mysqlclient to link against at import time: MariaDB-shared for libmariadb.so.3
+# and zlib for libz.so.1.
 ROOTFS_DNF += rsync zlib-devel
 ROOTFS_DNF_NOARCH += python3-PyMySQL
 
