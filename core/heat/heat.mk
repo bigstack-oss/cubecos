@@ -13,10 +13,11 @@
 # was installed under. core/heavyfs moved the CLI into the venv, so the plugin
 # follows it: it is named on the pip install below instead, next to the service.
 #
-# Dropping the rpm also drops /usr/bin/heat{,-3}, the deprecated heatclient CLI. That
-# is not a regression to recover: the venv has its own bin/heat and this file has
-# always left it unlinked on purpose (see the console-script note below), so the rpm
-# was the only reason the tree shipped it at all.
+# Dropping the rpm also drops /usr/bin/heat, the client's own CLI, which this file had
+# left unlinked on purpose while the rpm was the one supplying it. Nothing in this tree
+# calls it, but it has always been on the image for operators, so the venv's bin/heat is
+# linked below to keep that. /usr/bin/heat-3, the Fedora python3 alias, is not
+# recreated -- no other venv console script here is aliased that way.
 #
 # Nothing else is needed: the RDO spec's only non-python Requires was
 # shadow-utils, for the heat user and group, and core/heavyfs/account/centos9
@@ -49,12 +50,13 @@ rootfs_install::
 			python-heatclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)# Link the six console scripts heat declares. The venv also gains
-	$(Q)# heat-db-setup and heat-keystone-setup{,-domain} (manual deployment
-	$(Q)# helpers that hex_config replaces), heat-wsgi-api{,-cfn} (only used when
-	$(Q)# heat is hosted under a wsgi server, which is not the layout here) and
-	$(Q)# heat (the deprecated python-heatclient CLI, called nowhere in this
-	$(Q)# tree); those are left unlinked on purpose.
+	$(Q)# Link the six console scripts heat declares, plus heat itself -- the client
+	$(Q)# CLI, which python3-heatclient used to own at this same path. The venv also
+	$(Q)# gains heat-db-setup and heat-keystone-setup{,-domain} (manual deployment
+	$(Q)# helpers that hex_config replaces) and heat-wsgi-api{,-cfn} (only used when
+	$(Q)# heat is hosted under a wsgi server, which is not the layout here); those
+	$(Q)# are left unlinked on purpose.
+	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat /usr/bin/heat
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-all /usr/bin/heat-all
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-api /usr/bin/heat-api
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-api-cfn /usr/bin/heat-api-cfn
