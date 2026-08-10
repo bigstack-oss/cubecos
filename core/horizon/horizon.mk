@@ -175,10 +175,16 @@ rootfs_install::
 # manage.py only exists once the step above has installed it.
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 $(HORIZON_POLICY_DIR)
+	$(Q)# || exit 1 per iteration: a for loop only returns the status of its *last*
+	$(Q)# iteration, so without it a failure in any earlier namespace leaves an empty
+	$(Q)# or missing yaml and the build still passes -- surfacing at runtime as
+	$(Q)# "No policy rules for service '<x>'" and a denied panel. masakari.mk used to
+	$(Q)# state this guarantee explicitly ("that command exits 1 and the build fails");
+	$(Q)# folding the dump into a loop here is what dropped it.
 	$(Q)for ns in keystone nova cinder glance neutron masakari octavia ; do \
 		chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py \
 			dump_default_policies --namespace $$ns \
-			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml 2>&1 > /dev/null ; \
+			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml 2>&1 > /dev/null || exit 1 ; \
 	done
 
 # gunicorn, the systemd unit and the httpd reverse proxy
