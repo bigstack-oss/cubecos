@@ -1,3 +1,24 @@
+# --- Assertion Transport Across the Gunicorn Socket ---
+#
+# mellon publishes the assertion below as httpd environment variables, which only
+# reach an application httpd hosts in process. keystone is behind ProxyPass now, and
+# mod_proxy forwards headers rather than the request environment, so the three values
+# the mapping needs travel as X-Mellon-* headers and cube_mellon_wsgi.py restores
+# them to the environ keys keystone reads.
+#
+# These unsets are what make that channel trustworthy, and they sit at server scope
+# rather than inside <Location /v3> on purpose: keystone-wsgi.conf also proxies
+# /identity to the same socket, and mellon does not guard that prefix. Without them a
+# plain unauthenticated request to
+# /identity/v3/OS-FEDERATION/identity_providers/cube_idp/protocols/mapped/auth
+# carrying three self-supplied headers is issued a token for any user the mapping can
+# name -- verified on a node built from this branch, HTTP 201 for "admin (IAM)".
+# mod_headers applies parent directives before child ones, so these always precede
+# the sets below.
+RequestHeader unset X-Mellon-Idp
+RequestHeader unset X-Mellon-Username
+RequestHeader unset X-Mellon-Groups
+
 # --- Root Mellon Session Engine Configuration ---
 <Location /v3>
     MellonEnable info
@@ -8,6 +29,21 @@
     MellonIdPMetadataFile /etc/keycloak/saml-metadata.xml
     MellonIdP IDP
     MellonMergeEnvVars On ";"
+
+    # MellonEnable info exports these whenever the request carries a mellon session,
+    # which is what makes one block here enough for every endpoint below. env= keeps
+    # the headers off unauthenticated calls entirely rather than sending empty ones.
+    #
+    # Only what idp_mapping_rules.json and remote_id_attribute consume: MELLON_IDP is
+    # matched against the identity provider's remote_ids, and username/groups are the
+    # two remote attributes the mapping rules name. X-Mellon-Groups stays ";"-merged,
+    # the form the any_one_of rules already expect. Adding a remote attribute to the
+    # mapping means adding it here and in cube_mellon_wsgi.py -- httpd cannot forward
+    # the set generically, and this is a header channel into an authentication
+    # decision, so it is deliberately enumerated rather than broadened.
+    RequestHeader set X-Mellon-Idp      "%{MELLON_IDP}e"      env=MELLON_IDP
+    RequestHeader set X-Mellon-Username "%{MELLON_username}e" env=MELLON_username
+    RequestHeader set X-Mellon-Groups   "%{MELLON_groups}e"   env=MELLON_groups
 </Location>
 
 # --- WebSSO Endpoint Mapping ---

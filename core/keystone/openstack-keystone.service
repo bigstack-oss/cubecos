@@ -11,9 +11,15 @@ RuntimeDirectoryMode=0775
 
 # Executes Gunicorn from the venv using Python 3.10
 # Point to the clean configuration file
+#
+# cube_mellon_wsgi wraps keystone.server.wsgi:initialize_public_application() rather
+# than replacing it: mod_auth_mellon's assertion arrives as X-Mellon-* headers now
+# that httpd proxies instead of hosting keystone, and the wrapper is what puts it
+# back into the environ keystone's federation code reads. Naming the unwrapped
+# application here brings keystone up with federated login silently broken.
 ExecStart=/opt/openstack-antelope/bin/gunicorn \
     -c /opt/openstack-antelope/bin/keystone-gunicorn.py \
-    "keystone.server.wsgi:initialize_public_application()"
+    cube_mellon_wsgi:application
 
 Restart=on-failure
 RestartSec=5s
