@@ -21,6 +21,16 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /tmp/cyborg
 
 # install cyborg inside the python 3.10 virtual environment
+#
+# python-cyborgclient used to be installed twice, here and again under
+# /usr/bin/python3, because it owns the "accelerator" osc plugin and the 3.9
+# /usr/bin/openstack could only see entry points installed alongside it. core/heavyfs
+# moved the cli into this venv, so the second install is gone.
+#
+# Dropping it also drops /usr/local/bin/cyborg, the console script that install left
+# behind. That is a fix, not a loss: /usr/local/bin precedes /usr/bin in the PATH
+# hex_sdk sets, so a bare `cyborg` resolved to the 3.9 copy and shadowed the
+# /usr/bin/cyborg symlink below.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -36,12 +46,6 @@ rootfs_install::
 		-r /tmp/cyborg/python-cyborgclient/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/cyborg/python-cyborgclient && \
 		/opt/openstack-antelope/bin/python setup.py install"
-	$(Q)# The osc plugin has to live in the system python as well: /usr/bin/openstack
-	$(Q)# runs under python3.9 and only sees entry points installed there, so a
-	$(Q)# venv-only client silently drops the "openstack accelerator ..." commands.
-	$(Q)# Remove once python-openstackclient itself moves into the venv.
-	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/cyborg/python-cyborgclient && \
-		/usr/bin/python3 setup.py install"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
