@@ -10,9 +10,11 @@
 # 22.1.1 and therefore python-swiftclient under the yoga constraint, and none of them
 # installs into python 3.9 any more.
 #
-# The python3-swiftclient rpm still survives in the system python, and dropping it
-# from ROOTFS_DNF_NOARCH here would not uninstall it: dnf keeps pulling it in as a
-# dependency of python3-heatclient, python3-troveclient and openstack-ironic-common.
+# The python3-swiftclient rpm survives in the system python, but nothing asks for it
+# any longer: it was pulled in as a dependency of python3-heatclient (retired with the
+# osc move), python3-troveclient and openstack-ironic-common. It is not named here
+# either way -- this file installs the venv client, and the rpm's /usr/bin/swift is
+# overwritten by the symlink below.
 #
 # The venv install below is what cinder's SwiftBackupDriver imports; naming it here
 # makes that explicit rather than relying on cinder to pull it in transitively.
@@ -25,8 +27,7 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries. This overwrites a path owned by the python3-swiftclient
-	$(Q)# rpm, and it does not win PATH: horizon's pip-installed copy owns
-	$(Q)# /usr/local/bin/swift, which precedes /usr/bin, so a bare "swift" is
-	$(Q)# still yoga 3.13.1. Antelope's client is reachable explicitly as
-	$(Q)# /opt/openstack-antelope/bin/swift until horizon leaves python 3.9.
+	$(Q)# rpm, and it now wins PATH as well: the pip-installed yoga copy that owned
+	$(Q)# /usr/local/bin/swift -- which precedes /usr/bin -- came in with horizon,
+	$(Q)# and #609 moved horizon into the venv, so a bare "swift" is antelope 4.2.0.
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/swift /usr/bin/swift
