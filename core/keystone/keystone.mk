@@ -9,6 +9,7 @@
 ROOTFS_DNF += httpd mod_ssl mod_auth_mellon openldap-devel
 
 KEYSTONE_CONF_DIR := /etc/keystone
+KEYSTONE_VENV_SITE_PACKAGES := $(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
 
 # install keystone
 rootfs_install::
@@ -113,4 +114,12 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/keystone/gunicorn.py $(ROOTDIR)/opt/openstack-antelope/bin/keystone-gunicorn.py
 	$(Q)chroot $(ROOTDIR) chown root:root /opt/openstack-antelope/bin/keystone-gunicorn.py
 	$(Q)chroot $(ROOTDIR) chmod 644 /opt/openstack-antelope/bin/keystone-gunicorn.py
+	$(Q)# openstack-keystone.service names this module, not keystone's own wsgi entry
+	$(Q)# point. It goes in site-packages rather than beside the gunicorn config
+	$(Q)# because that is what is importable: gunicorn resolves the application
+	$(Q)# string on sys.path, and /var/lib/keystone (WorkingDirectory) is group
+	$(Q)# writable state, not somewhere to keep code that authenticates requests.
+	$(Q)cp -f $(COREDIR)/keystone/cube_mellon_wsgi.py $(ROOTDIR)$(KEYSTONE_VENV_SITE_PACKAGES)/cube_mellon_wsgi.py
+	$(Q)chroot $(ROOTDIR) chown root:root $(KEYSTONE_VENV_SITE_PACKAGES)/cube_mellon_wsgi.py
+	$(Q)chroot $(ROOTDIR) chmod 644 $(KEYSTONE_VENV_SITE_PACKAGES)/cube_mellon_wsgi.py
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/keystone/openstack-keystone.service ./lib/systemd/system

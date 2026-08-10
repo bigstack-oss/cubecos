@@ -29,7 +29,11 @@ Listen @BIND_ADDR@5443
     ProxyPreserveHost On
     ProxyRequests Off
 
-    # Pass Mellon environment data down to the Gunicorn UNIX Socket
+    # This hop does *not* pass mellon's environment data down to the socket -- mod_proxy
+    # forwards headers, not httpd's request environment. v3_mellon_keycloak_master.conf
+    # re-sends the assertion as X-Mellon-* headers and cube_mellon_wsgi.py restores it
+    # on the far side; that file also unsets those headers at server scope, which is
+    # what keeps the /identity proxy below from accepting a forged one.
     ProxyPass / unix:/var/lib/keystone/keystone.socket|http://localhost/
     ProxyPassReverse / unix:/var/lib/keystone/keystone.socket|http://localhost/
 
