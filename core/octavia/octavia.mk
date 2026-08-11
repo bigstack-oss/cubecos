@@ -33,6 +33,9 @@
 OCTAVIA_CONF_DIR := /etc/octavia
 OCTAVIA_CONFDIR := $(ROOTDIR)$(OCTAVIA_CONF_DIR)
 
+OCTAVIA_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/octavia
+OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(NEXT_OPENSTACK_RELEASE)_patch/octavia
+
 # https://releases.openstack.org/antelope/index.html -- last numeric 2023.1 revision,
 # and the dashboard that pairs with the octavia 12.0.1 installed below. Horizon
 # plugins are not in the antelope upper-constraints (that file only covers
@@ -69,6 +72,15 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-db-manage /usr/bin/octavia-db-manage
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-driver-agent /usr/bin/octavia-driver-agent
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-status /usr/bin/octavia-status
+
+# octavia/cmd/status.py reads CONF.oslo_policy in _check_yaml_policy() but never
+# imports octavia.common.policy, which is what registers that group -- it calls
+# oslo_policy.opts.set_defaults() at import time. So `octavia-status upgrade check`
+# dies with "NoSuchOptError: no such option oslo_policy in group [DEFAULT]" before
+# printing any result. Upstream's bug, not this packaging's: RDO's spec carries no
+# patches, so the rpm build fails identically, and master's import list is unchanged.
+rootfs_install::
+	$(Q)[ -d $(OCTAVIA_PATCHDIR) ] && cp -rf $(OCTAVIA_PATCHDIR)/* $(OCTAVIA_SRCDIR)/ || /bin/true
 
 # install the octavia web ui plugin, the openstack-octavia-ui rpm's replacement.
 # Registering its panel and settings snippet is core/horizon's job, where every
