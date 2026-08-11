@@ -262,8 +262,53 @@ UpdateDebug(bool enabled)
     return true;
 }
 
+// The health manager's own lb-mgmt address. This used to be hardcoded as
+// "172.16.0." + octet4, which is not the lb-mgmt network on any deployment: the
+// subnet comes from GetMgmtCidr(cubesys.mgmt.cidr, 0) in os_octavia_init(), and
+// octavia-hm0 is given GetMgmtCidrIp(..., octet4) by os_octavia_node_init(). On
+// jim-1cc those are 10.254.0.0/17 and 10.254.0.11, against a configured
+// 172.16.0.11 that no interface carries.
+//
+// It never failed loudly because net.ipv4.ip_nonlocal_bind is 1 -- the VIP
+// machinery sets it -- so binding a nonexistent address succeeds, and 172.16.0.11
+// then routes out the provider default gateway. Amphora heartbeats leave the
+// lb-mgmt network entirely and load balancers sit at operating_status OFFLINE
+// while forwarding traffic correctly.
+static std::string
+HealthManagerIp(const std::string& mgmtCidr, const std::string& addr)
+{
+    std::string octet4 = hex_string_util::split(addr, '.')[3];
+    // maps the 4th octet ranges from 1~9 to 11~19 for avoiding conflict with dhcp port
+    if (octet4.length() == 1)
+        octet4 = "1" + octet4;
+
+    return GetMgmtCidrIp(mgmtCidr, 0, octet4);
+}
+
+// Every controller runs a health manager, and each amphora has to know all of them:
+// the amphora agent round-robins its heartbeats across this list, so naming only the
+// local controller loses the heartbeats that land on the other two once an amphora
+// picks them.
+static std::string
+ControllerIpPortList(const bool ha, const std::string& mgmtCidr,
+                     const std::string& cidrIp, const std::string& ctrlAddrs)
+{
+    if (!ha)
+        return cidrIp + ":5555";
+
+    auto group = hex_string_util::split(ctrlAddrs, ',');
+    std::string list;
+    for (size_t i = 0; i < group.size(); i++) {
+        list += HealthManagerIp(mgmtCidr, group[i]) + ":5555";
+        if (i + 1 < group.size())
+            list += ",";
+    }
+
+    return list;
+}
+
 static bool
-UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const std::string& adminCliPass, const std::string& octet4)
+UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const std::string& adminCliPass, const std::string& cidrIp, const std::string& ctrlIpPortList)
 {
     if(IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
         cfg["DEFAULT"]["log_dir"] = "/var/log/octavia";
@@ -286,8 +331,8 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
 
         cfg["health_manager"]["heartbeat_key"] = "insecure";
         cfg["health_manager"]["bind_port"] = "5555";
-        cfg["health_manager"]["bind_ip"] = "172.16.0." + octet4;
-        cfg["health_manager"]["controller_ip_port_list"] = "172.16.0." + octet4 + ":5555";
+        cfg["health_manager"]["bind_ip"] = cidrIp;
+        cfg["health_manager"]["controller_ip_port_list"] = ctrlIpPortList;
 
         cfg["certificates"]["ca_certificate"] = std::string(CAFILE);
         cfg["certificates"]["ca_private_key"] = "/etc/octavia/certs/private/cakey.pem";
@@ -523,7 +568,8 @@ Commit(bool modified, int dryLevel)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
     if (s_bConfigChanged) {
-        UpdateCfg(s_lbHa, s_cubeDomain, userPass, adminCliPass, octet4);
+        UpdateCfg(s_lbHa, s_cubeDomain, userPass, adminCliPass, cidrIp,
+                  ControllerIpPortList(s_lbHa, s_mgmtCidr.newValue(), cidrIp, s_ctrlAddrs.newValue()));
         UpdateSharedId(sharedId);
         UpdateMyIp(myip);
         UpdateDbConn(sharedId, dbPass);
