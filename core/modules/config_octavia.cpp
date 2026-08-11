@@ -143,6 +143,20 @@ SetupCheck()
         s_bSetup = false;
     }
 
+    // taskflow's persistence store, kept out of the octavia database because the
+    // two carry independent alembic chains -- see UpdateDbConn(). Checked on its
+    // own so an existing cluster, whose octavia database already exists, still
+    // gets it.
+    if(!MysqlUtilIsDbExist("octavia_persistence")) {
+        if (!MysqlUtilRunSQL("CREATE DATABASE octavia_persistence") ||
+            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON octavia_persistence.* TO 'octavia'@'localhost' IDENTIFIED BY 'octavia_dbpass'") ||
+            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON octavia_persistence.* TO 'octavia'@'%' IDENTIFIED BY 'octavia_dbpass'")) {
+            return false;
+        }
+
+        s_bSetup = false;
+    }
+
     return true;
 }
 
@@ -156,6 +170,11 @@ SetupService(std::string domain, std::string userPass)
     HexLogInfo("Setting up octavia");
 
     HexUtilSystemF(0, 0, "su -s /bin/sh -c \"octavia-db-manage upgrade head\" %s", USER);
+    // taskflow keeps its own tables, in the same database but on its own
+    // migration chain; "upgrade head" does not create them. Without this the
+    // jobboard-backed persistence configured in UpdateDbConn() has nowhere to
+    // write and every amphorav2 flow fails at startup.
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"octavia-db-manage upgrade_persistence\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
@@ -202,6 +221,27 @@ UpdateDbConn(std::string sharedId, std::string password)
 
         cfg["database"]["connection"] = dbconn;
         cfg["database"]["mysql_wsrep_sync_wait"] = "1";
+
+        // taskflow's own store. [task_flow] was left entirely unwritten, so it
+        // took upstream's defaults: an in-memory "sqlite://" persistence with no
+        // jobboard. The amphora provider is amphorav2 in 2023.1 (v1 was removed),
+        // so that path is live -- and with ephemeral persistence and no jobboard,
+        // an octavia-worker restart in the middle of a flow loses it, stranding
+        // the load balancer in PENDING_CREATE or PENDING_UPDATE with no automatic
+        // recovery.
+        //
+        // It has to be a *separate* database, not the octavia one. taskflow keeps
+        // its own alembic chain, and "octavia-db-manage upgrade_persistence"
+        // against the octavia database dies with "Can't locate revision
+        // identified by '0995c26fc506'" -- octavia's own head, sitting in the
+        // alembic_version table the two would share.
+        std::string persconn = "mysql+pymysql://octavia:";
+        persconn += password;
+        persconn += "@";
+        persconn += sharedId;
+        persconn += "/octavia_persistence";
+
+        cfg["task_flow"]["persistence_connection"] = persconn;
     }
 
     return true;
@@ -308,7 +348,7 @@ ControllerIpPortList(const bool ha, const std::string& mgmtCidr,
 }
 
 static bool
-UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const std::string& adminCliPass, const std::string& cidrIp, const std::string& ctrlIpPortList)
+UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const std::string& adminCliPass, const std::string& cidrIp, const std::string& ctrlIpPortList, const std::string& jobboardHosts)
 {
     if(IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
         cfg["DEFAULT"]["log_dir"] = "/var/log/octavia";
@@ -333,6 +373,28 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
         cfg["health_manager"]["bind_port"] = "5555";
         cfg["health_manager"]["bind_ip"] = cidrIp;
         cfg["health_manager"]["controller_ip_port_list"] = ctrlIpPortList;
+
+        // The jobboard is the half of amphorav2 that makes a lost flow
+        // recoverable: workers claim jobs from it, so a worker that dies
+        // mid-flow has its job re-claimed instead of leaving the load balancer
+        // stranded.
+        //
+        // zookeeper rather than upstream's default redis. octavia and taskflow
+        // register exactly these two drivers and no others, CubeCOS ships no
+        // redis server, and adding one would be a new service to run purely for
+        // this. zookeeper is already here for kafka and the venv already carries
+        // kazoo.
+        //
+        // NOTE for the kafka upgrade: moving kafka to KRaft removes *kafka's*
+        // need for zookeeper, not this one. The zookeeper service has to keep
+        // running for the octavia jobboard, and core/kafka's
+        // 4lw.commands.whitelist has to keep "envi" -- kazoo reads the server
+        // version from it, and without it every worker dies at startup on
+        // "Unable to fetch useable server version after trying 4 times".
+        cfg["task_flow"]["jobboard_enabled"] = "True";
+        cfg["task_flow"]["jobboard_backend_driver"] = "zookeeper_taskflow_driver";
+        cfg["task_flow"]["jobboard_backend_hosts"] = jobboardHosts;
+        cfg["task_flow"]["jobboard_backend_port"] = "2181";
 
         cfg["certificates"]["ca_certificate"] = std::string(CAFILE);
         cfg["certificates"]["ca_private_key"] = "/etc/octavia/certs/private/cakey.pem";
@@ -569,7 +631,8 @@ Commit(bool modified, int dryLevel)
 
     if (s_bConfigChanged) {
         UpdateCfg(s_lbHa, s_cubeDomain, userPass, adminCliPass, cidrIp,
-                  ControllerIpPortList(s_lbHa, s_mgmtCidr.newValue(), cidrIp, s_ctrlAddrs.newValue()));
+                  ControllerIpPortList(s_lbHa, s_mgmtCidr.newValue(), cidrIp, s_ctrlAddrs.newValue()),
+                  s_ha ? s_ctrlAddrs.newValue() : ctrlIp);
         UpdateSharedId(sharedId);
         UpdateMyIp(myip);
         UpdateDbConn(sharedId, dbPass);
