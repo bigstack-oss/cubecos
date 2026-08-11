@@ -181,9 +181,16 @@ migrate_nova_db()
         su -s /bin/sh -c "nova-manage api_db sync" nova
         su -s /bin/sh -c "nova-manage db sync" nova
         su -s /bin/sh -c "placement-manage db sync" nova
-        if [[ "x$($OPENSTACK --version)" =~ "x$OPENSTACK 6." ]] ; then
-            mysql -e "update nova.services set version = 61 where deleted = 0;"
-        fi
+        # NOTE: this used to force `update nova.services set version = 61` behind a
+        # guard on the openstack client version. Removed rather than repaired, on
+        # three counts. The guard never fired: $OPENSTACK carries its `timeout <n>`
+        # prefix, so the pattern expanded to "xtimeout 60 /usr/bin/openstack 6."
+        # against a subject of "xopenstack 6.2.1". 61 is a yoga-era constant --
+        # antelope's nova reports SERVICE_VERSION 66 -- so reviving it would have
+        # written a *lower* version than the code actually speaks. And it is
+        # unnecessary: nova writes its own row on every service start, verified by
+        # restarting nova-conductor and watching nova.services.updated_at advance
+        # with version staying 66.
     fi
 
     touch $STATE_DIR/nova_db_migrated
@@ -204,11 +211,22 @@ migrate_nova_db_post()
     fi
 
     if is_control_node ; then
-        su -s /bin/sh -c "nova-manage db online_data_migrations" nova
+        # Chain the marker to the migration, the way migrate_cinder_db() does.
+        # Invoked without --max-count, nova-manage db online_data_migrations loops
+        # in batches until nothing is left to migrate, so it returns 0 on success
+        # and 2 for "Some migrations failed unexpectedly. Check log for details."
+        # Touching the marker unconditionally recorded that failure as a completed
+        # migration, so the rows it could not convert were never revisited for the
+        # life of the release. Leaving the marker unwritten means the next Commit()
+        # retries it.
+        ( su -s /bin/sh -c "nova-manage db online_data_migrations" nova && \
+              touch $STATE_DIR/nova_db_post_migrated ) || true
+        # Not chained: removing the nova-consoleauth service row is unrelated
+        # bookkeeping, and its failure should not hold back the migration marker.
         $HEX_SDK os_nova_service_remove $HOSTNAME "nova-consoleauth"
+    else
+        touch $STATE_DIR/nova_db_post_migrated
     fi
-
-    touch $STATE_DIR/nova_db_post_migrated
 }
 
 migrate_ironic_db()
