@@ -10,9 +10,14 @@ PIPS_DIR := $(CURDIR)/PIPS
 ARCS_DIR := $(CURDIR)/ARCS
 HEAVYFS = $(CURDIR)/heavy_rootfs
 
-OSP_SRCDIR := $(ROOTDIR)/usr/lib/python3.9/site-packages/
-OSP_LOCAL_SRCDIR := $(ROOTDIR)/usr/local/lib/python3.9/site-packages/
-OSP_PATCHDIR := $(SRCDIR)/$(OPENSTACK_RELEASE)_patch
+# NOTE: this used to define OSP_SRCDIR, OSP_LOCAL_SRCDIR and OSP_PATCHDIR and copy
+# $(OPENSTACK_RELEASE)_patch over both python 3.9 site-packages trees. The tree held
+# two backports, and upstream has since absorbed both -- oslo_log's
+# _fix_eventlet_logging (eventlet#432) is in oslo.log 5.2.1, and pyroute2 0.7.3
+# already resolves RTM_DELLINK to flags_req, RTM_DELNEIGH to flags_base, and carries
+# no NLM_F_EXCL in flush_addr/flush_rules at all. Both targets were python 3.9
+# copies, which no openstack service has used since the antelope migration, so the
+# patches applied to an interpreter that no longer runs the code they fixed.
 
 ROOTFS_PIP += numpy
 BLKLST_DNF += iptables-legacy iptables-legacy-libs python3-django3 ceph-mgr-k8sevents
@@ -351,10 +356,6 @@ $(HEAVYFS): $(HEX_FULL_ROOTFS) $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_CO
 	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
 	$(Q)touch $@
 endif
-
-rootfs_install::
-	$(Q)[ -d $(OSP_PATCHDIR) ] && cp -rf $(OSP_PATCHDIR)/* $(OSP_SRCDIR)/ || /bin/true
-	$(Q)[ -d $(OSP_PATCHDIR) ] && cp -rf $(OSP_PATCHDIR)/* $(OSP_LOCAL_SRCDIR)/ || /bin/true
 
 # /var/update should work irrespective of a functioning cephfs mount
 rootfs_install::
