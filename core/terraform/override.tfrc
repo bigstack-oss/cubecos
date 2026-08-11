@@ -1,9 +1,13 @@
+# Air-gap: block terraform's internet paths (checkpoint telemetry + direct
+# provider install); every provider comes from the local patched mirror.
+disable_checkpoint = true
+
 provider_installation {
   filesystem_mirror {
     path    = "/var/lib/terraform/patched-registry"
     include = ["registry.terraform.io/rancher/*", "registry.terraform.io/mrparkers/*", "registry.terraform.io/terraform-providers/*"]
   }
   direct {
-    exclude = ["registry.terraform.io/rancher/*", "registry.terraform.io/mrparkers/*", "registry.terraform.io/terraform-providers/*"]
+    exclude = ["registry.terraform.io/*/*"]
   }
 }
