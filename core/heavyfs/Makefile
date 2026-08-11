@@ -20,8 +20,12 @@ BLKLST_DNF += python3-PyMySQL   # CVE-2024-36039 Upgrade to version: 1.1.1
 BLKLST_DNF += python3-django    # CVE-2022-28347, CVE-2023-31047, CVE-2025-64459 CVE-2023-46695, CVE-2023-43665, CVE-2022-36359 Upgrade to version: 3.2.23
 ROOTFS_PIP += python-jose       # CVE-2024-33663 Upgrade to version: 3.4.0
 BLKLST_DNF += python3-monascaclient # Remove DNF managed package
-BLKLST_DNF += python3-scciclient # CVE-2022-2996
-ROOTFS_PIP += python-scciclient # CVE-2022-2996 Upgrade to version: 0.12.0
+# CVE-2022-2996. The rpm stays blacklisted; the ROOTFS_PIP entry that used to
+# replace it with 0.12.0 is gone. scciclient backs ironic's iRMC driver, ironic runs
+# in the antelope venv now, and core/ironic deliberately does not install it there --
+# so the system python 3.9 copy had no importer left. Nothing in the image carries
+# scciclient at all now, which is the stronger answer to the CVE.
+BLKLST_DNF += python3-scciclient
 BLKLST_DNF += python3-pillow    # CVE-2023-50447
 ROOTFS_PIP += pillow            # CVE-2023-50447 Upgrade to version: 10.2.0
 ROOTFS_PIP += waitress          # CVE-2024-49768 Upgrade to version: 3.0.1
