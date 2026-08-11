@@ -486,7 +486,22 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         ml2Cfg["ml2"]["type_drivers"] = "local,flat,vlan,geneve";
         ml2Cfg["ml2"]["tenant_network_types"] = "geneve";
         ml2Cfg["ml2"]["mechanism_drivers"] = "ovn,baremetal";
-        ml2Cfg["ml2"]["extension_drivers"] = "port_security,dns_domain_ports,qos,subnet_dns_publish_fixed_ip";
+        // dns_domain_ports is deliberately absent: the three dns extension drivers
+        // are a progression, not a set to combine.
+        // SubnetDNSPublishFixedIPExtensionDriver subclasses
+        // DNSDomainPortsExtensionDriver, which subclasses DNSExtensionDriverML2 ->
+        // DNSExtensionDriver, and all three answer to the same "dns-integration"
+        // extension alias. Loading two of them makes ml2's extension manager call
+        // the *same inherited* process_create_network() once per driver, and that
+        // method does an unconditional NetworkDNSDomain(...).create() -- so the
+        // second call collides with the first on the network_id primary key.
+        //
+        // The visible symptom was `openstack network create --dns-domain ...`
+        // hanging ~165s (neutron's db retry backoff) and then failing with
+        // "Failed to create a duplicate NetworkDNSDomain: for attribute(s)
+        // ['PRIMARY']". Naming only subnet_dns_publish_fixed_ip loses nothing --
+        // it inherits every port and network behaviour dns_domain_ports provides.
+        ml2Cfg["ml2"]["extension_drivers"] = "port_security,qos,subnet_dns_publish_fixed_ip";
         ml2Cfg["ml2"]["overlay_ip_version"] = "4";
         ml2Cfg["ml2"]["path_mtu"] = std::to_string(overlayMtu);
         ml2Cfg["ml2_type_flat"]["flat_networks"] = "provider" + ep;
