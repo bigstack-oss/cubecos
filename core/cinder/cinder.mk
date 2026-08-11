@@ -5,7 +5,7 @@ ROOTFS_DNF += qemu-img cryptsetup lvm2 iscsi-initiator-utils device-mapper-multi
 ROOTFS_DNF_NOARCH += nvmetcli targetcli
 
 CINDER_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/cinder
-CINDER_PATCHDIR := $(COREDIR)/cinder/$(NEXT_OPENSTACK_RELEASE)_patch
+CINDER_PATCHDIR := $(COREDIR)/cinder/$(OPENSTACK_RELEASE)_patch
 
 CINDER_CONFDIR := $(ROOTDIR)/etc/cinder
 
@@ -16,7 +16,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			cinder==22.3.0 \
 			python-cinderclient \
 			python-keystoneclient \

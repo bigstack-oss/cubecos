@@ -33,8 +33,8 @@
 OCTAVIA_CONF_DIR := /etc/octavia
 OCTAVIA_CONFDIR := $(ROOTDIR)$(OCTAVIA_CONF_DIR)
 
-OCTAVIA_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/octavia
-OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(NEXT_OPENSTACK_RELEASE)_patch/octavia
+OCTAVIA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/octavia
+OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(OPENSTACK_RELEASE)_patch/octavia
 
 # https://releases.openstack.org/antelope/index.html -- last numeric 2023.1 revision,
 # and the dashboard that pairs with the octavia 12.0.1 installed below. Horizon
@@ -54,7 +54,7 @@ rootfs_install::
 	$(Q)# python-octaviaclient is the "loadbalancer" osc plugin, named explicitly
 	$(Q)# rather than left transitive -- see the note at the top of this file.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			octavia==12.0.1 \
 			octavia-lib \
 			python-octaviaclient"
@@ -91,8 +91,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		octavia-dashboard==$(OCTAVIA_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

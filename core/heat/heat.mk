@@ -45,7 +45,7 @@ rootfs_install::
 	$(Q)# python-heatclient is the "orchestration" osc plugin, named explicitly rather
 	$(Q)# than left transitive -- see the note at the top of this file.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			openstack-heat==$(HEAT_VER) \
 			python-heatclient"
 	$(Q)# clean up dns configurations after downloading packages
@@ -145,8 +145,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		heat-dashboard==$(HEAT_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

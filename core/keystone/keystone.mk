@@ -9,14 +9,14 @@
 ROOTFS_DNF += httpd mod_ssl mod_auth_mellon openldap-devel
 
 KEYSTONE_CONF_DIR := /etc/keystone
-KEYSTONE_VENV_SITE_PACKAGES := $(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
+KEYSTONE_VENV_SITE_PACKAGES := $(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
 
 # install keystone
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			keystone==23.0.2 \
 			python-keystoneclient \
 			PyMySQL \

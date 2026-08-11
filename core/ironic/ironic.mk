@@ -37,7 +37,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		ironic==21.4.4 \
 		ironic-inspector==11.4.1"
 	$(Q)# clean up dns configurations after downloading packages
@@ -72,8 +72,8 @@ rootfs_install::
 	$(Q)# --no-build-isolation: ironic-ui pulls horizon, whose sdist-only XStatic
 	$(Q)# dependencies cannot be built against a current setuptools. See the note by
 	$(Q)# the venv bootstrap in core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		ironic-ui==$(IRONIC_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages

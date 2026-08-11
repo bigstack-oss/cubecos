@@ -41,14 +41,14 @@ ROOTFS_DNF += $(LIBVIRT_LOCKED_RPMS) dosfstools python3-libvirt ksmtuned virt-v2
 ROOTFS_DNF_NOARCH += iptables-services novnc
 
 NOVA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/nova
-NOVA_PATCHDIR := $(COREDIR)/nova/$(NEXT_OPENSTACK_RELEASE)_patch
+NOVA_PATCHDIR := $(COREDIR)/nova/$(OPENSTACK_RELEASE)_patch
 
 # install nova inside the python 3.10 virtual environment
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			nova==27.5.1 \
 			python-novaclient \
 			python-cinderclient \

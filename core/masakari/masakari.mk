@@ -13,8 +13,8 @@ MASAKARI_RUN_DIR := /var/run/masakari
 # The dashboard patch matters -- upstream sets default_panel = 'default', a panel
 # whose urls.py has no index, so an unpatched masakaridashboard makes the sidebar
 # raise NoReverseMatch and every page 500s.
-MASAKARI_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
-MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch
+MASAKARI_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(OPENSTACK_RELEASE)_patch
 
 # prepare the build directory
 rootfs_install::
@@ -36,9 +36,9 @@ MASAKARI_REPO_URL := https://github.com/openstack/masakari.git
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_REPO_URL) /tmp/masakari/masakari
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_REPO_URL) /tmp/masakari/masakari
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		-r /tmp/masakari/masakari/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/masakari/masakari && \
 		/opt/openstack-antelope/bin/python setup.py install"
@@ -65,9 +65,9 @@ MASAKARI_MONITORS_REPO_URL := https://github.com/openstack/masakari-monitors.git
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_MONITORS_REPO_URL) /tmp/masakari/masakari-monitors
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_MONITORS_REPO_URL) /tmp/masakari/masakari-monitors
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		-r /tmp/masakari/masakari-monitors/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/masakari/masakari-monitors && \
 		/opt/openstack-antelope/bin/python setup.py install"
@@ -100,9 +100,9 @@ MASAKARI_CLI_REPO_URL := https://github.com/openstack/python-masakariclient.git
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_CLI_REPO_URL) /tmp/masakari/python-masakariclient
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_CLI_REPO_URL) /tmp/masakari/python-masakariclient
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		-r /tmp/masakari/python-masakariclient/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/masakari/python-masakariclient && \
 		/opt/openstack-antelope/bin/python setup.py install"
@@ -116,10 +116,10 @@ MASAKARI_DASHBOARD_REPO_URL := https://github.com/openstack/masakari-dashboard.g
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_DASHBOARD_REPO_URL) /tmp/masakari/masakari-dashboard
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_DASHBOARD_REPO_URL) /tmp/masakari/masakari-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		-r /tmp/masakari/masakari-dashboard/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/masakari/masakari-dashboard && \

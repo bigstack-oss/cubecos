@@ -7,7 +7,7 @@ CYBORG_APP_DIR := /var/lib/cyborg
 CYBORG_RUN_DIR := /var/run/cyborg
 
 CYBORG_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/cyborg
-CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(NEXT_OPENSTACK_RELEASE)_patch
+CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(OPENSTACK_RELEASE)_patch
 
 # cyborg
 CYBORG_REPO_URL := https://github.com/openstack/cyborg.git
@@ -34,15 +34,15 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(CYBORG_REPO_URL) /tmp/cyborg/cyborg
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(CYBORG_REPO_URL) /tmp/cyborg/cyborg
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		-r /tmp/cyborg/cyborg/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/cyborg/cyborg && \
 		/opt/openstack-antelope/bin/python setup.py install"
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(CYBORG_CLI_REPO_URL) /tmp/cyborg/python-cyborgclient
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(CYBORG_CLI_REPO_URL) /tmp/cyborg/python-cyborgclient
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		-r /tmp/cyborg/python-cyborgclient/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/cyborg/python-cyborgclient && \
 		/opt/openstack-antelope/bin/python setup.py install"
