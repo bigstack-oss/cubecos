@@ -87,9 +87,14 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/masakari/masakari-hostmonitor.service ./lib/systemd/system
 
 # masakari command line plugin
+#
+# The venv clone below is the only install. It used to be paired with a
+# ROOTFS_PIP_DL_FROM entry that put a second copy in the system python 3.9, so the
+# "ha" osc plugin would resolve for /usr/bin/openstack while that was still
+# `#!/usr/bin/python3`; the cli moved into the venv, so the 3.9 copy is gone. It
+# owned no console script -- masakariclient ships only the osc plugin -- so nothing
+# needs relinking.
 MASAKARI_CLI_REPO_URL := https://github.com/openstack/python-masakariclient.git
-# FIXME: drop the installation in python 3.9 after wrapping up the whole upgrade of openstack
-ROOTFS_PIP_DL_FROM += $(MASAKARI_CLI_REPO_URL)
 
 # install masakari command line plugin inside the python 3.10 virtual environment
 rootfs_install::
