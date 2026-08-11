@@ -23,7 +23,13 @@ LOCKED_DNF += python3-jaraco-text-3.2.0-6.el9s
 # build ceph python bindings for python 3.10 used by openstack antelope
 ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
 
-CEPH_PATCHDIR := $(COREDIR)/ceph/$(OPENSTACK_RELEASE)_patch
+# Not $(OPENSTACK_RELEASE)_patch: this patches the ceph dashboard (a token.decode()
+# on an already-str token), under /usr/share/ceph/mgr where ceph-mgr runs on the
+# system python. It was only ever *named* by the openstack release and has nothing to
+# do with one -- deriving it from the release meant that promoting OPENSTACK_RELEASE
+# to antelope silently pointed it at a directory that does not exist, and the
+# "[ -d ] && cp || /bin/true" guard below would have swallowed that.
+CEPH_PATCHDIR := $(COREDIR)/ceph/patch
 
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
 
