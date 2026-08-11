@@ -9,8 +9,8 @@ WATCHER_APP_DIR := /var/cache/watcher
 WATCHER_LOG_DIR := /var/log/watcher
 WATCHER_RUN_DIR := /var/run/watcher
 
-WATCHER_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python$(NEXT_PYTHON_VER)/site-packages
-WATCHER_PATCHDIR := $(COREDIR)/watcher/$(NEXT_OPENSTACK_RELEASE)_patch
+WATCHER_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python$(PYTHON_VER)/site-packages
+WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch
 
 # watcher-dashboard publishes neither stable/2023.1 nor unmaintained/2023.1 -- both
 # branches were deleted at EOL -- so pin the tag instead. 2023.1-eol is 9.0.0 plus
@@ -38,7 +38,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-watcher==$(WATCHER_VER)"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -76,7 +76,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(WATCHER_DASHBOARD_TAG) --depth 1 $(WATCHER_DASHBOARD_REPO_URL) /tmp/watcher/watcher-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		-r /tmp/watcher/watcher-dashboard/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/watcher/watcher-dashboard && \

@@ -39,8 +39,8 @@ MANILA_APP_DIR := /var/lib/manila
 MANILA_LOG_DIR := /var/log/manila
 MANILA_RUN_DIR := /var/run/manila
 
-MANILA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python$(NEXT_PYTHON_VER)/site-packages/manila
-MANILA_PATCHDIR := $(COREDIR)/manila/$(NEXT_OPENSTACK_RELEASE)_patch
+MANILA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python$(PYTHON_VER)/site-packages/manila
+MANILA_PATCHDIR := $(COREDIR)/manila/$(OPENSTACK_RELEASE)_patch
 
 # https://releases.openstack.org/antelope/index.html -- last numeric 2023.1
 # revision. Horizon plugins are not in the antelope upper-constraints (that file
@@ -54,7 +54,7 @@ rootfs_install::
 	$(Q)# python-manilaclient is the "share" osc plugin and owns /usr/bin/manila,
 	$(Q)# named explicitly -- see the note at the top of this file.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			manila==$(MANILA_VER) \
 			python-manilaclient"
 	$(Q)# clean up dns configurations after downloading packages
@@ -86,8 +86,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		manila-ui==$(MANILA_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages

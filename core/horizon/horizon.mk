@@ -19,7 +19,7 @@ MYSQLCLIENT_VER := 2.2.8
 # path, so a plain cp from the build host would follow it out to the *host* root
 # instead of into $(ROOTDIR).
 HORIZON_APP_DIR := /usr/share/openstack-dashboard
-HORIZON_VENV_SITE_PACKAGES := $(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
+HORIZON_VENV_SITE_PACKAGES := $(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
 HORIZON_DIR := $(HORIZON_VENV_SITE_PACKAGES)/openstack_dashboard
 HORIZON_ETCDIR := /etc/openstack-dashboard
 HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
@@ -68,14 +68,14 @@ rootfs_install::
 	$(Q)# namespace from setup.py, so they have to be built against this venv's
 	$(Q)# setuptools 65.7.0 -- a current setuptools has no pkg_resources at all.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			--no-build-isolation \
 			horizon==$(HORIZON_VER)"
 	$(Q)# mysqlclient is the counter-example: it is also a source build, but its
 	$(Q)# pyproject.toml is newer than setuptools 65.7.0 can parse, so it keeps pip's
 	$(Q)# default build isolation and gets a current setuptools of its own.
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			mysqlclient==$(MYSQLCLIENT_VER) \
 			pymemcache"
 	$(Q)# clean up dns configurations after downloading packages
@@ -198,7 +198,7 @@ rootfs_install::
 	$(Q)# state this guarantee explicitly ("that command exits 1 and the build fails");
 	$(Q)# folding the dump into a loop here is what dropped it.
 	$(Q)for ns in keystone nova cinder glance neutron masakari octavia ; do \
-		chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py \
+		chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py \
 			dump_default_policies --namespace $$ns \
 			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml 2>&1 > /dev/null || exit 1 ; \
 	done
@@ -212,9 +212,9 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/horizon/openstack-dashboard.conf ./etc/httpd/conf.d/
 
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compilemessages 2>&1 > /dev/null
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py collectstatic --noinput 2>&1 > /dev/null
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compress --force 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compilemessages 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py collectstatic --noinput 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compress --force 2>&1 > /dev/null
 	$(Q)chroot $(ROOTDIR) chmod 755 -R $(HORIZON_APP_DIR)
 	$(Q)chroot $(ROOTDIR) sh -c "chown root:apache -R $(HORIZON_POLICY_DIR)/*"
 	$(Q)chroot $(ROOTDIR) sh -c "chmod 640 -R $(HORIZON_POLICY_DIR)/*"

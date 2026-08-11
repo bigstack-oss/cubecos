@@ -74,7 +74,7 @@ rootfs_install::
 	$(Q)mkdir -p $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
 
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(NEXT_OPENSTACK_RELEASE)
+	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
 	$(Q)chroot $(ROOTDIR) rpm -e centos-release-ceph-pacific --nodeps || true
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-quincy
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled highavailability
@@ -178,7 +178,7 @@ $(call PROJ_INSTALL_DNF_NOARCH,-d "$(ROOTFS_DNF_DL_FROM)","$(ROOTFS_DNF)")
 
 # install no constraint packages first
 $(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
-$(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
+$(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_01)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
 
 # install python 3.10 for openstack antelope
 rootfs_install::
@@ -219,8 +219,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /opt/openstack-antelope
 	$(Q)chroot $(ROOTDIR) python3.10 -m venv /opt/openstack-antelope
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && pip install --upgrade pip setuptools"
-	$(Q)cp -f $(NEXT_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)/opt/openstack-antelope/
-	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) wheel
+	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)/opt/openstack-antelope/
+	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) wheel
 
 # NOTE: setuptools in this venv is pinned to 65.7.0 by the constraints file -- the
 # version antelope's own upper-constraints names -- because setuptools 82 deleted
@@ -271,13 +271,13 @@ rootfs_install::
 # tree calls it and no other venv console script is aliased that way, so it is not
 # recreated.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-openstackclient
 	$(Q)# Link the cli. hex_sdk reaches it by absolute path ($$OPENSTACK in
 	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/openstack), so
 	$(Q)# this symlink is what carries every caller over.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
 
 # set up the execution context for openstack caracal
 rootfs_install::

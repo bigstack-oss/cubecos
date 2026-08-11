@@ -6,8 +6,8 @@ MONASCA_APP_DIR := /var/lib/monasca
 MONASCA_LOG_DIR := /var/log/monasca
 MONASCA_RUN_DIR := /var/run/monasca
 
-MONASCA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python$(NEXT_PYTHON_VER)/site-packages
-MONASCA_PATCHDIR := $(COREDIR)/monasca/$(NEXT_OPENSTACK_RELEASE)_patch
+MONASCA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python$(PYTHON_VER)/site-packages
+MONASCA_PATCHDIR := $(COREDIR)/monasca/$(OPENSTACK_RELEASE)_patch
 
 # NOTE: despite living alongside the antelope services, monasca is NOT installed
 # from OpenStack Antelope (2023.1). The versions used are the Bobcat (2023.2)
@@ -58,7 +58,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		monasca-api==$(MONASCA_API_VER) \
 		monasca-agent==$(MONASCA_AGENT_VER) \
 		monasca-persister==$(MONASCA_PERSISTER_VER) \
@@ -121,4 +121,4 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chmod 440 /etc/sudoers.d/monasca-agent
 
 rootfs_install::
-	$(Q)$(COREDIR)/monasca/santize-monasca-log4j.sh $(BLDDIR)/heavy_rootfs/opt/openstack-antelope/lib/python$(NEXT_PYTHON_VER)/site-packages/monasca_agent/collector/checks/libs
+	$(Q)$(COREDIR)/monasca/santize-monasca-log4j.sh $(BLDDIR)/heavy_rootfs/opt/openstack-antelope/lib/python$(PYTHON_VER)/site-packages/monasca_agent/collector/checks/libs

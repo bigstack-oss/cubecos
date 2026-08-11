@@ -32,7 +32,7 @@ DESIGNATE_APP_DIR := /var/lib/designate
 DESIGNAT_LOG_DIR := /var/log/designate
 
 DESIGNATE_BINDIR := $(ROOTDIR)/opt/openstack-antelope/bin
-DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(NEXT_OPENSTACK_RELEASE)_bin_patch
+DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(OPENSTACK_RELEASE)_bin_patch
 
 # prepare the build directory
 rootfs_install::
@@ -43,20 +43,20 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(DESIGNATE_REPO_URL) /tmp/designate/designate
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(DESIGNATE_REPO_URL) /tmp/designate/designate
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		-r /tmp/designate/designate/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/designate/designate && \
 		/opt/openstack-antelope/bin/python setup.py install"
 	$(Q)# the "dns" osc plugin, named explicitly -- see the note at the top of this file
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-designateclient
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(DESIGNATE_DASHBOARD_REPO_URL) /tmp/designate/designate-dashboard
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(DESIGNATE_DASHBOARD_REPO_URL) /tmp/designate/designate-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		-r /tmp/designate/designate-dashboard/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/designate/designate-dashboard && \

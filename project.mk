@@ -27,23 +27,35 @@ PROJ_NFS_PATH := /volume1/pxe-server
 PROJ_TEST_EXPORTS := "PS4=+[\\t]"
 
 # openstack version
-OPENSTACK_RELEASE := yoga
-RHOSP_RELEASE := 19
-OPS_GITHUB_BRANCH := stable/yoga
-OPS_GITHUB_TAG := yoga-eol
-PYTHON_VER := 3.9
+OPENSTACK_RELEASE := antelope
+OPENSTACK_HOME_DIR := /opt/openstack-$(OPENSTACK_RELEASE)
+OPS_GITHUB_BRANCH_01 := stable/2023.1
+OPS_GITHUB_BRANCH_02 := unmaintained/2023.1
+PYTHON_VER := 3.10
+OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
+OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
 
-# pip contraints file
-PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
+# The system python 3.9 pip constraint, for the ROOTFS_PIP installs in core/heavyfs
+# and friends. Deliberately NOT os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt any
+# more: no openstack package is installed into the system python since the antelope
+# migration, and this file has been maintained locally instead -- it carries the CVE
+# pins the ROOTFS_PIP lines exist for (pillow 11.3.0, waitress 3.0.2, numpy 1.25.2,
+# ansible-core, python-jose, numexpr, xmlsec), none of which the openstack constraint
+# files have. Deriving it from the release name would have quietly downgraded pillow
+# to 9.2.0 and waitress to 2.1.2 -- straight back into CVE-2023-50447 and
+# CVE-2024-49768 -- the moment OPENSTACK_RELEASE moved to antelope.
+PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 
-# openstack next version
-NEXT_OPENSTACK_RELEASE := antelope
-NEXT_OPENSTACK_HOME_DIR := /opt/openstack-antelope
-NEXT_OPS_GITHUB_BRANCH_01 := stable/2023.1
-NEXT_OPS_GITHUB_BRANCH_02 := unmaintained/2023.1
-NEXT_PYTHON_VER := 3.10
-NEXT_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
-NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(NEXT_OPENSTACK_HOME_DIR)/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+# openstack next version -- left blank until the next hop, then filled in the way
+# antelope's were while it was NEXT_*: a second venv is built from these, components
+# move into it one at a time, and the values are promoted above once the move is done.
+NEXT_OPENSTACK_RELEASE :=
+NEXT_OPENSTACK_HOME_DIR :=
+NEXT_OPS_GITHUB_BRANCH_01 :=
+NEXT_OPS_GITHUB_BRANCH_02 :=
+NEXT_PYTHON_VER :=
+NEXT_OPENSTACK_PIP_CONSTRAINT ?=
+NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 
 # openstack caracal -- a second isolated runtime, kept apart from the antelope venv so
 # that caracal-era components do not drag their dependency versions into the 2023.1

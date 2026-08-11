@@ -15,7 +15,7 @@ ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.1/3.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
 
 NEUTRON_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/neutron
-NEUTRON_PATCHDIR := $(COREDIR)/neutron/$(NEXT_OPENSTACK_RELEASE)_patch
+NEUTRON_PATCHDIR := $(COREDIR)/neutron/$(OPENSTACK_RELEASE)_patch
 NEUTRON_CONFDIR := $(ROOTDIR)/etc/neutron
 
 OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)
@@ -34,7 +34,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		neutron==22.2.1 \
 		networking-baremetal"
 	$(Q)# clean up dns configurations after downloading packages
@@ -82,16 +82,16 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(NEUTRON_VPNAAS_REPO_URL) /tmp/neutron/neutron-vpnaas
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(NEUTRON_VPNAAS_REPO_URL) /tmp/neutron/neutron-vpnaas
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		-r /tmp/neutron/neutron-vpnaas/requirements.txt
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/neutron/neutron-vpnaas && \
 		/opt/openstack-antelope/bin/python setup.py install"
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(NEXT_OPS_GITHUB_BRANCH_02) --depth 1 $(NEUTRON_VPNAAS_DASHBOARD_REPO_URL) /tmp/neutron/neutron-vpnaas-dashboard
+	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(NEUTRON_VPNAAS_DASHBOARD_REPO_URL) /tmp/neutron/neutron-vpnaas-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		-r /tmp/neutron/neutron-vpnaas-dashboard/requirements.txt \
 		--no-build-isolation
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/neutron/neutron-vpnaas-dashboard && \
