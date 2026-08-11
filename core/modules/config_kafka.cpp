@@ -116,7 +116,15 @@ UpdateCfg(bool ha, const std::string hostname, const std::string sharedId,
         HexSystemF(0, "echo \"0\" > %s", ZK_ID);
 
         zkCfg[GLOBAL_SEC]["autopurge.purgeInterval"] = "24";
-        zkCfg[GLOBAL_SEC]["4lw.commands.whitelist"] = "stat,dump";
+        // envi is here for octavia, not for kafka. The octavia amphorav2 jobboard
+        // is a taskflow zookeeper job board (see config_octavia.cpp), and kazoo
+        // reads the server version out of the envi four-letter word before it will
+        // connect. With only stat,dump whitelisted, zookeeper answers "envi is not
+        // executed because it is not in the whitelist", kazoo's server_version()
+        // finds no zookeeper.version key, and every octavia-worker dies at startup
+        // on "Unable to fetch useable server version after trying 4 times". envi
+        // reports jvm and os properties only -- no data, no ACL bypass.
+        zkCfg[GLOBAL_SEC]["4lw.commands.whitelist"] = "stat,dump,envi";
 
         HexSystemF(0, "echo \"version=0\" > %s", KAFKA_META);
         kafkaCfg[GLOBAL_SEC]["broker.id"] = "0";
