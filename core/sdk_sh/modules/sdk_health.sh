@@ -3147,6 +3147,18 @@ health_mongodb_check()
         if [ ${could_read_write_db:-0} -ne 0 ] ; then
             ERR_CODE=5
             ERR_MSG+="user admin could not read write mongodb"
+        elif $HEX_SDK mongodb_fcv_stale ; then
+            # every member has rolled to the same version but the replica set is
+            # still on the previous feature set, so the next major upgrade would
+            # refuse to start. Checked last because nothing is broken right now,
+            # and a set that is still mid-roll has no agreed version so it never
+            # lands here. Reached through $HEX_SDK because hex_sdk sources only
+            # the module matching the command prefix, leaving sdk_mongodb.sh out
+            # of scope here -- same reason as mongodb_add_read_write_role below.
+            local fcv="$($MONGODB --quiet --eval 'db.adminCommand({getParameter:1, featureCompatibilityVersion:1}).featureCompatibilityVersion.version' 2>/dev/null)"
+            local running="$($MONGODB --quiet --eval 'db.version()' 2>/dev/null | cut -d. -f1,2)"
+            ERR_CODE=6
+            ERR_MSG+="mongodb featureCompatibilityVersion is ${fcv:-unknown}, behind the ${running:-unknown} every member runs\n"
         fi
     fi
 
@@ -3164,6 +3176,9 @@ _health_mongodb_auto_repair()
     # auto repair for the cases like:
     # code 1: mongodb is not running well
     # code 2: mongodb quorum is lost, but the database can still be read
+    # code 4: mongodb quorum is fine, but some nodes are not reachable
+    # code 5: user admin needs role readWriteAnyDatabase
+    # code 6: the roll finished but the featureCompatibilityVersion is behind
 
     if [ "$ERR_CODE" == "1" -o "$ERR_CODE" == "2" ] ; then
         health_mongodb_repair
@@ -3179,6 +3194,12 @@ _health_mongodb_auto_repair()
     elif [ "$ERR_CODE" == "5" ] ; then
         # code 5: user admin needs role readWriteAnyDatabase
         $HEX_SDK mongodb_add_read_write_role
+    elif [ "$ERR_CODE" == "6" ] ; then
+        # code 6: config_mongodb raises the FCV during the upgrade itself, but only
+        # while /run/cube_migration exists -- if a peer was briefly unreachable at
+        # that moment the raise was skipped, and by now the marker is gone and
+        # nothing else retries it. This is that retry.
+        $HEX_SDK mongodb_raise_fcv
     fi
 }
 
@@ -3187,6 +3208,7 @@ health_mongodb_repair()
     cmd $HEX_SDK mongodb_repair_keyfile_ownership
     cmd $HEX_CFG restart_mongodb
     Quiet -n $HEX_SDK mongodb_add_read_write_role
+    Quiet -n $HEX_SDK mongodb_raise_fcv
 }
 
 health_node_report()
