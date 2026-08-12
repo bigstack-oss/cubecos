@@ -287,13 +287,20 @@ updateKeycloak()
         nodeCount = 1;
     }
 
+    /**
+     * chart-values.yaml needs the address Keycloak is reached on so it can pin the admin
+     * console URL, which Keycloak resolves separately from the frontend one.
+     */
+    const std::string sharedId = G(SHARED_ID);
+
     const std::string cmd = std::string()
         + "/usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml "
         + "upgrade --install " + CHART_RELEASE_NAME + " " + KEYCLOAK_CHARTS + " "
         + "-f " + KEYCLOAK_CHART_VALUES + " "
         + "-n " + APP_NAMESPACE + " "
         + "--create-namespace "
-        + "--set replicas=" + std::to_string(nodeCount);
+        + "--set replicas=" + std::to_string(nodeCount) + " "
+        + "--set cubeController=" + sharedId;
 
     // parallel control-node applies race on the same helm release; retry the
     // transient "another operation in progress" lock
