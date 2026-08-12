@@ -11,6 +11,45 @@ mongodb_stats()
     $MONGODB --quiet --eval 'rs.status()'
 }
 
+# $MONGODB addresses the replica set as a whole, which resolves to whichever
+# member is currently primary. The FCV gate below needs the version of a *named*
+# member instead, so it needs a shell pinned to one host.
+mongodb_member_version()
+{
+    local host=$1
+    local access=
+
+    [ -z "$MONGODB_ADMIN_ACCESS" ] || access="admin:$MONGODB_ADMIN_ACCESS@"
+    timeout $SRVTO /usr/bin/mongosh "mongodb://$access$host" --quiet --eval 'db.version()'
+}
+
+# 0 (uniform) only if every replica set member reports the same MongoDB minor --
+# the safe precondition for raising the featureCompatibilityVersion. Raising the
+# FCV is not reversible in place, and a member still running the previous major
+# cannot rejoin once the FCV is above what its binary supports.
+#
+# The member list comes from rs.status() rather than the node roster: the FCV is
+# a property of the replica set, so the set that has to agree is exactly the set
+# of members, and asking the set itself needs no node-role lookup.
+mongodb_version_uniform()
+{
+    # Fail-safe: EVERY member must answer AND report the same major.minor. An
+    # unreachable member is "unknown", not "absent" -- treating it as absent
+    # would report a mid-roll replica set as uniform and raise the FCV past what
+    # the still-old member supports, stranding it on rejoin. Any miss => not
+    # uniform, and the loop bails on the first one.
+    local members m v vers=
+
+    members=$($MONGODB --quiet --eval 'rs.status().members.map(m => m.name).join(" ")' 2>/dev/null)
+    [ -n "$members" ] || return 1
+    for m in $members ; do
+        v=$(mongodb_member_version "$m" 2>/dev/null | cut -d. -f1,2)
+        [ -n "$v" ] || return 1
+        vers="$vers $v"
+    done
+    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
+}
+
 mongodb_repair_keyfile_ownership()
 {
     local mongodb_keyfile="/etc/mongodb/keyfile"
