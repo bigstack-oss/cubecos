@@ -23,9 +23,6 @@
 
 static const char SERVICE[] = "mongodb";
 static const char MONGODB_REPLICA_SET_NAME[] = "cube-cos-rs";
-// the feature set the shipped mongod is built for; see RaiseFcv below for why
-// this is not simply inherited from the data directory across an upgrade
-static const char MONGODB_FCV[] = "8.0";
 static const char MONGOD_CONF_IN[] = "/etc/mongod.conf.in";
 static const char MONGOD_CONF[] = "/etc/mongod.conf";
 static const char MONGODB_CONF_DIR[] = "/etc/mongodb";
@@ -402,43 +399,6 @@ UpdateAdminUser(std::string mongodbUri, std::string dbPass)
 }
 
 static bool
-IsFcvCurrent(std::string mongodbUri)
-{
-    const ExecSyncResult r = ExecBashSync(
-        0,
-        false,
-        false,
-        {},
-        "mongosh " + mongodbUri + " --quiet --eval "
-            + "'db.adminCommand({getParameter:1,featureCompatibilityVersion:1}).featureCompatibilityVersion.version'"
-            + " | grep -qxF " + MONGODB_FCV);
-    return (r.exitCode == 0);
-}
-
-/**
- * A mongod keeps serving the previous release's feature set until the
- * featureCompatibilityVersion is raised, and the release after this one refuses
- * to start against a data directory whose FCV was never raised. CONFIG_MIGRATE
- * carries /var/lib/mongo across an appliance upgrade, so an upgraded cluster
- * inherits the old FCV and nothing raises it on its own -- only a fresh install,
- * which initiates its replica set on the new binary, gets the current FCV for
- * free.
- */
-static bool
-RaiseFcv(std::string mongodbUri)
-{
-    const ExecSyncResult r = ExecBashSync(
-        0,
-        false,
-        false,
-        {},
-        "mongosh " + mongodbUri + " --quiet --eval "
-            + "'JSON.stringify(db.adminCommand({setFeatureCompatibilityVersion:\"" + MONGODB_FCV + "\",confirm:true}))'"
-            + " | grep -q '\"ok\":1'");
-    return (r.exitCode == 0);
-}
-
-static bool
 Commit(bool modified, int dryLevel)
 {
     HEX_DRYRUN_BARRIER(dryLevel, true);
@@ -559,18 +519,26 @@ Commit(bool modified, int dryLevel)
         }
     }
 
-    // Raising the FCV locks out any member still running the previous major, so
-    // it can only happen once the last control node has rolled. Checks run
-    // cheapest-first: the migration marker is the only lifecycle where the FCV
-    // can be stale, so FTS and normal reconfigs never pay for the probes below
-    // it. Deliberately not gated on IS_MASTER -- the node that rolls last is the
-    // one that finds the replica set uniform, and that is not always the master.
-    if (access(CUBE_MIGRATE, F_OK) == 0 && !IsFcvCurrent(mongodbUriStr) &&
-        HexSystemF(0, HEX_SDK " mongodb_version_uniform") == 0) {
-        if (RaiseFcv(mongodbUriStr)) {
-            HexLogInfo("mongodb featureCompatibilityVersion raised to %s", MONGODB_FCV);
+    // A mongod keeps serving the previous release's feature set until the FCV is
+    // raised, and the release after this one refuses to start against a data
+    // directory whose FCV was never raised. CONFIG_MIGRATE carries /var/lib/mongo
+    // across an appliance upgrade, so an upgraded cluster inherits the old FCV
+    // and nothing raises it on its own -- only a fresh install, which initiates
+    // its replica set on the new binary, gets the current FCV for free.
+    //
+    // Raising it locks out any member still on the previous major, so mongodb_fcv_stale
+    // reports stale only once every member agrees on a version. The migration
+    // marker is checked first because it is the cheap one, and because an upgrade
+    // is the only lifecycle where the FCV can be behind -- FTS and normal
+    // reconfigs never pay for the probe. Deliberately not gated on IS_MASTER:
+    // the node that rolls last is the one that sees the set agree, and that is
+    // not always the master. Only a warning: a missed raise leaves the cluster
+    // working, just still on the old feature set.
+    if (access(CUBE_MIGRATE, F_OK) == 0 && HexSystemF(0, HEX_SDK " mongodb_fcv_stale") == 0) {
+        if (HexSystemF(0, HEX_SDK " mongodb_raise_fcv") == 0) {
+            HexLogInfo("mongodb featureCompatibilityVersion raised");
         } else {
-            HexLogWarning("failed to raise mongodb featureCompatibilityVersion to %s", MONGODB_FCV);
+            HexLogWarning("failed to raise mongodb featureCompatibilityVersion");
         }
     }
 
