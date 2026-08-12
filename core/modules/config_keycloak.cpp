@@ -283,6 +283,12 @@ updateKeycloak()
         nodeCount = 1;
     }
 
+    /**
+     * chart-values.yaml needs the address Keycloak is reached on so it can pin the admin
+     * console URL, which Keycloak resolves separately from the frontend one.
+     */
+    const std::string sharedId = G(SHARED_ID);
+
     const ExecSyncResult r = ExecBashSync(
         0,
         false,
@@ -294,7 +300,8 @@ updateKeycloak()
             + "-f " + KEYCLOAK_CHART_VALUES + " "
             + "-n " + APP_NAMESPACE + " "
             + "--create-namespace "
-            + "--set replicas=" + std::to_string(nodeCount));
+            + "--set replicas=" + std::to_string(nodeCount) + " "
+            + "--set cubeController=" + sharedId);
     return (r.exitCode == 0);
 }
 
