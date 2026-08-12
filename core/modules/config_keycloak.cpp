@@ -3,6 +3,11 @@
 #include "config_keycloak.hpp"
 
 static const std::string APP = "statefulset.apps/keycloak-keycloakx";
+/**
+ * The statefulset the WildFly-based chart used to create. CubeCOS v3.1.0 and older
+ * deploy this one, and it stays up until a rolling upgrade reaches its last control node.
+ */
+static const std::string LEGACY_APP = "statefulset.apps/keycloak";
 static const std::string APP_NAMESPACE = "keycloak";
 static const std::string CHART_RELEASE_NAME = "keycloak";
 static const char KEYCLOAK_CHARTS[] = "/opt/keycloak/keycloakx-*.tgz";
@@ -201,18 +206,15 @@ createKeycloakDbSecrets()
 }
 
 /**
- * Check if Keycloak is deployed or not.
+ * Check if a given Keycloak statefulset is rolled out on every node.
  */
 static bool
-checkKeycloak()
+checkKeycloakApp(const std::string& app)
 {
-    HexLogInfo("check keycloak");
-
-    if (!K3sWatchRollOut(APP, APP_NAMESPACE, "1s")) {
-        HexLogError("failed to see all pods rolled out");
+    if (!K3sWatchRollOut(app, APP_NAMESPACE, "1s")) {
+        HexLogInfo("%s has not rolled out all its pods", app.c_str());
         return false;
     }
-    HexLogInfo("all keycloak pods are rolled out");
 
     int nodeCount = K3sGetNodeCounts();
     if (nodeCount < 0) {
@@ -220,23 +222,50 @@ checkKeycloak()
         return false;
     }
 
-    int replicaCount = K3sGetReadyReplicas(APP, APP_NAMESPACE);
+    int replicaCount = K3sGetReadyReplicas(app, APP_NAMESPACE);
     if (replicaCount < 0) {
         HexLogError("failed to get the ready replica count");
         return false;
     }
 
     if (nodeCount != replicaCount) {
-        HexLogError(
-            "control node count: %d doesn't match replica count: %d",
+        HexLogInfo(
+            "control node count: %d doesn't match replica count: %d of %s",
             nodeCount,
-            replicaCount);
+            replicaCount,
+            app.c_str());
         return false;
     }
-    HexLogInfo("keycloak replica count matched the node count");
 
-    HexLogInfo("checked keycloak");
     return true;
+}
+
+/**
+ * Check if Keycloak is deployed or not.
+ */
+static bool
+checkKeycloak()
+{
+    HexLogInfo("check keycloak");
+
+    if (checkKeycloakApp(APP)) {
+        HexLogInfo("checked keycloak");
+        return true;
+    }
+
+    /**
+     * A rolling upgrade only hands the helm release over to the Quarkus chart on the
+     * last control node, so a node that has already been upgraded still has the
+     * WildFly statefulset from CubeCOS v3.1.0 serving logins. That is healthy, not a
+     * failure, so do not report keycloak down for the whole length of the upgrade.
+     */
+    if (checkKeycloakApp(LEGACY_APP)) {
+        HexLogInfo("checked keycloak, still served by the pre-quarkus statefulset");
+        return true;
+    }
+
+    HexLogError("neither %s nor %s is rolled out", APP.c_str(), LEGACY_APP.c_str());
+    return false;
 }
 
 /**
@@ -262,12 +291,52 @@ isUpdateKeycloakPossible(
 }
 
 /**
+ * Retire the statefulset the WildFly-based chart created.
+ *
+ * Keycloak 18 runs its schema migration the first time a pod starts, and the WildFly 17
+ * pods cannot run against the migrated schema. Helm would delete the old statefulset on
+ * its own, but only after it has already created the new one, which leaves both versions
+ * pointed at the same database for a while. Take the old one down first so they never
+ * overlap.
+ */
+static void
+retireLegacyKeycloak()
+{
+    const ExecSyncResult found = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl get " + LEGACY_APP + " -n " + APP_NAMESPACE);
+    if (found.exitCode != 0) {
+        // nothing to retire, this cluster is already on the quarkus chart
+        return;
+    }
+
+    HexLogInfo("retire the pre-quarkus keycloak statefulset");
+    const ExecSyncResult deleted = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl delete " + LEGACY_APP + " -n " + APP_NAMESPACE
+            + " --wait=true --timeout=3m");
+    if (deleted.exitCode != 0) {
+        HexLogError("failed to retire the pre-quarkus keycloak statefulset");
+        return;
+    }
+    HexLogInfo("retired the pre-quarkus keycloak statefulset");
+}
+
+/**
  * Deploy Keycloak using Helm.
  */
 static bool
 updateKeycloak()
 {
     HexLogInfo("update keycloak helm chart and roll out pods");
+
+    retireLegacyKeycloak();
 
     int nodeCount = K3sGetNodeCounts();
     if (nodeCount < 0) {
@@ -758,6 +827,16 @@ repairKeycloak()
 {
     if (!IsControl(s_eCubeRole)) {
         HexLogNotice("keycloak should not be repaired from a non-control node");
+        return true;
+    }
+
+    /**
+     * Repairing redeploys the helm release, which on a cluster still running the WildFly
+     * chart hands it over to Keycloak 18 and migrates the shared schema. Mid rolling
+     * upgrade that would strand the control nodes still on CubeCOS v3.1.0, whose WildFly
+     * pods cannot read the migrated schema, so leave the handover to the last node.
+     */
+    if (!isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
         return true;
     }
 
