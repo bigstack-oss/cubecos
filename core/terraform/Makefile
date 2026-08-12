@@ -8,7 +8,12 @@ RANCHER_PROV_VER      := v7.0.0
 RANCHER_PROV_DIR      := terraform-provider-rancher2
 RANCHER_UPSTREAM_BIN  := $(RANCHER_PROV_DIR)/bin/terraform-provider-rancher2
 KEYCLOAK_PROV_REPO    := https://github.com/mrparkers/terraform-provider-keycloak.git
-KEYCLOAK_PROV_VER     := v3.10.0
+# 4.x is the first line that understands the Quarkus distribution. Its releases up to
+# 4.2.0 are validated against Keycloak 19, the closest supported neighbour of the 18.x we
+# deploy; 4.3.0 onwards moved to Keycloak 21. Keep the required_providers pins in
+# src/keycloak/**/main.tf in step with this.
+KEYCLOAK_PROV_VER     := v4.2.0
+KEYCLOAK_PROV_SEMVER  := $(patsubst v%,%,$(KEYCLOAK_PROV_VER))
 KEYCLOAK_PROV_DIR     := terraform-provider-keycloak
 KEYCLOAK_UPSTREAM_BIN := $(KEYCLOAK_PROV_DIR)/terraform-provider-keycloak
 TF_CORE_REPO          := https://github.com/hashicorp/terraform.git
@@ -80,7 +85,7 @@ terraform: $(TF_CORE_BIN) $(RANCHER_UPSTREAM_BIN) $(KEYCLOAK_UPSTREAM_BIN)
 	$(Q)cp -f $(RANCHER_UPSTREAM_BIN) \
         ./$@/.terraform/providers/registry.terraform.io/rancher/rancher2/7.0.0/linux_amd64/terraform-provider-rancher2_v7.0.0
 	$(Q)cp -f $(KEYCLOAK_UPSTREAM_BIN) \
-		./$@/.terraform/providers/registry.terraform.io/mrparkers/keycloak/3.10.0/linux_amd64/terraform-provider-keycloak_v3.10.0
+		./$@/.terraform/providers/registry.terraform.io/mrparkers/keycloak/$(KEYCLOAK_PROV_SEMVER)/linux_amd64/terraform-provider-keycloak_$(KEYCLOAK_PROV_VER)
 	$(Q)make clean-etcd
 
 install: terraform
