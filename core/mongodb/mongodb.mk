@@ -4,10 +4,16 @@
 MONGODB_BINARY := /usr/bin/mongod
 MONGODB_LOG_DIR := /var/log/mongodb
 
-MONGODB_PKG := mongodb-org-server-7.0.28-1.el9.x86_64.rpm
-MONGOSH_PKG := mongodb-mongosh-shared-openssl3-2.2.15.x86_64.rpm
+# The shell moves with the server: 2.2.15 was built months before 8.0 existed,
+# and mongosh is only supported against server releases it shipped alongside.
+# Both are pinned by version so the pair that was tested together stays together.
+MONGODB_VER := 8.0.29
+MONGOSH_VER := 2.9.2
 
-ROOTFS_DNF_DL_FROM += https://repo.mongodb.org/yum/redhat/9/mongodb-org/7.0/x86_64/RPMS/$(MONGODB_PKG)
+MONGODB_PKG := mongodb-org-server-$(MONGODB_VER)-1.el9.x86_64.rpm
+MONGOSH_PKG := mongodb-mongosh-shared-openssl3-$(MONGOSH_VER).x86_64.rpm
+
+ROOTFS_DNF_DL_FROM += https://repo.mongodb.org/yum/redhat/9/mongodb-org/8.0/x86_64/RPMS/$(MONGODB_PKG)
 ROOTFS_DNF_DL_FROM += https://downloads.mongodb.com/compass/$(MONGOSH_PKG)
 
 rootfs_install::
