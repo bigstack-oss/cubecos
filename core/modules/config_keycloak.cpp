@@ -17,6 +17,8 @@ static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.x
 static const std::string KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET = "admin-password";
 static const std::string KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE
     = "/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars";
+// the login theme cube-cos-ui ships, see setMasterRealmLoginTheme()
+static const std::string KEYCLOAK_LOGIN_THEME = "cos-ui";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -501,6 +503,191 @@ downloadKeycloakSamlMetadata(const std::string& endpointIp)
     return isDownloadSuccessful && isCopySuccessful;
 }
 
+/**
+ * Check if the admin password is stored in K8S secret on K3S.
+ */
+static bool
+isKeycloakUserPasswordInK8sSecret()
+{
+    bool ret = HexUtilSystemF(
+                   0,
+                   0,
+                   "/usr/local/bin/k3s kubectl get secret %s -n %s",
+                   KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+                   APP_NAMESPACE.c_str())
+        == 0;
+
+    if (ret) {
+        HexLogInfo("found the existing keycloak admin password");
+    }
+
+    return ret;
+}
+
+/**
+ * Get the admin password from the K8S secret.
+ */
+static std::string
+getKeycloakAdminPasswordFromK8sSecret()
+{
+    if (!isKeycloakUserPasswordInK8sSecret()) {
+        return "";
+    }
+
+    TempFile base64encodedAdminPass = CreateTempFile();
+    if (!base64encodedAdminPass.isValid) {
+        HexLogError("failed to create a temporary file");
+        return "";
+    }
+    if (HexUtilSystemF(
+            0,
+            0,
+            "/usr/local/bin/k3s kubectl get secret %s -n %s -o jsonpath='{.data.password}' > %s",
+            KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+            APP_NAMESPACE.c_str(),
+            base64encodedAdminPass.fileName.c_str())
+        != 0) {
+        HexLogError("failed to read the existing keycloak admin password k8s secret");
+        return "";
+    }
+    HexLogInfo("extracted the existing keycloak admin password");
+
+    const std::string base64encodedAdminPassString = HexUtilPOpen(
+        "base64 --decode %s",
+        base64encodedAdminPass.fileName.c_str());
+    DeleteTempFile(base64encodedAdminPass);
+
+    return base64encodedAdminPassString;
+}
+
+static std::string
+getKeycloakAdminAccessToken(
+    const std::string& endpointIp,
+    const std::string& adminPass)
+{
+    HexLogInfo("get keycloak admin access token");
+
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+    Url url = Url(host, "/auth/realms/master/protocol/openid-connect/token");
+    url.scheme = "https";
+
+    const std::vector<std::string> formBody = {
+        "grant_type=password",
+        "client_id=admin-cli",
+        "username=admin",
+        "password=" + adminPass,
+    };
+
+    const HttpResponse r = PostFormHttp(url, formBody);
+
+    if (!r.error.empty()) {
+        HexLogError("failed to send the http request");
+
+        CleanupHttpResponse(r);
+        return "";
+    }
+    if (!isHttpResponseSuccessful(r)) {
+        HexLogError("failed to get the response");
+
+        CleanupHttpResponse(r);
+        return "";
+    }
+
+    std::string fsError;
+    const std::string responseString = ReadFile(fsError, r.outputFileName);
+    CleanupHttpResponse(r);
+
+    if (!fsError.empty()) {
+        HexLogError("failed to read out the response");
+        return "";
+    }
+
+    std::string jsonError;
+    const json11::Json responseJson = json11::Json::parse(responseString.c_str(), jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("failed to parse the response");
+        return "";
+    }
+
+    std::string token;
+    if (responseJson["access_token"].is_string()) {
+        token = responseJson["access_token"].string_value();
+    }
+
+    HexLogInfo("got keycloak admin access token");
+    return token;
+}
+
+/**
+ * Point the master realm's login theme at the theme cube-cos-ui ships.
+ *
+ * The WildFly image took this from KEYCLOAK_DEFAULT_THEME, which set a server-wide default
+ * for every theme type. cos-ui only carries a login theme, so that left the account,
+ * admin, email and welcome pages failing over to the built-in theme and logging an error
+ * every time one was rendered (bigstack-oss/cubecos#187). Setting it per realm scopes the
+ * theme to the only page it actually provides.
+ */
+static bool
+setMasterRealmLoginTheme(const std::string& endpointIp)
+{
+    std::string adminPass = "admin";
+    if (isKeycloakUserPasswordInK8sSecret()) {
+        const std::string adminPassInK8sSecret = getKeycloakAdminPasswordFromK8sSecret();
+        if (adminPassInK8sSecret.empty()) {
+            HexLogError("failed to get the admin password from the k8s secret");
+            return false;
+        }
+
+        adminPass = adminPassInK8sSecret;
+    }
+
+    const std::string token = getKeycloakAdminAccessToken(endpointIp, adminPass);
+    if (token.empty()) {
+        HexLogError("failed to get the keycloak admin access token");
+        return false;
+    }
+
+    HexLogInfo("set the login theme of the master realm to %s", KEYCLOAK_LOGIN_THEME.c_str());
+
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+    Url url = Url(host, "/auth/admin/realms/master");
+    url.scheme = "https";
+
+    /**
+     * Keycloak only applies the fields a realm update actually carries, so naming just the
+     * realm and the login theme leaves every other realm setting alone.
+     */
+    const HttpRequest req = {
+        .method = "PUT",
+        .url = url,
+        .header = {
+            { "Authorization", "Bearer " + token },
+            { "Content-Type", "application/json" },
+        },
+        .body = R"({"realm":"master","loginTheme":")" + KEYCLOAK_LOGIN_THEME + R"("})",
+    };
+    const HttpResponse res = DoHttp(req);
+
+    if (!res.error.empty()) {
+        HexLogError("failed to send the http request");
+
+        CleanupHttpResponse(res);
+        return false;
+    }
+    if (!isHttpResponseSuccessful(res)) {
+        HexLogError("failed to set the login theme of the master realm");
+
+        CleanupHttpResponse(res);
+        return false;
+    }
+    CleanupHttpResponse(res);
+
+    HexLogInfo("set the login theme of the master realm");
+    return true;
+}
+
 static bool
 Commit(bool modified, int dryLevel)
 {
@@ -582,6 +769,11 @@ Commit(bool modified, int dryLevel)
 
             // let other modules to commit
             return true;
+        }
+
+        // serve the cube-cos-ui login page
+        if (!setMasterRealmLoginTheme(sharedId)) {
+            HexLogError("failed to set the login theme of the master realm");
         }
 
         // create default cube groups
@@ -907,63 +1099,6 @@ RemoveKeycloakSamlMetadataMain(int argc, char** argv)
 CONFIG_COMMAND_WITH_SETTINGS(remove_keycloak_saml_metadata, RemoveKeycloakSamlMetadataMain, RemoveKeycloakSamlMetadataUsage);
 
 /**
- * Check if the admin password is stored in K8S secret on K3S.
- */
-static bool
-isKeycloakUserPasswordInK8sSecret()
-{
-    bool ret = HexUtilSystemF(
-                   0,
-                   0,
-                   "/usr/local/bin/k3s kubectl get secret %s -n %s",
-                   KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
-                   APP_NAMESPACE.c_str())
-        == 0;
-
-    if (ret) {
-        HexLogInfo("found the existing keycloak admin password");
-    }
-
-    return ret;
-}
-
-/**
- * Get the admin password from the K8S secret.
- */
-static std::string
-getKeycloakAdminPasswordFromK8sSecret()
-{
-    if (!isKeycloakUserPasswordInK8sSecret()) {
-        return "";
-    }
-
-    TempFile base64encodedAdminPass = CreateTempFile();
-    if (!base64encodedAdminPass.isValid) {
-        HexLogError("failed to create a temporary file");
-        return "";
-    }
-    if (HexUtilSystemF(
-            0,
-            0,
-            "/usr/local/bin/k3s kubectl get secret %s -n %s -o jsonpath='{.data.password}' > %s",
-            KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
-            APP_NAMESPACE.c_str(),
-            base64encodedAdminPass.fileName.c_str())
-        != 0) {
-        HexLogError("failed to read the existing keycloak admin password k8s secret");
-        return "";
-    }
-    HexLogInfo("extracted the existing keycloak admin password");
-
-    const std::string base64encodedAdminPassString = HexUtilPOpen(
-        "base64 --decode %s",
-        base64encodedAdminPass.fileName.c_str());
-    DeleteTempFile(base64encodedAdminPass);
-
-    return base64encodedAdminPassString;
-}
-
-/**
  * Save the new admin password to the K8S secret.
  */
 static bool
@@ -1024,65 +1159,6 @@ static void
 UpdateKeycloakAdminPasswordUsage()
 {
     fprintf(stderr, "Usage: %s update_keycloak_admin_password <password>\n", HexLogProgramName());
-}
-
-static std::string
-getKeycloakAdminAccessToken(
-    const std::string& endpointIp,
-    const std::string& adminPass)
-{
-    HexLogInfo("get keycloak admin access token");
-
-    std::string host = endpointIp;
-    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
-    Url url = Url(host, "/auth/realms/master/protocol/openid-connect/token");
-    url.scheme = "https";
-
-    const std::vector<std::string> formBody = {
-        "grant_type=password",
-        "client_id=admin-cli",
-        "username=admin",
-        "password=" + adminPass,
-    };
-
-    const HttpResponse r = PostFormHttp(url, formBody);
-
-    if (!r.error.empty()) {
-        HexLogError("failed to send the http request");
-
-        CleanupHttpResponse(r);
-        return "";
-    }
-    if (!isHttpResponseSuccessful(r)) {
-        HexLogError("failed to get the response");
-
-        CleanupHttpResponse(r);
-        return "";
-    }
-
-    std::string fsError;
-    const std::string responseString = ReadFile(fsError, r.outputFileName);
-    CleanupHttpResponse(r);
-
-    if (!fsError.empty()) {
-        HexLogError("failed to read out the response");
-        return "";
-    }
-
-    std::string jsonError;
-    const json11::Json responseJson = json11::Json::parse(responseString.c_str(), jsonError);
-    if (!jsonError.empty()) {
-        HexLogError("failed to parse the response");
-        return "";
-    }
-
-    std::string token;
-    if (responseJson["access_token"].is_string()) {
-        token = responseJson["access_token"].string_value();
-    }
-
-    HexLogInfo("got keycloak admin access token");
-    return token;
 }
 
 static std::string
