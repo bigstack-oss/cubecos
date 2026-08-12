@@ -2,10 +2,10 @@
 
 #include "config_keycloak.hpp"
 
-static const std::string APP = "statefulset.apps/keycloak";
+static const std::string APP = "statefulset.apps/keycloak-keycloakx";
 static const std::string APP_NAMESPACE = "keycloak";
 static const std::string CHART_RELEASE_NAME = "keycloak";
-static const char KEYCLOAK_CHARTS[] = "/opt/keycloak/keycloak-*.tgz";
+static const char KEYCLOAK_CHARTS[] = "/opt/keycloak/keycloakx-*.tgz";
 static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 static const std::string DB_NAME = "keycloak";
 static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.xml";
