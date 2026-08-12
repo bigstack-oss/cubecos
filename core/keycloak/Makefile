@@ -3,12 +3,17 @@
 include ../../build.mk
 
 # login keycloak helm chart
-CHART_VERSION := 18.1.1
-CHART := keycloak-$(CHART_VERSION).tgz
+# keycloakx is codecentric's chart for the Quarkus distribution. Their plain "keycloak"
+# chart is the WildFly one -- its 18.x versions are chart versions, and every one of them
+# still ships appVersion 17.0.1-legacy -- so moving to Quarkus means changing chart, not
+# just bumping a version. Chart 1.6.0 is the newest one whose appVersion is 18.x.
+CHART_NAME := keycloakx
+CHART_VERSION := 1.6.0
+CHART := $(CHART_NAME)-$(CHART_VERSION).tgz
 
 $(CHART):
 	$(Q)helm repo add codecentric https://codecentric.github.io/helm-charts $(QEND)
-	$(Q)helm pull codecentric/keycloak --version $(CHART_VERSION)
+	$(Q)helm pull codecentric/$(CHART_NAME) --version $(CHART_VERSION)
 
 # login rpm
 LOGIN_RPM := login.rpm
@@ -17,6 +22,10 @@ PKG_NAME := cube-cos-login
 GITHUB_URL := https://github.com/bigstack-oss/cube-cos-ui
 
 ifneq ($(RC),)
+# NOTE: this RPM and the IMG_BUILD tag below are pinned to a published release, so they
+# still carry a WildFly Keycloak 17 image. They must be moved to a cube-cos-login 18.x
+# release in step with CHART_NAME/CHART_VERSION above -- the keycloakx chart cannot drive
+# a 17.0.1-legacy image.
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
 		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.0-rc3/$(PKG_NAME)-17.2.0-1.9835cfd.x86_64.rpm, \
@@ -141,10 +150,11 @@ endif
 
 test-podman:: .load-img
 	$(Q)podman run -d -p 80:8080 -p 443:8443 --name=keycloak \
-		-e KEYCLOAK_USER=admin \
-		-e KEYCLOAK_PASSWORD=admin \
-		-e KEYCLOAK_DEFAULT_THEME=cube \
-		$(shell cat .load-img)
+		-e KEYCLOAK_ADMIN=admin \
+		-e KEYCLOAK_ADMIN_PASSWORD=admin \
+		-e KC_SPI_THEME_DEFAULT=cos-ui \
+		$(shell cat .load-img) \
+		start-dev
 	$(Q)echo Accessing keycloak on http://$(shell cat /etc/hosts | grep $$(cat /etc/hostname) | awk '{print $$1}')/auth/
 
 testclean::
