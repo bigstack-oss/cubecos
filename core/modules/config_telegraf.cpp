@@ -45,6 +45,7 @@ static bool s_bCubeModified = false;
 static bool s_bKapacitorModified = false;
 
 static bool s_bConfigChanged = false;
+static bool s_bDbPassChanged = false;
 
 static CubeRole_e s_eCubeRole;
 static Configs cfg;
@@ -254,6 +255,8 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
+    s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
+
     s_bConfigChanged = modified | s_bCubeModified | s_bKapacitorModified |
                        G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
 
@@ -264,15 +267,38 @@ CommitCheck(bool modified, int dryLevel)
 // owning tenant and instance. Give it a dedicated read-only account so the agent
 // keeps running as the unprivileged telegraf user instead of root.
 static bool
-SetupCheck(const std::string &dbPass)
+SetupCheck(const std::string &dbPass, bool dbPassChanged)
 {
     static const char *dbs[] = { "neutron", "nova", "keystone" };
 
+    // Create the account once and only write the password at creation. A bare
+    // GRANT ... IDENTIFIED BY would reset it on every commit, and again for each
+    // extra control node joining a converged cluster.
+    std::string user = "CREATE USER IF NOT EXISTS '" + std::string(DBUSER) +
+                       "'@'localhost' IDENTIFIED BY '" + dbPass + "'";
+    if (!MysqlUtilRunSQL(user.c_str())) {
+        HexLogError("failed to create the %s database account", DBUSER);
+        return false;
+    }
+
+    // Re-granting an existing privilege is a no-op, so this stays idempotent.
     for (size_t i = 0; i < sizeof(dbs) / sizeof(dbs[0]); i++) {
-        std::string sql = "GRANT SELECT ON " + std::string(dbs[i]) + ".* TO '" + DBUSER +
-                          "'@'localhost' IDENTIFIED BY '" + dbPass + "'";
+        std::string sql = "GRANT SELECT ON " + std::string(dbs[i]) + ".* TO '" +
+                          std::string(DBUSER) + "'@'localhost'";
         if (!MysqlUtilRunSQL(sql.c_str())) {
             HexLogError("failed to grant %s read access to %s", DBUSER, dbs[i]);
+            return false;
+        }
+    }
+
+    // An existing account keeps its old password, so rotate it explicitly when the
+    // tuning moves. MysqlUtilUpdateDbPass is not usable here: it also targets
+    // '<user>'@'%', which this localhost-only account does not have.
+    if (dbPassChanged) {
+        std::string sql = "SET PASSWORD FOR '" + std::string(DBUSER) +
+                          "'@'localhost' = PASSWORD('" + dbPass + "')";
+        if (!MysqlUtilRunSQL(sql.c_str()) || !MysqlUtilRunSQL("FLUSH PRIVILEGES")) {
+            HexLogError("failed to update the %s database password", DBUSER);
             return false;
         }
     }
@@ -329,7 +355,7 @@ Commit(bool modified, int dryLevel)
         if (IsControl(s_eCubeRole)) {
             std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
 
-            if (!SetupCheck(dbPass))
+            if (!SetupCheck(dbPass, s_bDbPassChanged))
                 return false;
 
             if (HexSystemF(0, "sed -e 's/@BASE@/%s/' -e 's/@UNIT@/%s/' -e 's/@THRESHOLD@/%d/' -e 's|@DBPASS@|%s|' %s > %s",
