@@ -32,6 +32,7 @@ static const int MONGODB_KEYFILE_MAX_LENGTH = 1024;
 static const char MONGODB_ADMIN_ACCESS[] = "/etc/mongodb/admin-access.sh";
 static const char DATA_DIR[] = "/var/lib/mongo";
 static const char MARKER_MONGODB_RS_CREATED[] = "/etc/appliance/state/mongodb_rs_created";
+static const char MARKER_MONGODB_FCV_SETTLED[] = "/etc/appliance/state/mongodb_fcv_settled";
 
 static const char USER[] = "mongod";
 static const char GROUP[] = "mongod";
@@ -519,29 +520,6 @@ Commit(bool modified, int dryLevel)
         }
     }
 
-    // A mongod keeps serving the previous release's feature set until the FCV is
-    // raised, and the release after this one refuses to start against a data
-    // directory whose FCV was never raised. CONFIG_MIGRATE carries /var/lib/mongo
-    // across an appliance upgrade, so an upgraded cluster inherits the old FCV
-    // and nothing raises it on its own -- only a fresh install, which initiates
-    // its replica set on the new binary, gets the current FCV for free.
-    //
-    // Raising it locks out any member still on the previous major, so mongodb_fcv_stale
-    // reports stale only once every member agrees on a version. The migration
-    // marker is checked first because it is the cheap one, and because an upgrade
-    // is the only lifecycle where the FCV can be behind -- FTS and normal
-    // reconfigs never pay for the probe. Deliberately not gated on IS_MASTER:
-    // the node that rolls last is the one that sees the set agree, and that is
-    // not always the master. Only a warning: a missed raise leaves the cluster
-    // working, just still on the old feature set.
-    if (access(CUBE_MIGRATE, F_OK) == 0 && HexSystemF(0, HEX_SDK " mongodb_fcv_stale") == 0) {
-        if (HexSystemF(0, HEX_SDK " mongodb_raise_fcv") == 0) {
-            HexLogInfo("mongodb featureCompatibilityVersion raised");
-        } else {
-            HexLogWarning("failed to raise mongodb featureCompatibilityVersion");
-        }
-    }
-
     // write the dbPass as mongodb admin access
     if (!WriteAdminAccess(dbPass)) {
         HexLogError("failed to write mongodb admin access");
@@ -580,6 +558,57 @@ RestartMain(int argc, char* argv[])
     return EXIT_SUCCESS;
 }
 
+/**
+ * Settle the featureCompatibilityVersion once, per image.
+ *
+ * A mongod keeps serving the previous release's feature set until the FCV is
+ * raised, and the release after this one refuses to start against a data
+ * directory whose FCV was never raised. CONFIG_MIGRATE carries DATA_DIR across
+ * an appliance upgrade, so an upgraded cluster inherits the old FCV and nothing
+ * raises it -- only a fresh install, which initiates its replica set on the new
+ * binary, gets the current FCV for free.
+ *
+ * Raising it locks out any member still on the previous major, so it must wait
+ * until the whole replica set has rolled. mongodb_fcv_stale reports stale only
+ * once every member agrees on a version, and mongodb_version_uniform separates
+ * the two reasons it can report false: already current (settle it and stop
+ * looking) versus still mid-roll (leave the marker absent and look again next
+ * cluster start).
+ *
+ * MARKER_MONGODB_FCV_SETTLED is deliberately NOT registered with CONFIG_MIGRATE.
+ * It must not reach the upgraded filesystem, or the next major's raise would be
+ * skipped and the FCV would fall behind again -- an absent marker is exactly the
+ * statement "the FCV for this image has not been settled yet".
+ */
+static int
+ClusterStartMain(int argc, char* argv[])
+{
+    if (argc != 1) {
+        return EXIT_FAILURE;
+    }
+
+    if (!IsControl(s_eCubeRole) || access(MARKER_MONGODB_FCV_SETTLED, F_OK) == 0) {
+        return EXIT_SUCCESS;
+    }
+
+    if (HexSystemF(0, HEX_SDK " mongodb_version_uniform") != 0) {
+        HexLogInfo("mongodb replica set has no agreed version yet, deferring the featureCompatibilityVersion check");
+        return EXIT_SUCCESS;
+    }
+
+    if (HexSystemF(0, HEX_SDK " mongodb_fcv_stale") == 0) {
+        if (HexSystemF(0, HEX_SDK " mongodb_raise_fcv") != 0) {
+            HexLogWarning("failed to raise mongodb featureCompatibilityVersion, retrying on the next cluster start");
+            return EXIT_SUCCESS;
+        }
+        HexLogInfo("mongodb featureCompatibilityVersion raised");
+    }
+
+    HexSystemF(0, "touch %s", MARKER_MONGODB_FCV_SETTLED);
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_COMMAND_WITH_SETTINGS(restart_mongodb, RestartMain, RestartUsage);
 
 CONFIG_MODULE(mongodb, Init, Parse, 0, 0, Commit);
@@ -587,6 +616,7 @@ CONFIG_REQUIRES(mongodb, cube_scan);
 
 CONFIG_OBSERVES(mongodb, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(mongodb, cubesys, ParseCube, NotifyCube);
+CONFIG_TRIGGER_WITH_SETTINGS(mongodb, "cluster_start", ClusterStartMain);
 
 CONFIG_MIGRATE(mongodb, MARKER_MONGODB_RS_CREATED);
 CONFIG_MIGRATE(mongodb, DATA_DIR);
