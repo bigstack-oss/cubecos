@@ -20,6 +20,7 @@
 #include <cluster.hpp>
 
 #include "include/role_cubesys.h"
+#include "mysql_util.h"
 
 #define DELL_POWEREDGE_XR_MARKER "/etc/appliance/state/dell_poweredge_xr_detected"
 
@@ -36,6 +37,10 @@
 
 const static char NAME[] = "telegraf";
 
+// read-only account used by the sflow input to look up openstack port info
+static const char DBUSER[] = "telegraf";
+static const char DBPASS[] = "cIkpxxCLUFBbw4iO";
+
 static bool s_bCubeModified = false;
 static bool s_bKapacitorModified = false;
 
@@ -48,14 +53,22 @@ static Configs cfg;
 CONFIG_GLOBAL_STR_REF(CTRL_IP);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
+// private tunings
+CONFIG_TUNING_STR(TELEGRAF_DBPASS, "telegraf.db.password", TUNING_UNPUB, "Set telegraf database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
+
 // using external tunings
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
+CONFIG_TUNING_SPEC_STR(CUBESYS_SEED);
+CONFIG_TUNING_SPEC_BOOL(CUBESYS_SALTKEY);
 CONFIG_TUNING_SPEC_STR(KAPACITOR_ALERT_FLOW_BASE);
 CONFIG_TUNING_SPEC_STR(KAPACITOR_ALERT_FLOW_UNIT);
 CONFIG_TUNING_SPEC_INT(KAPACITOR_ALERT_FLOW_THRESHOLD);
 
 // parse tunings
+PARSE_TUNING_STR(s_dbPass, TELEGRAF_DBPASS);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
+PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 1);
+PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 PARSE_TUNING_X_STR(s_alertFlowBase, KAPACITOR_ALERT_FLOW_BASE, 2);
 PARSE_TUNING_X_STR(s_alertFlowUnit, KAPACITOR_ALERT_FLOW_UNIT, 2);
 PARSE_TUNING_X_INT(s_alertFlowThreshold, KAPACITOR_ALERT_FLOW_THRESHOLD, 2);
@@ -247,6 +260,26 @@ CommitCheck(bool modified, int dryLevel)
     return s_bConfigChanged;
 }
 
+// The sflow input reads neutron/nova/keystone directly to tag flows with the
+// owning tenant and instance. Give it a dedicated read-only account so the agent
+// keeps running as the unprivileged telegraf user instead of root.
+static bool
+SetupCheck(const std::string &dbPass)
+{
+    static const char *dbs[] = { "neutron", "nova", "keystone" };
+
+    for (size_t i = 0; i < sizeof(dbs) / sizeof(dbs[0]); i++) {
+        std::string sql = "GRANT SELECT ON " + std::string(dbs[i]) + ".* TO '" + DBUSER +
+                          "'@'localhost' IDENTIFIED BY '" + dbPass + "'";
+        if (!MysqlUtilRunSQL(sql.c_str())) {
+            HexLogError("failed to grant %s read access to %s", DBUSER, dbs[i]);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static bool
 Init()
 {
@@ -294,14 +327,25 @@ Commit(bool modified, int dryLevel)
         WriteDeviceConfig();
 
         if (IsControl(s_eCubeRole)) {
-            if (HexSystemF(0, "sed -e 's/@BASE@/%s/' -e 's/@UNIT@/%s/' -e 's/@THRESHOLD@/%d/' %s > %s",
+            std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
+
+            if (!SetupCheck(dbPass))
+                return false;
+
+            if (HexSystemF(0, "sed -e 's/@BASE@/%s/' -e 's/@UNIT@/%s/' -e 's/@THRESHOLD@/%d/' -e 's|@DBPASS@|%s|' %s > %s",
                            s_alertFlowBase.c_str(), s_alertFlowUnit.c_str(), s_alertFlowThreshold.newValue(),
+                           dbPass.c_str(),
                            CTRL_CONF IN_EXT, CTRL_CONF) != 0) {
                 HexLogError("failed to update %s", CTRL_CONF);
                 return false;
             }
             HexSystemF(0, "cat %s >> %s", CTRL_CONF, CONF);
         }
+
+        // both files now carry the sflow database password
+        HexSetFileMode(CONF, "root", "telegraf", 0640);
+        if (IsControl(s_eCubeRole))
+            HexSetFileMode(CTRL_CONF, "root", "telegraf", 0640);
     }
 
     SystemdCommitService(true, NAME);
@@ -368,6 +412,7 @@ CONFIG_MODULE(telegraf, Init, 0, 0, 0, Commit);
 // startup sequence
 CONFIG_REQUIRES(telegraf, cube_scan);
 CONFIG_REQUIRES(telegraf, kafka);
+CONFIG_REQUIRES(telegraf, mysql);
 
 // extra tunings
 CONFIG_OBSERVES(telegraf, cubesys, ParseCube, NotifyCube);
