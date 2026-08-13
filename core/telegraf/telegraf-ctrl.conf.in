@@ -46,3 +46,4 @@ gather_cluster_stats = true
 
 [[inputs.sflow]]
 service_address = "udp://:6343"
+openstack_dsn = "telegraf:@DBPASS@@unix(/var/lib/mysql/mysql.sock)/"
