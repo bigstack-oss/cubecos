@@ -1304,7 +1304,7 @@ MoveVolumeToBackendMain(int argc, const char** argv)
         true,
         true,
         ParseOpenstackCliAuth(),
-        "/usr/local/bin/cinder retype --migration-policy on-demand \""
+        "/usr/bin/cinder retype --migration-policy on-demand \""
             + volumeId + "\" \"" + destinationVolumeType + "\"");
     if (r.exitCode != 0) {
         HexLogError("%s", r.stderrOutput.c_str());

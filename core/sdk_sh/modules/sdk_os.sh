@@ -1480,7 +1480,7 @@ os_cinder_volume_service_remove()
         return 0;
     fi
 
-    /usr/local/bin/cinder service-disable $HOSTNAME cinder-volume
+    /usr/bin/cinder service-disable $HOSTNAME cinder-volume
     /usr/bin/cinder-manage service remove cinder-volume $HOSTNAME
 }
 
