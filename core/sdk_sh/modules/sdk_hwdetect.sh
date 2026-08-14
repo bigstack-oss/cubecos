@@ -26,11 +26,11 @@ hwdetect_cluster_ready()
         Quiet -n $OPENSTACK flavor create --vcpus 4 --ram 16384 --disk 160 --property hw:cpu_sockets=1 --property hw:cpu_cores=2 --property hw:cpu_threads=2 --public t2.xlarge
         Quiet -n $OPENSTACK flavor create --vcpus 8 --ram 32768 --disk 160 --property hw:cpu_sockets=2 --property hw:cpu_cores=2 --property hw:cpu_threads=2 --public t2.2xlarge
 
-        Quiet -n $OPENSTACK flavor create --vcpus 2 --ram 4096 --disk 40 --public vgpu.example
-        Quiet -n $OPENSTACK flavor set vgpu.example --property "resources:VGPU=1"
-
-        Quiet -n $OPENSTACK flavor create --vcpus 2 --ram 4096 --disk 40 --public pgpu.example
-        Quiet -n $OPENSTACK flavor set pgpu.example --property 'accel:device_profile=<profile_name>'
+        # No GPU example flavors here. Neither property can hold a valid value at
+        # set_ready time: a PCI alias name is minted by gpu_resource_set when a card is
+        # carved (and encodes the chosen profile), and a cyborg device profile is created
+        # by the operator afterwards. Anything written here is wrong or an unfillable
+        # placeholder - see the carving procedure for the working flavor forms.
     fi
 
     if [ -n "$iprange" ] ; then
