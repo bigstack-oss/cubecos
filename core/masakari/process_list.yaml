@@ -32,7 +32,7 @@
     run_as_root: True
 -
     # instancemonitor
-    process_name: /usr/bin/python3 /usr/local/bin/masakari-instancemonitor
+    process_name: /usr/bin/masakari-instancemonitor
     start_command: systemctl start masakari-instancemonitor
     pre_start_command:
     post_start_command:
@@ -42,7 +42,7 @@
     run_as_root: True
 -
     # hostmonitor
-    process_name: /usr/bin/python3 /usr/local/bin/masakari-hostmonitor
+    process_name: /usr/bin/masakari-hostmonitor
     start_command: systemctl start masakari-hostmonitor
     pre_start_command:
     post_start_command:
