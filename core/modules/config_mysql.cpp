@@ -197,7 +197,13 @@ WriteConfig(const bool ha, const std::string& ctrl, const std::string& ctrlIp, c
         fprintf(fout, "wsrep_on = ON\n");
         fprintf(fout, "wsrep_slave_threads = 32\n");
         fprintf(fout, "wsrep_slave_FK_checks = OFF\n");
-        fprintf(fout, "wsrep_provider = /usr/lib64/galera/libgalera_smm.so\n");
+        // galera-4 ships the provider under /usr/lib64/galera-4; galera 3 used
+        // /usr/lib64/galera. GALERA_RPM in core/mysql/mysql.mk moved to galera-4 with the
+        // mariadb 10.6 bump, and this path did not follow -- mariadbd then aborts at
+        // startup with "wsrep_load(): dlopen(): /usr/lib64/galera/libgalera_smm.so: cannot
+        // open shared object file". Only HA writes a [galera] section, so a single-node
+        // install never loads a provider and cannot see this.
+        fprintf(fout, "wsrep_provider = /usr/lib64/galera-4/libgalera_smm.so\n");
         // 4G keeps a rejoin on IST across a firmware-reboot-length outage (SST breaks on 10.6->10.11)
         fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=4G;pc.ignore_sb=TRUE\"\n");
         fprintf(fout, "wsrep_cluster_name = \"cube_galera_cluster\"\n");
