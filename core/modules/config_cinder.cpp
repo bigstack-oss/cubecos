@@ -876,7 +876,11 @@ Commit(bool modified, int dryLevel)
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass.newValue(), s_seed.newValue());
     std::string novaPass = GetSaltKey(s_saltkey, s_novaPass.newValue(), s_seed.newValue());
-    std::string virshSecret = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s", s_seed.c_str());
+    // Only the uuid: cinder puts it in cinder.conf as rbd_secret_uuid and ships it to nova
+    // in the volume's connection_info. The libvirt secret it names is a hypervisor
+    // credential, so config_nova defines that on every compute node -- this commit returns
+    // early on anything that is not a control node and cannot stand in for them (#856).
+    std::string virshSecret = HexUtilPOpen(HEX_SDK " os_virsh_secret_uuid %s", s_seed.c_str());
 
     // set up the database
     if (!IsDatabaseSetup()) {
@@ -1008,7 +1012,7 @@ AddCephPoolAsStorageBackend(
     if (config.count(BUILTIN_STORAGE_BACKEND) > 0 && config[BUILTIN_STORAGE_BACKEND].count("rbd_secret_uuid") > 0) {
         config[pool]["rbd_secret_uuid"] = config[BUILTIN_STORAGE_BACKEND]["rbd_secret_uuid"];
     } else {
-        config[pool]["rbd_secret_uuid"] = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s", s_seed.c_str());
+        config[pool]["rbd_secret_uuid"] = HexUtilPOpen(HEX_SDK " os_virsh_secret_uuid %s", s_seed.c_str());
     }
     config[pool]["rados_connect_timeout"] = "-1";
     config[pool]["rbd_store_chunk_size"] = "4";

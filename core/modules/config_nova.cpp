@@ -861,6 +861,16 @@ Commit(bool modified, int dryLevel)
         HexUtilSystemF(0, 0, HEX_SDK " os_nova_sshkey_create %s", NOVA_SSH);
     }
 
+    // libvirt hands the ceph client.admin key to qemu when it opens an rbd volume, so the
+    // secret has to exist on every hypervisor. It used to be defined by cinder's commit,
+    // which ran on all nodes; d3ba8dc put an early return for non-control nodes ahead of
+    // that, so pure compute nodes have come up without it ever since -- and a live
+    // migration onto a freshly upgraded or scaled-out compute fails to authenticate to
+    // ceph (#856). The uuid is derived from the seed alone, so what is defined here is
+    // exactly what cinder writes into cinder.conf as rbd_secret_uuid.
+    if (IsCompute(s_eCubeRole))
+        HexUtilSystemF(0, 0, HEX_SDK " os_virsh_secret_define %s", s_seed.c_str());
+
     SetupCheck();
     if (!s_bSetup) {
         s_bDbPassChanged = true;

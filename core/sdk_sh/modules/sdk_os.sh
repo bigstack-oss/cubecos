@@ -1378,12 +1378,28 @@ os_cinder_volume_force_detach()
     fi
 }
 
-os_cinder_virsh_secret_create()
+# Derive the uuid of the libvirt secret holding a ceph client.admin key.
+#
+# Pure: the same seed and location always give the same uuid, on any node and without
+# reading any state. That is what lets cinder name a secret in cinder.conf that nova
+# defines separately on each hypervisor, with neither side sharing anything but the seed.
+os_virsh_secret_uuid()
+{
+    local seed=$1
+    local location=${2:-localhost}
+    echo -n "$(uuidgen --sha1 --namespace @dns --name "$seed.$location")"
+}
+
+# Define (or redefine) that secret on *this* node and echo its uuid.
+#
+# Only hypervisors need it: libvirt hands the key to qemu when it opens an rbd volume.
+# Cinder needs the uuid, not the secret -- see os_virsh_secret_uuid.
+os_virsh_secret_define()
 {
     local seed=$1
     local location=${2:-localhost}
     local pass=$3
-    local uuid=$(uuidgen --sha1 --namespace @dns --name "$seed.$location")
+    local uuid=$(os_virsh_secret_uuid "$seed" "$location")
     if [ -n "$pass" ] ; then
         local secret=$(sshpass -p "$pass" ssh root@$location $CEPH auth get-key client.admin)
     else
