@@ -112,7 +112,22 @@ rootfs_install::
 # qemu-kvm-17:9.1.0-27.el9 is not compatible with 17:9.1.0-20 (v3.0.0)
 # Pinned NVR: live-migration-compatible with 3.1.0's qemu. Never unpin -- an
 # unpinned build floats to build-day c9s. Rig validation + drift: cubecos#1150.
-QEMU_VER := -17:10.1.0-22.el9
+#
+# No epoch, even though every qemu build carries Epoch 17. LOCKED_DNF is only ever
+# matched as a *string* against rpm filenames, and a filename never carries an epoch:
+# installdnf derives qemu-img-10.1.0-22.el9 from the file and greps locked_rpms.txt
+# for it, so a locked_rpms.txt line reading qemu-img-17:10.1.0-22.el9 never matched.
+# The duplicate pass then saw the pinned rpm as nothing but the older of the pair and
+# deleted it -- 17 of the 18 packages, leaving builds on build-day c9s (10.1.0-23 on
+# prod and jim, 2026-08-15) with qemu-guest-agent-10.1.0-22 stranded beside them,
+# which is the drift #1150 pinned against. The same colon truncated the archive
+# lookup to `qemu-img*` (qemu-img-17 -> qemu-img), so a workspace holding a retired
+# 9.1.0 set got it copied in as a third version and installdnf, which only resolves
+# duplicates in pairs, failed the build outright with "Unhandled pkg duplicates".
+# Dropping the epoch changes no resolution -- every candidate in c9s is epoch 17, and
+# dnf takes the NVR without it -- and it puts qemu on the same form as libvirt in
+# core/nova/nova.mk and pacemaker, whose locks hold for exactly that reason.
+QEMU_VER := -10.1.0-22.el9
 # Filename NVR (no epoch); kojihub keeps builds the c9s mirror rotates away, so an
 # air-gapped rebuild resolves the exact NVR (same pattern as mysql.mk).
 QEMU_NVR := 10.1.0-22.el9
