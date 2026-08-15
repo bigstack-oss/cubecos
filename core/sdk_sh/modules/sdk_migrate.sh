@@ -428,10 +428,15 @@ migrate_pacemaker_remote()
 
 migrate_libvirt()
 {
-    if is_control_node ; then
-        # During rolling upgrade, master control has empty virsh secret-list
-        ls /etc/libvirt/secrets/*.{base64,xml} >/dev/null 2>&1 || cp -r /store/ppu/libvirt/secrets/* /etc/libvirt/secrets/
-    fi
+    # During a rolling upgrade the new rootfs comes up with an empty /etc/libvirt/secrets;
+    # update.sh stashed this node's own copy under /store/ppu first. Restore it wherever
+    # there is one -- a compute node needs the ceph secret to open rbd volumes just as much
+    # as a control does, and gating this on is_control_node was half of why a freshly
+    # upgraded compute could not be live-migrated onto (#856); the other half is that
+    # nothing recreated it there, which config_nova now does.
+    ls /etc/libvirt/secrets/*.{base64,xml} >/dev/null 2>&1 || \
+        { ls /store/ppu/libvirt/secrets/* >/dev/null 2>&1 && \
+          cp -r /store/ppu/libvirt/secrets/* /etc/libvirt/secrets/ ; }
 
     touch /run/cube_libvirt
 }
