@@ -34,6 +34,20 @@ CEPH_PATCHDIR := $(COREDIR)/ceph/patch
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
 
 # build ceph python bindings for python 3.10 used by openstack antelope
+#
+# `pip install`, not `setup.py install`: setuptools is retiring that command, and at
+# the venv's pinned 65.7.0 it takes its easy_install path and drops a
+# rados-2.0.0-py3.10-linux-x86_64.egg plus an easy-install.pth line instead of the
+# flat rados.cpython-310-*.so every shipped rootfs has. pip gives the flat layout and
+# a rados-2.0.0.dist-info with it, so `pip list` can see these two.
+#
+# --no-build-isolation: setup.py cythonizes rados.pyx, and Cython lives in this venv
+# (installed just above), not in the throwaway overlay pip would otherwise build in.
+# Building here also means egg_info runs with pbr installed -- pbr registers an
+# egg_info writer that imports pkg_resources -- which is why this step needs the
+# venv's setuptools pinned below 82; see the NOTE in core/heavyfs/Makefile.
+# --no-deps: neither binding declares a dependency, so nothing should be resolved
+# against the index at this point.
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install "Cython<3"
@@ -41,8 +55,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) wget -O /usr/src/ceph/ceph-v17.2.6.tar.gz https://github.com/ceph/ceph/archive/refs/tags/v17.2.6.tar.gz
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/ceph/ceph-v17.2.6.tar.gz -C /usr/src/ceph
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rados && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/python setup.py install"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rbd && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/python setup.py install"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rados && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/pip install --no-build-isolation --no-deps ."
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rbd && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/pip install --no-build-isolation --no-deps ."
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl mask lvm2-monitor
