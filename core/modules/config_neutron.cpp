@@ -967,6 +967,25 @@ DisableSflowMain(int argc, char* argv[])
     return EXIT_SUCCESS;
 }
 
+static int
+SetReadyReconcileMain(int argc, char **argv)
+{
+    if (!s_enabled)
+        return EXIT_SUCCESS;
+
+    // ovn-controller (compute-side) can SEGV-crash-loop into its systemd
+    // start limit while the SB DB / VIP are still forming; heal this node.
+    // Fired in parallel on every node from set_ready.
+    if (IsCompute(s_eCubeRole)) {
+        HexUtilSystemF(0, 0,
+                       "systemctl reset-failed ovn-controller 2>/dev/null; "
+                       "systemctl is-active ovn-controller >/dev/null || "
+                       "systemctl restart ovn-controller");
+    }
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_COMMAND_WITH_SETTINGS(restart_neutron, RestartMain, RestartUsage);
 CONFIG_COMMAND_WITH_SETTINGS(enable_sflow, EnableSflowMain, EnableSflowUsage);
 CONFIG_COMMAND_WITH_SETTINGS(disable_sflow, DisableSflowMain, DisableSflowUsage);
@@ -986,6 +1005,8 @@ CONFIG_OBSERVES(neutron, rabbitmq, ParseRabbitMQ, NotifyMQ);
 CONFIG_OBSERVES(neutron, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(neutron, nova, ParseNova, NotifyNova);
 CONFIG_OBSERVES(neutron, keystone, ParseKeystone, NotifyKeystone);
+
+CONFIG_TRIGGER_WITH_SETTINGS(neutron, "set_ready_reconcile", SetReadyReconcileMain);
 
 CONFIG_MIGRATE(neutron, "/etc/openvswitch/");
 CONFIG_MIGRATE(neutron, "/var/lib/ovn");

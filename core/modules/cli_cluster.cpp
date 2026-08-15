@@ -864,8 +864,10 @@ ClusterReadyMain(int argc, const char** argv)
     else
         HexSpawn(0, HEX_CFG, "-p", "trigger", "cluster_ready", ZEROCHAR_PTR);
 
-    CliPrintf("[3/6] Starting cluster");
+    CliPrintf("[3/6] Starting and reconciling cluster");
     HexUtilSystemF(0, 0, HEX_SDK " host_local_run hex_sdk cmd " HEX_SDK " cube_cluster_start");
+    // parallel per-node heals (ovn-controller start-limit recovery)
+    HexUtilSystemF(0, 0, "cubectl node exec -pn \"" HEX_CFG " trigger set_ready_reconcile\"");
 
     // the cluster is guaranteed complete here -- never import at boot, where a
     // still-forming ceph wedges the upload (#1139)
