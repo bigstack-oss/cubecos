@@ -963,6 +963,28 @@ ClusterStartMain(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
+/**
+ * Hand the migrated placement log back to the user uwsgi runs as.
+ *
+ * hex's supportbase module migrates all of /var/log from the old root with
+ * `rsync -aAXR`, ownership included. Up to 3.1.0 placement ran under httpd as root, so
+ * that copy lands a root-owned placement-api.log on an upgraded node -- while the uwsgi
+ * that replaced httpd runs as User=placement and exits 1 the moment it cannot open its
+ * log. That crash-loops placement, and with it every nova service that resolves the
+ * placement endpoint through the sdk, which fails with "The placement service for
+ * <ip>:None exists but does not have any supported versions". A fresh install never sees
+ * it: there the file does not exist yet and uwsgi creates it itself.
+ *
+ * POST rather than the plain CONFIG_MIGRATE, because pre-migrate functions run *before*
+ * those rsyncs -- a chown there would be undone the moment /var/log is copied in.
+ */
+static bool
+MigratePlacementLogOwner(const char *prevVersion, const char *prevRootDir)
+{
+    HexSystemF(0, "chown placement:placement /var/log/placement/*.log 2>/dev/null || true");
+    return true;
+}
+
 CONFIG_COMMAND_WITH_SETTINGS(restart_nova, RestartMain, RestartUsage);
 
 CONFIG_MODULE(nova, Init, Parse, 0, 0, Commit);
@@ -973,6 +995,7 @@ CONFIG_REQUIRES(nova, ceph);
 //CONFIG_REQUIRES(nova, glance);
 
 CONFIG_MIGRATE(nova, "/etc/nova/nova.d");
+CONFIG_MIGRATE_POST(nova, MigratePlacementLogOwner);
 
 // extra tunings
 CONFIG_OBSERVES(nova, net, ParseNet, NotifyNet);
