@@ -354,6 +354,13 @@ network_ipt_restore()
 airgap_sim_apply()
 {
     touch /etc/appliance/state/airgap_sim
+    # already fully applied? leave the chain untouched so DROP counters keep
+    # accumulating -- re-applying with a flush zeroes them and makes air-gap
+    # violations unauditable (the agent re-applies periodically)
+    if [ "$(iptables -S CUBE_AIRGAP 2>/dev/null | grep -c .)" -eq 8 ] &&
+       iptables -C OUTPUT -j CUBE_AIRGAP 2>/dev/null ; then
+        return 0
+    fi
     iptables -nL CUBE_AIRGAP >/dev/null 2>&1 && iptables -F CUBE_AIRGAP || iptables -N CUBE_AIRGAP
     iptables -A CUBE_AIRGAP -o lo -j RETURN
     local net
