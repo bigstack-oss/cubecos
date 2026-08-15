@@ -212,13 +212,25 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /opt/openstack-antelope
 	$(Q)chroot $(ROOTDIR) python3.10 -m venv /opt/openstack-antelope
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && pip install --upgrade pip setuptools"
 	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)/opt/openstack-antelope/
-	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) wheel
+	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && pip install --upgrade pip"
+	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: setuptools in this venv is pinned to 65.7.0 by the constraints file -- the
 # version antelope's own upper-constraints names -- because setuptools 82 deleted
 # pkg_resources and the 2023-era services still import it (see cubecos#607/#1080).
+#
+# The pin is applied here, at creation, rather than being left to whichever later
+# `pip install -c` happens to pull setuptools in as a dependency. It used to be:
+# `pip install --upgrade pip setuptools` put the *current* setuptools in the venv
+# (84.0.0 as of this writing) and nothing constrained it until some service install
+# further down resolved setuptools==65.7.0 and downgraded it. Everything installed in
+# between ran against a setuptools with no pkg_resources -- and core/ceph/ceph.mk is
+# in between, because ceph sits ahead of keystone in HEAVY_COMPONENTS. Its rados/rbd
+# bindings are a `setup.py install`, whose egg_info step loads pbr's entry point, and
+# pbr imports pkg_resources: "ModuleNotFoundError: No module named 'pkg_resources'".
+# Note also that this only broke once setuptools 82 shipped, so it fails on a date,
+# not on a commit -- pinning at creation is what removes that.
 #
 # That pin does *not* reach pip's PEP-517 build environments. pip builds every sdist
 # in a throwaway overlay and resolves the default backend requirement
@@ -277,17 +289,20 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(CARACAL_OPENSTACK_HOME_DIR)
 	$(Q)chroot $(ROOTDIR) python$(CARACAL_PYTHON_VER) -m venv $(CARACAL_OPENSTACK_HOME_DIR)
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip setuptools"
 	$(Q)cp -f $(CARACAL_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) wheel
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
 # upper-constraints.txt copied down verbatim -- unlike the antelope file, which carries
-# six local deltas for services we build from source. Nothing is pinned here yet because
-# skyline is the only planned occupant and it does not follow yoga's or antelope's
-# constraints. Upstream does not pin setuptools, so `pip install --upgrade setuptools`
-# above leaves this venv on whatever setuptools is current; if a future occupant needs
-# pkg_resources (pbr does), pin setuptools here the way antelope pins 65.7.0.
+# six local deltas for services we build from source. Upstream does not pin setuptools,
+# so the -c above is inert for setuptools today and this venv still lands on whatever
+# is current (84.0.0 as of this writing) -- which is what skyline, the only occupant,
+# is already installed against. setuptools is routed through the constraints file
+# anyway so that adding one line to that file is the whole pin, the same way antelope
+# pins 65.7.0. Do that when the version has to be settled: the ceph python bindings
+# move into this venv when caracal takes over from antelope, and a `setup.py install`
+# goes through pbr, which imports pkg_resources -- gone since setuptools 82.
 
 # Allow admin to be sudoers
 rootfs_install::
