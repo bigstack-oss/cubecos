@@ -57,6 +57,11 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 750 /var/log/mariadb
 	$(Q)chroot $(ROOTDIR) chown mysql:mysql /var/log/mariadb
 
+# see the drop-in for why upstream's stop semantics are not safe across a reboot
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/mariadb.service.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/mysql/mariadb-stop.conf ./etc/systemd/system/mariadb.service.d/
+
 rootfs_install::
 	$(Q)# /etc/my.cnf.d/galera.cnf came from centos stream 9 appstream repo, mariadb repo mariadb does not have this default config
 	$(Q)# mv $(ROOTDIR)/etc/my.cnf.d/galera.cnf $(ROOTDIR)/etc/my.cnf.d/galera.cnf.orig
