@@ -39,12 +39,20 @@ RPMBUILD_RPMS = $(RPMBUILD_DIR)/RPMS
 
 # prepare the login source code, being pulled from GitHub using the default branch
 # For RC: git clone -b v3.1.0-rc3
+#
+# TEMPORARY: pinned to the branch of cube-cos-ui#848, which builds the keycloak image
+# with --transaction-xa-enabled=false. Without it keycloak 18 uses XA transactions,
+# MariaDB refuses those whenever wsrep is on, and its first bootstrap dies half-done on
+# every HA cluster -- which is what leaves 2ec_1m/3cc/3c_3p_5s hanging in first-time
+# setup. Drop LOGIN_BRANCH and this note once that PR is merged to the default branch.
+LOGIN_BRANCH := fix/keycloak-xa-transactions-on-galera
+
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone --depth 1 -b $(LOGIN_BRANCH) $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   $(GITHUB_URL)")
+		"  CLONE   $(GITHUB_URL) ($(LOGIN_BRANCH))")
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $@ && nvm install $(QEND)
