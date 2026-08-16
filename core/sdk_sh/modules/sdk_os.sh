@@ -2887,6 +2887,22 @@ os_rabbitmq_version_uniform()
     [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
 }
 
+os_neutron_version_uniform()
+{
+    # Same fail-safe contract as os_rabbitmq_version_uniform(): every control node
+    # must be reachable AND report the same neutron major version; unreachable =
+    # unknown, any miss => not uniform. Yoga reports 20.x, Antelope 22.x.
+    local hosts h v vers=
+    hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
+    [ -n "$hosts" ] || return 1
+    for h in $hosts ; do
+        v=$(remote_run "$h" "neutron-server --version 2>&1 | tail -1" | awk '{print $NF}' | cut -d. -f1)
+        [ -n "$v" ] || return 1
+        vers="$vers $v"
+    done
+    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
+}
+
 os_device_profile_create()
 {
     local units=${1:-1}

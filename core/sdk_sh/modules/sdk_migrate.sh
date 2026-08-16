@@ -179,9 +179,61 @@ migrate_neutron_db()
 
         # upgrade to 2.2.0
         su -s /bin/sh -c "neutron-db-manage --subproject neutron-vpnaas upgrade heads" neutron
+
+        # Yoga <-> Antelope compatibility shim for the mixed-version window.
+        #
+        # zed/expand/I43e0b669096_port_forwarding_port_ranges.py replaces
+        # portforwardings.external_port and .socket with start/end range columns.
+        # Upstream put it in the *expand* branch, so there is no phased form of
+        # this migration that leaves the old columns standing: the moment the
+        # first node migrates the shared schema, every still-Yoga neutron-server
+        # on the other control nodes answers 500 to any port query with
+        #   (1054, "Unknown column 'portforwardings.external_port' in 'SELECT'")
+        # That is not confined to port forwarding -- the port_forwarding service
+        # plugin's callback fires on every port create and update, so it takes
+        # out the whole port API on 2 of 3 servers behind the VIP, and with it
+        # the live migration that rolling_upgrade drains each node with.
+        #
+        # Deferring the migration instead does not help; it only inverts which
+        # servers are broken, and worse, the healthy pool then shrinks as the
+        # roll proceeds instead of growing. Since only the column *shape*
+        # changed, re-add the two dropped columns as generated columns so the
+        # migrated schema answers both dialects. They are additive and derived,
+        # and invisible to Antelope's ORM, which names its columns explicitly.
+        # Yoga can read port forwardings through them but not create one --
+        # generated columns reject writes -- which is the accepted trade for
+        # keeping the port API and the drain alive during the window.
+        #
+        # migrate_neutron_db_post() drops them once no Yoga server is left.
+        if [ "$($MYSQL -N -u root -D neutron -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'neutron' AND TABLE_NAME = 'portforwardings' AND COLUMN_NAME IN ('external_port', 'socket')")" = "0" ] ; then
+            $MYSQL -u root -D neutron -e "ALTER TABLE portforwardings ADD COLUMN external_port int(11) GENERATED ALWAYS AS (external_port_start) VIRTUAL, ADD COLUMN socket varchar(36) GENERATED ALWAYS AS (concat(internal_ip_address, ':', internal_port_start)) VIRTUAL"
+        fi
     fi
 
     touch $STATE_DIR/neutron_db_migrated
+}
+
+migrate_neutron_db_post()
+{
+    if [ -f $STATE_DIR/neutron_db_post_migrated ] ; then
+        return 0
+    fi
+
+    if ! is_control_node ; then
+        touch $STATE_DIR/neutron_db_post_migrated
+        return 0
+    fi
+
+    # Drop the mixed-window compatibility shim migrate_neutron_db() added, but
+    # only once every control node runs Antelope's neutron-server. An unreachable
+    # node counts as unknown and holds the shim, so a half-finished roll never
+    # loses the columns out from under a Yoga server; carrying two generated
+    # columns for one more cluster_start costs nothing.
+    $HEX_SDK os_neutron_version_uniform || return 0
+
+    $MYSQL -u root -D neutron -e "ALTER TABLE portforwardings DROP COLUMN IF EXISTS external_port, DROP COLUMN IF EXISTS socket"
+
+    touch $STATE_DIR/neutron_db_post_migrated
 }
 
 migrate_neutron_ovn_sync()

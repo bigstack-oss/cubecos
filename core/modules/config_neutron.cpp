@@ -13,6 +13,7 @@
 #include <hex/config_global.h>
 #include <hex/logrotate.h>
 #include <hex/dryrun.h>
+#include <hex/exec.hpp>
 
 #include <cube/systemd_util.h>
 #include <cube/config_file.h>
@@ -986,6 +987,27 @@ SetReadyReconcileMain(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
+static int
+ClusterStartMain(int argc, char **argv)
+{
+    if (argc != 1) {
+        return EXIT_FAILURE;
+    }
+
+    // post actions for db migration
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        HEX_SDK " migrate_neutron_db_post");
+    if (r.exitCode != 0) {
+        HexLogError("failed to run neutron post-migration actions");
+    }
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_COMMAND_WITH_SETTINGS(restart_neutron, RestartMain, RestartUsage);
 CONFIG_COMMAND_WITH_SETTINGS(enable_sflow, EnableSflowMain, EnableSflowUsage);
 CONFIG_COMMAND_WITH_SETTINGS(disable_sflow, DisableSflowMain, DisableSflowUsage);
@@ -1010,4 +1032,6 @@ CONFIG_TRIGGER_WITH_SETTINGS(neutron, "set_ready_reconcile", SetReadyReconcileMa
 
 CONFIG_MIGRATE(neutron, "/etc/openvswitch/");
 CONFIG_MIGRATE(neutron, "/var/lib/ovn");
+
+CONFIG_TRIGGER_WITH_SETTINGS(neutron, "cluster_start", ClusterStartMain);
 
