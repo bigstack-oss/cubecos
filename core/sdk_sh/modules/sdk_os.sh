@@ -2185,6 +2185,9 @@ os_manila_service_network_dedup()
 os_manila_service_network_ensure()
 {
     is_first_compute_node || return 0
+    # Wait for the OVN NB (pacemaker VIP:6641) before writing to neutron: an
+    # early write's SG lands without a port group. systemd retries on failure.
+    timeout 5 ovsdb-client list-dbs tcp:$(shared_ip):6641 >/dev/null 2>&1 || return 1
     local count i
     # Converge to exactly one: create, then dedup + settle-verify (a create that
     # times out on the client can still land, so don't trust its exit code).
