@@ -149,6 +149,25 @@ git_init()
     git_client_init
 }
 
+git_node_init()
+{
+    # Init only THIS node: the master creates the bare repo (and its own /
+    # clone); peers clone from cephfs, failing harmlessly until it exists.
+    source $HEX_TUN $SETTINGS_TXT
+    local master
+    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
+        master=$T_cubesys_controller
+        [ -n "$master" ] || master=$T_net_hostname
+    else
+        master=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
+    fi
+    if [ "x$T_net_hostname" = "x$master" ] ; then
+        $HEX_SDK _git_server_init
+    else
+        $HEX_SDK _git_client_init
+    fi
+}
+
 git_push()
 {
     local msg="${@:-n/a}"

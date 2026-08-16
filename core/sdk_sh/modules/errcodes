@@ -135,7 +135,6 @@ eval "ERR_DESC_$SRV[2]='cephfs not all mounted'"
 eval "ERR_DESC_$SRV[3]='nfs-ganesha fail to mount'"
 eval "ERR_DESC_$SRV[4]='nfs-ganesha fail to write'"
 eval "ERR_DESC_$SRV[5]='nfs-ganesha not all up'"
-eval "ERR_DESC_$SRV[6]='git not initialied'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="ceph_osd"

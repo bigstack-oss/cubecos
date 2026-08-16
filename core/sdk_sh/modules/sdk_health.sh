@@ -1587,8 +1587,6 @@ health_ceph_mds_check()
         ERR_CODE=4
     elif [ $(cmd -cv "systemctl show -p SubState nfs-ganesha" | grep running| wc -l) -lt $num_ctrlnode ] ; then
         ERR_CODE=5
-    elif ! cmd git log ; then
-        ERR_CODE=6
     fi
 
     rm -f $nfs_dir/.alive
@@ -1608,8 +1606,6 @@ _health_ceph_mds_auto_repair()
         cmd $HEX_SDK ceph_mount_cephfs
     elif [ "$ERR_CODE" == "3" -o "$ERR_CODE" == "4" -o "$ERR_CODE" == "5" ] ; then
         cmd -c "systemctl restart nfs-ganesha"
-    elif [ "$ERR_CODE" == "6" ] ; then
-        $HEX_SDK git_init
     fi
 }
 
