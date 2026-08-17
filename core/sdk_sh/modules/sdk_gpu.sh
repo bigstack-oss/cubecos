@@ -10,6 +10,14 @@ GPU_CONFIG_FILE_PATH="/etc/cube/cos/gpu/config.json"
 SRIOV_PROFILE_NAME_REGEX="^[A-Za-z0-9]+-[0-9]+[A-Za-z]+$"
 MIG_PROFILE_NAME_REGEX="^[A-Za-z0-9]+-[0-9]+-[0-9]+[A-Za-z]+$"
 
+# Static vGPU type table shipped with the NVIDIA vGPU host driver, keyed by PCI
+# device id. It answers the same question `nvidia-smi vgpu -s -v` does, and is
+# needed because a pgpu is bound to vfio-pci and therefore invisible to
+# nvidia-smi while its PCI ids stay readable in sysfs. Absent when no vGPU host
+# driver is installed - in which case the card genuinely cannot run vGPU and
+# reporting pgpu-only is the correct answer.
+VGPU_CONFIG_XML="/usr/share/nvidia/vgpu/vgpuConfig.xml"
+
 gpu_iommu_list()
 {
     shopt -s nullglob
@@ -440,6 +448,81 @@ gpu_vm_stats()
 #     total: number
 #   } | null
 # }[]
+# Emits one TSV record per vGPU type the card's model supports:
+#   <typeId>\t<shortProfileName>\t<framebufferMiB>
+# Takes an nvidia-smi style bus id ("00000001:C8:00.0"). Silent (exit 0, no
+# output) when the table or the device is missing - callers treat that the same
+# way they treat an empty nvidia-smi probe.
+gpu_vgpu_types_from_xml()
+{
+    local pci_bus_id="$1"
+
+    [ -n "$pci_bus_id" ] || return 0
+    [ -r "$VGPU_CONFIG_XML" ] || return 0
+
+    # nvidia-smi prints an 8-digit domain in upper case; sysfs uses 4 digits in
+    # lower case. Same trimming as gpu_bind_vfio_pci.
+    local sysfs_pci_addr
+    sysfs_pci_addr=$(echo "$pci_bus_id" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+
+    local device_id
+    device_id=$(cat "/sys/bus/pci/devices/${sysfs_pci_addr}/device" 2>/dev/null)
+    [ -n "$device_id" ] || return 0
+
+    # sysfs prints 0x2bb5, the table spells it 0x2BB5
+    device_id="0x$(echo "${device_id#0x}" | tr '[:lower:]' '[:upper:]')"
+
+    awk -v want="$device_id" '
+        /<vgpuType / {
+            id = ""; name = ""; dev = ""; size = ""
+            if (match($0, /id="[0-9]+"/))
+                id = substr($0, RSTART + 4, RLENGTH - 5)
+            if (match($0, /name="[^"]*"/))
+                name = substr($0, RSTART + 6, RLENGTH - 7)
+        }
+        /<devId / {
+            if (match($0, /deviceId="[^"]*"/))
+                dev = substr($0, RSTART + 10, RLENGTH - 11)
+        }
+        /<profileSize>/ {
+            if (match($0, />0[xX][0-9a-fA-F]+</))
+                size = substr($0, RSTART + 1, RLENGTH - 2)
+        }
+        /<\/vgpuType>/ {
+            # The profile name callers match on is the last token of the full
+            # board name ("NVIDIA RTX Pro 6000 Blackwell DC-12Q" -> "DC-12Q"),
+            # the same slice nvidia-smi parsing takes with $NF.
+            if (dev == want && id != "" && name != "" && size != "") {
+                n = split(name, parts, " ")
+                printf "%s\t%s\t%d\n", id, parts[n], strtonum(size) / 1048576
+            }
+        }
+    ' "$VGPU_CONFIG_XML"
+}
+
+# supportTypes for a card nvidia-smi cannot enumerate. A pgpu is bound to
+# vfio-pci, so every probe-based answer collapses to ["pgpu"] - which is what
+# the card currently is, not what it can be. supportTypes is capability data,
+# so derive it from the static table instead.
+gpu_support_types_from_xml()
+{
+    local pci_bus_id="$1"
+
+    local support_types='["pgpu"]'
+    local profile_names
+    profile_names=$(gpu_vgpu_types_from_xml "$pci_bus_id" | awk -F'\t' '{print $2}')
+
+    if echo "$profile_names" | grep -qE "$SRIOV_PROFILE_NAME_REGEX"; then
+        support_types=$(echo "$support_types" | jq -c '. + ["sriovVgpu"]')
+    fi
+
+    if echo "$profile_names" | grep -qE "$MIG_PROFILE_NAME_REGEX"; then
+        support_types=$(echo "$support_types" | jq -c '. + ["migBackedVgpu"]')
+    fi
+
+    echo "$support_types"
+}
+
 gpu_device_list()
 {
     local gpu_config="[]"
@@ -615,14 +698,18 @@ gpu_device_list()
             fi
         fi
 
+        local support_types
+        support_types=$(gpu_support_types_from_xml "$pci_address")
+
         output=$(echo "$output" | jq -c \
             --arg id "$uuid" \
             --arg name "$name" \
             --arg type "$gpu_type" \
             --arg pciAddress "$pci_address" \
             --arg status "$status" \
+            --argjson supportTypes "$support_types" \
             --argjson allocation "$allocation" \
-            '. + [{id:$id, name:$name, type:$type, supportTypes:["pgpu"], pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
+            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
     done <<< "$(echo "$pgpu_ids" | jq -c '.[]' 2>/dev/null)"
 
     # The union above only catches vfio-pci-bound GPUs that config.json
@@ -681,13 +768,17 @@ gpu_device_list()
             allocation='{"current":1,"total":1}'
         fi
 
+        local support_types
+        support_types=$(gpu_support_types_from_xml "$pci_address")
+
         output=$(echo "$output" | jq -c \
             --arg id "$uuid" \
             --arg name "$name" \
             --arg pciAddress "$pci_address" \
             --arg status "$status" \
+            --argjson supportTypes "$support_types" \
             --argjson allocation "$allocation" \
-            '. + [{id:$id, name:$name, type:"pgpu", supportTypes:["pgpu"], pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
+            '. + [{id:$id, name:$name, type:"pgpu", supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
     done
 
     # Every step above rebuilds $output through jq, so a single failed jq call
@@ -764,6 +855,40 @@ gpu_vgpu_profile_list()
 
     local vgpu_output
     vgpu_output=$($NVIDIA_SMI vgpu -s -v -i "$gpu_id" 2>/dev/null)
+
+    # Same vfio-pci blindness as in gpu_device_list: a pgpu reports no profiles
+    # at all, which reads as "this card cannot do vGPU" and leaves a client with
+    # nothing to request. Rebuild the capability half from the static table.
+    #
+    # vmCountLimit stays null here. The table carries a per-GI limit only, and
+    # the card-wide count depends on how the card is partitioned - undefined
+    # while it is still a passthrough card. It comes back on its own once the
+    # card actually runs vGPU and nvidia-smi answers again.
+    # Keyed on the absence of parsable records, not an empty string: nvidia-smi
+    # prints "No devices were found" to stdout, so the probe output is never
+    # actually empty for a card it cannot see.
+    if ! echo "$vgpu_output" | grep -q "vGPU Type ID"; then
+        local pci_address
+        pci_address=$(echo "$gpu_config" | jq -r --arg id "$gpu_id" \
+            'map(select(.id == $id)) | if length > 0 then (.[0].pciAddress // "") else "" end')
+
+        local xml_id xml_name xml_vram
+        while IFS="$(printf '\t')" read -r xml_id xml_name xml_vram; do
+            [ -z "$xml_id" ] && continue
+
+            if echo "$xml_name" | grep -qE "$MIG_PROFILE_NAME_REGEX"; then
+                mig_profiles=$(echo "$mig_profiles" | jq -c \
+                    --argjson id "$xml_id" --arg name "$xml_name" --argjson vram_mib "$xml_vram" \
+                    '. + [{ id: $id, name: $name, vramMiB: $vram_mib, vmCountLimit: null }]')
+            elif echo "$xml_name" | grep -qE "$SRIOV_PROFILE_NAME_REGEX"; then
+                sriov_profiles=$(echo "$sriov_profiles" | jq -c \
+                    --argjson id "$xml_id" --arg name "$xml_name" --argjson vram_mib "$xml_vram" \
+                    '. + [{ id: $id, name: $name, vramMiB: $vram_mib, vmCountLimit: null }]')
+            fi
+        done <<EOF
+$(gpu_vgpu_types_from_xml "$pci_address")
+EOF
+    fi
 
     local vgpu_type_id_hex
     for vgpu_type_id_hex in $(echo "$vgpu_output" | grep "vGPU Type ID" | awk '{print $NF}'); do
