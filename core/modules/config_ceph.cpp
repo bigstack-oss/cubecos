@@ -1027,7 +1027,16 @@ RemoveMon(const char* hostname)
     HexUtilSystemF(0, 0, "timeout 60 ceph mon remove %s", hostname);
     RemoveMonData(hostname);
     // Drop the node from the grace DB on permanent removal (a rejoin re-adds itself in SetupMds).
-    HexUtilSystemF(0, 0, "ganesha-rados-grace -p %s remove %s", GANESHA_RECOV_POOL, hostname);
+    //
+    // Bounded like the `ceph mon remove` above, and for the same reason: this talks
+    // to RADOS, and a node reaching here need not have a reachable cluster. A compute
+    // node takes this branch during first-time setup -- monEnabled is false, so
+    // Commit() calls RemoveMon() -- while ceph does not exist yet, and an unbounded
+    // ganesha-rados-grace then blocks forever. That wedges the whole commit, so
+    // /etc/appliance/state/configured is never written and FTS never finishes; worse,
+    // it holds hex_config.commit.lock, so every other node's cluster_map_update fails
+    // with "Unable to grab lock after 600 seconds".
+    HexUtilSystemF(0, 0, "timeout 60 ganesha-rados-grace -p %s remove %s", GANESHA_RECOV_POOL, hostname);
     HexLogInfo("ceph-mon@%s removed", hostname);
 
     return true;
@@ -1309,7 +1318,9 @@ MountCephfsStore()
 
         HexUtilSystemF(0, 0, "systemctl start ceph-umountfs");
         // Register this node in the grace DB before ganesha joins (idempotent; also covers a same-hostname rejoin). See #1231.
-        HexUtilSystemF(0, 0, "ganesha-rados-grace -p %s add %s", GANESHA_RECOV_POOL, s_hostname.c_str());
+        // Bounded for the same reason as the remove in RemoveMon(): it is a RADOS
+        // call, and hanging here would wedge the commit that owns it.
+        HexUtilSystemF(0, 0, "timeout 60 ganesha-rados-grace -p %s add %s", GANESHA_RECOV_POOL, s_hostname.c_str());
         HexUtilSystemF(0, 0, "systemctl start nfs-ganesha");
     }
 
