@@ -820,8 +820,10 @@ power_roll_status_json()
                 # status words ("bootstrapping" is inferred the same way)
                 | (if (.status == "rebooting" and .hostname == $inf and $boot == "1") then "bootstrapping"
                    else (.status // "pending") end) as $phase
-                # $current keeps the API's own vocabulary -- the UI's completion
-                # logic keys off "succeeded"/"failed", so it is NOT the label.
+                # $current keeps the vocabulary the API itself uses -- the UI
+                # completion logic keys off "succeeded"/"failed", so it is NOT
+                # the label. Note: no apostrophes in this program -- it is a
+                # single-quoted shell string, so one would end it early.
                 | (if $failed then "failed"
                    elif .status == "done" then "succeeded"
                    elif .status == "stage_failed" then "failed"
