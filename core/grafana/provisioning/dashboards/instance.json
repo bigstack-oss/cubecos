@@ -1597,19 +1597,13 @@
           "steppedLine": false,
           "targets": [
             {
-              "alias": "[[tag_name]] {[[tag_gid]]}",
+              "alias": "[[tag_name]]",
               "groupBy": [
                 {
                   "params": [
                     "$__interval"
                   ],
                   "type": "time"
-                },
-                {
-                  "params": [
-                    "gid"
-                  ],
-                  "type": "tag"
                 },
                 {
                   "params": [
@@ -1742,19 +1736,13 @@
           "steppedLine": false,
           "targets": [
             {
-              "alias": "[[tag_name]] {[[tag_gid]]}: Total",
+              "alias": "[[tag_name]]: Total",
               "groupBy": [
                 {
                   "params": [
                     "$__interval"
                   ],
                   "type": "time"
-                },
-                {
-                  "params": [
-                    "gid"
-                  ],
-                  "type": "tag"
                 },
                 {
                   "params": [
@@ -1798,19 +1786,13 @@
               ]
             },
             {
-              "alias": "[[tag_name]] {[[tag_gid]]}: Used",
+              "alias": "[[tag_name]]: Used",
               "groupBy": [
                 {
                   "params": [
                     "$__interval"
                   ],
                   "type": "time"
-                },
-                {
-                  "params": [
-                    "gid"
-                  ],
-                  "type": "tag"
                 },
                 {
                   "params": [
@@ -1945,19 +1927,13 @@
           "steppedLine": false,
           "targets": [
             {
-              "alias": "[[tag_name]] {[[tag_gid]]}",
+              "alias": "[[tag_name]]",
               "groupBy": [
                 {
                   "params": [
                     "$__interval"
                   ],
                   "type": "time"
-                },
-                {
-                  "params": [
-                    "gid"
-                  ],
-                  "type": "tag"
                 },
                 {
                   "params": [
@@ -2090,19 +2066,13 @@
           "steppedLine": false,
           "targets": [
             {
-              "alias": "[[tag_name]] {[[tag_gid]]}",
+              "alias": "[[tag_name]]",
               "groupBy": [
                 {
                   "params": [
                     "$__interval"
                   ],
                   "type": "time"
-                },
-                {
-                  "params": [
-                    "gid"
-                  ],
-                  "type": "tag"
                 },
                 {
                   "params": [
