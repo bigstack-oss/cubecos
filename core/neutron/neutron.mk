@@ -1,18 +1,17 @@
 # Cube SDK
 # neutron installation
 
-RDOOVN_VERSION := -23.03-3.el9s
+RDOOVN_VERSION := -24.03-1.el9s
 
 # Base networking RPMs
-ROOTFS_DNF += openvswitch3.1 ovn23.03 ovn23.03-central ovn23.03-host
+ROOTFS_DNF += openvswitch3.3 ovn24.03 ovn24.03-central ovn24.03-host
+ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn$(RDOOVN_VERSION).noarch.rpm
+ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
+ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
 
 # System requirements formerly pulled in by openstack-neutron RPMs
 # handled elsewhere: iptables
 ROOTFS_DNF += dnsmasq dnsmasq-utils radvd dibbler-client conntrack-tools keepalived haproxy ipset iputils iproute-tc libreswan sudo
-
-ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.1/3.el9s/noarch/rdo-ovn$(RDOOVN_VERSION).noarch.rpm
-ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.1/3.el9s/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
-ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.1/3.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
 
 NEUTRON_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/neutron
 NEUTRON_PATCHDIR := $(COREDIR)/neutron/$(OPENSTACK_RELEASE)_patch
