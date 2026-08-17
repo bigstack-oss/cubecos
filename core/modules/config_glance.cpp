@@ -69,6 +69,7 @@ CONFIG_TUNING_SPEC_STR(CINDER_VOLUME_TYPE_DEFAULT);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, GLANCE_ENABLED);
+PARSE_TUNING_BOOL(s_debug, GLANCE_DEBUG);
 PARSE_TUNING_STR(s_glancePass, GLANCE_USERPASS);
 PARSE_TUNING_STR(s_dbPass, GLANCE_DBPASS);
 PARSE_TUNING_INT(s_exportRp, GLANCE_EXPORT_RP);
@@ -321,6 +322,17 @@ SetDefaults(Configs& config)
 
     config["paste_deploy"]["flavor"] = "keystone";
     config["paste_deploy"]["config_file"] = "/etc/glance/glance-api-paste.ini";
+}
+
+/**
+ * glance.debug.enabled has been published since the initial commit but was never
+ * parsed or applied, so setting it did nothing. Kept separate from SetDefaults()
+ * because it is operator-driven rather than a fixed default.
+ */
+static void
+SetDebug(Configs& config, bool enabled)
+{
+    config["DEFAULT"]["debug"] = enabled ? "true" : "false";
 }
 
 /**
@@ -632,6 +644,7 @@ Commit(bool modified, int dryLevel)
         LoadDefaultConfig(config);
         InitConfig(config);
         SetDefaults(config);
+        SetDebug(config, s_debug);
         SetEndpoint(config, myIp);
         SetDatabaseConnection(config, sharedId, dbPass);
         SetWorkerQueue(config, s_ha, sharedId, mqPass, s_ctrlAddrs);

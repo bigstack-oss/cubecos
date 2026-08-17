@@ -85,6 +85,7 @@ CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, KEYSTONE_ENABLED);
+PARSE_TUNING_BOOL(s_debug, KEYSTONE_DEBUG);
 PARSE_TUNING_STR(s_dbPass, KEYSTONE_DBPASS);
 PARSE_TUNING_STR(s_adminPass, KEYSTONE_ADMIN_PASS);
 PARSE_TUNING_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS);
@@ -341,6 +342,19 @@ UpdateConfig(std::string sharedId)
     return true;
 }
 
+/** 
+ * keystone.debug.enabled has been published since the initial commit but was
+ * never parsed or applied, so setting it did nothing. Mirrors UpdateDebug() in
+ * config_neutron.cpp / config_nova.cpp.
+ */
+static bool
+UpdateDebug(bool enabled)
+{
+    cfg["DEFAULT"]["debug"] = enabled ? "true" : "false";
+
+    return true;
+}
+
 static bool
 UpdateEndpoint(std::string password, std::string endpoint, std::string external,
                std::string domain, std::string region)
@@ -464,6 +478,7 @@ Commit(bool modified, int dryLevel)
     if (s_bConfigChanged) {
         UpdateConfig(sharedId);
         UpdateDbConn(sharedId, dbPass);
+        UpdateDebug(s_debug);
         HexUtilSystemF(0, 0, HEX_SDK " os_wsgi_conf_update %s", myIp.c_str());
 
         WriteConfig(CONF, SB_SEC_WFMT, '=', cfg);
