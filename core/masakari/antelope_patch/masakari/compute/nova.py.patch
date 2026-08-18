@@ -1,5 +1,5 @@
---- masakari/compute/nova.py	2026-07-11 11:21:16.676763358 +0800
-+++ masakari/compute/nova.py	2026-07-11 11:21:16.676763358 +0800
+--- masakari/compute/nova.py
++++ masakari/compute/nova.py
 @@ -85,6 +85,11 @@
      @param timeout: Number of seconds to wait for an answer before raising a
          Timeout exception (None to disable)
@@ -23,3 +23,44 @@
  
      client_obj = nova_client.Client(
          api_versions.APIVersion(NOVA_API_VERSION),
+@@ -167,6 +176,40 @@
+             nova.services.enable(service.id)
+ 
+     @translate_nova_exception
++    def is_service_down(self, context, host_name, binary='nova-compute'):
++        """True once nova itself considers the service down.
++
++        Evacuate is rejected with ComputeServiceInUse while nova still sees
++        the source service up (nova/compute/api.py), and nova only reaches
++        that verdict service_down_time seconds after the last heartbeat.
++        Nothing tells it out of band -- masakari disables the service but
++        never force-downs it -- so this is the condition the recovery has to
++        wait for, rather than a fixed sleep racing it from the other side.
++        """
++        nova = novaclient(context)
++        services = nova.services.list(host=host_name, binary=binary)
++        if not services:
++            # the service is gone from nova entirely; nothing to wait for
++            return True
++        service = services[0]
++        return (service.state == 'down' or
++                getattr(service, 'forced_down', False))
++
++    @translate_nova_exception
++    def has_valid_target(self, context, failed_host, binary='nova-compute'):
++        """True when some host other than the failed one can accept instances.
++
++        ComputeFilter drops every host whose service is not enabled and up, so
++        with no such host the evacuation cannot do anything except fail with
++        NoValidHost. This mirrors that filter's own test so the check and the
++        scheduler cannot disagree.
++        """
++        nova = novaclient(context)
++        return any(s.host != failed_host and
++                   s.state == 'up' and s.status == 'enabled'
++                   for s in nova.services.list(binary=binary))
++
++    @translate_nova_exception
+     def is_service_disabled(self, context, host_name, binary):
+         """Check whether service is enabled or disabled on given host."""
+         nova = novaclient(context)

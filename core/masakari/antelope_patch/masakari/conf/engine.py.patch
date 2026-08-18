@@ -1,0 +1,19 @@
+--- masakari/conf/engine.py
++++ masakari/conf/engine.py
+@@ -72,6 +72,16 @@
+                default=180,
+                help='Number of seconds to wait after a service is enabled '
+                     'or disabled.'),
++    cfg.IntOpt('wait_period_for_valid_target',
++               default=600,
++               help="Number of seconds to wait for at least one enabled and "
++                    "up compute service other than the failed host before "
++                    "evacuating. A failed host frequently takes the "
++                    "survivors' reporting path down with it (blackholed "
++                    "VIP-backed connections that no deadline covers), and an "
++                    "evacuation issued inside that window is rejected by the "
++                    "scheduler with NoValidHost -- which spends one of only "
++                    "two recovery attempts a notification ever gets."),
+     cfg.IntOpt('wait_period_after_evacuation',
+                default=90,
+                help='Wait until instance is evacuated'),

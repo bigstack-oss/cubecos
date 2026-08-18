@@ -1,6 +1,47 @@
---- masakari/engine/drivers/taskflow/host_failure.py	2026-08-14 17:30:00.000000000 +0800
-+++ masakari/engine/drivers/taskflow/host_failure.py	2026-08-14 17:30:00.000000000 +0800
-@@ -79,8 +79,17 @@
+--- masakari/engine/drivers/taskflow/host_failure.py
++++ masakari/engine/drivers/taskflow/host_failure.py
+@@ -14,6 +14,7 @@
+ #    under the License.
+ 
+ import eventlet
++import time
+ from eventlet import greenpool
+ from eventlet import timeout as etimeout
+ 
+@@ -53,11 +54,27 @@
+         self.update_details(msg)
+         self.novaclient.enable_disable_service(self.context, host_name,
+             reason=CONF.host_failure.service_disable_reason)
+-        # Sleep until nova-compute service is marked as disabled.
+-        log_msg = ("Sleeping %(wait)s sec before starting recovery "
+-               "thread until nova recognizes the node down.")
+-        LOG.info(log_msg, {'wait': CONF.wait_period_after_service_update})
+-        eventlet.sleep(CONF.wait_period_after_service_update)
++        # Wait for the condition the upstream sleep was approximating: nova
++        # rejects evacuate with ComputeServiceInUse until it agrees the source
++        # service is down, and it only gets there service_down_time (60s)
++        # after the last heartbeat. A constant races that from the other side
++        # -- on edge roles this is configured to 30s, half the window -- while
++        # also burning the full period whenever nova already agreed, which is
++        # the common case because the host monitor's own poll interval is 60s.
++        # Poll instead, and keep the tuning as the ceiling.
++        deadline = time.time() + CONF.wait_period_after_service_update
++        log_msg = ("Waiting up to %(wait)s sec for nova to recognize "
++               "'%(host)s' as down before starting the recovery thread.")
++        LOG.info(log_msg, {'wait': CONF.wait_period_after_service_update,
++                           'host': host_name})
++        while not self.novaclient.is_service_down(self.context, host_name):
++            if time.time() >= deadline:
++                LOG.warning("nova still reports '%(host)s' up after "
++                            "%(wait)s sec; starting recovery anyway.",
++                            {'host': host_name,
++                             'wait': CONF.wait_period_after_service_update})
++                break
++            eventlet.sleep(max(CONF.verify_interval, 5))
+         msg = "Disabled compute service on host: '%s'" % host_name
+         self.update_details(msg, 1.0)
+ 
+@@ -79,8 +96,17 @@
              ha_enabled_key = CONF.host_failure.ha_enabled_instance_metadata_key
  
              for instance in instance_list:
@@ -19,7 +60,7 @@
                  if CONF.host_failure.ignore_instances_in_error_state and (
                          getattr(instance, "OS-EXT-STS:vm_state") == "error"):
                      if is_instance_ha_enabled:
-@@ -265,6 +274,29 @@
+@@ -265,6 +291,29 @@
              vm_state = getattr(instance, "OS-EXT-STS:vm_state")
              task_state = getattr(instance, "OS-EXT-STS:task_state")
  
@@ -49,3 +90,40 @@
              # Nova evacuates an instance only when vm_state is in active,
              # stopped or error state. If an instance is in other than active,
              # error and stopped vm_state, masakari resets the instance state
+@@ -348,6 +397,36 @@
+             'host_name': host_name, 'instance_list': ','.join(instance_list)}
+         self.update_details(msg)
+ 
++        # Do not spend the attempt on an empty pool. Losing a host regularly
++        # takes the survivors' own reporting down with it for minutes -- their
++        # VIP-backed connections to the dead holder blackhole with no RST, and
++        # the DB path carries no deadline -- so nova reports them down too and
++        # ComputeFilter returns 0 hosts. A notification only ever gets two
++        # attempts (the initial one plus a single retry from
++        # process_unfinished_notifications, after which it is marked FAILED
++        # and never revisited), and both fit easily inside such a window, so
++        # an early attempt does not merely fail, it exhausts the recovery.
++        if not reserved_host:
++            deadline = time.time() + CONF.wait_period_for_valid_target
++            waited = False
++            while not self.novaclient.has_valid_target(self.context,
++                                                       host_name):
++                if time.time() >= deadline:
++                    LOG.warning("No enabled and up compute service other "
++                                "than '%(host)s' after %(wait)s sec; "
++                                "attempting evacuation anyway so the failure "
++                                "is reported rather than held silently.",
++                                {'host': host_name,
++                                 'wait': CONF.wait_period_for_valid_target})
++                    break
++                if not waited:
++                    waited = True
++                    msg = ("Waiting for a valid evacuation target other than "
++                           "'%s'" % host_name)
++                    self.update_details(msg, 0.05)
++                    LOG.info(msg)
++                eventlet.sleep(max(CONF.verify_interval, 10))
++
+         def _do_evacuate(context, host_name,
+                          reserved_host=None):
+             if reserved_host:

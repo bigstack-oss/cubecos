@@ -87,6 +87,7 @@ CONFIG_TUNING_BOOL(MASAKARI_DEBUG, "masakari.debug.enabled", TUNING_UNPUB, "Set 
 CONFIG_TUNING_BOOL(MASAKARI_HOST_EVA_ALL, "masakari.host.evacuate_all", TUNING_PUB, "Set to true to enable evacuate all instances when host goes down.", true);
 CONFIG_TUNING_BOOL(MASAKARI_INST_PROCESS_ALL, "masakari.instance.process_all", TUNING_PUB, "Set to true to auto-recover every crashed instance (false: only instances tagged HA_Enabled=True).", true);
 CONFIG_TUNING_INT(MASAKARI_WAIT_PERIOD, "masakari.wait.period", TUNING_PUB, "Set wait period after service update", 0, 0, 99999);
+CONFIG_TUNING_INT(MASAKARI_TARGET_WAIT, "masakari.target.wait", TUNING_PUB, "Set wait period for a valid evacuation target", 0, 0, 99999);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
@@ -108,6 +109,7 @@ PARSE_TUNING_STR(s_dbPass, MASAKARI_DBPASS);
 PARSE_TUNING_BOOL(s_hostEvaAll, MASAKARI_HOST_EVA_ALL);
 PARSE_TUNING_BOOL(s_instProcessAll, MASAKARI_INST_PROCESS_ALL);
 PARSE_TUNING_INT(s_waitPeriod, MASAKARI_WAIT_PERIOD);
+PARSE_TUNING_INT(s_targetWait, MASAKARI_TARGET_WAIT);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 2);
@@ -280,6 +282,13 @@ UpdateCfg(std::string region, std::string domain, std::string userPass, std::str
         cfg["DEFAULT"]["process_unfinished_notifications_interval"] = "120";
         cfg["DEFAULT"]["retry_notification_new_status_interval"] = "60";
         cfg["DEFAULT"]["wait_period_after_service_update"] = s_waitPeriod == 0 ? (IsEdge(s_eCubeRole) ? "30" : "60") : std::to_string(s_waitPeriod);
+        // Ceiling on waiting for a live evacuation target. Losing a host takes
+        // the survivors' own service reporting down with it for minutes (their
+        // VIP-backed connections blackhole with no RST and the DB path carries
+        // no deadline), and a notification only gets two attempts before it is
+        // marked FAILED for good -- so this has to outlast that window, not
+        // race it. 600s covers the observed outage with margin; 0 = default.
+        cfg["DEFAULT"]["wait_period_for_valid_target"] = s_targetWait == 0 ? "600" : std::to_string(s_targetWait);
         cfg["DEFAULT"]["os_privileged_user_tenant"] = "service";
         cfg["DEFAULT"]["os_privileged_user_name"] = "masakari";
         cfg["DEFAULT"]["os_privileged_user_password"] = userPass;
