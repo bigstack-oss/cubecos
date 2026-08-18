@@ -180,6 +180,7 @@ hex_config_MODULES += config_kafka.o
 hex_config_MODULES += config_prometheus.o
 hex_config_MODULES += config_gpu.o
 hex_config_MODULES += config_lachesis.o
+hex_config_MODULES += config_advisor.o
 
 PROGRAMS += hex_config
 

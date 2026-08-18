@@ -1,0 +1,175 @@
+# CUBE SDK
+
+# PROG must be set before sourcing this file
+if [ -z "$PROG" ] ; then
+    echo "Error: PROG not set" >&2
+    exit 1
+fi
+
+# Node-side helpers for the Cube AI Advisor agent.
+#
+# The agent is released by Bigstack as signed per-arch artifacts and must be
+# verified before a node executes one. Two decisions from ADR 0003 shape what is
+# here:
+#
+#   * Verification lives in cubecos, not in the agent's own repository. A
+#     verifier must not share a build pipeline with the artifact it verifies, or
+#     one compromised pipeline produces both.
+#   * The trust anchor belongs to the OS, and is compiled into hex_config the
+#     same way hex compiles in the licence key -- so it is deliberately NOT
+#     configurable from here. A verifier whose trust anchor is chosen by its
+#     caller verifies nothing.
+#
+# The check itself is in hex_config rather than in this file. Key and check
+# belong in one place: this file lives under /usr/lib/hex_sdk where root can
+# edit it, so a shell verifier could have its check removed while the compiled-in
+# key stayed perfectly safe -- which protects the wrong half.
+#
+# A customer who would rather not trust our binary can still do the whole check
+# with standard tools, because the manifest is in sha256sum's own format:
+#
+#     hex_config advisor_pubkey > release.pub
+#     openssl dgst -sha256 -verify release.pub -signature manifest.txt.sig manifest.txt
+#     sha256sum -c manifest.txt
+
+ADVISOR_MANIFEST_NAME=manifest.txt
+ADVISOR_SIGNATURE_NAME=manifest.txt.sig
+
+# advisor_verify_release <dir> [artifact]
+#
+# Verifies the release in <dir>: the manifest's signature against the key
+# compiled into this image, then every artifact digest the manifest lists. When
+# <artifact> is given, it must additionally be one the manifest names.
+#
+# Returns 0 only when every check passes. Every other outcome is a refusal.
+advisor_verify_release()
+{
+    # artifact is optional; default it so a one-argument call is not an
+    # unbound-variable error under set -u.
+    local dir=$1 artifact=${2:-}
+
+    if [ -z "$dir" ] ; then
+        echo "Error: advisor_verify_release: no release directory given" >&2
+        return 1
+    fi
+
+    # Branch rather than leaving $artifact unquoted: an empty positional would
+    # be a second argument, and an unquoted one would word-split.
+    if [ -n "$artifact" ] ; then
+        $HEX_CFG advisor_verify_release "$dir" "$artifact"
+    else
+        $HEX_CFG advisor_verify_release "$dir"
+    fi
+}
+
+# advisor_release_version <dir>
+#
+# Prints the version recorded in a release manifest. Reads a comment line, so it
+# must only ever be called on a manifest that advisor_verify_release has already
+# accepted — otherwise it is reporting whatever an attacker wrote.
+advisor_release_version()
+{
+    local dir=$1
+    awk -F': *' '/^# version:/ { print $2 ; exit }' "$dir/$ADVISOR_MANIFEST_NAME" 2>/dev/null
+}
+
+# advisor_install_release <dir> <artifact> <dest>
+#
+# Verifies then installs. The two are one function on purpose: an install path
+# that can be called without verifying is an install path that eventually is.
+advisor_install_release()
+{
+    local dir=$1 artifact=$2 dest=$3
+
+    if [ -z "$artifact" ] || [ -z "$dest" ] ; then
+        echo "Error: advisor_install_release: usage <dir> <artifact> <dest>" >&2
+        return 1
+    fi
+    # Passing the artifact makes "is this file covered by the signature?" part of
+    # the same verification, rather than a second check that could be skipped. A
+    # file that happens to sit in a verified directory is not itself verified.
+    advisor_verify_release "$dir" "$artifact" || return 1
+
+    install -m 0755 -o root -g root "$dir/$artifact" "$dest" || return 1
+    echo "Installed $artifact $(advisor_release_version "$dir") to $dest"
+    return 0
+}
+
+# advisor_agent_arch
+#
+# Maps this machine to the artifact naming the release manifest uses. Unknown
+# architectures are a refusal rather than a guess: installing the wrong binary
+# fails later and less clearly than not installing one.
+advisor_agent_arch()
+{
+    local m
+    m=$(uname -m)
+    case "$m" in
+        x86_64)  echo amd64 ;;
+        aarch64) echo arm64 ;;
+        *)       echo "Error: no Advisor agent build for $m" >&2 ; return 1 ;;
+    esac
+}
+
+# advisor_enroll <server> <token-file> <version>
+#
+# The whole node-side install path: fetch the release, verify it against the
+# image's public key, install the agent, then enrol this cluster.
+#
+# The token is read from a file rather than an argument. A pairing token on a
+# command line is visible in ps to every user on the box for as long as the
+# process runs, and this function is exactly the place that would otherwise
+# leak it.
+#
+# Every step fails closed. A partial install -- a verified binary with no
+# identity, or an identity with no binary -- is worse than a clean failure the
+# operator can retry.
+advisor_enroll()
+{
+    local server=$1 token_file=$2 version=$3
+    local arch artifact tmp rc
+
+    if [ -z "$server" ] || [ -z "$token_file" ] || [ -z "$version" ] ; then
+        echo "Error: advisor_enroll: usage <server> <token-file> <version>" >&2
+        return 1
+    fi
+    if [ ! -r "$token_file" ] ; then
+        echo "Error: cannot read the pairing token file: $token_file" >&2
+        return 1
+    fi
+    arch=$(advisor_agent_arch) || return 1
+    artifact="cube-advisor-agent_linux_$arch"
+
+    tmp=$(mktemp -d /run/advisor-release.XXXXXX) || return 1
+    # The download directory holds no secrets, but it does hold a binary that is
+    # about to be trusted; do not leave it lying around either way.
+    trap 'rm -rf "$tmp"' RETURN
+
+    local url="$server/api/v1/releases/$version"
+    local f
+    for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$artifact" ; do
+        if ! curl -fsS --max-time 120 \
+                -H "Authorization: Bearer $(cat "$token_file")" \
+                -o "$tmp/$f" "$url/$f" ; then
+            echo "Error: cannot fetch $f from $url" >&2
+            return 1
+        fi
+    done
+
+    # Verification happens before anything is installed or executed, which is
+    # the entire point of the chain: the artifact is untrusted until the image's
+    # own public key says otherwise.
+    advisor_install_release "$tmp" "$artifact" /usr/local/bin/cube-advisor-agent || return 1
+
+    /usr/local/bin/cube-advisor-agent enroll \
+        -server "$server" -token-file "$token_file"
+    rc=$?
+    case $rc in
+        0) ;;
+        3) echo "This node is already enrolled; nothing was changed." >&2 ;;
+        4) echo "The pairing token was refused -- ask for a fresh one." >&2 ;;
+        5) echo "The Advisor service was unreachable from this node." >&2 ;;
+        *) echo "Error: enrolment failed (exit $rc)" >&2 ;;
+    esac
+    return $rc
+}
