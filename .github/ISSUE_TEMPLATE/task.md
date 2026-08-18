@@ -32,3 +32,5 @@ Insert content here.
 - [ ] **Handbook knowledge update** — land the durable, team-readable knowledge from this
       work into the bigstack-handbook cubecos kb (`kb/cubecos/…`) via
       `/bigstack-core:save-to-handbook` (Topic / Runbook / Known-issue / ADR as fits).
+      Diagnosed or fixed a failure? Ship the scenario sidecar (`<note>.scenario.yaml`)
+      beside the note.
