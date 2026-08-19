@@ -45,12 +45,12 @@ RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS = $(RPMBUILD_DIR)/RPMS
 
-# prepare the login source code, being pulled from GitHub at the release_3.1.10 branch
+# prepare the login source code, being pulled from GitHub using the default branch
 # For RC: the rpm is pulled from the release above, not built from source
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone -b release_3.1.10 --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
 		"  CLONE   $(GITHUB_URL)")
 	$(Q)# enable nvm
