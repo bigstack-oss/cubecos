@@ -129,8 +129,20 @@ UpdateCheck()
     if (access(BACKDIR, F_OK) != 0)
         return true;
 
-    // defer mysql_upgrade until every control node runs the same MariaDB
-    // version -- its system-table DDL replicates to peers
+    // Defer mysql_upgrade until every control node runs the same MariaDB version.
+    //
+    // The gate stays, but not for the reason recorded here before: --skip-write-binlog
+    // sets sql_log_bin=0, and galera carries TOI DDL over that same binlog path, so the
+    // system-table DDL does NOT reach the peers. Measured on the 3cc accept cluster
+    // across the 10.6.27 -> 10.11.18 roll: after this ran on cc1, cc1's
+    // mysql.column_stats had the new definition while cc2 and cc3 still had the old one.
+    //
+    // Two consequences. Every control node has to run this itself -- which is what
+    // happens, since UpdateCheck() is per-node and each node's migrate hook leaves its
+    // own BACKDIR. And the deferral is still the right order: MariaDB's own galera
+    // guidance is to get every node onto the new server before upgrading system tables,
+    // and it keeps a just-upgraded node from becoming an SST donor with new-format
+    // system tables while an old-version joiner is still asking for them.
     if (HexSystemF(0, HEX_SDK " os_mariadb_version_uniform") != 0)
         return true;
 
