@@ -9,8 +9,8 @@ include ../../build.mk
 ##################################################################################
 
 # Product Release Version Numbers
-RELEASE_VERSION := 3.1.10
-PRE_RELEASE_VERSION := 3.1.0
+RELEASE_VERSION := 3.1.20
+PRE_RELEASE_VERSION := 3.1.10
 
 ##################################################################################
 #
