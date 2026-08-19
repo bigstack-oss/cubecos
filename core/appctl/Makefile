@@ -8,7 +8,7 @@ GITHUB_URL := https://github.com/bigstack-oss/$(PKG_NAME)
 ifneq ($(RC),)
 $(APPCTL_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O appctl.rpm $(GITHUB_URL)/releases/download/v3.1.0-rc3/$(PKG_NAME)-v3.1.0-1.fc35.0751aad.x86_64.rpm, \
+		wget -O appctl.rpm $(GITHUB_URL)/releases/download/v3.1.10-rc1/$(PKG_NAME)-v3.1.0-1.fc35.63ea8fd.x86_64.rpm, \
 		"  PULL    $(APPCTL_RPM)")
 else
 GIT_DIR := git
@@ -17,12 +17,12 @@ RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 
-# prepare the appctl source code, being pulled from GitHub using the default branch
-# For RC: git clone -b v3.1.0-rc3
+# prepare the appctl source code, being pulled from GitHub at the release_3.1.10 branch
+# For RC: the rpm is pulled from the release above, not built from source
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone -b release_3.1.10 --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
 		"  CLONE   $(GITHUB_URL)")
 	$(Q)cd $@ && git lfs pull

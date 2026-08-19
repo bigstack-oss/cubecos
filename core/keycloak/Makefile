@@ -22,13 +22,21 @@ PKG_NAME := cube-cos-login
 GITHUB_URL := https://github.com/bigstack-oss/cube-cos-ui
 
 ifneq ($(RC),)
-# NOTE: this RPM and the IMG_BUILD tag below are pinned to a published release, so they
-# still carry a WildFly Keycloak 17 image. They must be moved to a cube-cos-login 18.x
-# release in step with CHART_NAME/CHART_VERSION above -- the keycloakx chart cannot drive
-# a 17.0.1-legacy image.
+# NOTE: this RPM and the IMG_BUILD tag below must be bumped together. .load-img does not
+# pull the image from a registry -- it installs this rpm and loads the tar inside it --
+# and cube-cos-login.spec commits/saves that image as
+# localhost:5080/bigstack/keycloak:%{version}, where %{version} is the login package.json
+# version. So the RC IMG_BUILD literal has to be exactly this rpm's version, or .push-img
+# pushes a tag nothing loaded. It drifted before: IMG_BUILD said 17.1.0 while the pinned
+# rpm was 17.2.0.
+#
+# 3.1.10 is also where this stops being a WildFly image: KEYCLOAK_VERSION is 18.0.2, the
+# spec builds on quay.io/keycloak/keycloak:18.0.2 and runs kc.sh build, so it is the
+# Quarkus distribution CHART_NAME/CHART_VERSION (keycloakx 1.6.0) needs -- the chart could
+# never drive the old 17.0.1-legacy image.
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.0-rc3/$(PKG_NAME)-17.2.0-1.9835cfd.x86_64.rpm, \
+		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.10-rc1/$(PKG_NAME)-18.0.0-1.54a03f5.x86_64.rpm, \
 		"  PULL    $(LOGIN_RPM)")
 else
 GIT_DIR := git
@@ -37,12 +45,12 @@ RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS = $(RPMBUILD_DIR)/RPMS
 
-# prepare the login source code, being pulled from GitHub using the default branch
-# For RC: git clone -b v3.1.0-rc3
+# prepare the login source code, being pulled from GitHub at the release_3.1.10 branch
+# For RC: the rpm is pulled from the release above, not built from source
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone -b release_3.1.10 --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
 		"  CLONE   $(GITHUB_URL)")
 	$(Q)# enable nvm
@@ -109,7 +117,7 @@ $(LOGIN_RPM): $(RPMBUILD_RPMS)
 endif
 
 ifneq ($(RC),)
-IMG_BUILD := localhost:5080/bigstack/keycloak:17.1.0
+IMG_BUILD := localhost:5080/bigstack/keycloak:18.0.0
 else
 IMG_BUILD := localhost:5080/bigstack/keycloak:`cat version`
 endif

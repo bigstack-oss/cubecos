@@ -33,7 +33,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-apiserver
-	$(Q)for i in {1..3} ; do timeout 120 git clone --depth 1 https://github.com/bigstack-oss/skyline-apiserver.git $(ROOTDIR)/skyline-apiserver && break ; done
+	$(Q)for i in {1..3} ; do timeout 120 git clone -b release_3.1.10 --depth 1 https://github.com/bigstack-oss/skyline-apiserver.git $(ROOTDIR)/skyline-apiserver && break ; done
 	$(Q)chroot $(ROOTDIR) sh -c "cd /skyline-apiserver && $(SKYLINE_PIP) install $(SKYLINE_PIP_C) -r requirements.txt && $(SKYLINE_PIP) install $(SKYLINE_PIP_C) ."
 	$(Q)cp ${ROOTDIR}/skyline-apiserver/etc/gunicorn.py ${ROOTDIR}/etc/skyline/gunicorn.py
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/skyline/skyline-apiserver.service ./lib/systemd/system
@@ -45,7 +45,7 @@ heavyfs_install::
 	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-apiserver
-	$(Q)for i in {1..3} ; do timeout 120 git clone --depth 1 https://github.com/bigstack-oss/skyline-apiserver.git $(ROOTDIR)/skyline-apiserver && break ; done
+	$(Q)for i in {1..3} ; do timeout 120 git clone -b v3.1.10-rc1 --depth 1 https://github.com/bigstack-oss/skyline-apiserver.git $(ROOTDIR)/skyline-apiserver && break ; done
 	$(Q)chroot $(ROOTDIR) sh -c "cd /skyline-apiserver && $(SKYLINE_PIP) install $(SKYLINE_PIP_C) -r requirements.txt && $(SKYLINE_PIP) install $(SKYLINE_PIP_C) ."
 	$(Q)cp ${ROOTDIR}/skyline-apiserver/etc/gunicorn.py ${ROOTDIR}/etc/skyline/gunicorn.py
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/skyline/skyline-apiserver.service ./lib/systemd/system
@@ -57,7 +57,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-console
-	$(Q)for i in {1..3} ; do timeout 120 git clone --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
+	$(Q)for i in {1..3} ; do timeout 120 git clone -b release_3.1.10 --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(ROOTDIR)/skyline-console && nvm install $(QEND)
@@ -73,7 +73,7 @@ heavyfs_install::
 	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-console
-	$(Q)for i in {1..3} ; do timeout 120 git clone -b v3.1.0-rc3 --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
+	$(Q)for i in {1..3} ; do timeout 120 git clone -b v3.1.10-rc1 --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(ROOTDIR)/skyline-console && nvm install $(QEND)
