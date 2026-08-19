@@ -1,14 +1,28 @@
 # Cube SDK
 # mysql installation
 
-# Unknown system variable 'innodb_version' since MariaDB 10.10
+# MariaDB comes from MariaDB.org's own repo rather than appstream's mariadb module,
+# which core/heavyfs/Makefile disables. The commented ROOTFS_DNF line below is what that
+# used to be; the warning that sat beside it -- "Unknown system variable 'innodb_version'
+# since MariaDB 10.10" -- is obsolete and has been dropped. Nothing in this tree or in
+# the telegraf fork reads innodb_version, and 10.11.18 starts clean on the config
+# core/modules/config_mysql.cpp generates (verified on cc1).
 # ROOTFS_DNF += mariadb-server mariadb-server-galera rsync
 # rpmfind.net is often not responsive
 # MARIADB_URL := https://rpmfind.net/linux/centos-stream/9-stream/AppStream/x86_64/os/Packages
 
-MARIADB_VER := 10.6.27-1.el9
+# 10.11 is the series OpenStack Caracal targets (cubecos#651). galera-4 is published at
+# the same 26.4.27 under the 10.11 tree, so only the series directory moves.
+#
+# MariaDB-server 10.11 adds a hard, rich dependency that 10.6 did not have:
+#   (mysql-selinux >= 1.0.14 if selinux-policy-targeted)
+# selinux-policy-targeted is in the rootfs, so mysql-selinux is pulled in for real. It
+# lives in appstream and is NOT part of the mariadb module, so the module being disabled
+# does not hide it and it needs no entry here. lsof/pv/socat are new *weak* deps and are
+# allowed to be skipped.
+MARIADB_VER := 10.11.18-1.el9
 GALERA_VER := 26.4.27-1.el9
-MARIADB_URL := https://archive.mariadb.org/yum/10.6/rocky9-amd64/rpms
+MARIADB_URL := https://archive.mariadb.org/yum/10.11/rocky9-amd64/rpms
 
 # Official MariaDB package list
 # Note: we dropped errmsg and server-utils as they are now bundled
