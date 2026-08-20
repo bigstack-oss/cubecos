@@ -1059,6 +1059,12 @@ CONFIG_REQUIRES(nova, ceph);
 //CONFIG_REQUIRES(nova, glance);
 
 CONFIG_MIGRATE(nova, "/etc/nova/nova.d");
+// Antelope's nova keys each compute to a local identity file and refuses to
+// start when the DB has nodes for this host but the file is gone (manager.py
+// _ensure_existing_node_identity). It lives in the root slot, so without this
+// an upgrade -- which boots the other slot -- leaves every upgraded node
+// without nova-compute, and the roll stalls with nothing able to migrate.
+CONFIG_MIGRATE(nova, "/var/lib/nova/compute_id");
 CONFIG_MIGRATE_POST(nova, MigratePlacementLogOwner);
 
 // extra tunings
