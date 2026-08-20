@@ -378,6 +378,30 @@ ceph_finish_maintenance()
     Quiet $CEPH osd unset noout
 }
 
+# Lift ONLY the client-I/O blocks (pause, nodown) that cluster poweroff set, as
+# early in the boot as the mons will answer. Deliberately not the full
+# ceph_leave_maintenance: that also schedules ceph_finish_maintenance, which
+# clears noout -- fine at cluster start, wrong mid-roll (see the rolling-op
+# guard note below). Idempotent and cheap: a no-op when the flags are not set.
+#
+# nodown has to go too, not just pause: under nodown the osdmap reads all-up
+# while stale (see ceph_wait_all_osds_up), so clients and the MDS aim I/O at
+# OSDs that have not booted yet and block on them -- that stale map is what
+# stalled ceph_fs_mds_init. Clearing it only makes the map truthful; the costly
+# consequences stay blocked, because noout/nobackfill/norebalance/norecover are
+# untouched here, so nothing is marked out and nothing re-replicates. On a large
+# cluster this marks proportionally more OSDs down while they come up, which is
+# map churn, not data movement -- and it is the same two flags
+# ceph_leave_maintenance already clears on every boot, just earlier.
+ceph_unpause_client_io()
+{
+    $CEPH -s >/dev/null 2>&1 || return 0
+    $CEPH osd dump 2>/dev/null | grep -qE '^flags.*(pauserd|pausewr|nodown)' || return 0
+    log_info "ceph: lifting client-I/O pause left by cluster poweroff"
+    Quiet -n $CEPH osd unset pause
+    Quiet -n $CEPH osd unset nodown
+}
+
 ceph_leave_maintenance()
 {
     # unblock client I/O immediately so the cluster is usable on boot
