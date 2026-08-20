@@ -6,9 +6,15 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+# Paths named, not inlined: the tests point them somewhere writable.
+CUBE_GITIGNORE=${CUBE_GITIGNORE:-/.gitignore}
+# Hidden opt-out, like cube_repair_optout: keep this node's uncommitted changes
+# instead of stashing them away, and never publish them to the shared repo.
+CUBE_GIT_OPTOUT=${CUBE_GIT_OPTOUT:-/etc/appliance/state/cube_git_optout}
+
 git_ignore_file()
 {
-    cat >/.gitignore <<EOF
+    cat >$CUBE_GITIGNORE <<EOF
 *.pyc
 *.po
 *.mo
@@ -57,7 +63,7 @@ _git_server_init()
         Quiet -n git init -b $branch
         # local cephfs path, not ssh://VIP (stalls during set_ready reconfig). #1195
         Quiet -n $GIT remote add $project ${cube_git_dir}
-        if [ -e "/.gitignore" ] ; then
+        if [ -e "$CUBE_GITIGNORE" ] ; then
             if ! git log -1 >/dev/null 2>&1 ; then
                 Quiet -n git add -A
                 Quiet -n git commit -m "$(hex_cli -c firmware list | grep ACTIVE | awk '{print $2}')" -a
@@ -65,7 +71,7 @@ _git_server_init()
             Quiet -n git push --set-upstream $project $branch
             git -P branch -r | grep -q "${project}/${branch}"
         else
-            Error "failed to generate /.gitignore"
+            Error "failed to generate $CUBE_GITIGNORE"
         fi
         Quiet -n popd
         $GIT -P log || Error "failed to initialize GIT server"
@@ -120,19 +126,25 @@ _git_client_init()
     Quiet -n $GIT init -b $branch
     # local cephfs path, not ssh://VIP (stalls during set_ready reconfig). #1195
     Quiet -n $GIT remote add $project ${cube_git_dir}
-    if [ -e "/.gitignore" ] ; then
+    if [ -e "$CUBE_GITIGNORE" ] ; then
         if $GIT fetch ; then
             _git_suid_save
             Quiet -n $GIT branch --track $branch $project/$branch
-            Quiet -n $GIT add -A
-            Quiet -n $GIT stash
-            Quiet -n $GIT pull $project $branch --rebase
+            # --track already lands HEAD on the fetched tip, so the opt-out path
+            # needs no pull to stay current; local edits just read as modified.
+            if [ -f $CUBE_GIT_OPTOUT ] ; then
+                log_warning "git opt-out: keeping uncommitted changes on $HOSTNAME; / stays modified vs $project/$branch"
+            else
+                Quiet -n $GIT add -A
+                Quiet -n $GIT stash
+                Quiet -n $GIT pull $project $branch --rebase
+            fi
             _git_suid_restore
         else
             Error "git server (on VIP node) is not ready"
         fi
     else
-        Error "failed to generate /.gitignore"
+        Error "failed to generate $CUBE_GITIGNORE"
     fi
     Quiet -n popd
     Quiet -n $GIT -P log
@@ -172,10 +184,17 @@ git_push()
 {
     local msg="${@:-n/a}"
 
+    # Opted out, this tree is the operator's in both directions: don't harvest
+    # its local edits into the shared repo.
+    if [ -f $CUBE_GIT_OPTOUT ] ; then
+        log_warning "git opt-out: not pushing $HOSTNAME's local changes"
+        return 0
+    fi
     if git -P status | grep -q modified ; then
         cmd $HEX_SDK git_client_init
         _git_suid_save
-        ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "$GIT stash ; $GIT pull" ) >/dev/null
+        # per-node check: a peer that opted out keeps its own changes
+        ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "[ -f $CUBE_GIT_OPTOUT ] || { $GIT stash ; $GIT pull ; }" ) >/dev/null
         _git_suid_restore
         Quiet -n $GIT -P log -3
     else
