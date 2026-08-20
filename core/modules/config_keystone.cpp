@@ -186,8 +186,13 @@ SetupPublicAdminUser(std::string name, std::string password, std::string sharedI
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s project create --domain %s --description \"Service Project\" service" RETRY_FMT_F,
                          env.c_str(), OPENSTACK_CLI, domain.c_str());
 
-    // Create a service role for other services to auth (nova, cinder)
-    HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role create service" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
+    // No `role create service` here any more. This function only ever runs on an
+    // unconfigured node -- SetupCheck gates it on the keystone database not existing
+    // yet -- so SetupKeystone has just run keystone-manage bootstrap, and since
+    // caracal bootstrap creates the service role itself (launchpad bug 1951632 added
+    // it beside admin/member/reader). Creating it again could only fail, five times
+    // over through RETRY_FMT. migrate_keystone still creates it where it is missing,
+    // which is what covers clusters that predate the role.
 
     return true;
 }
