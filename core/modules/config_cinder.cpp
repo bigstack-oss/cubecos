@@ -459,8 +459,10 @@ SetDefaults(
     config["oslo_reports"]["log_dir"] = "/var/log/cinder";
 
     // cinder.privsep.sys_admin_pctxt and os_brick.privileged.default, the two privsep
-    // contexts this service starts. The ceph backend never reaches either, but the
-    // lvm, nvmet and nfs drivers and every os-brick attach path do.
+    // contexts this service starts. os_brick.privileged.default is on a live path even
+    // with only the ceph backend enabled -- cinder-backup attaches the volume to read
+    // it, so every backup spawns a helper. cinder_sys_admin is reached by the lvm,
+    // nvmet and nfs drivers rather than by anything this appliance enables today.
     config["cinder_sys_admin"]["helper_command"] = PRIVSEP_HELPER;
     config["privsep_osbrick"]["helper_command"] = PRIVSEP_HELPER;
 }
