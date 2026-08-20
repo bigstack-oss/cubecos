@@ -20,7 +20,8 @@ ROOTFS_PIP += python-magic python3-saml xmlsec
 ROOTFS_DNF_NOARCH += python3-jaraco-text-3.2.0-6.el9s
 LOCKED_DNF += python3-jaraco-text-3.2.0-6.el9s
 
-# build ceph python bindings for python 3.10 used by openstack antelope
+# build ceph python bindings for the openstack venvs (python 3.10 for antelope,
+# python 3.11 for caracal)
 ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
 
 # Not $(OPENSTACK_RELEASE)_patch: this patches the ceph dashboard (a token.decode()
@@ -33,7 +34,12 @@ CEPH_PATCHDIR := $(COREDIR)/ceph/patch
 
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
 
-# build ceph python bindings for python 3.10 used by openstack antelope
+# build ceph python bindings for both openstack venvs
+#
+# Every venv that talks to the built-in Ceph RBD store needs its own rados/rbd --
+# they are C extensions, so the antelope build (cpython-310) is not importable from
+# the caracal venv's python 3.11. glance is the first caracal occupant to need them
+# (#630); keystone and skyline never did, which is why this used to build once.
 #
 # `pip install`, not `setup.py install`: setuptools is retiring that command, and at
 # the venv's pinned 65.7.0 it takes its easy_install path and drops a
@@ -45,18 +51,25 @@ CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; e
 # (installed just above), not in the throwaway overlay pip would otherwise build in.
 # Building here also means egg_info runs with pbr installed -- pbr registers an
 # egg_info writer that imports pkg_resources -- which is why this step needs the
-# venv's setuptools pinned below 82; see the NOTE in core/heavyfs/Makefile.
+# venv's setuptools pinned below 82; see the NOTE in core/heavyfs/Makefile. Both
+# venvs pin it there, so the caracal build takes the same path.
 # --no-deps: neither binding declares a dependency, so nothing should be resolved
 # against the index at this point.
+CEPH_PYBIND_SRCDIR := /usr/src/ceph/ceph-17.2.6
+CEPH_PYBIND_CFLAGS := -I$(CEPH_PYBIND_SRCDIR)/src/include
+
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install "Cython<3"
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install "Cython<3"
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install "Cython<3"
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/ceph
 	$(Q)chroot $(ROOTDIR) wget -O /usr/src/ceph/ceph-v17.2.6.tar.gz https://github.com/ceph/ceph/archive/refs/tags/v17.2.6.tar.gz
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/ceph/ceph-v17.2.6.tar.gz -C /usr/src/ceph
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rados && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/pip install --no-build-isolation --no-deps ."
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/ceph/ceph-17.2.6/src/pybind/rbd && CFLAGS='-I/usr/src/ceph/ceph-17.2.6/src/include' /opt/openstack-antelope/bin/pip install --no-build-isolation --no-deps ."
+	$(Q)chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/rados && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(OPENSTACK_HOME_DIR)/bin/pip install --no-build-isolation --no-deps ."
+	$(Q)chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/rbd && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(OPENSTACK_HOME_DIR)/bin/pip install --no-build-isolation --no-deps ."
+	$(Q)chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/rados && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --no-build-isolation --no-deps ."
+	$(Q)chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/rbd && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --no-build-isolation --no-deps ."
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl mask lvm2-monitor
