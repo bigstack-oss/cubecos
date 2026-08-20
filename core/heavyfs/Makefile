@@ -309,15 +309,18 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
-# upper-constraints.txt copied down verbatim -- unlike the antelope file, which carries
-# six local deltas for services we build from source. Upstream does not pin setuptools,
-# so the -c above is inert for setuptools today and this venv still lands on whatever
-# is current (84.0.0 as of this writing) -- which is what skyline, the only occupant,
-# is already installed against. setuptools is routed through the constraints file
-# anyway so that adding one line to that file is the whole pin, the same way antelope
-# pins 65.7.0. Do that when the version has to be settled: the ceph python bindings
-# move into this venv when caracal takes over from antelope, and a `setup.py install`
-# goes through pbr, which imports pkg_resources -- gone since setuptools 82.
+# upper-constraints.txt copied down verbatim, save for one local delta -- unlike the
+# antelope file, which carries six. Upstream does not pin setuptools, so this venv used
+# to land on whatever was current (84.0.0), which was fine while skyline was the only
+# occupant. keystone is not: keystonemiddleware 10.6.0 does `import pkg_resources` in
+# _common/config.py, and setuptools 82 deleted pkg_resources, so every gunicorn worker
+# died at import with ModuleNotFoundError and openstack-keystone never came up (#631).
+#
+# The pin is therefore settled now, as the same one line in the constraints file that
+# antelope uses, and at the same 65.7.0 -- the version that venv has been proving
+# against pbr and pkg_resources all along. It also keeps `setup.py install` working,
+# which setuptools 80 removed: the ceph python bindings still build that way and move
+# into this venv when caracal takes over from antelope.
 
 # Allow admin to be sudoers
 rootfs_install::
