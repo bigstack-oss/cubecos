@@ -66,8 +66,10 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 
 # openstack caracal -- a second isolated runtime, kept apart from the antelope venv so
 # that caracal-era components do not drag their dependency versions into the 2023.1
-# services. skyline is the first occupant: its forks branch off upstream master at
-# 4.0.1 (apiserver) and 4.0.0.0rc1 (console), i.e. caracal, not antelope.
+# services. skyline was the first occupant: its forks branch off upstream master at
+# 4.0.1 (apiserver) and 4.0.0.0rc1 (console), i.e. caracal, not antelope. keystone
+# (25.0.0) is the second -- #631, the first openstack service to make the hop. The
+# services move one at a time and OPENSTACK_RELEASE is promoted once they all have.
 CARACAL_OPENSTACK_RELEASE := caracal
 CARACAL_OPENSTACK_HOME_DIR := /opt/openstack-$(CARACAL_OPENSTACK_RELEASE)
 CARACAL_OPS_GITHUB_BRANCH_01 := stable/2024.1

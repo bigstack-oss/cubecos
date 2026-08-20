@@ -9,15 +9,23 @@
 ROOTFS_DNF += httpd mod_ssl mod_auth_mellon openldap-devel
 
 KEYSTONE_CONF_DIR := /etc/keystone
-KEYSTONE_VENV_SITE_PACKAGES := $(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+
+# keystone runs out of the caracal venv, not the antelope one it shared with every
+# other 2023.1 service. keystone 25.0.0 pulls oslo.db 15, oslo.messaging 14.7 and
+# SQLAlchemy 2.x; installing that beside nova/neutron/cinder would have upgraded the
+# whole antelope dependency set under them, so the identity service moves alone into
+# /opt/openstack-caracal instead (skyline was the first occupant, this is the second).
+# Resolved against os-caracal-pip-upper-constraints.txt the two sets are disjoint --
+# keystone adds 51 packages there and changes no version skyline already holds.
+KEYSTONE_VENV_SITE_PACKAGES := $(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
 
 # install keystone
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			keystone==23.0.2 \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			keystone==25.0.0 \
 			python-keystoneclient \
 			PyMySQL \
 			"oslo.messaging[kafka]" \
@@ -27,10 +35,10 @@ rootfs_install::
 			gunicorn"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/keystone-manage /usr/bin/keystone-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/keystone-status /usr/bin/keystone-status
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/keystone-wsgi-admin /usr/bin/keystone-wsgi-admin
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/keystone-wsgi-public /usr/bin/keystone-wsgi-public
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/keystone-manage /usr/bin/keystone-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/keystone-status /usr/bin/keystone-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/keystone-wsgi-admin /usr/bin/keystone-wsgi-admin
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/keystone-wsgi-public /usr/bin/keystone-wsgi-public
 
 # prepare the build directory
 rootfs_install::
@@ -111,9 +119,9 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/keystone/idp_mapping_rules.json ./etc/keystone/
 	$(Q)chroot $(ROOTDIR) chown keystone:apache /var/lib/keystone
 	$(Q)chroot $(ROOTDIR) chmod 770 /var/lib/keystone
-	$(Q)cp -f $(COREDIR)/keystone/gunicorn.py $(ROOTDIR)/opt/openstack-antelope/bin/keystone-gunicorn.py
-	$(Q)chroot $(ROOTDIR) chown root:root /opt/openstack-antelope/bin/keystone-gunicorn.py
-	$(Q)chroot $(ROOTDIR) chmod 644 /opt/openstack-antelope/bin/keystone-gunicorn.py
+	$(Q)cp -f $(COREDIR)/keystone/gunicorn.py $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/bin/keystone-gunicorn.py
+	$(Q)chroot $(ROOTDIR) chown root:root $(CARACAL_OPENSTACK_HOME_DIR)/bin/keystone-gunicorn.py
+	$(Q)chroot $(ROOTDIR) chmod 644 $(CARACAL_OPENSTACK_HOME_DIR)/bin/keystone-gunicorn.py
 	$(Q)# openstack-keystone.service names this module, not keystone's own wsgi entry
 	$(Q)# point. It goes in site-packages rather than beside the gunicorn config
 	$(Q)# because that is what is importable: gunicorn resolves the application

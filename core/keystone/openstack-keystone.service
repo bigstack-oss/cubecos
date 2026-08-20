@@ -9,7 +9,7 @@ WorkingDirectory=/var/lib/keystone
 RuntimeDirectory=keystone
 RuntimeDirectoryMode=0775
 
-# Executes Gunicorn from the venv using Python 3.10
+# Executes Gunicorn from the caracal venv using Python 3.11
 # Point to the clean configuration file
 #
 # cube_mellon_wsgi wraps keystone.server.wsgi:initialize_public_application() rather
@@ -17,8 +17,8 @@ RuntimeDirectoryMode=0775
 # that httpd proxies instead of hosting keystone, and the wrapper is what puts it
 # back into the environ keystone's federation code reads. Naming the unwrapped
 # application here brings keystone up with federated login silently broken.
-ExecStart=/opt/openstack-antelope/bin/gunicorn \
-    -c /opt/openstack-antelope/bin/keystone-gunicorn.py \
+ExecStart=/opt/openstack-caracal/bin/gunicorn \
+    -c /opt/openstack-caracal/bin/keystone-gunicorn.py \
     cube_mellon_wsgi:application
 
 Restart=on-failure

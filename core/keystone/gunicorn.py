@@ -1,4 +1,4 @@
-#!/opt/openstack-antelope/bin/python3.10
+#!/opt/openstack-caracal/bin/python3.11
 import os
 
 bind = "unix:/var/lib/keystone/keystone.socket"
