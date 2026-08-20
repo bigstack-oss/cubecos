@@ -1,20 +1,4 @@
 deprecated_options:
-  DATABASE:
-  - name: sql_connection
-    replacement_group: database
-    replacement_name: connection
-  - name: sql_max_retries
-    replacement_group: database
-    replacement_name: max_retries
-  - name: reconnect_interval
-    replacement_group: database
-    replacement_name: retry_interval
-  - name: sqlalchemy_max_overflow
-    replacement_group: database
-    replacement_name: max_overflow
-  - name: sqlalchemy_pool_timeout
-    replacement_group: database
-    replacement_name: pool_timeout
   DEFAULT:
   - name: rpc_conn_pool_size
     replacement_group: DEFAULT
@@ -37,6 +21,15 @@ deprecated_options:
   - name: max_request_body_size
     replacement_group: oslo_middleware
     replacement_name: max_request_body_size
+  - name: policy_file
+    replacement_group: oslo_policy
+    replacement_name: policy_file
+  - name: policy_default_rule
+    replacement_group: oslo_policy
+    replacement_name: policy_default_rule
+  - name: policy_dirs
+    replacement_group: oslo_policy
+    replacement_name: policy_dirs
   - name: notification_driver
     replacement_group: oslo_messaging_notifications
     replacement_name: driver
@@ -61,57 +54,6 @@ deprecated_options:
   - name: rabbit_ha_queues
     replacement_group: oslo_messaging_rabbit
     replacement_name: rabbit_ha_queues
-  - name: bind_host
-    replacement_group: eventlet_server
-    replacement_name: public_bind_host
-  - name: public_bind_host
-    replacement_group: eventlet_server
-    replacement_name: public_bind_host
-  - name: public_port
-    replacement_group: eventlet_server
-    replacement_name: public_port
-  - name: bind_host
-    replacement_group: eventlet_server
-    replacement_name: admin_bind_host
-  - name: admin_bind_host
-    replacement_group: eventlet_server
-    replacement_name: admin_bind_host
-  - name: admin_port
-    replacement_group: eventlet_server
-    replacement_name: admin_port
-  - name: sqlite_synchronous
-    replacement_group: database
-    replacement_name: sqlite_synchronous
-  - name: db_backend
-    replacement_group: database
-    replacement_name: backend
-  - name: sql_connection
-    replacement_group: database
-    replacement_name: connection
-  - name: sql_max_retries
-    replacement_group: database
-    replacement_name: max_retries
-  - name: sql_retry_interval
-    replacement_group: database
-    replacement_name: retry_interval
-  - name: sql_max_overflow
-    replacement_group: database
-    replacement_name: max_overflow
-  - name: sql_connection_debug
-    replacement_group: database
-    replacement_name: connection_debug
-  - name: sql_connection_trace
-    replacement_group: database
-    replacement_name: connection_trace
-  - name: policy_file
-    replacement_group: oslo_policy
-    replacement_name: policy_file
-  - name: policy_default_rule
-    replacement_group: oslo_policy
-    replacement_name: policy_default_rule
-  - name: policy_dirs
-    replacement_group: oslo_policy
-    replacement_name: policy_dirs
   amqp1:
   - name: container_name
     replacement_group: oslo_messaging_amqp
@@ -195,10 +137,6 @@ deprecated_options:
   - name: topics
     replacement_group: oslo_messaging_notifications
     replacement_name: topics
-  sql:
-  - name: connection
-    replacement_group: database
-    replacement_name: connection
   token:
   - name: revocation_cache_time
     replacement_group: revoke
@@ -206,7 +144,7 @@ deprecated_options:
 generator_options:
   config_dir: []
   config_file:
-  - /tmp/keystone/config-generator.conf
+  - /tmp/ksgen/config-generator.conf
   config_source: []
   format_: yaml
   minimal: false
@@ -219,7 +157,7 @@ generator_options:
   - oslo.db
   - oslo.middleware
   - osprofiler
-  output_file: /tmp/keystone/kestone-schema.yaml
+  output_file: /tmp/ksgen/keystone-schema.yaml
   summarize: false
   wrap_width: 79
 options:
@@ -229,190 +167,6 @@ options:
     dynamic_group_owner: ''
     help: ''
     opts:
-    - advanced: false
-      choices: []
-      default: 30
-      deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: rpc_conn_pool_size
-      deprecated_reason: null
-      deprecated_since: null
-      dest: rpc_conn_pool_size
-      help: Size of RPC connection pool.
-      max: null
-      metavar: null
-      min: 1
-      mutable: false
-      name: rpc_conn_pool_size
-      namespace: oslo.messaging
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: 2
-      deprecated_for_removal: false
-      deprecated_opts: []
-      deprecated_reason: null
-      deprecated_since: null
-      dest: conn_pool_min_size
-      help: The pool size limit for connections expiration policy
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: conn_pool_min_size
-      namespace: oslo.messaging
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: 1200
-      deprecated_for_removal: false
-      deprecated_opts: []
-      deprecated_reason: null
-      deprecated_since: null
-      dest: conn_pool_ttl
-      help: The time-to-live in sec of idle connections in the pool
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: conn_pool_ttl
-      namespace: oslo.messaging
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: 64
-      deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: rpc_thread_pool_size
-      deprecated_reason: null
-      deprecated_since: null
-      dest: executor_thread_pool_size
-      help: Size of executor thread pool when executor is threading or eventlet.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: executor_thread_pool_size
-      namespace: oslo.messaging
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: 60
-      deprecated_for_removal: false
-      deprecated_opts: []
-      deprecated_reason: null
-      deprecated_since: null
-      dest: rpc_response_timeout
-      help: Seconds to wait for a response from a call.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: rpc_response_timeout
-      namespace: oslo.messaging
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: rabbit://
-      deprecated_for_removal: false
-      deprecated_opts: []
-      deprecated_reason: null
-      deprecated_since: null
-      dest: transport_url
-      help: 'The network address and optional user credentials for connecting to the
-        messaging backend, in URL format. The expected format is:
-
-
-        driver://[user:pass@]host:port[,[userN:passN@]hostN:portN]/virtual_host?query
-
-
-        Example: rabbit://rabbitmq:password@127.0.0.1:5672//
-
-
-        For full details on the fields in the URL see the documentation of oslo_messaging.TransportURL
-        at https://docs.openstack.org/oslo.messaging/latest/reference/transport.html'
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: transport_url
-      namespace: oslo.messaging
-      positional: false
-      required: false
-      sample_default: null
-      secret: true
-      short: null
-      type: string value
-    - advanced: false
-      choices: []
-      default: keystone
-      deprecated_for_removal: false
-      deprecated_opts: []
-      deprecated_reason: null
-      deprecated_since: null
-      dest: control_exchange
-      help: The default exchange under which topics are scoped. May be overridden
-        by an exchange name specified in the transport_url option.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: control_exchange
-      namespace: oslo.messaging
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: string value
-    - advanced: false
-      choices: []
-      default: false
-      deprecated_for_removal: false
-      deprecated_opts: []
-      deprecated_reason: null
-      deprecated_since: null
-      dest: rpc_ping_enabled
-      help: Add an endpoint to answer to ping calls. Endpoint is named oslo_rpc_server_ping
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: rpc_ping_enabled
-      namespace: oslo.messaging
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: boolean value
     - advanced: false
       choices: []
       default: null
@@ -663,7 +417,6 @@ options:
       default:
       - identity.authenticate.success
       - identity.authenticate.pending
-      - identity.authenticate.failed
       deprecated_for_removal: false
       deprecated_opts: []
       deprecated_reason: null
@@ -689,6 +442,190 @@ options:
       secret: false
       short: null
       type: multi valued
+    - advanced: false
+      choices: []
+      default: 30
+      deprecated_for_removal: false
+      deprecated_opts:
+      - group: DEFAULT
+        name: rpc_conn_pool_size
+      deprecated_reason: null
+      deprecated_since: null
+      dest: rpc_conn_pool_size
+      help: Size of RPC connection pool.
+      max: null
+      metavar: null
+      min: 1
+      mutable: false
+      name: rpc_conn_pool_size
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: integer value
+    - advanced: false
+      choices: []
+      default: 2
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: conn_pool_min_size
+      help: The pool size limit for connections expiration policy
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: conn_pool_min_size
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: integer value
+    - advanced: false
+      choices: []
+      default: 1200
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: conn_pool_ttl
+      help: The time-to-live in sec of idle connections in the pool
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: conn_pool_ttl
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: integer value
+    - advanced: false
+      choices: []
+      default: 64
+      deprecated_for_removal: false
+      deprecated_opts:
+      - group: DEFAULT
+        name: rpc_thread_pool_size
+      deprecated_reason: null
+      deprecated_since: null
+      dest: executor_thread_pool_size
+      help: Size of executor thread pool when executor is threading or eventlet.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: executor_thread_pool_size
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: integer value
+    - advanced: false
+      choices: []
+      default: 60
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: rpc_response_timeout
+      help: Seconds to wait for a response from a call.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: rpc_response_timeout
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: integer value
+    - advanced: false
+      choices: []
+      default: rabbit://
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: transport_url
+      help: 'The network address and optional user credentials for connecting to the
+        messaging backend, in URL format. The expected format is:
+
+
+        driver://[user:pass@]host:port[,[userN:passN@]hostN:portN]/virtual_host?query
+
+
+        Example: rabbit://rabbitmq:password@127.0.0.1:5672//
+
+
+        For full details on the fields in the URL see the documentation of oslo_messaging.TransportURL
+        at https://docs.openstack.org/oslo.messaging/latest/reference/transport.html'
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: transport_url
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: true
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default: keystone
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: control_exchange
+      help: The default exchange under which topics are scoped. May be overridden
+        by an exchange name specified in the transport_url option.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: control_exchange
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default: false
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: rpc_ping_enabled
+      help: Add an endpoint to answer to ping calls. Endpoint is named oslo_rpc_server_ping
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: rpc_ping_enabled
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: boolean value
     - advanced: false
       choices: []
       default: false
@@ -950,9 +887,9 @@ options:
     - advanced: false
       choices: []
       default: false
-      deprecated_for_removal: false
+      deprecated_for_removal: true
       deprecated_opts: []
-      deprecated_reason: null
+      deprecated_reason: Windows support is no longer maintained.
       deprecated_since: null
       dest: use_eventlog
       help: Log output to Windows Event Log.
@@ -1397,14 +1334,6 @@ options:
       short: null
       type: boolean value
     standard_opts:
-    - rpc_conn_pool_size
-    - conn_pool_min_size
-    - conn_pool_ttl
-    - executor_thread_pool_size
-    - rpc_response_timeout
-    - transport_url
-    - control_exchange
-    - rpc_ping_enabled
     - admin_token
     - public_endpoint
     - max_project_tree_depth
@@ -1416,6 +1345,14 @@ options:
     - default_publisher_id
     - notification_format
     - notification_opt_out
+    - rpc_conn_pool_size
+    - conn_pool_min_size
+    - conn_pool_ttl
+    - executor_thread_pool_size
+    - rpc_response_timeout
+    - transport_url
+    - control_exchange
+    - rpc_ping_enabled
     - debug
     - log-config-append
     - log-date-format
@@ -1868,6 +1805,8 @@ options:
         - null
       - - dogpile.cache.redis
         - null
+      - - dogpile.cache.redis_sentinel
+        - null
       - - dogpile.cache.memory
         - null
       - - dogpile.cache.memory_pickle
@@ -1998,7 +1937,7 @@ options:
       help: Memcache servers in the format of "host:port". This is used by backends
         dependent on Memcached.If ``dogpile.cache.memcached`` or ``oslo_cache.memcache_pool``
         is used and a given host refer to an IPv6 or a given domain refer to IPv6
-        then you should prefix the given address withthe address family (``inet6``)
+        then you should prefix the given address with the address family (``inet6``)
         (e.g ``inet6[::1]:11211``, ``inet6:[fd12:3456:789a:1::1]:11211``, ``inet6:[controller-0.internalapi]:11211``).
         If the address family is not given then these backends will use the default
         ``inet`` address family which corresponds to IPv4
@@ -2170,7 +2109,7 @@ options:
       type: boolean value
     - advanced: false
       choices: []
-      default: ''
+      default: null
       deprecated_for_removal: false
       deprecated_opts: []
       deprecated_reason: null
@@ -2191,7 +2130,7 @@ options:
       type: string value
     - advanced: false
       choices: []
-      default: ''
+      default: null
       deprecated_for_removal: false
       deprecated_opts: []
       deprecated_reason: null
@@ -2207,6 +2146,134 @@ options:
       positional: false
       required: false
       sample_default: null
+      secret: true
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default: localhost:6379
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: redis_server
+      help: Redis server in the format of "host:port"
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: redis_server
+      namespace: oslo.cache
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default: null
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: redis_username
+      help: the user name for redis
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: redis_username
+      namespace: oslo.cache
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default: null
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: redis_password
+      help: the password for redis
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: redis_password
+      namespace: oslo.cache
+      positional: false
+      required: false
+      sample_default: null
+      secret: true
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default:
+      - localhost:26379
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: redis_sentinels
+      help: Redis sentinel servers in the format of "host:port"
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: redis_sentinels
+      namespace: oslo.cache
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: list value
+    - advanced: false
+      choices: []
+      default: 1.0
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: redis_socket_timeout
+      help: Timeout in seconds for every call to a server. (dogpile.cache.redis and
+        dogpile.cache.redis_sentinel backends only).
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: redis_socket_timeout
+      namespace: oslo.cache
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: floating point value
+    - advanced: false
+      choices: []
+      default: mymaster
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: redis_sentinel_service_name
+      help: Service name of the redis sentinel cluster.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: redis_sentinel_service_name
+      namespace: oslo.cache
+      positional: false
+      required: false
+      sample_default: null
       secret: false
       short: null
       type: string value
@@ -2218,7 +2285,9 @@ options:
       deprecated_reason: null
       deprecated_since: null
       dest: tls_enabled
-      help: Global toggle for TLS usage when comunicating with the caching servers.
+      help: Global toggle for TLS usage when communicating with the caching servers.
+        Currently supported by ``dogpile.cache.bmemcache``, ``dogpile.cache.pymemcache``,
+        ``oslo_cache.memcache_pool``, ``dogpile.cache.redis`` and ``dogpile.cache.redis_sentinel``.
       max: null
       metavar: null
       min: null
@@ -2311,7 +2380,8 @@ options:
       dest: tls_allowed_ciphers
       help: Set the available ciphers for sockets created with the TLS context. It
         should be a string in the OpenSSL cipher list format. If not specified, all
-        OpenSSL enabled ciphers will be available.
+        OpenSSL enabled ciphers will be available. Currently supported by ``dogpile.cache.bmemcache``,
+        ``dogpile.cache.pymemcache`` and ``oslo_cache.memcache_pool``.
       max: null
       metavar: null
       min: null
@@ -2542,6 +2612,32 @@ options:
       secret: false
       short: null
       type: floating point value
+    - advanced: false
+      choices: []
+      default: false
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: enforce_fips_mode
+      help: Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
+        Python support. This is available in Python 3.9 in all environments and may
+        have been backported to older Python versions on select environments. If the
+        Python executable used does not support OpenSSL FIPS mode, an exception will
+        be raised. Currently supported by ``dogpile.cache.bmemcache``, ``dogpile.cache.pymemcache``
+        and ``oslo_cache.memcache_pool``.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: enforce_fips_mode
+      namespace: oslo.cache
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: boolean value
     standard_opts:
     - config_prefix
     - expiration_time
@@ -2560,6 +2656,12 @@ options:
     - memcache_sasl_enabled
     - memcache_username
     - memcache_password
+    - redis_server
+    - redis_username
+    - redis_password
+    - redis_sentinels
+    - redis_socket_timeout
+    - redis_sentinel_service_name
     - tls_enabled
     - tls_cafile
     - tls_certfile
@@ -2575,6 +2677,7 @@ options:
     - hashclient_retry_attempts
     - hashclient_retry_delay
     - dead_timeout
+    - enforce_fips_mode
   catalog:
     driver_option: ''
     driver_opts: {}
@@ -3051,9 +3154,7 @@ options:
       choices: []
       default: true
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: sqlite_synchronous
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: sqlite_synchronous
@@ -3074,9 +3175,7 @@ options:
       choices: []
       default: sqlalchemy
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: db_backend
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: backend
@@ -3097,13 +3196,7 @@ options:
       choices: []
       default: null
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: sql_connection
-      - group: DATABASE
-        name: sql_connection
-      - group: sql
-        name: connection
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: connection
@@ -3188,28 +3281,6 @@ options:
       type: integer value
     - advanced: false
       choices: []
-      default: false
-      deprecated_for_removal: true
-      deprecated_opts: []
-      deprecated_reason: Support for the MySQL NDB Cluster storage engine has been
-        deprecated and will be removed in a future release.
-      deprecated_since: 12.1.0
-      dest: mysql_enable_ndb
-      help: If True, transparently enables support for handling MySQL Cluster (NDB).
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: mysql_enable_ndb
-      namespace: oslo.db
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: boolean value
-    - advanced: false
-      choices: []
       default: 3600
       deprecated_for_removal: false
       deprecated_opts: []
@@ -3257,11 +3328,7 @@ options:
       choices: []
       default: 10
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: sql_max_retries
-      - group: DATABASE
-        name: sql_max_retries
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: max_retries
@@ -3283,11 +3350,7 @@ options:
       choices: []
       default: 10
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: sql_retry_interval
-      - group: DATABASE
-        name: reconnect_interval
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: retry_interval
@@ -3308,11 +3371,7 @@ options:
       choices: []
       default: 50
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: sql_max_overflow
-      - group: DATABASE
-        name: sqlalchemy_max_overflow
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: max_overflow
@@ -3333,9 +3392,7 @@ options:
       choices: []
       default: 0
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: sql_connection_debug
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: connection_debug
@@ -3356,9 +3413,7 @@ options:
       choices: []
       default: false
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DEFAULT
-        name: sql_connection_trace
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: connection_trace
@@ -3379,9 +3434,7 @@ options:
       choices: []
       default: null
       deprecated_for_removal: false
-      deprecated_opts:
-      - group: DATABASE
-        name: sqlalchemy_pool_timeout
+      deprecated_opts: []
       deprecated_reason: null
       deprecated_since: null
       dest: pool_timeout
@@ -3535,7 +3588,6 @@ options:
     - slave_connection
     - mysql_sql_mode
     - mysql_wsrep_sync_wait
-    - mysql_enable_ndb
     - connection_recycle_time
     - max_pool_size
     - max_retries
@@ -3715,123 +3767,6 @@ options:
       type: string value
     standard_opts:
     - driver
-  eventlet_server:
-    driver_option: ''
-    driver_opts: {}
-    dynamic_group_owner: ''
-    help: ''
-    opts:
-    - advanced: false
-      choices: []
-      default: 0.0.0.0
-      deprecated_for_removal: true
-      deprecated_opts:
-      - group: DEFAULT
-        name: bind_host
-      - group: DEFAULT
-        name: public_bind_host
-      deprecated_reason: Support for running keystone under eventlet has been removed
-        in the Newton release. These options remain for backwards compatibility because
-        they are used for URL substitutions.
-      deprecated_since: K
-      dest: public_bind_host
-      help: The IP address of the network interface for the public service to listen
-        on.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: public_bind_host
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: host address value
-    - advanced: false
-      choices: []
-      default: 5000
-      deprecated_for_removal: true
-      deprecated_opts:
-      - group: DEFAULT
-        name: public_port
-      deprecated_reason: Support for running keystone under eventlet has been removed
-        in the Newton release. These options remain for backwards compatibility because
-        they are used for URL substitutions.
-      deprecated_since: K
-      dest: public_port
-      help: The port number for the public service to listen on.
-      max: 65535
-      metavar: null
-      min: 0
-      mutable: false
-      name: public_port
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: port value
-    - advanced: false
-      choices: []
-      default: 0.0.0.0
-      deprecated_for_removal: true
-      deprecated_opts:
-      - group: DEFAULT
-        name: bind_host
-      - group: DEFAULT
-        name: admin_bind_host
-      deprecated_reason: Support for running keystone under eventlet has been removed
-        in the Newton release. These options remain for backwards compatibility because
-        they are used for URL substitutions.
-      deprecated_since: K
-      dest: admin_bind_host
-      help: The IP address of the network interface for the admin service to listen
-        on.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: admin_bind_host
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: host address value
-    - advanced: false
-      choices: []
-      default: 35357
-      deprecated_for_removal: true
-      deprecated_opts:
-      - group: DEFAULT
-        name: admin_port
-      deprecated_reason: Support for running keystone under eventlet has been removed
-        in the Newton release. These options remain for backwards compatibility because
-        they are used for URL substitutions.
-      deprecated_since: K
-      dest: admin_port
-      help: The port number for the admin service to listen on.
-      max: 65535
-      metavar: null
-      min: 0
-      mutable: false
-      name: admin_port
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: port value
-    standard_opts:
-    - public_bind_host
-    - public_port
-    - admin_bind_host
-    - admin_port
   federation:
     driver_option: ''
     driver_opts: {}
@@ -4027,6 +3962,32 @@ options:
       secret: false
       short: null
       type: integer value
+    - advanced: false
+      choices: []
+      default: '1.0'
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: attribute_mapping_default_schema_version
+      help: The attribute mapping default schema version to be used, if the attribute
+        mapping being registered does not have a schema version. One must bear in
+        mind that changing this value will have no effect on attribute mappings that
+        were previously registered when another default value was applied. Once registered,
+        one needs to update the attribute mapping schema via the update API to be
+        able to change an attribute mapping schema version.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: attribute_mapping_default_schema_version
+      namespace: keystone
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: string value
     standard_opts:
     - driver
     - assertion_prefix
@@ -4036,6 +3997,7 @@ options:
     - sso_callback_template
     - caching
     - default_authorization_ttl
+    - attribute_mapping_default_schema_version
   fernet_receipts:
     driver_option: ''
     driver_opts: {}
@@ -4258,6 +4220,49 @@ options:
       type: list value
     - advanced: false
       choices: []
+      default: []
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: allowed_source_ranges
+      help: A list of network addresses to limit source ip allowed to access healthcheck
+        information. Any request from ip outside of these network addresses are ignored.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: allowed_source_ranges
+      namespace: oslo.middleware
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: list value
+    - advanced: false
+      choices: []
+      default: false
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: ignore_proxied_requests
+      help: Ignore requests with proxy headers.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: ignore_proxied_requests
+      namespace: oslo.middleware
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: boolean value
+    - advanced: false
+      choices: []
       default: null
       deprecated_for_removal: false
       deprecated_opts: []
@@ -4305,6 +4310,8 @@ options:
     - path
     - detailed
     - backends
+    - allowed_source_ranges
+    - ignore_proxied_requests
     - disable_by_file_path
     - disable_by_file_paths
   identity:
@@ -4536,6 +4543,8 @@ options:
     - advanced: false
       choices:
       - - bcrypt
+        - null
+      - - bcrypt_sha256
         - null
       - - scrypt
         - null
@@ -6123,135 +6132,6 @@ options:
     - use_auth_pool
     - auth_pool_size
     - auth_pool_connection_lifetime
-  memcache:
-    driver_option: ''
-    driver_opts: {}
-    dynamic_group_owner: ''
-    help: ''
-    opts:
-    - advanced: false
-      choices: []
-      default: 300
-      deprecated_for_removal: true
-      deprecated_opts: []
-      deprecated_reason: 'This option has no effect. Configure ``keystone.conf [cache]
-        memcache_dead_retry`` option to set the dead_retry of memcached instead. '
-      deprecated_since: Y
-      dest: dead_retry
-      help: Number of seconds memcached server is considered dead before it is tried
-        again. This is used by the key value store system.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: dead_retry
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: 3
-      deprecated_for_removal: true
-      deprecated_opts: []
-      deprecated_reason: 'This option has no effect. Configure ``keystone.conf [cache]
-        memcache_socket_timeout`` option to set the socket_timeout of memcached instead. '
-      deprecated_since: T
-      dest: socket_timeout
-      help: Timeout in seconds for every call to a server. This is used by the key
-        value store system.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: socket_timeout
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: 10
-      deprecated_for_removal: true
-      deprecated_opts: []
-      deprecated_reason: 'This option has no effect. Configure ``keystone.conf [cache]
-        memcache_pool_maxsize`` option to set the pool_maxsize of memcached instead. '
-      deprecated_since: Y
-      dest: pool_maxsize
-      help: Max total number of open connections to every memcached server. This is
-        used by the key value store system.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: pool_maxsize
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: 60
-      deprecated_for_removal: true
-      deprecated_opts: []
-      deprecated_reason: 'This option has no effect. Configure ``keystone.conf [cache]
-        memcache_pool_unused_timeout`` option to set the pool_unused_timeout of memcached
-        instead. '
-      deprecated_since: Y
-      dest: pool_unused_timeout
-      help: Number of seconds a connection to memcached is held unused in the pool
-        before it is closed. This is used by the key value store system.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: pool_unused_timeout
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    - advanced: false
-      choices: []
-      default: 10
-      deprecated_for_removal: true
-      deprecated_opts: []
-      deprecated_reason: 'This option has no effect. Configure ``keystone.conf [cache]
-        memcache_pool_connection_get_timeout`` option to set the connection_get_timeout
-        of memcached instead. '
-      deprecated_since: Y
-      dest: pool_connection_get_timeout
-      help: Number of seconds that an operation will wait to get a memcache client
-        connection. This is used by the key value store system.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: pool_connection_get_timeout
-      namespace: keystone
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: integer value
-    standard_opts:
-    - dead_retry
-    - socket_timeout
-    - pool_maxsize
-    - pool_unused_timeout
-    - pool_connection_get_timeout
   oauth1:
     driver_option: ''
     driver_opts: {}
@@ -8290,14 +8170,37 @@ options:
         is a modern queue type for RabbitMQ implementing a durable, replicated FIFO
         queue based on the Raft consensus algorithm. It is available as of RabbitMQ
         3.8.0. If set this option will conflict with the HA queues (``rabbit_ha_queues``)
-        aka mirrored queues, in other words the HA queues should be disabled, quorum
-        queues durable by default so the amqp_durable_queues opion is ignored when
-        this option enabled.'
+        aka mirrored queues, in other words the HA queues should be disabled. Quorum
+        queues are also durable by default so the amqp_durable_queues option is ignored
+        when this option is enabled.'
       max: null
       metavar: null
       min: null
       mutable: false
       name: rabbit_quorum_queue
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: boolean value
+    - advanced: false
+      choices: []
+      default: false
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: rabbit_transient_quorum_queue
+      help: Use quorum queues for transients queues in RabbitMQ. Enabling this option
+        will then make sure those queues are also using quorum kind of rabbit queues,
+        which are HA by default.
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: rabbit_transient_quorum_queue
       namespace: oslo.messaging
       positional: false
       required: false
@@ -8391,10 +8294,13 @@ options:
       dest: rabbit_transient_queues_ttl
       help: Positive integer representing duration in seconds for queue TTL (x-expires).
         Queues which are unused for the duration of the TTL are automatically deleted.
-        The parameter affects only reply and fanout queues.
+        The parameter affects only reply and fanout queues. Setting 0 as value will
+        disable the x-expires. If doing so, make sure you have a rabbitmq policy to
+        delete the queues or you deployment will create an infinite number of queue
+        over time.
       max: null
       metavar: null
-      min: 1
+      min: 0
       mutable: false
       name: rabbit_transient_queues_ttl
       namespace: oslo.messaging
@@ -8450,7 +8356,7 @@ options:
       type: integer value
     - advanced: false
       choices: []
-      default: 2
+      default: 3
       deprecated_for_removal: false
       deprecated_opts: []
       deprecated_reason: null
@@ -8517,6 +8423,94 @@ options:
       secret: false
       short: null
       type: boolean value
+    - advanced: false
+      choices: []
+      default: false
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: use_queue_manager
+      help: Should we use consistant queue names or random ones
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: use_queue_manager
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: boolean value
+    - advanced: false
+      choices: []
+      default: cc1
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: hostname
+      help: Hostname used by queue manager
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: hostname
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default: oslo-config-generator
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: processname
+      help: Process name used by queue manager
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: processname
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default: false
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: rabbit_stream_fanout
+      help: 'Use stream queues in RabbitMQ (x-queue-type: stream). Streams are a new
+        persistent and replicated data structure ("queue type") in RabbitMQ which
+        models an append-only log with non-destructive consumer semantics. It is available
+        as of RabbitMQ 3.9.0. If set this option will replace all fanout queues with
+        only one stream queue.'
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: rabbit_stream_fanout
+      namespace: oslo.messaging
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: boolean value
     standard_opts:
     - amqp_durable_queues
     - amqp_auto_delete
@@ -8537,6 +8531,7 @@ options:
     - rabbit_interval_max
     - rabbit_ha_queues
     - rabbit_quorum_queue
+    - rabbit_transient_quorum_queue
     - rabbit_quorum_delivery_limit
     - rabbit_quorum_max_memory_length
     - rabbit_quorum_max_memory_bytes
@@ -8546,6 +8541,10 @@ options:
     - heartbeat_rate
     - direct_mandatory_flag
     - enable_cancel_on_failover
+    - use_queue_manager
+    - hostname
+    - processname
+    - rabbit_stream_fanout
   oslo_middleware:
     driver_option: ''
     driver_opts: {}
@@ -8577,28 +8576,6 @@ options:
       secret: false
       short: null
       type: integer value
-    - advanced: false
-      choices: []
-      default: X-Forwarded-Proto
-      deprecated_for_removal: true
-      deprecated_opts: []
-      deprecated_reason: null
-      deprecated_since: null
-      dest: secure_proxy_ssl_header
-      help: The HTTP Header that will be used to determine what the original request
-        protocol scheme was, even if it was hidden by a SSL termination proxy.
-      max: null
-      metavar: null
-      min: null
-      mutable: false
-      name: secure_proxy_ssl_header
-      namespace: oslo.middleware
-      positional: false
-      required: false
-      sample_default: null
-      secret: false
-      short: null
-      type: string value
     - advanced: false
       choices: []
       default: false
@@ -8644,7 +8621,6 @@ options:
       type: string value
     standard_opts:
     - max_request_body_size
-    - secure_proxy_ssl_header
     - enable_proxy_headers_parsing
     - http_basic_auth_user_file
   oslo_policy:
@@ -9018,6 +8994,45 @@ options:
       type: boolean value
     - advanced: false
       choices: []
+      default: false
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: trace_requests
+      help: '
+
+        Enable python requests package profiling.
+
+
+        Supported drivers: jaeger+otlp
+
+
+        Default value is False.
+
+
+        Possible values:
+
+
+        * True: Enables requests profiling.
+
+        * False: Disables requests profiling.
+
+        '
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: trace_requests
+      namespace: osprofiler
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: boolean value
+    - advanced: false
+      choices: []
       default: SECRET_KEY
       deprecated_for_removal: false
       deprecated_opts: []
@@ -9058,7 +9073,7 @@ options:
       positional: false
       required: false
       sample_default: null
-      secret: false
+      secret: true
       short: null
       type: string value
     - advanced: false
@@ -9264,6 +9279,7 @@ options:
     standard_opts:
     - enabled
     - trace_sqlalchemy
+    - trace_requests
     - hmac_keys
     - connection_string
     - es_doc_type
@@ -9272,6 +9288,98 @@ options:
     - socket_timeout
     - sentinel_service_name
     - filter_error_trace
+  profiler_jaeger:
+    driver_option: ''
+    driver_opts: {}
+    dynamic_group_owner: ''
+    help: ''
+    opts:
+    - advanced: false
+      choices: []
+      default: null
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: service_name_prefix
+      help: '
+
+        Set service name prefix to Jaeger service name.
+
+        '
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: service_name_prefix
+      namespace: osprofiler
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: string value
+    - advanced: false
+      choices: []
+      default: {}
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: process_tags
+      help: '
+
+        Set process tracer tags.
+
+        '
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: process_tags
+      namespace: osprofiler
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: dict value
+    standard_opts:
+    - service_name_prefix
+    - process_tags
+  profiler_otlp:
+    driver_option: ''
+    driver_opts: {}
+    dynamic_group_owner: ''
+    help: ''
+    opts:
+    - advanced: false
+      choices: []
+      default: null
+      deprecated_for_removal: false
+      deprecated_opts: []
+      deprecated_reason: null
+      deprecated_since: null
+      dest: service_name_prefix
+      help: '
+
+        Set service name prefix to OTLP exporters.
+
+        '
+      max: null
+      metavar: null
+      min: null
+      mutable: false
+      name: service_name_prefix
+      namespace: osprofiler
+      positional: false
+      required: false
+      sample_default: null
+      secret: false
+      short: null
+      type: string value
+    standard_opts:
+    - service_name_prefix
   receipt:
     driver_option: ''
     driver_opts: {}
@@ -10430,7 +10538,7 @@ options:
       help: 'The regular expression used to validate password strength requirements.
         By default, the regular expression will match any password. The following
         is an example of a pattern which requires at least 1 letter, 1 digit, and
-        have a minimum length of 7 characters: ^(?=.*\\d)(?=.*[a-zA-Z]).{7,}$ This
+        have a minimum length of 7 characters: ^(?=.*\\\d)(?=.*[a-zA-Z]).{7,}$ This
         feature depends on the `sql` backend for the `[identity] driver`.'
       max: null
       metavar: null
