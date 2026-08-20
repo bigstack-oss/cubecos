@@ -3442,3 +3442,43 @@ ceph_osd_list()
     fi
     rm -rf $logpth
 }
+
+ceph_mgr_dashboard_ensure()
+{
+    # Usage: ceph_mgr_dashboard_ensure [<evict-host>]
+    # With <evict-host>: fail the active mgr off that host first (no-op if it
+    # is not the active). Then make sure the dashboard answers on the active
+    # mgr -- it wedges on failover (listener up, TLS never completes), so
+    # bounce the module when the probe fails.
+    local evict=$1
+    local active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
+    if [ -n "$evict" ] ; then
+        [ "$active" = "$evict" ] || return 0
+        $CEPH mgr fail
+        for i in $(seq 30) ; do
+            sleep 2
+            active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
+            [ -n "$active" -a "$active" != "$evict" ] && break
+        done
+        if [ -z "$active" -o "$active" = "$evict" ] ; then
+            echo "ceph-mgr did not fail over off $evict" >&2
+            return 1
+        fi
+    fi
+    [ -n "$active" ] || return 1
+    local port=7442
+    grep -q "ha = false" $SETTINGS_TXT 2>/dev/null && port=7443
+    local probe="timeout 5 curl -sIk https://$active:$port/ceph/"
+    for i in $(seq 3) ; do
+        $probe 2>/dev/null | grep -q "200 OK" && return 0
+        sleep 5
+    done
+    $CEPH mgr module disable dashboard
+    $CEPH mgr module enable dashboard
+    for i in $(seq 12) ; do
+        sleep 5
+        $probe 2>/dev/null | grep -q "200 OK" && return 0
+    done
+    echo "ceph-mgr dashboard on $active not serving after module bounce" >&2
+    return 1
+}
