@@ -630,8 +630,11 @@ Commit(bool modified, int dryLevel)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
     if (s_bConfigChanged) {
+        // Health-manager endpoints follow CLUSTER ha, not the amphora topology
+        // (s_lbHa): with one endpoint, rebooting that node black-holes every
+        // amphora's heartbeats and octavia marks them ERROR.
         UpdateCfg(s_lbHa, s_cubeDomain, userPass, adminCliPass, cidrIp,
-                  ControllerIpPortList(s_lbHa, s_mgmtCidr.newValue(), cidrIp, s_ctrlAddrs.newValue()),
+                  ControllerIpPortList(s_ha, s_mgmtCidr.newValue(), cidrIp, s_ctrlAddrs.newValue()),
                   s_ha ? s_ctrlAddrs.newValue() : ctrlIp);
         UpdateSharedId(sharedId);
         UpdateMyIp(myip);
