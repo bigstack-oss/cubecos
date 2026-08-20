@@ -1808,6 +1808,17 @@ os_octavia_sgid_get()
     $OPENSTACK security group list | awk ' / lb-mgmt-sec-grp / {print $2}' | tr -d '\n'
 }
 
+# Are this node's lb-mgmt ids actually stamped in octavia.conf? An empty
+# amp_boot_network_list makes every amphora build handed to this node's worker
+# fail with nova's misleading "Multiple possible networks found".
+os_octavia_cfg_ids_ok()
+{
+    local conf=/etc/octavia/octavia.conf
+    [ -f $conf ] || return 0
+    grep -qE '^amp_boot_network_list *= *[0-9a-f-]{36}' $conf || return 1
+    grep -qE '^amp_secgroup_list *= *[0-9a-f-]{36}' $conf || return 1
+}
+
 os_octavia_port_remove()
 {
     local lb_id=$1

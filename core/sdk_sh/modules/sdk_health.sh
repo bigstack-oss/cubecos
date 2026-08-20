@@ -2734,6 +2734,9 @@ health_octavia_check()
                 elif ! is_remote_running $node octavia-health-manager ; then
                     ERR_MSG+="octavia-health-manager on $node is not running\n"
                     ERR_CODE=9
+                elif ! remote_run $node hex_sdk os_octavia_cfg_ids_ok ; then
+                    ERR_MSG+="empty lb-mgmt ids in octavia.conf on $node\n"
+                    ERR_CODE=10
                 fi
             fi
         done
@@ -2766,6 +2769,10 @@ _health_octavia_auto_repair()
                 remote_systemd_restart $node octavia-worker
             elif ! is_remote_running $node octavia-health-manager ; then
                 remote_systemd_restart $node octavia-health-manager
+            elif ! remote_run $node hex_sdk os_octavia_cfg_ids_ok ; then
+                # re-stamp only (code 10); no port recreate, so it stays far
+                # cheaper than the reinit_octavia in health_octavia_repair
+                Quiet -n remote_run $node $HEX_CFG reconfig_octavia
             fi
         fi
     done

@@ -26,7 +26,6 @@
 #define CERT_DIR    "/etc/octavia/certs/"
 #define DEF_EXT     ".def"
 #define CONF        "/etc/octavia/octavia.conf"
-#define INIT_DONE   "/etc/appliance/state/octavia_init_done"
 
 static const char USER[] = "octavia";
 static const char GROUP[] = "octavia";
@@ -55,7 +54,6 @@ static Configs cfg;
 static Configs oldCfg;
 
 static bool s_bSetup = true;
-static bool s_bInit = true;
 
 static bool s_bCubeModified = false;
 static bool s_bMqModified = false;
@@ -113,18 +111,6 @@ PARSE_TUNING_X_STR(s_mgmtCidr, CUBESYS_MGMT_CIDR, 2);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 2);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 2);
 PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 3);
-
-static bool
-InitCheck()
-{
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    if (access(INIT_DONE, F_OK) != 0)
-        s_bInit = false;
-
-    return true;
-}
 
 // should run after mysql services are running.
 static bool
@@ -418,14 +404,11 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
         cfg["controller_worker"]["amphora_driver"] = "amphora_haproxy_rest_driver";
         cfg["controller_worker"]["loadbalancer_topology"] = ha ? "ACTIVE_STANDBY" : "SINGLE";
 
-        if (s_bInit) {
-            cfg["controller_worker"]["amp_boot_network_list"] = oldCfg["controller_worker"]["amp_boot_network_list"];
-            cfg["controller_worker"]["amp_secgroup_list"] = oldCfg["controller_worker"]["amp_secgroup_list"];
-        }
-        else {
-            cfg["controller_worker"]["amp_boot_network_list"] = "";
-            cfg["controller_worker"]["amp_secgroup_list"] = "";
-        }
+        // Always carry these two forward. They are cluster-wide neutron ids
+        // stamped by ReconfigMain, not settings, so a commit must never author
+        // them: on a genuine first init oldCfg has nothing and they stay empty.
+        cfg["controller_worker"]["amp_boot_network_list"] = oldCfg["controller_worker"]["amp_boot_network_list"];
+        cfg["controller_worker"]["amp_secgroup_list"] = oldCfg["controller_worker"]["amp_secgroup_list"];
 
         cfg["oslo_messaging"]["topic"] = "octavia_prov";
 
@@ -619,7 +602,6 @@ Commit(bool modified, int dryLevel)
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass, s_seed);
     std::string adminCliPass = GetSaltKey(s_saltkey, s_adminCliPass.newValue(), s_seed.newValue());
 
-    InitCheck();
     SetupCheck();
     if (!s_bSetup) {
         s_bDbPassChanged = true;
@@ -793,10 +775,22 @@ ReconfigMain(int argc, char* argv[])
         curCfg["controller_worker"]["amp_secgroup_list"] = std::string(argv[2]);
     }
     else {
+        // Keep the current ids when the lookup comes back empty (openstack not
+        // answering yet on a booting node). An empty amp_boot_network_list makes
+        // every amphora build on this node's worker fail with nova's misleading
+        // "Multiple possible networks found".
         std::string nid = HexUtilPOpen(HEX_SDK " os_octavia_nid_get");
         std::string sgid = HexUtilPOpen(HEX_SDK " os_octavia_sgid_get");
-        curCfg["controller_worker"]["amp_boot_network_list"] = nid;
-        curCfg["controller_worker"]["amp_secgroup_list"] = sgid;
+        if (!nid.empty())
+            curCfg["controller_worker"]["amp_boot_network_list"] = nid;
+        else
+            HexLogWarning("octavia: lb-mgmt-net lookup empty, keeping amp_boot_network_list=%s",
+                          curCfg["controller_worker"]["amp_boot_network_list"].c_str());
+        if (!sgid.empty())
+            curCfg["controller_worker"]["amp_secgroup_list"] = sgid;
+        else
+            HexLogWarning("octavia: lb-mgmt-sec-grp lookup empty, keeping amp_secgroup_list=%s",
+                          curCfg["controller_worker"]["amp_secgroup_list"].c_str());
     }
 
     WriteConfig(CONF, SB_SEC_WFMT, '=', curCfg);
