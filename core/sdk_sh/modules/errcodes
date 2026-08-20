@@ -230,6 +230,7 @@ eval "ERR_DESC_$SRV[6]='octavia-hm0 link missng'"
 eval "ERR_DESC_$SRV[7]='octavia-hm0 route missing'"
 eval "ERR_DESC_$SRV[8]='worker down'"
 eval "ERR_DESC_$SRV[9]='health-manager down'"
+eval "ERR_DESC_$SRV[10]='lb-mgmt ids unset'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="designate"
