@@ -65,7 +65,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -477,11 +480,14 @@
 
 #
 # If True, when limiting allocation candidate results, the results will be
-# a random sampling of the full result set. If False, allocation candidates
-# are returned in a deterministic but undefined order. That is, all things
-# being equal, two requests for allocation candidates will return the same
-# results in the same order; but no guarantees are made as to how that order
-# is determined.
+# a random sampling of the full result set. The
+# [placement]max_allocation_candidates config might limit the size of the full
+# set used as the input of the sampling.
+#
+# If False, allocation candidates are returned in a deterministic but undefined
+# order. That is, all things being equal, two requests for allocation candidates
+# will return the same results in the same order; but no guarantees are made as
+# to how that order is determined.
 #  (boolean value)
 #randomize_allocation_candidates = false
 
@@ -509,6 +515,60 @@
 # when many concurrent allocations to the same resource provider are expected.
 #  (integer value)
 #allocation_conflict_retry_count = 10
+
+#
+# The maximum number of allocation candidates placement generates for a single
+# request. This is a global limit to avoid excessive memory use and query
+# runtime. If set to -1 it means that the number of generated candidates are
+# only limited by the number and structure of the resource providers and the
+# content of the allocation_candidates query.
+#
+# Note that the limit param of the allocation_candidates query is applied after
+# all the viable candidates are generated so that limit alone is not enough to
+# restrict the runtime or memory consumption of the query.
+#
+# In a deployment with thousands of resource providers or if the deployment has
+# wide and symmetric provider trees, i.e. there are multiple children providers
+# under the same root having inventory from the same resource class
+# (e.g. in case of nova's mdev GPU or PCI in Placement features) we recommend
+# to tune this config option based on the memory available for the
+# placement service and the client timeout setting on the client side. A good
+# initial value could be around 100000.
+#
+# In a deployment with wide and symmetric provider trees we also recommend to
+# change the [placement]allocation_candidates_generation_strategy to
+# breadth-first.
+#  (integer value)
+#max_allocation_candidates = -1
+
+#
+# Defines the order placement visits viable root providers during allocation
+# candidate generation:
+#
+# * depth-first, generates all candidates from the first viable root provider
+#   before moving to the next.
+#
+# * breadth-first, generates candidates from viable roots in a round-robin
+#   fashion, creating one candidate from each viable root before creating the
+#   second candidate from the first root.
+#
+# If the deployment has wide and symmetric provider trees, i.e. there are
+# multiple children providers under the same root having inventory from the same
+# resource class (e.g. in case of nova's mdev GPU or PCI in Placement features)
+# then the depth-first strategy with a max_allocation_candidates
+# limit might produce candidates from a limited set of root providers. On the
+# other hand breadth-first strategy will ensure that the candidates are returned
+# from all viable roots in a balanced way.
+#
+# Both strategies produce the candidates in the API response in an undefined but
+# deterministic order. That is, all things being equal, two requests for
+# allocation candidates will return the same results in the same order; but no
+# guarantees are made as to how that order is determined.
+#  (string value)
+# Possible values:
+# depth-first - <No description provided>
+# breadth-first - <No description provided>
+#allocation_candidates_generation_strategy = depth-first
 
 
 [placement_database]
@@ -613,6 +673,20 @@
 #trace_sqlalchemy = false
 
 #
+# Enable python requests package profiling.
+#
+# Supported drivers: jaeger+otlp
+#
+# Default value is False.
+#
+# Possible values:
+#
+# * True: Enables requests profiling.
+# * False: Disables requests profiling.
+#  (boolean value)
+#trace_requests = false
+
+#
 # Secret key(s) to use for encrypting context data for performance profiling.
 #
 # This string value should have the following format: <key1>[,<key2>,...<keyn>],
@@ -687,3 +761,32 @@
 # * False: Disable the filter.
 #  (boolean value)
 #filter_error_trace = false
+
+
+[profiler_jaeger]
+
+#
+# From osprofiler
+#
+
+#
+# Set service name prefix to Jaeger service name.
+#  (string value)
+#service_name_prefix = <None>
+
+#
+# Set process tracer tags.
+#  (dict value)
+#process_tags =
+
+
+[profiler_otlp]
+
+#
+# From osprofiler
+#
+
+#
+# Set service name prefix to OTLP exporters.
+#  (string value)
+#service_name_prefix = <None>
