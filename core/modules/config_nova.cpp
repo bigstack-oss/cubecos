@@ -421,7 +421,6 @@ UpdateSharedId(std::string sharedId)
         cfg["service_user"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["service_user"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["placement"]["auth_url"] = "http://" + sharedId + ":5000/v3";
-        cfg["neutron"]["url"] = "http://" + sharedId + ":9696";
         cfg["neutron"]["auth_url"] = "http://" + sharedId + ":5000";
 
         // deadline VIP-backed sessions: a failover blackholes established connections
@@ -477,7 +476,6 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["vnc"]["server_listen"] = myIp;
         cfg["vnc"]["server_proxyclient_address"] = myIp;
 
-        cfg["placement"]["randomize_allocation_candidates"] = "true";
         cfg["filter_scheduler"]["host_subset_size"] = "3";
         cfg["filter_scheduler"]["shuffle_best_same_weighed_hosts"] = "true";
         cfg["filter_scheduler"]["ram_weight_multiplier"] = "5.0";
@@ -494,6 +492,13 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         // Unset UpgradeLevelNovaCompute or live migrations fail
         // https://bugzilla.redhat.com/show_bug.cgi?id=1849235
         // cfg["upgrade_levels"]["compute"] = "auto";
+
+        // randomize_allocation_candidates is a placement option, so it has to go into
+        // placement.conf. nova.conf's [placement] is only the client-side adapter group and
+        // never registered it, so the copy that used to sit there did nothing -- which is
+        // why host_subset_size and shuffle_best_same_weighed_hosts were the only two
+        // spreading knobs actually in effect.
+        plaCfg["placement"]["randomize_allocation_candidates"] = "true";
 
         plaCfg["api"]["auth_strategy"] = "keystone";
         plaCfg["keystone_authtoken"]["auth_type"] = "password";
@@ -519,7 +524,6 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["libvirt"]["hw_machine_type"] = hwType.c_str();
         cfg["libvirt"]["num_pcie_ports"] = "28";
         cfg["libvirt"]["swtpm_enabled"] = "True";
-        cfg["libvirt"]["ovmf_path"] = "/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd";
         cfg["libvirt"]["images_type"] = "rbd";
         cfg["libvirt"]["images_rbd_pool"] = VOLUME;
         cfg["libvirt"]["images_rbd_ceph_conf"] = "/etc/ceph/ceph.conf";
@@ -603,7 +607,6 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["log_dir"] = "/var/log/nova";
         cfg["DEFAULT"]["host"] = hostname;
 
-        cfg["DEFAULT"]["vnc_enabled"] = "true";
         cfg["DEFAULT"]["cpu_allocation_ratio"] = s_ocCpuRatio.newValue();
         cfg["DEFAULT"]["ram_allocation_ratio"] = s_ocRamRatio.newValue();
         cfg["DEFAULT"]["disk_allocation_ratio"] = s_ocDiskRatio.newValue();
@@ -624,7 +627,10 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["keystone_authtoken"]["username"] = "nova";
         cfg["keystone_authtoken"]["password"] = novaPass.c_str();
 
-        cfg["placement"]["os_region_name"] = region.c_str();
+        // region_name, not os_region_name: [placement] is a keystoneauth adapter group and
+        // registers region-name, the way cfg["neutron"]["region_name"] below already spells
+        // it. os_region_name only ever existed in [cinder], where nova still registers it.
+        cfg["placement"]["region_name"] = region.c_str();
         cfg["placement"]["project_domain_name"] = domain.c_str();
         cfg["placement"]["user_domain_name"] = domain.c_str();
         cfg["placement"]["project_name"] = "service";
