@@ -1,4 +1,4 @@
 Defaults:cinder !requiretty
 
 cinder ALL = (root) NOPASSWD: /usr/bin/cinder-rootwrap /etc/cinder/rootwrap.conf *
-cinder ALL = (root) NOPASSWD: /usr/bin/privsep-helper *
+cinder ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *

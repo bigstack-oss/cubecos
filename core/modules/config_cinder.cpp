@@ -63,6 +63,21 @@ static const char BAK_NAME[] = "openstack-cinder-backup";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
+/**
+ * The privsep helper cinder must escalate through.
+ *
+ * oslo.privsep defaults to `sudo privsep-helper`, which sudo's secure_path
+ * resolves to /usr/bin/privsep-helper -- a symlink core/nova/nova.mk points at the
+ * *antelope* venv. Every other privsep user still lives there, so that link cannot
+ * move; but a python 3.10 helper cannot serve a caracal cinder. On a freshly built
+ * rootfs the antelope venv holds no cinder at all and the context would die with
+ * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
+ * imports the cinder 22.3.0 still sitting there and answers a 24.5.0 parent.
+ * Naming the caracal helper explicitly avoids both; /etc/sudoers.d/cinder authorises
+ * exactly this path.
+ */
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+
 static const char USERPASS[] = "8YHpMKC1394HbTmL";
 static const char DBPASS[] = "hhyCDG3IdNmcQaJo";
 
@@ -393,6 +408,7 @@ InitConfig(Configs& config)
         "barbican_service_user",
         "brcd_fabric_example",
         BUILTIN_STORAGE_BACKEND,
+        "cinder_sys_admin",
         "cisco_fabric_example",
         "coordination",
         "cors",
@@ -412,6 +428,7 @@ InitConfig(Configs& config)
         "oslo_reports",
         "oslo_versionedobjects",
         "privsep",
+        "privsep_osbrick",
         "profiler",
         "sample_castellan_source",
         "sample_remote_file_source",
@@ -440,6 +457,12 @@ SetDefaults(
 
     config["os_brick"]["lock_path"] = "/var/lock/os_brick";
     config["oslo_reports"]["log_dir"] = "/var/log/cinder";
+
+    // cinder.privsep.sys_admin_pctxt and os_brick.privileged.default, the two privsep
+    // contexts this service starts. The ceph backend never reaches either, but the
+    // lvm, nvmet and nfs drivers and every os-brick attach path do.
+    config["cinder_sys_admin"]["helper_command"] = PRIVSEP_HELPER;
+    config["privsep_osbrick"]["helper_command"] = PRIVSEP_HELPER;
 }
 
 /**
