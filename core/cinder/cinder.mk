@@ -64,11 +64,7 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/cinder/cinder-config-generator.conf $(ROOTDIR)/tmp/cinder/
 	$(Q)cp -f $(COREDIR)/cinder/cinder.conf.sample $(ROOTDIR)/tmp/cinder/
 	$(Q)# copy statutory configuration templates from core directory
-	$(Q)cp -f $(COREDIR)/cinder/api-paste.ini $(ROOTDIR)/tmp/cinder/
-	$(Q)cp -f $(COREDIR)/cinder/rootwrap.conf $(ROOTDIR)/tmp/cinder/
-	$(Q)cp -f $(COREDIR)/cinder/resource_filters.json $(ROOTDIR)/tmp/cinder/
 	$(Q)cp -f $(COREDIR)/cinder/cinder-sudoers $(ROOTDIR)/tmp/cinder/
-	$(Q)cp -f $(COREDIR)/cinder/volume.filters $(ROOTDIR)/tmp/cinder/
 	$(Q)# copy systemd unit file templates
 	$(Q)cp -f $(COREDIR)/cinder/openstack-cinder-api.service $(ROOTDIR)/tmp/cinder/
 	$(Q)cp -f $(COREDIR)/cinder/openstack-cinder-scheduler.service $(ROOTDIR)/tmp/cinder/
@@ -87,9 +83,14 @@ rootfs_install::
 	$(Q)# install configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/cinder-dist.conf /usr/share/cinder/cinder-dist.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/cinder.conf.sample /etc/cinder/cinder.conf
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/api-paste.ini /etc/cinder/api-paste.ini
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/rootwrap.conf /etc/cinder/rootwrap.conf
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/cinder/resource_filters.json /etc/cinder/resource_filters.json
+	$(Q)# api-paste.ini, rootwrap.conf, resource_filters.json and the volume rootwrap
+	$(Q)# filters are upstream data the cinder wheel already puts under the venv prefix
+	$(Q)# through its setup.cfg data_files. They used to be checked into core/cinder
+	$(Q)# verbatim, which meant they only ever moved when someone remembered to re-copy
+	$(Q)# them.
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/cinder/api-paste.ini /etc/cinder/api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/cinder/rootwrap.conf /etc/cinder/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/cinder/resource_filters.json /etc/cinder/resource_filters.json
 	$(Q)# install security configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/cinder/cinder-sudoers /etc/sudoers.d/cinder
 	$(Q)# install systemd unit files
@@ -98,7 +99,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/cinder/openstack-cinder-volume.service /usr/lib/systemd/system/openstack-cinder-volume.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/cinder/openstack-cinder-backup.service /usr/lib/systemd/system/openstack-cinder-backup.service
 	$(Q)# install rootwrap filters into system cinder deployment configuration
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/cinder/volume.filters /etc/cinder/rootwrap.d/
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/cinder/rootwrap.d/volume.filters /etc/cinder/rootwrap.d/
 
 # adjust file ownerships and permissions
 rootfs_install::
