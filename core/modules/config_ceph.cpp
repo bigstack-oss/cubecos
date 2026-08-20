@@ -1060,6 +1060,17 @@ CommitMds(const char* name, const char* hostname)
     if (!IsControl(s_eCubeRole))
         return true;
 
+    // cluster poweroff sets pauserd/pausewr, and nothing lifts them until
+    // cube_cluster_start_node -- which runs a whole phase later, in cluster
+    // start. Every module commit in between, this one included, then waits on
+    // storage that cannot serve: the MDS sits in up:replay with metadata IOs
+    // blocked, and the mgr has no fs metadata to answer with. Measured 4x on
+    // the ceph commit after a cold poweroff (469s vs ~90-125s on a boot with no
+    // flags set). Lift just the client-I/O blocks here, once the mons answer;
+    // noout/norebalance/nobackfill/norecover stay for cube_cluster_start_node's
+    // ceph_leave_maintenance, so a roll's OSD guard is untouched.
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_unpause_client_io");
+
     std::string srv = std::string(name) + "-mds@" + std::string(hostname);
     SystemdCommitService(true, srv.c_str());
     HexUtilSystemF(0, 0, HEX_SDK " ceph_fs_mds_init");
