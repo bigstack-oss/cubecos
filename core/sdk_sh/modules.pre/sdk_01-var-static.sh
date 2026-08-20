@@ -45,7 +45,9 @@ CEPHFS_UPDATE_DIR=/mnt/cephfs/update
 ADMIN_KEYRING=/etc/ceph/ceph.client.admin.keyring
 CEPHFS_CLIENT_AUTHKEY=/etc/ceph/admin.key
 CEPH_OSD_MAP=/var/lib/ceph/osd/dev_osd.map
-CEPH="timeout $SRVSTO /usr/bin/ceph"
+# -k: SIGTERM alone does not free a ceph CLI blocked on an unserving mgr, and
+# plain `timeout` then waits forever -- the cap has to be enforced with a kill.
+CEPH="timeout -k 5 $SRVSTO /usr/bin/ceph"
 GIT="timeout 300 /usr/bin/git"
 MAPFILE=/tmp/monmap.sdk
 CRUSHMAPFILE=/tmp/crushmap.sdk
