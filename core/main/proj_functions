@@ -1252,18 +1252,22 @@ cube_wait_all_committed()
 
 cluster_check_repair_async()
 {
-    # Hidden opt-out: skip the final check_repair if the agent dropped the marker. See #1225.
-    [ -f /etc/appliance/state/cube_repair_optout ] && return 0
     # Run the final cluster check_repair off the caller's critical path so the
     # operator gets their prompt back immediately and can start using the box.
     # The result is popped onto the console device(s) and broadcast (wall) when
     # it finishes. Detached via setsid so it survives the parent CLI exiting.
     # Held until all nodes have committed so it fires once on a settled cluster.
+    # Hidden opt-out: skip the check_repair if the agent dropped the marker (see
+    # #1225) -- but ALWAYS restore the VMs recorded at cluster stop. The opt-out
+    # suppresses health repair so faults stay visible; it must not strand a
+    # customer's running VMs SHUTOFF after a poweroff/power-loss cycle.
     setsid bash -c '
         hex_sdk cube_wait_all_committed 1500
-        out=$(hex_cli -c cluster check_repair 2>&1 | grep -av "Broken pipe")
-        # Restore VMs recorded at cluster stop, now that services are healed.
+        if [ ! -f /etc/appliance/state/cube_repair_optout ] ; then
+            out=$(hex_cli -c cluster check_repair 2>&1 | grep -av "Broken pipe")
+        fi
         hex_sdk power_restore_recorded_vms
+        [ -n "$out" ] || exit 0
         con=$(hex_sdk GetKernelConsoleDevices)
         { echo "" ; echo "===== cluster check_repair complete =====" ; echo "$out" ; echo "=========================================" ; } | tee $con 2>/dev/null | wall 2>/dev/null
     ' </dev/null >/dev/null 2>&1 &
