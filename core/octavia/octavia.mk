@@ -80,7 +80,20 @@ rootfs_install::
 # printing any result. Upstream's bug, not this packaging's: RDO's spec carries no
 # patches, so the rpm build fails identically, and master's import list is unchanged.
 rootfs_install::
-	$(Q)[ -d $(OCTAVIA_PATCHDIR) ] && cp -rf $(OCTAVIA_PATCHDIR)/* $(OCTAVIA_SRCDIR)/ || /bin/true
+	$(Q)[ -d $(OCTAVIA_PATCHDIR) ] && rsync -a --exclude='*.py.patch' --exclude='*.py.orig' $(OCTAVIA_PATCHDIR)/ $(OCTAVIA_SRCDIR)/ || /bin/true
+
+# Reviewable unified diffs, same convention as core/masakari: each patch sits at
+# <PATCHDIR>/<rel>.py.patch and targets <SRCDIR>/<rel>.py, with a <rel>.py.orig
+# alongside for review only. Preferred over the whole-file copies above -- a diff
+# shows what we changed, and --forward keeps re-runs idempotent while a failed
+# hunk aborts the build, so upstream drift is caught here rather than shipped.
+rootfs_install::
+	$(Q)set -e; for p in $$(find $(OCTAVIA_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(OCTAVIA_PATCHDIR)/}; tgt=$(OCTAVIA_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH   $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "octavia: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
 
 # install the octavia web ui plugin, the openstack-octavia-ui rpm's replacement.
 # Registering its panel and settings snippet is core/horizon's job, where every

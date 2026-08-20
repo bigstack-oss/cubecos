@@ -1,0 +1,18 @@
+--- nova_driver.py	2026-08-21 00:17:26.242065455 +0800
++++ nova_driver.py	2026-08-21 00:17:40.751121333 +0800
+@@ -145,7 +145,14 @@
+                 userdata=user_data,
+                 config_drive=True,
+                 scheduler_hints=server_group,
+-                availability_zone=az_name
++                availability_zone=az_name,
++                # Opt amphorae out of masakari evacuation. Amphorae are
++                # octavia-managed and disposable: a nova evacuate rebuilds one
++                # without its injected config, which leaves the load balancer
++                # provisioning_status ERROR and octavia refusing to touch it
++                # again, so the LB stays dead until an operator failovers it.
++                # Octavia's own health-manager rebuild is the right recovery.
++                meta={'HA_Enabled': 'False'}
+             )
+ 
+             return amphora.id
