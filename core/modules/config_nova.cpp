@@ -61,6 +61,21 @@ static const char MULTIPATHD[] = "multipathd";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
+/**
+ * The privsep helper nova must escalate through.
+ *
+ * oslo.privsep defaults to `sudo privsep-helper`, which sudo's secure_path resolves to
+ * /usr/bin/privsep-helper -- a symlink core/nova/nova.mk keeps pointed at the *antelope*
+ * venv, because neutron, manila, masakari and cyborg are still there and it cannot move
+ * with nova. A python 3.10 helper cannot serve a caracal nova: on a freshly built rootfs
+ * the antelope venv holds no nova at all and the context dies with
+ * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
+ * imports the nova 27.5.1 still sitting there and answers a 29.4.0 parent with no error
+ * at all. Naming the caracal helper explicitly avoids both; /etc/sudoers.d/nova
+ * authorises exactly this path.
+ */
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+
 static const char USERPASS[] = "8YdO3T0l3qaEgdjT";
 static const char PLACEPASS[] = "TXh08jAWj1gDdd82";
 static const char DBPASS[] = "ZEuDgxtp6TuMB2gc";
@@ -561,6 +576,18 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
     }
 
     if(IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
+        // The four privsep contexts a nova-compute reaches: nova.privsep.sys_admin_pctxt
+        // for the driver's own privileged calls, os_brick.privileged.default for volume
+        // attach (os-brick 6.7.3 renamed the section to privsep_osbrick), and os-vif's
+        // two, which are on the live path of every instance that has a network
+        // interface -- vif_plug_ovs is what plugs the tap into br-int. A pin in the
+        // wrong section is silently ignored, so these names are the cfg_section values
+        // read out of the installed packages, not the context names in the log lines.
+        cfg["nova_sys_admin"]["helper_command"] = PRIVSEP_HELPER;
+        cfg["privsep_osbrick"]["helper_command"] = PRIVSEP_HELPER;
+        cfg["vif_plug_ovs_privileged"]["helper_command"] = PRIVSEP_HELPER;
+        cfg["vif_plug_linux_bridge_privileged"]["helper_command"] = PRIVSEP_HELPER;
+
         cfg["DEFAULT"]["my_ip"] = myIp;
         cfg["DEFAULT"]["resume_guests_state_on_host_boot"] = "true";
         cfg["DEFAULT"]["block_device_allocate_retries"] = "300";
