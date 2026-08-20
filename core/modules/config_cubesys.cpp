@@ -463,6 +463,13 @@ CONFIG_MIGRATE(cubesys, MigrateMain);
 //CONFIG_MIGRATE(cubesys, SRV_CRT);
 CONFIG_MIGRATE(cubesys, SSH_CLIENT_CONFIG);
 CONFIG_MIGRATE(cubesys, AUTHORIZED_KEYS);
+// The hidden opt-out markers (cube_repair_optout #1225, cube_git_optout) are a
+// deliberate, persistent operator choice, but they live in the root slot -- so an
+// upgrade, which boots the other slot, silently revoked them and turned auto-repair
+// back on underneath the operator. Only the opt-outs: the *_done markers beside them
+// gate first-time setup and must be re-evaluated by the new firmware, so migrating
+// the whole directory would make it skip init it needs to run.
+CONFIG_MIGRATE(cubesys, "/etc/appliance/state/cube_*_optout");
 
 CONFIG_MODULE(standalone, 0, 0, 0, 0, 0);
 CONFIG_REQUIRES(standalone, time);
