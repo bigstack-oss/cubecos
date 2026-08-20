@@ -149,7 +149,6 @@ rootfs_install::
 rootfs_install::
 	$(Q)cp -f $(COREDIR)/nova/nova-dist.conf $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/nova.conf.sample $(ROOTDIR)/tmp/nova/
-	$(Q)cp -f $(COREDIR)/nova/nova-compute.conf.sample $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/policy.yaml.sample $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/policy.json $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/release $(ROOTDIR)/tmp/nova/
@@ -157,7 +156,6 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/nova/placement.conf.sample $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/placement-policy.yaml.sample $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/placement-policy.json $(ROOTDIR)/tmp/nova/
-	$(Q)cp -f $(COREDIR)/nova/placement-api.conf $(ROOTDIR)/tmp/nova/
 	$(Q)# copy systemd unit file templates
 	$(Q)cp -f $(COREDIR)/nova/openstack-nova-api.service $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/openstack-nova-compute.service $(ROOTDIR)/tmp/nova/
@@ -190,7 +188,6 @@ rootfs_install::
 	$(Q)# install configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/nova-dist.conf /usr/share/nova/nova-dist.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/nova.conf.sample /etc/nova/nova.conf
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/nova-compute.conf.sample /etc/nova/nova-compute.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/policy.yaml.sample /etc/nova/policy.yaml.sample
 	$(Q)# api-paste.ini and rootwrap.conf are upstream data the nova wheel already puts
 	$(Q)# under the venv prefix through its setup.cfg data_files, so core/nova no longer
@@ -205,7 +202,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement.conf.sample /etc/placement/placement.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement-policy.yaml.sample /etc/placement/policy.yaml.sample
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement-policy.json /etc/placement/policy.json
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement-api.conf /etc/httpd/conf.d/00-placement-api.conf
 	$(Q)# install systemd unit files
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/openstack-nova-api.service /usr/lib/systemd/system/openstack-nova-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/openstack-nova-compute.service /usr/lib/systemd/system/openstack-nova-compute.service
@@ -232,7 +228,6 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:nova /usr/share/nova/nova-dist.conf
 	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/nova.conf
-	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/nova-compute.conf
 	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/api-paste.ini
 	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/policy.json
@@ -257,7 +252,6 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/nova/nova.d
-	$(Q)rm -f $(ROOTDIR)/etc/httpd/conf.d/00-placement-api.conf
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/nova/placement-api-wsgi.conf.in ./etc/httpd/conf.d/
 	$(Q)cp -f $(ROOTDIR)/etc/placement/placement.conf $(ROOTDIR)/etc/placement/placement.conf.def
 	$(Q)mv $(ROOTDIR)/etc/placement/policy.json $(ROOTDIR)/etc/placement/policy.json.orig
