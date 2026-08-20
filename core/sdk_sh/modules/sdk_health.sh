@@ -1605,7 +1605,9 @@ _health_ceph_mds_auto_repair()
     elif [ "$ERR_CODE" == "2" ] ; then
         cmd $HEX_SDK ceph_mount_cephfs
     elif [ "$ERR_CODE" == "3" -o "$ERR_CODE" == "4" -o "$ERR_CODE" == "5" ] ; then
-        cmd -c "systemctl restart nfs-ganesha"
+        # restore grace-DB membership first: ganesha exits fatally without it, so
+        # a bare restart loops forever on that fault
+        cmd -c "$HEX_SDK ceph_ganesha_grace_join ; systemctl restart nfs-ganesha"
     fi
 }
 
