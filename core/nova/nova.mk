@@ -151,8 +151,6 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/nova/nova.conf.sample $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/nova-compute.conf.sample $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/policy.yaml.sample $(ROOTDIR)/tmp/nova/
-	$(Q)cp -f $(COREDIR)/nova/api-paste.ini $(ROOTDIR)/tmp/nova/
-	$(Q)cp -f $(COREDIR)/nova/rootwrap.conf $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/policy.json $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/release $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/placement-dist.conf $(ROOTDIR)/tmp/nova/
@@ -174,7 +172,6 @@ rootfs_install::
 	$(Q)# copy security configurations
 	$(Q)cp -f $(COREDIR)/nova/nova-sudoers $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/nova-ifc-template $(ROOTDIR)/tmp/nova/
-	$(Q)cp -f $(COREDIR)/nova/rootwrap_compute.filters $(ROOTDIR)/tmp/nova/
 
 # install system directories and production files
 rootfs_install::
@@ -195,8 +192,13 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/nova.conf.sample /etc/nova/nova.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/nova-compute.conf.sample /etc/nova/nova-compute.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/policy.yaml.sample /etc/nova/policy.yaml.sample
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/api-paste.ini /etc/nova/api-paste.ini
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/rootwrap.conf /etc/nova/rootwrap.conf
+	$(Q)# api-paste.ini and rootwrap.conf are upstream data the nova wheel already puts
+	$(Q)# under the venv prefix through its setup.cfg data_files, so core/nova no longer
+	$(Q)# carries a second copy that only moves when someone remembers to re-copy it.
+	$(Q)# Unlike glance's, nova's rootwrap.conf never narrowed exec_dirs -- it was the
+	$(Q)# upstream default verbatim.
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/nova/api-paste.ini /etc/nova/api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/nova/rootwrap.conf /etc/nova/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/policy.json /etc/nova/policy.json
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/release /etc/nova/release
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement-dist.conf /usr/share/placement/placement-dist.conf
@@ -223,7 +225,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/nova-ifc-template /usr/share/nova/interfaces.template
 	$(Q)# install rootwrap filters
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/nova/rootwrap
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/rootwrap_compute.filters /usr/share/nova/rootwrap/compute.filters
+	$(Q)# also the wheel's, through the etc/nova/rootwrap.d/* glob in data_files
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/nova/rootwrap.d/compute.filters /usr/share/nova/rootwrap/compute.filters
 
 # adjust file ownerships and permissions
 rootfs_install::
