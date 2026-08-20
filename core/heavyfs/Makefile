@@ -113,6 +113,22 @@ rootfs_install::
 # Pinned NVR: live-migration-compatible with 3.1.0's qemu. Never unpin -- an
 # unpinned build floats to build-day c9s. Rig validation + drift: cubecos#1150.
 #
+# What made 9.1.0-20 and -27 incompatible was 9.1.0-21's
+# kvm-hw-i386-Fix-machine-type-compatibility.patch [RHEL-91307], which rewrites the
+# x86 machine-type compat property tables -- so the same pc-q35-rhel9.N.0 name
+# describes a different guest on either side and the migration stream does not match.
+# That gives the rule for moving this pin: a z-stream bump is live-migration-safe when
+# `dnf repoquery --changelogs` over the delta shows no hw-i386 machine-type/compat
+# patch and `qemu-kvm -M help` still resolves q35 to the same pc-q35-rhel9.N.0. Both
+# hold for -22 -> -23, whose delta is scsi reservations, an ide/block drain deadlock,
+# MIGRATION_STATUS_FAILING and s390x hardening; -23 also fixes three migration bugs of
+# its own (RHEL-158244, RHEL-190701, RHEL-45628). Verified on accept-3cc in every
+# direction -- -22 -> -23, -23 -> -22, and a guest first booted under -23 migrated to
+# a -22 node and back -- all completed with no error in any nova-compute log.
+#
+# There is no qemu-kvm 11.x to move to: the CentOS Stream koji carries 10.0.0 and
+# 10.1.0 and nothing above, for el9 and el10 alike, all at epoch 17.
+#
 # No epoch, even though every qemu build carries Epoch 17. LOCKED_DNF is only ever
 # matched as a *string* against rpm filenames, and a filename never carries an epoch:
 # installdnf derives qemu-img-10.1.0-22.el9 from the file and greps locked_rpms.txt
@@ -127,11 +143,11 @@ rootfs_install::
 # Dropping the epoch changes no resolution -- every candidate in c9s is epoch 17, and
 # dnf takes the NVR without it -- and it puts qemu on the same form as libvirt in
 # core/nova/nova.mk and pacemaker, whose locks hold for exactly that reason.
-QEMU_VER := -10.1.0-22.el9
+QEMU_VER := -10.1.0-23.el9
 # Filename NVR (no epoch); kojihub keeps builds the c9s mirror rotates away, so an
 # air-gapped rebuild resolves the exact NVR (same pattern as mysql.mk).
-QEMU_NVR := 10.1.0-22.el9
-QEMU_URL := https://kojihub.stream.centos.org/kojifiles/packages/qemu-kvm/10.1.0/22.el9/x86_64
+QEMU_NVR := 10.1.0-23.el9
+QEMU_URL := https://kojihub.stream.centos.org/kojifiles/packages/qemu-kvm/10.1.0/23.el9/x86_64
 QEMU_PKGS := qemu-kvm qemu-kvm-device-display-virtio-gpu-pci qemu-kvm-device-display-virtio-gpu
 QEMU_PKGS += qemu-kvm-device-display-virtio-vga qemu-kvm-device-usb-redirect qemu-kvm-device-usb-host
 QEMU_PKGS += qemu-guest-agent qemu-kvm-block-rbd qemu-kvm-block-blkio qemu-kvm-common qemu-kvm-core
