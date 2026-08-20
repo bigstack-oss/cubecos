@@ -207,7 +207,7 @@ textfsm===1.1.2
 python-3parclient===4.2.13
 unittest2===1.1.0
 django-compressor===4.4
-libvirt-python===10.0.0
+libvirt-python===11.10.0
 python-zunclient===5.0.0
 tzlocal===5.2
 sphinxcontrib-jsmath===1.0.1

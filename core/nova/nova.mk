@@ -40,21 +40,36 @@ ROOTFS_DNF += $(LIBVIRT_LOCKED_RPMS) dosfstools python3-libvirt ksmtuned virt-v2
 # handled elsewhere: iptables
 ROOTFS_DNF_NOARCH += iptables-services novnc
 
-NOVA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/nova
-NOVA_PATCHDIR := $(COREDIR)/nova/$(OPENSTACK_RELEASE)_patch
+NOVA_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/nova
+NOVA_PATCHDIR := $(COREDIR)/nova/$(CARACAL_OPENSTACK_RELEASE)_patch
 
-# install nova inside the python 3.10 virtual environment
+# nova and placement run out of the caracal venv. nova 29.4.0 is the last 2024.1
+# release and openstack-placement 11.0.1 its counterpart; both pull only new
+# packages into $(CARACAL_OPENSTACK_HOME_DIR) -- 17 of them, changing no version
+# skyline, keystone, glance or cinder already holds -- so the hop costs the other
+# occupants nothing.
+#
+# It has to be a different venv rather than a version bump in place: neutron,
+# manila, masakari, cyborg, ironic and the rest of the 2023.1 set share
+# /opt/openstack-antelope, and installing nova 29.4.0 beside them would have taken
+# os-vif to 3.5.0 and oslo.privsep to 3.3.0 under neutron.
+#
+# libvirt-python is the one C extension here and it compiles against whatever
+# libvirt-devel headers are present, so os-caracal-pip-upper-constraints.txt carries
+# the same deliberate 11.10.0 bump the antelope file got, matching the
+# libvirt-11.10.0-14.el9 held above. Left at caracal's own 10.0.0 the build dies deep
+# in generator.py on missing type converters, which reads like a code bug.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			nova==27.5.1 \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			nova==29.4.0 \
+			openstack-placement==11.0.1 \
 			python-novaclient \
 			python-cinderclient \
 			python-glanceclient \
 			python-neutronclient \
-			openstack-placement \
 			osc-placement \
 			osprofiler \
 			uwsgi \
@@ -63,59 +78,66 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link Nova binaries
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova /usr/bin/nova
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-api /usr/bin/nova-api
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-api-metadata /usr/bin/nova-api-metadata
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-api-os-compute /usr/bin/nova-api-os-compute
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-api-wsgi /usr/bin/nova-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-compute /usr/bin/nova-compute
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-conductor /usr/bin/nova-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-manage /usr/bin/nova-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-metadata-wsgi /usr/bin/nova-metadata-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-novncproxy /usr/bin/nova-novncproxy
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-policy /usr/bin/nova-policy
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-rootwrap /usr/bin/nova-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-rootwrap-daemon /usr/bin/nova-rootwrap-daemon
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-scheduler /usr/bin/nova-scheduler
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-serialproxy /usr/bin/nova-serialproxy
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-spicehtml5proxy /usr/bin/nova-spicehtml5proxy
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/nova-status /usr/bin/nova-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova /usr/bin/nova
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-api /usr/bin/nova-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-api-metadata /usr/bin/nova-api-metadata
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-api-os-compute /usr/bin/nova-api-os-compute
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-api-wsgi /usr/bin/nova-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-compute /usr/bin/nova-compute
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-conductor /usr/bin/nova-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-manage /usr/bin/nova-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-metadata-wsgi /usr/bin/nova-metadata-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-novncproxy /usr/bin/nova-novncproxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-policy /usr/bin/nova-policy
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-rootwrap /usr/bin/nova-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-rootwrap-daemon /usr/bin/nova-rootwrap-daemon
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-scheduler /usr/bin/nova-scheduler
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-serialproxy /usr/bin/nova-serialproxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-spicehtml5proxy /usr/bin/nova-spicehtml5proxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-status /usr/bin/nova-status
 	$(Q)# Link Placement binaries (since they were removed from RPMs)
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/placement-api /usr/bin/placement-api
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/placement-manage /usr/bin/placement-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/placement-status /usr/bin/placement-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/placement-api /usr/bin/placement-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/placement-manage /usr/bin/placement-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/placement-status /usr/bin/placement-status
 	$(Q)# Link the uWSGI binary for Placement WSGI
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/uwsgi /usr/bin/uwsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/uwsgi /usr/bin/uwsgi
 
-# Link the venv's privsep-helper into /usr/bin.
+# Keep a privsep-helper in the antelope venv, and keep /usr/bin/privsep-helper pointed
+# at it.
 #
 # oslo.privsep escalates by running `sudo privsep-helper`, resolved off sudo's
-# secure_path (/sbin:/bin:/usr/sbin:/usr/bin), which never contains the venv's bin --
-# so the bare name has to exist there. It is listed in the pip install above rather
-# than left transitive for the same reason python3-designateclient is named in
+# secure_path (/sbin:/bin:/usr/sbin:/usr/bin), which never contains a venv's bin -- so
+# the bare name has to exist there. One symlink covers every service that has not made
+# the caracal hop: neutron, manila, masakari and cyborg all reach the helper through
+# /usr/bin/privsep-helper, and config_manila.cpp, config_masakari.cpp and
+# config_cyborg.cpp name that path in helper_command.
+#
+# It is load-bearing rather than a convenience: with no /usr/bin/privsep-helper at all,
+# neutron-ovn-metadata-agent crash-loops on "FailedToDropPrivileges: privsep helper
+# command exited non-zero (96)" and `cluster check` reports
+# "Network NG [ neutron(3 metadata not all up) ]".
+#
+# So the helper is installed into *both* venvs from here: caracal's comes from the
+# oslo.privsep named in the pip install above, which is the one nova itself escalates
+# through (config_nova.cpp pins four helper_command values at
+# /opt/openstack-caracal/bin/privsep-helper, since a python 3.10 helper cannot serve a
+# caracal nova), and antelope's is installed here explicitly. Naming it rather than
+# leaving it transitive is the same reasoning that names python3-designateclient in
 # core/designate/designate.mk: a dependency nothing asks for is one that disappears
-# silently.
+# silently -- and nova was the only component naming oslo.privsep in the antelope venv
+# before this hop.
 #
-# This link was deliberately deferred until every privsep user had moved into the
-# venv, because /usr/bin/privsep-helper used to be a *python 3.9* binary owned by
-# python3-oslo-privsep, shared by every rootwrap caller:
-#
-#   # rpm -qf /usr/bin/privsep-helper
-#   python3-oslo-privsep-2.7.0-1.el9s.noarch
-#   # dnf repoquery --installed --whatrequires python3-oslo-privsep
-#   openstack-ironic-common, python3-cinder-common, python3-glance-store,
-#   python3-manila, python3-neutron, python3-nova, python3-os-brick, python3-os-vif
-#
-# Pointing it at the 3.10 helper while any of those still ran on 3.9 would have
-# broken them. All eight have since moved, python3-oslo-privsep is no longer
-# installed, and `python3 -c "import oslo_privsep"` fails on the system python --
-# so there is no 3.9 consumer left and the link is now unambiguously correct.
-#
-# It is also load-bearing: with no /usr/bin/privsep-helper at all,
-# neutron-ovn-metadata-agent crash-looped on
-# "FailedToDropPrivileges: privsep helper command exited non-zero (96)" and
-# `cluster check` reported "Network NG [ neutron(3 metadata not all up) ]".
+# Both halves go once the last antelope service reaches caracal: the pip install below,
+# the symlink, and the helper_command pins in config_manila.cpp, config_masakari.cpp
+# and config_cyborg.cpp.
 rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			oslo.privsep"
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/privsep-helper /usr/bin/privsep-helper
 
 # prepare the build directory

@@ -15,6 +15,7 @@
 #    under the License.
 
 import collections
+import copy
 import typing as ty
 
 from oslo_config import cfg
@@ -97,7 +98,8 @@ class PciDevTracker(object):
                 self.stats.add_device(dev)
 
     def save(self, context: ctx.RequestContext) -> None:
-        for dev in self.pci_devs:
+        devs = copy.copy(self.pci_devs.objects)
+        for dev in devs:
             if dev.obj_what_changed():
                 with dev.obj_alternate_context(context):
                     dev.save()
@@ -131,18 +133,13 @@ class PciDevTracker(object):
         devices = []
         for dev in jsonutils.loads(devices_json):
             try:
-                pci_dev_spec = self.dev_filter.device_assignable(dev)
-                if pci_dev_spec is not None:
-                    # Since some configuration parameters cannot be
-                    # discovered by the driver, we need to add them from
-                    # the device specification provided by the operator.
-                    pci_dev_spec.enhanced_pci_device_with_spec_tags(dev)
+                if self.dev_filter.device_assignable(dev):
                     devices.append(dev)
             except exception.PciConfigInvalidSpec as e:
                 # The raised exception is misleading as the problem is not with
                 # the whitelist config but with the host PCI device reported by
                 # libvirt. The code that matches the host PCI device to the
-                # withelist spec reuses the WhitelistPciAddress object to parse
+                # whitelist spec reuses the WhitelistPciAddress object to parse
                 # the host PCI device address. That parsing can fail if the
                 # PCI address has a 32 bit domain. But this should not prevent
                 # processing the rest of the devices. So we simply skip this
@@ -150,7 +147,7 @@ class PciDevTracker(object):
                 # Please note that this except block does not ignore the
                 # invalid whitelist configuration. The whitelist config has
                 # already been parsed or rejected in case it was invalid. At
-                # this point the self.dev_filter representes the parsed and
+                # this point the self.dev_filter represents the parsed and
                 # validated whitelist config.
                 LOG.debug(
                     'Skipping PCI device %s reported by the hypervisor: %s',

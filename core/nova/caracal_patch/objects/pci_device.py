@@ -184,10 +184,21 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject):
                 #     - "parent_ifname": the netdev name of the parent (PF)
                 #        device of a VF
                 #     - "mac_address": the MAC address of the PF
+                #     - "managed": "true"/"false" if the device is managed by
+                #       hypervisor
                 extra_info = self.extra_info
                 data = v if isinstance(v, str) else jsonutils.dumps(v)
                 extra_info.update({k: data})
                 self.extra_info = extra_info
+
+        # Remove the "managed" key if it was set previously
+        # As with the previous case, we must explicitly assign to
+        # self.extra_info so that obj_what_changed detects the modification
+        # and triggers a save later.
+        if "managed" not in dev_dict and "managed" in self.extra_info:
+            extra_info = self.extra_info
+            del extra_info["managed"]
+            self.extra_info = extra_info
 
     def __init__(self, *args, **kwargs):
         super(PciDevice, self).__init__(*args, **kwargs)
@@ -198,6 +209,7 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject):
         self.parent_device = None
         self.child_devices = []
 
+    @base.lazy_load_counter
     def obj_load_attr(self, attr):
         if attr in ['extra_info']:
             # NOTE(danms): extra_info used to be defaulted during init,
@@ -215,11 +227,11 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject):
         return not (self == other)
 
     @classmethod
-    def populate_dev_uuids(cls, context, count):
+    def populate_dev_uuids(cls, context, max_count):
         @db.pick_context_manager_reader
         def get_devs_no_uuid(context):
             return context.session.query(db_models.PciDevice).\
-                    filter_by(uuid=None).limit(count).all()
+                    filter_by(uuid=None).limit(max_count).all()
 
         db_devs = get_devs_no_uuid(context)
 

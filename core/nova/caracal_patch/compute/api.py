@@ -751,6 +751,9 @@ class API:
         if flavor['memory_mb'] < int(image.get('min_ram') or 0):
             raise exception.FlavorMemoryTooSmall()
 
+        # Verify flavor/image Virtio Packed Ring configuration conflict.
+        hardware.get_packed_virtqueue_constraint(flavor, image)
+
         # Image min_disk is in gb, size is in bytes. For sanity, have them both
         # in bytes.
         image_min_disk = int(image.get('min_disk') or 0) * units.Gi
@@ -1031,7 +1034,7 @@ class API:
                             context,
                             ['nova-compute']))
                     if min_version < SUPPORT_VNIC_TYPE_ACCELERATOR:
-                        msg = ("Port with cyborg profile is not avaliable"
+                        msg = ("Port with cyborg profile is not available"
                             " until upgrade finished.")
                         raise exception.ForbiddenPortsWithAccelerator(msg)
 
@@ -3003,7 +3006,7 @@ class API:
 
         The results will be sorted based on the list of sort keys in the
         'sort_keys' parameter (first value is primary sort key, second value is
-        secondary sort ket, etc.). For each sort key, the associated sort
+        secondary sort key, etc.). For each sort key, the associated sort
         direction is based on the list of sort directions in the 'sort_dirs'
         parameter.
 
@@ -3388,7 +3391,7 @@ class API:
                              "error_msg": str(exc)})
             attr = 'task_state'
             state = task_states.DELETING
-            if type(ex) == exception.InstanceNotFound:
+            if type(ex) is exception.InstanceNotFound:
                 attr = 'vm_state'
                 state = vm_states.DELETED
             raise exception.InstanceInvalidState(attr=attr,
@@ -4123,7 +4126,7 @@ class API:
             desired destination of the instance during the cold migration
         :param allow_cross_cell_resize: If True, cross-cell resize is allowed
             for this operation and the host could be in a different cell from
-            the one that the instance is currently in. If False, the speciifed
+            the one that the instance is currently in. If False, the specified
             host must be in the same cell as the instance.
         :returns: ComputeNode object of the requested host
         :raises: CannotMigrateToSameHost if the host is the same as the
@@ -4849,15 +4852,6 @@ class API:
     def get_spice_console(self, context, instance, console_type):
         """Get a url to an instance Console."""
         connect_info = self.compute_rpcapi.get_spice_console(context,
-                instance=instance, console_type=console_type)
-        return {'url': connect_info['access_url']}
-
-    @check_instance_host()
-    @reject_instance_state(
-        task_state=[task_states.DELETING, task_states.MIGRATING])
-    def get_rdp_console(self, context, instance, console_type):
-        """Get a url to an instance Console."""
-        connect_info = self.compute_rpcapi.get_rdp_console(context,
                 instance=instance, console_type=console_type)
         return {'url': connect_info['access_url']}
 
@@ -6197,6 +6191,45 @@ class HostAPI:
                                                payload)
         return result
 
+    def _service_get_all_cells(self, context, disabled, set_zones,
+                               cell_down_support):
+        services = []
+        service_dict = nova_context.scatter_gather_all_cells(context,
+            objects.ServiceList.get_all, disabled, set_zones=set_zones)
+
+        cell0_computes = [
+            x for x in
+            service_dict.get(objects.CellMapping.CELL0_UUID, [])
+            if x.binary == 'nova-compute']
+        for cn in cell0_computes:
+            LOG.warning(
+                'Found compute service %(service)s in cell0; '
+                'This should never happen!',
+                {'service': cn.host})
+
+        for cell_uuid, cell_services in service_dict.items():
+            if not nova_context.is_cell_failure_sentinel(cell_services):
+                services.extend(cell_services)
+            elif cell_down_support:
+                unavailable_services = objects.ServiceList()
+                cid = [cm.id for cm in nova_context.CELLS
+                        if cm.uuid == cell_uuid]
+                # We know cid[0] is in the list because we are using the
+                # same list that scatter_gather_all_cells used
+                hms = objects.HostMappingList.get_by_cell_id(context,
+                                                                cid[0])
+                for hm in hms:
+                    unavailable_services.objects.append(objects.Service(
+                        binary='nova-compute', host=hm.host))
+                LOG.warning("Cell %s is not responding and hence only "
+                            "partial results are available from this "
+                            "cell.", cell_uuid)
+                services.extend(unavailable_services)
+            else:
+                LOG.warning("Cell %s is not responding and hence skipped "
+                            "from the results.", cell_uuid)
+        return services
+
     def service_get_all(self, context, filters=None, set_zones=False,
                         all_cells=False, cell_down_support=False):
         """Returns a list of services, optionally filtering the results.
@@ -6221,30 +6254,9 @@ class HostAPI:
         # and we should always iterate over the cells. However, certain
         # callers need the legacy behavior for now.
         if all_cells:
-            services = []
-            service_dict = nova_context.scatter_gather_all_cells(context,
-                objects.ServiceList.get_all, disabled, set_zones=set_zones)
-            for cell_uuid, service in service_dict.items():
-                if not nova_context.is_cell_failure_sentinel(service):
-                    services.extend(service)
-                elif cell_down_support:
-                    unavailable_services = objects.ServiceList()
-                    cid = [cm.id for cm in nova_context.CELLS
-                           if cm.uuid == cell_uuid]
-                    # We know cid[0] is in the list because we are using the
-                    # same list that scatter_gather_all_cells used
-                    hms = objects.HostMappingList.get_by_cell_id(context,
-                                                                 cid[0])
-                    for hm in hms:
-                        unavailable_services.objects.append(objects.Service(
-                            binary='nova-compute', host=hm.host))
-                    LOG.warning("Cell %s is not responding and hence only "
-                                "partial results are available from this "
-                                "cell.", cell_uuid)
-                    services.extend(unavailable_services)
-                else:
-                    LOG.warning("Cell %s is not responding and hence skipped "
-                                "from the results.", cell_uuid)
+            services = self._service_get_all_cells(context, disabled,
+                                                   set_zones,
+                                                   cell_down_support)
         else:
             services = objects.ServiceList.get_all(context, disabled,
                                                    set_zones=set_zones)
@@ -6666,6 +6678,51 @@ class AggregateAPI:
             availability_zones.update_host_availability_zone_cache(context,
                                                                    host_name)
 
+    def ensure_no_instances_need_to_move_az_when_host_added(
+        self, context, aggregate, host_name
+    ):
+        instances = objects.InstanceList.get_by_host(context, host_name)
+        if not instances:
+            # if no instance then nothing moves
+            return
+
+        new_az = aggregate.metadata.get('availability_zone')
+        if not new_az:
+            # if we add a host to an aggregate without AZ that cannot change
+            # existing, effective AZ of the host. The host was either not
+            # in any AZ and will not be in an AZ. Or the host was already in
+            # an AZ but this aggregate does not challenge that as it has no AZ.
+            return
+
+        # let's gather what is the AZ of the instances on the host before the
+        # host is added to the aggregate
+        aggregates = objects.AggregateList.get_by_host(context, host_name)
+        az = {
+            agg.metadata['availability_zone']
+            for agg in aggregates
+            if 'availability_zone' in agg.metadata}
+
+        # There can only be one or zero AZ names. Two different AZ names case
+        # is already rejected by is_safe_to_update_az()
+        old_az = list(az)[0] if az else None
+
+        # So here we know that the host is being added to a new AZ if it is
+        # different from the existing, effective AZ of the host then the
+        # instances on this host would need to move between AZs, that is not
+        # supported. So reject it.
+        if old_az != new_az:
+            msg = _(
+                "The host cannot be added to the aggregate as the "
+                "availability zone of the host would change from '%s' to '%s' "
+                "but the host already has %d instance(s). Changing the AZ of "
+                "an existing instance is not supported by this action. Move "
+                "the instances away from this host then try again. If you "
+                "need to move the instances between AZs then you can use "
+                "shelve_offload and unshelve to achieve this."
+            ) % (old_az, new_az, len(instances))
+            self._raise_invalid_aggregate_exc(
+                AGGREGATE_ACTION_ADD, aggregate.id, msg)
+
     @wrap_exception()
     def add_host_to_aggregate(self, context, aggregate_id, host_name):
         """Adds the host to an aggregate."""
@@ -6694,6 +6751,8 @@ class AggregateAPI:
 
         self.is_safe_to_update_az(context, aggregate.metadata,
                                   hosts=[host_name], aggregate=aggregate)
+        self.ensure_no_instances_need_to_move_az_when_host_added(
+            context, aggregate, host_name)
 
         aggregate.add_host(host_name)
         self.query_client.update_aggregates(context, [aggregate])
@@ -6729,6 +6788,54 @@ class AggregateAPI:
 
         return aggregate
 
+    def ensure_no_instances_need_to_move_az_when_host_removed(
+        self, context, aggregate, host_name
+    ):
+        instances = objects.InstanceList.get_by_host(context, host_name)
+        if not instances:
+            # if no instance then nothing moves
+            return
+
+        current_az = aggregate.metadata.get('availability_zone')
+        if not current_az:
+            # if we remove a host from an aggregate without AZ that cannot
+            # change existing, effective AZ of the host. If the host has an AZ
+            # before the removal then that is due to a different aggregate
+            # membership so that does not change here. If the host has no AZ
+            # before the removal then it won't have either after the removal
+            # from an aggregate without az
+            return
+
+        # let's gather what would be the AZ of the instances on the host
+        # if we exclude the current aggregate.
+        aggregates = objects.AggregateList.get_by_host(context, host_name)
+        azs = {
+            agg.metadata['availability_zone']
+            for agg in aggregates
+            if agg.id != aggregate.id and 'availability_zone' in agg.metadata
+        }
+
+        # There can only be one or zero AZ names. Two different AZ names case
+        # is already rejected by is_safe_to_update_az()
+        new_az = list(azs)[0] if azs else None
+
+        # So here we know that the host is being removed from an aggregate
+        # that has an AZ. So if the new AZ without this aggregate is different
+        # then, that would mean the instances on this host need to change AZ.
+        # That is not supported.
+        if current_az != new_az:
+            msg = _(
+                "The host cannot be removed from the aggregate as the "
+                "availability zone of the host would change from '%s' to '%s' "
+                "but the host already has %d instance(s). Changing the AZ of "
+                "an existing instance is not supported by this action. Move "
+                "the instances away from this host then try again. If you "
+                "need to move the instances between AZs then you can use "
+                "shelve_offload and unshelve to achieve this."
+            ) % (current_az, new_az, len(instances))
+            self._raise_invalid_aggregate_exc(
+                AGGREGATE_ACTION_DELETE, aggregate.id, msg)
+
     @wrap_exception()
     def remove_host_from_aggregate(self, context, aggregate_id, host_name):
         """Removes host from the aggregate."""
@@ -6745,6 +6852,9 @@ class AggregateAPI:
             aggregate=aggregate,
             action=fields_obj.NotificationAction.REMOVE_HOST,
             phase=fields_obj.NotificationPhase.START)
+
+        self.ensure_no_instances_need_to_move_az_when_host_removed(
+            context, aggregate, host_name)
 
         # Remove the resource provider from the provider aggregate first before
         # we change anything on the nova side because if we did the nova stuff
