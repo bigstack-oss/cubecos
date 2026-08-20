@@ -18,13 +18,24 @@ export HOSTNAME=$(hostname)
 space_filler=$(printf '%79s' '')
 # console list is fixed at boot -- resolve once
 KERNEL_CONSOLES=$(hex_sdk GetKernelConsoleDevices)
+# Write to each console separately, never one shared tee: a console whose getty
+# was restarted loses CLOCAL and blocks open() until carrier, which would stall
+# the boot path and swallow the healthy consoles too. clocal re-arms the line,
+# timeout bounds the write, and a dead console costs 2s instead of the boot.
+bootstrap_console_write()
+{
+    local c
+    for c in $KERNEL_CONSOLES ; do
+        stty -F "$c" clocal >/dev/null 2>&1
+        printf '%s' "$1" | timeout 2 tee "$c" >/dev/null 2>&1
+    done
+    return 0
+}
 # console: blank, home, print, home (one write); log: plain line per status.
-# tee, not >$(...): a multi-device redirect target is ambiguous and fails.
 bootstrap_status()
 {
-    local msg="$1"
-    echo "$msg" >> $BOOTSTRAP_CUBE_LOG
-    echo -n "$space_filler"$'\r'"$msg"$'\r' | tee $KERNEL_CONSOLES >/dev/null 2>&1
+    echo "$1" >> $BOOTSTRAP_CUBE_LOG
+    bootstrap_console_write "$space_filler"$'\r'"$1"$'\r'
 }
 BootstrapAndClusterstart()
 {
@@ -123,7 +134,7 @@ PostBootRecovery()
 export CLUSTER_SIZE=$(cubectl node list | wc -l)
 
 if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; then
-    echo -n "                                                                    " $'\r' | tee $KERNEL_CONSOLES
+    bootstrap_console_write "$space_filler"$'\r'
     if grep -q manual $BOOTSTRAP_CUBE_MODE ; then
         bootstrap_status "Auto bootstrap is disabled"
         hex_log_event -e BSP00009I "interface=system,host=$HOSTNAME,service=bootstrap"
