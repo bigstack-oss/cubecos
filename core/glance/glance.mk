@@ -59,16 +59,12 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/glance/glance-manage.conf.sample $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/glance-scrubber.conf.sample $(ROOTDIR)/tmp/glance/
 	$(Q)# copy more configs
-	$(Q)cp -f $(COREDIR)/glance/glance-api-paste.ini $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/glance-swift.conf $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/glance-rootwrap.conf $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/schema-image.json $(ROOTDIR)/tmp/glance/
-	$(Q)cp -rf $(COREDIR)/glance/metadefs $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/openstack-glance-api.service $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/openstack-glance-scrubber.service $(ROOTDIR)/tmp/glance/
 	$(Q)cp -f $(COREDIR)/glance/glance-sudoers $(ROOTDIR)/tmp/glance/
-	$(Q)cp -f $(COREDIR)/glance/glance_cinder_store.filters $(ROOTDIR)/tmp/glance/
-	$(Q)cp -f $(COREDIR)/glance/os-brick.filters $(ROOTDIR)/tmp/glance/
 
 # install system directories and files
 rootfs_install::
@@ -76,22 +72,29 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/lib/glance/images
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/glance/metadefs
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-api.conf.sample /etc/glance/glance-api.conf
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance-api-paste.ini /etc/glance/glance-api-paste.ini
+	$(Q)# glance-api-paste.ini, the metadefs and the two rootwrap filter files are
+	$(Q)# upstream data the wheels already put under the venv prefix -- glance's own for
+	$(Q)# the paste config and the metadefs, glance_store's for glance_cinder_store and
+	$(Q)# os-brick's for its own. They used to be checked into core/glance verbatim,
+	$(Q)# which meant they only ever moved when someone remembered to re-copy them: the
+	$(Q)# carried metadefs were still glance 26.1.0's, three files behind 2024.1, and the
+	$(Q)# carried paste config still had the pre-bobcat pipeline layout.
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/glance/glance-api-paste.ini /etc/glance/glance-api-paste.ini
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-cache.conf.sample /etc/glance/glance-cache.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-scrubber.conf.sample /etc/glance/glance-scrubber.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance-swift.conf /etc/glance/glance-swift.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance-image-import.conf.sample /etc/glance/glance-image-import.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-rootwrap.conf /etc/glance/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/schema-image.json /etc/glance/schema-image.json
-	$(Q)chroot $(ROOTDIR) bash -c "install -p -D -m 640 /tmp/glance/metadefs/*.json /etc/glance/metadefs/"
+	$(Q)chroot $(ROOTDIR) bash -c "install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/glance/metadefs/*.json /etc/glance/metadefs/"
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-api.service /usr/lib/systemd/system/openstack-glance-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-scrubber.service /usr/lib/systemd/system/openstack-glance-scrubber.service
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/run/glance
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/log/glance
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/glance/glance-sudoers /etc/sudoers.d/glance
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/glance/rootwrap.d
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance_cinder_store.filters /etc/glance/rootwrap.d
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/os-brick.filters /etc/glance/rootwrap.d
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/glance/rootwrap.d/glance_cinder_store.filters /etc/glance/rootwrap.d
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/os-brick/rootwrap.d/os-brick.filters /etc/glance/rootwrap.d
 
 # adjust file ownerships and permissions
 rootfs_install::
