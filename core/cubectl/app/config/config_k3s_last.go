@@ -311,13 +311,26 @@ func untarLoalCephImageSet() error {
 }
 
 func syncCephImagesToCubeRegistry() error {
+	// Importing these costs ~10 min (821 MiB tarball -> 2.27 GiB of layers,
+	// loaded and pushed), and it ran on every commit even though the registry
+	// already served them. Import only what is missing.
+	missing := []docker.Image{}
+	for _, image := range ceph.CsiImages {
+		if !docker.ExistsInCubeRegistry(image) {
+			missing = append(missing, image)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
 	err := untarLoalCephImageSet()
 	if err != nil {
 		return err
 	}
 
 	defer removeTmpUntarFiles(ceph.CsiLocalStore)
-	err = pushImagesToCuebRegistry(ceph.CsiImages)
+	err = pushImagesToCuebRegistry(missing)
 	if err != nil {
 		return err
 	}

@@ -24,21 +24,17 @@ func GetRadosGatewayUrl() string {
 	return fmt.Sprintf("http://%s:%d/", settings.GetControllerIp(), RadosGatewayPort)
 }
 
+// getRegexMatchedHosts returns every v1 monitor endpoint on a "mon host = " line.
+// It must not filter them against this node's management IP: monitors bind the
+// storage network, so that comparison matched nothing on any cluster with a
+// separate storage VLAN and left ceph-csi without monitors.
 func getRegexMatchedHosts(line string) []string {
 	regex := regexp.MustCompile(`([\d\.]+:6789)`)
 	matches := regex.FindAllStringSubmatch(line, -1)
 	hosts := []string{}
-	hostIP := settings.GetMgmtIfIp()
 
 	for _, match := range matches {
-		if !strings.Contains(match[1], hostIP) {
-			continue
-		}
-
-		for _, m := range matches {
-			hosts = append(hosts, m[1])
-		}
-		break
+		hosts = append(hosts, match[1])
 	}
 
 	return hosts
