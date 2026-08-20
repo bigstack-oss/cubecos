@@ -221,6 +221,14 @@ _power_roll_kick()
             ;;
     esac
 
+    # Hand off the active ceph-mgr before taking its node down: the dashboard
+    # wedges on mgr failover, and auto-repair stands down while rolling, so
+    # the roll fails it over and verifies/bounces the dashboard itself.
+    # UI-only, so a failure is logged, not a pause.
+    echo "handing off ceph-mgr/dashboard if active on $host"
+    remote_run $master "$HEX_SDK ceph_mgr_dashboard_ensure $host" </dev/null || \
+        echo "ceph-mgr dashboard not verified healthy; continuing (cluster check will flag it)"
+
     if ! is_sshable $ip ; then
         _power_roll_pause "$host ($ip) is unreachable"
         return 1
