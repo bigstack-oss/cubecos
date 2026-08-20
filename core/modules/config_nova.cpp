@@ -481,7 +481,15 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["filter_scheduler"]["host_subset_size"] = "3";
         cfg["filter_scheduler"]["shuffle_best_same_weighed_hosts"] = "true";
         cfg["filter_scheduler"]["ram_weight_multiplier"] = "5.0";
-        cfg["filter_scheduler"]["enabled_filters"] = "AvailabilityZoneFilter,ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,AggregateInstanceExtraSpecsFilter,PciPassthroughFilter";
+        // AvailabilityZoneFilter is gone as of nova 29.0.0 -- naming a filter nova no
+        // longer registers is fatal, not ignored: HostManager._choose_host_filters
+        // raises SchedulerHostFilterNotFound and nova-scheduler exits on start. The
+        // map_az_to_placement_aggregate pre-filter does the same job and is now always
+        // on, which is also why [scheduler] query_placement_for_availability_zone was
+        // removed rather than defaulted. It matches a nova aggregate carrying an
+        // availability_zone to the placement aggregate of the same uuid, so an AZ only
+        // filters once `nova-manage placement sync_aggregates` has paired them.
+        cfg["filter_scheduler"]["enabled_filters"] = "ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,AggregateInstanceExtraSpecsFilter,PciPassthroughFilter";
 
         // Unset UpgradeLevelNovaCompute or live migrations fail
         // https://bugzilla.redhat.com/show_bug.cgi?id=1849235
