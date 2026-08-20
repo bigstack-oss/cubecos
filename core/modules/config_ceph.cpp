@@ -1319,8 +1319,27 @@ MountCephfsStore()
         HexUtilSystemF(0, 0, "systemctl start ceph-umountfs");
         // Register this node in the grace DB before ganesha joins (idempotent; also covers a same-hostname rejoin). See #1231.
         // Bounded for the same reason as the remove in RemoveMon(): it is a RADOS
-        // call, and hanging here would wedge the commit that owns it.
-        HexUtilSystemF(0, 0, "timeout 60 ganesha-rados-grace -p %s add %s", GANESHA_RECOV_POOL, s_hostname.c_str());
+        // call, and hanging here would wedge the commit that owns it. The bound can
+        // expire on a node bootstrapping against a still-recovering cluster, so
+        // verify the membership took and retry: ganesha's rados_cluster backend
+        // exits fatally without it, and no restart can recover that.
+        bool joined = false;
+        for (int i = 0; i < 3 && !joined; ++i) {
+            HexUtilSystemF(0, 0, "timeout 60 ganesha-rados-grace -p %s add %s", GANESHA_RECOV_POOL, s_hostname.c_str());
+            const ExecSyncResult gr = ExecBashSync(
+                0,
+                false,
+                false,
+                {},
+                "timeout 30 ganesha-rados-grace -p " + std::string(GANESHA_RECOV_POOL)
+                    + " dump 2>/dev/null | awk '{print $1}' | grep -qx " + s_hostname.c_str());
+            joined = (gr.exitCode == 0);
+            if (!joined)
+                sleep(10);
+        }
+        if (!joined)
+            HexLogError("%s is not in the %s grace DB; nfs-ganesha cannot start until it is",
+                        s_hostname.c_str(), GANESHA_RECOV_POOL);
         HexUtilSystemF(0, 0, "systemctl start nfs-ganesha");
     }
 

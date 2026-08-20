@@ -3292,6 +3292,22 @@ ceph_fs_mds_reorder()
     fi
 }
 
+GANESHA_CONF=${GANESHA_CONF:-/etc/ganesha/ganesha.conf}
+
+# Make this node a member of the ganesha grace DB, idempotently. ganesha's
+# rados_cluster backend exits fatally when its nodeid is not a member, so
+# restarting the daemon cannot recover that state -- the membership must come
+# back first. Registration at commit time is bounded and can expire silently on
+# a node booting into a still-recovering cluster; this restores it.
+ceph_ganesha_grace_join()
+{
+    local pool=$(awk -F'"' '/^[[:space:]]*pool[[:space:]]*=/{print $2; exit}' $GANESHA_CONF 2>/dev/null)
+    pool=${pool:-cephfs_data}
+    timeout 30 ganesha-rados-grace -p $pool dump 2>/dev/null | awk '{print $1}' | grep -qx "$HOSTNAME" && return 0
+    Quiet -n timeout 60 ganesha-rados-grace -p $pool add $HOSTNAME
+    timeout 30 ganesha-rados-grace -p $pool dump 2>/dev/null | awk '{print $1}' | grep -qx "$HOSTNAME"
+}
+
 ceph_nfs_ganesha()
 {
     case $1 in
