@@ -3,13 +3,26 @@
 
 ROOTFS_DNF += qemu-img
 
-# install glance
+# glance runs out of the caracal venv, not the antelope one it shared with every other
+# 2023.1 service. glance 28.2.0 pulls glance-store 4.7.1, os-brick 6.7.3, taskflow 5.6
+# and castellan 5.0; installing that beside nova/neutron/cinder would have upgraded
+# the whole antelope dependency set under them, so the image service moves alone into
+# /opt/openstack-caracal (skyline was the first occupant, keystone the second).
+# Resolved against os-caracal-pip-upper-constraints.txt the two sets are disjoint --
+# glance adds 25 packages there and changes no version keystone or skyline already
+# holds.
+#
+# The /usr/bin/glance-* symlinks are the only thing outside this venv that has to
+# follow: the service units, config_glance.cpp and hex_sdk all reach glance through
+# them. The glance-3 and glance-rootwrap-3 links are gone -- they were RDO console
+# script names that no pip-installed glance has ever provided, so they have been
+# dangling since the yoga-to-antelope hop moved this component off the rpm.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			glance==26.1.0 \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			glance==28.2.0 \
 			os-brick \
 			python-cinderclient \
 			python-glanceclient \
@@ -17,21 +30,19 @@ rootfs_install::
 			pysendfile"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance /usr/bin/glance
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-3 /usr/bin/glance-3
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-api /usr/bin/glance-api
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-cache-cleaner /usr/bin/glance-cache-cleaner
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-cache-manage /usr/bin/glance-cache-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-cache-prefetcher /usr/bin/glance-cache-prefetcher
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-cache-pruner /usr/bin/glance-cache-pruner
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-control /usr/bin/glance-control
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-manage /usr/bin/glance-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-replicator /usr/bin/glance-replicator
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-rootwrap /usr/bin/glance-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-rootwrap-3 /usr/bin/glance-rootwrap-3
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-scrubber /usr/bin/glance-scrubber
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-status /usr/bin/glance-status
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/glance-wsgi-api /usr/bin/glance-wsgi-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance /usr/bin/glance
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-api /usr/bin/glance-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-cache-cleaner /usr/bin/glance-cache-cleaner
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-cache-manage /usr/bin/glance-cache-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-cache-prefetcher /usr/bin/glance-cache-prefetcher
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-cache-pruner /usr/bin/glance-cache-pruner
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-control /usr/bin/glance-control
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-manage /usr/bin/glance-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-replicator /usr/bin/glance-replicator
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-rootwrap /usr/bin/glance-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-scrubber /usr/bin/glance-scrubber
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-status /usr/bin/glance-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-wsgi-api /usr/bin/glance-wsgi-api
 
 # prepare the build directory
 rootfs_install::
