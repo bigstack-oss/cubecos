@@ -169,6 +169,31 @@ _power_roll_drain_poll()
     done
 }
 
+_power_roll_api_ready()
+{
+    # Every control node must actually SERVE the APIs the drain calls, not just
+    # listen: neutron/nova bind their port early in startup and drop requests
+    # until their workers are up, while haproxy re-enables the rejoined backend
+    # after two passing checks. A live-migration pre-check balanced onto one of
+    # those marks the instance ERROR (no retry in nova's pre-check path), so
+    # gate the next drain on a real response from every node.
+    local deadline=$(( $(date +%s) + ${ROLLING_API_READY_TIMEOUT:-600} ))
+    local bad
+    while : ; do
+        bad=""
+        for n in $(cubectl node list -j | jq -r '.[].ip.management') ; do
+            for p in 9696 8774 ; do
+                Quiet timeout 5 curl -s -o /dev/null http://$n:$p/ || bad="$bad $n:$p"
+            done
+        done
+        [ -z "$bad" ] && return 0
+        [ $(date +%s) -ge $deadline ] && break
+        sleep 10
+    done
+    echo "api endpoints not serving:$bad"
+    return 1
+}
+
 _power_roll_kick()
 {
     # Drain (if compute-bearing) and reboot one node. Pauses the job on any
@@ -191,6 +216,11 @@ _power_roll_kick()
             return 1
         fi
     done
+    local apierr=$(_power_roll_api_ready)
+    if [ -n "$apierr" ] ; then
+        _power_roll_pause "$apierr -- a rejoined node is still starting; wait, then run rolling_$(_power_roll_kind) continue"
+        return 1
+    fi
 
     _power_roll_set_str inflight "$host"
     _power_roll_set_node_num "$host" started $(date +%s)
