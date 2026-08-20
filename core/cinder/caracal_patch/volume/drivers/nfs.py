@@ -27,7 +27,6 @@ from oslo_concurrency import processutils as putils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import units
-import six
 
 from cinder import context
 from cinder import coordination
@@ -239,7 +238,7 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
                               '%(count)d attempts.',
                               {'share': nfs_share,
                                'count': num_attempts})
-                    raise exception.NfsException(six.text_type(e))
+                    raise exception.NfsException(str(e))
                 LOG.debug('Mount attempt %(attempt)d failed: %(exc)s.\n'
                           'Retrying mount ...',
                           {'attempt': attempt, 'exc': e})
@@ -395,18 +394,22 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             raise exception.ExtendVolumeError(reason='Insufficient space to'
                                               ' extend volume %s to %sG'
                                               % (volume.id, new_size))
-        path = self.local_path(volume)
+        # Use the active image file because this volume might have snapshot(s).
+        active_file = self.get_active_image_from_info(volume)
+        active_file_path = os.path.join(self._local_volume_dir(volume),
+                                        active_file)
         LOG.info('Resizing file to %sG...', new_size)
         file_format = None
         admin_metadata = objects.Volume.get_by_id(
             context.get_admin_context(), volume.id).admin_metadata
+
         if admin_metadata and 'format' in admin_metadata:
             file_format = admin_metadata['format']
-        image_utils.resize_image(path, new_size,
+        image_utils.resize_image(active_file_path, new_size,
                                  run_as_root=self._execute_as_root,
                                  file_format=file_format)
         if file_format == 'qcow2' and not self._is_file_size_equal(
-                path, new_size):
+                active_file_path, new_size):
             raise exception.ExtendVolumeError(
                 reason='Resizing image file failed.')
 
@@ -641,6 +644,8 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         # when this snapshot was created.
         img_info = self._qemu_img_info(forward_path, snapshot.volume.name)
         path_to_snap_img = os.path.join(vol_path, img_info.backing_file)
+        snap_backing_file_img_info = self._qemu_img_info(path_to_snap_img,
+                                                         snapshot.volume.name)
 
         path_to_new_vol = self._local_path_volume(volume)
 
@@ -686,12 +691,14 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
                         'luks',
                         passphrase_file=new_pass_file.name,
                         src_passphrase_file=src_pass_file.name,
-                        run_as_root=self._execute_as_root)
+                        run_as_root=self._execute_as_root,
+                        data=snap_backing_file_img_info)
         else:
             image_utils.convert_image(path_to_snap_img,
                                       path_to_new_vol,
                                       out_format,
-                                      run_as_root=self._execute_as_root)
+                                      run_as_root=self._execute_as_root,
+                                      data=snap_backing_file_img_info)
 
         self._set_rw_permissions_for_all(path_to_new_vol)
 
