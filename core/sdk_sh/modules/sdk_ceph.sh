@@ -3221,8 +3221,31 @@ ceph_fs_mds_init()
         Quiet -n $CEPH fs set cephfs allow_standby_replay true
         Quiet -n $CEPH fs set cephfs session_timeout 30
         Quiet -n $CEPH fs set cephfs session_autoclose 30
-        Quiet -n ceph_fs_mds_reorder
+        # Every probe in the reorder goes through the mgr, which on a cold boot
+        # is often not serving yet -- waiting for it inline cost 389s of one
+        # boot with every commit worker idle behind it. Run it detached so the
+        # commit is not blocked and the placement still happens: skipping it and
+        # leaving it to the boot-end repair pass would never run on a
+        # repair-opted-out cluster, where that pass is skipped entirely.
+        setsid $HEX_SDK ceph_fs_mds_reorder_when_ready </dev/null >/dev/null 2>&1 &
     fi
+}
+
+# Wait (bounded) for a serving mgr, then reorder MDS placement. Detached from
+# the ceph commit by ceph_fs_mds_init -- never call this inline.
+ceph_fs_mds_reorder_when_ready()
+{
+    local deadline=$(( SECONDS + ${CEPH_MGR_READY_TIMEOUT:-900} ))
+    while [ $SECONDS -lt $deadline ] ; do
+        if [ "x$($CEPH mgr dump -f json 2>/dev/null | jq -r .available)" = "xtrue" ] ; then
+            Quiet -n ceph_fs_mds_reorder
+            return 0
+        fi
+        sleep 10
+    done
+
+    log_error "ceph_fs_mds_reorder_when_ready: mgr never became available on $(hostname); MDS placement left as-is"
+    return 1
 }
 
 ceph_fs_mds_reorder()
