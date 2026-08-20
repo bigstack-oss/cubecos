@@ -674,7 +674,13 @@ Commit(bool modified, int dryLevel)
         }
         else {
             std::string peer = s_ha ? GetControllerPeers(myip, s_ctrlAddrs)[0] : ctrlIp;
-            HexUtilSystemF(0, 0, "scp -r root@%s:%s %s", peer.c_str(), CERT_DIR, CERT_DIR);
+            // Copy into the PARENT: scp -r <src>/ <dst>/ where dst exists lands
+            // the tree at <dst>/certs/, so ca_01.pem never appears where
+            // octavia.conf points. Any worker flow on such a node then dies with
+            // "Failed to load CA Cert" -- amphora builds and failovers only work
+            // when they happen to land on the master, which is why LB recovery
+            // looked intermittent.
+            HexUtilSystemF(0, 0, "scp -r root@%s:%s /etc/octavia/", peer.c_str(), CERT_DIR);
         }
         HexSystemF(0, "chmod -R 755 %s", CERT_DIR);
     }
