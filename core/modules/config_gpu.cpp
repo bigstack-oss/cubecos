@@ -789,6 +789,17 @@ IsVfBackedType(const json11::Json& type)
 // of every sriovVgpu/migBackedVgpu GPU. Regenerating everything from the
 // truth file means entries for GPUs switched away from either type
 // disappear without any dedicated cleanup logic.
+//
+// Every entry carries a vgpu_type tag naming the profile its VF was carved
+// to. Nova keeps unrecognised device_spec keys as pool tags and matches them
+// against the keys present in a request's spec, so this tag is the only thing
+// that stops two aliases on one card from being interchangeable: without it
+// every vGPU VF on the node reports the same vendor:product and an alias has
+// no address field, so a flavor gets whichever VF the pool's free list hands
+// out. Measured wrong 4 times out of 4 on cn13 2026-08-21, in both boot
+// orders. The tag has to appear on *every* entry, including single-profile
+// cards - an alias without it is unconstrained by that key and will match a
+// tagged pool belonging to a different card.
 static std::string
 BuildNovaGpuConfContent(const json11::Json& gpuConfig,
                         const std::map<std::string, std::vector<PciVf>>& vfsByGpuId)
@@ -810,19 +821,42 @@ BuildNovaGpuConfContent(const json11::Json& gpuConfig,
 
         const std::vector<PciVf>& vfs = vfsIt->second;
 
+        // Walks the profiles in request order and consumes that many VFs each -
+        // the same expansion BuildVfAssignmentPlan performs when it writes the
+        // types, so profiles[0] owns the first block of VFs, profiles[1] the
+        // next, and so on. That correspondence is what lets a whitelist entry
+        // be tagged with the profile its VF actually carries.
+        //
+        // vfIndex advances even for a profile whose alias is unusable: skipping
+        // the advance would shift every later profile's VFs by that count and
+        // silently mistag them.
+        size_t vfIndex = 0;
+
         for (const json11::Json& profile : entry["profiles"].array_items()) {
-            if (!profile["alias"].is_string()) {
+            const long count = (long)profile["count"].number_value();
+
+            if (!profile["alias"].is_string() || !profile["id"].is_number()) {
+                HexLogWarning("%s: GPU %s has a profile with no usable alias/id; its %ld VF(s) are "
+                              "left out of the drop-in", NOVA_GPU_CONF,
+                              entry["id"].string_value().c_str(), count);
+                vfIndex += (size_t)((count > 0) ? count : 0);
                 continue;
             }
+
+            const std::string vgpuType = std::to_string((int)profile["id"].number_value());
+
             content += "alias = { \"name\": \"" + profile["alias"].string_value() +
                        "\", \"device_type\": \"type-VF\", \"vendor_id\": \"" + vfs[0].vendorId +
-                       "\", \"product_id\": \"" + vfs[0].productId + "\" }\n";
-        }
+                       "\", \"product_id\": \"" + vfs[0].productId +
+                       "\", \"vgpu_type\": \"" + vgpuType + "\" }\n";
 
-        for (size_t i = 0; i < vfs.size(); i++) {
-            content += "passthrough_whitelist = { \"vendor_id\": \"" + vfs[i].vendorId +
-                       "\", \"product_id\": \"" + vfs[i].productId +
-                       "\", \"address\": \"" + vfs[i].address + "\", \"managed\": \"no\" }\n";
+            for (long i = 0; i < count && vfIndex < vfs.size(); i++, vfIndex++) {
+                content += "passthrough_whitelist = { \"vendor_id\": \"" + vfs[vfIndex].vendorId +
+                           "\", \"product_id\": \"" + vfs[vfIndex].productId +
+                           "\", \"address\": \"" + vfs[vfIndex].address +
+                           "\", \"vgpu_type\": \"" + vgpuType +
+                           "\", \"managed\": \"no\" }\n";
+            }
         }
     }
 
