@@ -132,17 +132,130 @@ TeardownSriov(const std::string& sysfsAddr)
     RunSriovManageWithRetry("-d", sysfsAddr);
 }
 
+// Pulls one "Field Name : value" pair out of an `nvidia-smi -q` dump.
+// Returns false when the field is absent or has no value, which every caller
+// treats as "not confirmed" rather than as a default.
+static bool
+NvidiaSmiFieldValue(const std::string& output, const char* field, std::string* value)
+{
+    const size_t at = output.find(field);
+    if (at == std::string::npos) {
+        return false;
+    }
+
+    const size_t colon = output.find(':', at);
+    if (colon == std::string::npos) {
+        return false;
+    }
+
+    size_t eol = output.find('\n', colon);
+    if (eol == std::string::npos) {
+        eol = output.size();
+    }
+
+    const std::string raw = output.substr(colon + 1, eol - colon - 1);
+    const size_t first = raw.find_first_not_of(" \t\r");
+    if (first == std::string::npos) {
+        return false;
+    }
+    const size_t last = raw.find_last_not_of(" \t\r");
+
+    *value = raw.substr(first, last - first + 1);
+    return true;
+}
+
+// Whether this card can host vGPUs of more than one framebuffer size at once.
+// This is a static capability; the mode that uses it is not (see
+// EnableHeterogeneousVgpuMode).
+//
+// Two spelling traps in one output: the capability is printed as
+// "Heterogenous Multi-vGPU" - upstream is missing an 'e' - while the mode's
+// state a few lines later is spelled "vGPU Heterogeneous Mode" correctly.
+// The value is compared for equality rather than searched for, because the
+// negative form is "Not Supported" and contains "Supported".
+//
+// An unreadable answer is a "no": the caller refuses a mixed-size request
+// rather than reaching a mode switch that must fail after the card's previous
+// carve has already been torn down.
+static bool
+HeterogeneousVgpuSupported(const std::string& gpuId)
+{
+    const std::string output = HexUtilPOpen("%s -q -i %s", NVIDIA_SMI, gpuId.c_str());
+
+    std::string value;
+    if (!NvidiaSmiFieldValue(output, "Heterogenous Multi-vGPU", &value)) {
+        HexLogWarning("gpu_resource_set: could not read the heterogeneous vGPU capability of GPU %s; "
+                      "treating it as unsupported", gpuId.c_str());
+        return false;
+    }
+
+    return value == "Supported";
+}
+
+// Turns on the mode that lets one PF carry vGPUs of different framebuffer
+// sizes. `nvidia-smi vgpu -shm` is the only interface - the PF has no
+// nvidia/ sysfs directory, only its VFs do (cn13, 2026-08-21).
+//
+// The ordering this must be called in is not negotiable: after
+// sriov-manage -e, before any current_vgpu_type write. The mode is *runtime*
+// state and sriov-manage clears it in both directions, so setting it before
+// the VFs are enabled is silently undone by the driver rebind - the mode reads
+// Enabled beforehand and Disabled after, every VF's creatable_vgpu_types stays
+// collapsed to one framebuffer size, and the cross-size write still fails.
+// That failure is indistinguishable from "the hardware cannot do it".
+//
+// The same property is why there is no undo on teardown: releasing the VFs
+// clears the mode by itself, so unlike MIG mode it can never outlive the carve
+// it belongs to and no card is left in a mode nothing records.
+//
+// The exit code is trustworthy (rc=19 "In use by another client" when a vGPU
+// already exists, rc=6 for an unknown -i), and the mode is read back anyway
+// because a silent no-op is the one outcome this must not ship with. The state
+// field reads N/A on a MIG-enabled card, which the equality check rejects.
+static bool
+EnableHeterogeneousVgpuMode(const std::string& gpuId)
+{
+    if (HexUtilSystemF(0, 0, "%s vgpu -shm 1 -i %s", NVIDIA_SMI, gpuId.c_str()) != 0) {
+        HexLogError("gpu_resource_set: failed to enable heterogeneous vGPU mode on GPU %s",
+                    gpuId.c_str());
+        return false;
+    }
+
+    const std::string output = HexUtilPOpen("%s -q -i %s", NVIDIA_SMI, gpuId.c_str());
+
+    std::string value;
+    if (!NvidiaSmiFieldValue(output, "vGPU Heterogeneous Mode", &value) || value != "Enabled") {
+        HexLogError("gpu_resource_set: heterogeneous vGPU mode did not take effect on GPU %s "
+                    "(mode reads '%s')", gpuId.c_str(), value.c_str());
+        return false;
+    }
+
+    return true;
+}
+
 // Enables the PF's VFs and writes each requested profile id into that many
 // VFs' current_vgpu_type - the write is what actually carves the vGPU.
 // profiles must already be validated. sriov-manage -e is idempotent for an
 // already-enabled GPU (verified on cn13, 2026-07-17), so this is safe to
 // re-run from boot-time Commit().
 static bool
-ApplySriovVgpu(const std::string& pciAddress, const json11::Json& profiles)
+ApplySriovVgpu(const std::string& gpuId, const std::string& pciAddress,
+               const json11::Json& profiles)
 {
     const std::string sysfsAddr = SysfsPciAddr(pciAddress);
 
     if (!RunSriovManageWithRetry("-e", sysfsAddr)) {
+        return false;
+    }
+
+    // Has to happen here: the VFs are up and nothing is carved yet. Cards that
+    // do not advertise the capability are left alone - a request that actually
+    // needs the mode is refused by ValidateVgpuProfiles long before this point,
+    // so reaching here without it means a single-size carve, which behaves
+    // identically either way (verified on cn13: same types, same placements,
+    // same 32-vGPU ceiling with the mode on and off).
+    if (HeterogeneousVgpuSupported(gpuId) && !EnableHeterogeneousVgpuMode(gpuId)) {
+        TeardownSriov(sysfsAddr);
         return false;
     }
 
@@ -831,6 +944,14 @@ GetGpuTotalVramMiB(const char* gpuId)
 //   non-negative-integer ids and positive-integer counts
 // - existence: every id must be an available profile of the requested type
 //   on this GPU, as reported by gpu_vgpu_profile_list
+// - heterogeneity (SR-IOV): a request spanning more than one framebuffer size
+//   needs the card's heterogeneous vGPU mode, so the card has to advertise the
+//   capability. Checked here rather than left to apply time because
+//   gpu_unset_current_type has already destroyed the previous carve by then -
+//   an apply-time rejection costs the card its working configuration. It runs
+//   ahead of the capacity rule below because it reads nothing from sysfs: a
+//   card that cannot serve the request at all should say so by name even on a
+//   node where sriov_totalvfs happens to be unreadable.
 // - capacity (SR-IOV): each vGPU instance occupies one VF, so the total
 //   requested count must fit within the PF's sriov_totalvfs
 // - capacity (MIG-backed), three rules:
@@ -846,10 +967,10 @@ GetGpuTotalVramMiB(const char* gpuId)
 //   Rule 3 does not model cross-profile slice coupling (R7: 1g/2g/4g partitions
 //   draw on one shared pool, so mixing partition *shapes* can run out of slices
 //   even when each shape's own instance count is fine). nvidia-smi mig -cgi
-//   enforces that at apply time and ApplyMigVgpu is fail-fast, matching how the
-//   SR-IOV homogeneous-mode restriction (discovered only via cn13 hardware
-//   testing, see spec.md §4b/§8) was handled: apply-time rejection first,
-//   tighten validation later if real hardware shows it's worth pre-checking.
+//   enforces that at apply time and ApplyMigVgpu is fail-fast. The SR-IOV
+//   framebuffer-size restriction started out the same way and has since been
+//   promoted to a pre-check (the heterogeneity rule above), for the reason
+//   given there: by apply time the previous carve is already gone.
 //
 // migTypes is the parsed `nvidia-smi vgpu -s -v` geometry, supplied by the
 // caller so the same output serves validation and persistence; it is empty for
@@ -919,6 +1040,44 @@ ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profile
     for (const int id : requestedIds) {
         if (availableIds.find(id) == availableIds.end()) {
             HexLogError("gpu_resource_set: profile id %d is not a valid %s profile for GPU %s", id, newType, gpuId);
+            return false;
+        }
+    }
+
+    if (strcmp(newType, "sriovVgpu") == 0) {
+        // Not gated on pciAddress: this rule is about the card's advertised
+        // capability, which nvidia-smi answers by UUID.
+        std::map<int, double> sriovVramMiBById;
+
+        for (const json11::Json& profile : profileList[listKey].array_items()) {
+            if (profile["id"].is_number()) {
+                sriovVramMiBById[(int)profile["id"].number_value()] =
+                    profile["vramMiB"].number_value();
+            }
+        }
+
+        std::set<double> requestedSizes;
+
+        for (const int id : requestedIds) {
+            const std::map<int, double>::const_iterator it = sriovVramMiBById.find(id);
+
+            // Fails closed: without every requested profile's framebuffer size
+            // there is no way to tell whether the request mixes sizes, and
+            // guessing "it doesn't" is the direction that reaches the card.
+            if (it == sriovVramMiBById.end() || it->second <= 0) {
+                HexLogError("gpu_resource_set: could not read the framebuffer size of profile %d "
+                            "on GPU %s; cannot tell whether the request mixes sizes", id, gpuId);
+                return false;
+            }
+
+            requestedSizes.insert(it->second);
+        }
+
+        if (requestedSizes.size() > 1 && !HeterogeneousVgpuSupported(gpuId)) {
+            HexLogError("gpu_resource_set: the request mixes %zu vGPU framebuffer sizes, but GPU %s "
+                        "does not report 'Heterogenous Multi-vGPU : Supported'; a single-size "
+                        "request is required on this card",
+                        requestedSizes.size(), gpuId);
             return false;
         }
     }
@@ -1245,7 +1404,7 @@ ResourceSetMain(int argc, char* argv[])
             });
         }
 
-        if (!ApplySriovVgpu(pciAddress, requested)) {
+        if (!ApplySriovVgpu(gpuId, pciAddress, requested)) {
             HexLogError("gpu_resource_set: failed to apply SR-IOV vGPU partitioning on GPU %s", gpuId);
             return EXIT_FAILURE;
         }
@@ -1451,7 +1610,7 @@ Commit(bool modified, int dryLevel)
             // running VMs.
             if (!VfVgpuApplied(SysfsPciAddr(pciAddress))) {
                 const bool applied = (type == "sriovVgpu")
-                    ? ApplySriovVgpu(pciAddress, entry["profiles"])
+                    ? ApplySriovVgpu(id, pciAddress, entry["profiles"])
                     : ApplyMigVgpu(id, pciAddress, entry["profiles"]);
 
                 if (!applied) {
