@@ -936,6 +936,39 @@ WriteNovaGpuConf(void)
     return true;
 }
 
+// Removes one GPU's entry from the truth file.
+//
+// Used on the failed-apply path. By the time an apply can fail,
+// gpu_unset_current_type has already released the card's previous carve, so the
+// entry that is still in config.json describes hardware state that no longer
+// exists - and the Nova drop-in generated from it whitelists VF addresses that
+// are gone (three-way divergence measured on cn13 2026-08-20, resolved until
+// then only by the next successful carve or a reboot). Dropping the entry
+// records what is actually true: this card has no carve.
+static bool
+DropGpuConfigEntry(const char* gpuId)
+{
+    HexTempFile tmpFile;
+    if (tmpFile.fd() < 0) {
+        HexLogError("gpu_resource_set: failed to create a temporary file");
+        return false;
+    }
+    tmpFile.close();
+
+    if (HexUtilSystemF(0, 0, "jq -c --arg id \"%s\" 'map(select(.id != $id))' %s > %s",
+                       gpuId, GPU_CONFIG_FILE, tmpFile.path()) != 0) {
+        HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
+        return false;
+    }
+
+    if (HexUtilSystemF(0, 0, "mv %s %s", tmpFile.path(), GPU_CONFIG_FILE) != 0) {
+        HexLogError("gpu_resource_set: failed to persist GPU %s config", gpuId);
+        return false;
+    }
+
+    return true;
+}
+
 // Looks up GPU gpuId via gpu_device_list, the single source of truth for
 // GPU id/name/type/pciAddress - it already unions live nvidia-smi data with
 // `config.json` entries, specifically for GPUs no longer visible to nvidia-smi
@@ -1440,6 +1473,39 @@ ResourceSetMain(int argc, char* argv[])
 
         if (!ApplySriovVgpu(gpuId, pciAddress, requested)) {
             HexLogError("gpu_resource_set: failed to apply SR-IOV vGPU partitioning on GPU %s", gpuId);
+
+            // Leave the three views of this card agreeing with each other. The
+            // previous carve is unrecoverable at this point - it was torn down
+            // before the apply was attempted - so the honest record is "no
+            // carve", and the drop-in has to be regenerated from that or it
+            // keeps whitelisting VFs that no longer exist.
+            //
+            // Re-applying the previous layout is deliberately not attempted: it
+            // can fail for the same reason this apply did, and a retry loop on
+            // the failure path is a worse place to discover that.
+            if (!DropGpuConfigEntry(gpuId)) {
+                HexLogError("gpu_resource_set: GPU %s also failed to drop its stale config entry; "
+                            "the intent file still describes a carve the hardware no longer has",
+                            gpuId);
+                return EXIT_FAILURE;
+            }
+
+            // Nodes that never had a drop-in are left without one.
+            if (access(NOVA_GPU_CONF, F_OK) != 0) {
+                return EXIT_FAILURE;
+            }
+
+            if (!WriteNovaGpuConf()) {
+                HexLogError("gpu_resource_set: failed to regenerate %s after the failed apply "
+                            "on GPU %s", NOVA_GPU_CONF, gpuId);
+                return EXIT_FAILURE;
+            }
+
+            if (HexUtilSystemF(0, 0, HEX_CFG " restart_nova") != 0) {
+                HexLogError("gpu_resource_set: failed to restart nova services after the failed "
+                            "apply on GPU %s", gpuId);
+            }
+
             return EXIT_FAILURE;
         }
 
