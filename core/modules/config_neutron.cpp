@@ -439,8 +439,6 @@ UpdateSharedId(std::string sharedId, std::string ovnnb, std::string ovnsb)
         cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["http_connect_timeout"] = "15";
         cfg["nova"]["auth_url"] = "http://" + sharedId + ":5000";
-        cfg["octavia"]["base_url"] = "http://" + sharedId + ":9876";
-        cfg["service_auth"]["auth_url"] = "http://" + sharedId + ":5000/v2.0";
         cfg["designate"]["url"] = "http://" + sharedId + ":9001/v2";
         cfg["designate"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["designate"]["auth_url"] = "http://" + sharedId + ":5000";
@@ -472,7 +470,7 @@ UpdateDebug(bool enabled)
 
 static bool
 UpdateCfg(std::string domain, std::string region, std::string password,
-          std::string novapass, std::string metapass, std::string clipass, unsigned overlayMtu, std::string ep)
+          std::string novapass, std::string metapass, unsigned overlayMtu, std::string ep)
 {
     if (IsControl(s_eCubeRole)) {
         cfg["DEFAULT"]["auth_strategy"] = "keystone";
@@ -495,12 +493,6 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         cfg["DEFAULT"]["notify_nova_on_port_data_changes"] = "true";
         cfg["DEFAULT"]["dns_domain"] = "cube.local.";
         cfg["DEFAULT"]["external_dns_driver"] = "designate";
-
-        cfg["service_auth"]["admin_user"] = "admin_cli";
-        cfg["service_auth"]["admin_password"] = clipass;
-        cfg["service_auth"]["admin_user_domain"] = "default";
-        cfg["service_auth"]["admin_tenant_name"] = "admin";
-        cfg["service_auth"]["auth_version"] = "2";
 
         cfg["nova"]["auth_type"] = "password";
         cfg["nova"]["project_domain_name"] = domain.c_str();
@@ -797,6 +789,11 @@ NotifyNova(bool modified)
     s_bNovaModified = s_novaPass.modified();
 }
 
+// keystone.admin.cli.password is the only tuning on index 4, and neutron.conf no
+// longer contains anything derived from it now that [service_auth] is gone -- so this
+// flag can only ever trigger a rewrite that produces an identical file. The observer
+// stays anyway: CONFIG_OBSERVES also orders neutron's commit after keystone's, and
+// re-ordering hex's module graph is not this change's business.
 static void
 NotifyKeystone(bool modified)
 {
@@ -863,7 +860,6 @@ Commit(bool modified, int dryLevel)
     std::string metaPass = GetSaltKey(s_saltkey, s_metaPass.newValue(), s_seed.newValue());
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass.newValue(), s_seed.newValue());
-    std::string adminCliPass = GetSaltKey(s_saltkey, s_adminCliPass.newValue(), s_seed.newValue());
     std::string ovnNbRemote = GetOvnRemote(sharedId, "6641");
     std::string ovnSbRemote = GetOvnRemote(sharedId, "6642");
 
@@ -880,7 +876,7 @@ Commit(bool modified, int dryLevel)
     // 2. Service Config
     if (s_bConfigChanged) {
         UpdateCfg(s_cubeDomain.newValue(), s_cubeRegion.newValue(),
-                  neutronPass, novaPass, metaPass, adminCliPass,
+                  neutronPass, novaPass, metaPass,
                   s_uOverlayMtu, GetExtraProvider(s_providerExtra));
         UpdateSharedId(sharedId, ovnNbRemote, ovnSbRemote);
         UpdateMyIp(myIp);
