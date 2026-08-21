@@ -28,22 +28,22 @@
 
 # When proxying metadata requests, Neutron signs the Instance-ID header with a
 # shared secret to prevent spoofing. You may select any string for a secret,
-# but it must match here and in the configuration used by the Nova Metadata
-# Server. NOTE: Nova uses the same config key, but in [neutron] section.
+# but it must match here and in the configuration used by the Nova metadata
+# server. NOTE: Nova uses the same config key, but in [neutron] section.
 # (string value)
 #metadata_proxy_shared_secret =
 
-# Protocol to access nova metadata, http or https (string value)
+# Protocol to access Nova metadata, http or https (string value)
 # Possible values:
 # http - <No description provided>
 # https - <No description provided>
 #nova_metadata_protocol = http
 
-# Allow to perform insecure SSL (https) requests to nova metadata (boolean
+# Allow to perform insecure SSL (https) requests to Nova metadata (boolean
 # value)
 #nova_metadata_insecure = false
 
-# Client certificate for nova metadata api server. (string value)
+# Client certificate for Nova metadata api server. (string value)
 #nova_client_cert =
 
 # Private key of client certificate. (string value)
@@ -140,7 +140,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -225,15 +228,43 @@
 #fatal_deprecations = false
 
 
+[metadata_rate_limiting]
+
+#
+# From neutron.ovn.metadata.agent
+#
+
+# Enable rate limiting on the metadata API. (boolean value)
+#rate_limit_enabled = false
+
+# Comma separated list of the metadata address IP versions (4, 6) for which
+# rate limiting will be enabled. The default is to rate limit only for the
+# metadata IPv4 address. NOTE: at the moment, the open source version of
+# HAProxy only allows us to rate limit for IPv4 or IPv6, but not both at the
+# same time. (list value)
+#ip_versions = 4
+
+# Duration (seconds) of the base window on the metadata API. (integer value)
+#base_window_duration = 10
+
+# Max number of queries to accept during the base window. (integer value)
+#base_query_rate_limit = 10
+
+# Duration (seconds) of the burst window on the metadata API. (integer value)
+#burst_window_duration = 10
+
+# Max number of queries to accept during the burst window. (integer value)
+#burst_query_rate_limit = 10
+
+
 [ovs]
 
 #
 # From neutron.ovn.metadata.agent
 #
 
-# The connection string for the native OVSDB backend.
-# Use tcp:IP:PORT for TCP connection.
-# Use unix:FILE for unix domain socket connection. (string value)
+# The connection string for the native OVSDB backend. Use tcp:IP:PORT for TCP
+# connections. Use unix:FILE for unix domain socket connections. (string value)
 #ovsdb_connection = unix:/usr/local/var/run/openvswitch/db.sock
 
 # Timeout in seconds for the OVSDB connection transaction (integer value)

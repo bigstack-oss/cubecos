@@ -20,7 +20,7 @@
 # paths. For example: api_extensions_path =
 # extensions:/path/to/more/exts:/even/more/exts. The __path__ of
 # neutron.extensions is appended to this, so if your extensions are in there
-# you don't need to specify them here. (string value)
+# you do not need to specify them here. (string value)
 #api_extensions_path =
 
 # The type of authentication to use (string value)
@@ -40,7 +40,7 @@
 # Allow the usage of the bulk API (boolean value)
 #allow_bulk = true
 
-# The maximum number of items returned in a single response, value was
+# The maximum number of items returned in a single response, value of
 # 'infinite' or negative integer means no limit (string value)
 #pagination_max_limit = -1
 
@@ -58,14 +58,18 @@
 # Maximum number of host routes per subnet (integer value)
 #max_subnet_host_routes = 20
 
-# Warning: This feature is experimental with low test coverage, and the Dibbler
-# client which is used for this feature is no longer maintained! Enables IPv6
-# Prefix Delegation for automatic subnet CIDR allocation. Set to True to enable
-# IPv6 Prefix Delegation for subnet allocation in a PD-capable environment.
-# Users making subnet creation requests for IPv6 subnets without providing a
-# CIDR or subnetpool ID will be given a CIDR via the Prefix Delegation
-# mechanism. Note that enabling PD will override the behavior of the default
-# IPv6 subnetpool. (boolean value)
+# DEPRECATED: Warning: This feature is experimental with low test coverage, and
+# the Dibbler client which is used for this feature is no longer maintained!
+# Enables IPv6 Prefix Delegation for automatic subnet CIDR allocation. Set to
+# True to enable IPv6 Prefix Delegation for subnet allocation in a PD-capable
+# environment. Users making subnet creation requests for IPv6 subnets without
+# providing a CIDR or subnetpool ID will be given a CIDR via the Prefix
+# Delegation mechanism. Note that enabling PD will override the behavior of the
+# default IPv6 subnetpool. (boolean value)
+# This option is deprecated for removal since 2023.2.
+# Its value may be silently ignored in the future.
+# Reason: The Dibbler client used for this feature is no longer maintained. See
+# LP#1916428
 #ipv6_pd_enabled = false
 
 # DHCP lease duration (in seconds). Use -1 to tell dnsmasq to use infinite
@@ -95,14 +99,14 @@
 # unchanged. (string value)
 #network_link_prefix = <None>
 
-# Send notification to nova when port status changes (boolean value)
+# Send notification to Nova when port status changes (boolean value)
 #notify_nova_on_port_status_changes = true
 
-# Send notification to nova when port data (fixed_ips/floatingip) changes so
-# nova can update its cache. (boolean value)
+# Send notification to Nova when port data (fixed_ips/floatingip) changes so
+# Nova can update its cache. (boolean value)
 #notify_nova_on_port_data_changes = true
 
-# Number of seconds between sending events to nova if there are any events to
+# Number of seconds between sending events to Nova if there are any events to
 # send. (integer value)
 #send_events_interval = 2
 
@@ -130,10 +134,9 @@
 # uses this value without modification. For overlay networks such as VXLAN,
 # neutron automatically subtracts the overlay protocol overhead from this
 # value. Defaults to 1500, the standard value for Ethernet. (integer value)
-# Deprecated group/name - [ml2]/segment_mtu
 #global_physnet_mtu = 1500
 
-# Number of times client connections (nova, ironic) should be retried on a
+# Number of times client connections (Nova, Ironic) should be retried on a
 # failed HTTP call. 0 (zero) means connection is attempted only once (not
 # retried). Setting to any positive integer means that on failure the
 # connection is retried that many times. For example, setting to 3 means total
@@ -142,9 +145,22 @@
 #http_retries = 3
 
 # If False, neutron-server will disable the following DHCP-agent related
-# functions:1. DHCP provisioning block 2. DHCP scheduler API extension 3.
+# functions: 1. DHCP provisioning block 2. DHCP scheduler API extension 3.
 # Network scheduling mechanism 4. DHCP RPC/notification (boolean value)
 #enable_traditional_dhcp = true
+
+# IPv4 address of this host. If no address is provided and one cannot be
+# determined, 127.0.0.1 will be used. (string value)
+#my_ip = 10.1.0.1
+
+# IPv6 address of this host. If no address is provided and one cannot be
+# determined, ::1 will be used. (string value)
+#my_ipv6 = ::1
+
+# If False, neutron-server will not listen for signals like SIGINT or SIGTERM.
+# This is useful when running behind a WSGI server like apache/mod_wsgi.
+# (boolean value)
+#enable_signals = true
 
 # Number of backlog requests to configure the socket with (integer value)
 #backlog = 4096
@@ -161,14 +177,19 @@
 # Number of separate API worker processes for service. If not specified, the
 # default is equal to the number of CPUs available for best performance, capped
 # by potential RAM usage. (integer value)
+# Minimum value: 1
 #api_workers = <None>
 
 # Number of RPC worker processes for service. If not specified, the default is
-# equal to half the number of API workers. (integer value)
+# equal to half the number of API workers. If set to 0, no RPC worker is
+# launched. (integer value)
+# Minimum value: 0
 #rpc_workers = <None>
 
-# Number of RPC worker processes dedicated to state reports queue. (integer
+# Number of RPC worker processes dedicated to the state reports queue. If set
+# to 0, no dedicated RPC worker for state reports queue is launched. (integer
 # value)
+# Minimum value: 0
 #rpc_state_report_workers = 1
 
 # Range of seconds to randomly delay when starting the periodic task scheduler
@@ -182,7 +203,7 @@
 # From neutron.agent
 #
 
-# The driver used to manage the virtual interface. (string value)
+# The driver used to manage virtual interfaces. (string value)
 #interface_driver = <None>
 
 # Location for Metadata Proxy UNIX domain socket. (string value)
@@ -200,7 +221,7 @@
 # From neutron.db
 #
 
-# Seconds to regard the agent is down; should be at least twice
+# Seconds to regard the agent as down; should be at least twice
 # report_interval, to be sure the agent is down for good. (integer value)
 # Maximum value: 2147483.0
 #agent_down_time = 75
@@ -209,8 +230,8 @@
 # This can be "networks", "subnets" or "ports". When specified (Default is
 # networks), the server will extract particular load sent as part of its agent
 # configuration object from the agent report state, which is the number of
-# resources being consumed, at every report_interval.dhcp_load_type can be used
-# in combination with network_scheduler_driver =
+# resources being consumed, at every report_interval. dhcp_load_type can be
+# used in combination with network_scheduler_driver =
 # neutron.scheduler.dhcp_agent_scheduler.WeightScheduler When the
 # network_scheduler_driver is WeightScheduler, dhcp_load_type can be configured
 # to represent the choice for the resource being balanced. Example:
@@ -221,13 +242,13 @@
 # ports - <No description provided>
 #dhcp_load_type = networks
 
-# Agent starts with admin_state_up=False when enable_new_agents=False. In the
-# case, user's resources will not be scheduled automatically to the agent until
-# admin changes admin_state_up to True. (boolean value)
+# Agents start with admin_state_up=False when enable_new_agents=False. In this
+# case, a user's resources will not be scheduled automatically to an agent
+# until an admin sets admin_state_up to True. (boolean value)
 #enable_new_agents = true
 
-# Number of resources for neutron to divide the large RPC call data sets. It
-# can be reduced if RPC timeout occurred. The best value can be determined
+# Number of resources for neutron to divide a large RPC call into data sets. It
+# can be reduced if RPC timeouts occur. The best value should be determined
 # empirically in your environment. (integer value)
 # Minimum value: 1
 #rpc_resources_processing_step = 20
@@ -239,10 +260,10 @@
 # external_gateway_info. (boolean value)
 #enable_snat_by_default = true
 
-# Driver to use for scheduling network to DHCP agent (string value)
+# Driver to use for scheduling networks to a DHCP agent (string value)
 #network_scheduler_driver = neutron.scheduler.dhcp_agent_scheduler.WeightScheduler
 
-# Allow auto scheduling networks to DHCP agent. (boolean value)
+# Allow auto scheduling networks to a DHCP agent. (boolean value)
 #network_auto_schedule = true
 
 # Automatically remove networks from offline DHCP agents. (boolean value)
@@ -263,20 +284,20 @@
 # available if this option is True. (boolean value)
 #enable_services_on_agents_with_admin_state_down = false
 
-# The base mac address used for unique DVR instances by Neutron. The first 3
+# The base MAC address used for unique DVR instances by Neutron. The first 3
 # octets will remain unchanged. If the 4th octet is not 00, it will also be
 # used. The others will be randomly generated. The 'dvr_base_mac' *must* be
-# different from 'base_mac' to avoid mixing them up with MAC's allocated for
-# tenant ports. A 4 octet example would be dvr_base_mac = fa:16:3f:4f:00:00.
-# The default is 3 octet (string value)
+# different from 'base_mac' to avoid mixing it up with MAC's allocated for
+# tenant ports. A 4-octet example would be dvr_base_mac = fa:16:3f:4f:00:00.
+# The default is 3 octets (string value)
 #dvr_base_mac = fa:16:3f:00:00:00
 
 # System-wide flag to determine the type of router that tenants can create.
 # Only admin can override. (boolean value)
 #router_distributed = false
 
-# Determine if setup is configured for DVR. If False, DVR API extension will be
-# disabled. (boolean value)
+# Determine if setup is configured for DVR. If False, the DVR API extension
+# will be disabled. (boolean value)
 #enable_dvr = true
 
 # Flag to determine if hosting a DVR local router to the DHCP agent is desired.
@@ -284,10 +305,10 @@
 # possible, for instance: DNS. (boolean value)
 #host_dvr_for_dhcp = true
 
-# Driver to use for scheduling router to a default L3 agent (string value)
+# Driver to use for scheduling a router to a default L3 agent (string value)
 #router_scheduler_driver = neutron.scheduler.l3_agent_scheduler.LeastRoutersScheduler
 
-# Allow auto scheduling of routers to L3 agent. (boolean value)
+# Allow auto scheduling of routers to L3 agents. (boolean value)
 #router_auto_schedule = true
 
 # Automatically reschedule routers from offline L3 agents to online L3 agents.
@@ -301,18 +322,26 @@
 # set to 0 then the router will be scheduled on every agent. (integer value)
 #max_l3_agents_per_router = 3
 
-# Subnet used for the l3 HA admin network. (string value)
+# Subnet used for the L3 HA admin network. (string value)
 #l3_ha_net_cidr = 169.254.192.0/18
 
-# The network type to use when creating the HA network for an HA router. By
-# default or if empty, the first 'tenant_network_types' is used. This is
+# The network type to use when creating the L3 HA network for an HA router. By
+# default, or if empty, the first 'tenant_network_types' value is used. This is
 # helpful when the VRRP traffic should use a specific network which is not the
 # default one. (string value)
 #l3_ha_network_type =
 
-# The physical network name with which the HA network can be created. (string
-# value)
+# The physical network name with which the L3 HA network should be created.
+# (string value)
 #l3_ha_network_physical_name =
+
+# Define the default value for enable_default_route_ecmp if not specified on
+# the router. (boolean value)
+#enable_default_route_ecmp = false
+
+# Define the default value for enable_default_route_bfd if not specified on the
+# router. (boolean value)
+#enable_default_route_bfd = false
 
 #
 # From neutron.extensions
@@ -321,7 +350,7 @@
 # Maximum number of allowed address pairs (integer value)
 #max_allowed_address_pair = 10
 
-# Defines the allowed conntrack helpers, and conntack helper module protocol
+# Defines the allowed conntrack helpers, and conntrack helper module protocol
 # constraints. (list value)
 #
 # This option has a sample default set, which means that
@@ -394,7 +423,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -651,8 +683,8 @@
 # exit - <No description provided>
 #check_child_processes_action = respawn
 
-# Interval between checks of child process liveness (seconds), use 0 to disable
-# (integer value)
+# Interval between checks of child process liveness, in seconds, use 0 to
+# disable (integer value)
 #check_child_processes_interval = 60
 
 # Location of scripts used to kill external processes. Names of scripts here
@@ -700,6 +732,7 @@
 # dogpile.cache.bmemcached - <No description provided>
 # dogpile.cache.dbm - <No description provided>
 # dogpile.cache.redis - <No description provided>
+# dogpile.cache.redis_sentinel - <No description provided>
 # dogpile.cache.memory - <No description provided>
 # dogpile.cache.memory_pickle - <No description provided>
 # dogpile.cache.null - <No description provided>
@@ -727,7 +760,7 @@
 # Memcache servers in the format of "host:port". This is used by backends
 # dependent on Memcached.If ``dogpile.cache.memcached`` or
 # ``oslo_cache.memcache_pool`` is used and a given host refer to an IPv6 or a
-# given domain refer to IPv6 then you should prefix the given address withthe
+# given domain refer to IPv6 then you should prefix the given address with the
 # address family (``inet6``) (e.g ``inet6[::1]:11211``,
 # ``inet6:[fd12:3456:789a:1::1]:11211``,
 # ``inet6:[controller-0.internalapi]:11211``). If the address family is not
@@ -765,13 +798,34 @@
 #memcache_sasl_enabled = false
 
 # the user name for the memcached which SASL enabled (string value)
-#memcache_username =
+#memcache_username = <None>
 
 # the password for the memcached which SASL enabled (string value)
-#memcache_password =
+#memcache_password = <None>
 
-# Global toggle for TLS usage when comunicating with the caching servers.
-# (boolean value)
+# Redis server in the format of "host:port" (string value)
+#redis_server = localhost:6379
+
+# the user name for redis (string value)
+#redis_username = <None>
+
+# the password for redis (string value)
+#redis_password = <None>
+
+# Redis sentinel servers in the format of "host:port" (list value)
+#redis_sentinels = localhost:26379
+
+# Timeout in seconds for every call to a server. (dogpile.cache.redis and
+# dogpile.cache.redis_sentinel backends only). (floating point value)
+#redis_socket_timeout = 1.0
+
+# Service name of the redis sentinel cluster. (string value)
+#redis_sentinel_service_name = mymaster
+
+# Global toggle for TLS usage when communicating with the caching servers.
+# Currently supported by ``dogpile.cache.bmemcache``,
+# ``dogpile.cache.pymemcache``, ``oslo_cache.memcache_pool``,
+# ``dogpile.cache.redis`` and ``dogpile.cache.redis_sentinel``. (boolean value)
 #tls_enabled = false
 
 # Path to a file of concatenated CA certificates in PEM format necessary to
@@ -792,7 +846,9 @@
 
 # Set the available ciphers for sockets created with the TLS context. It should
 # be a string in the OpenSSL cipher list format. If not specified, all OpenSSL
-# enabled ciphers will be available. (string value)
+# enabled ciphers will be available. Currently supported by
+# ``dogpile.cache.bmemcache``, ``dogpile.cache.pymemcache`` and
+# ``oslo_cache.memcache_pool``. (string value)
 #tls_allowed_ciphers = <None>
 
 # Global toggle for the socket keepalive of dogpile's pymemcache backend
@@ -840,6 +896,15 @@
 # Time in seconds before attempting to add a node back in the pool in the
 # HashClient's internal mechanisms. (floating point value)
 #dead_timeout = 60
+
+# Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
+# Python support. This is available in Python 3.9 in all environments and may
+# have been backported to older Python versions on select environments. If the
+# Python executable used does not support OpenSSL FIPS mode, an exception will
+# be raised. Currently supported by ``dogpile.cache.bmemcache``,
+# ``dogpile.cache.pymemcache`` and ``oslo_cache.memcache_pool``. (boolean
+# value)
+#enforce_fips_mode = false
 
 
 [cors]
@@ -889,14 +954,10 @@
 #sqlite_synchronous = true
 
 # The back end to use for the database. (string value)
-# Deprecated group/name - [DEFAULT]/db_backend
 #backend = sqlalchemy
 
 # The SQLAlchemy connection string to use to connect to the database. (string
 # value)
-# Deprecated group/name - [DEFAULT]/sql_connection
-# Deprecated group/name - [DATABASE]/sql_connection
-# Deprecated group/name - [sql]/connection
 #connection = <None>
 
 # The SQLAlchemy connection string to use to connect to the slave database.
@@ -914,14 +975,6 @@
 # value)
 #mysql_wsrep_sync_wait = <None>
 
-# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
-# (NDB). (boolean value)
-# This option is deprecated for removal since 12.1.0.
-# Its value may be silently ignored in the future.
-# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
-# and will be removed in a future release.
-#mysql_enable_ndb = false
-
 # Connections which have been present in the connection pool longer than this
 # number of seconds will be replaced with a new one the next time they are
 # checked out from the pool. (integer value)
@@ -933,33 +986,24 @@
 
 # Maximum number of database connection retries during startup. Set to -1 to
 # specify an infinite retry count. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_retries
-# Deprecated group/name - [DATABASE]/sql_max_retries
 #max_retries = 10
 
 # Interval between retries of opening a SQL connection. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_retry_interval
-# Deprecated group/name - [DATABASE]/reconnect_interval
 #retry_interval = 10
 
 # If set, use this value for max_overflow with SQLAlchemy. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_overflow
-# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
 #max_overflow = 50
 
 # Verbosity of SQL debugging information: 0=None, 100=Everything. (integer
 # value)
 # Minimum value: 0
 # Maximum value: 100
-# Deprecated group/name - [DEFAULT]/sql_connection_debug
 #connection_debug = 0
 
 # Add Python stack traces to SQL as comment strings. (boolean value)
-# Deprecated group/name - [DEFAULT]/sql_connection_trace
 #connection_trace = false
 
 # If set, use this value for pool_timeout with SQLAlchemy. (integer value)
-# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
 #pool_timeout = <None>
 
 # Enable the experimental use of database reconnect on connection lost.
@@ -1086,52 +1130,21 @@
 # URL for connecting to designate (string value)
 #url = <None>
 
-# DEPRECATED: Username for connecting to designate in admin context (string
-# value)
-# This option is deprecated for removal since Xena.
-# Its value may be silently ignored in the future.
-# Reason: This option will be completely replaced by keystoneauth parameters.
-#admin_username = <None>
-
-# DEPRECATED: Password for connecting to designate in admin context (string
-# value)
-# This option is deprecated for removal since Xena.
-# Its value may be silently ignored in the future.
-# Reason: This option will be completely replaced by keystoneauth parameters.
-#admin_password = <None>
-
-# DEPRECATED: Tenant id for connecting to designate in admin context (string
-# value)
-# This option is deprecated for removal since Xena.
-# Its value may be silently ignored in the future.
-# Reason: This option will be completely replaced by keystoneauth parameters.
-#admin_tenant_id = <None>
-
-# DEPRECATED: Tenant name for connecting to designate in admin context (string
-# value)
-# This option is deprecated for removal since Xena.
-# Its value may be silently ignored in the future.
-# Reason: This option will be completely replaced by keystoneauth parameters.
-#admin_tenant_name = <None>
-
-# DEPRECATED: Authorization URL for connecting to designate in admin context
-# (string value)
-# This option is deprecated for removal since Xena.
-# Its value may be silently ignored in the future.
-# Reason: This option will be completely replaced by keystoneauth parameters.
-#admin_auth_url = <None>
-
 # Allow the creation of PTR records (boolean value)
 #allow_reverse_dns_lookup = true
 
-# Number of bits in an ipv4 PTR zone that will be considered network prefix. It
+# Number of bits in an IPv4 PTR zone that will be considered network prefix. It
 # has to align to byte boundary. Minimum value is 8. Maximum value is 24. As a
-# consequence, range of values is 8, 16 and 24 (integer value)
+# consequence, range of values is 8, 16 and 24 (IPv4 zone prefix)
+# Minimum value: 8
+# Maximum value: 24
 #ipv4_ptr_zone_prefix_size = 24
 
-# Number of bits in an ipv6 PTR zone that will be considered network prefix. It
+# Number of bits in an IPv6 PTR zone that will be considered network prefix. It
 # has to align to nyble boundary. Minimum value is 4. Maximum value is 124. As
-# a consequence, range of values is 4, 8, 12, 16,..., 124 (integer value)
+# a consequence, range of values is 4, 8, 12, 16,..., 124 (IPv6 zone prefix)
+# Minimum value: 4
+# Maximum value: 124
 #ipv6_ptr_zone_prefix_size = 120
 
 # The email address to be used when creating PTR zones. If not specified, the
@@ -1147,6 +1160,10 @@
 
 # Enable execution of the experimental Linuxbridge agent. (boolean value)
 #linuxbridge = false
+
+# Enable execution of the experimental IPv6 Prefix Delegation functionality in
+# the L3 agent. (boolean value)
+#ipv6_pd_enabled = false
 
 
 [healthcheck]
@@ -1169,6 +1186,14 @@
 # Additional backends that can perform health checks and report that
 # information back as part of a request. (list value)
 #backends =
+
+# A list of network addresses to limit source ip allowed to access healthcheck
+# information. Any request from ip outside of these network addresses are
+# ignored. (list value)
+#allowed_source_ranges =
+
+# Ignore requests with proxy headers. (boolean value)
+#ignore_proxied_requests = false
 
 # Check the presence of a file to determine if an application is running on a
 # port. Used by DisableByFileHealthcheck plugin. (string value)
@@ -1277,7 +1302,7 @@
 # From neutron
 #
 
-# Send notification events to ironic. (For example on relevant port status
+# Send notification events to Ironic. (For example on relevant port status
 # changes.) (boolean value)
 #enable_notifications = false
 
@@ -1450,12 +1475,12 @@
 # From neutron
 #
 
-# Name of nova region to use. Useful if keystone manages more than one region.
+# Name of Nova region to use. Useful if Keystone manages more than one region.
 # (string value)
 #region_name = <None>
 
-# Type of the nova endpoint to use.  This endpoint will be looked up in the
-# keystone catalog and should be one of public, internal or admin. (string
+# Type of the Nova endpoint to use.  This endpoint will be looked up in the
+# Keystone catalog and should be one of public, internal or admin. (string
 # value)
 # Possible values:
 # public - <No description provided>
@@ -1972,10 +1997,15 @@
 # modern queue type for RabbitMQ implementing a durable, replicated FIFO queue
 # based on the Raft consensus algorithm. It is available as of RabbitMQ 3.8.0.
 # If set this option will conflict with the HA queues (``rabbit_ha_queues``)
-# aka mirrored queues, in other words the HA queues should be disabled, quorum
-# queues durable by default so the amqp_durable_queues opion is ignored when
-# this option enabled. (boolean value)
+# aka mirrored queues, in other words the HA queues should be disabled. Quorum
+# queues are also durable by default so the amqp_durable_queues option is
+# ignored when this option is enabled. (boolean value)
 #rabbit_quorum_queue = false
+
+# Use quorum queues for transients queues in RabbitMQ. Enabling this option
+# will then make sure those queues are also using quorum kind of rabbit queues,
+# which are HA by default. (boolean value)
+#rabbit_transient_quorum_queue = false
 
 # Each time a message is redelivered to a consumer, a counter is incremented.
 # Once the redelivery count exceeds the delivery limit the message gets dropped
@@ -2001,8 +2031,11 @@
 
 # Positive integer representing duration in seconds for queue TTL (x-expires).
 # Queues which are unused for the duration of the TTL are automatically
-# deleted. The parameter affects only reply and fanout queues. (integer value)
-# Minimum value: 1
+# deleted. The parameter affects only reply and fanout queues. Setting 0 as
+# value will disable the x-expires. If doing so, make sure you have a rabbitmq
+# policy to delete the queues or you deployment will create an infinite number
+# of queue over time. (integer value)
+# Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
 # Specifies the number of messages to prefetch. Setting to zero allows
@@ -2015,7 +2048,7 @@
 
 # How often times during the heartbeat_timeout_threshold we check the
 # heartbeat. (integer value)
-#heartbeat_rate = 2
+#heartbeat_rate = 3
 
 # DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag for
 # direct send. The direct send is used as reply, so the MessageUndeliverable
@@ -2031,6 +2064,22 @@
 # Enable x-cancel-on-ha-failover flag so that rabbitmq server will cancel and
 # notify consumerswhen queue is down (boolean value)
 #enable_cancel_on_failover = false
+
+# Should we use consistant queue names or random ones (boolean value)
+#use_queue_manager = false
+
+# Hostname used by queue manager (string value)
+#hostname = cc1
+
+# Process name used by queue manager (string value)
+#processname = oslo-config-generator
+
+# Use stream queues in RabbitMQ (x-queue-type: stream). Streams are a new
+# persistent and replicated data structure ("queue type") in RabbitMQ which
+# models an append-only log with non-destructive consumer semantics. It is
+# available as of RabbitMQ 3.9.0. If set this option will replace all fanout
+# queues with only one stream queue. (boolean value)
+#rabbit_stream_fanout = false
 
 
 [oslo_middleware]
@@ -2056,7 +2105,7 @@
 # match, an ``InvalidScope`` exception will be raised. If ``False``, a message
 # will be logged informing operators that policies are being invoked with
 # mismatching scope. (boolean value)
-#enforce_scope = false
+#enforce_scope = true
 
 # This option controls whether or not to use old deprecated defaults when
 # evaluating policies. If ``True``, the old deprecated defaults are not going
@@ -2067,7 +2116,7 @@
 # deprecated policy check string is logically OR'd with the new policy check
 # string, allowing for a graceful upgrade experience between releases with new
 # policies, which is the default behavior. (boolean value)
-#enforce_new_defaults = false
+#enforce_new_defaults = true
 
 # The relative or absolute path of a file that maps roles to permissions for a
 # given service. Relative paths must be specified in relation to the
@@ -2130,12 +2179,12 @@
 # From neutron
 #
 
-# Name of placement region to use. Useful if keystone manages more than one
+# Name of placement region to use. Useful if Keystone manages more than one
 # region. (string value)
 #region_name = <None>
 
 # Type of the placement endpoint to use.  This endpoint will be looked up in
-# the keystone catalog and should be one of public, internal or admin. (string
+# the Keystone catalog and should be one of public, internal or admin. (string
 # value)
 # Possible values:
 # public - <No description provided>
@@ -2311,6 +2360,20 @@
 #trace_sqlalchemy = false
 
 #
+# Enable python requests package profiling.
+#
+# Supported drivers: jaeger+otlp
+#
+# Default value is False.
+#
+# Possible values:
+#
+# * True: Enables requests profiling.
+# * False: Disables requests profiling.
+#  (boolean value)
+#trace_requests = false
+
+#
 # Secret key(s) to use for encrypting context data for performance profiling.
 #
 # This string value should have the following format:
@@ -2390,13 +2453,42 @@
 #filter_error_trace = false
 
 
+[profiler_jaeger]
+
+#
+# From osprofiler
+#
+
+#
+# Set service name prefix to Jaeger service name.
+#  (string value)
+#service_name_prefix = <None>
+
+#
+# Set process tracer tags.
+#  (dict value)
+#process_tags =
+
+
+[profiler_otlp]
+
+#
+# From osprofiler
+#
+
+#
+# Set service name prefix to OTLP exporters.
+#  (string value)
+#service_name_prefix = <None>
+
+
 [quotas]
 
 #
 # From neutron
 #
 
-# Default number of resource allowed per tenant. A negative value means
+# Default number of resources allowed per tenant. A negative value means
 # unlimited. (integer value)
 #default_quota = -1
 
@@ -2415,9 +2507,11 @@
 # Default driver to use for quota checks. (string value)
 #quota_driver = neutron.db.quota.driver_nolock.DbQuotaNoLockDriver
 
-# Keep in track in the database of current resource quota usage. Plugins which
-# do not leverage the neutron database should set this flag to False. (boolean
-# value)
+# When set to True, quota usage will be tracked in the Neutron database for
+# each resource, by directly mapping to a data model class, for example,
+# networks, subnets, ports, etc. When set to False, quota usage will be tracked
+# by the quota engine as a count of the object type directly. For more
+# information, see the Quota Management and Enforcement guide. (boolean value)
 #track_quota_usage = true
 
 #
@@ -2436,7 +2530,7 @@
 # unlimited. (integer value)
 #quota_security_group = 10
 
-# Number of security rules allowed per tenant. A negative value means
+# Number of security group rules allowed per tenant. A negative value means
 # unlimited. (integer value)
 #quota_security_group_rule = 100
 

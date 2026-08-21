@@ -4,19 +4,12 @@
 # From neutron.base.agent
 #
 
-# DEPRECATED: Name of Open vSwitch bridge to use (string value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: This variable is a duplicate of OVS.integration_bridge. To be removed
-# in W.
-#ovs_integration_bridge = br-int
-
 # Uses veth for an OVS interface or not. Support kernels with limited namespace
 # support (e.g. RHEL 6.5) and rate limiting on router's gateway port so long as
 # ovs_use_veth is set to True. (boolean value)
 #ovs_use_veth = false
 
-# The driver used to manage the virtual interface. (string value)
+# The driver used to manage virtual interfaces. (string value)
 #interface_driver = <None>
 
 # Maximum seconds to wait for a response from an RPC call. (integer value)
@@ -106,7 +99,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -212,7 +208,7 @@
 # From neutron.base.agent
 #
 
-# The connection string for the OVSDB backend. Will be used for all ovsdb
+# The connection string for the OVSDB backend. Will be used for all OVSDB
 # commands and by ovsdb-client when monitoring (string value)
 #ovsdb_connection = tcp:127.0.0.1:6640
 
@@ -225,14 +221,13 @@
 #ssl_cert_file = <None>
 
 # The Certificate Authority (CA) certificate to use when interacting with
-# OVSDB.  Required when using an "ssl:" prefixed ovsdb_connection (string
-# value)
+# OVSDB. Required when using an "ssl:" prefixed ovsdb_connection (string value)
 #ssl_ca_cert_file = <None>
 
 # Enable OVSDB debug logs (boolean value)
 #ovsdb_debug = false
 
-# Timeout in seconds for ovsdb commands. If the timeout expires, ovsdb commands
+# Timeout in seconds for OVSDB commands. If the timeout expires, OVSDB commands
 # will fail with ALARMCLOCK error. (integer value)
 #ovsdb_timeout = 10
 
@@ -243,9 +238,18 @@
 
 # Enable IGMP snooping for integration bridge. If this option is set to True,
 # support for Internet Group Management Protocol (IGMP) is enabled in
-# integration bridge. Setting this option to True will also enable Open vSwitch
-# mcast-snooping-disable-flood-unregistered flag. This option will disable
-# flooding of unregistered multicast packets to all ports. The switch will send
-# unregistered multicast packets only to ports connected to multicast routers.
-# (boolean value)
+# integration bridge. (boolean value)
 #igmp_snooping_enable = false
+
+# Multicast packets (except reports) are unconditionally forwarded to the ports
+# bridging a logical network to a physical network. (boolean value)
+#igmp_flood = false
+
+# Multicast reports are unconditionally forwarded to the ports bridging a
+# logical network to a physical network. (boolean value)
+#igmp_flood_reports = true
+
+# This option enables or disables flooding of unregistered multicast packets to
+# all ports. If False, The switch will send unregistered multicast packets only
+# to ports connected to multicast routers. (boolean value)
+#igmp_flood_unregistered = false

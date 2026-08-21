@@ -65,7 +65,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -160,8 +163,8 @@
 # changes. (integer value)
 #polling_interval = 2
 
-# Set new timeout in seconds for new rpc calls after agent receives SIGTERM. If
-# value is set to 0, rpc timeout won't be changed (integer value)
+# Set new timeout in seconds for new RPC calls after agent receives SIGTERM. If
+# value is set to 0, RPC timeout will not be changed (integer value)
 #quitting_rpc_timeout = 10
 
 # The DSCP value to use for outer headers during tunnel encapsulation. (integer
@@ -200,12 +203,13 @@
 #firewall_driver = <None>
 
 # Controls whether the neutron security group API is enabled in the server. It
-# should be false when using no security groups or using the nova security
+# should be false when using no security groups or using the Nova security
 # group API. (boolean value)
 #enable_security_group = true
 
-# Use ipset to speed-up the iptables based security groups. Enabling ipset
-# support requires that ipset is installed on L2 agent node. (boolean value)
+# Use IPsets to speed-up the iptables based security groups. Enabling IPset
+# support requires that ipset is installed on the L2 agent node. (boolean
+# value)
 #enable_ipset = true
 
 # Comma-separated list of ethertypes to be permitted, in hexadecimal (starting

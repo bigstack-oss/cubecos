@@ -4,19 +4,12 @@
 # From neutron.base.agent
 #
 
-# DEPRECATED: Name of Open vSwitch bridge to use (string value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: This variable is a duplicate of OVS.integration_bridge. To be removed
-# in W.
-#ovs_integration_bridge = br-int
-
 # Uses veth for an OVS interface or not. Support kernels with limited namespace
 # support (e.g. RHEL 6.5) and rate limiting on router's gateway port so long as
 # ovs_use_veth is set to True. (boolean value)
 #ovs_use_veth = false
 
-# The driver used to manage the virtual interface. (string value)
+# The driver used to manage virtual interfaces. (string value)
 #interface_driver = <None>
 
 # Maximum seconds to wait for a response from an RPC call. (integer value)
@@ -28,14 +21,14 @@
 
 # The working mode for the agent. Allowed modes are: 'legacy' - this preserves
 # the existing behavior where the L3 agent is deployed on a centralized
-# networking node to provide L3 services like DNAT, and SNAT. Use this mode if
+# networking node to provide L3 services like DNAT and SNAT. Use this mode if
 # you do not want to adopt DVR. 'dvr' - this mode enables DVR functionality and
 # must be used for an L3 agent that runs on a compute host. 'dvr_snat' - this
-# enables centralized SNAT support in conjunction with DVR.  This mode must be
+# enables centralized SNAT support in conjunction with DVR. This mode must be
 # used for an L3 agent running on a centralized node (or in single-host
 # deployments, e.g. devstack). dvr_snat mode is not supported on a compute
 # host. 'dvr_no_external' - this mode enables only East/West DVR routing
-# functionality for a L3 agent that runs on a compute host, the North/South
+# functionality for an L3 agent that runs on a compute host, the North/South
 # functionality such as DNAT and SNAT will be provided by the centralized
 # network node that is running in 'dvr_snat' mode. This mode should be used
 # when there is no external network connectivity on the compute host. (string
@@ -62,18 +55,18 @@
 # associated subnet, since the automatically assigned link-local address (LLA)
 # can be used. However, an IPv6 gateway address is needed for use as the next-
 # hop for the default route. If no IPv6 gateway address is configured here,
-# (and only then) the neutron router will be configured to get its default
-# route from router advertisements (RAs) from the upstream router; in which
+# (and only then) the Neutron router will be configured to get its default
+# route from Router Advertisements (RAs) from the upstream router; in which
 # case the upstream router must also be configured to send these RAs. The
 # ipv6_gateway, when configured, should be the LLA of the interface on the
 # upstream router. If a next-hop using a global unique address (GUA) is
 # desired, it needs to be done via a subnet allocated to the network and not
-# through this parameter.  (string value)
+# through this parameter. (string value)
 #ipv6_gateway =
 
-# Driver used for ipv6 prefix delegation. This needs to be an entry point
+# Driver used for IPv6 Prefix Delegation. This needs to be an entry point
 # defined in the neutron.agent.linux.pd_drivers namespace. See setup.cfg for
-# entry points included with the neutron source. (string value)
+# entry points included with the Neutron source code. (string value)
 #prefix_delegation_driver = dibbler
 
 # Allow running metadata proxy. (boolean value)
@@ -84,16 +77,16 @@
 # value)
 #metadata_access_mark = 0x1
 
-# Iptables mangle mark used to mark ingress from external network. This mark
+# Iptables mangle mark used to mark ingress from an external network. This mark
 # will be masked with 0xffff so that only the lower 16 bits will be used.
 # (string value)
 #external_ingress_mark = 0x2
 
 # The username passed to radvd, used to drop root privileges and change user ID
-# to username and group ID to the primary group of username. If no user
-# specified (by default), the user executing the L3 agent will be passed. If
-# "root" specified, because radvd is spawned as root, no "username" parameter
-# will be passed. (string value)
+# to username and group ID of the primary group of username. If no user
+# specified (default), the user executing the L3 agent will be passed. If
+# "root" is specified, because radvd is spawned as root, no "username"
+# parameter will be passed. (string value)
 #radvd_user =
 
 # Delete all routers on L3 agent shutdown. For L3 HA routers it includes a
@@ -108,14 +101,19 @@
 # Number of separate API worker processes for service. If not specified, the
 # default is equal to the number of CPUs available for best performance, capped
 # by potential RAM usage. (integer value)
+# Minimum value: 1
 #api_workers = <None>
 
 # Number of RPC worker processes for service. If not specified, the default is
-# equal to half the number of API workers. (integer value)
+# equal to half the number of API workers. If set to 0, no RPC worker is
+# launched. (integer value)
+# Minimum value: 0
 #rpc_workers = <None>
 
-# Number of RPC worker processes dedicated to state reports queue. (integer
+# Number of RPC worker processes dedicated to the state reports queue. If set
+# to 0, no dedicated RPC worker for state reports queue is launched. (integer
 # value)
+# Minimum value: 0
 #rpc_state_report_workers = 1
 
 # Range of seconds to randomly delay when starting the periodic task scheduler
@@ -155,14 +153,14 @@
 # connection. (integer value)
 #ha_vrrp_health_check_interval = 0
 
-# Location to store IPv6 PD files. (string value)
+# Location to store IPv6 Prefix Delegation files. (string value)
 #pd_confs = $state_path/pd
 
 # A decimal value as Vendor's Registered Private Enterprise Number as required
 # by RFC3315 DUID-EN. (string value)
 #vendor_pen = 8888
 
-# Location to store IPv6 RA config files (string value)
+# Location to store IPv6 Router Advertisement config files (string value)
 #ra_confs = $state_path/ra
 
 # MinRtrAdvInterval setting for radvd.conf (integer value)
@@ -236,7 +234,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -350,6 +351,35 @@
 #extensions =
 
 
+[metadata_rate_limiting]
+
+#
+# From neutron.l3.agent
+#
+
+# Enable rate limiting on the metadata API. (boolean value)
+#rate_limit_enabled = false
+
+# Comma separated list of the metadata address IP versions (4, 6) for which
+# rate limiting will be enabled. The default is to rate limit only for the
+# metadata IPv4 address. NOTE: at the moment, the open source version of
+# HAProxy only allows us to rate limit for IPv4 or IPv6, but not both at the
+# same time. (list value)
+#ip_versions = 4
+
+# Duration (seconds) of the base window on the metadata API. (integer value)
+#base_window_duration = 10
+
+# Max number of queries to accept during the base window. (integer value)
+#base_query_rate_limit = 10
+
+# Duration (seconds) of the burst window on the metadata API. (integer value)
+#burst_window_duration = 10
+
+# Max number of queries to accept during the burst window. (integer value)
+#burst_query_rate_limit = 10
+
+
 [network_log]
 
 #
@@ -374,7 +404,7 @@
 # From neutron.base.agent
 #
 
-# The connection string for the OVSDB backend. Will be used for all ovsdb
+# The connection string for the OVSDB backend. Will be used for all OVSDB
 # commands and by ovsdb-client when monitoring (string value)
 #ovsdb_connection = tcp:127.0.0.1:6640
 
@@ -387,14 +417,13 @@
 #ssl_cert_file = <None>
 
 # The Certificate Authority (CA) certificate to use when interacting with
-# OVSDB.  Required when using an "ssl:" prefixed ovsdb_connection (string
-# value)
+# OVSDB. Required when using an "ssl:" prefixed ovsdb_connection (string value)
 #ssl_ca_cert_file = <None>
 
 # Enable OVSDB debug logs (boolean value)
 #ovsdb_debug = false
 
-# Timeout in seconds for ovsdb commands. If the timeout expires, ovsdb commands
+# Timeout in seconds for OVSDB commands. If the timeout expires, OVSDB commands
 # will fail with ALARMCLOCK error. (integer value)
 #ovsdb_timeout = 10
 
@@ -405,9 +434,18 @@
 
 # Enable IGMP snooping for integration bridge. If this option is set to True,
 # support for Internet Group Management Protocol (IGMP) is enabled in
-# integration bridge. Setting this option to True will also enable Open vSwitch
-# mcast-snooping-disable-flood-unregistered flag. This option will disable
-# flooding of unregistered multicast packets to all ports. The switch will send
-# unregistered multicast packets only to ports connected to multicast routers.
-# (boolean value)
+# integration bridge. (boolean value)
 #igmp_snooping_enable = false
+
+# Multicast packets (except reports) are unconditionally forwarded to the ports
+# bridging a logical network to a physical network. (boolean value)
+#igmp_flood = false
+
+# Multicast reports are unconditionally forwarded to the ports bridging a
+# logical network to a physical network. (boolean value)
+#igmp_flood_reports = true
+
+# This option enables or disables flooding of unregistered multicast packets to
+# all ports. If False, The switch will send unregistered multicast packets only
+# to ports connected to multicast routers. (boolean value)
+#igmp_flood_unregistered = false

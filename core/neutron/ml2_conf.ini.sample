@@ -65,7 +65,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -194,8 +197,10 @@
 # option. (string value)
 #external_network_type = <None>
 
-# IP version of all overlay (tunnel) network endpoints. Use a value of 4 for
-# IPv4 or 6 for IPv6. (integer value)
+# IP version of all overlay (tunnel) network endpoints. (integer value)
+# Possible values:
+# 4 - IPv4
+# 6 - IPv6
 #overlay_ip_version = 4
 
 # Resource provider name for the host with tunnelled networks. This resource
@@ -293,7 +298,6 @@
 # port allows to offload the OVS flows using tc to the SR-IOV NIC. This allows
 # to support hardware offload via tc and that allows us to manage the VF by
 # OpenFlow control plane using representor net-device. (list value)
-# Deprecated group/name - [ovs_driver]/vnic_type_blacklist
 #vnic_type_prohibit_list =
 
 
@@ -307,12 +311,13 @@
 #firewall_driver = <None>
 
 # Controls whether the neutron security group API is enabled in the server. It
-# should be false when using no security groups or using the nova security
+# should be false when using no security groups or using the Nova security
 # group API. (boolean value)
 #enable_security_group = true
 
-# Use ipset to speed-up the iptables based security groups. Enabling ipset
-# support requires that ipset is installed on L2 agent node. (boolean value)
+# Use IPsets to speed-up the iptables based security groups. Enabling IPset
+# support requires that ipset is installed on the L2 agent node. (boolean
+# value)
 #enable_ipset = true
 
 # Comma-separated list of ethertypes to be permitted, in hexadecimal (starting
@@ -329,7 +334,7 @@
 # Comma-separated list of VNIC types for which support is administratively
 # prohibited by the mechanism driver. Please note that the supported vnic_types
 # depend on your network interface card, on the kernel version of your
-# operating system, and on other factors. In case of sriov mechanism driver the
-# valid VNIC types are direct, macvtap and direct-physical. (list value)
-# Deprecated group/name - [sriov_driver]/vnic_type_blacklist
+# operating system, and on other factors. In the case of SRIOV mechanism
+# drivers the valid VNIC types are direct, macvtap and direct-physical. (list
+# value)
 #vnic_type_prohibit_list =

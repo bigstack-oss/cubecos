@@ -65,7 +65,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -161,7 +164,7 @@
 # Use ssl:IP:PORT for SSL connection. The ovn_nb_private_key,
 # ovn_nb_certificate and ovn_nb_ca_cert are mandatory.
 # Use unix:FILE for unix domain socket connection.
-# Multiple connection can be specified by a comma separated string. See also:
+# Multiple connections can be specified by a comma separated string. See also:
 # https://github.com/openvswitch/ovs/blob/ab4d3bfbef37c31331db5a9dbe7c22eb8d5e5e5f/python/ovs/db/idl.py#L215-L216
 # (string value)
 #ovn_nb_connection = tcp:127.0.0.1:6641
@@ -182,7 +185,7 @@
 # Use ssl:IP:PORT for SSL connection. The ovn_sb_private_key,
 # ovn_sb_certificate and ovn_sb_ca_cert are mandatory.
 # Use unix:FILE for unix domain socket connection.
-# Multiple connection can be specified by a comma separated string. See also:
+# Multiple connections can be specified by a comma separated string. See also:
 # https://github.com/openvswitch/ovs/blob/ab4d3bfbef37c31331db5a9dbe7c22eb8d5e5e5f/python/ovs/db/idl.py#L215-L216
 # (string value)
 #ovn_sb_connection = tcp:127.0.0.1:6642
@@ -198,14 +201,14 @@
 # presented to it by SSL peers (string value)
 #ovn_sb_ca_cert =
 
-# Timeout in seconds for the OVSDB connection transaction (integer value)
+# Timeout, in seconds, for the OVSDB connection transaction (integer value)
 #ovsdb_connection_timeout = 180
 
-# Max interval in seconds between each retry to get the OVN NB and SB IDLs
+# Max interval, in seconds ,between each retry to get the OVN NB and SB IDLs
 # (integer value)
 #ovsdb_retry_max_interval = 180
 
-# The probe interval in for the OVSDB session in milliseconds. If this is zero,
+# The probe interval for the OVSDB session, in milliseconds. If this is zero,
 # it disables the connection keepalive feature. If non-zero the value will be
 # forced to at least 1000 milliseconds. Defaults to 60 seconds. (integer value)
 # Minimum value: 0
@@ -228,14 +231,6 @@
 # migrate - <No description provided>
 #neutron_sync_mode = log
 
-# DEPRECATED: Whether to use OVN native L3 support. Do not change the value for
-# existing deployments that contain routers. (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: This option is no longer used. Native L3 support in OVN is always
-# used.
-#ovn_l3_mode = true
-
 # The OVN L3 Scheduler type used to schedule router gateway ports on
 # hypervisors/chassis.
 # leastloaded - chassis with fewest gateway ports selected
@@ -252,22 +247,11 @@
 # mappings) on each compute node. (boolean value)
 #enable_distributed_floating_ip = false
 
-# DEPRECATED: Type of VIF to be used for ports valid values are (ovs,
-# vhostuser) default ovs (string value)
-# Possible values:
-# ovs - <No description provided>
-# vhostuser - <No description provided>
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: The port VIF type is now determined based on the OVN chassis
-# information when the port is bound to a host.
-#vif_type = ovs
-
-# The directory in which vhost virtio socket is created by all the vswitch
+# The directory in which vhost virtio sockets are created by all the vswitch
 # daemons (string value)
 #vhost_sock_dir = /var/run/openvswitch
 
-# Default least time (in seconds) to use with OVN's native DHCP service.
+# Default lease time (in seconds) to use with OVN's native DHCP service.
 # (integer value)
 #dhcp_default_lease_time = 43200
 
@@ -285,7 +269,7 @@
 
 # Comma-separated list of the DNS servers which will be used as forwarders if a
 # subnet's dns_nameservers field is empty. If both subnet's dns_nameservers and
-# this option is empty, then the DNS resolvers on the host running the neutron
+# this option are empty, then the DNS resolvers on the host running the neutron
 # server will be used. (list value)
 #dns_servers =
 
@@ -300,32 +284,83 @@
 
 # Dictionary of global DHCPv6 options which will be automatically set on each
 # subnet upon creation and on all existing subnets when Neutron starts.
-# An empty value for a DHCP option will cause that option to be unset globally.
-# EXAMPLES:
-# - ntp_server:1.2.3.4,wpad:1.2.3.5 - Set ntp_server and wpad
-# - ntp_server:,wpad:1.2.3.5 - Unset ntp_server and set wpad
+# An empty value for a DHCPv6 option will cause that option to be unset
+# globally.
 # See the ovn-nb(5) man page for available options. (dict value)
 #ovn_dhcp6_global_options =
 
-# Configure OVN to emit "need to frag" packets in case of MTU mismatch.
-# Before enabling this configuration make sure that its supported by the host
-# kernel (version >= 5.2) or by checking the output of the following command:
+# Configure OVN to emit "need to frag" packets in case of MTU mismatches.
+# Before enabling this option make sure that it is supported by the host kernel
+# (version >= 5.2) or by checking the output of the following command:
 # ovs-appctl -t ovs-vswitchd dpif/show-dp-features br-int | grep "Check pkt
 # length action". (boolean value)
 #ovn_emit_need_to_frag = false
 
 # Disable OVN's built-in DHCP for baremetal ports (VNIC type "baremetal"). This
-# alllow operators to plug their own DHCP server of choice for PXE booting
-# baremetal nodes. Defaults to False. (boolean value)
+# allows operators to plug their own DHCP server of choice for PXE booting
+# baremetal nodes. OVN 23.06.0 and newer also supports baremetal ``PXE`` based
+# provisioning over IPv6. If an older version of OVN is used for baremetal
+# provisioning over IPv6 this option should be set to "True" and neutron-dhcp-
+# agent should be used instead. Defaults to "False". (boolean value)
 #disable_ovn_dhcp_for_baremetal_ports = false
 
 # DEPRECATED: If OVN older than 21.06 is used together with Neutron, this
-# option should be set to ``False`` in order to disable ``stateful-security-
-# group`` API extension as ``allow-stateless`` keyword is only supported by OVN
-# >= 21.06. (boolean value)
+# option should be set to ``False`` in order to disable the ``stateful-
+# security-group`` API extension as ``allow-stateless`` keyword is only
+# supported by OVN >= 21.06. (boolean value)
 # This option is deprecated for removal since 2023.1.
 # Its value may be silently ignored in the future.
 #allow_stateless_action_supported = true
+
+# If enabled it will allow localnet ports to learn MAC addresses and store them
+# in FDB SB table. This avoids flooding for traffic towards unknown IPs when
+# port security is disabled. It requires OVN 22.09 or newer. (boolean value)
+#localnet_learn_fdb = false
+
+# The number of seconds to keep FDB entries in the OVN DB. The value defaults
+# to 0, which means disabled. This is supported by OVN >= 23.09. (integer
+# value)
+# Minimum value: 0
+#fdb_age_threshold = 0
+
+# The number of seconds to keep MAC_Binding entries in the OVN DB. 0 to disable
+# aging. (integer value)
+# Minimum value: 0
+#mac_binding_age_threshold = 0
+
+# Whether to configure SNAT for all nested subnets connected to the router
+# through any other routers, similar to the default ML2/OVS behavior. Defaults
+# to "False". (boolean value)
+#ovn_router_indirect_snat = false
+
+
+[ovn_nb_global]
+
+#
+# From neutron.ml2.ovn
+#
+
+# If set to False, ARP/ND reply flows for logical switch ports will be
+# installed only if the port is UP, i.e. claimed by a Chassis. If set to True,
+# these flows are installed regardless of the status of the port, which can
+# result in a situation that an ARP request to an IP is resolved even before
+# the relevant VM/container is running. For environments where this is not an
+# issue, setting it to True can reduce the load and latency of the control
+# plane. The default value is False. (boolean value)
+#ignore_lsp_down = false
+
+# FDB aging bulk removal limit. This limits how many rows can expire in a
+# single transaction. Default is 0, which is unlimited. When the limit is
+# reached, the next batch removal is delayed by 5 seconds. This is supported by
+# OVN >= 23.09. (integer value)
+# Minimum value: 0
+#fdb_removal_limit = 0
+
+# MAC binding aging bulk removal limit. This limits how many entries can expire
+# in a single transaction. The default is 0 which is unlimited. When the limit
+# is reached, the next batch removal is delayed by 5 seconds. (integer value)
+# Minimum value: 0
+#mac_binding_removal_limit = 0
 
 
 [ovs]
@@ -334,7 +369,7 @@
 # From neutron.ml2.ovn
 #
 
-# Timeout in seconds for ovsdb commands. If the timeout expires, ovsdb commands
+# Timeout in seconds for OVSDB commands. If the timeout expires, OVSDB commands
 # will fail with ALARMCLOCK error. (integer value)
 #ovsdb_timeout = 10
 
@@ -345,9 +380,18 @@
 
 # Enable IGMP snooping for integration bridge. If this option is set to True,
 # support for Internet Group Management Protocol (IGMP) is enabled in
-# integration bridge. Setting this option to True will also enable Open vSwitch
-# mcast-snooping-disable-flood-unregistered flag. This option will disable
-# flooding of unregistered multicast packets to all ports. The switch will send
-# unregistered multicast packets only to ports connected to multicast routers.
-# (boolean value)
+# integration bridge. (boolean value)
 #igmp_snooping_enable = false
+
+# Multicast packets (except reports) are unconditionally forwarded to the ports
+# bridging a logical network to a physical network. (boolean value)
+#igmp_flood = false
+
+# Multicast reports are unconditionally forwarded to the ports bridging a
+# logical network to a physical network. (boolean value)
+#igmp_flood_reports = true
+
+# This option enables or disables flooding of unregistered multicast packets to
+# all ports. If False, The switch will send unregistered multicast packets only
+# to ports connected to multicast routers. (boolean value)
+#igmp_flood_unregistered = false
