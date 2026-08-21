@@ -57,8 +57,12 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/ironic-inspector-migrate-data /usr/bin/ironic-inspector-migrate-data
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/ironic-inspector-rootwrap /usr/bin/ironic-inspector-rootwrap
 	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
-	$(Q)# provided by networking-baremetal, installed with neutron
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
+	$(Q)# provided by networking-baremetal, installed with neutron -- so it follows
+	$(Q)# neutron's venv, not ironic's. The agent only reports chassis state to
+	$(Q)# neutron-server over RPC and imports nothing from ironic, so a caracal
+	$(Q)# binary in front of an antelope ironic is fine; a python 3.10 one in front
+	$(Q)# of a caracal neutron-server would not be.
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
 
 # install the ironic web ui plugin
 #

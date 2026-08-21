@@ -69,9 +69,10 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 # services. skyline was the first occupant: its forks branch off upstream master at
 # 4.0.1 (apiserver) and 4.0.0.0rc1 (console), i.e. caracal, not antelope. keystone
 # (25.0.0) is the second -- #631, the first openstack service to make the hop -- and
-# glance (28.2.0) the third (#630), cinder (24.5.0) the fourth (#629) and nova with
-# placement (29.4.0 / 11.0.1) the fifth (#627). The services move one at a time and
-# OPENSTACK_RELEASE is promoted once they all have.
+# glance (28.2.0) the third (#630), cinder (24.5.0) the fourth (#629), nova with
+# placement (29.4.0 / 11.0.1) the fifth (#627) and neutron (24.2.2) the sixth (#628).
+# The services move one at a time and OPENSTACK_RELEASE is promoted once they all
+# have.
 CARACAL_OPENSTACK_RELEASE := caracal
 CARACAL_OPENSTACK_HOME_DIR := /opt/openstack-$(CARACAL_OPENSTACK_RELEASE)
 CARACAL_OPS_GITHUB_BRANCH_01 := stable/2024.1

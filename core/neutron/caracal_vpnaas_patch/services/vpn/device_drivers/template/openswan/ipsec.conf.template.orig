@@ -1,0 +1,90 @@
+# Configuration for {{vpnservice.id}}
+config setup
+    nat_traversal=yes
+    virtual_private={{virtual_privates}}
+conn %default
+    keylife=60m
+    keyingtries=%forever
+{% for ipsec_site_connection in vpnservice.ipsec_site_connections if ipsec_site_connection.admin_state_up
+-%}
+conn {{ipsec_site_connection.id}}
+    {% if ipsec_site_connection['local_ip_vers'] == 6 -%}
+    # To recognize the given IP addresses in this config
+    # as IPv6 addresses by pluto whack. Default is ipv4
+    connaddrfamily=ipv6
+    # openswan can't process defaultroute for ipv6.
+    # Assign gateway address as leftnexthop
+    leftnexthop={{ipsec_site_connection.external_ip}}
+    # rightnexthop is not mandatory for ipsec, so no need in ipv6.
+    {% else -%}
+    # NOTE: a default route is required for %defaultroute to work...
+    leftnexthop=%defaultroute
+    rightnexthop=%defaultroute
+    {% endif -%}
+    left={{ipsec_site_connection.external_ip}}
+    leftid={{ipsec_site_connection.local_id}}
+    auto={{ipsec_site_connection.initiator}}
+    # NOTE:REQUIRED
+    # [subnet]
+    {% if ipsec_site_connection['local_cidrs']|length == 1 -%}
+    leftsubnet={{ipsec_site_connection['local_cidrs'][0]}}
+    {% else -%}
+    leftsubnets={ {{ipsec_site_connection['local_cidrs']|join(' ')}} }
+    {% endif -%}
+    # [updown]
+    # What "updown" script to run to adjust routing and/or firewalling when
+    # the status of the connection changes (default "ipsec _updown").
+    # "--route yes" allows to specify such routing options as mtu and metric.
+    leftupdown="ipsec _updown --route yes"
+    ######################
+    # ipsec_site_connections
+    ######################
+    # [peer_address]
+    right={{ipsec_site_connection.peer_address}}
+    # [peer_id]
+    rightid={{ipsec_site_connection.peer_id}}
+    # [peer_cidrs]
+    rightsubnets={ {{ipsec_site_connection['peer_cidrs']|join(' ')}} }
+    # rightsubnet=networkA/netmaskA, networkB/netmaskB (IKEv2 only)
+    # [mtu]
+    mtu={{ipsec_site_connection.mtu}}
+    # [dpd_action]
+    dpdaction={{ipsec_site_connection.dpd_action}}
+    # [dpd_interval]
+    dpddelay={{ipsec_site_connection.dpd_interval}}
+    # [dpd_timeout]
+    dpdtimeout={{ipsec_site_connection.dpd_timeout}}
+    # [auth_mode]
+    authby=secret
+    ######################
+    # IKEPolicy params
+    ######################
+    #ike version
+    ikev2={{ipsec_site_connection.ikepolicy.ike_version}}
+    # [encryption_algorithm]-[auth_algorithm]-[pfs]
+    ike={{ipsec_site_connection.ikepolicy.encryption_algorithm}}-{{ipsec_site_connection.ikepolicy.auth_algorithm}};{{ipsec_site_connection.ikepolicy.pfs}}
+    {% if ipsec_site_connection.ikepolicy.phase1_negotiation_mode == "aggressive" -%}
+    aggressive=yes
+    {% endif -%}
+    # [lifetime_value]
+    ikelifetime={{ipsec_site_connection.ikepolicy.lifetime_value}}s
+    # NOTE: it looks lifetime_units=kilobytes can't be enforced (could be seconds,  hours,  days...)
+    ##########################
+    # IPsecPolicys params
+    ##########################
+    # [transform_protocol]
+    phase2={{ipsec_site_connection.ipsecpolicy.transform_protocol}}
+    {% if ipsec_site_connection.ipsecpolicy.transform_protocol == "ah" -%}
+    # AH protocol does not support encryption
+    # [auth_algorithm]-[pfs]
+    phase2alg={{ipsec_site_connection.ipsecpolicy.auth_algorithm}};{{ipsec_site_connection.ipsecpolicy.pfs}}
+    {% else -%}
+    # [encryption_algorithm]-[auth_algorithm]-[pfs]
+    phase2alg={{ipsec_site_connection.ipsecpolicy.encryption_algorithm}}-{{ipsec_site_connection.ipsecpolicy.auth_algorithm}};{{ipsec_site_connection.ipsecpolicy.pfs}}
+    {% endif -%}
+    # [encapsulation_mode]
+    type={{ipsec_site_connection.ipsecpolicy.encapsulation_mode}}
+    # [lifetime_value]
+    lifetime={{ipsec_site_connection.ipsecpolicy.lifetime_value}}s
+    # lifebytes=100000 if lifetime_units=kilobytes (IKEv2 only)
+{% endfor -%}

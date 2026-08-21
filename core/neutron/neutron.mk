@@ -26,80 +26,113 @@ ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/
 # handled elsewhere: iptables
 ROOTFS_DNF += dnsmasq dnsmasq-utils radvd dibbler-client conntrack-tools keepalived haproxy ipset iputils iproute-tc libreswan sudo
 
-NEUTRON_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python3.10/site-packages/neutron
-NEUTRON_PATCHDIR := $(COREDIR)/neutron/$(OPENSTACK_RELEASE)_patch
+NEUTRON_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/neutron
+NEUTRON_PATCHDIR := $(COREDIR)/neutron/$(CARACAL_OPENSTACK_RELEASE)_patch
+NEUTRON_VPNAAS_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/neutron_vpnaas
+NEUTRON_VPNAAS_PATCHDIR := $(COREDIR)/neutron/$(CARACAL_OPENSTACK_RELEASE)_vpnaas_patch
 NEUTRON_CONFDIR := $(ROOTDIR)/etc/neutron
 
 OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)
 
-NEUTRON_VPNAAS_REPO_URL := https://github.com/bigstack-oss/neutron-vpnaas.git
 NEUTRON_VPNAAS_DASHBOARD_REPO_URL := https://github.com/openstack/neutron-vpnaas-dashboard.git
 
-# install neutron inside the python 3.10 virtual environment
-# NOTE: never pip install the standalone 'networking-ovn' package here — its
-# OVN ML2 driver was merged into neutron since Ussuri, and installing both
-# registers two conflicting 'ovn' entry points that crash-loop neutron-server
-# on Antelope. networking-baremetal provides the 'baremetal' ML2 driver that
-# config_neutron.cpp always references; unlike on RPM, pip won't pull it in
-# transitively, so it must stay listed explicitly below.
+# neutron runs out of the caracal venv. neutron 24.2.2 is the last 2024.1 release
+# and neutron-vpnaas 24.0.2 its counterpart; resolved against the caracal
+# constraints the three of them pull only new packages into
+# $(CARACAL_OPENSTACK_HOME_DIR) -- ten of them, changing no version skyline,
+# keystone, glance, cinder, nova or placement already holds -- so the hop costs the
+# other occupants nothing.
+#
+# It has to be a different venv rather than a version bump in place: manila,
+# masakari, cyborg, ironic, designate, octavia, heat and horizon still share
+# /opt/openstack-antelope, and neutron 24.2.2 takes neutron-lib to 3.11.1, os-ken to
+# 2.8.2 and ovsdbapp to 2.6.1 -- which openstack-heat also resolves neutron-lib
+# through.
+#
+# networking-baremetal has to be pinned rather than left to resolve: the caracal
+# constraints file does not carry it (the antelope one pins 6.1.1), so an
+# unqualified name resolves to whatever is newest on PyPI. 6.3.1 is the last of the
+# 6.3.x line that shipped with 2024.1.
+#
+# NOTE: never pip install the standalone 'networking-ovn' package here -- its OVN
+# ML2 driver was merged into neutron since Ussuri, and installing both registers two
+# conflicting 'ovn' entry points that crash-loop neutron-server. networking-baremetal
+# provides the 'baremetal' ML2 driver that config_neutron.cpp always references;
+# unlike on RPM, pip won't pull it in transitively, so it must stay listed
+# explicitly below.
+#
+# neutron-vpnaas comes from PyPI rather than the bigstack-oss fork it came from up to
+# antelope. The fork existed to carry the OVN VPNaaS backport (a Xena-era spec that
+# only reached upstream in 2023.2) onto a 2023.1 base; 2024.1 ships all of it --
+# neutron_vpnaas/services/vpn/ovn_agent.py, the ovn_ipsec service and device drivers
+# and the two 2023.2 alembic migrations -- so the only thing left downstream is the
+# libreswan 4.x adaptation, which is now $(NEUTRON_VPNAAS_PATCHDIR). A wheel also
+# reports a real version where 'setup.py install' from a --depth 1 clone left pbr
+# calling it 0.0.0.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-		neutron==22.2.1 \
-		networking-baremetal"
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		neutron==24.2.2 \
+		neutron-vpnaas==24.0.2 \
+		networking-baremetal==6.3.1"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron /usr/bin/neutron
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-api /usr/bin/neutron-api
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-db-manage /usr/bin/neutron-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-debug /usr/bin/neutron-debug
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-dhcp-agent /usr/bin/neutron-dhcp-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-ipset-cleanup /usr/bin/neutron-ipset-cleanup
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-keepalived-state-change /usr/bin/neutron-keepalived-state-change
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-l3-agent /usr/bin/neutron-l3-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-linuxbridge-agent /usr/bin/neutron-linuxbridge-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-linuxbridge-cleanup /usr/bin/neutron-linuxbridge-cleanup
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-macvtap-agent /usr/bin/neutron-macvtap-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-metadata-agent /usr/bin/neutron-metadata-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-metering-agent /usr/bin/neutron-metering-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-netns-cleanup /usr/bin/neutron-netns-cleanup
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-openvswitch-agent /usr/bin/neutron-openvswitch-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-ovn-agent /usr/bin/neutron-ovn-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-ovn-db-sync-util /usr/bin/neutron-ovn-db-sync-util
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-ovn-metadata-agent /usr/bin/neutron-ovn-metadata-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-ovn-migration-mtu /usr/bin/neutron-ovn-migration-mtu
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-ovs-cleanup /usr/bin/neutron-ovs-cleanup
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-pd-notify /usr/bin/neutron-pd-notify
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-remove-duplicated-port-bindings /usr/bin/neutron-remove-duplicated-port-bindings
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-rootwrap /usr/bin/neutron-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-rootwrap-daemon /usr/bin/neutron-rootwrap-daemon
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-rpc-server /usr/bin/neutron-rpc-server
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-sanitize-port-binding-profile-allocation /usr/bin/neutron-sanitize-port-binding-profile-allocation
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-sanitize-port-mac-addresses /usr/bin/neutron-sanitize-port-mac-addresses
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-sanity-check /usr/bin/neutron-sanity-check
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-server /usr/bin/neutron-server
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-sriov-nic-agent /usr/bin/neutron-sriov-nic-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-status /usr/bin/neutron-status
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-usage-audit /usr/bin/neutron-usage-audit
+	$(Q)# /usr/bin/neutron and /usr/bin/neutron-debug are deliberately absent: the
+	$(Q)# neutron CLI went with python-neutronclient 11.0.0 and neutron-debug with
+	$(Q)# neutron 24.0.0. core/sdk_sh/modules/sdk_os.sh reaches neutron through the
+	$(Q)# openstack CLI instead.
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-api /usr/bin/neutron-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-db-manage /usr/bin/neutron-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-dhcp-agent /usr/bin/neutron-dhcp-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-ipset-cleanup /usr/bin/neutron-ipset-cleanup
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-keepalived-state-change /usr/bin/neutron-keepalived-state-change
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-l3-agent /usr/bin/neutron-l3-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-linuxbridge-agent /usr/bin/neutron-linuxbridge-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-linuxbridge-cleanup /usr/bin/neutron-linuxbridge-cleanup
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-macvtap-agent /usr/bin/neutron-macvtap-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-metadata-agent /usr/bin/neutron-metadata-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-metering-agent /usr/bin/neutron-metering-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-netns-cleanup /usr/bin/neutron-netns-cleanup
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-openvswitch-agent /usr/bin/neutron-openvswitch-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-ovn-agent /usr/bin/neutron-ovn-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-ovn-db-sync-util /usr/bin/neutron-ovn-db-sync-util
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-ovn-metadata-agent /usr/bin/neutron-ovn-metadata-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-ovn-migration-mtu /usr/bin/neutron-ovn-migration-mtu
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-ovs-cleanup /usr/bin/neutron-ovs-cleanup
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-pd-notify /usr/bin/neutron-pd-notify
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-remove-duplicated-port-bindings /usr/bin/neutron-remove-duplicated-port-bindings
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-rootwrap /usr/bin/neutron-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-rootwrap-daemon /usr/bin/neutron-rootwrap-daemon
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-rpc-server /usr/bin/neutron-rpc-server
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-sanitize-port-binding-profile-allocation /usr/bin/neutron-sanitize-port-binding-profile-allocation
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-sanitize-port-mac-addresses /usr/bin/neutron-sanitize-port-mac-addresses
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-sanity-check /usr/bin/neutron-sanity-check
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-server /usr/bin/neutron-server
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-sriov-nic-agent /usr/bin/neutron-sriov-nic-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-status /usr/bin/neutron-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-usage-audit /usr/bin/neutron-usage-audit
+	$(Q)# for neutron-vpnaas
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-ovn-vpn-agent /usr/bin/neutron-ovn-vpn-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-vpn-netns-wrapper /usr/bin/neutron-vpn-netns-wrapper
 
 # prepare the build directory and configuration templates
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/neutron
 	$(Q)chroot $(ROOTDIR) mkdir -p /tmp/neutron
 
-# set up forked neutron-vpnaas projects
+# set up the neutron-vpnaas VPN panel
+#
+# The dashboard stays in the antelope venv and on $(OPS_GITHUB_BRANCH_02) even though
+# the service it drives has moved: it is a horizon plugin, horizon is still
+# horizon 23.1.1 in /opt/openstack-antelope, and 10.0.0 -- the 2024.1 dashboard --
+# wants a caracal horizon. It talks to neutron over the API, so the two ends are free
+# to sit a release apart. It moves when horizon does.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(NEUTRON_VPNAAS_REPO_URL) /tmp/neutron/neutron-vpnaas
-	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-		-r /tmp/neutron/neutron-vpnaas/requirements.txt
-	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/neutron/neutron-vpnaas && \
-		/opt/openstack-antelope/bin/python setup.py install"
 	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(NEUTRON_VPNAAS_DASHBOARD_REPO_URL) /tmp/neutron/neutron-vpnaas-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
@@ -110,9 +143,6 @@ rootfs_install::
 		/opt/openstack-antelope/bin/python setup.py install"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)# Link binaries
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-ovn-vpn-agent /usr/bin/neutron-ovn-vpn-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-vpn-netns-wrapper /usr/bin/neutron-vpn-netns-wrapper
 
 # generate default configurations and stage files
 rootfs_install::
@@ -275,6 +305,7 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)[ -d $(NEUTRON_PATCHDIR) ] && cp -rf $(NEUTRON_PATCHDIR)/* $(NEUTRON_SRCDIR)/ || /bin/true
+	$(Q)[ -d $(NEUTRON_VPNAAS_PATCHDIR) ] && cp -rf $(NEUTRON_VPNAAS_PATCHDIR)/* $(NEUTRON_VPNAAS_SRCDIR)/ || /bin/true
 
 rootfs_install::
 	$(Q)for ns in $$(find $(ROOTDIR)/usr/lib/systemd/system/*neutron*.service) ; do sed -i /^Timeout*/d $$ns ; done
@@ -283,7 +314,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /etc/neutron/neutron_vpnaas.conf /usr/share/neutron/server/neutron_vpnaas.conf
 	$(Q)# Note: The netns wrapper symlink target is updated to the venv bin path
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/neutron-vpn-netns-wrapper /usr/sbin/neutron-vpn-netns-wrapper
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-vpn-netns-wrapper /usr/sbin/neutron-vpn-netns-wrapper
 	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/neutron/neutron_vpnaas.conf ./etc/neutron/neutron_vpnaas.conf.def
 	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/neutron/vpn_agent.ini ./etc/neutron/vpn_agent.ini.def
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/vpnaas.filters ./usr/share/neutron/rootwrap/
