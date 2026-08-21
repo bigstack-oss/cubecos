@@ -58,11 +58,57 @@ static const char USERPASS[] = "XPrCSFAZu5h98rVM";
 static const char METAPASS[] = "HeBlO7sMRH6fYtmC";
 static const char DBPASS[] = "KNaHKGg62djyeJ6M";
 
+/**
+ * The privsep helper neutron must escalate through.
+ *
+ * neutron does not use oslo.privsep's `sudo privsep-helper` default: every agent
+ * calls priv_context.init(root_helper=...) at startup, which makes the helper
+ * command `sudo neutron-rootwrap /etc/neutron/rootwrap.conf privsep-helper`.
+ * neutron-rootwrap then resolves the bare name off the exec_dirs in
+ * rootwrap.conf, and /usr/bin comes first -- so it lands on
+ * /usr/bin/privsep-helper, the symlink core/nova/nova.mk keeps pointed at the
+ * *antelope* venv for manila, masakari and cyborg. A python 3.10 helper cannot
+ * serve a caracal neutron, and the failure has two shapes, only one of them
+ * loud: on a freshly built rootfs the antelope venv holds no neutron at all and
+ * the agent dies with FailedToDropPrivileges, while on a node upgraded in place
+ * the neutron 22.2.1 still sitting there imports fine and answers a 24.2.2
+ * parent with no error anywhere.
+ *
+ * helper_command wins over the root_helper prefix (oslo.privsep documents
+ * root_helper as "ignored if context's helper_command config option is set"), so
+ * naming it here takes rootwrap out of the path entirely and
+ * /etc/sudoers.d/neutron authorises exactly this path.
+ */
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+
 static Configs cfg;
 static Configs ml2Cfg;
 static Configs mdCfg;
 static Configs vpnaasCfg;
 static Configs vpnAgtCfg;
+
+/**
+ * Pin every privsep section neutron registers, in one config file.
+ *
+ * neutron/privileged/__init__.py declares six PrivContexts, each with its own
+ * cfg_section: privsep, privsep_dhcp_release, privsep_ovs_vsctl,
+ * privsep_namespace, privsep_conntrack and privsep_link. A pin in the wrong
+ * section is silently ignored, and the sections are not interchangeable -- the
+ * metadata agent alone reaches three of them (default, link_cmd and
+ * namespace_cmd) before it has provisioned a single network -- so all six are
+ * written rather than only the ones a given agent happens to use today.
+ */
+static void
+SetPrivsepHelper(Configs& config)
+{
+    static const std::vector<std::string> sections = {
+        "privsep", "privsep_dhcp_release", "privsep_ovs_vsctl",
+        "privsep_namespace", "privsep_conntrack", "privsep_link",
+    };
+
+    for (auto& section : sections)
+        config[section]["helper_command"] = PRIVSEP_HELPER;
+}
 
 static bool s_bSetup = true;
 static bool s_bNetModified = false;
@@ -519,6 +565,8 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         ml2Cfg["ovn"]["ovn_dhcp4_global_options"] = "classless_static_route:{169.254.169.254/32}";
 
         vpnaasCfg["service_providers"]["service_provider"] = "VPN:openswan:neutron_vpnaas.services.vpn.service_drivers.ovn_ipsec.IPsecOvnVPNDriver:default";
+
+        SetPrivsepHelper(cfg);
     }
 
     if (IsCompute(s_eCubeRole)) {
@@ -530,6 +578,14 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         vpnAgtCfg["ipsec"]["enable_detailed_logging"] = "true";
         vpnAgtCfg["vpnagent"]["vpn_device_driver"] = "neutron_vpnaas.services.vpn.device_drivers.ovn_ipsec.OvnLibreSwanDriver";
         vpnAgtCfg["AGENT"]["root_helper"] = "sudo neutron-rootwrap /etc/neutron/rootwrap.conf";
+
+        // The two agents that actually escalate. Both pins go in the IsCompute
+        // branch, not the control-only one: on 3c_3p_5s a pure compute node runs
+        // neutron-ovn-metadata-agent and neutron-ovn-vpn-agent without being a
+        // controller, and privsep is all that stands between the metadata agent and
+        // "Network NG [ neutron(3 metadata not all up) ]".
+        SetPrivsepHelper(mdCfg);
+        SetPrivsepHelper(vpnAgtCfg);
     }
 
     if (IsControl(s_eCubeRole)) {

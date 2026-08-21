@@ -2,4 +2,9 @@ Defaults:neutron !requiretty
 
 neutron ALL = (root) NOPASSWD: /usr/bin/neutron-rootwrap /etc/neutron/rootwrap.conf *
 neutron ALL = (root) NOPASSWD: /usr/bin/neutron-rootwrap-daemon /etc/neutron/rootwrap.conf
-neutron ALL = (root) NOPASSWD: /usr/bin/privsep-helper *
+# This is what the six helper_command pins config_neutron.cpp writes point at.
+# /usr/bin/privsep-helper stays pointed at the antelope venv (core/nova/nova.mk keeps
+# it there for the services that have not hopped), and a python 3.10 helper cannot
+# serve a caracal neutron, so the path is spelled out rather than left to the
+# exec_dirs in rootwrap.conf.
+neutron ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *
