@@ -161,9 +161,6 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/neutron/ovn.ini.sample $(ROOTDIR)/tmp/neutron/
 	$(Q)cp -f $(COREDIR)/neutron/ovn_agent.ini.sample $(ROOTDIR)/tmp/neutron/
 	$(Q)cp -f $(COREDIR)/neutron/sriov_agent.ini.sample $(ROOTDIR)/tmp/neutron/
-	$(Q)cp -f $(COREDIR)/neutron/rootwrap.filters $(ROOTDIR)/tmp/neutron/
-	$(Q)cp -f $(COREDIR)/neutron/api-paste.ini $(ROOTDIR)/tmp/neutron/
-	$(Q)cp -f $(COREDIR)/neutron/rootwrap.conf $(ROOTDIR)/tmp/neutron/
 	$(Q)cp -f $(COREDIR)/neutron/neutron-sudoers $(ROOTDIR)/tmp/neutron/
 	$(Q)cp -f $(COREDIR)/neutron/neutron-destroy-patch-ports.service $(ROOTDIR)/tmp/neutron/
 	$(Q)cp -f $(COREDIR)/neutron/neutron-dhcp-agent.service $(ROOTDIR)/tmp/neutron/
@@ -186,11 +183,18 @@ rootfs_install::
 # install system directories and production files
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/neutron/rootwrap
-	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/rootwrap.filters /usr/share/neutron/rootwrap/rootwrap.filters
+	$(Q)# api-paste.ini, rootwrap.conf and rootwrap.d/rootwrap.filters are upstream
+	$(Q)# data the neutron wheel already installs under the venv prefix through its
+	$(Q)# setup.cfg data_files, and all three are byte-identical to what the tree used
+	$(Q)# to carry -- so they are installed from there rather than kept as a second
+	$(Q)# copy that only moves when someone remembers to re-copy it. Ordering is safe:
+	$(Q)# the pip install that creates the venv is an earlier rootfs_install:: block in
+	$(Q)# this file, and double-colon rules run in definition order.
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/neutron/rootwrap.d/rootwrap.filters /usr/share/neutron/rootwrap/rootwrap.filters
 	$(Q)# install base configurations
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/neutron
-	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/api-paste.ini /etc/neutron/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/rootwrap.conf /etc/neutron/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/neutron/api-paste.ini /etc/neutron/api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/neutron/rootwrap.conf /etc/neutron/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/neutron/plugins/ml2
 	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/neutron.conf.sample /etc/neutron/neutron.conf
 	$(Q)chroot $(ROOTDIR) cp -f /tmp/neutron/ovn.ini.sample /etc/neutron/ovn.ini
@@ -317,6 +321,9 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/neutron-vpn-netns-wrapper /usr/sbin/neutron-vpn-netns-wrapper
 	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/neutron/neutron_vpnaas.conf ./etc/neutron/neutron_vpnaas.conf.def
 	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/neutron/vpn_agent.ini ./etc/neutron/vpn_agent.ini.def
+	$(Q)# vpnaas.filters is the one filter file that stays carried: the neutron-vpnaas
+	$(Q)# wheel ships it too, but upstream's copy authorises
+	$(Q)# /usr/local/bin/neutron-vpn-netns-wrapper and cube's wrapper is at /usr/bin.
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/vpnaas.filters ./usr/share/neutron/rootwrap/
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/neutron-ovn-vpn-agent.service ./lib/systemd/system
 
