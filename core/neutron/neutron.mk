@@ -1,10 +1,23 @@
 # Cube SDK
 # neutron installation
 
-RDOOVN_VERSION := -24.03-1.el9s
+# OVN is held at 24.03.8-31.el9s on Open vSwitch 3.3.8-7.el9s -- the newest of each in
+# centos-nfv-openvswitch, and the pair the caracal image resolves to. The pin is not
+# housekeeping: core/neutron/Makefile builds the DR-SNAT-patched ovn-northd from the
+# ovn24.03-24.03.8-31.el9s src rpm and core/neutron/ovn_patch/$(HEX_DIST) ships that
+# binary, so letting the RPMs float would put a northd built from one OVN release next
+# to an ovn-controller and an ovn-nb schema from another. Neither package carries an
+# Epoch, so the plain name-version form holds -- see core/heavyfs/Makefile on why an
+# epoch in LOCKED_DNF silently defeats the pin.
+OVN_VER := -24.03.8-31.el9s
+OVN_LOCKED_RPMS := ovn24.03$(OVN_VER) ovn24.03-central$(OVN_VER) ovn24.03-host$(OVN_VER)
+OVS_LOCKED_RPMS := openvswitch3.3-3.3.8-7.el9s
+LOCKED_DNF += $(OVN_LOCKED_RPMS) $(OVS_LOCKED_RPMS)
 
 # Base networking RPMs
-ROOTFS_DNF += openvswitch3.3 ovn24.03 ovn24.03-central ovn24.03-host
+ROOTFS_DNF += $(OVS_LOCKED_RPMS) $(OVN_LOCKED_RPMS)
+
+RDOOVN_VERSION := -24.03-1.el9s
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn$(RDOOVN_VERSION).noarch.rpm
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
