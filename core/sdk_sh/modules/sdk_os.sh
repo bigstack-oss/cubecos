@@ -404,9 +404,22 @@ os_list_loadbalancer_by_project_basic()
     $OPENSTACK loadbalancer list --project $tid -f value -c name
 }
 
+# The settable network attributes, spelled out rather than scraped out of
+# `--help`. This used to be `neutron net-update --help`, which offered exactly
+# these six; `openstack network set` offers twenty-two, but most of them are
+# valueless flags (--enable, --share, --external) or take structured arguments
+# (--tag, --extra-property, --provider-*) that do not fit the "pick a type, type a
+# value" contract os_neutron_network_update and cli_iaas_network.cpp share. Keeping
+# the list at what worked before is a like-for-like port; widening it is a separate
+# decision.
 os_neutron_network_opt_list()
 {
-    neutron net-update --help 2>/dev/null | grep "^  --" | awk -F'--' '{print $2}' | awk '{print $1}'
+    echo "name
+description
+qos-policy
+no-qos-policy
+dns-domain
+no-dns-domain"
 }
 
 os_neutron_network_update()
@@ -416,12 +429,26 @@ os_neutron_network_update()
     local type=$3
     local value=$4
     local nid=$(os_get_network_id_by_tenant_and_name $tenant $network)
-    neutron net-update $nid --$type $value 2>/dev/null
+
+    if [ "$type" == "no-dns-domain" ] ; then
+        # `openstack network set --dns-domain ""` is a no-op -- osc drops empty
+        # string values before it builds the request -- so clearing has to go
+        # through the generic attribute setter, which sends what it is given.
+        $OPENSTACK network set --extra-property type=str,name=dns_domain,value= $nid
+    elif [ "${type#no-}" != "$type" ] ; then
+        # --no-qos-policy and friends take no value; cli_iaas_network.cpp passes an
+        # empty one for them.
+        $OPENSTACK network set --$type $nid
+    else
+        # quoted: a description is the one value here that legitimately has spaces
+        # in it, and unquoted it used to reach the CLI as several arguments.
+        $OPENSTACK network set --$type "$value" $nid
+    fi
 
     if [ "$type" == "dns-domain" ]; then
-        local subnet_ids=$(openstack subnet list --network $nid -f value -c ID)
+        local subnet_ids=$($OPENSTACK subnet list --network $nid -f value -c ID)
         for subnet_id in $subnet_ids; do
-            openstack subnet set --dns-publish-fixed-ip $subnet_id
+            $OPENSTACK subnet set --dns-publish-fixed-ip $subnet_id
         done
     fi
 }
@@ -434,9 +461,25 @@ os_neutron_network_show()
     $OPENSTACK network show $nid
 }
 
+# The network quotas `openstack quota set` can set, spelled out because its
+# `--help` mixes compute, volume and network options behind identical
+# "New value for the X quota" descriptions -- there is nothing to filter on. This
+# used to be scraped from `neutron quota-update --help`, which also offered
+# vip/pool/member/health-monitor/loadbalancer/listener: neutron-lbaas quotas that
+# have not existed since Train. Nine live names replace fourteen mostly dead ones.
+# Note these are the *flag* names, which differ from the resource names
+# `openstack quota show --network` prints (subnetpools vs subnet_pools).
 os_neutron_quota_list()
 {
-    neutron quota-update --help 2>/dev/null | grep "The limit" -B 1 | grep "^  --" | awk -F'--' '{print $2}' | awk '{print $1}'
+    echo "networks
+subnets
+ports
+routers
+floating-ips
+secgroups
+secgroup-rules
+rbac-policies
+subnetpools"
 }
 
 os_neutron_quota_update()
@@ -445,14 +488,16 @@ os_neutron_quota_update()
     local type=$2
     local value=$3
     local tid=$(os_get_project_id_by_name $tenant)
-    neutron quota-update --tenant-id $tid --$type $value 2>/dev/null
+    # --force explicitly: osc currently defaults to it for network quotas but warns
+    # that the default will flip, and `neutron quota-update` always forced.
+    $OPENSTACK quota set --force --$type $value $tid
 }
 
 os_neutron_quota_show()
 {
     local tenant=$1
     local tid=$(os_get_project_id_by_name $tenant)
-    neutron quota-show --tenant-id $tid 2>/dev/null
+    $OPENSTACK quota show --network $tid
 }
 
 os_neutron_agent_cache_renew()
@@ -526,7 +571,8 @@ os_set_router_ext_gateway()
     local gateway_info=$($OPENSTACK router show $router -f json | jq .external_gateway_info)
     local ext_net_id=$(echo $gateway_info | jq -r ".network_id")
     local sub_net_id=$(echo $gateway_info | jq -r ".external_fixed_ips[0].subnet_id")
-    neutron router-gateway-set --fixed-ip subnet_id=$sub_net_id,ip_address=$ipaddr $router_id $ext_net_id > /dev/null 2>&1
+    $OPENSTACK router set --external-gateway $ext_net_id \
+        --fixed-ip subnet=$sub_net_id,ip-address=$ipaddr $router_id > /dev/null 2>&1
 }
 
 os_remove_floating_ip()
@@ -1762,28 +1808,6 @@ os_octavia_sgid_get()
     $OPENSTACK security group list | awk ' / lb-mgmt-sec-grp / {print $2}' | tr -d '\n'
 }
 
-os_octavia_neutron_lbaas_status_sync()
-{
-    local sync=${1:-yes}
-    readarray lbid_array <<<"$(neutron lbaas-loadbalancer-list -c id -f value 2>/dev/null )"
-    declare -p lbid_array > /dev/null
-    for lbid in "${lbid_array[@]}" ; do
-        local lb_id=$(echo $lbid | tr -d '\n')
-        if [ -n "$lb_id" ] ; then
-            local prov=$(neutron lbaas-loadbalancer-show $lb_id 2>/dev/null | awk '/ provisioning_status /{print $4}')
-            local op=$(neutron lbaas-loadbalancer-show $lb_id 2>/dev/null | awk '/ operating_status /{print $4}')
-            local o_prov=$(/usr/bin/mysql -u root -D octavia -e "select id,provisioning_status from load_balancer" | grep $lb_id | awk '{print $2}')
-            if [ "$o_prov" != "$prov" ] ; then
-                if [ "$sync" == "yes" ] ; then
-                    /usr/bin/mysql -u root -D octavia -e "UPDATE load_balancer set provisioning_status='$prov', operating_status='$op' where id='$lb_id'"
-                else
-                    return -1
-                fi
-            fi
-        fi
-    done
-}
-
 os_octavia_port_remove()
 {
     local lb_id=$1
@@ -1794,115 +1818,6 @@ os_octavia_port_remove()
         local port_id=$(echo $pid | tr -d '\n')
         $OPENSTACK port delete octavia-lb-vrrp-$port_id
     done
-}
-
-os_octavia_neutron_lbaas_hm_remove()
-{
-    local pool_id=$1
-    local hm_id=$(neutron lbaas-pool-show $pool_id 2>/dev/null | awk '/ healthmonitor_id /{print $4}')
-
-    if [ -n "$hm_id" -a "$hm_id" != "|" ] ; then
-        neutron lbaas-healthmonitor-delete $hm_id
-        sleep 6
-    fi
-}
-
-os_octavia_neutron_lbaas_member_remove()
-{
-    local pool_id=$1
-
-    readarray mid_array <<<"$(neutron lbaas-member-list $pool_id -c id -f value 2>/dev/null)"
-    declare -p mid_array > /dev/null
-    for mid in "${mid_array[@]}" ; do
-        local member_id=$(echo $mid | tr -d '\n')
-        neutron lbaas-member-delete $member_id $pool_id
-        sleep 6
-    done
-}
-
-os_octavia_neutron_lbaas_pool_remove()
-{
-    local lb_id=$1
-
-    readarray pid_array <<<"$(/usr/bin/mysql -u root -D neutron -e "select id,loadbalancer_id from lbaas_pools where loadbalancer_id = '$lb_id'" | grep $lb_id | awk '{print $1}')"
-    declare -p pid_array > /dev/null
-    for pid in "${pid_array[@]}" ; do
-        local pool_id=$(echo $pid | tr -d '\n')
-        os_octavia_neutron_lbaas_hm_remove $pool_id
-        os_octavia_neutron_lbaas_member_remove $pool_id
-        neutron lbaas-pool-delete $pool_id
-        sleep 6
-    done
-}
-
-os_octavia_neutron_lbaas_listener_remove()
-{
-    local lb_id=$1
-
-    readarray lid_array <<<"$(/usr/bin/mysql -u root -D neutron -e "select id,loadbalancer_id from lbaas_listeners where loadbalancer_id = '$lb_id'" | grep $lb_id | awk '{print $1}')"
-    declare -p lid_array > /dev/null
-    for lid in "${lid_array[@]}" ; do
-        local listener_id=$(echo $lid | tr -d '\n')
-        neutron lbaas-listener-delete $listener_id
-        sleep 6
-    done
-}
-
-os_octavia_neutron_lbaas_remove()
-{
-    local lb_name=$@
-    local lb_id=$(neutron lbaas-loadbalancer-list 2>/dev/null | grep " $lb_name " | awk '{print $2}' | tr -d '\n')
-
-    if [ -z "$lb_id" ] ; then
-        echo "$lb_name is not found"
-        return 0
-    fi
-
-    echo "Removing attached vrrp ports..."
-    os_octavia_port_remove $lb_id
-
-    echo "Removing pools and its members/monitors..."
-    os_octavia_neutron_lbaas_pool_remove $lb_id
-
-    echo "Removing listeners..."
-    os_octavia_neutron_lbaas_listener_remove $lb_id
-
-    echo "Removing loadbalancer... $lb_id"
-    neutron lbaas-loadbalancer-delete $lb_id
-}
-
-os_octavia_neutron_lbaas_db_remove()
-{
-    local lb_name=$@
-    local lb_id=$(neutron lbaas-loadbalancer-list 2>/dev/null | grep " $lb_name " | awk '{print $2}' | tr -d '\n')
-
-    if [ -z "$lb_id" ] ; then
-        echo "$lb_name is not found"
-        return 0
-    fi
-
-    echo "Removing attached vrrp ports..."
-    os_octavia_port_remove $lb_id
-
-    echo "Removing listeners..."
-    /usr/bin/mysql -u root -D neutron -e "delete from lbaas_listeners where loadbalancer_id = '$lb_id'"
-
-    readarray pid_array <<<"$(/usr/bin/mysql -u root -D neutron -e "select id,loadbalancer_id from lbaas_pools where loadbalancer_id = '$lb_id'" | grep $lb_id | awk '{print $1}')"
-    declare -p pid_array > /dev/null
-    for pid in "${pid_array[@]}" ; do
-        local pool_id=$(echo $pid | tr -d '\n')
-        local hm_id=$(neutron lbaas-pool-show $pool_id 2>/dev/null | awk '/ healthmonitor_id /{print $4}')
-        echo "Removing pools and its members/monitors... $pool_id"
-        /usr/bin/mysql -u root -D neutron -e "delete from lbaas_members where pool_id = '$pool_id'"
-        /usr/bin/mysql -u root -D neutron -e "delete from lbaas_pools where id = '$pool_id'"
-        /usr/bin/mysql -u root -D neutron -e "delete from lbaas_healthmonitors where id = '$hm_id'"
-    done
-
-    echo "Removing loadbalancer... $lb_id"
-    /usr/bin/mysql -u root -D neutron -e "delete from lbaas_loadbalancer_statistics where loadbalancer_id = '$lb_id'"
-    /usr/bin/mysql -u root -D neutron -e "delete from lbaas_loadbalancers where id = '$lb_id'"
-    $OPENSTACK loadbalancer delete $lb_id --cascade
-    $OPENSTACK port delete loadbalancer-$lb_id
 }
 
 os_octavia_lb_remove()
