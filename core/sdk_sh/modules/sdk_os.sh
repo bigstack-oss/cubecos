@@ -1762,6 +1762,45 @@ os_octavia_sgid_get()
     $OPENSTACK security group list | awk ' / lb-mgmt-sec-grp / {print $2}' | tr -d '\n'
 }
 
+# Ports OVN has brought up that neutron still calls DOWN. neutron's OVN port
+# status is event-driven with no reconciliation, so a neutron-server whose IDL
+# stops delivering Logical_Switch_Port events leaves them DOWN forever and every
+# nova build routed to it dies on vif_plugging_timeout. Prints the port ids.
+os_neutron_ovn_port_status_stale()
+{
+    local now=$(date -u +%s) p up ts age rc=1
+    # port list has no --status filter; take the json and pick the DOWN ones
+    for p in $($OPENSTACK port list --device-owner compute:nova -f json 2>/dev/null | \
+               python3 -c 'import sys,json;[print(x["ID"]) for x in json.load(sys.stdin) if x.get("Status")=="DOWN"]' 2>/dev/null) ; do
+        up=$(ovn-nbctl --timeout=5 get logical_switch_port $p up 2>/dev/null | tr -d '"')
+        [ "x$up" = "xtrue" ] || continue
+        # skip ports still inside the normal plug window -- a healthy transition
+        # is sub-second, so only a stale one is still inconsistent this late
+        ts=$($OPENSTACK port show $p -f value -c updated_at 2>/dev/null)
+        age=$(( now - $(date -u -d "$ts" +%s 2>/dev/null || echo $now) ))
+        [ $age -ge 90 ] || continue
+        echo $p
+        rc=0
+    done
+    return $rc
+}
+
+# Make neutron re-derive the status of the given ports. The LSP's enabled field
+# is the port's admin_state_up, so toggling it produces the Logical_Switch_Port
+# update neutron's LogicalSwitchPortUpdateUpEvent needs; that calls
+# set_port_status_up, which also notifies nova -- so a build still inside
+# vif_plugging_timeout recovers instead of failing. A neutron-server restart
+# achieves the same only because its IDL reconnect re-dumps every port.
+os_neutron_ovn_port_status_resync()
+{
+    local p
+    for p in "$@" ; do
+        log_info "neutron: re-firing OVN port status for $p"
+        $OPENSTACK port set --disable $p 2>/dev/null
+        $OPENSTACK port set --enable $p 2>/dev/null
+    done
+}
+
 # Are this node's lb-mgmt ids actually stamped in octavia.conf? An empty
 # amp_boot_network_list makes every amphora build handed to this node's worker
 # fail with nova's misleading "Multiple possible networks found".
