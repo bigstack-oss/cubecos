@@ -2368,6 +2368,14 @@ health_neutron_check()
         fi
     fi
 
+    if [ $ERR_CODE -eq 0 ] ; then
+        OVN_STALE_PORTS="$($HEX_SDK os_neutron_ovn_port_status_stale)"
+        if [ -n "$OVN_STALE_PORTS" ] ; then
+            ERR_MSG+="ports up in OVN but DOWN in neutron: $(echo $OVN_STALE_PORTS)\n"
+            ERR_CODE=7
+        fi
+    fi
+
     _health_fail_log
 }
 
@@ -2393,6 +2401,21 @@ _health_neutron_auto_repair()
             for host in $OVN_META_STUCK ; do
                 remote_systemd_restart $host neutron-ovn-metadata-agent
             done
+        elif [ $ERR_CODE -eq 7 ] ; then
+            # re-fire the status event for just the affected ports -- no service
+            # restart, and it notifies nova so an in-flight build still recovers.
+            # (a db_sync can't help here: ovn_db_sync never touches port status)
+            Quiet -n cmd -c -- $HEX_SDK os_neutron_ovn_port_status_resync $OVN_STALE_PORTS
+            sleep 10
+            # only if that didn't take, fall back to bouncing neutron-server one
+            # node at a time: its IDL reconnect re-dumps and re-derives every port
+            if [ -n "$($HEX_SDK os_neutron_ovn_port_status_stale)" ] ; then
+                for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+                    remote_systemd_restart $node neutron-server
+                    sleep 20
+                    [ -n "$($HEX_SDK os_neutron_ovn_port_status_stale)" ] || break
+                done
+            fi
         else
             $HEX_SDK ovn_neutron_db_sync
             readarray entry_array <<<"$(echo -n "$ERR_MSG" | awk '/False/{print $1" "$3}' | sort)"

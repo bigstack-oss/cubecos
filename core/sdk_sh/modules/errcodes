@@ -188,6 +188,7 @@ eval "ERR_DESC_$SRV[3]='metadata not all up'"
 eval "ERR_DESC_$SRV[4]='vpn not all up'"
 eval "ERR_DESC_$SRV[5]='control not all up'"
 eval "ERR_DESC_$SRV[6]='port create fail'"
+eval "ERR_DESC_$SRV[7]='port status stale vs ovn'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="glance"
