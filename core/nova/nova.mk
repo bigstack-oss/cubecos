@@ -108,14 +108,20 @@ rootfs_install::
 # oslo.privsep escalates by running `sudo privsep-helper`, resolved off sudo's
 # secure_path (/sbin:/bin:/usr/sbin:/usr/bin), which never contains a venv's bin -- so
 # the bare name has to exist there. One symlink covers every service that has not made
-# the caracal hop: neutron, manila, masakari and cyborg all reach the helper through
+# the caracal hop: manila, masakari and cyborg all reach the helper through
 # /usr/bin/privsep-helper, and config_manila.cpp, config_masakari.cpp and
-# config_cyborg.cpp name that path in helper_command.
+# config_cyborg.cpp name that path in helper_command. neutron used to be on that list
+# and reached it a fourth way -- not through sudo's secure_path but through the
+# exec_dirs in /etc/neutron/rootwrap.conf, since neutron agents escalate via
+# `sudo neutron-rootwrap ... privsep-helper`. #628 took neutron to caracal and
+# config_neutron.cpp now pins the caracal helper in all six of its privsep sections,
+# so nothing under /etc/neutron resolves this symlink any more.
 #
 # It is load-bearing rather than a convenience: with no /usr/bin/privsep-helper at all,
-# neutron-ovn-metadata-agent crash-loops on "FailedToDropPrivileges: privsep helper
-# command exited non-zero (96)" and `cluster check` reports
-# "Network NG [ neutron(3 metadata not all up) ]".
+# an antelope agent that has not been pinned crash-loops on
+# "FailedToDropPrivileges: privsep helper command exited non-zero (96)" -- which is how
+# it was first found, as "Network NG [ neutron(3 metadata not all up) ]" before neutron
+# had its own pins.
 #
 # So the helper is installed into *both* venvs from here: caracal's comes from the
 # oslo.privsep named in the pip install above, which is the one nova itself escalates
@@ -129,7 +135,8 @@ rootfs_install::
 #
 # Both halves go once the last antelope service reaches caracal: the pip install below,
 # the symlink, and the helper_command pins in config_manila.cpp, config_masakari.cpp
-# and config_cyborg.cpp.
+# and config_cyborg.cpp. At that point the caracal half moves out of nova.mk too --
+# every venv occupant will be naming its own helper by then.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
