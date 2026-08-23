@@ -2727,6 +2727,11 @@ health_octavia_check()
     local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'octavia'" | jq .results[0].series[0].values[0][1])
     if [ "$http_stats" != "0" ] ; then
         ERR_CODE=1
+    elif cube_cluster_ready && $HEX_SDK os_planned_maintenance_stale ; then
+        # As in health_masakari_check: reported ahead of the health-manager-down
+        # code, which is only the symptom of the gate still holding.
+        ERR_MSG+="planned-maintenance marker stale (>30min) on a ready cluster; octavia health-manager gated off\n"
+        ERR_CODE=13
     else
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if ! is_remote_running $node octavia-api ; then
@@ -2959,6 +2964,12 @@ health_masakari_check()
     $CURL -sf http://$HOSTNAME:15868 >/dev/null
     if [ $? -ne 0 ] ; then
         ERR_CODE=1
+    elif cube_cluster_ready && $HEX_SDK os_planned_maintenance_stale ; then
+        # Marker left behind by an interrupted bring-up. Reported ahead of the
+        # monitor-down codes below because those are its symptom: the gate is
+        # holding the monitors off, so instance-HA is silently disabled.
+        ERR_MSG+="planned-maintenance marker stale (>30min) on a ready cluster; instance-HA monitors gated off\n"
+        ERR_CODE=9
     else
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if ! is_remote_running $node masakari-api ; then

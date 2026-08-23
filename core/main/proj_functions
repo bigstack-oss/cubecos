@@ -308,6 +308,10 @@ cube_cluster_start_node()
     cmd "$HEX_SDK network_ipt_serviceint" # customized iptables
     Quiet -n $HEX_SDK ceph_osd_set_bucket_host # assign osds to customized ceph buckets
     Quiet -n $HEX_SDK os_resume_hypervisor     # resume hypervisors disabled due to ins-ha
+    # NB: the instance-HA monitors are deliberately NOT started here. Per-node
+    # start is too early -- the process monitor reports its own not-yet-started
+    # nova-compute as a failure and masakari flags the host on_maintenance.
+    # They are armed once, cluster-wide, in cube_cluster_start_cluster.
     Quiet -n killall /usr/sbin/hex_banner # refresh console banner
     ( $HEX_SDK toggle_health_check | grep ceph_osd | grep -q disabled ) || Quiet -n $HEX_SDK toggle_health_check ceph_osd
     iptables-save > /run/iptables
@@ -346,6 +350,12 @@ cube_cluster_start_cluster()
     fi
     keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
     Quiet -n cubectl node rsync /run/ec2.key
+
+    # NB: the planned-maintenance marker is deliberately NOT cleared here. This
+    # half finishes well before the recorded VMs are restored, and arming the
+    # monitors while the amphorae are still SHUTOFF is exactly the false-failure
+    # they are gated against. Released in cluster_check_repair_async, after
+    # power_restore_recorded_vms.
 }
 
 # Master-only, run-once gate for the cluster-wide half. The master waits until
@@ -1267,6 +1277,13 @@ cluster_check_repair_async()
             out=$(hex_cli -c cluster check_repair 2>&1 | grep -av "Broken pipe")
         fi
         hex_sdk power_restore_recorded_vms
+        # Bring-up really is done now: the recorded VMs are back, so release the
+        # planned-maintenance gate and arm the monitors directly rather than
+        # waiting out RestartSec. Must follow the restore -- arming while the
+        # amphorae are still SHUTOFF makes octavia rebuild every one of them.
+        hex_sdk os_planned_maintenance_clear
+        hex_sdk os_masakari_monitors start
+        cubectl node exec -r compute -p "systemctl start octavia-health-manager" >/dev/null 2>&1
         [ -n "$out" ] || exit 0
         con=$(hex_sdk GetKernelConsoleDevices)
         { echo "" ; echo "===== cluster check_repair complete =====" ; echo "$out" ; echo "=========================================" ; } | tee $con 2>/dev/null | wall 2>/dev/null

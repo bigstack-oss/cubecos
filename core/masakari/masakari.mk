@@ -85,6 +85,11 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/masakari/masakari-instancemonitor.service ./lib/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/masakari/masakari-processmonitor.service ./lib/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/masakari/masakari-hostmonitor.service ./lib/systemd/system
+	$(Q)# gate the monitors on the planned-maintenance marker (see cube-planned-maintenance.conf)
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/masakari-instancemonitor.service.d /etc/systemd/system/masakari-processmonitor.service.d /etc/systemd/system/masakari-hostmonitor.service.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-planned-maintenance.conf ./etc/systemd/system/masakari-instancemonitor.service.d/
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-planned-maintenance.conf ./etc/systemd/system/masakari-processmonitor.service.d/
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-planned-maintenance.conf ./etc/systemd/system/masakari-hostmonitor.service.d/
 
 # masakari command line plugin
 #

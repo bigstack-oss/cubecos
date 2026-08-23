@@ -636,6 +636,25 @@ ClusterStopMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+// Shared preamble for the planned whole-cluster stops (poweroff and powercycle).
+// Kept in one place because those two paths are near-identical twins and a fix
+// applied to only one of them silently does nothing on the other.
+//
+// Marks the shutdown planned before anything stops: a systemd drop-in gates the
+// monitors that trigger destructive recovery on that marker, so they cannot
+// rearm early on the way back up and read a still-starting service as a failure
+// (masakari flagging the host on_maintenance, octavia rebuilding every amphora
+// on stale heartbeats). Then silences instance-HA before any node goes down --
+// otherwise the nodes stopped first are seen failing by monitors still running
+// on the rest. Cleared by cube_cluster_start_cluster.
+static void
+ClusterPlannedStopPrepare()
+{
+    HexUtilSystemF(0, 0, HEX_SDK " os_planned_maintenance_set");
+    HexUtilSystemF(0, 0, HEX_SDK " os_masakari_monitors stop");
+    HexUtilSystemF(0, 0, "cubectl node exec -r compute -p 'systemctl stop octavia-health-manager' >/dev/null 2>&1");
+}
+
 static int
 ClusterPoweroffMain(int argc, const char** argv)
 {
@@ -659,6 +678,8 @@ ClusterPoweroffMain(int argc, const char** argv)
     // Record running VMs up front, while the API is healthy -- the per-host stop
     // below can't reliably do it mid-teardown (see power_record_running_vms).
     HexSystemF(0, "ssh root@%s '%s power_record_running_vms'", masterctl.c_str(), HEX_SDK);
+
+    ClusterPlannedStopPrepare();
 
     for (auto& ip : reverse(iplist)) {
         CliPrintf("mark control host %s down", ip.c_str());
@@ -698,6 +719,8 @@ ClusterPowercycleMain(int argc, const char** argv)
     // below can't reliably do it mid-teardown (see power_record_running_vms).
     HexSystemF(0, "ssh root@%s '%s power_record_running_vms'", masterctl.c_str(), HEX_SDK);
 
+    ClusterPlannedStopPrepare();
+
     for (auto& ip : reverse(iplist)) {
         CliPrintf("mark control host %s down", ip.c_str());
         HexSystemF(0, "ssh root@%s '%s cube_cluster_stop' 2>/dev/null", ip.c_str(), HEX_SDK);
@@ -706,7 +729,6 @@ ClusterPowercycleMain(int argc, const char** argv)
 
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_compact >/dev/null 2>&1");
     HexUtilSystemF(0, 0, HEX_SDK " ceph_enter_maintenance");
-    HexUtilSystemF(0, 0, HEX_SDK " os_maintain_segment_hosts"); // puts hosts in maintenance if ins-ha is enabled
 
     HexSystemF(0, "ssh root@%s '%s cube_cluster_power cycle' 2>/dev/null", masterctl.c_str(), HEX_SDK);
 

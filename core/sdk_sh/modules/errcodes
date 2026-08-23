@@ -234,6 +234,7 @@ eval "ERR_DESC_$SRV[9]='health-manager down'"
 eval "ERR_DESC_$SRV[10]='lb-mgmt ids unset'"
 eval "ERR_DESC_$SRV[11]='octavia-hm0 port not bound in ovn'"
 eval "ERR_DESC_$SRV[12]='load balancer in ERROR'"
+eval "ERR_DESC_$SRV[13]='planned-maintenance marker stuck, health-manager gated off'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="designate"
@@ -260,6 +261,7 @@ eval "ERR_DESC_$SRV[5]='processmonitor down'"
 eval "ERR_DESC_$SRV[6]='hostmonitor down'"
 eval "ERR_DESC_$SRV[7]='instancemonitor down'"
 eval "ERR_DESC_$SRV[8]='host in maintenance, instance-HA off'"
+eval "ERR_DESC_$SRV[9]='planned-maintenance marker stuck, monitors gated off'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="monasca"
