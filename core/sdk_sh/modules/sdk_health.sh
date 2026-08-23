@@ -2586,6 +2586,12 @@ health_manila_check()
     local share_up=$(echo "$service_stats" | grep manila-share | grep -i enabled | grep -i up | wc -l )
     local share_down=$(echo "$service_stats" | grep manila-share | grep -i enabled | grep -i down | wc -l )
     local share_total=$(cubectl node list -r compute -j | jq -r .[].hostname | head -3 | wc -l)
+    # Count HOSTS with a share service up, not service rows: with N backends each
+    # node runs one manila-share per backend (host@generic, host@cephfs, ...), so
+    # comparing rows against a node count reports "share down" on every healthy
+    # multi-backend cluster. Host is the part before '@'.
+    local share_hosts_up=$(echo "$service_stats" | grep manila-share | grep -i enabled | grep -i up \
+        | awk '{for(i=1;i<=NF;i++) if($i ~ /@/) {split($i,a,"@"); print a[1]; break}}' | sort -u | wc -l)
 
     if [ -z "$service_stats" ] ; then
         ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-manila-api"
@@ -2593,7 +2599,7 @@ health_manila_check()
     elif [ "$scheduler_up" == "0" -o "$scheduler_down" != "0" ] ; then
         ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-manila-scheduler"
         ERR_CODE=3
-    elif [ "$share_up" != "$share_total" -o "$share_down" != "0" ] ; then
+    elif [ "$share_hosts_up" != "$share_total" -o "$share_down" != "0" ] ; then
         ERR_CODE=4
     fi
 
