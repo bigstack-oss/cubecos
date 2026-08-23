@@ -1752,6 +1752,50 @@ os_octavia_hm0_up()
     fi
 }
 
+# Planned-maintenance marker. Set by `cluster poweroff` on every node before the
+# nodes go down, cleared by `cluster start` once the cluster-wide bring-up is
+# done. Health monitors that trigger destructive recovery (masakari monitors,
+# octavia health-manager) are gated on it by a systemd drop-in, so a planned
+# shutdown is never read as a failure: without it the masakari process monitor
+# reports its own not-yet-started nova-compute and flags the host on_maintenance,
+# and octavia's health-manager rebuilds every amphora on stale heartbeats.
+# Lives in /etc/appliance/state so it survives the reboot it has to span.
+PLANNED_MAINT_MARKER=/etc/appliance/state/cube_planned_maintenance
+
+os_planned_maintenance_active()
+{
+    [ -e $PLANNED_MAINT_MARKER ]
+}
+
+# Marker left behind by a bring-up that never finished. Age-bounded because the
+# legitimate window runs to the end of cluster_check_repair_async -- a boot that
+# also runs check_repair holds the marker for ~10min, and reporting that as a
+# fault would just be a false alarm on every power cycle.
+PLANNED_MAINT_STALE_MIN=30
+
+os_planned_maintenance_stale()
+{
+    [ -e $PLANNED_MAINT_MARKER ] || return 1
+    [ -n "$(find $PLANNED_MAINT_MARKER -mmin +$PLANNED_MAINT_STALE_MIN 2>/dev/null)" ]
+}
+
+# Write locally then rsync. Neither a remote_run loop nor `cubectl node exec`
+# carries the marker: remote_run expands "$@" unquoted, and the quoting of an
+# `echo '...' > file` argument does not survive node exec -- it redirects
+# cubectl's own output into the local file instead.
+os_planned_maintenance_set()
+{
+    echo "set=$(date -Is) by=$(hostname)" > $PLANNED_MAINT_MARKER
+    Quiet -n cubectl node rsync $PLANNED_MAINT_MARKER
+    log_info "planned maintenance: marker set on all nodes"
+}
+
+os_planned_maintenance_clear()
+{
+    Quiet -n cubectl node exec -p "rm -f $PLANNED_MAINT_MARKER"
+    log_info "planned maintenance: marker cleared on all nodes"
+}
+
 # This node's health-mgr port must be ACTIVE, i.e. actually bound in OVN. A port
 # left DOWN still has its ovs port, link and route, so the structural hm0 checks
 # all pass while lb-mgmt has no datapath at all.

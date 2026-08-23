@@ -177,6 +177,10 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/octavia/octavia-worker.service /usr/lib/systemd/system/octavia-worker.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/octavia/octavia-housekeeping.service /usr/lib/systemd/system/octavia-housekeeping.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/octavia/octavia-health-manager.service /usr/lib/systemd/system/octavia-health-manager.service
+	$(Q)# gate the health-manager on the planned-maintenance marker: it rebuilds every
+	$(Q)# amphora on stale heartbeats, which a planned shutdown otherwise looks like
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/octavia-health-manager.service.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-planned-maintenance.conf ./etc/systemd/system/octavia-health-manager.service.d/
 
 # adjust file ownerships and permissions
 rootfs_install::
