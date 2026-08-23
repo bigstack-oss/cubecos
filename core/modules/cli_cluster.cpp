@@ -603,6 +603,11 @@ ClusterCheckRepairMain(int argc, const char** argv)
             CliPrint("A critical service could not be repaired. Stop checking.");
     }
 
+    // Finish a planned stop the operator was told to complete by hand. Gated on
+    // the marker, so a routine sweep touches no workload.
+    if (repair)
+        HexUtilSystemF(0, 0, HEX_SDK " cube_cluster_resume_after_stop");
+
     return CLI_SUCCESS;
 }
 
@@ -636,17 +641,12 @@ ClusterStopMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-// Shared preamble for the planned whole-cluster stops (poweroff and powercycle).
-// Kept in one place because those two paths are near-identical twins and a fix
-// applied to only one of them silently does nothing on the other.
+// Shared by poweroff and powercycle -- near-identical twins, and a fix applied
+// to one of them silently does nothing on the other.
 //
-// Marks the shutdown planned before anything stops: a systemd drop-in gates the
-// monitors that trigger destructive recovery on that marker, so they cannot
-// rearm early on the way back up and read a still-starting service as a failure
-// (masakari flagging the host on_maintenance, octavia rebuilding every amphora
-// on stale heartbeats). Then silences instance-HA before any node goes down --
-// otherwise the nodes stopped first are seen failing by monitors still running
-// on the rest. Cleared by cube_cluster_start_cluster.
+// Marks the stop planned so the gated monitors cannot rearm early on the way
+// back up, then silences instance-HA before any node goes down: otherwise the
+// nodes stopped first are seen failing by monitors still running on the rest.
 static void
 ClusterPlannedStopPrepare()
 {

@@ -1752,14 +1752,9 @@ os_octavia_hm0_up()
     fi
 }
 
-# Planned-maintenance marker. Set by `cluster poweroff` on every node before the
-# nodes go down, cleared by `cluster start` once the cluster-wide bring-up is
-# done. Health monitors that trigger destructive recovery (masakari monitors,
-# octavia health-manager) are gated on it by a systemd drop-in, so a planned
-# shutdown is never read as a failure: without it the masakari process monitor
-# reports its own not-yet-started nova-compute and flags the host on_maintenance,
-# and octavia's health-manager rebuilds every amphora on stale heartbeats.
-# Lives in /etc/appliance/state so it survives the reboot it has to span.
+# Set by `cluster poweroff`, cleared once the resume completes. The health
+# monitors are gated on it by a systemd drop-in. In /etc/appliance/state because
+# it has to survive the reboot it spans.
 PLANNED_MAINT_MARKER=/etc/appliance/state/cube_planned_maintenance
 
 os_planned_maintenance_active()
@@ -1767,10 +1762,8 @@ os_planned_maintenance_active()
     [ -e $PLANNED_MAINT_MARKER ]
 }
 
-# Marker left behind by a bring-up that never finished. Age-bounded because the
-# legitimate window runs to the end of cluster_check_repair_async -- a boot that
-# also runs check_repair holds the marker for ~10min, and reporting that as a
-# fault would just be a false alarm on every power cycle.
+# Marker left behind by a bring-up that never finished. Age-bounded: the
+# legitimate window runs to the end of cluster_check_repair_async.
 PLANNED_MAINT_STALE_MIN=30
 
 os_planned_maintenance_stale()
@@ -1779,10 +1772,8 @@ os_planned_maintenance_stale()
     [ -n "$(find $PLANNED_MAINT_MARKER -mmin +$PLANNED_MAINT_STALE_MIN 2>/dev/null)" ]
 }
 
-# Write locally then rsync. Neither a remote_run loop nor `cubectl node exec`
-# carries the marker: remote_run expands "$@" unquoted, and the quoting of an
-# `echo '...' > file` argument does not survive node exec -- it redirects
-# cubectl's own output into the local file instead.
+# Write locally then rsync: neither remote_run nor `node exec` carries a
+# redirect intact (unquoted "$@", and node exec redirects its own output).
 os_planned_maintenance_set()
 {
     echo "set=$(date -Is) by=$(hostname)" > $PLANNED_MAINT_MARKER
@@ -1796,9 +1787,9 @@ os_planned_maintenance_clear()
     log_info "planned maintenance: marker cleared on all nodes"
 }
 
-# This node's health-mgr port must be ACTIVE, i.e. actually bound in OVN. A port
-# left DOWN still has its ovs port, link and route, so the structural hm0 checks
-# all pass while lb-mgmt has no datapath at all.
+# This node's health-mgr port must be ACTIVE, i.e. bound in OVN. A DOWN port
+# still has its ovs port, link and route, so codes 5/6/7 all pass while
+# lb-mgmt has no datapath.
 os_octavia_hm_port_bound()
 {
     [ -f /run/cube_commit_done ] || return 0
@@ -1813,8 +1804,8 @@ os_octavia_lb_error_list()
     $OPENSTACK loadbalancer list --provisioning-status ERROR -f value -c id 2>/dev/null
 }
 
-# Recover them with octavia's own failover: it rebuilds the amphora with the
-# injected config a plain nova rebuild would lose.
+# octavia's own failover: it rebuilds the amphora with the injected config a
+# nova rebuild would lose.
 os_octavia_lb_failover_errored()
 {
     local lb
@@ -2937,12 +2928,9 @@ os_calibrate_nova_resources()
     done
 }
 
-# Echo the first OTHER control node whose galera reports a live PRIMARY
-# component; rc 0 when one exists. Guards the boot path against bootstrapping a
-# second cluster over a running one: two primaries meet later and galera aborts
-# a node FATAL with "conflicting prims: older overrides" (seen 2026-08-23, when a
-# node rebooting from a host failure bootstrapped an empty cluster while the two
-# survivors held quorum). _health_mysql repair has always had this check.
+# Echo the first OTHER control node whose galera reports a live Primary; rc 0
+# when one exists. Bootstrapping over one aborts a node FATAL with
+# "conflicting prims". _health_mysql repair has always had this check.
 os_galera_live_primary()
 {
     local me=$(hostname) node st
@@ -2957,14 +2945,9 @@ os_galera_live_primary()
     return 1
 }
 
-# Hosts currently flagged on_maintenance in ANY masakari segment -- instance-HA
-# is OFF for these: every host-failure notification for them is rejected 409
-# "already under maintenance" and nothing evacuates.
-#
-# Reads the field by name with `segment host show`. Do NOT use
-# `segment host list -c name -c on_maintenance`: -c does not set column order and
-# the output transposes on_maintenance with reserved, which reads plausibly and
-# is wrong (cost a misdiagnosis 2026-08-23).
+# Hosts flagged on_maintenance in ANY segment -- instance-HA is OFF for these.
+# Reads the field by name: `segment host list -c name -c on_maintenance` does not
+# set column order and transposes on_maintenance with reserved.
 os_masakari_maintenance_hosts()
 {
     local u h
@@ -2976,17 +2959,10 @@ os_masakari_maintenance_hosts()
     done
 }
 
-# Stop/start the masakari monitors cluster-wide.
-#
-# Used by `cluster poweroff` so an orderly shutdown is never reported as host
-# failures: with the monitors down no COMPUTE_HOST notification is raised at all,
-# so masakari's DB is left untouched and nothing has to be un-set on the way back
-# up. This replaces flagging every host on_maintenance, which was wrong twice
-# over -- the flag is shared with operator intent (an operator may set it for
-# planned work and must not have it cleared under them), and when it leaked
-# instance-HA was off cluster-wide with `cluster check` still reporting
-# InstanceHa ok. A monitor left stopped, by contrast, is already reported by
-# health_masakari_check (codes 5/6/7), so the failure mode is visible.
+# Stop/start the masakari monitors cluster-wide. `cluster poweroff` stops them so
+# an orderly shutdown raises no host-failure notification at all, leaving nothing
+# to un-set on the way back up -- unlike flagging hosts on_maintenance, which
+# shares a field with operator intent and silently disabled instance-HA.
 os_masakari_monitors()   # $1 = start|stop
 {
     local act=${1:-start} node

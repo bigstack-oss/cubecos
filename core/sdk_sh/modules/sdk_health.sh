@@ -2586,10 +2586,9 @@ health_manila_check()
     local share_up=$(echo "$service_stats" | grep manila-share | grep -i enabled | grep -i up | wc -l )
     local share_down=$(echo "$service_stats" | grep manila-share | grep -i enabled | grep -i down | wc -l )
     local share_total=$(cubectl node list -r compute -j | jq -r .[].hostname | head -3 | wc -l)
-    # Count HOSTS with a share service up, not service rows: with N backends each
-    # node runs one manila-share per backend (host@generic, host@cephfs, ...), so
-    # comparing rows against a node count reports "share down" on every healthy
-    # multi-backend cluster. Host is the part before '@'.
+    # Count HOSTS with a share up, not rows: with N backends each node runs one
+    # manila-share per backend, so rows vs a node count reports "share down" on
+    # every healthy multi-backend cluster.
     local share_hosts_up=$(echo "$service_stats" | grep manila-share | grep -i enabled | grep -i up \
         | awk '{for(i=1;i<=NF;i++) if($i ~ /@/) {split($i,a,"@"); print a[1]; break}}' | sort -u | wc -l)
 
@@ -2734,8 +2733,7 @@ health_octavia_check()
     if [ "$http_stats" != "0" ] ; then
         ERR_CODE=1
     elif cube_cluster_ready && $HEX_SDK os_planned_maintenance_stale ; then
-        # As in health_masakari_check: reported ahead of the health-manager-down
-        # code, which is only the symptom of the gate still holding.
+        # Ahead of the health-manager-down code, which is only its symptom.
         ERR_MSG+="planned-maintenance marker stale (>30min) on a ready cluster; octavia health-manager gated off\n"
         ERR_CODE=13
     else
@@ -2833,9 +2831,8 @@ health_octavia_repair()
     # -triggered path -- it can't overlap a periodic round, so the cost is fine.
     local master=$CUBE_NODE_CONTROL_HOSTNAMES node pids=""
 
-    # code 12 first: an LB in ERROR usually just needs octavia's own failover,
-    # and issuing it is async + seconds. Behind the reinit loop it never runs --
-    # that loop takes ~6min, past the repair round's budget.
+    # code 12 first: issuing the failover is async and takes seconds. Behind the
+    # reinit loop it never runs -- that loop outlasts the repair round.
     Quiet -n $HEX_SDK os_octavia_lb_failover_errored
 
     Quiet -n remote_run $master $HEX_CFG reinit_octavia
@@ -2848,9 +2845,8 @@ health_octavia_repair()
     done
     for p in $pids ; do wait "$p" ; done
 
-    # again for any LB whose failover needed the datapath the reinit just
-    # restored; already-recovered ones are not in the ERROR list, so this is a
-    # no-op in the common case.
+    # again for any LB whose failover needed the datapath the reinit restored;
+    # recovered ones are no longer in the ERROR list, so usually a no-op.
     Quiet -n $HEX_SDK os_octavia_lb_failover_errored
 }
 
@@ -2971,9 +2967,7 @@ health_masakari_check()
     if [ $? -ne 0 ] ; then
         ERR_CODE=1
     elif cube_cluster_ready && $HEX_SDK os_planned_maintenance_stale ; then
-        # Marker left behind by an interrupted bring-up. Reported ahead of the
-        # monitor-down codes below because those are its symptom: the gate is
-        # holding the monitors off, so instance-HA is silently disabled.
+        # Reported ahead of the monitor-down codes below: those are its symptom.
         ERR_MSG+="planned-maintenance marker stale (>30min) on a ready cluster; instance-HA monitors gated off\n"
         ERR_CODE=9
     else
@@ -3004,11 +2998,8 @@ health_masakari_check()
             fi
         done
 
-        # A host left in masakari maintenance has instance-HA OFF: every
-        # host-failure notification for it is rejected 409 "already under
-        # maintenance", nothing evacuates, and nothing else says so. Report it --
-        # do NOT auto-clear here, since an operator may have set it deliberately
-        # (os_resume_hypervisor only undoes the platform's own planned-stop flag).
+        # instance-HA is OFF for these. Report only -- an operator may have set
+        # the flag deliberately, so never auto-clear it.
         if [ $ERR_CODE -eq 0 ] ; then
             local maint=$($HEX_SDK os_masakari_maintenance_hosts 2>/dev/null | tr '\n' ' ')
             if [ -n "$(echo $maint)" ] ; then
