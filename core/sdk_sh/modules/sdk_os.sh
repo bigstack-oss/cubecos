@@ -2780,6 +2780,26 @@ os_calibrate_nova_resources()
     done
 }
 
+# Echo the first OTHER control node whose galera reports a live PRIMARY
+# component; rc 0 when one exists. Guards the boot path against bootstrapping a
+# second cluster over a running one: two primaries meet later and galera aborts
+# a node FATAL with "conflicting prims: older overrides" (seen 2026-08-23, when a
+# node rebooting from a host failure bootstrapped an empty cluster while the two
+# survivors held quorum). _health_mysql repair has always had this check.
+os_galera_live_primary()
+{
+    local me=$(hostname) node st
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        [ "x$node" = "x$me" ] && continue
+        st=$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'")
+        if [ "x$st" = "xPrimary" ] ; then
+            echo "$node"
+            return 0
+        fi
+    done
+    return 1
+}
+
 os_resume_hypervisor()
 {
     if nova hypervisor-list | grep -q disabled ; then
