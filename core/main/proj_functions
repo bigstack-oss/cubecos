@@ -351,11 +351,8 @@ cube_cluster_start_cluster()
     keys=$keys timeout $SRVSTO $HEX_SDK os_s3_bucket_create admin log >/dev/null 2>&1
     Quiet -n cubectl node rsync /run/ec2.key
 
-    # NB: the planned-maintenance marker is deliberately NOT cleared here. This
-    # half finishes well before the recorded VMs are restored, and arming the
-    # monitors while the amphorae are still SHUTOFF is exactly the false-failure
-    # they are gated against. Released in cluster_check_repair_async, after
-    # power_restore_recorded_vms.
+    # NB: the marker is deliberately NOT cleared here -- this half finishes well
+    # before the VMs are restored. Released by cube_cluster_resume_after_stop.
 }
 
 # Master-only, run-once gate for the cluster-wide half. The master waits until
@@ -1260,6 +1257,30 @@ cube_wait_all_committed()
     return 1
 }
 
+# Finish a planned stop: restore the VMs it recorded and release the gate. The
+# monitors need nothing more -- their drop-in retries until the gate lifts.
+cube_cluster_resume_after_stop()
+{
+    _cube_cluster_start_env
+
+    # Only a planned stop may power a VM back. The recorded list outlives the
+    # restore, so ungated this would restart a VM stopped on purpose. The roll
+    # path records without the marker and restores in PostBootRecovery.
+    $HEX_SDK os_planned_maintenance_active || return 0
+
+    # Wait for the API this needs: cube_cluster_ready only means every node
+    # committed and synced, and the sweep reports FAIL and moves on. Bounded at
+    # 1h -- a cold powercycle with slow OSD recovery can take that long to serve.
+    local i
+    for i in $(seq 1 360) ; do
+        $OPENSTACK compute service list --service nova-compute >/dev/null 2>&1 && break
+        sleep 10
+    done
+
+    $HEX_SDK power_restore_recorded_vms
+    $HEX_SDK os_planned_maintenance_clear
+}
+
 cluster_check_repair_async()
 {
     # Run the final cluster check_repair off the caller's critical path so the
@@ -1268,22 +1289,14 @@ cluster_check_repair_async()
     # it finishes. Detached via setsid so it survives the parent CLI exiting.
     # Held until all nodes have committed so it fires once on a settled cluster.
     # Hidden opt-out: skip the check_repair if the agent dropped the marker (see
-    # #1225) -- but ALWAYS restore the VMs recorded at cluster stop. The opt-out
-    # suppresses health repair so faults stay visible; it must not strand a
-    # customer's running VMs SHUTOFF after a poweroff/power-loss cycle.
+    # #1225) -- it suppresses health repair so faults stay visible. The resume
+    # below runs either way; it is gated on the planned-stop marker, not this.
     setsid bash -c '
         hex_sdk cube_wait_all_committed 1500
         if [ ! -f /etc/appliance/state/cube_repair_optout ] ; then
             out=$(hex_cli -c cluster check_repair 2>&1 | grep -av "Broken pipe")
         fi
-        hex_sdk power_restore_recorded_vms
-        # Bring-up really is done now: the recorded VMs are back, so release the
-        # planned-maintenance gate and arm the monitors directly rather than
-        # waiting out RestartSec. Must follow the restore -- arming while the
-        # amphorae are still SHUTOFF makes octavia rebuild every one of them.
-        hex_sdk os_planned_maintenance_clear
-        hex_sdk os_masakari_monitors start
-        cubectl node exec -r compute -p "systemctl start octavia-health-manager" >/dev/null 2>&1
+        hex_sdk cube_cluster_resume_after_stop
         [ -n "$out" ] || exit 0
         con=$(hex_sdk GetKernelConsoleDevices)
         { echo "" ; echo "===== cluster check_repair complete =====" ; echo "$out" ; echo "=========================================" ; } | tee $con 2>/dev/null | wall 2>/dev/null
