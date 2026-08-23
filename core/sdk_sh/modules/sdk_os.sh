@@ -1752,6 +1752,34 @@ os_octavia_hm0_up()
     fi
 }
 
+# This node's health-mgr port must be ACTIVE, i.e. actually bound in OVN. A port
+# left DOWN still has its ovs port, link and route, so the structural hm0 checks
+# all pass while lb-mgmt has no datapath at all.
+os_octavia_hm_port_bound()
+{
+    [ -f /run/cube_commit_done ] || return 0
+
+    local st=$($OPENSTACK port show "octavia-hmgr-port-$(hostname)" -f value -c status 2>/dev/null)
+    [ "x$st" = "xACTIVE" ]
+}
+
+# Load balancers left in ERROR.
+os_octavia_lb_error_list()
+{
+    $OPENSTACK loadbalancer list --provisioning-status ERROR -f value -c id 2>/dev/null
+}
+
+# Recover them with octavia's own failover: it rebuilds the amphora with the
+# injected config a plain nova rebuild would lose.
+os_octavia_lb_failover_errored()
+{
+    local lb
+    for lb in $(os_octavia_lb_error_list) ; do
+        log_info "octavia: failover load balancer $lb in ERROR"
+        Quiet -n $OPENSTACK loadbalancer failover $lb
+    done
+}
+
 os_octavia_nid_get()
 {
     $OPENSTACK network list | awk '/ lb-mgmt-net / {print $2}' | tr -d '\n'
@@ -2885,31 +2913,66 @@ os_galera_live_primary()
     return 1
 }
 
-os_resume_hypervisor()
+# Hosts currently flagged on_maintenance in ANY masakari segment -- instance-HA
+# is OFF for these: every host-failure notification for them is rejected 409
+# "already under maintenance" and nothing evacuates.
+#
+# Reads the field by name with `segment host show`. Do NOT use
+# `segment host list -c name -c on_maintenance`: -c does not set column order and
+# the output transposes on_maintenance with reserved, which reads plausibly and
+# is wrong (cost a misdiagnosis 2026-08-23).
+os_masakari_maintenance_hosts()
 {
-    if nova hypervisor-list | grep -q disabled ; then
-        for u in $($OPENSTACK segment list -f value -c uuid) ; do
-            for n in $($OPENSTACK segment host list $u -f value -c name) ; do
-                if [ "x$n" = "x$(hostname)" ] ; then
-                    $OPENSTACK segment host update $u $(hostname) --on_maintenance False
-                    $OPENSTACK compute service set --enable $(hostname) nova-compute
-                fi
-            done
-        done
-
-        # Let users decide if they want to hard-reboot instances
-        # echo YES | hex_cli -c iaas compute reset All
-    fi
-}
-
-os_maintain_segment_hosts()
-{
-    for u in $($OPENSTACK segment list -f value -c uuid) ; do
-        for n in $($OPENSTACK segment host list $u -f value -c name) ; do
-            $OPENSTACK segment host update $u $n --on_maintenance True
+    local u h
+    for u in $($OPENSTACK segment list -f value -c uuid 2>/dev/null) ; do
+        for h in $($OPENSTACK segment host list $u -f value -c name 2>/dev/null) ; do
+            $OPENSTACK segment host show $u $h 2>/dev/null \
+                | awk '$2 == "on_maintenance" && $4 == "True" { f = 1 } END { exit !f }' && echo "$h"
         done
     done
 }
+
+# Stop/start the masakari monitors cluster-wide.
+#
+# Used by `cluster poweroff` so an orderly shutdown is never reported as host
+# failures: with the monitors down no COMPUTE_HOST notification is raised at all,
+# so masakari's DB is left untouched and nothing has to be un-set on the way back
+# up. This replaces flagging every host on_maintenance, which was wrong twice
+# over -- the flag is shared with operator intent (an operator may set it for
+# planned work and must not have it cleared under them), and when it leaked
+# instance-HA was off cluster-wide with `cluster check` still reporting
+# InstanceHa ok. A monitor left stopped, by contrast, is already reported by
+# health_masakari_check (codes 5/6/7), so the failure mode is visible.
+os_masakari_monitors()   # $1 = start|stop
+{
+    local act=${1:-start} node
+    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+        log_info "masakari monitors: $act on $node"
+        Quiet -n remote_run $node "systemctl $act masakari-hostmonitor masakari-processmonitor masakari-instancemonitor"
+    done
+}
+
+# Re-enable this node's compute after a planned stop, once the API answers.
+os_resume_hypervisor()
+{
+    local host=$(hostname) i
+
+    for i in $(seq 1 30) ; do
+        $OPENSTACK compute service list --service nova-compute >/dev/null 2>&1 && break
+        sleep 10
+    done
+
+    # no-op when already enabled. Deliberately NOT unconditional: masakari disables
+    # the compute of a host it evacuated, but so does an operator draining a node,
+    # and nova records no reason for either (masakari calls services.disable() with
+    # none) -- so a disabled compute we did not disable is reported by the masakari
+    # health check rather than silently re-enabled here.
+    Quiet -n $OPENSTACK compute service set --enable $host nova-compute
+
+    # Let users decide if they want to hard-reboot instances
+    # echo YES | hex_cli -c iaas compute reset All
+}
+
 
 # put ONE segment host into masakari maintenance so a PLANNED reboot is not
 # cold-evacuated as a host failure
