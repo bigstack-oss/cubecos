@@ -3104,7 +3104,13 @@ ceph_osd_compact()
     if $CEPH -s >/dev/null ; then
         hn=$(hostname)
         [ "$VERBOSE" != "1" ] || $CEPH osd df tree $hn 2>/dev/null || true
-        $CEPH osd tree-from $hn -f json 2>/dev/null | jq .nodes[0].children[] | sort -n | xargs -i ceph tell osd.{} compact
+        # Bound each compact. A non-master control node runs `cluster stop` from
+        # its own bootstrap before waiting for master, and that lands here; during
+        # a full-cluster powercycle the local OSDs are not up yet while the mon
+        # still lists them, so an unbounded `ceph tell` blocks forever on the
+        # first one and the node never reaches the wait-for-master stage.
+        $CEPH osd tree-from $hn -f json 2>/dev/null | jq .nodes[0].children[] | sort -n \
+            | xargs -i timeout -k 5 60 ceph tell osd.{} compact
         [ "$VERBOSE" != "1" ] || $CEPH osd df tree $hn 2>/dev/null || true
     fi
 }
