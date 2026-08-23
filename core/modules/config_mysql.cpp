@@ -239,7 +239,27 @@ SetupCluster(bool enabled, bool isMaster, bool force, const std::string& ctrlAdd
     }
 
     if (isMaster) {
-        HexUtilSystemF(0, 0, "galera_new_cluster");
+        // Never bootstrap over a live cluster. If a peer already holds a galera
+        // PRIMARY, join it instead: bootstrapping here creates a SECOND primary,
+        // and when the two components meet galera aborts one node FATAL with
+        // "conflicting prims: older overrides". Seen 2026-08-23 -- a node
+        // rebooting after a host failure ran SetupCluster and bootstrapped an
+        // empty cluster (initial position 00000000-...:-1) while the two
+        // survivors held quorum; the node was evicted ~48 min later and the VIP
+        // it served had a dead DB until `cluster repair mysql`.
+        // _health_mysql's repair path has always had this guard; the boot path
+        // did not.
+        if (HexSystemF(0, HEX_SDK " os_galera_live_primary >/dev/null 2>&1") == 0) {
+            HexLogInfo("galera: a peer already holds a primary, joining instead of bootstrapping");
+            // the force path above armed safe_to_bootstrap; disarm it so this node
+            // joins the running component instead of forming another one
+            HexSystemF(0, "sed -i 's/^\\(safe_to_bootstrap\\s*:\\s*\\).*$/\\10/' /var/lib/mysql/grastate.dat");
+            // galera_new_cluster would have started mariadb; joining must too
+            SystemdCommitService(enabled, NAME, true);
+        }
+        else {
+            HexUtilSystemF(0, 0, "galera_new_cluster");
+        }
     }
 
     HexSystemF(0, "touch %s", SETUP_MARK);
