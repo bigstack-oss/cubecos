@@ -2760,9 +2760,20 @@ health_octavia_check()
                 elif ! remote_run $node hex_sdk os_octavia_cfg_ids_ok ; then
                     ERR_MSG+="empty lb-mgmt ids in octavia.conf on $node\n"
                     ERR_CODE=10
+                elif ! remote_run $node hex_sdk os_octavia_hm_port_bound ; then
+                    ERR_MSG+="octavia-hm0 port not bound in ovn on $node\n"
+                    ERR_CODE=11
                 fi
             fi
         done
+
+        if [ $ERR_CODE -eq 0 ] ; then
+            local lberr=$($HEX_SDK os_octavia_lb_error_list 2>/dev/null | tr '\n' ' ')
+            if [ -n "$(echo $lberr)" ] ; then
+                ERR_MSG+="load balancer(s) in ERROR: $lberr\n"
+                ERR_CODE=12
+            fi
+        fi
     fi
 
     _health_fail_log
@@ -2810,6 +2821,12 @@ health_octavia_repair()
     # (~2min/node incl. ReconfigMain), but this is the serialized, operator/roll
     # -triggered path -- it can't overlap a periodic round, so the cost is fine.
     local master=$CUBE_NODE_CONTROL_HOSTNAMES node pids=""
+
+    # code 12 first: an LB in ERROR usually just needs octavia's own failover,
+    # and issuing it is async + seconds. Behind the reinit loop it never runs --
+    # that loop takes ~6min, past the repair round's budget.
+    Quiet -n $HEX_SDK os_octavia_lb_failover_errored
+
     Quiet -n remote_run $master $HEX_CFG reinit_octavia
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         [ "$node" = "$master" ] && continue
@@ -2819,6 +2836,11 @@ health_octavia_repair()
         fi
     done
     for p in $pids ; do wait "$p" ; done
+
+    # again for any LB whose failover needed the datapath the reinit just
+    # restored; already-recovered ones are not in the ERROR list, so this is a
+    # no-op in the common case.
+    Quiet -n $HEX_SDK os_octavia_lb_failover_errored
 }
 
 health_designate_report()
@@ -2964,6 +2986,19 @@ health_masakari_check()
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u masakari-instancemonitor"
             fi
         done
+
+        # A host left in masakari maintenance has instance-HA OFF: every
+        # host-failure notification for it is rejected 409 "already under
+        # maintenance", nothing evacuates, and nothing else says so. Report it --
+        # do NOT auto-clear here, since an operator may have set it deliberately
+        # (os_resume_hypervisor only undoes the platform's own planned-stop flag).
+        if [ $ERR_CODE -eq 0 ] ; then
+            local maint=$($HEX_SDK os_masakari_maintenance_hosts 2>/dev/null | tr '\n' ' ')
+            if [ -n "$(echo $maint)" ] ; then
+                ERR_MSG+="instance-HA is off for: $maint (masakari on_maintenance)\n"
+                ERR_CODE=8
+            fi
+        fi
     fi
 
     _health_fail_log
