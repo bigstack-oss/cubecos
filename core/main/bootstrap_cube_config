@@ -37,6 +37,21 @@ bootstrap_status()
     echo "$1" >> $BOOTSTRAP_CUBE_LOG
     bootstrap_console_write "$space_filler"$'\r'"$1"$'\r'
 }
+# Run a long bootstrap step, logging every line and echoing it to the consoles,
+# without letting a console stall the step. `cmd | tee -a $LOG $KERNEL_CONSOLES`
+# blocks the whole pipeline on a console that stops draining -- that wedged
+# master for 10+ minutes here, in pipe_read, during a full-cluster powercycle.
+# The log is written directly and each console line goes through the bounded
+# writer, so a dead console costs 2s per line instead of the boot.
+bootstrap_run_logged()
+{
+    local line
+    "$@" 2>&1 | while IFS= read -r line ; do
+        echo "$line" >> $BOOTSTRAP_CUBE_LOG
+        bootstrap_console_write "$line"$'\n'
+    done
+    return 0
+}
 BootstrapAndClusterstart()
 {
     if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
@@ -44,7 +59,7 @@ BootstrapAndClusterstart()
         hex_log_event -e BSP00001I "interface=system,host=$HOSTNAME,service=bootstrap,phase=bootstrapping"
         hex_sdk power_bootup_mark bootstrapping   # cluster bootup status: entering the config commit
         [ -e /store/rolling_recover ] && hex_sdk _power_roll_set_phase_ts "$HOSTNAME" bootstrapping   # rolling_restart phase timing
-        bash -c "hex_config -p bootstrap standalone-done | tee -a $BOOTSTRAP_CUBE_LOG $KERNEL_CONSOLES"
+        bootstrap_run_logged hex_config -p bootstrap standalone-done
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
             bootstrap_status "Bootstrap error: $(journalctl | grep hex | egrep -i 'failed to commit')"
             hex_log_event -e BSP00003W "interface=system,host=$HOSTNAME,service=bootstrap,detail=$(journalctl | grep hex | egrep -i 'failed to commit|took' | tail -2 | tr -d ',\"=|' | tr '\n' ' ')"
@@ -54,7 +69,7 @@ BootstrapAndClusterstart()
             hex_log_event -e BSP00002I "interface=system,host=$HOSTNAME,service=bootstrap,phase=cluster_start"
             hex_sdk power_bootup_mark finalizing   # cluster bootup status: entering cluster_start (+ master check_repair)
             [ -e /store/rolling_recover ] && hex_sdk _power_roll_set_node_status "$HOSTNAME" finalizing   # rolling_restart: status + phase ts (until power_roll_advance -> done)
-            bash -c "hex_sdk -v cube_cluster_start | tee -a $BOOTSTRAP_CUBE_LOG $KERNEL_CONSOLES"
+            bootstrap_run_logged hex_sdk -v cube_cluster_start
             return 0
         fi
     fi
