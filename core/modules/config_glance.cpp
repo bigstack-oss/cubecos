@@ -31,6 +31,40 @@ static const char GA_NAME[] = "openstack-glance-api";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
+/**
+ * The privsep helper glance must escalate through.
+ *
+ * glance reaches privsep only through glance_store's cinder driver, which hands the
+ * upload to os-brick -- so the context is os_brick.privileged.default and, since
+ * os-brick 6.7.3, its cfg_section is `privsep_osbrick` rather than the older
+ * `os_brick_privileged`.
+ *
+ * Left unpinned it resolves the wrong way. glance_store calls
+ * priv_context.init(root_helper=...), so the command becomes
+ * `sudo glance-rootwrap /etc/glance/rootwrap.conf privsep-helper`, and glance-rootwrap
+ * then looks the bare name up in the exec_dirs of rootwrap.conf -- where /bin and
+ * /usr/bin come first and hold the symlink core/nova/nova.mk keeps pointed at the
+ * *antelope* venv. A caracal glance-api on python 3.11 therefore drives a python 3.10
+ * helper. Verified on jim-1cc before this pin: glance-api ran from
+ * /opt/openstack-caracal/bin/python3.11 while its os_brick.privileged.default helper
+ * ran from /opt/openstack-antelope/bin/python3.10.
+ *
+ * That pairing happens to work today -- os_brick.privileged exposes the same 23
+ * callables with the same signatures in the antelope venv's 6.2.5 as in caracal's
+ * 6.7.3, so the image upload succeeds and nothing is logged. It is still wrong, and
+ * it stops working the moment nova hops: /usr/bin/privsep-helper is nova's symlink,
+ * and when it follows nova to caracal or goes away, glance's rootwrap lookup has
+ * nothing left to find. Naming the caracal helper removes the dependency on another
+ * component's symlink; /etc/sudoers.d/glance authorises exactly this path.
+ *
+ * helper_command is what takes rootwrap out of the path -- oslo.privsep documents
+ * root_helper as "ignored if context's helper_command config option is set". It also
+ * drops the auto-generated --config-file, which costs nothing here: the context's
+ * capabilities come from os-brick's own decorator, and the helper was verified to
+ * still start with CAP_SYS_ADMIN either way.
+ */
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+
 static const char USERPASS[] = "0ZsvkS1bHXYsywTx";
 static const char DBPASS[] = "g6CEJCNFT6ufPY22";
 
@@ -292,6 +326,7 @@ InitConfig(Configs& config)
         "oslo_policy",
         "oslo_reports",
         "paste_deploy",
+        "privsep_osbrick",
         "profiler",
         "store_type_location_strategy",
         "task",
@@ -316,6 +351,11 @@ SetDefaults(Configs& config)
     config["DEFAULT"]["node_staging_uri"] = "file:///mnt/cephfs/glance_tmp_transition";
 
     config["os_brick"]["lock_path"] = "/var/lock/os_brick";
+
+    // os_brick.privileged.default, the only privsep context a glance-api reaches. It
+    // is on a live path only for a <volumeType>:cinder store, which exists solely for
+    // an external backend -- the built-in rbd store never attaches anything.
+    config["privsep_osbrick"]["helper_command"] = PRIVSEP_HELPER;
 
     // should be oslo_reports.log_dir, however, the current version does not support it
     config["DEFAULT"]["log_dir"] = "/var/log/glance";
