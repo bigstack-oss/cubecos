@@ -49,6 +49,15 @@ _power_roll_set_raw() { _power_roll_write --argjson v "$2" ".$1=\$v" ; }
 # shared log lines and events that must name the right operation.
 _power_roll_kind() { jq -r '.kind // "restart"' $ROLLING_JOB 2>/dev/null || echo restart ; }
 
+# CLI verb for a roll kind. The state machine says "upgrade"; the shipped command
+# is `cluster rolling_update`. Operator-facing text only -- log/event tags keep
+# the kind verbatim so existing queries still match.
+_power_roll_cli_verb()
+{
+    local k=${1:-$(_power_roll_kind)}
+    if [ "x$k" = "xupgrade" ] ; then echo update ; else echo restart ; fi
+}
+
 # resolve the dispatch node via the cluster VIP: a static first-node pick keeps
 # addressing exactly the host an upgrade reboots first
 _power_roll_master()
@@ -218,7 +227,7 @@ _power_roll_kick()
     done
     local apierr=$(_power_roll_api_ready)
     if [ -n "$apierr" ] ; then
-        _power_roll_pause "$apierr -- a rejoined node is still starting; wait, then run rolling_$(_power_roll_kind) continue"
+        _power_roll_pause "$apierr -- a rejoined node is still starting; wait, then run rolling_$(_power_roll_cli_verb) continue"
         return 1
     fi
 
@@ -245,7 +254,7 @@ _power_roll_kick()
             if ! remote_run $master "$HEX_SDK power_node_evacuate $host" ; then
                 local stuck=""
                 [ -s "$ROLLING_DIR/.stuck.$host" ] && stuck=": $(tr '\n' ' ' < "$ROLLING_DIR/.stuck.$host")"
-                _power_roll_pause "could not live-migrate all workloads off $host${stuck} -- migrate or stop them, then run rolling_$(_power_roll_kind) continue"
+                _power_roll_pause "could not live-migrate all workloads off $host${stuck} -- migrate or stop them, then run rolling_$(_power_roll_cli_verb) continue"
                 return 1
             fi
             ;;
@@ -647,9 +656,9 @@ power_roll_start()
     # on cephfs, so progress is followable from any node either way.
     if jq -e --arg h "$HOSTNAME" 'any(.nodes[]; .hostname==$h)' $ROLLING_JOB >/dev/null ; then
         echo "NOTE: $HOSTNAME will be rebooted as part of this roll; once it goes down,"
-        echo "      run \"cluster rolling_$kind status\" from another node to follow progress."
+        echo "      run \"cluster rolling_$(_power_roll_cli_verb $kind) status_watch\" from another node to follow progress."
     else
-        echo "follow progress with \"cluster rolling_$kind status\"."
+        echo "follow progress with \"cluster rolling_$(_power_roll_cli_verb $kind) status_watch\"."
     fi
     # arm only now that the job exists (a tick seeing no job self-stops)
     _power_roll_watchdog_arm
