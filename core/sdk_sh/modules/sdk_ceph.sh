@@ -564,7 +564,16 @@ ceph_adjust_pool_size()
         rf)
             echo "set ceph pool $pool_name (size, min_size) to ($size, $min_size)"
             $CEPH osd pool set $pool_name size $size --yes-i-really-mean-it 2>/dev/null || true
-            $CEPH osd pool set $pool_name min_size $min_size 2>/dev/null || true
+            local cur_min_size=
+            for i in {1..15} ; do
+                $CEPH osd pool set $pool_name min_size $min_size 2>/dev/null || true
+                cur_min_size=$($CEPH osd pool get $pool_name min_size -f json 2>/dev/null | jq -r .min_size) || true
+                [ "$cur_min_size" == "$min_size" ] && break
+                sleep 1
+            done
+            if [ "$cur_min_size" != "$min_size" ] ; then
+                log_error "ceph_adjust_pool_size: $pool_name: failed to set min_size to $min_size (currently ${cur_min_size:-unknown})"
+            fi
             ;;
         ec)
             echo "set ceph ec pool $pool_name (chunks, parity) to ($size, $min_size)"
