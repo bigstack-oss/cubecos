@@ -4,6 +4,11 @@
 # https://releases.openstack.org/antelope/index.html#antelope-horizon
 HORIZON_VER := 23.1.1
 
+# The caracal dashboard, installed alongside it in the caracal venv. Nothing serves
+# this one -- see the note by its install block below -- and the version is the one
+# $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the two agree.
+CARACAL_HORIZON_VER := 24.0.2
+
 # Not in the antelope upper-constraints, so pinned here for reproducibility. This is
 # also a source build (see core/mysql/mysql.mk), which is the other reason not to
 # leave it floating.
@@ -78,6 +83,32 @@ rootfs_install::
 		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			mysqlclient==$(MYSQLCLIENT_VER) \
 			pymemcache"
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+
+# the same dashboard again, in the caracal venv
+#
+# Nothing serves this copy. openstack-dashboard.service, gunicorn-config.py and the
+# httpd reverse proxy all point at $(HORIZON_APP_DIR), which is the antelope tree,
+# and every dashboard plugin still installs next to it. This one exists so that
+# dump_default_policies can run under the interpreter that owns the core services'
+# oslo.policy entry points -- see the policy block near the end of this file.
+#
+# It is a down payment rather than scaffolding: 24.0.2 is what horizon's own move to
+# this venv will install, so the dependency set lands once. Verified against a built
+# rootfs: 41 packages, +170MB, and no already-installed caracal package changes
+# version, so keystone/nova/cinder/glance/placement are untouched (pip check clean).
+#
+# --no-build-isolation for the XStatic sdists, exactly as above -- this venv also
+# carries setuptools 65.7.0, so the pkg_resources those setup.py files import is
+# there.
+rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			--no-build-isolation \
+			horizon==$(CARACAL_HORIZON_VER)"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
@@ -187,8 +218,37 @@ rootfs_install::
 # DEFAULT_POLICY_FILES points at came from the openstack-dashboard rpm, and the
 # masakari one from masakari.mk running this same command under python 3.9. Generate
 # them all here instead, from the services that are actually running -- every one of
-# these namespaces is an oslo.policy.policies entry point inside the venv, and
-# manage.py only exists once the step above has installed it.
+# these namespaces is an oslo.policy.policies entry point in one of the two venvs.
+#
+# Which venv is the whole difficulty. stevedore only sees entry points registered in
+# the interpreter it is running under, so one python cannot dump them all any more:
+# keystone, nova, cinder, glance and neutron have moved to caracal while masakari and
+# octavia are still antelope. Each list is therefore dumped by the dashboard that
+# shares its venv. A namespace listed against the venv that does not hold it fails
+# the build with 'The requested namespace "<x>" is not found'; move it to the other
+# list when its service makes the hop.
+HORIZON_POLICY_NS_ANTELOPE := masakari octavia
+HORIZON_POLICY_NS_CARACAL := keystone nova cinder glance neutron
+
+# django-admin rather than $(HORIZON_APP_DIR)/manage.py, for both venvs so the two
+# loops stay one shape. manage.py sits in a directory whose horizon and
+# openstack_dashboard entries are symlinks into the *antelope* venv, and a script's
+# own directory leads sys.path -- so running it with the caracal python imports
+# python3.10 packages under python3.11. A console script has no such directory.
+#
+# --skip-checks because django's system checks instantiate every configured cache
+# backend, and horizon defaults CACHES to django's PyMemcacheCache. The antelope venv
+# has pymemcache (installed above, for the running dashboard); the caracal venv has
+# no reason to. The dump reads oslo.policy entry points and touches no cache.
+# "No local_settings file found." on the caracal side is expected and harmless:
+# openstack_dashboard/settings.py warns and carries on, and only the antelope copy is
+# ever configured.
+#
+# Both loops are noisy on stderr -- the USE_L10N notice, a debreach distutils warning,
+# and oslo.policy grumbling about upstream nova/cinder rules that set deprecated_since
+# on the RuleDefault instead of the DeprecatedRule. It is left alone: PYTHONWARNINGS
+# does not reach it (something under settings resets the filters), and stderr has to
+# stay open anyway for the namespace failure above to be visible.
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 $(HORIZON_POLICY_DIR)
 	$(Q)# || exit 1 per iteration: a for loop only returns the status of its *last*
@@ -197,10 +257,17 @@ rootfs_install::
 	$(Q)# "No policy rules for service '<x>'" and a denied panel. masakari.mk used to
 	$(Q)# state this guarantee explicitly ("that command exits 1 and the build fails");
 	$(Q)# folding the dump into a loop here is what dropped it.
-	$(Q)for ns in keystone nova cinder glance neutron masakari octavia ; do \
-		chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py \
-			dump_default_policies --namespace $$ns \
-			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml 2>&1 > /dev/null || exit 1 ; \
+	$(Q)for ns in $(HORIZON_POLICY_NS_ANTELOPE) ; do \
+		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
+			$(OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
+			--namespace $$ns \
+			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml || exit 1 ; \
+	done
+	$(Q)for ns in $(HORIZON_POLICY_NS_CARACAL) ; do \
+		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
+			$(CARACAL_OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
+			--namespace $$ns \
+			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml || exit 1 ; \
 	done
 
 # gunicorn, the systemd unit and the httpd reverse proxy
