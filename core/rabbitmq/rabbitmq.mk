@@ -3,14 +3,17 @@
 
 ROOTFS_DNF += logrotate
 
-# erlang 26.2.5-1.el9 doesn't work with rabbitmq, and modern-erlang also serves
-# 25/26/27 - pin what we install so a later dnf update can't bump it
-ERLANG_VER := 24.3.4.15-1.el9
+# rabbitmq-server 3.11 declares "erlang >= 25.0" and "erlang < 26.0" itself, so
+# the erlang bump is mandatory rather than opportunistic. modern-erlang keeps
+# exactly one 25.x build - 25.3.2.21 - next to the 26/27 it also serves, so pin
+# it or a later dnf update lands on an erlang 3.11 refuses to run on
+ERLANG_VER := 25.3.2.21-1.el9
 LOCKED_DNF += erlang-$(ERLANG_VER)
 
-# rabbitmq refuses to skip minor versions on upgrade, so 3.10 is the only step
-# reachable from 3.9 - pin it against the 3.11/3.12/4.x the repo also serves
-RABBITMQ_VER := 3.10.25-1.el8
+# rabbitmq refuses to skip minor versions on upgrade, so 3.11 is the only step
+# reachable from 3.10 - pin it against the 3.12/4.x the repo also serves.
+# 3.11.28 is the last release of the 3.11 series
+RABBITMQ_VER := 3.11.28-1.el8
 LOCKED_DNF += rabbitmq-server-$(RABBITMQ_VER)
 
 # install erlang
