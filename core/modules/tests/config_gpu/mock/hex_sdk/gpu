@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# Mock hex_sdk for the gpu module's shell-outs.
+#
+# The device is reported as sriovVgpu rather than pgpu on purpose: a pgpu sends
+# ResourceSetMain through gpu_unbind_vfio_pci first, which is a path this test
+# is not about. pciAddress must be non-empty - ResourceSetMain refuses the
+# request outright without one.
+case "$1" in
+    gpu_device_list)
+        echo '[{"id":"GPU-1316-test","name":"Test Card","type":"sriovVgpu","pciAddress":"00000000:42:00.0"}]'
+        ;;
+    gpu_vgpu_profile_list)
+        # two profiles of one size and one of another, so the test can build both
+        # a single-size and a mixed-size request out of the same list
+        # 1599 deliberately carries no vramMiB: the size rule has to refuse a
+        # profile whose framebuffer size the list does not report, rather than
+        # assume it matches the others.
+        echo '{"sriov":[{"id":1519,"name":"Test DC-3Q","vramMiB":3072},{"id":1520,"name":"Test DC-3A","vramMiB":3072},{"id":1523,"name":"Test DC-6Q","vramMiB":6144},{"id":1599,"name":"Test No-VRAM"}],"migBacked":[]}'
+        ;;
+    *)
+        # gpu_resource_set_check, gpu_unset_current_type, bind/unbind: all pass
+        exit 0
+        ;;
+esac

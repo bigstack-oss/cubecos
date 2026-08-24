@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# Mock nvidia-smi. Only the `-q` dump matters here: ValidateVgpuProfiles reads
+# the heterogeneous-vGPU capability out of it. The advertised value comes from a
+# marker file so one mock serves every case in the test script:
+#
+#   "Supported"      -> the card can host mixed framebuffer sizes
+#   "Not Supported"  -> it cannot
+#   (empty file)     -> the field is absent, i.e. unreadable
+#
+# Note the upstream spelling: the capability is "Heterogenous Multi-vGPU" with
+# one 'e' missing, while the mode's state field a few lines later spells
+# "Heterogeneous" correctly. config_gpu matches both exactly.
+cap=$(cat /tmp/mock-hetero-capability 2>/dev/null)
+
+case "$*" in
+    *-q*)
+        echo "GPU 00000000:42:00.0"
+        echo "    vGPU Driver Capability"
+        if [ -n "$cap" ]; then
+            echo "        Heterogenous Multi-vGPU           : $cap"
+        fi
+        echo "    vGPU Device Capability"
+        echo "        vGPU Heterogeneous Mode           : Disabled"
+        ;;
+esac
+
+exit 0
