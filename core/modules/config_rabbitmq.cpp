@@ -230,9 +230,14 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
     }
 
     // feature-flag enable is irreversible: during an UPGRADE (migration marker)
-    // enable only once version-uniform; FTS enables via the cluster_ready trigger
-    if (enabled && ha && access(CUBE_MIGRATE, F_OK) == 0 &&
-        HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0)
+    // enable only once version-uniform; FTS enables via the cluster_ready trigger.
+    // Without ha there is one broker and no peer a newly-enabled flag could strand,
+    // so skip the guard rather than consult it: os_rabbitmq_version_uniform is
+    // fail-safe and reports "not uniform" when it cannot reach a control node,
+    // which on a single node would leave the flags off forever. `enabled` is
+    // already IsControl(role) && rabbitmq.enabled, so compute nodes never get here.
+    if (enabled && access(CUBE_MIGRATE, F_OK) == 0 &&
+        (!ha || HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0))
         HexUtilSystemF(0, 0, CONTROL_FMT "enable_feature_flag all", hostname.c_str());
 
     return true;
@@ -412,10 +417,13 @@ GPassMain(int argc, char* argv[])
 static int
 ClusterReadyMain(int argc, char **argv)
 {
-    // FTS set_ready: enable stable flags explicitly; the version-uniform guard
-    // keeps a mid-roll set_ready re-run from enabling on a mixed cluster
-    if (s_ha && IsControl(s_eCubeRole) &&
-        HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0)
+    // FTS set_ready: enable stable flags explicitly. Under ha the version-uniform
+    // guard keeps a mid-roll set_ready re-run from enabling on a mixed cluster; a
+    // single broker has no peer to strand, so it enables unconditionally. This is
+    // the path a 1-control + n-compute deployment takes, and the only one that
+    // reaches the flags the management-agent plugin provides.
+    if (IsControl(s_eCubeRole) &&
+        (!s_ha || HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0))
         HexUtilSystemF(0, 0, CONTROL_FMT "enable_feature_flag all",
                        s_hostname.newValue().c_str());
 
