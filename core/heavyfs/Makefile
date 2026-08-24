@@ -333,10 +333,26 @@ rootfs_install::
 # died at import with ModuleNotFoundError and openstack-keystone never came up (#631).
 #
 # The pin is therefore settled now, as the same one line in the constraints file that
-# antelope uses, and at the same 65.7.0 -- the version that venv has been proving
-# against pbr and pkg_resources all along. It also keeps `setup.py install` working,
-# which setuptools 80 removed: the ceph python bindings still build that way and move
-# into this venv when caracal takes over from antelope.
+# antelope uses -- but at 75.6.0, not antelope's 65.7.0. The two venvs have different
+# reasons for their numbers: antelope's is the version its own upper-constraints
+# names, while caracal's is a local delta with no upstream value to match, so it takes
+# the newest release that clears both ceilings rather than a 2023 one inherited by
+# habit. 75.6.0 is the last setuptools of 2024 (2024-11-20), which puts it in the same
+# year as the release this venv carries.
+#
+# The two ceilings, both still honoured:
+#   - below 82 (2026-02-08), which deleted pkg_resources. That is the hard one, and
+#     it is a runtime requirement as much as a build one -- keystonemiddleware above,
+#     plus pbr's egg_info writer on every --no-build-isolation build in this venv.
+#   - below 80 (2025-04-27), which removed `setup.py install`. Nothing in this venv
+#     needs it today: ceph's bindings moved to `pip install` (see core/ceph/ceph.mk)
+#     and skyline's did too. It is kept as headroom for masakari, designate, watcher
+#     and cyborg, which still install that way in antelope and will bring the command
+#     with them unless they are converted when they hop.
+#
+# Verified in a python 3.11 venv before the bump: horizon 24.0.2's six sdists build
+# under --no-build-isolation, ceph's rados and rbd bindings produce the same flat
+# .so + .dist-info layout as under 65.7.0 and import, and pkg_resources is present.
 
 # Allow admin to be sudoers
 rootfs_install::

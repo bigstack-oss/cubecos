@@ -52,7 +52,8 @@ CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; e
 # Building here also means egg_info runs with pbr installed -- pbr registers an
 # egg_info writer that imports pkg_resources -- which is why this step needs the
 # venv's setuptools pinned below 82; see the NOTE in core/heavyfs/Makefile. Both
-# venvs pin it there, so the caracal build takes the same path.
+# venvs pin it below that -- antelope at 65.7.0, caracal at 75.6.0 -- so both builds
+# take the same path; verified to produce the same flat .so layout under either.
 # --no-deps: neither binding declares a dependency, so nothing should be resolved
 # against the index at this point.
 CEPH_PYBIND_SRCDIR := /usr/src/ceph/ceph-17.2.6
