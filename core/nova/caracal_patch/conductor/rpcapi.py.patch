@@ -1,0 +1,16 @@
+--- conductor/rpcapi.py
++++ conductor/rpcapi.py
+@@ -309,6 +309,13 @@ class ComputeTaskAPI(object):
+         cctxt = self.client.prepare(version=version)
+         cctxt.cast(context, 'live_migrate_instance', **kw)
+ 
++    def live_resize_instance(self, context, instance, flavor):
++        # cube downstream
++        version = '1.15'
++        cctxt = self.client.prepare(version=version)
++        cctxt.cast(context, 'live_resize_instance', instance=instance,
++                   flavor=flavor)
++
+     # TODO(melwitt): Remove the reservations parameter in version 2.0 of the
+     # RPC API.
+     # TODO(mriedem): Make request_spec required *and* a RequestSpec object

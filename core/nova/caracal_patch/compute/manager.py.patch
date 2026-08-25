@@ -8,7 +8,7 @@
  import nova.conf
  import nova.context
  from nova import exception
-@@ -9058,6 +9059,50 @@ class ComputeManager(manager.Manager):
+@@ -9058,6 +9059,60 @@ class ComputeManager(manager.Manager):
                  self._set_instance_obj_error_state(instance,
                                                     clean_task_state=True)
  
@@ -53,6 +53,16 @@
 +        instance.task_state = None
 +        instance.system_metadata.pop(clr.SYSMETA_FLAVOR_ID, None)
 +        instance.save()
++        try:
++            # keep the request spec in sync so future scheduling
++            # (migrations, evacuations) uses the new size
++            reqspec = objects.RequestSpec.get_by_instance_uuid(
++                context, instance.uuid)
++            reqspec.flavor = flavor
++            reqspec.save()
++        except Exception:
++            LOG.warning("live-resize: failed to sync the request spec",
++                        instance=instance)
 +        self._notify_about_instance_usage(context, instance,
 +                                          "live_resize.end")
 +

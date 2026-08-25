@@ -1,0 +1,81 @@
+--- conductor/manager.py
++++ conductor/manager.py
+@@ -20,6 +20,7 @@ import copy
+ import eventlet
+ import functools
+ import sys
++import time
+ import typing as ty
+ 
+ from keystoneauth1 import exceptions as ks_exc
+@@ -45,6 +46,7 @@ from nova.conductor.tasks import cross_c
+ from nova.conductor.tasks import live_migrate
+ from nova.conductor.tasks import migrate
+ from nova import context as nova_context
++from nova import cube_live_resize as clr
+ from nova import exception
+ from nova.i18n import _
+ from nova.image import glance
+@@ -467,6 +469,62 @@ class ComputeTaskManager:
+         self._live_migrate(context, instance, scheduler_hint,
+                            block_migration, disk_over_commit, request_spec)
+ 
++    def live_resize_instance(self, context, instance, flavor):
++        """Cube live-resize orchestration (cast from compute_api).
++
++        Claim the new size on the current host; if it does not fit,
++        live-migrate to a host the scheduler picks for the NEW flavor
++        (that migration's placement claim is already new-flavor-sized),
++        then cast the hotplug to the compute.
++        """
++        try:
++            self._live_resize_instance(context, instance, flavor)
++        except Exception as ex:
++            LOG.error("live-resize of instance %(uuid)s failed: %(ex)s",
++                      {"uuid": instance.uuid, "ex": ex})
++            compute_utils.add_instance_fault_from_exc(
++                context, instance, ex, sys.exc_info())
++            instance.task_state = None
++            instance.system_metadata.pop(clr.SYSMETA_FLAVOR_ID, None)
++            instance.save()
++
++    def _live_resize_instance(self, context, instance, flavor):
++        if clr.set_allocations(self.report_client, context,
++                               instance.uuid, flavor):
++            self.compute_rpcapi.live_resize_instance(context, instance,
++                                                     flavor)
++            return
++        source = instance.host
++        LOG.info("live-resize: flavor %(flavor)s does not fit on "
++                 "%(host)s, live-migrating instance %(uuid)s first",
++                 {"flavor": flavor.flavorid, "host": source,
++                  "uuid": instance.uuid})
++        request_spec = objects.RequestSpec.get_by_instance_uuid(
++            context, instance.uuid)
++        request_spec.flavor = flavor
++        instance.system_metadata[clr.SYSMETA_FLAVOR_ID] = flavor.flavorid
++        instance.task_state = task_states.MIGRATING
++        instance.save(expected_task_state=[task_states.LIVE_RESIZING])
++        self._live_migrate(context, instance, {'host': None}, None, None,
++                           request_spec)
++        deadline = time.time() + CONF.cube.live_resize_migrate_timeout
++        while True:
++            time.sleep(5)
++            instance.refresh()
++            if instance.task_state is None:
++                break
++            if time.time() > deadline:
++                raise exception.MigrationError(reason=_(
++                    "live resize: timed out waiting for the live "
++                    "migration to a host that fits the new flavor"))
++        if instance.host == source:
++            raise exception.MigrationError(reason=_(
++                "live resize: the live migration failed; the instance "
++                "is unchanged on its original host"))
++        instance.task_state = task_states.LIVE_RESIZING
++        instance.save(expected_task_state=[None])
++        self.compute_rpcapi.live_resize_instance(context, instance, flavor)
++
+     def _live_migrate(self, context, instance, scheduler_hint,
+                       block_migration, disk_over_commit, request_spec):
+         destination = scheduler_hint.get("host")
