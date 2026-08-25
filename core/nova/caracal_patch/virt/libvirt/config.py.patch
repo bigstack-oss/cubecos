@@ -1,0 +1,58 @@
+--- virt/libvirt/config.py
++++ virt/libvirt/config.py
+@@ -3013,6 +3013,7 @@ class LibvirtConfigGuest(LibvirtConfigOb
+         self.memtune = None
+         self.numatune = None
+         self.vcpus = 1
++        self.vcpus_current = None
+         self.cpuset = None
+         self.cpu = None
+         self.cputune = None
+@@ -3057,12 +3058,12 @@ class LibvirtConfigGuest(LibvirtConfigOb
+             root.append(self.memtune.format_dom())
+         if self.numatune is not None:
+             root.append(self.numatune.format_dom())
++        vcpu = self._text_node("vcpu", self.vcpus)
+         if self.cpuset is not None:
+-            vcpu = self._text_node("vcpu", self.vcpus)
+             vcpu.set("cpuset", hardware.format_cpu_spec(self.cpuset))
+-            root.append(vcpu)
+-        else:
+-            root.append(self._text_node("vcpu", self.vcpus))
++        if self.vcpus_current is not None:
++            vcpu.set("current", str(self.vcpus_current))
++        root.append(vcpu)
+ 
+         if len(self.metadata) > 0:
+             metadata = etree.Element("metadata")
+@@ -3904,6 +3905,30 @@ class LibvirtConfigGuestIOMMU(LibvirtCon
+             self.eim = self.parse_on_off_str(driver.get("eim"))
+ 
+ 
++class LibvirtConfigGuestMemoryDevice(LibvirtConfigGuestDevice):
++    """<memory model='dimm'> device for memory hot-add (cube live-resize)."""
++
++    def __init__(self, **kwargs):
++        super(LibvirtConfigGuestMemoryDevice, self).__init__(
++            root_name="memory", **kwargs)
++
++        self.model = "dimm"
++        self.target_size = kwargs.get("size_kb", 0)
++        self.target_node = 0
++
++    def format_dom(self):
++        memory = super(LibvirtConfigGuestMemoryDevice, self).format_dom()
++
++        memory.set("model", self.model)
++
++        target = etree.Element("target")
++        target.append(self._text_node("size", self.target_size))
++        target.append(self._text_node("node", self.target_node))
++        memory.append(target)
++
++        return memory
++
++
+ class LibvirtConfigGuestMetaNovaPorts(LibvirtConfigObject):
+ 
+     def __init__(self, ports=None):
