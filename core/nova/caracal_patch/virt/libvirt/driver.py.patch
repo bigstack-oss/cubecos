@@ -43,7 +43,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7430,6 +7436,29 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7430,6 +7436,85 @@ class LibvirtDriver(driver.ComputeDriver
              for resource in vpmem_resources]
          return vpmems
  
@@ -70,10 +70,66 @@
 +                numa.cells = [cell]
 +                guest.cpu.numa = numa
 +
++    def check_live_resize(self, instance, new_flavor):
++        # cube live-resize: can the RUNNING domain grow to new_flavor?
++        # The domain's baked-in ceiling is authoritative, not the config.
++        guest = self._host.get_guest(instance)
++        old = instance.flavor
++        if new_flavor.vcpus > old.vcpus:
++            max_vcpus = guest._domain.maxVcpus()
++            if max_vcpus < new_flavor.vcpus:
++                raise exception.LiveResizeError(reason=_(
++                    "domain vCPU ceiling %(max)d < requested %(want)d "
++                    "(instance must be rebooted to gain headroom)") % {
++                        "max": max_vcpus, "want": new_flavor.vcpus})
++        if new_flavor.memory_mb > old.memory_mb:
++            tree = etree.fromstring(guest.get_xml_desc())
++            maxmem = tree.find("./maxMemory")
++            if maxmem is None or int(maxmem.text) < (
++                    new_flavor.memory_mb * units.Ki):
++                raise exception.LiveResizeError(reason=_(
++                    "domain memory ceiling missing or too small "
++                    "(instance must be rebooted to gain headroom)"))
++
++    def live_resize(self, context, instance, new_flavor):
++        # cube live-resize: memory first (clean abort), then vCPUs.
++        guest = self._host.get_guest(instance)
++        old = instance.flavor
++        mem_delta_kb = (new_flavor.memory_mb - old.memory_mb) * units.Ki
++        dev = None
++        if mem_delta_kb > 0:
++            dev = vconfig.LibvirtConfigGuestMemoryDevice()
++            dev.target_size = mem_delta_kb
++            dev.target_node = 0
++            try:
++                guest.attach_device(dev, persistent=True, live=True)
++            except libvirt.libvirtError as ex:
++                raise exception.LiveResizeError(reason=str(ex))
++        if new_flavor.vcpus > old.vcpus:
++            flags = (libvirt.VIR_DOMAIN_AFFECT_LIVE |
++                     libvirt.VIR_DOMAIN_AFFECT_CONFIG)
++            try:
++                guest._domain.setVcpusFlags(new_flavor.vcpus, flags)
++            except libvirt.libvirtError as ex:
++                if dev is None:
++                    raise exception.LiveResizeError(reason=str(ex))
++                try:
++                    guest.detach_device(dev, persistent=True, live=True)
++                except Exception:
++                    LOG.exception("live-resize: DIMM rollback failed",
++                                  instance=instance)
++                    raise exception.LiveResizePartial(reason=str(ex))
++                raise exception.LiveResizeError(reason=str(ex))
++        LOG.info("live-resize applied: %(ov)d->%(nv)d vCPU, "
++                 "%(om)d->%(nm)d MB",
++                 {"ov": old.vcpus, "nv": new_flavor.vcpus,
++                  "om": old.memory_mb, "nm": new_flavor.memory_mb},
++                 instance=instance)
++
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
-@@ -7598,7 +7627,7 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7598,7 +7683,7 @@ class LibvirtDriver(driver.ComputeDriver
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])

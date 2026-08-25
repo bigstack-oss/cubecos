@@ -1,0 +1,14 @@
+--- exception.py
++++ exception.py
+@@ -2576,3 +2576,11 @@ class EphemeralEncryptionCleanupFailed(N
+ 
+ class HostConflict(Exception):
+     pass
++
++
++class LiveResizeError(Invalid):
++    msg_fmt = _("Live resize not possible: %(reason)s")
++
++
++class LiveResizePartial(NovaException):
++    msg_fmt = _("Live resize partially applied: %(reason)s")
