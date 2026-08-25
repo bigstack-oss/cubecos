@@ -1,7 +1,6 @@
 package config
 
 import (
-	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -96,74 +95,4 @@ func TestGenSelfSignCerts(t *testing.T) {
 			assert.Contains(t, string(b), "-----BEGIN PRIVATE KEY-----")
 		}
 	}
-}
-
-func TestTerraformModuleMysql(t *testing.T) {
-	ns := cubeTesting.ContainerNS(t.Name())
-	if testClean(t, func() {
-		ns.CleanupContainers()
-		os.RemoveAll(path.Dir(mysqlSockFile))
-		os.Remove(terraformStateFile)
-	}) {
-		return
-	}
-
-	if _, err := ns.RunEtcdContainer(); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := runMysqlContainer(ns, ""); err != nil {
-		t.Fatal(err)
-	}
-
-	// // Ignore error
-	// if err := terraformInitBackend(); err != nil {
-	// 	t.Log(err)
-	// }
-
-	testdb := "testdb"
-
-	if err := terraformExec("apply", "mysql", []string{"mysql_dbname=" + testdb}, []string{}); err != nil {
-		t.Fatal(err)
-	}
-
-	if db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", testdb, "password", "localhost", mysqlPort, testdb)); err != nil {
-		t.Fatal(err)
-	} else {
-		defer db.Close()
-
-		if err := db.Ping(); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	t.Run("Main", func(t *testing.T) {
-	})
-
-	t.Run("StatePushPull", func(t *testing.T) {
-		stateBefore, _, err := util.ExecShf("etcdctl-cube.sh get terraform-state/ --prefix --print-value-only | jq .resources")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := terraformPullState(); err != nil {
-			t.Fatal(err)
-		}
-
-		_, _, err = util.ExecCmd("etcdctl-cube.sh", "del", "terraform-state/", "--prefix")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := terraformPushState(); err != nil {
-			t.Fatal(err)
-		}
-
-		stateAfter, _, err := util.ExecShf("etcdctl-cube.sh get terraform-state/ --prefix --print-value-only | jq .resources")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		assert.Equal(t, stateBefore, stateAfter)
-	})
 }

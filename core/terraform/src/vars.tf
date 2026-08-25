@@ -1,7 +1,3 @@
-variable "mysql_dbname" {
-  type    = string
-  default = ""
-}
 variable "cube_controller" {
   type    = string
   default = ""

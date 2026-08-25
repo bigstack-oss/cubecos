@@ -6,13 +6,6 @@ terraform {
   }
 }
 
-module "mysql" {
-  source = "./mysql/"
-
-  mysql_dbname = var.mysql_dbname
-}
-
-
 module "keycloak" {
   source = "./keycloak/"
 
