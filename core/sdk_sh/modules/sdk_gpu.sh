@@ -434,6 +434,22 @@ gpu_vm_stats()
     fi
 }
 
+# What to put in a log line about a failed nvidia-smi probe. nvidia-smi prints
+# "No devices were found" on stdout and leaves stderr empty (measured on cn13:
+# a nonexistent GPU is exit 6, empty stderr), so a message built from stderr
+# alone says nothing. Prefer stderr, fall back to stdout, both flattened to one
+# line for the journal.
+gpu_probe_diagnosis()
+{
+    local err_file="$1" std_out="$2"
+
+    local text
+    text=$(tr '\n' ' ' < "$err_file" 2>/dev/null | sed 's/[[:space:]]*$//')
+    [ -n "$text" ] || text=$(echo "$std_out" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+
+    echo "${text:-(no output)}"
+}
+
 # Returns a stringified JSON array conforming to the following schema:
 # {
 #   id: string
@@ -550,8 +566,21 @@ gpu_device_list()
         name=$(echo "$name" | xargs)
         pci_bus_id=$(echo "$pci_bus_id" | xargs)
 
-        local vgpu_support_out
-        vgpu_support_out=$($NVIDIA_SMI vgpu -s -v -i "$pci_bus_id" 2>/dev/null)
+        # Keep the probe's exit status instead of dropping it. On failure
+        # support_types stays at its hardcoded ["pgpu"] below, so a
+        # vGPU-capable card reports as passthrough-only; without this the node
+        # carries no trace of why. One card's failed probe must not fail the
+        # node, so the list is still built - the reason is just on the record.
+        local vgpu_support_out vgpu_support_rc vgpu_support_err vgpu_support_err_file
+        vgpu_support_err_file=$(mktemp)
+        vgpu_support_out=$($NVIDIA_SMI vgpu -s -v -i "$pci_bus_id" 2>"$vgpu_support_err_file")
+        vgpu_support_rc=$?
+        vgpu_support_err=$(gpu_probe_diagnosis "$vgpu_support_err_file" "$vgpu_support_out")
+        rm -f "$vgpu_support_err_file"
+
+        if [ "$vgpu_support_rc" -ne 0 ]; then
+            log_error "gpu_device_list: nvidia-smi vgpu -s -v -i $pci_bus_id exited $vgpu_support_rc: $vgpu_support_err; supportTypes for this card falls back to [\"pgpu\"]"
+        fi
 
         local profile_names
         profile_names=$(echo "$vgpu_support_out" | grep "Name" | awk '{print $NF}')
@@ -853,8 +882,16 @@ gpu_vgpu_profile_list()
     # Verified on cn13 2026-08-04; see spec.md §2c/§5b (#905).
     local mig_profiles="[]"
 
-    local vgpu_output
-    vgpu_output=$($NVIDIA_SMI vgpu -s -v -i "$gpu_id" 2>/dev/null)
+    # Keep the probe's exit status and its diagnosis. Dropping both -
+    # 2>/dev/null and no test of $? - is what let a failed probe reach the
+    # caller as exit 0 with empty lists, indistinguishable from "this card has
+    # no vGPU types".
+    local vgpu_output vgpu_probe_rc vgpu_probe_err vgpu_probe_err_file
+    vgpu_probe_err_file=$(mktemp)
+    vgpu_output=$($NVIDIA_SMI vgpu -s -v -i "$gpu_id" 2>"$vgpu_probe_err_file")
+    vgpu_probe_rc=$?
+    vgpu_probe_err=$(gpu_probe_diagnosis "$vgpu_probe_err_file" "$vgpu_output")
+    rm -f "$vgpu_probe_err_file"
 
     # Same vfio-pci blindness as in gpu_device_list: a pgpu reports no profiles
     # at all, which reads as "this card cannot do vGPU" and leaves a client with
@@ -888,6 +925,23 @@ gpu_vgpu_profile_list()
         done <<EOF
 $(gpu_vgpu_types_from_xml "$pci_address")
 EOF
+    fi
+
+    # A failed probe is only fatal once nothing else has answered. A pgpu bound
+    # to vfio-pci fails the probe exactly the way a nonexistent GPU does - both
+    # are "No devices were found", exit 6 - and for that card the static table
+    # above is the intended answer, so keying on the exit status alone would
+    # undo the vfio-pci fallback and turn every poll of a healthy pgpu into an
+    # error. What must never happen is empty lists with exit 0 when no source
+    # answered at all: the caller reads that as "this card has no vGPU types"
+    # and offers the operator nothing to pick.
+    if [ "$vgpu_probe_rc" -ne 0 ]; then
+        if [ "$sriov_profiles" = "[]" ] && [ "$mig_profiles" = "[]" ]; then
+            echo "Error: gpu_vgpu_profile_list: no profile source answered for $gpu_id" >&2
+            log_error "gpu_vgpu_profile_list: nvidia-smi vgpu -s -v -i $gpu_id exited $vgpu_probe_rc: $vgpu_probe_err; $VGPU_CONFIG_XML listed no type either, refusing to report empty profile lists as a healthy answer"
+            return 1
+        fi
+        log_debug "gpu_vgpu_profile_list: nvidia-smi vgpu -s -v -i $gpu_id exited $vgpu_probe_rc: $vgpu_probe_err; answered from $VGPU_CONFIG_XML instead"
     fi
 
     local vgpu_type_id_hex
