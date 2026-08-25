@@ -1,0 +1,18 @@
+--- api/openstack/compute/routes.py
++++ api/openstack/compute/routes.py
+@@ -32,6 +32,7 @@ from nova.api.openstack.compute import c
+ from nova.api.openstack.compute import console_output
+ from nova.api.openstack.compute import consoles
+ from nova.api.openstack.compute import create_backup
++from nova.api.openstack.compute import cube_live_resize
+ from nova.api.openstack.compute import deferred_delete
+ from nova.api.openstack.compute import evacuate
+ from nova.api.openstack.compute import extension_info
+@@ -253,6 +254,7 @@ server_controller = functools.partial(_c
+         admin_password.AdminPasswordController,
+         console_output.ConsoleOutputController,
+         create_backup.CreateBackupController,
++        cube_live_resize.LiveResizeController,
+         deferred_delete.DeferredDeleteController,
+         evacuate.EvacuateController,
+         floating_ips.FloatingIPActionController,
