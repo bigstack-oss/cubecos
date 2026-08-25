@@ -1,6 +1,14 @@
 --- virt/libvirt/driver.py
 +++ virt/libvirt/driver.py
-@@ -6001,19 +6001,22 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -86,6 +86,7 @@ from nova.console import serial as seria
+ from nova.console import type as ctype
+ from nova import context as nova_context
+ from nova import crypto
++from nova import cube_live_resize as clr
+ from nova.db import constants as db_const
+ from nova import exception
+ from nova.i18n import _
+@@ -6001,19 +6002,22 @@ class LibvirtDriver(driver.ComputeDriver
  
          return sysinfo
  
@@ -26,7 +34,46 @@
  
          return dev
  
-@@ -7598,7 +7601,7 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7413,6 +7417,8 @@ class LibvirtDriver(driver.ComputeDriver
+ 
+         self._guest_add_iommu_device(guest, image_meta, flavor)
+ 
++        self._guest_add_live_resize_headroom(guest, flavor)
++
+         return guest
+ 
+     def _get_ordered_vpmems(self, instance, flavor):
+@@ -7430,6 +7436,29 @@ class LibvirtDriver(driver.ComputeDriver
+             for resource in vpmem_resources]
+         return vpmems
+ 
++    def _guest_add_live_resize_headroom(self, guest, flavor):
++        # cube live-resize: declare the hotplug ceiling at boot; (0, 0)
++        # means the flavor is blocked or opted out.
++        max_vcpus, max_mem_mb = clr.headroom(flavor)
++        if max_vcpus > flavor.vcpus:
++            guest.vcpus = max_vcpus
++            guest.vcpus_current = flavor.vcpus
++        if max_mem_mb > flavor.memory_mb:
++            if guest.max_memory_size is not None:
++                return  # vpmem already owns maxMemory; don't fight it
++            guest.max_memory_size = max_mem_mb * units.Ki
++            guest.max_memory_slots = clr.MEM_SLOTS
++            # libvirt requires a guest NUMA topology for memory hotplug;
++            # synthesize one flat cell when the instance has none.
++            if guest.cpu is not None and not guest.cpu.numa:
++                cell = vconfig.LibvirtConfigGuestCPUNUMACell()
++                cell.id = 0
++                cell.cpus = set(range(guest.vcpus))
++                cell.memory = flavor.memory_mb * units.Ki
++                numa = vconfig.LibvirtConfigGuestCPUNUMA()
++                numa.cells = [cell]
++                guest.cpu.numa = numa
++
+     def _guest_add_vpmems(self, guest, vpmems):
+         guest.max_memory_size = guest.memory
+         guest.max_memory_slots = 0
+@@ -7598,7 +7627,7 @@ class LibvirtDriver(driver.ComputeDriver
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])
