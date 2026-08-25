@@ -1,0 +1,36 @@
+--- pci/request.py
++++ pci/request.py
+@@ -112,6 +112,33 @@ _ALIAS_SCHEMA = {
+         "traits": {
+             "type": "string",
+         },
++        # CubeCOS: names the vGPU profile a VF was carved to, so two aliases on
++        # one SR-IOV card are not interchangeable as match criteria.
++        #
++        # Every vGPU VF on a node reports the same vendor:product, and an alias
++        # carries no address - only [pci]device_spec does - so upstream leaves
++        # nothing for the scheduler to tell them apart by. Measured on a
++        # 4x RTX PRO 6000 Blackwell node: with two free VFs of different
++        # framebuffer size on one card, one VM per alias got the wrong size
++        # 4 times out of 4, in both boot orders; with this property in place,
++        # 4 times out of 4 correct.
++        #
++        # Everything needed downstream already works: _get_alias_from_config()
++        # leaves unrecognised alias keys in the spec, that spec becomes
++        # InstancePCIRequest.spec (a ListOfDictOfNullableStrings, so arbitrary
++        # keys survive), PciDeviceStats keeps unrecognised device_spec keys as
++        # pool tags, and _filter_pools_for_spec() matches "any of the other
++        # arbitrary tags ... specified in the request". The only thing missing is
++        # permission for the key to appear in an alias at all -
++        # additionalProperties is False. Hence this one property, and no other
++        # change to nova.
++        #
++        # hex_config emits the tag on both the alias and the device_spec entries
++        # it generates into /etc/nova/nova.d/gpu.conf; see
++        # BuildNovaGpuConfContent in core/modules/config_gpu.cpp.
++        "vgpu_type": {
++            "type": "string",
++        },
+     },
+     "required": ["name"],
+ }

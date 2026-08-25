@@ -253,9 +253,21 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/nova
 
-# install custom files and run deployment overrides
+# Apply reviewable unified diffs (<rel>.py.patch beside pristine <rel>.py.orig,
+# same convention as core/masakari/masakari.mk), then install brand-new
+# downstream files (anything not *.patch/*.orig) verbatim. --forward keeps
+# re-runs idempotent; a failed hunk aborts the build instead of shipping
+# drift silently.
 rootfs_install::
-	$(Q)[ -d $(NOVA_PATCHDIR) ] && cp -rf $(NOVA_PATCHDIR)/* $(NOVA_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(NOVA_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(NOVA_PATCHDIR)/}; tgt=$(NOVA_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "nova: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)cd $(NOVA_PATCHDIR) && find . -type f ! -name '*.patch' ! -name '*.orig' \
+		! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(NOVA_SRCDIR)/"$$f"; done
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/nova/nova.d

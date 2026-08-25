@@ -1,0 +1,32 @@
+--- virt/block_device.py
++++ virt/block_device.py
+@@ -296,10 +296,10 @@ class DriverImageBlockDevice(DriverBlock
+             'guest_format': self._bdm_obj.guest_format,
+             'image_id': self._bdm_obj.image_id,
+             'boot_index': 0,
+-            'encrypted': self._bdm_obj.encrypted,
+-            'encryption_secret_uuid': self._bdm_obj.encryption_secret_uuid,
+-            'encryption_format': self._bdm_obj.encryption_format,
+-            'encryption_options': self._bdm_obj.encryption_options
++            'encrypted': self._bdm_obj.get('encrypted', None),
++            'encryption_secret_uuid': self._bdm_obj.get('encryption_secret_uuid', None),
++            'encryption_format': self._bdm_obj.get('encryption_format', None),
++            'encryption_options': self._bdm_obj.get('encryption_options', None)
+         })
+ 
+ 
+@@ -335,10 +335,10 @@ class DriverEphemeralBlockDevice(DriverB
+             'disk_bus': self._bdm_obj.disk_bus,
+             'device_type': self._bdm_obj.device_type,
+             'guest_format': self._bdm_obj.guest_format,
+-            'encrypted': self._bdm_obj.encrypted,
+-            'encryption_secret_uuid': self._bdm_obj.encryption_secret_uuid,
+-            'encryption_format': self._bdm_obj.encryption_format,
+-            'encryption_options': self._bdm_obj.encryption_options
++            'encrypted': self._bdm_obj.get('encrypted', None),
++            'encryption_secret_uuid': self._bdm_obj.get('encryption_secret_uuid', None),
++            'encryption_format': self._bdm_obj.get('encryption_format', None),
++            'encryption_options': self._bdm_obj.get('encryption_options', None)
+         })
+ 
+ 
