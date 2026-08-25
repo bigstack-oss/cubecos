@@ -8,7 +8,25 @@
  import nova.conf
  import nova.context
  from nova import exception
-@@ -9058,6 +9059,60 @@ class ComputeManager(manager.Manager):
+@@ -1299,6 +1300,17 @@ class ComputeManager(manager.Manager):
+             # host. Abort ongoing migration if still running and reset state.
+             self._reset_live_migration(context, instance)
+ 
++        if instance.task_state == task_states.LIVE_RESIZING:
++            # cube live-resize died mid-flight: clear the stuck state and
++            # re-align the allocation with the stored flavor
++            LOG.warning("Instance stuck in live_resizing on init; "
++                        "clearing state and re-aligning allocations",
++                        instance=instance)
++            self._lr_revert_allocations(context, instance)
++            instance.task_state = None
++            instance.system_metadata.pop(clr.SYSMETA_FLAVOR_ID, None)
++            instance.save()
++
+         db_state = instance.power_state
+         drv_state = self._get_power_state(instance)
+         expect_running = (db_state == power_state.RUNNING and
+@@ -9058,6 +9070,60 @@ class ComputeManager(manager.Manager):
                  self._set_instance_obj_error_state(instance,
                                                     clean_task_state=True)
  
