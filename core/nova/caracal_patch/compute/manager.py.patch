@@ -26,7 +26,7 @@
          db_state = instance.power_state
          drv_state = self._get_power_state(instance)
          expect_running = (db_state == power_state.RUNNING and
-@@ -9058,6 +9070,60 @@ class ComputeManager(manager.Manager):
+@@ -9058,6 +9070,73 @@ class ComputeManager(manager.Manager):
                  self._set_instance_obj_error_state(instance,
                                                     clean_task_state=True)
  
@@ -38,20 +38,33 @@
 +            LOG.exception("live-resize: failed to revert allocations",
 +                          instance=instance)
 +
++    def live_resize_grow_cpus(self, context, instance, flavor):
++        """Cube live-resize: grow ONLY vCPUs, synchronously (RPC call).
++
++        Used by the conductor on the SOURCE host before an auto-migrate:
++        vCPUs hot-added after a live migration cannot be onlined by the
++        guest until reboot. No flavor/task-state changes here -- the
++        conductor stays in control; exceptions propagate to the caller.
++        """
++        self.driver.check_live_resize(instance, flavor)
++        self.driver.live_resize(context, instance, flavor,
++                                cpus=True, memory=False)
++
 +    @wrap_exception()
 +    @wrap_instance_event(prefix='compute')
 +    @wrap_instance_fault
-+    def live_resize_instance(self, context, instance, flavor):
++    def live_resize_instance(self, context, instance, flavor, cpus=True):
 +        """Cube live-resize: hotplug the running instance up to flavor.
 +
 +        The placement allocation was already bumped by the conductor
-+        task; on failure it is reverted here.
++        task; on failure it is reverted here. cpus=False finalizes an
++        auto-migrated resize whose vCPUs were grown on the source.
 +        """
 +        self._notify_about_instance_usage(context, instance,
 +                                          "live_resize.start")
 +        try:
 +            self.driver.check_live_resize(instance, flavor)
-+            self.driver.live_resize(context, instance, flavor)
++            self.driver.live_resize(context, instance, flavor, cpus=cpus)
 +        except exception.LiveResizePartial:
 +            with excutils.save_and_reraise_exception():
 +                self._lr_revert_allocations(context, instance)

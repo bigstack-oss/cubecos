@@ -56,9 +56,12 @@ def headroom(flavor):
 SYSMETA_FLAVOR_ID = "cube_live_resize_flavor_id"
 
 
-def set_allocations(reportclient, context, consumer_uuid, flavor):
+def set_allocations(reportclient, context, consumer_uuid, flavor,
+                    vcpus=None, memory_mb=None):
     """PUT the consumer's allocations resized to flavor.
 
+    vcpus/memory_mb override the flavor values (used to claim only the
+    CPU half on the source before an auto-migrate).
     Returns False when placement rejects the new size (no capacity).
     """
     allocs = reportclient.get_allocs_for_consumer(context, consumer_uuid)
@@ -67,7 +70,8 @@ def set_allocations(reportclient, context, consumer_uuid, flavor):
     for alloc in allocs["allocations"].values():
         res = alloc["resources"]
         if "VCPU" in res:
-            res["VCPU"] = flavor.vcpus
+            res["VCPU"] = vcpus if vcpus is not None else flavor.vcpus
         if "MEMORY_MB" in res:
-            res["MEMORY_MB"] = flavor.memory_mb
+            res["MEMORY_MB"] = (memory_mb if memory_mb is not None
+                                else flavor.memory_mb)
     return reportclient.put_allocations(context, consumer_uuid, allocs)

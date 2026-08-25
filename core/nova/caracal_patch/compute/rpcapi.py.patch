@@ -1,17 +1,27 @@
 --- compute/rpcapi.py
 +++ compute/rpcapi.py
-@@ -897,6 +897,15 @@ class ComputeAPI(object):
+@@ -897,6 +897,25 @@ class ComputeAPI(object):
                     dest=dest, block_migration=block_migration,
                     migrate_data=migrate_data, migration=migration)
  
-+    def live_resize_instance(self, ctxt, instance, flavor):
++    def live_resize_instance(self, ctxt, instance, flavor, cpus=True):
 +        # cube downstream: hotplug executor; claim already made by conductor
 +        version = self._ver(ctxt, '5.0')
 +        client = self.router.client(ctxt)
 +        cctxt = client.prepare(server=_compute_host(None, instance),
 +                               version=version)
 +        cctxt.cast(ctxt, 'live_resize_instance', instance=instance,
-+                   flavor=flavor)
++                   flavor=flavor, cpus=cpus)
++
++    def live_resize_grow_cpus(self, ctxt, instance, flavor):
++        # cube downstream: sync vCPU-only grow on the source host, called
++        # by the conductor before an auto-migrate
++        version = self._ver(ctxt, '5.0')
++        client = self.router.client(ctxt)
++        cctxt = client.prepare(server=_compute_host(None, instance),
++                               version=version)
++        return cctxt.call(ctxt, 'live_resize_grow_cpus', instance=instance,
++                          flavor=flavor)
 +
      def live_migration_force_complete(self, ctxt, instance, migration):
          version = self._ver(ctxt, '5.0')

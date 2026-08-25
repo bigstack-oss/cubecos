@@ -16,7 +16,7 @@
  from nova import exception
  from nova.i18n import _
  from nova.image import glance
-@@ -467,6 +469,62 @@ class ComputeTaskManager:
+@@ -467,6 +469,87 @@ class ComputeTaskManager:
          self._live_migrate(context, instance, scheduler_hint,
                             block_migration, disk_over_commit, request_spec)
  
@@ -50,6 +50,30 @@
 +                 "%(host)s, live-migrating instance %(uuid)s first",
 +                 {"flavor": flavor.flavorid, "host": source,
 +                  "uuid": instance.uuid})
++        # grow vCPUs on the SOURCE first when they fit: CPUs hot-added
++        # after a live migration cannot be onlined until reboot (#1269)
++        cpus_grown = False
++        if flavor.vcpus > instance.flavor.vcpus:
++            if clr.set_allocations(self.report_client, context,
++                                   instance.uuid, flavor,
++                                   memory_mb=instance.flavor.memory_mb):
++                try:
++                    self.compute_rpcapi.live_resize_grow_cpus(
++                        context, instance, flavor)
++                    cpus_grown = True
++                except Exception as ex:
++                    LOG.warning("live-resize: source-side vCPU grow "
++                                "failed (%s); falling back to growing "
++                                "after the migration (guest reboot will "
++                                "be needed to online the CPUs)", ex)
++                    clr.set_allocations(self.report_client, context,
++                                        instance.uuid, instance.flavor)
++            else:
++                LOG.warning("live-resize: no room to claim the vCPU grow "
++                            "on %s; growing after the migration instead",
++                            source)
++        else:
++            cpus_grown = True  # memory-only resize: nothing to pre-grow
 +        request_spec = objects.RequestSpec.get_by_instance_uuid(
 +            context, instance.uuid)
 +        request_spec.flavor = flavor
@@ -74,7 +98,8 @@
 +                "is unchanged on its original host"))
 +        instance.task_state = task_states.LIVE_RESIZING
 +        instance.save(expected_task_state=[None])
-+        self.compute_rpcapi.live_resize_instance(context, instance, flavor)
++        self.compute_rpcapi.live_resize_instance(context, instance, flavor,
++                                                 cpus=not cpus_grown)
 +
      def _live_migrate(self, context, instance, scheduler_hint,
                        block_migration, disk_over_commit, request_spec):

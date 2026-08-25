@@ -43,7 +43,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7430,6 +7436,93 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7430,6 +7436,99 @@ class LibvirtDriver(driver.ComputeDriver
              for resource in vpmem_resources]
          return vpmems
  
@@ -99,11 +99,15 @@
 +                    "domain memory ceiling missing or too small "
 +                    "(instance must be rebooted to gain headroom)"))
 +
-+    def live_resize(self, context, instance, new_flavor):
-+        # cube live-resize: memory first (clean abort), then vCPUs.
++    def live_resize(self, context, instance, new_flavor, cpus=True,
++                    memory=True):
++        # cube live-resize: memory first (clean abort), then vCPUs; the
++        # cpus/memory flags split the grow around a live migration.
 +        guest = self._host.get_guest(instance)
 +        old = instance.flavor
 +        mem_delta_kb = (new_flavor.memory_mb - old.memory_mb) * units.Ki
++        if not memory:
++            mem_delta_kb = 0
 +        dev = None
 +        if mem_delta_kb > 0:
 +            dev = vconfig.LibvirtConfigGuestMemoryDevice()
@@ -113,7 +117,7 @@
 +                guest.attach_device(dev, persistent=True, live=True)
 +            except libvirt.libvirtError as ex:
 +                raise exception.LiveResizeError(reason=str(ex))
-+        if new_flavor.vcpus > old.vcpus:
++        if cpus and new_flavor.vcpus > old.vcpus:
 +            flags = (libvirt.VIR_DOMAIN_AFFECT_LIVE |
 +                     libvirt.VIR_DOMAIN_AFFECT_CONFIG)
 +            try:
@@ -130,14 +134,16 @@
 +                raise exception.LiveResizeError(reason=str(ex))
 +        LOG.info("live-resize applied: %(ov)d->%(nv)d vCPU, "
 +                 "%(om)d->%(nm)d MB",
-+                 {"ov": old.vcpus, "nv": new_flavor.vcpus,
-+                  "om": old.memory_mb, "nm": new_flavor.memory_mb},
++                 {"ov": old.vcpus,
++                  "nv": new_flavor.vcpus if cpus else old.vcpus,
++                  "om": old.memory_mb,
++                  "nm": new_flavor.memory_mb if memory else old.memory_mb},
 +                 instance=instance)
 +
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
-@@ -7598,7 +7691,7 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7598,7 +7697,7 @@ class LibvirtDriver(driver.ComputeDriver
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])
