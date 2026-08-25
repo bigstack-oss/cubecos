@@ -18,7 +18,6 @@
 #include <hex/process_util.h>
 #include <http.hpp>
 #include <k3s.hpp>
-#include <mysql_util.h>
 #include <terraform.hpp>
 #include <third_party/json11.hpp>
 #include <upgrade.hpp>

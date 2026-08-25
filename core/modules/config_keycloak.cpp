@@ -13,6 +13,11 @@ static const std::string CHART_RELEASE_NAME = "keycloak";
 static const char KEYCLOAK_CHARTS[] = "/opt/keycloak/keycloakx-*.tgz";
 static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 static const std::string DB_NAME = "keycloak";
+// the db connection info keycloak reads, shipped as one file per field so
+// createKeycloakDbSecrets() can hand the directory straight to kubectl. The database
+// account is created from the same files, so the two cannot drift apart.
+static const char KEYCLOAK_DB_DIR[] = "/opt/keycloak/db";
+static const char MYSQL[] = "/usr/bin/mysql";
 static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.xml";
 static const std::string KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET = "admin-password";
 static const std::string KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE
@@ -91,12 +96,109 @@ NotifyCube(bool modified)
 }
 
 /**
+ * Read one field of the db connection info from KEYCLOAK_DB_DIR.
+ *
+ * @return the field value, or an empty string if it could not be read.
+ */
+static const std::string
+readKeycloakDbField(const std::string& field)
+{
+    std::string error;
+    const std::string value = ReadFile(error, std::string(KEYCLOAK_DB_DIR) + "/" + field);
+    if (!error.empty()) {
+        HexLogError("failed to read the keycloak db %s: %s", field.c_str(), error.c_str());
+        return "";
+    }
+
+    // the files carry no trailing newline, because kubectl would fold one into the secret
+    // value; strip anyway so a hand-edited file cannot yield an account nobody can log into
+    const size_t end = value.find_last_not_of("\r\n");
+    return (end == std::string::npos) ? "" : value.substr(0, end + 1);
+}
+
+/**
+ * Run one statement on the local mysql socket as root.
+ *
+ * @param rows the statement's output, empty when it selected nothing
+ * @return true if mysql exited zero
+ */
+static bool
+execDatabaseSQL(const std::string& sql, std::string& rows)
+{
+    Cmd c;
+    c.path = MYSQL;
+    // an argv rather than a shell line, so the account name and password reach mysql
+    // verbatim and never get a chance to be re-parsed as shell syntax
+    c.args = { "-sNe", sql };
+    c.captureStdout = true;
+    c.captureStderr = true;
+
+    const ExecSyncResult r = ExecSync(0, c);
+    rows = r.stdoutOutput;
+    if (r.exitCode != 0) {
+        // deliberately without the statement: it carries the database password
+        HexLogError(
+            "failed to run a statement on the keycloak database: %s",
+            r.stderrOutput.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+execDatabaseSQL(const std::string& sql)
+{
+    std::string rows;
+    return execDatabaseSQL(sql, rows);
+}
+
+/**
+ * Run a SELECT COUNT(*) and return the count, or -1 if it could not be read.
+ */
+static int
+countDatabaseRows(const std::string& sql)
+{
+    std::string rows;
+    if (!execDatabaseSQL(sql, rows)) {
+        return -1;
+    }
+
+    try {
+        return std::stoi(rows);
+    } catch (const std::exception& e) {
+        HexLogError("unexpected row count from the keycloak database: %s", e.what());
+        return -1;
+    }
+}
+
+/**
  * Check if the database is set up for Keycloak.
  */
 static bool
 isDatabaseSetup()
 {
-    return MysqlUtilIsDbExist("keycloak");
+    const std::string dbUser = readKeycloakDbField("db-user");
+    if (dbUser.empty()) {
+        return false;
+    }
+
+    if (countDatabaseRows(
+            "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '"
+            + DB_NAME + "'")
+        != 1) {
+        return false;
+    }
+
+    // The schema on its own is not proof. The terraform module this replaced created the
+    // schema before the accounts, so an apply that died in between left a schema nothing
+    // could log into -- and a check on the schema alone then short-circuited
+    // setupDatabase() on every later commit, so it never healed. Count one grant per host
+    // pattern setupDatabase() issues.
+    return countDatabaseRows(
+               "SELECT COUNT(*) FROM mysql.db WHERE Db = '" + DB_NAME + "'"
+               " AND User = '" + dbUser + "' AND Host IN ('localhost', '%')")
+        == 2;
 }
 
 /**
@@ -108,15 +210,34 @@ isDatabaseSetup()
 static bool
 setupDatabase()
 {
-    HexLogInfo("create the database for keycloak");
-
     if (isDatabaseSetup()) {
         HexLogInfo("the database for keycloak is already created");
         return true;
     }
 
-    if (!ExecTerraform("apply", "mysql", { "mysql_dbname=" + DB_NAME }, {})) {
-        HexLogError("failed to create keycloak database via terraform");
+    HexLogInfo("create the database for keycloak");
+
+    const std::string dbUser = readKeycloakDbField("db-user");
+    const std::string dbPass = readKeycloakDbField("db-password");
+    if (dbUser.empty() || dbPass.empty()) {
+        HexLogError("cannot create the keycloak database without its connection info");
+        return false;
+    }
+
+    // IF NOT EXISTS, because isDatabaseSetup() also returns false when the schema is there
+    // and only the grants are missing, and re-creating it would discard keycloak's realms
+    if (!execDatabaseSQL("CREATE DATABASE IF NOT EXISTS " + DB_NAME)) {
+        HexLogError("failed to create the keycloak database");
+        return false;
+    }
+
+    // both host patterns: keycloak runs as a k3s pod and reaches mysql from a pod address,
+    // while anything on the node itself comes in over localhost
+    const std::string grant = "GRANT ALL PRIVILEGES ON " + DB_NAME + ".* TO '" + dbUser + "'@'";
+    const std::string identifiedBy = "' IDENTIFIED BY '" + dbPass + "'";
+    if (!execDatabaseSQL(grant + "localhost" + identifiedBy)
+        || !execDatabaseSQL(grant + "%" + identifiedBy)) {
+        HexLogError("failed to grant the keycloak database to %s", dbUser.c_str());
         return false;
     }
 
@@ -206,7 +327,7 @@ createKeycloakDbSecrets()
         false,
         {},
         "/usr/local/bin/k3s kubectl create secret generic " + secretName
-            + " --from-file=/opt/keycloak/db"
+            + " --from-file=" + KEYCLOAK_DB_DIR
             + " -n " + APP_NAMESPACE);
     return (r.exitCode == 0);
 }
@@ -967,11 +1088,21 @@ removeKeycloak(const bool isHard)
     HexLogInfo("uninstalled keycloak helm chart release");
 
     if (isHard) {
-        if (!ExecTerraform("destroy", "mysql", { "mysql_dbname=" + DB_NAME }, {})) {
+        const std::string dbUser = readKeycloakDbField("db-user");
+        if (dbUser.empty()) {
+            HexLogError("cannot remove the keycloak database without its connection info");
+            return false;
+        }
+
+        // drop the accounts before the database: a failure part way then leaves a database
+        // no one can reach, which setupDatabase() recognises as unfinished and completes
+        if (!execDatabaseSQL("DROP USER IF EXISTS '" + dbUser + "'@'localhost'")
+            || !execDatabaseSQL("DROP USER IF EXISTS '" + dbUser + "'@'%'")
+            || !execDatabaseSQL("DROP DATABASE IF EXISTS " + DB_NAME)) {
             HexLogError("failed to remove keycloak database");
             return false;
         }
-        HexLogInfo("destroyed keycloak database via terraform");
+        HexLogInfo("dropped the keycloak database and its accounts");
 
         if (!K3sDeleteNamespace(APP_NAMESPACE)) {
             HexLogError("failed to delete namespace %s", APP_NAMESPACE.c_str());
