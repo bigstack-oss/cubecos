@@ -43,7 +43,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7430,6 +7436,85 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7430,6 +7436,93 @@ class LibvirtDriver(driver.ComputeDriver
              for resource in vpmem_resources]
          return vpmems
  
@@ -51,6 +51,14 @@
 +        # cube live-resize: declare the hotplug ceiling at boot; (0, 0)
 +        # means the flavor is blocked or opted out.
 +        max_vcpus, max_mem_mb = clr.headroom(flavor)
++        if max_vcpus > flavor.vcpus and guest.cpu is not None:
++            # libvirt requires sockets*cores*threads == MAX vcpus; scale
++            # sockets, or skip cpu headroom if it does not divide evenly.
++            per_socket = (guest.cpu.cores or 1) * (guest.cpu.threads or 1)
++            if max_vcpus % per_socket == 0:
++                guest.cpu.sockets = max_vcpus // per_socket
++            else:
++                max_vcpus = 0
 +        if max_vcpus > flavor.vcpus:
 +            guest.vcpus = max_vcpus
 +            guest.vcpus_current = flavor.vcpus
@@ -129,7 +137,7 @@
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
-@@ -7598,7 +7683,7 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7598,7 +7691,7 @@ class LibvirtDriver(driver.ComputeDriver
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])
