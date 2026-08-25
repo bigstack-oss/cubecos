@@ -1,0 +1,61 @@
+--- compute/manager.py
++++ compute/manager.py
+@@ -69,6 +69,7 @@ from nova.compute import utils as comput
+ from nova.compute.utils import wrap_instance_event
+ from nova.compute import vm_states
+ from nova import conductor
++from nova import cube_live_resize as clr
+ import nova.conf
+ import nova.context
+ from nova import exception
+@@ -9058,6 +9059,50 @@ class ComputeManager(manager.Manager):
+                 self._set_instance_obj_error_state(instance,
+                                                    clean_task_state=True)
+ 
++    def _lr_revert_allocations(self, context, instance):
++        try:
++            clr.set_allocations(self.reportclient, context,
++                                instance.uuid, instance.flavor)
++        except Exception:
++            LOG.exception("live-resize: failed to revert allocations",
++                          instance=instance)
++
++    @wrap_exception()
++    @wrap_instance_event(prefix='compute')
++    @wrap_instance_fault
++    def live_resize_instance(self, context, instance, flavor):
++        """Cube live-resize: hotplug the running instance up to flavor.
++
++        The placement allocation was already bumped by the conductor
++        task; on failure it is reverted here.
++        """
++        self._notify_about_instance_usage(context, instance,
++                                          "live_resize.start")
++        try:
++            self.driver.check_live_resize(instance, flavor)
++            self.driver.live_resize(context, instance, flavor)
++        except exception.LiveResizePartial:
++            with excutils.save_and_reraise_exception():
++                self._lr_revert_allocations(context, instance)
++                instance.vm_state = vm_states.ERROR
++                instance.task_state = None
++                instance.system_metadata.pop(clr.SYSMETA_FLAVOR_ID, None)
++                instance.save()
++        except Exception:
++            with excutils.save_and_reraise_exception():
++                self._lr_revert_allocations(context, instance)
++                instance.task_state = None
++                instance.system_metadata.pop(clr.SYSMETA_FLAVOR_ID, None)
++                instance.save()
++        instance.flavor = flavor
++        instance.vcpus = flavor.vcpus
++        instance.memory_mb = flavor.memory_mb
++        instance.task_state = None
++        instance.system_metadata.pop(clr.SYSMETA_FLAVOR_ID, None)
++        instance.save()
++        self._notify_about_instance_usage(context, instance,
++                                          "live_resize.end")
++
+     @wrap_exception()
+     @wrap_instance_event(prefix='compute')
+     @errors_out_migration

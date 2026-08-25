@@ -1,0 +1,9 @@
+--- compute/task_states.py
++++ compute/task_states.py
+@@ -130,3 +130,6 @@ resizing_states = (RESIZE_PREP, RESIZE_M
+ 
+ # These states indicate a rebuild
+ rebuild_states = (REBUILDING, REBUILD_BLOCK_DEVICE_MAPPING, REBUILD_SPAWNING)
++
++# cube live-resize (downstream): possible task states during live_resize
++LIVE_RESIZING = fields.InstanceTaskState.LIVE_RESIZING

@@ -1,0 +1,19 @@
+--- objects/fields.py
++++ objects/fields.py
+@@ -1054,6 +1054,7 @@ class InstanceTaskState(BaseNovaEnum):
+     SHELVING_IMAGE_UPLOADING = 'shelving_image_uploading'
+     SHELVING_OFFLOADING = 'shelving_offloading'
+     UNSHELVING = 'unshelving'
++    LIVE_RESIZING = 'live_resizing'
+ 
+     ALL = (SCHEDULING, BLOCK_DEVICE_MAPPING, NETWORKING, SPAWNING,
+            IMAGE_SNAPSHOT, IMAGE_SNAPSHOT_PENDING, IMAGE_PENDING_UPLOAD,
+@@ -1065,7 +1066,7 @@ class InstanceTaskState(BaseNovaEnum):
+            RESCUING, UNRESCUING, REBUILDING, REBUILD_BLOCK_DEVICE_MAPPING,
+            REBUILD_SPAWNING, MIGRATING, DELETING, SOFT_DELETING, RESTORING,
+            SHELVING, SHELVING_IMAGE_PENDING_UPLOAD, SHELVING_IMAGE_UPLOADING,
+-           SHELVING_OFFLOADING, UNSHELVING)
++           SHELVING_OFFLOADING, UNSHELVING, LIVE_RESIZING)
+ 
+ 
+ class InstancePowerState(Enum):

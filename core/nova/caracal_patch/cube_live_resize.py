@@ -49,3 +49,25 @@ def headroom(flavor):
     if max_mem < flavor.memory_mb:
         max_mem = 0
     return (max_vcpus, max_mem)
+
+
+# key in instance.system_metadata carrying the in-flight target flavor id
+# while a live resize is migrating the instance to a host that fits
+SYSMETA_FLAVOR_ID = "cube_live_resize_flavor_id"
+
+
+def set_allocations(reportclient, context, consumer_uuid, flavor):
+    """PUT the consumer's allocations resized to flavor.
+
+    Returns False when placement rejects the new size (no capacity).
+    """
+    allocs = reportclient.get_allocs_for_consumer(context, consumer_uuid)
+    if not allocs.get("allocations"):
+        return False
+    for alloc in allocs["allocations"].values():
+        res = alloc["resources"]
+        if "VCPU" in res:
+            res["VCPU"] = flavor.vcpus
+        if "MEMORY_MB" in res:
+            res["MEMORY_MB"] = flavor.memory_mb
+    return reportclient.put_allocations(context, consumer_uuid, allocs)
