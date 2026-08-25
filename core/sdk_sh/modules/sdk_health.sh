@@ -2407,13 +2407,14 @@ _health_neutron_auto_repair()
             # (a db_sync can't help here: ovn_db_sync never touches port status)
             Quiet -n cmd -c -- $HEX_SDK os_neutron_ovn_port_status_resync $OVN_STALE_PORTS
             sleep 10
-            # only if that didn't take, fall back to bouncing neutron-server one
-            # node at a time: its IDL reconnect re-dumps and re-derives every port
-            if [ -n "$($HEX_SDK os_neutron_ovn_port_status_stale)" ] ; then
+            # didn't take: bounce neutron-server one node at a time (its IDL
+            # reconnect re-derives every port). No grace period on the re-check --
+            # the toggle above refreshed updated_at.
+            if [ -n "$(OVN_PORT_STALE_MIN_AGE=0 $HEX_SDK os_neutron_ovn_port_status_stale $OVN_STALE_PORTS)" ] ; then
                 for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
                     remote_systemd_restart $node neutron-server
                     sleep 20
-                    [ -n "$($HEX_SDK os_neutron_ovn_port_status_stale)" ] || break
+                    [ -n "$(OVN_PORT_STALE_MIN_AGE=0 $HEX_SDK os_neutron_ovn_port_status_stale $OVN_STALE_PORTS)" ] || break
                 done
             fi
         else
@@ -2459,6 +2460,20 @@ health_neutron_repair()
             $OPENSTACK network agent delete $i
         fi
     done
+
+    # Port status stale vs OVN (ERR_CODE 7): bounce neutron-server one node at a
+    # time. Nothing above touches port status, and check_repair has already
+    # accepted disruption, so skip the toggle the auto path tries first.
+    local stale_ports="$($HEX_SDK os_neutron_ovn_port_status_stale)"
+    if [ -n "$stale_ports" ] ; then
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            remote_systemd_restart $node neutron-server
+            sleep 20
+            # named ports, no grace period: a port that plugged since must
+            # not keep the loop going
+            [ -n "$(OVN_PORT_STALE_MIN_AGE=0 $HEX_SDK os_neutron_ovn_port_status_stale $stale_ports)" ] || break
+        done
+    fi
 }
 
 health_glance_report()

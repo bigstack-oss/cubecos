@@ -1875,19 +1875,32 @@ os_octavia_sgid_get()
 # status is event-driven with no reconciliation, so a neutron-server whose IDL
 # stops delivering Logical_Switch_Port events leaves them DOWN forever and every
 # nova build routed to it dies on vif_plugging_timeout. Prints the port ids.
+# os_neutron_ovn_port_status_stale [port ...]  -- named ports, or every compute
+# port. OVN_PORT_STALE_MIN_AGE (default 90) is how long a port must have been
+# DOWN-while-OVN-says-up to count; 0 skips the grace period, which a post-repair
+# re-check needs because a repair refreshes the port's updated_at.
 os_neutron_ovn_port_status_stale()
 {
     local now=$(date -u +%s) p up ts age rc=1
-    # port list has no --status filter; take the json and pick the DOWN ones
-    for p in $($OPENSTACK port list --device-owner compute:nova -f json 2>/dev/null | \
-               python3 -c 'import sys,json;[print(x["ID"]) for x in json.load(sys.stdin) if x.get("Status")=="DOWN"]' 2>/dev/null) ; do
+    local min_age=${OVN_PORT_STALE_MIN_AGE:-90}
+    local ports="$@"
+    if [ -z "$ports" ] ; then
+        # port list has no --status filter; take the json and pick the DOWN ones
+        ports="$($OPENSTACK port list --device-owner compute:nova -f json 2>/dev/null | \
+                 python3 -c 'import sys,json;[print(x["ID"]) for x in json.load(sys.stdin) if x.get("Status")=="DOWN"]' 2>/dev/null)"
+    else
+        ports="$(for p in $ports ; do
+                     [ "x$($OPENSTACK port show $p -f value -c status 2>/dev/null)" = "xDOWN" ] && echo $p
+                 done)"
+    fi
+    for p in $ports ; do
         up=$(ovn-nbctl --timeout=5 get logical_switch_port $p up 2>/dev/null | tr -d '"')
         [ "x$up" = "xtrue" ] || continue
         # skip ports still inside the normal plug window -- a healthy transition
         # is sub-second, so only a stale one is still inconsistent this late
         ts=$($OPENSTACK port show $p -f value -c updated_at 2>/dev/null)
         age=$(( now - $(date -u -d "$ts" +%s 2>/dev/null || echo $now) ))
-        [ $age -ge 90 ] || continue
+        [ $age -ge $min_age ] || continue
         echo $p
         rc=0
     done
