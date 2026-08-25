@@ -7,7 +7,7 @@ include $(SRCDIR)/docker.mk
 REGISTRY_TAR := registry@2.tar
 
 $(REGISTRY_TAR):
-	$(Q)skopeo copy docker://registry:2 docker-archive:$(REGISTRY_TAR):registry:2 >/dev/null
+	$(Q)skopeo copy docker://registry:2 docker-archive:$(REGISTRY_TAR):registry:2 --retry-times 3 >/dev/null
 
 registry: $(REGISTRY_TAR)
 	$(Q)make build-image -C ../k3s
@@ -45,7 +45,7 @@ push-image:
 copy-image:
 	$(call RUN_CMD_TIMED, make run-registry,"  RUN     docker registry")
 	$(call RUN_CMD_TIMED, \
-		skopeo copy --all --dest-tls-verify=false --preserve-digests \
+		skopeo copy --all --dest-tls-verify=false --preserve-digests --retry-times 3 \
 			docker://$(IMG) docker://$(shell echo $(IMG) | sed -E 's/^[^\/]+\//localhost:5080\//') \
 		,"  COPY    $(IMG)")
 	$(Q)make rm-registry

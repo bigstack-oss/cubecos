@@ -20,5 +20,5 @@ for i in $IMGS; do
         nametag=$i
     fi
 
-    skopeo copy $src docker://$REGISTRY/$nametag --dest-tls-verify=false --preserve-digests
+    skopeo copy $src docker://$REGISTRY/$nametag --dest-tls-verify=false --preserve-digests --retry-times 3
 done

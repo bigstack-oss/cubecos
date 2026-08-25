@@ -28,7 +28,7 @@ pull() {
         # local tag=$(echo $i | cut -d: -f2)
         mkdir -p ./${dir}/$(dirname "$img")
         #skopeo copy docker://$img docker-archive:./${dir}/${path}~${tag}.tar:${path}:${tag}
-        skopeo copy docker://$img docker-archive:${dir}/${img/:/@}.tar:${img}
+        skopeo copy docker://$img docker-archive:${dir}/${img/:/@}.tar:${img} --retry-times 3
     done
 }
 
