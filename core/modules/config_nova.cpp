@@ -101,6 +101,7 @@ static bool s_bStorageBackendModified = false;
 static bool s_bDbPassChanged = false;
 static bool s_bPlaDbPassChanged = false;
 static bool s_bConfigChanged = false;
+static bool s_bLrChanged = false;
 static bool s_bEndpointChanged = false;
 static bool s_bCellChanged = false;
 
@@ -131,6 +132,11 @@ CONFIG_TUNING_STR(NOVA_OC_CPU_RATIO, "nova.overcommit.cpu.ratio", TUNING_PUB, "S
 CONFIG_TUNING_STR(NOVA_OC_RAM_RATIO, "nova.overcommit.ram.ratio", TUNING_PUB, "Specifiy an allowed RAM overcommitted ratio.", "1.0", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_OC_DISK_RATIO, "nova.overcommit.disk.ratio", TUNING_PUB, "Specifiy an allowed DISK overcommitted ratio.", "1.5", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_HW_TYPE, "nova.hardware.type", TUNING_PUB, "Set default hardware type for hypervisor.", "q35", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_BOOL(NOVA_LR_ENABLED, "nova.live.resize.enabled", TUNING_PUB, "Set to false to boot new instances without live-resize hotplug headroom.", true);
+CONFIG_TUNING_UINT(NOVA_LR_FACTOR, "nova.live.resize.factor", TUNING_PUB, "Default live-resize ceiling as a multiple of the flavor size.", 4, 1, 64);
+CONFIG_TUNING_UINT(NOVA_LR_MAX_VCPUS, "nova.live.resize.max.vcpus", TUNING_PUB, "Absolute cap on the default vCPU live-resize ceiling.", 32, 1, 1024);
+CONFIG_TUNING_UINT(NOVA_LR_MAX_MEMORY, "nova.live.resize.max.memory.mb", TUNING_PUB, "Absolute cap on the default memory live-resize ceiling (MB).", 131072, 1024, 4194304);
+CONFIG_TUNING_UINT(NOVA_LR_MIGRATE_TIMEOUT, "nova.live.resize.migrate.timeout", TUNING_PUB, "Seconds to wait for the live migration run when a live resize does not fit on the current host.", 1800, 60, 86400);
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
@@ -161,6 +167,11 @@ PARSE_TUNING_STR(s_ocCpuRatio, NOVA_OC_CPU_RATIO);
 PARSE_TUNING_STR(s_ocRamRatio, NOVA_OC_RAM_RATIO);
 PARSE_TUNING_STR(s_ocDiskRatio, NOVA_OC_DISK_RATIO);
 PARSE_TUNING_STR(s_hwType, NOVA_HW_TYPE);
+PARSE_TUNING_BOOL(s_lrEnabled, NOVA_LR_ENABLED);
+PARSE_TUNING_UINT(s_lrFactor, NOVA_LR_FACTOR);
+PARSE_TUNING_UINT(s_lrMaxVcpus, NOVA_LR_MAX_VCPUS);
+PARSE_TUNING_UINT(s_lrMaxMemory, NOVA_LR_MAX_MEMORY);
+PARSE_TUNING_UINT(s_lrMigrateTimeout, NOVA_LR_MIGRATE_TIMEOUT);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 2);
@@ -610,6 +621,13 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["cpu_allocation_ratio"] = s_ocCpuRatio.newValue();
         cfg["DEFAULT"]["ram_allocation_ratio"] = s_ocRamRatio.newValue();
         cfg["DEFAULT"]["disk_allocation_ratio"] = s_ocDiskRatio.newValue();
+
+        // cube live-resize (vCPU/memory hot-add) policy
+        cfg["cube"]["live_resize_default_headroom"] = s_lrEnabled.newValue() ? "true" : "false";
+        cfg["cube"]["live_resize_headroom_factor"] = std::to_string(s_lrFactor.newValue());
+        cfg["cube"]["live_resize_max_vcpus"] = std::to_string(s_lrMaxVcpus.newValue());
+        cfg["cube"]["live_resize_max_memory_mb"] = std::to_string(s_lrMaxMemory.newValue());
+        cfg["cube"]["live_resize_migrate_timeout"] = std::to_string(s_lrMigrateTimeout.newValue());
         cfg["vnc"]["enabled"] = "true";
 
         // cfg["spice"]["enabled"] = "true";
@@ -855,7 +873,12 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bNetModified | s_bMqModified |
+    s_bLrChanged = s_lrEnabled.modified() | s_lrFactor.modified() |
+                s_lrMaxVcpus.modified() | s_lrMaxMemory.modified() |
+                s_lrMigrateTimeout.modified();
+
+    s_bConfigChanged = modified | s_bLrChanged |
+                s_bNetModified | s_bMqModified |
                 s_bCubeModified | s_bNeutronModified | s_bIronicModified |
                 s_bStorageBackendModified |
                G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
