@@ -176,7 +176,25 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += sharedId;
         dbconn += "/barbican";
 
-        cfg["DEFAULT"]["sql_connection"] = dbconn;
+        // [database] connection, not [DEFAULT] sql_connection: barbican 18.0.0 moved the
+        // database options into their own group (barbican/common/config.py registers
+        // core_db_opts under OptGroup(name='database')). The old spelling survives as a
+        // deprecated alias, so writing it would still work today -- but the regenerated
+        // barbican.conf.sample only documents the new one, and leaving the two disagreeing
+        // hands the next hop a failure that produces no error at all: the option's default
+        // is `sqlite:///barbican.sqlite`, so once the alias goes barbican does not complain
+        // about a missing URI, it quietly opens a per-node sqlite file. Each control node
+        // would then serve its own empty key store while every service and health check
+        // reported success.
+        //
+        // No mysql_wsrep_sync_wait here, unlike the eleven other upgraded modules. It
+        // would be a dead key: barbican does not use oslo.db's enginefacade and does not
+        // register oslo.db's [database] options. barbican/model/repositories.py builds
+        // engine_args itself from exactly three values -- connection_recycle_time,
+        // max_pool_size, max_overflow -- and hands them to
+        // oslo_db.sqlalchemy.session.create_engine(), which only applies
+        // mysql_wsrep_sync_wait when it arrives as a kwarg. Nothing would read it.
+        cfg["database"]["connection"] = dbconn;
     }
 
     return true;
@@ -244,6 +262,29 @@ UpdateCfg(std::string domain, std::string userPass, std::string cryptoPass)
         cfg["secretstore"]["enabled_secretstore_plugins"] = "store_crypto";
         cfg["crypto"]["enabled_crypto_plugins"] = "simple_crypto";
         cfg["simple_crypto_plugin"]["kek"] = "'" + cryptoPass + "'";
+
+        // Keep the antelope authorization behaviour across the hop. barbican 18.0.0 turns
+        // Secure RBAC on for itself -- barbican/common/config.py calls
+        // policy_opts.set_defaults(enforce_scope=True, enforce_new_defaults=True) -- and
+        // that is a changed default, not one of the new features the story excludes.
+        //
+        // What it changes here is who may store a secret. The legacy rule is
+        // `secrets:post = rule:admin_or_creator`, and in CubeCOS only the barbican service
+        // user holds `creator` (SetupBarbican() above grants it, nobody else does), so an
+        // ordinary tenant cannot create secrets today. The new default is
+        // `secrets:post = role:member`, and config_keystone.cpp binds `member` to the
+        // cube_users group -- every ordinary user would gain write access to the key
+        // manager. Widening that is a product decision, not an upgrade side effect.
+        //
+        // The rule definitions themselves are identical in 16.0.2 and 18.0.0 (both ship
+        // the legacy rule and the new one, gated on enforce_new_defaults), so switching
+        // the gate back reproduces the current behaviour exactly rather than approximately.
+        //
+        // This belongs here rather than in barbican.conf.sample: that file has to stay
+        // byte-identical to oslo-config-generator output or the next hop loses its diff
+        // baseline.
+        cfg["oslo_policy"]["enforce_new_defaults"] = "false";
+        cfg["oslo_policy"]["enforce_scope"] = "false";
 
         cfg["keystone_authtoken"].clear();
         cfg["keystone_authtoken"]["auth_type"] = "password";
