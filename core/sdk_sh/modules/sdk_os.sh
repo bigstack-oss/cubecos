@@ -1122,6 +1122,15 @@ os_keystone_idp_config()
     mv $fed_dir/https_${shared_id}_5443_v3_mellon_metadata.xml $fed_dir/v3.xml
     cat $fed_dir/v3.xml | xmllint --format - > /etc/keycloak/keystone_sp_metadata.xml
     cp -f /etc/httpd/conf.d/v3_mellon_keycloak_master.conf.def /etc/httpd/conf.d/v3_mellon_keycloak_master.conf
+
+    # keystone_idp commits after the apache2/keystone modules have already started httpd,
+    # so the mellon config above is only on disk -- reload to put it in the running server.
+    # Without this, /v3/auth/OS-FEDERATION/websso/mapped bypasses mellon and keystone
+    # answers 401 until the next unrelated httpd restart.
+    if systemctl is-active --quiet httpd ; then
+        systemctl reload httpd
+    fi
+
     Quiet -n $TERRAFORM_CUBE apply \
           -auto-approve -target=module.keycloak_keystone \
           -var "cube_controller=${shared_id}" \
