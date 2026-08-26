@@ -70,10 +70,13 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 # 4.0.1 (apiserver) and 4.0.0.0rc1 (console), i.e. caracal, not antelope. keystone
 # (25.0.0) is the second -- #631, the first openstack service to make the hop -- and
 # glance (28.2.0) the third (#630), cinder (24.5.0) the fourth (#629), nova with
-# placement (29.4.0 / 11.0.1) the fifth (#627), neutron (24.2.2) the sixth (#628) and
-# manila (18.3.0) the seventh (#638).
-# The services move one at a time and OPENSTACK_RELEASE is promoted once they all
-# have.
+# placement (29.4.0 / 11.0.1) the fifth (#627), neutron (24.2.2) the sixth (#628),
+# manila (18.3.0) the seventh (#638) and barbican (18.0.0) the eighth (#632). The
+# services move one at a time and OPENSTACK_RELEASE is promoted once they all have.
+#
+# barbican is the first of them to leave a piece behind: python-barbicanclient owns the
+# `openstack secret ...` commands and has to stay in the antelope venv for as long as
+# /usr/bin/openstack does. See core/barbican/barbican.mk.
 CARACAL_OPENSTACK_RELEASE := caracal
 CARACAL_OPENSTACK_HOME_DIR := /opt/openstack-$(CARACAL_OPENSTACK_RELEASE)
 CARACAL_OPS_GITHUB_BRANCH_01 := stable/2024.1
