@@ -2405,6 +2405,22 @@ os_instance_list()
     done
 }
 
+# Instances whose running domain still exposes vmx/svm to the guest. Those
+# guests load kvm_intel/kvm_amd, and that module cannot online vCPUs hot-added
+# after a live migration until it is reloaded. A domain keeps the CPU features
+# it booted with -- live migration carries them across -- so this clears only
+# when the instance is rebooted.
+os_instance_nested_virt_list()
+{
+    local d feat host
+    host=$(hostname)
+    for d in $(virsh list --name 2>/dev/null) ; do
+        feat=$(virsh dumpxml $d 2>/dev/null | grep -cE "name='(vmx|svm)'")
+        [ "$feat" -gt 0 ] || continue
+        echo "$host $d $(virsh domuuid $d 2>/dev/null)"
+    done
+}
+
 os_instance_id_list()
 {
     local tenant=$1

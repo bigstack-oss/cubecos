@@ -132,6 +132,7 @@ CONFIG_TUNING_STR(NOVA_OC_CPU_RATIO, "nova.overcommit.cpu.ratio", TUNING_PUB, "S
 CONFIG_TUNING_STR(NOVA_OC_RAM_RATIO, "nova.overcommit.ram.ratio", TUNING_PUB, "Specifiy an allowed RAM overcommitted ratio.", "1.0", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_OC_DISK_RATIO, "nova.overcommit.disk.ratio", TUNING_PUB, "Specifiy an allowed DISK overcommitted ratio.", "1.5", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_HW_TYPE, "nova.hardware.type", TUNING_PUB, "Set default hardware type for hypervisor.", "q35", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_BOOL(NOVA_NESTED_VIRT, "nova.nested.virt.enabled", TUNING_PUB, "Set to true to expose hardware virtualization (vmx/svm) to instances, enabling nested virtualization.", false);
 CONFIG_TUNING_BOOL(NOVA_LR_ENABLED, "nova.live.resize.enabled", TUNING_PUB, "Set to false to boot new instances without live-resize hotplug headroom.", true);
 CONFIG_TUNING_UINT(NOVA_LR_FACTOR, "nova.live.resize.factor", TUNING_PUB, "Default live-resize ceiling as a multiple of the flavor size.", 4, 1, 64);
 CONFIG_TUNING_UINT(NOVA_LR_MAX_VCPUS, "nova.live.resize.max.vcpus", TUNING_PUB, "Absolute cap on the default vCPU live-resize ceiling.", 32, 1, 1024);
@@ -167,6 +168,7 @@ PARSE_TUNING_STR(s_ocCpuRatio, NOVA_OC_CPU_RATIO);
 PARSE_TUNING_STR(s_ocRamRatio, NOVA_OC_RAM_RATIO);
 PARSE_TUNING_STR(s_ocDiskRatio, NOVA_OC_DISK_RATIO);
 PARSE_TUNING_STR(s_hwType, NOVA_HW_TYPE);
+PARSE_TUNING_BOOL(s_nestedVirt, NOVA_NESTED_VIRT);
 PARSE_TUNING_BOOL(s_lrEnabled, NOVA_LR_ENABLED);
 PARSE_TUNING_UINT(s_lrFactor, NOVA_LR_FACTOR);
 PARSE_TUNING_UINT(s_lrMaxVcpus, NOVA_LR_MAX_VCPUS);
@@ -569,9 +571,14 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         // source of truth for migration parallelism. 3 overlaps migrations on a
         // fast fabric; on a saturated link nova still serializes within the cap.
         cfg["DEFAULT"]["max_concurrent_live_migrations"] = "3";
+        // Instances get vmx/svm only when nested virt is opted in. Exposed by
+        // default, every guest loads kvm_intel/kvm_amd, and that module's
+        // cached VMCS config then rejects vCPUs hot-added after a live
+        // migration until it is reloaded.
         std::string cpuVirtInstr = HexUtilPOpen("echo -n $(egrep -o '(vmx|svm)' /proc/cpuinfo | uniq)");
-        if (cpuVirtInstr == "svm")
-            cfg["libvirt"]["cpu_model_extra_flags"] = cpuVirtInstr;
+        if (!cpuVirtInstr.empty())
+            cfg["libvirt"]["cpu_model_extra_flags"] =
+                (s_nestedVirt.newValue() ? "" : "-") + cpuVirtInstr;
 
         // Ceilometer
         cfg["DEFAULT"]["instance_usage_audit"] = "True";
