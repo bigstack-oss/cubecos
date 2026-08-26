@@ -66,9 +66,15 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_MONITORS_REPO_URL) /tmp/masakari/masakari-monitors
+	$(Q)# libvirt-python is named here rather than left transitive: masakarimonitors
+	$(Q)# imports libvirt directly (instancemonitor/instance.py), its requirements.txt
+	$(Q)# does not list it, and it used to arrive because nova shared this venv. The
+	$(Q)# caracal hop moved nova and its libvirt-python to /opt/openstack-caracal, so
+	$(Q)# instancemonitor crash-loops on ModuleNotFoundError without this (#1347).
 	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-		-r /tmp/masakari/masakari-monitors/requirements.txt
+		-r /tmp/masakari/masakari-monitors/requirements.txt \
+		libvirt-python
 	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/masakari/masakari-monitors && \
 		/opt/openstack-antelope/bin/python setup.py install"
 	$(Q)# clean up dns configurations after downloading packages
