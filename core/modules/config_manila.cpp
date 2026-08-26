@@ -40,6 +40,21 @@ static const char SHARE_NAME[] = "openstack-manila-share";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
+/**
+ * The privsep helper manila must escalate through.
+ *
+ * oslo.privsep defaults to `sudo privsep-helper`, which sudo's secure_path resolves to
+ * /usr/bin/privsep-helper -- a symlink core/nova/nova.mk keeps pointed at the *antelope*
+ * venv, because masakari and cyborg are still there and it cannot move with manila. A
+ * python 3.10 helper cannot serve a caracal manila, so the caracal path is named
+ * explicitly; config_nova.cpp and config_neutron.cpp pin theirs for the same reason.
+ *
+ * Only the lvm and glusterfs drivers reach privsep and enabled_share_backends is pinned
+ * to generic, so this never fires today -- it is here so it does not become a latent bug
+ * the day a backend changes. /etc/sudoers.d/manila authorises exactly this path.
+ */
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+
 static const char USERPASS[] = "iSH2oRU3cwyOG6vj";
 static const char DBPASS[] = "vSV8gnW0PtuFgnHA";
 
@@ -305,13 +320,7 @@ SetDefaults(Configs& config)
 
     config["oslo_concurrency"]["lock_path"] = "/var/lock/manila";
 
-    // /usr/bin/privsep-helper is a symlink to the venv helper as of the Horizon hop --
-    // core/nova/nova.mk creates it, now that no service runs privsep under the system
-    // python. Only the lvm and glusterfs drivers reach privsep and
-    // enabled_share_backends is pinned to generic above, so this never fires today
-    // -- it is here so it does not become a latent bug the day a backend changes.
-    // /etc/sudoers.d/manila authorises exactly this path.
-    config["manila_sys_admin"]["helper_command"] = "sudo /usr/bin/privsep-helper";
+    config["manila_sys_admin"]["helper_command"] = PRIVSEP_HELPER;
 }
 
 /**

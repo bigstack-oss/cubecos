@@ -2,7 +2,9 @@ Defaults:manila !requiretty
 
 manila ALL = (root) NOPASSWD: /usr/bin/manila-rootwrap /etc/manila/rootwrap.conf *
 # This is what [manila_sys_admin] helper_command in manila.conf points at.
-# /usr/bin/privsep-helper is a symlink to the venv helper as of the Horizon hop.
+# /usr/bin/privsep-helper stays pointed at the antelope venv (core/nova/nova.mk keeps
+# it there for the services that have not hopped), and a python 3.10 helper cannot serve
+# a caracal manila, so the path is spelled out rather than left to sudo's secure_path.
 # Only the lvm and glusterfs drivers reach privsep, and config_manila.cpp pins the
 # backend to generic, so this is a safety net.
-manila ALL = (root) NOPASSWD: /usr/bin/privsep-helper *
+manila ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *
