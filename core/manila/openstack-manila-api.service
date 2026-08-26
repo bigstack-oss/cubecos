@@ -5,7 +5,7 @@ After=syslog.target network.target
 [Service]
 Type=simple
 User=manila
-# manila comes from pip inside /opt/openstack-antelope; /usr/bin/manila-api is the
+# manila comes from pip inside /opt/openstack-caracal; /usr/bin/manila-api is the
 # symlink manila.mk creates into that venv. /usr/share/manila/manila-dist.conf is
 # no longer passed: it was an RDO source file, and its only line that ever reached
 # manila was [database] max_pool_size (its first section is spelled [default], not

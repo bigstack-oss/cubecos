@@ -5,18 +5,24 @@
 # calls in health_manila_check(), os_manila_init() and migrate_manila_db_post(), and
 # the "share" osc plugin entry point.
 #
-# It used to be the yoga python3-manilaclient rpm under the *system* python 3.9,
-# because /usr/bin/openstack was itself `#!/usr/bin/python3` and an entry point is
-# only visible to the interpreter it was installed under. core/heavyfs moved the cli
-# into the 3.10 venv, so the plugin follows it: it is named on the pip install below
-# and /usr/bin/manila is relinked into the venv the way every other console script
-# here already is. That also retires the yoga-client-against-antelope-api pairing the
-# rpm forced -- 4.4.2 is the client antelope's own upper-constraints names for the
-# 16.3.0 api installed here.
+# Those two now want different venvs, so it is installed twice.
 #
-# openstack-manila-ui is replaced by the manila-ui wheel installed further down.
-# #609 moved horizon into the 3.10 venv, so the Shares panels can follow the manila
-# service in there.
+# The osc plugin has to sit with the interpreter that runs /usr/bin/openstack, because
+# an entry point is only visible to the interpreter it was installed under -- and
+# core/heavyfs still links /usr/bin/openstack at $(OPENSTACK_HOME_DIR), the antelope
+# venv. `openstack share` is reached from sdk_os.sh (os_manila_share_delete and the
+# share-type reconcile), so dropping the antelope copy would break those four call
+# sites. Unlike volume/compute/image, share is not built into python-openstackclient;
+# it is a separate plugin, which is why cinder could take its client to caracal
+# wholesale and manila cannot.
+#
+# /usr/bin/manila is the standalone cli hex_sdk drives, and it talks HTTP, so it goes
+# to caracal with the api it queries -- 4.8.1, the client caracal's own
+# upper-constraints names for the 18.3.0 api installed here. That keeps the pairing
+# #1203 established when it retired the yoga-client-against-antelope-api one.
+#
+# openstack-manila-ui is replaced by the manila-ui wheel installed further down, and
+# that one does *not* move: see the note above it.
 #
 # openstack-manila and openstack-manila-share are what the pip install below
 # replaces. Non-python Requires of those two that are deliberately not restated:
@@ -30,8 +36,11 @@
 #                 CIFSHelper runs its `net conf` calls through _ssh_exec() inside
 #                 the service instance, never on the host.
 
-# https://releases.openstack.org/antelope/index.html#antelope-manila
-MANILA_VER := 16.3.0
+# https://releases.openstack.org/caracal/index.html#caracal-manila -- last numeric
+# 2024.1 revision. 18.3.0 specifically: it is the first tag carrying upstream's own
+# <world> fix in NFSHelper.get_host_list(), which is what let caracal_patch/ not exist
+# (see the note where antelope_patch/ used to be applied).
+MANILA_VER := 18.3.0
 
 MANILA_CONF_DIR := /etc/manila
 MANILA_DATA_DIR := /usr/share/manila
@@ -39,23 +48,33 @@ MANILA_APP_DIR := /var/lib/manila
 MANILA_LOG_DIR := /var/log/manila
 MANILA_RUN_DIR := /var/run/manila
 
-MANILA_SRCDIR := $(ROOTDIR)/opt/openstack-antelope/lib/python$(PYTHON_VER)/site-packages/manila
-MANILA_PATCHDIR := $(COREDIR)/manila/$(OPENSTACK_RELEASE)_patch
+MANILA_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/manila
+MANILA_PATCHDIR := $(COREDIR)/manila/$(CARACAL_OPENSTACK_RELEASE)_patch
 
-# https://releases.openstack.org/antelope/index.html -- last numeric 2023.1
-# revision. Horizon plugins are not in the antelope upper-constraints (that file
-# only covers libraries), so the pin has to be explicit.
+# Deliberately still the 2023.1 pin, and deliberately still in the antelope venv.
+# core/horizon/horizon.mk installs the dashboard into both venvs, but nothing serves
+# the caracal copy -- openstack-dashboard.service, gunicorn-config.py and the httpd
+# reverse proxy all point at the antelope tree, and every dashboard plugin installs
+# next to it. manila-ui follows horizon, not the manila service, so the Shares panels
+# stay on 9.0.1 against horizon 23.x until horizon itself hops; 11.0.1 is the caracal
+# release to move to on that day. Horizon plugins are not in the upper-constraints
+# (that file only covers libraries), so the pin has to be explicit.
 MANILA_UI_VER := 9.0.1
 
-# install manila inside the python 3.10 virtual environment
+# install manila inside the caracal python 3.11 virtual environment
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)# python-manilaclient is the "share" osc plugin and owns /usr/bin/manila,
-	$(Q)# named explicitly -- see the note at the top of this file.
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)# python-manilaclient owns /usr/bin/manila, named explicitly -- see the note
+	$(Q)# at the top of this file for why it is installed into both venvs.
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			manila==$(MANILA_VER) \
+			python-manilaclient"
+	$(Q)# and again in the antelope venv, for the "share" osc plugin alone: that entry
+	$(Q)# point is only visible to the interpreter /usr/bin/openstack runs under.
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-manilaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -67,15 +86,15 @@ rootfs_install::
 	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/manila, the path
 	$(Q)# python3-manilaclient used to own. The rpm also shipped /usr/bin/manila-3,
 	$(Q)# the Fedora python3 alias, which nothing calls and which is not recreated.
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila /usr/bin/manila
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-api /usr/bin/manila-api
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-data /usr/bin/manila-data
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-manage /usr/bin/manila-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-rootwrap /usr/bin/manila-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-scheduler /usr/bin/manila-scheduler
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-share /usr/bin/manila-share
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-status /usr/bin/manila-status
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/manila-wsgi /usr/bin/manila-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila /usr/bin/manila
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila-api /usr/bin/manila-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila-data /usr/bin/manila-data
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila-manage /usr/bin/manila-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila-rootwrap /usr/bin/manila-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila-scheduler /usr/bin/manila-scheduler
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila-share /usr/bin/manila-share
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila-status /usr/bin/manila-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/manila-wsgi /usr/bin/manila-wsgi
 
 # install the manila web ui plugin, the openstack-manila-ui rpm's replacement.
 # Registering its panels and policy files is core/horizon's job, where every
@@ -131,9 +150,9 @@ rootfs_install::
 	$(Q)# 0644, not 0640: the spec's %files marks both %attr(-, root, manila), i.e.
 	$(Q)# keep whatever mode the build produced, and `mv` off the wheel leaves 0644.
 	$(Q)# Verified against cc1, where both are -rw-r--r-- root:manila.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /opt/openstack-antelope/etc/manila/api-paste.ini $(MANILA_CONF_DIR)/api-paste.ini
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /opt/openstack-antelope/etc/manila/rootwrap.conf $(MANILA_CONF_DIR)/rootwrap.conf
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /opt/openstack-antelope/etc/manila/rootwrap.d/share.filters $(MANILA_DATA_DIR)/rootwrap/share.filters
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/manila/api-paste.ini $(MANILA_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/manila/rootwrap.conf $(MANILA_CONF_DIR)/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/manila/rootwrap.d/share.filters $(MANILA_DATA_DIR)/rootwrap/share.filters
 	$(Q)# install security configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/manila/manila-sudoers /etc/sudoers.d/manila
 	$(Q)# install systemd unit files
@@ -163,6 +182,6 @@ rootfs_install::
 	$(Q)# config_manila.cpp does not take its section list from the .def:
 	$(Q)# InitConfig() spells the sections out, because manila.conf needs a [generic]
 	$(Q)# backend section that no generated sample can contain. LoadConfig() on an
-	$(Q)# empty file is what keeps the two from fighting; feeding it the antelope
+	$(Q)# empty file is what keeps the two from fighting; feeding it the caracal
 	$(Q)# sample would only add [oslo_reports].
 	$(Q)touch $(ROOTDIR)$(MANILA_CONF_DIR)/manila.conf.def
