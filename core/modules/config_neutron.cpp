@@ -67,7 +67,7 @@ static const char DBPASS[] = "KNaHKGg62djyeJ6M";
  * neutron-rootwrap then resolves the bare name off the exec_dirs in
  * rootwrap.conf, and /usr/bin comes first -- so it lands on
  * /usr/bin/privsep-helper, the symlink core/nova/nova.mk keeps pointed at the
- * *antelope* venv for manila, masakari and cyborg. A python 3.10 helper cannot
+ * *antelope* venv for masakari and cyborg. A python 3.10 helper cannot
  * serve a caracal neutron, and the failure has two shapes, only one of them
  * loud: on a freshly built rootfs the antelope venv holds no neutron at all and
  * the agent dies with FailedToDropPrivileges, while on a node upgraded in place

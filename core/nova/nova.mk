@@ -108,14 +108,15 @@ rootfs_install::
 # oslo.privsep escalates by running `sudo privsep-helper`, resolved off sudo's
 # secure_path (/sbin:/bin:/usr/sbin:/usr/bin), which never contains a venv's bin -- so
 # the bare name has to exist there. One symlink covers every service that has not made
-# the caracal hop: manila, masakari and cyborg all reach the helper through
-# /usr/bin/privsep-helper, and config_manila.cpp, config_masakari.cpp and
-# config_cyborg.cpp name that path in helper_command. neutron used to be on that list
-# and reached it a fourth way -- not through sudo's secure_path but through the
+# the caracal hop: masakari and cyborg both reach the helper through
+# /usr/bin/privsep-helper, and config_masakari.cpp and config_cyborg.cpp name that path
+# in helper_command. two services used to be on that list and have since left it.
+# neutron reached it a third way -- not through sudo's secure_path but through the
 # exec_dirs in /etc/neutron/rootwrap.conf, since neutron agents escalate via
-# `sudo neutron-rootwrap ... privsep-helper`. #628 took neutron to caracal and
-# config_neutron.cpp now pins the caracal helper in all six of its privsep sections,
-# so nothing under /etc/neutron resolves this symlink any more.
+# `sudo neutron-rootwrap ... privsep-helper`; #628 took neutron to caracal and
+# config_neutron.cpp now pins the caracal helper in all six of its privsep sections, so
+# nothing under /etc/neutron resolves this symlink any more. #638 then took manila, and
+# config_manila.cpp pins PRIVSEP_HELPER the same way.
 #
 # It is load-bearing rather than a convenience: with no /usr/bin/privsep-helper at all,
 # an antelope agent that has not been pinned crash-loops on
