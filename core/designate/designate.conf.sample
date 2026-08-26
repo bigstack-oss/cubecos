@@ -149,7 +149,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -347,157 +350,6 @@
 #wsgi_server_debug = false
 
 
-[backend:agent:bind9]
-
-#
-# From designate.conf
-#
-
-# DEPRECATED: RNDC Host (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#rndc_host = 127.0.0.1
-
-# DEPRECATED: RNDC Port (integer value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#rndc_port = 953
-
-# DEPRECATED: RNDC Config File (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#rndc_config_file = <None>
-
-# DEPRECATED: RNDC Key File (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#rndc_key_file = <None>
-
-# DEPRECATED: RNDC command timeout (integer value)
-# Minimum value: 0
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#rndc_timeout = 0
-
-# DEPRECATED: Path where zone files are stored (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#zone_file_path = $state_path/zones
-
-# DEPRECATED: Host to query when finding zones (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#query_destination = 127.0.0.1
-
-
-[backend:agent:denominator]
-
-#
-# From designate.conf
-#
-
-# DEPRECATED: Name of the affected provider (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#name = fake
-
-# DEPRECATED: Path to Denominator configuration file (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#config_file = /etc/denominator.conf
-
-
-[backend:agent:djbdns]
-
-#
-# From designate.conf
-#
-
-# DEPRECATED: tcpclient executable path or rootwrap command name (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#tcpclient_cmd_name = tcpclient
-
-# DEPRECATED: axfr-get executable path or rootwrap command name (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#axfr_get_cmd_name = axfr-get
-
-# DEPRECATED: tinydns-data executable path or rootwrap command name (string
-# value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#tinydns_data_cmd_name = tinydns-data
-
-# DEPRECATED: TinyDNS data directory (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#tinydns_datadir = /var/lib/djbdns
-
-# DEPRECATED: Host to query when finding zones (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#query_destination = 127.0.0.1
-
-
-[backend:agent:gdnsd]
-
-#
-# From designate.conf
-#
-
-# DEPRECATED: gdnsd executable path or rootwrap command name (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#gdnsd_cmd_name = gdnsd
-
-# DEPRECATED: gdnsd configuration directory path (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#confdir_path = /etc/gdnsd
-
-# DEPRECATED: Host to query when finding zones (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#query_destination = 127.0.0.1
-
-
-[backend:agent:knot2]
-
-#
-# From designate.conf
-#
-
-# DEPRECATED: knotc executable path or rootwrap command name (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#knotc_cmd_name = knotc
-
-# DEPRECATED: Host to query when finding zones (string value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#query_destination = 127.0.0.1
-
-
 [backend:dynect]
 
 #
@@ -651,14 +503,10 @@
 #sqlite_synchronous = true
 
 # The back end to use for the database. (string value)
-# Deprecated group/name - [DEFAULT]/db_backend
 #backend = sqlalchemy
 
 # The SQLAlchemy connection string to use to connect to the database. (string
 # value)
-# Deprecated group/name - [DEFAULT]/sql_connection
-# Deprecated group/name - [DATABASE]/sql_connection
-# Deprecated group/name - [sql]/connection
 #connection = <None>
 
 # The SQLAlchemy connection string to use to connect to the slave database.
@@ -676,14 +524,6 @@
 # value)
 #mysql_wsrep_sync_wait = <None>
 
-# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
-# (NDB). (boolean value)
-# This option is deprecated for removal since 12.1.0.
-# Its value may be silently ignored in the future.
-# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
-# and will be removed in a future release.
-#mysql_enable_ndb = false
-
 # Connections which have been present in the connection pool longer than this
 # number of seconds will be replaced with a new one the next time they are
 # checked out from the pool. (integer value)
@@ -695,33 +535,24 @@
 
 # Maximum number of database connection retries during startup. Set to -1 to
 # specify an infinite retry count. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_retries
-# Deprecated group/name - [DATABASE]/sql_max_retries
 #max_retries = 10
 
 # Interval between retries of opening a SQL connection. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_retry_interval
-# Deprecated group/name - [DATABASE]/reconnect_interval
 #retry_interval = 10
 
 # If set, use this value for max_overflow with SQLAlchemy. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_overflow
-# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
 #max_overflow = 50
 
 # Verbosity of SQL debugging information: 0=None, 100=Everything. (integer
 # value)
 # Minimum value: 0
 # Maximum value: 100
-# Deprecated group/name - [DEFAULT]/sql_connection_debug
 #connection_debug = 0
 
 # Add Python stack traces to SQL as comment strings. (boolean value)
-# Deprecated group/name - [DEFAULT]/sql_connection_trace
 #connection_trace = false
 
 # If set, use this value for pool_timeout with SQLAlchemy. (integer value)
-# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
 #pool_timeout = <None>
 
 # Enable the experimental use of database reconnect on connection lost. (boolean
@@ -825,6 +656,14 @@
 # back as part of a request. (list value)
 #backends =
 
+# A list of network addresses to limit source ip allowed to access healthcheck
+# information. Any request from ip outside of these network addresses are
+# ignored. (list value)
+#allowed_source_ranges =
+
+# Ignore requests with proxy headers. (boolean value)
+#ignore_proxied_requests = false
+
 # Check the presence of a file to determine if an application is running on a
 # port. Used by DisableByFileHealthcheck plugin. (string value)
 #disable_by_file_path = <None>
@@ -905,6 +744,10 @@
 # exponential retry starting with 0.5 seconds up to a maximum of 60 seconds is
 # used. (floating point value)
 #status_code_retry_delay = <None>
+
+# List of retriable HTTP status codes that should be retried. If not set default
+# to  [503] (list value)
+#retriable_status_codes = <None>
 
 # DEPRECATED: The default interface for endpoint URL discovery. (string value)
 # This option is deprecated for removal.
@@ -1113,27 +956,48 @@
 # timeout value for connecting to neutron in seconds (integer value)
 #timeout = 30
 
-# username for connecting to neutron in admin context (string value)
-#admin_username = <None>
-
-# password for connecting to neutron in admin context (string value)
-#admin_password = <None>
-
-# tenant name for connecting to neutron in admin context (string value)
-#admin_tenant_name = <None>
-
-# auth url for connecting to neutron in admin context (string value)
-#auth_url = <None>
-
 # if set, ignore any SSL validation issues (boolean value)
 #insecure = false
-
-# auth strategy for connecting to neutron in admin context (string value)
-#auth_strategy = keystone
 
 # Location of ca certificates file to use for neutron client requests. (string
 # value)
 #ca_certificates_file = <None>
+
+# Location of client certificate file to use for neutron client requests.
+# (string value)
+#client_certificate_file = <None>
+
+# DEPRECATED: username for connecting to neutron in admin context (string value)
+# This option is deprecated for removal since 2023.2.
+# Its value may be silently ignored in the future.
+# Reason: This parameter is no longer used.
+#admin_username = <None>
+
+# DEPRECATED: password for connecting to neutron in admin context (string value)
+# This option is deprecated for removal since 2023.2.
+# Its value may be silently ignored in the future.
+# Reason: This parameter is no longer used.
+#admin_password = <None>
+
+# DEPRECATED: tenant name for connecting to neutron in admin context (string
+# value)
+# This option is deprecated for removal since 2023.2.
+# Its value may be silently ignored in the future.
+# Reason: This parameter is no longer used.
+#admin_tenant_name = <None>
+
+# DEPRECATED: auth url for connecting to neutron in admin context (string value)
+# This option is deprecated for removal since 2023.2.
+# Its value may be silently ignored in the future.
+# Reason: This parameter is no longer used.
+#auth_url = <None>
+
+# DEPRECATED: auth strategy for connecting to neutron in admin context (string
+# value)
+# This option is deprecated for removal since 2023.2.
+# Its value may be silently ignored in the future.
+# Reason: This parameter is no longer used.
+#auth_strategy = keystone
 
 
 [oslo_concurrency]
@@ -1551,10 +1415,15 @@
 # modern queue type for RabbitMQ implementing a durable, replicated FIFO queue
 # based on the Raft consensus algorithm. It is available as of RabbitMQ 3.8.0.
 # If set this option will conflict with the HA queues (``rabbit_ha_queues``) aka
-# mirrored queues, in other words the HA queues should be disabled, quorum
-# queues durable by default so the amqp_durable_queues opion is ignored when
-# this option enabled. (boolean value)
+# mirrored queues, in other words the HA queues should be disabled. Quorum
+# queues are also durable by default so the amqp_durable_queues option is
+# ignored when this option is enabled. (boolean value)
 #rabbit_quorum_queue = false
+
+# Use quorum queues for transients queues in RabbitMQ. Enabling this option will
+# then make sure those queues are also using quorum kind of rabbit queues, which
+# are HA by default. (boolean value)
+#rabbit_transient_quorum_queue = false
 
 # Each time a message is redelivered to a consumer, a counter is incremented.
 # Once the redelivery count exceeds the delivery limit the message gets dropped
@@ -1567,19 +1436,24 @@
 # length it can put memory pressure on a cluster. This option can limit the
 # number of messages in the quorum queue. Used only when rabbit_quorum_queue is
 # enabled, Default 0 which means dont set a limit. (integer value)
-#rabbit_quroum_max_memory_length = 0
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_length
+#rabbit_quorum_max_memory_length = 0
 
 # By default all messages are maintained in memory if a quorum queue grows in
 # length it can put memory pressure on a cluster. This option can limit the
 # number of memory bytes used by the quorum queue. Used only when
 # rabbit_quorum_queue is enabled, Default 0 which means dont set a limit.
 # (integer value)
-#rabbit_quroum_max_memory_bytes = 0
+# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_quroum_max_memory_bytes
+#rabbit_quorum_max_memory_bytes = 0
 
 # Positive integer representing duration in seconds for queue TTL (x-expires).
 # Queues which are unused for the duration of the TTL are automatically deleted.
-# The parameter affects only reply and fanout queues. (integer value)
-# Minimum value: 1
+# The parameter affects only reply and fanout queues. Setting 0 as value will
+# disable the x-expires. If doing so, make sure you have a rabbitmq policy to
+# delete the queues or you deployment will create an infinite number of queue
+# over time. (integer value)
+# Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
 # Specifies the number of messages to prefetch. Setting to zero allows unlimited
@@ -1592,7 +1466,7 @@
 
 # How often times during the heartbeat_timeout_threshold we check the heartbeat.
 # (integer value)
-#heartbeat_rate = 2
+#heartbeat_rate = 3
 
 # DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag for direct
 # send. The direct send is used as reply, so the MessageUndeliverable exception
@@ -1609,6 +1483,22 @@
 # notify consumerswhen queue is down (boolean value)
 #enable_cancel_on_failover = false
 
+# Should we use consistant queue names or random ones (boolean value)
+#use_queue_manager = false
+
+# Hostname used by queue manager (string value)
+#hostname = centos9-jail
+
+# Process name used by queue manager (string value)
+#processname = oslo-config-generator
+
+# Use stream queues in RabbitMQ (x-queue-type: stream). Streams are a new
+# persistent and replicated data structure ("queue type") in RabbitMQ which
+# models an append-only log with non-destructive consumer semantics. It is
+# available as of RabbitMQ 3.9.0. If set this option will replace all fanout
+# queues with only one stream queue. (boolean value)
+#rabbit_stream_fanout = false
+
 
 [oslo_middleware]
 
@@ -1620,13 +1510,6 @@
 # Deprecated group/name - [DEFAULT]/osapi_max_request_body_size
 # Deprecated group/name - [DEFAULT]/max_request_body_size
 #max_request_body_size = 114688
-
-# DEPRECATED: The HTTP Header that will be used to determine what the original
-# request protocol scheme was, even if it was hidden by a SSL termination proxy.
-# (string value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-#secure_proxy_ssl_header = X-Forwarded-Proto
 
 # Whether the application is behind a proxy or not. This determines if the
 # middleware should parse the headers or not. (boolean value)
@@ -1714,6 +1597,16 @@
 # How many seconds to wait between polls when file_event_handler is set (integer
 # value)
 #file_event_handler_interval = 1
+
+
+[oslo_versionedobjects]
+
+#
+# From oslo.versionedobjects
+#
+
+# Make exception message format errors fatal (boolean value)
+#fatal_exception_format_errors = false
 
 
 [producer_task:delayed_notify]
@@ -1805,76 +1698,6 @@
 
 # These addresses should not be proxied (list value)
 #no_proxy =
-
-
-[service:agent]
-
-#
-# From designate.conf
-#
-
-# DEPRECATED: Number of agent worker processes to spawn (integer value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#workers = <None>
-
-# DEPRECATED: Number of agent greenthreads to spawn (integer value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#threads = 1000
-
-# DEPRECATED: Agent host:port pairs to listen on (list value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#listen = 0.0.0.0:5358
-
-# DEPRECATED: The Agent TCP Backlog (integer value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#tcp_backlog = 100
-
-# DEPRECATED: Agent TCP Receive Timeout (floating point value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#tcp_recv_timeout = 0.5
-
-# DEPRECATED: List of IP addresses allowed to NOTIFY The Agent (list value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#allow_notify =
-
-# DEPRECATED: List of masters for the Agent, format ip:port (list value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#masters =
-
-# DEPRECATED: The backend driver to use, e.g. bind9, djbdns, knot2 (string
-# value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#backend_driver = bind9
-
-# DEPRECATED: An IP address to be used to fetch zones transferred in (string
-# value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#transfer_source = <None>
-
-# DEPRECATED: Delay after a NOTIFY arrives for a zone that the Agent will pause
-# and drop subsequent NOTIFYs for that zone (floating point value)
-# This option is deprecated for removal since Antelope(2023.1).
-# Its value may be silently ignored in the future.
-# Reason: The agent framework is deprecated.
-#notify_delay = 0.0
 
 
 [service:api]
@@ -1986,9 +1809,6 @@
 # Number of central greenthreads to spawn (integer value)
 #threads = 1000
 
-# The storage driver to use (string value)
-#storage_driver = sqlalchemy
-
 # Maximum zone name length (integer value)
 #max_zone_name_len = 255
 
@@ -2036,29 +1856,11 @@
 # mDNS TCP Receive Timeout (floating point value)
 #tcp_recv_timeout = 0.5
 
-# DEPRECATED: Send all traffic over TCP (integer value)
-# This option is deprecated for removal since Zed.
-# Its value may be silently ignored in the future.
-# Reason: This parameter should now be configured inservice:worker instead
-#all_tcp = <None>
-
 # Enforce all incoming queries (including AXFR) are TSIG signed (boolean value)
 #query_enforce_tsig = false
 
-# The storage driver to use (string value)
-#storage_driver = sqlalchemy
-
 # Maximum message size to emit (integer value)
 #max_message_size = 65535
-
-# RPC topic name for mdns (string value)
-#topic = mdns
-
-# DEPRECATED: Timeout in seconds for XFR's. (integer value)
-# This option is deprecated for removal since Zed.
-# Its value may be silently ignored in the future.
-# Reason: This parameter should now be configured inservice:worker instead
-#xfr_timeout = <None>
 
 
 [service:producer]
@@ -2075,9 +1877,6 @@
 
 # Enabled tasks to run (list value)
 #enabled_tasks = <None>
-
-# The storage driver to use (string value)
-#storage_driver = sqlalchemy
 
 # DEPRECATED: Whether to allow synchronous zone exports (boolean value)
 # This option is deprecated for removal.
@@ -2120,9 +1919,6 @@
 
 # Number of Worker threads to spawn per process (integer value)
 #threads = 200
-
-# The storage driver to use (string value)
-#storage_driver = sqlalchemy
 
 # The percentage of servers requiring a successful update for a domain change to
 # be considered active (integer value)
@@ -2203,14 +1999,10 @@
 #sqlite_synchronous = true
 
 # The back end to use for the database. (string value)
-# Deprecated group/name - [DEFAULT]/db_backend
 #backend = sqlalchemy
 
 # The SQLAlchemy connection string to use to connect to the database. (string
 # value)
-# Deprecated group/name - [DEFAULT]/sql_connection
-# Deprecated group/name - [DATABASE]/sql_connection
-# Deprecated group/name - [sql]/connection
 #connection = <None>
 
 # The SQLAlchemy connection string to use to connect to the slave database.
@@ -2228,14 +2020,6 @@
 # value)
 #mysql_wsrep_sync_wait = <None>
 
-# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
-# (NDB). (boolean value)
-# This option is deprecated for removal since 12.1.0.
-# Its value may be silently ignored in the future.
-# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
-# and will be removed in a future release.
-#mysql_enable_ndb = false
-
 # Connections which have been present in the connection pool longer than this
 # number of seconds will be replaced with a new one the next time they are
 # checked out from the pool. (integer value)
@@ -2247,33 +2031,24 @@
 
 # Maximum number of database connection retries during startup. Set to -1 to
 # specify an infinite retry count. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_retries
-# Deprecated group/name - [DATABASE]/sql_max_retries
 #max_retries = 10
 
 # Interval between retries of opening a SQL connection. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_retry_interval
-# Deprecated group/name - [DATABASE]/reconnect_interval
 #retry_interval = 10
 
 # If set, use this value for max_overflow with SQLAlchemy. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_overflow
-# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
 #max_overflow = 50
 
 # Verbosity of SQL debugging information: 0=None, 100=Everything. (integer
 # value)
 # Minimum value: 0
 # Maximum value: 100
-# Deprecated group/name - [DEFAULT]/sql_connection_debug
 #connection_debug = 0
 
 # Add Python stack traces to SQL as comment strings. (boolean value)
-# Deprecated group/name - [DEFAULT]/sql_connection_trace
 #connection_trace = false
 
 # If set, use this value for pool_timeout with SQLAlchemy. (integer value)
-# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
 #pool_timeout = <None>
 
 # Enable the experimental use of database reconnect on connection lost. (boolean
