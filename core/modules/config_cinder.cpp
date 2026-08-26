@@ -63,21 +63,6 @@ static const char BAK_NAME[] = "openstack-cinder-backup";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 
-/**
- * The privsep helper cinder must escalate through.
- *
- * oslo.privsep defaults to `sudo privsep-helper`, which sudo's secure_path
- * resolves to /usr/bin/privsep-helper -- a symlink core/nova/nova.mk points at the
- * *antelope* venv. Every other privsep user still lives there, so that link cannot
- * move; but a python 3.10 helper cannot serve a caracal cinder. On a freshly built
- * rootfs the antelope venv holds no cinder at all and the context would die with
- * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
- * imports the cinder 22.3.0 still sitting there and answers a 24.5.0 parent.
- * Naming the caracal helper explicitly avoids both; /etc/sudoers.d/cinder authorises
- * exactly this path.
- */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
-
 static const char USERPASS[] = "8YHpMKC1394HbTmL";
 static const char DBPASS[] = "hhyCDG3IdNmcQaJo";
 
@@ -457,14 +442,6 @@ SetDefaults(
 
     config["os_brick"]["lock_path"] = "/var/lock/os_brick";
     config["oslo_reports"]["log_dir"] = "/var/log/cinder";
-
-    // cinder.privsep.sys_admin_pctxt and os_brick.privileged.default, the two privsep
-    // contexts this service starts. os_brick.privileged.default is on a live path even
-    // with only the ceph backend enabled -- cinder-backup attaches the volume to read
-    // it, so every backup spawns a helper. cinder_sys_admin is reached by the lvm,
-    // nvmet and nfs drivers rather than by anything this appliance enables today.
-    config["cinder_sys_admin"]["helper_command"] = PRIVSEP_HELPER;
-    config["privsep_osbrick"]["helper_command"] = PRIVSEP_HELPER;
 }
 
 /**
@@ -901,11 +878,7 @@ Commit(bool modified, int dryLevel)
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass.newValue(), s_seed.newValue());
     std::string novaPass = GetSaltKey(s_saltkey, s_novaPass.newValue(), s_seed.newValue());
-    // Only the uuid: cinder puts it in cinder.conf as rbd_secret_uuid and ships it to nova
-    // in the volume's connection_info. The libvirt secret it names is a hypervisor
-    // credential, so config_nova defines that on every compute node -- this commit returns
-    // early on anything that is not a control node and cannot stand in for them (#856).
-    std::string virshSecret = HexUtilPOpen(HEX_SDK " os_virsh_secret_uuid %s", s_seed.c_str());
+    std::string virshSecret = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s", s_seed.c_str());
 
     // set up the database
     if (!IsDatabaseSetup()) {
@@ -1037,7 +1010,7 @@ AddCephPoolAsStorageBackend(
     if (config.count(BUILTIN_STORAGE_BACKEND) > 0 && config[BUILTIN_STORAGE_BACKEND].count("rbd_secret_uuid") > 0) {
         config[pool]["rbd_secret_uuid"] = config[BUILTIN_STORAGE_BACKEND]["rbd_secret_uuid"];
     } else {
-        config[pool]["rbd_secret_uuid"] = HexUtilPOpen(HEX_SDK " os_virsh_secret_uuid %s", s_seed.c_str());
+        config[pool]["rbd_secret_uuid"] = HexUtilPOpen(HEX_SDK " os_cinder_virsh_secret_create %s", s_seed.c_str());
     }
     config[pool]["rados_connect_timeout"] = "-1";
     config[pool]["rbd_store_chunk_size"] = "4";
