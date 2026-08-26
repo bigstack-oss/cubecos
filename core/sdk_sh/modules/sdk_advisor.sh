@@ -137,6 +137,27 @@ advisor_enroll()
         echo "Error: cannot read the pairing token file: $token_file" >&2
         return 1
     fi
+
+    # Enrolment is a cluster-level act, and the agent's tools are the control
+    # plane's: cluster check, the CLI, the cube-cos-api reads. A compute or
+    # storage node can neither answer those nor speak for the cluster, so it
+    # must not hold the cluster's identity.
+    if ! is_control_node ; then
+        echo "Error: enrol from a control node; this node's role is ${T_cubesys_role:-unknown}" >&2
+        return 1
+    fi
+
+    # The cluster's identity, not this node's. cubesys.controller is the
+    # operator-chosen controller name: the VIP's name on an HA cluster and the
+    # single node's name otherwise, and identical on every node of the cluster
+    # -- so enrolling from any control node yields the same identity, where the
+    # agent's own default (the hostname) would mint one identity per node.
+    local cluster
+    cluster=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "$T_cubesys_controller")
+    if [ -z "$cluster" ] ; then
+        echo "Error: cubesys.controller is not set; cannot tell which cluster this node belongs to" >&2
+        return 1
+    fi
     arch=$(advisor_agent_arch) || return 1
     artifact="cube-advisor-agent_linux_$arch"
 
@@ -162,7 +183,7 @@ advisor_enroll()
     advisor_install_release "$tmp" "$artifact" /usr/local/bin/cube-advisor-agent || return 1
 
     /usr/local/bin/cube-advisor-agent enroll \
-        -server "$server" -token-file "$token_file"
+        -server "$server" -token-file "$token_file" -cluster "$cluster"
     rc=$?
     case $rc in
         0) ;;
