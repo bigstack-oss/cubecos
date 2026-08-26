@@ -2,15 +2,10 @@
 
 #include "config_keycloak.hpp"
 
-static const std::string APP = "statefulset.apps/keycloak-keycloakx";
-/**
- * The statefulset the WildFly-based chart used to create. CubeCOS v3.1.0 and older
- * deploy this one, and it stays up until a rolling upgrade reaches its last control node.
- */
-static const std::string LEGACY_APP = "statefulset.apps/keycloak";
+static const std::string APP = "statefulset.apps/keycloak";
 static const std::string APP_NAMESPACE = "keycloak";
 static const std::string CHART_RELEASE_NAME = "keycloak";
-static const char KEYCLOAK_CHARTS[] = "/opt/keycloak/keycloakx-*.tgz";
+static const char KEYCLOAK_CHARTS[] = "/opt/keycloak/keycloak-*.tgz";
 static const char KEYCLOAK_CHART_VALUES[] = "/opt/keycloak/chart-values.yaml";
 static const std::string DB_NAME = "keycloak";
 static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.xml";
@@ -21,8 +16,6 @@ static const int SAML_METADATA_STUCK_NOTIFY_SECS = 600;
 // operator escape hatch: touching this releases the saml metadata gate below
 // (one-shot; consumed when honored). /run is tmpfs so it cannot outlive a boot.
 static const char SAML_METADATA_GATE_RELEASE[] = "/run/cube_keycloak_saml_gate_release";
-// the login theme cube-cos-ui ships, see setMasterRealmLoginTheme()
-static const std::string KEYCLOAK_LOGIN_THEME = "cos-ui";
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -212,41 +205,6 @@ createKeycloakDbSecrets()
 }
 
 /**
- * Check if a given Keycloak statefulset is rolled out on every node.
- */
-static bool
-checkKeycloakApp(const std::string& app)
-{
-    if (!K3sWatchRollOut(app, APP_NAMESPACE, "1s")) {
-        HexLogInfo("%s has not rolled out all its pods", app.c_str());
-        return false;
-    }
-
-    int nodeCount = K3sGetNodeCounts();
-    if (nodeCount < 0) {
-        HexLogError("failed to get the node count");
-        return false;
-    }
-
-    int replicaCount = K3sGetReadyReplicas(app, APP_NAMESPACE);
-    if (replicaCount < 0) {
-        HexLogError("failed to get the ready replica count");
-        return false;
-    }
-
-    if (nodeCount != replicaCount) {
-        HexLogInfo(
-            "control node count: %d doesn't match replica count: %d of %s",
-            nodeCount,
-            replicaCount,
-            app.c_str());
-        return false;
-    }
-
-    return true;
-}
-
-/**
  * Check if Keycloak is deployed or not.
  */
 static bool
@@ -254,24 +212,35 @@ checkKeycloak()
 {
     HexLogInfo("check keycloak");
 
-    if (checkKeycloakApp(APP)) {
-        HexLogInfo("checked keycloak");
-        return true;
+    if (!K3sWatchRollOut(APP, APP_NAMESPACE, "1s")) {
+        HexLogError("failed to see all pods rolled out");
+        return false;
+    }
+    HexLogInfo("all keycloak pods are rolled out");
+
+    int nodeCount = K3sGetNodeCounts();
+    if (nodeCount < 0) {
+        HexLogError("failed to get the node count");
+        return false;
     }
 
-    /**
-     * A rolling upgrade only hands the helm release over to the Quarkus chart on the
-     * last control node, so a node that has already been upgraded still has the
-     * WildFly statefulset from CubeCOS v3.1.0 serving logins. That is healthy, not a
-     * failure, so do not report keycloak down for the whole length of the upgrade.
-     */
-    if (checkKeycloakApp(LEGACY_APP)) {
-        HexLogInfo("checked keycloak, still served by the pre-quarkus statefulset");
-        return true;
+    int replicaCount = K3sGetReadyReplicas(APP, APP_NAMESPACE);
+    if (replicaCount < 0) {
+        HexLogError("failed to get the ready replica count");
+        return false;
     }
 
-    HexLogError("neither %s nor %s is rolled out", APP.c_str(), LEGACY_APP.c_str());
-    return false;
+    if (nodeCount != replicaCount) {
+        HexLogError(
+            "control node count: %d doesn't match replica count: %d",
+            nodeCount,
+            replicaCount);
+        return false;
+    }
+    HexLogInfo("keycloak replica count matched the node count");
+
+    HexLogInfo("checked keycloak");
+    return true;
 }
 
 /**
@@ -297,52 +266,12 @@ isUpdateKeycloakPossible(
 }
 
 /**
- * Retire the statefulset the WildFly-based chart created.
- *
- * Keycloak 18 runs its schema migration the first time a pod starts, and the WildFly 17
- * pods cannot run against the migrated schema. Helm would delete the old statefulset on
- * its own, but only after it has already created the new one, which leaves both versions
- * pointed at the same database for a while. Take the old one down first so they never
- * overlap.
- */
-static void
-retireLegacyKeycloak()
-{
-    const ExecSyncResult found = ExecBashSync(
-        0,
-        false,
-        false,
-        {},
-        "/usr/local/bin/k3s kubectl get " + LEGACY_APP + " -n " + APP_NAMESPACE);
-    if (found.exitCode != 0) {
-        // nothing to retire, this cluster is already on the quarkus chart
-        return;
-    }
-
-    HexLogInfo("retire the pre-quarkus keycloak statefulset");
-    const ExecSyncResult deleted = ExecBashSync(
-        0,
-        false,
-        false,
-        {},
-        "/usr/local/bin/k3s kubectl delete " + LEGACY_APP + " -n " + APP_NAMESPACE
-            + " --wait=true --timeout=3m");
-    if (deleted.exitCode != 0) {
-        HexLogError("failed to retire the pre-quarkus keycloak statefulset");
-        return;
-    }
-    HexLogInfo("retired the pre-quarkus keycloak statefulset");
-}
-
-/**
  * Deploy Keycloak using Helm.
  */
 static bool
 updateKeycloak()
 {
     HexLogInfo("update keycloak helm chart and roll out pods");
-
-    retireLegacyKeycloak();
 
     int nodeCount = K3sGetNodeCounts();
     if (nodeCount < 0) {
@@ -358,20 +287,13 @@ updateKeycloak()
         nodeCount = 1;
     }
 
-    /**
-     * chart-values.yaml needs the address Keycloak is reached on so it can pin the admin
-     * console URL, which Keycloak resolves separately from the frontend one.
-     */
-    const std::string sharedId = G(SHARED_ID);
-
     const std::string cmd = std::string()
         + "/usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml "
         + "upgrade --install " + CHART_RELEASE_NAME + " " + KEYCLOAK_CHARTS + " "
         + "-f " + KEYCLOAK_CHART_VALUES + " "
         + "-n " + APP_NAMESPACE + " "
         + "--create-namespace "
-        + "--set replicas=" + std::to_string(nodeCount) + " "
-        + "--set cubeController=" + sharedId;
+        + "--set replicas=" + std::to_string(nodeCount);
 
     // parallel control-node applies race on the same helm release; retry the
     // transient "another operation in progress" lock
@@ -512,191 +434,6 @@ downloadKeycloakSamlMetadata(const std::string& endpointIp)
     return false;
 }
 
-/**
- * Check if the admin password is stored in K8S secret on K3S.
- */
-static bool
-isKeycloakUserPasswordInK8sSecret()
-{
-    bool ret = HexUtilSystemF(
-                   0,
-                   0,
-                   "/usr/local/bin/k3s kubectl get secret %s -n %s",
-                   KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
-                   APP_NAMESPACE.c_str())
-        == 0;
-
-    if (ret) {
-        HexLogInfo("found the existing keycloak admin password");
-    }
-
-    return ret;
-}
-
-/**
- * Get the admin password from the K8S secret.
- */
-static std::string
-getKeycloakAdminPasswordFromK8sSecret()
-{
-    if (!isKeycloakUserPasswordInK8sSecret()) {
-        return "";
-    }
-
-    TempFile base64encodedAdminPass = CreateTempFile();
-    if (!base64encodedAdminPass.isValid) {
-        HexLogError("failed to create a temporary file");
-        return "";
-    }
-    if (HexUtilSystemF(
-            0,
-            0,
-            "/usr/local/bin/k3s kubectl get secret %s -n %s -o jsonpath='{.data.password}' > %s",
-            KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
-            APP_NAMESPACE.c_str(),
-            base64encodedAdminPass.fileName.c_str())
-        != 0) {
-        HexLogError("failed to read the existing keycloak admin password k8s secret");
-        return "";
-    }
-    HexLogInfo("extracted the existing keycloak admin password");
-
-    const std::string base64encodedAdminPassString = HexUtilPOpen(
-        "base64 --decode %s",
-        base64encodedAdminPass.fileName.c_str());
-    DeleteTempFile(base64encodedAdminPass);
-
-    return base64encodedAdminPassString;
-}
-
-static std::string
-getKeycloakAdminAccessToken(
-    const std::string& endpointIp,
-    const std::string& adminPass)
-{
-    HexLogInfo("get keycloak admin access token");
-
-    std::string host = endpointIp;
-    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
-    Url url = Url(host, "/auth/realms/master/protocol/openid-connect/token");
-    url.scheme = "https";
-
-    const std::vector<std::string> formBody = {
-        "grant_type=password",
-        "client_id=admin-cli",
-        "username=admin",
-        "password=" + adminPass,
-    };
-
-    const HttpResponse r = PostFormHttp(url, formBody);
-
-    if (!r.error.empty()) {
-        HexLogError("failed to send the http request");
-
-        CleanupHttpResponse(r);
-        return "";
-    }
-    if (!isHttpResponseSuccessful(r)) {
-        HexLogError("failed to get the response");
-
-        CleanupHttpResponse(r);
-        return "";
-    }
-
-    std::string fsError;
-    const std::string responseString = ReadFile(fsError, r.outputFileName);
-    CleanupHttpResponse(r);
-
-    if (!fsError.empty()) {
-        HexLogError("failed to read out the response");
-        return "";
-    }
-
-    std::string jsonError;
-    const json11::Json responseJson = json11::Json::parse(responseString.c_str(), jsonError);
-    if (!jsonError.empty()) {
-        HexLogError("failed to parse the response");
-        return "";
-    }
-
-    std::string token;
-    if (responseJson["access_token"].is_string()) {
-        token = responseJson["access_token"].string_value();
-    }
-
-    HexLogInfo("got keycloak admin access token");
-    return token;
-}
-
-/**
- * Point the master realm's login theme at the theme cube-cos-ui ships.
- *
- * The WildFly image took this from KEYCLOAK_DEFAULT_THEME, which set a server-wide default
- * for every theme type. cos-ui only carries a login theme, so that left the account,
- * admin, email and welcome pages failing over to the built-in theme and logging an error
- * every time one was rendered (bigstack-oss/cubecos#187). Setting it per realm scopes the
- * theme to the only page it actually provides.
- */
-static bool
-setMasterRealmLoginTheme(const std::string& endpointIp)
-{
-    std::string adminPass = "admin";
-    if (isKeycloakUserPasswordInK8sSecret()) {
-        const std::string adminPassInK8sSecret = getKeycloakAdminPasswordFromK8sSecret();
-        if (adminPassInK8sSecret.empty()) {
-            HexLogError("failed to get the admin password from the k8s secret");
-            return false;
-        }
-
-        adminPass = adminPassInK8sSecret;
-    }
-
-    const std::string token = getKeycloakAdminAccessToken(endpointIp, adminPass);
-    if (token.empty()) {
-        HexLogError("failed to get the keycloak admin access token");
-        return false;
-    }
-
-    HexLogInfo("set the login theme of the master realm to %s", KEYCLOAK_LOGIN_THEME.c_str());
-
-    std::string host = endpointIp;
-    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
-    Url url = Url(host, "/auth/admin/realms/master");
-    url.scheme = "https";
-
-    /**
-     * Keycloak only applies the fields a realm update actually carries, so naming just the
-     * realm and the login theme leaves every other realm setting alone.
-     */
-    const HttpRequest req = {
-        .method = "PUT",
-        .url = url,
-        .header = {
-            { "Authorization", "Bearer " + token },
-            { "Content-Type", "application/json" },
-        },
-        .body = R"({"realm":"master","loginTheme":")" + KEYCLOAK_LOGIN_THEME + R"("})",
-    };
-    const HttpResponse res = DoHttp(req);
-
-    if (!res.error.empty()) {
-        HexLogError("failed to send the http request");
-
-        CleanupHttpResponse(res);
-        return false;
-    }
-    if (!isHttpResponseSuccessful(res)) {
-        HexLogError("failed to set the login theme of the master realm");
-
-        CleanupHttpResponse(res);
-        return false;
-    }
-    CleanupHttpResponse(res);
-
-    HexLogInfo("set the login theme of the master realm");
-    return true;
-}
-
 static bool
 Commit(bool modified, int dryLevel)
 {
@@ -803,15 +540,9 @@ Commit(bool modified, int dryLevel)
         sleep(10);
     }
 
-    // set the login theme and create default cube groups (owned by the node that
-    // scaled keycloak), gated on the endpoint being reachable. Both idempotent.
+    // create default cube groups (owned by the node that scaled keycloak),
+    // gated on the endpoint being reachable. Idempotent.
     if (isKeycloakUpdated && checkKeycloakEndpoint(sharedId)) {
-        // serve the cube-cos-ui login page
-        if (!setMasterRealmLoginTheme(sharedId)) {
-            HexLogError("failed to set the login theme of the master realm");
-        }
-
-        // create default cube groups
         if (!ExecTerraform(
                 "apply",
                 "keycloak",
@@ -1050,16 +781,6 @@ repairKeycloak()
         return true;
     }
 
-    /**
-     * Repairing redeploys the helm release, which on a cluster still running the WildFly
-     * chart hands it over to Keycloak 18 and migrates the shared schema. Mid rolling
-     * upgrade that would strand the control nodes still on CubeCOS v3.1.0, whose WildFly
-     * pods cannot read the migrated schema, so leave the handover to the last node.
-     */
-    if (!isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
-        return true;
-    }
-
     HexLogInfo("repair keycloak");
 
     if (!K3sDeleteAllPods(APP_NAMESPACE)) {
@@ -1127,6 +848,63 @@ RemoveKeycloakSamlMetadataMain(int argc, char** argv)
 CONFIG_COMMAND_WITH_SETTINGS(remove_keycloak_saml_metadata, RemoveKeycloakSamlMetadataMain, RemoveKeycloakSamlMetadataUsage);
 
 /**
+ * Check if the admin password is stored in K8S secret on K3S.
+ */
+static bool
+isKeycloakUserPasswordInK8sSecret()
+{
+    bool ret = HexUtilSystemF(
+                   0,
+                   0,
+                   "/usr/local/bin/k3s kubectl get secret %s -n %s",
+                   KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+                   APP_NAMESPACE.c_str())
+        == 0;
+
+    if (ret) {
+        HexLogInfo("found the existing keycloak admin password");
+    }
+
+    return ret;
+}
+
+/**
+ * Get the admin password from the K8S secret.
+ */
+static std::string
+getKeycloakAdminPasswordFromK8sSecret()
+{
+    if (!isKeycloakUserPasswordInK8sSecret()) {
+        return "";
+    }
+
+    TempFile base64encodedAdminPass = CreateTempFile();
+    if (!base64encodedAdminPass.isValid) {
+        HexLogError("failed to create a temporary file");
+        return "";
+    }
+    if (HexUtilSystemF(
+            0,
+            0,
+            "/usr/local/bin/k3s kubectl get secret %s -n %s -o jsonpath='{.data.password}' > %s",
+            KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET.c_str(),
+            APP_NAMESPACE.c_str(),
+            base64encodedAdminPass.fileName.c_str())
+        != 0) {
+        HexLogError("failed to read the existing keycloak admin password k8s secret");
+        return "";
+    }
+    HexLogInfo("extracted the existing keycloak admin password");
+
+    const std::string base64encodedAdminPassString = HexUtilPOpen(
+        "base64 --decode %s",
+        base64encodedAdminPass.fileName.c_str());
+    DeleteTempFile(base64encodedAdminPass);
+
+    return base64encodedAdminPassString;
+}
+
+/**
  * Save the new admin password to the K8S secret.
  */
 static bool
@@ -1187,6 +965,65 @@ static void
 UpdateKeycloakAdminPasswordUsage()
 {
     fprintf(stderr, "Usage: %s update_keycloak_admin_password <password>\n", HexLogProgramName());
+}
+
+static std::string
+getKeycloakAdminAccessToken(
+    const std::string& endpointIp,
+    const std::string& adminPass)
+{
+    HexLogInfo("get keycloak admin access token");
+
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+    Url url = Url(host, "/auth/realms/master/protocol/openid-connect/token");
+    url.scheme = "https";
+
+    const std::vector<std::string> formBody = {
+        "grant_type=password",
+        "client_id=admin-cli",
+        "username=admin",
+        "password=" + adminPass,
+    };
+
+    const HttpResponse r = PostFormHttp(url, formBody);
+
+    if (!r.error.empty()) {
+        HexLogError("failed to send the http request");
+
+        CleanupHttpResponse(r);
+        return "";
+    }
+    if (!isHttpResponseSuccessful(r)) {
+        HexLogError("failed to get the response");
+
+        CleanupHttpResponse(r);
+        return "";
+    }
+
+    std::string fsError;
+    const std::string responseString = ReadFile(fsError, r.outputFileName);
+    CleanupHttpResponse(r);
+
+    if (!fsError.empty()) {
+        HexLogError("failed to read out the response");
+        return "";
+    }
+
+    std::string jsonError;
+    const json11::Json responseJson = json11::Json::parse(responseString.c_str(), jsonError);
+    if (!jsonError.empty()) {
+        HexLogError("failed to parse the response");
+        return "";
+    }
+
+    std::string token;
+    if (responseJson["access_token"].is_string()) {
+        token = responseJson["access_token"].string_value();
+    }
+
+    HexLogInfo("got keycloak admin access token");
+    return token;
 }
 
 static std::string
