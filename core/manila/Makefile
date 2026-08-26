@@ -36,17 +36,43 @@ include ../../build.mk
 # (ubuntu-nfs, ubuntu-cifs, manila-ssh, vm, manila-ubuntu-minimal,
 # dhcp-all-interfaces): they add a lustre element we do not build, move
 # manila-centos-minimal off yum, and touch zuul/gate tooling. bin/manila-image-create
-# does change, but not in a way that reaches a zero-argument invocation -- DIB_RELEASE
-# moves from before argument parsing to inside configure() (a fix for `-d centos`
-# setting MANILA_IMG_OS_VER too late; MANILA_IMG_OS_VER still defaults to jammy), lustre
-# joins the protocol validation, and valid_distro loses a missing-space bash bug that
-# only fires with -d. So the pin now tracks upstream while the artifact is unchanged in
-# substance -- the refresh comes from debootstrap picking up current jammy packages.
+# does change, and one of those changes *does* reach a zero-argument invocation: ff78b8cb
+# drops `debootstrap` from need_required_packages() for rhel/centos, and
+# verify_dependencies() runs on every invocation regardless of arguments, so upstream no
+# longer offers to install it on a build host like this one. That is why the rule below
+# asserts it rather than only naming it above. The rest does not reach us: DIB_RELEASE
+# moves from before argument parsing to inside configure() (a fix for `-d centos` setting
+# MANILA_IMG_OS_VER too late -- it still defaults to jammy either way), lustre joins the
+# protocol validation, `yum` becomes `dnf` in a branch where el9's yum is already a dnf
+# symlink, and valid_distro loses a missing-space bash bug that only fires with -d. So the
+# pin tracks upstream while the artifact is unchanged in substance -- the refresh comes
+# from debootstrap picking up current jammy packages.
 MANILA_IMAGE_ELEMENTS_COMMIT := 68a7e4beccbe36ca6c3c601c85aca041ddd7f326
 
-$(BLDDIR)/manila-image-elements:
-	$(Q)git clone https://github.com/openstack/manila-image-elements.git
-	$(Q)cd manila-image-elements && git checkout $(MANILA_IMAGE_ELEMENTS_COMMIT)
+# The checkout is keyed on the SHA, not on the directory.
+#
+# This used to be a bare `$(BLDDIR)/manila-image-elements:` rule, and a directory target is
+# up to date the moment it exists -- so on any warm build dir the whole rule was skipped,
+# `git checkout` never ran, and a bumped pin silently rebuilt the *old* elements. #638 was
+# the first time this pin had ever moved, and the tree had to be removed by hand for the
+# new SHA to take effect. A stamp named after the SHA makes the bump the thing that
+# invalidates the clone. Both the stamp and the clone are relative, so they live in
+# core/manila's own build dir beside each other rather than at the top of the tree.
+#
+# It re-clones rather than fetch+checkout on purpose, and that matters for the `sed` below:
+# on a warm tree the line it deletes is already gone, so `grep -c Type=oneshot` reads 0
+# whether or not the workaround fired and it can no longer be proven to have applied. A
+# pristine tree makes 1 -> 0 checkable.
+MANILA_ELEMENTS_DIR := manila-image-elements
+MANILA_ELEMENTS_REPO := https://github.com/openstack/manila-image-elements.git
+MANILA_ELEMENTS_STAMP := manila-elements-$(MANILA_IMAGE_ELEMENTS_COMMIT).stamp
+
+$(MANILA_ELEMENTS_STAMP):
+	$(Q)rm -f manila-elements-*.stamp
+	$(Q)rm -rf $(MANILA_ELEMENTS_DIR)
+	$(call RUN_CMD_TIMED,git clone $(MANILA_ELEMENTS_REPO) $(MANILA_ELEMENTS_DIR),"  CLONE   manila-image-elements")
+	$(Q)cd $(MANILA_ELEMENTS_DIR) && git checkout $(MANILA_IMAGE_ELEMENTS_COMMIT)
+	$(Q)touch $@
 
 # Upstream regression, hit for real on jim-1cc -- see the commit that added this
 # target. manila-ssh ships two pieces that now deadlock each other:
@@ -74,15 +100,28 @@ $(BLDDIR)/manila-image-elements:
 # both directly and through squid. The stall is indistinguishable from slow progress,
 # which is the expensive part.
 #
-# wget's only other lever is its config file, and DIB's 08-debootstrap hook runs
-# `sudo sh -c 'http_proxy= no_proxy= debootstrap ...'`, so WGETRC does not survive into
-# the environment that matters. /etc/wgetrc is what is left. Appended idempotently,
-# keyed on `timeout` already being set, so a second build is a no-op and an operator who
-# has their own timeout is not overridden.
-manila_service_image: $(BLDDIR)/manila-image-elements
-	$(Q)grep -qE '^[[:space:]]*timeout[[:space:]]*=' /etc/wgetrc || \
-		printf '\n# added by core/manila: bound debootstrap fetches, see manila_service_image\ntimeout = 30\ntries = 3\nwaitretry = 5\n' >> /etc/wgetrc
+# wget's only other lever is its config file. DIB's 08-debootstrap hook runs
+# `sudo sh -c 'http_proxy= no_proxy= debootstrap ...'`, so WGETRC does not survive into the
+# environment that matters -- but ~/.wgetrc does: this sudoers has `always_set_home`, so
+# HOME is /root inside that shell, and wget reads ~/.wgetrc at *higher* precedence than
+# /etc/wgetrc. Verified on the jim jail, with a deliberately bogus directive:
+#
+#   $$ sudo sh -c "http_proxy= no_proxy= wget --version"
+#   wget: Unknown command 'bogusdirective' in /root/.wgetrc at line 1.
+#
+# So this writes root's own dotfile rather than a system config file. Because ~/.wgetrc
+# wins over /etc/wgetrc, the guard checks *both* -- an operator who has set a timeout
+# system-wide is not silently overridden -- and a second build is a no-op either way.
+manila_service_image: $(MANILA_ELEMENTS_STAMP)
+	$(Q)# upstream ff78b8cb dropped debootstrap from need_required_packages() for
+	$(Q)# rhel/centos, so verify_dependencies() no longer installs it on this build host.
+	$(Q)command -v debootstrap >/dev/null || \
+		{ echo "manila_service_image: debootstrap missing, and upstream no longer installs it on rhel/centos -- dnf install debootstrap" >&2; exit 1; }
+	$(Q)grep -qhE '^[[:space:]]*timeout[[:space:]]*=' /root/.wgetrc /etc/wgetrc 2>/dev/null || \
+		printf '\n# added by core/manila: bound debootstrap fetches, see manila_service_image\ntimeout = 30\ntries = 3\nwaitretry = 5\n' >> /root/.wgetrc
 	$(Q)sed -i '/^Type=oneshot$$/d' manila-image-elements/elements/manila-ssh/install.d/fetch-public-ssh-keys.service
 	$(Q)cd manila-image-elements && bash -x ./bin/manila-image-create
+
+.PHONY: manila_service_image
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
