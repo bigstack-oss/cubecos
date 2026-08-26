@@ -55,6 +55,10 @@ def headroom(flavor):
 # while a live resize is migrating the instance to a host that fits
 SYSMETA_FLAVOR_ID = "cube_live_resize_flavor_id"
 
+# set once the instance has been live-migrated since its last boot: the guest
+# kernel can no longer online hot-added vCPUs (EIO) until it reboots (#1269)
+SYSMETA_MIGRATED = "cube_live_resize_migrated"
+
 
 def set_allocations(reportclient, context, consumer_uuid, flavor,
                     vcpus=None, memory_mb=None):

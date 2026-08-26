@@ -1,6 +1,6 @@
 --- compute/api.py
 +++ compute/api.py
-@@ -49,6 +49,7 @@ from nova.compute import utils as comput
+@@ -49,6 +49,7 @@
  from nova.compute.utils import wrap_instance_event
  from nova.compute import vm_states
  from nova import conductor
@@ -8,7 +8,7 @@
  import nova.conf
  from nova import context as nova_context
  from nova import crypto
-@@ -761,7 +762,8 @@ class API:
+@@ -761,7 +762,8 @@
  
          # Target disk is a volume. Don't check flavor disk size because it
          # doesn't make sense, and check min_disk against the volume size.
@@ -18,7 +18,7 @@
              # There are 2 possibilities here:
              #
              # 1. The target volume already exists but bdm.volume_size is not
-@@ -4160,9 +4162,55 @@ class API:
+@@ -4160,9 +4162,62 @@
  
      # TODO(stephenfin): This logic would be so much easier to grok if we
      # finally split resize and cold migration into separate code paths
@@ -48,6 +48,13 @@
 +        if new.memory_mb > old.memory_mb and new.memory_mb > max_mem:
 +            _bad(_("target memory exceeds this instance's hotplug "
 +                   "ceiling (%d MB)") % max_mem)
++        # a guest that has live-migrated cannot online hot-added vCPUs
++        # until it reboots (#1269); memory hotplug is unaffected
++        if (new.vcpus > old.vcpus and
++                instance.system_metadata.get(clr.SYSMETA_MIGRATED)):
++            _bad(_("this instance has been live-migrated since it last "
++                   "booted; its guest cannot online hot-added vCPUs until "
++                   "it is hard-rebooted (memory-only grows still work)"))
 +
 +    @check_instance_lock
 +    @check_instance_state(vm_state=[vm_states.ACTIVE], task_state=[None])
