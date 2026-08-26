@@ -116,12 +116,16 @@ WriteSshConfig(void)
     fprintf(fout, "UserKnownHostsFile /dev/null\n");
     // Multiplex repeated connections so health checks (one ssh per service per
     // node) reuse a single session instead of flooding sshd/logind/sudo.
-    fprintf(fout, "ControlMaster auto\n");
-    // control socket is root-only in /run (tmpfs, cleared on reboot) on a
-    // single-tenant appliance; 120s outlives the ~40s health poll so masters
-    // don't expire between cycles.
-    fprintf(fout, "ControlPath /run/cube-ssh-%%C\n");
-    fprintf(fout, "ControlPersist 120s\n");
+    // Scoped to root: the socket lives in /run (tmpfs, cleared on reboot),
+    // which only root can write, so leaving this global made every ssh by a
+    // service user fail with "unix_listener: cannot bind to path" -- taking
+    // out nova's cold resize and cold migration. 120s outlives the ~40s
+    // health poll so masters don't expire between cycles.
+    fprintf(fout, "Match User root\n");
+    fprintf(fout, "    ControlMaster auto\n");
+    fprintf(fout, "    ControlPath /run/cube-ssh-%%C\n");
+    fprintf(fout, "    ControlPersist 120s\n");
+    fprintf(fout, "Match all\n");
     fclose(fout);
 
     return true;
