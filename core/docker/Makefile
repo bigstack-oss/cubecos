@@ -9,7 +9,17 @@ REGISTRY_TAR := registry@2.tar
 $(REGISTRY_TAR):
 	$(Q)skopeo copy docker://registry:2 docker-archive:$(REGISTRY_TAR):registry:2 --retry-times 3 >/dev/null
 
-registry: $(REGISTRY_TAR)
+# Gated on a stamp written only after every copy succeeded: `registry` matched the
+# directory run-registry creates, so a stage that aborted midway looked done (#1346).
+# A stamp, not .PHONY -- re-copying every build would re-resolve every upstream
+# manifest. The image lists are dependencies, so editing one re-copies.
+REGISTRY_STAMP := .registry-copied
+
+$(REGISTRY_STAMP): $(REGISTRY_TAR) \
+                   $(COREDIR)/appctl/images/list.txt \
+                   $(COREDIR)/rancher/images.txt \
+                   $(COREDIR)/rancher/rancher-images.txt \
+                   $(COREDIR)/k3s/images.txt
 	$(Q)make build-image -C ../k3s
 	$(call RUN_CMD_TIMED, make run-registry,"  RUN     docker registry")
 	$(Q)make copy-image -C ../k3s
@@ -17,6 +27,11 @@ registry: $(REGISTRY_TAR)
 	$(Q)make copy-image -C ../rancher FULL=$(FULL)
 	$(Q)make copy-image -C ../appctl
 	$(Q)make rm-registry
+	$(Q)touch $@
+
+registry: $(REGISTRY_STAMP)
+
+CLEAN += $(REGISTRY_STAMP)
 
 k8s-full-registry.tar:
 	$(Q)make registry FULL=true
@@ -33,10 +48,8 @@ run-registry: $(REGISTRY_TAR)
 rm-registry:
 	$(Q)podman rm -ivf registry $(QEND)
 
-# Not .IGNORE: an image that fails to reach the bundled registry is missing from
-# the shipped bundle, and the install only finds out when the pod cannot pull it
-# with no egress. Retry first -- the failures seen are transient (upstream EOF,
-# registry 400 mid-upload) -- then fail the build (#1346).
+# Not .IGNORE: an image missing from the bundle only surfaces when a pod cannot
+# pull it with no egress. Retry the transient failures, then fail the build (#1346).
 .PHONY: push-image
 push-image:
 	$(call RUN_CMD_TIMED, make run-registry,"  RUN     docker registry")
