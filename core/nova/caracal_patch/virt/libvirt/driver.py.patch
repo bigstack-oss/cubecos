@@ -1,6 +1,6 @@
 --- virt/libvirt/driver.py
 +++ virt/libvirt/driver.py
-@@ -86,6 +86,7 @@ from nova.console import serial as seria
+@@ -86,6 +86,7 @@
  from nova.console import type as ctype
  from nova import context as nova_context
  from nova import crypto
@@ -8,7 +8,7 @@
  from nova.db import constants as db_const
  from nova import exception
  from nova.i18n import _
-@@ -6001,19 +6002,22 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -6001,19 +6002,22 @@
  
          return sysinfo
  
@@ -34,20 +34,20 @@
  
          return dev
  
-@@ -7413,6 +7417,8 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7413,6 +7417,8 @@
  
          self._guest_add_iommu_device(guest, image_meta, flavor)
  
-+        self._guest_add_live_resize_headroom(guest, flavor)
++        self._guest_add_live_resize_headroom(guest, flavor, instance)
 +
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7430,6 +7436,99 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7430,6 +7436,103 @@
              for resource in vpmem_resources]
          return vpmems
  
-+    def _guest_add_live_resize_headroom(self, guest, flavor):
++    def _guest_add_live_resize_headroom(self, guest, flavor, instance=None):
 +        # cube live-resize: declare the hotplug ceiling at boot; (0, 0)
 +        # means the flavor is blocked or opted out.
 +        max_vcpus, max_mem_mb = clr.headroom(flavor)
@@ -77,6 +77,10 @@
 +                numa = vconfig.LibvirtConfigGuestCPUNUMA()
 +                numa.cells = [cell]
 +                guest.cpu.numa = numa
++        if instance is not None:
++            # record what was actually baked in, after the sockets-divisibility
++            # adjustment above may have zeroed the vCPU half
++            clr.record_headroom(instance, max_vcpus, max_mem_mb)
 +
 +    def check_live_resize(self, instance, new_flavor):
 +        # cube live-resize: can the RUNNING domain grow to new_flavor?
@@ -143,7 +147,7 @@
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
-@@ -7598,7 +7697,7 @@ class LibvirtDriver(driver.ComputeDriver
+@@ -7598,7 +7701,7 @@
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])

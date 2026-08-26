@@ -55,6 +55,34 @@ def headroom(flavor):
 # while a live resize is migrating the instance to a host that fits
 SYSMETA_FLAVOR_ID = "cube_live_resize_flavor_id"
 
+# Ceiling actually baked into the running domain, recorded at spawn so the API
+# can answer a resize plan from the instance object -- no compute RPC. The
+# config default is only a fallback for instances booted before this shipped.
+SYSMETA_MAX_VCPUS = "cube_live_resize_max_vcpus"
+SYSMETA_MAX_MEM_MB = "cube_live_resize_max_memory_mb"
+
+
+def record_headroom(instance, max_vcpus, max_mem_mb):
+    """Stash the domain's real ceiling on the instance at domain-build time."""
+    instance.system_metadata[SYSMETA_MAX_VCPUS] = str(max_vcpus)
+    instance.system_metadata[SYSMETA_MAX_MEM_MB] = str(max_mem_mb)
+
+
+def recorded_headroom(instance):
+    """The recorded ceiling, or None when the instance predates the record.
+
+    Callers fall back to headroom(instance.flavor); that is the config-derived
+    estimate and can be wrong when the flavor carried an extra-spec override,
+    which is exactly why the recorded value exists.
+    """
+    sysmeta = instance.system_metadata
+    if SYSMETA_MAX_VCPUS not in sysmeta or SYSMETA_MAX_MEM_MB not in sysmeta:
+        return None
+    try:
+        return (int(sysmeta[SYSMETA_MAX_VCPUS]), int(sysmeta[SYSMETA_MAX_MEM_MB]))
+    except (TypeError, ValueError):
+        return None
+
 
 def set_allocations(reportclient, context, consumer_uuid, flavor,
                     vcpus=None, memory_mb=None):

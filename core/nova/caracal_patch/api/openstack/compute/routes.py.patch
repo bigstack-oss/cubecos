@@ -1,14 +1,15 @@
 --- api/openstack/compute/routes.py
 +++ api/openstack/compute/routes.py
-@@ -32,6 +32,7 @@ from nova.api.openstack.compute import c
+@@ -32,6 +32,8 @@
  from nova.api.openstack.compute import console_output
  from nova.api.openstack.compute import consoles
  from nova.api.openstack.compute import create_backup
 +from nova.api.openstack.compute import cube_live_resize
++from nova.api.openstack.compute import cube_resize_plan
  from nova.api.openstack.compute import deferred_delete
  from nova.api.openstack.compute import evacuate
  from nova.api.openstack.compute import extension_info
-@@ -253,6 +254,7 @@ server_controller = functools.partial(_c
+@@ -253,6 +255,7 @@
          admin_password.AdminPasswordController,
          console_output.ConsoleOutputController,
          create_backup.CreateBackupController,
@@ -16,3 +17,23 @@
          deferred_delete.DeferredDeleteController,
          evacuate.EvacuateController,
          floating_ips.FloatingIPActionController,
+@@ -280,6 +283,9 @@
+ server_diagnostics_controller = functools.partial(_create_controller,
+     server_diagnostics.ServerDiagnosticsController, [])
+ 
++cube_resize_plan_controller = functools.partial(_create_controller,
++    cube_resize_plan.ResizePlanController, [])
++
+ 
+ server_external_events_controller = functools.partial(_create_controller,
+     server_external_events.ServerExternalEventsController, [])
+@@ -765,6 +771,9 @@
+     ('/servers/{server_id}/diagnostics', {
+         'GET': [server_diagnostics_controller, 'index']
+     }),
++    ('/servers/{server_id}/resize-plan', {
++        'GET': [cube_resize_plan_controller, 'index']
++    }),
+     ('/servers/{server_id}/ips', {
+         'GET': [ips_controller, 'index']
+     }),
