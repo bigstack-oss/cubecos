@@ -9,7 +9,9 @@ User=barbican
 Group=barbican
 RuntimeDirectory=barbican
 RuntimeDirectoryMode=770
-ExecStart=/opt/openstack-antelope/bin/gunicorn --pid /run/barbican/pid -c /etc/barbican/gunicorn-config.py --paste /etc/barbican/barbican-api-paste.ini
+# Executes gunicorn from the caracal venv using python 3.11 -- barbican moved there in
+# #632, so a python 3.10 gunicorn can no longer import it.
+ExecStart=/opt/openstack-caracal/bin/gunicorn --pid /run/barbican/pid -c /etc/barbican/gunicorn-config.py --paste /etc/barbican/barbican-api-paste.ini
 ExecReload=/usr/bin/kill -s HUP $MAINPID
 ExecStop=/usr/bin/kill -s TERM $MAINPID
 StandardError=journal

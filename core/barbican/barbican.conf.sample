@@ -28,30 +28,6 @@
 # (string value)
 #host_href = http://localhost:9311
 
-# SQLAlchemy connection string for the reference implementation
-# registry server. Any valid SQLAlchemy connection string is fine.
-# See:
-# http://www.sqlalchemy.org/docs/05/reference/sqlalchemy/connections.html#sqlalchemy.create_engine.
-# Note: For absolute addresses, use '////' slashes after 'sqlite:'.
-# (string value)
-#sql_connection = sqlite:///barbican.sqlite
-
-# Period in seconds after which SQLAlchemy should reestablish its
-# connection to the database. MySQL uses a default `wait_timeout` of 8
-# hours, after which it will drop idle connections. This can result in
-# 'MySQL Gone Away' exceptions. If you notice this, you can lower this
-# value to ensure that SQLAlchemy reconnects before MySQL can drop the
-# connection. (integer value)
-#sql_idle_timeout = 3600
-
-# Maximum number of database connection retries during startup. Set to
-# -1 to specify an infinite retry count. (integer value)
-#sql_max_retries = 60
-
-# Interval between retries of opening a SQL connection. (integer
-# value)
-#sql_retry_interval = 1
-
 # Create the Barbican database on service startup. (boolean value)
 #db_auto_create = false
 
@@ -75,41 +51,6 @@
 # Show SQLAlchemy pool-related debugging output in logs (sets DEBUG
 # log level output) if specified. (boolean value)
 #sql_pool_logging = false
-
-# Size of pool used by SQLAlchemy. This is the largest number of
-# connections that will be kept persistently in the pool. Can be set
-# to 0 to indicate no size limit. To disable pooling, use a NullPool
-# with sql_pool_class instead. Comment out to allow SQLAlchemy to
-# select the default. (integer value)
-#sql_pool_size = 5
-
-# # The maximum overflow size of the pool used by SQLAlchemy. When the
-# number of checked-out connections reaches the size set in
-# sql_pool_size, additional connections will be returned up to this
-# limit. It follows then that the total number of simultaneous
-# connections the pool will allow is sql_pool_size +
-# sql_pool_max_overflow. Can be set to -1 to indicate no overflow
-# limit, so no limit will be placed on the total number of concurrent
-# connections. Comment out to allow SQLAlchemy to select the default.
-# (integer value)
-#sql_pool_max_overflow = 10
-
-# Enable eventlet backdoor.  Acceptable values are 0, <port>, and
-# <start>:<end>, where 0 results in listening on a random tcp port
-# number; <port> results in listening on the specified port number
-# (and not enabling backdoor if that port is in use); and
-# <start>:<end> results in listening on the smallest unused port
-# number within the specified range of port numbers.  The chosen port
-# is displayed in the service's log file. (string value)
-#backdoor_port = <None>
-
-# Enable eventlet backdoor, using the provided path as a unix socket
-# that can receive connections. This option is mutually exclusive with
-# 'backdoor_port' in that only one should be provided. If both are
-# provided then the existence of this option overrides the usage of
-# that option. Inside the path {pid} will be replaced with the PID of
-# the current process. (string value)
-#backdoor_socket = <None>
 
 #
 # From oslo.log
@@ -178,7 +119,10 @@
 # log_config_append is set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is
@@ -312,14 +256,6 @@
 #rpc_ping_enabled = false
 
 #
-# From oslo.service.periodic_task
-#
-
-# Some periodic tasks can be run in a separate process. Should we run
-# them here? (boolean value)
-#run_external_periodic_tasks = true
-
-#
 # From oslo.service.service
 #
 
@@ -347,46 +283,6 @@
 # Specify a timeout after which a gracefully shutdown server will
 # exit. Zero value means endless wait. (integer value)
 #graceful_shutdown_timeout = 60
-
-#
-# From oslo.service.wsgi
-#
-
-# File name for the paste.deploy config for api service (string value)
-#api_paste_config = api-paste.ini
-
-# A python format string that is used as the template to generate log
-# lines. The following values can beformatted into it: client_ip,
-# date_time, request_line, status_code, body_length, wall_seconds.
-# (string value)
-#wsgi_log_format = %(client_ip)s "%(request_line)s" status: %(status_code)s  len: %(body_length)s time: %(wall_seconds).7f
-
-# Sets the value of TCP_KEEPIDLE in seconds for each server socket.
-# Not supported on OS X. (integer value)
-#tcp_keepidle = 600
-
-# Size of the pool of greenthreads used by wsgi (integer value)
-#wsgi_default_pool_size = 100
-
-# Maximum line size of message headers to be accepted. max_header_line
-# may need to be increased when using large tokens (typically those
-# generated when keystone is configured to use PKI tokens with big
-# service catalogs). (integer value)
-#max_header_line = 16384
-
-# If False, closes the client socket connection explicitly. (boolean
-# value)
-#wsgi_keep_alive = true
-
-# Timeout for client connections' socket operations. If an incoming
-# connection is idle for this number of seconds it will be closed. A
-# value of '0' means wait forever. (integer value)
-#client_socket_timeout = 900
-
-# True if the server should send exception tracebacks to the clients
-# on 500 errors. If False, the server will respond with empty bodies.
-# (boolean value)
-#wsgi_server_debug = false
 
 
 [audit_middleware_notifications]
@@ -416,32 +312,6 @@
 # specified, we fall back to the same configuration used for RPC.
 # (string value)
 #transport_url = <None>
-
-
-[certificate]
-
-#
-# From barbican.certificate.plugin
-#
-
-# Extension namespace to search for plugins. (string value)
-#namespace = barbican.certificate.plugin
-
-# List of certificate plugins to load. (multi valued)
-#enabled_certificate_plugins = simple_certificate
-
-
-[certificate_event]
-
-#
-# From barbican.certificate.plugin
-#
-
-# Extension namespace to search for eventing plugins. (string value)
-#namespace = barbican.certificate.event.plugin
-
-# List of certificate plugins to load. (multi valued)
-#enabled_certificate_event_plugins = simple_certificate_event
 
 
 [cors]
@@ -489,6 +359,60 @@
 #enabled_crypto_plugins = simple_crypto
 
 
+[database]
+
+#
+# From barbican.common.config
+#
+
+# SQLAlchemy connection string for the reference implementation
+# registry server. Any valid SQLAlchemy connection string is fine.
+# See:
+# http://www.sqlalchemy.org/docs/05/reference/sqlalchemy/connections.html#sqlalchemy.create_engine.
+# Note: For absolute addresses, use '////' slashes after 'sqlite:'.
+# (string value)
+# Deprecated group/name - [DEFAULT]/sql_connection
+#connection = sqlite:///barbican.sqlite
+
+# Period in seconds after which SQLAlchemy should reestablish its
+# connection to the database. MySQL uses a default `wait_timeout` of 8
+# hours, after which it will drop idle connections. This can result in
+# 'MySQL Gone Away' exceptions. If you notice this, you can lower this
+# value to ensure that SQLAlchemy reconnects before MySQL can drop the
+# connection. (integer value)
+# Deprecated group/name - [DEFAULT]/sql_idle_timeout
+#connection_recycle_time = 3600
+
+# Maximum number of database connection retries during startup. Set to
+# -1 to specify an infinite retry count. (integer value)
+# Deprecated group/name - [DEFAULT]/sql_max_retries
+#max_retries = 60
+
+# Interval between retries of opening a SQL connection. (integer
+# value)
+# Deprecated group/name - [DEFAULT]/sql_retry_interval
+#retry_interval = 1
+
+# Size of pool used by SQLAlchemy. This is the largest number of
+# connections that will be kept persistently in the pool. Can be set
+# to 0 to indicate no size limit. To disable pooling, use a NullPool
+# with sql_pool_class instead. Comment out to allow SQLAlchemy to
+# select the default. (integer value)
+# Deprecated group/name - [DEFAULT]/sql_pool_size
+#max_pool_size = 5
+
+# # The maximum overflow size of the pool used by SQLAlchemy. When the
+# number of checked-out connections reaches the size set in
+# max_pool_size, additional connections will be returned up to this
+# limit. It follows then that the total number of simultaneous
+# connections the pool will allow is max_pool_size + max_overflow. Can
+# be set to -1 to indicate no overflow limit, so no limit will be
+# placed on the total number of concurrent connections. Comment out to
+# allow SQLAlchemy to select the default. (integer value)
+# Deprecated group/name - [DEFAULT]/sql_pool_max_overflow
+#max_overflow = 10
+
+
 [dogtag_plugin]
 
 #
@@ -511,18 +435,6 @@
 
 # Password for the NSS certificate databases (string value)
 #nss_password = <None>
-
-# Profile for simple CMC requests (string value)
-#simple_cmc_profile = caOtherCert
-
-# List of automatically approved enrollment profiles (string value)
-#auto_approved_profiles = caServerCert
-
-# Time in days for CA entries to expire (integer value)
-#ca_expiration_time = 1
-
-# Working directory for Dogtag plugin (string value)
-#plugin_working_dir = /etc/barbican/dogtag
 
 # User friendly plugin name (string value)
 #plugin_name = Dogtag KRA
@@ -552,6 +464,14 @@
 # Additional backends that can perform health checks and report that
 # information back as part of a request. (list value)
 #backends =
+
+# A list of network addresses to limit source ip allowed to access
+# healthcheck information. Any request from ip outside of these
+# network addresses are ignored. (list value)
+#allowed_source_ranges =
+
+# Ignore requests with proxy headers. (boolean value)
+#ignore_proxied_requests = false
 
 # Check the presence of a file to determine if an application is
 # running on a port. Used by DisableByFileHealthcheck plugin. (string
@@ -1243,10 +1163,15 @@
 # replicated FIFO queue based on the Raft consensus algorithm. It is
 # available as of RabbitMQ 3.8.0. If set this option will conflict
 # with the HA queues (``rabbit_ha_queues``) aka mirrored queues, in
-# other words the HA queues should be disabled, quorum queues durable
-# by default so the amqp_durable_queues opion is ignored when this
-# option enabled. (boolean value)
+# other words the HA queues should be disabled. Quorum queues are also
+# durable by default so the amqp_durable_queues option is ignored when
+# this option is enabled. (boolean value)
 #rabbit_quorum_queue = false
+
+# Use quorum queues for transients queues in RabbitMQ. Enabling this
+# option will then make sure those queues are also using quorum kind
+# of rabbit queues, which are HA by default. (boolean value)
+#rabbit_transient_quorum_queue = false
 
 # Each time a message is redelivered to a consumer, a counter is
 # incremented. Once the redelivery count exceeds the delivery limit
@@ -1274,8 +1199,11 @@
 # Positive integer representing duration in seconds for queue TTL
 # (x-expires). Queues which are unused for the duration of the TTL are
 # automatically deleted. The parameter affects only reply and fanout
-# queues. (integer value)
-# Minimum value: 1
+# queues. Setting 0 as value will disable the x-expires. If doing so,
+# make sure you have a rabbitmq policy to delete the queues or you
+# deployment will create an infinite number of queue over time.
+# (integer value)
+# Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
 # Specifies the number of messages to prefetch. Setting to zero allows
@@ -1289,7 +1217,7 @@
 
 # How often times during the heartbeat_timeout_threshold we check the
 # heartbeat. (integer value)
-#heartbeat_rate = 2
+#heartbeat_rate = 3
 
 # DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag
 # for direct send. The direct send is used as reply, so the
@@ -1306,6 +1234,23 @@
 # Enable x-cancel-on-ha-failover flag so that rabbitmq server will
 # cancel and notify consumerswhen queue is down (boolean value)
 #enable_cancel_on_failover = false
+
+# Should we use consistant queue names or random ones (boolean value)
+#use_queue_manager = false
+
+# Hostname used by queue manager (string value)
+#hostname = centos9-jail
+
+# Process name used by queue manager (string value)
+#processname = oslo-config-generator
+
+# Use stream queues in RabbitMQ (x-queue-type: stream). Streams are a
+# new persistent and replicated data structure ("queue type") in
+# RabbitMQ which models an append-only log with non-destructive
+# consumer semantics. It is available as of RabbitMQ 3.9.0. If set
+# this option will replace all fanout queues with only one stream
+# queue. (boolean value)
+#rabbit_stream_fanout = false
 
 
 [oslo_middleware]
@@ -1331,7 +1276,7 @@
 # scopes do not match, an ``InvalidScope`` exception will be raised.
 # If ``False``, a message will be logged informing operators that
 # policies are being invoked with mismatching scope. (boolean value)
-#enforce_scope = false
+#enforce_scope = true
 
 # This option controls whether or not to use old deprecated defaults
 # when evaluating policies. If ``True``, the old deprecated defaults
@@ -1343,7 +1288,7 @@
 # policy check string is logically OR'd with the new policy check
 # string, allowing for a graceful upgrade experience between releases
 # with new policies, which is the default behavior. (boolean value)
-#enforce_new_defaults = false
+#enforce_new_defaults = true
 
 # The relative or absolute path of a file that maps roles to
 # permissions for a given service. Relative paths must be specified in
@@ -1385,6 +1330,16 @@
 #remote_ssl_client_key_file = <None>
 
 
+[oslo_versionedobjects]
+
+#
+# From oslo.versionedobjects
+#
+
+# Make exception message format errors fatal (boolean value)
+#fatal_exception_format_errors = false
+
+
 [p11_crypto_plugin]
 
 #
@@ -1398,16 +1353,10 @@
 # value)
 #token_serial_number = <None>
 
-# DEPRECATED: Use token_labels instead. Token label used to identify
-# the token to be used. (string value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-#token_label = <None>
-
 # List of labels for one or more tokens to be used. Typically this is
 # a single label, but some HSM devices may require more than one label
 # for Load Balancing or High Availability configurations. (list value)
-#token_labels = <None>
+#token_labels =
 
 # Password to login to PKCS11 session (string value)
 #login = <None>
@@ -1569,59 +1518,6 @@
 #plugin_name = Software Only Crypto
 
 
-[snakeoil_ca_plugin]
-
-#
-# From barbican.certificate.plugin.snakeoil
-#
-
-# Path to CA certificate file (string value)
-#ca_cert_path = <None>
-
-# Path to CA certificate key file (string value)
-#ca_cert_key_path = <None>
-
-# Path to CA certificate chain file (string value)
-#ca_cert_chain_path = <None>
-
-# Path to CA chain pkcs7 file (string value)
-#ca_cert_pkcs7_path = <None>
-
-# Directory in which to store certs/keys for subcas (string value)
-#subca_cert_key_directory = /etc/barbican/snakeoil-cas
-
-
-[ssl]
-
-#
-# From oslo.service.sslutils
-#
-
-# CA certificate file to use to verify connecting clients. (string
-# value)
-# Deprecated group/name - [DEFAULT]/ssl_ca_file
-#ca_file = <None>
-
-# Certificate file to use when starting the server securely. (string
-# value)
-# Deprecated group/name - [DEFAULT]/ssl_cert_file
-#cert_file = <None>
-
-# Private key file to use when starting the server securely. (string
-# value)
-# Deprecated group/name - [DEFAULT]/ssl_key_file
-#key_file = <None>
-
-# SSL version to use (valid only if SSL enabled). Valid values are
-# TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be
-# available on some distributions. (string value)
-#version = <None>
-
-# Sets the list of available ciphers. value should be a string in the
-# OpenSSL cipher list format. (string value)
-#ciphers = <None>
-
-
 [vault_plugin]
 
 #
@@ -1650,3 +1546,7 @@
 
 # SSL Enabled/Disabled (boolean value)
 #use_ssl = false
+
+# Vault Namespace to use for all requests. Namespaces is a feature
+# available in HasiCorp Vault Enterprise only. (string value)
+#namespace = <None>
