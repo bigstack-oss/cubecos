@@ -21,6 +21,12 @@
 # upper-constraints names for the 18.3.0 api installed here. That keeps the pairing
 # #1203 established when it retired the yoga-client-against-antelope-api one.
 #
+# The antelope copy has a second consumer besides the osc plugin, so do not drop it on the
+# day horizon hops and the plugin follows: manila-ui declares
+# `Requires-Dist: python-manilaclient (>=2.7.0)` and imports it from 15 modules, including
+# manila_ui/api/manila.py and manila_ui/exceptions.py. Whichever of the two moves last is
+# what keeps 4.4.2 needed there.
+#
 # openstack-manila-ui is replaced by the manila-ui wheel installed further down, and
 # that one does *not* move: see the note above it.
 #
