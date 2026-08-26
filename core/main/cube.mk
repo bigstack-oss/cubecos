@@ -24,6 +24,7 @@ hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_preset.sh
 hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_util.sh
 hex_shell_MODULES += $(HEX_SHMODDIR)/sdk_tuning.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/errcodes
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_advisor.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_alert.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_api.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_app.sh
