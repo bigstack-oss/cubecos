@@ -1,0 +1,18 @@
+#!/opt/openstack-caracal/bin/python3.11
+import sys
+from designate.cmd.manage import main
+
+# Silence the SQLAlchemy warnings designate emits on every start. Re-derived for
+# 18.0.0 from the console script setuptools generates -- the pbr template the
+# antelope copies were based on is gone, so this is a fresh patch of a different
+# base, not a path rewrite of the old one.
+import warnings
+
+from sqlalchemy import exc as sa_exc
+
+warnings.filterwarnings(action="ignore", category=sa_exc.SAWarning)
+warnings.filterwarnings(action="ignore", category=UserWarning)
+
+if __name__ == '__main__':
+    sys.argv[0] = sys.argv[0].removesuffix('.exe')
+    sys.exit(main())
