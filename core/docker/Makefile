@@ -33,15 +33,19 @@ run-registry: $(REGISTRY_TAR)
 rm-registry:
 	$(Q)podman rm -ivf registry $(QEND)
 
-.PHONY .IGNORE: push-image
+# Not .IGNORE: an image that fails to reach the bundled registry is missing from
+# the shipped bundle, and the install only finds out when the pod cannot pull it
+# with no egress. Retry first -- the failures seen are transient (upstream EOF,
+# registry 400 mid-upload) -- then fail the build (#1346).
+.PHONY: push-image
 push-image:
 	$(call RUN_CMD_TIMED, make run-registry,"  RUN     docker registry")
 	$(call RUN_CMD_TIMED, \
-		podman push $(IMG) --tls-verify=false \
+		podman push $(IMG) --tls-verify=false --retry 3 \
 		,"  PUSH    $(IMG)")
 	$(Q)make rm-registry
 
-.PHONY .IGNORE: copy-image
+.PHONY: copy-image
 copy-image:
 	$(call RUN_CMD_TIMED, make run-registry,"  RUN     docker registry")
 	$(call RUN_CMD_TIMED, \
