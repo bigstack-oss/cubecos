@@ -16,10 +16,13 @@ LicenseCheckMain(int argc, const char** argv)
     if (argc > 1 /* [0]="check" */)
         return CLI_INVALID_ARGS;
 
+    // flush before spawning: the child writes straight to fd 1
     CliPrintf("\n====== CubeCOS ======\n");
+    fflush(stdout);
     HexSpawn(0, HEX_SDK, "license_cluster_check", NULL);
 
     CliPrintf("\n====== CubeCMP ======\n");
+    fflush(stdout);
     HexSpawn(0, HEX_SDK, "license_cluster_check", "cmp", NULL);
 
     return CLI_SUCCESS;
@@ -32,9 +35,11 @@ LicenseShowMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
 
     CliPrintf("\n====== CubeCOS ======\n");
+    fflush(stdout);
     HexSpawn(0, HEX_SDK, "license_cluster_show", NULL);
 
     CliPrintf("\n====== CubeCMP ======\n");
+    fflush(stdout);
     HexSpawn(0, HEX_SDK, "license_cluster_show", "cmp", NULL);
 
     return CLI_SUCCESS;
