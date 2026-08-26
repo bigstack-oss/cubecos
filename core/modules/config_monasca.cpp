@@ -272,6 +272,7 @@ SetupMonasca(std::string domain, std::string userPass)
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s monasca",
                          env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user monasca admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user monasca service", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name monasca-api "

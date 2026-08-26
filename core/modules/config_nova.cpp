@@ -272,6 +272,7 @@ SetupNova(std::string domain, std::string novaPass, std::string placePass)
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s placement",
                          env.c_str(), OPENSTACK_CLI, domain.c_str(), placePass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user placement admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user placement service", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name nova "

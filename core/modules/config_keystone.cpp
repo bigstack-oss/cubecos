@@ -529,6 +529,7 @@ Commit(bool modified, int dryLevel)
 
     // check for setup migration
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone");
+    HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_service_role");
 
     // 6. create endpoint
     if (s_bEndpointChanged) {

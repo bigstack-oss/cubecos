@@ -338,6 +338,7 @@ SetupNeutron(std::string domain, std::string password)
     // Create the neutron service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s neutron", env.c_str(), OPENSTACK_CLI, domain.c_str(), password.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user neutron admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user neutron service", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
     HexUtilSystemF(0, 0, "%s %s service create --name %s "

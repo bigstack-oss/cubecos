@@ -106,6 +106,7 @@ SetupService(std::string domain, std::string userPass)
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s skyline",
         env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user skyline admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user skyline service", env.c_str(), OPENSTACK_CLI);
 
     return true;
 }

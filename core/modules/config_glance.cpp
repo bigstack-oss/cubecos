@@ -597,6 +597,12 @@ SetupService(const std::string domain, const std::string userPass)
         "%s %s role add --project service --user glance admin",
         env.c_str(),
         OPENSTACK_CLI);
+    HexUtilSystemF(
+        0,
+        0,
+        "%s %s role add --project service --user glance service",
+        env.c_str(),
+        OPENSTACK_CLI);
 
     // create the service entity
     HexUtilSystemF(

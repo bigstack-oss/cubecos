@@ -97,6 +97,29 @@ migrate_keystone()
     touch $STATE_DIR/keystone_migrated
 }
 
+# Caracal secure-RBAC: service-to-service APIs check role:service with no admin
+# fallback, but only cinder/nova ever got it. Own marker: keystone_migrated
+# short-circuits on clusters that already ran the v2.4 step.
+migrate_keystone_service_role()
+{
+    if [ -f $STATE_DIR/keystone_service_role_migrated ] ; then
+        return 0
+    fi
+
+    is_control_node || return 0
+
+    $OPENSTACK role show service >/dev/null 2>&1 || $OPENSTACK role create service
+
+    local u
+    for u in barbican cinder cyborg designate glance heat ironic ironic-inspector \
+             masakari monasca neutron nova octavia placement skyline watcher ; do
+        $OPENSTACK user show $u >/dev/null 2>&1 || continue
+        $OPENSTACK role add --project service --user $u service >/dev/null 2>&1
+    done
+
+    touch $STATE_DIR/keystone_service_role_migrated
+}
+
 migrate_barbican_db()
 {
     if [ -f $STATE_DIR/barbican_db_migrated ] ; then

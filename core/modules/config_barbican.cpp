@@ -135,6 +135,7 @@ SetupBarbican(std::string domain, std::string userPass)
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s barbican",
                          env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user barbican admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user barbican service", env.c_str(), OPENSTACK_CLI);
 
     // Create a creator role
     HexUtilSystemF(0, 0, "%s %s role create creator", env.c_str(), OPENSTACK_CLI);

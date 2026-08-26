@@ -252,6 +252,7 @@ SetupIronic(std::string domain, std::string ironicPass, std::string inspPass)
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s ironic",
                          env.c_str(), OPENSTACK_CLI, domain.c_str(), ironicPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic service", env.c_str(), OPENSTACK_CLI);
 
     // Create the ironic service entity
     HexUtilSystemF(0, 0, "%s %s service create --name ironic "
@@ -262,6 +263,7 @@ SetupIronic(std::string domain, std::string ironicPass, std::string inspPass)
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s ironic-inspector",
                          env.c_str(), OPENSTACK_CLI, domain.c_str(), inspPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic-inspector admin", env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic-inspector service", env.c_str(), OPENSTACK_CLI);
 
     // Create the ironic-inspector service entity
     HexUtilSystemF(0, 0, "%s %s service create --name ironic-inspector "
