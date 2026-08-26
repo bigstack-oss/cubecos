@@ -176,7 +176,25 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += sharedId;
         dbconn += "/barbican";
 
-        cfg["DEFAULT"]["sql_connection"] = dbconn;
+        // [database] connection, not [DEFAULT] sql_connection: barbican 18.0.0 moved the
+        // database options into their own group (barbican/common/config.py registers
+        // core_db_opts under OptGroup(name='database')). The old spelling survives as a
+        // deprecated alias, so writing it would still work today -- but the regenerated
+        // barbican.conf.sample only documents the new one, and leaving the two disagreeing
+        // hands the next hop a failure that produces no error at all: the option's default
+        // is `sqlite:///barbican.sqlite`, so once the alias goes barbican does not complain
+        // about a missing URI, it quietly opens a per-node sqlite file. Each control node
+        // would then serve its own empty key store while every service and health check
+        // reported success.
+        //
+        // No mysql_wsrep_sync_wait here, unlike the eleven other upgraded modules. It
+        // would be a dead key: barbican does not use oslo.db's enginefacade and does not
+        // register oslo.db's [database] options. barbican/model/repositories.py builds
+        // engine_args itself from exactly three values -- connection_recycle_time,
+        // max_pool_size, max_overflow -- and hands them to
+        // oslo_db.sqlalchemy.session.create_engine(), which only applies
+        // mysql_wsrep_sync_wait when it arrives as a kwarg. Nothing would read it.
+        cfg["database"]["connection"] = dbconn;
     }
 
     return true;
