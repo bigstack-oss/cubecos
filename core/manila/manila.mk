@@ -112,6 +112,13 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
+# No $(MANILA_PATCHDIR) exists at caracal, and the guard below is what makes that a
+# no-op rather than an error. antelope_patch/ carried exactly one line -- a
+# `<world>` -> `*` rewrite in NFSHelper.get_host_list(), because `exportfs` prints
+# `<world>` for a wildcard export and manila's parser wanted `*`. Upstream landed its
+# own version of that fix, per-entry rather than over the whole blob (so it cannot also
+# rewrite a `<world>` inside a path, which ours could), and 18.3.0 is the first tag
+# carrying it. The hook is kept so the next hop only has to create the directory.
 rootfs_install::
 	$(Q)[ -d $(MANILA_PATCHDIR) ] && cp -rf $(MANILA_PATCHDIR)/* $(MANILA_SRCDIR)/ || /bin/true
 
