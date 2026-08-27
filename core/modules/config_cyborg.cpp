@@ -245,12 +245,20 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
 
         // Cyborg ships no rootwrap, so unlike cinder/glance the helper cannot be
         // resolved through rootwrap exec_dirs and has to be named here.
-        // /usr/bin/privsep-helper is a symlink to the venv helper as of the Horizon
-        // hop -- core/nova/nova.mk creates it, now that no service runs privsep under
-        // the system python. It used to be a pre-venv system-python binary that could
-        // not import cyborg, so every device discovery failed with
-        // FailedToDropPrivileges.
-        cfg["cyborg_sys_admin"]["helper_command"] = "sudo /usr/bin/privsep-helper";
+        //
+        // The caracal helper is named in full rather than reached through
+        // /usr/bin/privsep-helper, which core/nova/nova.mk keeps pointed at the
+        // *antelope* venv. A privsep helper runs the caller's own code -- it imports
+        // cyborg and executes the entrypoint the client asks for -- so a python 3.10
+        // helper cannot serve a 3.11 cyborg. That combination has been seen on
+        // jim-1cc for glance (see config_glance.cpp): the service ran from
+        // /opt/openstack-caracal/bin/python3.11 while its helper ran from
+        // /opt/openstack-antelope/bin/python3.10. cinder, glance, neutron, nova and
+        // manila all pin the caracal path for the same reason.
+        //
+        // /etc/sudoers.d/cyborg authorises exactly this path -- the two have to move
+        // together, or privsep is refused by sudo instead of failing to import.
+        cfg["cyborg_sys_admin"]["helper_command"] = "sudo /opt/openstack-caracal/bin/privsep-helper";
 
         cfg["placement"].clear();
         cfg["placement"]["auth_type"] = "password";

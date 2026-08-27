@@ -107,16 +107,17 @@ rootfs_install::
 #
 # oslo.privsep escalates by running `sudo privsep-helper`, resolved off sudo's
 # secure_path (/sbin:/bin:/usr/sbin:/usr/bin), which never contains a venv's bin -- so
-# the bare name has to exist there. One symlink covers every service that has not made
-# the caracal hop: masakari and cyborg both reach the helper through
-# /usr/bin/privsep-helper, and config_masakari.cpp and config_cyborg.cpp name that path
-# in helper_command. two services used to be on that list and have since left it.
-# neutron reached it a third way -- not through sudo's secure_path but through the
-# exec_dirs in /etc/neutron/rootwrap.conf, since neutron agents escalate via
+# the bare name has to exist there. The symlink now covers exactly one service:
+# masakari is the only one still reaching the helper this way, and
+# config_masakari.cpp names /usr/bin/privsep-helper in helper_command. Three services
+# used to be on that list and have since left it. neutron reached it a third way --
+# not through sudo's secure_path but through the exec_dirs in
+# /etc/neutron/rootwrap.conf, since neutron agents escalate via
 # `sudo neutron-rootwrap ... privsep-helper`; #628 took neutron to caracal and
 # config_neutron.cpp now pins the caracal helper in all six of its privsep sections, so
-# nothing under /etc/neutron resolves this symlink any more. #638 then took manila, and
-# config_manila.cpp pins PRIVSEP_HELPER the same way.
+# nothing under /etc/neutron resolves this symlink any more. #638 then took manila and
+# #633 cyborg, and config_manila.cpp and config_cyborg.cpp pin the caracal helper the
+# same way.
 #
 # It is load-bearing rather than a convenience: with no /usr/bin/privsep-helper at all,
 # an antelope agent that has not been pinned crash-loops on
@@ -134,10 +135,9 @@ rootfs_install::
 # silently -- and nova was the only component naming oslo.privsep in the antelope venv
 # before this hop.
 #
-# Both halves go once the last antelope service reaches caracal: the pip install below,
-# the symlink, and the helper_command pins in config_manila.cpp, config_masakari.cpp
-# and config_cyborg.cpp. At that point the caracal half moves out of nova.mk too --
-# every venv occupant will be naming its own helper by then.
+# Both halves go once masakari reaches caracal: the pip install below, the symlink, and
+# the helper_command pin in config_masakari.cpp. At that point the caracal half moves
+# out of nova.mk too -- every venv occupant will be naming its own helper by then.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

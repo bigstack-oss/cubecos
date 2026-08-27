@@ -1,7 +1,12 @@
 Defaults:cyborg !requiretty
 
-# This is what [cyborg_sys_admin] helper_command in cyborg.conf points at.
-# /usr/bin/privsep-helper is a symlink to the venv helper as of the Horizon hop, so
-# the venv path this used to authorise is no longer needed -- the condition that
-# comment was waiting for ("once /usr/bin/privsep-helper is the venv one again") is met.
-cyborg ALL = (root) NOPASSWD: /usr/bin/privsep-helper *
+# This is what [cyborg_sys_admin] helper_command in cyborg.conf points at, and it has
+# to stay byte-identical to what config_cyborg.cpp writes there: sudo matches the
+# command by path, so a helper_command that names a path this file does not authorise
+# is refused with "cyborg : command not allowed", before privsep gets far enough to
+# report anything of its own.
+#
+# The path is the caracal venv's own helper, not the /usr/bin/privsep-helper symlink
+# core/nova/nova.mk keeps pointed at the antelope venv -- #633 moved cyborg into the
+# python 3.11 venv, and a 3.10 helper cannot import a 3.11 cyborg.
+cyborg ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *
