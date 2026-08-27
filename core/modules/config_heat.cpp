@@ -225,8 +225,32 @@ UpdateSharedId(std::string sharedId)
         cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["http_connect_timeout"] = "15";
         cfg["trustee"]["auth_url"] = "http://" + sharedId + ":5000";
-        cfg["clients_keystone"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
-        cfg["ec2authtoken"]["www_authenticate_uri"] = "http://" + sharedId + ":5000/v3";
+        // auth_uri, not www_authenticate_uri: that name belongs to
+        // keystonemiddleware and exists only in [keystone_authtoken] above. Both
+        // groups below are heat's own -- [clients_keystone] from
+        // heat.common.config, [ec2authtoken] from heat.api.aws.ec2token -- and
+        // both call the option auth_uri, in every release since yoga. oslo.config
+        // drops an unknown key in a registered group without a word, so the two
+        // lines used to be inert.
+        //
+        // [ec2authtoken] was not merely cosmetic. Unset, ec2token.py falls back to
+        // endpoint_utils.get_auth_uri(), which returns the *unversioned*
+        // [keystone_authtoken] www_authenticate_uri, and then appends /ec2tokens
+        // -- so it POSTed to http://<id>:5000/ec2tokens, which keystone 404s with
+        // an HTML body. response.json() then raised JSONDecodeError and the
+        // request 500ed, breaking every AWS-signed call to heat-api-cfn: that is
+        // the path heat_metadata_server_url and heat_waitcondition_server_url
+        // above hand to guests, so AWS::CloudFormation::WaitCondition could never
+        // be signalled and any template using one hung until its timeout.
+        //
+        // [clients_keystone] auth_uri is what heat's own keystone client resolves
+        // from; unset it fell back to the same unversioned URL. Set, heat runs
+        // version discovery against it and gets http://<id>:5000/v3/. Keep this
+        // one unversioned -- the option documents itself as "Unversioned keystone
+        // url" and discovery appends the version -- while [ec2authtoken] keeps the
+        // explicit /v3, because there ec2token.py appends /ec2tokens verbatim.
+        cfg["clients_keystone"]["auth_uri"] = "http://" + sharedId + ":5000";
+        cfg["ec2authtoken"]["auth_uri"] = "http://" + sharedId + ":5000/v3";
         cfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
     }
 
