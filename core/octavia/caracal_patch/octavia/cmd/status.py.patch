@@ -1,0 +1,14 @@
+--- status.py
++++ status.py
+@@ -19,6 +19,11 @@
+ 
+ # Need to import to load config
+ from octavia.common import config  # noqa: F401 pylint: disable=unused-import
++# Also needed to load config: _check_yaml_policy() reads CONF.oslo_policy,
++# and octavia.common.policy is what registers that group -- it calls
++# oslo_policy.opts.set_defaults() at import time. Without this import the
++# check raises NoSuchOptError and `octavia-status upgrade check` aborts.
++from octavia.common import policy  # noqa: F401 pylint: disable=unused-import
+ from octavia.common import constants
+ from octavia.controller.worker.v2 import taskflow_jobboard_driver as tsk_driver
+ from octavia.i18n import _
