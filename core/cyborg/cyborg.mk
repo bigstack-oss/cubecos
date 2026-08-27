@@ -96,8 +96,14 @@ rootfs_install::
 	$(Q)# than a git checkout: cyborg's setup.cfg data_files puts both there, and
 	$(Q)# taking them from the install means they track the pinned version instead
 	$(Q)# of going stale silently. cinder.mk, glance.mk and designate.mk do the same.
+	$(Q)#
+	$(Q)# The policy file keeps upstream's name. cyborg sets its own default for
+	$(Q)# CONF.oslo_policy.policy_file to policy.yaml (cyborg/common/authorize_wsgi.py)
+	$(Q)# and only falls back to policy.json when no policy.yaml is found -- a
+	$(Q)# compatibility path its own TODO says will be removed. Installing it as
+	$(Q)# policy.json, as this did, worked solely through that fallback.
 	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/cyborg/api-paste.ini $(CYBORG_CONF_DIR)/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/cyborg/policy.yaml $(CYBORG_CONF_DIR)/policy.json
+	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/cyborg/policy.yaml $(CYBORG_CONF_DIR)/policy.yaml
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg_sudoers ./etc/sudoers.d/
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg.conf.def .$(CYBORG_CONF_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg-api.service ./lib/systemd/system
