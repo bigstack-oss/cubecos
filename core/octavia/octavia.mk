@@ -9,10 +9,21 @@
 #
 # It used to be the yoga python3-octaviaclient rpm under the *system* python 3.9,
 # because /usr/bin/openstack was `#!/usr/bin/python3` and an entry point is only
-# visible to the interpreter it was installed under. core/heavyfs moved the CLI into
-# the 3.10 venv, so the plugin follows it: it is named on the pip install below.
-# This rpm was also the only hard Requires on python3-openstackclient anywhere in the
-# tree, so dropping it here is what lets core/heavyfs stop installing the yoga CLI.
+# visible to the interpreter it was installed under. #1206 moved it into the 3.10
+# venv alongside the CLI. This rpm was also the only hard Requires on
+# python3-openstackclient anywhere in the tree, so dropping it there is what let
+# core/heavyfs stop installing the yoga CLI.
+#
+# It stays in the *antelope* venv now that octavia itself has moved to caracal, for
+# the same entry-point reason: core/heavyfs still links /usr/bin/openstack at
+# $(OPENSTACK_HOME_DIR), so the `loadbalancer` plugin has to be installed under that
+# interpreter or the call sites above stop resolving. Unlike manila, there is no
+# second consumer -- octavia ships no standalone CLI and nothing in hex_sdk runs one
+# -- so the client is installed once, and only there. That leaves the antelope
+# constraint's python-octaviaclient 3.4.0 talking to a caracal 14.0.2 API, which is
+# the supported direction: octaviaclient negotiates the API version per request and
+# every call sdk_os.sh makes (loadbalancer list, the flavorprofile/flavor pairs,
+# delete --cascade) predates 2023.1.
 #
 # NOTE: unlike heat, health_octavia_check() is *not* what depends on this.
 # It checks systemd units, the monasca http_status metric and the octavia-hm0
@@ -24,7 +35,8 @@
 # to pip because Horizon still ran on the system python 3.9 and could not import a
 # package from the 3.10 venv; #609 moved Horizon into the venv, so the Load Balancer
 # panel comes back. Registering it is core/horizon's job, where every dashboard
-# action lives.
+# action lives. That wheel does *not* follow octavia to caracal -- see the note
+# above it.
 #
 # The octavia user and group are carried statically by
 # core/heavyfs/account/centos9 (uid/gid 138), so the RDO spec's shadow-utils
@@ -33,13 +45,24 @@
 OCTAVIA_CONF_DIR := /etc/octavia
 OCTAVIA_CONFDIR := $(ROOTDIR)$(OCTAVIA_CONF_DIR)
 
-OCTAVIA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/octavia
-OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(OPENSTACK_RELEASE)_patch/octavia
+OCTAVIA_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/octavia
+OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(CARACAL_OPENSTACK_RELEASE)_patch/octavia
 
-# https://releases.openstack.org/antelope/index.html -- last numeric 2023.1 revision,
-# and the dashboard that pairs with the octavia 12.0.1 installed below. Horizon
-# plugins are not in the antelope upper-constraints (that file only covers
-# libraries), so the pin has to be explicit.
+# https://releases.openstack.org/caracal/index.html#caracal-octavia -- last numeric
+# 2024.1 revision, the same rule #1206 used to land on 12.0.1. core/octavia/Makefile
+# builds the amphora image from this same tag, so the agent inside the image and the
+# controllers outside it stay one release.
+OCTAVIA_VER := 14.0.2
+
+# Deliberately still the 2023.1 pin, and deliberately still in the antelope venv.
+# core/horizon/horizon.mk serves the dashboard out of $(OPENSTACK_HOME_DIR) --
+# openstack-dashboard.service, gunicorn-config.py and the httpd reverse proxy all
+# point at the antelope tree, and every dashboard plugin installs next to it.
+# octavia-dashboard follows horizon, not the octavia service, so the Load Balancer
+# panel stays on 11.0.1 until horizon itself hops; 13.0.1 is the caracal release to
+# move to on that day. It talks to the API over HTTP and imports nothing from
+# octavia, so the split costs nothing. Horizon plugins are not in the
+# upper-constraints (that file only covers libraries), so the pin has to be explicit.
 OCTAVIA_DASHBOARD_VER := 11.0.1
 
 # install octavia
@@ -51,12 +74,27 @@ rootfs_install::
 	$(Q)# amphora_driver/v2/driver.py imports octavia_lib.api.drivers), and that
 	$(Q)# is the provider this deployment uses. The RPM pulled it in as
 	$(Q)# python3-octavia-lib; pip will not, so it is listed explicitly.
-	$(Q)# python-octaviaclient is the "loadbalancer" osc plugin, named explicitly
-	$(Q)# rather than left transitive -- see the note at the top of this file.
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			octavia==12.0.1 \
+	$(Q)#
+	$(Q)# kazoo is the same shape of problem, and the venv split is what exposed it.
+	$(Q)# config_octavia.cpp writes task_flow/jobboard_backend_driver =
+	$(Q)# zookeeper_taskflow_driver, and taskflow's zookeeper jobboard imports kazoo
+	$(Q)# -- but that is an *extra* (taskflow[zookeeper]), not a requirement, and
+	$(Q)# octavia does not declare it. Under antelope it happened to be present
+	$(Q)# anyway, dragged into the shared venv by monasca-common; the caracal venv has
+	$(Q)# no monasca, so octavia-worker crash-looped on ModuleNotFoundError: No module
+	$(Q)# named 'kazoo' until this line existed. Named here rather than as
+	$(Q)# taskflow[zookeeper] to match octavia-lib above, and because the constraint
+	$(Q)# file already pins it (2.10.0).
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			octavia==$(OCTAVIA_VER) \
 			octavia-lib \
+			kazoo"
+	$(Q)# and the "loadbalancer" osc plugin in the antelope venv, alone: that entry
+	$(Q)# point is only visible to the interpreter /usr/bin/openstack runs under, and
+	$(Q)# that is still the antelope one -- see the note at the top of this file.
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-octaviaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -64,21 +102,20 @@ rootfs_install::
 	$(Q)# also gains amphora-agent, amphora-health-checker, amphora-interface,
 	$(Q)# haproxy-vrrp-check and prometheus-proxy; those run *inside* the
 	$(Q)# amphora VM and are provided by the amphora image, so they are left
-	$(Q)# unlinked on purpose.
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-api /usr/bin/octavia-api
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-worker /usr/bin/octavia-worker
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-health-manager /usr/bin/octavia-health-manager
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-housekeeping /usr/bin/octavia-housekeeping
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-db-manage /usr/bin/octavia-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-driver-agent /usr/bin/octavia-driver-agent
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/octavia-status /usr/bin/octavia-status
+	$(Q)# unlinked on purpose. 2024.1 adds an eighth, octavia-wsgi, for serving the
+	$(Q)# api under a wsgi container; octavia-api.service execs octavia-api directly,
+	$(Q)# so that one is left unlinked too.
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-api /usr/bin/octavia-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-worker /usr/bin/octavia-worker
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-health-manager /usr/bin/octavia-health-manager
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-housekeeping /usr/bin/octavia-housekeeping
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-db-manage /usr/bin/octavia-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-driver-agent /usr/bin/octavia-driver-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-status /usr/bin/octavia-status
 
-# octavia/cmd/status.py reads CONF.oslo_policy in _check_yaml_policy() but never
-# imports octavia.common.policy, which is what registers that group -- it calls
-# oslo_policy.opts.set_defaults() at import time. So `octavia-status upgrade check`
-# dies with "NoSuchOptError: no such option oslo_policy in group [DEFAULT]" before
-# printing any result. Upstream's bug, not this packaging's: RDO's spec carries no
-# patches, so the rpm build fails identically, and master's import list is unchanged.
+# Whole-file downstream copies, if any -- anything under PATCHDIR that is not a
+# *.py.patch or its *.py.orig. Nothing uses this today: both carried changes are
+# unified diffs below.
 rootfs_install::
 	$(Q)[ -d $(OCTAVIA_PATCHDIR) ] && rsync -a --exclude='*.py.patch' --exclude='*.py.orig' $(OCTAVIA_PATCHDIR)/ $(OCTAVIA_SRCDIR)/ || /bin/true
 
@@ -87,6 +124,21 @@ rootfs_install::
 # alongside for review only. Preferred over the whole-file copies above -- a diff
 # shows what we changed, and --forward keeps re-runs idempotent while a failed
 # hunk aborts the build, so upstream drift is caught here rather than shipped.
+#
+# Two are carried:
+#
+#   compute/drivers/nova_driver.py  meta={'HA_Enabled': 'False'} on the amphora
+#                                   boot, so masakari does not evacuate amphorae
+#   cmd/status.py                   import octavia.common.policy, which is what
+#                                   registers the [oslo_policy] group that
+#                                   _check_yaml_policy() reads. Without it
+#                                   `octavia-status upgrade check` dies with
+#                                   "NoSuchOptError: no such option oslo_policy in
+#                                   group [DEFAULT]" before printing any result.
+#                                   Still upstream's bug at 14.0.2 -- the import
+#                                   list is unchanged since 12.0.1, and master's
+#                                   is too. #1206 carried this as a whole-file
+#                                   copy; a diff is what catches the next drift.
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(OCTAVIA_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(OCTAVIA_PATCHDIR)/}; tgt=$(OCTAVIA_SRCDIR)/$${rel%.patch}; \
@@ -104,6 +156,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
+	$(Q)# $(OPENSTACK_HOME_DIR), not the caracal venv: this follows horizon, which
+	$(Q)# has not hopped -- see the note by OCTAVIA_DASHBOARD_VER.
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
@@ -147,15 +201,21 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/octavia/octavia.conf.sample /etc/octavia/octavia.conf
 	$(Q)# policy.yaml reverts the API to the legacy admin-or-owner RBAC, where a
 	$(Q)# project member can manage the load balancers they own. Without it the
-	$(Q)# Antelope default RBAC applies and every non-admin call needs an
+	$(Q)# stock default RBAC applies and every non-admin call needs an
 	$(Q)# explicit load-balancer_* role.
 	$(Q)#
 	$(Q)# This is a verbatim copy of upstream etc/policy/admin_or_owner-policy.yaml
 	$(Q)# (md5 c53952746cfb39f5c66f97bbe3bcb263), which is the same file the RPM
 	$(Q)# delivered: openstack-octavia.spec:234 renames that exact path to
-	$(Q)# /etc/octavia/policy.yaml and the spec carries no patches at all. The
-	$(Q)# 0640 root:octavia set further down matches the %attr the spec put on
-	$(Q)# it, so nothing about the effective RBAC moves with this hop.
+	$(Q)# /etc/octavia/policy.yaml and the spec carries no patches at all. That file
+	$(Q)# is byte-identical at 12.0.1 and 14.0.2, so the caracal hop does not move
+	$(Q)# it either. The 0640 root:octavia set further down matches the %attr the
+	$(Q)# spec put on it, so nothing about the effective RBAC moves with this hop.
+	$(Q)#
+	$(Q)# It has to keep being carried: unlike manila's api-paste.ini or glance's
+	$(Q)# metadefs, octavia's wheel data_files are only share/octavia/{LICENSE,
+	$(Q)# README.rst,diskimage-create/*} -- nothing under etc/ reaches the venv
+	$(Q)# prefix, so there is no installed copy to relocate from.
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/octavia/policy.yaml /etc/octavia/policy.yaml
 	$(Q)# 644, not 640: the units run as User=octavia and must be able to read
 	$(Q)# this. It holds no secrets.
