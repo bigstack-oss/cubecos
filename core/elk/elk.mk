@@ -3,7 +3,7 @@
 
 ifneq (,$(wildcard $(ROOTDIR)))
 ELK_REPO := $(shell chroot $(ROOTDIR) rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch 2>/dev/null && cp $(COREDIR)/elk/elasticsearch/elastic.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "elastic")
-OSEARCH := $(shell chroot $(ROOTDIR) rpm --import https://artifacts.opensearch.org/publickeys/opensearch.pgp && cp $(COREDIR)/elk/opensearch/opensearch.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "opensearch")
+OSEARCH := $(shell chroot $(ROOTDIR) rpm --import https://artifacts.opensearch.org/publickeys/opensearch-release.pgp ; echo "opensearch")
 else
 OSEARCH := $(shell echo "opensearch")
 endif
