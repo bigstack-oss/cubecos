@@ -446,6 +446,27 @@ UpdateCfg(std::string domain, std::string ironicPass, std::string inspPass)
 
         cfg["oslo_messaging_notifications"]["driver"] = "messagingv2";
 
+        // ironic 24.1.5 calls oslo_policy.opts.set_defaults(..., enforce_scope=True,
+        // enforce_new_defaults=True) from ironic/common/policy.py, which 21.4.4 did
+        // not, so the 2024.1 secure-RBAC check strings now apply with no deprecated
+        // fallback. Most of them read SYSTEM_READER, which is
+        //   "(role:reader and system_scope:all) or (role:service and
+        //    system_scope:all) or rule:service_role"
+        // and rule:service_role is
+        //   "role:service and project_name:%(config.service_project_name)s".
+        // That target key only reaches the check context when this option is set --
+        // ironic/common/context.py adds it under
+        // "if CONF.rbac_service_role_elevated_access", and the option defaults to
+        // false, meaning "scope every service-role request to the service account's
+        // own project". So without it the role:service grant #1360 hands out cannot
+        // match anything, and nova's ironic driver reads GET /v1/nodes as an empty
+        // list -- silently, because list_all being refused narrows the query instead
+        // of failing it. The two halves are complementary and this is the ironic one;
+        // the grant itself is #1360 / PR #1362. The option is not a caracal addition
+        // (21.4.4 documents it identically) and it is not a policy override -- the
+        // enforce_* flags stay at whatever the release decides.
+        cfg["DEFAULT"]["rbac_service_role_elevated_access"] = "true";
+
         inspCfg["DEFAULT"]["log_dir"] = "/var/log/ironic-inspector";
         inspCfg["DEFAULT"]["standalone"] = "true";
 
