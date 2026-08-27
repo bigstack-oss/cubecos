@@ -23,7 +23,6 @@ const static char GROUP[] = "opensearch";
 
 const static char NAME[] = "opensearch";
 const static char CONF[] = "/etc/opensearch/opensearch.yml";
-const static char JVM_OPTS[] = "/etc/opensearch/jvm.options.d/cube.options";
 const static char RUNDIR[] = "/run/opensearch";
 const static char CLUSTER_ID[] = "MRMGsDtEMaVqWRFl";
 
@@ -107,7 +106,7 @@ CuratorCronJob(int rp)
 
 static bool
 WriteConfig(const bool ha, const std::string& clusterid, const std::string& ctrl,
-            const std::string& ctrlIp, const std::string& ctrlAddrs, int heap)
+            const std::string& ctrlIp, const std::string& ctrlAddrs)
 {
     if (!IsControl(s_eCubeRole))
         return true;
@@ -152,20 +151,7 @@ WriteConfig(const bool ha, const std::string& clusterid, const std::string& ctrl
     }
 
     fclose(fout);
-/*
-    FILE *fheap = fopen(JVM_OPTS, "w");
-    if (!fout) {
-        HexLogError("Unable to write %s jvm options: %s", NAME, JVM_OPTS);
-        return false;
-    }
 
-    fprintf(fheap, "-Xms%dg\n", heap);
-    fprintf(fheap, "-Xmx%dg\n", heap);
-    fprintf(fheap, "# CVE-2021-44228\n");
-    fprintf(fheap, "-Dlog4j2.formatMsgNoLookups=true\n");
-
-    fclose(fheap);
-*/
     return true;
 }
 
@@ -247,7 +233,7 @@ Commit(bool modified, int dryLevel)
     std::string cId = GetSaltKey(s_saltkey, s_clusterId.newValue(), s_seed.newValue());
     bool enabled = IsControl(s_eCubeRole) && s_enabled;
 
-    WriteConfig(s_ha, cId, s_hostname.newValue(), myip, s_ctrlAddrs.newValue(), s_heapSize);
+    WriteConfig(s_ha, cId, s_hostname.newValue(), myip, s_ctrlAddrs.newValue());
     SystemdCommitService(enabled, NAME, true);
 
     // wait for service ready
