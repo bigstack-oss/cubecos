@@ -222,13 +222,18 @@ rootfs_install::
 #
 # Which venv is the whole difficulty. stevedore only sees entry points registered in
 # the interpreter it is running under, so one python cannot dump them all any more:
-# keystone, nova, cinder, glance and neutron have moved to caracal while masakari and
-# octavia are still antelope. Each list is therefore dumped by the dashboard that
+# keystone, nova, cinder, glance, neutron and octavia have moved to caracal while
+# masakari is still antelope. Each list is therefore dumped by the dashboard that
 # shares its venv. A namespace listed against the venv that does not hold it fails
 # the build with 'The requested namespace "<x>" is not found'; move it to the other
 # list when its service makes the hop.
-HORIZON_POLICY_NS_ANTELOPE := masakari octavia
-HORIZON_POLICY_NS_CARACAL := keystone nova cinder glance neutron
+#
+# Note the octavia entry follows the *service*, not the panel: octavia-dashboard is
+# still installed into the antelope venv beside horizon, but the oslo.policy.policies
+# entry point named "octavia" is registered by the octavia package, and #640 moved
+# that to caracal.
+HORIZON_POLICY_NS_ANTELOPE := masakari
+HORIZON_POLICY_NS_CARACAL := keystone nova cinder glance neutron octavia
 
 # django-admin rather than $(HORIZON_APP_DIR)/manage.py, for both venvs so the two
 # loops stay one shape. manage.py sits in a directory whose horizon and
