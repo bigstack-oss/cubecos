@@ -1,7 +1,7 @@
 # Cube SDK
 # Telegraf installation
 
-TELEGRAF_PKG := telegraf-1.24.4-1.x86_64.rpm
+TELEGRAF_PKG := telegraf-1.30.3-1.x86_64.rpm
 
 ROOTFS_DNF_DL_FROM += https://dl.influxdata.com/telegraf/releases/$(TELEGRAF_PKG)
 
