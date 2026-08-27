@@ -13,7 +13,7 @@ PROJ_EXT := $(MAIN_DIR)/proj.ext
 PKGCLEAN += $(PROJ_EXT)
 NAS := $(TOP_BLDDIR)/nas
 
-AMPHORA := $(TOP_BLDDIR)/../amphora-x64-haproxy_antelope.qcow2
+AMPHORA := $(TOP_BLDDIR)/../amphora-x64-haproxy_caracal.qcow2
 MANILA  := $(TOP_BLDDIR)/../manila-service-image_caracal.qcow2
 RANCHER := $(TOP_BLDDIR)/../rancher-cluster-image-rke2-v1.32.4.raw
 EXTPACK := $(AMPHORA) $(MANILA) $(RANCHER)
@@ -30,12 +30,21 @@ $(NAS):
 	$(Q)[ -d $@ ] || mkdir -p $@
 	$(Q)mount -o ro $(PROJ_NFS_SERVER):$(PROJ_NFS_OPENSTACK_PATH)/ $@
 
+# The amphora image follows the venv, so it moves to app-image/caracal/ with #640.
+# Unlike the manila service image this really is an octavia rebuild -- the guest runs
+# the amphora agent, which speaks a versioned REST API to the controllers and so has
+# to be the same release they are (core/octavia/Makefile builds it from the
+# OCTAVIA_VER tag for exactly that reason).
+# Its .md5 sidecar on the NAS has to be the *bare hash*, i.e.
+# `md5sum <file> | awk '{print $$1}'`: the diff below compares this file byte for
+# byte, so a full-format `md5sum` line never matches and silently re-copies ~340 MB
+# over NFS on every build.
 $(AMPHORA): $(NAS)
-	$(Q)cp $</app-image/antelope/amphora-x64-haproxy_antelope.qcow2 $@
+	$(Q)cp $</app-image/caracal/amphora-x64-haproxy_caracal.qcow2 $@
 
 .PHONY: $(AMPHORA).md5
 $(AMPHORA).md5: $(AMPHORA)
-	$(Q)diff $@ $(NAS)/app-image/antelope/amphora-x64-haproxy_antelope.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/antelope/amphora-x64-haproxy_antelope.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
+	$(Q)diff $@ $(NAS)/app-image/caracal/amphora-x64-haproxy_caracal.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/caracal/amphora-x64-haproxy_caracal.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
 
 # The manila service image follows the venv, so it moves to app-image/caracal/ with
 # #638. The artifact is a base-OS refresh, not a manila rebuild -- the guest runs
