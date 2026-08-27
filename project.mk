@@ -72,7 +72,8 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 # glance (28.2.0) the third (#630), cinder (24.5.0) the fourth (#629), nova with
 # placement (29.4.0 / 11.0.1) the fifth (#627), neutron (24.2.2) the sixth (#628),
 # manila (18.3.0) the seventh (#638), octavia (14.0.2) the eighth (#640),
-# barbican (18.0.0) the ninth (#632), and heat (22.0.1) the tenth (#635).
+# barbican (18.0.0) the ninth (#632), heat (22.0.1) the tenth (#635),
+# and ironic with ironic-inspector (24.1.5 / 12.1.1) the eleventh (#637).
 # The services move one at a time and OPENSTACK_RELEASE is promoted once they all have.
 #
 # barbican leaves a piece behind, the same way octavia does: python-barbicanclient owns
