@@ -20,8 +20,16 @@ BIN := $(TOP_BLDDIR)/core/telegraf/telegraf/telegraf
 #
 # Copy it ourselves from the rpm's own payload, so it stays whatever the packaged version
 # ships and no longer depends on a scriptlet probing the build environment.
+#
+# One line of that payload has to go, though. 1.30 added `ImportCredential=telegraf.*`,
+# a directive systemd only learned in v254; CentOS Stream 9 is on 252, so it logs
+# "Unknown key name 'ImportCredential' in section 'Service', ignoring" -- twice per
+# `systemctl daemon-reload`, which every hex_config commit triggers. A drop-in cannot
+# unset a key the base unit's parser rejected, so it is stripped here instead. Nothing
+# feeds telegraf systemd credentials, so the directive is inert either way.
 rootfs_install::
 	$(Q)cp -f $(ROOTDIR)/usr/lib/telegraf/scripts/telegraf.service $(ROOTDIR)/usr/lib/systemd/system/telegraf.service
+	$(Q)sed -i '/^ImportCredential=/d' $(ROOTDIR)/usr/lib/systemd/system/telegraf.service
 	$(Q)chroot $(ROOTDIR) systemctl disable telegraf
 	$(Q)mv -f $(ROOTDIR)/etc/telegraf/telegraf.conf $(ROOTDIR)/etc/telegraf/telegraf.conf.org
 	$(Q)cp -f $(BIN) $(ROOTDIR)/usr/bin/
