@@ -5,7 +5,7 @@ After=syslog.target network.target
 [Service]
 Type=simple
 User=heat
-# heat comes from pip inside /opt/openstack-antelope; /usr/bin/heat-api is the
+# heat comes from pip inside /opt/openstack-caracal; /usr/bin/heat-api is the
 # symlink heat.mk creates into that venv. Only /etc/heat/heat.conf is loaded --
 # hex_config generates it in full from heat.conf.def, so there is no
 # distribution-level heat-dist.conf in this layout.

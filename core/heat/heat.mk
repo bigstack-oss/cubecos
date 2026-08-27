@@ -11,13 +11,23 @@
 # /usr/bin/openstack was `#!/usr/bin/python3` (3.9) and the copy pip put in the 3.10
 # venv was invisible to it -- an entry point is only visible to the interpreter it
 # was installed under. core/heavyfs moved the CLI into the venv, so the plugin
-# follows it: it is named on the pip install below instead, next to the service.
+# followed it.
 #
-# Dropping the rpm also drops /usr/bin/heat, the client's own CLI, which this file had
-# left unlinked on purpose while the rpm was the one supplying it. Nothing in this tree
-# calls it, but it has always been on the image for operators, so the venv's bin/heat is
-# linked below to keep that. /usr/bin/heat-3, the Fedora python3 alias, is not
-# recreated -- no other venv console script here is aliased that way.
+# It stays in the *antelope* venv now that heat itself has moved to caracal, for that
+# same entry-point reason: core/heavyfs still links /usr/bin/openstack at
+# $(OPENSTACK_HOME_DIR), so the `orchestration` plugin has to be installed under that
+# interpreter or health_heat_check() breaks again. heat's own requirements.txt names
+# python-heatclient, so the caracal venv gets a 3.5.0 copy of its own; the antelope
+# one is what /usr/bin/openstack sees, and its 3.2.0 talks to a 22.0.1 API, which is
+# the supported direction -- `orchestration service list` is /v1/{tenant}/services
+# and predates 2023.1. Named explicitly rather than left transitive because nothing
+# in the antelope venv would pull it any more.
+#
+# /usr/bin/heat, the client's own CLI, therefore also stays on the antelope venv: it
+# is python-heatclient's console script, not heat's. Nothing in this tree calls it,
+# but it has always been on the image for operators. /usr/bin/heat-3, the Fedora
+# python3 alias, is not recreated -- no other venv console script here is aliased
+# that way.
 #
 # Nothing else is needed: the RDO spec's only non-python Requires was
 # shadow-utils, for the heat user and group, and core/heavyfs/account/centos9
@@ -26,43 +36,56 @@
 # openstack-heat-ui, the Horizon dashboard plugin, is replaced by the
 # heat-dashboard wheel installed further down. It was dropped when heat moved to
 # pip because horizon was still on python 3.9; #609 moved horizon into the venv, so
-# the Orchestration panels come back here.
+# the Orchestration panels come back here. That wheel does *not* follow heat to
+# caracal -- see the note above it.
 
 HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 
 # the release is needed twice: once to pin the wheel, once for [revision] heat_revision
-HEAT_VER := 20.0.1
+# https://releases.openstack.org/caracal/index.html#caracal-heat -- last numeric
+# 2024.1 revision, the same rule #1191 used to land on 20.0.1.
+HEAT_VER := 22.0.1
 
-# https://releases.openstack.org/antelope/index.html -- last numeric 2023.1
-# revision. Horizon plugins are not in the antelope upper-constraints (that file
-# only covers libraries), so the pin has to be explicit.
+# Deliberately still the 2023.1 pin, and deliberately still in the antelope venv.
+# core/horizon/horizon.mk serves the dashboard out of $(OPENSTACK_HOME_DIR) --
+# openstack-dashboard.service, gunicorn-config.py and the httpd reverse proxy all
+# point at the antelope tree, and every dashboard plugin installs next to it.
+# heat-dashboard follows horizon, not the heat service, so the Orchestration panels
+# stay on 9.0.0 until horizon itself hops; 11.0.1 is the caracal release to move to
+# on that day. It talks to the API over HTTP through heatclient and imports nothing
+# from heat, so the split costs nothing. Horizon plugins are not in the
+# upper-constraints (that file only covers libraries), so the pin has to be explicit.
 HEAT_DASHBOARD_VER := 9.0.0
 
 # install heat
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)# python-heatclient is the "orchestration" osc plugin, named explicitly rather
-	$(Q)# than left transitive -- see the note at the top of this file.
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			openstack-heat==$(HEAT_VER)"
+	$(Q)# and the "orchestration" osc plugin in the antelope venv: that entry point is
+	$(Q)# only visible to the interpreter /usr/bin/openstack runs under, and that is
+	$(Q)# still the antelope one -- see the note at the top of this file.
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
 		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			openstack-heat==$(HEAT_VER) \
 			python-heatclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)# Link the six console scripts heat declares, plus heat itself -- the client
-	$(Q)# CLI, which python3-heatclient used to own at this same path. The venv also
-	$(Q)# gains heat-db-setup and heat-keystone-setup{,-domain} (manual deployment
-	$(Q)# helpers that hex_config replaces) and heat-wsgi-api{,-cfn} (only used when
-	$(Q)# heat is hosted under a wsgi server, which is not the layout here); those
-	$(Q)# are left unlinked on purpose.
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat /usr/bin/heat
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-all /usr/bin/heat-all
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-api /usr/bin/heat-api
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-api-cfn /usr/bin/heat-api-cfn
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-engine /usr/bin/heat-engine
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-manage /usr/bin/heat-manage
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/heat-status /usr/bin/heat-status
+	$(Q)# Link the six console scripts heat declares. The venv also gains
+	$(Q)# heat-db-setup and heat-keystone-setup{,-domain} (manual deployment helpers
+	$(Q)# that hex_config replaces) and heat-wsgi-api{,-cfn} (only used when heat is
+	$(Q)# hosted under a wsgi server, which is not the layout here); those are left
+	$(Q)# unlinked on purpose. 2024.1 adds none and removes none.
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-all /usr/bin/heat-all
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-api /usr/bin/heat-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-api-cfn /usr/bin/heat-api-cfn
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-engine /usr/bin/heat-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-manage /usr/bin/heat-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-status /usr/bin/heat-status
+	$(Q)# the heatclient CLI, which is python-heatclient's console script and so
+	$(Q)# follows the antelope install above, not heat.
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
 
 # prepare the build directory
 rootfs_install::
@@ -90,10 +113,12 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/heat/heat.conf.sample /etc/heat/heat.conf
 	$(Q)# api-paste.ini, environment.d and templates ship inside the wheel, so
 	$(Q)# pip lands them under the venv prefix; relocate them into /etc/heat the
-	$(Q)# same way the RDO spec's %install does.
-	$(Q)chroot $(ROOTDIR) cp -f /opt/openstack-antelope/etc/heat/api-paste.ini /etc/heat/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -rf /opt/openstack-antelope/etc/heat/environment.d /etc/heat/
-	$(Q)chroot $(ROOTDIR) cp -rf /opt/openstack-antelope/etc/heat/templates /etc/heat/
+	$(Q)# same way the RDO spec's %install does. All three are byte-identical
+	$(Q)# between 20.0.1 and 22.0.1, and heat's data_files list is unchanged, so
+	$(Q)# the hop moves only where they are read from.
+	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/heat/api-paste.ini /etc/heat/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -rf $(CARACAL_OPENSTACK_HOME_DIR)/etc/heat/environment.d /etc/heat/
+	$(Q)chroot $(ROOTDIR) cp -rf $(CARACAL_OPENSTACK_HOME_DIR)/etc/heat/templates /etc/heat/
 	$(Q)# install systemd unit files
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/heat/openstack-heat-api.service /usr/lib/systemd/system/openstack-heat-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/heat/openstack-heat-api-cfn.service /usr/lib/systemd/system/openstack-heat-api-cfn.service
@@ -140,11 +165,16 @@ rootfs_install::
 # install the heat web ui plugin, the openstack-heat-ui rpm's replacement.
 # Registering its panels, settings snippet and policy files is core/horizon's job:
 # every dashboard action lives there, because horizon is built last and is what runs
-# collectstatic and compress.
+# collectstatic and compress. Unlike the other components' panels this one needs no
+# entry in HORIZON_POLICY_NS_*: heat-dashboard ships a pre-generated
+# conf/default_policies/heat.yaml, so horizon copies it instead of dumping the
+# `heat` oslo.policy namespace out of a venv.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
+	$(Q)# $(OPENSTACK_HOME_DIR), not the caracal venv: this follows horizon, which
+	$(Q)# has not hopped -- see the note by HEAT_DASHBOARD_VER.
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
