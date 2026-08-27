@@ -32,6 +32,12 @@
 # Note: This option can be changed without restarting.
 #default_resource_class = <None>
 
+# The conductor_group to use for new nodes when no
+# conductor_group was defined in the creation request. (string
+# value)
+# Note: This option can be changed without restarting.
+#default_conductor_group =
+
 # Specify the list of hardware types to load during service
 # initialization. Missing hardware types, or hardware types
 # which fail to initialize, will prevent the conductor service
@@ -131,6 +137,29 @@
 # enumerating the "ironic.hardware.interfaces.deploy"
 # entrypoint. (string value)
 #default_deploy_interface = <None>
+
+# Specify the list of firmware interfaces to load during
+# service initialization. Missing firmware interfaces, or
+# firmware interfaces which fail to initialize, will prevent
+# the ironic-conductor service from starting. At least one
+# firmware interface that is supported by each enabled
+# hardware type must be enabled here, or the ironic-conductor
+# service will not start. Must not be an empty list. The
+# default value is a recommended set of production-oriented
+# firmware interfaces. A complete list of firmware interfaces
+# present on your system may be found by enumerating the
+# "ironic.hardware.interfaces.firmware" entrypoint. When
+# setting this value, please make sure that every enabled
+# hardware type will have the same set of enabled firmware
+# interfaces on every ironic-conductor service. (list value)
+#enabled_firmware_interfaces = no-firmware
+
+# Default firmware interface to be used for nodes that do not
+# have firmware_interface field set. A complete list of
+# firmware interfaces present on your system may be found by
+# enumerating the "ironic.hardware.interfaces.firmware"
+# entrypoint. (string value)
+#default_firmware_interface = <None>
 
 # Specify the list of inspect interfaces to load during
 # service initialization. Missing inspect interfaces, or
@@ -496,11 +525,19 @@
 # yoga - "yoga" release
 # antelope - "antelope" release
 # 9.2 - "9.2" release
+# 24.1 - "24.1" release
+# 24.0 - "24.0" release
+# 23.1 - "23.1" release
+# 23.0 - "23.0" release
+# 22.1 - "22.1" release
+# 22.0 - "22.0" release
 # 21.4 - "21.4" release
 # 21.3 - "21.3" release
 # 21.2 - "21.2" release
 # 21.1 - "21.1" release
 # 21.0 - "21.0" release
+# 2024.1 - "2024.1" release
+# 2023.2 - "2023.2" release
 # 2023.1 - "2023.1" release
 # 20.2 - "20.2" release
 # 20.1 - "20.1" release
@@ -561,9 +598,12 @@
 # Note: This option can be changed without restarting.
 #minimum_memory_wait_retries = 6
 
-# Path to the rootwrap configuration file to use for running
-# commands as root. (string value)
-#rootwrap_config = /etc/ironic/rootwrap.conf
+# Timeout (seconds) after which a server will exit from a
+# drain shutdown. Drain shutdowns are triggered by sending the
+# signal SIGUSR2. Zero value means shutdown will never be
+# triggered by a timeout. (integer value)
+# Note: This option can be changed without restarting.
+#drain_shutdown_timeout = 1800
 
 # Temporary working directory, default is Python temp dir.
 # (string value)
@@ -587,8 +627,9 @@
 # Note: This option can be changed without restarting.
 #webserver_verify_ca = True
 
-# Connection timeout when accessing remote web servers with
-# images. (integer value)
+# Connection timeout when accessing/interacting with remote
+# web servers with images or other artifacts being accessed.
+# (integer value)
 #webserver_connection_timeout = 60
 
 # Enable elevated access for users with service role belonging
@@ -624,20 +665,20 @@
 # times. Changing the algorithm requires an offline update.
 # (string value)
 # Possible values:
-# shake_256 - <No description provided>
-# blake2s - <No description provided>
-# sha256 - <No description provided>
-# sha512 - <No description provided>
-# shake_128 - <No description provided>
-# sha3_224 - <No description provided>
 # sha3_512 - <No description provided>
-# md5 - <No description provided>
-# sha3_384 - <No description provided>
-# sha224 - <No description provided>
-# blake2b - <No description provided>
-# sha3_256 - <No description provided>
+# shake_128 - <No description provided>
 # sha384 - <No description provided>
+# sha3_224 - <No description provided>
+# sha512 - <No description provided>
+# blake2s - <No description provided>
+# sha3_384 - <No description provided>
+# sha3_256 - <No description provided>
+# shake_256 - <No description provided>
+# sha224 - <No description provided>
 # sha1 - <No description provided>
+# sha256 - <No description provided>
+# blake2b - <No description provided>
+# md5 - <No description provided>
 # Advanced Option: intended for advanced users and not used
 # by the majority of users, and might have a significant
 # effect on stability and/or performance.
@@ -714,7 +755,10 @@
 # log_config_append is set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This
@@ -773,7 +817,7 @@
 
 # List of package logging levels in logger=LEVEL pairs. This
 # option is ignored if log_config_append is set. (list value)
-#default_log_levels = amqp=WARNING,amqplib=WARNING,qpid.messaging=INFO,oslo.messaging=INFO,oslo_messaging=INFO,sqlalchemy=WARNING,stevedore=INFO,eventlet.wsgi.server=INFO,iso8601=WARNING,requests=WARNING,glanceclient=WARNING,urllib3.connectionpool=WARNING,keystonemiddleware.auth_token=INFO,keystoneauth.session=INFO,openstack=WARNING,oslo_policy=WARNING,oslo_concurrency.lockutils=WARNING
+#default_log_levels = amqp=WARNING,amqplib=WARNING,qpid.messaging=INFO,oslo.messaging=INFO,oslo_messaging=INFO,stevedore=INFO,eventlet.wsgi.server=INFO,iso8601=WARNING,requests=WARNING,glanceclient=WARNING,urllib3.connectionpool=WARNING,keystonemiddleware.auth_token=INFO,keystoneauth.session=INFO,openstack=WARNING,oslo_policy=WARNING,oslo_concurrency.lockutils=WARNING
 
 # Enables or disables publication of error events. (boolean
 # value)
@@ -1038,6 +1082,12 @@
 # (string value)
 #api_ca_file = <None>
 
+# When enabled, the agent will be notified it is permitted to
+# consider MD5 checksums. This option is expected to change to
+# a default of False in a 2024 release of Ironic. (boolean
+# value)
+#allow_md5_checksum = true
+
 
 [anaconda]
 
@@ -1056,7 +1106,7 @@
 # not. This option exists largely to facilitate easy testing
 # and use of the ``anaconda`` deployment interface. When this
 # option is set, heartbeat operations, depending on the
-# contents of the utilized kickstart template, may not enfore
+# contents of the utilized kickstart template, may not enforce
 # TLS certificate verification. (boolean value)
 # Note: This option can be changed without restarting.
 #insecure_heartbeat = false
@@ -1251,7 +1301,7 @@
 #network_data_schema = $pybasedir/api/controllers/v1/network-data-schema.json
 
 # If a project scoped administrative user is permitted to
-# create/delte baremetal nodes in their project. (boolean
+# create/delete baremetal nodes in their project. (boolean
 # value)
 # Note: This option can be changed without restarting.
 #project_admin_can_manage_own_nodes = true
@@ -1411,6 +1461,10 @@
 # value)
 #region_name = <None>
 
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
+
 # Client retries in the case of a failed request connection.
 # (integer value)
 #retries = 3
@@ -1486,7 +1540,15 @@
 # `sync_power_state_workers` will take up to 7 green threads
 # with the default value of 8. (integer value)
 # Minimum value: 3
-#workers_pool_size = 100
+#workers_pool_size = 300
+
+# The percentage of the whole workers pool that will be kept
+# for API requests and other important tasks. This part of the
+# pool will not be used for periodic tasks or agent
+# heartbeats. Set to 0 to disable. (integer value)
+# Minimum value: 0
+# Maximum value: 50
+#reserved_workers_pool_percentage = 5
 
 # Seconds between conductor heart beats. (integer value)
 #heartbeat_interval = 10
@@ -1672,6 +1734,18 @@
 # Note: This option can be changed without restarting.
 #deploy_ramdisk = <None>
 
+# A dictionary of key-value pairs of each architecture with
+# the Glance ID, http:// or file:// URL of the kernel of the
+# default deploy image. (dict value)
+# Note: This option can be changed without restarting.
+#deploy_kernel_by_arch =
+
+# A dictionary of key-value pairs of each architecture with
+# the Glance ID, http:// or file:// URL of the initramfs of
+# the default deploy image. (dict value)
+# Note: This option can be changed without restarting.
+#deploy_ramdisk_by_arch =
+
 # Glance ID, http:// or file:// URL of the kernel of the
 # default rescue image. (string value)
 # Note: This option can be changed without restarting.
@@ -1681,6 +1755,18 @@
 # default rescue image. (string value)
 # Note: This option can be changed without restarting.
 #rescue_ramdisk = <None>
+
+# A dictionary of key-value pairs of each architecture with
+# the Glance ID, http:// or file:// URL of the kernel of the
+# default rescue image. (dict value)
+# Note: This option can be changed without restarting.
+#rescue_kernel_by_arch =
+
+# A dictionary of key-value pairs of each architecture with
+# the Glance ID, http:// or file:// URL of the initramfs of
+# the default rescue image. (dict value)
+# Note: This option can be changed without restarting.
+#rescue_ramdisk_by_arch =
 
 # Password hash algorithm to be used for the rescue password.
 # (string value)
@@ -1804,6 +1890,40 @@
 # Note: This option can be changed without restarting.
 #max_concurrent_clean = 50
 
+# If True power off nodes in the ``clean failed`` state.
+# Default False. Option may be unsafe when using Cleaning to
+# perform hardware-transformative actions such as firmware
+# upgrade. (boolean value)
+#poweroff_in_cleanfail = false
+
+# If True power off nodes in the ``service failed`` state.
+# Default False. Option may be unsafe when using service to
+# perform hardware-transformative actions such as firmware
+# upgrade. (boolean value)
+#poweroff_in_servicefail = false
+
+# This option allows child node steps to not error if the
+# resulting step execution returned a "wait" state. Under
+# normal conditions, child nodes are not expected to request a
+# wait state. This option exists for operators to use if
+# needed to perform specific tasks where this is known
+# acceptable. Use at yourown risk! (boolean value)
+# Note: This option can be changed without restarting.
+#permit_child_node_step_async_result = false
+
+# The maximum number of seconds which a step can be requested
+# to explicitly sleep or wait. This value should be changed
+# sparingly as it holds a conductor thread and if used across
+# many nodes at once can exhaust a conductor's resources.
+# Thiscapability has a hard coded maximum wait of 1800
+# seconds, or 30 minutes. If you need to wait longer than the
+# maximum value, we recommend exploring hold steps. (integer
+# value)
+# Minimum value: 0
+# Maximum value: 1800
+# Note: This option can be changed without restarting.
+#max_conductor_wait_step_seconds = 30
+
 # Security Option to permit an operator to disable file
 # content inspections. Under normal conditions, the conductor
 # will inspect requested image contents which are transferred
@@ -1853,6 +1973,17 @@
 # create a more secure environment, however it may break users
 # in an unexpected fashion. (boolean value)
 #disable_support_for_checksum_files = false
+
+# List of paths that are allowed to be used as file:// URLs.
+# Files in /boot, /dev, /etc, /proc, /sys and othersystem
+# paths are always disallowed for security reasons. Any files
+# in this path readable by ironic may be used as an image
+# source when deploying. Setting this value to "" (empty)
+# disables file:// URL support. Paths listed here are
+# validated as absolute paths and will be rejectedif they
+# contain path traversal mechanisms, such as "..". (list
+# value)
+#file_url_allowed_paths = /var/lib/ironic,/shared/html,/templates,/opt/cache/files,/vagrant
 
 
 [console]
@@ -1949,6 +2080,17 @@
 # MySQL engine to use. (string value)
 #mysql_engine = InnoDB
 
+# If SQLite database operation retry logic is enabled or not.
+# Enabled by default. (boolean value)
+#sqlite_retries = true
+
+# Maximum number of seconds to retry SQLite database locks,
+# after which the original exception will be returned to the
+# caller. This does not presently apply to internal node lock
+# release actions and DB actions centered around the
+# completion of tasks. (integer value)
+#sqlite_max_wait_for_retry = 10
+
 #
 # From oslo.db
 #
@@ -1957,14 +2099,10 @@
 #sqlite_synchronous = true
 
 # The back end to use for the database. (string value)
-# Deprecated group/name - [DEFAULT]/db_backend
 #backend = sqlalchemy
 
 # The SQLAlchemy connection string to use to connect to the
 # database. (string value)
-# Deprecated group/name - [DEFAULT]/sql_connection
-# Deprecated group/name - [DATABASE]/sql_connection
-# Deprecated group/name - [sql]/connection
 #connection = <None>
 
 # The SQLAlchemy connection string to use to connect to the
@@ -1983,14 +2121,6 @@
 # configure any setting. (integer value)
 #mysql_wsrep_sync_wait = <None>
 
-# DEPRECATED: If True, transparently enables support for
-# handling MySQL Cluster (NDB). (boolean value)
-# This option is deprecated for removal since 12.1.0.
-# Its value may be silently ignored in the future.
-# Reason: Support for the MySQL NDB Cluster storage engine has
-# been deprecated and will be removed in a future release.
-#mysql_enable_ndb = false
-
 # Connections which have been present in the connection pool
 # longer than this number of seconds will be replaced with a
 # new one the next time they are checked out from the pool.
@@ -2004,37 +2134,28 @@
 # Maximum number of database connection retries during
 # startup. Set to -1 to specify an infinite retry count.
 # (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_retries
-# Deprecated group/name - [DATABASE]/sql_max_retries
 #max_retries = 10
 
 # Interval between retries of opening a SQL connection.
 # (integer value)
-# Deprecated group/name - [DEFAULT]/sql_retry_interval
-# Deprecated group/name - [DATABASE]/reconnect_interval
 #retry_interval = 10
 
 # If set, use this value for max_overflow with SQLAlchemy.
 # (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_overflow
-# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
 #max_overflow = 50
 
 # Verbosity of SQL debugging information: 0=None,
 # 100=Everything. (integer value)
 # Minimum value: 0
 # Maximum value: 100
-# Deprecated group/name - [DEFAULT]/sql_connection_debug
 #connection_debug = 0
 
 # Add Python stack traces to SQL as comment strings. (boolean
 # value)
-# Deprecated group/name - [DEFAULT]/sql_connection_trace
 #connection_trace = false
 
 # If set, use this value for pool_timeout with SQLAlchemy.
 # (integer value)
-# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
 #pool_timeout = <None>
 
 # Enable the experimental use of database reconnect on
@@ -2077,6 +2198,31 @@
 
 # ironic-conductor node's HTTP root path. (string value)
 #http_root = /httpboot
+
+# Used to select authentication strategy against the image
+# hosting HTTP(S) server. When set to http_basic it enables
+# HTTP(S) Basic Authentication. Exception is thrown in case of
+# missing credentials. When this option has a valid value such
+# as http_basic, the same single set of credentials will be
+# used against all user-image sources! Currently only the
+# http_basic option has any functionality. (string value)
+# Possible values:
+# noauth - No authentication
+# http_basic - HTTP Basic authentication
+# Note: This option can be changed without restarting.
+#image_server_auth_strategy = noauth
+
+# Can be used by any authentication strategy that requires
+# username credential. Currently utilized by the http_basic
+# authentication strategy. (string value)
+# Note: This option can be changed without restarting.
+#image_server_user = <None>
+
+# Can be used by any authentication strategy that requires
+# password credential. Currently utilized by the http_basic
+# authentication strategy. (string value)
+# Note: This option can be changed without restarting.
+#image_server_password = <None>
 
 # URL of the ironic-conductor node's HTTP server for boot
 # methods such as virtual media, where images could be served
@@ -2303,29 +2449,8 @@
 #image_convert_attempts = 3
 
 #
-# From ironic_lib.disk_utils
+# From ironic_lib.qemu_img
 #
-
-# Size of EFI system partition in MiB when configuring UEFI
-# systems for local boot. (integer value)
-#efi_system_partition_size = 200
-
-# Size of BIOS Boot partition in MiB when configuring GPT
-# partitioned systems for local boot in BIOS. (integer value)
-#bios_boot_partition_size = 1
-
-# Block size to use when writing to the nodes disk. (string
-# value)
-#dd_block_size = 1M
-
-# Maximum attempts to detect a newly created partition.
-# (integer value)
-# Minimum value: 1
-#partition_detection_attempts = 3
-
-# Maximum number of attempts to try to read the partition.
-# (integer value)
-#partprobe_attempts = 10
 
 # Memory limit for "qemu-img convert" in MiB. Implemented via
 # the address space resource limit. (integer value)
@@ -2478,6 +2603,10 @@
 # The default region_name for endpoint URL discovery. (string
 # value)
 #region_name = <None>
+
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
 
 # The default service_name for endpoint URL discovery. (string
 # value)
@@ -2651,6 +2780,14 @@
 # value)
 #backends =
 
+# A list of network addresses to limit source ip allowed to
+# access healthcheck information. Any request from ip outside
+# of these network addresses are ignored. (list value)
+#allowed_source_ranges =
+
+# Ignore requests with proxy headers. (boolean value)
+#ignore_proxied_requests = false
+
 # Check the presence of a file to determine if an application
 # is running on a port. Used by DisableByFileHealthcheck
 # plugin. (string value)
@@ -2773,7 +2910,7 @@
 # `instance_info/kernel_append_params` property. (string
 # value)
 # Note: This option can be changed without restarting.
-#kernel_append_params = nofb nomodeset vga=normal
+#kernel_append_params = nofb vga=normal
 
 # On the ironic-conductor node, directory where ilo driver
 # stores the CSR and the cert. (string value)
@@ -2785,6 +2922,15 @@
 #
 # From ironic
 #
+
+# Which MAC addresses to add as ports during inspection.
+# (string value)
+# Possible values:
+# all - all MAC addresses
+# active - MAC addresses of NICs with IP addresses
+# pxe - only the MAC address of the PXE NIC
+# disabled - do not create any ports
+#add_ports = pxe
 
 # Authentication URL (string value)
 #auth_url = <None>
@@ -2818,6 +2964,11 @@
 # point value)
 #connect_retry_delay = <None>
 
+# Mapping between a CPU flag and a node capability to set if
+# this CPU flag is present. This configuration option is used
+# by the "cpu-capabilities" inspection hook. (dict value)
+#cpu_capabilities = aes:cpu_aes,pdpe1gb:cpu_hugepages_1g,pse:cpu_hugepages,smx:cpu_txt,svm:cpu_vt,vmx:cpu_vt
+
 # Optional domain ID to use with v3 and v2 parameters. It will
 # be used for both the user and project domain in v3 and
 # ignored in v2 authentication. (string value)
@@ -2827,6 +2978,21 @@
 # It will be used for both the user and project domain in v3
 # and ignored in v2 authentication. (string value)
 #default_domain_name = <None>
+
+# A comma-separated lists of inspection hooks that are run by
+# default. In most cases, the operators will not modify this.
+# The default (somewhat conservative) hooks will raise an
+# exception in case the ramdisk reports an error, validate
+# interfaces in the inventory, create ports and set the node's
+# cpu architecture property. (string value)
+#default_hooks = ramdisk-error,validate-interfaces,ports,architecture
+
+# Whether to leave 1 GiB of disk size untouched for
+# partitioning. Only has effect when used with the IPA as a
+# ramdisk, for older ramdisk local_gb is calculated on the
+# ramdisk side. This configuration option is used by the
+# "root-device" inspection hook. (boolean value)
+#disk_partitioning_spacing = true
 
 # Domain ID to scope to (string value)
 #domain_id = <None>
@@ -2840,16 +3006,44 @@
 # version`, and/or `max-version` options. (string value)
 #endpoint_override = <None>
 
+# If True, refuse to parse extra data (in plugin_data) if at
+# least one record is too short. Additionally, remove the
+# incoming "data" even if parsing failed. This configuration
+# option is used by the "extra-hardware" inspection hook.
+# (boolean value)
+#extra_hardware_strict = false
+
 # extra kernel parameters to pass to the inspection ramdisk
 # when boot is managed by ironic (not ironic-inspector). Pairs
 # key=value separated by spaces. (string value)
 #extra_kernel_params =
 
+# Comma-separated list of enabled hooks for processing
+# pipeline. The default for this is $default_hooks. Hooks can
+# be added before or after the defaults like this:
+# "prehook,$default_hooks,posthook". (string value)
+#hooks = $default_hooks
+
 # Verify HTTPS connections. (boolean value)
 #insecure = false
 
+# Which ports (already present on a node) to keep after
+# inspection. (string value)
+# Possible values:
+# all - keep all ports, even ones with MAC addresses that are
+# not present in the inventory
+# present - keep only ports with MAC addresses present in the
+# inventory
+# added - keep only ports determined by the add_ports option
+#keep_ports = all
+
 # PEM encoded client certificate key file (string value)
 #keyfile = <None>
+
+# Path to the file which contains the known accelerator
+# devices, to be used by the "accelerators" inspection hook.
+# (string value)
+#known_accelerators = $pybasedir/drivers/modules/inspector/hooks/known_accelerators.yaml
 
 # The maximum major version of a given API, intended to be
 # used as the upper bound of a range with min_version.
@@ -2865,6 +3059,22 @@
 
 # User's password (string value)
 #password = <None>
+
+# An alias for a PCI device identified by 'vendor_id' and
+# 'product_id' fields. Format: {"vendor_id": "1234",
+# "product_id": "5678", "name": "pci_dev1"}. Use double quotes
+# for the keys and values. (multi valued)
+#pci_device_alias =
+
+# Mapping of IP subnet CIDR to physical network. When the
+# phyical-network inspection hook is enabled, the
+# "physical_network" property of corresponding baremetal ports
+# is populated based on this mapping. (list value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#physical_network_cidr_map = 10.10.10.0/24:physnet_a,2001:db8::/64:physnet_b
 
 # whether to power off a node after inspection finishes.
 # Ignored for nodes that have fast track mode enabled.
@@ -2890,10 +3100,18 @@
 #region_name = <None>
 
 # require that the in-band inspection boot is fully managed by
-# ironic. Set this to True if your installation of ironic-
-# inspector does not have a separate PXE boot environment.
-# (boolean value)
-#require_managed_boot = false
+# the node's boot interface. Set this to False if your
+# installation has a separate (i)PXE boot environment for node
+# discovery or unmanaged inspection. You may need to set it to
+# False to inspect nodes that are not supported by boot
+# interfaces (e.g. because they don't have ports). The default
+# value depends on which inspect interface is used: inspector
+# uses False, agent - True. (boolean value)
+#require_managed_boot = <None>
+
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
 
 # The default service_name for endpoint URL discovery. (string
 # value)
@@ -2935,6 +3153,10 @@
 # ID of the trust to use as a trustee use (string value)
 #trust_id = <None>
 
+# Whether to update the ports' pxe_enabled field according to
+# the inspection data. (boolean value)
+#update_pxe_enabled = true
+
 # User's domain id (string value)
 #user_domain_id = <None>
 
@@ -2964,16 +3186,16 @@
 # From ironic
 #
 
-# The storage backend for storing introspection data. (string
+# The storage backend for storing inspection data. (string
 # value)
 # Possible values:
-# none - introspection data will not be stored
-# database - introspection data stored in an SQL database
-# swift - introspection data stored in Swift
+# none - do not store inspection data
+# database - store in the service database
+# swift - store in the Object Storage (swift)
 #data_backend = database
 
-# The Swift introspection data container to store the
-# inventory data. (string value)
+# The Swift container prefix to store the inspection data
+# (separately inventory and plugin data). (string value)
 #swift_data_container = introspection_data_container
 
 
@@ -3249,6 +3471,14 @@
 
 # List of roles allowed to use JSON RPC (list value)
 #allowed_roles = admin
+
+# Unix socket to listen on. Disables host_ip and port. (string
+# value)
+#unix_socket = <None>
+
+# File mode (an octal number) of the unix socket to listen on.
+# Ignored if unix_socket is not set. (integer value)
+#unix_socket_mode = <None>
 
 # Authentication URL (string value)
 #auth_url = <None>
@@ -3862,6 +4092,10 @@
 # Note: This option can be changed without restarting.
 #rescuing_network_security_groups =
 
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
+
 # DEPRECATED: Client retries in the case of a failed request.
 # (integer value)
 # Note: This option can be changed without restarting.
@@ -3878,6 +4112,23 @@
 # The default service_type for endpoint URL discovery. (string
 # value)
 #service_type = network
+
+# Neutron network UUID or name for booting the ramdisk for
+# service mode. Required for "neutron" network interface, if
+# service mode will be used. It is not used for the "flat" or
+# "noop" network interfaces. If a name is provided, it must be
+# unique among all networks or service will fail. (string
+# value)
+# Note: This option can be changed without restarting.
+#servicing_network = <None>
+
+# List of Neutron Security Group UUIDs to be applied during
+# the node service process. Optional for the "neutron" network
+# interface and not used for the "flat" or "noop" network
+# interfaces. If not specified, the default security group is
+# used. (list value)
+# Note: This option can be changed without restarting.
+#servicing_network_security_groups =
 
 # Log requests to multiple loggers. (boolean value)
 #split_loggers = false
@@ -4023,6 +4274,10 @@
 # The default region_name for endpoint URL discovery. (string
 # value)
 #region_name = <None>
+
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
 
 # When set to True, it will enable the support for power state
 # change callbacks to nova. This option should be set to False
@@ -4554,10 +4809,16 @@
 # Raft consensus algorithm. It is available as of RabbitMQ
 # 3.8.0. If set this option will conflict with the HA queues
 # (``rabbit_ha_queues``) aka mirrored queues, in other words
-# the HA queues should be disabled, quorum queues durable by
-# default so the amqp_durable_queues opion is ignored when
-# this option enabled. (boolean value)
+# the HA queues should be disabled. Quorum queues are also
+# durable by default so the amqp_durable_queues option is
+# ignored when this option is enabled. (boolean value)
 #rabbit_quorum_queue = false
+
+# Use quorum queues for transients queues in RabbitMQ.
+# Enabling this option will then make sure those queues are
+# also using quorum kind of rabbit queues, which are HA by
+# default. (boolean value)
+#rabbit_transient_quorum_queue = false
 
 # Each time a message is redelivered to a consumer, a counter
 # is incremented. Once the redelivery count exceeds the
@@ -4587,8 +4848,12 @@
 # Positive integer representing duration in seconds for queue
 # TTL (x-expires). Queues which are unused for the duration of
 # the TTL are automatically deleted. The parameter affects
-# only reply and fanout queues. (integer value)
-# Minimum value: 1
+# only reply and fanout queues. Setting 0 as value will
+# disable the x-expires. If doing so, make sure you have a
+# rabbitmq policy to delete the queues or you deployment will
+# create an infinite number of queue over time. (integer
+# value)
+# Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
 # Specifies the number of messages to prefetch. Setting to
@@ -4602,7 +4867,7 @@
 
 # How often times during the heartbeat_timeout_threshold we
 # check the heartbeat. (integer value)
-#heartbeat_rate = 2
+#heartbeat_rate = 3
 
 # DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ
 # mandatory flag for direct send. The direct send is used as
@@ -4621,6 +4886,24 @@
 # will cancel and notify consumerswhen queue is down (boolean
 # value)
 #enable_cancel_on_failover = false
+
+# Should we use consistant queue names or random ones (boolean
+# value)
+#use_queue_manager = false
+
+# Hostname used by queue manager (string value)
+#hostname = centos9_cubecos_jim_200.13-1cc
+
+# Process name used by queue manager (string value)
+#processname = oslo-config-generator
+
+# Use stream queues in RabbitMQ (x-queue-type: stream).
+# Streams are a new persistent and replicated data structure
+# ("queue type") in RabbitMQ which models an append-only log
+# with non-destructive consumer semantics. It is available as
+# of RabbitMQ 3.9.0. If set this option will replace all
+# fanout queues with only one stream queue. (boolean value)
+#rabbit_stream_fanout = false
 
 
 [oslo_middleware]
@@ -4729,6 +5012,16 @@
 #file_event_handler_interval = 1
 
 
+[oslo_versionedobjects]
+
+#
+# From oslo.versionedobjects
+#
+
+# Make exception message format errors fatal (boolean value)
+#fatal_exception_format_errors = false
+
+
 [profiler]
 
 #
@@ -4770,6 +5063,20 @@
 # analyzed this way.
 #  (boolean value)
 #trace_sqlalchemy = false
+
+#
+# Enable python requests package profiling.
+#
+# Supported drivers: jaeger+otlp
+#
+# Default value is False.
+#
+# Possible values:
+#
+# * True: Enables requests profiling.
+# * False: Disables requests profiling.
+#  (boolean value)
+#trace_requests = false
 
 #
 # Secret key(s) to use for encrypting context data for
@@ -4869,6 +5176,35 @@
 #filter_error_trace = false
 
 
+[profiler_jaeger]
+
+#
+# From osprofiler
+#
+
+#
+# Set service name prefix to Jaeger service name.
+#  (string value)
+#service_name_prefix = <None>
+
+#
+# Set process tracer tags.
+#  (dict value)
+#process_tags =
+
+
+[profiler_otlp]
+
+#
+# From osprofiler
+#
+
+#
+# Set service name prefix to OTLP exporters.
+#  (string value)
+#service_name_prefix = <None>
+
+
 [pxe]
 
 #
@@ -4879,7 +5215,7 @@
 # value)
 # Note: This option can be changed without restarting.
 # Deprecated group/name - [pxe]/pxe_append_params
-#kernel_append_params = nofb nomodeset vga=normal
+#kernel_append_params = nofb vga=normal
 
 # Default file system format for ephemeral partition, if one
 # is created. (string value)
@@ -5115,7 +5451,7 @@
 # `instance_info/kernel_append_params` property. (string
 # value)
 # Note: This option can be changed without restarting.
-#kernel_append_params = nofb nomodeset vga=normal
+#kernel_append_params = nofb vga=normal
 
 # File permission for swift-less image hosting with the octal
 # permission representation of file access permissions. This
@@ -5159,6 +5495,12 @@
 # config tasks (integer value)
 # Minimum value: 0
 #raid_config_fail_interval = 60
+
+# Number of seconds to wait for boot mode or secure boot
+# status change to take effect after a reboot. Set to 0 to
+# disable waiting. (integer value)
+# Minimum value: 0
+#boot_mode_config_timeout = 900
 
 
 [sensor_data]
@@ -5220,7 +5562,7 @@
 #enable_for_conductor = true
 
 # If to transmit any sensor data for any nodes under this
-# conductor's management. This option superceeds the
+# conductor's management. This option supersedes the
 # ``send_sensor_data_for_undeployed_nodes`` setting. (boolean
 # value)
 #enable_for_nodes = true
@@ -5319,6 +5661,10 @@
 # The default region_name for endpoint URL discovery. (string
 # value)
 #region_name = <None>
+
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
 
 # The default service_name for endpoint URL discovery. (string
 # value)
@@ -5540,6 +5886,10 @@
 # value)
 #region_name = <None>
 
+# List of retriable HTTP status codes that should be retried.
+# If not set default to  [503] (list value)
+#retriable_status_codes = <None>
+
 # The default service_name for endpoint URL discovery. (string
 # value)
 #service_name = <None>
@@ -5560,10 +5910,6 @@
 # seconds up to a maximum of 60 seconds is used. (floating
 # point value)
 #status_code_retry_delay = <None>
-
-# Maximum number of times to retry a Swift request, before
-# failing. (integer value)
-#swift_max_retries = 2
 
 # Scope for system operations (string value)
 #system_scope = <None>

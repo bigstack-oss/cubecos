@@ -165,7 +165,10 @@
 # log_config_append is set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is
@@ -223,7 +226,7 @@
 
 # List of package logging levels in logger=LEVEL pairs. This option is
 # ignored if log_config_append is set. (list value)
-#default_log_levels = sqlalchemy=WARNING,iso8601=WARNING,requests=WARNING,urllib3.connectionpool=WARNING,keystonemiddleware=WARNING,keystoneauth=WARNING,ironicclient=WARNING,amqp=WARNING,amqplib=WARNING,oslo.messaging=WARNING,oslo_messaging=WARNING
+#default_log_levels = sqlalchemy=WARNING,iso8601=WARNING,requests=WARNING,urllib3.connectionpool=WARNING,keystonemiddleware=WARNING,keystoneauth=WARNING,ironicclient=WARNING,amqp=WARNING,amqplib=WARNING,stevedore=WARNING,oslo.messaging=WARNING,oslo_messaging=WARNING
 
 # Enables or disables publication of error events. (boolean value)
 #publish_errors = false
@@ -435,14 +438,10 @@
 #sqlite_synchronous = true
 
 # The back end to use for the database. (string value)
-# Deprecated group/name - [DEFAULT]/db_backend
 #backend = sqlalchemy
 
 # The SQLAlchemy connection string to use to connect to the database.
 # (string value)
-# Deprecated group/name - [DEFAULT]/sql_connection
-# Deprecated group/name - [DATABASE]/sql_connection
-# Deprecated group/name - [sql]/connection
 #connection = <None>
 
 # The SQLAlchemy connection string to use to connect to the slave
@@ -460,14 +459,6 @@
 # (integer value)
 #mysql_wsrep_sync_wait = <None>
 
-# DEPRECATED: If True, transparently enables support for handling
-# MySQL Cluster (NDB). (boolean value)
-# This option is deprecated for removal since 12.1.0.
-# Its value may be silently ignored in the future.
-# Reason: Support for the MySQL NDB Cluster storage engine has been
-# deprecated and will be removed in a future release.
-#mysql_enable_ndb = false
-
 # Connections which have been present in the connection pool longer
 # than this number of seconds will be replaced with a new one the next
 # time they are checked out from the pool. (integer value)
@@ -479,36 +470,27 @@
 
 # Maximum number of database connection retries during startup. Set to
 # -1 to specify an infinite retry count. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_retries
-# Deprecated group/name - [DATABASE]/sql_max_retries
 #max_retries = 10
 
 # Interval between retries of opening a SQL connection. (integer
 # value)
-# Deprecated group/name - [DEFAULT]/sql_retry_interval
-# Deprecated group/name - [DATABASE]/reconnect_interval
 #retry_interval = 10
 
 # If set, use this value for max_overflow with SQLAlchemy. (integer
 # value)
-# Deprecated group/name - [DEFAULT]/sql_max_overflow
-# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
 #max_overflow = 50
 
 # Verbosity of SQL debugging information: 0=None, 100=Everything.
 # (integer value)
 # Minimum value: 0
 # Maximum value: 100
-# Deprecated group/name - [DEFAULT]/sql_connection_debug
 #connection_debug = 0
 
 # Add Python stack traces to SQL as comment strings. (boolean value)
-# Deprecated group/name - [DEFAULT]/sql_connection_trace
 #connection_trace = false
 
 # If set, use this value for pool_timeout with SQLAlchemy. (integer
 # value)
-# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
 #pool_timeout = <None>
 
 # Enable the experimental use of database reconnect on connection
@@ -627,6 +609,14 @@
 # Additional backends that can perform health checks and report that
 # information back as part of a request. (list value)
 #backends =
+
+# A list of network addresses to limit source ip allowed to access
+# healthcheck information. Any request from ip outside of these
+# network addresses are ignored. (list value)
+#allowed_source_ranges =
+
+# Ignore requests with proxy headers. (boolean value)
+#ignore_proxied_requests = false
 
 # Check the presence of a file to determine if an application is
 # running on a port. Used by DisableByFileHealthcheck plugin. (string
@@ -762,6 +752,10 @@
 
 # The default region_name for endpoint URL discovery. (string value)
 #region_name = <None>
+
+# List of retriable HTTP status codes that should be retried. If not
+# set default to  [503] (list value)
+#retriable_status_codes = <None>
 
 # Interval between retries in case of conflict error (HTTP 409).
 # (integer value)
@@ -1438,10 +1432,15 @@
 # replicated FIFO queue based on the Raft consensus algorithm. It is
 # available as of RabbitMQ 3.8.0. If set this option will conflict
 # with the HA queues (``rabbit_ha_queues``) aka mirrored queues, in
-# other words the HA queues should be disabled, quorum queues durable
-# by default so the amqp_durable_queues opion is ignored when this
-# option enabled. (boolean value)
+# other words the HA queues should be disabled. Quorum queues are also
+# durable by default so the amqp_durable_queues option is ignored when
+# this option is enabled. (boolean value)
 #rabbit_quorum_queue = false
+
+# Use quorum queues for transients queues in RabbitMQ. Enabling this
+# option will then make sure those queues are also using quorum kind
+# of rabbit queues, which are HA by default. (boolean value)
+#rabbit_transient_quorum_queue = false
 
 # Each time a message is redelivered to a consumer, a counter is
 # incremented. Once the redelivery count exceeds the delivery limit
@@ -1469,8 +1468,11 @@
 # Positive integer representing duration in seconds for queue TTL
 # (x-expires). Queues which are unused for the duration of the TTL are
 # automatically deleted. The parameter affects only reply and fanout
-# queues. (integer value)
-# Minimum value: 1
+# queues. Setting 0 as value will disable the x-expires. If doing so,
+# make sure you have a rabbitmq policy to delete the queues or you
+# deployment will create an infinite number of queue over time.
+# (integer value)
+# Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
 # Specifies the number of messages to prefetch. Setting to zero allows
@@ -1484,7 +1486,7 @@
 
 # How often times during the heartbeat_timeout_threshold we check the
 # heartbeat. (integer value)
-#heartbeat_rate = 2
+#heartbeat_rate = 3
 
 # DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag
 # for direct send. The direct send is used as reply, so the
@@ -1501,6 +1503,23 @@
 # Enable x-cancel-on-ha-failover flag so that rabbitmq server will
 # cancel and notify consumerswhen queue is down (boolean value)
 #enable_cancel_on_failover = false
+
+# Should we use consistant queue names or random ones (boolean value)
+#use_queue_manager = false
+
+# Hostname used by queue manager (string value)
+#hostname = centos9_cubecos_jim_200.13-1cc
+
+# Process name used by queue manager (string value)
+#processname = oslo-config-generator
+
+# Use stream queues in RabbitMQ (x-queue-type: stream). Streams are a
+# new persistent and replicated data structure ("queue type") in
+# RabbitMQ which models an append-only log with non-destructive
+# consumer semantics. It is available as of RabbitMQ 3.9.0. If set
+# this option will replace all fanout queues with only one stream
+# queue. (boolean value)
+#rabbit_stream_fanout = false
 
 
 [oslo_policy]
@@ -1805,6 +1824,10 @@
 # The default region_name for endpoint URL discovery. (string value)
 #region_name = <None>
 
+# List of retriable HTTP status codes that should be retried. If not
+# set default to  [503] (list value)
+#retriable_status_codes = <None>
+
 # The default service_name for endpoint URL discovery. (string value)
 #service_name = <None>
 
@@ -1989,6 +2012,10 @@
 
 # The default region_name for endpoint URL discovery. (string value)
 #region_name = <None>
+
+# List of retriable HTTP status codes that should be retried. If not
+# set default to  [503] (list value)
+#retriable_status_codes = <None>
 
 # The default service_name for endpoint URL discovery. (string value)
 #service_name = <None>
