@@ -80,6 +80,14 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 # /usr/bin/openstack does. See core/barbican/barbican.mk. designate leaves two --
 # python-designateclient for the same reason, and designate-dashboard because horizon
 # has not made the hop yet.
+#
+# swift is the tenth stop (#642) and the only one that is not a service: CubeCOS does
+# not ship the swift server -- ceph rgw answers object-store on 8888, and
+# config_swift.cpp:145-147 registers all three keystone endpoints against it -- so
+# what moved is python-swiftclient (4.5.0) and the /usr/bin/swift symlink, nothing
+# else. It leaves nothing behind either: the antelope venv still has a swiftclient,
+# but as a dependency of horizon 23.1.1 rather than as anything swift.mk declares, so
+# it goes when horizon goes.
 CARACAL_OPENSTACK_RELEASE := caracal
 CARACAL_OPENSTACK_HOME_DIR := /opt/openstack-$(CARACAL_OPENSTACK_RELEASE)
 CARACAL_OPS_GITHUB_BRANCH_01 := stable/2024.1
