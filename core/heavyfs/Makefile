@@ -346,9 +346,10 @@ rootfs_install::
 #     plus pbr's egg_info writer on every --no-build-isolation build in this venv.
 #   - below 80 (2025-04-27), which removed `setup.py install`. Nothing in this venv
 #     needs it today: ceph's bindings moved to `pip install` (see core/ceph/ceph.mk)
-#     and skyline's did too. It is kept as headroom for masakari, designate, watcher
-#     and cyborg, which still install that way in antelope and will bring the command
-#     with them unless they are converted when they hop.
+#     and skyline's did too. It is kept as headroom for masakari and watcher, which
+#     still install that way in antelope and will bring the command with them unless
+#     they are converted when they hop -- designate (#634) and cyborg (#633) were,
+#     so neither needs it any more.
 #
 # Verified in a python 3.11 venv before the bump: horizon 24.0.2's six sdists build
 # under --no-build-isolation, ceph's rados and rbd bindings produce the same flat
