@@ -424,7 +424,13 @@ UpdateCfg(std::string domain, std::string ironicPass, std::string inspPass)
         cfg["inspector"]["auth_section"] = "keystone_authtoken";
         cfg["service_catalog"]["auth_section"] = "keystone_authtoken";
 
-        cfg["inspector"]["enabled"] = "true";
+        // NOTE: no [inspector] enabled here. That option was ironic's pre-Wallaby
+        // switch for in-band inspection and has not existed since; inspection is
+        // selected by enabled_inspect_interfaces above. oslo.config silently drops
+        // an unknown key in a registered group, so the line this replaces was inert
+        // at 21.4.4 as well -- and at 24.1.5 the only "enabled" ironic registers
+        // near it is [auto_discovery] enabled, a different feature (auto-enrolling
+        // unrecognised nodes) that must stay at its default of false.
         cfg["dhcp"]["dhcp_provider"] = "neutron";
 
         cfg["conductor"]["automated_clean"] = "false";
