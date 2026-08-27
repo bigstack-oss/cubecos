@@ -103,5 +103,5 @@ ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/file
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/auditbeat-$(BEATS_VER)-x86_64.rpm
 
 rootfs_install::
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/logstash/filebeat.service ./lib/systemd/system
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/logstash/auditbeat.service ./lib/systemd/system
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/beats/filebeat.service ./lib/systemd/system
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/beats/auditbeat.service ./lib/systemd/system
