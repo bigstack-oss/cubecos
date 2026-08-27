@@ -17,7 +17,7 @@ LOGSTASH_LOG_DIR := /var/log/logstash
 LOGSTASH_LIB_DIR := /var/lib/logstash
 LOGSTASH_JDK := $(LOGSTASH_HOME)/jdk
 
-OSEARCH_VER := 3.4.0
+OSEARCH_VER := 3.8.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
 OSEARCH_CONF_SECURITY_DIR := $(OSEARCH_CONF_DIR)/opensearch-security
 OSEARCH_HOME := /usr/share/$(OSEARCH)
