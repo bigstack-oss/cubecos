@@ -173,7 +173,6 @@ def _generate_attach_handle(gpu, num=None):
 
 
 def _generate_dep_list(gpu):
-    dep_list = []
     driver_dep = driver_deployable.DriverDeployable()
     driver_dep.attribute_list = _generate_attribute_list(gpu)
     driver_dep.attach_handle_list = []
@@ -209,8 +208,7 @@ def _generate_dep_list(gpu):
         for num in range(driver_dep.num_accelerators):
             driver_dep.attach_handle_list.append(
                 _generate_attach_handle(gpu, num))
-    dep_list.append(driver_dep)
-    return dep_list
+    return [driver_dep]
 
 
 def _generate_controlpath_id(gpu):
@@ -295,8 +293,9 @@ def _get_vgpu_type_per_pgpu(device_address, supported_vgpu_types,
     supported_vgpu_types, pgpu_type_mapping = _get_supported_vgpu_types()
     # Bail out quickly if we don't support vGPUs
     if not supported_vgpu_types:
-        LOG.error('Unable to load vGPU_type from [gpu_devices] '
-                  'Ensure "enabled_vgpu_types" is set.')
+        LOG.warning('Unable to load vGPU_type from [gpu_devices] '
+                    'Ensure "enabled_vgpu_types" is set if the gpu'
+                    'is virtualized.')
         return
 
     try:
