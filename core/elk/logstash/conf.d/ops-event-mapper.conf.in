@@ -128,8 +128,8 @@ output {
   opensearch {
     index => "ops-%{+YYYYMMdd}-notify"
     hosts => [ "@CUBE_SHARED_ID@" ]
-    template_name => "default"
-    template => "/etc/logstash/default-ec-template.json"
+    # hex_config installs this template; see InstallTemplates() in config_logstash.cpp
+    manage_template => false
   }
   if [event][key] {
     http {

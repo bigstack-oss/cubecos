@@ -279,6 +279,23 @@ WriteTemplateConfigs(bool ha, const std::string &hostname,
     return true;
 }
 
+// The opensearch outputs run with manage_template => false, so nothing in the pipelines
+// installs these any more. That is deliberate: logstash-output-opensearch reaches them
+// through a File.exists? that Ruby 3.4 removed, which capped LOGSTASH_VER at the 9.3.x
+// line. Installing them here is what lets that pin move -- and unlike the plugin, which
+// only writes a template that is absent, this re-applies a changed one on every commit.
+static bool
+InstallTemplates(void)
+{
+    // Non-fatal: the pipelines still index without them, only with opensearch's dynamic
+    // mappings instead of ours, and the next commit installs them. The sdk helper retries
+    // on its own, so there is no wait_for_service here.
+    HexUtilSystemF(0, 0, HEX_SDK " opensearch_template_install logs %s", LOG_TPL);
+    HexUtilSystemF(0, 0, HEX_SDK " opensearch_template_install default %s", DEF_TPL);
+
+    return true;
+}
+
 static bool
 CommitService(bool enabled)
 {
@@ -352,6 +369,9 @@ Commit(bool modified, int dryLevel)
     WriteTemplateConfigs(s_ha, s_hostname, sharedId, kafkaHosts);
     WriteConfigs(qkafkaHosts);
 
+    if (IsControl(s_eCubeRole) && !IsModerator(s_eCubeRole))
+        InstallTemplates();
+
     CommitService(true);
 
     if (IsControl(s_eCubeRole) && !IsModerator(s_eCubeRole))
@@ -364,6 +384,8 @@ Commit(bool modified, int dryLevel)
 
 CONFIG_MODULE(logstash, 0, 0, 0, 0, Commit);
 CONFIG_REQUIRES(logstash, kafka);
+// InstallTemplates() writes to opensearch, so commit after it is up
+CONFIG_REQUIRES(logstash, opensearch);
 // order logstash after its output sinks (influxdb/kapacitor)
 CONFIG_REQUIRES(logstash, influxdb);
 CONFIG_REQUIRES(logstash, kapacitor);

@@ -36,6 +36,30 @@ opensearch_shard_delete_unassigned()
     $CURL -XGET http://localhost:9200/_cat/shards?h=index,shard,prirep,state,unassigned.reason| grep UNASSIGNED | cut -d' ' -f1  | xargs -i $CURL -XDELETE "http://localhost:9200/{}"
 }
 
+opensearch_template_install()
+{
+    local name=$1
+    local file=$2
+    local retry=${3:-24}
+
+    [ -r "$file" ] || { Warning "no such template file: $file" ; return 1 ; }
+
+    # 9200 answers before the cluster will accept a template write, so retry rather than
+    # leave the index shape to whatever the first document happens to create.
+    local i=0
+    while [ $i -lt $retry ] ; do
+        if $CURL -f -X PUT "http://localhost:9200/_template/${name}" \
+                 -H 'Content-type: application/json' --data-binary "@${file}" >/dev/null 2>&1 ; then
+            return 0
+        fi
+        sleep 5
+        i=$(expr $i + 1)
+    done
+
+    Warning "failed to install opensearch template: $name"
+    return 1
+}
+
 opensearch_ops_reqid_search()
 {
     local saved_objects="$($CURL -X GET \"http://localhost:5601/opensearch-dashboards/api/saved_objects/_find?type=search\" 2>/dev/null)"
