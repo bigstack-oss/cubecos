@@ -97,7 +97,7 @@ rootfs_install::
 # Beats (filebeat, auditbeat)
 #
 
-BEATS_VER := 9.2.3
+BEATS_VER := 9.5.2
 
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-$(BEATS_VER)-x86_64.rpm
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/auditbeat-$(BEATS_VER)-x86_64.rpm
