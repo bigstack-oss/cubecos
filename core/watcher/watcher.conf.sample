@@ -65,7 +65,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# Log output to Windows Event Log. (boolean value)
+# DEPRECATED: Log output to Windows Event Log. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Windows support is no longer maintained.
 #use_eventlog = false
 
 # The amount of time before the log files are rotated. This option is ignored
@@ -290,7 +293,7 @@
 # Name of this node. This can be an opaque identifier. It is not necessarily a
 # hostname, FQDN, or IP address. However, the node name must be valid within an
 # AMQP key. (host address value)
-#host = cc1
+#host = centos9-jail
 
 # Maximum time since last check-in for up service. (integer value)
 #service_down_time = 90
@@ -365,6 +368,7 @@
 # dogpile.cache.bmemcached - <No description provided>
 # dogpile.cache.dbm - <No description provided>
 # dogpile.cache.redis - <No description provided>
+# dogpile.cache.redis_sentinel - <No description provided>
 # dogpile.cache.memory - <No description provided>
 # dogpile.cache.memory_pickle - <No description provided>
 # dogpile.cache.null - <No description provided>
@@ -392,7 +396,7 @@
 # Memcache servers in the format of "host:port". This is used by backends
 # dependent on Memcached.If ``dogpile.cache.memcached`` or
 # ``oslo_cache.memcache_pool`` is used and a given host refer to an IPv6 or a
-# given domain refer to IPv6 then you should prefix the given address withthe
+# given domain refer to IPv6 then you should prefix the given address with the
 # address family (``inet6``) (e.g ``inet6[::1]:11211``,
 # ``inet6:[fd12:3456:789a:1::1]:11211``,
 # ``inet6:[controller-0.internalapi]:11211``). If the address family is not
@@ -430,13 +434,34 @@
 #memcache_sasl_enabled = false
 
 # the user name for the memcached which SASL enabled (string value)
-#memcache_username =
+#memcache_username = <None>
 
 # the password for the memcached which SASL enabled (string value)
-#memcache_password =
+#memcache_password = <None>
 
-# Global toggle for TLS usage when comunicating with the caching servers.
-# (boolean value)
+# Redis server in the format of "host:port" (string value)
+#redis_server = localhost:6379
+
+# the user name for redis (string value)
+#redis_username = <None>
+
+# the password for redis (string value)
+#redis_password = <None>
+
+# Redis sentinel servers in the format of "host:port" (list value)
+#redis_sentinels = localhost:26379
+
+# Timeout in seconds for every call to a server. (dogpile.cache.redis and
+# dogpile.cache.redis_sentinel backends only). (floating point value)
+#redis_socket_timeout = 1.0
+
+# Service name of the redis sentinel cluster. (string value)
+#redis_sentinel_service_name = mymaster
+
+# Global toggle for TLS usage when communicating with the caching servers.
+# Currently supported by ``dogpile.cache.bmemcache``,
+# ``dogpile.cache.pymemcache``, ``oslo_cache.memcache_pool``,
+# ``dogpile.cache.redis`` and ``dogpile.cache.redis_sentinel``. (boolean value)
 #tls_enabled = false
 
 # Path to a file of concatenated CA certificates in PEM format necessary to
@@ -457,7 +482,9 @@
 
 # Set the available ciphers for sockets created with the TLS context. It should
 # be a string in the OpenSSL cipher list format. If not specified, all OpenSSL
-# enabled ciphers will be available. (string value)
+# enabled ciphers will be available. Currently supported by
+# ``dogpile.cache.bmemcache``, ``dogpile.cache.pymemcache`` and
+# ``oslo_cache.memcache_pool``. (string value)
 #tls_allowed_ciphers = <None>
 
 # Global toggle for the socket keepalive of dogpile's pymemcache backend
@@ -505,6 +532,15 @@
 # Time in seconds before attempting to add a node back in the pool in the
 # HashClient's internal mechanisms. (floating point value)
 #dead_timeout = 60
+
+# Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
+# Python support. This is available in Python 3.9 in all environments and may
+# have been backported to older Python versions on select environments. If the
+# Python executable used does not support OpenSSL FIPS mode, an exception will
+# be raised. Currently supported by ``dogpile.cache.bmemcache``,
+# ``dogpile.cache.pymemcache`` and ``oslo_cache.memcache_pool``. (boolean
+# value)
+#enforce_fips_mode = false
 
 
 [ceilometer_client]
@@ -599,14 +635,10 @@
 #sqlite_synchronous = true
 
 # The back end to use for the database. (string value)
-# Deprecated group/name - [DEFAULT]/db_backend
 #backend = sqlalchemy
 
 # The SQLAlchemy connection string to use to connect to the database. (string
 # value)
-# Deprecated group/name - [DEFAULT]/sql_connection
-# Deprecated group/name - [DATABASE]/sql_connection
-# Deprecated group/name - [sql]/connection
 #connection = <None>
 
 # The SQLAlchemy connection string to use to connect to the slave database.
@@ -624,14 +656,6 @@
 # value)
 #mysql_wsrep_sync_wait = <None>
 
-# DEPRECATED: If True, transparently enables support for handling MySQL Cluster
-# (NDB). (boolean value)
-# This option is deprecated for removal since 12.1.0.
-# Its value may be silently ignored in the future.
-# Reason: Support for the MySQL NDB Cluster storage engine has been deprecated
-# and will be removed in a future release.
-#mysql_enable_ndb = false
-
 # Connections which have been present in the connection pool longer than this
 # number of seconds will be replaced with a new one the next time they are
 # checked out from the pool. (integer value)
@@ -643,33 +667,24 @@
 
 # Maximum number of database connection retries during startup. Set to -1 to
 # specify an infinite retry count. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_retries
-# Deprecated group/name - [DATABASE]/sql_max_retries
 #max_retries = 10
 
 # Interval between retries of opening a SQL connection. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_retry_interval
-# Deprecated group/name - [DATABASE]/reconnect_interval
 #retry_interval = 10
 
 # If set, use this value for max_overflow with SQLAlchemy. (integer value)
-# Deprecated group/name - [DEFAULT]/sql_max_overflow
-# Deprecated group/name - [DATABASE]/sqlalchemy_max_overflow
 #max_overflow = 50
 
 # Verbosity of SQL debugging information: 0=None, 100=Everything. (integer
 # value)
 # Minimum value: 0
 # Maximum value: 100
-# Deprecated group/name - [DEFAULT]/sql_connection_debug
 #connection_debug = 0
 
 # Add Python stack traces to SQL as comment strings. (boolean value)
-# Deprecated group/name - [DEFAULT]/sql_connection_trace
 #connection_trace = false
 
 # If set, use this value for pool_timeout with SQLAlchemy. (integer value)
-# Deprecated group/name - [DATABASE]/sqlalchemy_pool_timeout
 #pool_timeout = <None>
 
 # Enable the experimental use of database reconnect on connection lost.
@@ -781,6 +796,11 @@
 # such as Postman. Example: SELECT cpu FROM {4}.cpu_percent WHERE host == '{1}'
 # AND time > now()-{2}s (dict value)
 #query_map = host_airflow:None,host_cpu_usage:None,host_inlet_temp:None,host_outlet_temp:None,host_power:None,host_ram_usage:None,instance_cpu_usage:None,instance_l3_cache_usage:None,instance_ram_allocated:None,instance_ram_usage:None,instance_root_disk_size:None
+
+# Timeout for Grafana request (integer value)
+# Minimum value: 0
+# Note: This option can be changed without restarting.
+#http_timeout = 60
 
 
 [grafana_translators]
@@ -991,6 +1011,22 @@
 # Region in Identity service catalog to use for communication with the
 # OpenStack service. (string value)
 #region_name = <None>
+
+
+[maas_client]
+
+#
+# From watcher
+#
+
+# MaaS URL, example: http://1.2.3.4:5240/MAAS (string value)
+#url = <None>
+
+# MaaS API authentication key. (string value)
+#api_key = <None>
+
+# MaaS client operation timeout in seconds. (integer value)
+#timeout = 60
 
 
 [monasca_client]
@@ -1474,10 +1510,15 @@
 # modern queue type for RabbitMQ implementing a durable, replicated FIFO queue
 # based on the Raft consensus algorithm. It is available as of RabbitMQ 3.8.0.
 # If set this option will conflict with the HA queues (``rabbit_ha_queues``)
-# aka mirrored queues, in other words the HA queues should be disabled, quorum
-# queues durable by default so the amqp_durable_queues opion is ignored when
-# this option enabled. (boolean value)
+# aka mirrored queues, in other words the HA queues should be disabled. Quorum
+# queues are also durable by default so the amqp_durable_queues option is
+# ignored when this option is enabled. (boolean value)
 #rabbit_quorum_queue = false
+
+# Use quorum queues for transients queues in RabbitMQ. Enabling this option
+# will then make sure those queues are also using quorum kind of rabbit queues,
+# which are HA by default. (boolean value)
+#rabbit_transient_quorum_queue = false
 
 # Each time a message is redelivered to a consumer, a counter is incremented.
 # Once the redelivery count exceeds the delivery limit the message gets dropped
@@ -1503,8 +1544,11 @@
 
 # Positive integer representing duration in seconds for queue TTL (x-expires).
 # Queues which are unused for the duration of the TTL are automatically
-# deleted. The parameter affects only reply and fanout queues. (integer value)
-# Minimum value: 1
+# deleted. The parameter affects only reply and fanout queues. Setting 0 as
+# value will disable the x-expires. If doing so, make sure you have a rabbitmq
+# policy to delete the queues or you deployment will create an infinite number
+# of queue over time. (integer value)
+# Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
 # Specifies the number of messages to prefetch. Setting to zero allows
@@ -1517,7 +1561,7 @@
 
 # How often times during the heartbeat_timeout_threshold we check the
 # heartbeat. (integer value)
-#heartbeat_rate = 2
+#heartbeat_rate = 3
 
 # DEPRECATED: (DEPRECATED) Enable/Disable the RabbitMQ mandatory flag for
 # direct send. The direct send is used as reply, so the MessageUndeliverable
@@ -1533,6 +1577,22 @@
 # Enable x-cancel-on-ha-failover flag so that rabbitmq server will cancel and
 # notify consumerswhen queue is down (boolean value)
 #enable_cancel_on_failover = false
+
+# Should we use consistant queue names or random ones (boolean value)
+#use_queue_manager = false
+
+# Hostname used by queue manager (string value)
+#hostname = centos9-jail
+
+# Process name used by queue manager (string value)
+#processname = gen.py
+
+# Use stream queues in RabbitMQ (x-queue-type: stream). Streams are a new
+# persistent and replicated data structure ("queue type") in RabbitMQ which
+# models an append-only log with non-destructive consumer semantics. It is
+# available as of RabbitMQ 3.9.0. If set this option will replace all fanout
+# queues with only one stream queue. (boolean value)
+#rabbit_stream_fanout = false
 
 
 [oslo_policy]
@@ -1968,7 +2028,7 @@
 
 # Number of workers for taskflow engine to execute actions. (integer value)
 # Minimum value: 1
-#max_workers = 12
+#max_workers = 80
 
 # The execution rule for linked actions,the key is strategy name and value
 # ALWAYS means all actions will be executed,value ANY means if previous action
