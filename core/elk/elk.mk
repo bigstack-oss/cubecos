@@ -110,9 +110,18 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_CONF_DIR) $(LOGSTASH_CONF_EVENTDB_DIR) $(LOGSTASH_LOG_DIR) $(LOGSTASH_LIB_DIR) $(LOGSTASH_HOME)
 
 # install logstash plugins, such as output-syslog for N-Reporter
+#
+# Pinned, because logstash-plugin resolves these from rubygems at build time: unpinned,
+# the image's plugin versions are whatever upstream published that morning, and neither
+# the change nor the day it happened appears in this repo.
+LOGSTASH_PLUGIN_ENV := PATH=$(LOGSTASH_JDK)/bin:$$PATH LD_LIBRARY_PATH=$(LOGSTASH_JDK)/lib LS_JAVA_OPTS="-Xmx2048M"
+LOGSTASH_OUT_SYSLOG_VER := 3.1.0
+LOGSTASH_OUT_OSEARCH_VER := 2.1.1
+
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) /usr/bin/env PATH=$(LOGSTASH_JDK)/bin:$$PATH LD_LIBRARY_PATH=$(LOGSTASH_JDK)/lib LS_JAVA_OPTS="-Xmx2048M" $(LOGSTASH_HOME)/bin/logstash-plugin install logstash-output-syslog logstash-output-opensearch
+	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin install --version $(LOGSTASH_OUT_SYSLOG_VER) logstash-output-syslog
+	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin install --version $(LOGSTASH_OUT_OSEARCH_VER) logstash-output-opensearch
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 #
