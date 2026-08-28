@@ -17,9 +17,6 @@ PROJ_MODDIR := $(TOP_BLDDIR)/core/modules
 # Node config namespace: the installer (hex) drops the phone-home agent's env
 # file here (overrides hex's default).
 HEX_AGENT_ENV_DIR := /etc/cube
-# Installer disk auto-detect: skip our OSD/data disks (cube_ partition labels).
-# SAN LUNs (Compellent, etc.) are excluded by hex's default transport filter.
-HEX_INSTALL_DATA_LABEL_PREFIX := cube_
 
 # policy source tree
 CORE_POLICYDIR := $(COREDIR)/policies
