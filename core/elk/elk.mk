@@ -53,7 +53,7 @@ rootfs_install::
 # Logstash
 #
 
-LOGSTASH_VER := 9.3.8
+LOGSTASH_VER := 9.5.2
 LOGSTASH_CONF_DIR := /etc/logstash
 LOGSTASH_CONF_D_DIR := $(LOGSTASH_CONF_DIR)/conf.d
 LOGSTASH_CONF_EVENTDB_DIR := $(LOGSTASH_CONF_DIR)/eventdb
