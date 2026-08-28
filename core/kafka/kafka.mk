@@ -8,9 +8,27 @@ KAFKA_RUN_DIR := /var/run/kafka
 
 KAFKA_VER := 3.9.2
 KAFKA_TGZ := kafka_2.13-$(KAFKA_VER).tgz
+KAFKA_DL_URL := https://archive.apache.org/dist/kafka/$(KAFKA_VER)
+# The Apache release manager who signed this release. Apache signs per-signer rather than
+# per-project, so this belongs next to KAFKA_VER and moves with it -- a bump that forgets
+# it fails the build instead of quietly trusting whatever the KEYS file carries. Find the
+# new one with: gpg --verify <tgz>.asc <tgz>
+KAFKA_GPG_FPR := D9472951E133753353DCE20D72E522CC9FCBBAC9
+KAFKA_GNUPGHOME := $(ARCS_DIR)/kafka-gnupg
 
+# Download to .part and only rename once the detached signature checks out, so a truncated
+# or tampered object is never left where the next run would unpack it as a finished
+# download. KEYS comes from downloads.apache.org, a different host to the tarball's.
 $(ARCS_DIR)/$(KAFKA_TGZ):
-	$(Q)wget https://archive.apache.org/dist/kafka/$(KAFKA_VER)/$(KAFKA_TGZ) -O $@ || { rm -f $@; false; }
+	$(Q)wget $(KAFKA_DL_URL)/$(KAFKA_TGZ) -O $@.part
+	$(Q)wget $(KAFKA_DL_URL)/$(KAFKA_TGZ).asc -O $@.asc
+	$(Q)rm -rf $(KAFKA_GNUPGHOME) && mkdir -p -m 700 $(KAFKA_GNUPGHOME)
+	$(Q)wget -qO- https://downloads.apache.org/kafka/KEYS | \
+		GNUPGHOME=$(KAFKA_GNUPGHOME) gpg --batch --quiet --import
+	$(Q)GNUPGHOME=$(KAFKA_GNUPGHOME) gpg --batch --status-fd 1 --verify $@.asc $@.part | \
+		grep -q '^\[GNUPG:\] VALIDSIG $(KAFKA_GPG_FPR) '
+	$(Q)rm -rf $(KAFKA_GNUPGHOME) $@.asc
+	$(Q)mv $@.part $@
 
 rootfs_install:: $(ARCS_DIR)/$(KAFKA_TGZ)
 	$(Q)chroot $(ROOTDIR) mkdir -p $(KAFKA_BIN_DIR) $(KAFKA_APP_DIR) $(KAFKA_LOG_DIR) $(KAFKA_RUN_DIR)
