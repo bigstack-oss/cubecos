@@ -133,6 +133,6 @@ BEATS_VER := 9.5.2
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-$(BEATS_VER)-x86_64.rpm
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/auditbeat-$(BEATS_VER)-x86_64.rpm
 
-rootfs_install::
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/beats/filebeat.service ./lib/systemd/system
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/beats/auditbeat.service ./lib/systemd/system
+# No rootfs_install for the beats: their units come from the rpms. The copies this tree
+# used to install over them were upstream's own files, one word of a Description apart,
+# and a vendored unit only masks whatever upstream changes in it next.
