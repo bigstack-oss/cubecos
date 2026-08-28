@@ -67,10 +67,15 @@ filter {
       }
     }
   }
-  else if [path] == "/var/log/httpd/\S+\.log" {
+  else if [path] =~ /\/var\/log\/httpd\/\S+\.log/ {
     # httpd access log format
+    #
+    # Only the *_access.log files are in this shape; error.log and the ssl logs are not,
+    # and tagging those as parse failures would divert them to a local file instead of
+    # OpenSearch. They fall through to the unparsed handling below with their line intact.
     grok {
       patterns_dir => ["/etc/logstash/patterns.txt"]
+      tag_on_failure => []
       match => { "rawlog" => "%{IP:client_ip} %{USER:ident} %{USER:auth} \[%{HTTPDATE:occurred_at}\] \"%{WORD:method} %{NOTSPACE:request_page} HTTP/%{NUMBER:http_version}\" %{NUMBER:server_response} " }
       add_field => {
         "format" => "apapche2-access"
