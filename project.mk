@@ -72,13 +72,20 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 # glance (28.2.0) the third (#630), cinder (24.5.0) the fourth (#629), nova with
 # placement (29.4.0 / 11.0.1) the fifth (#627), neutron (24.2.2) the sixth (#628),
 # manila (18.3.0) the seventh (#638), octavia (14.0.2) the eighth (#640),
-# barbican (18.0.0) the ninth (#632), heat (22.0.1) the tenth (#635),
-# and ironic with ironic-inspector (24.1.5 / 12.1.1) the eleventh (#637).
+# barbican (18.0.0) the ninth (#632), cyborg (12.0.0) the tenth (#633),
+# designate (18.0.0) the eleventh (#634), heat (22.0.1) the twelfth (#635),
+# ironic with ironic-inspector (24.1.5 / 12.1.1) the thirteenth (#637) and
+# watcher (12.1.0) the fourteenth (#643).
 # The services move one at a time and OPENSTACK_RELEASE is promoted once they all have.
+# (#642 moved python-swiftclient rather than a service, so it takes no place in that
+# count.) The ordinals are merge order into develop. #633 and #634 moved their services
+# without coming back to this comment and #635 and #637 then took the numbers they had
+# left free, so cyborg through ironic are renumbered here.
 #
 # barbican leaves a piece behind, the same way octavia does: python-barbicanclient owns
 # the `openstack secret ...` commands and has to stay in the antelope venv for as long as
-# /usr/bin/openstack does. See core/barbican/barbican.mk.
+# /usr/bin/openstack does. See core/barbican/barbican.mk. designate and watcher each
+# leave two: their osc plugin and their horizon dashboard plugin, both blocked on #636.
 CARACAL_OPENSTACK_RELEASE := caracal
 CARACAL_OPENSTACK_HOME_DIR := /opt/openstack-$(CARACAL_OPENSTACK_RELEASE)
 CARACAL_OPS_GITHUB_BRANCH_01 := stable/2024.1
