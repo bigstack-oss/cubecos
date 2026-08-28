@@ -117,6 +117,27 @@ filter {
     ]
     target => "occurred_at"
   }
+  # Whatever reached here without matching a branch -- httpd's non-access logs, mariadb's
+  # error log -- has its line in rawlog and nothing in message, and the cleanup at the end
+  # of this filter would drop rawlog and store a document with no content at all.
+  if ![message] {
+    mutate {
+      copy => { "rawlog" => "message" }
+    }
+  }
+  # ...and with no program it would be indexed into a literal "logs-<date>-%{program}".
+  # Name it from the log's own path, which is how the openstack branch above does it.
+  if ![program] {
+    grok {
+      tag_on_failure => []
+      match => { "path" => "/var/log/%{NOTSPACE:component}/%{NOTSPACE:program}\.log" }
+    }
+  }
+  if ![program] {
+    mutate {
+      add_field => { "program" => "unknown" }
+    }
+  }
   mutate {
     lowercase => [ "program" ]
     add_field => {
