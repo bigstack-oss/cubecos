@@ -70,7 +70,7 @@ rootfs_install::
 	# $(Q)sed "s/\/var\/run\//\/run\//g" $(ROOTDIR)/usr/lib/tmpfiles.d/subscription-manager.conf > $(ROOTDIR)/etc/tmpfiles.d/subscription-manager.conf
 	$(Q)mount -t proc proc $(ROOTDIR)/proc || /bin/true
 	$(Q)chroot $(ROOTDIR) dnf clean all
-	$(Q)echo "Add to $(ROOTDIR) repos: $(INFLUXDB_REPO) $(CEPH_REPO) $(PROMETHEUS_REPO) $(ELK_REPO) $(DOCKER_REPO)"
+	$(Q)echo "Add to $(ROOTDIR) repos: $(INFLUXDB_REPO) $(CEPH_REPO) $(PROMETHEUS_REPO) $(DOCKER_REPO)"
 	$(Q)mkdir -p $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
 
 rootfs_install::

@@ -2,7 +2,11 @@
 # elk installation (OpenSearch, OpenSearch-Dashboards, Logstash and Beats)
 
 ifneq (,$(wildcard $(ROOTDIR)))
-ELK_REPO := $(shell chroot $(ROOTDIR) rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch 2>/dev/null && cp $(COREDIR)/elk/elasticsearch/elastic.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "elastic")
+# Imported for its side effect: it is what lets `rpm -K` speak for the beats rpms, which
+# arrive through ROOTFS_DNF_DL_FROM and install as @commandline. No repo file is added:
+# since the initial commit the beats have always been direct rpm downloads, so nothing
+# in the image has ever resolved a package from Elastic's yum repo.
+ELK_KEY := $(shell chroot $(ROOTDIR) rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch 2>/dev/null ; echo "elastic")
 OSEARCH := $(shell chroot $(ROOTDIR) rpm --import https://artifacts.opensearch.org/publickeys/opensearch-release.pgp ; echo "opensearch")
 else
 OSEARCH := $(shell echo "opensearch")
