@@ -24,13 +24,21 @@ filter {
 
   if [path] == "/var/log/messages" {
     # syslog format
+    #
+    # ecs_compatibility must stay disabled here. This pipeline reads the pre-ECS field
+    # names, and logstash 8 changed the default to v8, under which SYSLOGPROG writes
+    # [process][name]/[process][pid] instead of program/pid and syslog_pri writes
+    # [log][syslog][severity][name] instead of syslog_severity. Both are referenced
+    # below by their pre-ECS names, so the default silently emptied them.
     grok {
+      ecs_compatibility => disabled
       match => { "rawlog" => "%{SYSLOGTIMESTAMP:occurred_at} %{SYSLOGPROG}: %{GREEDYDATA:message}" }
       add_field => {
         "format" => "syslog"
       }
     }
     syslog_pri {
+      ecs_compatibility => disabled
       severity_labels => [ "ERROR", "ERROR", "ERROR", "ERROR", "WARNING", "INFO", "INFO", "DEBUG" ]
       add_field => { "log_level" => "%{syslog_severity}" }
       remove_field => [ "syslog_facility", "syslog_facility_code", "syslog_severity", "syslog_severity_code" ]
