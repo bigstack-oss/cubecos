@@ -1139,29 +1139,42 @@ os_keystone_idp_config()
 
 # Restore the modern role chain and bridge the legacy _member_ role onto it.
 #
-# keystone-manage bootstrap creates admin/member/reader and the member->reader
-# implication. CubeCOS used to delete `member` right after bootstrap, which also removed
-# that implication, so no upstream "new default" policy keyed on role:member could ever
-# match and _member_ users lost access in Skyline (cubecos#216).
+# keystone-manage bootstrap builds admin -> manager -> member -> reader
+# (keystone/cmd/bootstrap.py, _bootstrap_{admin,manager,member}_role). CubeCOS used to
+# delete `member` right after bootstrap, which took the implications hanging off it with
+# it, so no upstream "new default" policy keyed on role:member could ever match and
+# _member_ users lost access in Skyline (cubecos#216).
 #
-# This restores member (+ member->reader) and adds _member_ -> member, so every existing
-# _member_ assignment grants member and reader at token issue with no assignment changes.
+# Repair the whole chain, not just member->reader. Caracal inserted `manager` between
+# admin and member -- yoga wired admin -> member directly -- so admin now reaches member
+# only through manager. Measured on cc1: delete the manager->member link alone and admin's
+# effective roles collapse from {admin,manager,member,reader} to {admin,manager}. Any
+# policy that defaults to role:member then denies admin, barbican's secrets:post among
+# them (cubecos#1374).
+#
+# The links are the part that goes missing. Caracal marks the default roles immutable, so
+# on a caracal cluster the roles themselves cannot be deleted -- the loop below is for a
+# cluster arriving from a release that had no `manager` at all, or that deleted `member`
+# and took the implications hanging off it with it.
+#
+# This restores the chain and adds _member_ -> member, so every existing _member_
+# assignment grants member and reader at token issue with no assignment changes.
 # Idempotent -- safe on every commit and on clusters upgraded from older releases.
 os_keystone_legacy_member_role_setup()
 {
-    local prior implied
+    local prior implied role
 
-    if ! $OPENSTACK role show member >/dev/null 2>&1 ; then
-        Quiet -n $OPENSTACK role create member
-    fi
-    if ! $OPENSTACK role show reader >/dev/null 2>&1 ; then
-        Quiet -n $OPENSTACK role create reader
-    fi
+    for role in manager member reader ; do
+        if ! $OPENSTACK role show $role >/dev/null 2>&1 ; then
+            Quiet -n $OPENSTACK role create $role
+        fi
+    done
 
     # "<prior id> <prior name> <implied id> <implied name>" per line
     local existing=$($OPENSTACK implied role list -f value 2>/dev/null | awk '{print $2" "$4}')
 
-    for pair in "member reader" "_member_ member" ; do
+    # The first three are upstream's chain; _member_ -> member is the CubeCOS bridge onto it.
+    for pair in "admin manager" "manager member" "member reader" "_member_ member" ; do
         prior=${pair% *}
         implied=${pair#* }
         if ! echo "$existing" | grep -qx "$prior $implied" ; then
