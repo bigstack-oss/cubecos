@@ -1077,17 +1077,11 @@ CommitMds(const char* name, const char* hostname)
     if (!IsControl(s_eCubeRole))
         return true;
 
-    // cluster poweroff sets pauserd/pausewr, and nothing lifts them until
-    // cube_cluster_start_node -- which runs a whole phase later, in cluster
-    // start. Every module commit in between, this one included, then waits on
-    // storage that cannot serve: the MDS sits in up:replay with metadata IOs
-    // blocked, and the mgr has no fs metadata to answer with. Measured 4x on
-    // the ceph commit after a cold poweroff (469s vs ~90-125s on a boot with no
-    // flags set). Lift just the client-I/O blocks here, once the mons answer;
-    // noout/norebalance/nobackfill/norecover stay for cube_cluster_start_node's
-    // ceph_leave_maintenance, so a roll's OSD guard is untouched.
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_unpause_client_io");
-
+    // The pauserd/pausewr lift that used to sit here has moved up into Commit(),
+    // to just after the mon answers -- the OSDs are committed before the mds now
+    // and they need the block gone too. Kept out of here rather than duplicated:
+    // ceph_unpause_client_io is idempotent, but a second call would only hide
+    // which step actually needed it.
     std::string srv = std::string(name) + "-mds@" + std::string(hostname);
     SystemdCommitService(true, srv.c_str());
     HexUtilSystemF(0, 0, HEX_SDK " ceph_fs_mds_init");
@@ -1464,6 +1458,50 @@ Validate()
     return true;
 }
 
+// Wait until a mon quorum answers before anything downstream talks to the
+// cluster.
+//
+// Everything after the mon step -- the mgr coming up, pool creation, `ceph fs
+// new` -- is a client of the cluster, and on a node that has just rebooted into
+// a new firmware the mon needs a moment to re-form quorum. Without this the
+// steps still work, because most of them carry their own ad-hoc retry (see the
+// `for i in 1 2 3 4 5` in SetupPools), but they each pay the timeout separately
+// and the failures are logged as their own rather than as "the mon was not up
+// yet". Waiting once, here, is both faster and legible in the log.
+//
+// A timeout is not fatal: on a multi-node cluster this node's mon may
+// legitimately be unable to form quorum on its own (it is waiting for peers
+// that are still rolling), and the commit should carry on and let the peers
+// arrive rather than fail the whole firmware switch.
+static bool
+WaitForMonQuorum(int timeoutSec = 300)
+{
+    for (int waited = 0; waited < timeoutSec; waited += 5) {
+        if (HexSystemF(0, "timeout 10 ceph -s >/dev/null 2>&1") == 0) {
+            HexLogInfo("ceph: mon quorum answered after %ds", waited);
+            return true;
+        }
+        sleep(5);
+    }
+
+    HexLogWarning("ceph: no mon quorum after %ds, continuing anyway", timeoutSec);
+    return false;
+}
+
+// Last step of ceph's upgrade procedure. Gated and idempotent -- see
+// ceph_finalize_release in sdk_ceph.sh for what it will and will not do. Called
+// on every commit so that a cluster upgraded without a roll job (a single-node
+// appliance, or a node landed by hand) still completes its upgrade; on a rolling
+// upgrade every node but the last one finds the gate shut and does nothing.
+static void
+FinalizeCephRelease()
+{
+    if (!IsControl(s_eCubeRole))
+        return;
+
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_finalize_release");
+}
+
 static bool
 CommitCheck(bool modified, int dryLevel)
 {
@@ -1594,15 +1632,59 @@ Commit(bool modified, int dryLevel)
         if (!monEnabled)
             RemoveMon(s_hostname.c_str());
 
-        if (!SetupPools() || !SetupFS() || !SetupMgr(s_hostname)
-            || !SetupMds(s_hostname) || !SetupRgw(s_hostname.c_str())
-            || !SetupOsd(s_hostname, fsid) || !SetupISCSI())
+        // Daemons come up in ceph's documented upgrade order -- mon, mgr, osd,
+        // mds, rgw -- rather than the order their state directories happen to be
+        // created in. The mon step is above; the rest follows here.
+        //
+        // This used to run every Setup* in one condition and then commit mgr,
+        // mds, rgw, osd, which put both mds and rgw ahead of the OSDs and
+        // created the rgw and cephfs pools before there was an OSD to place
+        // their PGs on. That is survivable on a cluster that is merely
+        // restarting -- the PGs sit inactive until the OSDs arrive -- but it is
+        // the wrong order to hold across a major version upgrade, where each
+        // tier is supposed to be up and answering on the new release before the
+        // next one is asked to talk to it.
+        //
+        // Note the ordering that is enforced here is *within this node*. Across
+        // the cluster the A/B partition switch moves a whole node at a time, so
+        // the cluster runs mixed-version for the length of a roll; that is
+        // supported, and the cluster-wide steps that are not are gated
+        // separately (see ceph_finalize_release, and the gate helpers in
+        // sdk_ceph.sh).
+        WaitForMonQuorum();
+
+        // Lift the client-I/O block left by a cluster poweroff as soon as the
+        // mons answer, rather than at the mds step. It was called from
+        // CommitMds when the mds happened to be the first thing committed after
+        // the mon; now that the OSDs go first, leaving it there would mean the
+        // OSDs came up under pauserd/pausewr and paid the stall that call exists
+        // to avoid. noout/norebalance/nobackfill/norecover are untouched and
+        // still belong to cube_cluster_start_node's ceph_leave_maintenance, so a
+        // roll's OSD guard is unaffected.
+        HexUtilSystemF(0, 0, HEX_SDK " ceph_unpause_client_io");
+
+        if (!SetupMgr(s_hostname))
+            return false;
+        CommitMgr(NAME, s_hostname.c_str());
+
+        if (!SetupOsd(s_hostname, fsid))
+            return false;
+        CommitOsd(NAME);
+
+        // Pools and the filesystem are created once the OSDs that will carry
+        // them are up. SetupFS also has to stay ahead of the mds step below: it
+        // is what runs `ceph fs new`, and the mds claims rank 0 on a filesystem
+        // that already exists.
+        if (!SetupPools() || !SetupFS() || !SetupISCSI())
             return false;
 
-        CommitMgr(NAME, s_hostname.c_str());
+        if (!SetupMds(s_hostname))
+            return false;
         CommitMds(NAME, s_hostname.c_str());
+
+        if (!SetupRgw(s_hostname.c_str()))
+            return false;
         CommitRgw(NAME, s_hostname.c_str());
-        CommitOsd(NAME);
         // CommitISCSI();
 
         EnableMgrRestful();
@@ -1612,6 +1694,10 @@ Commit(bool modified, int dryLevel)
         // EnablePgAutoScale();
         InitCephClient(master, peer);
         MountCephfsStore();
+
+        // Once every tier on this node is up, complete the upgrade if this node
+        // is the one that finished it.
+        FinalizeCephRelease();
     }
 
     if (s_bRbdMirrorChanged && IsControl(s_eCubeRole)) {
