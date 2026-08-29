@@ -49,25 +49,31 @@ ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
 
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
 
-# ceph's own python 3.11 execution context
+# ceph's python 3.11 BUILD context -- removed again before the image ships
 #
 # Ceph is the only component that needed build tooling inside somebody else's venv:
 # the rados/rbd bindings are Cython C extensions, so building them used to mean
 # `pip install "Cython<3"` into the antelope venv *and* the caracal venv, leaving a
 # build-time compiler installed in two openstack runtime environments for the life of
-# the image. This venv is where that tooling lives now, so neither openstack venv is
-# touched by ceph any more.
+# the image. That tooling lives here instead, so neither openstack venv is touched by
+# ceph any more.
 #
-# It is also the canonical home of the built bindings. The wheels are produced here
-# once and then installed into the caracal venv, rather than compiled separately in
-# each consumer -- same interpreter (3.11), same ABI tag (cp311), so one build
-# serves both.
+# This venv is scaffolding, not a runtime environment. Nothing on a running node
+# imports from it: the wheels it produces are installed into the caracal venv, which
+# is where cinder, glance and manila -- the services that talk to the built-in RBD
+# store -- actually live, and once that is done there is no consumer left. It is
+# deleted at the end of the binding step so the shipped image carries neither it nor
+# Cython.
+#
+# It cannot host ceph itself, either, which is worth stating so it is not tried
+# again: mon, osd, mds and radosgw declare no python dependency at all (pure C++),
+# and ceph-mgr embeds its interpreter via a hard libpython3.9.so.1.0 link, so its
+# modules can only ever load from /usr/lib64/python3.9/site-packages. Moving the mgr
+# to 3.11 is a `-DWITH_PYTHON3=3.11` source build of ceph, not a venv.
 #
 # 3.11 to match the caracal venv: a C extension is only importable by the minor it
-# was built for, and cinder, glance and manila -- the services that talk to the
-# built-in RBD store -- all live in /opt/openstack-caracal now. The antelope venv no
-# longer holds an RBD consumer, which is why the second (cpython-310) build that used
-# to run here is gone.
+# was built for. The antelope venv no longer holds an RBD consumer, which is why the
+# second (cpython-310) build that used to run here is gone.
 CEPH_PYTHON_VER := 3.11
 CEPH_HOME_DIR := /opt/ceph
 
@@ -124,12 +130,16 @@ rootfs_install::
 	$(Q)for b in rados rbd ; do \
 		chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/$$b && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CEPH_HOME_DIR)/bin/pip wheel --no-build-isolation --no-deps -w $(CEPH_WHEEL_DIR) ." ; \
 	done
-	$(Q)chroot $(ROOTDIR) bash -c "$(CEPH_HOME_DIR)/bin/pip install --no-deps $(CEPH_WHEEL_DIR)/rados-*.whl $(CEPH_WHEEL_DIR)/rbd-*.whl"
 	$(Q)chroot $(ROOTDIR) bash -c "$(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --no-deps $(CEPH_WHEEL_DIR)/rados-*.whl $(CEPH_WHEEL_DIR)/rbd-*.whl"
 	$(Q)# fail the build here rather than at first RBD I/O if either binding did not land
-	$(Q)chroot $(ROOTDIR) $(CEPH_HOME_DIR)/bin/python -c "import rados, rbd"
 	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python -c "import rados, rbd"
-	$(Q)chroot $(ROOTDIR) rm -rf $(CEPH_PYBIND_SRCDIR) /usr/src/ceph/ceph-v$(CEPH_PYBIND_VERSION).tar.gz
+	$(Q)# tear the scaffolding down: the venv, its Cython, the wheels and the source
+	$(Q)# tree are all build-time only, and none of them belong in the shipped image
+	$(Q)chroot $(ROOTDIR) rm -rf $(CEPH_HOME_DIR) /usr/src/ceph
+	$(Q)# guard against a future edit leaving either behind
+	$(Q)test ! -e $(ROOTDIR)$(CEPH_HOME_DIR)
+	$(Q)test ! -e $(ROOTDIR)/usr/src/ceph
+
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl mask lvm2-monitor
 	$(Q)chroot $(ROOTDIR) systemctl disable ceph-crash libstoragemgmt
