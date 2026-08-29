@@ -63,7 +63,7 @@ var (
 		{
 			Registry: "registry.k8s.io",
 			Name:     "sig-storage/csi-node-driver-registrar",
-			Tag:      "v2.10.0",
+			Tag:      "v2.11.1",
 			LocalTar: fmt.Sprintf("%s/ceph-csi-node-driver-registrar.tar", CsiLocalStore),
 		},
 	}
