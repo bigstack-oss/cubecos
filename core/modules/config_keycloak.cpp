@@ -932,13 +932,24 @@ Commit(bool modified, int dryLevel)
             HexLogError("failed to set the login theme of the master realm");
         }
 
-        // create default cube groups
+        // Create the default cube groups and the SAML/OIDC clients. Failing here
+        // is not cosmetic: cube-cos-api requires the api_client SAML client at
+        // startup and crash-loops without it, so a run that only logged the
+        // failure reported a successful FTS on a cluster whose API cannot start.
+        // Report it on the console the way the SAML metadata gate does, so the
+        // operator sees it at install time rather than in `cluster check`.
         if (!ExecTerraform(
                 "apply",
                 "keycloak",
                 { "cube_controller=" + sharedId },
                 { KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE })) {
-            HexLogError("failed to create default cube groups via terraform");
+            HexLogError("failed to create the keycloak clients and default cube groups via terraform");
+            HexSystemF(0,
+                "echo 'CUBE: keycloak client provisioning failed."
+                " Single sign-on and the control API (cube-cos-api) will not work:"
+                " cube-cos-api requires the api_client SAML client at startup."
+                " Check the terraform provider mirror, then re-run"
+                " hex_config install_keycloak.' > /dev/console");
         }
     }
 

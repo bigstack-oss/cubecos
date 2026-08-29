@@ -77,7 +77,15 @@ $(TF_CORE_BIN): $(TF_CORE_DIR)
 		-o terraform-core ., \
 		"  BUILD   tf-core")
 
-terraform: $(TF_CORE_BIN) $(RANCHER_UPSTREAM_BIN) $(KEYCLOAK_UPSTREAM_BIN)
+# The .tf sources are a prerequisite: without them make keeps a tree built
+# before the last source change, and terraform.mk ships that stale tree next to
+# an override.tfrc taken fresh from source -- a pair that can disagree about
+# which providers are needed. Rebuild from scratch too, since cp -rfT merges
+# and would leave a module that source has since deleted.
+TF_SRCS := $(shell find $(SRCDIR)/src -type f 2>/dev/null)
+
+terraform: $(TF_CORE_BIN) $(RANCHER_UPSTREAM_BIN) $(KEYCLOAK_UPSTREAM_BIN) $(TF_SRCS)
+	$(Q)rm -rf ./$@
 	$(Q)cp -rfT $(SRCDIR)/src/ ./$@
 	$(Q)make clean-etcd
 	$(call RUN_CMD_TIMED,make run-etcd,"  RUN     etcd@jail")
