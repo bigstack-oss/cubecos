@@ -75,14 +75,21 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
-	$(Q)chroot $(ROOTDIR) rpm -e centos-release-ceph-pacific --nodeps || true
-	$(Q)# The quincy release rpm has to come off explicitly. Both it and the reef one
-	$(Q)# own /etc/yum.repos.d/CentOS-Ceph-*.repo under *different* names and neither
-	$(Q)# Obsoletes the other, so installing reef on top leaves the quincy repo file
-	$(Q)# behind and enabled -- dnf then has 17.2.z and 18.2.z in one view and resolves
-	$(Q)# ceph-mgr-dashboard against whichever sorts higher per package.
-	$(Q)chroot $(ROOTDIR) rpm -e centos-release-ceph-quincy --nodeps || true
+	$(Q)# centos-release-openstack-antelope *requires* centos-release-ceph-quincy, so the
+	$(Q)# line above installs it every build and it cannot simply be erased: `rpm -e
+	$(Q)# --nodeps` leaves antelope with an unsatisfied dependency, which `dnf check`
+	$(Q)# reports for the life of the image ("has missing requires of
+	$(Q)# centos-release-ceph-quincy").
+	$(Q)#
+	$(Q)# Disabling the repo gets what we actually want -- 17.2.z out of dnf's view --
+	$(Q)# while leaving the package installed, the dependency satisfied and the rpm
+	$(Q)# database clean. It matters because the quincy and reef release rpms own
+	$(Q)# differently-named CentOS-Ceph-*.repo files and neither Obsoletes the other, so
+	$(Q)# without this dnf sees 17.2.z and 18.2.z at once. The pinned NVRs in
+	$(Q)# core/ceph/ceph.mk would still resolve correctly, but any *unpinned* dependency
+	$(Q)# could be satisfied from the wrong release.
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-reef
+	$(Q)chroot $(ROOTDIR) dnf config-manager --set-disabled centos-ceph-quincy
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled highavailability
 
 # ceph-nfs-ganesha repo needs to be installed before packages
