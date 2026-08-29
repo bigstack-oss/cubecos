@@ -905,8 +905,25 @@ UpdateConfig(
     // bluestore osd perf tuning
     if (perfTuned) {
         fprintf(fout, "bluestore cache autotune = 0\n");    // off: autotune's PriorityCache mem_avail assert aborts OSDs during unclean-shutdown recovery
+        // These three have to sum to <= 1.0 or bluestore refuses to mount and
+        // every OSD exits (22) Invalid argument at init -- not a warning, a hard
+        // stop. Quincy only summed meta+kv, so 0.8 + 0.2 = 1.0 was exactly legal;
+        // reef added kv_onode to the same check and its 0.04 default pushed the
+        // total to 1.04. Measured on jim-1cc: with the quincy values in place,
+        // both OSDs failed every start with
+        //   _set_cache_sizes bluestore_cache_meta_ratio (0.8)
+        //   + bluestore_cache_kv_ratio (0.2) + bluestore_cache_kv_onode_ratio (0.04)
+        //   = 1.04; must be <= 1.0
+        // meta gives up the 0.04 because the intent of this block is a
+        // metadata-heavy cache and 0.76 still spends three quarters of it there;
+        // the alternative, trimming kv, is the cache rocksdb reads out of.
+        //
+        // All three are written explicitly, including kv_onode at its own default.
+        // Leaving it implicit is what made this break in the first place: the sum
+        // silently depended on a value upstream was free to change, and it did.
         fprintf(fout, "bluestore cache kv ratio = 0.2\n");
-        fprintf(fout, "bluestore cache meta ratio = 0.8\n");
+        fprintf(fout, "bluestore cache meta ratio = 0.76\n");
+        fprintf(fout, "bluestore cache kv onode ratio = 0.04\n");
         fprintf(fout, "bluestore csum type = crc32c\n");     // corruption detection on for tenant data
         fprintf(fout, "bluestore extent map shard max size = 200\n");
         fprintf(fout, "bluestore extent map shard min size = 50\n");
