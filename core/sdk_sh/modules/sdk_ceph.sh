@@ -454,14 +454,144 @@ ceph_leave_rolling()
 {
     cluster_rolling_marker_clear
     Quiet $CEPH config rm global mon_osd_down_out_interval
-    # post-upgrade finalization: pin require-osd-release once every OSD runs
-    # one release and it is not already set; a no-op otherwise
-    if [ "$($CEPH osd versions 2>/dev/null | grep -cE 'ceph version')" = 1 ] ; then
-        local rel=$($CEPH osd versions 2>/dev/null | grep -oE '\) [a-z]+ \(stable\)' | sed -E 's/.* ([a-z]+) .*/\1/' | head -1)
-        if [ -n "$rel" ] && ! $CEPH osd dump 2>/dev/null | grep -q "require_osd_release $rel" ; then
-            Quiet $CEPH osd require-osd-release "$rel" --yes-i-really-mean-it
-        fi
-    fi
+    # post-upgrade finalization; see ceph_finalize_release, which is also called
+    # from the per-node ceph commit so a cluster upgraded without a roll job
+    # (a 1-node appliance, a hand-landed node) still completes the upgrade
+    ceph_finalize_release
+}
+
+# ---------------------------------------------------------------------------
+# release gates for a rolling major upgrade
+#
+# Ceph's documented non-cephadm upgrade order is mon -> mgr -> osd -> mds -> rgw,
+# each tier fully on the new release before the next tier is restarted, and only
+# then `ceph osd require-osd-release`.
+#
+# CubeCOS cannot upgrade a tier at a time. The A/B partition switch reboots a
+# whole node, so every daemon on that node changes release together and the
+# cluster necessarily runs mixed for the length of the roll. Ceph supports that
+# -- mixed-version operation during an upgrade is the documented steady state.
+# What it does not support is running a *cluster-wide* step early.
+#
+# So the order is enforced in two different places, and it matters which is which:
+#
+#   - within a node, config_ceph.cpp starts the daemons in the documented order
+#     and waits for the local mon to join quorum before the mgr comes up;
+#   - across the cluster, the one step that is cluster-scoped and effectively
+#     irreversible -- require-osd-release -- is gated here, by
+#     ceph_finalize_release.
+#
+# Note what is deliberately NOT gated: a node's OSDs coming up. Holding them down
+# until every other node has upgraded would, on a 3-node cluster, mean two thirds
+# of the OSDs are down at the moment the second node reboots, which takes pools
+# below min_size and stops client I/O. Ceph's ordering advice assumes you restart
+# a tier across all hosts in minutes; an A/B roll takes a node out for the length
+# of a reboot and a firmware switch. Local OSDs come straight back up, mixed
+# version, exactly as ceph intends during an upgrade.
+CEPH_TARGET_RELEASE=reef
+
+# Release names currently running in one daemon tier (mon|mgr|osd|mds|rgw).
+# Empty when nothing of that kind runs, or when the mon cannot be reached.
+ceph_tier_releases()
+{
+    local tier=${1:-mon}
+    $CEPH versions -f json 2>/dev/null \
+        | jq -r --arg t "$tier" '.[$t] // {} | keys[]' 2>/dev/null \
+        | sed -nE 's/.*\)[[:space:]]+([a-z]+)[[:space:]]+\(stable\).*/\1/p' \
+        | sort -u
+}
+
+# 0 only if every daemon in tier $1 runs release $2 (default $CEPH_TARGET_RELEASE).
+# Fail-safe in the same sense as os_mariadb_version_uniform(): no answer, an empty
+# tier or a mixed tier all mean "not yet", never "go ahead".
+ceph_tier_on_release()
+{
+    local tier=${1:-mon} want=${2:-$CEPH_TARGET_RELEASE} got
+    got=$(ceph_tier_releases "$tier")
+    [ -n "$got" ] || return 1
+    [ "$(echo "$got" | wc -l)" = "1" ] || return 1
+    [ "$got" = "$want" ]
+}
+
+# 0 when it is safe for the *next* cluster-wide step to run, given that tier $1
+# has to be upgraded first.
+#
+# Two cases return 0 without the tier being on the target release, and both are
+# deliberate:
+#   - the mon is unreachable / no cluster answers. That is first-time setup, not
+#     an upgrade, and there is no previous release to order against. Gating here
+#     would deadlock FTS, which has no upgraded peer to wait for and never will.
+#   - the tier is empty. Nothing of that kind runs (an rgw-less deployment, a mds
+#     that has not been created yet), so there is nothing to wait for.
+ceph_upgrade_gate()
+{
+    local tier=${1:-mon} want=${2:-$CEPH_TARGET_RELEASE}
+    $CEPH -s >/dev/null 2>&1 || return 0
+    [ -n "$(ceph_tier_releases "$tier")" ] || return 0
+    ceph_tier_on_release "$tier" "$want"
+}
+
+# Block until ceph_upgrade_gate passes, or give up. Returns 0 when the gate is
+# open, 1 on timeout -- the caller decides whether that is fatal. Default 600s is
+# the outside of a mon quorum re-form plus a mgr failover on a loaded node; a
+# whole-cluster roll is not meant to be waited out here.
+ceph_wait_upgrade_gate()
+{
+    local tier=${1:-mon} timeout=${2:-600} want=${3:-$CEPH_TARGET_RELEASE}
+    local waited=0
+    while ! ceph_upgrade_gate "$tier" "$want" ; do
+        [ $waited -lt $timeout ] || {
+            log_warning "ceph_wait_upgrade_gate: $tier not fully on $want after ${timeout}s (running: $(ceph_tier_releases "$tier" | tr '\n' ' '))"
+            return 1
+        }
+        sleep 10
+        waited=$((waited + 10))
+    done
+    return 0
+}
+
+# 0 once the monmap itself has been pinned to the target release. This is the
+# check the upgrade docs name (`ceph mon dump | grep min_mon_release`), and it is
+# strictly stronger than ceph_tier_on_release mon: the mons can all be running
+# reef binaries while min_mon_release still reads quincy, because the monmap only
+# advances once every mon in the quorum has been seen on the new release.
+ceph_mon_release_pinned()
+{
+    local want=${1:-$CEPH_TARGET_RELEASE}
+    $CEPH mon dump 2>/dev/null | grep -q "min_mon_release .*($want)"
+}
+
+# Complete a major upgrade by pinning require-osd-release.
+#
+# This is the last step of ceph's documented upgrade procedure and the only one
+# that is both cluster-wide and effectively irreversible -- it disallows
+# pre-$rel OSDs from rejoining and switches on the release's new on-disk
+# behaviour -- so it is gated hard and left until every other tier is done.
+#
+# Idempotent and cheap, so it is safe to call from every ceph commit as well as
+# from the end of a roll. It does nothing at all unless:
+#   - a cluster answers (so it is a no-op during FTS), and
+#   - every OSD reports the same release (so it is a no-op for the whole of a
+#     rolling upgrade, right up until the last node is done), and
+#   - the monmap has already advanced to that release. `ceph osd
+#     require-osd-release` is refused while the mons are behind, and the caller
+#     this replaced took the refusal as success and never retried, which is how
+#     a rolled cluster could end up running reef with require_osd_release still
+#     reading quincy.
+ceph_finalize_release()
+{
+    local rel
+    $CEPH -s >/dev/null 2>&1 || return 0
+
+    rel=$(ceph_tier_releases osd)
+    [ -n "$rel" ] && [ "$(echo "$rel" | wc -l)" = "1" ] || return 0
+
+    ceph_mon_release_pinned "$rel" || return 0
+
+    $CEPH osd dump 2>/dev/null | grep -q "require_osd_release $rel" && return 0
+
+    log_info "ceph_finalize_release: pinning require-osd-release to $rel"
+    Quiet $CEPH osd require-osd-release "$rel" --yes-i-really-mean-it
 }
 
 ceph_maintenance_status()

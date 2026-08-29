@@ -457,9 +457,23 @@ migrate_ceph()
     Quiet -n $HEX_SDK ceph_wait_for_services
 
     local release=$($CEPH version  -f json | jq -r .version | cut -d" " -f5)
-    $CEPH osd require-osd-release $release
+
+    # NOT `$CEPH osd require-osd-release $release`. That took the *local* CLI's
+    # release and pinned the cluster to it unconditionally, which is wrong twice
+    # over on a rolling upgrade: on the first node to reboot into reef it asks a
+    # cluster that still holds quincy OSDs to disallow pre-reef ones, ceph
+    # refuses, the refusal is not checked -- and the marker below is written
+    # anyway, so it is never retried and the cluster stays on
+    # require_osd_release quincy for good.
+    #
+    # ceph_finalize_release reads the release off the cluster instead of off this
+    # node, and only pins once every OSD agrees and the monmap has advanced. It
+    # is idempotent, and the ceph config module calls it on every commit, so
+    # whichever node finishes the roll last is the one that completes the upgrade.
+    $HEX_SDK ceph_finalize_release
+
     case $release in
-        nautilus|pacific|quincy)
+        nautilus|pacific|quincy|reef)
             for p in $($CEPH osd pool ls) ; do
                 local mode=$($CEPH osd pool get $p pg_autoscale_mode | awk '{print $2}' | tr -d '\n')
                 if [ "$mode" != "on" ] ; then
