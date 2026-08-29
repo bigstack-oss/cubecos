@@ -66,6 +66,7 @@ include $(SRCDIR)/cube.mk
 
 ROOT_COMPONENTS += cubectl
 ROOT_COMPONENTS += phone-home-agent
+ROOT_COMPONENTS += advisor
 include $(shell for m in $(ROOT_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 
 # cube finalizer

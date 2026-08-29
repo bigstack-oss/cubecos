@@ -35,6 +35,11 @@ fi
 ADVISOR_MANIFEST_NAME=manifest.txt
 ADVISOR_SIGNATURE_NAME=manifest.txt.sig
 
+# The agent's own unit, shipped by cube-advisor-agent and installed with the
+# image. Enabled only once a node has enrolled -- see advisor_agent_service_enable.
+ADVISOR_AGENT_UNIT_NAME=cube-advisor-agent.service
+ADVISOR_AGENT_UNIT=/usr/lib/systemd/system/$ADVISOR_AGENT_UNIT_NAME
+
 # advisor_verify_release <dir> [artifact]
 #
 # Verifies the release in <dir>: the manifest's signature against the key
@@ -95,6 +100,78 @@ advisor_install_release()
     return 0
 }
 
+# advisor_agent_service_enable
+#
+# Start the tunnel and keep it started. Enrolment leaves the node holding a
+# valid certificate; without this it would hold one and never connect, which
+# looks from the Advisor exactly like a broken tunnel.
+#
+# Enabled here rather than at image build: an un-enrolled node has no identity,
+# so the unit would crash-loop from first boot until someone enrolled it.
+advisor_agent_service_enable()
+{
+    if [ ! -r "$ADVISOR_AGENT_UNIT" ] ; then
+        echo "Warning: $ADVISOR_AGENT_UNIT is missing; the tunnel will not start on its own" >&2
+        return 0
+    fi
+
+    systemctl daemon-reload
+    if systemctl enable --now "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
+        echo "Tunnel service enabled; the agent will reconnect on its own after a reboot."
+    else
+        # The identity is saved and enrolment did succeed, so this must not
+        # fail the command -- say what is wrong and let the operator start it.
+        echo "Warning: could not enable $ADVISOR_AGENT_UNIT_NAME; start it manually with: systemctl enable --now $ADVISOR_AGENT_UNIT_NAME" >&2
+    fi
+    return 0
+}
+
+# advisor_cluster_id
+#
+# The cluster's identity for enrolment -- this cluster's, never this node's.
+# The Advisor makes it the certificate's common name and the primary key five
+# of its tables reference, none with ON UPDATE CASCADE, so it is chosen once
+# and effectively permanently. Two sources, in order:
+#
+#   1. CUBE_CLUSTER_ID, written by cube-cos-driver at deploy time. Derived from
+#      the cluster UUID the driver assigns, so it is unique by construction --
+#      and the Advisor's fleet then shows the same id the driver shows.
+#   2. cubesys.controller, the operator-chosen controller name: the VIP's name
+#      on an HA cluster and the single node's name otherwise. Identical on
+#      every node of the cluster, so enrolling from any control node yields
+#      one identity -- but a name, so two sites can collide on it.
+#
+# Never the hostname: a 3-node cluster would then enrol as whichever node the
+# operator happened to type the command on.
+advisor_cluster_id()
+{
+    local id=""
+
+    if [ -r /etc/cube/phone-home-agent.env ] ; then
+        id=$(sed -n 's/^CUBE_CLUSTER_ID=//p' /etc/cube/phone-home-agent.env | head -1)
+    fi
+    if [ -z "$id" ] ; then
+        id=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "$T_cubesys_controller")
+    fi
+    if [ -z "$id" ] ; then
+        echo "Error: cannot tell which cluster this node belongs to (no CUBE_CLUSTER_ID, no cubesys.controller)" >&2
+        return 1
+    fi
+
+    # It becomes a certificate CN and a URL path segment, and nothing on the
+    # Advisor side validates either -- so refuse the shapes that would break
+    # them here, where the message can still be useful.
+    case $id in
+        */*|*\ *) echo "Error: cluster id contains a character that cannot appear in a URL path: $id" >&2 ; return 1 ;;
+    esac
+    if [ ${#id} -gt 64 ] ; then
+        echo "Error: cluster id is longer than 64 characters, which strict X.509 tooling rejects: $id" >&2
+        return 1
+    fi
+
+    echo "$id"
+}
+
 # advisor_agent_arch
 #
 # Maps this machine to the artifact naming the release manifest uses. Unknown
@@ -147,17 +224,8 @@ advisor_enroll()
         return 1
     fi
 
-    # The cluster's identity, not this node's. cubesys.controller is the
-    # operator-chosen controller name: the VIP's name on an HA cluster and the
-    # single node's name otherwise, and identical on every node of the cluster
-    # -- so enrolling from any control node yields the same identity, where the
-    # agent's own default (the hostname) would mint one identity per node.
     local cluster
-    cluster=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "$T_cubesys_controller")
-    if [ -z "$cluster" ] ; then
-        echo "Error: cubesys.controller is not set; cannot tell which cluster this node belongs to" >&2
-        return 1
-    fi
+    cluster=$(advisor_cluster_id) || return 1
     arch=$(advisor_agent_arch) || return 1
     artifact="cube-advisor-agent_linux_$arch"
 
@@ -186,7 +254,7 @@ advisor_enroll()
         -server "$server" -token-file "$token_file" -cluster "$cluster"
     rc=$?
     case $rc in
-        0) ;;
+        0) advisor_agent_service_enable ;;
         3) echo "This node is already enrolled; nothing was changed." >&2 ;;
         4) echo "The pairing token was refused -- ask for a fresh one." >&2 ;;
         5) echo "The Advisor service was unreachable from this node." >&2 ;;

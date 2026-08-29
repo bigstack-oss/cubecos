@@ -1,0 +1,23 @@
+# Installed by the CubeCOS OS image, but enabled only after `cube-advisor-agent
+# enroll` succeeds — an un-enrolled node has no identity and nothing to connect
+# with, so enabling this unit before that point would just crash-loop.
+#
+# `run` takes no arguments: enrolment persists the tunnel address (see
+# internal/identity.SaveServer), and the agent reconnects with its own backoff
+# on every flap or SaaS restart. This unit's only job is to keep the process
+# alive across reboots and crashes — bigstack-oss/cube-advisor-agent#19.
+
+[Unit]
+Description=CubeCOS AI Advisor agent
+Documentation=https://github.com/bigstack-oss/cube-advisor-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cube-advisor-agent run
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
