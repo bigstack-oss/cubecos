@@ -1,5 +1,12 @@
 controller:
   kind: DaemonSet
+  # copy-images.sh bundles a single-arch copy, whose manifest digest differs
+  # from upstream's multi-arch index. Clear the chart's digest pins so the pull
+  # resolves by tag through the registries.yaml mirror instead of by a digest
+  # the local registry will never hold.
+  image:
+    digest: ""
+    digestChroot: ""
   hostPort:
     enabled: true
     ports:
