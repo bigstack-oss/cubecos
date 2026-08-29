@@ -71,6 +71,28 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 750 /var/log/mariadb
 	$(Q)chroot $(ROOTDIR) chown mysql:mysql /var/log/mariadb
 
+# Drop MariaDB-server's own logrotate file. It and the one config_mysql.cpp writes
+# (/etc/logrotate.d/mysql) both glob /var/log/mariadb/*.log, and logrotate treats two
+# entries for one file as a hard error:
+#
+#   error: mysql:1 duplicate log entry for /var/log/mariadb/mysql_error.log
+#   error: found error in file mysql, skipping
+#
+# It skips that one file but still **exits 1**, so logrotate.service is left in a
+# permanently failed state. That matters well beyond mariadb: a failed unit is the
+# signal anything watching log rotation keys off, so a genuinely stuck rotation
+# elsewhere is indistinguishable from this. Observed on accept-3cc, where the unit had
+# been failing since the 10.6 -> 10.11 bump first installed this file and /var/log had
+# grown to 19G across the three nodes.
+#
+# Ours is the one to keep: config_mysql.cpp owns the policy (daily, maxsize 128M,
+# copytruncate) and rewrites it on every commit, so the vendor copy would be
+# reintroduced-and-ignored at best. Nothing is lost by removing it -- its other two
+# paths, /var/lib/mysql/{mysqld,mariadb}.log, are never written here, because
+# config_mysql.cpp points log_error at /var/log/mariadb/mysql_error.log.
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) rm -f /etc/logrotate.d/mariadb
+
 # see the drop-in for why upstream's stop semantics are not safe across a reboot
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/mariadb.service.d
