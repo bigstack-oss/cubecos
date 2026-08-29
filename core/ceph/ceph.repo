@@ -1,6 +1,6 @@
 [ceph]
 name=Ceph packages for $basearch
-baseurl=https://download.ceph.com/rpm-17.2.4/el9/$basearch
+baseurl=https://download.ceph.com/rpm-18.2.8/el9/$basearch
 enabled=1
 priority=2
 gpgcheck=1
@@ -8,7 +8,7 @@ gpgkey=https://download.ceph.com/keys/release.asc
 
 [ceph-noarch]
 name=Ceph noarch packages
-baseurl=https://download.ceph.com/rpm-17.2.4/el9/noarch
+baseurl=https://download.ceph.com/rpm-18.2.8/el9/noarch
 enabled=1
 priority=2
 gpgcheck=1

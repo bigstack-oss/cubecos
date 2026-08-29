@@ -76,7 +76,13 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
 	$(Q)chroot $(ROOTDIR) rpm -e centos-release-ceph-pacific --nodeps || true
-	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-quincy
+	$(Q)# The quincy release rpm has to come off explicitly. Both it and the reef one
+	$(Q)# own /etc/yum.repos.d/CentOS-Ceph-*.repo under *different* names and neither
+	$(Q)# Obsoletes the other, so installing reef on top leaves the quincy repo file
+	$(Q)# behind and enabled -- dnf then has 17.2.z and 18.2.z in one view and resolves
+	$(Q)# ceph-mgr-dashboard against whichever sorts higher per package.
+	$(Q)chroot $(ROOTDIR) rpm -e centos-release-ceph-quincy --nodeps || true
+	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-reef
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled highavailability
 
 # ceph-nfs-ganesha repo needs to be installed before packages

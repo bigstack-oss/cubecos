@@ -1,9 +1,16 @@
 # Cube SDK
 # ceph packages
 
-# ceph-17.2.6-4.el9s + python3-cherrypy-18.6.1-2 + CherryPy===18.6.1 to avoid dashboard->Object Gateway 500 error
-# ENGINE HTTP Server cherrypy._cpwsgi_server.CPWSGIServer(('0.0.0.0', 9283)) shut down
-CEPH_VERSION:=-17.2.6-4.el9s
+# Reef 18.2.8 is the last release in the reef series (2026-03-20); reef and quincy
+# are both archived upstream, so this is a hop, not a destination -- squid (19.2.z)
+# is the next one and is reachable directly from here. Ceph only supports upgrading
+# across two majors, so quincy -> reef -> squid is the supported path and
+# quincy -> tentacle is not.
+CEPH_VERSION:=-18.2.8-1.el9s
+# nfs-ganesha stays on 5.9: its ceph FSAL links libcephfs.so.2, the same soname reef
+# provides, so the ganesha packages are unaffected by the major bump. Verified
+# against nfs-ganesha-ceph-5.9-2.el9s and -6.5-1.el9s -- both carry the same soname
+# dependency, so moving to 6.x buys nothing here and is left for the squid hop.
 GANESHA_VERSION:=-5.9-1.el9s
 ROOTFS_DNF_NOARCH_P1 += python3-rados$(CEPH_VERSION) python3-rbd$(CEPH_VERSION)
 ROOTFS_DNF += ceph$(CEPH_VERSION) ceph-mds$(CEPH_VERSION) ceph-radosgw$(CEPH_VERSION) rbd-mirror$(CEPH_VERSION) bc liburing
@@ -13,65 +20,116 @@ ROOTFS_DNF_NOARCH += s3cmd ceph-mgr-dashboard$(CEPH_VERSION) python3-rtslib targ
 # FIXME: ceph-iscsi for el9/python3.9 is not yet available (Latest is ceph-iscsi 3.6-2 el8 which depends on python3.6)
 # ROOTFS_DNF_DL_FROM += https://download.ceph.com/ceph-iscsi/latest/rpm/el8/noarch/ceph-iscsi-3.6-2.el8.noarch.rpm
 
-# FIXME:  scikit-learn needed by ceph mgr module diskprediction
+# These three stay on the *system* python 3.9 and cannot move into the ceph venv
+# below, however much we would like them isolated.
+#
+# ceph-mgr is a C++ binary with an embedded interpreter: the reef rpm carries a hard
+# `libpython3.9.so.1.0()(64bit)` dependency, so every mgr module -- dashboard,
+# prometheus, restful -- is imported by that 3.9 interpreter and can only ever see
+# /usr/lib64/python3.9/site-packages. python3-saml and xmlsec back the dashboard's
+# SAML2 SSO controller (dashboard/controllers/saml2.py does
+# `from onelogin.saml2.auth import ...`), which is the IdP path config_ceph.cpp's
+# ceph_dashboard_idp module configures, so pointing them anywhere else silently
+# turns dashboard SSO into "Required library not found: python3-saml".
+#
+# mon, osd, mds and radosgw are unaffected either way -- their reef rpms declare no
+# python dependency at all, they are pure C++.
 ROOTFS_PIP += python-magic python3-saml xmlsec
 
-# ceph mgr module enable dashboard/prometheus failed with unknown version when python3-jaraco-text is 4.0.0-2.el9
+# ceph mgr module enable dashboard/prometheus failed with unknown version when
+# python3-jaraco-text is 4.0.0-2.el9. Kept across the reef bump: reef's mgr still
+# resolves module versions through pkg_resources on the same system python 3.9, so
+# nothing about the bump retires this. Re-verify with
+# `ceph mgr module ls` + `ceph mgr module enable dashboard` before dropping it.
 ROOTFS_DNF_NOARCH += python3-jaraco-text-3.2.0-6.el9s
 LOCKED_DNF += python3-jaraco-text-3.2.0-6.el9s
 
-# build ceph python bindings for the openstack venvs (python 3.10 for antelope,
-# python 3.11 for caracal)
+# headers for the rados/rbd python bindings built below
 ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
-
-# Not $(OPENSTACK_RELEASE)_patch: this patches the ceph dashboard (a token.decode()
-# on an already-str token), under /usr/share/ceph/mgr where ceph-mgr runs on the
-# system python. It was only ever *named* by the openstack release and has nothing to
-# do with one -- deriving it from the release meant that promoting OPENSTACK_RELEASE
-# to antelope silently pointed it at a directory that does not exist, and the
-# "[ -d ] && cp || /bin/true" guard below would have swallowed that.
-CEPH_PATCHDIR := $(COREDIR)/ceph/patch
 
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
 
-# build ceph python bindings for both openstack venvs
+# ceph's own python 3.11 execution context
 #
-# Every venv that talks to the built-in Ceph RBD store needs its own rados/rbd --
-# they are C extensions, so the antelope build (cpython-310) is not importable from
-# the caracal venv's python 3.11. glance is the first caracal occupant to need them
-# (#630); keystone and skyline never did, which is why this used to build once.
+# Ceph is the only component that needed build tooling inside somebody else's venv:
+# the rados/rbd bindings are Cython C extensions, so building them used to mean
+# `pip install "Cython<3"` into the antelope venv *and* the caracal venv, leaving a
+# build-time compiler installed in two openstack runtime environments for the life of
+# the image. This venv is where that tooling lives now, so neither openstack venv is
+# touched by ceph any more.
 #
-# `pip install`, not `setup.py install`: setuptools is retiring that command, and at
-# the venv's pinned 65.7.0 it takes its easy_install path and drops a
-# rados-2.0.0-py3.10-linux-x86_64.egg plus an easy-install.pth line instead of the
-# flat rados.cpython-310-*.so every shipped rootfs has. pip gives the flat layout and
-# a rados-2.0.0.dist-info with it, so `pip list` can see these two.
+# It is also the canonical home of the built bindings. The wheels are produced here
+# once and then installed into the caracal venv, rather than compiled separately in
+# each consumer -- same interpreter (3.11), same ABI tag (cp311), so one build
+# serves both.
 #
-# --no-build-isolation: setup.py cythonizes rados.pyx, and Cython lives in this venv
-# (installed just above), not in the throwaway overlay pip would otherwise build in.
-# Building here also means egg_info runs with pbr installed -- pbr registers an
-# egg_info writer that imports pkg_resources -- which is why this step needs the
-# venv's setuptools pinned below 82; see the NOTE in core/heavyfs/Makefile. Both
-# venvs pin it below that -- antelope at 65.7.0, caracal at 75.6.0 -- so both builds
-# take the same path; verified to produce the same flat .so layout under either.
-# --no-deps: neither binding declares a dependency, so nothing should be resolved
-# against the index at this point.
-CEPH_PYBIND_SRCDIR := /usr/src/ceph/ceph-17.2.6
-CEPH_PYBIND_CFLAGS := -I$(CEPH_PYBIND_SRCDIR)/src/include
+# 3.11 to match the caracal venv: a C extension is only importable by the minor it
+# was built for, and cinder, glance and manila -- the services that talk to the
+# built-in RBD store -- all live in /opt/openstack-caracal now. The antelope venv no
+# longer holds an RBD consumer, which is why the second (cpython-310) build that used
+# to run here is gone.
+CEPH_PYTHON_VER := 3.11
+CEPH_HOME_DIR := /opt/ceph
 
+# setuptools is pinned rather than left to float. Unpinned, the version is whatever
+# the index serves on the day of the build, which is how the antelope venv acquired a
+# setuptools with no pkg_resources and started failing on a date rather than on a
+# commit (see the NOTE in core/heavyfs/Makefile). 75.6.0 is the same value the
+# caracal venv settled on -- below 80, which removed `setup.py install`, and below
+# 82, which deleted pkg_resources.
+CEPH_VENV_SETUPTOOLS := 75.6.0
+
+# Cython<3 because that is what reef itself builds against: ceph.spec.in's
+# BuildRequires is the el9s python3-Cython (0.29.x). Reef's rbd/setup.py does carry a
+# Cython 3 branch (it sets legacy_implicit_noexcept when it sees one), so 3.x would
+# also compile, but 0.29.x is the combination upstream ships and tests.
+#
+# `packaging` is a reef-only requirement and is easy to miss: reef's
+# src/pybind/rbd/setup.py gained a top-level `from packaging import version` that
+# quincy's did not have, and with --no-build-isolation that import is resolved
+# against this venv rather than a throwaway overlay. Without it the rbd build dies at
+# setup.py import time, before a single line is compiled. rados/setup.py is byte
+# for byte identical between 17.2.6 and 18.2.8 and needs nothing new.
+CEPH_VENV_BUILD_REQS := "Cython<3" packaging wheel
+
+CEPH_PYBIND_VERSION := 18.2.8
+CEPH_PYBIND_SRCDIR := /usr/src/ceph/ceph-$(CEPH_PYBIND_VERSION)
+CEPH_PYBIND_CFLAGS := -I$(CEPH_PYBIND_SRCDIR)/src/include
+CEPH_WHEEL_DIR := /usr/src/ceph/wheels
+
+# create the ceph venv and its build tooling
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p $(CEPH_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) python$(CEPH_PYTHON_VER) -m venv $(CEPH_HOME_DIR)
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) $(CEPH_HOME_DIR)/bin/pip install --upgrade pip
+	$(Q)chroot $(ROOTDIR) $(CEPH_HOME_DIR)/bin/pip install --upgrade setuptools==$(CEPH_VENV_SETUPTOOLS)
+	$(Q)chroot $(ROOTDIR) $(CEPH_HOME_DIR)/bin/pip install $(CEPH_VENV_BUILD_REQS)
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+
+# build the rados/rbd bindings once, here, then install the wheels into the caracal venv
+#
+# `pip wheel`, not `pip install .`: the artifact has to be installable into a second
+# venv, and a wheel is the only output that carries over. --no-build-isolation keeps
+# the build against this venv's own Cython and setuptools instead of the throwaway
+# overlay pip would otherwise create (which would resolve Cython off the index, and
+# a Cython 3 at that). --no-deps because neither binding declares a dependency, so
+# nothing should be resolved against the index at this point.
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install "Cython<3"
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install "Cython<3"
-	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/ceph
-	$(Q)chroot $(ROOTDIR) wget -O /usr/src/ceph/ceph-v17.2.6.tar.gz https://github.com/ceph/ceph/archive/refs/tags/v17.2.6.tar.gz
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/ceph $(CEPH_WHEEL_DIR)
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/ceph/ceph-v$(CEPH_PYBIND_VERSION).tar.gz https://github.com/ceph/ceph/archive/refs/tags/v$(CEPH_PYBIND_VERSION).tar.gz
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/ceph/ceph-v17.2.6.tar.gz -C /usr/src/ceph
-	$(Q)chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/rados && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(OPENSTACK_HOME_DIR)/bin/pip install --no-build-isolation --no-deps ."
-	$(Q)chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/rbd && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(OPENSTACK_HOME_DIR)/bin/pip install --no-build-isolation --no-deps ."
-	$(Q)chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/rados && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --no-build-isolation --no-deps ."
-	$(Q)chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/rbd && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --no-build-isolation --no-deps ."
-
+	$(Q)chroot $(ROOTDIR) tar -xzf /usr/src/ceph/ceph-v$(CEPH_PYBIND_VERSION).tar.gz -C /usr/src/ceph
+	$(Q)for b in rados rbd ; do \
+		chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/$$b && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CEPH_HOME_DIR)/bin/pip wheel --no-build-isolation --no-deps -w $(CEPH_WHEEL_DIR) ." ; \
+	done
+	$(Q)chroot $(ROOTDIR) bash -c "$(CEPH_HOME_DIR)/bin/pip install --no-deps $(CEPH_WHEEL_DIR)/rados-*.whl $(CEPH_WHEEL_DIR)/rbd-*.whl"
+	$(Q)chroot $(ROOTDIR) bash -c "$(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --no-deps $(CEPH_WHEEL_DIR)/rados-*.whl $(CEPH_WHEEL_DIR)/rbd-*.whl"
+	$(Q)# fail the build here rather than at first RBD I/O if either binding did not land
+	$(Q)chroot $(ROOTDIR) $(CEPH_HOME_DIR)/bin/python -c "import rados, rbd"
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python -c "import rados, rbd"
+	$(Q)chroot $(ROOTDIR) rm -rf $(CEPH_PYBIND_SRCDIR) /usr/src/ceph/ceph-v$(CEPH_PYBIND_VERSION).tar.gz
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl mask lvm2-monitor
 	$(Q)chroot $(ROOTDIR) systemctl disable ceph-crash libstoragemgmt
@@ -92,9 +150,6 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/nfs-ganesha-sigkill.conf ./etc/systemd/system/nfs-ganesha.service.d/
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/cron
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cube/cos/ceph
-
-rootfs_install::
-	$(Q)[ -d $(CEPH_PATCHDIR) ] && (cd $(CEPH_PATCHDIR) && rsync -ar . $(ROOTDIR)/) || /bin/true
 
 # install hdsentinel to assist osd disk life predictions
 rootfs_install::
