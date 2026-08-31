@@ -65,9 +65,9 @@ static const char DBPASS[] = "KNaHKGg62djyeJ6M";
  * calls priv_context.init(root_helper=...) at startup, which makes the helper
  * command `sudo neutron-rootwrap /etc/neutron/rootwrap.conf privsep-helper`.
  * neutron-rootwrap then resolves the bare name off the exec_dirs in
- * rootwrap.conf, and /usr/bin comes first -- so it lands on
- * /usr/bin/privsep-helper, the symlink core/nova/nova.mk keeps pointed at the
- * *antelope* venv for masakari. A python 3.10 helper cannot
+ * rootwrap.conf, and /usr/bin comes first -- so it would land on
+ * /usr/bin/privsep-helper, the symlink core/nova/nova.mk kept pointed at the
+ * *antelope* venv for masakari until #639 removed it. A python 3.10 helper cannot
  * serve a caracal neutron, and the failure has two shapes, only one of them
  * loud: on a freshly built rootfs the antelope venv holds no neutron at all and
  * the agent dies with FailedToDropPrivileges, while on a node upgraded in place

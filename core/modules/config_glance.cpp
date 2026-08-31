@@ -43,19 +43,19 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * priv_context.init(root_helper=...), so the command becomes
  * `sudo glance-rootwrap /etc/glance/rootwrap.conf privsep-helper`, and glance-rootwrap
  * then looks the bare name up in the exec_dirs of rootwrap.conf -- where /bin and
- * /usr/bin come first and hold the symlink core/nova/nova.mk keeps pointed at the
- * *antelope* venv. A caracal glance-api on python 3.11 therefore drives a python 3.10
- * helper. Verified on jim-1cc before this pin: glance-api ran from
+ * /usr/bin come first and used to hold the symlink core/nova/nova.mk kept pointed at
+ * the *antelope* venv. A caracal glance-api on python 3.11 therefore drove a python
+ * 3.10 helper. Verified on jim-1cc before this pin: glance-api ran from
  * /opt/openstack-caracal/bin/python3.11 while its os_brick.privileged.default helper
  * ran from /opt/openstack-antelope/bin/python3.10.
  *
  * That pairing happens to work today -- os_brick.privileged exposes the same 23
  * callables with the same signatures in the antelope venv's 6.2.5 as in caracal's
  * 6.7.3, so the image upload succeeds and nothing is logged. It is still wrong, and
- * it stops working the moment nova hops: /usr/bin/privsep-helper is nova's symlink,
- * and when it follows nova to caracal or goes away, glance's rootwrap lookup has
- * nothing left to find. Naming the caracal helper removes the dependency on another
- * component's symlink; /etc/sudoers.d/glance authorises exactly this path.
+ * it stopped working exactly as predicted: #639 took the last service that needed
+ * that symlink to caracal and removed it, so glance's rootwrap lookup now has nothing
+ * to find. Naming the caracal helper removed the dependency on another component's
+ * symlink before that happened; /etc/sudoers.d/glance authorises exactly this path.
  *
  * helper_command is what takes rootwrap out of the path -- oslo.privsep documents
  * root_helper as "ignored if context's helper_command config option is set". It also

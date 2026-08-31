@@ -2,7 +2,8 @@ Defaults:nova !requiretty
 
 nova ALL = (root) NOPASSWD: /usr/bin/nova-rootwrap /etc/nova/rootwrap.conf *
 # This is what the four helper_command pins config_nova.cpp writes point at.
-# /usr/bin/privsep-helper stays pointed at the antelope venv (core/nova/nova.mk keeps
-# it there for the services that have not hopped), and a python 3.10 helper cannot serve
-# a caracal nova, so the path is spelled out rather than left to sudo's secure_path.
+# There is no /usr/bin/privsep-helper any more -- it pointed at the antelope venv until
+# #639 took the last service that needed it to caracal -- and a python 3.10 helper could
+# not serve a caracal nova anyway, so the path is spelled out rather than left to sudo's
+# secure_path.
 nova ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *

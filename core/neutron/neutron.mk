@@ -44,7 +44,7 @@ NEUTRON_VPNAAS_DASHBOARD_REPO_URL := https://github.com/openstack/neutron-vpnaas
 # other occupants nothing.
 #
 # It has to be a different venv rather than a version bump in place: manila,
-# masakari, cyborg, ironic, designate, octavia, heat and horizon still share
+# cyborg, ironic, designate, octavia, heat and horizon still shared
 # /opt/openstack-antelope, and neutron 24.2.2 takes neutron-lib to 3.11.1, os-ken to
 # 2.8.2 and ovsdbapp to 2.6.1 -- which openstack-heat also resolves neutron-lib
 # through.

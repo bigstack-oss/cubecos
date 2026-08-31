@@ -43,10 +43,11 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
 /**
  * The privsep helper manila must escalate through.
  *
- * oslo.privsep defaults to `sudo privsep-helper`, which sudo's secure_path resolves to
- * /usr/bin/privsep-helper -- a symlink core/nova/nova.mk keeps pointed at the *antelope*
- * venv, because masakari and cyborg are still there and it cannot move with manila. A
- * python 3.10 helper cannot serve a caracal manila, so the caracal path is named
+ * oslo.privsep defaults to `sudo privsep-helper`, which sudo's secure_path used to
+ * resolve to /usr/bin/privsep-helper, a symlink core/nova/nova.mk kept pointed at the
+ * *antelope* venv. #639 took the last service that needed it (masakari) to caracal, so
+ * the symlink is gone and the bare name resolves to nothing. A python 3.10 helper could
+ * not have served a caracal manila in any case, so the caracal path is named
  * explicitly; config_nova.cpp and config_neutron.cpp pin theirs for the same reason.
  *
  * Only the lvm and glusterfs drivers reach privsep and enabled_share_backends is pinned

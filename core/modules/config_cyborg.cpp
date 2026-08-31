@@ -248,8 +248,9 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         // resolved through rootwrap exec_dirs and has to be named here.
         //
         // The caracal helper is named in full rather than reached through
-        // /usr/bin/privsep-helper, which core/nova/nova.mk keeps pointed at the
-        // *antelope* venv. A privsep helper runs the caller's own code -- it imports
+        // /usr/bin/privsep-helper, which core/nova/nova.mk kept pointed at the
+        // *antelope* venv until #639 removed it. A privsep helper runs the caller's
+        // own code -- it imports
         // cyborg and executes the entrypoint the client asks for -- so a python 3.10
         // helper cannot serve a 3.11 cyborg. That combination has been seen on
         // jim-1cc for glance (see config_glance.cpp): the service ran from
