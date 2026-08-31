@@ -1,10 +1,5 @@
-# Cube downstream: resize plan -- the capability envelope an operator-facing
-# resize dialog needs to decide LIVE vs COLD for every candidate flavor.
-#
-# Deliberately returns the INSTANCE's envelope once rather than a verdict per
-# flavor: the caller evaluates candidates locally. A per-flavor endpoint would
-# cost a round-trip each (~46ms measured) times the size of the flavor list,
-# every time the dialog opens. See spike cubecos#1366.
+# Cube downstream: the instance's hotplug envelope, returned once so a caller
+# can decide LIVE vs COLD per flavor locally. See cubecos#1370.
 
 from nova.api.openstack import common
 from nova.api.openstack import wsgi

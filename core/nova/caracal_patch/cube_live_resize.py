@@ -55,9 +55,8 @@ def headroom(flavor):
 # while a live resize is migrating the instance to a host that fits
 SYSMETA_FLAVOR_ID = "cube_live_resize_flavor_id"
 
-# Ceiling actually baked into the running domain, recorded at spawn so the API
-# can answer a resize plan from the instance object -- no compute RPC. The
-# config default is only a fallback for instances booted before this shipped.
+# Ceiling baked into the running domain, recorded at spawn so the plan needs no
+# compute RPC. headroom() is only a fallback for instances booted before this.
 SYSMETA_MAX_VCPUS = "cube_live_resize_max_vcpus"
 SYSMETA_MAX_MEM_MB = "cube_live_resize_max_memory_mb"
 

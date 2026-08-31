@@ -36,12 +36,8 @@ cube_resize_schema = {
             'properties': {
                 'flavorRef': {'type': ['string', 'integer'],
                               'minLength': 1},
-                # The caller states the mode it was shown and consented to.
-                # There is deliberately no 'auto': falling back from live to
-                # cold on the operator's behalf would reboot the guest, move
-                # it to another host and strand it in VERIFY_RESIZE holding
-                # allocations on two hosts. Cold is downtime, and downtime is
-                # consented to, never inferred.
+                # No 'auto': cold means downtime, and downtime is
+                # consented to, never inferred. See cubecos#1372.
                 'mode': {'type': 'string', 'enum': ['live', 'cold']},
             },
             'required': ['flavorRef', 'mode'],
