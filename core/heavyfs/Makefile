@@ -392,6 +392,12 @@ $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
 # Component artifacts baked into the rootfs — prereqs so a component rebuild
 # forces a rootfs rebuild (with touch $@ below). Scoped to HEAVY_COMPONENTS, not
 # core/main (circular). Not covered: remote dnf/pip + bare-binary/dir deliverables.
+#
+# The source-side prereqs on the $(HEAVYFS) rules below scan each component dir with
+# a bare -type f, matching how core/main/Makefile scans ROOT_COMPONENTS. The narrower
+# '*.mk' filter this replaces hid every non-makefile source a component ships -- conf
+# templates, unit files, and the *_patch/ trees -- so editing one of those left
+# heavy_rootfs looking up to date and the change never reached the image.
 HEAVY_DELIVERABLES := $(wildcard $(foreach m,$(HEAVY_COMPONENTS),$(TOP_BLDDIR)/core/$(m)/*.rpm $(TOP_BLDDIR)/core/$(m)/*.tgz))
 
 ifneq ($(RC),)
@@ -413,12 +419,12 @@ rootfs.cgz:
 	$(Q)umount pkg
 	$(Q)rmdir pkg
 
-$(HEAVYFS): rootfs.cgz $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
+$(HEAVYFS): rootfs.cgz $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f; done)
 	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" heavyfs_install' $< $@, "  GEN     $@")
 	$(Q)cp -f /etc/resolv.conf $@/etc/resolv.conf
 	$(Q)touch $@
 else
-$(HEAVYFS): $(HEX_FULL_ROOTFS) $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
+$(HEAVYFS): $(HEX_FULL_ROOTFS) $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f; done)
 	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
 	$(Q)touch $@
 endif
