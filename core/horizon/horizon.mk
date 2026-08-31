@@ -1,17 +1,15 @@
 # Cube SDK
 # horizon installation
 
-# https://releases.openstack.org/antelope/index.html#antelope-horizon
-HORIZON_VER := 23.1.1
+# https://releases.openstack.org/caracal/index.html#caracal-horizon
+#
+# The same version $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the
+# two agree and neither decides the release on its own.
+HORIZON_VER := 24.0.2
 
-# The caracal dashboard, installed alongside it in the caracal venv. Nothing serves
-# this one -- see the note by its install block below -- and the version is the one
-# $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the two agree.
-CARACAL_HORIZON_VER := 24.0.2
-
-# Not in the antelope upper-constraints, so pinned here for reproducibility. This is
-# also a source build (see core/mysql/mysql.mk), which is the other reason not to
-# leave it floating.
+# Not in the caracal upper-constraints either, so pinned here for reproducibility.
+# This is also a source build (see core/mysql/mysql.mk), which is the other reason not
+# to leave it floating.
 MYSQLCLIENT_VER := 2.2.8
 
 # The dashboard layout. These used to live in core/heavyfs/Makefile, from the days
@@ -24,7 +22,7 @@ MYSQLCLIENT_VER := 2.2.8
 # path, so a plain cp from the build host would follow it out to the *host* root
 # instead of into $(ROOTDIR).
 HORIZON_APP_DIR := /usr/share/openstack-dashboard
-HORIZON_VENV_SITE_PACKAGES := $(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+HORIZON_VENV_SITE_PACKAGES := $(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
 HORIZON_DIR := $(HORIZON_VENV_SITE_PACKAGES)/openstack_dashboard
 HORIZON_ETCDIR := /etc/openstack-dashboard
 HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
@@ -37,31 +35,42 @@ HORIZON_LOG_DIR := /var/log/horizon
 HORIZON_APP_STATE_DIR := /var/lib/openstack-dashboard
 
 # The same site-packages directory as seen from the build host. Every dashboard plugin
-# is pip installed by the component that owns it -- heat-dashboard by heat.mk,
-# ironic-ui by ironic.mk, manila-ui by manila.mk, octavia-dashboard by octavia.mk, and
-# designate/masakari/watcher/neutron-vpnaas from git by theirs -- and all of them land
-# here for the collection step below to pick up.
+# is a pinned pip install done by the component that owns it -- heat-dashboard by
+# heat.mk, ironic-ui by ironic.mk, manila-ui by manila.mk, octavia-dashboard by
+# octavia.mk, and designate/masakari/watcher/neutron-vpnaas by theirs -- and all of
+# them land here for the collection step below to pick up.
 HORIZON_VENV_SP := $(ROOTDIR)$(HORIZON_VENV_SITE_PACKAGES)
 
 CUBE_THEME_SRCS := $(shell find $(CUBE_THEME_SRCDIR) -type f 2>/dev/null)
 
 $(PROJ_HEAVYFS): $(COREDIR)/horizon/local_settings.in $(CUBE_THEME_SRCS)
 
-# install horizon inside the python 3.10 virtual environment
+# install horizon inside the python 3.11 virtual environment
 #
 # The rpms this replaces are openstack-dashboard, openstack-dashboard-theme and
 # python3-django-horizon. Each dashboard plugin is pip installed by the component
 # that owns it; registering the panels and running manage.py is this file's job, and
 # horizon is built last so all of it happens once every plugin is in the venv.
 #
-# Two dependencies that are not horizon requirements and so have to be named:
+# This used to be two installs: the served dashboard in the antelope venv, and a
+# second 24.0.2 copy here whose only job was to give dump_default_policies an
+# interpreter that could see the caracal services' oslo.policy entry points. That
+# copy was a down payment on this move -- same version, so the dependency set landed
+# once -- and this is the move, so there is one install again.
+#
+# Three dependencies that are not horizon requirements and so have to be named:
 #   - mysqlclient replaces the python3-mysqlclient rpm. local_settings.in uses
 #     django.db.backends.mysql for the cached_db session store, and that backend
-#     imports MySQLdb. PyMySQL is already in the venv but django 3.2 rejects it:
-#     it wants MySQLdb >= 1.4.0 and PyMySQL reports 1.0.2.
+#     imports MySQLdb. PyMySQL is already in the venv but django rejects it: 4.2
+#     wants MySQLdb >= 1.4.3 and PyMySQL reports 1.0.2.
 #   - pymemcache backs the PyMemcacheCache cache backend. python-memcached is in
-#     the venv already, but MemcachedCache is removed in django 4.1 and there is
-#     no reason to move onto a dead backend now.
+#     the venv already, but MemcachedCache was removed in django 4.1, and 24.0.2
+#     runs on 4.2.
+#   - gunicorn is what openstack-dashboard.service execs. It was never named while
+#     the dashboard was in the antelope venv, because core/monasca put it there and
+#     monasca is not moving; keystone.mk and barbican.mk put it in this one, but a
+#     dependency nothing asks for is one that disappears silently -- the reason
+#     barbican.mk names it even though keystone.mk already installs it.
 #
 # These are two pip invocations rather than one because the two halves want opposite
 # build environments, and a single command can only have one. See the note by the venv
@@ -71,44 +80,19 @@ rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# horizon's sdist-only XStatic dependencies import a pkg_resources-declared
 	$(Q)# namespace from setup.py, so they have to be built against this venv's
-	$(Q)# setuptools 65.7.0 -- a current setuptools has no pkg_resources at all.
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			--no-build-isolation \
-			horizon==$(HORIZON_VER)"
-	$(Q)# mysqlclient is the counter-example: it is also a source build, but its
-	$(Q)# pyproject.toml is newer than setuptools 65.7.0 can parse, so it keeps pip's
-	$(Q)# default build isolation and gets a current setuptools of its own.
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			mysqlclient==$(MYSQLCLIENT_VER) \
-			pymemcache"
-	$(Q)# clean up dns configurations after downloading packages
-	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-
-# the same dashboard again, in the caracal venv
-#
-# Nothing serves this copy. openstack-dashboard.service, gunicorn-config.py and the
-# httpd reverse proxy all point at $(HORIZON_APP_DIR), which is the antelope tree,
-# and every dashboard plugin still installs next to it. This one exists so that
-# dump_default_policies can run under the interpreter that owns the core services'
-# oslo.policy entry points -- see the policy block near the end of this file.
-#
-# It is a down payment rather than scaffolding: 24.0.2 is what horizon's own move to
-# this venv will install, so the dependency set lands once. Verified against a built
-# rootfs: 41 packages, +170MB, and no already-installed caracal package changes
-# version, so keystone/nova/cinder/glance/placement are untouched (pip check clean).
-#
-# --no-build-isolation for the XStatic sdists, exactly as above -- this venv also
-# carries setuptools 65.7.0, so the pkg_resources those setup.py files import is
-# there.
-rootfs_install::
-	$(Q)# enable dns in the rootfs for downloading packages
-	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)# setuptools 75.6.0 -- a current setuptools has no pkg_resources at all.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
 		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			--no-build-isolation \
-			horizon==$(CARACAL_HORIZON_VER)"
+			horizon==$(HORIZON_VER)"
+	$(Q)# mysqlclient is the counter-example: it is also a source build, but its
+	$(Q)# pyproject.toml wants a setuptools newer than this venv's, so it keeps pip's
+	$(Q)# default build isolation and gets a current setuptools of its own.
+	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			mysqlclient==$(MYSQLCLIENT_VER) \
+			pymemcache \
+			gunicorn"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
@@ -218,39 +202,36 @@ rootfs_install::
 # DEFAULT_POLICY_FILES points at came from the openstack-dashboard rpm, and the
 # masakari one from masakari.mk running this same command under python 3.9. Generate
 # them all here instead, from the services that are actually running -- every one of
-# these namespaces is an oslo.policy.policies entry point in one of the two venvs.
+# these namespaces is an oslo.policy.policies entry point in the venv this dashboard
+# now shares with them.
 #
-# Which venv is the whole difficulty. stevedore only sees entry points registered in
-# the interpreter it is running under, so one python cannot dump them all any more:
-# keystone, nova, cinder, glance, neutron, octavia and masakari have all moved to
-# caracal, so the antelope list is empty and its loop below does not run. Each list is
-# dumped by the dashboard that shares its venv. A namespace listed against the venv
-# that does not hold it fails the build with 'The requested namespace "<x>" is not
-# found'; move it to the other list when its service makes the hop.
+# There used to be a second list, dumped by the antelope venv's python, because
+# stevedore only sees entry points registered in the interpreter it is running under
+# and one python could not dump them all. It emptied out as the services hopped, and
+# horizon following them is what removes the split: every namespace below is a caracal
+# package's entry point, and this dashboard runs on caracal. A namespace whose service
+# is still in the antelope venv cannot be dumped from here -- it fails the build with
+# 'The requested namespace "<x>" is not found' -- so nothing may be added to this list
+# ahead of its service.
 #
-# Note the octavia and masakari entries follow the *service*, not the panel:
-# octavia-dashboard and masakaridashboard are both still installed into the antelope
-# venv beside horizon, but the oslo.policy.policies entry points named "octavia" and
-# "masakari" are registered by the octavia and masakari packages, which #640 and #639
-# moved to caracal.
-HORIZON_POLICY_NS_ANTELOPE :=
-HORIZON_POLICY_NS_CARACAL := keystone nova cinder glance neutron octavia masakari
+# Note the octavia and masakari entries follow the *service*, not the panel: the
+# oslo.policy.policies entry points named "octavia" and "masakari" are registered by
+# the octavia and masakari packages, not by their dashboard plugins.
+HORIZON_POLICY_NS := keystone nova cinder glance neutron octavia masakari
 
-# django-admin rather than $(HORIZON_APP_DIR)/manage.py, for both venvs so the two
-# loops stay one shape. manage.py sits in a directory whose horizon and
-# openstack_dashboard entries are symlinks into the *antelope* venv, and a script's
-# own directory leads sys.path -- so running it with the caracal python imports
-# python3.10 packages under python3.11. A console script has no such directory.
+# django-admin rather than $(HORIZON_APP_DIR)/manage.py. Both resolve to this venv now
+# that the symlinks in that directory point here, so the cross-venv import hazard that
+# used to force the console script is gone; it stays because a console script has no
+# directory of its own leading sys.path, and DJANGO_SETTINGS_MODULE is set explicitly
+# below anyway.
 #
-# --skip-checks because django's system checks instantiate every configured cache
-# backend, and horizon defaults CACHES to django's PyMemcacheCache. The antelope venv
-# has pymemcache (installed above, for the running dashboard); the caracal venv has
-# no reason to. The dump reads oslo.policy entry points and touches no cache.
-# "No local_settings file found." on the caracal side is expected and harmless:
-# openstack_dashboard/settings.py warns and carries on, and only the antelope copy is
-# ever configured.
+# --skip-checks because the dump reads oslo.policy entry points and needs nothing
+# else: no cache, no database, no static tree. django's system checks instantiate
+# every configured cache backend, and this runs before collectstatic has built
+# anything, so skipping them keeps the dump independent of what the rest of the build
+# has done so far.
 #
-# Both loops are noisy on stderr -- the USE_L10N notice, a debreach distutils warning,
+# The loop is noisy on stderr -- the USE_L10N notice, a debreach distutils warning,
 # and oslo.policy grumbling about upstream nova/cinder rules that set deprecated_since
 # on the RuleDefault instead of the DeprecatedRule. It is left alone: PYTHONWARNINGS
 # does not reach it (something under settings resets the filters), and stderr has to
@@ -263,13 +244,7 @@ rootfs_install::
 	$(Q)# "No policy rules for service '<x>'" and a denied panel. masakari.mk used to
 	$(Q)# state this guarantee explicitly ("that command exits 1 and the build fails");
 	$(Q)# folding the dump into a loop here is what dropped it.
-	$(Q)for ns in $(HORIZON_POLICY_NS_ANTELOPE) ; do \
-		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
-			$(OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
-			--namespace $$ns \
-			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml || exit 1 ; \
-	done
-	$(Q)for ns in $(HORIZON_POLICY_NS_CARACAL) ; do \
+	$(Q)for ns in $(HORIZON_POLICY_NS) ; do \
 		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
 			$(CARACAL_OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
 			--namespace $$ns \
@@ -285,9 +260,9 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/horizon/openstack-dashboard.conf ./etc/httpd/conf.d/
 
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compilemessages 2>&1 > /dev/null
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py collectstatic --noinput 2>&1 > /dev/null
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compress --force 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compilemessages 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py collectstatic --noinput 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compress --force 2>&1 > /dev/null
 	$(Q)chroot $(ROOTDIR) chmod 755 -R $(HORIZON_APP_DIR)
 	$(Q)chroot $(ROOTDIR) sh -c "chown root:apache -R $(HORIZON_POLICY_DIR)/*"
 	$(Q)chroot $(ROOTDIR) sh -c "chmod 640 -R $(HORIZON_POLICY_DIR)/*"

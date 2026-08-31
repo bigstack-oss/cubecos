@@ -57,15 +57,13 @@ MANILA_RUN_DIR := /var/run/manila
 MANILA_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/manila
 MANILA_PATCHDIR := $(COREDIR)/manila/$(CARACAL_OPENSTACK_RELEASE)_patch
 
-# Deliberately still the 2023.1 pin, and deliberately still in the antelope venv.
-# core/horizon/horizon.mk installs the dashboard into both venvs, but nothing serves
-# the caracal copy -- openstack-dashboard.service, gunicorn-config.py and the httpd
-# reverse proxy all point at the antelope tree, and every dashboard plugin installs
-# next to it. manila-ui follows horizon, not the manila service, so the Shares panels
-# stay on 9.0.1 against horizon 23.x until horizon itself hops; 11.0.1 is the caracal
-# release to move to on that day. Horizon plugins are not in the upper-constraints
-# (that file only covers libraries), so the pin has to be explicit.
-MANILA_UI_VER := 9.0.1
+# manila-ui follows horizon, not the manila service: it installs next to horizon
+# because that is where collectstatic collects panels from. #636 moved horizon into
+# the caracal venv, so this moved with it. 11.0.1 is the caracal release --
+# https://releases.openstack.org/caracal/index.html#caracal-manila-ui. Horizon plugins
+# are not in the upper-constraints (that file only covers libraries), so the pin is
+# explicit.
+MANILA_UI_VER := 11.0.1
 
 # install manila inside the caracal python 3.11 virtual environment
 rootfs_install::
@@ -111,8 +109,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		manila-ui==$(MANILA_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages

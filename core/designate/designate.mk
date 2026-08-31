@@ -24,9 +24,14 @@ ROOTFS_DNF += bind bind-utils
 NAMED_CONF_FILES := /etc/named*
 NAMED_APP_DIR := /var/named
 
-# https://releases.openstack.org/teams/designate.html
-# Only the dashboard is still built from git; designate itself is a pinned pip install.
-DESIGNATE_DASHBOARD_REPO_URL := https://github.com/openstack/designate-dashboard.git
+# https://releases.openstack.org/caracal/index.html#caracal-designate-dashboard
+# Horizon plugins are not in the upper-constraints (that file only covers libraries),
+# so the pin is explicit. This was a $(OPS_GITHUB_BRANCH_02) clone until #636: the
+# branch name was chosen while the dashboard had to match an antelope horizon, and a
+# branch resolves to whatever its tip is on build day. Now that the panel follows
+# horizon into the caracal venv the version has to change anyway, so it changes to a
+# number.
+DESIGNATE_DASHBOARD_VER := 18.0.0
 
 DESIGNATE_CONF_DIR := /etc/designate
 DESIGNATE_APP_DIR := /var/lib/designate
@@ -36,11 +41,6 @@ DESIGNAT_LOG_DIR := /var/log/designate
 # dashboard and the osc plugin do not follow it there -- see the install blocks.
 DESIGNATE_BINDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/bin
 DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(CARACAL_OPENSTACK_RELEASE)_bin_patch
-
-# prepare the build directory
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) rm -rf /tmp/designate
-	$(Q)chroot $(ROOTDIR) mkdir -p /tmp/designate
 
 # install designate into the caracal venv
 #
@@ -82,29 +82,23 @@ rootfs_install::
 # designate unit was active. See the note at the top of this file; #632 has the same
 # constraint for python-barbicanclient.
 #
-# designate-dashboard is a horizon plugin, and horizon itself is still the antelope
-# venv's 23.1.1 (core/horizon/horizon.mk -- the caracal 24.0.2 copy next to it is a
-# down payment that nothing serves). $(HORIZON_VENV_SP) is the antelope
-# site-packages, and that is where horizon's collectstatic collects the panels from,
-# so the dashboard cannot move ahead of horizon. It is left on its git checkout at
-# $(OPS_GITHUB_BRANCH_02) deliberately: converting it to pip would change which
-# dashboard version lands, and this story is not the place to do that.
+# designate-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
+# panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
+# horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
+# caracal, so the panel is a caracal-venv install now.
 #
-# Both go once horizon reaches the caracal venv (#636).
+# The osc plugin goes once /usr/bin/openstack is the caracal venv's (#636).
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-designateclient
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(DESIGNATE_DASHBOARD_REPO_URL) /tmp/designate/designate-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
-		-r /tmp/designate/designate-dashboard/requirements.txt
-	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/designate/designate-dashboard && \
-		$(OPENSTACK_HOME_DIR)/bin/python setup.py install"
+		designate-dashboard==$(DESIGNATE_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
@@ -155,7 +149,3 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)[ -d $(DESIGNATE_BIN_PATCHDIR) ] && cp -rf $(DESIGNATE_BIN_PATCHDIR)/* $(DESIGNATE_BINDIR)/ || /bin/true
-
-# clean up the build directory
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) rm -rf /tmp/designate

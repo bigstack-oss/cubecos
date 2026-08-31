@@ -25,7 +25,7 @@ Environment=SCRIPT_NAME=/horizon
 # /usr/lib/systemd/system/httpd.service.d/openstack-dashboard.conf. They have to
 # move here for two reasons: the rpm (and therefore the drop-in) is gone, and
 # they ran under /usr/bin/python3, which can no longer import the dashboard or
-# its plugins now that both live in the python 3.10 venv.
+# its plugins now that both live in the python 3.11 venv.
 #
 # They are kept rather than left to the build because config_horizon.cpp
 # rewrites local_settings on every Commit() -- WEBROOT and STATIC_URL are
@@ -43,11 +43,11 @@ Environment=SCRIPT_NAME=/horizon
 # openstack-dashboard`. collectstatic overwrites what it collects, so --clear only
 # buys the removal of files a plugin has stopped shipping, which is not worth a
 # window where the dashboard has no assets.
-ExecStartPre=+/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py collectstatic --noinput -v0
-ExecStartPre=+/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py compress --force -v0
+ExecStartPre=+/opt/openstack-caracal/bin/python /usr/share/openstack-dashboard/manage.py collectstatic --noinput -v0
+ExecStartPre=+/opt/openstack-caracal/bin/python /usr/share/openstack-dashboard/manage.py compress --force -v0
 TimeoutStartSec=5min
 
-ExecStart=/opt/openstack-antelope/bin/gunicorn \
+ExecStart=/opt/openstack-caracal/bin/gunicorn \
     -c /etc/openstack-dashboard/gunicorn-config.py \
     openstack_dashboard.wsgi:application
 

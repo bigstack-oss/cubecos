@@ -23,18 +23,14 @@ IRONIC_VER := 24.1.5
 # while "inspector" is still in that list.
 IRONIC_INSP_VER := 12.1.1
 
-# Deliberately still the 2023.1 pin, and deliberately still in the antelope venv.
-# core/horizon/horizon.mk serves the dashboard out of $(OPENSTACK_HOME_DIR) --
-# openstack-dashboard.service, gunicorn-config.py and the httpd reverse proxy all
-# point at the antelope tree, and every dashboard plugin installs next to it.
-# ironic-ui follows horizon, not the ironic service, so the Bare Metal Provisioning
-# panel stays on 6.1.0 until horizon itself hops; 6.3.0 is the caracal release to move
-# to on that day. It reaches the api over HTTP through python-ironicclient and imports
-# nothing from ironic, so the split costs nothing -- the same reasoning
-# octavia-dashboard got in #1373, manila-ui in #1353 and heat-dashboard in #1376.
-# Horizon plugins are not in the caracal upper-constraints either (that file only
-# covers libraries), so the pin has to be explicit.
-IRONIC_UI_VER := 6.1.0
+# ironic-ui follows horizon, not the ironic service: it installs next to horizon
+# because that is where collectstatic collects panels from. #636 moved horizon into
+# the caracal venv, so this moved with it. 6.3.0 is the caracal release --
+# https://releases.openstack.org/caracal/index.html#caracal-ironic-ui. It reaches the
+# api over HTTP through python-ironicclient and imports nothing from ironic, so it
+# never had to move when the service did. Horizon plugins are not in the caracal
+# upper-constraints either (that file only covers libraries), so the pin is explicit.
+IRONIC_UI_VER := 6.3.0
 
 # python-ironicclient owns the `baremetal` osc plugin, and an entry point is only
 # visible to the interpreter it was installed under. core/heavyfs still links
@@ -114,10 +110,8 @@ rootfs_install::
 	$(Q)# --no-build-isolation: ironic-ui pulls horizon, whose sdist-only XStatic
 	$(Q)# dependencies cannot be built against a current setuptools. See the note by
 	$(Q)# the venv bootstrap in core/heavyfs/Makefile.
-	$(Q)# $(OPENSTACK_HOME_DIR), not the caracal venv: this follows horizon, which
-	$(Q)# has not hopped -- see the note by IRONIC_UI_VER.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		ironic-ui==$(IRONIC_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages

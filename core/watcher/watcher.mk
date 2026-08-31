@@ -17,18 +17,14 @@ WATCHER_RUN_DIR := /var/run/watcher
 WATCHER_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
 WATCHER_PATCHDIR := $(COREDIR)/watcher/$(CARACAL_OPENSTACK_RELEASE)_patch
 
+# https://releases.openstack.org/caracal/index.html#caracal-watcher-dashboard
+# Horizon plugins are not in the upper-constraints (that file only covers libraries),
+# so the pin is explicit. This used to be a git clone of the 2023.1-eol *tag*, because
 # watcher-dashboard publishes neither stable/2023.1 nor unmaintained/2023.1 -- both
-# branches were deleted at EOL -- so pin the tag instead. 2023.1-eol is 9.0.0 plus
-# two commits that touch only .gitreview and tox.ini, exactly the relationship
-# yoga-eol has to 7.0.0, and yoga-eol is what installpip's branch fallback chain
-# resolves to today.
-WATCHER_DASHBOARD_REPO_URL := https://github.com/openstack/watcher-dashboard.git
-WATCHER_DASHBOARD_TAG := 2023.1-eol
-
-# prepare the build directory
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) rm -rf /tmp/watcher
-	$(Q)chroot $(ROOTDIR) mkdir -p /tmp/watcher
+# branches were deleted at EOL, so there was no branch for installpip's fallback chain
+# to resolve. #636 moved the panel to the caracal release, which is on PyPI as a wheel,
+# and the tag hack goes with it.
+WATCHER_DASHBOARD_VER := 11.0.0
 
 # install watcher inside the python 3.11 caracal virtual environment
 #
@@ -91,13 +87,12 @@ rootfs_install::
 # file already carries python-watcherclient (4.1.0), so a version here could only drift
 # from it.
 #
-# watcher-dashboard is a horizon plugin, and horizon itself is still the antelope venv's
-# 23.1.1 -- core/horizon/horizon.mk copies watcher_dashboard's enabled panels out of
-# $(HORIZON_VENV_SP), which is that venv's site-packages, so the dashboard cannot move
-# ahead of horizon. It is left on its git checkout deliberately: converting it to pip
-# would change which dashboard version lands, and this story is not the place for that.
+# watcher-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
+# panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
+# horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
+# caracal, so the panel is a caracal-venv install now.
 #
-# Both go once horizon reaches the caracal venv (#636).
+# The osc plugin goes once /usr/bin/openstack is the caracal venv's (#636).
 #
 # /usr/bin/watcher is the client's own cli. It used to come from the system python 3.9
 # install as /usr/local/bin/watcher -- /usr/bin held only the watcher-* service scripts
@@ -110,14 +105,11 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-watcherclient
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(WATCHER_DASHBOARD_TAG) --depth 1 $(WATCHER_DASHBOARD_REPO_URL) /tmp/watcher/watcher-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
-		-r /tmp/watcher/watcher-dashboard/requirements.txt
-	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/watcher/watcher-dashboard && \
-		$(OPENSTACK_HOME_DIR)/bin/python setup.py install"
+		watcher-dashboard==$(WATCHER_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher /usr/bin/watcher
@@ -176,7 +168,3 @@ rootfs_install::
 		[ -f "$$ep" ] || { echo "watcher: $$ep not found, cannot register allocation_balance" >&2; exit 1; }; \
 		grep -q '^allocation_balance =' "$$ep" || \
 			sed -i '/^\[watcher_strategies\]/a allocation_balance = watcher.decision_engine.strategy.strategies.allocation_balance:AllocationBalance' "$$ep"
-
-# clean up the build directory
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) rm -rf /tmp/watcher

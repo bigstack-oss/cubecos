@@ -54,16 +54,14 @@ OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(CARACAL_OPENSTACK_RELEASE)_patch/octavi
 # controllers outside it stay one release.
 OCTAVIA_VER := 14.0.2
 
-# Deliberately still the 2023.1 pin, and deliberately still in the antelope venv.
-# core/horizon/horizon.mk serves the dashboard out of $(OPENSTACK_HOME_DIR) --
-# openstack-dashboard.service, gunicorn-config.py and the httpd reverse proxy all
-# point at the antelope tree, and every dashboard plugin installs next to it.
-# octavia-dashboard follows horizon, not the octavia service, so the Load Balancer
-# panel stays on 11.0.1 until horizon itself hops; 13.0.1 is the caracal release to
-# move to on that day. It talks to the API over HTTP and imports nothing from
-# octavia, so the split costs nothing. Horizon plugins are not in the
-# upper-constraints (that file only covers libraries), so the pin has to be explicit.
-OCTAVIA_DASHBOARD_VER := 11.0.1
+# octavia-dashboard follows horizon, not the octavia service: it installs next to
+# horizon because that is where collectstatic collects panels from. #636 moved horizon
+# into the caracal venv, so this moved with it. 13.0.1 is the caracal release --
+# https://releases.openstack.org/caracal/index.html#caracal-octavia-dashboard. It talks
+# to the API over HTTP and imports nothing from octavia, so it never had to move when
+# the service did. Horizon plugins are not in the upper-constraints (that file only
+# covers libraries), so the pin is explicit.
+OCTAVIA_DASHBOARD_VER := 13.0.1
 
 # install octavia
 rootfs_install::
@@ -156,10 +154,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)# $(OPENSTACK_HOME_DIR), not the caracal venv: this follows horizon, which
-	$(Q)# has not hopped -- see the note by OCTAVIA_DASHBOARD_VER.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		octavia-dashboard==$(OCTAVIA_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

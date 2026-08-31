@@ -92,9 +92,9 @@ SetupService()
 
     HexLogInfo("Setting up horizon");
 
-    // horizon lives in the python 3.10 venv now; /usr/bin/python3 (3.9) can no
+    // horizon lives in the python 3.11 venv now; /usr/bin/python3 (3.9) can no
     // longer import openstack_dashboard or any of its plugins.
-    HexUtilSystemF(0, 0, "/opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py migrate --noinput 2>/dev/null");
+    HexUtilSystemF(0, 0, "/opt/openstack-caracal/bin/python /usr/share/openstack-dashboard/manage.py migrate --noinput 2>/dev/null");
 
     return true;
 }

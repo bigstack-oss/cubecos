@@ -7,22 +7,19 @@ MASAKARI_APP_DIR := /var/lib/masakari
 MASAKARI_LOG_DIR := /var/log/masakari
 MASAKARI_RUN_DIR := /var/run/masakari
 
-# The patch pairs split across two venvs from #639 on. masakari and
-# masakari-monitors are in the caracal venv; masakaridashboard is not, because it is a
-# horizon plugin and horizon is still antelope's. The dashboard patch matters --
-# upstream sets default_panel = 'default', a panel whose urls.py has no index, so an
-# unpatched masakaridashboard makes the sidebar raise NoReverseMatch and every page
-# 500s. It rejoins the others under caracal_patch/ when horizon hops (#636), and
-# antelope_patch/ goes with it.
-MASAKARI_CARACAL_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
-MASAKARI_CARACAL_PATCHDIR := $(COREDIR)/masakari/$(CARACAL_OPENSTACK_RELEASE)_patch
-MASAKARI_ANTELOPE_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
-MASAKARI_ANTELOPE_PATCHDIR := $(COREDIR)/masakari/$(OPENSTACK_RELEASE)_patch
-
-# prepare the build directory
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) rm -rf /tmp/masakari
-	$(Q)chroot $(ROOTDIR) mkdir -p /tmp/masakari
+# The patch pairs were split across two venvs between #639 and #636: masakari and
+# masakari-monitors went to caracal, masakaridashboard could not because it is a
+# horizon plugin and horizon was still antelope's. #636 moved horizon, so the
+# dashboard patch rejoins the others under caracal_patch/ and antelope_patch/ is gone.
+#
+# The dashboard patch matters -- upstream sets default_panel = 'default', a panel whose
+# urls.py has no index, so an unpatched masakaridashboard makes the sidebar raise
+# NoReverseMatch and every page 500s. Upstream has not fixed it at 10.0.0, so the patch
+# was re-derived against that release rather than moved: 10.0.0 adds 'vmoves' to the
+# panels tuple two lines above the change and renames ugettext_lazy to gettext_lazy, so
+# the 8.0.0 hunk's context no longer matches.
+MASAKARI_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
+MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(CARACAL_OPENSTACK_RELEASE)_patch
 
 # masakari common
 rootfs_install::
@@ -93,17 +90,20 @@ rootfs_install::
 # the antelope constraints file decides the version, the way core/designate does it for
 # python-designateclient -- rather than a branch-name clone.
 #
-# masakari-dashboard is a horizon plugin, and horizon itself is still the antelope
-# venv's (core/horizon/horizon.mk). $(HORIZON_VENV_SP) is that venv's site-packages,
-# and that is where horizon's collectstatic collects the panels from, so the dashboard
-# cannot move ahead of horizon. It is left on its git checkout at
-# $(OPS_GITHUB_BRANCH_02) deliberately: converting it to pip would change which
-# dashboard version lands, and this story is not the place to do that. That is also
-# why the caracal vmoves panel does not appear -- the API is there at 17.0.0, the
-# panel that drives it is not.
+# masakari-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
+# panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
+# horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
+# caracal, so the panel is a caracal-venv install now. 10.0.0 is the caracal release --
+# https://releases.openstack.org/caracal/index.html#caracal-masakari-dashboard. Horizon
+# plugins are not in the upper-constraints (that file only covers libraries), so the
+# pin is explicit; it replaces a $(OPS_GITHUB_BRANCH_02) clone, whose version was
+# whatever the branch tip was on build day.
 #
-# Both go once horizon reaches the caracal venv (#636).
-MASAKARI_DASHBOARD_REPO_URL := https://github.com/openstack/masakari-dashboard.git
+# 10.0.0 brings the vmoves panel with it. The API behind it has been there since
+# masakari 17.0.0 (#639); only the panel was missing, and this is what supplies it.
+#
+# The osc plugin goes once /usr/bin/openstack is the caracal venv's (#636).
+MASAKARI_DASHBOARD_VER := 10.0.0
 
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
@@ -111,14 +111,11 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-masakariclient
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(MASAKARI_DASHBOARD_REPO_URL) /tmp/masakari/masakari-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
-		-r /tmp/masakari/masakari-dashboard/requirements.txt
-	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/masakari/masakari-dashboard && \
-		$(OPENSTACK_HOME_DIR)/bin/python setup.py install"
+		masakari-dashboard==$(MASAKARI_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
@@ -162,19 +159,9 @@ rootfs_install::
 # review. --forward makes re-runs idempotent; a failed hunk aborts the build
 # (so upstream drift is caught at build time, not shipped silently).
 rootfs_install::
-	$(Q)set -e; for p in $$(find $(MASAKARI_CARACAL_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
-		rel=$${p#$(MASAKARI_CARACAL_PATCHDIR)/}; tgt=$(MASAKARI_CARACAL_SRCDIR)/$${rel%.patch}; \
+	$(Q)set -e; for p in $$(find $(MASAKARI_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(MASAKARI_PATCHDIR)/}; tgt=$(MASAKARI_SRCDIR)/$${rel%.patch}; \
 		echo "  PATCH $${rel%.patch}"; \
 		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
 			|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
 	done
-	$(Q)set -e; for p in $$(find $(MASAKARI_ANTELOPE_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
-		rel=$${p#$(MASAKARI_ANTELOPE_PATCHDIR)/}; tgt=$(MASAKARI_ANTELOPE_SRCDIR)/$${rel%.patch}; \
-		echo "  PATCH $${rel%.patch}"; \
-		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
-			|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
-	done
-
-# clean up the build directory
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) rm -rf /tmp/masakari

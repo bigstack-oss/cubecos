@@ -10,7 +10,7 @@ HEX_DONE=/run/bootstrap_done
 CUBE_DONE=/run/cube_commit_done
 CLUSTER_SYNC=/run/cube_cluster_synced
 CLUSTER_REPAIRING=/run/cube_cluster_repairing
-# Note: openstack_dashboard is a symlink into the python 3.10 venv's site-packages
+# Note: openstack_dashboard is a symlink into the python 3.11 venv's site-packages
 # now, so this path resolves inside the venv. Moving panels aside below therefore
 # edits the installed package rather than a private copy under /usr/share.
 HORIZON_APP_DIR=/usr/share/openstack-dashboard/openstack_dashboard/local/enabled
@@ -230,12 +230,12 @@ cube_edge_cfg()
         remote_run $ctrl mv $HORIZON_APP_DIR/_17*.py $HORIZON_APP_DIR/bak/
         # watcher
         remote_run $ctrl mv $HORIZON_APP_DIR/_310*.py $HORIZON_APP_DIR/bak/
-        # horizon lives in the python 3.10 venv, so /usr/bin/python3 can no longer
+        # horizon lives in the python 3.11 venv, so /usr/bin/python3 can no longer
         # import openstack_dashboard -- use the venv interpreter, the same one
         # config_horizon.cpp and openstack-dashboard.service name.
-        remote_run $ctrl /opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py compilemessages 2>&1 > /dev/null
-        remote_run $ctrl /opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py collectstatic --noinput 2>&1 > /dev/null
-        remote_run $ctrl /opt/openstack-antelope/bin/python /usr/share/openstack-dashboard/manage.py compress --force 2>&1 > /dev/null
+        remote_run $ctrl /opt/openstack-caracal/bin/python /usr/share/openstack-dashboard/manage.py compilemessages 2>&1 > /dev/null
+        remote_run $ctrl /opt/openstack-caracal/bin/python /usr/share/openstack-dashboard/manage.py collectstatic --noinput 2>&1 > /dev/null
+        remote_run $ctrl /opt/openstack-caracal/bin/python /usr/share/openstack-dashboard/manage.py compress --force 2>&1 > /dev/null
         # the dashboard is its own unit now; restarting httpd only reloads the proxy
         # in front of it and no longer reruns collectstatic/compress.
         remote_run $ctrl systemctl restart openstack-dashboard

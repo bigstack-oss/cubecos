@@ -15,7 +15,7 @@
 
 from oslo_log import log as logging
 
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 import horizon
 
@@ -28,7 +28,7 @@ LOG = logging.getLogger(__name__)
 class MasakariDashboard(horizon.Dashboard):
     slug = "masakaridashboard"
     name = _("Instance-ha")
-    panels = ('default', 'segments', 'hosts', 'notifications')
+    panels = ('default', 'segments', 'hosts', 'notifications', 'vmoves')
     default_panel = 'default'
     policy_rules = (('instance-ha', 'context_is_admin'),)
 

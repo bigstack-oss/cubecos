@@ -1,9 +1,9 @@
---- masakaridashboard/dashboard.py	2025-04-10 14:09:56.018108719 +0800
-+++ masakaridashboard/dashboard.py	2025-04-10 14:09:56.018108719 +0800
+--- masakaridashboard/dashboard.py	2026-08-31 15:27:49.000000000 +0000
++++ masakaridashboard/dashboard.py	2026-08-31 15:27:49.000000000 +0000
 @@ -29,7 +29,8 @@
      slug = "masakaridashboard"
      name = _("Instance-ha")
-     panels = ('default', 'segments', 'hosts', 'notifications')
+     panels = ('default', 'segments', 'hosts', 'notifications', 'vmoves')
 -    default_panel = 'default'
 +    #default_panel = 'default'
 +    default_panel = 'segments'

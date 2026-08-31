@@ -34,7 +34,11 @@ NEUTRON_CONFDIR := $(ROOTDIR)/etc/neutron
 
 OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)
 
-NEUTRON_VPNAAS_DASHBOARD_REPO_URL := https://github.com/openstack/neutron-vpnaas-dashboard.git
+# https://releases.openstack.org/caracal/index.html#caracal-neutron-vpnaas-dashboard
+# Horizon plugins are not in the upper-constraints (that file only covers libraries),
+# so the pin is explicit. It replaces a $(OPS_GITHUB_BRANCH_02) clone, whose version
+# was whatever the branch tip was on build day.
+NEUTRON_VPNAAS_DASHBOARD_VER := 10.0.0
 
 # neutron runs out of the caracal venv. neutron 24.2.2 is the last 2024.1 release
 # and neutron-vpnaas 24.0.2 its counterpart; resolved against the caracal
@@ -125,22 +129,18 @@ rootfs_install::
 
 # set up the neutron-vpnaas VPN panel
 #
-# The dashboard stays in the antelope venv and on $(OPS_GITHUB_BRANCH_02) even though
-# the service it drives has moved: it is a horizon plugin, horizon is still
-# horizon 23.1.1 in /opt/openstack-antelope, and 10.0.0 -- the 2024.1 dashboard --
-# wants a caracal horizon. It talks to neutron over the API, so the two ends are free
-# to sit a release apart. It moves when horizon does.
+# The dashboard is a horizon plugin, so it lives where horizon lives: #636 moved
+# horizon into the caracal venv, and 10.0.0 -- the 2024.1 dashboard -- is what wants a
+# caracal horizon. It talks to neutron over the API, which is why it was free to sit a
+# release behind the service until now.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) timeout 120 git clone -b $(OPS_GITHUB_BRANCH_02) --depth 1 $(NEUTRON_VPNAAS_DASHBOARD_REPO_URL) /tmp/neutron/neutron-vpnaas-dashboard
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-		-r /tmp/neutron/neutron-vpnaas-dashboard/requirements.txt \
-		--no-build-isolation
-	$(Q)chroot $(ROOTDIR) bash -c "cd /tmp/neutron/neutron-vpnaas-dashboard && \
-		/opt/openstack-antelope/bin/python setup.py install"
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		--no-build-isolation \
+		neutron-vpnaas-dashboard==$(NEUTRON_VPNAAS_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 

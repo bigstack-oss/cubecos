@@ -46,16 +46,15 @@ HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 # 2024.1 revision, the same rule #1191 used to land on 20.0.1.
 HEAT_VER := 22.0.1
 
-# Deliberately still the 2023.1 pin, and deliberately still in the antelope venv.
-# core/horizon/horizon.mk serves the dashboard out of $(OPENSTACK_HOME_DIR) --
-# openstack-dashboard.service, gunicorn-config.py and the httpd reverse proxy all
-# point at the antelope tree, and every dashboard plugin installs next to it.
-# heat-dashboard follows horizon, not the heat service, so the Orchestration panels
-# stay on 9.0.0 until horizon itself hops; 11.0.1 is the caracal release to move to
-# on that day. It talks to the API over HTTP through heatclient and imports nothing
-# from heat, so the split costs nothing. Horizon plugins are not in the
-# upper-constraints (that file only covers libraries), so the pin has to be explicit.
-HEAT_DASHBOARD_VER := 9.0.0
+# heat-dashboard follows horizon, not the heat service: it installs next to horizon
+# because that is where collectstatic collects panels from. #636 moved horizon into
+# the caracal venv, so this moved with it. 11.0.0 is the caracal release --
+# https://releases.openstack.org/caracal/index.html#caracal-heat-dashboard. There is
+# no 11.0.1: the comment this replaces named one, and it does not exist on PyPI.
+# heat-dashboard talks to the API over HTTP through heatclient and imports nothing
+# from heat, so it never had to move when the service did. Horizon plugins are not in
+# the upper-constraints (that file only covers libraries), so the pin is explicit.
+HEAT_DASHBOARD_VER := 11.0.0
 
 # install heat
 rootfs_install::
@@ -166,17 +165,15 @@ rootfs_install::
 # Registering its panels, settings snippet and policy files is core/horizon's job:
 # every dashboard action lives there, because horizon is built last and is what runs
 # collectstatic and compress. Unlike the other components' panels this one needs no
-# entry in HORIZON_POLICY_NS_*: heat-dashboard ships a pre-generated
+# entry in HORIZON_POLICY_NS: heat-dashboard ships a pre-generated
 # conf/default_policies/heat.yaml, so horizon copies it instead of dumping the
 # `heat` oslo.policy namespace out of a venv.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)# $(OPENSTACK_HOME_DIR), not the caracal venv: this follows horizon, which
-	$(Q)# has not hopped -- see the note by HEAT_DASHBOARD_VER.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		heat-dashboard==$(HEAT_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

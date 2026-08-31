@@ -1,4 +1,4 @@
-#!/opt/openstack-antelope/bin/python
+#!/opt/openstack-caracal/bin/python
 import os
 import sys
 
