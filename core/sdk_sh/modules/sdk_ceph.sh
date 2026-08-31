@@ -456,8 +456,10 @@ ceph_leave_rolling()
     Quiet $CEPH config rm global mon_osd_down_out_interval
     # post-upgrade finalization; see ceph_finalize_release, which is also called
     # from the per-node ceph commit so a cluster upgraded without a roll job
-    # (a 1-node appliance, a hand-landed node) still completes the upgrade
-    ceph_finalize_release
+    # (a 1-node appliance, a hand-landed node) still completes the upgrade.
+    # `|| true` because rc 1 there means "not this node's turn", which is a normal
+    # outcome mid-roll and must not fail leaving rolling mode.
+    ceph_finalize_release || true
 }
 
 # ---------------------------------------------------------------------------
@@ -581,17 +583,23 @@ ceph_mon_release_pinned()
 ceph_finalize_release()
 {
     local rel
-    $CEPH -s >/dev/null 2>&1 || return 0
+    # rc 0 = the release is pinned (we just did it, or it already was), so the
+    #        caller may retire its upgrade marker
+    # rc 1 = not yet -- no cluster, a mixed OSD tier, mons still behind, or the pin
+    #        failed. The caller keeps its marker and the next commit tries again.
+    $CEPH -s >/dev/null 2>&1 || return 1
 
     rel=$(ceph_tier_releases osd)
-    [ -n "$rel" ] && [ "$(echo "$rel" | wc -l)" = "1" ] || return 0
+    [ -n "$rel" ] && [ "$(echo "$rel" | wc -l)" = "1" ] || return 1
 
-    ceph_mon_release_pinned "$rel" || return 0
+    ceph_mon_release_pinned "$rel" || return 1
 
     $CEPH osd dump 2>/dev/null | grep -q "require_osd_release $rel" && return 0
 
     log_info "ceph_finalize_release: pinning require-osd-release to $rel"
     Quiet $CEPH osd require-osd-release "$rel" --yes-i-really-mean-it
+    # confirm rather than trusting the command's own exit status
+    $CEPH osd dump 2>/dev/null | grep -q "require_osd_release $rel"
 }
 
 ceph_maintenance_status()

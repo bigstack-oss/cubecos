@@ -37,6 +37,11 @@
 #define MAKRER_AUTOSCALE "/etc/appliance/state/ceph_autoscale_done"
 #define MAKRER_MSGR2 "/etc/appliance/state/ceph_msgr2_done"
 #define MAKRER_CLIENT "/etc/appliance/state/ceph_client_done"
+// Dropped by the migrate hook, cleared once the release is pinned. Its presence is
+// what says "a firmware switch happened, so the ceph release may have moved" --
+// without it, every commit on every boot would pay a ceph round trip to re-answer a
+// question that only changes across an upgrade.
+#define MAKRER_RELEASE_PENDING "/etc/appliance/state/ceph_release_upgrade_pending"
 #define MAKRER_DASHBOARD "/etc/appliance/state/ceph_dashboard_done"
 #define MAKRER_DASHBOARD_IDP "/etc/appliance/state/ceph_dashboard_idp_done"
 #define MAKRER_ISCSI "/etc/appliance/state/ceph_iscsi_done"
@@ -1458,48 +1463,44 @@ Validate()
     return true;
 }
 
-// Wait until a mon quorum answers before anything downstream talks to the
-// cluster.
+// Last step of ceph's upgrade procedure, and only ever that -- require_osd_release
+// changes when the release does and at no other time.
 //
-// Everything after the mon step -- the mgr coming up, pool creation, `ceph fs
-// new` -- is a client of the cluster, and on a node that has just rebooted into
-// a new firmware the mon needs a moment to re-form quorum. Without this the
-// steps still work, because most of them carry their own ad-hoc retry (see the
-// `for i in 1 2 3 4 5` in SetupPools), but they each pay the timeout separately
-// and the failures are logged as their own rather than as "the mon was not up
-// yet". Waiting once, here, is both faster and legible in the log.
+// So it runs only while MAKRER_RELEASE_PENDING exists, which the migrate hook drops
+// on a firmware switch. On an ordinary boot there is no marker and this costs
+// nothing; without the guard every commit paid a ceph round trip (measured on
+// accept-3cc: 3s against a healthy cluster, 11s when no mon answers) to re-check a
+// release that had not moved.
 //
-// A timeout is not fatal: on a multi-node cluster this node's mon may
-// legitimately be unable to form quorum on its own (it is waiting for peers
-// that are still rolling), and the commit should carry on and let the peers
-// arrive rather than fail the whole firmware switch.
-static bool
-WaitForMonQuorum(int timeoutSec = 300)
-{
-    for (int waited = 0; waited < timeoutSec; waited += 5) {
-        if (HexSystemF(0, "timeout 10 ceph -s >/dev/null 2>&1") == 0) {
-            HexLogInfo("ceph: mon quorum answered after %ds", waited);
-            return true;
-        }
-        sleep(5);
-    }
-
-    HexLogWarning("ceph: no mon quorum after %ds, continuing anyway", timeoutSec);
-    return false;
-}
-
-// Last step of ceph's upgrade procedure. Gated and idempotent -- see
-// ceph_finalize_release in sdk_ceph.sh for what it will and will not do. Called
-// on every commit so that a cluster upgraded without a roll job (a single-node
-// appliance, or a node landed by hand) still completes its upgrade; on a rolling
-// upgrade every node but the last one finds the gate shut and does nothing.
+// The marker is cleared only when ceph_finalize_release reports the release actually
+// pinned -- rc 0 -- not merely that it ran. Mid-roll the gate is shut and it returns
+// 1, so the marker survives and the next commit tries again; whichever node finishes
+// the roll last is the one that clears its own. Same shape as config_mysql.cpp's
+// BACKDIR, which also survives until the upgrade it represents has succeeded.
 static void
 FinalizeCephRelease()
 {
     if (!IsControl(s_eCubeRole))
         return;
 
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_finalize_release");
+    if (access(MAKRER_RELEASE_PENDING, F_OK) != 0)
+        return;
+
+    if (HexUtilSystemF(0, 0, HEX_SDK " ceph_finalize_release") == 0) {
+        HexLogInfo("ceph: release finalized, clearing the upgrade marker");
+        unlink(MAKRER_RELEASE_PENDING);
+    }
+}
+
+// Drop the marker FinalizeCephRelease() keys off. This runs on a firmware switch --
+// the only way the ceph packages change under a cluster -- so it is the one moment
+// worth re-checking require_osd_release. It fires on switches that do not move ceph
+// too; that costs one no-op finalize, which then clears the marker.
+static bool
+MigratePrepare(const char* prevVersion, const char* prevRootDir)
+{
+    HexSystemF(0, "touch " MAKRER_RELEASE_PENDING);
+    return true;
 }
 
 static bool
@@ -1568,8 +1569,20 @@ Commit(bool modified, int dryLevel)
     // todo: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
-    if (IsUndef(s_eCubeRole) || !CommitCheck(modified, dryLevel))
+    if (IsUndef(s_eCubeRole))
         return true;
+
+    // A commit with nothing to reconfigure still has to be able to finish an
+    // interrupted release upgrade. CommitCheck() is true for every bootstrap --
+    // it sets s_bConfigChanged unconditionally there -- so the boot after a
+    // firmware switch takes the normal path below. This branch is for the case
+    // that is left over: the gate was shut when that boot ran (mid-roll the mons
+    // are not all on the new release yet), so the marker survived and the next
+    // commit to come along has to retry it. That one need not be a bootstrap.
+    if (!CommitCheck(modified, dryLevel)) {
+        FinalizeCephRelease();
+        return true;
+    }
 
     if (s_bConfigChanged) {
         bool monEnabled = IsMonEnabled(s_ha, s_monEnabled, s_eCubeRole, s_ctrlHosts);
@@ -1651,7 +1664,15 @@ Commit(bool modified, int dryLevel)
         // supported, and the cluster-wide steps that are not are gated
         // separately (see ceph_finalize_release, and the gate helpers in
         // sdk_ceph.sh).
-        WaitForMonQuorum();
+        //
+        // Nothing here waits for a mon quorum, deliberately. An earlier revision
+        // did, and it was wrong on the path that matters most: on a cold cluster
+        // poweroff the first control node commits before its peers have booted, so
+        // a 3-mon quorum cannot form yet and the wait blocked for its whole
+        // duration achieving nothing. Every step below that needs the cluster
+        // already tolerates it not being there -- SetupPools carries its own retry,
+        // ceph_osd_create_map reads local disks through ceph-volume, and starting a
+        // unit does not require quorum.
 
         // Lift the client-I/O block left by a cluster poweroff as soon as the
         // mons answer, rather than at the mds step. It was called from
@@ -1695,9 +1716,6 @@ Commit(bool modified, int dryLevel)
         InitCephClient(master, peer);
         MountCephfsStore();
 
-        // Once every tier on this node is up, complete the upgrade if this node
-        // is the one that finished it.
-        FinalizeCephRelease();
     }
 
     if (s_bRbdMirrorChanged && IsControl(s_eCubeRole)) {
@@ -1712,6 +1730,13 @@ Commit(bool modified, int dryLevel)
     }
 
     CronCephHousekeeper();
+
+    // Last rather than inside the s_bConfigChanged block above, so that a commit
+    // which reconfigures something else (rbd mirroring, say) still completes a
+    // pending upgrade. By here this node's OSDs have been committed, so if this is
+    // the node that finished the roll the gate can actually open. Costs one access()
+    // when there is no marker, which is every commit that is not post-upgrade.
+    FinalizeCephRelease();
 
     return true;
 }
@@ -2054,6 +2079,7 @@ CONFIG_OBSERVES(ceph, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(ceph, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(ceph, keystone, ParseKeystone, NotifyKeystone);
 
+CONFIG_MIGRATE(ceph, MigratePrepare);
 CONFIG_MIGRATE(ceph, "/etc/cube/cos/ceph");
 CONFIG_MIGRATE(ceph, "/var/lib/ceph");
 CONFIG_MIGRATE(ceph, MAKRER_POOL);

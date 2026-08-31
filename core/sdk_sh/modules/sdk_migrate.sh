@@ -468,9 +468,11 @@ migrate_ceph()
     #
     # ceph_finalize_release reads the release off the cluster instead of off this
     # node, and only pins once every OSD agrees and the monmap has advanced. It
-    # is idempotent, and the ceph config module calls it on every commit, so
-    # whichever node finishes the roll last is the one that completes the upgrade.
-    $HEX_SDK ceph_finalize_release
+    # returns 1 for "not this node's turn", which is the normal outcome mid-roll and
+    # must not fail the migration -- the ceph config module retries it from each
+    # commit while its upgrade marker stands, so whichever node finishes the roll
+    # last is the one that completes the upgrade.
+    $HEX_SDK ceph_finalize_release || true
 
     case $release in
         nautilus|pacific|quincy|reef)
