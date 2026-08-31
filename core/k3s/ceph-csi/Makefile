@@ -57,14 +57,14 @@ $(CSI_NODE_DRIVER_REGISTER_IMG_TAR):
 	$(call RUN_CMD_TIMED,docker pull $(CSI_NODE_DRIVER_REGISTER_IMG):$(CSI_NODE_DRIVER_REGISTER_IMG_TAG),"  PULL    $(CSI_NODE_DRIVER_REGISTER_IMG):$(CSI_NODE_DRIVER_REGISTER_IMG_TAG)")
 	$(call RUN_CMD_TIMED,docker save $(CSI_NODE_DRIVER_REGISTER_IMG):$(CSI_NODE_DRIVER_REGISTER_IMG_TAG) -o $(CSI_NODE_DRIVER_REGISTER_IMG_TAR),"  SAVE    $(CSI_NODE_DRIVER_REGISTER_IMG_TAR)")
 
-CSI_DRIVERS_GO := ../../cubectl/app/util/ceph/csi-drivers.go
+CSI_DRIVERS_GO := $(COREDIR)/cubectl/app/util/ceph/csi-drivers.go
 
 # The charts decide what kubelet pulls; these tags decide what the offline
 # bundle holds. Checked against each other so a chart bump cannot ship a
 # bundle the cluster cannot use.
 .PHONY: verify-image-tags
 verify-image-tags: $(CEPH_CSI_RBD_CHART) $(CEPH_CSI_FS_CHART)
-	$(call RUN_CMD_TIMED,sh verify-image-tags.sh $(CSI_DRIVERS_GO) $(CEPH_CSI_RBD_CHART) $(CEPH_CSI_FS_CHART) -- \
+	$(call RUN_CMD_TIMED,sh $(SRCDIR)/verify-image-tags.sh $(CSI_DRIVERS_GO) $(CEPH_CSI_RBD_CHART) $(CEPH_CSI_FS_CHART) -- \
 	    $(CEPH_CSI_IMG):$(CEPH_CSI_IMG_TAG) \
 	    $(CSI_PROVISIONER_IMG):$(CSI_PROVISIONER_IMG_TAG) \
 	    $(CSI_RESIZER_IMG):$(CSI_RESIZER_IMG_TAG) \
