@@ -15,7 +15,6 @@
 
 import eventlet
 from eventlet import greenpool
-from eventlet import timeout as etimeout
 
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -176,23 +175,20 @@ class EvacuateInstancesTask(base.MasakariTask):
             if new_vm_state == 'stopped':
                 raise loopingcall.LoopingCallDone()
 
-        periodic_call_stopped = loopingcall.FixedIntervalLoopingCall(
-            _wait_for_stop_confirmation)
-
         try:
-            self.novaclient.stop_server(context, instance.id)
             # confirm instance is stopped after recovery
-            periodic_call_stopped.start(interval=CONF.verify_interval)
-            etimeout.with_timeout(
-                CONF.wait_period_after_power_off,
-                periodic_call_stopped.wait)
-        except etimeout.Timeout:
+            self.novaclient.stop_server(context, instance.id)
+            timer = loopingcall.FixedIntervalWithTimeoutLoopingCall(
+                _wait_for_stop_confirmation)
+            timer.start(interval=CONF.verify_interval,
+                        timeout=CONF.wait_period_after_power_off).wait()
+        except loopingcall.LoopingCallTimeOut:
             with excutils.save_and_reraise_exception():
                 msg = ("Instance '%(uuid)s' is successfully evacuated but "
                        "timeout to stop.") % {'uuid': instance.id}
                 LOG.warning(msg)
         finally:
-            periodic_call_stopped.stop()
+            timer.stop()
 
     def _evacuate_and_confirm(self, context, vmove,
                               reserved_host=None):
@@ -242,16 +238,13 @@ class EvacuateInstancesTask(base.MasakariTask):
                     raise loopingcall.LoopingCallDone()
 
         def _wait_for_evacuation():
-            periodic_call = loopingcall.FixedIntervalLoopingCall(
-                _wait_for_evacuation_confirmation)
-
             try:
                 # add a timeout to the periodic call.
-                periodic_call.start(interval=CONF.verify_interval)
-                etimeout.with_timeout(
-                    CONF.wait_period_after_evacuation,
-                    periodic_call.wait)
-            except etimeout.Timeout:
+                timer = loopingcall.FixedIntervalWithTimeoutLoopingCall(
+                    _wait_for_evacuation_confirmation)
+                timer.start(interval=CONF.verify_interval,
+                            timeout=CONF.wait_period_after_evacuation).wait()
+            except loopingcall.LoopingCallTimeOut:
                 with excutils.save_and_reraise_exception():
                     msg = ("Timeout for instance '%(uuid)s' evacuation."
                            % {'uuid': instance.id})
@@ -259,7 +252,7 @@ class EvacuateInstancesTask(base.MasakariTask):
             finally:
                 # stop the periodic call, in case of exceptions or
                 # Timeout.
-                periodic_call.stop()
+                timer.stop()
 
         try:
             vm_state = getattr(instance, "OS-EXT-STS:vm_state")
@@ -318,7 +311,7 @@ class EvacuateInstancesTask(base.MasakariTask):
                 vmove,
                 status=fields.VMoveStatus.SUCCEEDED,
                 dest_host=dest_host)
-        except etimeout.Timeout:
+        except loopingcall.LoopingCallTimeOut:
             # Instance is not stop in the expected time_limit.
             msg = "Failed reason: timeout."
             _update_vmove(

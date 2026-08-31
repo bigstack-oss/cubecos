@@ -6,9 +6,9 @@
  import eventlet
 +import time
  from eventlet import greenpool
- from eventlet import timeout as etimeout
  
-@@ -53,11 +54,27 @@
+ from oslo_config import cfg
+@@ -52,11 +53,27 @@
          self.update_details(msg)
          self.novaclient.enable_disable_service(self.context, host_name,
              reason=CONF.host_failure.service_disable_reason)
@@ -41,7 +41,7 @@
          msg = "Disabled compute service on host: '%s'" % host_name
          self.update_details(msg, 1.0)
  
-@@ -79,8 +96,17 @@
+@@ -78,8 +95,17 @@
              ha_enabled_key = CONF.host_failure.ha_enabled_instance_metadata_key
  
              for instance in instance_list:
@@ -60,7 +60,7 @@
                  if CONF.host_failure.ignore_instances_in_error_state and (
                          getattr(instance, "OS-EXT-STS:vm_state") == "error"):
                      if is_instance_ha_enabled:
-@@ -265,6 +291,29 @@
+@@ -258,6 +284,29 @@
              vm_state = getattr(instance, "OS-EXT-STS:vm_state")
              task_state = getattr(instance, "OS-EXT-STS:task_state")
  
@@ -90,7 +90,7 @@
              # Nova evacuates an instance only when vm_state is in active,
              # stopped or error state. If an instance is in other than active,
              # error and stopped vm_state, masakari resets the instance state
-@@ -348,6 +397,36 @@
+@@ -341,6 +390,36 @@
              'host_name': host_name, 'instance_list': ','.join(instance_list)}
          self.update_details(msg)
  
