@@ -319,15 +319,19 @@ UpdateCfg(std::string region, std::string domain, std::string userPass, std::str
         // deprecated alias for "hostname" since masakari-monitors 9.0.0.
         monCfg["DEFAULT"]["hostname"] = hostname;
 
-        // masakari-monitors runs out of the antelope venv and ships no rootwrap, so
-        // unlike cinder/glance the helper cannot be resolved through rootwrap
-        // exec_dirs and has to be named here. /usr/bin/privsep-helper is a symlink to
-        // the venv helper as of the Horizon hop -- core/nova/nova.mk creates it, now
-        // that no service runs privsep under the system python. It used to be a
-        // pre-venv system-python binary that could not import masakarimonitors, which
-        // made every root command in hostmonitor (cibadmin, crm_mon,
-        // corosync-cfgtool) fail with FailedToDropPrivileges.
-        monCfg["masakarimonitors_privileged"]["helper_command"] = "sudo /usr/bin/privsep-helper";
+        // masakari-monitors ships no rootwrap, so unlike cinder/glance the helper
+        // cannot be resolved through rootwrap exec_dirs and has to be named here.
+        // It names the caracal venv's own helper, not the /usr/bin/privsep-helper
+        // symlink core/nova/nova.mk used to keep pointed at the antelope venv: #639
+        // moved masakarimonitors into the python 3.11 venv, and a 3.10 helper cannot
+        // import a 3.11 masakarimonitors. That symlink had no other consumer left, so
+        // #639 removed it and the antelope oslo.privsep install behind it.
+        //
+        // /etc/sudoers.d/masakari authorises exactly this path -- the two have to move
+        // together, or privsep is refused by sudo instead of failing to import. A
+        // mismatch here is what makes every root command in hostmonitor (cibadmin,
+        // crm_mon, corosync-cfgtool) fail with FailedToDropPrivileges.
+        monCfg["masakarimonitors_privileged"]["helper_command"] = "sudo /opt/openstack-caracal/bin/privsep-helper";
 
         monCfg["api"].clear();
         monCfg["api"]["region"] = region;

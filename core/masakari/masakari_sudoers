@@ -1,5 +1,14 @@
 Defaults:masakari !requiretty
 
-# /usr/bin/privsep-helper is a symlink to the venv helper as of the Horizon hop, so
-# the second rule that used to authorise the venv path directly is redundant.
-masakari ALL = (root) NOPASSWD: /usr/bin/privsep-helper *
+# This is what [masakarimonitors_privileged] helper_command in
+# masakarimonitors.conf points at, and it has to stay byte-identical to what
+# config_masakari.cpp writes there: sudo matches the command by path, so a
+# helper_command that names a path this file does not authorise is refused with
+# "masakari : command not allowed", before privsep gets far enough to report anything
+# of its own.
+#
+# The path is the caracal venv's own helper, not the /usr/bin/privsep-helper symlink
+# core/nova/nova.mk used to keep pointed at the antelope venv -- #639 moved
+# masakari-monitors into the python 3.11 venv, and a 3.10 helper cannot import a 3.11
+# masakarimonitors.
+masakari ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *
