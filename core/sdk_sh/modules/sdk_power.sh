@@ -185,12 +185,13 @@ _power_roll_api_ready()
     # until their workers are up, while haproxy re-enables the rejoined backend
     # after two passing checks. A live-migration pre-check balanced onto one of
     # those marks the instance ERROR (no retry in nova's pre-check path), so
-    # gate the next drain on a real response from every node.
+    # gate the next drain on a real response. Control-only: compute nodes
+    # never serve 9696/8774.
     local deadline=$(( $(date +%s) + ${ROLLING_API_READY_TIMEOUT:-600} ))
     local bad
     while : ; do
         bad=""
-        for n in $(cubectl node list -j | jq -r '.[].ip.management') ; do
+        for n in $(cubectl node list -j -r control | jq -r '.[].ip.management') ; do
             for p in 9696 8774 ; do
                 Quiet timeout 5 curl -s -o /dev/null http://$n:$p/ || bad="$bad $n:$p"
             done
