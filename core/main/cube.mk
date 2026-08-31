@@ -265,6 +265,11 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/systemd/system.conf.d
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-watchdog.conf ./etc/systemd/system.conf.d
 
+# persistent journal so boot-time failures survive the reboot they happen on
+rootfs_install::
+	$(Q)mkdir -p $(ROOTDIR)/etc/systemd/journald.conf.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-journald.conf ./etc/systemd/journald.conf.d
+
 # roll stall watchdog -- installed disabled; the roll arms/disarms it
 rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/hex-roll-watchdog.service ./lib/systemd/system
