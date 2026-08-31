@@ -13,8 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from eventlet import timeout as etimeout
-
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_service import loopingcall
@@ -93,17 +91,15 @@ class StopInstanceTask(base.MasakariTask):
             if vm_state == 'stopped':
                 raise loopingcall.LoopingCallDone()
 
-        periodic_call = loopingcall.FixedIntervalLoopingCall(
-            _wait_for_power_off)
-
         try:
             # add a timeout to the periodic call.
-            periodic_call.start(interval=CONF.verify_interval)
-            etimeout.with_timeout(CONF.wait_period_after_power_off,
-                                  periodic_call.wait)
+            timer = loopingcall.FixedIntervalWithTimeoutLoopingCall(
+                _wait_for_power_off)
+            timer.start(interval=CONF.verify_interval,
+                        timeout=CONF.wait_period_after_power_off).wait()
             msg = "Stopped instance: '%s'" % instance_uuid
             self.update_details(msg, 1.0)
-        except etimeout.Timeout:
+        except loopingcall.LoopingCallTimeOut:
             msg = "Failed to stop instance %(instance)s" % {
                 'instance': instance.id
             }
@@ -112,7 +108,7 @@ class StopInstanceTask(base.MasakariTask):
                 message=msg)
         finally:
             # stop the periodic call, in case of exceptions or Timeout.
-            periodic_call.stop()
+            timer.stop()
 
 
 class StartInstanceTask(base.MasakariTask):
@@ -159,20 +155,18 @@ class ConfirmInstanceActiveTask(base.MasakariTask):
             if vm_state == 'active':
                 raise loopingcall.LoopingCallDone()
 
-        periodic_call = loopingcall.FixedIntervalLoopingCall(
-            _wait_for_active)
         try:
             msg = "Confirming instance '%s' vm_state is ACTIVE" % instance_uuid
             self.update_details(msg)
 
             # add a timeout to the periodic call.
-            periodic_call.start(interval=CONF.verify_interval)
-            etimeout.with_timeout(CONF.wait_period_after_power_on,
-                                  periodic_call.wait)
-
+            timer = loopingcall.FixedIntervalWithTimeoutLoopingCall(
+                _wait_for_active)
+            timer.start(interval=CONF.verify_interval,
+                        timeout=CONF.wait_period_after_power_on).wait()
             msg = "Confirmed instance '%s' vm_state is ACTIVE" % instance_uuid
             self.update_details(msg, 1.0)
-        except etimeout.Timeout:
+        except loopingcall.LoopingCallTimeOut:
             msg = "Failed to start instance %(instance)s" % {
                 'instance': instance_uuid
             }
@@ -181,7 +175,7 @@ class ConfirmInstanceActiveTask(base.MasakariTask):
                 message=msg)
         finally:
             # stop the periodic call, in case of exceptions or Timeout.
-            periodic_call.stop()
+            timer.stop()
 
 
 def get_instance_recovery_flow(context, novaclient, process_what):

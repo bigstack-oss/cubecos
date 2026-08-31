@@ -13,8 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from eventlet import timeout as etimeout
-
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_service import loopingcall
@@ -70,23 +68,21 @@ class ConfirmComputeNodeDisabledTask(base.MasakariTask):
             if service_disabled:
                 raise loopingcall.LoopingCallDone()
 
-        periodic_call = loopingcall.FixedIntervalLoopingCall(
-            _wait_for_disable)
         try:
             msg = "Confirming compute service is disabled on host: '%s'" % (
                 host_name)
             self.update_details(msg)
 
             # add a timeout to the periodic call.
-            periodic_call.start(interval=CONF.verify_interval)
-            etimeout.with_timeout(
-                CONF.wait_period_after_service_update,
-                periodic_call.wait)
+            timer = loopingcall.FixedIntervalWithTimeoutLoopingCall(
+                _wait_for_disable)
+            timer.start(interval=CONF.verify_interval,
+                        timeout=CONF.wait_period_after_service_update).wait()
 
             msg = "Confirmed compute service is disabled on host: '%s'" % (
                 host_name)
             self.update_details(msg, 1.0)
-        except etimeout.Timeout:
+        except loopingcall.LoopingCallTimeOut:
             msg = "Failed to disable service %(process_name)s" % {
                 'process_name': process_name
             }
@@ -95,7 +91,7 @@ class ConfirmComputeNodeDisabledTask(base.MasakariTask):
                 message=msg)
         finally:
             # stop the periodic call, in case of exceptions or Timeout.
-            periodic_call.stop()
+            timer.stop()
 
 
 def get_compute_process_recovery_flow(context, novaclient, process_what):

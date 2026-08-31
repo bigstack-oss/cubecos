@@ -1,6 +1,6 @@
---- masakari/engine/drivers/taskflow/process_failure.py	2026-07-11 04:37:26.727435989 +0800
-+++ masakari/engine/drivers/taskflow/process_failure.py	2026-07-11 04:37:26.727435989 +0800
-@@ -92,7 +92,7 @@
+--- masakari/engine/drivers/taskflow/process_failure.py
++++ masakari/engine/drivers/taskflow/process_failure.py
+@@ -88,7 +88,7 @@
              }
              self.update_details(msg, 1.0)
              raise exception.ProcessRecoveryFailureException(
@@ -8,4 +8,4 @@
 +                message=msg) from None
          finally:
              # stop the periodic call, in case of exceptions or Timeout.
-             periodic_call.stop()
+             timer.stop()
