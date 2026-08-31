@@ -102,51 +102,31 @@ rootfs_install::
 	$(Q)# Link the uWSGI binary for Placement WSGI
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/uwsgi /usr/bin/uwsgi
 
-# Keep a privsep-helper in the antelope venv, and keep /usr/bin/privsep-helper pointed
-# at it.
+# There is no /usr/bin/privsep-helper any more, and no oslo.privsep in the antelope
+# venv.
 #
 # oslo.privsep escalates by running `sudo privsep-helper`, resolved off sudo's
 # secure_path (/sbin:/bin:/usr/sbin:/usr/bin), which never contains a venv's bin -- so
-# the bare name has to exist there. The symlink now covers exactly one service:
-# masakari is the only one still reaching the helper this way, and
-# config_masakari.cpp names /usr/bin/privsep-helper in helper_command. Three services
-# used to be on that list and have since left it. neutron reached it a third way --
-# not through sudo's secure_path but through the exec_dirs in
-# /etc/neutron/rootwrap.conf, since neutron agents escalate via
-# `sudo neutron-rootwrap ... privsep-helper`; #628 took neutron to caracal and
-# config_neutron.cpp now pins the caracal helper in all six of its privsep sections, so
-# nothing under /etc/neutron resolves this symlink any more. #638 then took manila and
-# #633 cyborg, and config_manila.cpp and config_cyborg.cpp pin the caracal helper the
-# same way.
+# a service that does not pin an absolute helper_command needs the bare name to exist
+# there. This file used to install oslo.privsep into the antelope venv and keep that
+# symlink pointed at it, load-bearing rather than convenient: without it an unpinned
+# antelope agent crash-loops on "FailedToDropPrivileges: privsep helper command exited
+# non-zero (96)" -- which is how it was first found, as
+# "Network NG [ neutron(3 metadata not all up) ]".
 #
-# It is load-bearing rather than a convenience: with no /usr/bin/privsep-helper at all,
-# an antelope agent that has not been pinned crash-loops on
-# "FailedToDropPrivileges: privsep helper command exited non-zero (96)" -- which is how
-# it was first found, as "Network NG [ neutron(3 metadata not all up) ]" before neutron
-# had its own pins.
+# The consumers then left one at a time, each pinning the caracal helper by absolute
+# path in its own config module: neutron (#628, which reached it through the exec_dirs
+# in /etc/neutron/rootwrap.conf rather than secure_path), manila (#638), cyborg (#633),
+# and masakari last (#639). With nothing resolving the bare name, both halves went --
+# an antelope helper that nothing runs is one more thing to reason about the next time
+# a service hops.
 #
-# So the helper is installed into *both* venvs from here: caracal's comes from the
-# oslo.privsep named in the pip install above, which is the one nova itself escalates
-# through (config_nova.cpp pins four helper_command values at
-# /opt/openstack-caracal/bin/privsep-helper, since a python 3.10 helper cannot serve a
-# caracal nova), and antelope's is installed here explicitly. Naming it rather than
-# leaving it transitive is the same reasoning that names python3-designateclient in
-# core/designate/designate.mk: a dependency nothing asks for is one that disappears
-# silently -- and nova was the only component naming oslo.privsep in the antelope venv
-# before this hop.
-#
-# Both halves go once masakari reaches caracal: the pip install below, the symlink, and
-# the helper_command pin in config_masakari.cpp. At that point the caracal half moves
-# out of nova.mk too -- every venv occupant will be naming its own helper by then.
-rootfs_install::
-	$(Q)# enable dns in the rootfs for downloading packages
-	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			oslo.privsep"
-	$(Q)# clean up dns configurations after downloading packages
-	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf /opt/openstack-antelope/bin/privsep-helper /usr/bin/privsep-helper
+# nova still names oslo.privsep in the caracal pip install above, and that one is its
+# own: config_nova.cpp pins four helper_command values at
+# $(CARACAL_OPENSTACK_HOME_DIR)/bin/privsep-helper, since a python 3.10 helper cannot
+# serve a caracal nova. Naming it rather than leaving it transitive is the same
+# reasoning that names python-designateclient in core/designate/designate.mk: a
+# dependency nothing asks for is one that disappears silently.
 
 # prepare the build directory
 rootfs_install::
