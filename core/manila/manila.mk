@@ -5,30 +5,30 @@
 # calls in health_manila_check(), os_manila_init() and migrate_manila_db_post(), and
 # the "share" osc plugin entry point.
 #
-# Those two now want different venvs, so it is installed twice.
+# Those two wanted different venvs between #638 and #636, so it was installed twice.
+# #636 took /usr/bin/openstack to caracal, where the api and the standalone cli already
+# were, so one install serves all three consumers again.
 #
 # The osc plugin has to sit with the interpreter that runs /usr/bin/openstack, because
-# an entry point is only visible to the interpreter it was installed under -- and
-# core/heavyfs still links /usr/bin/openstack at $(OPENSTACK_HOME_DIR), the antelope
-# venv. `openstack share` is reached from sdk_os.sh (os_manila_share_delete and the
-# share-type reconcile), so dropping the antelope copy would break those four call
-# sites. Unlike volume/compute/image, share is not built into python-openstackclient;
-# it is a separate plugin, which is why cinder could take its client to caracal
-# wholesale and manila cannot.
+# an entry point is only visible to the interpreter it was installed under. `openstack
+# share` is reached from sdk_os.sh (os_manila_share_delete and the share-type
+# reconcile), so a copy in the wrong venv breaks those four call sites silently. Unlike
+# volume/compute/image, share is not built into python-openstackclient; it is a
+# separate plugin, which is why cinder could take its client to caracal wholesale and
+# manila had to wait.
 #
 # /usr/bin/manila is the standalone cli hex_sdk drives, and it talks HTTP, so it goes
 # to caracal with the api it queries -- 4.8.1, the client caracal's own
 # upper-constraints names for the 18.3.0 api installed here. That keeps the pairing
 # #1203 established when it retired the yoga-client-against-antelope-api one.
 #
-# The antelope copy has a second consumer besides the osc plugin, so do not drop it on the
-# day horizon hops and the plugin follows: manila-ui declares
-# `Requires-Dist: python-manilaclient (>=2.7.0)` and imports it from 15 modules, including
-# manila_ui/api/manila.py and manila_ui/exceptions.py. Whichever of the two moves last is
-# what keeps 4.4.2 needed there.
+# manila-ui is the third consumer: it declares
+# `Requires-Dist: python-manilaclient (>=2.7.0)` and imports it from 15 modules,
+# including manila_ui/api/manila.py and manila_ui/exceptions.py. It moved to caracal
+# with horizon in #636, which is what emptied the antelope side out.
 #
-# openstack-manila-ui is replaced by the manila-ui wheel installed further down, and
-# that one does *not* move: see the note above it.
+# openstack-manila-ui is replaced by the manila-ui wheel installed further down --
+# see the note above it.
 #
 # openstack-manila and openstack-manila-share are what the pip install below
 # replaces. Non-python Requires of those two that are deliberately not restated:

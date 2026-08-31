@@ -5,14 +5,15 @@ ROOTFS_DNF += bind bind-utils
 
 # python-designateclient owns the "dns" osc plugin entry point, which hex_sdk's
 # health_designate_check() drives as `openstack dns service list`, counting the
-# api/central/worker/producer/mdns rows that report UP. Since #634 it is installed by
-# its own block, the one that keeps it in the antelope venv while the service moves to
-# caracal -- see the note there for why it cannot follow.
+# api/central/worker/producer/mdns rows that report UP. It is installed by its own
+# block further down, which #634 split out to hold it in the antelope venv while the
+# service moved to caracal; #636 took /usr/bin/openstack to caracal too, so the block
+# now installs alongside the service and only the separation remains.
 #
 # It used to be the yoga python3-designateclient rpm under the *system* python 3.9,
 # because /usr/bin/openstack was itself `#!/usr/bin/python3` and a stevedore entry point
 # is only visible to the interpreter it was installed under. core/heavyfs moved the cli
-# into the venv, so the plugin follows it and the rpm is gone.
+# into a venv, so the plugin follows it and the rpm is gone.
 #
 # It is still named explicitly rather than left to designate-dashboard's requirements,
 # for the same reason it had to be named as an rpm: it once arrived only as a side effect
@@ -72,22 +73,20 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
-# the osc plugin and the dashboard stay in the antelope venv -- TEMPORARY
+# the osc plugin and the dashboard
 #
 # python-designateclient owns the "dns" osc plugin entry point, and a stevedore entry
-# point is only visible to the interpreter it was installed under. /usr/bin/openstack
-# is the antelope venv's, so the plugin has to stay next to it or
-# health_designate_check()'s `openstack dns service list` cannot run at all -- which is
-# how this was first found, as "DNSaaS NG [ designate(9 api not all up) ]" while every
-# designate unit was active. See the note at the top of this file; #632 has the same
-# constraint for python-barbicanclient.
+# point is only visible to the interpreter it was installed under, so the plugin has
+# to sit next to /usr/bin/openstack or health_designate_check()'s `openstack dns
+# service list` cannot run at all -- which is how this was first found, as
+# "DNSaaS NG [ designate(9 api not all up) ]" while every designate unit was active.
+# That held it in the antelope venv from #634 until #636 moved the cli here; #632 had
+# the same constraint for python-barbicanclient.
 #
 # designate-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
 # horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
 # caracal, so the panel is a caracal-venv install now.
-#
-# The osc plugin goes once /usr/bin/openstack is the caracal venv's (#636).
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

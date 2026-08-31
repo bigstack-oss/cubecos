@@ -80,15 +80,15 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-introspectiveinstancemonitor /usr/bin/masakari-introspectiveinstancemonitor
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-processmonitor /usr/bin/masakari-processmonitor
 
-# the osc plugin and the dashboard stay in the antelope venv -- TEMPORARY
+# the osc plugin and the dashboard
 #
 # python-masakariclient owns the "ha" osc plugin entry point ("openstack segment ...",
 # which hex_sdk's os_masakari_maintenance_hosts drives), and a stevedore entry point is
-# only visible to the interpreter it was installed under. /usr/bin/openstack is the
-# antelope venv's, so the plugin has to stay next to it. It owns no console script of
-# its own, so nothing needs relinking. It is now a pinned pip install like the rest --
-# the antelope constraints file decides the version, the way core/designate does it for
-# python-designateclient -- rather than a branch-name clone.
+# only visible to the interpreter it was installed under, so the plugin has to sit next
+# to /usr/bin/openstack. That held it in the antelope venv from #639 until #636 moved
+# the cli here. It owns no console script of its own, so nothing needs relinking. The
+# constraints file decides its version, the way core/designate does it for
+# python-designateclient -- it is not a branch-name clone.
 #
 # masakari-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
@@ -101,8 +101,6 @@ rootfs_install::
 #
 # 10.0.0 brings the vmoves panel with it. The API behind it has been there since
 # masakari 17.0.0 (#639); only the panel was missing, and this is what supplies it.
-#
-# The osc plugin goes once /usr/bin/openstack is the caracal venv's (#636).
 MASAKARI_DASHBOARD_VER := 10.0.0
 
 rootfs_install::

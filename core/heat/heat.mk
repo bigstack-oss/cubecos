@@ -8,26 +8,21 @@
 # healthy.
 #
 # It used to be the yoga python3-heatclient rpm under the *system* python, because
-# /usr/bin/openstack was `#!/usr/bin/python3` (3.9) and the copy pip put in the 3.10
-# venv was invisible to it -- an entry point is only visible to the interpreter it
-# was installed under. core/heavyfs moved the CLI into the venv, so the plugin
-# followed it.
+# /usr/bin/openstack was `#!/usr/bin/python3` (3.9) and the copy pip put in a venv was
+# invisible to it -- an entry point is only visible to the interpreter it was
+# installed under. #609 moved the CLI into the antelope venv and the plugin followed
+# it; when heat moved to caracal the plugin had to stay behind, because the CLI had
+# not; #636 moved the CLI too, so the plugin sits with the service again.
 #
-# It stays in the *antelope* venv now that heat itself has moved to caracal, for that
-# same entry-point reason: core/heavyfs still links /usr/bin/openstack at
-# $(OPENSTACK_HOME_DIR), so the `orchestration` plugin has to be installed under that
-# interpreter or health_heat_check() breaks again. heat's own requirements.txt names
-# python-heatclient, so the caracal venv gets a 3.5.0 copy of its own; the antelope
-# one is what /usr/bin/openstack sees, and its 3.2.0 talks to a 22.0.1 API, which is
-# the supported direction -- `orchestration service list` is /v1/{tenant}/services
-# and predates 2023.1. Named explicitly rather than left transitive because nothing
-# in the antelope venv would pull it any more.
+# It is named explicitly rather than left transitive. heat's own requirements.txt
+# asks for it today, but designate.mk carries the story of what happens when the only
+# thing asking for a client is some other install: it disappears the day that install
+# moves, and `cluster check` reports the service NG while every unit is active.
 #
-# /usr/bin/heat, the client's own CLI, therefore also stays on the antelope venv: it
-# is python-heatclient's console script, not heat's. Nothing in this tree calls it,
-# but it has always been on the image for operators. /usr/bin/heat-3, the Fedora
-# python3 alias, is not recreated -- no other venv console script here is aliased
-# that way.
+# /usr/bin/heat, the client's own CLI, follows it: it is python-heatclient's console
+# script, not heat's. Nothing in this tree calls it, but it has always been on the
+# image for operators. /usr/bin/heat-3, the Fedora python3 alias, is not recreated --
+# no other venv console script here is aliased that way.
 #
 # Nothing else is needed: the RDO spec's only non-python Requires was
 # shadow-utils, for the heat user and group, and core/heavyfs/account/centos9
@@ -35,9 +30,9 @@
 #
 # openstack-heat-ui, the Horizon dashboard plugin, is replaced by the
 # heat-dashboard wheel installed further down. It was dropped when heat moved to
-# pip because horizon was still on python 3.9; #609 moved horizon into the venv, so
-# the Orchestration panels come back here. That wheel does *not* follow heat to
-# caracal -- see the note above it.
+# pip because horizon was still on python 3.9; #609 moved horizon into the antelope
+# venv and #636 into the caracal one, and the wheel has followed horizon both times
+# -- see the note above it.
 
 HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 

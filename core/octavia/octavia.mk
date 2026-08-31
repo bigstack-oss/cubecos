@@ -9,21 +9,17 @@
 #
 # It used to be the yoga python3-octaviaclient rpm under the *system* python 3.9,
 # because /usr/bin/openstack was `#!/usr/bin/python3` and an entry point is only
-# visible to the interpreter it was installed under. #1206 moved it into the 3.10
+# visible to the interpreter it was installed under. #1206 moved it into the antelope
 # venv alongside the CLI. This rpm was also the only hard Requires on
 # python3-openstackclient anywhere in the tree, so dropping it there is what let
 # core/heavyfs stop installing the yoga CLI.
 #
-# It stays in the *antelope* venv now that octavia itself has moved to caracal, for
-# the same entry-point reason: core/heavyfs still links /usr/bin/openstack at
-# $(OPENSTACK_HOME_DIR), so the `loadbalancer` plugin has to be installed under that
-# interpreter or the call sites above stop resolving. Unlike manila, there is no
-# second consumer -- octavia ships no standalone CLI and nothing in hex_sdk runs one
-# -- so the client is installed once, and only there. That leaves the antelope
-# constraint's python-octaviaclient 3.4.0 talking to a caracal 14.0.2 API, which is
-# the supported direction: octaviaclient negotiates the API version per request and
-# every call sdk_os.sh makes (loadbalancer list, the flavorprofile/flavor pairs,
-# delete --cascade) predates 2023.1.
+# It had to stay in the antelope venv when octavia moved to caracal, for that same
+# entry-point reason -- the `loadbalancer` plugin has to be installed under whichever
+# interpreter runs /usr/bin/openstack or the call sites above stop resolving. #636
+# moved the CLI, so it is installed with the service now. Unlike manila, there is no
+# second consumer: octavia ships no standalone CLI and nothing in hex_sdk runs one, so
+# the client is installed once.
 #
 # NOTE: unlike heat, health_octavia_check() is *not* what depends on this.
 # It checks systemd units, the monasca http_status metric and the octavia-hm0
@@ -33,10 +29,9 @@
 # openstack-octavia-ui, the Horizon dashboard plugin, is replaced by the
 # octavia-dashboard wheel installed further down. It was dropped when octavia moved
 # to pip because Horizon still ran on the system python 3.9 and could not import a
-# package from the 3.10 venv; #609 moved Horizon into the venv, so the Load Balancer
-# panel comes back. Registering it is core/horizon's job, where every dashboard
-# action lives. That wheel does *not* follow octavia to caracal -- see the note
-# above it.
+# package from a venv; #609 moved Horizon into the antelope venv, so the Load Balancer
+# panel came back, and #636 moved both to caracal. Registering it is core/horizon's
+# job, where every dashboard action lives.
 #
 # The octavia user and group are carried statically by
 # core/heavyfs/account/centos9 (uid/gid 138), so the RDO spec's shadow-utils

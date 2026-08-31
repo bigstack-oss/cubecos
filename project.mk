@@ -71,18 +71,30 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 # manila (18.3.0) the seventh (#638), octavia (14.0.2) the eighth (#640),
 # barbican (18.0.0) the ninth (#632), cyborg (12.0.0) the tenth (#633),
 # designate (18.0.0) the eleventh (#634), heat (22.0.1) the twelfth (#635),
-# ironic with ironic-inspector (24.1.5 / 12.1.1) the thirteenth (#637) and
-# watcher (12.1.0) the fourteenth (#643).
+# ironic with ironic-inspector (24.1.5 / 12.1.1) the thirteenth (#637),
+# masakari with masakari-monitors (17.0.0 / 17.0.1) the fourteenth (#639),
+# watcher (12.1.0) the fifteenth (#643) and horizon (24.0.2) the sixteenth (#636),
+# which took the eight dashboard plugins and the openstack cli with it.
 # The services move one at a time and OPENSTACK_RELEASE is promoted once they all have.
 # (#642 moved python-swiftclient rather than a service, so it takes no place in that
 # count.) The ordinals are merge order into develop. #633 and #634 moved their services
 # without coming back to this comment and #635 and #637 then took the numbers they had
 # left free, so cyborg through ironic are renumbered here.
 #
-# barbican leaves a piece behind, the same way octavia does: python-barbicanclient owns
-# the `openstack secret ...` commands and has to stay in the antelope venv for as long as
-# /usr/bin/openstack does. See core/barbican/barbican.mk. designate and watcher each
-# leave two: their osc plugin and their horizon dashboard plugin, both blocked on #636.
+# Several hops had to leave a piece behind: an osc plugin is a stevedore entry point,
+# visible only to the interpreter that runs /usr/bin/openstack, so barbican, designate,
+# masakari, octavia, watcher, cyborg, heat and manila each left their client in the
+# antelope venv, and designate, masakari, watcher and neutron-vpnaas left their horizon
+# dashboard plugin there too. #636 collected all of it: horizon, the eight dashboard
+# plugins, /usr/bin/openstack and the eight clients moved together.
+#
+# What is left in the antelope venv is no longer a service: monasca (core/monasca),
+# ospurge (core/appfw) and ceph's rados/rbd bindings (core/ceph, which builds a copy
+# into each venv). OPENSTACK_RELEASE is promoted when those are dealt with.
+#
+# $(OPS_GITHUB_BRANCH_02) has no reader left after #636 -- the four dashboard clones
+# were the last -- but $(OPS_GITHUB_BRANCH_01) is still what core/heavyfs passes to
+# PROJ_INSTALL_PIP, so the pair is left intact.
 CARACAL_OPENSTACK_RELEASE := caracal
 CARACAL_OPENSTACK_HOME_DIR := /opt/openstack-$(CARACAL_OPENSTACK_RELEASE)
 CARACAL_OPS_GITHUB_BRANCH_01 := stable/2024.1

@@ -33,13 +33,13 @@ IRONIC_INSP_VER := 12.1.1
 IRONIC_UI_VER := 6.3.0
 
 # python-ironicclient owns the `baremetal` osc plugin, and an entry point is only
-# visible to the interpreter it was installed under. core/heavyfs still links
-# /usr/bin/openstack at $(OPENSTACK_HOME_DIR), so that plugin has to stay in the
-# antelope venv -- and it does, without a pip line of its own: ironic-ui (installed
-# below) and python-watcher (core/watcher) both declare it, so it is guaranteed there
-# rather than lucky. That is why this hop needs no counterpart to the explicit
-# python-heatclient / python-manilaclient antelope installs #1376 and #1353 had to add.
-# A 5.1.0 client against a 24.1.5 api is the supported direction.
+# visible to the interpreter it was installed under, so it has to sit next to whichever
+# interpreter runs /usr/bin/openstack. #636 made that the caracal venv, where it is
+# already present without a pip line of its own: ironic-ui (installed below) and
+# python-watcher (core/watcher) both declare it and both are in that venv, so it is
+# guaranteed there rather than lucky. Two declarers is what makes it safe to leave
+# implicit here where heat and manila had to be explicit -- see designate.mk for the
+# failure mode a single transitive declarer produces.
 #
 # System requirements formerly pulled in by the openstack-ironic RPMs.
 # ipmitool backs enabled_hardware_types=ipmi / enabled_management_interfaces=ipmitool

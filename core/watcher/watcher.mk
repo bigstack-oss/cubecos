@@ -66,39 +66,33 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-status /usr/bin/watcher-status
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-sync /usr/bin/watcher-sync
 
-# the osc plugin and the web ui plugin stay in the antelope venv -- TEMPORARY
+# the osc plugin and the web ui plugin
 #
 # python-watcherclient owns the "optimize" osc plugin entry point, which hex_sdk's
 # health_watcher_check() drives as `openstack optimize service list`. A stevedore entry
 # point is only visible to the interpreter it was installed under, and /usr/bin/openstack
-# is the antelope venv's (core/heavyfs/Makefile), so the plugin has to stay next to it or
-# the health check cannot run its query at all. #632, #633 and #634 hit the same
-# constraint for python-barbicanclient, python-cyborgclient and python-designateclient.
-#
-# The client can stay a release behind because watcher's REST API did not move: not one
-# file under watcher/api/ differs between 10.0.0 and unmaintained/2024.1, so the 4.1.0
-# the antelope constraint resolves still speaks to 12.1.0.
+# is the caracal venv's since #636, so the plugin lives here or the health check cannot
+# run its query at all. It had to stay in antelope while the cli did, which is the
+# constraint #632, #633 and #634 also hit for python-barbicanclient,
+# python-cyborgclient and python-designateclient.
 #
 # It is named explicitly rather than left to watcher-dashboard's requirements.txt, which
 # also asks for it. designate.mk carries the story: a client that arrives only as a side
 # effect of some other install disappears silently the day that install moves, and the
 # symptom is `cluster check` reporting the service NG while every unit is active. No
-# version is named, the same way cyborg.mk does not name one: the antelope constraints
-# file already carries python-watcherclient (4.1.0), so a version here could only drift
-# from it.
+# version is named, the same way cyborg.mk does not name one: the caracal constraints
+# file already carries python-watcherclient, so a version here could only drift from it.
 #
 # watcher-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
 # horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
 # caracal, so the panel is a caracal-venv install now.
 #
-# The osc plugin goes once /usr/bin/openstack is the caracal venv's (#636).
-#
 # /usr/bin/watcher is the client's own cli. It used to come from the system python 3.9
 # install as /usr/local/bin/watcher -- /usr/bin held only the watcher-* service scripts
 # linked above -- and since /usr/local/bin precedes /usr/bin in the PATH hex_sdk sets,
 # the replacement is this symlink, the same shape core/monasca uses. It points at the
-# antelope venv because that is where the client is, not where the service is.
+# client, which is now the same venv as the service.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

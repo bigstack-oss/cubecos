@@ -325,12 +325,13 @@ rootfs_install::
 #   - below 82 (2026-02-08), which deleted pkg_resources. That is the hard one, and
 #     it is a runtime requirement as much as a build one -- keystonemiddleware above,
 #     plus pbr's egg_info writer on every --no-build-isolation build in this venv.
-#   - below 80 (2025-04-27), which removed `setup.py install`. Nothing in this venv
-#     needs it today: ceph's bindings moved to `pip install` (see core/ceph/ceph.mk)
-#     and skyline's did too. It is kept as headroom for masakari, designate and
-#     watcher, which still install that way in antelope and will bring the command
-#     with them unless they are converted when they hop -- cyborg (#633) was, so it
-#     no longer needs it.
+#   - below 80 (2025-04-27), which removed `setup.py install`. Nothing anywhere in
+#     the tree invokes that command any more: ceph's bindings moved to `pip install`
+#     (see core/ceph/ceph.mk), skyline's did too, and #636 converted the last four --
+#     the designate, masakari, watcher and neutron-vpnaas dashboards -- from a git
+#     clone to a pinned pip install as they followed horizon here. The ceiling is
+#     kept anyway: it costs nothing, and it is what makes a future `setup.py`
+#     install fail on review rather than on build day.
 #
 # Verified in a python 3.11 venv before the bump: horizon 24.0.2's six sdists build
 # under --no-build-isolation, ceph's rados and rbd bindings produce the same flat

@@ -53,24 +53,22 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg-status /usr/bin/cyborg-status
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg-wsgi-api /usr/bin/cyborg-wsgi-api
 
-# the osc plugin stays in the antelope venv -- TEMPORARY
+# the osc plugin
 #
 # python-cyborgclient owns the `openstack accelerator ...` commands, and a
 # stevedore entry point is only visible to the interpreter it was installed
-# under. /usr/bin/openstack is the antelope venv's (core/heavyfs/Makefile), so
-# the plugin has to stay next to it or those commands disappear from the cli.
-# Every service whose client owns an osc plugin meets this on its way over.
+# under, so the plugin has to sit next to /usr/bin/openstack or those commands
+# disappear from the cli. That held it in the antelope venv while the cli was
+# there; #636 moved the cli, so it sits with the service again. Every service
+# whose client owns an osc plugin met this on its way over.
 #
 # Nothing in hex_sdk drives this one -- health_cyborg_check() only asks systemd
 # whether the three units are running -- so no health check depends on it. What
 # would go quiet is the operator-facing cli.
 #
 # It is a pip install rather than a git checkout for the same reason the service
-# is, and no version is named: os-antelope-pip-upper-constraints.txt already
-# carries python-cyborgclient (2.1.0), so a version here could only drift from
-# that file.
-#
-# It goes once /usr/bin/openstack is the caracal venv's (#636).
+# is, and no version is named: os-caracal-pip-upper-constraints.txt already
+# carries python-cyborgclient, so a version here could only drift from that file.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

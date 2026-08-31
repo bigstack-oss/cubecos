@@ -9,13 +9,13 @@
 # #642 moves the client from the antelope venv to the caracal one. There is no server
 # to move, so the client and the /usr/bin/swift symlink below are the whole of it.
 #
-# The install is a re-declaration rather than a first install. horizon 24.0.2's down
-# payment into this venv (core/horizon/horizon.mk, the second rootfs_install::) runs
-# without --no-deps, and horizon 24.0.2 declares python-swiftclient >=3.2.0, so the
-# ===4.5.0 pinned in os-caracal-pip-upper-constraints.txt:103 is already installed by
-# the time this file runs. Naming it here keeps the object-store client an explicit
-# part of the object-store story rather than an accident of horizon's dependency set
-# -- the same reason it was named while it lived in the antelope venv.
+# The install is a re-declaration rather than a first install. horizon (installed
+# into this venv by core/horizon/horizon.mk) runs without --no-deps and declares
+# python-swiftclient >=3.2.0, so the ===4.5.0 pinned in
+# os-caracal-pip-upper-constraints.txt:103 is already installed by the time this file
+# runs. Naming it here keeps the object-store client an explicit part of the
+# object-store story rather than an accident of horizon's dependency set -- the same
+# reason it was named while it lived in the antelope venv.
 #
 # Two library consumers keep it from being a convenience CLI only, and both live in
 # the caracal venv as of #629: the `cube-swift` cinder backup type

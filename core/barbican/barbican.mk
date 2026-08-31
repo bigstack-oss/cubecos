@@ -32,25 +32,21 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
-# python-barbicanclient stays in the *antelope* venv -- TEMPORARY, see below
+# python-barbicanclient
 #
-# It is the only part of barbican that does not follow the service into the caracal venv,
-# because it is the one part the openstack cli loads rather than the one barbican runs.
-# python-barbicanclient contributes an [openstack.cli.extension] entry point plus sixteen
-# [openstack.key_manager.v1] commands (secret store/get/list/delete/update, the container
-# and consumer families, and the order family), and a stevedore entry point is only visible
-# to the interpreter it was installed under. /usr/bin/openstack is the antelope venv's
-# (core/heavyfs/Makefile links it there), so installing the client into the caracal venv
-# would take `openstack secret ...` off the node entirely.
+# It is kept in a block of its own because it was the one part of barbican that could not
+# follow the service into the caracal venv: it is what the openstack cli loads rather than
+# what barbican runs. python-barbicanclient contributes an [openstack.cli.extension] entry
+# point plus sixteen [openstack.key_manager.v1] commands (secret store/get/list/delete/
+# update, the container and consumer families, and the order family), and a stevedore entry
+# point is only visible to the interpreter it was installed under, so it has to sit next to
+# /usr/bin/openstack or `openstack secret ...` leaves the node entirely.
 #
-# This is the first caracal hop to hit that. keystone, glance, cinder and nova escaped it
+# #632 was the first caracal hop to hit that. keystone, glance, cinder and nova escaped it
 # because `openstack image|volume|server ...` are osc built-ins -- python-keystoneclient and
 # python-cinderclient contribute no [openstack.cli.extension] at all -- so their clients
-# could move with the service. The same split is already spelled out for designate in
-# core/designate/designate.mk, from the era when the cli was the system python's.
-#
-# TEMPORARY: this goes away when the cli itself reaches the caracal venv, at which point
-# this install block moves back into the one above.
+# could move with the service. #636 moved the cli, so the split is over; the block stays
+# separate only because the reasoning above is worth keeping next to the install.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
