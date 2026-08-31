@@ -83,16 +83,17 @@ rootfs_install::
 	$(Q)# named 'kazoo' until this line existed. Named here rather than as
 	$(Q)# taskflow[zookeeper] to match octavia-lib above, and because the constraint
 	$(Q)# file already pins it (2.10.0).
+	$(Q)#
+	$(Q)# python-octaviaclient owns the "loadbalancer" osc plugin. It is named for the
+	$(Q)# same reason as the two above: an entry point is only visible to the
+	$(Q)# interpreter /usr/bin/openstack runs under, so a dependency nothing asks for
+	$(Q)# is one that can disappear silently. It was in the antelope venv until #636
+	$(Q)# took the cli here.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
 		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			octavia==$(OCTAVIA_VER) \
 			octavia-lib \
-			kazoo"
-	$(Q)# and the "loadbalancer" osc plugin in the antelope venv, alone: that entry
-	$(Q)# point is only visible to the interpreter /usr/bin/openstack runs under, and
-	$(Q)# that is still the antelope one -- see the note at the top of this file.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			kazoo \
 			python-octaviaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf

@@ -60,14 +60,13 @@ HEAT_DASHBOARD_VER := 11.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)# python-heatclient owns the "orchestration" osc plugin and /usr/bin/heat. It
+	$(Q)# is named explicitly: an entry point is only visible to the interpreter
+	$(Q)# /usr/bin/openstack runs under, so a dependency nothing asks for is one that
+	$(Q)# can disappear silently and take `openstack orchestration ...` with it.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
 		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			openstack-heat==$(HEAT_VER)"
-	$(Q)# and the "orchestration" osc plugin in the antelope venv: that entry point is
-	$(Q)# only visible to the interpreter /usr/bin/openstack runs under, and that is
-	$(Q)# still the antelope one -- see the note at the top of this file.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			openstack-heat==$(HEAT_VER) \
 			python-heatclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -82,9 +81,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-engine /usr/bin/heat-engine
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-manage /usr/bin/heat-manage
 	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-status /usr/bin/heat-status
-	$(Q)# the heatclient CLI, which is python-heatclient's console script and so
-	$(Q)# follows the antelope install above, not heat.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
+	$(Q)# the heatclient CLI, which is python-heatclient's console script.
+	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
 
 # prepare the build directory
 rootfs_install::

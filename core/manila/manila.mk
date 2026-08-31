@@ -69,16 +69,14 @@ MANILA_UI_VER := 11.0.1
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)# python-manilaclient owns /usr/bin/manila, named explicitly -- see the note
-	$(Q)# at the top of this file for why it is installed into both venvs.
+	$(Q)# python-manilaclient owns /usr/bin/manila and the "share" osc plugin, and is
+	$(Q)# named explicitly: an entry point is only visible to the interpreter
+	$(Q)# /usr/bin/openstack runs under, so a dependency nothing asks for is one that
+	$(Q)# can disappear silently. It used to be installed into the antelope venv as
+	$(Q)# well, for the plugin alone; #636 took the cli here, so one copy does both.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
 		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			manila==$(MANILA_VER) \
-			python-manilaclient"
-	$(Q)# and again in the antelope venv, for the "share" osc plugin alone: that entry
-	$(Q)# point is only visible to the interpreter /usr/bin/openstack runs under.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-manilaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
