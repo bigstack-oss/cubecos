@@ -65,9 +65,10 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * The privsep helper nova must escalate through.
  *
  * oslo.privsep defaults to `sudo privsep-helper`, which sudo's secure_path resolves to
- * /usr/bin/privsep-helper -- a symlink core/nova/nova.mk keeps pointed at the *antelope*
- * venv, because manila, masakari and cyborg are still there and it cannot move
- * with nova. A python 3.10 helper cannot serve a caracal nova: on a freshly built rootfs
+ * /usr/bin/privsep-helper -- a symlink core/nova/nova.mk used to keep pointed at the
+ * *antelope* venv, for the services that were still living there. #639 took the last of
+ * them (masakari) to caracal, so nova.mk no longer creates it and the bare name resolves
+ * to nothing at all. It could never have served nova anyway: on a freshly built rootfs
  * the antelope venv holds no nova at all and the context dies with
  * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
  * imports the nova 27.5.1 still sitting there and answers a 29.4.0 parent with no error

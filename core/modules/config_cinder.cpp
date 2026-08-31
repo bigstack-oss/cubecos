@@ -67,9 +67,10 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * The privsep helper cinder must escalate through.
  *
  * oslo.privsep defaults to `sudo privsep-helper`, which sudo's secure_path
- * resolves to /usr/bin/privsep-helper -- a symlink core/nova/nova.mk points at the
- * *antelope* venv. Every other privsep user still lives there, so that link cannot
- * move; but a python 3.10 helper cannot serve a caracal cinder. On a freshly built
+ * resolved to /usr/bin/privsep-helper -- a symlink core/nova/nova.mk kept pointed at
+ * the *antelope* venv while other privsep users still lived there. #639 took the last
+ * of them and removed it. A python 3.10 helper could not have served a caracal cinder
+ * in any case. On a freshly built
  * rootfs the antelope venv holds no cinder at all and the context would die with
  * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
  * imports the cinder 22.3.0 still sitting there and answers a 24.5.0 parent.
