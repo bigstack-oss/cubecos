@@ -68,20 +68,23 @@ LOGSTASH_DL_URL := https://artifacts.elastic.co/downloads/logstash
 # what makes the check worth anything: the key travels the same channel as the tarball,
 # so accepting whatever key that channel hands back would verify nothing.
 LOGSTASH_GPG_FPR := 46095ACC8548582C1A2699A9D27D666CD88E42B4
-LOGSTASH_GNUPGHOME := $(ARCS_DIR)/logstash-gnupg
 
+# Checked with gpgv against a throwaway keyring rather than `gpg --verify` against a
+# homedir: gpg wants gpg-agent even to read a public keyring, and the agent does not
+# reliably start under mountrootfs -- it failed a build in one jail while the same command
+# worked by hand in the same container. gpgv needs no agent, no homedir and no keyring
+# mutation, which is what it exists for.
+#
 # Download to .part and only rename once the detached signature checks out, so neither a
 # truncated object from a caching proxy nor a tampered one is ever left where the next
 # run would extract it as a finished download.
 $(ARCS_DIR)/$(LOGSTASH_TGZ):
 	$(Q)wget $(LOGSTASH_DL_URL)/$(LOGSTASH_TGZ) -O $@.part
 	$(Q)wget $(LOGSTASH_DL_URL)/$(LOGSTASH_TGZ).asc -O $@.asc
-	$(Q)rm -rf $(LOGSTASH_GNUPGHOME) && mkdir -p -m 700 $(LOGSTASH_GNUPGHOME)
-	$(Q)wget -qO- https://artifacts.elastic.co/GPG-KEY-elasticsearch | \
-		GNUPGHOME=$(LOGSTASH_GNUPGHOME) gpg --batch --quiet --import
-	$(Q)GNUPGHOME=$(LOGSTASH_GNUPGHOME) gpg --batch --status-fd 1 --verify $@.asc $@.part | \
+	$(Q)wget -qO- https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor > $@.gpg
+	$(Q)gpgv --keyring $@.gpg --status-fd 1 $@.asc $@.part | \
 		grep -q '^\[GNUPG:\] VALIDSIG $(LOGSTASH_GPG_FPR) '
-	$(Q)rm -rf $(LOGSTASH_GNUPGHOME) $@.asc
+	$(Q)rm -f $@.asc $@.gpg
 	$(Q)mv $@.part $@
 
 rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)

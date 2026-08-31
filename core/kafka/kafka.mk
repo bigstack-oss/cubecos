@@ -14,20 +14,21 @@ KAFKA_DL_URL := https://archive.apache.org/dist/kafka/$(KAFKA_VER)
 # it fails the build instead of quietly trusting whatever the KEYS file carries. Find the
 # new one with: gpg --verify <tgz>.asc <tgz>
 KAFKA_GPG_FPR := D9472951E133753353DCE20D72E522CC9FCBBAC9
-KAFKA_GNUPGHOME := $(ARCS_DIR)/kafka-gnupg
 
+# Checked with gpgv rather than `gpg --verify` -- see the note on the logstash rule in
+# core/elk/elk.mk; gpg needs gpg-agent to read a keyring and the agent does not reliably
+# start under mountrootfs.
+#
 # Download to .part and only rename once the detached signature checks out, so a truncated
 # or tampered object is never left where the next run would unpack it as a finished
 # download. KEYS comes from downloads.apache.org, a different host to the tarball's.
 $(ARCS_DIR)/$(KAFKA_TGZ):
 	$(Q)wget $(KAFKA_DL_URL)/$(KAFKA_TGZ) -O $@.part
 	$(Q)wget $(KAFKA_DL_URL)/$(KAFKA_TGZ).asc -O $@.asc
-	$(Q)rm -rf $(KAFKA_GNUPGHOME) && mkdir -p -m 700 $(KAFKA_GNUPGHOME)
-	$(Q)wget -qO- https://downloads.apache.org/kafka/KEYS | \
-		GNUPGHOME=$(KAFKA_GNUPGHOME) gpg --batch --quiet --import
-	$(Q)GNUPGHOME=$(KAFKA_GNUPGHOME) gpg --batch --status-fd 1 --verify $@.asc $@.part | \
+	$(Q)wget -qO- https://downloads.apache.org/kafka/KEYS | gpg --dearmor > $@.gpg
+	$(Q)gpgv --keyring $@.gpg --status-fd 1 $@.asc $@.part | \
 		grep -q '^\[GNUPG:\] VALIDSIG $(KAFKA_GPG_FPR) '
-	$(Q)rm -rf $(KAFKA_GNUPGHOME) $@.asc
+	$(Q)rm -f $@.asc $@.gpg
 	$(Q)mv $@.part $@
 
 rootfs_install:: $(ARCS_DIR)/$(KAFKA_TGZ)
