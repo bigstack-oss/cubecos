@@ -23,6 +23,11 @@ static const std::string KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET = "admin-password";
 static const std::string KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE
     = "/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars";
 static const int SAML_METADATA_STUCK_NOTIFY_SECS = 600;
+// how long to give the old keycloak pods to go before a cross-version upgrade. The chart
+// asks for a 60s termination grace period per pod and takes them one at a time, so three
+// control nodes can legitimately need three minutes.
+static const int KEYCLOAK_DOWN_ATTEMPTS = 60;
+static const int KEYCLOAK_DOWN_INTERVAL_SECS = 5;
 // operator escape hatch: touching this releases the saml metadata gate below
 // (one-shot; consumed when honored). /run is tmpfs so it cannot outlive a boot.
 static const char SAML_METADATA_GATE_RELEASE[] = "/run/cube_keycloak_saml_gate_release";
@@ -456,6 +461,154 @@ retireLegacyKeycloak()
 }
 
 /**
+ * Strip trailing whitespace from a captured command output.
+ */
+static const std::string
+trimOutput(const std::string& output)
+{
+    const size_t end = output.find_last_not_of(" \t\r\n");
+    return (end == std::string::npos) ? "" : output.substr(0, end + 1);
+}
+
+/**
+ * The image tag chart-values.yaml asks for.
+ *
+ * Read the same way core/keycloak/keycloak.mk reads it when it checks the bundled
+ * registry at build time, so the tag this module compares against and the tag the build
+ * was gated on cannot come apart.
+ *
+ * @return the tag, or an empty string if it could not be read.
+ */
+static const std::string
+readWantedKeycloakImageTag()
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        false,
+        {},
+        std::string("awk '/^  tag:/ {print $2; exit}' ") + KEYCLOAK_CHART_VALUES);
+    if (r.exitCode != 0) {
+        return "";
+    }
+
+    return trimOutput(r.stdoutOutput);
+}
+
+/**
+ * Take the running Keycloak down before an upgrade that changes its version.
+ *
+ * Keycloak migrates its schema when the first pod of a new version starts, and upstream
+ * is explicit that the database is not compatible with the old server afterwards. The
+ * chart rolls pods one at a time and replicas tracks the node count, so on an HA cluster
+ * a plain helm upgrade leaves the pods that have not been rolled yet running against a
+ * schema the first new one has already migrated. retireLegacyKeycloak() above does not
+ * cover this: it retires the statefulset the WildFly chart created, a different object,
+ * whereas a version change within the Quarkus chart rolls inside this one.
+ *
+ * So scale to zero and wait for the pods to actually be gone, which leaves exactly one
+ * version looking at the schema. K3sDeleteAllPods() is not a substitute -- it force
+ * deletes pods and the statefulset recreates them from the same old spec at once.
+ *
+ * Failure is fail-closed: return false and let the commit report it. The schema may
+ * already have been touched by then, and putting the old version back on top of a
+ * migrated schema is the combination upstream says does not work. Recovery is a restore
+ * from backup, not an automatic rollback.
+ *
+ * @return true when helm may proceed.
+ */
+static bool
+takeKeycloakDownForVersionChange()
+{
+    const std::string wanted = readWantedKeycloakImageTag();
+    if (wanted.empty()) {
+        HexLogError(
+            "cannot tell whether this keycloak upgrade changes version: no image tag in %s",
+            KEYCLOAK_CHART_VALUES);
+        return false;
+    }
+
+    // --ignore-not-found so a missing statefulset is an empty success rather than an exit
+    // status shared with "the api server did not answer" -- the two need opposite
+    // responses, and only one of them is safe to carry on from
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        true,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl get " + APP + " -n " + APP_NAMESPACE
+            + " --ignore-not-found "
+            + "-o jsonpath='{.spec.template.spec.containers[?(@.name==\"keycloak\")].image}'");
+    if (r.exitCode != 0) {
+        HexLogError("failed to read the image the running keycloak statefulset deploys");
+        return false;
+    }
+
+    const std::string running = trimOutput(r.stdoutOutput);
+    if (running.empty()) {
+        // nothing is deployed yet, so there is no schema anybody could be holding
+        return true;
+    }
+
+    // the tag is what follows the last colon, and only when that colon comes after the
+    // last slash -- otherwise it is the registry port in localhost:5080. An image pinned
+    // by digest has no tag at all; the chart only emits that shape when image.digest is
+    // set, which chart-values.yaml does not do, and an unreadable version is treated as a
+    // changed one because taking the pods down is the harmless direction to be wrong in.
+    const size_t at = running.find('@');
+    const size_t colon = running.find_last_of(':');
+    const size_t slash = running.find_last_of('/');
+    const bool tagged = (at == std::string::npos)
+        && (colon != std::string::npos)
+        && (slash == std::string::npos || colon > slash);
+    if (tagged && running.substr(colon + 1) == wanted) {
+        // same version: let helm roll the pods the way it does on every other commit
+        return true;
+    }
+
+    HexLogInfo(
+        "keycloak is moving from %s to tag %s; taking the statefulset down so that only "
+        "one version sees the schema",
+        running.c_str(),
+        wanted.c_str());
+
+    const ExecSyncResult scaled = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "/usr/local/bin/k3s kubectl scale " + APP + " -n " + APP_NAMESPACE
+            + " --replicas=0");
+    if (scaled.exitCode != 0) {
+        HexLogError("failed to scale the keycloak statefulset down");
+        return false;
+    }
+
+    // wait on the pods the controller still has, not on the replica count that was just
+    // asked for: a pod that is terminating is still connected to the database
+    for (int attempt = 0; attempt < KEYCLOAK_DOWN_ATTEMPTS; attempt++) {
+        const ExecSyncResult left = ExecBashSync(
+            0,
+            true,
+            false,
+            {},
+            "/usr/local/bin/k3s kubectl get " + APP + " -n " + APP_NAMESPACE
+                + " -o jsonpath='{.status.replicas}'");
+        if (left.exitCode == 0 && trimOutput(left.stdoutOutput) == "0") {
+            HexLogInfo("the keycloak statefulset is down; upgrading it now");
+            return true;
+        }
+        sleep(KEYCLOAK_DOWN_INTERVAL_SECS);
+    }
+
+    HexLogError(
+        "keycloak pods were still up %d seconds after scaling the statefulset down; "
+        "refusing to upgrade onto a schema the old version can still reach",
+        KEYCLOAK_DOWN_ATTEMPTS * KEYCLOAK_DOWN_INTERVAL_SECS);
+    return false;
+}
+
+/**
  * Deploy Keycloak using Helm.
  */
 static bool
@@ -464,6 +617,10 @@ updateKeycloak()
     HexLogInfo("update keycloak helm chart and roll out pods");
 
     retireLegacyKeycloak();
+
+    if (!takeKeycloakDownForVersionChange()) {
+        return false;
+    }
 
     int nodeCount = K3sGetNodeCounts();
     if (nodeCount < 0) {
