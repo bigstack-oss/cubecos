@@ -2625,6 +2625,24 @@ ceph_osd_create_map()
         done
         cat $osdmap_new | sort -k1 > ${osdmap_new}.sorted
         unlink $osdmap_new
+
+        # this scan can miss an OSD whose udev links are momentarily gone; keep
+        # its existing entry when the data partition is still valid, otherwise
+        # ceph_osd_remount leaves a healthy OSD unmounted (cubecos#1284)
+        if [ -s $CEPH_OSD_MAP ] ; then
+            while read -r dev id metauuid datauuid ; do
+                [ -n "${id:-}" ] || continue
+                awk -v i="$id" '$2==i{f=1} END{exit !f}' ${osdmap_new}.sorted && continue
+                if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 ; then
+                    log_warning "ceph_osd_create_map: osd $id missing from this scan but $datauuid still resolves to a device; keeping its entry"
+                    echo "$dev $id $metauuid $datauuid" >> ${osdmap_new}.sorted
+                else
+                    log_warning "ceph_osd_create_map: osd $id removed from $CEPH_OSD_MAP"
+                fi
+            done < $CEPH_OSD_MAP
+            sort -k1 -o ${osdmap_new}.sorted ${osdmap_new}.sorted
+        fi
+
         if cmp -s ${osdmap_new}.sorted $CEPH_OSD_MAP ; then
             rm -f ${osdmap_new}.sorted
         else
@@ -2633,12 +2651,36 @@ ceph_osd_create_map()
     fi
 
     # clean up broken ceph osd folders
-    for osddir in $(ls -1d ${osdpth}/ceph-*) ; do
-        if ! readlink -e ${osddir}/block ; then
-            rm -f ${osddir}/block
-            rmdir ${osddir}
+    for osddir in $(ls -1d ${osdpth}/ceph-* 2>/dev/null) ; do
+        [ -L ${osddir}/block ] || continue
+        readlink -e ${osddir}/block >/dev/null 2>&1 && continue
+        # the link dangles; only remove it when the data device is really gone,
+        # not when udev merely lost the symlink (cubecos#1284)
+        datauuid=$(basename "$(readlink ${osddir}/block 2>/dev/null)")
+        if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 ; then
+            log_warning "ceph_osd_create_map: ${osddir}/block dangles but $datauuid still resolves to a device; keeping it"
+            continue
         fi
+        rm -f ${osddir}/block
+        rmdir ${osddir} 2>/dev/null
     done
+}
+
+# resolve a dev_osd.map data uuid to its device without going through
+# /dev/disk: a GPT PARTUUID for raw OSDs, an LVM lv_uuid for encrypted/mpath
+# ones. Fails only when the device is genuinely absent, so callers can treat
+# failure as proof the OSD is gone.
+ceph_osd_datapart_resolve()
+{
+    local uuid=$1
+    [ -n "$uuid" ] || return 1
+
+    # blkid reads the GPT off the disk, so it resolves without the udev symlink
+    local dev=$(blkid -o device --match-token PARTUUID=$uuid 2>/dev/null | head -1)
+    [ -n "$dev" ] || dev=$(lvs --noheadings -o lv_path -S lv_uuid=$uuid 2>/dev/null | head -1 | tr -d ' ')
+    [ -n "$dev" ] || return 1
+
+    echo -n "$dev"
 }
 
 ceph_wait_for_services()
