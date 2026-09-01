@@ -2666,6 +2666,16 @@ ceph_osd_create_map()
     done
 }
 
+# true if data uuid $1 resolves to a device that already carries a bluestore
+# label, i.e. an OSD lives there and must not be re-created
+ceph_osd_datapart_has_osd()
+{
+    local dev=$(ceph_osd_datapart_resolve "$1") || return 1
+    [ -n "$dev" ] || return 1
+
+    ceph-bluestore-tool show-label --dev "$dev" >/dev/null 2>&1
+}
+
 # resolve a dev_osd.map data uuid to its device without going through
 # /dev/disk: a GPT PARTUUID for raw OSDs, an LVM lv_uuid for encrypted/mpath
 # ones. Fails only when the device is genuinely absent, so callers can treat

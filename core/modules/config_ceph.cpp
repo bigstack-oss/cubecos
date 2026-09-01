@@ -380,16 +380,16 @@ prepareOsdDirectories()
         snprintf(osddir, sizeof(osddir), OSDDIR_FMT, osdId);
         s_osdIds.push_back(osdId);
 
-        bool isOldOsd = stat(osddir, &ds) == 0 && S_ISDIR(ds.st_mode);
-        if (!isOldOsd) {
+        if (stat(osddir, &ds) != 0 || !S_ISDIR(ds.st_mode)) {
             if (HexMakeDir(osddir, USER, GROUP, 0755) != 0) {
                 HexLogError("failed to create ceph osd directory %s", osddir);
                 return false;
             }
-
-            s_osdNewIds.push_back(osdId);
         }
 
+        // Mount before deciding. The directory alone says nothing about whether
+        // an OSD exists -- it is just a mountpoint, and the metadata only shows
+        // up once the metapart is mounted.
         const ExecSyncResult mr = ExecBashSync(
             0,
             false,
@@ -400,11 +400,34 @@ prepareOsdDirectories()
             HexUtilSystemF(0, 0, "mount %s %s", d.c_str(), osddir);
         }
 
+        // An OSD already lives here if its metadata is on the mounted metapart,
+        // or its data partition still carries a bluestore label. Deciding this
+        // from the directory's existence wipes a healthy OSD whose directory was
+        // removed while it was unmounted (cubecos#1284).
+        struct stat ts;
+        std::string typePath = std::string(osddir) + "/type";
+        bool isOldOsd = stat(typePath.c_str(), &ts) == 0;
+        if (!isOldOsd && dataPartUuid.length() > 0) {
+            const ExecSyncResult lr = ExecBashSync(
+                0,
+                false,
+                false,
+                {},
+                HEX_SDK " ceph_osd_datapart_has_osd " + dataPartUuid);
+            isOldOsd = (lr.exitCode == 0);
+            if (isOldOsd)
+                HexLogWarning("osd %lu has no metadata at %s but its data partition %s carries a "
+                              "bluestore label; not re-creating it", osdId, osddir, dataPartUuid.c_str());
+        }
+
         if (!isOldOsd) {
+            s_osdNewIds.push_back(osdId);
+            HexLogInfo("creating a new osd %lu on %s", osdId, d.c_str());
             HexSystemF(0, "rm -rf %s/*", osddir);
             HexSystemF(0, "echo bluestore > %s/type", osddir);
             HexSystemF(0, "ln -sf /dev/disk/by-partuuid/%s %s/block", dataPartUuid.c_str(), osddir);
-            HexUtilSystemF(0, 0, "ceph-osd -i %lu --mkfs --osd-uuid %s >/dev/null 2>&1", osdId, uuid.c_str());
+            if (HexUtilSystemF(0, 0, "ceph-osd -i %lu --mkfs --osd-uuid %s", osdId, uuid.c_str()) != 0)
+                HexLogError("failed to mkfs osd %lu on %s", osdId, d.c_str());
             HexSystemF(0, "chown -R %s:%s %s", USER, GROUP, osddir);
         }
     }
