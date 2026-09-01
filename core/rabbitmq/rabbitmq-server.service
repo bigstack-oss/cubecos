@@ -10,7 +10,9 @@ User=rabbitmq
 Group=rabbitmq
 UMask=0027
 NotifyAccess=all
-TimeoutStartSec=3600
+# a wedged start blocks the whole bootstrap commit; 300s is rabbit's own ceiling
+# for waiting on peer tables (mnesia retry_timeout 30s x retry_limit 10)
+TimeoutStartSec=300
 LimitNOFILE=65536
 
 # Note:
