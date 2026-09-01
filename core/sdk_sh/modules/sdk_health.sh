@@ -1639,10 +1639,17 @@ health_ceph_osd_check()
     local total=$(echo $stats | jq -r .osdmap.num_osds)
     local uposd=$(echo $stats | jq -r .osdmap.num_up_osds)
     local inosd=$(echo $stats | jq -r .osdmap.num_in_osds)
+    local damaged="$($HEX_SDK ceph_osd_damaged_list 2>/dev/null)"
+
     if cmd "$HEX_SDK ceph_osd_list" | sort -t. -n -k2 | egrep -q "warning|fail" ; then
         # device hardware fault -- always a fault, even mid-recovery
         ERR_CODE=3
         ERR_LOG="dmesg | grep -i -e fail -e error"
+    elif [ -n "$damaged" ] ; then
+        # on-disk state damaged while the data device is still present; ceph can
+        # report this host healthy after marking the OSD out (cubecos#1284)
+        ERR_CODE=4
+        ERR_MSG+="$damaged\n"
     elif [ "$total" != "$uposd" ] ; then
         # OSDs still rejoining -- only a fault if data is unavailable
         _ceph_blocking_health "$stats" && ERR_CODE=1
@@ -1656,15 +1663,28 @@ health_ceph_osd_check()
 
 health_ceph_osd_repair()
 {
-    if [ $($CEPH osd tree down | grep host | awk '{print $4}' | sort -u | wc -l) -gt 0 ] ; then
-        readarray osd_array <<<"$($CEPH osd tree | awk '/ down /{print $1}' | sort)"
-        declare -p osd_array > /dev/null
-        for osd_entry in "${osd_array[@]}" ; do
-            local osd=$(echo $osd_entry | head -c -1)
-            local host=$(ceph_get_host_by_id $osd)
-            remote_run $host "timeout $SRVLTO $HEX_SDK ceph_osd_restart $osd"
-        done
+    if [ $($CEPH osd tree down | grep host | awk '{print $4}' | sort -u | wc -l) -eq 0 ] ; then
+        return 0
     fi
+
+    readarray osd_array <<<"$($CEPH osd tree | awk '/ down /{print $1}' | sort)"
+    declare -p osd_array > /dev/null
+    for osd_entry in "${osd_array[@]}" ; do
+        local osd=$(echo $osd_entry | head -c -1)
+        local host=$(ceph_get_host_by_id $osd)
+
+        # A down OSD whose metadata dir isn't mounted will fail the same way on
+        # every restart ("missing 'type' file"), so restarting it is not a
+        # repair -- it is a loop. Remount just this OSD first; if that cannot be
+        # done safely, report and leave it alone rather than churn (cubecos#1284).
+        if ! remote_run $host "test -f /var/lib/ceph/osd/ceph-$osd/type" ; then
+            if ! remote_run $host "$HEX_SDK ceph_osd_remount_one $osd" ; then
+                log_error "health_ceph_osd_repair: osd.$osd on $host cannot be remounted safely; leaving it down for inspection"
+                continue
+            fi
+        fi
+        remote_run $host "timeout $SRVLTO $HEX_SDK ceph_osd_restart $osd"
+    done
 }
 
 health_ceph_rgw_report()

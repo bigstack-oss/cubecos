@@ -141,6 +141,7 @@ SRV="ceph_osd"
 eval "ERR_DESC_$SRV[1]='not all up'"
 eval "ERR_DESC_$SRV[2]='not all in'"
 eval "ERR_DESC_$SRV[3]='disk failing'"
+eval "ERR_DESC_$SRV[4]='osd on-disk state damaged'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="ceph_rgw"
