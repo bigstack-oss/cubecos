@@ -8,11 +8,20 @@ RANCHER_PROV_VER      := v7.0.0
 RANCHER_PROV_DIR      := terraform-provider-rancher2
 RANCHER_UPSTREAM_BIN  := $(RANCHER_PROV_DIR)/bin/terraform-provider-rancher2
 KEYCLOAK_PROV_REPO    := https://github.com/mrparkers/terraform-provider-keycloak.git
-# 4.x is the first line that understands the Quarkus distribution. Its releases up to
-# 4.2.0 are validated against Keycloak 19, the closest supported neighbour of the 18.x we
-# deploy; 4.3.0 onwards moved to Keycloak 21. Keep the required_providers pins in
-# src/keycloak/**/main.tf in step with this.
-KEYCLOAK_PROV_VER     := v4.2.0
+# 4.x is the first line that understands the Quarkus distribution. No release of it is
+# validated against the Keycloak 22 we deploy -- 4.2.0 tested against 19, and 4.3.0
+# through 4.5.0 all stop at 21, the closest supported neighbour, while 5.x starts at 26 --
+# so take the newest 4.x neighbour instead of reaching across that gap.
+#
+# That newest one is 4.4.0, not 4.5.0. The provider moved to the Keycloak organization in
+# 4.5.0 and republished under the keycloak/keycloak registry namespace; mrparkers/keycloak
+# ends at 4.4.0. The `terraform init` in this Makefile resolves the source below from the
+# public registry before the locally built binary is copied over it, so a 4.5.0 pin under
+# the old namespace does not resolve. Nothing is lost by staying: 4.5.0 carries only the
+# org move, the Apache 2.0 relicence, dependency bumps and go 1.22 -- no resource changes.
+#
+# Keep the required_providers pins in src/keycloak/**/main.tf in step with this.
+KEYCLOAK_PROV_VER     := v4.4.0
 KEYCLOAK_PROV_SEMVER  := $(patsubst v%,%,$(KEYCLOAK_PROV_VER))
 KEYCLOAK_PROV_DIR     := terraform-provider-keycloak
 KEYCLOAK_UPSTREAM_BIN := $(KEYCLOAK_PROV_DIR)/terraform-provider-keycloak
