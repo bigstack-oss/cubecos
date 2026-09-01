@@ -466,13 +466,10 @@ migrate_ceph()
     # anyway, so it is never retried and the cluster stays on
     # require_osd_release quincy for good.
     #
-    # ceph_finalize_release reads the release off the cluster instead of off this
-    # node, and only pins once every OSD agrees and the monmap has advanced. It
-    # returns 1 for "not this node's turn", which is the normal outcome mid-roll and
-    # must not fail the migration -- the ceph config module retries it from each
-    # commit while its upgrade marker stands, so whichever node finishes the roll
-    # last is the one that completes the upgrade.
-    $HEX_SDK ceph_finalize_release || true
+    # Finalization is not done here. migrate_ceph short-circuits on its own
+    # ceph_cluster_migrated marker, so it is one-shot per node and cannot retry -- on
+    # the node that matters it has usually already run. config_ceph.cpp's Commit()
+    # owns it instead, from every node, retried while its own upgrade marker stands.
 
     case $release in
         nautilus|pacific|quincy|reef)

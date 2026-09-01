@@ -1480,9 +1480,11 @@ Validate()
 static void
 FinalizeCephRelease()
 {
-    if (!IsControl(s_eCubeRole))
-        return;
-
+    // Deliberately not IsControl-gated. On a web-scale cluster the OSDs live on the
+    // storage nodes, so the gate can only open once the *last storage node* is on the
+    // new release -- and no control node necessarily commits after that. Every node
+    // can do this: InitCephClient() rsyncs ceph.client.admin.keyring to all of them,
+    // and the migrate hook drops the marker on all of them.
     if (access(MAKRER_RELEASE_PENDING, F_OK) != 0)
         return;
 

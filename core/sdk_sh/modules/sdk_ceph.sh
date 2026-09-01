@@ -454,21 +454,9 @@ ceph_leave_rolling()
 {
     cluster_rolling_marker_clear
     Quiet $CEPH config rm global mon_osd_down_out_interval
-    # Post-upgrade finalization, and only then. A roll is far more often a rolling
-    # *restart* than an upgrade, and on those there is no release to pin -- so gate on
-    # the same marker config_ceph.cpp's FinalizeCephRelease() uses rather than paying a
-    # ceph round trip (3s healthy, 11s with no quorum) at the end of every roll.
-    #
-    # ceph_finalize_release is also called from the per-node ceph commit, so a cluster
-    # upgraded without a roll job (a 1-node appliance, a hand-landed node) still
-    # completes. rc 1 means "not this node's turn", a normal outcome mid-roll: leave the
-    # marker for the next commit to retry and never fail leaving rolling mode over it.
-    if [ -f "$CEPH_RELEASE_PENDING_MARKER" ] ; then
-        if ceph_finalize_release ; then
-            rm -f "$CEPH_RELEASE_PENDING_MARKER"
-        fi
-    fi
-    return 0
+    # No release finalization here. It belongs to config_ceph.cpp's Commit(), which is
+    # the only caller that runs on *every* node -- and on a web-scale cluster the node
+    # holding the last quincy OSDs is a storage node, which never drives a roll.
 }
 
 # ---------------------------------------------------------------------------
@@ -501,10 +489,6 @@ ceph_leave_rolling()
 # version, exactly as ceph intends during an upgrade.
 CEPH_TARGET_RELEASE=reef
 
-# Dropped by config_ceph.cpp's migrate hook on a firmware switch and cleared once the
-# release is pinned. Shell reads it for the same reason the module does: to skip the
-# release check entirely on a node where no upgrade is pending.
-CEPH_RELEASE_PENDING_MARKER=/etc/appliance/state/ceph_release_upgrade_pending
 
 # Release names currently running in one daemon tier (mon|mgr|osd|mds|rgw).
 # Empty when nothing of that kind runs, or when the mon cannot be reached.
