@@ -1,0 +1,104 @@
+#!/bin/bash
+#
+# Point RPMS/PIPS/ARCS at a download cache that outlives distclean, and evict
+# from it before the build starts pulling.
+#
+# The three directories hold everything the heavyfs build downloads: rpms fetched
+# by name, rpms fetched by URL (ROOTFS_DNF_DL_FROM), the pip cache, and the
+# tarballs components wget by hand. Every one of those already skips the fetch
+# when the file is present -- installdnf's `[ -e ${D##*/} ] || $WGET $D`, and the
+# $(ARCS_DIR)/<tarball> make rules. The caching was never the problem: the
+# directories sat under build/, so distclean's `rm -rf build` took them with it
+# and the next build re-fetched all of it.
+#
+# They stay at $(CURDIR)/{RPMS,PIPS,ARCS} and become symlinks. installdnf computes
+# its own RPMDIR=$(pwd)/RPMS rather than reading $(RPMS_DIR), so moving the
+# variable alone would leave it writing to the old path; a symlink is what both
+# spellings follow. rm -rf removes a symlink, never its target, so distclean and
+# PKGCLEAN keep working unchanged.
+#
+# Usage: dlcache <cache-root> <link-dir>
+
+set -u
+
+CACHE_ROOT=${1:?cache root required}
+LINK_DIR=${2:?link dir required}
+
+# $(TOP_BLDDIR)/../dlcache reaches here with the .. still in it. Resolve it, so
+# the symlinks carry a clean target and the readlink comparison below matches on
+# a second run.
+mkdir -p "$CACHE_ROOT"
+CACHE_ROOT=$(cd "$CACHE_ROOT" && pwd)
+
+# Evict on atime, not mtime: a package downloaded once and used by every build
+# since is not stale, and /home is mounted relatime so reads do update it. The
+# cost of evicting too eagerly is one re-download, so the window is generous.
+ATIME_DAYS=${DLCACHE_ATIME_DAYS:-30}
+
+# Hard ceiling, applied after the atime pass. The build node's /home is shared
+# with every other job's workspace, so the cache is not allowed to grow without
+# bound just because every file keeps being touched.
+MAX_MB=${DLCACHE_MAX_MB:-25600}
+
+SUBDIRS="RPMS PIPS ARCS"
+
+for sub in $SUBDIRS ; do
+    target=$CACHE_ROOT/$sub
+    link=$LINK_DIR/$sub
+
+    mkdir -p "$target"
+
+    # First run after this change lands, $link is a real directory holding the
+    # rpms the running build already fetched. Move them in rather than starting
+    # the cache empty -- otherwise the build that introduces the cache is also
+    # the one that pays full price for it.
+    if [ -d "$link" ] && [ ! -L "$link" ] ; then
+        if [ -n "$(ls -A "$link" 2>/dev/null)" ] ; then
+            echo "  DLCACHE seeding $sub from $link"
+            cp -an "$link"/. "$target"/ 2>/dev/null || true
+        fi
+        rm -rf "$link"
+    fi
+
+    # A symlink pointing somewhere else is left over from a different cache root.
+    if [ -L "$link" ] && [ "$(readlink "$link")" != "$target" ] ; then
+        rm -f "$link"
+    fi
+
+    [ -e "$link" ] || ln -s "$target" "$link"
+done
+
+# Eviction runs before the build pulls anything, so a file this build is about to
+# use has last week's atime and survives; one nothing has read for a month goes.
+evicted=0
+for sub in $SUBDIRS ; do
+    target=$CACHE_ROOT/$sub
+    n=$(find "$target" -type f -atime +"$ATIME_DAYS" -print -delete 2>/dev/null | wc -l)
+    evicted=$((evicted + n))
+done
+
+# find leaves the directory skeleton behind; pip in particular nests deeply.
+for sub in $SUBDIRS ; do
+    find "$CACHE_ROOT/$sub" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+done
+
+used_mb=$(du -sm "$CACHE_ROOT" 2>/dev/null | cut -f1)
+used_mb=${used_mb:-0}
+
+# Over the ceiling: keep deleting the least recently used file until under it.
+# -printf with %A@ gives atime as a sortable epoch; the loop stops as soon as the
+# running total is back inside the limit rather than deleting the whole sorted list.
+if [ "$used_mb" -gt "$MAX_MB" ] ; then
+    over_mb=$((used_mb - MAX_MB))
+    freed_kb=0
+    over_kb=$((over_mb * 1024))
+    while read -r _atime size_kb path ; do
+        [ "$freed_kb" -ge "$over_kb" ] && break
+        rm -f "$path" || continue
+        freed_kb=$((freed_kb + size_kb))
+        evicted=$((evicted + 1))
+    done < <(find "$CACHE_ROOT" -type f -printf '%A@ %k %p\n' 2>/dev/null | sort -n)
+    used_mb=$(du -sm "$CACHE_ROOT" 2>/dev/null | cut -f1)
+fi
+
+echo "  DLCACHE $CACHE_ROOT  ${used_mb:-0}MB / ${MAX_MB}MB, evicted $evicted file(s) unread for ${ATIME_DAYS}d"

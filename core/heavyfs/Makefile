@@ -5,6 +5,22 @@
 include ../../build.mk
 
 PROJ_HEAVYFS_INSTALL := 1
+# Everything the heavyfs build downloads lands in these three, and every fetch
+# already skips the download when the file is present. They stayed under build/
+# though, so distclean's `rm -rf build` deleted the lot and the next build
+# re-fetched it -- 2.8G of rpms, plus the tarballs and wheels that go over https
+# and so cannot be served by the build node's caching proxy at all.
+#
+# They keep these paths and become symlinks into $(CUBE_DLCACHE), which sits
+# beside build/ rather than inside it. installdnf computes its own
+# RPMDIR=$(pwd)/RPMS instead of reading $(RPMS_DIR), so a symlink is the one form
+# both spellings follow. See core/heavyfs/dlcache for the eviction policy.
+#
+# One cache per workspace, i.e. per job. Sharing a single cache between jobs
+# needs installdnf's use of RPMS as a working directory -- it cd's in, copies
+# into it, and deletes blacklisted rpms out of it -- untangled first.
+CUBE_DLCACHE ?= $(TOP_BLDDIR)/../dlcache
+
 RPMS_DIR := $(CURDIR)/RPMS
 PIPS_DIR := $(CURDIR)/PIPS
 ARCS_DIR := $(CURDIR)/ARCS
@@ -71,7 +87,10 @@ rootfs_install::
 	$(Q)mount -t proc proc $(ROOTDIR)/proc || /bin/true
 	$(Q)chroot $(ROOTDIR) dnf clean all
 	$(Q)echo "Add to $(ROOTDIR) repos: $(INFLUXDB_REPO) $(CEPH_REPO) $(PROMETHEUS_REPO) $(DOCKER_REPO)"
-	$(Q)mkdir -p $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
+	$(Q)# Creates the three directories as symlinks into $(CUBE_DLCACHE) and evicts
+	$(Q)# from it. Runs here, before the first download, so a file this build is
+	$(Q)# about to read still carries its previous atime and survives the pass.
+	$(Q)$(SHELL) $(COREDIR)/heavyfs/dlcache $(CUBE_DLCACHE) $(CURDIR)
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
