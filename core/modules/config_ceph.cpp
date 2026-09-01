@@ -1572,17 +1572,8 @@ Commit(bool modified, int dryLevel)
     if (IsUndef(s_eCubeRole))
         return true;
 
-    // A commit with nothing to reconfigure still has to be able to finish an
-    // interrupted release upgrade. CommitCheck() is true for every bootstrap --
-    // it sets s_bConfigChanged unconditionally there -- so the boot after a
-    // firmware switch takes the normal path below. This branch is for the case
-    // that is left over: the gate was shut when that boot ran (mid-roll the mons
-    // are not all on the new release yet), so the marker survived and the next
-    // commit to come along has to retry it. That one need not be a bootstrap.
-    if (!CommitCheck(modified, dryLevel)) {
-        FinalizeCephRelease();
+    if (!CommitCheck(modified, dryLevel))
         return true;
-    }
 
     if (s_bConfigChanged) {
         bool monEnabled = IsMonEnabled(s_ha, s_monEnabled, s_eCubeRole, s_ctrlHosts);
@@ -1734,8 +1725,17 @@ Commit(bool modified, int dryLevel)
     // Last rather than inside the s_bConfigChanged block above, so that a commit
     // which reconfigures something else (rbd mirroring, say) still completes a
     // pending upgrade. By here this node's OSDs have been committed, so if this is
-    // the node that finished the roll the gate can actually open. Costs one access()
-    // when there is no marker, which is every commit that is not post-upgrade.
+    // the node that finished the roll the gate can actually open.
+    //
+    // Deliberately NOT also called on CommitCheck()'s false path. That path is taken
+    // by almost every hex_config run, so the call would be meaningless nearly every
+    // time, and all it would buy is tidiness: the marker is per-node bookkeeping, and
+    // the cluster-wide require_osd_release has already been pinned by whichever node
+    // finished the roll last. One left behind on the other control nodes changes
+    // nothing, and is cleared the next time they come through here -- which is every
+    // boot, since /usr/sbin/bootstrap (from systemd-hexctl-user.service) runs
+    // `hex_config bootstrap` and CommitCheck() sets s_bConfigChanged unconditionally
+    // under IsBootstrap().
     FinalizeCephRelease();
 
     return true;
