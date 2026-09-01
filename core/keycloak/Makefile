@@ -35,10 +35,13 @@ ifneq ($(RC),)
 # pushes a tag nothing loaded. It drifted before: IMG_BUILD said 17.1.0 while the pinned
 # rpm was 17.2.0.
 #
-# 3.1.10 is also where this stops being a WildFly image: KEYCLOAK_VERSION is 18.0.2, the
-# spec builds on quay.io/keycloak/keycloak:18.0.2 and runs kc.sh build, so it is the
-# Quarkus distribution CHART_NAME/CHART_VERSION (keycloakx 1.6.0) needs -- the chart could
-# never drive the old 17.0.1-legacy image.
+# This pin is currently BEHIND the chart above. It is a Keycloak 18.0.2 image, while
+# CHART_NAME/CHART_VERSION now ship 22 and chart-values.yaml asks for the tag the matching
+# cube-cos-login carries. Until cube-cos-ui cuts a 22.x release for this to point at, RC
+# builds fail the bundled-registry check in keycloak.mk -- .push-img pushes the tag named
+# here and chart-values.yaml names a different one. Non-RC builds are unaffected: they
+# build the rpm from the cube-cos-ui default branch and take the tag from its package.json.
+# Move both this URL and the IMG_BUILD literal to that release when it exists.
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
 		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.10-rc1/$(PKG_NAME)-18.0.0-1.54a03f5.x86_64.rpm, \
