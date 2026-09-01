@@ -147,8 +147,11 @@ advisor_cluster_id()
 {
     local id=""
 
-    if [ -r /etc/cube/phone-home-agent.env ] ; then
-        id=$(sed -n 's/^CUBE_CLUSTER_ID=//p' /etc/cube/phone-home-agent.env | head -1)
+    # CLUSTER_ENV is overridable so the unit test can supply a file; nothing
+    # in production sets it.
+    local env_file=${CLUSTER_ENV:-/etc/cube/phone-home-agent.env}
+    if [ -r "$env_file" ] ; then
+        id=$(sed -n 's/^CUBE_CLUSTER_ID=//p' "$env_file" | head -1)
     fi
     if [ -z "$id" ] ; then
         id=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "$T_cubesys_controller")
@@ -158,11 +161,22 @@ advisor_cluster_id()
         return 1
     fi
 
-    # It becomes a certificate CN and a URL path segment, and nothing on the
-    # Advisor side validates either -- so refuse the shapes that would break
-    # them here, where the message can still be useful.
+    # The Advisor folds this to lowercase and stores the folded form, so case
+    # is not an error here either -- cubesys.controller is declared with
+    # ValidateRegex/DFT_REGEX_STR ("^.*$"), which constrains nothing, and a
+    # cluster whose controller is named Controller01 is perfectly legal. Fold
+    # to match what will be stored, then refuse only the shapes that genuinely
+    # break a certificate CN, a URL path segment or /etc/hosts. The Advisor
+    # enforces the same set with a CHECK constraint; refusing here first means
+    # the operator sees the rule before a round trip, not a remote error after.
+    id=$(echo "$id" | tr '[:upper:]' '[:lower:]')
     case $id in
-        */*|*\ *) echo "Error: cluster id contains a character that cannot appear in a URL path: $id" >&2 ; return 1 ;;
+        *[!a-z0-9._-]*)
+            echo "Error: cluster id may contain only letters, digits, '.', '-' and '_': $id" >&2
+            return 1 ;;
+        [!a-z0-9]*|*[!a-z0-9])
+            echo "Error: cluster id must start and end with a letter or digit: $id" >&2
+            return 1 ;;
     esac
     if [ ${#id} -gt 64 ] ; then
         echo "Error: cluster id is longer than 64 characters, which strict X.509 tooling rejects: $id" >&2

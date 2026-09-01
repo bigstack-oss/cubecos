@@ -20,7 +20,7 @@ set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_advisor.sh"
 
-for f in advisor_verify_release advisor_release_version advisor_install_release advisor_agent_arch advisor_enroll ; do
+for f in advisor_verify_release advisor_release_version advisor_install_release advisor_agent_arch advisor_enroll advisor_cluster_id ; do
     fn="$(awk -v want="^$f\\\\(\\\\)" '$0 ~ want {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ -n "$fn" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
     eval "$fn"
@@ -148,6 +148,41 @@ if advisor_enroll https://example "$WORK/no-such-token" 0.2.0 >/dev/null 2>&1 ; 
 else
     ok
 fi
+
+
+# --- the cluster id matches what the Advisor will store ----------------------
+#
+# cubesys.controller is declared with ValidateRegex/DFT_REGEX_STR ("^.*$"), so
+# CubeCOS constrains it not at all -- the Advisor must accept what CubeCOS
+# produces. It folds to lowercase and stores the folded form; these cases pin
+# that the local check folds the same way and refuses only what genuinely
+# breaks a CN, a path segment or /etc/hosts.
+idcheck() {
+    local want="$1" id="$2" env="$WORK/phone-home-agent.env"
+    printf 'CUBE_CLUSTER_ID=%s\n' "$id" > "$env"
+    local got
+    if got=$(CLUSTER_ENV="$env" advisor_cluster_id 2>/dev/null) ; then
+        check "cluster id '$id'" "accept:$got" "$want"
+    else
+        check "cluster id '$id'" "reject" "$want"
+    fi
+}
+idcheck "accept:ky3haclust01" ky3haclust01
+idcheck "accept:sky-140"      sky-140
+idcheck "accept:cube.lab.01"  cube.lab.01
+idcheck "accept:foo_bar"      foo_bar
+# Folded, not refused: the Advisor stores the lowercase form, so a controller
+# named in caps must enrol -- as the id the Advisor will actually hold.
+idcheck "accept:controller01" Controller01
+idcheck "accept:acme-prod-01" ACME-PROD-01
+# Refused: each of these breaks a CN, a path segment, or /etc/hosts.
+idcheck "reject" "a/b"
+idcheck "reject" "has space"
+idcheck "reject" _leading
+idcheck "reject" trailing_
+idcheck "reject" -leading
+idcheck "reject" .dot
+idcheck "reject" "$(printf 'x%.0s' $(seq 1 65))"
 
 echo "----"
 echo "pass=$pass fail=$fail"
