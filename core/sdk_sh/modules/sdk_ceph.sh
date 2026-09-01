@@ -454,12 +454,21 @@ ceph_leave_rolling()
 {
     cluster_rolling_marker_clear
     Quiet $CEPH config rm global mon_osd_down_out_interval
-    # post-upgrade finalization; see ceph_finalize_release, which is also called
-    # from the per-node ceph commit so a cluster upgraded without a roll job
-    # (a 1-node appliance, a hand-landed node) still completes the upgrade.
-    # `|| true` because rc 1 there means "not this node's turn", which is a normal
-    # outcome mid-roll and must not fail leaving rolling mode.
-    ceph_finalize_release || true
+    # Post-upgrade finalization, and only then. A roll is far more often a rolling
+    # *restart* than an upgrade, and on those there is no release to pin -- so gate on
+    # the same marker config_ceph.cpp's FinalizeCephRelease() uses rather than paying a
+    # ceph round trip (3s healthy, 11s with no quorum) at the end of every roll.
+    #
+    # ceph_finalize_release is also called from the per-node ceph commit, so a cluster
+    # upgraded without a roll job (a 1-node appliance, a hand-landed node) still
+    # completes. rc 1 means "not this node's turn", a normal outcome mid-roll: leave the
+    # marker for the next commit to retry and never fail leaving rolling mode over it.
+    if [ -f "$CEPH_RELEASE_PENDING_MARKER" ] ; then
+        if ceph_finalize_release ; then
+            rm -f "$CEPH_RELEASE_PENDING_MARKER"
+        fi
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -492,6 +501,11 @@ ceph_leave_rolling()
 # version, exactly as ceph intends during an upgrade.
 CEPH_TARGET_RELEASE=reef
 
+# Dropped by config_ceph.cpp's migrate hook on a firmware switch and cleared once the
+# release is pinned. Shell reads it for the same reason the module does: to skip the
+# release check entirely on a node where no upgrade is pending.
+CEPH_RELEASE_PENDING_MARKER=/etc/appliance/state/ceph_release_upgrade_pending
+
 # Release names currently running in one daemon tier (mon|mgr|osd|mds|rgw).
 # Empty when nothing of that kind runs, or when the mon cannot be reached.
 ceph_tier_releases()
@@ -503,60 +517,12 @@ ceph_tier_releases()
         | sort -u
 }
 
-# 0 only if every daemon in tier $1 runs release $2 (default $CEPH_TARGET_RELEASE).
-# Fail-safe in the same sense as os_mariadb_version_uniform(): no answer, an empty
-# tier or a mixed tier all mean "not yet", never "go ahead".
-ceph_tier_on_release()
-{
-    local tier=${1:-mon} want=${2:-$CEPH_TARGET_RELEASE} got
-    got=$(ceph_tier_releases "$tier")
-    [ -n "$got" ] || return 1
-    [ "$(echo "$got" | wc -l)" = "1" ] || return 1
-    [ "$got" = "$want" ]
-}
-
-# 0 when it is safe for the *next* cluster-wide step to run, given that tier $1
-# has to be upgraded first.
-#
-# Two cases return 0 without the tier being on the target release, and both are
-# deliberate:
-#   - the mon is unreachable / no cluster answers. That is first-time setup, not
-#     an upgrade, and there is no previous release to order against. Gating here
-#     would deadlock FTS, which has no upgraded peer to wait for and never will.
-#   - the tier is empty. Nothing of that kind runs (an rgw-less deployment, a mds
-#     that has not been created yet), so there is nothing to wait for.
-ceph_upgrade_gate()
-{
-    local tier=${1:-mon} want=${2:-$CEPH_TARGET_RELEASE}
-    $CEPH -s >/dev/null 2>&1 || return 0
-    [ -n "$(ceph_tier_releases "$tier")" ] || return 0
-    ceph_tier_on_release "$tier" "$want"
-}
-
-# Block until ceph_upgrade_gate passes, or give up. Returns 0 when the gate is
-# open, 1 on timeout -- the caller decides whether that is fatal. Default 600s is
-# the outside of a mon quorum re-form plus a mgr failover on a loaded node; a
-# whole-cluster roll is not meant to be waited out here.
-ceph_wait_upgrade_gate()
-{
-    local tier=${1:-mon} timeout=${2:-600} want=${3:-$CEPH_TARGET_RELEASE}
-    local waited=0
-    while ! ceph_upgrade_gate "$tier" "$want" ; do
-        [ $waited -lt $timeout ] || {
-            log_warning "ceph_wait_upgrade_gate: $tier not fully on $want after ${timeout}s (running: $(ceph_tier_releases "$tier" | tr '\n' ' '))"
-            return 1
-        }
-        sleep 10
-        waited=$((waited + 10))
-    done
-    return 0
-}
-
 # 0 once the monmap itself has been pinned to the target release. This is the
 # check the upgrade docs name (`ceph mon dump | grep min_mon_release`), and it is
-# strictly stronger than ceph_tier_on_release mon: the mons can all be running
-# reef binaries while min_mon_release still reads quincy, because the monmap only
-# advances once every mon in the quorum has been seen on the new release.
+# strictly stronger than asking whether the mons are running the new binaries:
+# they can all be on reef while min_mon_release still reads quincy, because the
+# monmap only advances once every mon in the quorum has been seen on the new
+# release. That gap is the whole reason finalization is gated rather than assumed.
 ceph_mon_release_pinned()
 {
     local want=${1:-$CEPH_TARGET_RELEASE}
