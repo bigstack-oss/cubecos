@@ -2564,6 +2564,119 @@ ceph_osd_get_datapartuuid()
     echo -n "$datapart_partuuid"
 }
 
+# Ask udev to re-read a disk and re-populate its /dev/disk entries. This is a
+# view refresh only: it writes nothing to the disk, does not touch the partition
+# table, and leaves every partition node in place (cubecos#1284).
+# params: $1 - partition device path (e.g. /dev/sde4, /dev/nvme0n1p4)
+# returns: 0 if the partition's PARTUUID is resolvable afterwards, 1 otherwise
+ceph_osd_refresh_links()
+{
+    local datapart=$1
+    local disk=
+
+    [ -n "$(GetBlkPartUuid "$datapart")" ] && return 0
+
+    if [[ "$datapart" =~ ^(.*[0-9]+)p[0-9]+$ ]] ; then
+        disk="${BASH_REMATCH[1]}"
+    elif [[ "$datapart" =~ ^(.*[a-z])[0-9]+$ ]] ; then
+        disk="${BASH_REMATCH[1]}"
+    else
+        log_error "ceph_osd_refresh_links: cannot derive parent disk from $datapart"
+        return 1
+    fi
+
+    log_warning "ceph_osd_refresh_links: $datapart has no live PARTUUID, re-triggering udev on $disk"
+    udevadm trigger --action=change "$disk" "$datapart" 2>/dev/null
+    udevadm settle --timeout=30 2>/dev/null
+
+    if [ -n "$(GetBlkPartUuid "$datapart")" ] ; then
+        return 0
+    fi
+
+    log_error "ceph_osd_refresh_links: $datapart still has no live PARTUUID after a udev refresh -- inspect the disk before taking any repair action"
+    return 1
+}
+
+# Remount a single down OSD whose metadata dir is missing or unmounted. Scoped
+# to one OSD: unlike refresh_ceph_osd / ceph_osd_remount it never stops or
+# unmounts any other OSD on the host. Non-destructive -- it only mounts and
+# re-links, and refuses to act if the data partition cannot be resolved.
+# params: $1 - osd id
+# returns: 0 on success, 1 if it could not be repaired safely
+ceph_osd_remount_one()
+{
+    local osd_id=$1
+    local osdpth=/var/lib/ceph/osd
+    local osd_dir=$osdpth/ceph-$osd_id
+
+    local line=$(awk -v id="$osd_id" '$2 == id { print ; exit }' $CEPH_OSD_MAP 2>/dev/null)
+    if [ -z "$line" ] ; then
+        log_error "ceph_osd_remount_one: osd.$osd_id: no entry in $CEPH_OSD_MAP"
+        return 1
+    fi
+    local metapart=$(echo "$line" | cut -d" " -f1)
+    local datauuid=$(echo "$line" | cut -d" " -f4)
+
+    if [ ! -e "$metapart" ] ; then
+        log_error "ceph_osd_remount_one: osd.$osd_id: metapart $metapart is absent"
+        return 1
+    fi
+    # confirm the data device is really there before touching anything
+    if ! ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 ; then
+        log_error "ceph_osd_remount_one: osd.$osd_id: datapart $datauuid resolves to no device -- not repairing"
+        return 1
+    fi
+    # the udev link may be missing even though the device is fine
+    if [ ! -e "/dev/disk/by-partuuid/$datauuid" ] ; then
+        ceph_osd_refresh_links "$(ceph_osd_datapart_resolve "$datauuid")" || return 1
+    fi
+
+    if systemctl is-active ceph-osd@$osd_id -q ; then
+        $CEPH tell osd.$osd_id compact >/dev/null 2>&1 || true
+        systemctl stop ceph-osd@$osd_id || true
+    fi
+    umount $osd_dir 2>/dev/null || true
+
+    mkdir -p $osd_dir
+    chmod 0755 $osd_dir
+    if ! mount $metapart $osd_dir ; then
+        log_error "ceph_osd_remount_one: osd.$osd_id: failed to mount $metapart"
+        return 1
+    fi
+
+    if [ "x$(readlink $osd_dir/block)" != "x/dev/disk/by-partuuid/$datauuid" ] ; then
+        unlink $osd_dir/block 2>/dev/null
+        (cd $osd_dir && ln -sf /dev/disk/by-partuuid/$datauuid block)
+        chown -h ceph:ceph $osd_dir/block 2>/dev/null
+    fi
+
+    log_warning "ceph_osd_remount_one: osd.$osd_id remounted from $metapart"
+    return 0
+}
+
+# List local OSDs whose on-disk state is damaged but which ceph may still report
+# as merely down: metadata dir unmounted/empty, or block missing/dangling while
+# the data device is demonstrably still present. Reports, never repairs.
+ceph_osd_damaged_list()
+{
+    local osdpth=/var/lib/ceph/osd
+    local line dev id metauuid datauuid osd_dir
+
+    [ -s $CEPH_OSD_MAP ] || return 0
+    while read -r dev id metauuid datauuid ; do
+        [ -n "${id:-}" ] || continue
+        osd_dir=$osdpth/ceph-$id
+        ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 || continue
+        if [ ! -f "$osd_dir/type" ] ; then
+            echo "osd.$id metadata dir not mounted ($osd_dir)"
+        elif [ ! -L "$osd_dir/block" ] ; then
+            echo "osd.$id block symlink missing ($osd_dir/block)"
+        elif ! readlink -e "$osd_dir/block" >/dev/null 2>&1 ; then
+            echo "osd.$id block symlink dangling -> $(readlink $osd_dir/block)"
+        fi
+    done < $CEPH_OSD_MAP
+}
+
 ceph_osd_remount()
 {
     local osdpth=/var/lib/ceph/osd
