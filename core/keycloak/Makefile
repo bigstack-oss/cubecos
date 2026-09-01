@@ -6,9 +6,14 @@ include ../../build.mk
 # keycloakx is codecentric's chart for the Quarkus distribution. Their plain "keycloak"
 # chart is the WildFly one -- its 18.x versions are chart versions, and every one of them
 # still ships appVersion 17.0.1-legacy -- so moving to Quarkus means changing chart, not
-# just bumping a version. Chart 1.6.0 is the newest one whose appVersion is 18.x.
+# just bumping a version.
+#
+# 2.3.0 is the only keycloakx version that tracks a 22.x server: 2.2.2 before it is 21.1.1
+# and 2.4.1 after it jumps straight to 25.0.0. appVersion only supplies the default image
+# tag, which chart-values.yaml overrides with the bundled cube-cos-login image, so what it
+# actually buys is templates written against the server we ship.
 CHART_NAME := keycloakx
-CHART_VERSION := 1.6.0
+CHART_VERSION := 2.3.0
 CHART := $(CHART_NAME)-$(CHART_VERSION).tgz
 
 $(CHART):
