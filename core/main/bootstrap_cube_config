@@ -100,11 +100,8 @@ PostBootRecovery()
         bootstrap_status "Cluster checking and repairing"
         hex_log_event -e BSP00005I "interface=system,host=$HOSTNAME,service=bootstrap"
         hex_sdk cmd "rm -f /tmp/health_*error.count"
-        # normal boots only: 'cluster check' kicks auto_repair, which on a roll
-        # boot would restart a settling MDS; the gate below covers the roll
-        if [ "$rolling" != "1" ] ; then
-            hex_cli -c cluster check
-        fi
+        # no blocking 'cluster check' here: cluster_check_repair_async below runs
+        # the same checks (auto_repair included) plus the repairs, off the critical path
         # Roll boots: restore VMs this node suspended for its reboot. Only a
         # restart ever suspends (an upgrade refuses and pauses instead), so this
         # is a no-op on an upgrade -- the record is empty.

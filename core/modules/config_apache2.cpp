@@ -272,9 +272,10 @@ Commit(bool modified, int dryLevel)
     bool enabled = s_enabled && IsControl(s_eCubeRole);
     SystemdCommitService(enabled, NAME);
 
-    // waiting for keystone endpoint service back to work
+    // waiting for keystone endpoint service back to work; 600 is now real
+    // seconds, not attempts (~377s measured on a cold boot)
     std::string sharedId = G(SHARED_ID);
-    if (enabled && HexUtilSystemF(0, 0, HEX_SDK " wait_for_http_endpoint %s 5000 60", sharedId.c_str()) != 0) {
+    if (enabled && HexUtilSystemF(0, 0, HEX_SDK " wait_for_http_endpoint %s 5000 600", sharedId.c_str()) != 0) {
         return false;
     }
 

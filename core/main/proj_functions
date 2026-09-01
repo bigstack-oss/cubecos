@@ -908,16 +908,18 @@ wait_for_http_endpoint()
         /usr/sbin/arp -d $endpoint
     fi
 
-    local i=0
-    while [ $i -lt $timeout ] ; do
-        if $CURL -sf http://$endpoint:$port > /dev/null ; then
+    # $timeout is seconds: bound the loop by the clock, not by attempt count -- each
+    # probe can cost curl's own timeout (SRVTO, up to 60s) on top of the sleep
+    local deadline=$(( $(date +%s) + timeout ))
+    local rc=1
+    while [ $(date +%s) -lt $deadline ] ; do
+        if $CURL --connect-timeout 2 -m 5 -sf http://$endpoint:$port > /dev/null ; then
+            rc=0
             break
-        else
-            sleep 1
         fi
-        i=$(expr $i + 1)
+        sleep 1
     done
-    [ $i -lt $timeout ]
+    return $rc
 }
 
 check_service_memory_and_run()

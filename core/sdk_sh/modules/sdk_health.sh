@@ -262,7 +262,9 @@ health_dns_report()
 health_dns_check()
 {
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        local real=$(timeout $SRVSTO ssh root@$node time arp -a 2>&1 | grep real | awk '{print $2}') || ERR_CODE=1
+        # redirect on the remote side: a client reusing a mux master hands its
+        # stderr to that master, so the local pipe outlives the killed client
+        local real=$(timeout $SRVSTO ssh root@$node '{ time arp -a ; } 2>&1' | grep real | awk '{print $2}') || ERR_CODE=1
         if [ "x$ERR_CODE" = "x0" ] ; then
             ERR_MSG+="$node DNS lookup took $real sec\n"
         else

@@ -513,11 +513,12 @@ Commit(bool modified, int dryLevel)
     }
 
     // 4. keystone relies on httpd proxy and gunicorn, reached via the VIP; on a cold boot
-    // the VIP+haproxy+keystone chain can take >1 min, so wait up to 180s
+    // the VIP+haproxy+keystone chain can take >1 min (#1130). 600 is now real seconds,
+    // not attempts (~361s measured)
     SystemdCommitService(IsControl(s_eCubeRole), "openstack-keystone");
     WriteLogRotateConf(log_conf);
     SystemdCommitService(IsControl(s_eCubeRole), "httpd");
-    if (HexUtilSystemF(0, 0, HEX_SDK " wait_for_http_endpoint %s 5000 180", sharedId.c_str()) != 0) {
+    if (HexUtilSystemF(0, 0, HEX_SDK " wait_for_http_endpoint %s 5000 600", sharedId.c_str()) != 0) {
         return false;
     }
 
