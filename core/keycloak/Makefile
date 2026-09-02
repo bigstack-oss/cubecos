@@ -53,14 +53,28 @@ RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS = $(RPMBUILD_DIR)/RPMS
 
+# TEST BRANCH ONLY -- DO NOT MERGE.
+#
+# The image tag this build has to produce comes from cube-cos-login's package.json, and
+# this clone is the only place the login image reads cube-cos-ui. Without a --branch it
+# takes the default branch, where package.json is still 18.0.0, so .push-img pushes
+# 18.0.0 while chart-values.yaml asks for 22.0.0 and keycloak.mk's registry check fails
+# the build. KEYCLOAK_VERSION would also still read 18.0.2, so the image would be built
+# on the wrong base even if that check passed.
+#
+# Pointing the clone at the cube-cos-ui feature branch decouples this verification from
+# the merge order: the pair still has to land minutes apart, but the evidence does not
+# have to wait for it. Drop this commit before opening the PR.
+LOGIN_BRANCH := feat/649-keycloak-22
+
 # prepare the login source code, being pulled from GitHub using the default branch
 # For RC: the rpm is pulled from the release above, not built from source
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone --depth 1 --branch $(LOGIN_BRANCH) $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   $(GITHUB_URL)")
+		"  CLONE   $(GITHUB_URL)#$(LOGIN_BRANCH)")
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $@ && nvm install $(QEND)
