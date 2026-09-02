@@ -41,12 +41,19 @@ RUN if [ "$(go env GOARCH)" = "amd64" ]; then \
 ARG SELINUX=true
 ENV SELINUX $SELINUX
 
-ENV DAPPER_RUN_ARGS --privileged -v k3s-cache:/go/src/github.com/k3s-io/k3s/.cache -v trivy-cache:/root/.cache/trivy
+# DAPPER_DOCKER_SOCKET binds the engine socket at /var/run/docker.sock, and the
+# crun the jail now carries (1.29.1, from CentOS Stream 9 baseos) cannot resolve a
+# mount destination that walks this image's /var/run -> ../run symlink: every run
+# dies with "cannot resolve `var/run/docker.sock' under rootfs: Too many levels of
+# symbolic links". Any destination under /var/run does it, in any image; the same
+# path under /run resolves. So bind the socket at /run/docker.sock ourselves and
+# point the client there.
+ENV DAPPER_RUN_ARGS --privileged -v /run/docker.sock:/run/docker.sock -v k3s-cache:/go/src/github.com/k3s-io/k3s/.cache -v trivy-cache:/root/.cache/trivy
 ENV DAPPER_ENV REPO TAG DRONE_TAG IMAGE_NAME SKIP_VALIDATE SKIP_AIRGAP AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID GITHUB_TOKEN GOLANG DEBUG
 ENV DAPPER_SOURCE /go/src/github.com/k3s-io/k3s/
 ENV DAPPER_OUTPUT ./bin ./dist ./build/out ./build/static ./pkg/static ./pkg/deploy
 
-ENV DAPPER_DOCKER_SOCKET true
+ENV DOCKER_HOST unix:///run/docker.sock
 ENV HOME ${DAPPER_SOURCE}
 ENV CROSS true
 ENV STATIC_BUILD true
