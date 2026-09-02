@@ -911,14 +911,24 @@ wait_for_http_endpoint()
     # $timeout is seconds: bound the loop by the clock, not by attempt count -- each
     # probe can cost curl's own timeout (SRVTO, up to 60s) on top of the sleep
     local deadline=$(( $(date +%s) + timeout ))
-    local rc=1
+    local rc=1 tries=0 crc=0 code=
     while [ $(date +%s) -lt $deadline ] ; do
-        if $CURL --connect-timeout 2 -m 5 -sf http://$endpoint:$port > /dev/null ; then
+        code=$($CURL --connect-timeout 2 -m 5 -s -o /dev/null -w '%{http_code}' http://$endpoint:$port 2>/dev/null)
+        crc=$?
+        if [ $crc -eq 0 ] && [ "${code:-0}" -ge 200 ] && [ "${code:-0}" -lt 400 ] ; then
             rc=0
             break
         fi
+        tries=$(( tries + 1 ))
+        # say why it is still waiting: a silent retry loop leaves nothing to
+        # diagnose afterwards, and "waited 6 minutes" does not distinguish a
+        # refused connect from a 503 served by haproxy
+        if [ $tries -eq 1 -o $(( tries % 30 )) -eq 0 ] ; then
+            log_warning "wait_for_http_endpoint $endpoint:$port not ready after $tries tries (curl rc=$crc http=${code:-none})"
+        fi
         sleep 1
     done
+    [ $rc -eq 0 ] || log_warning "wait_for_http_endpoint $endpoint:$port gave up after ${timeout}s (curl rc=$crc http=${code:-none})"
     return $rc
 }
 
