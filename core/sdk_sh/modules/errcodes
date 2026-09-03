@@ -86,6 +86,11 @@ SRV="haproxy_ha"
 eval "ERR_DESC_$SRV[1]='active control haproxy-ha down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
+SRV="lb_backend"
+eval "ERR_DESC_$SRV[1]='backend still enabled on a node that is not ready'"
+eval "ERR_DESC_$SRV[2]='backend left disabled on a ready node'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
 SRV="haproxy"
 eval "ERR_DESC_$SRV[1]='control haproxy down'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done

@@ -1065,6 +1065,74 @@ health_httpd_report()
     _health_report ${FUNCNAME[0]}
 }
 
+health_lb_backend_report()
+{
+    _health_report ${FUNCNAME[0]}
+}
+
+# haproxy only drops a backend after "fall 5" consecutive failed checks, and
+# "balance source" pins a client to one server, so a node that is down -- or one
+# that a freshly restarted haproxy has not checked yet -- keeps taking that
+# client's share of control-plane traffic. The mirror case is a drain that was
+# never re-enabled, which costs capacity silently. #1390
+health_lb_backend_check()
+{
+    local sock=$(haproxy_ha_sock)
+    if ! is_control_node || [ -z "$sock" ] ; then
+        DESCRIPTION="not lb host"
+        _health_fail_log
+        return
+    fi
+
+    # readiness once per node, not once per proxy: every listen block repeats
+    # the same three servers
+    local -A ready=()
+    local node
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if remote_run $node "$HEX_SDK cube_node_ready" >/dev/null 2>&1 ; then
+            ready[$node]=1
+        else
+            ready[$node]=0
+        fi
+    done
+
+    LB_BACKEND_DRAIN=
+    LB_BACKEND_RESTORE=
+    local px sv st chk
+    while read -r px sv st chk ; do
+        # localhost entries follow the local service, not a peer's readiness
+        [ -n "${ready[$sv]}" ] || continue
+        if [ "$st" = "UP" ] && [ "${ready[$sv]}" = "0" ] ; then
+            ERR_CODE=1
+            ERR_MSG+="$px/$sv is UP in haproxy but $sv is not ready\n"
+            LB_BACKEND_DRAIN+="$px/$sv "
+        elif [ "$st" != "${st#MAINT}" ] && [ "${ready[$sv]}" = "1" ] ; then
+            ERR_CODE=2
+            ERR_MSG+="$px/$sv is $st in haproxy but $sv is ready\n"
+            LB_BACKEND_RESTORE+="$px/$sv "
+        fi
+    done < <(haproxy_server_states $sock)
+
+    [ "x$ERR_CODE" = "x0" ] || ERR_LOG="journalctl -n $ERR_LOGSIZE -u haproxy-ha"
+    _health_fail_log
+}
+
+# Drain now rather than waiting out "fall 5", and restore a stale drain. Both are
+# runtime-API only: no config is rewritten and no process is restarted.
+_health_lb_backend_auto_repair()
+{
+    local sock=$(haproxy_ha_sock)
+    [ -n "$sock" ] || return 0
+
+    local entry
+    for entry in $LB_BACKEND_DRAIN ; do
+        cmd "$HEX_SDK haproxy_server_admin $sock disable $entry"
+    done
+    for entry in $LB_BACKEND_RESTORE ; do
+        cmd "$HEX_SDK haproxy_server_admin $sock enable $entry"
+    done
+}
+
 health_httpd_check()
 {
     ERR_LOG="systemctl status httpd"
