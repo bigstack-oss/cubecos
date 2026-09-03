@@ -19,13 +19,20 @@ RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 
 # prepare the appctl source code, being pulled from GitHub using the default branch
 # For RC: the rpm is pulled from the release above, not built from source
+# The repo's only lfs object (plugins/images/tars/postgresql-*.tar, 264MB) is left out of the
+# clone so the timeout covers the git transfer alone; it is pulled below, where a retry resumes
+# instead of re-downloading from scratch.
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && GIT_LFS_SKIP_SMUDGE=1 timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
 		"  CLONE   $(GITHUB_URL)")
-	$(Q)cd $@ && git lfs pull
+	$(call RUN_CMD_TIMED, \
+		for i in {1..3} ; do \
+		( cd $@ && timeout 900 git lfs pull ) && break ; \
+		done,\
+		"  LFS     $(PKG_NAME)")
 
 version: $(GIT_DIR)
 	$(Q)head -n 1 $(GIT_DIR)/VERSION > version
