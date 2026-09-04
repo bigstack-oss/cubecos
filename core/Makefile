@@ -13,7 +13,6 @@ SUBDIRS += appctl
 SUBDIRS += lachesis
 SUBDIRS += telegraf
 SUBDIRS += yq
-SUBDIRS += prometheus
 SUBDIRS += etcd
 SUBDIRS += terraform
 SUBDIRS += docker
