@@ -2,7 +2,12 @@
 # grafana installation
 
 # ROOTFS_DNF += grafana
-ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-12.3.2-1.x86_64.rpm
+# 12.4 is the last minor of major 12, which is Grafana's LTS equivalent: an ordinary minor is
+# supported for 9 months, the final minor of a major for 15. 12.4 is therefore supported to
+# 2027-05-24 -- the longest window of any current release, a few days past even the newest
+# (13.2, to 2027-05-18). 12.3 went end-of-life on 2026-08-19, so 12.3.2 is both EOL and nine
+# patches behind its own dead line.
+ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-12.4.10-1.x86_64.rpm
 
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
