@@ -60,9 +60,15 @@ WriteDefaultConf()
         return false;
     }
 
-    fprintf(fout, "PROMETHEUS_OPTS='--config.file=" CONF
+    // ARGS, not PROMETHEUS_OPTS: EPEL's prometheus unit is ExecStart=/usr/bin/prometheus $ARGS.
+    // (packagecloud's retired prometheus2 unit used $PROMETHEUS_OPTS.)
+    //
+    // retention.time, not retention: the bare --storage.tsdb.retention has been deprecated
+    // since 2.x and 3.13's own --help still marks it [DEPRECATED]. It is accepted today, but
+    // there is no reason to keep feeding a flag upstream has been telling us to stop using.
+    fprintf(fout, "ARGS='--config.file=" CONF
                   " --storage.tsdb.path=" DATADIR
-                  " --storage.tsdb.retention=" TSDB_RP
+                  " --storage.tsdb.retention.time=" TSDB_RP
                   " --web.external-url=http://localhost/prometheus/"
                   " --web.listen-address=:" PORT "'\n");
     fclose(fout);
@@ -84,7 +90,18 @@ WriteConf(bool ha, const std::string& sharedId)
     fprintf(fout, "  evaluation_interval: " EVA_INTERVAL "\n");
     fprintf(fout, "  query_log_file: " QUERY_LOG "\n");
     fprintf(fout, "scrape_configs:\n");
+    // metrics_path has to carry the route prefix. The --web.external-url set in
+    // WriteDefaultConf ends in /prometheus/, and prometheus derives --web.route-prefix from
+    // it, so it serves its own /metrics at /prometheus/metrics and answers a bare /metrics
+    // with 404. Without this the self-scrape has always been down
+    // (up{job="prometheus"}=0 on every node), which is why no prometheus_* series existed
+    // to monitor prometheus with.
+    //
+    // The prefix cannot simply be dropped instead: haproxy's prometheus_backend forwards the
+    // path unchanged (no replace-path), so prometheus must keep serving under /prometheus for
+    // the UI and Grafana to reach it.
     fprintf(fout, "  - job_name: 'prometheus'\n");
+    fprintf(fout, "    metrics_path: /prometheus/metrics\n");
     fprintf(fout, "    static_configs:\n");
     fprintf(fout, "    - targets: ['localhost:9091']\n");
     fprintf(fout, "  - job_name: 'ceph'\n");
