@@ -2175,21 +2175,27 @@
       "id": 22,
       "panels": [
         {
-          "aliasColors": {},
-          "breakPoint": "50%",
           "cacheTimeout": null,
-          "combine": {
-            "label": "Others",
-            "threshold": "0.01"
-          },
           "datasource": "influxdb-telegraf",
           "decimals": 1,
           "fieldConfig": {
-            "defaults": {},
+            "defaults": {
+              "unit": "decbytes",
+              "decimals": 1,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            },
             "overrides": []
           },
-          "fontSize": "80%",
-          "format": "decbytes",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -2198,21 +2204,7 @@
           },
           "id": 27,
           "interval": null,
-          "legend": {
-            "header": "application",
-            "percentage": true,
-            "percentageDecimals": 1,
-            "show": true,
-            "sideWidth": null,
-            "sort": "total",
-            "sortDesc": true,
-            "values": true
-          },
-          "legendType": "Right side",
           "links": [],
-          "nullPointMode": "connected",
-          "pieType": "pie",
-          "strokeWidth": "1",
           "targets": [
             {
               "alias": "$tag_proto - $tag_dst_port",
@@ -2256,25 +2248,56 @@
           "timeFrom": null,
           "timeShift": null,
           "title": "Application (Protocol - Destination Port)",
-          "type": "grafana-piechart-panel",
-          "valueName": "total"
+          "type": "piechart",
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "sum"
+              ],
+              "fields": ""
+            },
+            "pieType": "pie",
+            "displayLabels": [],
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "legend": {
+              "showLegend": true,
+              "displayMode": "table",
+              "placement": "right",
+              "values": [
+                "value",
+                "percent"
+              ],
+              "sortBy": "Value",
+              "sortDesc": true
+            }
+          }
         },
         {
-          "aliasColors": {},
-          "breakPoint": "50%",
           "cacheTimeout": null,
-          "combine": {
-            "label": "Others",
-            "threshold": "0.01"
-          },
           "datasource": "influxdb-telegraf",
           "decimals": 1,
           "fieldConfig": {
-            "defaults": {},
+            "defaults": {
+              "unit": "decbytes",
+              "decimals": 1,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            },
             "overrides": []
           },
-          "fontSize": "80%",
-          "format": "decbytes",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -2283,21 +2306,7 @@
           },
           "id": 20,
           "interval": null,
-          "legend": {
-            "header": "conversation",
-            "percentage": true,
-            "percentageDecimals": 1,
-            "show": true,
-            "sideWidth": null,
-            "sort": "total",
-            "sortDesc": true,
-            "values": true
-          },
-          "legendType": "Right side",
           "links": [],
-          "nullPointMode": "connected",
-          "pieType": "pie",
-          "strokeWidth": "1",
           "targets": [
             {
               "alias": "$tag_src_ip - $tag_dst_ip",
@@ -2341,25 +2350,56 @@
           "timeFrom": null,
           "timeShift": null,
           "title": "Conversation (Source IP - Destination IP)",
-          "type": "grafana-piechart-panel",
-          "valueName": "total"
+          "type": "piechart",
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "sum"
+              ],
+              "fields": ""
+            },
+            "pieType": "pie",
+            "displayLabels": [],
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "legend": {
+              "showLegend": true,
+              "displayMode": "table",
+              "placement": "right",
+              "values": [
+                "value",
+                "percent"
+              ],
+              "sortBy": "Value",
+              "sortDesc": true
+            }
+          }
         },
         {
-          "aliasColors": {},
-          "breakPoint": "50%",
           "cacheTimeout": null,
-          "combine": {
-            "label": "Others",
-            "threshold": "0.01"
-          },
           "datasource": "influxdb-telegraf",
           "decimals": 1,
           "fieldConfig": {
-            "defaults": {},
+            "defaults": {
+              "unit": "decbytes",
+              "decimals": 1,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            },
             "overrides": []
           },
-          "fontSize": "80%",
-          "format": "decbytes",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -2368,21 +2408,7 @@
           },
           "id": 19,
           "interval": null,
-          "legend": {
-            "header": "ingress",
-            "percentage": true,
-            "percentageDecimals": 1,
-            "show": true,
-            "sideWidth": null,
-            "sort": "total",
-            "sortDesc": true,
-            "values": true
-          },
-          "legendType": "Right side",
           "links": [],
-          "nullPointMode": "connected",
-          "pieType": "pie",
-          "strokeWidth": "1",
           "targets": [
             {
               "alias": "$tag_src_ip",
@@ -2426,25 +2452,56 @@
           "timeFrom": null,
           "timeShift": null,
           "title": "Ingress (Source IP)",
-          "type": "grafana-piechart-panel",
-          "valueName": "total"
+          "type": "piechart",
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "sum"
+              ],
+              "fields": ""
+            },
+            "pieType": "pie",
+            "displayLabels": [],
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "legend": {
+              "showLegend": true,
+              "displayMode": "table",
+              "placement": "right",
+              "values": [
+                "value",
+                "percent"
+              ],
+              "sortBy": "Value",
+              "sortDesc": true
+            }
+          }
         },
         {
-          "aliasColors": {},
-          "breakPoint": "50%",
           "cacheTimeout": null,
-          "combine": {
-            "label": "Others",
-            "threshold": "0.01"
-          },
           "datasource": "influxdb-telegraf",
           "decimals": 1,
           "fieldConfig": {
-            "defaults": {},
+            "defaults": {
+              "unit": "decbytes",
+              "decimals": 1,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            },
             "overrides": []
           },
-          "fontSize": "80%",
-          "format": "decbytes",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -2453,21 +2510,7 @@
           },
           "id": 18,
           "interval": null,
-          "legend": {
-            "header": "egress",
-            "percentage": true,
-            "percentageDecimals": 1,
-            "show": true,
-            "sideWidth": null,
-            "sort": "total",
-            "sortDesc": true,
-            "values": true
-          },
-          "legendType": "Right side",
           "links": [],
-          "nullPointMode": "connected",
-          "pieType": "pie",
-          "strokeWidth": "1",
           "targets": [
             {
               "alias": "$tag_dst_ip",
@@ -2511,8 +2554,33 @@
           "timeFrom": null,
           "timeShift": null,
           "title": "Egress (Destination IP)",
-          "type": "grafana-piechart-panel",
-          "valueName": "total"
+          "type": "piechart",
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "sum"
+              ],
+              "fields": ""
+            },
+            "pieType": "pie",
+            "displayLabels": [],
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "legend": {
+              "showLegend": true,
+              "displayMode": "table",
+              "placement": "right",
+              "values": [
+                "value",
+                "percent"
+              ],
+              "sortBy": "Value",
+              "sortDesc": true
+            }
+          }
         },
         {
           "aliasColors": {},
