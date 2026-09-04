@@ -60,9 +60,15 @@ WriteDefaultConf()
         return false;
     }
 
-    fprintf(fout, "PROMETHEUS_OPTS='--config.file=" CONF
+    // ARGS, not PROMETHEUS_OPTS: EPEL's prometheus unit is ExecStart=/usr/bin/prometheus $ARGS.
+    // (packagecloud's retired prometheus2 unit used $PROMETHEUS_OPTS.)
+    //
+    // retention.time, not retention: the bare --storage.tsdb.retention has been deprecated
+    // since 2.x and 3.13's own --help still marks it [DEPRECATED]. It is accepted today, but
+    // there is no reason to keep feeding a flag upstream has been telling us to stop using.
+    fprintf(fout, "ARGS='--config.file=" CONF
                   " --storage.tsdb.path=" DATADIR
-                  " --storage.tsdb.retention=" TSDB_RP
+                  " --storage.tsdb.retention.time=" TSDB_RP
                   " --web.external-url=http://localhost/prometheus/"
                   " --web.listen-address=:" PORT "'\n");
     fclose(fout);
