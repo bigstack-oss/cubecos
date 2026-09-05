@@ -911,8 +911,11 @@ Commit(bool modified, int dryLevel)
     OvnService(s_enabled, isMaster, forceRun, s_ha);
     SetupOvn(s_hostname, overlayAddr, ovnSbRemote, provider, s_providerExtra);
 
-    // sync for neutron ovn db
-    HexUtilSystemF(0, 0, HEX_SDK " migrate_neutron_ovn_sync");
+    // The OVN northbound sync used to run here. It cannot: this module commits
+    // well before pacemaker_last promotes ovndb_servers, so the northbound DB is
+    // not listening yet and the sync silently does nothing. It now runs from
+    // CommitLast(), which CONFIG_REQUIRES(neutron_last, pacemaker_last) orders
+    // after the promotion.
 
     NeutronService(s_enabled);
     WriteLogRotateConf(ovn_log_conf);
@@ -943,6 +946,19 @@ CommitLast(bool modified, int dryLevel)
     if (enabled && isHaMaster) {
         SystemdCommitService(enabled, SRV_NAME, false);
     }
+
+    // Sync the OVN northbound DB from neutron's. It has to happen here rather
+    // than in Commit(): /etc/ovn lives on the A/B root partition, so an upgraded
+    // node boots with an empty northbound and every port bind fails until this
+    // rebuilds it -- but ovndb_servers is only promoted by pacemaker_last, which
+    // CONFIG_REQUIRES orders before this module.
+    //
+    // Bounded on purpose. A hung sync here would block the whole commit, and
+    // with it the node's slot in a rolling upgrade: HexUtilSystemF's timeout
+    // argument arms alarm(), and passing 0 (as this call used to) means no alarm
+    // at all. 900s is far above the seconds a real sync takes and still well
+    // inside the roll's per-node deadline.
+    HexUtilSystemF(0, 900, HEX_SDK " migrate_neutron_ovn_sync");
 
     if (access(SFLOW_ENABLED, F_OK) == 0) {
         std::string mgmtIf = G(MGMT_IF);
