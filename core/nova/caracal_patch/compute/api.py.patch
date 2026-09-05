@@ -18,7 +18,7 @@
              # There are 2 possibilities here:
              #
              # 1. The target volume already exists but bdm.volume_size is not
-@@ -4160,9 +4162,59 @@
+@@ -4160,9 +4162,57 @@
  
      # TODO(stephenfin): This logic would be so much easier to grok if we
      # finally split resize and cold migration into separate code paths
@@ -35,10 +35,8 @@
 +                    "name": f.name, "spec": b})
 +        if new.vcpus < old.vcpus or new.memory_mb < old.memory_mb:
 +            _bad(_("live resize is grow-only"))
-+        # root_gb is grow-only. An image-backed root is grown in place by the
-+        # driver, which refuses in check_live_resize when its image backend
-+        # cannot -- the same clean pre-hotplug failure the vCPU/memory ceilings
-+        # already use. A boot-from-volume root is cinder's.
++        # grow-only, and only for image-backed: nova ignores root_gb for a
++        # volume-backed root. The driver refuses in check_live_resize.
 +        if new.root_gb < old.root_gb and not is_bfv:
 +            _bad(_("root disk size cannot shrink"))
 +        if new.ephemeral_gb != old.ephemeral_gb:
