@@ -144,3 +144,54 @@ class TestRecordedHeadroom(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FakeAlloc(object):
+    """Minimal report client: records what was PUT back to placement."""
+
+    def __init__(self, resources):
+        self.allocs = {"allocations": {"rp": {"resources": dict(resources)}}}
+        self.put = None
+
+    def get_allocs_for_consumer(self, context, uuid):
+        return self.allocs
+
+    def put_allocations(self, context, uuid, allocs):
+        self.put = allocs["allocations"]["rp"]["resources"]
+        return True
+
+
+class TestSetAllocationsDisk(unittest.TestCase):
+    """DISK_GB moves only when a caller asks, because only an image-backed
+    root is grown by the compute. A boot-from-volume root is cinder's, and
+    claiming host disk for it would double-count."""
+
+    def _run(self, resources, **kwargs):
+        rc = FakeAlloc(resources)
+        clr.set_allocations(rc, None, "uuid",
+                            FakeFlavor(vcpus=4, memory_mb=8192), **kwargs)
+        return rc.put
+
+    def test_disk_untouched_when_root_gb_not_passed(self):
+        put = self._run({"VCPU": 2, "MEMORY_MB": 4096, "DISK_GB": 20})
+        self.assertEqual(20, put["DISK_GB"])
+        self.assertEqual(4, put["VCPU"])
+        self.assertEqual(8192, put["MEMORY_MB"])
+
+    def test_disk_claimed_when_root_gb_passed(self):
+        put = self._run({"VCPU": 2, "MEMORY_MB": 4096, "DISK_GB": 20},
+                        root_gb=40)
+        self.assertEqual(40, put["DISK_GB"])
+
+    def test_disk_absent_from_allocation_is_not_invented(self):
+        # a boot-from-volume consumer has no DISK_GB on the compute's provider
+        put = self._run({"VCPU": 2, "MEMORY_MB": 4096}, root_gb=40)
+        self.assertNotIn("DISK_GB", put)
+
+    def test_cpu_only_claim_still_leaves_disk_alone(self):
+        # the source-side vCPU grow before an auto-migrate
+        put = self._run({"VCPU": 2, "MEMORY_MB": 4096, "DISK_GB": 20},
+                        memory_mb=4096)
+        self.assertEqual(4, put["VCPU"])
+        self.assertEqual(4096, put["MEMORY_MB"])
+        self.assertEqual(20, put["DISK_GB"])

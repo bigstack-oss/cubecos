@@ -1,6 +1,6 @@
 --- conductor/manager.py
 +++ conductor/manager.py
-@@ -20,6 +20,7 @@ import copy
+@@ -20,6 +20,7 @@
  import eventlet
  import functools
  import sys
@@ -8,7 +8,7 @@
  import typing as ty
  
  from keystoneauth1 import exceptions as ks_exc
-@@ -45,6 +46,7 @@ from nova.conductor.tasks import cross_c
+@@ -45,6 +46,7 @@
  from nova.conductor.tasks import live_migrate
  from nova.conductor.tasks import migrate
  from nova import context as nova_context
@@ -16,7 +16,7 @@
  from nova import exception
  from nova.i18n import _
  from nova.image import glance
-@@ -467,6 +469,87 @@ class ComputeTaskManager:
+@@ -467,6 +469,90 @@
          self._live_migrate(context, instance, scheduler_hint,
                             block_migration, disk_over_commit, request_spec)
  
@@ -40,8 +40,11 @@
 +            instance.save()
 +
 +    def _live_resize_instance(self, context, instance, flavor):
++        # An image-backed root is grown on the compute, so its DISK_GB moves
++        # with the flavor. A boot-from-volume root is cinder's -- leave it.
++        root_gb = flavor.root_gb if instance.image_ref else None
 +        if clr.set_allocations(self.report_client, context,
-+                               instance.uuid, flavor):
++                               instance.uuid, flavor, root_gb=root_gb):
 +            self.compute_rpcapi.live_resize_instance(context, instance,
 +                                                     flavor)
 +            return

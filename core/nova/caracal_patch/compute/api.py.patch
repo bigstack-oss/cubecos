@@ -1,6 +1,6 @@
 --- compute/api.py
 +++ compute/api.py
-@@ -49,6 +49,7 @@ from nova.compute import utils as comput
+@@ -49,6 +49,7 @@
  from nova.compute.utils import wrap_instance_event
  from nova.compute import vm_states
  from nova import conductor
@@ -8,7 +8,7 @@
  import nova.conf
  from nova import context as nova_context
  from nova import crypto
-@@ -761,7 +762,8 @@ class API:
+@@ -761,7 +762,8 @@
  
          # Target disk is a volume. Don't check flavor disk size because it
          # doesn't make sense, and check min_disk against the volume size.
@@ -18,7 +18,7 @@
              # There are 2 possibilities here:
              #
              # 1. The target volume already exists but bdm.volume_size is not
-@@ -4160,9 +4162,55 @@ class API:
+@@ -4160,9 +4162,59 @@
  
      # TODO(stephenfin): This logic would be so much easier to grok if we
      # finally split resize and cold migration into separate code paths
@@ -35,8 +35,12 @@
 +                    "name": f.name, "spec": b})
 +        if new.vcpus < old.vcpus or new.memory_mb < old.memory_mb:
 +            _bad(_("live resize is grow-only"))
-+        if new.root_gb != old.root_gb and not is_bfv:
-+            _bad(_("root disk size must not change"))
++        # root_gb is grow-only. An image-backed root is grown in place by the
++        # driver, which refuses in check_live_resize when its image backend
++        # cannot -- the same clean pre-hotplug failure the vCPU/memory ceilings
++        # already use. A boot-from-volume root is cinder's.
++        if new.root_gb < old.root_gb:
++            _bad(_("root disk size cannot shrink"))
 +        if new.ephemeral_gb != old.ephemeral_gb:
 +            _bad(_("ephemeral disk size must not change"))
 +        # ceiling the running domain was booted with (config default or

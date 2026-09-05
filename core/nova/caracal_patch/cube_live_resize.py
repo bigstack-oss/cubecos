@@ -84,11 +84,15 @@ def recorded_headroom(instance):
 
 
 def set_allocations(reportclient, context, consumer_uuid, flavor,
-                    vcpus=None, memory_mb=None):
+                    vcpus=None, memory_mb=None, root_gb=None):
     """PUT the consumer's allocations resized to flavor.
 
     vcpus/memory_mb override the flavor values (used to claim only the
     CPU half on the source before an auto-migrate).
+
+    root_gb claims host disk, and is passed ONLY for an image-backed root the
+    driver is about to grow. A boot-from-volume root is cinder's, not the
+    compute's, so its DISK_GB must not move with the flavor.
     Returns False when placement rejects the new size (no capacity).
     """
     allocs = reportclient.get_allocs_for_consumer(context, consumer_uuid)
@@ -101,4 +105,6 @@ def set_allocations(reportclient, context, consumer_uuid, flavor,
         if "MEMORY_MB" in res:
             res["MEMORY_MB"] = (memory_mb if memory_mb is not None
                                 else flavor.memory_mb)
+        if root_gb is not None and "DISK_GB" in res:
+            res["DISK_GB"] = root_gb
     return reportclient.put_allocations(context, consumer_uuid, allocs)
