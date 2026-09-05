@@ -43,7 +43,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7430,6 +7436,103 @@
+@@ -7430,6 +7436,161 @@
              for resource in vpmem_resources]
          return vpmems
  
@@ -102,6 +102,60 @@
 +                raise exception.LiveResizeError(reason=_(
 +                    "domain memory ceiling missing or too small "
 +                    "(instance must be rebooted to gain headroom)"))
++        # A boot-from-volume instance has no image_ref and no 'disk' image --
++        # its root is cinder's. Same test nova uses where context is absent.
++        if new_flavor.root_gb > old.root_gb and instance.image_ref:
++            # Image.resize_image is a no-op on the base class, so a backend
++            # that never overrode it would silently leave the guest short.
++            image = self.image_backend.by_name(instance, "disk")
++            if type(image).resize_image is imagebackend.Image.resize_image:
++                raise exception.LiveResizeError(reason=_(
++                    "image backend %(be)s cannot grow a root disk in place") %
++                    {"be": type(image).__name__})
++
++    def _live_grow_root(self, guest, instance, new_flavor):
++        """Grow the root image, then tell the running guest.
++
++        Same two steps nova uses for an attached volume in extend_volume().
++        This grows the block device only -- growpart/resizefs are cloud-init
++        boot-time modules, so the guest's partition and filesystem stay at the
++        old size until it reboots or grows them itself.
++        """
++        size = new_flavor.root_gb * units.Gi
++        image = self.image_backend.by_name(instance, "disk")
++        try:
++            image.resize_image(size)
++        except Exception as ex:
++            raise exception.LiveResizeError(reason=_(
++                "could not grow the root image: %s") % ex)
++        # blockResize wants the target dev. Image.path is an rbd connection
++        # string it rejects, so match the disk the way the backend built it.
++        names = {image.path}
++        rbd_name = getattr(image, "rbd_name", None)
++        if rbd_name:
++            names.add("%s/%s" % (image.driver.pool, rbd_name))
++        dev = None
++        for disk in guest.get_all_disks():
++            if disk.source_path in names or disk.source_name in names:
++                dev = disk.target_dev
++                break
++        if dev is None:
++            LOG.warning("live-resize: root grown to %dG but its disk was not "
++                        "found in the domain config; the guest keeps the old "
++                        "size until it reboots", new_flavor.root_gb,
++                        instance=instance)
++            return
++        try:
++            guest.get_block_device(dev).resize(size)
++        except libvirt.libvirtError as ex:
++            # The image is bigger; the guest just has not been told. A hard
++            # reboot picks the new size up, so the flavor change still stands.
++            LOG.warning("live-resize: root grown to %(gb)dG but the guest was "
++                        "not notified: %(err)s",
++                        {"gb": new_flavor.root_gb, "err": ex},
++                        instance=instance)
++        LOG.info("live-resize: root disk grown to %dG", new_flavor.root_gb,
++                 instance=instance)
 +
 +    def live_resize(self, context, instance, new_flavor, cpus=True,
 +                    memory=True):
@@ -136,6 +190,10 @@
 +                                  instance=instance)
 +                    raise exception.LiveResizePartial(reason=str(ex))
 +                raise exception.LiveResizeError(reason=str(ex))
++        # Last: growing is irreversible while the hotplugs roll back, and the
++        # allocation revert restores the old flavor wholesale. See PR #1429.
++        if new_flavor.root_gb > old.root_gb and instance.image_ref:
++            self._live_grow_root(guest, instance, new_flavor)
 +        LOG.info("live-resize applied: %(ov)d->%(nv)d vCPU, "
 +                 "%(om)d->%(nm)d MB",
 +                 {"ov": old.vcpus,
@@ -147,7 +205,7 @@
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
-@@ -7598,7 +7701,7 @@
+@@ -7598,7 +7759,7 @@
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])
