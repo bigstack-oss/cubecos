@@ -695,6 +695,15 @@ SetStorageBackend(
     Configs& config,
     const std::string defaultVolumeType)
 {
+    // Opt an upgraded cluster's existing backends into Caracal's unsupported-driver
+    // gate. Here, and not earlier: CINDER_BACKEND_DIR is settled by now (written by
+    // the storage API, migrated forward by CONFIG_MIGRATE), and the copy below is
+    // about to wipe CONF_DIR and re-populate it from there -- so fixing the source
+    // is enough, and doing it any later would miss this commit's copy entirely.
+    // Bounded so a wedged migration cannot block the commit, and with it the node's
+    // slot in a rolling upgrade.
+    HexUtilSystemF(0, 120, HEX_SDK " migrate_cinder_ext_storage_unsupported");
+
     // move exta config files for external storage backends to Cinder config directory
     std::string fsError;
     bool fileExists = false;

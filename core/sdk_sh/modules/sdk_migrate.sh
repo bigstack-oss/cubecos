@@ -159,6 +159,50 @@ migrate_cinder_db()
     fi
 }
 
+migrate_cinder_ext_storage_unsupported()
+{
+    local f
+
+    if [ -f $STATE_DIR/cinder_ext_storage_unsupported_migrated ] ; then
+        return 0
+    fi
+
+    if ! is_control_node ; then
+        touch $STATE_DIR/cinder_ext_storage_unsupported_migrated
+        return 0
+    fi
+
+    # Caracal ships the Dell Storage Center drivers with SUPPORTED = False, so
+    # cinder-volume refuses to initialize the backend unless the operator opts in
+    # with enable_unsupported_driver. The built-in model carries that opt-in now,
+    # but a model only reaches backends created or re-applied after the upgrade.
+    # /etc/cinder/backends is CONFIG_MIGRATE'd (config_cinder.cpp), so an upgraded
+    # cluster carries its pre-Caracal backend config forward verbatim and the
+    # driver stays dead -- every attach failing with
+    #   'SCFCDriver' object has no attribute '_client'
+    # and with it the live migration a rolling upgrade drains each node with.
+    #
+    # Only /etc/cinder/backends is rewritten, because that is the source of truth
+    # and the only copy that lasts: config_cinder calls this from
+    # SetStorageBackend(), immediately before it wipes cinder.d/ext_storage_*.conf
+    # and re-copies them from here. Writing cinder.d as well would be undone by
+    # that copy seconds later.
+    #
+    # Insert after volume_driver rather than appending: these files hold one
+    # section each today, but appending would land outside the section the day one
+    # does not. iSCSI is matched as well -- same upstream flag, same failure --
+    # even though only the FC model ships built in.
+    for f in /etc/cinder/backends/ext_storage_*.conf ; do
+        [ -f "$f" ] || continue
+        grep -qE "^volume_driver[[:space:]]*=.*storagecenter_(fc|iscsi)\." "$f" || continue
+        grep -qE "^enable_unsupported_driver" "$f" && continue
+        sed -i "/^volume_driver[[:space:]]*=.*storagecenter_/a enable_unsupported_driver = True" "$f"
+        log_info "migrate_cinder_ext_storage_unsupported: opted $f into the unsupported SC driver"
+    done
+
+    touch $STATE_DIR/cinder_ext_storage_unsupported_migrated
+}
+
 migrate_glance_db()
 {
     if [ -f $STATE_DIR/glance_db_migrated ] ; then
