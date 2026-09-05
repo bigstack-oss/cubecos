@@ -43,7 +43,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7430,6 +7436,147 @@
+@@ -7430,6 +7436,167 @@
              for resource in vpmem_resources]
          return vpmems
  
@@ -128,8 +128,28 @@
 +        except Exception as ex:
 +            raise exception.LiveResizeError(reason=_(
 +                "could not grow the root image: %s") % ex)
++        # libvirt identifies the disk by its target dev, not by Image.path --
++        # which for rbd is a connection string ("rbd:pool/name:conf=...") that
++        # blockResize rejects. Match the domain's disk the same way the image
++        # backend built it: Rbd.libvirt_info sets source_name to pool/rbd_name,
++        # file backends set source_path to Image.path.
++        names = {image.path}
++        rbd_name = getattr(image, "rbd_name", None)
++        if rbd_name:
++            names.add("%s/%s" % (image.driver.pool, rbd_name))
++        dev = None
++        for disk in guest.get_all_disks():
++            if disk.source_path in names or disk.source_name in names:
++                dev = disk.target_dev
++                break
++        if dev is None:
++            LOG.warning("live-resize: root grown to %dG but its disk was not "
++                        "found in the domain config; the guest keeps the old "
++                        "size until it reboots", new_flavor.root_gb,
++                        instance=instance)
++            return
 +        try:
-+            guest.get_block_device(image.path).resize(size)
++            guest.get_block_device(dev).resize(size)
 +        except libvirt.libvirtError as ex:
 +            # The image is bigger; the guest just has not been told. A hard
 +            # reboot picks the new size up, so the flavor change still stands.
@@ -191,7 +211,7 @@
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
-@@ -7598,7 +7745,7 @@
+@@ -7598,7 +7765,7 @@
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])

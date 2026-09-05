@@ -39,7 +39,7 @@
 +        # driver, which refuses in check_live_resize when its image backend
 +        # cannot -- the same clean pre-hotplug failure the vCPU/memory ceilings
 +        # already use. A boot-from-volume root is cinder's.
-+        if new.root_gb < old.root_gb:
++        if new.root_gb < old.root_gb and not is_bfv:
 +            _bad(_("root disk size cannot shrink"))
 +        if new.ephemeral_gb != old.ephemeral_gb:
 +            _bad(_("ephemeral disk size must not change"))
