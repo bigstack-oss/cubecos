@@ -275,12 +275,61 @@ migrate_neutron_db_post()
 
 migrate_neutron_ovn_sync()
 {
+    local i=0
+
     if [ -f $STATE_DIR/neutron_ovn_migrated ] ; then
         return 0
     fi
 
-    if is_control_node ; then
-        neutron-ovn-db-sync-util --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini --ovn-neutron_sync_mode repair
+    if ! is_control_node ; then
+        touch $STATE_DIR/neutron_ovn_migrated
+        return 0
+    fi
+
+    # The OVN northbound DB lives under /etc/ovn on the A/B root partition, so an
+    # upgrade boots into an empty one: the networks exist only in neutron's MySQL
+    # until this sync rebuilds them. Until it does, the OVN mechanism driver fails
+    # every port bind with
+    #   RowNotFound: Cannot find Logical_Switch with name=neutron-<network-id>
+    # which takes out port binding, and with it the live migration that
+    # rolling_upgrade drains each node with. Diagnosed on cube4510 during the
+    # 3.1.10 -> 3.1.20 roll (2026-09-05).
+    #
+    # config_neutron calls this from CommitLast(), not Commit(): ovndb_servers is
+    # promoted by pacemaker_last, and CONFIG_REQUIRES(neutron_last, pacemaker_last)
+    # is what puts this after the promotion. Called from Commit() it ran a measured
+    # 8 minutes before the northbound was listening and silently did nothing.
+    #
+    # Everything below is bounded, because this runs inside a hex_config commit:
+    # blocking here blocks the node's whole bootstrap, and with it its slot in a
+    # rolling upgrade.
+    #
+    # - The probe is a safety net for a slow promotion, not the mechanism -- the
+    #   ordering above is. Worst case 24 * (5s connect + 5s sleep) = 4 minutes,
+    #   then give up and leave it for the next boot. Probe the VIP the way
+    #   neutron's ovn_nb_connection does rather than a local socket, since the
+    #   promoted node may be another one.
+    # - The sync itself gets a hard timeout. It takes seconds in practice; 600s is
+    #   the ceiling that keeps a wedged sync from eating the roll's node deadline.
+    # - Only mark the migration done when the sync actually succeeded. Marking it
+    #   unconditionally turned one early failure into a permanent skip: the marker
+    #   lives under /etc/appliance/state, which is CONFIG_MIGRATE'd, so it rode
+    #   onto the next partition and no later boot ever retried. Returning without
+    #   the marker leaves it to the next boot / cluster_start instead.
+    local nb="tcp:$($HEX_SDK shared_id):6641"
+    while [ $i -lt 24 ] ; do
+        ovn-nbctl --db="$nb" --timeout=5 show >/dev/null 2>&1 && break
+        sleep 5
+        i=$((i + 1))
+    done
+    if [ $i -ge 24 ] ; then
+        log_warning "migrate_neutron_ovn_sync: OVN northbound $nb not reachable; leaving the sync for the next boot"
+        return 0
+    fi
+
+    if ! timeout 600 neutron-ovn-db-sync-util --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini --ovn-neutron_sync_mode repair ; then
+        log_warning "migrate_neutron_ovn_sync: sync failed or timed out; leaving it for the next boot"
+        return 0
     fi
 
     touch $STATE_DIR/neutron_ovn_migrated
