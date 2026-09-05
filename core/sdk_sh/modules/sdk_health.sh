@@ -845,7 +845,35 @@ _health_mysql_repair()
     fi
 
     # No primary: bootstrap a fresh cluster from the last control node, rest join.
-    cmd -c "cp -rp /var/lib/mysql /var/lib/mysql-\${HOSTNAME}-${ts}"
+    #
+    # The safety copy of the datadir gets two bounds, because health_mysql_repair calls
+    # this in a `for i in 1 2 3` loop and the health machinery can call that again: keep
+    # at most one copy, and never make one there is no room for.
+    #
+    # Unbounded, this is how accept-3cc filled / to 100% twice -- six copies of a 4-8GB
+    # datadir per node, ~100GB across the cluster, from repair loops whose attempts were a
+    # minute apart. The first time it took ceph's mons down with ENOSPC for 8h; the second
+    # it blew opensearch's 85% disk watermark, which turned the cluster red and stalled log
+    # ingestion behind it. Either way the repair caused a worse outage than the one it was
+    # sent to fix.
+    #
+    # The copy is a safety net, not a prerequisite, so when there is no room the repair
+    # still goes ahead -- refusing to repair a database because the disk is full would be
+    # its own kind of wrong.
+    # Done per node rather than with a single `cmd -c` so the decision is made against
+    # each node's own disk, and so the skip can be reported with log_error -- cmd ships a
+    # bare string over ssh, where the sdk's log helpers do not exist.
+    local node dsz free
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        remote_run $node "rm -rf /var/lib/mysql-${node}-*"
+        dsz=$(remote_run $node "du -sm /var/lib/mysql 2>/dev/null | cut -f1")
+        free=$(remote_run $node "df -Pm /var/lib | awk '{print \$4}' | tail -1")
+        if [ "${free:-0}" -gt $(( ${dsz:-0} * 2 )) ] ; then
+            remote_run $node "cp -rp /var/lib/mysql /var/lib/mysql-${node}-${ts}"
+        else
+            log_error "_health_mysql_repair: $node has ${free}MB free, under 2x its ${dsz}MB datadir -- skipping the safety copy and repairing without it"
+        fi
+    done
     local cnt=0
     for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
         ((cnt++))
