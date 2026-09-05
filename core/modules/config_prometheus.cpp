@@ -15,6 +15,8 @@
 
 #include <cube/systemd_util.h>
 
+#include <filesystem.hpp>
+
 #include "include/role_cubesys.h"
 
 static const char NAME[] = "prometheus";
@@ -166,45 +168,46 @@ WriteConf(bool ha, const std::string& sharedId, const std::string& hostname)
 static bool
 WriteThanosConf(const std::string& ctrlAddrs)
 {
-    FILE *fout = fopen(THANOS_ENDPOINTS, "w");
-    if (!fout) {
-        HexLogError("Unable to write thanos endpoints file: %s", THANOS_ENDPOINTS);
-        return false;
-    }
-    fprintf(fout, "endpoints:\n");
+    std::string fsError;
+
+    std::vector<std::string> endpoints = { "endpoints:\n" };
     auto group = hex_string_util::split(ctrlAddrs, ',');
     for (const auto& addr : group)
-        fprintf(fout, "- address: %s:" THANOS_SIDECAR_GRPC "\n", addr.c_str());
-    fclose(fout);
+        endpoints.push_back("- address: " + addr + ":" THANOS_SIDECAR_GRPC "\n");
 
-    fout = fopen(THANOS_SIDECAR_DEF, "w");
-    if (!fout) {
-        HexLogError("Unable to write %s", THANOS_SIDECAR_DEF);
+    if (!WriteFile(fsError, THANOS_ENDPOINTS, endpoints)) {
+        HexLogError("%s", fsError.c_str());
         return false;
     }
+
     // prometheus.url carries the route prefix: --web.external-url puts every endpoint,
     // /api included, under /prometheus, and the sidecar talks to it over that API.
-    fprintf(fout, "ARGS='--prometheus.url=http://127.0.0.1:" PORT "/prometheus"
-                  " --tsdb.path=" DATADIR
-                  " --grpc-address=0.0.0.0:" THANOS_SIDECAR_GRPC
-                  " --http-address=0.0.0.0:" THANOS_SIDECAR_HTTP "'\n");
-    fclose(fout);
-
-    fout = fopen(THANOS_QUERY_DEF, "w");
-    if (!fout) {
-        HexLogError("Unable to write %s", THANOS_QUERY_DEF);
+    const std::vector<std::string> sidecar = {
+        "ARGS='--prometheus.url=http://127.0.0.1:" PORT "/prometheus"
+        " --tsdb.path=" DATADIR
+        " --grpc-address=0.0.0.0:" THANOS_SIDECAR_GRPC
+        " --http-address=0.0.0.0:" THANOS_SIDECAR_HTTP "'\n",
+    };
+    if (!WriteFile(fsError, THANOS_SIDECAR_DEF, sidecar)) {
+        HexLogError("%s", fsError.c_str());
         return false;
     }
+
     // Serves under the same /prometheus prefix the raw Prometheus did, so haproxy's route
     // and grafana's datasource keep working when the backend moves here. Note thanos keeps
     // /-/ready and /-/healthy at the root regardless -- that is what haproxy checks.
-    fprintf(fout, "ARGS='--endpoint.sd-config-file=" THANOS_ENDPOINTS
-                  " --query.replica-label=" THANOS_REPLICA_LABEL
-                  " --grpc-address=0.0.0.0:" THANOS_QUERY_GRPC
-                  " --http-address=0.0.0.0:" THANOS_QUERY_HTTP
-                  " --web.route-prefix=/prometheus"
-                  " --web.external-prefix=/prometheus'\n");
-    fclose(fout);
+    const std::vector<std::string> query = {
+        "ARGS='--endpoint.sd-config-file=" THANOS_ENDPOINTS
+        " --query.replica-label=" THANOS_REPLICA_LABEL
+        " --grpc-address=0.0.0.0:" THANOS_QUERY_GRPC
+        " --http-address=0.0.0.0:" THANOS_QUERY_HTTP
+        " --web.route-prefix=/prometheus"
+        " --web.external-prefix=/prometheus'\n",
+    };
+    if (!WriteFile(fsError, THANOS_QUERY_DEF, query)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
 
     return true;
 }
