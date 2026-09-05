@@ -151,7 +151,23 @@ filter {
       "es-index", "/", "_",
       # replace backslashes, question marks, and hashes
       # with a dot "."
-      "es-index", "[\\?#]", "."
+      "es-index", "[\\?#]", ".",
+      # Belt to the [program] fallbacks' braces. Logstash renders a *missing* field as
+      # the literal "%{name}", so an event reaching here without [program] is indexed
+      # into a real index called "logs-<date>-%{program}". a56f9a24 fixed that by
+      # defaulting [program], and it holds -- but only on a build that carries it.
+      # cube4510 ran 3.1.10, which predates a56f9a24, and accumulated seven such indices
+      # (2.3GB, 3.5M documents in one day) until it was upgraded to 3.1.20; the malformed
+      # index froze at that moment while /var/log/httpd/keystone_access.log, the very
+      # source that had been feeding it, resumed indexing under its own name.
+      #
+      # So this line guards nothing that is broken today. It is here because the failure
+      # is silent, unbounded and only visible once someone reads an index list: any
+      # future field that goes missing upstream of the index name would mint a new
+      # literal-braced index every day, and the documents are only found again by
+      # someone who knows to look for braces. Collapsing to "unknown" keeps them
+      # searchable and makes the condition obvious.
+      "es-index", "%\\{[^}]*\\}", "unknown"
     ]
   }
   if "_grokparsefailure" not in [tags] {
