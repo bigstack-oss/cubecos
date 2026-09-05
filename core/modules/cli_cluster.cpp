@@ -44,7 +44,7 @@ reversion_wrapper<T> reverse (T&& iterable) { return { iterable }; }
     C(ApiService) SEP C(SingleSignOn) SEP C(Compute) SEP C(Baremetal) SEP C(Network) SEP C(Image) SEP   \
     C(BlockStor) SEP C(FileStor) SEP C(ObjectStor) SEP C(Orchestration) SEP   \
     C(LBaaS) SEP C(DNSaaS) SEP C(K8SaaS) SEP C(InstanceHa) SEP \
-    C(BusinessLogic) SEP C(DataPipe) SEP C(Metrics) SEP C(LogAnalytics) SEP  \
+    C(BusinessLogic) SEP C(DataPipe) SEP C(Metrics) SEP C(MetricsDb) SEP C(LogAnalytics) SEP  \
     C(Notifications) SEP C(Node)
 
 #define EDGE_SRVS    \
@@ -52,7 +52,7 @@ reversion_wrapper<T> reverse (T&& iterable) { return { iterable }; }
     C(MsgQueue) SEP C(IaasDb) SEP C(VirtualIp) SEP C(Storage) SEP    \
     C(ApiService) SEP C(SingleSignOn) SEP C(Compute) SEP C(Network) SEP C(Image) SEP   \
     C(BlockStor) SEP C(FileStor) SEP C(ObjectStor) SEP C(Orchestration) SEP   \
-    C(LBaaS) SEP C(InstanceHa) SEP C(DataPipe) SEP C(Metrics) SEP C(LogAnalytics) SEP  \
+    C(LBaaS) SEP C(InstanceHa) SEP C(DataPipe) SEP C(Metrics) SEP C(MetricsDb) SEP C(LogAnalytics) SEP  \
     C(Notifications) SEP C(Node)
 
 #define C(x) x,
@@ -142,6 +142,8 @@ CompMap s_comps = {
     { "watcher", { 0, Q, R_CTRL_NOT_EDGE } },
     { "telegraf", { 0, Q } },
     { "lachesis", { 0, Q } },
+    { "prometheus", { 0, Q } },
+    { "thanos", { 0, Q } },
     { "influxdb", { 0, Q } },
     { "kapacitor", { 0, Q } },
     { "grafana", { 0, Q } },
@@ -192,6 +194,10 @@ CheckRepairItem s_services[] = {
     { S[BusinessLogic], "watcher", true, R_CTRL_NOT_EDGE },
     { S[DataPipe], "zookeeper,kafka", true },
     { S[Metrics], "monasca,telegraf,grafana,lachesis", true },
+    // The metric persistence layer, kept apart from Metrics (collection/visualisation).
+    // influxdb and kapacitor stay under Notifications for now: kapacitor is a write
+    // proxy and alerting engine here, not only storage, so moving them is its own call.
+    { S[MetricsDb], "prometheus,thanos", true },
     { S[LogAnalytics], "filebeat,auditbeat,logstash,opensearch,opensearch-dashboards", true },
     { S[Notifications], "influxdb,kapacitor", true },
     { S[Node], "node", true, R_ALL, BLVL_STD }
