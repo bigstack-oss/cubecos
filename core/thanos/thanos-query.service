@@ -1,0 +1,23 @@
+# -*- mode: conf -*-
+# Fans a PromQL query out to every control node's sidecar and deduplicates the answers by
+# the replica external label, so one node's outage gap is filled from its peers.
+#
+# After thanos-sidecar only orders the local one; the querier does not need any sidecar to
+# be up to start, and reconnects on its own as they appear.
+
+[Unit]
+Description=Thanos querier across the control nodes' Prometheus replicas
+Documentation=https://thanos.io/tip/components/query.md/
+Wants=network-online.target
+After=network-online.target thanos-sidecar.service
+
+[Service]
+EnvironmentFile=/etc/default/thanos-query
+User=prometheus
+ExecStart=/usr/bin/thanos query $ARGS
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

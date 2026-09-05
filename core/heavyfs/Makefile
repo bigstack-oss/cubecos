@@ -397,7 +397,7 @@ rootfs_install::
 HEAVY_COMPONENTS += nvidia
 HEAVY_COMPONENTS += yq api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
-HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift multipath
+HEAVY_COMPONENTS += influxdb prometheus thanos kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift multipath
 # note: horizon goes last so its collectstatic/compress sees the dashboard plugins
 # that designate, masakari and watcher drop into local/enabled at install time.
 # RPM-installed plugins (heat, octavia, ironic, manila) land theirs in the dnf
