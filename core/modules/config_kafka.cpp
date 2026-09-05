@@ -121,6 +121,15 @@ UpdateTopics(bool ha, bool run, const std::string sharedId)
     }
     RecreateTopic(ha, true, sharedId, "__consumer_offsets");
 
+    // The settings above only bind when a topic is created, and --create --if-not-exists
+    // is a no-op on one that already exists (--alter moves partitions, never replicas).
+    // So a cluster that has run before -- every upgrade from 3.1.10 or older, and every
+    // rolling upgrade, where the surviving ZooKeeper quorum hands the rebuilt node the
+    // old RF-1 topic definitions back -- needs its existing topics raised in place.
+    // That is a partition reassignment; hex_sdk owns it. Bounded and non-fatal: it
+    // defers itself when a broker is missing, and is idempotent across the control nodes.
+    HexUtilSystemF(0, 600, HEX_SDK " kafka_topic_rf_reconcile %s:9095", sharedId.c_str());
+
     return true;
 }
 
