@@ -957,9 +957,22 @@ health_mysql_repair()
         return 0
     fi
 
+    # Restart only the nodes that need it. This was a blanket `cmd -cor` across every
+    # control node, so one failed member took the whole galera cluster down with it --
+    # the survivors were Synced and serving, and got killed to "repair" a peer. During
+    # a roll that is the difference between a cluster short one node and no cluster at
+    # all. A node that is already Synced is left alone; one the network cannot reach
+    # cannot be restarted anyway.
+    #
     # mariadb.service is SendSIGKILL=no, so a hung stop wedges the unit: try restart,
-    # else force-clear the wedge (kill + reset-failed) and start.
-    cmd -cor "timeout $SRVTO systemctl restart mariadb || { systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; systemctl start mariadb ; }"
+    # else force-clear the wedge (kill + reset-failed) and start. Reverse order, one at
+    # a time, as before.
+    local node st
+    for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
+        st=$(_health_mysql_node_state $node)
+        [ "x$st" = "xsynced" -o "x$st" = "xunreachable" ] && continue
+        remote_run $node "timeout $SRVTO systemctl restart mariadb || { systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; systemctl start mariadb ; }"
+    done
     if ! health_mysql_check ; then
         # multiple attempts to fix is needed, especially after rolling-upgrade
         for i in 1 2 3 ; do
