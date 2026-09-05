@@ -203,33 +203,47 @@ migrate_neutron_db()
         # upgrade to 2.2.0
         su -s /bin/sh -c "neutron-db-manage --subproject neutron-vpnaas upgrade heads" neutron
 
-        # Yoga <-> Antelope compatibility shim for the mixed-version window.
+        # Antelope <-> Caracal compatibility shim for the mixed-version window.
         #
-        # zed/expand/I43e0b669096_port_forwarding_port_ranges.py replaces
-        # portforwardings.external_port and .socket with start/end range columns.
-        # Upstream put it in the *expand* branch, so there is no phased form of
-        # this migration that leaves the old columns standing: the moment the
-        # first node migrates the shared schema, every still-Yoga neutron-server
-        # on the other control nodes answers 500 to any port query with
-        #   (1054, "Unknown column 'portforwardings.external_port' in 'SELECT'")
-        # That is not confined to port forwarding -- the port_forwarding service
-        # plugin's callback fires on every port create and update, so it takes
-        # out the whole port API on 2 of 3 servers behind the VIP, and with it
-        # the live migration that rolling_upgrade drains each node with.
+        # Exactly one such shim is carried at a time. The supported upgrade path
+        # is stepwise -- 3.1.0 (Yoga) -> 3.1.10 (Antelope) -> 3.1.20 (Caracal),
+        # no jumping -- so a Caracal build can never meet a Yoga neutron-server,
+        # and the Yoga <-> Antelope portforwardings shim that used to live here
+        # was dead code the moment this build stopped shipping Antelope.
+        #
+        # 2023.2/expand/93f394357a27_remove_in_use_on_subnets.py drops
+        # subnets.in_use. Upstream put it in the *expand* branch -- it declares an
+        # expand_drop_exceptions() to opt out of the no-drops-in-expand rule -- so
+        # there is no phased form of this migration that leaves the column
+        # standing: the moment the first node migrates the shared schema, every
+        # still-Antelope neutron-server on the other control nodes answers 500 to
+        # any subnet query with
+        #   (1054, "Unknown column 'subnets.in_use' in 'SELECT'")
+        # Antelope's models_v2.HasInUse declares in_use as a real column and
+        # Subnet mixes it in, so this is not confined to one call: it takes out
+        # the subnet API on 2 of 3 servers behind the VIP, and with it the live
+        # migration that rolling_upgrade drains each node with. Observed on
+        # cube4510 2026-09-05 -- 0 of 13 VMs could be evacuated off cube452.
         #
         # Deferring the migration instead does not help; it only inverts which
         # servers are broken, and worse, the healthy pool then shrinks as the
-        # roll proceeds instead of growing. Since only the column *shape*
-        # changed, re-add the two dropped columns as generated columns so the
-        # migrated schema answers both dialects. They are additive and derived,
-        # and invisible to Antelope's ORM, which names its columns explicitly.
-        # Yoga can read port forwardings through them but not create one --
-        # generated columns reject writes -- which is the accepted trade for
-        # keeping the port API and the drain alive during the window.
+        # roll proceeds instead of growing. Caracal stopped using the column at
+        # all (it takes the row lock with SELECT ... FOR UPDATE and keeps the
+        # attribute only so back-ports need no schema change), so it is enough
+        # that the value reads false: re-add it as a generated column and the
+        # migrated schema answers both dialects. It is additive and derived, and
+        # invisible to Caracal's ORM, which names its columns explicitly. The
+        # expression is written against id rather than a bare literal so that it
+        # is unambiguously non-constant, which the generated-column parser wants.
         #
-        # migrate_neutron_db_post() drops them once no Yoga server is left.
-        if [ "$($MYSQL -N -u root -D neutron -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'neutron' AND TABLE_NAME = 'portforwardings' AND COLUMN_NAME IN ('external_port', 'socket')")" = "0" ] ; then
-            $MYSQL -u root -D neutron -e "ALTER TABLE portforwardings ADD COLUMN external_port int(11) GENERATED ALWAYS AS (external_port_start) VIRTUAL, ADD COLUMN socket varchar(36) GENERATED ALWAYS AS (concat(internal_ip_address, ':', internal_port_start)) VIRTUAL"
+        # Antelope then reads the flag as "not in use", so read/write_lock_register
+        # stop guarding concurrent subnet deletes for the length of the window --
+        # the accepted trade for keeping the subnet API and the drain alive, and
+        # the same one the retired Yoga shim made for port forwardings.
+        #
+        # migrate_neutron_db_post() drops it once no Antelope server is left.
+        if [ "$($MYSQL -N -u root -D neutron -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'neutron' AND TABLE_NAME = 'subnets' AND COLUMN_NAME = 'in_use'")" = "0" ] ; then
+            $MYSQL -u root -D neutron -e "ALTER TABLE subnets ADD COLUMN in_use tinyint(1) GENERATED ALWAYS AS (id IS NULL) VIRTUAL"
         fi
     fi
 
@@ -248,13 +262,13 @@ migrate_neutron_db_post()
     fi
 
     # Drop the mixed-window compatibility shim migrate_neutron_db() added, but
-    # only once every control node runs Antelope's neutron-server. An unreachable
+    # only once every control node runs Caracal's neutron-server. An unreachable
     # node counts as unknown and holds the shim, so a half-finished roll never
-    # loses the columns out from under a Yoga server; carrying two generated
-    # columns for one more cluster_start costs nothing.
+    # loses the column out from under an Antelope server; carrying one generated
+    # column for one more cluster_start costs nothing.
     $HEX_SDK os_neutron_version_uniform || return 0
 
-    $MYSQL -u root -D neutron -e "ALTER TABLE portforwardings DROP COLUMN IF EXISTS external_port, DROP COLUMN IF EXISTS socket"
+    $MYSQL -u root -D neutron -e "ALTER TABLE subnets DROP COLUMN IF EXISTS in_use"
 
     touch $STATE_DIR/neutron_db_post_migrated
 }
