@@ -3010,7 +3010,8 @@ os_neutron_version_uniform()
 {
     # Same fail-safe contract as os_rabbitmq_version_uniform(): every control node
     # must be reachable AND report the same neutron major version; unreachable =
-    # unknown, any miss => not uniform. Yoga reports 20.x, Antelope 22.x.
+    # unknown, any miss => not uniform. Yoga reports 20.x, Antelope 22.x,
+    # Caracal 24.x.
     local hosts h v vers=
     hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
     [ -n "$hosts" ] || return 1

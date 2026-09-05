@@ -12,3 +12,5 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable influxdb
 	$(Q)mv -f $(ROOTDIR)/etc/influxdb/influxdb.conf $(ROOTDIR)/etc/influxdb/influxdb.conf.org
 	$(Q)cp -f $(COREDIR)/influxdb/influxdb.conf $(ROOTDIR)/etc/influxdb/
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/influxdb.service.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/influxdb/influxdb-start-timeout.conf ./etc/systemd/system/influxdb.service.d/
