@@ -3707,6 +3707,146 @@ health_grafana_repair()
 }
 
 
+health_prometheus_report()
+{
+    _health_report ${FUNCNAME[0]}
+}
+
+# Prometheus serves every endpoint under the /prometheus route prefix: config_prometheus
+# sets --web.external-url=http://localhost/prometheus/ and prometheus derives
+# --web.route-prefix from that, so /-/healthy at the root is a 404 on a perfectly healthy
+# server. Measured on accept-3cc: :9091/-/healthy 404, :9091/prometheus/-/healthy 200.
+health_prometheus_check()
+{
+    local up
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node prometheus ; then
+            ERR_CODE=1
+            ERR_MSG+="prometheus on $node is not running\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u prometheus"
+            continue
+        fi
+        if ! $CURL -sf http://$node:9091/prometheus/-/healthy >/dev/null 2>&1 ; then
+            ERR_CODE=2
+            ERR_MSG+="prometheus on $node doesn't respond\n"
+            ERR_LOG="netstat -tunpl | grep 9091"
+            continue
+        fi
+        # a server that is up but scraping nothing is not monitoring anything, and it
+        # reports healthy the whole time -- the liveness probe alone would miss it
+        up=$($CURL -sf --data-urlencode 'query=count(up == 1)' \
+             http://$node:9091/prometheus/api/v1/query 2>/dev/null \
+             | jq -r '.data.result[0].value[1] // 0' 2>/dev/null)
+        if [ "${up:-0}" -lt 1 ] 2>/dev/null ; then
+            ERR_CODE=3
+            ERR_MSG+="prometheus on $node has no scrape target up\n"
+            ERR_LOG="$CURL -s http://$node:9091/prometheus/api/v1/targets"
+        fi
+    done
+
+    _health_fail_log
+}
+
+health_prometheus_repair()
+{
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node prometheus || \
+           ! $CURL -sf http://$node:9091/prometheus/-/healthy >/dev/null 2>&1 ; then
+            remote_systemd_restart $node prometheus
+        fi
+    done
+}
+
+# ERR_CODE 3 is "up, but scraping nothing": a config or service-discovery problem that a
+# restart does not fix, so auto-repairing it would just be a restart loop against a
+# server that is answering fine. Leave it for the operator; the check keeps reporting it.
+_health_prometheus_auto_repair()
+{
+    [ "$ERR_CODE" = "3" ] && return 0
+    health_prometheus_repair
+}
+
+health_thanos_report()
+{
+    _health_report ${FUNCNAME[0]}
+}
+
+# Thanos exists only on an HA cluster -- config_prometheus gates both units on
+# thanosEnabled = enabled && s_ha -- so on a single-control cluster there is nothing to
+# check and nothing wrong.
+#
+# Unlike prometheus, thanos keeps /-/healthy and /-/ready at the root even though the
+# querier runs with --web.route-prefix=/prometheus; only its API moves under the prefix.
+# Measured on accept-3cc: :10904/-/ready 200, :10904/api/v1/stores 404,
+# :10904/prometheus/api/v1/stores 200.
+health_thanos_check()
+{
+    source hex_tuning $SETTINGS_TXT cubesys.ha
+    if [ "$T_cubesys_ha" != "true" ] ; then
+        DESCRIPTION="non-HA"
+        _health_fail_log
+        return 0
+    fi
+
+    local stores want=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node thanos-sidecar ; then
+            ERR_CODE=1
+            ERR_MSG+="thanos-sidecar on $node is not running\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u thanos-sidecar"
+            continue
+        fi
+        if ! is_remote_running $node thanos-query ; then
+            ERR_CODE=2
+            ERR_MSG+="thanos-query on $node is not running\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u thanos-query"
+            continue
+        fi
+        if ! $CURL -sf http://$node:10904/-/ready >/dev/null 2>&1 ; then
+            ERR_CODE=3
+            ERR_MSG+="thanos-query on $node doesn't respond\n"
+            ERR_LOG="netstat -tunpl | grep 10904"
+            continue
+        fi
+        # the whole point of thanos here is that a querier answers from every replica
+        # rather than only its own; a querier that has lost its peers still passes every
+        # probe above while silently serving one node's view of the cluster
+        stores=$($CURL -sf http://$node:10904/prometheus/api/v1/stores 2>/dev/null \
+                 | jq -r '[.data.sidecar[]? | select(.lastError == null)] | length' 2>/dev/null)
+        if [ "${stores:-0}" -lt "$want" ] 2>/dev/null ; then
+            ERR_CODE=4
+            ERR_MSG+="thanos-query on $node sees ${stores:-0}/$want sidecars\n"
+            ERR_LOG="$CURL -s http://$node:10904/prometheus/api/v1/stores"
+        fi
+    done
+
+    _health_fail_log
+}
+
+health_thanos_repair()
+{
+    source hex_tuning $SETTINGS_TXT cubesys.ha
+    [ "$T_cubesys_ha" = "true" ] || return 0
+
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        is_remote_running $node thanos-sidecar || remote_systemd_restart $node thanos-sidecar
+        if ! is_remote_running $node thanos-query || \
+           ! $CURL -sf http://$node:10904/-/ready >/dev/null 2>&1 ; then
+            remote_systemd_restart $node thanos-query
+        fi
+    done
+}
+
+# ERR_CODE 4 is "a peer's sidecar is not reachable" -- almost always a node that is down
+# or still booting. Restarting the local querier does not bring a peer back, and during a
+# roll it would restart a querier on every pass. The sidecar and querier faults (1-3) are
+# local and do repair.
+_health_thanos_auto_repair()
+{
+    [ "$ERR_CODE" = "4" ] && return 0
+    health_thanos_repair
+}
+
 health_filebeat_report()
 {
     _health_report ${FUNCNAME[0]}
