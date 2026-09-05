@@ -50,11 +50,15 @@ datasources:
      timeInterval: "1m"
   editable: true
 
+# Through the node's own haproxy rather than straight at :9091, so this follows whatever
+# /prometheus is wired to: the local Prometheus on a single node, and the deduplicating
+# thanos queriers in HA. Also means a dead local querier fails over with the route
+# instead of blanking this datasource.
 - name: Dashboard1
   type: prometheus
   access: proxy
   database:
-  url: http://localhost:9091/prometheus
+  url: http://localhost/prometheus
   jsonData:
      timeInterval: "1m"
   editable: true
