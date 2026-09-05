@@ -70,7 +70,7 @@ rootfs_install::
 	# $(Q)sed "s/\/var\/run\//\/run\//g" $(ROOTDIR)/usr/lib/tmpfiles.d/subscription-manager.conf > $(ROOTDIR)/etc/tmpfiles.d/subscription-manager.conf
 	$(Q)mount -t proc proc $(ROOTDIR)/proc || /bin/true
 	$(Q)chroot $(ROOTDIR) dnf clean all
-	$(Q)echo "Add to $(ROOTDIR) repos: $(INFLUXDB_REPO) $(CEPH_REPO) $(PROMETHEUS_REPO) $(DOCKER_REPO)"
+	$(Q)echo "Add to $(ROOTDIR) repos: $(INFLUXDB_REPO) $(CEPH_REPO) $(DOCKER_REPO)"
 	$(Q)mkdir -p $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
 
 rootfs_install::
@@ -397,7 +397,7 @@ rootfs_install::
 HEAVY_COMPONENTS += nvidia
 HEAVY_COMPONENTS += yq api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
-HEAVY_COMPONENTS += influxdb prometheus kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift multipath
+HEAVY_COMPONENTS += influxdb prometheus thanos kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift multipath
 # note: horizon goes last so its collectstatic/compress sees the dashboard plugins
 # that designate, masakari and watcher drop into local/enabled at install time.
 # RPM-installed plugins (heat, octavia, ironic, manila) land theirs in the dnf

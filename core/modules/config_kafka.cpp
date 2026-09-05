@@ -67,6 +67,24 @@ PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
 
+// Replication factor for this cluster: one replica per control node, capped at 3.
+// 3cc and 3c_3p_5s therefore get 3 -- the production default, and what a rolling
+// upgrade needs. Kafka's data directory is not carried across the A/B partition
+// switch (config_kafka declares no CONFIG_MIGRATE), so an upgraded node rejoins with
+// an empty log dir and has to re-replicate every partition it holds. At RF 2 the
+// partitions that node led are down to a single good copy for the length of that
+// catch-up, on every node of the roll; at RF 3 two copies remain throughout.
+//
+// Capped, not fixed at 3, because cubesys.control.addrs decides the size and a
+// 2-control-node HA is expressible -- the zookeeper block below already guards for
+// csize < 3. Asking for more replicas than brokers makes topic creation fail outright.
+static int
+TargetRF(bool ha)
+{
+    std::size_t csize = GetClusterSize(ha, s_ctrlAddrs.newValue());
+    return (int)(csize > 3 ? 3 : csize);
+}
+
 static bool
 RecreateTopic(bool ha, bool run, const std::string sharedId, const char* topic)
 {
@@ -82,7 +100,7 @@ RecreateTopic(bool ha, bool run, const std::string sharedId, const char* topic)
     // Ensure the topic exists with 6 partitions without deleting it first, so a
     // re-apply (e.g. set_ready) doesn't drop existing topic data.
     HexUtilSystemF(0, 0, "%s --create --topic %s --partitions 6 --bootstrap-server %s:9095 --replication-factor %d --if-not-exists >/dev/null 2>&1",
-                         cmd, topic, sharedId.c_str(), ha ? 2 : 1);
+                         cmd, topic, sharedId.c_str(), TargetRF(ha));
     HexUtilSystemF(0, 0, "%s --alter --topic %s --partitions 6 --bootstrap-server %s:9095 >/dev/null 2>&1",
                          cmd, topic, sharedId.c_str());
 
@@ -102,6 +120,15 @@ UpdateTopics(bool ha, bool run, const std::string sharedId)
         RecreateTopic(ha, true, sharedId, t.c_str());
     }
     RecreateTopic(ha, true, sharedId, "__consumer_offsets");
+
+    // The settings above only bind when a topic is created, and --create --if-not-exists
+    // is a no-op on one that already exists (--alter moves partitions, never replicas).
+    // So a cluster that has run before -- every upgrade from 3.1.10 or older, and every
+    // rolling upgrade, where the surviving ZooKeeper quorum hands the rebuilt node the
+    // old RF-1 topic definitions back -- needs its existing topics raised in place.
+    // That is a partition reassignment; hex_sdk owns it. Bounded and non-fatal: it
+    // defers itself when a broker is missing, and is idempotent across the control nodes.
+    HexUtilSystemF(0, 600, HEX_SDK " kafka_topic_rf_reconcile %s:9095", sharedId.c_str());
 
     return true;
 }
@@ -154,6 +181,25 @@ UpdateCfg(bool ha, const std::string hostname, const std::string sharedId,
                 }
             }
         }
+
+        // Replication defaults. Upstream's sample server.properties ships all three at 1
+        // and config_kafka never touched them, so every topic Kafka created for itself --
+        // __consumer_offsets above all -- was born unreplicated and stayed that way.
+        //
+        // auto.create.topics.enable is deliberately left at Kafka's default of true.
+        // oslo.messaging names its notification topics by priority, so notifications.warn
+        // and notifications.error appear the first time any service emits at that level and
+        // are not in the managed list; turning auto-create off would silently drop them.
+        // default.replication.factor is what makes those arrive replicated instead.
+        //
+        // min.insync.replicas is likewise left at 1 on purpose. This is a 5-minute, 64MB
+        // transport buffer, not a store of record, so availability beats durability: at
+        // min.insync 2 a two-broker loss would fail every produce, and telegraf produces
+        // with required_acks = -1.
+        int rf = TargetRF(ha);
+        kafkaCfg[GLOBAL_SEC]["default.replication.factor"] = std::to_string(rf);
+        kafkaCfg[GLOBAL_SEC]["offsets.topic.replication.factor"] = std::to_string(rf);
+        kafkaCfg[GLOBAL_SEC]["transaction.state.log.replication.factor"] = std::to_string(rf);
 
         kafkaCfg[GLOBAL_SEC]["listeners"] = "PLAINTEXT://" + ctrlIp + ":9095";
         // use the node's local zookeeper, not the VIP (avoids haproxy hop / boot stalls).

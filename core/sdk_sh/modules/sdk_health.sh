@@ -823,8 +823,69 @@ health_mysql_check()
     _health_fail_log
 }
 
+# Classify one control node for repair purposes.
+#
+# Reachability is tested first, and deliberately: asking galera whether a node is "in
+# the cluster" means nothing on its own. A node the network cannot reach was evicted
+# correctly -- the fault is power or network, galera is behaving exactly as designed,
+# and bootstrapping a new cluster cannot bring that node back. It can only destroy the
+# cluster the survivors still have.
+#
+# Prints one of: unreachable | joining | synced | down
+_health_mysql_node_state()
+{
+    local node=$1 unit state
+
+    is_sshable "$node" || { echo unreachable ; return 0 ; }
+
+    # a joiner receiving an SST answers no query at all for as long as the transfer
+    # runs -- the longest phase of joining, and its unit sitting in 'activating' is the
+    # only signal available for it
+    unit=$(remote_run $node "systemctl is-active mariadb 2>/dev/null")
+    [ "x$unit" = "xactivating" ] && { echo joining ; return 0 ; }
+
+    state=$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_local_state_comment'\" 2>/dev/null | awk '{print \$2}'")
+    case "$state" in
+        Synced)                         echo synced  ;;
+        Joining*|Joined|Donor/Desynced) echo joining ;;
+        *)                              echo down    ;;
+    esac
+    return 0
+}
+
+# Is there anything here that a galera repair can actually act on? Only a control node
+# that is reachable and whose mariadb is neither in the cluster nor on its way into it.
+#
+# health_mysql_check is strict on purpose -- wsrep_cluster_size equal to the control
+# node count, every node Synced, every mariadb unit active -- and it must stay that
+# way: that strictness is what makes it the right gate for a roll to advance on.
+# But "the cluster is short a member" and "the cluster is broken" are different
+# statements, and only the second one is repairable. A node still booting, a node
+# taking a state transfer, a node behind a dead switch: the repair fixes none of them,
+# and kill-mariadb-cluster-wide-then-bootstrap makes all of them worse.
+_health_mysql_repairable()
+{
+    local node st down="" why=""
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        st=$(_health_mysql_node_state $node)
+        [ "x$st" = "xdown" ] && down="$down $node"
+        why="$why $node=$st"
+    done
+
+    if [ -n "$down" ] ; then
+        log_info "health_mysql_repair: repairing --${down} reachable but neither in the cluster nor joining (${why# })"
+        return 0
+    fi
+
+    log_error "health_mysql_repair: nothing a galera repair can fix (${why# }) -- leaving the cluster alone"
+    return 1
+}
+
+# $1 = attempt number within one health_mysql_repair call (1-based, default 1).
+# Only the first attempt takes the datadir safety copy -- see the note on it below.
 _health_mysql_repair()
 {
+    local attempt=${1:-1}
     local ts=$(date +%Y%m%d-%H%M%S)
 
     # If a galera primary is still live, rejoin it instead of bootstrapping (avoids split-brain).
@@ -845,7 +906,43 @@ _health_mysql_repair()
     fi
 
     # No primary: bootstrap a fresh cluster from the last control node, rest join.
-    cmd -c "cp -rp /var/lib/mysql /var/lib/mysql-\${HOSTNAME}-${ts}"
+    #
+    # The safety copy of the datadir gets two bounds, because health_mysql_repair calls
+    # this in a `for i in 1 2 3` loop and the health machinery can call that again: keep
+    # at most one copy, and never make one there is no room for.
+    #
+    # Unbounded, this is how accept-3cc filled / to 100% twice -- six copies of a 4-8GB
+    # datadir per node, ~100GB across the cluster, from repair loops whose attempts were a
+    # minute apart. The first time it took ceph's mons down with ENOSPC for 8h; the second
+    # it blew opensearch's 85% disk watermark, which turned the cluster red and stalled log
+    # ingestion behind it. Either way the repair caused a worse outage than the one it was
+    # sent to fix.
+    #
+    # The copy is a safety net, not a prerequisite, so when there is no room the repair
+    # still goes ahead -- refusing to repair a database because the disk is full would be
+    # its own kind of wrong.
+    # Done per node rather than with a single `cmd -c` so the decision is made against
+    # each node's own disk, and so the skip can be reported with log_error -- cmd ships a
+    # bare string over ssh, where the sdk's log helpers do not exist.
+    #
+    # One copy per repair, not one per attempt: health_mysql_repair calls this up to
+    # three times and every attempt bootstraps from the same datadir, so the second and
+    # third copies are of state the first already captured -- they cost another full
+    # datadir of disk and a few GB of I/O against a database that is trying to start,
+    # and buy nothing.
+    local node dsz free
+    if [ "${attempt:-1}" -le 1 ] ; then
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            remote_run $node "rm -rf /var/lib/mysql-${node}-*"
+            dsz=$(remote_run $node "du -sm /var/lib/mysql 2>/dev/null | cut -f1")
+            free=$(remote_run $node "df -Pm /var/lib | awk '{print \$4}' | tail -1")
+            if [ "${free:-0}" -gt $(( ${dsz:-0} * 2 )) ] ; then
+                remote_run $node "cp -rp /var/lib/mysql /var/lib/mysql-${node}-${ts}"
+            else
+                log_error "_health_mysql_repair: $node has ${free}MB free, under 2x its ${dsz}MB datadir -- skipping the safety copy and repairing without it"
+            fi
+        done
+    fi
     local cnt=0
     for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
         ((cnt++))
@@ -861,13 +958,37 @@ _health_mysql_repair()
 
 health_mysql_repair()
 {
+    # Repair only a cluster that is actually broken -- see _health_mysql_repairable.
+    # Every boot reaches here (PostBootRecovery -> cluster_check_repair_async ->
+    # hex_cli -c cluster check_repair -> the mysql entry of the full service suite),
+    # and the only readiness it passes through is cube_cluster_ready, which checks
+    # three marker files and says nothing about wsrep. Without this gate the repair
+    # fires on a galera cluster that is merely still assembling itself.
+    if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -gt 1 ] && ! _health_mysql_repairable ; then
+        return 0
+    fi
+
+    # Restart only the nodes that need it. This was a blanket `cmd -cor` across every
+    # control node, so one failed member took the whole galera cluster down with it --
+    # the survivors were Synced and serving, and got killed to "repair" a peer. During
+    # a roll that is the difference between a cluster short one node and no cluster at
+    # all. A node that is already Synced is left alone; one the network cannot reach
+    # cannot be restarted anyway.
+    #
     # mariadb.service is SendSIGKILL=no, so a hung stop wedges the unit: try restart,
-    # else force-clear the wedge (kill + reset-failed) and start.
-    cmd -cor "timeout $SRVTO systemctl restart mariadb || { systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; systemctl start mariadb ; }"
+    # else force-clear the wedge (kill + reset-failed) and start. Reverse order, one at
+    # a time, as before.
+    local node st
+    for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
+        st=$(_health_mysql_node_state $node)
+        [ "x$st" = "xsynced" -o "x$st" = "xunreachable" ] && continue
+        remote_run $node "timeout $SRVTO systemctl restart mariadb || { systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; systemctl start mariadb ; }"
+    done
     if ! health_mysql_check ; then
-        # multiple attempts to fix is needed, especially after rolling-upgrade
+        # multiple attempts to fix is needed, especially after rolling-upgrade.
+        # The attempt number goes with the call: only the first takes a datadir copy.
         for i in 1 2 3 ; do
-            _health_mysql_repair
+            _health_mysql_repair $i
             if health_mysql_check ; then
                 break
             fi
@@ -3585,6 +3706,146 @@ health_grafana_repair()
     done
 }
 
+
+health_prometheus_report()
+{
+    _health_report ${FUNCNAME[0]}
+}
+
+# Prometheus serves every endpoint under the /prometheus route prefix: config_prometheus
+# sets --web.external-url=http://localhost/prometheus/ and prometheus derives
+# --web.route-prefix from that, so /-/healthy at the root is a 404 on a perfectly healthy
+# server. Measured on accept-3cc: :9091/-/healthy 404, :9091/prometheus/-/healthy 200.
+health_prometheus_check()
+{
+    local up
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node prometheus ; then
+            ERR_CODE=1
+            ERR_MSG+="prometheus on $node is not running\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u prometheus"
+            continue
+        fi
+        if ! $CURL -sf http://$node:9091/prometheus/-/healthy >/dev/null 2>&1 ; then
+            ERR_CODE=2
+            ERR_MSG+="prometheus on $node doesn't respond\n"
+            ERR_LOG="netstat -tunpl | grep 9091"
+            continue
+        fi
+        # a server that is up but scraping nothing is not monitoring anything, and it
+        # reports healthy the whole time -- the liveness probe alone would miss it
+        up=$($CURL -sf --data-urlencode 'query=count(up == 1)' \
+             http://$node:9091/prometheus/api/v1/query 2>/dev/null \
+             | jq -r '.data.result[0].value[1] // 0' 2>/dev/null)
+        if [ "${up:-0}" -lt 1 ] 2>/dev/null ; then
+            ERR_CODE=3
+            ERR_MSG+="prometheus on $node has no scrape target up\n"
+            ERR_LOG="$CURL -s http://$node:9091/prometheus/api/v1/targets"
+        fi
+    done
+
+    _health_fail_log
+}
+
+health_prometheus_repair()
+{
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node prometheus || \
+           ! $CURL -sf http://$node:9091/prometheus/-/healthy >/dev/null 2>&1 ; then
+            remote_systemd_restart $node prometheus
+        fi
+    done
+}
+
+# ERR_CODE 3 is "up, but scraping nothing": a config or service-discovery problem that a
+# restart does not fix, so auto-repairing it would just be a restart loop against a
+# server that is answering fine. Leave it for the operator; the check keeps reporting it.
+_health_prometheus_auto_repair()
+{
+    [ "$ERR_CODE" = "3" ] && return 0
+    health_prometheus_repair
+}
+
+health_thanos_report()
+{
+    _health_report ${FUNCNAME[0]}
+}
+
+# Thanos exists only on an HA cluster -- config_prometheus gates both units on
+# thanosEnabled = enabled && s_ha -- so on a single-control cluster there is nothing to
+# check and nothing wrong.
+#
+# Unlike prometheus, thanos keeps /-/healthy and /-/ready at the root even though the
+# querier runs with --web.route-prefix=/prometheus; only its API moves under the prefix.
+# Measured on accept-3cc: :10904/-/ready 200, :10904/api/v1/stores 404,
+# :10904/prometheus/api/v1/stores 200.
+health_thanos_check()
+{
+    source hex_tuning $SETTINGS_TXT cubesys.ha
+    if [ "$T_cubesys_ha" != "true" ] ; then
+        DESCRIPTION="non-HA"
+        _health_fail_log
+        return 0
+    fi
+
+    local stores want=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node thanos-sidecar ; then
+            ERR_CODE=1
+            ERR_MSG+="thanos-sidecar on $node is not running\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u thanos-sidecar"
+            continue
+        fi
+        if ! is_remote_running $node thanos-query ; then
+            ERR_CODE=2
+            ERR_MSG+="thanos-query on $node is not running\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u thanos-query"
+            continue
+        fi
+        if ! $CURL -sf http://$node:10904/-/ready >/dev/null 2>&1 ; then
+            ERR_CODE=3
+            ERR_MSG+="thanos-query on $node doesn't respond\n"
+            ERR_LOG="netstat -tunpl | grep 10904"
+            continue
+        fi
+        # the whole point of thanos here is that a querier answers from every replica
+        # rather than only its own; a querier that has lost its peers still passes every
+        # probe above while silently serving one node's view of the cluster
+        stores=$($CURL -sf http://$node:10904/prometheus/api/v1/stores 2>/dev/null \
+                 | jq -r '[.data.sidecar[]? | select(.lastError == null)] | length' 2>/dev/null)
+        if [ "${stores:-0}" -lt "$want" ] 2>/dev/null ; then
+            ERR_CODE=4
+            ERR_MSG+="thanos-query on $node sees ${stores:-0}/$want sidecars\n"
+            ERR_LOG="$CURL -s http://$node:10904/prometheus/api/v1/stores"
+        fi
+    done
+
+    _health_fail_log
+}
+
+health_thanos_repair()
+{
+    source hex_tuning $SETTINGS_TXT cubesys.ha
+    [ "$T_cubesys_ha" = "true" ] || return 0
+
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        is_remote_running $node thanos-sidecar || remote_systemd_restart $node thanos-sidecar
+        if ! is_remote_running $node thanos-query || \
+           ! $CURL -sf http://$node:10904/-/ready >/dev/null 2>&1 ; then
+            remote_systemd_restart $node thanos-query
+        fi
+    done
+}
+
+# ERR_CODE 4 is "a peer's sidecar is not reachable" -- almost always a node that is down
+# or still booting. Restarting the local querier does not bring a peer back, and during a
+# roll it would restart a querier on every pass. The sidecar and querier faults (1-3) are
+# local and do repair.
+_health_thanos_auto_repair()
+{
+    [ "$ERR_CODE" = "4" ] && return 0
+    health_thanos_repair
+}
 
 health_filebeat_report()
 {
