@@ -881,8 +881,11 @@ _health_mysql_repairable()
     return 1
 }
 
+# $1 = attempt number within one health_mysql_repair call (1-based, default 1).
+# Only the first attempt takes the datadir safety copy -- see the note on it below.
 _health_mysql_repair()
 {
+    local attempt=${1:-1}
     local ts=$(date +%Y%m%d-%H%M%S)
 
     # If a galera primary is still live, rejoin it instead of bootstrapping (avoids split-brain).
@@ -921,17 +924,25 @@ _health_mysql_repair()
     # Done per node rather than with a single `cmd -c` so the decision is made against
     # each node's own disk, and so the skip can be reported with log_error -- cmd ships a
     # bare string over ssh, where the sdk's log helpers do not exist.
+    #
+    # One copy per repair, not one per attempt: health_mysql_repair calls this up to
+    # three times and every attempt bootstraps from the same datadir, so the second and
+    # third copies are of state the first already captured -- they cost another full
+    # datadir of disk and a few GB of I/O against a database that is trying to start,
+    # and buy nothing.
     local node dsz free
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        remote_run $node "rm -rf /var/lib/mysql-${node}-*"
-        dsz=$(remote_run $node "du -sm /var/lib/mysql 2>/dev/null | cut -f1")
-        free=$(remote_run $node "df -Pm /var/lib | awk '{print \$4}' | tail -1")
-        if [ "${free:-0}" -gt $(( ${dsz:-0} * 2 )) ] ; then
-            remote_run $node "cp -rp /var/lib/mysql /var/lib/mysql-${node}-${ts}"
-        else
-            log_error "_health_mysql_repair: $node has ${free}MB free, under 2x its ${dsz}MB datadir -- skipping the safety copy and repairing without it"
-        fi
-    done
+    if [ "${attempt:-1}" -le 1 ] ; then
+        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+            remote_run $node "rm -rf /var/lib/mysql-${node}-*"
+            dsz=$(remote_run $node "du -sm /var/lib/mysql 2>/dev/null | cut -f1")
+            free=$(remote_run $node "df -Pm /var/lib | awk '{print \$4}' | tail -1")
+            if [ "${free:-0}" -gt $(( ${dsz:-0} * 2 )) ] ; then
+                remote_run $node "cp -rp /var/lib/mysql /var/lib/mysql-${node}-${ts}"
+            else
+                log_error "_health_mysql_repair: $node has ${free}MB free, under 2x its ${dsz}MB datadir -- skipping the safety copy and repairing without it"
+            fi
+        done
+    fi
     local cnt=0
     for node in $(for n in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do echo $n ; done | tac) ; do
         ((cnt++))
@@ -974,9 +985,10 @@ health_mysql_repair()
         remote_run $node "timeout $SRVTO systemctl restart mariadb || { systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; systemctl start mariadb ; }"
     done
     if ! health_mysql_check ; then
-        # multiple attempts to fix is needed, especially after rolling-upgrade
+        # multiple attempts to fix is needed, especially after rolling-upgrade.
+        # The attempt number goes with the call: only the first takes a datadir copy.
         for i in 1 2 3 ; do
-            _health_mysql_repair
+            _health_mysql_repair $i
             if health_mysql_check ; then
                 break
             fi
