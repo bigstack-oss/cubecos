@@ -823,6 +823,64 @@ health_mysql_check()
     _health_fail_log
 }
 
+# Classify one control node for repair purposes.
+#
+# Reachability is tested first, and deliberately: asking galera whether a node is "in
+# the cluster" means nothing on its own. A node the network cannot reach was evicted
+# correctly -- the fault is power or network, galera is behaving exactly as designed,
+# and bootstrapping a new cluster cannot bring that node back. It can only destroy the
+# cluster the survivors still have.
+#
+# Prints one of: unreachable | joining | synced | down
+_health_mysql_node_state()
+{
+    local node=$1 unit state
+
+    is_sshable "$node" || { echo unreachable ; return 0 ; }
+
+    # a joiner receiving an SST answers no query at all for as long as the transfer
+    # runs -- the longest phase of joining, and its unit sitting in 'activating' is the
+    # only signal available for it
+    unit=$(remote_run $node "systemctl is-active mariadb 2>/dev/null")
+    [ "x$unit" = "xactivating" ] && { echo joining ; return 0 ; }
+
+    state=$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_local_state_comment'\" 2>/dev/null | awk '{print \$2}'")
+    case "$state" in
+        Synced)                         echo synced  ;;
+        Joining*|Joined|Donor/Desynced) echo joining ;;
+        *)                              echo down    ;;
+    esac
+    return 0
+}
+
+# Is there anything here that a galera repair can actually act on? Only a control node
+# that is reachable and whose mariadb is neither in the cluster nor on its way into it.
+#
+# health_mysql_check is strict on purpose -- wsrep_cluster_size equal to the control
+# node count, every node Synced, every mariadb unit active -- and it must stay that
+# way: that strictness is what makes it the right gate for a roll to advance on.
+# But "the cluster is short a member" and "the cluster is broken" are different
+# statements, and only the second one is repairable. A node still booting, a node
+# taking a state transfer, a node behind a dead switch: the repair fixes none of them,
+# and kill-mariadb-cluster-wide-then-bootstrap makes all of them worse.
+_health_mysql_repairable()
+{
+    local node st down="" why=""
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        st=$(_health_mysql_node_state $node)
+        [ "x$st" = "xdown" ] && down="$down $node"
+        why="$why $node=$st"
+    done
+
+    if [ -n "$down" ] ; then
+        log_info "health_mysql_repair: repairing --${down} reachable but neither in the cluster nor joining (${why# })"
+        return 0
+    fi
+
+    log_error "health_mysql_repair: nothing a galera repair can fix (${why# }) -- leaving the cluster alone"
+    return 1
+}
+
 _health_mysql_repair()
 {
     local ts=$(date +%Y%m%d-%H%M%S)
@@ -889,6 +947,16 @@ _health_mysql_repair()
 
 health_mysql_repair()
 {
+    # Repair only a cluster that is actually broken -- see _health_mysql_repairable.
+    # Every boot reaches here (PostBootRecovery -> cluster_check_repair_async ->
+    # hex_cli -c cluster check_repair -> the mysql entry of the full service suite),
+    # and the only readiness it passes through is cube_cluster_ready, which checks
+    # three marker files and says nothing about wsrep. Without this gate the repair
+    # fires on a galera cluster that is merely still assembling itself.
+    if [ ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} -gt 1 ] && ! _health_mysql_repairable ; then
+        return 0
+    fi
+
     # mariadb.service is SendSIGKILL=no, so a hung stop wedges the unit: try restart,
     # else force-clear the wedge (kill + reset-failed) and start.
     cmd -cor "timeout $SRVTO systemctl restart mariadb || { systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; systemctl start mariadb ; }"
