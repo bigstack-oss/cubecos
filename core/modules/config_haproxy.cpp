@@ -57,7 +57,8 @@ PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
 
 static bool
-WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
+WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
+                 const std::string& ctrlAddrs)
 {
     FILE *fout = fopen(CONF, "w");
     if (!fout) {
@@ -134,7 +135,22 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId)
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
     fprintf(fout, "  option http-server-close\n");
-    fprintf(fout, "  server localhost 127.0.0.1:9091 check\n");
+    if (ha) {
+        // In HA the /prometheus route goes to the thanos queriers, not to one node's
+        // Prometheus. Each querier fans out to every control node's sidecar and
+        // deduplicates by replica, so the answer no longer depends on which node holds
+        // the VIP -- and a node that was down and came back stops serving its own gap.
+        // All three are listed so losing a querier fails over rather than blanking the
+        // route. Thanos keeps /-/ready at the root even though it serves the UI and API
+        // under /prometheus, so that is what is checked.
+        fprintf(fout, "  option  httpchk GET /-/ready\n");
+        auto group = hex_string_util::split(ctrlAddrs, ',');
+        for (size_t i = 0 ; i < group.size() ; i++)
+            fprintf(fout, "  server thanos-query-%lu %s:10904 check\n", i, group[i].c_str());
+    }
+    else {
+        fprintf(fout, "  server localhost 127.0.0.1:9091 check\n");
+    }
     fprintf(fout, "  \n");
 
     fprintf(fout, "backend ceph_dashboard_backend\n");
@@ -495,7 +511,7 @@ Commit(bool modified, int dryLevel)
     std::string sharedId = G(SHARED_ID);
     std::string strfAddrs = HexUtilPOpen(HEX_SDK " cube_control_strf_addrs");
 
-    WriteLocalConfig(s_ha, myip, sharedId);
+    WriteLocalConfig(s_ha, myip, sharedId, s_ctrlAddrs.newValue());
     WriteConfig(s_ha, s_ctrlVip.newValue(), s_ctrlHosts.newValue(), s_ctrlAddrs.newValue(), strfAddrs);
     SystemdCommitService(enabled, NAME);
     SystemdCommitService(enabled, NAME_HA);
