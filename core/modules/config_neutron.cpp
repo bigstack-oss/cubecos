@@ -1100,7 +1100,33 @@ CONFIG_OBSERVES(neutron, keystone, ParseKeystone, NotifyKeystone);
 CONFIG_TRIGGER_WITH_SETTINGS(neutron, "set_ready_reconcile", SetReadyReconcileMain);
 
 CONFIG_MIGRATE(neutron, "/etc/openvswitch/");
-CONFIG_MIGRATE(neutron, "/var/lib/ovn");
+
+// The OVN databases live here, on the A/B root partition, so without this an
+// upgraded node boots with an empty northbound. That is normally survivable --
+// ovsdb-server comes back as a backup and syncs the whole DB from the promoted
+// master -- but rolling_update rolls the master FIRST, so the node that owns the
+// only live copy is the one that reboots into the empty one. Pacemaker then
+// re-promotes it and the backups sync the *empty* DB from it, destroying the last
+// good copy cluster-wide. Carrying /etc/ovn across means the re-promoted master
+// serves what it had seconds before its reboot instead of nothing.
+//
+// This is belt to migrate_neutron_ovn_sync()'s braces, not a replacement for it:
+// the northbound is derived state and neutron's MySQL is the source of truth, so
+// the sync still reconciles whatever drifted while the node was down. It is worth
+// having anyway because it removes the single point of total loss -- with only the
+// sync, one failed sync leaves the cluster with no OVN data anywhere.
+//
+// Safe across an OVN version bump: ovn-ctl's upgrade_db converts the schema in
+// place (NB 7.0.0 -> 7.3.0 and SB 20.27.0 -> 20.33.0 were verified byte-identical
+// in ovn-nbctl/ovn-sbctl show), and on a failed convert it creates an empty
+// database -- i.e. degrades to exactly the behaviour we have without this line.
+//
+// (Replaces a stale "/var/lib/ovn" entry. Neither ovn23.03 nor ovn24.03 owns
+// anything under that path and 3.1.10 nodes have no such directory at all, so it
+// was carrying nothing live -- only unowned leftovers from an older layout, hauled
+// partition to partition. Verified on cube4510: rpm -qf on the files there reports
+// "not owned by any package".)
+CONFIG_MIGRATE(neutron, "/etc/ovn");
 
 CONFIG_TRIGGER_WITH_SETTINGS(neutron, "cluster_start", ClusterStartMain);
 
