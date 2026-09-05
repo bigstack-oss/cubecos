@@ -43,7 +43,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7430,6 +7436,167 @@
+@@ -7430,6 +7436,161 @@
              for resource in vpmem_resources]
          return vpmems
  
@@ -128,11 +128,8 @@
 +        except Exception as ex:
 +            raise exception.LiveResizeError(reason=_(
 +                "could not grow the root image: %s") % ex)
-+        # libvirt identifies the disk by its target dev, not by Image.path --
-+        # which for rbd is a connection string ("rbd:pool/name:conf=...") that
-+        # blockResize rejects. Match the domain's disk the same way the image
-+        # backend built it: Rbd.libvirt_info sets source_name to pool/rbd_name,
-+        # file backends set source_path to Image.path.
++        # blockResize wants the target dev. Image.path is an rbd connection
++        # string it rejects, so match the disk the way the backend built it.
 +        names = {image.path}
 +        rbd_name = getattr(image, "rbd_name", None)
 +        if rbd_name:
@@ -193,11 +190,8 @@
 +                                  instance=instance)
 +                    raise exception.LiveResizePartial(reason=str(ex))
 +                raise exception.LiveResizeError(reason=str(ex))
-+        # Disk last: growing is irreversible while the hotplugs roll back, and
-+        # _lr_revert_allocations restores the old flavor wholesale. Growing
-+        # first would leave a disk bigger than DISK_GB claims after a refused
-+        # hotplug -- the common failure. check_live_resize has already refused
-+        # up front when the backend cannot grow at all.
++        # Last: growing is irreversible while the hotplugs roll back, and the
++        # allocation revert restores the old flavor wholesale. See PR #1429.
 +        if new_flavor.root_gb > old.root_gb and instance.image_ref:
 +            self._live_grow_root(guest, instance, new_flavor)
 +        LOG.info("live-resize applied: %(ov)d->%(nv)d vCPU, "
@@ -211,7 +205,7 @@
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
-@@ -7598,7 +7765,7 @@
+@@ -7598,7 +7759,7 @@
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])
