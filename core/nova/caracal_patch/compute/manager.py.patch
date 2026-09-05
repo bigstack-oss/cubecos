@@ -1,6 +1,6 @@
 --- compute/manager.py
 +++ compute/manager.py
-@@ -69,6 +69,7 @@ from nova.compute import utils as comput
+@@ -69,6 +69,7 @@
  from nova.compute.utils import wrap_instance_event
  from nova.compute import vm_states
  from nova import conductor
@@ -8,7 +8,7 @@
  import nova.conf
  import nova.context
  from nova import exception
-@@ -1299,6 +1300,17 @@ class ComputeManager(manager.Manager):
+@@ -1299,6 +1300,17 @@
              # host. Abort ongoing migration if still running and reset state.
              self._reset_live_migration(context, instance)
  
@@ -26,14 +26,18 @@
          db_state = instance.power_state
          drv_state = self._get_power_state(instance)
          expect_running = (db_state == power_state.RUNNING and
-@@ -9058,6 +9070,73 @@ class ComputeManager(manager.Manager):
+@@ -9058,6 +9070,77 @@
                  self._set_instance_obj_error_state(instance,
                                                     clean_task_state=True)
  
 +    def _lr_revert_allocations(self, context, instance):
 +        try:
++            # DISK_GB comes back too when we claimed it. The disk grow runs
++            # last, so a revert means it never happened.
++            root_gb = instance.flavor.root_gb if instance.image_ref else None
 +            clr.set_allocations(self.reportclient, context,
-+                                instance.uuid, instance.flavor)
++                                instance.uuid, instance.flavor,
++                                root_gb=root_gb)
 +        except Exception:
 +            LOG.exception("live-resize: failed to revert allocations",
 +                          instance=instance)
