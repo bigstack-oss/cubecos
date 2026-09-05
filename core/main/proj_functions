@@ -477,7 +477,11 @@ cube_remote_cluster_check()
     for N in $(cubectl node list -r control -j | jq -r .[].hostname) ; do
         if remote_run $N "$HEX_SDK is_moderator_node" ; then
             continue
-        elif [ "x$(remote_run $N "$HEX_SDK hostname")" = "x$N" ] ; then
+        # plain hostname, not $HEX_SDK hostname: there is no hostname() in the sdk, so
+        # that form printed 1000+ lines of hex_sdk usage into the substitution and the
+        # comparison could never match -- this branch was dead, and with it the whole
+        # moderator/edge path that hands the cluster check to a real control node.
+        elif [ "x$(remote_run $N "hostname")" = "x$N" ] ; then
             remote_run $N "$HEX_CLI -c cluster check"
             break
         fi
