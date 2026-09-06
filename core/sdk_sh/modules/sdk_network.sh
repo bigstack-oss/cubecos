@@ -378,3 +378,135 @@ airgap_sim_clear()
     iptables -F CUBE_AIRGAP 2>/dev/null
     iptables -X CUBE_AIRGAP 2>/dev/null
 }
+
+# Bond aggregator health, 802.3ad only.
+#
+# The failure this exists for: cc1 on accept-3cc sat unreachable for 14 hours with
+# every conventional signal healthy -- both slaves UP/LOWER_UP at 1000Mbps, MII
+# Status up, the provider bridge holding the management IP, OVS forwarding with a
+# NORMAL flow and 493M packets counted. What was actually wrong was one bit: the
+# active aggregator's actor port state had lost Synchronization, so no slave was
+# collecting or distributing, and ARP failed to every peer including the gateway
+# in both directions. Nothing in the health SDK could see that -- health_link_check
+# only pings, which cannot tell "the peer is down" from "my own bond is wedged".
+#
+# Do NOT use Actor Churn State for this. It reads "churned" on perfectly healthy
+# nodes here, because the peer never answers LACPDUs and the bond runs permanently
+# defaulted; measured identical on all three nodes while two served traffic and one
+# black-holed. The active aggregator's Synchronization bit is what separates them.
+_network_bond_list()
+{
+    cat /sys/class/net/bonding_masters 2>/dev/null
+}
+
+# 0 = this bond's active aggregator has a synchronized slave, 1 = it does not.
+# A missing bond, or one that is not 802.3ad, is reported healthy: there is no
+# aggregator that could be out of sync.
+_network_bond_synced()
+{
+    local bond=$1 f=/proc/net/bonding/$bond
+    [ -r "$f" ] || return 0
+    grep -q "Bonding Mode: IEEE 802.3ad" "$f" || return 0
+
+    awk '
+        # the active aggregator id is indented under its own header; the per-slave
+        # one starts at column 0, which is how the two are told apart
+        /Active Aggregator Info:/ { inhdr = 1 ; next }
+        inhdr && /Aggregator ID:/ { active = $3 ; inhdr = 0 ; next }
+        /^Slave Interface:/       { agg = "" ; actor = 0 ; next }
+        /^Aggregator ID:/         { agg = $3 ; next }
+        /details actor lacp pdu:/ { actor = 1 ; next }
+        actor && /port state:/ {
+            # Synchronization is bit 3 (0x08) of the actor port state:
+            # 79 has it, 71 does not
+            if (agg == active && int($3) % 16 >= 8) synced = 1
+            actor = 0
+        }
+        END { exit(synced ? 0 : 1) }
+    ' "$f"
+}
+
+# Ground truth, used as a second opinion before bouncing anything: a bond whose
+# aggregator looks odd but is still carrying traffic must be left alone.
+_network_bond_reachable()
+{
+    local gw peer
+    gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
+    [ -n "$gw" ] && ping -c 1 -W 2 "$gw" >/dev/null 2>&1 && return 0
+    for peer in "${CUBE_NODE_LIST_IPS[@]}" ; do
+        [ "x$peer" = "x$(hostname -i 2>/dev/null | awk '{print $1}')" ] && continue
+        ping -c 1 -W 2 "$peer" >/dev/null 2>&1 && return 0
+    done
+    return 1
+}
+
+# 0 = every bond on this node is healthy, 1 = at least one is not. Prints a line
+# per bond, so it doubles as the operator-facing diagnostic:
+#   hex_sdk network_bond_check
+network_bond_check()
+{
+    local bond rc=0
+    for bond in $(_network_bond_list) ; do
+        if _network_bond_synced "$bond" ; then
+            echo "$bond synced"
+        else
+            echo "$bond NOT synced (active aggregator has no synchronized slave)"
+            rc=1
+        fi
+    done
+    return $rc
+}
+
+# Bounce the slaves one at a time to force LACP renegotiation, stopping as soon as
+# the aggregator synchronizes. Safe by construction: it only ever runs on a bond
+# that is already carrying nothing.
+network_bond_repair()
+{
+    local bond slaves s
+    for bond in $(_network_bond_list) ; do
+        _network_bond_synced "$bond" && continue
+        slaves=$(cat /sys/class/net/$bond/bonding/slaves 2>/dev/null)
+        log_error "network_bond_repair: $bond active aggregator has no synchronized slave, bouncing [$slaves] to force LACP renegotiation"
+        for s in $slaves ; do
+            ip link set "$s" down 2>/dev/null
+            sleep 3
+            ip link set "$s" up 2>/dev/null
+            sleep 12
+            if _network_bond_synced "$bond" ; then
+                log_info "network_bond_repair: $bond synchronized after bouncing $s"
+                break
+            fi
+        done
+        _network_bond_synced "$bond" || log_error "network_bond_repair: $bond still not synchronized after bouncing every slave"
+    done
+}
+
+# cron entry point. Deliberately not wired into the health SDK: every repair path
+# there is driven from a *reachable* node over ssh, and a node whose bond has lost
+# sync is by definition not reachable -- it has to fix itself, locally, with no
+# dependency on the telemetry or cluster stack.
+network_bond_watchdog()
+{
+    local now stamp=/run/network_bond_watchdog.last
+
+    # one decision path shared with the operator command, rather than a second
+    # copy of the loop that can drift from it
+    network_bond_check >/dev/null 2>&1 && return 0
+
+    # still passing traffic? then the aggregator reading is not worth acting on
+    _network_bond_reachable && return 0
+
+    # Rate limit. A bounce takes ~15s per slave and briefly drops the link, so a
+    # fault this cannot fix must not turn into a permanent flap.
+    now=$(date +%s)
+    if [ -r $stamp ] && [ $(( now - $(cat $stamp 2>/dev/null || echo 0) )) -lt ${BOND_WATCHDOG_HOLDOFF:-900} ] ; then
+        return 0
+    fi
+    echo "$now" > $stamp
+
+    /usr/sbin/hex_log_event -e ETH00003W "interface=host,host=$HOSTNAME,category=network,service=bonding,action=aggregator_desynchronized"
+    network_bond_repair
+    if network_bond_check >/dev/null 2>&1 ; then
+        /usr/sbin/hex_log_event -e ETH00004I "interface=host,host=$HOSTNAME,category=network,service=bonding,action=aggregator_resynchronized"
+    fi
+}

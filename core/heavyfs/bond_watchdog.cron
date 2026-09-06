@@ -1,0 +1,18 @@
+# Recover a bond whose 802.3ad aggregator has lost synchronization.
+#
+# On accept-3cc a control node sat unreachable for 14 hours in exactly this state:
+# both slaves UP/LOWER_UP at 1000Mbps with MII Status up, the provider bridge
+# holding the management IP, OVS forwarding normally -- but the active aggregator's
+# actor port state had lost the Synchronization bit, so no slave was collecting or
+# distributing and ARP failed to every peer in both directions.
+#
+# This runs from cron rather than the health SDK on purpose. Every repair path in
+# sdk_health.sh is driven from a *reachable* node over ssh, and a node whose bond
+# has lost sync is by definition unreachable -- it can only be fixed locally, by
+# itself. Cron rather than a telegraf exec input for the same reason: the telemetry
+# stack's outputs are all failing precisely when this is needed.
+#
+# network_bond_watchdog is cheap when healthy (one read of /proc/net/bonding), only
+# pings when an aggregator already looks wrong, and holds off 900s between repairs
+# so a fault it cannot fix does not become a flap.
+*/2 * * * * root /usr/sbin/hex_sdk network_bond_watchdog >/dev/null 2>&1
