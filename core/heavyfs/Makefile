@@ -393,6 +393,13 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/systemd/system/logrotate.timer.d
 	$(Q)cp -f $(TOP_SRCDIR)/core/heavyfs/logrotate-hourly.conf $(ROOTDIR)/etc/systemd/system/logrotate.timer.d/
 
+# Bond aggregator watchdog. Installed with no extension: cron.d ignores files
+# whose names contain a dot.
+rootfs_install::
+	$(Q)mkdir -p $(ROOTDIR)/etc/cron.d
+	$(Q)cp -f $(TOP_SRCDIR)/core/heavyfs/bond_watchdog.cron $(ROOTDIR)/etc/cron.d/bond_watchdog
+	$(Q)chmod 0644 $(ROOTDIR)/etc/cron.d/bond_watchdog
+
 # Disable USB storage drivers
 rootfs_install::
 	$(Q)echo "blacklist uas" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
