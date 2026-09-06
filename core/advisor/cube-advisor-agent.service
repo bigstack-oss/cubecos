@@ -19,5 +19,11 @@ ExecStart=/usr/local/bin/cube-advisor-agent run
 Restart=on-failure
 RestartSec=5s
 
+# Cap what one runaway loop can write. A misclassified transport error once
+# spun this accept loop and filled a node's root filesystem; journald's global
+# limits are shared, so bound this unit's own rate too.
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=1000
+
 [Install]
 WantedBy=multi-user.target
