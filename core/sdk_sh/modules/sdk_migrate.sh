@@ -159,6 +159,50 @@ migrate_cinder_db()
     fi
 }
 
+migrate_cinder_ext_storage_unsupported()
+{
+    local f
+
+    if [ -f $STATE_DIR/cinder_ext_storage_unsupported_migrated ] ; then
+        return 0
+    fi
+
+    if ! is_control_node ; then
+        touch $STATE_DIR/cinder_ext_storage_unsupported_migrated
+        return 0
+    fi
+
+    # Caracal ships the Dell Storage Center drivers with SUPPORTED = False, so
+    # cinder-volume refuses to initialize the backend unless the operator opts in
+    # with enable_unsupported_driver. The built-in model carries that opt-in now,
+    # but a model only reaches backends created or re-applied after the upgrade.
+    # /etc/cinder/backends is CONFIG_MIGRATE'd (config_cinder.cpp), so an upgraded
+    # cluster carries its pre-Caracal backend config forward verbatim and the
+    # driver stays dead -- every attach failing with
+    #   'SCFCDriver' object has no attribute '_client'
+    # and with it the live migration a rolling upgrade drains each node with.
+    #
+    # Only /etc/cinder/backends is rewritten, because that is the source of truth
+    # and the only copy that lasts: config_cinder calls this from
+    # SetStorageBackend(), immediately before it wipes cinder.d/ext_storage_*.conf
+    # and re-copies them from here. Writing cinder.d as well would be undone by
+    # that copy seconds later.
+    #
+    # Insert after volume_driver rather than appending: these files hold one
+    # section each today, but appending would land outside the section the day one
+    # does not. iSCSI is matched as well -- same upstream flag, same failure --
+    # even though only the FC model ships built in.
+    for f in /etc/cinder/backends/ext_storage_*.conf ; do
+        [ -f "$f" ] || continue
+        grep -qE "^volume_driver[[:space:]]*=.*storagecenter_(fc|iscsi)\." "$f" || continue
+        grep -qE "^enable_unsupported_driver" "$f" && continue
+        sed -i "/^volume_driver[[:space:]]*=.*storagecenter_/a enable_unsupported_driver = True" "$f"
+        log_info "migrate_cinder_ext_storage_unsupported: opted $f into the unsupported SC driver"
+    done
+
+    touch $STATE_DIR/cinder_ext_storage_unsupported_migrated
+}
+
 migrate_glance_db()
 {
     if [ -f $STATE_DIR/glance_db_migrated ] ; then
@@ -203,33 +247,47 @@ migrate_neutron_db()
         # upgrade to 2.2.0
         su -s /bin/sh -c "neutron-db-manage --subproject neutron-vpnaas upgrade heads" neutron
 
-        # Yoga <-> Antelope compatibility shim for the mixed-version window.
+        # Antelope <-> Caracal compatibility shim for the mixed-version window.
         #
-        # zed/expand/I43e0b669096_port_forwarding_port_ranges.py replaces
-        # portforwardings.external_port and .socket with start/end range columns.
-        # Upstream put it in the *expand* branch, so there is no phased form of
-        # this migration that leaves the old columns standing: the moment the
-        # first node migrates the shared schema, every still-Yoga neutron-server
-        # on the other control nodes answers 500 to any port query with
-        #   (1054, "Unknown column 'portforwardings.external_port' in 'SELECT'")
-        # That is not confined to port forwarding -- the port_forwarding service
-        # plugin's callback fires on every port create and update, so it takes
-        # out the whole port API on 2 of 3 servers behind the VIP, and with it
-        # the live migration that rolling_upgrade drains each node with.
+        # Exactly one such shim is carried at a time. The supported upgrade path
+        # is stepwise -- 3.1.0 (Yoga) -> 3.1.10 (Antelope) -> 3.1.20 (Caracal),
+        # no jumping -- so a Caracal build can never meet a Yoga neutron-server,
+        # and the Yoga <-> Antelope portforwardings shim that used to live here
+        # was dead code the moment this build stopped shipping Antelope.
+        #
+        # 2023.2/expand/93f394357a27_remove_in_use_on_subnets.py drops
+        # subnets.in_use. Upstream put it in the *expand* branch -- it declares an
+        # expand_drop_exceptions() to opt out of the no-drops-in-expand rule -- so
+        # there is no phased form of this migration that leaves the column
+        # standing: the moment the first node migrates the shared schema, every
+        # still-Antelope neutron-server on the other control nodes answers 500 to
+        # any subnet query with
+        #   (1054, "Unknown column 'subnets.in_use' in 'SELECT'")
+        # Antelope's models_v2.HasInUse declares in_use as a real column and
+        # Subnet mixes it in, so this is not confined to one call: it takes out
+        # the subnet API on 2 of 3 servers behind the VIP, and with it the live
+        # migration that rolling_upgrade drains each node with. Observed on
+        # cube4510 2026-09-05 -- 0 of 13 VMs could be evacuated off cube452.
         #
         # Deferring the migration instead does not help; it only inverts which
         # servers are broken, and worse, the healthy pool then shrinks as the
-        # roll proceeds instead of growing. Since only the column *shape*
-        # changed, re-add the two dropped columns as generated columns so the
-        # migrated schema answers both dialects. They are additive and derived,
-        # and invisible to Antelope's ORM, which names its columns explicitly.
-        # Yoga can read port forwardings through them but not create one --
-        # generated columns reject writes -- which is the accepted trade for
-        # keeping the port API and the drain alive during the window.
+        # roll proceeds instead of growing. Caracal stopped using the column at
+        # all (it takes the row lock with SELECT ... FOR UPDATE and keeps the
+        # attribute only so back-ports need no schema change), so it is enough
+        # that the value reads false: re-add it as a generated column and the
+        # migrated schema answers both dialects. It is additive and derived, and
+        # invisible to Caracal's ORM, which names its columns explicitly. The
+        # expression is written against id rather than a bare literal so that it
+        # is unambiguously non-constant, which the generated-column parser wants.
         #
-        # migrate_neutron_db_post() drops them once no Yoga server is left.
-        if [ "$($MYSQL -N -u root -D neutron -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'neutron' AND TABLE_NAME = 'portforwardings' AND COLUMN_NAME IN ('external_port', 'socket')")" = "0" ] ; then
-            $MYSQL -u root -D neutron -e "ALTER TABLE portforwardings ADD COLUMN external_port int(11) GENERATED ALWAYS AS (external_port_start) VIRTUAL, ADD COLUMN socket varchar(36) GENERATED ALWAYS AS (concat(internal_ip_address, ':', internal_port_start)) VIRTUAL"
+        # Antelope then reads the flag as "not in use", so read/write_lock_register
+        # stop guarding concurrent subnet deletes for the length of the window --
+        # the accepted trade for keeping the subnet API and the drain alive, and
+        # the same one the retired Yoga shim made for port forwardings.
+        #
+        # migrate_neutron_db_post() drops it once no Antelope server is left.
+        if [ "$($MYSQL -N -u root -D neutron -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'neutron' AND TABLE_NAME = 'subnets' AND COLUMN_NAME = 'in_use'")" = "0" ] ; then
+            $MYSQL -u root -D neutron -e "ALTER TABLE subnets ADD COLUMN in_use tinyint(1) GENERATED ALWAYS AS (id IS NULL) VIRTUAL"
         fi
     fi
 
@@ -248,25 +306,74 @@ migrate_neutron_db_post()
     fi
 
     # Drop the mixed-window compatibility shim migrate_neutron_db() added, but
-    # only once every control node runs Antelope's neutron-server. An unreachable
+    # only once every control node runs Caracal's neutron-server. An unreachable
     # node counts as unknown and holds the shim, so a half-finished roll never
-    # loses the columns out from under a Yoga server; carrying two generated
-    # columns for one more cluster_start costs nothing.
+    # loses the column out from under an Antelope server; carrying one generated
+    # column for one more cluster_start costs nothing.
     $HEX_SDK os_neutron_version_uniform || return 0
 
-    $MYSQL -u root -D neutron -e "ALTER TABLE portforwardings DROP COLUMN IF EXISTS external_port, DROP COLUMN IF EXISTS socket"
+    $MYSQL -u root -D neutron -e "ALTER TABLE subnets DROP COLUMN IF EXISTS in_use"
 
     touch $STATE_DIR/neutron_db_post_migrated
 }
 
 migrate_neutron_ovn_sync()
 {
+    local i=0
+
     if [ -f $STATE_DIR/neutron_ovn_migrated ] ; then
         return 0
     fi
 
-    if is_control_node ; then
-        neutron-ovn-db-sync-util --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini --ovn-neutron_sync_mode repair
+    if ! is_control_node ; then
+        touch $STATE_DIR/neutron_ovn_migrated
+        return 0
+    fi
+
+    # The OVN northbound DB lives under /etc/ovn on the A/B root partition, so an
+    # upgrade boots into an empty one: the networks exist only in neutron's MySQL
+    # until this sync rebuilds them. Until it does, the OVN mechanism driver fails
+    # every port bind with
+    #   RowNotFound: Cannot find Logical_Switch with name=neutron-<network-id>
+    # which takes out port binding, and with it the live migration that
+    # rolling_upgrade drains each node with. Diagnosed on cube4510 during the
+    # 3.1.10 -> 3.1.20 roll (2026-09-05).
+    #
+    # config_neutron calls this from CommitLast(), not Commit(): ovndb_servers is
+    # promoted by pacemaker_last, and CONFIG_REQUIRES(neutron_last, pacemaker_last)
+    # is what puts this after the promotion. Called from Commit() it ran a measured
+    # 8 minutes before the northbound was listening and silently did nothing.
+    #
+    # Everything below is bounded, because this runs inside a hex_config commit:
+    # blocking here blocks the node's whole bootstrap, and with it its slot in a
+    # rolling upgrade.
+    #
+    # - The probe is a safety net for a slow promotion, not the mechanism -- the
+    #   ordering above is. Worst case 24 * (5s connect + 5s sleep) = 4 minutes,
+    #   then give up and leave it for the next boot. Probe the VIP the way
+    #   neutron's ovn_nb_connection does rather than a local socket, since the
+    #   promoted node may be another one.
+    # - The sync itself gets a hard timeout. It takes seconds in practice; 600s is
+    #   the ceiling that keeps a wedged sync from eating the roll's node deadline.
+    # - Only mark the migration done when the sync actually succeeded. Marking it
+    #   unconditionally turned one early failure into a permanent skip: the marker
+    #   lives under /etc/appliance/state, which is CONFIG_MIGRATE'd, so it rode
+    #   onto the next partition and no later boot ever retried. Returning without
+    #   the marker leaves it to the next boot / cluster_start instead.
+    local nb="tcp:$($HEX_SDK shared_id):6641"
+    while [ $i -lt 24 ] ; do
+        ovn-nbctl --db="$nb" --timeout=5 show >/dev/null 2>&1 && break
+        sleep 5
+        i=$((i + 1))
+    done
+    if [ $i -ge 24 ] ; then
+        log_warning "migrate_neutron_ovn_sync: OVN northbound $nb not reachable; leaving the sync for the next boot"
+        return 0
+    fi
+
+    if ! timeout 600 neutron-ovn-db-sync-util --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini --ovn-neutron_sync_mode repair ; then
+        log_warning "migrate_neutron_ovn_sync: sync failed or timed out; leaving it for the next boot"
+        return 0
     fi
 
     touch $STATE_DIR/neutron_ovn_migrated

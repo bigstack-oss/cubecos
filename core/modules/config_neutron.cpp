@@ -911,8 +911,11 @@ Commit(bool modified, int dryLevel)
     OvnService(s_enabled, isMaster, forceRun, s_ha);
     SetupOvn(s_hostname, overlayAddr, ovnSbRemote, provider, s_providerExtra);
 
-    // sync for neutron ovn db
-    HexUtilSystemF(0, 0, HEX_SDK " migrate_neutron_ovn_sync");
+    // The OVN northbound sync used to run here. It cannot: this module commits
+    // well before pacemaker_last promotes ovndb_servers, so the northbound DB is
+    // not listening yet and the sync silently does nothing. It now runs from
+    // CommitLast(), which CONFIG_REQUIRES(neutron_last, pacemaker_last) orders
+    // after the promotion.
 
     NeutronService(s_enabled);
     WriteLogRotateConf(ovn_log_conf);
@@ -943,6 +946,19 @@ CommitLast(bool modified, int dryLevel)
     if (enabled && isHaMaster) {
         SystemdCommitService(enabled, SRV_NAME, false);
     }
+
+    // Sync the OVN northbound DB from neutron's. It has to happen here rather
+    // than in Commit(): /etc/ovn lives on the A/B root partition, so an upgraded
+    // node boots with an empty northbound and every port bind fails until this
+    // rebuilds it -- but ovndb_servers is only promoted by pacemaker_last, which
+    // CONFIG_REQUIRES orders before this module.
+    //
+    // Bounded on purpose. A hung sync here would block the whole commit, and
+    // with it the node's slot in a rolling upgrade: HexUtilSystemF's timeout
+    // argument arms alarm(), and passing 0 (as this call used to) means no alarm
+    // at all. 900s is far above the seconds a real sync takes and still well
+    // inside the roll's per-node deadline.
+    HexUtilSystemF(0, 900, HEX_SDK " migrate_neutron_ovn_sync");
 
     if (access(SFLOW_ENABLED, F_OK) == 0) {
         std::string mgmtIf = G(MGMT_IF);
@@ -1084,7 +1100,33 @@ CONFIG_OBSERVES(neutron, keystone, ParseKeystone, NotifyKeystone);
 CONFIG_TRIGGER_WITH_SETTINGS(neutron, "set_ready_reconcile", SetReadyReconcileMain);
 
 CONFIG_MIGRATE(neutron, "/etc/openvswitch/");
-CONFIG_MIGRATE(neutron, "/var/lib/ovn");
+
+// The OVN databases live here, on the A/B root partition, so without this an
+// upgraded node boots with an empty northbound. That is normally survivable --
+// ovsdb-server comes back as a backup and syncs the whole DB from the promoted
+// master -- but rolling_update rolls the master FIRST, so the node that owns the
+// only live copy is the one that reboots into the empty one. Pacemaker then
+// re-promotes it and the backups sync the *empty* DB from it, destroying the last
+// good copy cluster-wide. Carrying /etc/ovn across means the re-promoted master
+// serves what it had seconds before its reboot instead of nothing.
+//
+// This is belt to migrate_neutron_ovn_sync()'s braces, not a replacement for it:
+// the northbound is derived state and neutron's MySQL is the source of truth, so
+// the sync still reconciles whatever drifted while the node was down. It is worth
+// having anyway because it removes the single point of total loss -- with only the
+// sync, one failed sync leaves the cluster with no OVN data anywhere.
+//
+// Safe across an OVN version bump: ovn-ctl's upgrade_db converts the schema in
+// place (NB 7.0.0 -> 7.3.0 and SB 20.27.0 -> 20.33.0 were verified byte-identical
+// in ovn-nbctl/ovn-sbctl show), and on a failed convert it creates an empty
+// database -- i.e. degrades to exactly the behaviour we have without this line.
+//
+// (Replaces a stale "/var/lib/ovn" entry. Neither ovn23.03 nor ovn24.03 owns
+// anything under that path and 3.1.10 nodes have no such directory at all, so it
+// was carrying nothing live -- only unowned leftovers from an older layout, hauled
+// partition to partition. Verified on cube4510: rpm -qf on the files there reports
+// "not owned by any package".)
+CONFIG_MIGRATE(neutron, "/etc/ovn");
 
 CONFIG_TRIGGER_WITH_SETTINGS(neutron, "cluster_start", ClusterStartMain);
 

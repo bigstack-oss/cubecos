@@ -1,0 +1,21 @@
+# -*- mode: conf -*-
+# Serves the local Prometheus's TSDB over the Thanos Store API so a querier can read it.
+# Runs as prometheus: no new system user, and --tsdb.path already points at that user's
+# data directory, which is what an object-storage upload would need if one is ever added.
+
+[Unit]
+Description=Thanos sidecar for the local Prometheus
+Documentation=https://thanos.io/tip/components/sidecar.md/
+Wants=network-online.target
+After=network-online.target prometheus.service
+
+[Service]
+EnvironmentFile=/etc/default/thanos-sidecar
+User=prometheus
+ExecStart=/usr/bin/thanos sidecar $ARGS
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

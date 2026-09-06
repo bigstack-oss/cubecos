@@ -333,6 +333,19 @@ eval "ERR_DESC_$SRV[1]='daemon down'"
 eval "ERR_DESC_$SRV[2]='port not responding'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
+SRV="prometheus"
+eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='port not responding'"
+eval "ERR_DESC_$SRV[3]='no scrape target up'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
+SRV="thanos"
+eval "ERR_DESC_$SRV[1]='sidecar down'"
+eval "ERR_DESC_$SRV[2]='querier down'"
+eval "ERR_DESC_$SRV[3]='querier not responding'"
+eval "ERR_DESC_$SRV[4]='querier missing a replica'"
+eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
+
 SRV="grafana"
 eval "ERR_DESC_$SRV[1]='daemon down'"
 eval "ERR_DESC_$SRV[2]='port not responding'"

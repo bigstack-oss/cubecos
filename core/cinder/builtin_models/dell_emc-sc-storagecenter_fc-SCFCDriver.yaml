@@ -42,6 +42,13 @@ storage:
         value: "true"
       - key: "image_upload_use_cinder_backend"
         value: "true"
+      # Caracal ships SCFCDriver with SUPPORTED = False, so cinder-volume refuses
+      # to load the backend unless the operator opts in. We keep supporting the SC
+      # Series, so the opt-in ships with the model. Without it the backend never
+      # initializes and every attach fails with
+      #   'SCFCDriver' object has no attribute '_client'
+      - key: "enable_unsupported_driver"
+        value: "True"
     extraSettings: []
     extraConfigFiles: []
   volumeType:
