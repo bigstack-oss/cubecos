@@ -21,5 +21,13 @@ rootfs_install:: $(ARCS_DIR)/$(THANOS_TGZ)
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/thanos
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/thanos/thanos-sidecar.service ./lib/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/thanos/thanos-query.service ./lib/systemd/system
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/thanos/thanos-store.service ./lib/systemd/system
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/thanos/thanos-compact.service ./lib/systemd/system
+	$(Q)chroot $(ROOTDIR) mkdir -p /var/lib/thanos/store /var/lib/thanos/compact
+	$(Q)chroot $(ROOTDIR) chown -R prometheus:prometheus /var/lib/thanos
 	$(Q)chroot $(ROOTDIR) systemctl disable thanos-sidecar
 	$(Q)chroot $(ROOTDIR) systemctl disable thanos-query
+	$(Q)chroot $(ROOTDIR) systemctl disable thanos-store
+	# thanos-compact is pacemaker-managed and must never be enabled in systemd:
+	# two compactors on one bucket corrupt it. See thanos-compact.service.
+	$(Q)chroot $(ROOTDIR) systemctl disable thanos-compact

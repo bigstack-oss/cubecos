@@ -1,0 +1,25 @@
+# -*- mode: conf -*-
+# Serves blocks that the sidecar has uploaded to object storage back to the querier.
+# Without it the querier can only see what each Prometheus still holds locally, so
+# anything past the local retention window would be unreachable even though it is
+# safely in S3.
+#
+# Runs as prometheus for the same reason the sidecar does: no new system user, and it
+# needs to read the same objstore credentials file.
+
+[Unit]
+Description=Thanos store gateway over the metrics object store
+Documentation=https://thanos.io/tip/components/store.md/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/thanos-store
+User=prometheus
+ExecStart=/usr/bin/thanos store $ARGS
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

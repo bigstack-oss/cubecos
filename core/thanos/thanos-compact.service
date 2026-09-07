@@ -1,0 +1,28 @@
+# -*- mode: conf -*-
+# Downsamples blocks in object storage and enforces retention there.
+#
+# This unit is NOT enabled. Two compactors running against one bucket corrupt it, so
+# placement belongs to pacemaker, which runs exactly one instance cluster-wide -- the
+# same arrangement as cinder-volume. systemd must never start it on its own, or every
+# control node would run one.
+#
+# config_pacemaker masks it before pacemaker comes up and config_prometheus unmasks it
+# once the configuration exists, so pacemaker cannot start it against a half-written
+# config during the same commit pass.
+
+[Unit]
+Description=Thanos compactor for the metrics object store
+Documentation=https://thanos.io/tip/components/compact.md/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/thanos-compact
+User=prometheus
+ExecStart=/usr/bin/thanos compact $ARGS
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
