@@ -57,6 +57,16 @@ datasources:
 - name: Dashboard1
   type: prometheus
   access: proxy
+  # Pinned rather than left to Grafana. Grafana derives a uid from the datasource name when
+  # one is not given, which is why dashboards in this tree can hardcode uids at all -- but
+  # that derivation is not a documented contract, and a dashboard that references a uid
+  # needs it to be the same on every install. This is the value Grafana was already
+  # assigning, so pinning it changes nothing on an existing cluster and stops being luck on
+  # a new one. Referencing by name instead is not an option: Grafana 12 resolves a name only
+  # through the frontend's schema migration, and /api/ds/query rejects it outright with
+  # "Data source not found" -- verified against every datasource here, including the influxdb
+  # ones the other dashboards still name.
+  uid: P43CA22E17D0F9596
   database:
   url: http://localhost/prometheus
   jsonData:

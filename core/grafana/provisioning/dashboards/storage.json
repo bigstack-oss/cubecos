@@ -890,8 +890,8 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
       "decimals": 1,
       "fieldConfig": {
@@ -941,115 +941,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "total",
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "1m"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "ceph_daemon_stats",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT mean(d) FROM (SELECT sum(\"value\") as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^osd\\.[0-9]+/ AND \"type_instance\" = 'osd.stat_bytes') AND $timeFilter GROUP BY time(1m)) GROUP BY time($interval)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "sum"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "ceph_daemon",
-              "operator": "=~",
-              "value": "/^osd\\.[0-9]+/"
-            },
-            {
-              "condition": "AND",
-              "key": "type_instance",
-              "operator": "=",
-              "value": "osd.stat_bytes"
-            }
-          ]
+          "expr": "sum(ceph_osd_stat_bytes)",
+          "legendFormat": "total",
+          "refId": "A"
         },
         {
-          "alias": "used",
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "1m"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "ceph_daemon_stats",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT mean(d) FROM (SELECT sum(\"value\") as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^osd\\.[0-9]+/ AND \"type_instance\" = 'osd.stat_bytes_used') AND $timeFilter GROUP BY time(1m)) GROUP BY time($interval)",
-          "rawQuery": true,
-          "refId": "B",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "sum"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "ceph_daemon",
-              "operator": "=~",
-              "value": "/^osd\\.[0-9]+/"
-            },
-            {
-              "condition": "AND",
-              "key": "type_instance",
-              "operator": "=",
-              "value": "osd.stat_bytes_used"
-            }
-          ]
+          "expr": "sum(ceph_osd_stat_bytes_used)",
+          "legendFormat": "used",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -1092,8 +999,8 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
       "decimals": 1,
       "fieldConfig": {
@@ -1147,126 +1054,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "write",
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "1m"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "ceph_daemon_stats",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT mean(d) FROM (SELECT non_negative_derivative(sum(\"value\"), 1s) as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^osd\\.[0-9]+$/ AND \"type_instance\" = 'osd.op_w_in_bytes') AND $timeFilter GROUP BY time(1m)) GROUP BY time($interval)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "sum"
-              },
-              {
-                "params": [
-                  "1s"
-                ],
-                "type": "non_negative_derivative"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "ceph_daemon",
-              "operator": "=~",
-              "value": "/^osd\\.[0-9]+$/"
-            },
-            {
-              "condition": "AND",
-              "key": "type_instance",
-              "operator": "=",
-              "value": "osd.op_w_in_bytes"
-            }
-          ]
+          "expr": "sum(rate(ceph_osd_op_w_in_bytes[$__rate_interval]))",
+          "legendFormat": "write",
+          "refId": "A"
         },
         {
-          "alias": "read",
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "1m"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "ceph_daemon_stats",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT mean(d) FROM (SELECT non_negative_derivative(sum(\"value\"), 1s) as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^osd\\.[0-9]+$/ AND \"type_instance\" = 'osd.op_r_out_bytes') AND $timeFilter GROUP BY time(1m)) GROUP BY time($interval)",
-          "rawQuery": true,
-          "refId": "B",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "sum"
-              },
-              {
-                "params": [
-                  "1s"
-                ],
-                "type": "non_negative_derivative"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "ceph_daemon",
-              "operator": "=~",
-              "value": "/^osd\\.[0-9]+$/"
-            },
-            {
-              "condition": "AND",
-              "key": "type_instance",
-              "operator": "=",
-              "value": "osd.op_r_out_bytes"
-            }
-          ]
+          "expr": "sum(rate(ceph_osd_op_r_out_bytes[$__rate_interval]))",
+          "legendFormat": "read",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -1309,8 +1112,8 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
       "decimals": 1,
       "fieldConfig": {
@@ -1364,126 +1167,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "write",
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "1m"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "ceph_daemon_stats",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT mean(d) FROM (SELECT non_negative_derivative(sum(\"value\"), 1s) as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^osd\\.[0-9]+$/ AND \"type_instance\" = 'osd.op_w') AND $timeFilter GROUP BY time(1m)) GROUP BY time($interval)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "sum"
-              },
-              {
-                "params": [
-                  "1s"
-                ],
-                "type": "non_negative_derivative"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "ceph_daemon",
-              "operator": "=~",
-              "value": "/^osd\\.[0-9]+$/"
-            },
-            {
-              "condition": "AND",
-              "key": "type_instance",
-              "operator": "=",
-              "value": "osd.op_r"
-            }
-          ]
+          "expr": "sum(rate(ceph_osd_op_w[$__rate_interval]))",
+          "legendFormat": "write",
+          "refId": "A"
         },
         {
-          "alias": "read",
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "1m"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "ceph_daemon_stats",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT mean(d) FROM (SELECT non_negative_derivative(sum(\"value\"), 1s) as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^osd\\.[0-9]+$/ AND \"type_instance\" = 'osd.op_r') AND $timeFilter GROUP BY time(1m)) GROUP BY time($interval)",
-          "rawQuery": true,
-          "refId": "B",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "sum"
-              },
-              {
-                "params": [
-                  "1s"
-                ],
-                "type": "non_negative_derivative"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "ceph_daemon",
-              "operator": "=~",
-              "value": "/^osd\\.[0-9]+$/"
-            },
-            {
-              "condition": "AND",
-              "key": "type_instance",
-              "operator": "=",
-              "value": "osd.op_w"
-            }
-          ]
+          "expr": "sum(rate(ceph_osd_op_r[$__rate_interval]))",
+          "legendFormat": "read",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -1526,8 +1225,8 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
       "decimals": 1,
       "fieldConfig": {
@@ -1580,53 +1279,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "$col",
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "ceph_daemon"
-              ],
-              "type": "tag"
-            }
-          ],
-          "measurement": "ceph_daemon_stats_join",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT mean(\"w\") AS \"write\", mean(\"r\") AS \"read\" from (SELECT non_negative_difference(sum(\"latency_w.value\")) / non_negative_difference(sum(\"op_w.value\")) AS \"w\", non_negative_difference(sum(\"latency_r.value\")) / non_negative_difference(sum(\"op_r.value\")) AS \"r\" FROM \"ceph_daemon_stats_join\" WHERE $timeFilter GROUP BY time(1m)) GROUP BY time($interval)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "latency_r.value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "non_negative_difference"
-              }
-            ],
-            [
-              {
-                "params": [
-                  "op_r.value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "non_negative_difference"
-              }
-            ]
-          ],
-          "tags": []
+          "expr": "sum(rate(ceph_osd_op_w_latency_sum[$__rate_interval])) / sum(rate(ceph_osd_op_w_latency_count[$__rate_interval]))",
+          "legendFormat": "write",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "sum(rate(ceph_osd_op_r_latency_sum[$__rate_interval])) / sum(rate(ceph_osd_op_r_latency_count[$__rate_interval]))",
+          "legendFormat": "read",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -1649,7 +1317,7 @@
       },
       "yaxes": [
         {
-          "format": "ns",
+          "format": "s",
           "logBase": 1,
           "show": true
         },
@@ -1772,916 +1440,460 @@
       "type": "text"
     },
     {
-      "columns": [],
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
-      "fontSize": "100%",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 6,
         "w": 4,
         "x": 0,
         "y": 22
       },
-      "hideTimeOverride": false,
       "id": 302,
       "links": [],
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "desc": false
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Average"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Time",
-          "align": "auto",
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "pattern": "Time",
-          "type": "hidden"
-        },
-        {
-          "alias": "Average",
-          "align": "auto",
-          "colorMode": "value",
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "link": false,
-          "linkTooltip": "",
-          "linkUrl": "",
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [],
-          "type": "number",
-          "unit": "Bps"
-        },
-        {
-          "alias": "OSD",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/QTc_sAxiw/storage?&panelId=2&fullscreen&var-OSDS=${__cell}",
-          "mappingType": 1,
-          "pattern": "ceph_daemon",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "Host",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/i-R2q81iz/host?var-HOST=${__cell}",
-          "mappingType": 1,
-          "pattern": "host",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "decimals": 2,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT top(mean, \"ceph_daemon\", 5), \"host\" FROM (SELECT mean(d) FROM (SELECT non_negative_derivative(\"value\", 1s) as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^$OSDS$/ AND \"type_instance\" = 'osd.op_w_in_bytes') AND $timeFilter GROUP BY \"ceph_daemon\") GROUP BY \"ceph_daemon\", \"host\")",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": []
+          "expr": "topk(5, rate(ceph_osd_op_w_in_bytes[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
         }
       ],
       "title": "Write Bandwidth",
-      "transform": "table",
-      "type": "table-old"
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Average",
+              "ceph_daemon": "OSD"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
-      "columns": [],
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
-      "fontSize": "100%",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 6,
         "w": 4,
         "x": 4,
         "y": 22
       },
-      "hideTimeOverride": false,
       "id": 171,
       "links": [],
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "desc": false
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Average"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Time",
-          "align": "auto",
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "pattern": "Time",
-          "type": "hidden"
-        },
-        {
-          "alias": "Average",
-          "align": "auto",
-          "colorMode": "value",
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "link": false,
-          "linkTooltip": "",
-          "linkUrl": "",
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [],
-          "type": "number",
-          "unit": "Bps"
-        },
-        {
-          "alias": "OSD",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/QTc_sAxiw/storage?&panelId=2&fullscreen&var-OSDS=${__cell}",
-          "mappingType": 1,
-          "pattern": "ceph_daemon",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "Host",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/i-R2q81iz/host?var-HOST=${__cell}",
-          "mappingType": 1,
-          "pattern": "host",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "decimals": 2,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT top(mean, \"ceph_daemon\", 5), \"host\" FROM (SELECT mean(d) FROM (SELECT non_negative_derivative(\"value\", 1s) as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^$OSDS$/ AND \"type_instance\" = 'osd.op_r_out_bytes') AND $timeFilter GROUP BY \"ceph_daemon\") GROUP BY \"ceph_daemon\", \"host\")",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": []
+          "expr": "topk(5, rate(ceph_osd_op_r_out_bytes[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
         }
       ],
       "title": "Read Bandwidth",
-      "transform": "table",
-      "type": "table-old"
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Average",
+              "ceph_daemon": "OSD"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
-      "columns": [],
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
-      "fontSize": "100%",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "unit": "iops"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 6,
         "w": 4,
         "x": 8,
         "y": 22
       },
-      "hideTimeOverride": false,
       "id": 304,
       "links": [],
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "desc": false
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Average"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Time",
-          "align": "auto",
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "pattern": "Time",
-          "type": "hidden"
-        },
-        {
-          "alias": "Average",
-          "align": "auto",
-          "colorMode": "value",
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "link": false,
-          "linkTooltip": "",
-          "linkUrl": "",
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [],
-          "type": "number",
-          "unit": "ops"
-        },
-        {
-          "alias": "OSD",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/QTc_sAxiw/storage?&panelId=2&fullscreen&var-OSDS=${__cell}",
-          "mappingType": 1,
-          "pattern": "ceph_daemon",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "Host",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/i-R2q81iz/host?var-HOST=${__cell}",
-          "mappingType": 1,
-          "pattern": "host",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "decimals": 2,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT top(mean, \"ceph_daemon\", 5), \"host\" FROM (SELECT mean(d) FROM (SELECT non_negative_derivative(\"value\", 1s) as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^$OSDS$/ AND \"type_instance\" = 'osd.op_w') AND $timeFilter GROUP BY \"ceph_daemon\") GROUP BY \"ceph_daemon\", \"host\")",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": []
+          "expr": "topk(5, rate(ceph_osd_op_w[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
         }
       ],
       "title": "Write IOPS",
-      "transform": "table",
-      "type": "table-old"
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Average",
+              "ceph_daemon": "OSD"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
-      "columns": [],
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
-      "fontSize": "100%",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "unit": "iops"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 6,
         "w": 4,
         "x": 12,
         "y": 22
       },
-      "hideTimeOverride": false,
       "id": 303,
       "links": [],
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "desc": false
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Average"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Time",
-          "align": "auto",
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "pattern": "Time",
-          "type": "hidden"
-        },
-        {
-          "alias": "Average",
-          "align": "auto",
-          "colorMode": "value",
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "link": false,
-          "linkTooltip": "",
-          "linkUrl": "",
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [],
-          "type": "number",
-          "unit": "ops"
-        },
-        {
-          "alias": "OSD",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/QTc_sAxiw/storage?&panelId=2&fullscreen&var-OSDS=${__cell}",
-          "mappingType": 1,
-          "pattern": "ceph_daemon",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "Host",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/i-R2q81iz/host?var-HOST=${__cell}",
-          "mappingType": 1,
-          "pattern": "host",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "decimals": 2,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT top(mean, \"ceph_daemon\", 5), \"host\" FROM (SELECT mean(d) FROM (SELECT non_negative_derivative(\"value\", 1s) as d FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^$OSDS$/ AND \"type_instance\" = 'osd.op_r') AND $timeFilter GROUP BY \"ceph_daemon\") GROUP BY \"ceph_daemon\", \"host\")",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": []
+          "expr": "topk(5, rate(ceph_osd_op_r[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
         }
       ],
       "title": "Read IOPS",
-      "transform": "table",
-      "type": "table-old"
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Average",
+              "ceph_daemon": "OSD"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
-      "columns": [],
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
-      "fontSize": "100%",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 6,
         "w": 4,
         "x": 16,
         "y": 22
       },
-      "hideTimeOverride": false,
       "id": 305,
       "links": [],
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "desc": false
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Average"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Time",
-          "align": "auto",
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "pattern": "Time",
-          "type": "hidden"
-        },
-        {
-          "alias": "Average",
-          "align": "auto",
-          "colorMode": "value",
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [],
-          "type": "number",
-          "unit": "ns"
-        },
-        {
-          "alias": "OSD",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/QTc_sAxiw/storage?&panelId=138&fullscreen&var-OSDS=${__cell}",
-          "mappingType": 1,
-          "pattern": "ceph_daemon",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "Host",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/i-R2q81iz/host?var-HOST=${__cell}",
-          "mappingType": 1,
-          "pattern": "host",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "decimals": 2,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT top(mean, \"ceph_daemon\", 5), \"host\" FROM (SELECT mean(d) FROM (SELECT non_negative_difference(\"latency_w.value\") / non_negative_difference(\"op_w.value\") as d FROM \"ceph_daemon_stats_join\" WHERE (\"ceph_daemon\" =~ /^$OSDS$/) AND $timeFilter GROUP BY \"ceph_daemon\") GROUP BY \"ceph_daemon\", \"host\")",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": []
+          "expr": "topk(5, rate(ceph_osd_op_w_latency_sum[$__rate_interval]) / rate(ceph_osd_op_w_latency_count[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
         }
       ],
       "title": "Write Latency",
-      "transform": "table",
-      "type": "table-old"
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Average",
+              "ceph_daemon": "OSD"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
-      "columns": [],
       "datasource": {
-        "type": "influxdb",
-        "uid": "P0171D63BCBACC4D2"
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
       },
-      "fontSize": "100%",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 6,
         "w": 4,
         "x": 20,
         "y": 22
       },
-      "hideTimeOverride": false,
       "id": 184,
       "links": [],
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "desc": false
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Average"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Time",
-          "align": "auto",
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "pattern": "Time",
-          "type": "hidden"
-        },
-        {
-          "alias": "Average",
-          "align": "auto",
-          "colorMode": "value",
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [],
-          "type": "number",
-          "unit": "ns"
-        },
-        {
-          "alias": "OSD",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/QTc_sAxiw/storage?&panelId=138&fullscreen&var-OSDS=${__cell}",
-          "mappingType": 1,
-          "pattern": "ceph_daemon",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "Host",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTargetBlank": false,
-          "linkTooltip": "View",
-          "linkUrl": "d/i-R2q81iz/host?var-HOST=${__cell}",
-          "mappingType": 1,
-          "pattern": "host",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "align": "auto",
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "decimals": 2,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT top(mean, \"ceph_daemon\", 5), \"host\" FROM (SELECT mean(d) FROM (SELECT non_negative_difference(\"latency_r.value\") / non_negative_difference(\"op_r.value\") as d FROM \"ceph_daemon_stats_join\" WHERE (\"ceph_daemon\" =~ /^$OSDS$/) AND $timeFilter GROUP BY \"ceph_daemon\") GROUP BY \"ceph_daemon\", \"host\")",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": []
+          "expr": "topk(5, rate(ceph_osd_op_r_latency_sum[$__rate_interval]) / rate(ceph_osd_op_r_latency_count[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
         }
       ],
       "title": "Read Latency",
-      "transform": "table",
-      "type": "table-old"
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Average",
+              "ceph_daemon": "OSD"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
       "collapsed": true,
@@ -2703,8 +1915,8 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
           "decimals": 1,
           "fill": 1,
@@ -2748,150 +1960,22 @@
           "steppedLine": false,
           "targets": [
             {
-              "aggregator": "none found",
-              "alias": "write",
               "datasource": {
-                "type": "influxdb",
-                "uid": "P0171D63BCBACC4D2"
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
               },
-              "draw_missing_datapoint_as_zero": true,
-              "fill": 0,
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "ceph_daemon"
-                  ],
-                  "type": "tag"
-                }
-              ],
-              "groupby": "",
-              "label": "",
-              "measurement": "ceph_daemon_stats",
-              "metric_name": "none found",
-              "needed_overlap": 0,
-              "operations": "",
-              "orderByTime": "ASC",
-              "policy": "default",
-              "query": "SELECT non_negative_derivative(mean(\"value\"), 1s) FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^$osd$/ AND \"type_instance\" = 'osd.op_r_out_bytes') AND $timeFilter GROUP BY time($interval), \"ceph_daemon\"",
-              "queryMode": "resource_search",
-              "rawQuery": false,
-              "reaggregator": "none",
-              "refId": "A",
-              "resource_search": "",
-              "resource_type": "generic",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  },
-                  {
-                    "params": [
-                      "1s"
-                    ],
-                    "type": "non_negative_derivative"
-                  }
-                ]
-              ],
-              "tags": [
-                {
-                  "key": "ceph_daemon",
-                  "operator": "=~",
-                  "value": "/^$OSDS$/"
-                },
-                {
-                  "condition": "AND",
-                  "key": "type_instance",
-                  "operator": "=",
-                  "value": "osd.op_w_in_bytes"
-                }
-              ]
+              "expr": "rate(ceph_osd_op_w_in_bytes{ceph_daemon=~\"$OSDS\"}[$__rate_interval])",
+              "legendFormat": "{{ceph_daemon}} write",
+              "refId": "A"
             },
             {
-              "aggregator": "none found",
-              "alias": "read",
               "datasource": {
-                "type": "influxdb",
-                "uid": "P0171D63BCBACC4D2"
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
               },
-              "draw_missing_datapoint_as_zero": true,
-              "fill": 0,
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "ceph_daemon"
-                  ],
-                  "type": "tag"
-                }
-              ],
-              "groupby": "",
-              "label": "",
-              "measurement": "ceph_daemon_stats",
-              "metric_name": "none found",
-              "needed_overlap": 0,
-              "operations": "",
-              "orderByTime": "ASC",
-              "policy": "default",
-              "query": "SELECT non_negative_derivative(\"value\", 1s) FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^$osd$/ AND \"type_instance\" = 'osd.op_w_in_bytes') AND $timeFilter GROUP BY \"ceph_daemon\"",
-              "queryMode": "resource_search",
-              "rawQuery": false,
-              "reaggregator": "none",
-              "refId": "B",
-              "resource_search": "",
-              "resource_type": "generic",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  },
-                  {
-                    "params": [
-                      "1s"
-                    ],
-                    "type": "non_negative_derivative"
-                  }
-                ]
-              ],
-              "tags": [
-                {
-                  "key": "ceph_daemon",
-                  "operator": "=~",
-                  "value": "/^$OSDS$/"
-                },
-                {
-                  "condition": "AND",
-                  "key": "type_instance",
-                  "operator": "=",
-                  "value": "osd.op_r_out_bytes"
-                }
-              ]
+              "expr": "rate(ceph_osd_op_r_out_bytes{ceph_daemon=~\"$OSDS\"}[$__rate_interval])",
+              "legendFormat": "{{ceph_daemon}} read",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -2930,8 +2014,8 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
           "decimals": 1,
           "fill": 1,
@@ -2975,150 +2059,22 @@
           "steppedLine": false,
           "targets": [
             {
-              "aggregator": "none found",
-              "alias": "write",
               "datasource": {
-                "type": "influxdb",
-                "uid": "P0171D63BCBACC4D2"
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
               },
-              "draw_missing_datapoint_as_zero": true,
-              "fill": 0,
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "ceph_daemon"
-                  ],
-                  "type": "tag"
-                }
-              ],
-              "groupby": "",
-              "label": "",
-              "measurement": "ceph_daemon_stats",
-              "metric_name": "none found",
-              "needed_overlap": 0,
-              "operations": "",
-              "orderByTime": "ASC",
-              "policy": "default",
-              "query": "SELECT derivative(\"value\", 1s) FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^$osd$/ AND \"type_instance\" = 'osd.op_in_bytes') AND $timeFilter GROUP BY \"ceph_daemon\"",
-              "queryMode": "resource_search",
-              "rawQuery": false,
-              "reaggregator": "none",
-              "refId": "A",
-              "resource_search": "",
-              "resource_type": "generic",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  },
-                  {
-                    "params": [
-                      "1s"
-                    ],
-                    "type": "non_negative_derivative"
-                  }
-                ]
-              ],
-              "tags": [
-                {
-                  "key": "ceph_daemon",
-                  "operator": "=~",
-                  "value": "/^$OSDS$/"
-                },
-                {
-                  "condition": "AND",
-                  "key": "type_instance",
-                  "operator": "=",
-                  "value": "osd.op_w"
-                }
-              ]
+              "expr": "rate(ceph_osd_op_w{ceph_daemon=~\"$OSDS\"}[$__rate_interval])",
+              "legendFormat": "{{ceph_daemon}} write",
+              "refId": "A"
             },
             {
-              "aggregator": "none found",
-              "alias": "read",
               "datasource": {
-                "type": "influxdb",
-                "uid": "P0171D63BCBACC4D2"
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
               },
-              "draw_missing_datapoint_as_zero": true,
-              "fill": 0,
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "ceph_daemon"
-                  ],
-                  "type": "tag"
-                }
-              ],
-              "groupby": "",
-              "label": "",
-              "measurement": "ceph_daemon_stats",
-              "metric_name": "none found",
-              "needed_overlap": 0,
-              "operations": "",
-              "orderByTime": "ASC",
-              "policy": "default",
-              "query": "SELECT derivative(\"value\", 1s) FROM \"ceph_daemon_stats\" WHERE (\"ceph_daemon\" =~ /^$osd$/ AND \"type_instance\" = 'osd.op_in_bytes') AND $timeFilter GROUP BY \"ceph_daemon\"",
-              "queryMode": "resource_search",
-              "rawQuery": false,
-              "reaggregator": "none",
-              "refId": "B",
-              "resource_search": "",
-              "resource_type": "generic",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  },
-                  {
-                    "params": [
-                      "1s"
-                    ],
-                    "type": "non_negative_derivative"
-                  }
-                ]
-              ],
-              "tags": [
-                {
-                  "key": "ceph_daemon",
-                  "operator": "=~",
-                  "value": "/^$OSDS$/"
-                },
-                {
-                  "condition": "AND",
-                  "key": "type_instance",
-                  "operator": "=",
-                  "value": "osd.op_r"
-                }
-              ]
+              "expr": "rate(ceph_osd_op_r{ceph_daemon=~\"$OSDS\"}[$__rate_interval])",
+              "legendFormat": "{{ceph_daemon}} read",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -3157,8 +2113,8 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
           "decimals": 1,
           "fill": 1,
@@ -3202,148 +2158,22 @@
           "steppedLine": false,
           "targets": [
             {
-              "aggregator": "none found",
-              "alias": "write",
               "datasource": {
-                "type": "influxdb",
-                "uid": "P0171D63BCBACC4D2"
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
               },
-              "draw_missing_datapoint_as_zero": true,
-              "fill": 0,
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "ceph_daemon"
-                  ],
-                  "type": "tag"
-                }
-              ],
-              "groupby": "",
-              "label": "",
-              "measurement": "ceph_daemon_stats_join",
-              "metric_name": "none found",
-              "needed_overlap": 0,
-              "operations": "",
-              "orderByTime": "ASC",
-              "policy": "default",
-              "query": "SELECT non_negative_difference(mean(\"latency_w.value\")) / non_negative_difference(mean(\"op_w.value\")) FROM \"ceph_daemon_stats_join\" WHERE (\"ceph_daemon\" =~ /^$OSDS$/) AND $timeFilter GROUP BY time($interval), \"ceph_daemon\"",
-              "queryMode": "resource_search",
-              "rawQuery": true,
-              "reaggregator": "none",
-              "refId": "A",
-              "resource_search": "",
-              "resource_type": "generic",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "latency_r.value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  },
-                  {
-                    "params": [],
-                    "type": "non_negative_difference"
-                  },
-                  {
-                    "params": [
-                      " /"
-                    ],
-                    "type": "math"
-                  }
-                ]
-              ],
-              "tags": [
-                {
-                  "key": "ceph_daemon",
-                  "operator": "=~",
-                  "value": "/^$osd$/"
-                }
-              ]
+              "expr": "rate(ceph_osd_op_w_latency_sum{ceph_daemon=~\"$OSDS\"}[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{ceph_daemon=~\"$OSDS\"}[$__rate_interval])",
+              "legendFormat": "{{ceph_daemon}} write",
+              "refId": "A"
             },
             {
-              "aggregator": "none found",
-              "alias": "read",
               "datasource": {
-                "type": "influxdb",
-                "uid": "P0171D63BCBACC4D2"
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
               },
-              "draw_missing_datapoint_as_zero": true,
-              "fill": 0,
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "ceph_daemon"
-                  ],
-                  "type": "tag"
-                }
-              ],
-              "groupby": "",
-              "label": "",
-              "measurement": "ceph_daemon_stats",
-              "metric_name": "none found",
-              "needed_overlap": 0,
-              "operations": "",
-              "orderByTime": "ASC",
-              "policy": "default",
-              "query": "SELECT non_negative_difference(mean(\"latency_r.value\")) / non_negative_difference(mean(\"op_r.value\")) FROM \"ceph_daemon_stats_join\" WHERE (\"ceph_daemon\" =~ /^$OSDS$/) AND $timeFilter GROUP BY time($interval), \"ceph_daemon\"",
-              "queryMode": "resource_search",
-              "rawQuery": true,
-              "reaggregator": "none",
-              "refId": "B",
-              "resource_search": "",
-              "resource_type": "generic",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  },
-                  {
-                    "params": [
-                      "1s"
-                    ],
-                    "type": "non_negative_derivative"
-                  }
-                ]
-              ],
-              "tags": [
-                {
-                  "key": "ceph_daemon",
-                  "operator": "=~",
-                  "value": "/^$osd$/"
-                },
-                {
-                  "condition": "AND",
-                  "key": "type_instance",
-                  "operator": "=",
-                  "value": "osd.op_w"
-                }
-              ]
+              "expr": "rate(ceph_osd_op_r_latency_sum{ceph_daemon=~\"$OSDS\"}[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{ceph_daemon=~\"$OSDS\"}[$__rate_interval])",
+              "legendFormat": "{{ceph_daemon}} read",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -3362,7 +2192,7 @@
           },
           "yaxes": [
             {
-              "format": "ns",
+              "format": "s",
               "logBase": 1,
               "show": true
             },
@@ -3409,8 +2239,8 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": {
-            "type": "influxdb",
-            "uid": "P0171D63BCBACC4D2"
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
           },
           "decimals": 1,
           "fill": 1,
@@ -3454,150 +2284,22 @@
           "steppedLine": false,
           "targets": [
             {
-              "aggregator": "none found",
-              "alias": "write",
               "datasource": {
-                "type": "influxdb",
-                "uid": "P0171D63BCBACC4D2"
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
               },
-              "draw_missing_datapoint_as_zero": true,
-              "fill": 0,
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "pool_name"
-                  ],
-                  "type": "tag"
-                }
-              ],
-              "groupby": "",
-              "label": "",
-              "measurement": "ceph_pool_stats",
-              "metric_name": "none found",
-              "needed_overlap": 0,
-              "operations": "",
-              "orderByTime": "ASC",
-              "policy": "default",
-              "query": "SELECT non_negative_derivative(mean(\"value\"), 1s) FROM \"ceph_pool_stats\" WHERE (\"pool_name\" =~ /^$pool$/ AND \"type_instance\" = 'rd_bytes') AND $timeFilter GROUP BY time($interval), \"pool_name\"",
-              "queryMode": "resource_search",
-              "rawQuery": false,
-              "reaggregator": "none",
-              "refId": "A",
-              "resource_search": "",
-              "resource_type": "generic",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  },
-                  {
-                    "params": [
-                      "1s"
-                    ],
-                    "type": "non_negative_derivative"
-                  }
-                ]
-              ],
-              "tags": [
-                {
-                  "key": "pool_name",
-                  "operator": "=~",
-                  "value": "/^$POOLS$/"
-                },
-                {
-                  "condition": "AND",
-                  "key": "type_instance",
-                  "operator": "=",
-                  "value": "wr_bytes"
-                }
-              ]
+              "expr": "rate(ceph_pool_wr_bytes[$__rate_interval]) * on(pool_id) group_left(name) ceph_pool_metadata{name=~\"$POOLS\"}",
+              "legendFormat": "{{name}} write",
+              "refId": "A"
             },
             {
-              "aggregator": "none found",
-              "alias": "read",
               "datasource": {
-                "type": "influxdb",
-                "uid": "P0171D63BCBACC4D2"
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
               },
-              "draw_missing_datapoint_as_zero": true,
-              "fill": 0,
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "pool_name"
-                  ],
-                  "type": "tag"
-                }
-              ],
-              "groupby": "",
-              "label": "",
-              "measurement": "ceph_pool_stats",
-              "metric_name": "none found",
-              "needed_overlap": 0,
-              "operations": "",
-              "orderByTime": "ASC",
-              "policy": "default",
-              "query": "SELECT non_negative_derivative(mean(\"value\"), 1s) FROM \"ceph_pool_stats\" WHERE (\"pool_name\" =~ /^$POOLS$/ AND \"type_instance\" = 'wr_bytes') AND $timeFilter GROUP BY time($interval), \"pool_name\"",
-              "queryMode": "resource_search",
-              "rawQuery": false,
-              "reaggregator": "none",
-              "refId": "B",
-              "resource_search": "",
-              "resource_type": "generic",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  },
-                  {
-                    "params": [
-                      "1s"
-                    ],
-                    "type": "non_negative_derivative"
-                  }
-                ]
-              ],
-              "tags": [
-                {
-                  "key": "pool_name",
-                  "operator": "=~",
-                  "value": "/^$POOLS$/"
-                },
-                {
-                  "condition": "AND",
-                  "key": "type_instance",
-                  "operator": "=",
-                  "value": "rd_bytes"
-                }
-              ]
+              "expr": "rate(ceph_pool_rd_bytes[$__rate_interval]) * on(pool_id) group_left(name) ceph_pool_metadata{name=~\"$POOLS\"}",
+              "legendFormat": "{{name}} read",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -3661,17 +2363,20 @@
           ]
         },
         "datasource": {
-          "type": "influxdb",
-          "uid": "P0171D63BCBACC4D2"
+          "type": "prometheus",
+          "uid": "P43CA22E17D0F9596"
         },
-        "definition": "SHOW TAG VALUES FROM \"ceph_daemon_stats\" WITH KEY = \"ceph_daemon\"",
+        "definition": "label_values(ceph_osd_stat_bytes, ceph_daemon)",
         "hide": 0,
         "includeAll": true,
         "label": "OSD(s)",
         "multi": true,
         "name": "OSDS",
         "options": [],
-        "query": "SHOW TAG VALUES FROM \"ceph_daemon_stats\" WITH KEY = \"ceph_daemon\"",
+        "query": {
+          "query": "label_values(ceph_osd_stat_bytes, ceph_daemon)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
         "refresh": 1,
         "regex": "/osd\\.[0-9]+/",
         "skipUrlSync": false,
@@ -3692,17 +2397,20 @@
           ]
         },
         "datasource": {
-          "type": "influxdb",
-          "uid": "P0171D63BCBACC4D2"
+          "type": "prometheus",
+          "uid": "P43CA22E17D0F9596"
         },
-        "definition": "SHOW TAG VALUES FROM \"ceph_pool_stats\" WITH KEY = \"pool_name\"",
+        "definition": "label_values(ceph_pool_metadata, name)",
         "hide": 0,
         "includeAll": true,
         "label": "Pool(s)",
         "multi": true,
         "name": "POOLS",
         "options": [],
-        "query": "SHOW TAG VALUES FROM \"ceph_pool_stats\" WITH KEY = \"pool_name\"",
+        "query": {
+          "query": "label_values(ceph_pool_metadata, name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
