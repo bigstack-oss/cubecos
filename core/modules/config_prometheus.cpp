@@ -24,7 +24,6 @@ static const char NAME[] = "prometheus";
 #define DEFCONF "/etc/default/prometheus"
 #define DATADIR  "/var/lib/prometheus/data"
 #define PORT "9091"
-#define TSDB_RP "90d"
 
 #define CONF "/etc/prometheus/prometheus.yml"
 #define LACHESIS_TARGETS "/etc/prometheus/targets/lachesis.json"
@@ -67,6 +66,21 @@ static LogRotateConf log_conf("prometheus", "/var/log/prometheus/*.log", DAILY, 
 // external global variables
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
+// Retention, tunable so a cluster can be sized without a rebuild.
+//
+// Both limits apply and whichever is reached first wins, which is the point: time
+// alone does not bound disk if cardinality grows, and 90d with no size cap was the
+// same unbounded shape as influxdb's 364d -- on the same system partition as the OS,
+// ceph and the influx TSDB.
+//
+// Size 0 disables the size limit (prometheus's own semantics), and the flag is then
+// omitted entirely rather than written as 0.
+//
+// Note prometheus counts in powers of two: its "GB" is 1024^3, so 5GB here is 5 GiB
+// and prometheus echoes it back as "5GiB".
+CONFIG_TUNING_INT(PROMETHEUS_RP_DAYS, "prometheus.rp.duration", TUNING_PUB, "prometheus retention duration in days.", 30, 1, 3650);
+CONFIG_TUNING_INT(PROMETHEUS_RP_SIZE, "prometheus.rp.size", TUNING_PUB, "prometheus retention size cap in GiB, 0 to disable.", 5, 0, 10240);
+
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
@@ -74,6 +88,8 @@ CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
 
 // parse tunings
+PARSE_TUNING_INT(s_rpDays, PROMETHEUS_RP_DAYS);
+PARSE_TUNING_INT(s_rpSize, PROMETHEUS_RP_SIZE);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
@@ -90,12 +106,14 @@ WriteDefaultConf()
     // ARGS, not PROMETHEUS_OPTS: EPEL's prometheus unit is ExecStart=/usr/bin/prometheus $ARGS.
     // (packagecloud's retired prometheus2 unit used $PROMETHEUS_OPTS.)
     //
-    // retention.time, not retention: the bare --storage.tsdb.retention has been deprecated
-    // since 2.x and 3.13's own --help still marks it [DEPRECATED]. It is accepted today, but
-    // there is no reason to keep feeding a flag upstream has been telling us to stop using.
+    // Retention is not passed here. Both --storage.tsdb.retention.time and .size
+    // are marked [DEPRECATED] in 3.13, which points at the config file's
+    // storage.tsdb.retention block instead, and a flag set here would take
+    // precedence over that block -- silently pinning the value and making the
+    // tunings look ineffective. WriteConf emits the block; this file only carries
+    // the flags that have no config-file equivalent.
     fprintf(fout, "ARGS='--config.file=" CONF
                   " --storage.tsdb.path=" DATADIR
-                  " --storage.tsdb.retention.time=" TSDB_RP
                   " --web.external-url=http://localhost/prometheus/"
                   " --web.listen-address=:" PORT "'\n");
     fclose(fout);
@@ -104,13 +122,29 @@ WriteDefaultConf()
 }
 
 static bool
-WriteConf(bool ha, const std::string& sharedId, const std::string& hostname)
+WriteConf(bool ha, const std::string& sharedId, const std::string& hostname, int rpDays, int rpSizeGib)
 {
     FILE *fout = fopen(CONF, "w");
     if (!fout) {
         HexLogError("Unable to write %s conf file: %s", NAME, CONF);
         return false;
     }
+
+    // storage.tsdb.retention rather than the command-line flags: 3.13 marks both
+    // --storage.tsdb.retention.time and .size [DEPRECATED] and names this block as
+    // the replacement. Time and size are both enforced, whichever is reached first
+    // -- time alone does not bound disk if cardinality grows.
+    //
+    // This block requires prometheus 3.x; a 2.x prometheus refuses to parse the file
+    // rather than ignoring the unknown field ("field retention not found in type
+    // config.plain"), so it must not be emitted for a 2.x install. This branch ships
+    // 3.13 from EPEL, so that case cannot arise here.
+    fprintf(fout, "storage:\n");
+    fprintf(fout, "  tsdb:\n");
+    fprintf(fout, "    retention:\n");
+    fprintf(fout, "      time: %dd\n", rpDays);
+    if (rpSizeGib > 0)
+        fprintf(fout, "      size: %dGB\n", rpSizeGib);   // prometheus GB is 1024^3
 
     fprintf(fout, "global:\n");
     // The replica label is what lets Thanos tell one control node's copy of a series from
@@ -299,7 +333,7 @@ Commit(bool modified, int dryLevel)
 
     if (enabled) {
         WriteDefaultConf();
-        WriteConf(s_ha, sharedId, hostname);
+        WriteConf(s_ha, sharedId, hostname, s_rpDays.newValue(), s_rpSize.newValue());
 
         // seed the target list; non-fatal, and bounded so a wedged etcd
         // cannot hang the commit
