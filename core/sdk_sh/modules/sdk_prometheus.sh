@@ -60,5 +60,13 @@ prometheus_exporter_targets()
     _prometheus_targets_write $dir/memcached.json control 9150 || rc=1
     _prometheus_targets_write $dir/apache.json control 9117 || rc=1
 
+    # rabbitmq and influxdb need no exporter, but they are still per-node control-plane
+    # services, so their targets are enumerated the same way. Each member of the rabbitmq
+    # cluster reports its own state, so scraping one and calling it the cluster would be
+    # wrong. See config_prometheus.cpp for why influxdb is listed while 1.x has nothing
+    # useful to say.
+    _prometheus_targets_write $dir/rabbitmq.json control 15692 || rc=1
+    _prometheus_targets_write $dir/influxdb.json control 8086 || rc=1
+
     return $rc
 }

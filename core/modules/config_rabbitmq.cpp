@@ -93,6 +93,13 @@ WriteConfig(const std::string& myip)
 
     fprintf(fout, "cluster_partition_handling = pause_minority\n");
 
+    // rabbitmq_prometheus, enabled below, listens on 0.0.0.0:15692 by default. Bind the
+    // management address instead, the same rule the prometheus and thanos listeners follow:
+    // the scrape comes from a control node, and nothing off the management network has any
+    // business reading it.
+    fprintf(fout, "prometheus.tcp.ip = %s\n", myip.c_str());
+    fprintf(fout, "prometheus.tcp.port = 15692\n");
+
     fclose(fout);
 
     return true;
@@ -134,7 +141,10 @@ SetupCheck(const std::string& mqPass, const std::string& hostname)
         HexSystemF(0, CONTROL_FMT "set_permissions openstack \".*\" \".*\" \".*\" >/dev/null", hostname.c_str());
     }
 
-    HexSystemF(0, "env LANG=en_US.utf8 HOSTNAME=%s /usr/sbin/rabbitmq-plugins enable rabbitmq_management >/dev/null", hostname.c_str());
+    // rabbitmq needs no exporter: rabbitmq_prometheus ships with 3.11 and exposes the
+    // broker's own counters, so enabling it is the whole of what a rabbitmq exporter would
+    // have been. It is shipped disabled, which is why this is not a no-op.
+    HexSystemF(0, "env LANG=en_US.utf8 HOSTNAME=%s /usr/sbin/rabbitmq-plugins enable rabbitmq_management rabbitmq_prometheus >/dev/null", hostname.c_str());
 
     return true;
 }

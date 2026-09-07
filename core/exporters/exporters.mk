@@ -14,9 +14,16 @@
 #   haproxy    2.8 is built +PROMEX ("Available services : prometheus-exporter"), so
 #              config_haproxy exposes it with one use-service line on the stats listener it
 #              already binds. No haproxy_exporter.
-#   rabbitmq   3.11 ships rabbitmq_prometheus.
-#   influxdb   1.12 already serves /metrics on :8086.
-#   zookeeper  3.8 has PrometheusMetricsProvider built in.
+#   rabbitmq   3.11 ships rabbitmq_prometheus -- shipped DISABLED, so config_rabbitmq has to
+#              enable it. "Speaks Prometheus" is not "is turned on".
+#   influxdb   1.12 serves /metrics, though on 1.x it carries only go/process/promhttp series
+#              and nothing about the database. Scraped anyway, because 2.x reports properly
+#              and issue #648 moves us there.
+#
+# Zookeeper looked like the same win and is not, which is worth recording so it is not
+# re-attempted: 3.8 has a PrometheusMetricsProvider, but Kafka's bundled distribution does
+# not ship the jar it lives in. It needs jmx_exporter, as does kafka. See
+# config_prometheus.cpp.
 #
 # Provenance matters -- these run as daemons on every node -- so each is either the prometheus
 # org or prometheus-community, with one documented exception:

@@ -127,6 +127,24 @@ static const char NAME[] = "prometheus";
 #define IPMI_TARGETS "/etc/prometheus/targets/ipmi.json"
 #define MEMCACHED_TARGETS "/etc/prometheus/targets/memcached.json"
 #define APACHE_TARGETS "/etc/prometheus/targets/apache.json"
+// rabbitmq speaks Prometheus itself once the shipped rabbitmq_prometheus plugin is enabled,
+// which config_rabbitmq now does, so there is no exporter to install or run -- only a target
+// list.
+//
+// Zookeeper looked like the same win and is not, which is worth recording so it is not
+// re-attempted: 3.8 does carry a PrometheusMetricsProvider, but the class lives in
+// zookeeper-prometheus-metrics.jar and Kafka's bundled distribution ships only
+// zookeeper.jar and zookeeper-jute.jar, so configuring it makes zookeeper exit with
+// INVALIDARGUMENT. It needs prometheus/jmx_exporter, as does kafka, which has no native
+// endpoint at all -- one artifact covering both, in a separate change.
+#define RABBITMQ_TARGETS "/etc/prometheus/targets/rabbitmq.json"
+// influxdb is scraped for what it will report, not what it reports today. 1.12's /metrics
+// is 116 lines of go_*, process_* and promhttp_* with not one influx-specific series -- no
+// shards, no series counts, no writes, no queries, because 1.x keeps those in the _internal
+// database. 2.x exposes them properly, and issue #648 moves us there; wiring the job now
+// means that lands with no further change here. Until then it costs one scrape and reports
+// influxd's garbage collector.
+#define INFLUXDB_TARGETS "/etc/prometheus/targets/influxdb.json"
 
 static CubeRole_e s_eCubeRole;
 
@@ -295,6 +313,8 @@ WriteConf(bool ha, const std::string& sharedId, const std::string& ctrlAddrs,
         { "ipmi",      IPMI_TARGETS },
         { "memcached", MEMCACHED_TARGETS },
         { "apache",    APACHE_TARGETS },
+        { "rabbitmq",  RABBITMQ_TARGETS },
+        { "influxdb",  INFLUXDB_TARGETS },
     };
     for (const auto& job : sdJobs) {
         fprintf(fout, "  - job_name: '%s'\n", job.first.c_str());
