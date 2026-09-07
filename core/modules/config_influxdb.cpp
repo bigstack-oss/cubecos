@@ -24,12 +24,8 @@ static const char CURATOR[] = "/etc/cron.d/influx-curator";
 #define CONF    "/etc/influxdb/influxdb.conf"
 #define MAKRER  "/etc/appliance/state/ceph_mgr_influx_enabled"
 #define INFLUX_INTERVAL 60
-#define TSDB_RP "def"     // default rp
-#define RP_DURATION "52w" // 1 years
-#define SGP_DURATION "5w" // 1 month
-#define HC_TSDB_RP "hc"      // high cardinality rp
-#define HC_RP_DURATION "2w"  // 2 weeks
-#define HC_SGP_DURATION "1w" // 1 week
+#define TSDB_RP "def"        // default rp, low-cardinality metrics
+#define HC_TSDB_RP "hc"      // high cardinality rp -- sflow and vrouter.top
 
 static CubeRole_e s_eCubeRole;
 
@@ -43,12 +39,32 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // public tunings
 CONFIG_TUNING_INT(INFLUXDB_CURATOR_RP, "influxdb.curator.rp", TUNING_PUB, "influxdb curator retention policy in days.", 7, 0, 365);
+// Retention is two policies per database, split by cardinality: 'def' carries the
+// low-cardinality series whose count scales with node count (host cpu/mem/disk,
+// ceph_*), 'hc' carries sflow and vrouter.top, whose series count scales with
+// traffic -- one per flow tuple -- and would otherwise dominate the TSDB index.
+//
+// Duration and shard duration are tuned together on purpose. InfluxDB never deletes
+// individual points; it drops whole shard groups, and only once the entire group is
+// older than the duration. So a point written at the start of a shard group survives
+// duration + shard duration, and disk is freed in shard-sized steps. A long duration
+// with a coarse shard therefore both overshoots and frees space in cliffs -- the
+// previous 364d/35d pair kept data for up to 399 days and reclaimed it five weeks at
+// a time, on the same partition as the OS.
+CONFIG_TUNING_INT(INFLUXDB_RP_DAYS, "influxdb.def.rp.duration", TUNING_PUB, "influxdb default retention policy duration in days.", 14, 1, 3650);
+CONFIG_TUNING_INT(INFLUXDB_SGP_DAYS, "influxdb.def.rp.shard", TUNING_PUB, "influxdb default retention policy shard group duration in days.", 7, 1, 365);
+CONFIG_TUNING_INT(INFLUXDB_HC_RP_DAYS, "influxdb.hc.rp.duration", TUNING_PUB, "influxdb high-cardinality retention policy duration in days.", 7, 1, 3650);
+CONFIG_TUNING_INT(INFLUXDB_HC_SGP_DAYS, "influxdb.hc.rp.shard", TUNING_PUB, "influxdb high-cardinality retention policy shard group duration in days.", 2, 1, 365);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
 
 // parse tunings
 PARSE_TUNING_INT(s_curatorRp, INFLUXDB_CURATOR_RP);
+PARSE_TUNING_INT(s_rpDays, INFLUXDB_RP_DAYS);
+PARSE_TUNING_INT(s_sgpDays, INFLUXDB_SGP_DAYS);
+PARSE_TUNING_INT(s_hcRpDays, INFLUXDB_HC_RP_DAYS);
+PARSE_TUNING_INT(s_hcSgpDays, INFLUXDB_HC_SGP_DAYS);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 
 static bool
@@ -120,35 +136,51 @@ EnableCephInfluxPlugin(bool update, const std::string sharedId)
 }
 
 static bool
-CreateDBs()
+CreateDBs(int rpDays, int sgpDays, int hcRpDays, int hcSgpDays)
 {
     // Re-creation is allowed
     HexUtilSystemF(0, 0, HEX_SDK " wait_for_service :: 8086 90");
-    HexLogInfo("updating influxdb polices");
+
+    // A shard group wider than the policy it lives in is rejected by InfluxDB, and
+    // would mean the policy could never drop anything. Clamp rather than fail the
+    // commit, and say so.
+    if (sgpDays > rpDays) {
+        HexLogWarning("influxdb: def shard duration %dd exceeds retention %dd, clamping to %dd",
+                      sgpDays, rpDays, rpDays);
+        sgpDays = rpDays;
+    }
+    if (hcSgpDays > hcRpDays) {
+        HexLogWarning("influxdb: hc shard duration %dd exceeds retention %dd, clamping to %dd",
+                      hcSgpDays, hcRpDays, hcRpDays);
+        hcSgpDays = hcRpDays;
+    }
+
+    HexLogInfo("updating influxdb policies: def %dd/shard %dd, hc %dd/shard %dd",
+               rpDays, sgpDays, hcRpDays, hcSgpDays);
 
     std::string dbs[] = {"telegraf", "ceph", "monasca", "events"};
 
     for (const std::string &db : dbs) {
-        HexSystemF(0, "influx -execute 'CREATE DATABASE %s WITH DURATION %s SHARD DURATION %s NAME %s'",
-                      db.c_str(), RP_DURATION, SGP_DURATION, TSDB_RP);
+        HexSystemF(0, "influx -execute 'CREATE DATABASE %s WITH DURATION %dd SHARD DURATION %dd NAME %s'",
+                      db.c_str(), rpDays, sgpDays, TSDB_RP);
 
-        HexSystemF(0, "influx -execute 'CREATE RETENTION POLICY %s ON %s DURATION %s "
-                      "REPLICATION 1 SHARD DURATION %s'",
-                      TSDB_RP, db.c_str(), RP_DURATION, SGP_DURATION);
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DURATION %s DEFAULT'",
-                      TSDB_RP, db.c_str(), RP_DURATION);
+        HexSystemF(0, "influx -execute 'CREATE RETENTION POLICY %s ON %s DURATION %dd "
+                      "REPLICATION 1 SHARD DURATION %dd'",
+                      TSDB_RP, db.c_str(), rpDays, sgpDays);
+        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DURATION %dd DEFAULT'",
+                      TSDB_RP, db.c_str(), rpDays);
         HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DEFAULT'",
                       TSDB_RP, db.c_str());
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s SHARD DURATION %s DEFAULT'",
-                      TSDB_RP, db.c_str(), SGP_DURATION);
+        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s SHARD DURATION %dd DEFAULT'",
+                      TSDB_RP, db.c_str(), sgpDays);
 
-        HexSystemF(0, "influx -execute 'CREATE RETENTION POLICY %s ON %s DURATION %s "
-                      "REPLICATION 1 SHARD DURATION %s'",
-                      HC_TSDB_RP, db.c_str(), HC_RP_DURATION, HC_SGP_DURATION);
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DURATION %s'",
-                      HC_TSDB_RP, db.c_str(), HC_RP_DURATION);
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s SHARD DURATION %s'",
-                      HC_TSDB_RP, db.c_str(), HC_SGP_DURATION);
+        HexSystemF(0, "influx -execute 'CREATE RETENTION POLICY %s ON %s DURATION %dd "
+                      "REPLICATION 1 SHARD DURATION %dd'",
+                      HC_TSDB_RP, db.c_str(), hcRpDays, hcSgpDays);
+        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DURATION %dd'",
+                      HC_TSDB_RP, db.c_str(), hcRpDays);
+        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s SHARD DURATION %dd'",
+                      HC_TSDB_RP, db.c_str(), hcSgpDays);
     }
 
     return true;
@@ -211,7 +243,8 @@ Commit(bool modified, int dryLevel)
     if (enabled) {
         EnableCephInfluxPlugin(true, sharedId);
         WriteLogRotateConf(log_conf);
-        CreateDBs();
+        CreateDBs(s_rpDays.newValue(), s_sgpDays.newValue(),
+                  s_hcRpDays.newValue(), s_hcSgpDays.newValue());
     }
 
     CuratorCronJob(s_curatorRp.newValue());
