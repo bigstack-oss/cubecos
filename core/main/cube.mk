@@ -57,6 +57,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_os/os_cinder.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ovn.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_power.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_preset.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_prometheus.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_rabbitmq.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_security.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_snapshot.sh
