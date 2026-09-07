@@ -10,8 +10,6 @@ else
     export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
 fi
 
-systemctl mask openvswitch # openvswitch shouldn't be brought up by pacemaker commit
-
 # from the kernel: ssh-localhost returned empty whenever sshd wasn't up yet
 export HOSTNAME=$(hostname)
 # 79 cols fits an 80-col console row, so the status rewrites in place

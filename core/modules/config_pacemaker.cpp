@@ -22,6 +22,10 @@
 
 const static char NAME[] = "pacemaker";
 const static char PCSD[] = "pcsd";
+// Units pacemaker manages or must not start early. Named here rather than
+// included from their own modules: this is the only place that masks them.
+static const char OVS_NAME[] = "openvswitch";
+static const char THANOS_COMPACT[] = "thanos-compact";
 const static char FORCE_NEW_MARK[] = "/etc/appliance/state/pacemaker_new_setup";
 static const char CONFIGURED_FILE[] = "/etc/appliance/state/configured";
 
@@ -88,6 +92,18 @@ SetupCluster(const bool enabled, const bool ha, std::string sharedId, const std:
         HexUtilSystemF(0, 0, "pcs constraint order vip then haproxy");
         HexUtilSystemF(0, 0, "pcs resource create cinder-volume systemd:openstack-cinder-volume");
 
+        // Exactly one compactor cluster-wide: two of them against one thanos bucket
+        // corrupt it. Same shape as cinder-volume -- a plain systemd resource with no
+        // colocation, so pacemaker places it wherever it can run.
+        //
+        // failure-timeout matters here specifically. This resource is masked when
+        // pacemaker first comes up and only unmasked once config_prometheus has written
+        // its config, so pacemaker will see it fail a few times on the way through a
+        // bootstrap; without the timeout those failures never age out and the resource
+        // stays stopped. vaw carries the same meta for the same reason.
+        HexUtilSystemF(0, 0, "pcs resource create thanos-compact systemd:thanos-compact "
+                       "meta failure-timeout=\"60s\"");
+
         HexUtilSystemF(0, 0, "pcs resource create ovndb_servers ocf:ovn:ovndb-servers "
                        "manage_northd=yes master_ip=%s listen_on_master_ip_only=no promotable", sharedId.c_str());
         HexUtilSystemF(0, 0, "pcs resource meta ovndb_servers-clone notify=true clone-max=%lu", hosts.size());
@@ -99,6 +115,7 @@ SetupCluster(const bool enabled, const bool ha, std::string sharedId, const std:
             HexUtilSystemF(0, 0, "pcs constraint location vaw prefers %s --force", host.c_str());
             HexUtilSystemF(0, 0, "pcs constraint location haproxy prefers %s --force", host.c_str());
             HexUtilSystemF(0, 0, "pcs constraint location cinder-volume prefers %s --force", host.c_str());
+            HexUtilSystemF(0, 0, "pcs constraint location thanos-compact prefers %s --force", host.c_str());
             HexUtilSystemF(0, 0, "pcs constraint location ovndb_servers-clone prefers %s --force", host.c_str());
         }
 
@@ -193,6 +210,22 @@ Commit(bool modified, int dryLevel)
     }
 
     isMaster = isMaster & !isMasterRejoin;
+
+    // Mask the units pacemaker must not bring up before their own module has
+    // configured them. Both are unmasked later in the same commit pass, by the
+    // module that owns them: openvswitch by config_neutron (L13), thanos-compact
+    // by config_prometheus (L12). SetupCluster, which creates the pcs resources,
+    // runs from CommitLast at L18 -- after both -- so by the time pacemaker is
+    // told about thanos-compact the unit exists, is configured and is unmasked.
+    //
+    // This mask used to live at the top of bootstrap_cube_config, where it ran on
+    // every boot whether or not a commit followed. Here it is scoped to the path
+    // that actually needs it: pacemaker is brought up a few lines below, and the
+    // window this closes is exactly between that and the owning module's commit.
+    // Commit() has already returned for any role other than control or compute,
+    // which is the same set config_neutron's OvnService unmasks openvswitch for.
+    HexUtilSystemF(0, 0, "systemctl mask %s", OVS_NAME);
+    HexUtilSystemF(0, 0, "systemctl mask %s", THANOS_COMPACT);
 
     if (enabled) {
         if (isMaster) {
