@@ -3853,3 +3853,780 @@ ceph_mgr_dashboard_ensure()
     echo "ceph-mgr dashboard on $active not serving after module bounce" >&2
     return 1
 }
+
+# ---------------------------------------------------------------------------
+# Device tiering (#840)
+#
+# "tier" means three unrelated things around this file, so everything below
+# says device tier in full and nothing below is about the other two:
+#
+#   device tier   a named set of OSDs -- what these functions build
+#   cache tier    Ceph's cache tiering (osd tier add, cachepool, target_max_bytes),
+#                 the mechanism #840 exists to move away from
+#   daemon tier   the mon / osd / mgr grouping in `ceph versions`, which is what
+#                 the pre-existing ceph_tier_releases means by tier
+#
+# A device tier is a named set of OSDs carrying its own CRUSH device class,
+# CRUSH rule, RBD pool and Cinder volume type -- all four share the tier's
+# name. The order below is forced by Ceph: a rule cannot select a class that no
+# OSD carries, so the class has to come first.
+#
+# Where the data starts moving depends on what the OSDs were doing before. For
+# an OSD whose old class no rule selects through, nothing moves until step 4
+# binds the pool. But if any rule is class-restricted to that old class -- the
+# cache tiering path's rule-ssd / rule-hdd, or another device tier -- then
+# step 1's
+# rm-device-class changes that rule's OSD set immediately, and its pools start
+# remapping right there. So the CLI layer's confirmation has to come before the
+# first call into here, not before step 4; see the WP-5 contract in spec.md.
+#
+#   1  crush rm-device-class + set-device-class <name> <osd...>
+#   2  crush rule create-replicated <name> default host <name>
+#   3  ceph_create_pool <name> rbd <size>       -- never bare, see below
+#   4  osd pool set <name> crush_rule <name>    -- the pool joins the tier here
+#   5  os_volume_type_create <name> <name>
+#   6  tuning registry -> hex_config -> Cinder backend      *** not done here ***
+#
+# Step 6 is what makes the volume type usable by Cinder. It belongs to the
+# hex_config side and is deliberately absent: a device tier built by these
+# functions is complete on the Ceph side and present in the Cinder catalog,
+# and has no backend behind it yet.
+#
+# A bare `osd pool create` yields size 1 / min_size 1, and this cluster runs
+# with `mon warn on pool no redundancy = false` so Ceph does not even warn --
+# hence ceph_create_pool with an explicit size, then ceph_adjust_pool_size for
+# the (size, min_size) pair, everywhere below.
+#
+# Ceph is imperative, so a failed create unwinds in reverse over what that
+# invocation actually made: a half-built device tier is worse than a failed
+# one. Note
+# the asymmetry with ceph_device_tier_delete -- an unwind restores each OSD's
+# previous device class, while a deliberate delete leaves the OSDs classless
+# (settled on #840: the product does not guess what an OSD used to be).
+#
+# Input validation beyond argument sanity -- name collisions against existing
+# rules / pools / volume types, "that OSD already belongs to another device
+# tier" --
+# lives in the CLI layer and is not duplicated here.
+# ---------------------------------------------------------------------------
+
+# A device tier's name becomes a pool name, and config_cinder.cpp's scan for
+# legacy tiering matches "-pool" / "-ssd" as substrings rather than suffixes, so
+# a device tier called "gold-ssd-1" would be picked up by that scan as well as
+# by the registry. Everything else about the name is the CLI layer's business.
+_ceph_device_tier_name_ok()
+{
+    local tier=$1
+    if [ -z "$tier" ] ; then
+        echo "Error: device tier name is empty" >&2
+        return 1
+    fi
+    if echo "$tier" | grep -q -e '-pool' -e '-ssd' ; then
+        echo "Error: device tier name $tier must not contain '-pool' or '-ssd'" >&2
+        return 1
+    fi
+    return 0
+}
+
+# normalize "0" / "osd.0" to bare ids, one per line; fail on anything the
+# cluster does not know rather than letting crush invent a bucket for it
+_ceph_device_tier_osd_ids()
+{
+    local known=$($CEPH osd ls 2>/dev/null)
+    if [ -z "$known" ] ; then
+        echo "Error: cannot read the OSD list" >&2
+        return 1
+    fi
+    local id=
+    for a in "$@" ; do
+        id=${a#osd.}
+        if ! echo "$known" | grep -qx "$id" ; then
+            echo "Error: no such OSD: $a" >&2
+            return 1
+        fi
+        echo "$id"
+    done
+}
+
+_ceph_device_tier_class_of_osd()
+{
+    $CEPH osd tree -f json 2>/dev/null \
+        | jq -r --argjson id "${1#osd.}" '.nodes[] | select(.id == $id) | .device_class // empty'
+}
+
+# how many distinct hosts carry an OSD of this device class
+_ceph_device_tier_class_hosts()
+{
+    $CEPH osd tree -f json 2>/dev/null | jq -r --arg C "$1" '
+        ([ .nodes[] | select(.type == "osd" and .device_class == $C) | .id ]) as $o
+        | [ .nodes[] | select(.type == "host")
+            | select( any(.children[]; . as $c | ($o | index($c)) != null) ) | .name ]
+        | length'
+}
+
+# RF for a tier pool: the base pool's, because a tier carries user volumes just
+# like the base pool does -- but never more replicas than there are hosts the
+# tier's own rule can select. That rule is class-restricted, so a tier living on
+# two of three hosts cannot reach the base pool's 3 and would sit undersized
+# forever; `osd pool set size` fails quietly, so nothing would say so.
+_ceph_device_tier_target_pool_size()
+{
+    local tier=$1
+    local base=$($CEPH osd pool get $BUILTIN_BACKPOOL size -f json 2>/dev/null | jq -r '.size | numbers')
+    local hosts=$(_ceph_device_tier_class_hosts $tier)
+    if [ -z "$base" ] || [ -z "$hosts" ] || [ "$hosts" -lt 1 ] ; then
+        echo "Error: cannot size device tier $tier (base pool size '${base:-?}', hosts '${hosts:-?}')" >&2
+        return 1
+    fi
+    if [ "$base" -le "$hosts" ] ; then
+        echo -n "$base"
+    else
+        echo -n "$hosts"
+    fi
+}
+
+# anchored existence checks. os_volume_type_create's own check is an unanchored
+# grep, so "seki1" matches an existing "seki1-ssd" there -- never reuse it to
+# decide whether something is already present.
+_ceph_device_tier_has_class() { $CEPH osd crush class ls 2>/dev/null | jq -r '.[]' | grep -qx "$1" ; }
+_ceph_device_tier_has_rule()  { $CEPH osd crush rule ls 2>/dev/null | grep -qx "$1" ; }
+_ceph_device_tier_has_pool()  { $CEPH osd pool ls 2>/dev/null | grep -qx "$1" ; }
+_ceph_device_tier_has_vtype() { $OPENSTACK volume type list --long --format value -c Name 2>/dev/null | grep -qx "$1" ; }
+
+# Tri-state CRUSH rule readback: 0 present, 1 read and absent, 2 unreadable.
+#
+# _ceph_device_tier_has_rule cannot answer this. A pipeline carries only the
+# last command's status, so its non-zero is "the rule is not there" AND "the
+# mon did not answer" -- fine for a caller that only skips work, wrong for the
+# delete path, which uses the answer to license stripping the device class the
+# rule selects through. Reading into a variable first keeps the command's own
+# status, which is what tells absent from unknown.
+_ceph_device_tier_rule_state()
+{
+    local rules=
+    rules=$($CEPH osd crush rule ls 2>/dev/null) || return 2
+    echo "$rules" | grep -qx "$1"
+}
+
+# pools bound to CRUSH rule $1, excluding pool $2. Returns non-zero when the
+# question cannot be answered, so a caller can refuse to act on an answer it
+# did not get. `.rule_id | numbers` keeps rule_id 0 -- a valid id -- from
+# reading as absent, and `osd pool ls detail` reports crush_rule as an id while
+# `osd pool get` reports a name, which is why the id is resolved first.
+_ceph_device_tier_rule_users()
+{
+    local rule=$1
+    local except=$2
+    local pools_json=$($CEPH osd pool ls detail -f json 2>/dev/null)
+    local rule_id=$($CEPH osd crush rule dump $rule -f json 2>/dev/null | jq -r '.rule_id | numbers')
+    [ -n "$rule_id" ] || return 1
+    echo "$pools_json" | jq -e 'length > 0' >/dev/null 2>&1 || return 1
+    echo "$pools_json" | jq -r --argjson rid "$rule_id" --arg ex "$except" \
+        '[ .[] | select(.crush_rule == $rid) | .pool_name | select(. != $ex) ] | join(" ")'
+}
+
+# wait for a class change to finish moving data. Same shape as
+# ceph_osd_promote_disk: recovering_objects_per_sec goes null, confirm once,
+# then stop. Bounded -- a caller that times out is told, not left believing the
+# cluster settled.
+_ceph_device_tier_wait_recovery()
+{
+    local tries=${1:-60}
+    local recovering=
+    for i in $(seq $tries) ; do
+        sleep 10
+        recovering=$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)
+        if [ "x$recovering" = "xnull" ] ; then
+            sleep 5
+            recovering=$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)
+            [ "x$recovering" = "xnull" ] && return 0
+        else
+            echo "recovering $recovering obj/sec"
+        fi
+    done
+    echo "Warning: still recovering after $((tries * 10))s; data movement continues in the background" >&2
+    return 1
+}
+
+# preflight shared by device tier create and update: both start data movement,
+# and Ceph is much worse at two overlapping remappings than at one.
+_ceph_device_tier_health_ok()
+{
+    if [ "$($CEPH -s -f json | jq -r .health.status)" != "HEALTH_OK" ] ; then
+        echo "Error: ceph health has to be OK to change device tier membership" >&2
+        return 1
+    fi
+    if [ "x$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)" != "xnull" ] ; then
+        echo "Error: cannot change device tier membership while ceph is recovering" >&2
+        return 1
+    fi
+    return 0
+}
+
+# undo only what this create actually made. $2 is a word list out of
+# "class rule pool vtype"; $3 is "<id>:<previous class>" pairs.
+_ceph_device_tier_unwind_create()
+{
+    local tier=$1
+    local made=$2
+    local saved=$3
+    echo "Error: device tier $tier was not completed; unwinding what this run created" >&2
+    if echo "$made" | grep -qw vtype ; then
+        Quiet -n $OPENSTACK volume type delete $tier
+    fi
+    if echo "$made" | grep -qw pool ; then
+        Quiet -n $CEPH osd pool delete $tier $tier --yes-i-really-really-mean-it
+    fi
+    if echo "$made" | grep -qw rule ; then
+        Quiet -n $CEPH osd crush rule rm $tier
+    fi
+    if echo "$made" | grep -qw class ; then
+        local id= cls=
+        for pair in $saved ; do
+            id=${pair%%:*}
+            cls=${pair#*:}
+            Quiet -n $CEPH osd crush rm-device-class osd.$id
+            if [ -n "$cls" ] ; then
+                Quiet -n $CEPH osd crush set-device-class $cls osd.$id
+            fi
+        done
+    fi
+}
+
+# params:
+# $1    - tier name
+# $2... - OSD ids ("0" or "osd.0")
+ceph_device_tier_create()
+{
+    local tier=$1
+    shift
+    if [ -z "$tier" ] || [ $# -lt 1 ] ; then
+        # $0 inside hex_sdk is /usr/sbin/hex_sdk, which names the wrong thing
+        echo "Usage: hex_sdk ${FUNCNAME[0]} <tier-name> <osd id> [<osd id>...]"
+        ceph_device_tier_list
+        return 1
+    fi
+    _ceph_device_tier_name_ok "$tier" || return 1
+
+    local ids=
+    ids=$(_ceph_device_tier_osd_ids "$@") || return 1
+    local osd_list=
+    for i in $ids ; do osd_list="$osd_list osd.$i" ; done
+
+    # re-running the same command must not build a second copy of anything
+    if _ceph_device_tier_has_class $tier && _ceph_device_tier_has_rule $tier && \
+       _ceph_device_tier_has_pool $tier && _ceph_device_tier_has_vtype $tier ; then
+        echo "device tier $tier already exists (osd: $($CEPH osd crush class ls-osd $tier 2>/dev/null | tr '\n' ' '))"
+        echo "use 'hex_sdk ceph_device_tier_update $tier <osd id>...' to change its members"
+        return 0
+    fi
+
+    _ceph_device_tier_health_ok || return 1
+
+    local made=
+    local saved=
+    local cls=
+
+    # 1) device class. rm first: an OSD carries exactly one class, and
+    #    set-device-class on an OSD that already has one fails with EBUSY.
+    #    Create only ever adds; taking an OSD out of a tier is ceph_device_tier_update.
+    for i in $ids ; do
+        cls=$(_ceph_device_tier_class_of_osd $i)
+        [ "$cls" = "$tier" ] && continue
+        saved="$saved $i:$cls"
+        made="$made class"
+        if ! $CEPH osd crush rm-device-class osd.$i >/dev/null 2>&1 ; then
+            echo "Error: cannot clear the device class of osd.$i" >&2
+            _ceph_device_tier_unwind_create "$tier" "$made" "$saved"
+            return 1
+        fi
+        if ! $CEPH osd crush set-device-class $tier osd.$i >/dev/null 2>&1 ; then
+            echo "Error: cannot set device class $tier on osd.$i" >&2
+            _ceph_device_tier_unwind_create "$tier" "$made" "$saved"
+            return 1
+        fi
+    done
+
+    # 2) rule. Only possible once some OSD carries the class.
+    if ! _ceph_device_tier_has_rule $tier ; then
+        if ! $CEPH osd crush rule create-replicated $tier default host $tier >/dev/null 2>&1 ; then
+            echo "Error: cannot create CRUSH rule $tier" >&2
+            _ceph_device_tier_unwind_create "$tier" "$made" "$saved"
+            return 1
+        fi
+        made="$made rule"
+    fi
+
+    # 3) pool, with an explicit RF
+    local size=
+    size=$(_ceph_device_tier_target_pool_size $tier) || {
+        _ceph_device_tier_unwind_create "$tier" "$made" "$saved"
+        return 1
+    }
+    if ! _ceph_device_tier_has_pool $tier ; then
+        Quiet -n ceph_create_pool $tier rbd $size
+        if ! _ceph_device_tier_has_pool $tier ; then
+            echo "Error: pool $tier was not created" >&2
+            _ceph_device_tier_unwind_create "$tier" "$made" "$saved"
+            return 1
+        fi
+        made="$made pool"
+    fi
+    Quiet -n ceph_adjust_pool_size $tier $size
+
+    # 4) bind the pool to the rule -- data starts moving here
+    if [ "$($CEPH osd pool get $tier crush_rule -f json 2>/dev/null | jq -r .crush_rule)" != "$tier" ] ; then
+        if ! $CEPH osd pool set $tier crush_rule $tier >/dev/null 2>&1 ; then
+            echo "Error: cannot bind pool $tier to CRUSH rule $tier" >&2
+            _ceph_device_tier_unwind_create "$tier" "$made" "$saved"
+            return 1
+        fi
+    fi
+
+    # 5) Cinder volume type. The catalog is read with its exit status kept: an
+    #    existence helper would fold "OpenStack is broken" into "the volume type
+    #    is not there", and here that reads as a failed create -- which would
+    #    unwind and delete the pool this run just built.
+    #
+    #    So an unreadable answer does NOT unwind. Everything on the Ceph side is
+    #    already correct at this point, ceph_device_tier_list flags the tier as
+    #    no-volume-type, and re-running create completes it. Keeping repairable
+    #    state beats destroying good work over a blip. Only a catalog that is
+    #    readable AND does not list the type is a real failure.
+    local vtypes=
+    if ! vtypes=$($OPENSTACK volume type list --long --format value -c Name 2>/dev/null) ; then
+        echo "Error: cannot read the volume type list; device tier $tier is complete on" >&2
+        echo "       the Ceph side but has no volume type yet -- re-run this command" >&2
+        return 1
+    fi
+    if ! echo "$vtypes" | grep -qx "$tier" ; then
+        Quiet -n $HEX_SDK os_volume_type_create $tier $tier
+        if ! vtypes=$($OPENSTACK volume type list --long --format value -c Name 2>/dev/null) ; then
+            echo "Error: cannot confirm volume type $tier was created; re-run this command" >&2
+            return 1
+        fi
+        if ! echo "$vtypes" | grep -qx "$tier" ; then
+            echo "Error: volume type $tier was not created" >&2
+            _ceph_device_tier_unwind_create "$tier" "$made" "$saved"
+            return 1
+        fi
+        made="$made vtype"
+    fi
+
+    echo "device tier $tier created on$osd_list (pool size $size)"
+    echo "note: the Cinder backend for $tier is generated from the tuning registry;"
+    echo "      until that is in place the volume type exists but has no backend."
+    return 0
+}
+
+# params:
+# $1    - tier name
+# $2... - the OSD ids the tier should consist of afterwards
+ceph_device_tier_update()
+{
+    local tier=$1
+    shift
+    if [ -z "$tier" ] || [ $# -lt 1 ] ; then
+        echo "Usage: hex_sdk ${FUNCNAME[0]} <tier-name> <osd id> [<osd id>...]"
+        ceph_device_tier_list
+        return 1
+    fi
+    if ! _ceph_device_tier_has_class $tier || ! _ceph_device_tier_has_rule $tier ; then
+        echo "Error: no such device tier: $tier" >&2
+        ceph_device_tier_list
+        return 1
+    fi
+
+    local want= have=
+    want=$(_ceph_device_tier_osd_ids "$@") || return 1
+    # Not `local have=$(...)`: local's own status masks the command's. An
+    # unreadable membership list would read as an empty tier -- every requested
+    # OSD an addition (so members already in it get taken out and re-added,
+    # which moves data), every existing member missing from the removal list,
+    # and the success line at the end a statement about a set nobody read.
+    if ! have=$($CEPH osd crush class ls-osd $tier 2>/dev/null) ; then
+        echo "Error: cannot read the members of device tier $tier; not changing it" >&2
+        return 1
+    fi
+
+    local add= remove=
+    for i in $want ; do
+        echo "$have" | grep -qx "$i" || add="$add $i"
+    done
+    for i in $have ; do
+        echo "$want" | grep -qx "$i" || remove="$remove $i"
+    done
+
+    if [ -z "$add" ] && [ -z "$remove" ] ; then
+        echo "device tier $tier already consists of $(echo $want)"
+        return 0
+    fi
+    # the rule would select nothing, and every pool bound to it would go dark
+    if [ -z "$want" ] ; then
+        echo "Error: a device tier cannot be left with no OSD; use ceph_device_tier_delete instead" >&2
+        return 1
+    fi
+
+    _ceph_device_tier_health_ok || return 1
+
+    # Unlike create, the rule already exists here, so a class change starts
+    # moving data the moment it lands. Take the OSDs out first so the movement
+    # is one remapping rather than two.
+    #
+    # Nothing below is allowed to fail quietly. There is no data-level rollback
+    # -- objects that have moved cannot be moved back, and pretending otherwise
+    # would be the worse lie -- so the contract is: check every step, stop at
+    # the first failure, say what state that leaves behind, and return non-zero.
+    # The one thing that must always be attempted is bringing the OSDs back in:
+    # an OSD left `out` is a cluster quietly running short.
+    local touched=
+    for i in $add $remove ; do touched="$touched osd.$i" ; done
+
+    if ! $CEPH osd out $touched >/dev/null 2>&1 ; then
+        echo "Error: cannot take$touched out; nothing has been changed" >&2
+        return 1
+    fi
+
+    local rc=0
+    local failed=
+    local moved=
+    local cls=
+    for i in $add ; do
+        cls=$(_ceph_device_tier_class_of_osd $i)
+        if ! $CEPH osd crush rm-device-class osd.$i >/dev/null 2>&1 || \
+           ! $CEPH osd crush set-device-class $tier osd.$i >/dev/null 2>&1 ; then
+            failed="$failed osd.$i"
+            break
+        fi
+        echo "osd.$i: ${cls:-(no class)} -> $tier"
+        moved="$moved osd.$i"
+    done
+    if [ -z "$failed" ] ; then
+        for i in $remove ; do
+            if ! $CEPH osd crush rm-device-class osd.$i >/dev/null 2>&1 ; then
+                failed="$failed osd.$i"
+                break
+            fi
+            echo "osd.$i: $tier -> (no class)"
+            moved="$moved osd.$i"
+        done
+    fi
+    if [ -n "$failed" ] ; then
+        echo "Error: device class change failed on$failed; stopped there" >&2
+        [ -n "$moved" ] && echo "       already changed:$moved" >&2
+        rc=1
+    fi
+
+    # data can be moving whether or not a step failed, so this is not skipped
+    _ceph_device_tier_wait_recovery || rc=1
+    if ! $CEPH osd in $touched >/dev/null 2>&1 ; then
+        echo "Error: could not bring$touched back in -- THOSE OSDs ARE STILL OUT" >&2
+        echo "       run 'ceph osd in$touched' once the cluster is reachable" >&2
+        rc=1
+    fi
+
+    # membership changed, so the achievable RF may have too. ceph_adjust_pool_size
+    # swallows its own failures, so the result is read back rather than trusted.
+    #
+    # Both halves are read back, because that function sets a pair --
+    # (size, min_size = max(1, size - 1)) -- and they fail independently. A pool
+    # that took the new size and kept the old min_size passes a size-only check
+    # while being the half that actually decides whether the pool still accepts
+    # writes with a host down: a tier resized 3 -> 2 whose min_size stayed 2 is a
+    # pool that stops on the first failure, reported as a successful update.
+    local size=
+    if size=$(_ceph_device_tier_target_pool_size $tier) ; then
+        Quiet -n ceph_adjust_pool_size $tier $size
+        local want_min=$(( size - 1 ))
+        [ $want_min -lt 1 ] && want_min=1
+        local got=$($CEPH osd pool get $tier size -f json 2>/dev/null | jq -r '.size | numbers')
+        local got_min=$($CEPH osd pool get $tier min_size -f json 2>/dev/null | jq -r '.min_size | numbers')
+        if [ "$got" != "$size" ] ; then
+            echo "Error: pool $tier size is ${got:-unreadable}, expected $size" >&2
+            rc=1
+        fi
+        if [ "$got_min" != "$want_min" ] ; then
+            echo "Error: pool $tier min_size is ${got_min:-unreadable}, expected $want_min" >&2
+            rc=1
+        fi
+    else
+        echo "Error: device tier $tier membership changed but its pool could not be resized" >&2
+        rc=1
+    fi
+
+    if [ $rc -ne 0 ] ; then
+        echo "Error: device tier $tier update did not complete; it now consists of" >&2
+        echo "       [$($CEPH osd crush class ls-osd $tier 2>/dev/null | tr '\n' ' ')]" >&2
+        return $rc
+    fi
+
+    # The line below is a statement about what the tier now holds, so it is read
+    # back rather than inferred from the steps having returned 0 -- the same
+    # reason the delete path reads the class list back after stripping it. A
+    # set-device-class that returns 0 without taking effect is otherwise
+    # reported as a completed membership change.
+    local now=
+    if ! now=$($CEPH osd crush class ls-osd $tier 2>/dev/null) ; then
+        echo "Error: device tier $tier was changed but its membership could not be" >&2
+        echo "       read back; it may not consist of $(echo $want)" >&2
+        return 1
+    fi
+    if [ "$(echo $now | tr ' ' '\n' | sort -n | tr '\n' ' ')" != \
+         "$(echo $want | tr ' ' '\n' | sort -n | tr '\n' ' ')" ] ; then
+        echo "Error: device tier $tier consists of [$(echo $now)], not the requested" >&2
+        echo "       [$(echo $want)]" >&2
+        return 1
+    fi
+    echo "device tier $tier now consists of $(echo $want) (pool size $size)"
+    return 0
+}
+
+# params:
+# $1 - tier name
+ceph_device_tier_delete()
+{
+    local tier=$1
+    if [ -z "$tier" ] ; then
+        echo "Usage: hex_sdk ${FUNCNAME[0]} <tier-name>"
+        ceph_device_tier_list
+        return 1
+    fi
+
+    # 0) Read everything this function will decide on, once, up front, and stop
+    #    if any of it cannot be read.
+    #
+    #    Re-querying was the bug. An existence helper folds "the service is
+    #    broken" and "it is not there" into the same non-zero, so a Keystone
+    #    blip between the readability probe and the in-use gate read as "there
+    #    is no volume type", the guard was skipped, and the pool went anyway.
+    #    Command substitution carries the command's own exit status, which is
+    #    what tells the two apart -- so the answer is one query kept, not more
+    #    probes.
+    local vtypes= pools= rules= members=
+    if ! vtypes=$($OPENSTACK volume type list --long --format value -c Name 2>/dev/null) ; then
+        echo "Error: cannot read the volume type list, so 'not in use' cannot be" >&2
+        echo "       established; not deleting device tier $tier" >&2
+        return 1
+    fi
+    if ! pools=$($CEPH osd pool ls 2>/dev/null) ; then
+        echo "Error: cannot read the pool list; not deleting device tier $tier" >&2
+        return 1
+    fi
+    if ! rules=$($CEPH osd crush rule ls 2>/dev/null) ; then
+        echo "Error: cannot read the CRUSH rule list; not deleting device tier $tier" >&2
+        return 1
+    fi
+    if ! members=$($CEPH osd crush class ls-osd $tier 2>/dev/null) ; then
+        echo "Error: cannot read the members of device tier $tier; not deleting it" >&2
+        return 1
+    fi
+
+    local has_vtype=1 has_pool=1 has_rule=1
+    echo "$vtypes" | grep -qx "$tier" && has_vtype=0
+    echo "$pools"  | grep -qx "$tier" && has_pool=0
+    echo "$rules"  | grep -qx "$tier" && has_rule=0
+
+    # 1) refuse while volumes still use it.
+    #
+    #    cinder_is_volume_type_in_use exits 0 for "in use" AND for "could not
+    #    tell", which is the right answer on a destructive path -- so it is not
+    #    wrapped in Quiet and its return value is not discarded.
+    #
+    #    It has to be reached by shelling back out through hex_sdk. hex_sdk
+    #    sources only the module matching the command's own prefix (see
+    #    /usr/sbin/hex_sdk: MOD=$(echo $1 | cut -d_ -f1)), so under
+    #    ceph_device_tier_delete the sdk_cinder.sh functions are simply not defined --
+    #    calling one directly would be a command-not-found returning 127, which
+    #    reads as "not in use". Same reason ceph_create_group_ssdpool reaches
+    #    os_volume_type_create through $HEX_SDK.
+    #
+    #    That shell-out also returns 1 when hex_sdk could not run the function
+    #    at all, which is indistinguishable from "no volumes", so a negative
+    #    answer is only trusted once the volume list is known to be readable.
+    if [ $has_vtype -eq 0 ] ; then
+        if $HEX_SDK cinder_is_volume_type_in_use "$tier" ; then
+            echo "Error: volume type $tier is still in use by at least one volume," >&2
+            echo "       or the volume list could not be read; not deleting device tier $tier" >&2
+            return 1
+        fi
+        if ! $OPENSTACK volume list --all-projects -f json 2>/dev/null \
+             | jq -e 'type == "array"' >/dev/null 2>&1 ; then
+            echo "Error: cannot read the volume list, so 'not in use' cannot be trusted;" >&2
+            echo "       not deleting device tier $tier" >&2
+            return 1
+        fi
+    fi
+
+    # 2) the registry entry and the Cinder backend come out first once WP-1
+    #    lands, so that Cinder stops pointing at a pool that is about to go.
+
+    # 3) volume type. The poll has to re-read, because it is waiting for a
+    #    change -- but a read that fails is "unknown", never "gone".
+    if [ $has_vtype -eq 0 ] ; then
+        Quiet -n $OPENSTACK volume type delete $tier
+        local gone=1 probe=
+        for i in {1..15} ; do
+            if probe=$($OPENSTACK volume type list --long --format value -c Name 2>/dev/null) ; then
+                echo "$probe" | grep -qx "$tier" || { gone=0 ; break ; }
+            fi
+            sleep 1
+        done
+        if [ $gone -ne 0 ] ; then
+            echo "Error: volume type $tier was not confirmed deleted -- still listed, or" >&2
+            echo "       the list stopped being readable; leaving device tier $tier in place" >&2
+            return 1
+        fi
+    fi
+
+    # 4) pool
+    if [ $has_pool -eq 0 ] ; then
+        Quiet -n $CEPH osd pool delete $tier $tier --yes-i-really-really-mean-it
+        if ! pools=$($CEPH osd pool ls 2>/dev/null) ; then
+            echo "Error: cannot confirm pool $tier was deleted; leaving its rule and" >&2
+            echo "       OSD classes alone" >&2
+            return 1
+        fi
+        if echo "$pools" | grep -qx "$tier" ; then
+            echo "Error: pool $tier was not deleted; leaving its rule and OSD classes alone" >&2
+            return 1
+        fi
+    fi
+
+    # 5) CRUSH rule, once no pool is left using it. CRUSH refuses to remove a
+    #    rule that is still in use, and an orphan rule is not harmless: a later
+    #    create-replicated on the same name is a silent no-op that returns 0
+    #    even when the arguments differ.
+    local rule_kept=1 rule_why= rule_subject="the CRUSH rule and "
+    if [ $has_rule -eq 0 ] ; then
+        local users=
+        if ! users=$(_ceph_device_tier_rule_users $tier $tier) ; then
+            echo "Warning: cannot tell whether CRUSH rule $tier is still in use;" >&2
+            echo "         keeping the rule and the device class that makes it work" >&2
+            rule_kept=0
+            rule_why="it cannot be confirmed that nothing else selects through it"
+        elif [ -n "$users" ] ; then
+            echo "Keeping CRUSH rule $tier and its device class: still used by $users"
+            rule_kept=0
+            rule_why="something else still selects through that rule"
+        else
+            # Not Quiet -n, and then read back anyway. This is the step whose
+            # success licenses stripping the device class below, and it can go
+            # wrong three ways: the rm returns non-zero, the rm returns 0
+            # without the rule going away, or the readback itself is
+            # unavailable so neither can be established. Only a read that
+            # succeeded and did not find the rule licenses the next step --
+            # anything else followed by the class removal leaves a rule
+            # selecting nothing, which is the outage the next step's comment
+            # exists to avoid.
+            local rm_rc=0 rule_state=0
+            Quiet $CEPH osd crush rule rm $tier
+            rm_rc=$?
+            _ceph_device_tier_rule_state $tier
+            rule_state=$?
+            if [ $rule_state -eq 0 ] ; then
+                echo "Error: CRUSH rule $tier is still present after removing it;" >&2
+                echo "       keeping the device class so the rule keeps selecting" >&2
+                rule_kept=0
+                rule_why="removing the rule did not take effect"
+            elif [ $rule_state -ne 1 ] ; then
+                echo "Error: the CRUSH rule list stopped being readable, so it cannot be" >&2
+                echo "       established that rule $tier went; keeping the device class" >&2
+                echo "       that makes it work" >&2
+                rule_kept=0
+                rule_why="it cannot be confirmed that the rule went"
+            elif [ $rm_rc -ne 0 ] ; then
+                # The rule is provably gone, so saying it was kept would be a
+                # lie -- but an rm that failed and yet took effect is not
+                # understood, and the classes are the half that can still be
+                # put back by hand.
+                echo "Error: removing CRUSH rule $tier reported a failure even though the" >&2
+                echo "       rule is gone; keeping the device class until that is understood" >&2
+                rule_kept=0
+                rule_subject=
+                rule_why="removing the rule reported a failure"
+            fi
+        fi
+    fi
+
+    # 6) the OSDs go back to having no device class -- but only if the rule
+    #    actually went. Stripping the class while keeping the rule would leave
+    #    that rule selecting nothing and every pool still bound to it would go
+    #    dark: refusing to remove a rule because someone uses it and then
+    #    destroying what makes it work is worse than doing either alone.
+    #
+    #    They are deliberately not restored to hdd/ssd -- what an OSD used to be
+    #    is not recorded anywhere, and guessing was ruled out on #840.
+    if [ $rule_kept -eq 0 ] ; then
+        echo "device tier $tier partially deleted: the volume type and the pool are gone,"
+        echo "${rule_subject}osd$(for i in $members ; do echo -n ".$i" ; done) keep the"
+        echo "device class $tier because $rule_why."
+        return 1
+    fi
+
+    # Each removal is checked, and then the membership is read back, for the
+    # same reason as the rule above: an OSD that silently kept the class is
+    # still selected by anything reaching for it, and the line below is a
+    # statement about every member. Reporting a clean delete over a partial one
+    # is how an OSD ends up carrying a class nobody is looking for.
+    local failed=
+    for i in $members ; do
+        Quiet $CEPH osd crush rm-device-class osd.$i || failed="$failed osd.$i"
+    done
+
+    # An unreadable class list is "unknown", never "gone" -- command
+    # substitution carries the command's own status, which is what tells the two
+    # apart here as it does on the delete path above. The parse is the second
+    # half of that read and gets the same treatment: `ceph` exiting 0 with
+    # output jq cannot parse is an answer nobody got, and letting it fall
+    # through the grep would report a clean delete on the strength of it.
+    local stuck= classes= names=
+    if classes=$($CEPH osd crush class ls 2>/dev/null) && \
+       names=$(echo "$classes" | jq -r '.[]' 2>/dev/null) ; then
+        if echo "$names" | grep -qx "$tier" ; then
+            stuck=$($CEPH osd crush class ls-osd $tier 2>/dev/null | sed 's/^/osd./' | tr '\n' ' ')
+            [ -n "$stuck" ] || stuck="(the class is still there but its members could not be listed)"
+        fi
+    else
+        stuck="(the device class list could not be read)"
+    fi
+
+    if [ -n "$failed" ] || [ -n "$stuck" ] ; then
+        echo "Error: device tier $tier only partially deleted -- the volume type, the" >&2
+        echo "       pool and the CRUSH rule are gone, but the device class is not" >&2
+        [ -n "$failed" ] && echo "       rm-device-class failed on:$failed" >&2
+        [ -n "$stuck" ]  && echo "       still carrying device class $tier: $stuck" >&2
+        return 1
+    fi
+
+    echo "device tier $tier deleted; osd$(for i in $members ; do echo -n ".$i" ; done) left with no device class"
+    return 0
+}
+
+# Lists what the Ceph side actually has. A tier is recognised here by its own
+# shape -- a device class with a CRUSH rule and a pool of the same name -- which
+# is a derivation, not a source of truth; the authoritative list is the tuning
+# registry, and comparing the two is what this grows into once WP-1 lands.
+ceph_device_tier_list()
+{
+    $CEPH -s >/dev/null 2>&1 || return 1
+    printf "%-16s %-8s %-6s %-11s %-10s %-6s %s\n" \
+        DEVICE_TIER OSD HOSTS POOL_SZ/MIN POOL_RULE VTYPE NOTE
+    local tier= osds= hosts= size= min_size= prule= vtype= note=
+    for tier in $($CEPH osd crush class ls 2>/dev/null | jq -r '.[]') ; do
+        _ceph_device_tier_has_rule $tier || continue
+        _ceph_device_tier_has_pool $tier || continue
+        osds=$($CEPH osd crush class ls-osd $tier 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+        hosts=$(_ceph_device_tier_class_hosts $tier)
+        size=$($CEPH osd pool get $tier size -f json 2>/dev/null | jq -r '.size | numbers')
+        min_size=$($CEPH osd pool get $tier min_size -f json 2>/dev/null | jq -r '.min_size | numbers')
+        prule=$($CEPH osd pool get $tier crush_rule -f json 2>/dev/null | jq -r .crush_rule)
+        _ceph_device_tier_has_vtype $tier && vtype=yes || vtype=no
+        note=
+        [ "$prule" = "$tier" ] || note="$note pool-not-on-its-rule"
+        [ "$vtype" = "yes" ] || note="$note no-volume-type"
+        [ -n "$size" ] && [ -n "$hosts" ] && [ "$size" -gt "$hosts" ] && note="$note rf-above-host-count"
+        [ "${size:-0}" = "1" ] && note="$note no-redundancy"
+        printf "%-16s %-8s %-6s %-11s %-10s %-6s %s\n" \
+            "$tier" "${osds:--}" "${hosts:-?}" "${size:-?}/${min_size:-?}" "$prule" "$vtype" "${note:- ok}"
+    done
+}
