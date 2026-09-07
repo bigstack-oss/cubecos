@@ -45,6 +45,12 @@ spec:
         enableAutoRenew: true
     aws:
       region: auto
+      # accessKey is a keystone USERNAME, not an S3 key: cube-cos-api resolves the
+      # user by this name and mints an EC2 credential for it whose access key is the
+      # name itself. It used to default to "admin", which is why the API and hex_sdk
+      # fought over one credential. Its own user keeps them apart.
+      accessKey: @S3_ACCESS_KEY@
+      secretKey: @S3_SECRET_KEY@
       enableStaticCreds: true
       enableCustomURL: true
       insecureSkipVerify: true
