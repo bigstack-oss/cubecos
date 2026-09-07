@@ -1309,15 +1309,34 @@ EnableMgrPrometheus(const std::string& myIp, const std::string& hostname)
     // active mgr moves. Scoping to mgr.<id> gives each mgr its own address, so failover
     // lands on a daemon that can bind.
     //
-    // No cluster-wide value is written alongside it. Ceph's own default is already "all
-    // interfaces", so an unkeyed mgr still serves; writing an explicit wildcard as well
-    // would add a second, conflicting answer for the same daemon and buy nothing.
+    // No cluster-wide value is written alongside it, and any inherited one is removed below.
+    // Ceph's own default is "all interfaces" -- declared as "::", measured to bind *:9283 --
+    // so an unkeyed mgr still serves; writing an explicit wildcard as well would add a
+    // second, conflicting answer for the same daemon and buy nothing.
     //
     // The mgr id is the hostname here -- ceph-mgr@cc1 is mgr.cc1 -- which is why s_hostname
     // is the right key. Exposure is narrowed further by haproxy: only VIP:9285 is reachable
     // off the control plane, and its content health-check means only the active mgr answers.
     HexSystemF(0, "timeout 10 ceph config set mgr.%s mgr/prometheus/server_addr %s 2>/dev/null",
                   hostname.c_str(), myIp.c_str());
+
+    // Releases before this one set the cluster-wide key to 0.0.0.0, and it lives in the mon
+    // config store, so an upgrade carries it forward. The per-daemon key above already wins
+    // over it -- verified with both present: the mgr binds the mgmt address, not the
+    // wildcard -- so this is not a correctness fix, and it is not marker-gated for the same
+    // reason nothing else here is: rm on an absent key returns 0, so a fresh cluster pays
+    // one no-op call and an upgraded one is cleaned the first time ceph commits.
+    //
+    // What it buys is that a mgr with no per-daemon key stops falling back to the wildcard,
+    // which is the state of every control node that has not committed ceph yet -- during a
+    // rolling upgrade, that is a real window.
+    //
+    // Safe to drop mid-roll, while the other nodes are still on the old release: with no key
+    // at any level ceph's own default takes over, which is documented as "::" and measured
+    // to bind *:9283 and answer HTTP 200 on the IPv4 mgmt address (bindv6only is 0), exactly
+    // as the explicit 0.0.0.0 did. Those mgrs keep serving until their own commit narrows
+    // them.
+    HexSystemF(0, "timeout 10 ceph config rm mgr mgr/prometheus/server_addr 2>/dev/null");
     HexSystemF(0, "timeout 10 ceph config set mgr mgr/prometheus/server_port 9283 2>/dev/null");
 
     // Per-daemon perf counters, which the module excludes by default. These are the per-OSD
