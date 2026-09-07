@@ -800,7 +800,10 @@ ceph_adjust_pgs()
             $BUILTIN_CACHEPOOL|*-cache)
                 ceph_adjust_pool_pg $p 100
                 ;;
-            $BUILTIN_BACKPOOL|*-pool)
+            # a tiered pool (<group>-ssd) holds user volumes just like the base
+            # pool it was carved from, so it gets the base pool's share and not
+            # the 1-per-mille the catch-all hands to unknown pools.
+            $BUILTIN_BACKPOOL|*-pool|*-ssd)
                 ceph_adjust_pool_pg $p 400
                 ;;
             # others 35%: 350
