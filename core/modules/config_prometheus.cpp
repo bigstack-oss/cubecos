@@ -452,16 +452,25 @@ WriteExporterDefaults(bool control, const std::string& myIp)
 
 // Membership changes do not re-commit this module, so the per-node target lists are kept
 // current by cron -- the same arrangement, and the same reasoning, as the lachesis list.
-static void
+//
+// WriteFile rather than fopen, for the mode: a bare fopen leaves it to the process umask,
+// which CodeQL reports as cpp/world-writable-file-creation and which cron would refuse to
+// run anyway if the umask ever let the file out group-writable. Same fix as the thanos
+// config files a few commits back, and as config_apache2 before them.
+static bool
 WriteExporterTargetsCronJob()
 {
-    FILE *fout = fopen(EXPORTER_TARGETS_CRON, "w");
-    if (!fout) {
-        HexLogError("Unable to write %s", EXPORTER_TARGETS_CRON);
-        return;
+    std::string fsError;
+
+    const std::vector<std::string> cron = {
+        "* * * * * root " HEX_SDK " prometheus_exporter_targets\n",
+    };
+    if (!WriteFile(fsError, EXPORTER_TARGETS_CRON, cron)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
     }
-    fprintf(fout, "* * * * * root " HEX_SDK " prometheus_exporter_targets\n");
-    fclose(fout);
+
+    return true;
 }
 
 // The schema is thanos's own EndpointConfig, not prometheus file_sd: a bare list of
