@@ -643,3 +643,54 @@ migrate_libvirt()
 
     touch /run/cube_libvirt
 }
+
+# Retire the ceph-mgr influx module on a cluster upgraded from a release that had it
+# enabled. From v3.1.20 the mgr's own prometheus module is the source of ceph metrics,
+# enabled per node by config_ceph.cpp and scraped through haproxy, so the influx route
+# is both redundant and the non-HA one: only the active mgr writes, which left the ceph
+# database populated on one node of three.
+#
+# This is not free with the A/B partition switch. The module enablement lives in the mon
+# quorum's mgr map and mgr/influx/* in the mon config store, neither of which is on the
+# rootfs -- a rolling upgrade carries both forward untouched, so nothing clears them
+# unless we do it here.
+#
+# No marker of its own, deliberately. Same lesson migrate_ceph records above: a one-shot
+# per-node marker cannot retry, and this needs a serving mgr that a freshly booted node
+# often does not have yet. config_ceph.cpp's Commit owns the gate and keys off a marker
+# it clears only on rc 0, so an early run against an unavailable mgr is retried on the
+# next commit. Returns non-zero until the state is actually clean.
+migrate_ceph_mgr_influx()
+{
+    local ready=$($CEPH mgr dump -f json 2>/dev/null | jq -r .available 2>/dev/null | tr -d '\n')
+    if [ "$ready" != "true" ] ; then
+        log_info "migrate_ceph_mgr_influx: no serving mgr yet, will retry"
+        return 1
+    fi
+
+    local modules=$($CEPH mgr module ls -f json 2>/dev/null)
+    if [ "x$modules" = "x" ] ; then
+        log_info "migrate_ceph_mgr_influx: mgr module list unavailable, will retry"
+        return 1
+    fi
+
+    if echo "$modules" | jq -r '.enabled_modules[]' | grep -qx influx ; then
+        log_info "migrate_ceph_mgr_influx: disabling the influx mgr module"
+        $CEPH mgr module disable influx || return 1
+    fi
+
+    # Enumerated rather than named, so a hostname/port/interval set by an older release,
+    # by health_ceph_mgr's old auto-repair, or by hand all go the same way. The section is
+    # taken from the dump too: config-set wrote them under 'mgr', but a hand-set key could
+    # sit under mgr.<id>.
+    local keys=$($CEPH config dump -f json 2>/dev/null | \
+                 jq -r '.[] | select(.name | startswith("mgr/influx/")) | "\(.section) \(.name)"')
+    local section name
+    while read -r section name ; do
+        [ "x$name" = "x" ] && continue
+        log_info "migrate_ceph_mgr_influx: removing $section $name"
+        $CEPH config rm $section $name || return 1
+    done <<< "$keys"
+
+    return 0
+}

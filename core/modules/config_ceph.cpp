@@ -42,6 +42,10 @@
 // without it, every commit on every boot would pay a ceph round trip to re-answer a
 // question that only changes across an upgrade.
 #define MAKRER_RELEASE_PENDING "/etc/appliance/state/ceph_release_upgrade_pending"
+// Dropped by the same migrate hook, cleared once the influx mgr module is gone. See
+// RetireMgrInflux() -- the state it removes lives in the mon quorum, not on the rootfs,
+// so the partition switch does not clear it for us.
+#define MAKRER_INFLUX_PENDING "/etc/appliance/state/ceph_mgr_influx_retire_pending"
 #define MAKRER_DASHBOARD "/etc/appliance/state/ceph_dashboard_done"
 #define MAKRER_DASHBOARD_IDP "/etc/appliance/state/ceph_dashboard_idp_done"
 #define MAKRER_ISCSI "/etc/appliance/state/ceph_iscsi_done"
@@ -1562,7 +1566,35 @@ FinalizeCephRelease()
     }
 }
 
-// Drop the marker FinalizeCephRelease() keys off. This runs on a firmware switch --
+// Retire the influx mgr module on a cluster upgraded from a release that enabled it.
+// config_influxdb.cpp no longer turns it on, but that only covers new clusters: the
+// enablement is in the mon quorum's mgr map and mgr/influx/* in the mon config store,
+// so a rolling upgrade carries both forward and the appliance keeps writing ceph
+// metrics into influxdb from whichever mgr happens to be active.
+//
+// Marker-gated for the same reason as FinalizeCephRelease: this is a cluster-wide ceph
+// round trip whose answer changes only across an upgrade, and on an ordinary boot there
+// is no marker and it costs nothing. Cleared only when the sdk call reports the state
+// clean -- a boot where no mgr is serving yet returns 1, the marker survives, and the
+// next commit tries again.
+//
+// Not IsControl-gated, again matching FinalizeCephRelease: the migrate hook drops the
+// marker on every node, InitCephClient() gives them all the admin keyring, and a node
+// that could never clear its own marker would carry it forever.
+static void
+RetireMgrInflux()
+{
+    if (access(MAKRER_INFLUX_PENDING, F_OK) != 0)
+        return;
+
+    if (HexUtilSystemF(0, 0, HEX_SDK " migrate_ceph_mgr_influx") == 0) {
+        HexLogInfo("ceph: influx mgr module retired, clearing the marker");
+        unlink(MAKRER_INFLUX_PENDING);
+    }
+}
+
+// Drop the markers FinalizeCephRelease() and RetireMgrInflux() key off. This runs on a
+// firmware switch --
 // the only way the ceph packages change under a cluster -- so it is the one moment
 // worth re-checking require_osd_release. It fires on switches that do not move ceph
 // too; that costs one no-op finalize, which then clears the marker.
@@ -1570,6 +1602,7 @@ static bool
 MigratePrepare(const char* prevVersion, const char* prevRootDir)
 {
     HexSystemF(0, "touch " MAKRER_RELEASE_PENDING);
+    HexSystemF(0, "touch " MAKRER_INFLUX_PENDING);
     return true;
 }
 
@@ -1809,6 +1842,7 @@ Commit(bool modified, int dryLevel)
     // `hex_config bootstrap` and CommitCheck() sets s_bConfigChanged unconditionally
     // under IsBootstrap().
     FinalizeCephRelease();
+    RetireMgrInflux();
 
     return true;
 }
