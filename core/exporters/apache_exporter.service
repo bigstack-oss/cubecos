@@ -1,0 +1,19 @@
+# -*- mode: conf -*-
+# Replaces monasca-agent's apache plugin. Scrapes mod_status, which config_apache2 exposes
+# on localhost only, so this reaches it over loopback with no credentials.
+
+[Unit]
+Description=Prometheus exporter for Apache httpd
+Documentation=https://github.com/Lusitaniae/apache_exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/apache_exporter
+User=prometheus
+ExecStart=/usr/bin/apache_exporter $ARGS
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

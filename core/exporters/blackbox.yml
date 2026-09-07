@@ -1,0 +1,44 @@
+# Probe definitions for blackbox_exporter.
+#
+# These replace monasca-agent's http_check plugin, whose `http_status` series the six
+# health_*_check functions in sdk_health.sh read. The probe targets themselves are generated
+# by config_prometheus.cpp, because they are the VIP plus the same ports config_haproxy.cpp
+# already knows -- this file only says what "up" means.
+modules:
+  # Unauthenticated OpenStack API roots do not agree on a success code: a version document
+  # is 200 on nova and octavia, a multiple-choices list is 300 on glance and cinder, and a
+  # service that demands a token before it will say anything answers 401. All three prove the
+  # service is listening and serving, which is exactly what http_status meant, so all three
+  # count as up. A 5xx or a connection failure does not.
+  openstack_api:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: [200, 300, 401]
+      # No valid_http_versions. Constraining it proves nothing about whether the service is
+      # serving, and it produces false failures: octavia's API answers HTTP/1.0, so a list of
+      # 1.1/2.0 reported probe_http_status_code 200 alongside probe_success 0 -- which would
+      # have left health_octavia_check permanently NG once it moves onto this series.
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+
+  # Plain 2xx, for endpoints that do have a real health path.
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: []
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+
+  # For the non-HTTP members of the haproxy service list -- rabbitmq, zookeeper, kafka,
+  # memcached, mysql. Proves the listener accepts a connection, which is all a TCP service
+  # can be asked without speaking its protocol.
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false

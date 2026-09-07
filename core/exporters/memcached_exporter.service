@@ -1,0 +1,19 @@
+# -*- mode: conf -*-
+# Replaces monasca-agent's mcache plugin. Reads memcached's own stats protocol over the
+# loopback socket, so it needs no credentials and no privilege.
+
+[Unit]
+Description=Prometheus exporter for memcached
+Documentation=https://github.com/prometheus/memcached_exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/memcached_exporter
+User=prometheus
+ExecStart=/usr/bin/memcached_exporter $ARGS
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

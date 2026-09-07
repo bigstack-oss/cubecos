@@ -1,0 +1,20 @@
+# -*- mode: conf -*-
+# Synthetic probes -- what replaces monasca-agent's http_check plugin, and so what the six
+# health_*_check functions in sdk_health.sh read instead of monasca's http_status series.
+# Runs as prometheus: it needs no privilege beyond opening outbound sockets.
+
+[Unit]
+Description=Prometheus blackbox exporter for synthetic service probes
+Documentation=https://github.com/prometheus/blackbox_exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/blackbox_exporter
+User=prometheus
+ExecStart=/usr/bin/blackbox_exporter $ARGS
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

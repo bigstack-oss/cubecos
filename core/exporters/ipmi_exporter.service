@@ -1,0 +1,26 @@
+# -*- mode: conf -*-
+# Replaces monasca-agent's ipmi_sensors plugin, and is what supplies Watcher's
+# host_inlet_temp / host_outlet_temp / host_airflow / host_power once its data source moves
+# off monasca -- those four have no other source on the box.
+#
+# Runs as root, unlike the other exporters. The local ("DCMI") path shells out to
+# freeipmi against /dev/ipmi0, which is root-owned; the alternative is a setuid wrapper or
+# a udev rule granting a service user access to the raw BMC device, which is a larger
+# privilege surface than this. It binds the management address, not loopback: the Prometheus
+# that scrapes it runs on a control node and this unit runs on every node.
+
+[Unit]
+Description=Prometheus exporter for IPMI/BMC sensors
+Documentation=https://github.com/prometheus-community/ipmi_exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/ipmi_exporter
+User=root
+ExecStart=/usr/bin/ipmi_exporter $ARGS
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
