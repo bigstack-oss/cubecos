@@ -1284,6 +1284,55 @@ EnableMonMsgr2()
     return true;
 }
 
+// The prometheus module. Split out of EnableMgrDashboard, where it used to sit behind that
+// function's MAKRER_DASHBOARD short-circuit, so its settings were written exactly once ever
+// and never re-asserted. Enabling a module once is fine; pinning an *address* once is not,
+// because the address can change under it and nothing would notice.
+//
+// Nothing here is marker-gated. Every setting is idempotent, and ceph_mgr_module_enable
+// short-circuits when the module is already in enabled_modules, so re-running this on every
+// commit costs a couple of ceph calls and buys self-healing.
+static bool
+EnableMgrPrometheus(const std::string& myIp, const std::string& hostname)
+{
+    if (!IsControl(s_eCubeRole))
+        return true;
+
+    // Scoped to this mgr, not to mgr as a class, and that is the whole point.
+    // mgr/prometheus/server_addr is one value shared by every mgr, and a process can only
+    // bind an address that exists on its host -- so a single specific IP set cluster-wide is
+    // unbindable on every node that does not own it, and the endpoint dies the moment the
+    // active mgr moves. Scoping to mgr.<id> gives each mgr its own address, so failover
+    // lands on a daemon that can bind.
+    //
+    // No cluster-wide value is written alongside it. Ceph's own default is already "all
+    // interfaces", so an unkeyed mgr still serves; writing an explicit wildcard as well
+    // would add a second, conflicting answer for the same daemon and buy nothing.
+    //
+    // The mgr id is the hostname here -- ceph-mgr@cc1 is mgr.cc1 -- which is why s_hostname
+    // is the right key. Exposure is narrowed further by haproxy: only VIP:9285 is reachable
+    // off the control plane, and its content health-check means only the active mgr answers.
+    HexSystemF(0, "timeout 10 ceph config set mgr.%s mgr/prometheus/server_addr %s 2>/dev/null",
+                  hostname.c_str(), myIp.c_str());
+    HexSystemF(0, "timeout 10 ceph config set mgr mgr/prometheus/server_port 9283 2>/dev/null");
+
+    // Per-daemon perf counters, which the module excludes by default. These are the per-OSD
+    // series -- ceph_osd_stat_bytes, ceph_osd_op_{r,w}_{out,in}_bytes, the op latency
+    // sum/count pairs -- that the storage dashboards and the stats_storage_* functions need.
+    //
+    // This is not new collection. The influx module has always shipped exactly these counters
+    // (the ceph database carries the same 24 per-OSD latency series), so the mgr already
+    // gathers them; excluding them here only threw away data already being paid for.
+    // Measured on accept-3cc: rendering /metrics goes from 1841 lines in ~7ms to 7183 lines
+    // in ~11ms, so the cost is about 4ms a scrape.
+    HexSystemF(0, "timeout 10 ceph config set mgr mgr/prometheus/exclude_perf_counters false 2>/dev/null");
+
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_mgr_module_enable prometheus");
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_mgr_module_enable osd_perf_query");
+
+    return true;
+}
+
 static bool
 EnableMgrDashboard(const std::string& sharedId)
 {
@@ -1298,10 +1347,6 @@ EnableMgrDashboard(const std::string& sharedId)
         HexSystemF(0, "timeout 10 ceph config set mgr mgr/dashboard/ssl true 2>/dev/null");
         HexSystemF(0, "timeout 10 ceph config set mgr mgr/dashboard/url_prefix ceph 2>/dev/null");
         HexUtilSystemF(0, 0, HEX_SDK " ceph_mgr_module_enable dashboard");
-        HexSystemF(0, "timeout 10 ceph config set mgr mgr/prometheus/server_addr 0.0.0.0 2>/dev/null");
-        HexSystemF(0, "timeout 10 ceph config set mgr mgr/prometheus/server_port 9283 2>/dev/null");
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_mgr_module_enable prometheus");
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_mgr_module_enable osd_perf_query");
         HexSystemF(0, "touch " MAKRER_DASHBOARD);
     }
 
@@ -1554,6 +1599,7 @@ CommitCheck(bool modified, int dryLevel)
         | s_bKeystoneModified
         | G_MOD(IS_MASTER)
         | G_MOD(CTRL_IP)
+        | G_MOD(MGMT_ADDR)
         | G_MOD(SHARED_ID)
         | G_MOD(STORAGE_F_CIDR)
         | G_MOD(STORAGE_B_CIDR)
@@ -1726,6 +1772,7 @@ Commit(bool modified, int dryLevel)
 
         EnableMgrRestful();
         EnableMgrDashboard(sharedId);
+        EnableMgrPrometheus(G(MGMT_ADDR), s_hostname.c_str());
         // EnabledDashbaordISCSIGateway(myIp, gwApiPass);
         // pg_autoscaler is always on module since pacific
         // EnablePgAutoScale();
