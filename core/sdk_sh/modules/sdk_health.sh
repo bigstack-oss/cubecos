@@ -3808,6 +3808,20 @@ health_thanos_check()
             ERR_LOG="netstat -tunpl | grep 10904"
             continue
         fi
+        # the store gateway is what makes anything past local prometheus retention
+        # readable at all: without it the querier can only see what is still on disk
+        if ! is_remote_running $node thanos-store ; then
+            ERR_CODE=5
+            ERR_MSG+="thanos-store on $node is not running\n"
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u thanos-store"
+            continue
+        fi
+        if ! $CURL -sf http://$node:10906/-/ready >/dev/null 2>&1 ; then
+            ERR_CODE=6
+            ERR_MSG+="thanos-store on $node doesn't respond\n"
+            ERR_LOG="netstat -tunpl | grep 10906"
+            continue
+        fi
         # the whole point of thanos here is that a querier answers from every replica
         # rather than only its own; a querier that has lost its peers still passes every
         # probe above while silently serving one node's view of the cluster
@@ -3819,6 +3833,16 @@ health_thanos_check()
             ERR_LOG="$CURL -s http://$node:10904/prometheus/api/v1/stores"
         fi
     done
+
+    # The compactor is a pacemaker singleton, so it is checked cluster-wide rather than
+    # per node: exactly one instance must be running, anywhere. Two would corrupt the
+    # bucket, none means retention and downsampling have silently stopped.
+    local running=$(cmd -c -v "systemctl is-active thanos-compact" 2>/dev/null | grep -c "|0|active$")
+    if [ "${running:-0}" -ne 1 ] ; then
+        ERR_CODE=7
+        ERR_MSG+="thanos-compact instances running: ${running:-0}, expected exactly 1\n"
+        ERR_LOG="pcs status | grep -A2 thanos-compact"
+    fi
 
     _health_fail_log
 }
@@ -3834,7 +3858,21 @@ health_thanos_repair()
            ! $CURL -sf http://$node:10904/-/ready >/dev/null 2>&1 ; then
             remote_systemd_restart $node thanos-query
         fi
+        if ! is_remote_running $node thanos-store || \
+           ! $CURL -sf http://$node:10906/-/ready >/dev/null 2>&1 ; then
+            remote_systemd_restart $node thanos-store
+        fi
     done
+
+    # thanos-compact is pacemaker's, not ours. Restarting the unit directly would
+    # either fight pacemaker or, worse, start a second compactor against the bucket
+    # while pacemaker still believes its own instance is running. Ask pacemaker to
+    # replace it instead, and only from one node.
+    local running=$(cmd -c -v "systemctl is-active thanos-compact" 2>/dev/null | grep -c "|0|active$")
+    if [ "${running:-0}" -ne 1 ] && [ "x$HOSTNAME" = "x${CUBE_NODE_CONTROL_HOSTNAMES[0]}" ] ; then
+        log_error "health_thanos_repair: ${running:-0} thanos-compact instances, expected 1, asking pacemaker to replace it"
+        Quiet -n pcs resource cleanup thanos-compact
+    fi
 }
 
 # ERR_CODE 4 is "a peer's sidecar is not reachable" -- almost always a node that is down
