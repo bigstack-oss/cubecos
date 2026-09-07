@@ -3284,12 +3284,12 @@ ceph_create_group_ssdpool()
 
     if [ "$group" = "default" ] ; then
         local pool=${BUILTIN_BACKPOOL}-ssd
-        local cpool=$BUILTIN_CACHEPOOL
+        local bpool=$BUILTIN_BACKPOOL
         local rule=rule-ssd
         local vtype=CubeStorage-ssd
     else
         local pool=${group}-ssd
-        local cpool=${group}-cache
+        local bpool=${group}-pool
         local rule=${group}-ssd
         local vtype=${group}-ssd
     fi
@@ -3300,8 +3300,12 @@ ceph_create_group_ssdpool()
 
     Quiet -n ceph_create_pool $pool rbd
 
-    local c_size=$($CEPH osd pool get $cpool size | awk '{print $2}' | tr -d '\n')
-    Quiet -n ceph_adjust_pool_size "$pool" $c_size
+    # RF comes from the base pool this tier was carved from. A cache pool is
+    # sized one replica below its base pool (ceph_create_node_group), so taking
+    # the RF from there left the tiered pool a replica short of the volumes it
+    # serves.
+    local b_size=$($CEPH osd pool get $bpool size | awk '{print $2}' | tr -d '\n')
+    Quiet -n ceph_adjust_pool_size "$pool" $b_size
     $CEPH osd pool set $pool crush_rule $rule
     Quiet -n $HEX_SDK os_volume_type_create $vtype $pool
 
