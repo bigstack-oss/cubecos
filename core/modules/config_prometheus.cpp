@@ -15,6 +15,10 @@
 
 #include <cube/systemd_util.h>
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <filesystem.hpp>
 
 #include "include/role_cubesys.h"
@@ -75,6 +79,54 @@ static const char NAME[] = "prometheus";
 // group at a time); /var/lib is already covered by the cube_disk_stats telegraf input.
 #define THANOS_STORE_DATADIR   "/var/lib/thanos/store"
 #define THANOS_COMPACT_DATADIR "/var/lib/thanos/compact"
+
+// Exporters. What each one replaces from monasca-agent, and why the ports look like this:
+//
+//   node_exporter      cpu/load/mem/network/disk plugins, and Watcher's host_cpu_usage and
+//                      host_ram_usage. Registered port 9100 is taken by CubeCOS haproxy's
+//                      stats listener (config_haproxy.cpp, "listen stats"), and moving that
+//                      would change an operator-facing URL, so the exporter moves instead.
+//   blackbox_exporter  the http_check plugin, whose http_status series the six health_*_check
+//                      functions read. Loopback: each control node's Prometheus uses its own.
+//   ipmi_exporter      the ipmi_sensors plugin, and the only source on the box for Watcher's
+//                      host_inlet_temp / host_outlet_temp / host_airflow / host_power.
+//   memcached_exporter the mcache plugin.   apache_exporter  the apache plugin.
+//
+// haproxy, rabbitmq, influxdb and zookeeper are absent on purpose -- they all speak Prometheus
+// natively, so there is nothing to install or run for them. See core/exporters/exporters.mk.
+#define NODE_EXPORTER "prometheus-node-exporter"
+#define NODE_EXPORTER_DEF "/etc/default/prometheus-node-exporter"
+#define NODE_EXPORTER_PORT "9101"
+#define BLACKBOX_EXPORTER "blackbox_exporter"
+#define BLACKBOX_EXPORTER_DEF "/etc/default/blackbox_exporter"
+#define BLACKBOX_EXPORTER_PORT "9115"
+#define BLACKBOX_CONF "/etc/prometheus/exporters/blackbox.yml"
+#define IPMI_EXPORTER "ipmi_exporter"
+#define IPMI_EXPORTER_DEF "/etc/default/ipmi_exporter"
+#define IPMI_EXPORTER_PORT "9290"
+#define MEMCACHED_EXPORTER "memcached_exporter"
+#define MEMCACHED_EXPORTER_DEF "/etc/default/memcached_exporter"
+#define MEMCACHED_EXPORTER_PORT "9150"
+#define APACHE_EXPORTER "apache_exporter"
+#define APACHE_EXPORTER_DEF "/etc/default/apache_exporter"
+#define APACHE_EXPORTER_PORT "9117"
+// httpd's own default vhost, which is where mod_status lives. NOT port 80 -- that is the
+// front-end proxy, and it answers /server-status with a 302 to https, which the exporter
+// reports as apache_up 0 rather than as an error. config_apache2 ships the Location block
+// (server-status.conf, Require local) already; only the port needed finding.
+#define APACHE_STATUS_PORT "8080"
+// haproxy's own promex service, on the stats listeners config_haproxy already binds. There
+// are two, and they are different haproxies: the local one runs on every control node and
+// fronts that node's own traffic (haproxy.cfg, :9100), while the -ha one is the pacemaker
+// singleton that owns the VIP (haproxy-ha.cfg, :9000). Both are worth scraping and neither
+// substitutes for the other.
+#define HAPROXY_STATS_PORT "9100"
+#define HAPROXY_HA_STATS_PORT "9000"
+#define EXPORTER_TARGETS_CRON "/etc/cron.d/prometheus_exporter_targets"
+#define NODE_TARGETS "/etc/prometheus/targets/node.json"
+#define IPMI_TARGETS "/etc/prometheus/targets/ipmi.json"
+#define MEMCACHED_TARGETS "/etc/prometheus/targets/memcached.json"
+#define APACHE_TARGETS "/etc/prometheus/targets/apache.json"
 
 static CubeRole_e s_eCubeRole;
 
@@ -168,7 +220,8 @@ WriteDefaultConf(const std::string& myIp)
 }
 
 static bool
-WriteConf(bool ha, const std::string& sharedId, const std::string& hostname, int rpDays, int rpSizeGib)
+WriteConf(bool ha, const std::string& sharedId, const std::string& ctrlAddrs,
+          const std::string& hostname, int rpDays, int rpSizeGib)
 {
     FILE *fout = fopen(CONF, "w");
     if (!fout) {
@@ -233,6 +286,70 @@ WriteConf(bool ha, const std::string& sharedId, const std::string& hostname, int
     fprintf(fout, "    - files:\n");
     fprintf(fout, "      - '" LACHESIS_TARGETS "'\n");
 
+    // The exporter jobs. file_sd for everything that is per-node, because compute and
+    // storage membership is not in cubesys.control.addrs and a node joining must not need a
+    // commit to be scraped; the generator stamps each target with the fqdn label whose value
+    // is that node's hostname, which is what Watcher's host metrics are keyed on.
+    const std::vector<std::pair<std::string, std::string>> sdJobs = {
+        { "node",      NODE_TARGETS },
+        { "ipmi",      IPMI_TARGETS },
+        { "memcached", MEMCACHED_TARGETS },
+        { "apache",    APACHE_TARGETS },
+    };
+    for (const auto& job : sdJobs) {
+        fprintf(fout, "  - job_name: '%s'\n", job.first.c_str());
+        fprintf(fout, "    file_sd_configs:\n");
+        fprintf(fout, "    - files:\n");
+        fprintf(fout, "      - '%s'\n", job.second.c_str());
+    }
+
+    // haproxy needs no exporter -- see HAPROXY_STATS_PORT. The per-node local instance is
+    // listed from cubesys.control.addrs rather than file_sd, because haproxy only runs where
+    // Prometheus does and that list is already observed by this module.
+    fprintf(fout, "  - job_name: 'haproxy'\n");
+    fprintf(fout, "    static_configs:\n");
+    auto haGroup = hex_string_util::split(ctrlAddrs, ',');
+    for (const auto& addr : haGroup)
+        fprintf(fout, "    - targets: ['%s:" HAPROXY_STATS_PORT "']\n", addr.c_str());
+
+    // The VIP instance is a separate haproxy on a separate port, and a separate job so its
+    // series are not mixed in with the per-node ones. Only exists on HA.
+    if (ha) {
+        fprintf(fout, "  - job_name: 'haproxy-ha'\n");
+        fprintf(fout, "    static_configs:\n");
+        fprintf(fout, "    - targets: ['%s:" HAPROXY_HA_STATS_PORT "']\n", sharedId.c_str());
+    }
+
+    // blackbox is a probe runner, so the job lists what to probe and hands each target to
+    // the exporter as a parameter rather than scraping it directly. These are the same
+    // service ports config_haproxy fronts, reached through the VIP, which is what monasca's
+    // http_check watched -- so this is the series the six health_*_check functions move onto.
+    const std::vector<std::string> probes = {
+        "8774",  // nova
+        "9292",  // glance
+        "8776",  // cinder
+        "8004",  // heat
+        "9876",  // octavia
+        "9001",  // designate
+    };
+    fprintf(fout, "  - job_name: 'blackbox-openstack'\n");
+    fprintf(fout, "    metrics_path: /probe\n");
+    fprintf(fout, "    params:\n");
+    fprintf(fout, "      module: [openstack_api]\n");
+    fprintf(fout, "    static_configs:\n");
+    fprintf(fout, "    - targets:\n");
+    for (const auto& port : probes)
+        fprintf(fout, "      - 'http://%s:%s/'\n", sharedId.c_str(), port.c_str());
+    // __address__ has to become the exporter and the original target has to survive as a
+    // label, or every series would be labelled with the exporter instead of the service.
+    fprintf(fout, "    relabel_configs:\n");
+    fprintf(fout, "    - source_labels: [__address__]\n");
+    fprintf(fout, "      target_label: __param_target\n");
+    fprintf(fout, "    - source_labels: [__param_target]\n");
+    fprintf(fout, "      target_label: instance\n");
+    fprintf(fout, "    - target_label: __address__\n");
+    fprintf(fout, "      replacement: 127.0.0.1:" BLACKBOX_EXPORTER_PORT "\n");
+
     fclose(fout);
 
     return true;
@@ -243,6 +360,90 @@ WriteConf(bool ha, const std::string& sharedId, const std::string& hostname, int
 // change re-commits and rewrites the list -- unlike the lachesis compute list below,
 // which needs a cron because compute membership does not re-commit anything.
 //
+// The /etc/default/ARGS lines for the exporters this node runs. Written on every role, not
+// just control: node_exporter and ipmi_exporter report on compute and storage nodes too, and
+// the Prometheus that scrapes them lives elsewhere.
+//
+// Each binds one address rather than 0.0.0.0, the same rule the thanos ports follow: the
+// management address where a Prometheus on another node scrapes it, loopback where only the
+// local one does.
+static bool
+WriteExporterDefaults(bool control, const std::string& myIp)
+{
+    std::string fsError;
+
+    const std::vector<std::string> node = {
+        "ARGS='--web.listen-address=" + myIp + ":" NODE_EXPORTER_PORT "'\n",
+    };
+    if (!WriteFile(fsError, NODE_EXPORTER_DEF, node)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
+
+    // freeipmi's local path needs no host argument; without a config file the exporter uses
+    // its built-in "default" collector against the local BMC, which is what the monasca
+    // plugin did. A VM lab has no BMC and every probe fails -- the series read as down, same
+    // as they did before.
+    const std::vector<std::string> ipmi = {
+        "ARGS='--web.listen-address=" + myIp + ":" IPMI_EXPORTER_PORT "'\n",
+    };
+    if (!WriteFile(fsError, IPMI_EXPORTER_DEF, ipmi)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
+
+    if (!control)
+        return true;
+
+    // Loopback: the only client is this node's own Prometheus, and a probe target list is a
+    // fine thing not to expose. It is the *probe* that reaches across the cluster, not this.
+    const std::vector<std::string> blackbox = {
+        "ARGS='--config.file=" BLACKBOX_CONF
+        " --web.listen-address=127.0.0.1:" BLACKBOX_EXPORTER_PORT "'\n",
+    };
+    if (!WriteFile(fsError, BLACKBOX_EXPORTER_DEF, blackbox)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
+
+    const std::vector<std::string> memcached = {
+        "ARGS='--memcached.address=127.0.0.1:11211"
+        " --web.listen-address=" + myIp + ":" MEMCACHED_EXPORTER_PORT "'\n",
+    };
+    if (!WriteFile(fsError, MEMCACHED_EXPORTER_DEF, memcached)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
+
+    // mod_status is exposed on localhost only by config_apache2, so the scrape URI is
+    // loopback even though the exporter itself is reachable on the management address.
+    // The port is httpd's own vhost, not 80 -- see APACHE_STATUS_PORT.
+    const std::vector<std::string> apache = {
+        "ARGS='--scrape_uri=http://127.0.0.1:" APACHE_STATUS_PORT "/server-status?auto"
+        " --web.listen-address=" + myIp + ":" APACHE_EXPORTER_PORT "'\n",
+    };
+    if (!WriteFile(fsError, APACHE_EXPORTER_DEF, apache)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+// Membership changes do not re-commit this module, so the per-node target lists are kept
+// current by cron -- the same arrangement, and the same reasoning, as the lachesis list.
+static void
+WriteExporterTargetsCronJob()
+{
+    FILE *fout = fopen(EXPORTER_TARGETS_CRON, "w");
+    if (!fout) {
+        HexLogError("Unable to write %s", EXPORTER_TARGETS_CRON);
+        return;
+    }
+    fprintf(fout, "* * * * * root " HEX_SDK " prometheus_exporter_targets\n");
+    fclose(fout);
+}
+
 // The schema is thanos's own EndpointConfig, not prometheus file_sd: a bare list of
 // targets parses and then silently discovers nothing.
 static bool
@@ -449,13 +650,27 @@ Commit(bool modified, int dryLevel)
     std::string sharedId = G(SHARED_ID);
     std::string hostname = s_hostname.newValue();
 
+    // The exporters are not gated on `enabled`. Prometheus itself only runs on control
+    // nodes, but node_exporter and ipmi_exporter report on compute and storage nodes too --
+    // that is the whole point of them -- so their config and their units are handled on
+    // every role, and only the scrape side below is control-only.
+    WriteExporterDefaults(enabled, G(MGMT_ADDR));
+    SystemdCommitService(true, NODE_EXPORTER);
+    SystemdCommitService(true, IPMI_EXPORTER);
+    SystemdCommitService(enabled, BLACKBOX_EXPORTER);
+    SystemdCommitService(enabled, MEMCACHED_EXPORTER);
+    SystemdCommitService(enabled, APACHE_EXPORTER);
+
     if (enabled) {
         WriteDefaultConf(G(MGMT_ADDR));
-        WriteConf(s_ha, sharedId, hostname, s_rpDays.newValue(), s_rpSize.newValue());
+        WriteConf(s_ha, sharedId, s_ctrlAddrs.newValue(), hostname,
+                  s_rpDays.newValue(), s_rpSize.newValue());
 
-        // seed the target list; non-fatal, and bounded so a wedged etcd
+        // seed the target lists; non-fatal, and bounded so a wedged etcd
         // cannot hang the commit
         HexUtilSystemF(0, 30, HEX_SDK " lachesis_prometheus_targets");
+        HexUtilSystemF(0, 30, HEX_SDK " prometheus_exporter_targets");
+        WriteExporterTargetsCronJob();
 
         // membership changes (node join/remove) do not re-commit this module,
         // so a cron keeps the list current; the generator only rewrites the
@@ -467,6 +682,7 @@ Commit(bool modified, int dryLevel)
     }
     else {
         unlink(LACHESIS_TARGETS_CRON);
+        unlink(EXPORTER_TARGETS_CRON);
     }
 
     if (thanosEnabled)
