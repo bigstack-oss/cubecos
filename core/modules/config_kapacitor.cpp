@@ -32,7 +32,6 @@ static const char NAME[] = "kapacitor";
 #define CFGHDR_DIR CONF_PATH "config_handlers/"
 #define EXTRA_DIR CONF_PATH "alert_extra/"
 #define TELEGRAF_DB "telegraf"
-#define CEPH_DB "ceph"
 #define MONASCA_DB "monasca"
 #define EVENTS_DB "events"
 #define TSDB_RP "def"
@@ -718,8 +717,6 @@ Commit(bool modified, int dryLevel)
         // Write task tick scritps to relay influxdb write requsts to HA peers
         WriteRelayTask(TELEGRAF_DB, TSDB_RP, peerNames);
         WriteRelayTask(TELEGRAF_DB, HC_TSDB_RP, peerNames);
-        WriteRelayTask(CEPH_DB, TSDB_RP, peerNames);
-        WriteRelayTask(CEPH_DB, HC_TSDB_RP, peerNames);
         WriteRelayTask(MONASCA_DB, TSDB_RP, peerNames);
         WriteRelayTask(MONASCA_DB, HC_TSDB_RP, peerNames);
         WriteRelayTask(EVENTS_DB, TSDB_RP, peerNames);

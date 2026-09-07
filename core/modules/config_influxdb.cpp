@@ -113,7 +113,7 @@ CreateDBs(int rpDays, int sgpDays, int hcRpDays, int hcSgpDays)
     HexLogInfo("updating influxdb policies: def %dd/shard %dd, hc %dd/shard %dd",
                rpDays, sgpDays, hcRpDays, hcSgpDays);
 
-    std::string dbs[] = {"telegraf", "ceph", "monasca", "events"};
+    std::string dbs[] = {"telegraf", "monasca", "events"};
 
     for (const std::string &db : dbs) {
         HexSystemF(0, "influx -execute 'CREATE DATABASE %s WITH DURATION %dd SHARD DURATION %dd NAME %s'",

@@ -1,19 +1,19 @@
 apiVersion: 1
 
+# The ceph metrics this pointed at now come from the mgr's own prometheus module through
+# Dashboard1, and nothing writes the influx ceph database any more, so a datasource left
+# here would only ever serve data frozen at the upgrade. Listed for deletion rather than
+# just removed: dropping an entry from this file leaves the row in Grafana's own database
+# on an already-provisioned cluster, so an upgraded appliance would keep showing it.
+deleteDatasources:
+  - name: influxdb-ceph
+    orgId: 1
+
 datasources:
 - name: influxdb-telegraf
   type: influxdb
   access: proxy
   database: telegraf
-  url: http://localhost:8086
-  jsonData:
-     timeInterval: "1m"
-  editable: true
-
-- name: influxdb-ceph
-  type: influxdb
-  access: proxy
-  database: ceph
   url: http://localhost:8086
   jsonData:
      timeInterval: "1m"
