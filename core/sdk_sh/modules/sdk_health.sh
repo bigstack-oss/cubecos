@@ -1623,10 +1623,6 @@ health_ceph_mgr_check()
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u ceph-mon@$HOSTNAME"
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
-    elif echo $stats | jq -r .health | grep -q "Failed to list/create InfluxDB database" ; then
-        ERR_CODE=2
-    elif echo $stats | jq -r .health | grep -q "influx.* has failed:" ; then
-        ERR_CODE=3
     elif echo $stats | jq -r .health | grep -q "Module 'devicehealth' has failed: table Device already exists" ; then
         ERR_CODE=4
     elif [ ${MEM:-1} -gt 10 ] ; then
@@ -1647,16 +1643,6 @@ _health_ceph_mgr_auto_repair()
 {
     if [ "$ERR_CODE" == "1" ] ; then
         cmd -c "systemctl reset-failed ; systemctl restart ceph-mgr@\$HOSTNAME"
-    elif [ "$ERR_CODE" == "2" ] ; then
-        if [ "$influx_hn" = "non-HA" ] ; then
-            influx_hn=$(hostname)
-        fi
-        $CEPH config set mgr mgr/influx/hostname $influx_hn
-        $CEPH config set mgr mgr/influx/interval 60
-        health_influxdb_repair
-    elif [ "$ERR_CODE" == "3" ] ; then
-        $CEPH mgr module disable influx
-        $CEPH mgr module enable influx
     elif [ "$ERR_CODE" == "4" ] ; then
         cmd -c "systemctl stop ceph-mgr@\$HOSTNAME && sleep 5"
         $CEPH osd pool rename .mgr .mgr-old
@@ -1672,7 +1658,6 @@ _health_ceph_mgr_auto_repair()
 
 health_ceph_mgr_repair()
 {
-    health_influxdb_repair
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         remote_run $node $HEX_CFG restart_ceph_mgr
     done

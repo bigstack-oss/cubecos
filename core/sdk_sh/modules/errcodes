@@ -122,8 +122,10 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 
 SRV="ceph_mgr"
 eval "ERR_DESC_$SRV[1]='not all online'"
-eval "ERR_DESC_$SRV[2]='InfluxDB list/create fail'"
-eval "ERR_DESC_$SRV[3]='InfluxDB fail'"
+# 2 and 3 were the influx mgr module's failures. The module is retired (the mgr's own
+# prometheus module replaced it), so nothing can raise them. Left as gaps rather than
+# renumbered: 4/5/6 already appear in recorded events, and shifting them down would
+# relabel that history.
 eval "ERR_DESC_$SRV[4]='module devicehealth fail'"
 eval "ERR_DESC_$SRV[5]='dashboard unavailable'"
 eval "ERR_DESC_$SRV[6]='mem high'"
