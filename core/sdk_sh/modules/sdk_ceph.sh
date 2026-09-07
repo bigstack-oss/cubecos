@@ -726,6 +726,12 @@ ceph_pool_replicate_set()
             $BUILTIN_CACHEPOOL|$BUILTIN_EPHEMERAL|*-cache)
                 ceph_adjust_pool_size $P $cachesize
                 ;;
+            # a tiered pool (<group>-ssd) is a peer of its base pool, not of a
+            # cache pool: it carries user volumes, so it takes the same RF as
+            # the base pool that ceph_create_group_ssdpool sized it from.
+            *-ssd)
+                ceph_adjust_pool_size $P $size
+                ;;
             *)
                 ceph_adjust_pool_size $P $size
                 ;;
