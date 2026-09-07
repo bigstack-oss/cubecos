@@ -94,7 +94,7 @@ static bool
 CreateDBs(int rpDays, int sgpDays, int hcRpDays, int hcSgpDays)
 {
     // Re-creation is allowed
-    HexUtilSystemF(0, 0, HEX_SDK " wait_for_service :: 8086 90");
+    HexUtilSystemF(0, 0, HEX_SDK " wait_for_service 127.0.0.1 8086 90");
 
     // A shard group wider than the policy it lives in is rejected by InfluxDB, and
     // would mean the policy could never drop anything. Clamp rather than fail the

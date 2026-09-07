@@ -213,6 +213,26 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
     }
     fprintf(fout, "  use_backend prometheus_backend if { path_beg /prometheus } or { path_beg /prometheus/ }\n");
     fprintf(fout, "  use_backend ceph_dashboard_backend if { path_beg /ceph/ }\n");
+    // InfluxDB listens on 127.0.0.1 only, so every off-box client -- the kapacitor relay
+    // on a peer, the prometheus scrape, health_influxdb_check, the $INFLUX calls aimed at
+    // shared_id -- reaches it through here. The backend check is influxdb's own /ping,
+    // which answers 204, so a listener that is up while influxdb is down returns 503 and
+    // health_influxdb_check still fails rather than passing on haproxy's liveness.
+    fprintf(fout, "backend influxdb\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  option httpchk HEAD /ping\n");
+    fprintf(fout, "  http-check expect status 204\n");
+    fprintf(fout, "  server localhost 127.0.0.1:8086 check\n");
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "frontend influxdb_mgmt\n");
+    fprintf(fout, "  bind %s:8086\n", myip.c_str());
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  use_backend influxdb\n");
+    fprintf(fout, "  \n");
+
     fprintf(fout, "  acl api_path path_beg /api/\n");
     fprintf(fout, "  acl saml_path path_beg /saml/\n");
     fprintf(fout, "  use_backend cube_cos_api if api_path or saml_path\n");
@@ -456,6 +476,55 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         }
         fprintf(fout, "\n");
     }
+
+    // InfluxDB on the VIP: reads only, and the deny is the point of the block.
+    //
+    // Reads are safe from any backend because every control node holds a full replica --
+    // kapacitor relays what it proxies on :9092 out to its peers, and the event inserts fan
+    // out to every control host -- so the 42 `influx -host $(shared_id)` call sites in
+    // sdk_stats, sdk_health, sdk_logs, sdk_security and sdk_ovn keep working and keep their
+    // failover. Six of them are health checks reading monasca http_status, so pointing them
+    // at the local instance instead would make one node's dead influxdb look like nova,
+    // glance, cinder, heat, octavia and designate all being down.
+    //
+    // A write through here would land on exactly one backend and never be replicated,
+    // because the replication lives in kapacitor on :9092, not in influxdb. That is what
+    // broke ceph in 3.0.0-rc2 and got this whole exposure change reverted in PR #143: the
+    // mgr influx module wrote to shared_id:8086, its points stayed on one node, and Grafana
+    // -- which reads localhost -- had blank ceph panels everywhere else.
+    //
+    // Nothing writes here today. Measured on jim-1cc over 55867 logged writes, every one
+    // came from loopback (kapacitor) or the management address, and the only management-side
+    // writer was that mgr module, now retired: 1287 of 1292 were db=ceph from
+    // python-requests. The remaining event inserts address each control host directly, so
+    // they arrive on the per-node frontend, which does allow writes. Denying it stops a
+    // future writer from rediscovering the trap rather than fixing a live fault.
+    //
+    // mode http is not inherited -- the defaults section above sets no mode, so these
+    // listeners are tcp unless told otherwise -- and http-request is invalid in tcp mode.
+    fprintf(fout, "listen influxdb\n");
+    fprintf(fout, "  bind %s:8086\n", ctrlVip.c_str());
+    fprintf(fout, "  mode  http\n");
+    fprintf(fout, "  balance  source\n");
+    fprintf(fout, "  http-request deny if { path_beg /write } || { path_beg /api/v2/write }\n");
+    fprintf(fout, "  option  httpchk HEAD /ping\n");
+    fprintf(fout, "  http-check expect status 204\n");
+    fprintf(fout, "  option  httplog\n");
+
+    // Every peer is listed, with no CUBE_MIGRATE pin to the master. The srvlist loop above
+    // narrows to one server for the length of a rolling upgrade because talking to a
+    // half-upgraded peer is dangerous for wsrep state or a database mid-migration. Reading
+    // replicated points is not that: each control node holds the same series and the query
+    // API does not move between our releases. Pinning would instead leave this listener with
+    // a single checked backend, so while that one node is rebooting into the new partition
+    // the VIP route would have no server at all and every reader would fail -- and a
+    // freshly booted influxdb rebuilds its TSI on start, which is why TimeoutStartSec is
+    // 1800, so that window is minutes rather than moments. Failing over to a healthy
+    // replica is the behaviour we want here.
+    for (size_t n = 0 ; n < hosts.size() ; n++)
+        fprintf(fout, "  server %s %s:8086 check inter 2000 rise 2 fall 5\n",
+                      hosts[n].c_str(), addrs[n].c_str());
+    fprintf(fout, "  \n");
 
     fclose(fout);
 
