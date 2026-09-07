@@ -3323,9 +3323,13 @@ ceph_remove_group_ssdpool()
     if [ "$group" = "default" ] ; then
         local pool=${BUILTIN_BACKPOOL}-ssd
         local vtype=CubeStorage-ssd
+        # rule-ssd is shared with the cache tiering path, so it is never removed
+        # here -- see the note at the end of ceph_osd_disable_cache.
+        local rule=
     else
         local pool=${group}-ssd
         local vtype=${group}-ssd
+        local rule=${group}-ssd
     fi
 
     Quiet -n $OPENSTACK volume type delete $vtype
@@ -3338,6 +3342,27 @@ ceph_remove_group_ssdpool()
     else
         if ($CEPH osd pool ls | grep -q "^$pool$") ; then
             Quiet -n $CEPH osd pool delete $pool $pool --yes-i-really-really-mean-it
+        fi
+        # the per-group rule goes with the pool it was made for, but it is not
+        # this pool's alone: ceph_osd_create_cache builds the very same
+        # <group>-ssd rule and binds <group>-cache to it, so it only goes once
+        # no pool is left using it. After the pool delete, because CRUSH
+        # refuses to remove a rule that is still in use.
+        if [ -n "$rule" ] && ($CEPH osd crush rule ls | grep -q "^$rule$") ; then
+            local pools_json=$($CEPH osd pool ls detail -f json 2>/dev/null)
+            # 'numbers' keeps rule_id 0 (a valid id) and drops a null
+            local rule_id=$($CEPH osd crush rule dump $rule -f json 2>/dev/null | jq -r '.rule_id | numbers')
+            if [ -z "$rule_id" ] || ! (echo "$pools_json" | jq -e 'length > 0' >/dev/null 2>&1) ; then
+                # keep it rather than act on an answer we did not get
+                echo "Warning: cannot tell whether crush rule $rule is still in use, leaving it in place"
+            else
+                local rule_users=$(echo "$pools_json" | jq -r --argjson rid "$rule_id" '[ .[] | select(.crush_rule == $rid) | .pool_name ] | join(" ")')
+                if [ -n "$rule_users" ] ; then
+                    echo "Keeping crush rule $rule: still used by $rule_users"
+                else
+                    Quiet -n $CEPH osd crush rule rm $rule
+                fi
+            fi
         fi
         cmd -c "hex_config reconfig_cinder"
         cmd -c "hex_config restart_cinder"
