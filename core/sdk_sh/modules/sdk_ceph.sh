@@ -1404,7 +1404,11 @@ ceph_osd_get_cache_size()
     local rf=$($CEPH osd pool get $cachepool size | awk '{print $2}')
     local result=0
     # add each size into result (e.g.: 8.31,TiB 865,GiB)
-    for sz in $($CEPH osd df $cachepool | grep " ssd " | awk '{print $5","$6}') ; do
+    # 'osd df <pool>' already lists exactly the OSDs the pool's CRUSH rule can
+    # select, so the device class must not be filtered again here: a cache on
+    # nvme -- or on any other class -- would otherwise sum to zero. $1 is the
+    # OSD id, which keeps the header, TOTAL and MIN/MAX rows out.
+    for sz in $($CEPH osd df $cachepool | awk '$1 ~ /^[0-9]+$/ {print $5","$6}') ; do
         local N=$(echo $sz | awk -F',' '{print $1}')
         local U=$(echo $sz | awk -F',' '{print $2}')
         case "$U" in
