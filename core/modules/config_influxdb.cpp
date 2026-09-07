@@ -22,8 +22,6 @@ static const char CURATOR[] = "/etc/cron.d/influx-curator";
 
 #define DEF_EXT ".def"
 #define CONF    "/etc/influxdb/influxdb.conf"
-#define MAKRER  "/etc/appliance/state/ceph_mgr_influx_enabled"
-#define INFLUX_INTERVAL 60
 #define TSDB_RP "def"        // default rp, low-cardinality metrics
 #define HC_TSDB_RP "hc"      // high cardinality rp -- sflow and vrouter.top
 
@@ -35,7 +33,6 @@ static bool s_bCubeModified = false;
 static LogRotateConf log_conf("influxdb", "/var/log/influxdb/*.log", DAILY, 128, 0, true);
 
 // external global variables
-CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // public tunings
 CONFIG_TUNING_INT(INFLUXDB_CURATOR_RP, "influxdb.curator.rp", TUNING_PUB, "influxdb curator retention policy in days.", 7, 0, 365);
@@ -89,48 +86,6 @@ CuratorCronJob(int rp)
     else {
         unlink(CURATOR);
     }
-
-    return true;
-}
-
-// Enable Ceph influx plugin so that ceph-mgr can report state to influxdb
-/* Default config settings
-        'hostname': None,
-        'port': 8086,
-        'database': 'ceph',
-        'username': None,
-        'password': None,
-        'interval': 5,
-        'ssl': 'false',
-        'verify_ssl': 'true'
-*/
-static bool
-EnableCephInfluxPlugin(bool update, const std::string sharedId)
-{
-    struct stat ms;
-
-    if (!update && stat(MAKRER, &ms) == 0)
-        return true;
-
-    HexLogInfo("updating influxdb ceph plugin");
-
-    if (stat(MAKRER, &ms) != 0) {
-        // mark done only when the enable actually landed, so a transient
-        // mgr-not-ready failure is retried on the next commit
-        if (HexSystemF(0, "timeout 10 ceph mgr module enable influx 2>/dev/null") != 0) {
-            HexLogWarning("ceph mgr not ready to enable influx plugin; will retry on next commit");
-            return true;
-        }
-        HexSystemF(0, "touch " MAKRER);
-    }
-
-    // specifiy a timeout for ceph cmd since it may hang due to bad connectivity
-    // or master node runs restart when other nodes are down (cluster start)
-    // NOTE: timeout of HexSystemF doesn't work in this case
-    //       since parent doesn't kill child process when timeout occurs
-    HexSystemF(0, "timeout 10 ceph influx config-set interval %d >/dev/null 2>&1", INFLUX_INTERVAL);
-    HexSystemF(0, "timeout 10 ceph influx config-set hostname %s >/dev/null 2>&1", sharedId.c_str());
-    HexSystemF(0, "timeout 10 ceph influx config-set port 8086 >/dev/null 2>&1");
 
     return true;
 }
@@ -223,7 +178,7 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    return modified | s_bCubeModified | G_MOD(SHARED_ID);
+    return modified | s_bCubeModified;
 }
 
 static bool
@@ -236,12 +191,10 @@ Commit(bool modified, int dryLevel)
         return true;
 
     bool enabled = IsControl(s_eCubeRole) && !IsModerator(s_eCubeRole);
-    std::string sharedId = G(SHARED_ID);
 
     SystemdCommitService(enabled, NAME);
 
     if (enabled) {
-        EnableCephInfluxPlugin(true, sharedId);
         WriteLogRotateConf(log_conf);
         CreateDBs(s_rpDays.newValue(), s_sgpDays.newValue(),
                   s_hcRpDays.newValue(), s_hcSgpDays.newValue());
@@ -252,32 +205,14 @@ Commit(bool modified, int dryLevel)
     return true;
 }
 
-static int
-ClusterReadyMain(int argc, char **argv)
-{
-    bool enabled = IsControl(s_eCubeRole);
-    std::string sharedId = G(SHARED_ID);
-
-    if (enabled)
-        EnableCephInfluxPlugin(true, sharedId);
-
-    return EXIT_SUCCESS;
-}
-
 CONFIG_MODULE(influxdb, 0, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(influxdb, ceph_dashboard_idp);
-// the influx mgr plugin needs a functioning ceph mgr; without this the
-// dataflow scheduler commits influxdb while ceph is still bootstrapping
-CONFIG_REQUIRES(influxdb, ceph);
 
 // extra tunings
 CONFIG_OBSERVES(influxdb, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(influxdb, "/var/lib/influxdb");
-CONFIG_MIGRATE(influxdb, MAKRER);
 
 // influx 7d export is considered too large to place in support file (~5GB)
 //CONFIG_SUPPORT_COMMAND(HEX_SDK " support_influxdb $HEX_SUPPORT_DIR");
-
-CONFIG_TRIGGER_WITH_SETTINGS(influxdb, "cluster_ready", ClusterReadyMain);
 
