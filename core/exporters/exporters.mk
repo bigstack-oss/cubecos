@@ -42,7 +42,11 @@ EXPORTER_BLDDIR := $(TOP_BLDDIR)/core/exporters
 
 rootfs_install:: $(foreach b,$(EXPORTER_BINS),$(EXPORTER_BLDDIR)/$(b))
 	$(Q)$(foreach b,$(EXPORTER_BINS),$(INSTALL_PROGRAM) $(ROOTDIR) $(EXPORTER_BLDDIR)/$(b) ./usr/bin ;)
-	$(Q)chroot $(ROOTDIR) mkdir -p /etc/prometheus/exporters
+	# /etc/default holds only the directory here. The ARGS content is per-node -- it carries
+	# the management address -- so it cannot be baked into the image, and config_prometheus.cpp
+	# owns the write-then-enable ordering: it writes each /etc/default file before it enables
+	# the corresponding unit, so a configured exporter never starts without one.
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/prometheus/exporters /etc/default
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/exporters/blackbox.yml ./etc/prometheus/exporters/
 	$(Q)$(foreach b,$(EXPORTER_BINS),$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/exporters/$(b).service ./lib/systemd/system ;)
 	# Every exporter is installed disabled; config_prometheus.cpp enables the ones this node's
