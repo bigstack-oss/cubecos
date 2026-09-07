@@ -104,6 +104,13 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
     fprintf(fout, "  stats realm Haproxy\\ Statistics\n");
     fprintf(fout, "  stats uri /haproxy_stats\n");
     fprintf(fout, "  stats auth admin:Cube0s!\n");
+    // haproxy needs no exporter: 2.8 is built +PROMEX and carries the service internally
+    // ("Available services : prometheus-exporter"), so this one line is the whole of what
+    // haproxy_exporter would have been -- and it reports haproxy's own counters rather than
+    // re-parsing the CSV stats page. Guarded on the path so the stats UI above is untouched,
+    // and deliberately outside stats auth: the scrape is local or over the management
+    // network, and Prometheus has nowhere to put a password.
+    fprintf(fout, "  http-request use-service prometheus-exporter if { path /metrics }\n");
     fprintf(fout, "  \n");
 
     fprintf(fout, "backend openstack_horizon\n");
@@ -294,6 +301,13 @@ WriteConfig(bool ha, const std::string& ctrlVip,
     fprintf(fout, "  stats realm Haproxy\\ Statistics\n");
     fprintf(fout, "  stats uri /haproxy_stats\n");
     fprintf(fout, "  stats auth admin:Cube0s!\n");
+    // haproxy needs no exporter: 2.8 is built +PROMEX and carries the service internally
+    // ("Available services : prometheus-exporter"), so this one line is the whole of what
+    // haproxy_exporter would have been -- and it reports haproxy's own counters rather than
+    // re-parsing the CSV stats page. Guarded on the path so the stats UI above is untouched,
+    // and deliberately outside stats auth: the scrape is local or over the management
+    // network, and Prometheus has nowhere to put a password.
+    fprintf(fout, "  http-request use-service prometheus-exporter if { path /metrics }\n");
     fprintf(fout, "  \n");
 
     if (!ha) {
