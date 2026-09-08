@@ -96,6 +96,7 @@ CONFIG_TUNING_BOOL(CINDER_ENABLED, "cinder.enabled", TUNING_UNPUB, "Set to true 
 CONFIG_TUNING_STR(CINDER_USERPASS, "cinder.user.password", TUNING_UNPUB, "Set cinder user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CINDER_DBPASS, "cinder.db.password", TUNING_UNPUB, "Set cinder database password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CINDER_STORAGE_BACKEND, "cinder.storage.backend.%d.name", TUNING_UNPUB, "Set additional storage backends.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(CINDER_STORAGE_TIER, "cinder.storage.tier.%d.name", TUNING_UNPUB, "Set the Ceph device tiers that are backed by their own storage backend.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CINDER_VOLUME_TYPE_DEFAULT, "cinder.storage.volumeType.default", TUNING_UNPUB, "Set the default cinder volume type.", BUILTIN_VOLUME_TYPE, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
@@ -124,6 +125,7 @@ PARSE_TUNING_BOOL(s_debug, CINDER_DEBUG);
 PARSE_TUNING_STR(s_cinderPass, CINDER_USERPASS);
 PARSE_TUNING_STR(s_dbPass, CINDER_DBPASS);
 PARSE_TUNING_STR_ARRAY(s_storageBackends, CINDER_STORAGE_BACKEND);
+PARSE_TUNING_STR_ARRAY(s_storageTiers, CINDER_STORAGE_TIER);
 PARSE_TUNING_STR(s_volumeTypeDefault, CINDER_VOLUME_TYPE_DEFAULT);
 PARSE_TUNING_BOOL(s_backupOverride, CINDER_BACKUP_OVERRIDE);
 PARSE_TUNING_STR(s_backupType, CINDER_BACKUP_TYPE);
@@ -313,6 +315,7 @@ CommitCheck(bool modified, int dryLevel)
         || s_bCubeModified;
 
     s_bStorageBackendChanged = s_storageBackends.modified()
+        || s_storageTiers.modified()
         || s_volumeTypeDefault.modified()
         || isStorageBackendModified();
 
