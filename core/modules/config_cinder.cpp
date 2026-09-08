@@ -20,6 +20,8 @@
 #include <hex/process_util.h>
 #include <mysql_util.h>
 
+#include <algorithm>
+
 static LogRotateConf log_conf("cinder", "/var/log/cinder/*.log", DAILY, 128, 0, true);
 
 static const char USER[] = "cinder";
@@ -691,6 +693,96 @@ SetBackup(
 }
 
 /**
+ * Collect the device tiers that this module can safely act on.
+ *
+ * The tuning framework does not validate a string tuning at all: TuningStringArray
+ * takes a ValidateType and drops it (hex/include/hex/config_tuning.h), and the regex
+ * this one is declared with is DFT_REGEX_STR, "^.*$", so it would accept anything
+ * even if it were applied. Whatever reaches the registry reaches a cinder.conf
+ * section name and, through HexUtilSystemF, a /bin/bash -c line.
+ *
+ * The CLI checks all of this before it writes, but the CLI is not the only writer --
+ * the policy file this array is translated from is itself an entry point, and a
+ * commit can be handed a settings file directly. So the checks that need nothing but
+ * this file are made here as well, on the consuming side, where no writer can go
+ * around them.
+ *
+ * A rejected entry is skipped rather than failing the commit: one bad name in the
+ * registry should cost that tier, not every other thing this module configures.
+ *
+ * What is deliberately NOT checked here, because it needs Ceph or the Cinder catalog:
+ * whether the name collides with an existing CRUSH rule, pool, device class or volume
+ * type, and whether the OSDs behind it are eligible. Those stay with the CLI.
+ */
+static std::vector<std::string>
+CollectStorageTiers(
+    const TuningStringArray& storageTiers,
+    const TuningStringArray& storageBackends)
+{
+    static const char TIER_NAME_CHARS[] =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+
+    std::vector<std::string> tiers;
+
+    for (std::vector<ConfigString>::const_iterator it = storageTiers.begin(); it != storageTiers.end(); it++) {
+        const std::string tier = it->newValue();
+
+        // an empty entry is how the policy file encodes an empty list, not an error
+        if (tier.length() == 0) {
+            continue;
+        }
+
+        if (tier.find_first_not_of(TIER_NAME_CHARS) != std::string::npos) {
+            HexLogError("device tier \"%s\" is not [A-Za-z0-9_-]+, ignoring it", tier.c_str());
+            continue;
+        }
+
+        /**
+         * The scan in ReconfigMain matches "-pool" and "-ssd" as substrings, not as
+         * suffixes, so a tier carrying either would be claimed as a node group pool
+         * as well and end up configured twice.
+         */
+        if (tier.find("-pool") != std::string::npos || tier.find("-ssd") != std::string::npos) {
+            HexLogError("device tier \"%s\" contains -pool or -ssd, which the node group scan claims, ignoring it", tier.c_str());
+            continue;
+        }
+
+        /**
+         * A tier named after the built-in backend would take the [ceph] section with
+         * it -- AddCephPoolAsStorageBackend would repoint rbd_pool away from
+         * cinder-volumes -- and one named after the built-in volume type would leave
+         * that type pointing at the built-in backend while a section by the same name
+         * waits on a pool nobody created.
+         */
+        if (tier == BUILTIN_STORAGE_BACKEND || tier == BUILTIN_VOLUME_TYPE) {
+            HexLogError("device tier \"%s\" is a reserved name, ignoring it", tier.c_str());
+            continue;
+        }
+
+        bool taken = false;
+        for (std::vector<ConfigString>::const_iterator bit = storageBackends.begin(); bit != storageBackends.end(); bit++) {
+            if (bit->newValue().length() > 0 && bit->newValue() == tier) {
+                HexLogError("device tier \"%s\" is already an external storage backend, ignoring it", tier.c_str());
+                taken = true;
+                break;
+            }
+        }
+        if (taken) {
+            continue;
+        }
+
+        if (std::find(tiers.begin(), tiers.end(), tier) != tiers.end()) {
+            HexLogError("device tier \"%s\" is listed more than once, ignoring the repeat", tier.c_str());
+            continue;
+        }
+
+        tiers.push_back(tier);
+    }
+
+    return tiers;
+}
+
+/**
  * Add a Ceph pool as a storage backend.
  */
 static void
@@ -723,7 +815,8 @@ AddCephPoolAsStorageBackend(
 static void
 SetStorageBackend(
     Configs& config,
-    const std::string defaultVolumeType)
+    const std::string defaultVolumeType,
+    const std::vector<std::string>& storageTiers)
 {
     // Opt an upgraded cluster's existing backends into Caracal's unsupported-driver
     // gate. Here, and not earlier: CINDER_BACKEND_DIR is settled by now (written by
@@ -770,14 +863,9 @@ SetStorageBackend(
      * generated here from the registry, the same way ReconfigMain generates one for
      * a node group pool.
      */
-    for (std::vector<ConfigString>::const_iterator it = s_storageTiers.begin(); it != s_storageTiers.end(); it++) {
-        const std::string tier = it->newValue();
-        if (tier.length() == 0) {
-            continue;
-        }
-
-        AddCephPoolAsStorageBackend(config, tier);
-        enabledBackendLine << "," << tier;
+    for (std::vector<std::string>::const_iterator it = storageTiers.begin(); it != storageTiers.end(); it++) {
+        AddCephPoolAsStorageBackend(config, *it);
+        enabledBackendLine << "," << *it;
     }
 
     config["DEFAULT"]["allowed_direct_url_schemes"] = "cinder";
@@ -901,7 +989,7 @@ StartCinderService(const bool enabled, const bool isHa, const bool isBootstrap, 
  * Create volume types.
  */
 static void
-CreateVolumeTypes(const TuningStringArray& storageBackends, const TuningStringArray& storageTiers)
+CreateVolumeTypes(const TuningStringArray& storageBackends, const std::vector<std::string>& storageTiers)
 {
     std::stringstream typesLine;
     typesLine << BUILTIN_VOLUME_TYPE;
@@ -926,14 +1014,9 @@ CreateVolumeTypes(const TuningStringArray& storageBackends, const TuningStringAr
      * and it has to be named on typesLine for a second reason: os_volume_type_clear
      * deletes every volume type that is not on it.
      */
-    for (std::vector<ConfigString>::const_iterator it = storageTiers.begin(); it != storageTiers.end(); it++) {
-        const std::string storageTierName = it->newValue();
-        if (storageTierName.length() == 0) {
-            continue;
-        }
-
-        typesLine << "," << storageTierName;
-        HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_create %s %s", storageTierName.c_str(), storageTierName.c_str());
+    for (std::vector<std::string>::const_iterator it = storageTiers.begin(); it != storageTiers.end(); it++) {
+        typesLine << "," << *it;
+        HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_create %s %s", it->c_str(), it->c_str());
     }
 
     HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_clear %s", typesLine.str().c_str());
@@ -968,6 +1051,9 @@ Commit(bool modified, int dryLevel)
     std::string ctrlIp = G(CTRL_IP);
     std::string sharedId = G(SHARED_ID);
     std::string external = G(EXTERNAL);
+
+    // vetted once, so a rejected entry is reported once and every consumer below agrees
+    const std::vector<std::string> storageTiers = CollectStorageTiers(s_storageTiers, s_storageBackends);
 
     std::string cinderPass = GetSaltKey(s_saltkey, s_cinderPass.newValue(), s_seed.newValue());
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass.newValue(), s_seed.newValue());
@@ -1012,9 +1098,9 @@ Commit(bool modified, int dryLevel)
         SetNovaInfo(mainConfig, sharedId, s_cubeRegion, domain, novaPass);
         SetCeph(mainConfig, virshSecret);
         if (s_volumeTypeDefault.newValue() != "") {
-            SetStorageBackend(mainConfig, s_volumeTypeDefault);
+            SetStorageBackend(mainConfig, s_volumeTypeDefault, storageTiers);
         } else {
-            SetStorageBackend(mainConfig, BUILTIN_VOLUME_TYPE);
+            SetStorageBackend(mainConfig, BUILTIN_VOLUME_TYPE, storageTiers);
         }
         SetBackup(
             mainConfig,
@@ -1063,12 +1149,8 @@ Commit(bool modified, int dryLevel)
      * every pool it generates. Naming the tier on both sides would wait out the
      * full timeout on a host that never reports in.
      */
-    for (std::vector<ConfigString>::const_iterator it = s_storageTiers.begin(); it != s_storageTiers.end(); it++) {
-        if (it->newValue().length() == 0) {
-            continue;
-        }
-
-        enabledHostLine << "," << BUILTIN_STORAGE_HOST << "@" << it->newValue();
+    for (std::vector<std::string>::const_iterator it = storageTiers.begin(); it != storageTiers.end(); it++) {
+        enabledHostLine << "," << BUILTIN_STORAGE_HOST << "@" << *it;
     }
     HexUtilSystemF(
         0,
@@ -1079,7 +1161,7 @@ Commit(bool modified, int dryLevel)
 
     // create the volume type
     if (s_bStorageBackendChanged)
-        CreateVolumeTypes(s_storageBackends, s_storageTiers);
+        CreateVolumeTypes(s_storageBackends, storageTiers);
 
     return true;
 }
