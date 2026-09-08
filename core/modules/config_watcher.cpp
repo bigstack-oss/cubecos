@@ -287,13 +287,17 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
             std::string workers = std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole)));
             cfg["api"]["workers"] = workers;
             cfg["watcher_decision_engine"]["max_workers"] = workers;
-            // metric_map_path is no longer written. It existed to rename monasca's
-            // meters; the option still defaults to /etc/watcher/metric_map.yaml and that
-            // file is still installed, so it is still read -- but it carries only a
-            // monasca: section, which is exactly right. A prometheus: section must never
-            // be added: the datasource dispatches on the meter name (if meter ==
-            // 'ceilometer_cpu' ...) and raises "Cannot process prometheus meter" for
-            // anything else, so an override would break the query rather than redirect it.
+            // No metric_map_path, and no metric_map.yaml either -- the file only ever
+            // carried a monasca: section to rename that datasource's meters, and it went
+            // with the datasource. The option still defaults to that path; upstream's
+            // load_metric_map guards the missing file with os.path.exists and returns {},
+            // so nothing warns.
+            //
+            // Do not reintroduce it for prometheus. That datasource dispatches on the
+            // meter name (if meter == 'ceilometer_cpu' ...) and raises "Cannot process
+            // prometheus meter" for anything it does not recognise, so an override would
+            // break the query rather than redirect it. The names are matched at the
+            // source instead, by hex_sdk watcher_instance_metrics.
             cfg["watcher_applier"]["workers"] = workers;
         }
     }

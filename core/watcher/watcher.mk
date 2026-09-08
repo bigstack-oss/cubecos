@@ -140,7 +140,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 750 $(WATCHER_LOG_DIR)
 	$(Q)chroot $(ROOTDIR) install -d -m 755 $(WATCHER_RUN_DIR)
 	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/watcher/watcher.conf.sample .$(WATCHER_CONF_DIR)/watcher.conf
-	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/watcher/metric_map.yaml .$(WATCHER_CONF_DIR)/metric_map.yaml
 	$(Q)# install systemd unit files
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/watcher/openstack-watcher-api.service ./lib/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/watcher/openstack-watcher-applier.service ./lib/systemd/system
