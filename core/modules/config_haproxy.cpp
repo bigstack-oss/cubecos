@@ -213,26 +213,6 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
     }
     fprintf(fout, "  use_backend prometheus_backend if { path_beg /prometheus } or { path_beg /prometheus/ }\n");
     fprintf(fout, "  use_backend ceph_dashboard_backend if { path_beg /ceph/ }\n");
-    // InfluxDB listens on 127.0.0.1 only, so every off-box client -- the kapacitor relay
-    // on a peer, the prometheus scrape, health_influxdb_check, the $INFLUX calls aimed at
-    // shared_id -- reaches it through here. The backend check is influxdb's own /ping,
-    // which answers 204, so a listener that is up while influxdb is down returns 503 and
-    // health_influxdb_check still fails rather than passing on haproxy's liveness.
-    fprintf(fout, "backend influxdb\n");
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  option forwardfor\n");
-    fprintf(fout, "  option httpchk HEAD /ping\n");
-    fprintf(fout, "  http-check expect status 204\n");
-    fprintf(fout, "  server localhost 127.0.0.1:8086 check\n");
-    fprintf(fout, "  \n");
-
-    fprintf(fout, "frontend influxdb_mgmt\n");
-    fprintf(fout, "  bind %s:8086\n", myip.c_str());
-    fprintf(fout, "  mode http\n");
-    fprintf(fout, "  option forwardfor\n");
-    fprintf(fout, "  use_backend influxdb\n");
-    fprintf(fout, "  \n");
-
     fprintf(fout, "  acl api_path path_beg /api/\n");
     fprintf(fout, "  acl saml_path path_beg /saml/\n");
     fprintf(fout, "  use_backend cube_cos_api if api_path or saml_path\n");
@@ -257,6 +237,32 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
     fprintf(fout, "  acl saml_path path_beg /saml/\n");
     fprintf(fout, "  use_backend cube_cos_api if api_path or saml_path\n");
     fprintf(fout, "  default_backend cube_cos_ui\n");
+    fprintf(fout, "  \n");
+
+    // Last, after both cube_cos frontends are complete, and being on a section boundary is
+    // load-bearing rather than cosmetic: haproxy sections run to the next section header, so
+    // a backend/frontend emitted above cube_cos_http's closing lines silently adopts them and
+    // leaves :80 with no /api/ or /saml/ route and no default_backend. That form still parses
+    // and haproxy still starts, so nothing reports it. Add new sections here, at the end.
+    //
+    // InfluxDB listens on 127.0.0.1 only, so every off-box client -- the kapacitor relay
+    // on a peer, the prometheus scrape, health_influxdb_check, the $INFLUX calls aimed at
+    // shared_id -- reaches it through here. The backend check is influxdb's own /ping,
+    // which answers 204, so a listener that is up while influxdb is down returns 503 and
+    // health_influxdb_check still fails rather than passing on haproxy's liveness.
+    fprintf(fout, "backend influxdb\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  option httpchk HEAD /ping\n");
+    fprintf(fout, "  http-check expect status 204\n");
+    fprintf(fout, "  server localhost 127.0.0.1:8086 check\n");
+    fprintf(fout, "  \n");
+
+    fprintf(fout, "frontend influxdb_mgmt\n");
+    fprintf(fout, "  bind %s:8086\n", myip.c_str());
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  use_backend influxdb\n");
     fprintf(fout, "  \n");
 
     fclose(fout);
