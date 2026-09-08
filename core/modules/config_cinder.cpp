@@ -900,7 +900,7 @@ StartCinderService(const bool enabled, const bool isHa, const bool isBootstrap, 
  * Create volume types.
  */
 static void
-CreateVolumeTypes(const TuningStringArray& storageBackends)
+CreateVolumeTypes(const TuningStringArray& storageBackends, const TuningStringArray& storageTiers)
 {
     std::stringstream typesLine;
     typesLine << BUILTIN_VOLUME_TYPE;
@@ -918,6 +918,21 @@ CreateVolumeTypes(const TuningStringArray& storageBackends)
 
         typesLine << "," << storageBackendName;
         HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_create %s %s", storageBackendName.c_str(), storageBackendName.c_str());
+    }
+
+    /**
+     * A device tier follows the same convention, so it is created the same way --
+     * and it has to be named on typesLine for a second reason: os_volume_type_clear
+     * deletes every volume type that is not on it.
+     */
+    for (std::vector<ConfigString>::const_iterator it = storageTiers.begin(); it != storageTiers.end(); it++) {
+        const std::string storageTierName = it->newValue();
+        if (storageTierName.length() == 0) {
+            continue;
+        }
+
+        typesLine << "," << storageTierName;
+        HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_create %s %s", storageTierName.c_str(), storageTierName.c_str());
     }
 
     HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_clear %s", typesLine.str().c_str());
@@ -1063,7 +1078,7 @@ Commit(bool modified, int dryLevel)
 
     // create the volume type
     if (s_bStorageBackendChanged)
-        CreateVolumeTypes(s_storageBackends);
+        CreateVolumeTypes(s_storageBackends, s_storageTiers);
 
     return true;
 }
