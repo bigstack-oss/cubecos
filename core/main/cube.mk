@@ -68,6 +68,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_thanos.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_toggle.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_update.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_util.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_watcher.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_zookeeper.sh
 
 ## Install /usr/sbin/hex_sdk modules.post
