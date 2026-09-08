@@ -712,6 +712,7 @@ AddCephPoolAsStorageBackend(
     config[pool]["rados_connect_timeout"] = "-1";
     config[pool]["rbd_store_chunk_size"] = "4";
     config[pool]["rbd_max_clone_depth"] = "5";
+    config[pool]["enable_deferred_deletion"] = "true";
     config[pool]["rbd_flatten_volume_from_snapshot"] = "false";
     config[pool]["image_upload_use_cinder_backend"] = "true";
 }
