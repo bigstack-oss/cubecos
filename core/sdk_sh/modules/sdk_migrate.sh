@@ -271,23 +271,31 @@ migrate_neutron_db()
         #
         # Deferring the migration instead does not help; it only inverts which
         # servers are broken, and worse, the healthy pool then shrinks as the
-        # roll proceeds instead of growing. Caracal stopped using the column at
-        # all (it takes the row lock with SELECT ... FOR UPDATE and keeps the
-        # attribute only so back-ports need no schema change), so it is enough
-        # that the value reads false: re-add it as a generated column and the
-        # migrated schema answers both dialects. It is additive and derived, and
-        # invisible to Caracal's ORM, which names its columns explicitly. The
-        # expression is written against id rather than a bare literal so that it
-        # is unambiguously non-constant, which the generated-column parser wants.
+        # roll proceeds instead of growing. Caracal does not use the column at
+        # all -- 2024.1's models_v2.HasInUse carries no in_use attribute, both
+        # lock registers take the row lock with SELECT ... FOR UPDATE / LOCK IN
+        # SHARE MODE alone -- so nothing on the new side names it, and it is
+        # enough that the value reads false. Re-add it in exactly the shape
+        # ussuri/expand/d8bdf05313f4_add_in_use_to_subnet.py created it, which
+        # is the shape Antelope's ORM still expects.
         #
-        # Antelope then reads the flag as "not in use", so read/write_lock_register
-        # stop guarding concurrent subnet deletes for the length of the window --
-        # the accepted trade for keeping the subnet API and the drain alive, and
-        # the same one the retired Yoga shim made for port forwardings.
+        # Deliberately a plain column and not a generated one. Antelope's
+        # HasInUse declares in_use with a *python-side* default (default=False),
+        # so SQLAlchemy names it in the INSERT for every subnet it creates, and
+        # MariaDB refuses a supplied value for a generated column: ERROR 1906
+        # under any strict sql_mode, which covers both oslo.db's
+        # mysql_sql_mode=TRADITIONAL default (nothing in this tree overrides it)
+        # and our own server-wide STRICT_TRANS_TABLES. A generated column would
+        # therefore keep subnet *reads* alive and break subnet *create* on every
+        # still-Antelope server for the length of the window. A plain column
+        # answers both dialects -- Antelope names it and the value is accepted,
+        # Caracal does not name it and takes the DEFAULT -- and because neither
+        # release's lock register ever writes the column, the shim costs no
+        # locking guarantee on either side.
         #
         # migrate_neutron_db_post() drops it once no Antelope server is left.
         if [ "$($MYSQL -N -u root -D neutron -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'neutron' AND TABLE_NAME = 'subnets' AND COLUMN_NAME = 'in_use'")" = "0" ] ; then
-            $MYSQL -u root -D neutron -e "ALTER TABLE subnets ADD COLUMN in_use tinyint(1) GENERATED ALWAYS AS (id IS NULL) VIRTUAL"
+            $MYSQL -u root -D neutron -e "ALTER TABLE subnets ADD COLUMN in_use tinyint(1) NOT NULL DEFAULT 0"
         fi
     fi
 
@@ -308,7 +316,7 @@ migrate_neutron_db_post()
     # Drop the mixed-window compatibility shim migrate_neutron_db() added, but
     # only once every control node runs Caracal's neutron-server. An unreachable
     # node counts as unknown and holds the shim, so a half-finished roll never
-    # loses the column out from under an Antelope server; carrying one generated
+    # loses the column out from under an Antelope server; carrying one unused
     # column for one more cluster_start costs nothing.
     $HEX_SDK os_neutron_version_uniform || return 0
 
