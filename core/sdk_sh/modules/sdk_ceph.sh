@@ -1672,6 +1672,20 @@ ceph_osd_disable_cache()
     $CEPH osd pool ls | grep -q "^${cachepool}$" || exit 1
     [ "x$(ceph_osd_test_cache $backpool)" = "xon" ] || exit 1
 
+    # The sweep at the bottom of the $BUILTIN_BACKPOOL branch resets crush_rule
+    # on every pool it does not recognize, and a device tier pool is named by its
+    # operator, so it matches none of the suffixes in that skip list. Read the
+    # registry here, before the first mutation: once the overlay is off there is
+    # no way to stop half way, so "cannot read it" has to fail while failing is
+    # still free. The other branches do not sweep and do not need it.
+    local devtiers=
+    if [ "$backpool" = "$BUILTIN_BACKPOOL" ] ; then
+        if ! devtiers=$(_ceph_device_tier_registry) ; then
+            echo "Error: cannot read the device tier registry from $SETTINGS_TXT"
+            return 1
+        fi
+    fi
+
     # set to forward so no more dirty objects
     rados -p $cachepool cache-flush-evict-all &>/dev/null || true
     Quiet -n $CEPH osd tier cache-mode $cachepool none --yes-i-really-mean-it
@@ -1685,6 +1699,9 @@ ceph_osd_disable_cache()
 
     if [ "$backpool" = "$BUILTIN_BACKPOOL" ] ; then
         for p in $($CEPH osd pool ls) ; do
+            if _ceph_device_tier_is_registered "$p" "$devtiers" ; then
+                continue
+            fi
             case $p in
                 *-pool|*-cache|*-ssd)
                     continue
@@ -1739,6 +1756,18 @@ ceph_osd_create_cache()
         local rule_hdd=rule-hdd
     fi
 
+    # Paired with the read in ceph_osd_disable_cache -- the sweep below is the
+    # other half of the same rewrite, and guarding only one of them leaves the
+    # damage one-directional instead of absent. Same reason for reading it up
+    # front: enable_cache is the first mutation and there is no way back over it.
+    local devtiers=
+    if [ "$backpool" = "$BUILTIN_BACKPOOL" ] ; then
+        if ! devtiers=$(_ceph_device_tier_registry) ; then
+            echo "Error: cannot read the device tier registry from $SETTINGS_TXT"
+            return 1
+        fi
+    fi
+
     Quiet -n ceph_osd_enable_cache $backpool
 
     if ! ($CEPH osd crush rule list | grep -q $rule_ssd) ; then
@@ -1759,6 +1788,9 @@ ceph_osd_create_cache()
             Quiet -n $CEPH osd pool set $fsmetapool crush_rule $rule_ssd
         fi
         for p in $($CEPH osd pool ls) ; do
+            if _ceph_device_tier_is_registered "$p" "$devtiers" ; then
+                continue
+            fi
             case $p in
                 $BUILTIN_CACHEPOOL|cephfs_metadata)
                     continue
@@ -3909,6 +3941,39 @@ ceph_mgr_dashboard_ensure()
 # tier" --
 # lives in the CLI layer and is not duplicated here.
 # ---------------------------------------------------------------------------
+
+# The device tier registry, read the way config_cinder.cpp reads it: the
+# cinder.storage.tier.%d.name array in settings.txt, one name per line in index
+# order. An empty entry is how the policy file encodes an empty list, not a
+# mistake, so it is dropped rather than reported.
+#
+# A non-zero return means the registry could not be read, which is a different
+# answer from "there are no device tiers". The bulk crush_rule rewrites in
+# ceph_osd_create_cache / ceph_osd_disable_cache have to tell those two apart:
+# reading "cannot tell" as "none" is what silently overwrites a device tier's
+# placement, which is the whole reason they consult this.
+_ceph_device_tier_registry()
+{
+    [ -r "$SETTINGS_TXT" ] || return 1
+    awk '/^[[:space:]]*cinder\.storage\.tier\.[0-9]+\.name[[:space:]]*=/ {
+             sub(/^[^=]*=[[:space:]]*/, "")
+             sub(/[[:space:]]+$/, "")
+             if ($0 != "") print
+         }' "$SETTINGS_TXT"
+}
+
+# $1 - a pool name, $2 - the registry as _ceph_device_tier_registry printed it.
+#
+# Exact whole-line match, never a shell pattern: the names in settings.txt have
+# not been through _ceph_device_tier_name_ok -- the policy chain and
+# `hex_config commit <settings>` both write this array without passing through
+# the CLI -- so a registry entry can hold any byte at all, and one holding "*"
+# used as a case pattern would skip every pool in the cluster.
+_ceph_device_tier_is_registered()
+{
+    [ -n "$2" ] || return 1
+    printf '%s\n' "$2" | grep -qxF -- "$1"
+}
 
 # A device tier's name becomes a pool name, and config_cinder.cpp's scan for
 # legacy tiering matches "-pool" / "-ssd" as substrings rather than suffixes, so
