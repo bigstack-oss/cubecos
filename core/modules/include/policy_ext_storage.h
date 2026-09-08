@@ -10,6 +10,7 @@
 struct ExtStorageConfig {
     std::string volumeTypeDefault;
     std::vector<std::string> storageBackends;
+    std::vector<std::string> storageTiers;
     bool imageUseMultipath;
     bool imageEnforceMultipath;
 };

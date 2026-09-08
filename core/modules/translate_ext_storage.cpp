@@ -25,6 +25,11 @@ Translate(const char* policyFile, FILE* settings)
         fprintf(settings, "cinder.storage.backend.%zu.name = %s\n", i, config.storageBackends[i].c_str());
     }
 
+    // settings index starts from 0, while the yml sequence it comes from starts from 1
+    for (std::size_t i = 0; i < config.storageTiers.size(); i++) {
+        fprintf(settings, "cinder.storage.tier.%zu.name = %s\n", i, config.storageTiers[i].c_str());
+    }
+
     fprintf(settings, "glance.cinder.useMultipath = %s\n", (config.imageUseMultipath ? "true" : "false"));
     fprintf(settings, "glance.cinder.enforceMultipath = %s\n", (config.imageEnforceMultipath ? "true" : "false"));
 

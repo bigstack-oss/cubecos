@@ -56,6 +56,13 @@ bool ExtStoragePolicy::load(const char* policyFile)
         this->config.storageBackends.push_back(backendName);
     }
 
+    std::size_t tierCount = SizeOfYmlSeq(ymlRoot, "tiers");
+    for (std::size_t i = 1; i <= tierCount; i++) {
+        std::string tierName;
+        HexYmlParseString(tierName, this->ymlRoot, "tiers.%zu.name", i);
+        this->config.storageTiers.push_back(tierName);
+    }
+
     HexYmlParseBool(&(this->config.imageUseMultipath), this->ymlRoot, "image.multipath.use");
     HexYmlParseBool(&(this->config.imageEnforceMultipath), this->ymlRoot, "image.multipath.enforce");
 
@@ -87,6 +94,28 @@ bool ExtStoragePolicy::save(const char* policyFile)
         }
         std::string prefix = std::string("backends.").append(ymlIndex);
         if (AddYmlNode(this->ymlRoot, prefix.c_str(), "name", this->config.storageBackends[i].c_str()) != 0) {
+            return false;
+        }
+    }
+
+    if (DeleteYmlNode(this->ymlRoot, "tiers") != 0) {
+        return false;
+    }
+    AddYmlKey(this->ymlRoot, NULL, "tiers");
+
+    if (this->config.storageTiers.size() == 0) {
+        // the yml parser needs to set at least one blank child
+        // we would create a blank child if we do not have any
+        this->config.storageTiers.push_back("");
+    }
+    for (std::size_t i = 0; i < this->config.storageTiers.size(); i++) {
+        // yml index starts from 1
+        std::string ymlIndex = std::to_string(i + 1);
+        if (AddYmlKey(this->ymlRoot, "tiers", ymlIndex.c_str()) != 0) {
+            return false;
+        }
+        std::string prefix = std::string("tiers.").append(ymlIndex);
+        if (AddYmlNode(this->ymlRoot, prefix.c_str(), "name", this->config.storageTiers[i].c_str()) != 0) {
             return false;
         }
     }
