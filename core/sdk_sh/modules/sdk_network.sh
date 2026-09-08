@@ -421,6 +421,38 @@ _network_local_addrs()
     echo " $(ip -4 -o addr show 2>/dev/null | awk '{split($4,a,"/"); print a[1]}' | tr '\n' ' ') "
 }
 
+# Persistent proof that this node's bonded network has ever carried traffic.
+# Created the first time a target actually replies, and never removed.
+#
+# _network_bond_reachable() already refuses to act when there is nothing to test
+# against, but "the only target exists and never answers ICMP" falls on the other
+# side of that check and looks identical to a black-holed bond -- forever. On a
+# single-node cluster CUBE_NODE_LIST_IPS holds only this node's own address, so
+# every peer is correctly excluded as local and the default gateway is the only
+# target; a gateway that filters ICMP then pins the check at unreachable for the
+# life of the node, and the watchdog bounces the slaves every holdoff period on a
+# perfectly healthy node. Reproduced on jim-1cc by dropping echo-requests to the
+# gateway alone: both slaves MII up, the provider bridge holding the management IP
+# and an ssh session live over the bond, and network_bond_check returned 1.
+#
+# Requiring one observed reply before ever arming separates the fault this exists
+# for -- was carrying traffic, then stopped -- from "was never measurable". A node
+# that comes up already wedged is therefore left alone, which is the right call:
+# it is indistinguishable from the filtered-gateway case, and unlike a node that
+# broke after months of working there is no evidence a bounce would help.
+#
+# Lives under $STATE_DIR rather than /run because it has to survive a reboot and
+# an A/B upgrade -- a node does not become unmeasurable because it restarted.
+BOND_REACHABLE_SEEN=${BOND_REACHABLE_SEEN:-$STATE_DIR/network_bond_reachable_seen}
+
+# Record the first observed reply. Always returns 0 so it can be chained onto a
+# success path without changing what the caller sees.
+_network_bond_mark_seen()
+{
+    [ -e "$BOND_REACHABLE_SEEN" ] || : > "$BOND_REACHABLE_SEEN" 2>/dev/null
+    return 0
+}
+
 # Ground truth: can this node reach anything over its bonded network? The default
 # gateway first, then every other cluster node. Returns 0 if ANY answers, and also
 # 0 when there is nothing to test against -- an isolated or half-configured node
@@ -444,7 +476,7 @@ _network_bond_reachable()
     esac
     if [ -n "$gw" ] ; then
         targets=1
-        ping -c 1 -W 2 "$gw" >/dev/null 2>&1 && return 0
+        ping -c 1 -W 2 "$gw" >/dev/null 2>&1 && { _network_bond_mark_seen ; return 0 ; }
     fi
 
     for peer in "${CUBE_NODE_LIST_IPS[@]}" ; do
@@ -452,9 +484,11 @@ _network_bond_reachable()
             *" $peer "*) continue ;;
         esac
         targets=1
-        ping -c 1 -W 2 "$peer" >/dev/null 2>&1 && return 0
+        ping -c 1 -W 2 "$peer" >/dev/null 2>&1 && { _network_bond_mark_seen ; return 0 ; }
     done
 
+    # No target answered. Returning 0 here means "nothing to test against", which is
+    # not evidence of health -- deliberately not marked as an observed reply.
     [ $targets -eq 0 ] && return 0
     return 1
 }
@@ -543,10 +577,36 @@ network_bond_repair()
 # locally, with no dependency on the telemetry or cluster stack.
 network_bond_watchdog()
 {
-    local now stamp=/run/network_bond_watchdog.last
+    local now fails stamp=/run/network_bond_watchdog.last
+    local counter=/run/network_bond_watchdog.fails
 
     [ -n "$(_network_bond_list)" ] || return 0
-    network_bond_check >/dev/null 2>&1 && return 0
+    if network_bond_check >/dev/null 2>&1 ; then
+        rm -f $counter
+        return 0
+    fi
+
+    # Never arm on a node whose bonded network has not once been observed carrying
+    # traffic -- see BOND_REACHABLE_SEEN. This is what keeps a single-node cluster
+    # behind an ICMP-filtering gateway, which has no answerable target at all, from
+    # bouncing its slaves every holdoff period indefinitely.
+    if [ ! -e "$BOND_REACHABLE_SEEN" ] ; then
+        log_debug "network_bond_watchdog: bonded network has never been observed reachable, not arming"
+        return 0
+    fi
+
+    # Require consecutive failures. The check pings one target per peer plus the
+    # gateway, so on a multi-node cluster a lone dropped reply cannot decide
+    # anything -- but with a single target, which is exactly the single-node case
+    # above, one lost echo would otherwise be enough to bounce a healthy bond. At
+    # the cron interval of 2 min this delays a real repair by about four minutes,
+    # against the 14 hours the fault it exists for went unnoticed.
+    fails=$(( $(cat $counter 2>/dev/null || echo 0) + 1 ))
+    echo "$fails" > $counter
+    if [ "$fails" -lt "${BOND_WATCHDOG_FAILS:-3}" ] ; then
+        log_debug "network_bond_watchdog: bonded network unreachable, $fails of ${BOND_WATCHDOG_FAILS:-3} consecutive, not arming yet"
+        return 0
+    fi
 
     # Rate limit. A bounce briefly drops the link, so a fault this cannot fix must
     # not turn into a permanent flap.
@@ -555,6 +615,7 @@ network_bond_watchdog()
         return 0
     fi
     echo "$now" > $stamp
+    rm -f $counter
 
     /usr/sbin/hex_log_event -e ETH00003W "interface=host,host=$HOSTNAME,category=network,service=bonding,action=bond_not_carrying_traffic"
     if network_bond_repair ; then
