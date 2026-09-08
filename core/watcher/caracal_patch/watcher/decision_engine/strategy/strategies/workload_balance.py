@@ -259,7 +259,12 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
                 if self._meter == 'instance_cpu_usage':
                     workload_cache[instance.uuid] = (util * instance.vcpus / 100)
                 else:
-                    workload_cache[instance.uuid] = (util * 1024.0)
+                    # No unit conversion. This was `util * 1024.0` while the datasource
+                    # was monasca, whose mem.used_gb is GiB against a cache the strategy
+                    # compares to node.memory in MiB. ceilometer_memory_usage is already
+                    # MB, so the multiply would overstate every instance by 1024x and
+                    # migrate continuously.
+                    workload_cache[instance.uuid] = util
                 node_workload += workload_cache[instance.uuid]
                 LOG.debug("VM (%s): %s %f", instance.uuid, self._meter,
                           util)

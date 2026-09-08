@@ -50,9 +50,14 @@ WATCHER_DASHBOARD_VER := 11.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)# python-observabilityclient is watcher's own dependency for the prometheus
+	$(Q)# datasource, which caracal's 12.1.0 does not carry -- the datasource landed in
+	$(Q)# 2025.1 and is backported in $(CARACAL_OPENSTACK_RELEASE)_patch. It is not in
+	$(Q)# requirements.txt for this version, so it is named here rather than pulled in.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
 		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			python-watcher==$(WATCHER_VER)"
+			python-watcher==$(WATCHER_VER) \
+			python-observabilityclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries. This is exactly the set the rpms put in /usr/bin, which is

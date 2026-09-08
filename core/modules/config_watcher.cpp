@@ -255,9 +255,21 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         cfg["keystone_authtoken"]["password"] = userPass;
         cfg["keystone_authtoken"]["service_token_roles_required"] = "true";
 
-        cfg["monasca_client"].clear();
-        cfg["monasca_client"]["interface"] = "public";
-        cfg["monasca_client"]["region_name"] = "RegionOne";
+        // The prometheus datasource, backported into caracal from 2025.1. Pointed at the
+        // watcher_prometheus listener config_haproxy writes rather than at :9091 directly:
+        // the datasource builds "<host>:<port>/api/v1/..." with nowhere to put a path, and
+        // Prometheus serves under a /prometheus route prefix, so a direct target 404s on
+        // every query. Through the listener watcher follows the same route as the UI -- the
+        // local Prometheus on a single node, the deduplicating thanos queriers in HA.
+        //
+        // fqdn_label matches what config_prometheus stamps on every per-node target, and is
+        // what watcher matches against ComputeNode.hostname. instance_uuid_label keeps
+        // watcher's own default of 'resource'.
+        cfg["prometheus_client"].clear();
+        cfg["prometheus_client"]["host"] = "127.0.0.1";
+        cfg["prometheus_client"]["port"] = "9099";
+        cfg["prometheus_client"]["fqdn_label"] = "fqdn";
+        cfg["prometheus_client"]["instance_uuid_label"] = "resource";
 
         cfg["watcher_clients_auth"].clear();
         cfg["watcher_clients_auth"]["auth_type"] = "password";
@@ -267,7 +279,7 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         cfg["watcher_clients_auth"]["username"] = "admin_cli";
         cfg["watcher_clients_auth"]["password"] = adminCliPass;
 
-        cfg["watcher_datasources"]["datasources"] = "monasca";
+        cfg["watcher_datasources"]["datasources"] = "prometheus";
 
         cfg["oslo_messaging_notifications"]["driver"] = "messagingv2";
 
@@ -275,7 +287,13 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
             std::string workers = std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole)));
             cfg["api"]["workers"] = workers;
             cfg["watcher_decision_engine"]["max_workers"] = workers;
-            cfg["watcher_decision_engine"]["metric_map_path"] = "/etc/watcher/metric_map.yaml";
+            // metric_map_path is no longer written. It existed to rename monasca's
+            // meters; the option still defaults to /etc/watcher/metric_map.yaml and that
+            // file is still installed, so it is still read -- but it carries only a
+            // monasca: section, which is exactly right. A prometheus: section must never
+            // be added: the datasource dispatches on the meter name (if meter ==
+            // 'ceilometer_cpu' ...) and raises "Cannot process prometheus meter" for
+            // anything else, so an override would break the query rather than redirect it.
             cfg["watcher_applier"]["workers"] = workers;
         }
     }

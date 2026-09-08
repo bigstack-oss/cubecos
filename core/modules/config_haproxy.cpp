@@ -239,6 +239,31 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
     fprintf(fout, "  default_backend cube_cos_ui\n");
     fprintf(fout, "  \n");
 
+    // Watcher's prometheus datasource for the decision engine.
+    //
+    // It exists only because of a path mismatch that cannot be configured away. The
+    // datasource builds its URLs as "<host>:<port>/api/v1/...", and python-observabilityclient
+    // takes host and port -- there is no place to put a path prefix, and watcher validates
+    // the host against a hostname regex so one cannot be smuggled in. Our Prometheus runs
+    // with --web.external-url ending in /prometheus/, which sets the route prefix, so a bare
+    // /api/v1/query is a 404 on both :9091 and the thanos querier's :10904 (measured).
+    //
+    // So this listener prefixes the path and hands off to prometheus_backend, which means
+    // watcher inherits the same routing as the UI: the local Prometheus on a single node and
+    // the deduplicating thanos queriers in HA, with failover rather than one pinned node.
+    // Loopback only -- the decision engine runs on the control nodes it serves.
+    //
+    // Not solved by --web.route-prefix=/ instead: haproxy forwards the path unchanged, so
+    // that would break the UI and Grafana, which is why the self-scrape was fixed by moving
+    // the target rather than dropping the prefix.
+    fprintf(fout, "frontend watcher_prometheus\n");
+    fprintf(fout, "  bind 127.0.0.1:9099\n");
+    fprintf(fout, "  mode http\n");
+    fprintf(fout, "  option forwardfor\n");
+    fprintf(fout, "  http-request set-path /prometheus%%[path]\n");
+    fprintf(fout, "  use_backend prometheus_backend\n");
+    fprintf(fout, "  \n");
+
     // Last, after both cube_cos frontends are complete, and being on a section boundary is
     // load-bearing rather than cosmetic: haproxy sections run to the next section header, so
     // a backend/frontend emitted above cube_cos_http's closing lines silently adopts them and
