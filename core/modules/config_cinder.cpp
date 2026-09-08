@@ -691,6 +691,32 @@ SetBackup(
 }
 
 /**
+ * Add a Ceph pool as a storage backend.
+ */
+static void
+AddCephPoolAsStorageBackend(
+    Configs& config,
+    const std::string pool)
+{
+    config[pool]["backend_host"] = BUILTIN_STORAGE_HOST;
+    config[pool]["volume_backend_name"] = pool;
+    config[pool]["rbd_pool"] = pool;
+    config[pool]["volume_driver"] = "cinder.volume.drivers.rbd.RBDDriver";
+    config[pool]["rbd_ceph_conf"] = "/etc/ceph/ceph.conf";
+    config[pool]["rbd_user"] = "admin";
+    if (config.count(BUILTIN_STORAGE_BACKEND) > 0 && config[BUILTIN_STORAGE_BACKEND].count("rbd_secret_uuid") > 0) {
+        config[pool]["rbd_secret_uuid"] = config[BUILTIN_STORAGE_BACKEND]["rbd_secret_uuid"];
+    } else {
+        config[pool]["rbd_secret_uuid"] = HexUtilPOpen(HEX_SDK " os_virsh_secret_uuid %s", s_seed.c_str());
+    }
+    config[pool]["rados_connect_timeout"] = "-1";
+    config[pool]["rbd_store_chunk_size"] = "4";
+    config[pool]["rbd_max_clone_depth"] = "5";
+    config[pool]["rbd_flatten_volume_from_snapshot"] = "false";
+    config[pool]["image_upload_use_cinder_backend"] = "true";
+}
+
+/**
  * Set the storage backends.
  */
 static void
@@ -734,6 +760,23 @@ SetStorageBackend(
         }
 
         enabledBackendLine << "," << it->newValue();
+    }
+
+    /**
+     * Device tiers differ from the backends above in where their [section] comes
+     * from. An external backend ships one in its own ext_storage_*.conf, copied in
+     * just above; a device tier is an RBD pool in this cluster, so its section is
+     * generated here from the registry, the same way ReconfigMain generates one for
+     * a node group pool.
+     */
+    for (std::vector<ConfigString>::const_iterator it = s_storageTiers.begin(); it != s_storageTiers.end(); it++) {
+        const std::string tier = it->newValue();
+        if (tier.length() == 0) {
+            continue;
+        }
+
+        AddCephPoolAsStorageBackend(config, tier);
+        enabledBackendLine << "," << tier;
     }
 
     config["DEFAULT"]["allowed_direct_url_schemes"] = "cinder";
@@ -997,6 +1040,20 @@ Commit(bool modified, int dryLevel)
 
         enabledHostLine << "," << it->newValue() << "@" << it->newValue();
     }
+    /**
+     * A device tier's host is the built-in one, not its own name: the Host column
+     * of `openstack volume service list` is <backend_host>@<section>, and
+     * AddCephPoolAsStorageBackend sets backend_host to BUILTIN_STORAGE_HOST for
+     * every pool it generates. Naming the tier on both sides would wait out the
+     * full timeout on a host that never reports in.
+     */
+    for (std::vector<ConfigString>::const_iterator it = s_storageTiers.begin(); it != s_storageTiers.end(); it++) {
+        if (it->newValue().length() == 0) {
+            continue;
+        }
+
+        enabledHostLine << "," << BUILTIN_STORAGE_HOST << "@" << it->newValue();
+    }
     HexUtilSystemF(
         0,
         0,
@@ -1031,32 +1088,6 @@ RestartMain(int argc, char* argv[])
     StartCinderService(s_enabled, s_ha, IsBootstrap(), G(IS_MASTER));
 
     return EXIT_SUCCESS;
-}
-
-/**
- * Add a Ceph pool as a storage backend.
- */
-static void
-AddCephPoolAsStorageBackend(
-    Configs& config,
-    const std::string pool)
-{
-    config[pool]["backend_host"] = BUILTIN_STORAGE_HOST;
-    config[pool]["volume_backend_name"] = pool;
-    config[pool]["rbd_pool"] = pool;
-    config[pool]["volume_driver"] = "cinder.volume.drivers.rbd.RBDDriver";
-    config[pool]["rbd_ceph_conf"] = "/etc/ceph/ceph.conf";
-    config[pool]["rbd_user"] = "admin";
-    if (config.count(BUILTIN_STORAGE_BACKEND) > 0 && config[BUILTIN_STORAGE_BACKEND].count("rbd_secret_uuid") > 0) {
-        config[pool]["rbd_secret_uuid"] = config[BUILTIN_STORAGE_BACKEND]["rbd_secret_uuid"];
-    } else {
-        config[pool]["rbd_secret_uuid"] = HexUtilPOpen(HEX_SDK " os_virsh_secret_uuid %s", s_seed.c_str());
-    }
-    config[pool]["rados_connect_timeout"] = "-1";
-    config[pool]["rbd_store_chunk_size"] = "4";
-    config[pool]["rbd_max_clone_depth"] = "5";
-    config[pool]["rbd_flatten_volume_from_snapshot"] = "false";
-    config[pool]["image_upload_use_cinder_backend"] = "true";
 }
 
 static void
