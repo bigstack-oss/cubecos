@@ -213,19 +213,36 @@ Commit(bool modified, int dryLevel)
 
     // Mask the units pacemaker must not bring up before their own module has
     // configured them. Both are unmasked later in the same commit pass, by the
-    // module that owns them: openvswitch by config_neutron (L13), thanos-compact
-    // by config_prometheus (L12). SetupCluster, which creates the pcs resources,
-    // runs from CommitLast at L18 -- after both -- so by the time pacemaker is
-    // told about thanos-compact the unit exists, is configured and is unmasked.
+    // module that owns them: openvswitch by config_neutron's OvnService (L13),
+    // thanos-compact by config_prometheus (L12). SetupCluster, which creates the
+    // pcs resources, runs from CommitLast at L18 -- after both -- so by the time
+    // pacemaker is told about thanos-compact the unit exists, is configured and is
+    // unmasked.
     //
-    // This mask used to live at the top of bootstrap_cube_config, where it ran on
-    // every boot whether or not a commit followed. Here it is scoped to the path
-    // that actually needs it: pacemaker is brought up a few lines below, and the
-    // window this closes is exactly between that and the owning module's commit.
-    // Commit() has already returned for any role other than control or compute,
-    // which is the same set config_neutron's OvnService unmasks openvswitch for.
-    HexUtilSystemF(0, 0, "systemctl mask %s", OVS_NAME);
-    HexUtilSystemF(0, 0, "systemctl mask %s", THANOS_COMPACT);
+    // Bootstrap only, and that qualifier is the whole safety of the handshake: the
+    // unmasks are in other modules, and their CommitCheck predicates are not this
+    // one's. This module commits on its own `modified` and on G_MOD(MGMT_IF), which
+    // neutron has neither of, and prometheus has neither of plus no
+    // G_MOD(IS_MASTER). So a settings commit that changes only a pacemaker tunable
+    // -- or the management interface, or the master flag -- would mask here and
+    // never reach an unmask. A mask does not stop a running daemon, so nothing
+    // breaks immediately; what breaks is every later `systemctl restart
+    // openvswitch`, the repair paths included, until the next full commit, and on
+    // compute nodes too because this sits above the `if (enabled)` block. For
+    // thanos-compact the cost is a compactor pacemaker can no longer restart.
+    //
+    // Every CommitCheck in the pass short-circuits to true under IsBootstrap(), so
+    // that is exactly the set of commits where both unmasks are guaranteed to
+    // follow. It is also the only path where the window exists at all: on any later
+    // commit both units are already configured, so there is nothing to protect them
+    // from. This is the same scope the mask had at the top of bootstrap_cube_config,
+    // a PROJ_BOOTSTRAP script, before it moved here -- except that Commit() has
+    // already returned for any role other than control or compute, which is the
+    // same set OvnService unmasks openvswitch for.
+    if (IsBootstrap()) {
+        HexUtilSystemF(0, 0, "systemctl mask %s", OVS_NAME);
+        HexUtilSystemF(0, 0, "systemctl mask %s", THANOS_COMPACT);
+    }
 
     if (enabled) {
         if (isMaster) {
