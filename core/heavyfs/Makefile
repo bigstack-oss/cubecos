@@ -74,21 +74,27 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
-	$(Q)# centos-release-openstack-antelope *requires* centos-release-ceph-quincy, so the
-	$(Q)# line above installs it every build and it cannot simply be erased: `rpm -e
-	$(Q)# --nodeps` leaves antelope with an unsatisfied dependency, which `dnf check`
-	$(Q)# reports for the life of the image ("has missing requires of
-	$(Q)# centos-release-ceph-quincy").
+	$(Q)# The release rpm pulls a ceph release rpm with it, and which one follows the
+	$(Q)# openstack release: antelope required centos-release-ceph-quincy, caracal
+	$(Q)# requires centos-release-ceph-reef -- which is the one core/ceph pins against.
 	$(Q)#
-	$(Q)# Disabling the repo gets what we actually want -- 17.2.z out of dnf's view --
-	$(Q)# while leaving the package installed, the dependency satisfied and the rpm
-	$(Q)# database clean. It matters because the quincy and reef release rpms own
-	$(Q)# differently-named CentOS-Ceph-*.repo files and neither Obsoletes the other, so
-	$(Q)# without this dnf sees 17.2.z and 18.2.z at once. The pinned NVRs in
-	$(Q)# core/ceph/ceph.mk would still resolve correctly, but any *unpinned* dependency
-	$(Q)# could be satisfied from the wrong release.
+	$(Q)# That is why the quincy handling this block used to carry is gone. Under
+	$(Q)# antelope, quincy arrived on every build and could not simply be erased (`rpm -e
+	$(Q)# --nodeps` left antelope with an unsatisfied dependency and `dnf check`
+	$(Q)# complaining for the life of the image), so the repo was disabled instead --
+	$(Q)# the quincy and reef release rpms own differently-named CentOS-Ceph-*.repo
+	$(Q)# files and neither Obsoletes the other, so dnf otherwise saw 17.2.z and 18.2.z
+	$(Q)# at once and any *unpinned* dependency could resolve from the wrong release.
+	$(Q)#
+	$(Q)# Caracal never installs quincy, so there is nothing to disable -- and leaving
+	$(Q)# the line in would fail the build rather than no-op: `dnf config-manager
+	$(Q)# --set-disabled` on a repo that does not exist exits 1 ("No matching repo to
+	$(Q)# modify"). Measured on jim-1cc after doing the swap by hand.
+	$(Q)#
+	$(Q)# reef is still named explicitly rather than left to the dependency: it is what
+	$(Q)# core/ceph pins against, and an openstack release that later pairs with squid
+	$(Q)# should show up here as a conflict rather than as a silent ceph bump.
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-reef
-	$(Q)chroot $(ROOTDIR) dnf config-manager --set-disabled centos-ceph-quincy
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled highavailability
 
 # ceph-nfs-ganesha repo needs to be installed before packages
@@ -224,15 +230,15 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
 	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
 	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
-	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(CARACAL_PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(CARACAL_PYTHON_PATCH_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz
-	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz -C /usr/src/python-$(CARACAL_PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER) && ./configure --enable-optimizations"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER) && make altinstall"
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(PYTHON_PATCH_VER)/Python-$(PYTHON_PATCH_VER).tgz
+	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz -C /usr/src/python-$(PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && ./configure --enable-optimizations"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && make altinstall"
 	$(Q)umount -l $(ROOTDIR)/dev || true
 	$(Q)# ensure python 3.11 is successfully built
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(CARACAL_PYTHON_VER) ]
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(CARACAL_PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(PYTHON_VER) ]
 
 # NOTE: why the setuptools pin is applied at venv creation, below, rather than being
 # left to whichever later `pip install -c` happens to pull setuptools in as a
@@ -272,24 +278,25 @@ rootfs_install::
 
 # set up the execution context for openstack caracal
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p $(CARACAL_OPENSTACK_HOME_DIR)
-	$(Q)chroot $(ROOTDIR) python$(CARACAL_PYTHON_VER) -m venv $(CARACAL_OPENSTACK_HOME_DIR)
-	$(Q)cp -f $(CARACAL_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
+	$(Q)chroot $(ROOTDIR) mkdir -p $(OPENSTACK_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) python$(PYTHON_VER) -m venv $(OPENSTACK_HOME_DIR)
+	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(OPENSTACK_HOME_DIR)/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
-# upper-constraints.txt copied down verbatim, save for one local delta -- unlike the
-# antelope file, which carries six. Upstream does not pin setuptools, so this venv used
+# upper-constraints.txt copied down verbatim, save for one local delta -- where the
+# antelope file it replaced carried six. Upstream does not pin setuptools, so this venv used
 # to land on whatever was current (84.0.0), which was fine while skyline was the only
 # occupant. keystone is not: keystonemiddleware 10.6.0 does `import pkg_resources` in
 # _common/config.py, and setuptools 82 deleted pkg_resources, so every gunicorn worker
 # died at import with ModuleNotFoundError and openstack-keystone never came up (#631).
 #
-# The pin is therefore settled now, as the same one line in the constraints file that
-# antelope uses -- but at 75.6.0, not antelope's 65.7.0. The two venvs have different
-# reasons for their numbers: antelope's is the version its own upper-constraints
-# names, while caracal's is a local delta with no upstream value to match, so it takes
+# The pin is therefore settled now, as one line in the constraints file, the same way
+# antelope pinned it -- but at 75.6.0, not antelope's 65.7.0. The two venvs had
+# different reasons for their numbers: antelope's was the version its own
+# upper-constraints named, while caracal's is a local delta with no upstream value to
+# match, so it takes
 # the newest release that clears both ceilings rather than a 2023 one inherited by
 # habit. 75.6.0 is the last setuptools of 2024 (2024-11-20), which puts it in the same
 # year as the release this venv carries.
@@ -340,13 +347,13 @@ rootfs_install::
 # tree calls it and no other venv console script is aliased that way, so it is not
 # recreated.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-openstackclient
 	$(Q)# Link the cli. hex_sdk reaches it by absolute path ($$OPENSTACK in
 	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/openstack), so
 	$(Q)# this symlink is what carries every caller over.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
 
 # Allow admin to be sudoers
 rootfs_install::

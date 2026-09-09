@@ -59,8 +59,8 @@ rootfs_install::
 	$(Q)# is named explicitly: an entry point is only visible to the interpreter
 	$(Q)# /usr/bin/openstack runs under, so a dependency nothing asks for is one that
 	$(Q)# can disappear silently and take `openstack orchestration ...` with it.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			openstack-heat==$(HEAT_VER) \
 			python-heatclient"
 	$(Q)# clean up dns configurations after downloading packages
@@ -70,14 +70,14 @@ rootfs_install::
 	$(Q)# that hex_config replaces) and heat-wsgi-api{,-cfn} (only used when heat is
 	$(Q)# hosted under a wsgi server, which is not the layout here); those are left
 	$(Q)# unlinked on purpose. 2024.1 adds none and removes none.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-all /usr/bin/heat-all
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-api /usr/bin/heat-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-api-cfn /usr/bin/heat-api-cfn
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-engine /usr/bin/heat-engine
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-manage /usr/bin/heat-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat-status /usr/bin/heat-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-all /usr/bin/heat-all
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-api /usr/bin/heat-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-api-cfn /usr/bin/heat-api-cfn
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-engine /usr/bin/heat-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-manage /usr/bin/heat-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-status /usr/bin/heat-status
 	$(Q)# the heatclient CLI, which is python-heatclient's console script.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
 
 # prepare the build directory
 rootfs_install::
@@ -108,9 +108,9 @@ rootfs_install::
 	$(Q)# same way the RDO spec's %install does. All three are byte-identical
 	$(Q)# between 20.0.1 and 22.0.1, and heat's data_files list is unchanged, so
 	$(Q)# the hop moves only where they are read from.
-	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/heat/api-paste.ini /etc/heat/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -rf $(CARACAL_OPENSTACK_HOME_DIR)/etc/heat/environment.d /etc/heat/
-	$(Q)chroot $(ROOTDIR) cp -rf $(CARACAL_OPENSTACK_HOME_DIR)/etc/heat/templates /etc/heat/
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/heat/api-paste.ini /etc/heat/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/heat/environment.d /etc/heat/
+	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/heat/templates /etc/heat/
 	$(Q)# install systemd unit files
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/heat/openstack-heat-api.service /usr/lib/systemd/system/openstack-heat-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/heat/openstack-heat-api-cfn.service /usr/lib/systemd/system/openstack-heat-api-cfn.service
@@ -165,8 +165,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		heat-dashboard==$(HEAT_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

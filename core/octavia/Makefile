@@ -33,7 +33,7 @@ OCTAVIA_VER := $(shell sed -n 's/^OCTAVIA_VER := //p' $(COREDIR)/octavia/octavia
 # that one is not versioned with octavia -- 3.5.0 is caracal's. Read from the same
 # constraint file the venv install resolves it under, so the guest and the controllers
 # agree on it for the same reason and without a second pin to remember.
-OCTAVIA_LIB_VER := $(shell sed -n 's/^octavia-lib===//p' $(CARACAL_OPENSTACK_PIP_CONSTRAINT))
+OCTAVIA_LIB_VER := $(shell sed -n 's/^octavia-lib===//p' $(OPENSTACK_PIP_CONSTRAINT))
 
 # Everything this Makefile reads or writes is anchored at $(TOP_BLDDIR), never at the
 # directory make happens to be standing in. Make's CURDIR and hex's own BLDDIR (which
@@ -53,7 +53,7 @@ OCTAVIA_BLDDIR := $(TOP_BLDDIR)/core/octavia
 # core/extpacks/Makefile diffs its NAS copy byte for byte against a file it produces
 # the same way, so a full-format `md5sum` line never matches and silently re-copies
 # ~340 MB over NFS on every build.
-AMPHORA_IMAGE := $(OCTAVIA_BLDDIR)/amphora-x64-haproxy_$(CARACAL_OPENSTACK_RELEASE).qcow2
+AMPHORA_IMAGE := $(OCTAVIA_BLDDIR)/amphora-x64-haproxy_$(OPENSTACK_RELEASE).qcow2
 
 # The checkout is keyed on the tag, not on the directory.
 #
@@ -102,7 +102,7 @@ $(OCTAVIA_SRC_STAMP):
 #                is a no-op either way.
 haproxy_amphora_image: $(OCTAVIA_SRC_STAMP)
 	$(Q)[ -n "$(OCTAVIA_LIB_VER)" ] || \
-		{ echo "haproxy_amphora_image: no octavia-lib=== pin in $(CARACAL_OPENSTACK_PIP_CONSTRAINT); without it DIB falls back to the element's dead stable/2024.1" >&2; exit 1; }
+		{ echo "haproxy_amphora_image: no octavia-lib=== pin in $(OPENSTACK_PIP_CONSTRAINT); without it DIB falls back to the element's dead stable/2024.1" >&2; exit 1; }
 	$(Q)command -v debootstrap >/dev/null || \
 		{ echo "haproxy_amphora_image: debootstrap missing, and upstream no longer installs it on rhel/centos -- dnf install debootstrap" >&2; exit 1; }
 	$(Q)grep -qhE '^[[:space:]]*timeout[[:space:]]*=' /root/.wgetrc /etc/wgetrc 2>/dev/null || \
