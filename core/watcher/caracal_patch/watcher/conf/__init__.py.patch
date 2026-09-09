@@ -1,0 +1,15 @@
+--- watcher/conf/__init__.py.orig	2026-09-09 05:10:25.150726475 +0000
++++ watcher/conf/__init__.py	2026-09-09 05:10:25.150287264 +0000
+@@ -42,6 +42,7 @@
+ from watcher.conf import paths
+ from watcher.conf import placement_client
+ from watcher.conf import planner
++from watcher.conf import prometheus_client
+ from watcher.conf import service
+ 
+ CONF = cfg.CONF
+@@ -70,3 +71,4 @@
+ ironic_client.register_opts(CONF)
+ collector.register_opts(CONF)
+ placement_client.register_opts(CONF)
++prometheus_client.register_opts(CONF)

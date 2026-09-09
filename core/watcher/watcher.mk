@@ -14,6 +14,21 @@ WATCHER_RUN_DIR := /var/run/watcher
 # instead of descending into watcher/ the way cyborg.mk, nova.mk and neutron.mk do,
 # because the entry point registration at the bottom of this file reaches the dist-info
 # directory through it. The patch tree carries its own leading watcher/ to compensate.
+#
+# The tree follows the same convention as core/nova and core/masakari: a reviewable
+# unified diff at <rel>.py.patch beside the pristine <rel>.py.orig it applies to, and
+# brand-new downstream files (anything that is not *.patch/*.orig) installed verbatim.
+# Watcher used to overlay whole modified copies with cp -rf, which hid what had actually
+# been changed and silently absorbed upstream edits on a version bump. A failed hunk
+# aborts the build rather than shipping drift.
+#
+# One deliberate difference from core/nova and core/masakari: those guard the apply with
+# `|| exit 1` and rely on --forward for idempotence, but --forward only skips the *hunks* --
+# it still exits 1 when every hunk is already applied, so a re-run against an already-patched
+# tree aborts the build. That never fires there because each build reinstalls the venv from
+# pip first, so the target is always pristine; it would fire in an incremental workspace.
+# Testing with --dry-run --reverse first detects the already-applied case and skips it,
+# which keeps the convention and makes the loop genuinely re-runnable.
 WATCHER_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
 WATCHER_PATCHDIR := $(COREDIR)/watcher/$(CARACAL_OPENSTACK_RELEASE)_patch
 
@@ -158,7 +173,18 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chmod 0640 $(WATCHER_CONF_DIR)/watcher.conf.def
 
 rootfs_install::
-	$(Q)[ -d $(WATCHER_PATCHDIR) ] && cp -rf $(WATCHER_PATCHDIR)/* $(WATCHER_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(WATCHER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(WATCHER_PATCHDIR)/}; tgt=$(WATCHER_SRCDIR)/$${rel%.patch}; \
+		if patch --dry-run --reverse --force "$$tgt" < "$$p" >/dev/null 2>&1; then \
+			echo "  PATCH $${rel%.patch} (already applied)"; continue; \
+		fi; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "watcher: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)cd $(WATCHER_PATCHDIR) && find . -type f ! -name '*.patch' ! -name '*.orig' \
+		! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(WATCHER_SRCDIR)/"$$f"; done
 	$(Q)# Register the CubeCOS allocation_balance strategy entry point (idempotent).
 	$(Q)# pip installs a wheel, so the metadata directory is .dist-info; the
 	$(Q)# python_watcher-*.egg-info the yoga rpm carried does not exist in the venv.

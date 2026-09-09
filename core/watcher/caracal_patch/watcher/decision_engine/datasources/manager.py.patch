@@ -1,0 +1,43 @@
+--- watcher/decision_engine/datasources/manager.py.orig	2026-09-09 05:10:25.152389483 +0000
++++ watcher/decision_engine/datasources/manager.py	2026-09-09 05:10:25.151939314 +0000
+@@ -25,6 +25,7 @@
+ from watcher.decision_engine.datasources import gnocchi as gnoc
+ from watcher.decision_engine.datasources import grafana as graf
+ from watcher.decision_engine.datasources import monasca as mon
++from watcher.decision_engine.datasources import prometheus as prom
+ 
+ LOG = log.getLogger(__name__)
+ 
+@@ -36,6 +37,7 @@
+         (ceil.CeilometerHelper.NAME, ceil.CeilometerHelper.METRIC_MAP),
+         (mon.MonascaHelper.NAME, mon.MonascaHelper.METRIC_MAP),
+         (graf.GrafanaHelper.NAME, graf.GrafanaHelper.METRIC_MAP),
++        (prom.PrometheusHelper.NAME, prom.PrometheusHelper.METRIC_MAP),
+     ])
+     """Dictionary with all possible datasources, dictionary order is the default
+     order for attempting to use datasources
+@@ -48,6 +50,7 @@
+         self._monasca = None
+         self._gnocchi = None
+         self._grafana = None
++        self._prometheus = None
+ 
+         # Dynamically update grafana metric map, only available at runtime
+         # The metric map can still be overridden by a yaml config file
+@@ -104,6 +107,16 @@
+     def grafana(self, grafana):
+         self._grafana = grafana
+ 
++    @property
++    def prometheus(self):
++        if self._prometheus is None:
++            self._prometheus = prom.PrometheusHelper()
++        return self._prometheus
++
++    @prometheus.setter
++    def prometheus(self, prometheus):
++        self._prometheus = prometheus
++
+     def get_backend(self, metrics):
+         """Determine the datasource to use from the configuration
+ 
