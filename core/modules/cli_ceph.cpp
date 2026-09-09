@@ -1102,15 +1102,30 @@ struct CephOsdRow {
 
 // Run one of sdk_ceph.sh's device tier queries and split its stdout into lines.
 //
+// Arguments are passed as arguments. ExecBashSync -- the obvious tool here --
+// runs `/bin/bash -c "set -o pipefail && " + command`, so anything appended to
+// a command string is shell syntax, not data. Two of these queries take a
+// name that came out of the registry, and the registry is writable without
+// passing through this file at all: the policy chain and `hex_config commit
+// <settings>` both write it, which is why _ceph_device_tier_registry says an
+// entry can hold any byte. A tier called `x; rm -rf /` would be a second
+// command. ExecSync execvp()s the program with an argv, so it cannot be.
+//
 // False means the question was not answered. Every one of those queries returns
 // non-zero instead of an empty answer when it cannot read the cluster, and the
 // callers here refuse to decide on that: a name checked against a list that
 // failed to load is not checked, and reading "cannot tell" as "nothing there"
 // is the whole family of bugs #840 kept finding in the layer below.
 static bool
-CephDeviceTierQuery(const std::string& cmd, std::vector<std::string>& lines)
+CephDeviceTierQuery(const std::vector<std::string>& args, std::vector<std::string>& lines)
 {
-    const ExecSyncResult r = ExecBashSync(0, true, true, {}, cmd);
+    Cmd c;
+    c.path = HEX_SDK;
+    c.args = args;
+    c.captureStdout = true;
+    c.captureStderr = true;
+
+    const ExecSyncResult r = ExecSync(0, c);
     if (r.exitCode != 0) {
         return false;
     }
@@ -1118,6 +1133,50 @@ CephDeviceTierQuery(const std::string& cmd, std::vector<std::string>& lines)
     for (const auto& l : hex_string_util::split(r.stdoutOutput, '\n')) {
         if (l.length()) {
             lines.push_back(l);
+        }
+    }
+
+    return true;
+}
+
+// The three states ceph_device_tier_names reports, and what this CLI may do
+// with each. Ownership is the registry, never the shape of the Ceph objects:
+// a device class with a same-named rule and pool is what a device tier looks
+// like, and customers hand-build exactly that shape, so treating a lookalike
+// as one of ours is how this CLI would come to delete someone else's storage.
+enum CephDeviceTierState {
+    TIER_NONE,          // this CLI has never heard of the name
+    TIER_REGISTERED,    // ours, and Ceph has the objects
+    TIER_REGISTRY_ONLY, // ours, but nothing of that shape on the Ceph side
+    TIER_UNMANAGED,     // Ceph has the shape; the registry does not list it
+};
+
+// Read the state of every name ceph_device_tier_names knows.
+static bool
+CephDeviceTierStates(std::vector<std::pair<CephDeviceTierState, std::string>>& tiers)
+{
+    std::vector<std::string> lines;
+
+    if (!CephDeviceTierQuery({ "ceph_device_tier_names" }, lines)) {
+        return false;
+    }
+
+    for (const auto& l : lines) {
+        const std::size_t bar = l.find('|');
+        if (bar == std::string::npos) {
+            return false;
+        }
+        const std::string state = l.substr(0, bar);
+        const std::string name = l.substr(bar + 1);
+        if (state == "registered") {
+            tiers.push_back({ TIER_REGISTERED, name });
+        } else if (state == "registry-only") {
+            tiers.push_back({ TIER_REGISTRY_ONLY, name });
+        } else if (state == "unmanaged") {
+            tiers.push_back({ TIER_UNMANAGED, name });
+        } else {
+            // An unrecognised state is not a state to guess at
+            return false;
         }
     }
 
@@ -1175,28 +1234,39 @@ CephDeviceTierNameOk(const std::string& tier)
 // existence check is an unanchored grep, which answers yes for "seki1" when
 // only "seki1-ssd" exists, so it cannot be reused to decide this.
 //
-// A name that is already a device tier is not a collision with itself, and
-// *existing says so: re-running create is how a tier whose Ceph objects exist
-// but whose registry entry does not gets completed, and hex_sdk's create is
-// idempotent step by step.
+// A name the registry already lists is not a collision with itself, and
+// *existing says so: re-running create is how a tier of ours that is missing a
+// piece gets completed, and hex_sdk's create is idempotent step by step.
+//
+// A name that merely LOOKS like a device tier on the Ceph side is a collision.
+// It is reported like any other, because that is what it is: the registry says
+// this CLI did not build it, and a class with a same-named rule and pool is a
+// shape customers hand-build. Adopting it would make someone else's storage
+// into a Cinder backend, and then offer it for deletion.
 static bool
 CephDeviceTierNameFree(const std::string& tier, bool* existing)
 {
     std::vector<std::string> taken;
-    std::vector<std::string> tiers;
+    std::vector<std::pair<CephDeviceTierState, std::string>> tiers;
 
     *existing = false;
 
-    if (!CephDeviceTierQuery(HEX_SDK " ceph_device_tier_names_taken", taken)
-        || !CephDeviceTierQuery(HEX_SDK " ceph_device_tier_names", tiers)) {
-        CliPrintf("Cannot read the existing device class, CRUSH rule, pool and volume type names, so it cannot be established that '%s' is free. Not creating anything.",
+    if (!CephDeviceTierQuery({ "ceph_device_tier_names_taken" }, taken)
+        || !CephDeviceTierStates(tiers)) {
+        CliPrintf("Cannot read the device tier registry and the existing device class, CRUSH rule, pool and volume type names, so it cannot be established that '%s' is free. Not creating anything.",
             tier.c_str());
         return false;
     }
 
-    if (std::find(tiers.begin(), tiers.end(), tier) != tiers.end()) {
-        *existing = true;
-        return true;
+    for (const auto& t : tiers) {
+        if (t.second != tier) {
+            continue;
+        }
+        if (t.first == TIER_REGISTERED || t.first == TIER_REGISTRY_ONLY) {
+            *existing = true;
+            return true;
+        }
+        break;
     }
 
     for (const auto& t : taken) {
@@ -1222,7 +1292,11 @@ CephDeviceTierNameFree(const std::string& tier, bool* existing)
 
         CliPrintf("The name '%s' is already taken by a %s. A device tier's name has to be free as all four of a device class, a CRUSH rule, a pool and a volume type.",
             tier.c_str(), what.c_str());
-        CliPrintf("If '%s' is a half-created device tier, remove it with 'tier delete %s' and try again.",
+        // Deliberately not offered as something this CLI will take over. If
+        // those objects were built here and only the registry entry is
+        // missing, the repair is one explicit command that says what it is
+        // doing; if they were not, nothing here should touch them.
+        CliPrintf("This CLI does not manage objects it did not register. If '%s' is a device tier built here whose registration did not complete, finish it with 'hex_sdk ceph_device_tier_create %s <osd id>...'.",
             tier.c_str(), tier.c_str());
         return false;
     }
@@ -1236,7 +1310,7 @@ CephDeviceTierOsdTable(std::vector<CephOsdRow>& rows)
 {
     std::vector<std::string> lines;
 
-    if (!CephDeviceTierQuery(HEX_SDK " ceph_device_tier_osd_table", lines)) {
+    if (!CephDeviceTierQuery({ "ceph_device_tier_osd_table" }, lines)) {
         CliPrintf("Cannot read the OSD list. Not going any further -- an OSD id that has not been checked against the cluster would have CRUSH invent a bucket for it.");
         return false;
     }
@@ -1358,8 +1432,13 @@ static bool
 CephDeviceTierPrintImpact(const std::vector<std::string>& classes)
 {
     for (const auto& c : classes) {
-        const ExecSyncResult r = ExecBashSync(0, true, true, {},
-            std::string(HEX_SDK " ceph_device_tier_class_users ") + c);
+        Cmd cmd;
+        cmd.path = HEX_SDK;
+        cmd.args = { "ceph_device_tier_class_users", c };
+        cmd.captureStdout = true;
+        cmd.captureStderr = true;
+
+        const ExecSyncResult r = ExecSync(0, cmd);
         if (r.exitCode != 0) {
             CliPrintf("Cannot tell which pools select OSDs through device class '%s', so the effect of this change cannot be shown. Not proceeding.",
                 c.c_str());
@@ -1431,44 +1510,95 @@ CephDeviceTierSpawn(const char* subcmd, const std::string& tier, const std::vect
     return HexExitStatus(HexSpawnV(0, (char* const*)&args[0]));
 }
 
-// Name an existing device tier: from the arguments, or by picking one.
+// Name a device tier this CLI owns: from the arguments, or by picking one.
+// *state comes back so the caller can tell a tier whose objects are there from
+// one that is only a registry entry.
+//
+// Only registered names are offered and only registered names are accepted.
+// A Ceph structure that merely has the shape of a device tier is refused by
+// name here rather than listed and acted on -- update and delete are the two
+// commands that would otherwise remap or destroy it.
+//
+// The name is put through the same guard create uses even though it came from
+// the registry, because that is exactly why: the registry is written by the
+// policy chain and by `hex_config commit <settings>` without passing through
+// this file, so an entry can hold any byte. Nothing downstream builds a shell
+// command out of it any more, but a name Ceph itself will not accept is not
+// one to hand to Ceph, and a name starting with '-' is an option to everything
+// it reaches.
 //
 // Refusing when the list cannot be read is deliberate -- "no such device tier"
 // and "the cluster did not answer" are different answers, and reporting the
 // second as the first is what sends an operator to re-create something that
 // already exists.
 static bool
-CephDeviceTierPick(int argc, const char** argv, int argidx, std::string& tier)
+CephDeviceTierPick(int argc, const char** argv, int argidx, std::string& tier,
+    CephDeviceTierState* state)
 {
-    std::vector<std::string> names;
+    std::vector<std::pair<CephDeviceTierState, std::string>> tiers;
+    std::vector<std::string> owned;
 
-    if (!CephDeviceTierQuery(HEX_SDK " ceph_device_tier_names", names)) {
-        CliPrintf("Cannot read the device tier list. Not going any further.");
+    *state = TIER_NONE;
+
+    if (!CephDeviceTierStates(tiers)) {
+        CliPrintf("Cannot read the device tier registry. Not going any further -- which device tiers this CLI manages cannot be established without it.");
         return false;
     }
-    if (names.empty()) {
-        CliPrintf("There are no device tiers.");
-        return false;
+
+    for (const auto& t : tiers) {
+        if (t.first == TIER_REGISTERED || t.first == TIER_REGISTRY_ONLY) {
+            owned.push_back(t.second);
+        }
     }
 
     if (argc > argidx) {
+        // A name was given, so its own state is the answer -- checked before
+        // the "nothing to pick from" case, because a named lookalike deserves
+        // to be told it is a lookalike rather than that no tiers exist.
         tier = argv[argidx];
     } else {
-        for (std::size_t i = 0; i < names.size(); i++) {
-            CliPrintf("   %lu) %s", (unsigned long)(i + 1), names[i].c_str());
+        if (owned.empty()) {
+            CliPrintf("There are no device tiers.");
+            return false;
+        }
+        for (std::size_t i = 0; i < owned.size(); i++) {
+            CliPrintf("   %lu) %s", (unsigned long)(i + 1), owned[i].c_str());
         }
         std::string input;
         std::size_t index = 0;
         CliReadLine("Enter the index of the device tier: ", input);
-        if (!HexParseUInt(input.c_str(), 1, names.size(), &index)) {
+        if (!HexParseUInt(input.c_str(), 1, owned.size(), &index)) {
             CliPrintf("Invalid index.");
             return false;
         }
-        tier = names[index - 1];
+        tier = owned[index - 1];
     }
 
-    if (std::find(names.begin(), names.end(), tier) == names.end()) {
-        CliPrintf("No such device tier: '%s'.", tier.c_str());
+    for (const auto& t : tiers) {
+        if (t.second == tier) {
+            *state = t.first;
+            break;
+        }
+    }
+
+    if (*state == TIER_UNMANAGED) {
+        CliPrintf("'%s' is a device class with a CRUSH rule and a pool of the same name, but it is not in the storage tier registry -- so it was not created here and this CLI does not manage it. Nothing has been changed.",
+            tier.c_str());
+        CliPrintf("If it was created here and only its registration is missing, register it with 'hex_sdk cinder_apply_storage_tier_creation %s'; hex_sdk's ceph_device_tier_* functions operate on it directly if that is really what you want.",
+            tier.c_str());
+        return false;
+    }
+    if (*state == TIER_NONE) {
+        if (owned.empty()) {
+            CliPrintf("There are no device tiers.");
+        } else {
+            CliPrintf("No such device tier: '%s'.", tier.c_str());
+        }
+        return false;
+    }
+
+    if (!CephDeviceTierNameOk(tier)) {
+        CliPrintf("That name is in the storage tier registry but is not one this CLI can act on. It was written by something other than this command -- the policy file, or 'hex_config commit'. Remove it with 'hex_sdk cinder_apply_storage_tier_deletion' and register a valid name instead.");
         return false;
     }
 
@@ -1587,8 +1717,18 @@ CephDeviceTierUpdate(int argc, const char** argv)
 {
     /* [0]="update" [1]=<tier name> [2...]=<osd id> */
     std::string tier;
+    CephDeviceTierState state = TIER_NONE;
 
-    if (!CephDeviceTierPick(argc, argv, 1, tier)) {
+    if (!CephDeviceTierPick(argc, argv, 1, tier, &state)) {
+        return CLI_INVALID_ARGS;
+    }
+
+    // Registered, but there is no class or rule to move members between yet.
+    // hex_sdk would say "no such device tier", which is true of Ceph and
+    // misleading about the registry.
+    if (state == TIER_REGISTRY_ONLY) {
+        CliPrintf("Device tier '%s' is registered but has nothing on the Ceph side, so it has no members to change. Build it with 'tier create %s <osd id>...', or take the registry entry out with 'tier delete %s'.",
+            tier.c_str(), tier.c_str(), tier.c_str());
         return CLI_INVALID_ARGS;
     }
 
@@ -1677,8 +1817,29 @@ CephDeviceTierDelete(int argc, const char** argv)
     }
 
     std::string tier;
-    if (!CephDeviceTierPick(argc, argv, 1, tier)) {
+    CephDeviceTierState state = TIER_NONE;
+    if (!CephDeviceTierPick(argc, argv, 1, tier, &state)) {
         return CLI_INVALID_ARGS;
+    }
+
+    // Nothing on the Ceph side to tear down, so this is the registry entry and
+    // the backend generated from it -- which is the whole problem with that
+    // state: Cinder advertises a volume type whose pool does not exist. The
+    // Ceph-side delete would refuse here, because it cannot read the members of
+    // a class that is not there.
+    if (state == TIER_REGISTRY_ONLY) {
+        CliPrintf("\nDevice tier '%s' has nothing on the Ceph side: no device class, CRUSH rule or pool. Only its registry entry and the Cinder backend generated from it will be removed. No data is affected.",
+            tier.c_str());
+        if (!CliReadConfirmation()) {
+            return CLI_SUCCESS;
+        }
+        if (CephDeviceTierSpawn("cinder_apply_storage_tier_deletion", tier, {})) {
+            HexLogError("Failed to unregister device tier %s", tier.c_str());
+            CliPrintf("\n--\nFailed to unregister device tier %s.", tier.c_str());
+            return CLI_FAILURE;
+        }
+        CliPrintf("device tier %s unregistered", tier.c_str());
+        return CLI_SUCCESS;
     }
 
     std::vector<CephOsdRow> rows;

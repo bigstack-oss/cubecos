@@ -393,15 +393,48 @@ DEAD_PAT='osd pool ls detail'
 ceph_device_tier_class_users ssd >/dev/null 2>&1
 ck "$?" 1 "3e an unreadable pool list is a refusal"
 
-# ---- 3f. the device tier names, for the CLI's selection prompts ----
+# ---- 3f. the device tier names, and which of them this CLI owns ----
+#
+# Ownership is the registry, never the shape of the Ceph objects. A device
+# class with a same-named rule and pool is what a device tier looks like, and
+# customers hand-build exactly that shape (#1335 lists computehdd / computessd
+# / smarthealth on one site) -- so "looks like one" and "is one" have to come
+# back as different answers, or the CLI ends up offering someone else's
+# storage for deletion.
 reset_cluster
 printf 'cinder.storage.tier.0.name = gold\ncinder.storage.tier.1.name = bronze\n' > "$SETTINGS_TXT"
 OUT=$(ceph_device_tier_names) ; RC=$?
 ck "$RC" 0 "3f names succeeds"
-ck "$(echo "$OUT" | sort | tr '\n' ',')" "bronze,gold," "3f the union of Ceph and the registry, deduped"
+ck "$(echo "$OUT" | sort | tr '\n' ',')" "registered|gold,registry-only|bronze," "3f registered and registry-only are told apart"
+
+# ---- 3g. a Ceph structure the registry does not list is unmanaged ----
+reset_cluster
+: > "$SETTINGS_TXT"
+ck "$(ceph_device_tier_names)" "unmanaged|gold" "3g an unregistered lookalike is not ours"
+
+# ---- 3h. an unreadable registry is a refusal, not "nothing is ours" ----
+# Answering "unmanaged" for everything because settings.txt could not be read
+# would tell the CLI it owns none of these, which is not an answer anybody got.
 reset_cluster
 rm -f "$SETTINGS_TXT"
-ck "$(ceph_device_tier_names)" "gold" "3f an unreadable registry still lists what Ceph has"
+ceph_device_tier_names >/dev/null 2>&1
+ck "$?" 1 "3h an unreadable registry refuses"
+
+# ---- 3i. a registry entry is data, whatever bytes it holds ----
+# The registry is written by the policy chain and by `hex_config commit
+# <settings>` without going through the CLI's name guard, so an entry can hold
+# any byte. Two of them are traps: a shell metacharacter, which the CLI must
+# never let become a command, and a glob, which must not match every tier.
+reset_cluster
+printf 'cinder.storage.tier.0.name = bad; touch %s/marker\ncinder.storage.tier.1.name = *\n' \
+    "$TMP" > "$SETTINGS_TXT"
+OUT=$(ceph_device_tier_names) ; RC=$?
+ck "$RC" 0 "3i names still succeeds"
+ckhas "$OUT" "registry-only|bad; touch $TMP/marker" "3i the entry comes back verbatim"
+ckhas "$OUT" "registry-only|*" "3i a glob entry comes back as itself"
+ck "$(echo "$OUT" | grep -c '^registered|')" 0 "3i and the glob did not match gold"
+ck "$(echo "$OUT" | grep -c '^unmanaged|gold$')" 1 "3i gold is unmanaged, not registered by a glob"
+[ -e "$TMP/marker" ] && { fail=$((fail+1)); echo "FAIL: 3i the marker command must never run"; } || pass=$((pass+1))
 
 # ==== the health gate (#840 WP-5) ========================================
 #

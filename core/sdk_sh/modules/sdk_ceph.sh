@@ -4908,24 +4908,55 @@ ceph_device_tier_names_taken()
     return 0
 }
 
-# The device tiers that exist, one name per line: the Ceph side by shape, plus
-# whatever the registry lists, deduped. Both halves are needed -- a tier can be
-# registered with its Ceph objects already gone, and it still has to be
-# selectable so it can be deleted.
+# The device tiers, as "<state>|<name>", one per line. The state is what says
+# whether this CLI owns the thing:
+#
+#   registered    in the registry, and Ceph has the class + rule + pool
+#   registry-only in the registry, nothing of that shape on the Ceph side --
+#                 a Cinder backend advertising a pool that does not exist
+#   unmanaged     Ceph has the shape, the registry does not list it
+#
+# The distinction is the ownership boundary the design draws, not a detail. A
+# device class with a same-named rule and pool is what a device tier looks
+# like, but looking like one is not being one: customers hand-build exactly
+# that shape (#1335 lists computehdd / computessd / smarthealth on one site),
+# and the registry -- not the shape -- is what says a tier came from here. A
+# caller that cannot tell the two apart will offer someone else's storage for
+# deletion.
+#
+# An unreadable registry is a hard failure rather than "nothing is registered":
+# ownership cannot be decided without it, and every name would come back
+# unmanaged, which reads as "this CLI owns none of these".
 ceph_device_tier_names()
 {
     $CEPH -s >/dev/null 2>&1 || return 1
-    local out= tier= registry=
+
+    local registry=
+    registry=$(_ceph_device_tier_registry) || return 1
+
+    local tier= shaped=
     for tier in $($CEPH osd crush class ls 2>/dev/null | jq -r '.[]') ; do
         _ceph_device_tier_has_rule $tier || continue
         _ceph_device_tier_has_pool $tier || continue
-        out="$out$tier
+        shaped="$shaped$tier
 "
+        if _ceph_device_tier_is_registered "$tier" "$registry" ; then
+            echo "registered|$tier"
+        else
+            echo "unmanaged|$tier"
+        fi
     done
-    if registry=$(_ceph_device_tier_registry) ; then
-        out="$out$registry"
-    fi
-    printf '%s\n' "$out" | awk 'length && !seen[$0]++'
+
+    # Whole-line matching, never a shell pattern: a registry entry has not been
+    # through the CLI's name guard and can hold any byte, including one that
+    # would be a glob.
+    local entry=
+    while IFS= read -r entry ; do
+        [ -n "$entry" ] || continue
+        printf '%s' "$shaped" | grep -qxF -- "$entry" && continue
+        echo "registry-only|$entry"
+    done <<< "$registry"
+
     return 0
 }
 
