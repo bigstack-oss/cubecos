@@ -93,6 +93,8 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 	$(Q)mv $(ROOTDIR)$(LOGSTASH_HOME)/config $(ROOTDIR)$(LOGSTASH_CONF_DIR)
 	$(Q)chroot $(ROOTDIR) mkdir -p $(LOGSTASH_CONF_EVENTDB_DIR) $(LOGSTASH_LOG_DIR) $(LOGSTASH_LIB_DIR)
 	$(Q)cp -f $(ROOTDIR)$(LOGSTASH_CONF_DIR)/logstash.yml $(ROOTDIR)$(LOGSTASH_CONF_DIR)/logstash.yml.orig
+	$(Q)cp -f $(ROOTDIR)$(LOGSTASH_CONF_DIR)/log4j2.properties $(ROOTDIR)$(LOGSTASH_CONF_DIR)/log4j2.properties.orig
+	$(Q)cat $(COREDIR)/elk/logstash/log4j2-cube.properties >> $(ROOTDIR)$(LOGSTASH_CONF_DIR)/log4j2.properties
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/logstash/pipelines.yml .$(LOGSTASH_CONF_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/logstash/patterns.txt .$(LOGSTASH_CONF_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/logstash/logs-ec-template.json.in .$(LOGSTASH_CONF_DIR)
