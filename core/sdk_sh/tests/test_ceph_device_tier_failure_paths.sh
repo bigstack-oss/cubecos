@@ -8,6 +8,9 @@
 #                              set size but left min_size at its old value,
 #                              which is the half that decides whether the pool
 #                              still accepts writes with a host down (#840 R7)
+#   ceph_device_tier_delete -- must take the registry entry, and with it the
+#                              Cinder backend, out BEFORE the volume type and
+#                              the pool, and must stop if it cannot (#840 WP-5)
 #
 # Both functions drive Ceph through commands that swallow their own failures, so
 # the property under test is that each step is checked and then confirmed by
@@ -22,7 +25,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_ceph.sh"
 for f in ceph_device_tier_delete ceph_device_tier_update \
          _ceph_device_tier_has_rule _ceph_device_tier_has_class \
-         _ceph_device_tier_rule_state \
+         _ceph_device_tier_rule_state _ceph_device_tier_registry_del \
          _ceph_device_tier_rule_users _ceph_device_tier_class_of_osd ; do
     eval "$(awk -v n="^$f\\\\(\\\\)" '$0 ~ n {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ "$(type -t "$f")" = function ] || { echo "FAIL: $f not extracted"; exit 1; }
@@ -67,6 +70,9 @@ reset_cluster() {
     printf 'gold:3:2\ncinder-volumes:3:2\n' > "$TMP/poolattr"   # name:size:min_size
     printf 'gold\nCubeStorage\n' > "$TMP/vtypes"
     printf 'cinder-volumes:replicated_rule\ngold:gold\n' > "$TMP/poolrule"
+    printf 'gold\n' > "$TMP/registry"
+    : > "$TMP/calls"
+    REGISTRY_DEL_RC=0
     FAIL_PAT='^$'
     CEPH_DEAD=0
     RULE_LS_DEAD_AFTER_RM=0
@@ -144,6 +150,7 @@ fake_openstack() {
         *'volume type delete'*)
             # $4, not ${*##* }: on "$*" the ## operator applies to each
             # positional parameter, so it hands back the whole command line
+            echo "vtype_del $4" >> "$TMP/calls"
             grep -vx "$4" "$TMP/vtypes" > "$TMP/x"; mv "$TMP/x" "$TMP/vtypes" ;;
         *'volume type list'*) cat "$TMP/vtypes" ;;
         *'volume list'*)      echo '[]' ;;
@@ -151,8 +158,26 @@ fake_openstack() {
     return 0
 }
 OPENSTACK=fake_openstack
-# hex_sdk cinder_is_volume_type_in_use: non-zero == not in use
-fake_sdk() { return 1; }
+# hex_sdk, which the module shells back out to for the two things that live in
+# sdk_cinder.sh. Dispatching on the subcommand rather than answering everything
+# the same way is load-bearing: cinder_is_volume_type_in_use returns non-zero
+# for "not in use", while cinder_apply_storage_tier_deletion returns non-zero
+# for "the registry could not be edited", so one blanket return value would
+# make step 2 look like a failure and stop every delete before it started.
+# REGISTRY_DEL_RC arms that failure deliberately.
+REGISTRY_DEL_RC=0
+fake_sdk() {
+    case "$1" in
+        cinder_is_volume_type_in_use)
+            return 1 ;;
+        cinder_apply_storage_tier_deletion)
+            echo "registry_del $2" >> "$TMP/calls"
+            [ "$REGISTRY_DEL_RC" = 0 ] || return "$REGISTRY_DEL_RC"
+            grep -vx "$2" "$TMP/registry" > "$TMP/x" 2>/dev/null; mv "$TMP/x" "$TMP/registry"
+            return 0 ;;
+    esac
+    return 1
+}
 HEX_SDK=fake_sdk
 
 pass=0 fail=0
@@ -341,6 +366,53 @@ UOUT=$(ceph_device_tier_update gold 2 6 10 3 2>&1); URC=$?
 ck "$URC" 1 "7g unreadable readback returns non-zero"
 ckhas "$UOUT" "could not be" "7g reports unknown"
 _ceph_device_tier_wait_recovery() { return 0; }
+
+# ==== step 2, the registry (#840 WP-5) ===================================
+#
+# The registry entry has to come out before the volume type and the pool do,
+# and a failure to take it out has to stop the delete. Ordering is the property
+# under test, not decoration: a Cinder backend left pointing at a pool that has
+# already been deleted keeps accepting volumes into a store that is gone, and
+# the volume type then cannot be deleted at all -- the one state here that
+# re-running cannot repair.
+
+# ---- 8a. the registry comes out first ----
+reset_cluster
+OUT=$(ceph_device_tier_delete gold 2>&1); RC=$?
+ck "$RC" 0 "8a delete still succeeds with the registry step in place"
+ck "$(sed -n '1p' "$TMP/calls")" "registry_del gold" "8a the registry is edited first"
+ck "$(sed -n '2p' "$TMP/calls")" "vtype_del gold" "8a the volume type goes after it"
+ck "$(grep -cx gold "$TMP/registry")" 0 "8a the registry entry is gone"
+
+# ---- 8b. the registry edit fails: nothing else may be deleted ----
+reset_cluster
+REGISTRY_DEL_RC=1
+OUT=$(ceph_device_tier_delete gold 2>&1); RC=$?
+ck "$RC" 1 "8b a failed registry edit returns non-zero"
+ckhas "$OUT" "nothing else has been deleted" "8b says nothing was destroyed"
+ck "$(grep -cx gold "$TMP/vtypes")" 1 "8b the volume type is untouched"
+ck "$(grep -cx gold "$TMP/pools")" 1 "8b the pool is untouched"
+ck "$(grep -cx gold "$TMP/rules")" 1 "8b the rule is untouched"
+ck "$(sort "$TMP/classes" | tr '\n' ',')" "10:gold,2:gold,6:gold," "8b every OSD kept the class"
+ck "$(grep -c vtype_del "$TMP/calls")" 0 "8b the volume type delete was never reached"
+
+# ---- 8c. the in-use gate still comes first ----
+# A tier with volumes on it must be refused before the registry is touched:
+# once the backend is gone there is nobody left to service the deletes that
+# would have freed those volumes.
+reset_cluster
+fake_sdk() {
+    case "$1" in
+        cinder_is_volume_type_in_use) return 0 ;;
+        cinder_apply_storage_tier_deletion) echo "registry_del $2" >> "$TMP/calls"; return 0 ;;
+    esac
+    return 1
+}
+OUT=$(ceph_device_tier_delete gold 2>&1); RC=$?
+ck "$RC" 1 "8c an in-use volume type is still refused"
+ckhas "$OUT" "still in use" "8c keeps the pre-existing reason"
+ck "$(grep -c registry_del "$TMP/calls")" 0 "8c the registry was not touched"
+ck "$(grep -cx gold "$TMP/registry")" 1 "8c the registry entry survives"
 
 echo "----"; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] && { echo "OK: device tier delete/update failure reporting"; exit 0; } || exit 1

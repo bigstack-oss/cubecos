@@ -4128,6 +4128,27 @@ _ceph_device_tier_health_ok()
     return 0
 }
 
+# Step 6 of the create order, and step 2 of the delete order: the registry entry
+# the Cinder backend is generated from. config_cinder.cpp reads
+# cinder.storage.tier.%d.name out of settings.txt; the policy chain in
+# sdk_cinder.sh is what puts a name there.
+#
+# Reached through $HEX_SDK rather than called directly. hex_sdk sources only the
+# module matching the command's own prefix (see /usr/sbin/hex_sdk:
+# MOD=$(echo $1 | cut -d_ -f1)), so under a ceph_* command the sdk_cinder.sh
+# functions are not defined at all -- a direct call would be a command-not-found
+# 127, which is indistinguishable from an apply that failed. Same reason
+# ceph_device_tier_delete reaches cinder_is_volume_type_in_use this way.
+_ceph_device_tier_registry_add()
+{
+    $HEX_SDK cinder_apply_storage_tier_creation "$1"
+}
+
+_ceph_device_tier_registry_del()
+{
+    $HEX_SDK cinder_apply_storage_tier_deletion "$1"
+}
+
 # undo only what this create actually made. $2 is a word list out of
 # "class rule pool vtype"; $3 is "<id>:<previous class>" pairs.
 _ceph_device_tier_unwind_create()
@@ -4183,6 +4204,16 @@ ceph_device_tier_create()
        _ceph_device_tier_has_pool $tier && _ceph_device_tier_has_vtype $tier ; then
         echo "device tier $tier already exists (osd: $($CEPH osd crush class ls-osd $tier 2>/dev/null | tr '\n' ' '))"
         echo "use 'hex_sdk ceph_device_tier_update $tier <osd id>...' to change its members"
+        # Registering is part of existing, so the idempotent branch has to do it
+        # too: a run that built every Ceph and Cinder object and then failed at
+        # step 6 leaves a tier whose volume type has no backend, and re-running
+        # create is how that gets completed. Returning 0 here without this would
+        # make the repair unreachable and the failure permanent.
+        if ! _ceph_device_tier_registry_add "$tier" ; then
+            echo "Error: device tier $tier exists but is not registered as a Cinder" >&2
+            echo "       backend; its volume type has no backend until this is re-run" >&2
+            return 1
+        fi
         return 0
     fi
 
@@ -4278,9 +4309,21 @@ ceph_device_tier_create()
         made="$made vtype"
     fi
 
+    # 6) the registry entry, which is what generates the Cinder backend.
+    #
+    #    Everything before this point is already consistent between Ceph and
+    #    Cinder, so a failure here is reported and left repairable rather than
+    #    unwound: destroying a correct tier because a config apply failed is
+    #    worse than a tier whose volume type has no backend yet, which
+    #    ceph_device_tier_list flags and re-running create fixes.
+    if ! _ceph_device_tier_registry_add "$tier" ; then
+        echo "Error: device tier $tier was created on$osd_list but could not be" >&2
+        echo "       registered as a Cinder backend; the volume type exists with no" >&2
+        echo "       backend behind it -- re-run this command to finish" >&2
+        return 1
+    fi
+
     echo "device tier $tier created on$osd_list (pool size $size)"
-    echo "note: the Cinder backend for $tier is generated from the tuning registry;"
-    echo "      until that is in place the volume type exists but has no backend."
     return 0
 }
 
@@ -4522,8 +4565,18 @@ ceph_device_tier_delete()
         fi
     fi
 
-    # 2) the registry entry and the Cinder backend come out first once WP-1
-    #    lands, so that Cinder stops pointing at a pool that is about to go.
+    # 2) the registry entry, and with it the generated Cinder backend, come out
+    #    before the volume type and the pool do. Cinder pointing at a pool that
+    #    has already been deleted is the one ordering here that cannot be
+    #    repaired by re-running: the backend keeps accepting volumes into a
+    #    store that is gone, and the volume type cannot be deleted once they
+    #    exist. Nothing has been destroyed yet at this point, so a failure just
+    #    stops.
+    if ! _ceph_device_tier_registry_del "$tier" ; then
+        echo "Error: cannot take device tier $tier out of the storage registry;" >&2
+        echo "       nothing else has been deleted" >&2
+        return 1
+    fi
 
     # 3) volume type. The poll has to re-read, because it is waiting for a
     #    change -- but a read that fails is "unknown", never "gone".
@@ -4667,16 +4720,30 @@ ceph_device_tier_delete()
     return 0
 }
 
-# Lists what the Ceph side actually has. A tier is recognised here by its own
-# shape -- a device class with a CRUSH rule and a pool of the same name -- which
-# is a derivation, not a source of truth; the authoritative list is the tuning
-# registry, and comparing the two is what this grows into once WP-1 lands.
+# Lists what the Ceph side has against what the registry says, because the two
+# disagree in both directions and each direction has its own consequence: a
+# tier Ceph has but the registry does not is a volume type with no backend
+# behind it, and a registry entry with nothing on the Ceph side is a Cinder
+# backend pointing at a pool that does not exist.
+#
+# A tier is recognised on the Ceph side by its own shape -- a device class with
+# a CRUSH rule and a pool of the same name -- which is a derivation. The
+# registry is the authority for what was meant to be there.
 ceph_device_tier_list()
 {
     $CEPH -s >/dev/null 2>&1 || return 1
-    printf "%-16s %-8s %-6s %-11s %-10s %-6s %s\n" \
-        DEVICE_TIER OSD HOSTS POOL_SZ/MIN POOL_RULE VTYPE NOTE
-    local tier= osds= hosts= size= min_size= prule= vtype= note=
+
+    # An unreadable registry is unknown, never "no tiers registered". Printing
+    # not-registered against every tier because settings.txt could not be read
+    # would send the operator to re-run create on tiers that are registered --
+    # the same mistake in reverse as the sweeps in ceph_osd_create_cache, which
+    # is why _ceph_device_tier_registry reports the difference at all.
+    local registry= registry_ok=0
+    registry=$(_ceph_device_tier_registry) || registry_ok=1
+
+    printf "%-16s %-8s %-6s %-11s %-10s %-6s %-6s %s\n" \
+        DEVICE_TIER OSD HOSTS POOL_SZ/MIN POOL_RULE VTYPE REGIST NOTE
+    local tier= osds= hosts= size= min_size= prule= vtype= reg= note= seen=
     for tier in $($CEPH osd crush class ls 2>/dev/null | jq -r '.[]') ; do
         _ceph_device_tier_has_rule $tier || continue
         _ceph_device_tier_has_pool $tier || continue
@@ -4691,7 +4758,131 @@ ceph_device_tier_list()
         [ "$vtype" = "yes" ] || note="$note no-volume-type"
         [ -n "$size" ] && [ -n "$hosts" ] && [ "$size" -gt "$hosts" ] && note="$note rf-above-host-count"
         [ "${size:-0}" = "1" ] && note="$note no-redundancy"
-        printf "%-16s %-8s %-6s %-11s %-10s %-6s %s\n" \
-            "$tier" "${osds:--}" "${hosts:-?}" "${size:-?}/${min_size:-?}" "$prule" "$vtype" "${note:- ok}"
+        if [ $registry_ok -ne 0 ] ; then
+            reg="?"
+            note="$note registry-unreadable"
+        elif _ceph_device_tier_is_registered "$tier" "$registry" ; then
+            reg=yes
+        else
+            reg=no
+            note="$note not-registered"
+        fi
+        seen="$seen$tier
+"
+        printf "%-16s %-8s %-6s %-11s %-10s %-6s %-6s %s\n" \
+            "$tier" "${osds:--}" "${hosts:-?}" "${size:-?}/${min_size:-?}" "$prule" "$vtype" "$reg" "${note:- ok}"
     done
+
+    # Registry entries with no device tier behind them. Whole-line matching
+    # against what was printed above, never a shell pattern: these names have
+    # not been through the CLI's guard, so one of them can be any byte at all.
+    [ $registry_ok -eq 0 ] || return 0
+    local entry=
+    while IFS= read -r entry ; do
+        [ -n "$entry" ] || continue
+        printf '%s' "$seen" | grep -qxF -- "$entry" && continue
+        _ceph_device_tier_has_vtype "$entry" && vtype=yes || vtype=no
+        printf "%-16s %-8s %-6s %-11s %-10s %-6s %-6s %s\n" \
+            "$entry" "-" "-" "-/-" "-" "$vtype" yes "registered-but-absent"
+    done <<< "$registry"
+}
+
+# ---------------------------------------------------------------------------
+# Data queries for cli_ceph.cpp.
+#
+# The device tier CLI is the only place input can be validated -- an indexed
+# tuning array cannot be checked by hex_config, whose cinder CONFIG_MODULE has
+# no validate slot -- so the rules live there and these only answer questions.
+#
+# What they all have in common: each returns non-zero rather than an empty
+# answer when it cannot answer, so the CLI can refuse to decide on a reading it
+# did not get. A name checked against a list that failed to load is not
+# checked. Command substitution keeps the command's own exit status, which is
+# what makes that possible here; a pipeline would throw it away.
+# ---------------------------------------------------------------------------
+
+# Every name a new device tier must not reuse, as "<kind>|<name>": its name
+# becomes all four of a device class, a CRUSH rule, a pool and a Cinder volume
+# type, so a collision with any one of them is a collision.
+ceph_device_tier_names_taken()
+{
+    local classes= names= rules= pools= vtypes=
+    classes=$($CEPH osd crush class ls 2>/dev/null) || return 1
+    names=$(echo "$classes" | jq -r '.[]' 2>/dev/null) || return 1
+    rules=$($CEPH osd crush rule ls 2>/dev/null) || return 1
+    pools=$($CEPH osd pool ls 2>/dev/null) || return 1
+    vtypes=$($OPENSTACK volume type list --long --format value -c Name 2>/dev/null) || return 1
+    echo "$names"  | awk 'length {print "class|" $0}'
+    echo "$rules"  | awk 'length {print "rule|" $0}'
+    echo "$pools"  | awk 'length {print "pool|" $0}'
+    echo "$vtypes" | awk 'length {print "vtype|" $0}'
+    return 0
+}
+
+# The device tiers that exist, one name per line: the Ceph side by shape, plus
+# whatever the registry lists, deduped. Both halves are needed -- a tier can be
+# registered with its Ceph objects already gone, and it still has to be
+# selectable so it can be deleted.
+ceph_device_tier_names()
+{
+    $CEPH -s >/dev/null 2>&1 || return 1
+    local out= tier= registry=
+    for tier in $($CEPH osd crush class ls 2>/dev/null | jq -r '.[]') ; do
+        _ceph_device_tier_has_rule $tier || continue
+        _ceph_device_tier_has_pool $tier || continue
+        out="$out$tier
+"
+    done
+    if registry=$(_ceph_device_tier_registry) ; then
+        out="$out$registry"
+    fi
+    printf '%s\n' "$out" | awk 'length && !seen[$0]++'
+    return 0
+}
+
+# "<id>|<host>|<device class>|<status>" for every OSD the cluster knows.
+#
+# The CLI needs all four: to refuse an OSD that does not exist rather than let
+# CRUSH invent a bucket for it, to show which hosts a tier would be carved
+# across, to say out loud that an OSD is being taken out of the class it
+# already carries, and to work out a tier's current members without a second
+# round trip.
+ceph_device_tier_osd_table()
+{
+    local tree=
+    tree=$($CEPH osd tree -f json 2>/dev/null) || return 1
+    echo "$tree" | jq -e '.nodes | type == "array"' >/dev/null 2>&1 || return 1
+    echo "$tree" | jq -r '
+        [ .nodes[] | select(.type == "host") ] as $hosts
+        | .nodes[] | select(.type == "osd") | . as $osd
+        | ( [ $hosts[] | select( any(.children[]?; . == $osd.id) ) | .name ] | first // "?" ) as $host
+        | "\($osd.id)|\($host)|\($osd.device_class // "")|\($osd.status // "?")"'
+}
+
+# The pools whose CRUSH rule selects OSDs through device class $1.
+#
+# This is the impact of taking an OSD out of that class, and it is what the
+# CLI's confirmation has to show. A class-restricted rule loses a candidate the
+# moment the class changes, so these pools start moving data then -- not at the
+# later step that binds the new tier's pool to its own rule. When no rule
+# selects by this class the answer is genuinely empty, which is why an
+# unreadable one has to be a non-zero return instead.
+ceph_device_tier_class_users()
+{
+    local cls=$1
+    [ -n "$cls" ] || return 1
+    local rules= pools= ids=
+    rules=$($CEPH osd crush rule dump -f json 2>/dev/null) || return 1
+    pools=$($CEPH osd pool ls detail -f json 2>/dev/null) || return 1
+    echo "$rules" | jq -e 'type == "array"' >/dev/null 2>&1 || return 1
+    echo "$pools" | jq -e 'type == "array"' >/dev/null 2>&1 || return 1
+    # "default~ssd" is how a class-restricted step names its root. Split on the
+    # tilde and compare the whole tail: a suffix match would let class "sd"
+    # answer for "default~ssd".
+    ids=$(echo "$rules" | jq -c --arg c "$cls" \
+        '[ .[] | select( any(.steps[]?;
+             ((.item_name // "") | split("~")) as $p
+             | ($p | length) > 1 and ($p | last) == $c) ) | .rule_id ]') || return 1
+    echo "$pools" | jq -r --argjson ids "$ids" \
+        '[ .[] | select( .crush_rule as $r | $ids | index($r) != null ) | .pool_name ] | join(" ")'
 }
