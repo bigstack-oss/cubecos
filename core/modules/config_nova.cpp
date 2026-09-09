@@ -562,9 +562,6 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["instance_usage_audit_period"] = "hour";
         cfg["notifications"]["notify_on_state_change"] = "vm_and_task_state";
 
-        std::string gpuType = HexUtilPOpen(HEX_SDK " gpu_default_type_get");
-        if (gpuType.length())
-            cfg["devices"]["enabled_vgpu_types"] = gpuType;
         if (s_gpuType.length())
             cfg["devices"]["enabled_vgpu_types"] = s_gpuType.newValue();
 
@@ -840,7 +837,6 @@ CommitCheck(bool modified, int dryLevel)
 {
     if (IsBootstrap()) {
         s_bConfigChanged = true;
-        HexUtilSystemF(0, 0, HEX_SDK " os_nova_mdev_instance_sync");
         return true;
     }
 
