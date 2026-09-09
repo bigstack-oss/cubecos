@@ -1084,6 +1084,15 @@ gpu_sriov_disable_vfs()
 {
     local pci_addr="$1"
 
+    # An empty address would reach sriov-manage as a blank argument, and its
+    # own error ("no devices were found: lspci: -s: Invalid slot number") then
+    # lands where the address belongs in the message below - which reads as if
+    # the error text were the device name.
+    if [ -z "$pci_addr" ]; then
+        echo "Error: gpu_sriov_disable_vfs: no PCI address given" >&2
+        return 1
+    fi
+
     local attempt output rc
     for attempt in 1 2 3 4 5; do
         output=$($NVIDIA_SRIOV -d "$pci_addr" 2>&1)
@@ -1113,8 +1122,24 @@ gpu_sysfs_pci_addr()
 {
     local gpu_id="$1"
 
-    $NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null \
-        | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]'
+    local addr
+    addr=$($NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null \
+        | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+
+    # nvidia-smi cannot see a card whose PF is held by another driver: vfio-pci
+    # for a pgpu, or pci-pf-stub for an SR-IOV PF that currently has no VFs
+    # enabled. config.json records the address either way and sysfs keeps it
+    # readable, so fall back to the truth file rather than returning nothing.
+    # The pgpu branch of gpu_unset_current_type has always read the address
+    # this way for the same reason.
+    if [ -z "$addr" ]; then
+        addr=$(jq -r --arg id "$gpu_id" \
+            'map(select(.id == $id)) | if length > 0 then (.[0].pciAddress // "") else "" end' \
+            "$GPU_CONFIG_FILE_PATH" 2>/dev/null \
+            | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+    fi
+
+    echo "$addr"
 }
 
 gpu_unset_current_type()
@@ -1129,6 +1154,11 @@ gpu_unset_current_type()
     if [ "$current_type" = "sriovVgpu" ]; then
         local pci_addr
         pci_addr=$(gpu_sysfs_pci_addr "$gpu_id")
+
+        if [ -z "$pci_addr" ]; then
+            echo "Error: GPU $gpu_id has type sriovVgpu but no PCI address could be resolved" >&2
+            exit 1
+        fi
 
         if ! gpu_sriov_disable_vfs "$pci_addr"; then
             exit 1
