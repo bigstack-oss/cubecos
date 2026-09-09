@@ -1705,6 +1705,95 @@ cinder_apply_storage_creation()
     return 0
 }
 
+# The write end of the device tier registry (#840): put a device tier's name
+# into the cinder.storage.tier.%d.name array config_cinder.cpp generates its
+# Cinder backend, volume type keep-list entry and readiness wait from. That
+# array is translated out of the tiers: sequence in the external storage policy,
+# so this edits the policy and applies it -- the same chain
+# cinder_apply_storage_creation uses for external backends, which is the only
+# existing precedent for a CLI writing an indexed tuning array.
+#
+# Two deliberate differences from that precedent:
+#   - a name already in the sequence is not written again, so re-running the
+#     CLI's create cannot grow a second entry for one tier
+#   - nothing is applied when nothing changed, because $HEX_CFG apply restarts
+#     Cinder; a no-op create must not bounce a live service
+#
+# The name is NOT validated here. cli_ceph.cpp is the gatekeeper -- an indexed
+# tuning array cannot be validated by hex_config, whose cinder CONFIG_MODULE has
+# no validate slot and whose validate_tuning_value compares the literal key
+# name -- and config_cinder.cpp guards again on the way out. A caller that has
+# not been through the CLI is why that second guard exists.
+cinder_apply_storage_tier_creation()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local tier_name="${1:-""}"
+
+    if [ -z "$tier_name" ] ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+
+    # edit the policy file
+    local input_dir="$(MakeTempDir)"
+    mkdir -p "${input_dir}/external_storage"
+    if ! cp -f "$POLICY_DIR/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/" ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+    local ext_storage_policy_file="${input_dir}/external_storage/external_storage1_0.yml"
+
+    # How long the sequence is. A read that failed is not "there are no tiers":
+    # taking it as zero would append over index 0 and drop an existing tier's
+    # backend, so an unreadable policy stops here.
+    if ! _hex_function exec_output exec_error yq '.tiers | length' "$ext_storage_policy_file" ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+    local tier_count="$exec_output"
+    if ! echo "$tier_count" | grep -qE '^[0-9]+$' ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+
+    # The empty entry an empty list is encoded as (policy_ext_storage.cpp adds
+    # one back whenever the vector is empty, because the yml parser needs at
+    # least one child) is a slot to write into, not something to append after.
+    local tier_index="0"
+    local blank_tier_index=""
+    local existing_name=""
+    for tier_index in $(seq 0 $((tier_count - 1))) ; do
+        if ! _hex_function exec_output exec_error \
+            yq -r ".tiers[${tier_index}].name" \
+            "$ext_storage_policy_file" ; then
+            return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+        fi
+        existing_name="$exec_output"
+        # yq prints a nameless entry as the string "null"
+        if [ "$existing_name" == "null" ] ; then
+            existing_name=""
+        fi
+        if [ "$existing_name" == "$tier_name" ] ; then
+            # already registered -- and so is its backend
+            return 0
+        fi
+        if [ -z "$existing_name" ] && [ -z "$blank_tier_index" ] ; then
+            blank_tier_index="$tier_index"
+        fi
+    done
+
+    if ! _hex_function_ret yq -i \
+        ".tiers[${blank_tier_index:-$tier_count}].name = \"${tier_name}\"" \
+        "$ext_storage_policy_file" ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+
+    # apply configs, and restart services
+    if ! $HEX_CFG apply "$input_dir" ; then
+        return "$ERROR_CINDER_APPLY_EXT_STORAGE_FAILED"
+    fi
+
+    return 0
+}
+
 cinder_is_volume_type_in_use()
 {
     local volume_type="${1:-""}"
@@ -2761,6 +2850,100 @@ cinder_apply_storage_deletion()
         ".volumeType.default = \"${new_volume_type_default}\"" \
         "$ext_storage_policy_file" ; then
         return 1
+    fi
+
+    # apply configs, and restart services
+    if ! $HEX_CFG apply "$input_dir" ; then
+        return 1
+    fi
+
+    return 0
+}
+
+# The other half of the write end (#840): take a device tier out of the
+# cinder.storage.tier.%d.name array, which is what makes its Cinder backend
+# stop being generated.
+#
+# Ordering matters to the caller, not here: ceph_device_tier_delete runs this
+# before it deletes the volume type and the pool, so that Cinder stops
+# advertising a store that is about to go rather than pointing at one that
+# already went.
+#
+# Deliberately NOT written the way cinder_apply_storage_deletion writes the
+# backends array. That one round-trips the whole policy through
+# `yq -p=yaml -o=json` -> jq -> `yq -p=json -o=yaml`, which rewrites every
+# other key on the way past. Measured on the 1cc: `version: 1.0` comes back as
+# `version: 1`, and the empty placeholder `- name:` comes back as
+# `- name: null` -- which HexYmlParseString then reads as the four-character
+# string "null", putting a backend called null into enabled_backends. Editing
+# in place with `yq -i`, the way cinder_apply_storage_creation does, touches
+# only the node named.
+#
+# The name is compared in the shell rather than inside a jq filter, so a
+# registry entry holding a quote is data. It can: every other writer of this
+# array -- the policy chain, and `hex_config commit <settings>` -- writes it
+# without passing through cli_ceph.cpp's name guard.
+cinder_apply_storage_tier_deletion()
+{
+    local exec_output=""
+    local exec_error=""
+
+    local tier_name="${1:-""}"
+
+    if [ -z "$tier_name" ] ; then
+        return 1
+    fi
+
+    # edit the policy file
+    local input_dir="$(MakeTempDir)"
+    mkdir -p "${input_dir}/external_storage"
+    if ! cp -f "$POLICY_DIR/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/" ; then
+        return 1
+    fi
+    local ext_storage_policy_file="${input_dir}/external_storage/external_storage1_0.yml"
+
+    if ! _hex_function exec_output exec_error yq '.tiers | length' "$ext_storage_policy_file" ; then
+        return 1
+    fi
+    local tier_count="$exec_output"
+    if ! echo "$tier_count" | grep -qE '^[0-9]+$' ; then
+        return 1
+    fi
+
+    local tier_index="0"
+    local found_index=""
+    local existing_name=""
+    for tier_index in $(seq 0 $((tier_count - 1))) ; do
+        if ! _hex_function exec_output exec_error \
+            yq -r ".tiers[${tier_index}].name" \
+            "$ext_storage_policy_file" ; then
+            return 1
+        fi
+        existing_name="$exec_output"
+        if [ "$existing_name" == "$tier_name" ] ; then
+            found_index="$tier_index"
+            break
+        fi
+    done
+
+    # Not registered. Said plainly rather than applied anyway: $HEX_CFG apply
+    # restarts Cinder, and ceph_device_tier_delete calls this unconditionally --
+    # including for a tier that never got as far as being registered.
+    if [ -z "$found_index" ] ; then
+        return 0
+    fi
+
+    if ! _hex_function_ret yq -i "del(.tiers[${found_index}])" "$ext_storage_policy_file" ; then
+        return 1
+    fi
+
+    # the yml parser needs at least one child, so an emptied list keeps a blank
+    # entry -- the same one policy_ext_storage.cpp writes back when its vector
+    # is empty
+    if [ "$tier_count" -le 1 ] ; then
+        if ! _hex_function_ret yq -i '.tiers[0].name = ""' "$ext_storage_policy_file" ; then
+            return 1
+        fi
     fi
 
     # apply configs, and restart services
