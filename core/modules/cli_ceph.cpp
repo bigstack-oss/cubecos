@@ -1,5 +1,6 @@
 // CUBE SDK
 
+#include <algorithm>
 #include <cube/cubesys.h>
 #include <hex/cli_module.h>
 #include <hex/cli_util.h>
@@ -1065,6 +1066,668 @@ static int CephRemoveSsdPool(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+
+// ---------------------------------------------------------------------------
+// Device tiers (#840).
+//
+// A device tier is a named set of OSDs that gets its own CRUSH device class,
+// its own CRUSH rule, its own pool and its own Cinder volume type -- all four
+// carrying the tier's name -- plus an entry in the storage tier registry, which
+// is what generates its Cinder backend.
+//
+// Every rule about what a tier may be called and which OSDs it may hold is
+// enforced here, and nowhere else, because there is nowhere else it can be:
+// the registry is an indexed tuning array (cinder.storage.tier.%d.name), the
+// cinder CONFIG_MODULE has no validate slot, ConfigString::parse always returns
+// true, TuningStringArray drops its ValidateType, and `hex_config
+// validate_tuning_value` compares the literal key name -- which never equals
+// an indexed one. The CLI is the gatekeeper.
+//
+// The rules also all come from measurement rather than caution; each one below
+// says which one.
+// ---------------------------------------------------------------------------
+
+#define TIER_OSD_H_FMT " %6s  %14s  %14s  %8s\n--\n"
+#define TIER_OSD_FMT " %6s  %14s  %14s  %8s\n"
+
+static const char* LABEL_TIER_NAME = "Enter the device tier name (required): ";
+static const char* LABEL_TIER_OSDS = "Enter the OSD ids, space separated (required): ";
+
+struct CephOsdRow {
+    std::string id;
+    std::string host;
+    std::string cls;
+    std::string status;
+};
+
+// Run one of sdk_ceph.sh's device tier queries and split its stdout into lines.
+//
+// False means the question was not answered. Every one of those queries returns
+// non-zero instead of an empty answer when it cannot read the cluster, and the
+// callers here refuse to decide on that: a name checked against a list that
+// failed to load is not checked, and reading "cannot tell" as "nothing there"
+// is the whole family of bugs #840 kept finding in the layer below.
+static bool
+CephDeviceTierQuery(const std::string& cmd, std::vector<std::string>& lines)
+{
+    const ExecSyncResult r = ExecBashSync(0, true, true, {}, cmd);
+    if (r.exitCode != 0) {
+        return false;
+    }
+
+    for (const auto& l : hex_string_util::split(r.stdoutOutput, '\n')) {
+        if (l.length()) {
+            lines.push_back(l);
+        }
+    }
+
+    return true;
+}
+
+// A tier's name becomes a device class, a CRUSH rule, a pool and a volume type,
+// so what it may contain is the intersection of what those four accept. Ceph is
+// the strict side: `osd crush class create` rejects '.', ' ', '/', ':' and
+// non-ASCII (measured, F10). What it does NOT reject is the empty string -- it
+// returns 0 and creates a class with no name -- so the check cannot be left to
+// the layer that will actually run the command.
+static bool
+CephDeviceTierNameOk(const std::string& tier)
+{
+    if (tier.empty()) {
+        CliPrintf("A device tier name is required.");
+        return false;
+    }
+
+    for (std::size_t i = 0; i < tier.length(); i++) {
+        const char c = tier[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+                || c == '-' || c == '_')) {
+            CliPrintf("Invalid device tier name '%s': Ceph accepts only letters, digits, '-' and '_' in a device class name.",
+                tier.c_str());
+            return false;
+        }
+    }
+
+    // A leading '-' is read as an option by everything the name is handed to,
+    // starting with `ceph osd crush set-device-class`.
+    if (tier[0] == '-') {
+        CliPrintf("Invalid device tier name '%s': it cannot start with '-'.", tier.c_str());
+        return false;
+    }
+
+    // config_cinder.cpp's scan for the legacy tiering layout matches "-pool"
+    // and "-ssd" as substrings, not as suffixes (the grep at :1070 and the
+    // find() at :1077), so a tier holding either would be claimed by that scan
+    // as well as by the registry and end up with two conflicting Cinder
+    // backends.
+    if (tier.find("-pool") != std::string::npos || tier.find("-ssd") != std::string::npos) {
+        CliPrintf("Invalid device tier name '%s': it must not contain '-pool' or '-ssd', which the legacy tiering scan claims.",
+            tier.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+// Is this name free to become a device tier?
+//
+// The comparison is whole-name, never a substring: os_volume_type_create's own
+// existence check is an unanchored grep, which answers yes for "seki1" when
+// only "seki1-ssd" exists, so it cannot be reused to decide this.
+//
+// A name that is already a device tier is not a collision with itself, and
+// *existing says so: re-running create is how a tier whose Ceph objects exist
+// but whose registry entry does not gets completed, and hex_sdk's create is
+// idempotent step by step.
+static bool
+CephDeviceTierNameFree(const std::string& tier, bool* existing)
+{
+    std::vector<std::string> taken;
+    std::vector<std::string> tiers;
+
+    *existing = false;
+
+    if (!CephDeviceTierQuery(HEX_SDK " ceph_device_tier_names_taken", taken)
+        || !CephDeviceTierQuery(HEX_SDK " ceph_device_tier_names", tiers)) {
+        CliPrintf("Cannot read the existing device class, CRUSH rule, pool and volume type names, so it cannot be established that '%s' is free. Not creating anything.",
+            tier.c_str());
+        return false;
+    }
+
+    if (std::find(tiers.begin(), tiers.end(), tier) != tiers.end()) {
+        *existing = true;
+        return true;
+    }
+
+    for (const auto& t : taken) {
+        const std::size_t bar = t.find('|');
+        if (bar == std::string::npos) {
+            continue;
+        }
+        if (t.substr(bar + 1) != tier) {
+            continue;
+        }
+
+        const std::string kind = t.substr(0, bar);
+        std::string what = kind;
+        if (kind == "class") {
+            what = "CRUSH device class";
+        } else if (kind == "rule") {
+            what = "CRUSH rule";
+        } else if (kind == "pool") {
+            what = "Ceph pool";
+        } else if (kind == "vtype") {
+            what = "Cinder volume type";
+        }
+
+        CliPrintf("The name '%s' is already taken by a %s. A device tier's name has to be free as all four of a device class, a CRUSH rule, a pool and a volume type.",
+            tier.c_str(), what.c_str());
+        CliPrintf("If '%s' is a half-created device tier, remove it with 'tier delete %s' and try again.",
+            tier.c_str(), tier.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+// Every OSD the cluster knows, with its host, its device class and its state.
+static bool
+CephDeviceTierOsdTable(std::vector<CephOsdRow>& rows)
+{
+    std::vector<std::string> lines;
+
+    if (!CephDeviceTierQuery(HEX_SDK " ceph_device_tier_osd_table", lines)) {
+        CliPrintf("Cannot read the OSD list. Not going any further -- an OSD id that has not been checked against the cluster would have CRUSH invent a bucket for it.");
+        return false;
+    }
+
+    for (const auto& l : lines) {
+        const std::vector<std::string> f = hex_string_util::split(l, '|');
+        if (f.size() < 4) {
+            CliPrintf("Cannot read the OSD list: unexpected row '%s'.", l.c_str());
+            return false;
+        }
+        rows.push_back({ f[0], f[1], f[2], f[3] });
+    }
+
+    if (rows.empty()) {
+        CliPrintf("This cluster has no OSDs.");
+        return false;
+    }
+
+    return true;
+}
+
+static void
+CephDeviceTierPrintOsdTable(const std::vector<CephOsdRow>& rows)
+{
+    printf(TIER_OSD_H_FMT, "osd", "host", "device class", "state");
+    for (const auto& r : rows) {
+        printf(TIER_OSD_FMT, r.id.c_str(), r.host.c_str(),
+            r.cls.length() ? r.cls.c_str() : "-", r.status.c_str());
+    }
+}
+
+// "0" and "osd.0" both name OSD 0. Ids the cluster does not know are refused
+// here, and repeats are folded, so that what is confirmed below is what is
+// asked for.
+static bool
+CephDeviceTierParseOsds(const std::vector<std::string>& args,
+    const std::vector<CephOsdRow>& rows,
+    std::vector<std::string>& ids,
+    std::vector<CephOsdRow>& chosen)
+{
+    for (const auto& a : args) {
+        std::string id = a;
+        if (id.compare(0, 4, "osd.") == 0) {
+            id = id.substr(4);
+        }
+        if (id.empty() || id.find_first_not_of("0123456789") != std::string::npos) {
+            CliPrintf("Invalid OSD id: '%s'. Give an id as 0 or osd.0.", a.c_str());
+            return false;
+        }
+
+        const CephOsdRow* found = NULL;
+        for (const auto& r : rows) {
+            if (r.id == id) {
+                found = &r;
+                break;
+            }
+        }
+        if (found == NULL) {
+            CliPrintf("No such OSD: '%s'.", a.c_str());
+            return false;
+        }
+
+        if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
+            ids.push_back(id);
+            chosen.push_back(*found);
+        }
+    }
+
+    if (ids.empty()) {
+        CliPrintf("At least one OSD is required.");
+        return false;
+    }
+
+    return true;
+}
+
+// Read the OSD list from the arguments, or list the candidates and ask.
+static bool
+CephDeviceTierReadOsds(int argc, const char** argv, int argidx,
+    const std::vector<CephOsdRow>& rows,
+    std::vector<std::string>& ids,
+    std::vector<CephOsdRow>& chosen)
+{
+    std::vector<std::string> args;
+
+    if (argc > argidx) {
+        for (int i = argidx; i < argc; i++) {
+            args.push_back(argv[i]);
+        }
+    } else {
+        CephDeviceTierPrintOsdTable(rows);
+        std::string input;
+        CliReadLine(LABEL_TIER_OSDS, input);
+        for (const auto& a : hex_string_util::split(input, ' ')) {
+            if (a.length()) {
+                args.push_back(a);
+            }
+        }
+    }
+
+    return CephDeviceTierParseOsds(args, rows, ids, chosen);
+}
+
+// What starts moving the moment these OSDs change device class.
+//
+// This is the impact the operator is being asked to accept, and it is not the
+// same question as "which pool will the new tier serve". A class-restricted
+// rule loses a candidate as soon as the class changes, so the pools bound to
+// that rule start remapping at the first step -- not at the later one that
+// binds the tier's own pool. On the 1cc, where every pool is on the
+// class-agnostic replicated_rule, this list is empty and nothing moves until
+// that later step; on mixed hardware with rule-ssd / rule-hdd in use it is not
+// (measured, F3 and F13).
+//
+// False means one of those lists could not be read. Showing "(none)" for an
+// answer nobody got would be asking for consent to an unknown blast radius, so
+// it stops instead.
+static bool
+CephDeviceTierPrintImpact(const std::vector<std::string>& classes)
+{
+    for (const auto& c : classes) {
+        const ExecSyncResult r = ExecBashSync(0, true, true, {},
+            std::string(HEX_SDK " ceph_device_tier_class_users ") + c);
+        if (r.exitCode != 0) {
+            CliPrintf("Cannot tell which pools select OSDs through device class '%s', so the effect of this change cannot be shown. Not proceeding.",
+                c.c_str());
+            return false;
+        }
+
+        // Trimmed by hand: hex_string_util::strip does nothing at all when the
+        // whole string is in its character set (find_first_not_of returns npos
+        // and neither end is erased), so an answer of just a newline -- which
+        // is what "no pool selects through this class" looks like -- would keep
+        // its length and print as a blank list instead of as nothing.
+        std::string pools = r.stdoutOutput;
+        const std::size_t first = pools.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            pools.clear();
+        } else {
+            pools.erase(0, first);
+            pools.erase(pools.find_last_not_of(" \t\r\n") + 1);
+        }
+
+        CliPrintf("   %s: %s", c.c_str(),
+            pools.length() ? pools.c_str() : "no pool selects through this class");
+    }
+
+    return true;
+}
+
+// The distinct device classes the chosen OSDs carry now, in the order they
+// first appear. An OSD with no class contributes nothing: there is no rule
+// selecting through a class it does not have.
+static std::vector<std::string>
+CephDeviceTierClassesOf(const std::vector<CephOsdRow>& chosen)
+{
+    std::vector<std::string> classes;
+
+    for (const auto& r : chosen) {
+        if (r.cls.length() && std::find(classes.begin(), classes.end(), r.cls) == classes.end()) {
+            classes.push_back(r.cls);
+        }
+    }
+
+    return classes;
+}
+
+// Hand the work to hex_sdk without a shell. The name and the ids have already
+// been validated, so this is not the last line of defence -- but passing them
+// as separate arguments means a name that reaches this from somewhere else
+// still cannot become shell syntax.
+static int
+CephDeviceTierSpawn(const char* subcmd, const std::string& tier, const std::vector<std::string>& ids)
+{
+    std::vector<const char*> args;
+
+    args.push_back(HEX_SDK);
+    args.push_back(subcmd);
+    args.push_back(tier.c_str());
+    for (const auto& i : ids) {
+        args.push_back(i.c_str());
+    }
+    args.push_back(NULL);
+
+    // The child writes straight to the terminal while anything CliPrintf left
+    // in this process's buffer is still sitting there -- and when stdout is
+    // not a tty (a piped session, a script) that buffer is not flushed per
+    // line, so a warning printed before this call can come out after the
+    // output of the command it was warning about.
+    fflush(stdout);
+
+    return HexExitStatus(HexSpawnV(0, (char* const*)&args[0]));
+}
+
+// Name an existing device tier: from the arguments, or by picking one.
+//
+// Refusing when the list cannot be read is deliberate -- "no such device tier"
+// and "the cluster did not answer" are different answers, and reporting the
+// second as the first is what sends an operator to re-create something that
+// already exists.
+static bool
+CephDeviceTierPick(int argc, const char** argv, int argidx, std::string& tier)
+{
+    std::vector<std::string> names;
+
+    if (!CephDeviceTierQuery(HEX_SDK " ceph_device_tier_names", names)) {
+        CliPrintf("Cannot read the device tier list. Not going any further.");
+        return false;
+    }
+    if (names.empty()) {
+        CliPrintf("There are no device tiers.");
+        return false;
+    }
+
+    if (argc > argidx) {
+        tier = argv[argidx];
+    } else {
+        for (std::size_t i = 0; i < names.size(); i++) {
+            CliPrintf("   %lu) %s", (unsigned long)(i + 1), names[i].c_str());
+        }
+        std::string input;
+        std::size_t index = 0;
+        CliReadLine("Enter the index of the device tier: ", input);
+        if (!HexParseUInt(input.c_str(), 1, names.size(), &index)) {
+            CliPrintf("Invalid index.");
+            return false;
+        }
+        tier = names[index - 1];
+    }
+
+    if (std::find(names.begin(), names.end(), tier) == names.end()) {
+        CliPrintf("No such device tier: '%s'.", tier.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+static int
+CephDeviceTierCreate(int argc, const char** argv)
+{
+    /* [0]="create" [1]=<tier name> [2...]=<osd id> */
+    std::string tier;
+
+    if (argc > 1) {
+        tier = argv[1];
+    } else {
+        CliReadLine(LABEL_TIER_NAME, tier);
+    }
+
+    if (!CephDeviceTierNameOk(tier)) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::vector<CephOsdRow> rows;
+    if (!CephDeviceTierOsdTable(rows)) {
+        return CLI_FAILURE;
+    }
+
+    bool existing = false;
+    if (!CephDeviceTierNameFree(tier, &existing)) {
+        return CLI_INVALID_ARGS;
+    }
+
+    // Already known as a device tier -- by the registry, by Ceph, or by both.
+    std::vector<std::string> members;
+    if (existing) {
+        for (const auto& r : rows) {
+            if (r.cls == tier) {
+                members.push_back(r.id);
+            }
+        }
+    }
+
+    // The Ceph side is there. Creating it again cannot change which OSDs it
+    // holds -- that is update -- but it is how a tier that got as far as its
+    // Ceph objects and then failed at the volume type or the registry gets
+    // completed, which is the state tier list flags. Nothing moves, so there
+    // is nothing to confirm and no reason to ask which OSDs; the tier's own
+    // members are what hex_sdk is given, because its usage requires at least
+    // one and passing none would be rejected before it could do anything.
+    //
+    // A tier that is in the registry with nothing on the Ceph side has no
+    // members to pass, and building it IS a real create -- so that case falls
+    // through to the ordinary path below, confirmation included.
+    if (!members.empty()) {
+        if (argc > 2) {
+            CliPrintf("Device tier '%s' already exists. 'tier create' cannot change which OSDs it holds -- use 'tier update %s <osd id>...' for that. Completing whatever is missing instead.",
+                tier.c_str(), tier.c_str());
+        }
+        if (CephDeviceTierSpawn("ceph_device_tier_create", tier, members)) {
+            HexLogError("Failed to complete device tier %s", tier.c_str());
+            CliPrintf("\n--\nFailed to complete device tier %s.", tier.c_str());
+            return CLI_FAILURE;
+        }
+        return CLI_SUCCESS;
+    }
+
+    std::vector<std::string> ids;
+    std::vector<CephOsdRow> chosen;
+    if (!CephDeviceTierReadOsds(argc, argv, 2, rows, ids, chosen)) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::vector<std::string> hosts;
+    std::string osdLine;
+    for (const auto& r : chosen) {
+        osdLine.append(" osd.").append(r.id);
+        if (std::find(hosts.begin(), hosts.end(), r.host) == hosts.end()) {
+            hosts.push_back(r.host);
+        }
+    }
+
+    CliPrintf("\nDevice tier '%s' will be created on:", tier.c_str());
+    CephDeviceTierPrintOsdTable(chosen);
+    CliPrintf("Its pool is replicated across the %lu host(s) those OSDs are on, with a replication size of whichever is smaller: that host count, or the replication size of %s.",
+        (unsigned long)hosts.size(), BUILTIN_BACKPOOL.c_str());
+
+    // The confirmation goes here, before the first call that changes anything,
+    // rather than before the step that binds the pool to the rule. Taking an
+    // OSD out of a class that some rule selects through starts moving data at
+    // that first step, so a confirmation after it would be asking about
+    // something already under way. Cancelling leaves no class change behind
+    // because no SDK call has been made yet.
+    const std::vector<std::string> classes = CephDeviceTierClassesOf(chosen);
+    if (classes.size()) {
+        CliPrintf("\nThose OSDs are leaving the device classes they carry now. Data starts moving as soon as this is confirmed, for every pool whose CRUSH rule selects through one of them:");
+        if (!CephDeviceTierPrintImpact(classes)) {
+            return CLI_FAILURE;
+        }
+    }
+
+    if (!CliReadConfirmation()) {
+        return CLI_SUCCESS;
+    }
+
+    if (CephDeviceTierSpawn("ceph_device_tier_create", tier, ids)) {
+        HexLogError("Failed to create device tier %s on%s", tier.c_str(), osdLine.c_str());
+        CliPrintf("\n--\nFailed to create device tier %s.", tier.c_str());
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+static int
+CephDeviceTierUpdate(int argc, const char** argv)
+{
+    /* [0]="update" [1]=<tier name> [2...]=<osd id> */
+    std::string tier;
+
+    if (!CephDeviceTierPick(argc, argv, 1, tier)) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::vector<CephOsdRow> rows;
+    if (!CephDeviceTierOsdTable(rows)) {
+        return CLI_FAILURE;
+    }
+
+    std::vector<std::string> before;
+    for (const auto& r : rows) {
+        if (r.cls == tier) {
+            before.push_back(r.id);
+        }
+    }
+
+    std::vector<std::string> ids;
+    std::vector<CephOsdRow> chosen;
+    if (!CephDeviceTierReadOsds(argc, argv, 2, rows, ids, chosen)) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string leaving;
+    for (const auto& id : before) {
+        if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
+            leaving.append(" osd.").append(id);
+        }
+    }
+    std::string joining;
+    for (const auto& id : ids) {
+        if (std::find(before.begin(), before.end(), id) == before.end()) {
+            joining.append(" osd.").append(id);
+        }
+    }
+
+    // Nothing to consent to when the membership is not changing; hex_sdk says
+    // so itself and does nothing.
+    if (leaving.empty() && joining.empty()) {
+        if (CephDeviceTierSpawn("ceph_device_tier_update", tier, ids)) {
+            CliPrintf("\n--\nFailed to update device tier %s.", tier.c_str());
+            return CLI_FAILURE;
+        }
+        return CLI_SUCCESS;
+    }
+
+    CliPrintf("\nDevice tier '%s' will consist of:", tier.c_str());
+    CephDeviceTierPrintOsdTable(chosen);
+    if (joining.length()) {
+        CliPrintf("joining:%s", joining.c_str());
+    }
+    if (leaving.length()) {
+        CliPrintf("leaving:%s -- left with no device class, not put back to what they carried before this tier",
+            leaving.c_str());
+    }
+
+    // Unlike create, this tier's CRUSH rule already exists, so its own pool
+    // starts remapping at the first class change too, not only the pools bound
+    // to the classes the joining OSDs are leaving (F13).
+    std::vector<std::string> classes = CephDeviceTierClassesOf(chosen);
+    if (std::find(classes.begin(), classes.end(), tier) == classes.end()) {
+        classes.push_back(tier);
+    }
+    CliPrintf("\nData starts moving as soon as this is confirmed, for every pool whose CRUSH rule selects through one of these device classes:");
+    if (!CephDeviceTierPrintImpact(classes)) {
+        return CLI_FAILURE;
+    }
+
+    if (!CliReadConfirmation()) {
+        return CLI_SUCCESS;
+    }
+
+    if (CephDeviceTierSpawn("ceph_device_tier_update", tier, ids)) {
+        HexLogError("Failed to update device tier %s", tier.c_str());
+        CliPrintf("\n--\nFailed to update device tier %s.", tier.c_str());
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+static int
+CephDeviceTierDelete(int argc, const char** argv)
+{
+    /* [0]="delete" [1]=<tier name> */
+    if (argc > 2) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string tier;
+    if (!CephDeviceTierPick(argc, argv, 1, tier)) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::vector<CephOsdRow> rows;
+    if (!CephDeviceTierOsdTable(rows)) {
+        return CLI_FAILURE;
+    }
+
+    std::string members;
+    for (const auto& r : rows) {
+        if (r.cls == tier) {
+            members.append(" osd.").append(r.id);
+        }
+    }
+
+    CliPrintf("\nWarning: ALL DATA IN POOL %s WILL BE LOST!", tier.c_str());
+    CliPrintf("The Cinder backend is taken out of service first, so the volume type stops being served before the pool goes; a tier with volumes still on it is refused rather than half deleted.");
+    if (members.length()) {
+        CliPrintf("Afterwards the OSDs it holds (%s ) are left with no device class -- they are not restored to whatever they carried before this tier.",
+            members.c_str());
+    }
+
+    if (!CliReadConfirmation()) {
+        return CLI_SUCCESS;
+    }
+
+    if (CephDeviceTierSpawn("ceph_device_tier_delete", tier, {})) {
+        HexLogError("Failed to delete device tier %s", tier.c_str());
+        CliPrintf("\n--\nFailed to delete device tier %s.", tier.c_str());
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
+static int
+CephDeviceTierList(int argc, const char** argv)
+{
+    if (argc > 1) {
+        return CLI_INVALID_ARGS;
+    }
+
+    if (HexExitStatus(HexSpawn(0, HEX_SDK, "ceph_device_tier_list", NULL))) {
+        CliPrintf("Failed to list the device tiers.");
+        return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
 static int
 CreateRestfulKeyMain(int argc, const char** argv)
 {
@@ -1490,6 +2153,26 @@ CLI_MODE_COMMAND("storage", "add_ssdpool", CephCreateSsdPool, NULL,
 CLI_MODE_COMMAND("storage", "remove_ssdpool", CephRemoveSsdPool, NULL,
     "Remove SSD pool of specified group.",
     "remove_ssdpool group");
+
+CLI_MODE("storage", "tier",
+    "Work with storage device tiers: named sets of OSDs, each with its own CRUSH device class, pool and Cinder volume type. Not the same thing as cache tiering, which lives under storage > cache.",
+    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
+
+CLI_MODE_COMMAND("tier", "create", CephDeviceTierCreate, NULL,
+    "Create a device tier over a set of OSDs and a Cinder volume type for it.",
+    "create <tier> <osd id> [<osd id>...]");
+
+CLI_MODE_COMMAND("tier", "update", CephDeviceTierUpdate, NULL,
+    "Change which OSDs a device tier consists of.",
+    "update <tier> <osd id> [<osd id>...]");
+
+CLI_MODE_COMMAND("tier", "delete", CephDeviceTierDelete, NULL,
+    "Delete a device tier, its pool and its Cinder volume type.",
+    "delete <tier>");
+
+CLI_MODE_COMMAND("tier", "list", CephDeviceTierList, NULL,
+    "List the device tiers and where the registry and Ceph disagree.",
+    "list");
 
 CLI_MODE("storage", "restful",
     "Work with stroage restful API settings.",
