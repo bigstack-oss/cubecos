@@ -92,11 +92,32 @@ _instance_metrics_dump()
 # matters on a compute node, which holds no OpenStack credentials and should not need any to
 # report on the domains it is running.
 #
+# The influx half, posted to the Kapacitor write proxy on :9092 rather than to InfluxDB on
+# :8086. That is the only ingress that replicates -- kapacitor relays what it proxies out to
+# its peers, and it is also what feeds the stream tasks, so a point written straight to
+# InfluxDB would reach neither the other control nodes nor the alert that is the whole
+# reason for writing it. Same endpoint and same shape logstash's persisters use.
+#
+# A failure here is not a failure of the collection: the textfile is already on disk and
+# Prometheus will scrape it regardless, so this returns non-zero and the caller carries on.
+_instance_metrics_ship()
+{
+    local lp=$1
+
+    [ -s "$lp" ] || return 0
+
+    $CURL -sf -X POST --data-binary @"$lp" \
+        "http://$(shared_id):9092/write?db=telegraf&rp=def&precision=s" >/dev/null 2>&1
+}
+
 # Usage: $PROG instance_metrics_collect [textfile_dir]
 instance_metrics_collect()
 {
     local dir=${1:-/var/lib/node_exporter/textfile}
     local out=$dir/cube_instance_metrics.prom
+    local state=/run/cube_instance_metrics.state
+    local now=$(date +%s)
+    local lp
 
     # Runs wherever node_exporter does, which is every role. A node with no hypervisor has
     # no virsh and produces nothing rather than an error -- the series simply do not exist
@@ -104,7 +125,11 @@ instance_metrics_collect()
     command -v virsh >/dev/null 2>&1 || return 0
     mkdir -p "$dir" || return 1
 
-    _instance_metrics_dump | awk '
+    # One libvirt read, two outputs: the awk writes the textfile to OUT and the influx line
+    # protocol to stdout. Splitting this into two functions would mean walking every domain
+    # twice for the same numbers.
+    lp=$(MakeTemp)
+    _instance_metrics_dump | awk -v OUT="$out.tmp" -v STATE="$state" -v NOW="$now" '
 function esc(v) {
     gsub(/\\/, "\\\\", v)
     gsub(/"/, "\\\"", v)
@@ -145,14 +170,24 @@ function attrval(line, attr,   s, rest, e) {
 function emit(metric, extra, value) {
     if (value == "") return
     printf "%s{resource=\"%s\",project=\"%s\",project_name=\"%s\",name=\"%s\"%s} %s\n",
-           metric, esc(uuid), esc(project), esc(project_name), esc(name), extra, value
+           metric, esc(uuid), esc(project), esc(project_name), esc(name), extra, value > OUT
+}
+# Tag values in influx line protocol escape comma, equals and space, and nothing else --
+# a backslash is literal there, so unlike the Prometheus label above it is left alone. The
+# four-backslash replacements are awk gsub syntax: two produce one literal backslash in the
+# output, so the pair before the delimiter is what emits a single escaping backslash.
+function lpesc(v) {
+    gsub(/,/, "\\,", v)
+    gsub(/=/, "\\=", v)
+    gsub(/ /, "\\ ", v)
+    return v
 }
 function reset() {
     uuid = ""; domname = ""; name = ""; project = ""; project_name = ""; vcpus = ""
     in_meta = 0
     delete st
 }
-function flush(   i, cnt, dev, extra, avail, unused, usable) {
+function flush(   i, cnt, dev, extra, avail, unused, usable, tags, pct) {
     if (uuid == "") return
     # A domain libvirt is running but nova did not create. Nothing in CubeCOS makes one,
     # but the label still has to be defined rather than left holding the previous domain.
@@ -204,35 +239,69 @@ function flush(   i, cnt, dev, extra, avail, unused, usable) {
         emit("ceilometer_network_incoming_packets", extra, st["net." i ".rx.pkts"])
         emit("ceilometer_network_outgoing_packets", extra, st["net." i ".tx.pkts"])
     }
+
+    # And the same read, as the two influx measurements the per-project Kapacitor VM alert
+    # templates stream from. Measurement names, tag names and the field name are exactly
+    # the ones monasca published, so re-sourcing those templates is a one-line dbrp change
+    # and every threshold an operator has tuned keeps meaning what it meant. Only the
+    # database moves.
+    if (st["cpu.time"] != "")
+        newcpu[uuid] = st["cpu.time"]
+    tags = sprintf("resource_id=%s,tenant_id=%s,tenant_name=%s,vm_name=%s",
+                   lpesc(uuid), lpesc(project), lpesc(project_name), lpesc(name))
+
+    # Two samples and a positive interval, or there is no rate to report -- a VM that
+    # booted since the last run publishes its first CPU point one run later, which is what
+    # monasca did too. The counter going backwards means the domain was recreated.
+    if (st["cpu.time"] != "" && vcpus + 0 > 0 && dt > 0 &&
+        (uuid in prev_cpu) && st["cpu.time"] + 0 >= prev_cpu[uuid]) {
+        pct = (st["cpu.time"] - prev_cpu[uuid]) / (dt * 1e9) * 100 / vcpus
+        if (pct > 100) pct = 100
+        printf "vm.cpu.utilization_norm_perc,%s value=%.6f %s\n", tags, pct, NOW
+    }
+    # usable / available, the figure the monasca libvirt check publishes -- see the header.
+    if (avail + 0 > 0 && usable != "")
+        printf "vm.mem.free_perc,%s value=%.6f %s\n", tags, usable / avail * 100, NOW
 }
 BEGIN {
+    # The previous CPU sample, for the rate the two Kapacitor templates consume. In /run
+    # rather than /var: a counter delta across a reboot is meaningless, so losing it there
+    # is correct, and the first run after boot simply publishes no CPU point.
+    while ((getline line < STATE) > 0) {
+        split(line, a, " ")
+        if (a[1] == "@") { prev_t = a[2] + 0 ; continue }
+        prev_cpu[a[1]] = a[2] + 0
+    }
+    close(STATE)
+    dt = NOW - prev_t
+
     reset()
-    print "# HELP ceilometer_cpu Cumulative CPU time consumed by the instance in nanoseconds."
-    print "# TYPE ceilometer_cpu counter"
-    print "# HELP ceilometer_vcpus Virtual CPUs allocated to the instance."
-    print "# TYPE ceilometer_vcpus gauge"
-    print "# HELP ceilometer_memory_usage Guest memory in use in megabytes, libvirt available minus unused."
-    print "# TYPE ceilometer_memory_usage gauge"
-    print "# HELP cube_instance_memory_visible_mb Memory the guest OS can see in megabytes, libvirt balloon.available."
-    print "# TYPE cube_instance_memory_visible_mb gauge"
-    print "# HELP cube_instance_memory_usable_mb Memory the guest OS could still allocate in megabytes, libvirt balloon.usable."
-    print "# TYPE cube_instance_memory_usable_mb gauge"
-    print "# HELP ceilometer_disk_device_read_bytes Cumulative bytes read from a virtual disk."
-    print "# TYPE ceilometer_disk_device_read_bytes counter"
-    print "# HELP ceilometer_disk_device_write_bytes Cumulative bytes written to a virtual disk."
-    print "# TYPE ceilometer_disk_device_write_bytes counter"
-    print "# HELP ceilometer_disk_device_read_requests Cumulative read requests to a virtual disk."
-    print "# TYPE ceilometer_disk_device_read_requests counter"
-    print "# HELP ceilometer_disk_device_write_requests Cumulative write requests to a virtual disk."
-    print "# TYPE ceilometer_disk_device_write_requests counter"
-    print "# HELP ceilometer_network_incoming_bytes Cumulative bytes received on a virtual interface."
-    print "# TYPE ceilometer_network_incoming_bytes counter"
-    print "# HELP ceilometer_network_outgoing_bytes Cumulative bytes sent on a virtual interface."
-    print "# TYPE ceilometer_network_outgoing_bytes counter"
-    print "# HELP ceilometer_network_incoming_packets Cumulative packets received on a virtual interface."
-    print "# TYPE ceilometer_network_incoming_packets counter"
-    print "# HELP ceilometer_network_outgoing_packets Cumulative packets sent on a virtual interface."
-    print "# TYPE ceilometer_network_outgoing_packets counter"
+    print "# HELP ceilometer_cpu Cumulative CPU time consumed by the instance in nanoseconds." > OUT
+    print "# TYPE ceilometer_cpu counter" > OUT
+    print "# HELP ceilometer_vcpus Virtual CPUs allocated to the instance." > OUT
+    print "# TYPE ceilometer_vcpus gauge" > OUT
+    print "# HELP ceilometer_memory_usage Guest memory in use in megabytes, libvirt available minus unused." > OUT
+    print "# TYPE ceilometer_memory_usage gauge" > OUT
+    print "# HELP cube_instance_memory_visible_mb Memory the guest OS can see in megabytes, libvirt balloon.available." > OUT
+    print "# TYPE cube_instance_memory_visible_mb gauge" > OUT
+    print "# HELP cube_instance_memory_usable_mb Memory the guest OS could still allocate in megabytes, libvirt balloon.usable." > OUT
+    print "# TYPE cube_instance_memory_usable_mb gauge" > OUT
+    print "# HELP ceilometer_disk_device_read_bytes Cumulative bytes read from a virtual disk." > OUT
+    print "# TYPE ceilometer_disk_device_read_bytes counter" > OUT
+    print "# HELP ceilometer_disk_device_write_bytes Cumulative bytes written to a virtual disk." > OUT
+    print "# TYPE ceilometer_disk_device_write_bytes counter" > OUT
+    print "# HELP ceilometer_disk_device_read_requests Cumulative read requests to a virtual disk." > OUT
+    print "# TYPE ceilometer_disk_device_read_requests counter" > OUT
+    print "# HELP ceilometer_disk_device_write_requests Cumulative write requests to a virtual disk." > OUT
+    print "# TYPE ceilometer_disk_device_write_requests counter" > OUT
+    print "# HELP ceilometer_network_incoming_bytes Cumulative bytes received on a virtual interface." > OUT
+    print "# TYPE ceilometer_network_incoming_bytes counter" > OUT
+    print "# HELP ceilometer_network_outgoing_bytes Cumulative bytes sent on a virtual interface." > OUT
+    print "# TYPE ceilometer_network_outgoing_bytes counter" > OUT
+    print "# HELP ceilometer_network_incoming_packets Cumulative packets received on a virtual interface." > OUT
+    print "# TYPE ceilometer_network_incoming_packets counter" > OUT
+    print "# HELP ceilometer_network_outgoing_packets Cumulative packets sent on a virtual interface." > OUT
+    print "# TYPE ceilometer_network_outgoing_packets counter" > OUT
 }
 $0 == "@@STATS@@" { section = "stats" ; next }
 $0 == "@@END@@"   { flush() ; reset() ; section = "" ; next }
@@ -253,10 +322,19 @@ section == "stats" {
 in_meta && /<nova:name>/    { name = tagval($0, "nova:name") }
 in_meta && /<nova:vcpus>/   { vcpus = tagval($0, "nova:vcpus") }
 in_meta && /<nova:project / { project = attrval($0, "uuid") ; project_name = tagval($0, "nova:project") }
-' > "$out.tmp" || { rm -f "$out.tmp" ; return 1 ; }
+END {
+    printf "@ %s\n", NOW > STATE
+    for (u in newcpu)
+        printf "%s %s\n", u, newcpu[u] > STATE
+    close(STATE)
+}
+' > "$lp" || { rm -f "$out.tmp" ; RemoveTempFiles ; return 1 ; }
 
     # node_exporter reads the whole directory on every scrape, so a half-written file is a
     # parse error that fails the entire textfile collector, not just these series. Rename
     # rather than write in place.
     mv -f "$out.tmp" "$out"
+
+    _instance_metrics_ship "$lp"
+    RemoveTempFiles
 }
