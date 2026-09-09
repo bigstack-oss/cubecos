@@ -1375,21 +1375,6 @@ os_nova_hci_reserved_mem_mb()
     echo -n $reserved_mem_mb
 }
 
-os_nova_mdev_instance_sync()
-{
-    local type=$(cat /etc/nova/nova.conf | grep enabled_vgpu_types | awk '{print $3}' | tr -d '\n')
-
-    for i in $(virsh list --all | grep instance- | awk '{print $2}') ; do
-        if virsh dumpxml $i | grep -q mdev ; then
-            local mdev_loc=$(find /sys/devices/ -name $type -type d | sort -R | head -n 1)
-            local uuid=$(virsh dumpxml $i | grep mdev -A 2 | grep uuid | awk -F\' '{print $2}')
-            if [ -n "$uuid" -a -n "$mdev_loc" -a ! -d "/sys/bus/mdev/devices/$uuid"  ] ; then
-                echo $uuid > $mdev_loc/create
-            fi
-        fi
-    done
-}
-
 os_nova_instance_reset_pass()
 {
     local srv_id=${1:-NOSUCHSERVERID}
