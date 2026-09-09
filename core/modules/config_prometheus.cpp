@@ -350,23 +350,33 @@ WriteConf(bool ha, const std::string& sharedId, const std::string& ctrlAddrs,
     // blackbox is a probe runner, so the job lists what to probe and hands each target to
     // the exporter as a parameter rather than scraping it directly. These are the same
     // service ports config_haproxy fronts, reached through the VIP, which is what monasca's
-    // http_check watched -- so this is the series the six health_*_check functions move onto.
-    const std::vector<std::string> probes = {
-        "8774",  // nova
-        "9292",  // glance
-        "8776",  // cinder
-        "8004",  // heat
-        "9876",  // octavia
-        "9001",  // designate
+    // http_check watched -- so this is the series the six health_*_check functions read.
+    //
+    // Each target carries a service label, because that is how the consumer asks. monasca
+    // dimensioned http_status by service and the checks selected on it; keeping a label
+    // means the query stays a name lookup instead of a port number the reader has to
+    // recognise, and a port move here does not silently break sdk_health.sh. The names are
+    // CubeCOS's own -- the ones the health_*_check functions are named after -- rather than
+    // monasca's "image-service"/"block-storage", which belonged to its dimension vocabulary
+    // and to nothing that outlives it.
+    const std::vector<std::pair<std::string, std::string>> probes = {
+        { "nova",      "8774" },
+        { "glance",    "9292" },
+        { "cinder",    "8776" },
+        { "heat",      "8004" },
+        { "octavia",   "9876" },
+        { "designate", "9001" },
     };
     fprintf(fout, "  - job_name: 'blackbox-openstack'\n");
     fprintf(fout, "    metrics_path: /probe\n");
     fprintf(fout, "    params:\n");
     fprintf(fout, "      module: [openstack_api]\n");
     fprintf(fout, "    static_configs:\n");
-    fprintf(fout, "    - targets:\n");
-    for (const auto& port : probes)
-        fprintf(fout, "      - 'http://%s:%s/'\n", sharedId.c_str(), port.c_str());
+    for (const auto& probe : probes) {
+        fprintf(fout, "    - targets: ['http://%s:%s/']\n", sharedId.c_str(), probe.second.c_str());
+        fprintf(fout, "      labels:\n");
+        fprintf(fout, "        service: %s\n", probe.first.c_str());
+    }
     // __address__ has to become the exporter and the original target has to survive as a
     // label, or every series would be labelled with the exporter instead of the service.
     fprintf(fout, "    relabel_configs:\n");

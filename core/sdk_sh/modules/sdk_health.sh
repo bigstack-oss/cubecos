@@ -38,6 +38,33 @@ health_errcode_lookup()
     fi
 }
 
+# Is one OpenStack API answering through the VIP, as blackbox_exporter sees it?
+#
+# This is the replacement for monasca-agent's http_check plugin, whose http_status series
+# the six API health checks read: 0 meant the probe got an acceptable answer and anything
+# else meant it did not. probe_success states the same thing the other way round -- 1 is
+# up -- and carries the service label config_prometheus.cpp puts on each target, so the
+# lookup stays by name.
+#
+# "No such series" is deliberately NOT a failure, which is the one behaviour that changes.
+# Under monasca an absent point compared as null != 0 and read as "endpoint unreachable",
+# so a metric pipeline that was itself down turned all six checks NG and pointed the
+# operator at six innocent services. health_prometheus_check and health_influxdb_check
+# exist to report that; here the remaining conditions in each function -- the service
+# lists and the systemd states -- still run and still say something true.
+_health_api_reachable()
+{
+    local service=$1
+    local result
+
+    result=$($CURL -sf --get \
+                --data-urlencode "query=probe_success{job=\"blackbox-openstack\",service=\"$service\"}" \
+                http://localhost/prometheus/api/v1/query 2>/dev/null \
+                | jq -r '.data.result[0].value[1] // empty' 2>/dev/null)
+
+    [ "$result" != "0" ]
+}
+
 _health_report()
 {
     local tmp=${1%_report}
@@ -2267,7 +2294,6 @@ health_nova_check()
 {
     stale_api_check_repair openstack-nova-api 8774 nova-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'compute'" | jq .results[0].series[0].values[0][1])
     local service_stats="$($OPENSTACK compute service list -f value -c Binary -c Host -c Status -c State 2>/dev/null)"
     local scheduler_up=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i up | wc -l )
     local scheduler_down=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i down | wc -l )
@@ -2276,7 +2302,7 @@ health_nova_check()
     local compute_up=$(echo "$service_stats" | grep compute | grep -v ironic | grep -i enabled | grep -i up | wc -l )
     local compute_down=$(echo "$service_stats" | grep compute | grep -v ironic | grep -i enabled | grep -i down | wc -l )
 
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable nova ; then
         ERR_CODE=1
         ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-nova-api"
     elif [ -z "$service_stats" ] ; then
@@ -2614,9 +2640,8 @@ health_glance_check()
 {
     stale_api_check_repair openstack-glance-api 9292 glance-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'image-service'" | jq .results[0].series[0].values[0][1])
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-glance-api"
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable glance ; then
         ERR_CODE=1
     else
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -2654,7 +2679,6 @@ health_cinder_check()
 {
     stale_api_check_repair openstack-cinder-api 8776 cinder-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'block-storage'" | jq .results[0].series[0].values[0][1])
     local service_stats="$($OPENSTACK volume service list -f value -c Binary -c Host -c Status -c State 2>/dev/null)"
     local scheduler_up=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i up | wc -l )
     local scheduler_down=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i down | wc -l )
@@ -2663,7 +2687,7 @@ health_cinder_check()
     local backup_up=$(echo "$service_stats" | grep backup | grep -i enabled | grep -i up | wc -l )
     local backup_down=$(echo "$service_stats" | grep backup | grep -i enabled | grep -i down | wc -l )
 
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable cinder ; then
         ERR_CODE=1
         ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-cinder-volume"
     elif [ -z "$service_stats" ] ; then
@@ -2817,12 +2841,11 @@ health_heat_check()
     stale_api_check_repair openstack-heat-api 8004 heat-api python3
     stale_api_check_repair openstack-heat-api-cfn 8000 heat-api-cfn python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'orchestration'" | jq .results[0].series[0].values[0][1])
     local service_stats="$($OPENSTACK orchestration service list -f value -c Hostname -c Binary -c Status | sort | uniq 2>/dev/null)"
     local engine_up=$(echo "$service_stats" | grep -i up | wc -l )
     local engine_down=$(echo "$service_stats" | grep -i down | wc -l )
 
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable heat ; then
         ERR_CODE=1
     elif [ -z "$service_stats" ] ; then
         ERR_CODE=2
@@ -2872,8 +2895,7 @@ health_octavia_check()
 {
     stale_api_check_repair octavia-api 9876 octavia-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'octavia'" | jq .results[0].series[0].values[0][1])
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable octavia ; then
         ERR_CODE=1
     elif cube_cluster_ready && $HEX_SDK os_planned_maintenance_stale ; then
         # Ahead of the health-manager-down code, which is only its symptom.
@@ -3003,7 +3025,6 @@ health_designate_check()
 {
     stale_api_check_repair designate-api 9001 designate-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'dns'" | jq .results[0].series[0].values[0][1])
     local service_stats="$($OPENSTACK dns service list -f value -c hostname -c service_name -c status 2>/dev/null)"
     local api_up=$(echo "$service_stats" | grep api | grep -i up | wc -l )
     local api_down=$(echo "$service_stats" | grep api | grep -i down | wc -l )
@@ -3016,7 +3037,7 @@ health_designate_check()
     local mdns_up=$(echo "$service_stats" | grep mdns | grep -i up | wc -l )
     local mdns_down=$(echo "$service_stats" | grep mdns | grep -i down | wc -l )
 
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable designate ; then
         ERR_CODE=1
     elif [ -z "$service_stats" ] ; then
         ERR_CODE=2
