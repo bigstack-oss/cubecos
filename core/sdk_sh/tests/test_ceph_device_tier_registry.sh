@@ -436,6 +436,58 @@ ck "$(echo "$OUT" | grep -c '^registered|')" 0 "3i and the glob did not match go
 ck "$(echo "$OUT" | grep -c '^unmanaged|gold$')" 1 "3i gold is unmanaged, not registered by a glob"
 [ -e "$TMP/marker" ] && { fail=$((fail+1)); echo "FAIL: 3i the marker command must never run"; } || pass=$((pass+1))
 
+# ---- 3j. a Ceph read that fails is a refusal, never "nothing on the Ceph side" ----
+#
+# This state is what licenses `tier delete` to take a registry entry out while
+# telling the operator Ceph has none of the objects, so the reads behind it are
+# fail-closed. They used to be the opposite: the class list went through a
+# `for x in $(ceph ... | jq ...)` whose status is discarded, and the rule and
+# pool checks were bare pipelines whose non-zero means "not there" AND "the mon
+# did not answer" -- so one blipped query emptied the shaped set and every
+# registered tier came back registry-only with rc 0. A live tier would then be
+# unregistered, its backend taken out of service and its pool orphaned.
+for dead in '^osd crush class ls$' '^osd crush rule ls$' '^osd pool ls$' ; do
+    reset_cluster
+    DEAD_PAT="$dead"
+    OUT=$(ceph_device_tier_names 2>/dev/null) ; RC=$?
+    ck "$RC" 1 "3j $dead failing is a refusal"
+    cklacks "$OUT" "registry-only|gold" "3j $dead must not report a live tier as absent"
+done
+
+# ---- 3k. a registered tier missing only SOME of its objects is partial ----
+#
+# Not registry-only: that answer says Ceph has none of the three, and the CLI
+# acts on it by removing just the registry entry. A tier still holding a class
+# and a rule would be silently orphaned by that -- objects with no owner and no
+# record -- so it gets its own state and goes down the full delete path, where
+# hex_sdk takes each piece it actually finds.
+reset_cluster
+grep -vx 'gold' "$TMP/pools" > "$TMP/p.new" && mv "$TMP/p.new" "$TMP/pools"
+ck "$(ceph_device_tier_names)" "registry-partial|gold" "3k class and rule but no pool is partial"
+
+reset_cluster
+grep -vx 'gold' "$TMP/pools" > "$TMP/p.new" && mv "$TMP/p.new" "$TMP/pools"
+grep -vx 'gold' "$TMP/rules" > "$TMP/r.new" && mv "$TMP/r.new" "$TMP/rules"
+ck "$(ceph_device_tier_names)" "registry-partial|gold" "3k class alone is partial"
+
+# ---- 3l. with none of the three it is registry-only, as before ----
+reset_cluster
+grep -vx 'gold' "$TMP/pools" > "$TMP/p.new" && mv "$TMP/p.new" "$TMP/pools"
+grep -vx 'gold' "$TMP/rules" > "$TMP/r.new" && mv "$TMP/r.new" "$TMP/rules"
+sed -i.bak 's/^\([0-9]*\):gold$/\1:/' "$TMP/classes"
+ck "$(ceph_device_tier_names)" "registry-only|gold" "3l nothing on the Ceph side stays registry-only"
+
+# ---- 3m. an unregistered name with only some of the three is not listed ----
+# A device class with no rule and no pool of its own name is just a device
+# class, which every cluster has. Listing it would put "ssd" and "hdd" in front
+# of an operator as things to delete.
+reset_cluster
+: > "$SETTINGS_TXT"
+OUT=$(ceph_device_tier_names)
+cklacks "$OUT" "|hdd" "3m a bare device class is not a device tier"
+cklacks "$OUT" "|ssd" "3m nor is one whose rule is named differently"
+ck "$(echo "$OUT" | wc -l | tr -d ' ')" 1 "3m only the full-shape lookalike is listed"
+
 # ==== the health gate (#840 WP-5) ========================================
 #
 # Requiring HEALTH_OK is not usable: measured on the 1cc, one BlueStore slow

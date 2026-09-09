@@ -4909,12 +4909,13 @@ ceph_device_tier_names_taken()
 }
 
 # The device tiers, as "<state>|<name>", one per line. The state is what says
-# whether this CLI owns the thing:
+# whether this CLI owns the thing, and how much of it Ceph still has:
 #
-#   registered    in the registry, and Ceph has the class + rule + pool
-#   registry-only in the registry, nothing of that shape on the Ceph side --
-#                 a Cinder backend advertising a pool that does not exist
-#   unmanaged     Ceph has the shape, the registry does not list it
+#   registered       in the registry, and Ceph has the class + rule + pool
+#   registry-partial in the registry, and Ceph has SOME of the three
+#   registry-only    in the registry, and Ceph is known to have NONE of them --
+#                    a Cinder backend advertising a pool that does not exist
+#   unmanaged        Ceph has all three, the registry does not list it
 #
 # The distinction is the ownership boundary the design draws, not a detail. A
 # device class with a same-named rule and pool is what a device tier looks
@@ -4923,6 +4924,23 @@ ceph_device_tier_names_taken()
 # and the registry -- not the shape -- is what says a tier came from here. A
 # caller that cannot tell the two apart will offer someone else's storage for
 # deletion.
+#
+# registry-partial is separate from registry-only because the caller does
+# different things with them: registry-only licenses taking the registry entry
+# out on the stated grounds that there is nothing on the Ceph side, and that
+# statement has to be true. A tier holding a class and a rule but no pool is
+# not "nothing on the Ceph side"; unregistering it would leave those objects
+# with no owner and no record.
+#
+# Every read here is fail-closed, and none of them may be a bare pipeline.
+# _ceph_device_tier_has_rule and friends cannot be used: a pipeline carries
+# only its last command's status, so their non-zero means "not there" AND "the
+# mon did not answer" -- see _ceph_device_tier_rule_state's comment, which
+# calls that tolerable for a caller that only skips work and wrong for the
+# delete path. This caller is the delete path's evidence, so it takes the
+# strict reading: three lists, read once each, each with its own status kept.
+# Answering "registry-only" because a query blipped is how a live tier gets
+# unregistered and its pool orphaned.
 #
 # An unreadable registry is a hard failure rather than "nothing is registered":
 # ownership cannot be decided without it, and every name would come back
@@ -4934,28 +4952,47 @@ ceph_device_tier_names()
     local registry=
     registry=$(_ceph_device_tier_registry) || return 1
 
-    local tier= shaped=
-    for tier in $($CEPH osd crush class ls 2>/dev/null | jq -r '.[]') ; do
-        _ceph_device_tier_has_rule $tier || continue
-        _ceph_device_tier_has_pool $tier || continue
-        shaped="$shaped$tier
-"
-        if _ceph_device_tier_is_registered "$tier" "$registry" ; then
-            echo "registered|$tier"
-        else
-            echo "unmanaged|$tier"
-        fi
-    done
+    local classes= class_names= rules= pools=
+    classes=$($CEPH osd crush class ls 2>/dev/null) || return 1
+    class_names=$(echo "$classes" | jq -r '.[]' 2>/dev/null) || return 1
+    rules=$($CEPH osd crush rule ls 2>/dev/null) || return 1
+    pools=$($CEPH osd pool ls 2>/dev/null) || return 1
 
-    # Whole-line matching, never a shell pattern: a registry entry has not been
-    # through the CLI's name guard and can hold any byte, including one that
-    # would be a glob.
-    local entry=
-    while IFS= read -r entry ; do
-        [ -n "$entry" ] || continue
-        printf '%s' "$shaped" | grep -qxF -- "$entry" && continue
-        echo "registry-only|$entry"
-    done <<< "$registry"
+    # Every name either side knows about: the classes Ceph has, plus whatever
+    # the registry lists. A registry entry has not been through the CLI's name
+    # guard and can hold any byte, so every comparison below is -F and -x --
+    # whole-line, literal, never a shell pattern and never a substring.
+    local candidates=
+    candidates=$(printf '%s\n%s\n' "$class_names" "$registry" | awk 'length && !seen[$0]++')
+
+    local name= has_class= has_rule= has_pool=
+    while IFS= read -r name ; do
+        [ -n "$name" ] || continue
+
+        has_class=1 ; has_rule=1 ; has_pool=1
+        printf '%s\n' "$class_names" | grep -qxF -- "$name" && has_class=0
+        printf '%s\n' "$rules"       | grep -qxF -- "$name" && has_rule=0
+        printf '%s\n' "$pools"       | grep -qxF -- "$name" && has_pool=0
+
+        if _ceph_device_tier_is_registered "$name" "$registry" ; then
+            if [ $has_class -eq 0 ] && [ $has_rule -eq 0 ] && [ $has_pool -eq 0 ] ; then
+                echo "registered|$name"
+            elif [ $has_class -ne 0 ] && [ $has_rule -ne 0 ] && [ $has_pool -ne 0 ] ; then
+                echo "registry-only|$name"
+            else
+                echo "registry-partial|$name"
+            fi
+        elif [ $has_class -eq 0 ] && [ $has_rule -eq 0 ] && [ $has_pool -eq 0 ] ; then
+            # A lookalike. Reported so the CLI can refuse it by name rather
+            # than fall through to a collision message that does not say why.
+            echo "unmanaged|$name"
+        fi
+
+        # An unregistered name with only some of the three is not listed at
+        # all: a device class with no rule and no pool of its own name is just
+        # a device class, which every cluster has, and none of this CLI's
+        # business.
+    done <<< "$candidates"
 
     return 0
 }

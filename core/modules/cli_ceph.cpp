@@ -1139,16 +1139,17 @@ CephDeviceTierQuery(const std::vector<std::string>& args, std::vector<std::strin
     return true;
 }
 
-// The three states ceph_device_tier_names reports, and what this CLI may do
+// The states ceph_device_tier_names reports, and what this CLI may do
 // with each. Ownership is the registry, never the shape of the Ceph objects:
 // a device class with a same-named rule and pool is what a device tier looks
 // like, and customers hand-build exactly that shape, so treating a lookalike
 // as one of ours is how this CLI would come to delete someone else's storage.
 enum CephDeviceTierState {
-    TIER_NONE,          // this CLI has never heard of the name
-    TIER_REGISTERED,    // ours, and Ceph has the objects
-    TIER_REGISTRY_ONLY, // ours, but nothing of that shape on the Ceph side
-    TIER_UNMANAGED,     // Ceph has the shape; the registry does not list it
+    TIER_NONE,             // this CLI has never heard of the name
+    TIER_REGISTERED,       // ours, and Ceph has the class, the rule and the pool
+    TIER_REGISTRY_PARTIAL, // ours, and Ceph has some of those three
+    TIER_REGISTRY_ONLY,    // ours, and Ceph is known to have none of them
+    TIER_UNMANAGED,        // Ceph has all three; the registry does not list it
 };
 
 // Read the state of every name ceph_device_tier_names knows.
@@ -1170,6 +1171,8 @@ CephDeviceTierStates(std::vector<std::pair<CephDeviceTierState, std::string>>& t
         const std::string name = l.substr(bar + 1);
         if (state == "registered") {
             tiers.push_back({ TIER_REGISTERED, name });
+        } else if (state == "registry-partial") {
+            tiers.push_back({ TIER_REGISTRY_PARTIAL, name });
         } else if (state == "registry-only") {
             tiers.push_back({ TIER_REGISTRY_ONLY, name });
         } else if (state == "unmanaged") {
@@ -1262,11 +1265,24 @@ CephDeviceTierNameFree(const std::string& tier, bool* existing)
         if (t.second != tier) {
             continue;
         }
-        if (t.first == TIER_REGISTERED || t.first == TIER_REGISTRY_ONLY) {
-            *existing = true;
-            return true;
+        if (t.first == TIER_UNMANAGED) {
+            // Terminal here, decided from THIS snapshot. Breaking out to the
+            // collision loop below would settle ownership using `taken`, which
+            // was read BEFORE this list: a lookalike that became complete
+            // between the two reads is absent from `taken`, the name comes
+            // back free, and the idempotent create adopts the foreign objects
+            // -- exactly what telling the states apart is here to prevent.
+            CliPrintf("The name '%s' is a device class with a CRUSH rule and a pool of the same name, but it is not in the storage tier registry -- so it was not created here. Not creating anything.",
+                tier.c_str());
+            CliPrintf("This CLI does not manage objects it did not register. If '%s' is a device tier built here whose registration did not complete, finish it with 'hex_sdk ceph_device_tier_create %s <osd id>...'.",
+                tier.c_str(), tier.c_str());
+            return false;
         }
-        break;
+        // registered, registry-partial or registry-only: the registry says
+        // this one is ours, and re-running create is how a tier that is
+        // missing a piece gets completed.
+        *existing = true;
+        return true;
     }
 
     for (const auto& t : taken) {
@@ -1514,10 +1530,11 @@ CephDeviceTierSpawn(const char* subcmd, const std::string& tier, const std::vect
 // *state comes back so the caller can tell a tier whose objects are there from
 // one that is only a registry entry.
 //
-// Only registered names are offered and only registered names are accepted.
-// A Ceph structure that merely has the shape of a device tier is refused by
-// name here rather than listed and acted on -- update and delete are the two
-// commands that would otherwise remap or destroy it.
+// Only names the registry lists are offered, and only those are accepted --
+// whether Ceph has all, some or none of their objects. A Ceph structure that
+// merely has the shape of a device tier is refused by name here rather than
+// listed and acted on: update and delete are the two commands that would
+// otherwise remap or destroy it.
 //
 // The name is put through the same guard create uses even though it came from
 // the registry, because that is exactly why: the registry is written by the
@@ -1546,7 +1563,8 @@ CephDeviceTierPick(int argc, const char** argv, int argidx, std::string& tier,
     }
 
     for (const auto& t : tiers) {
-        if (t.first == TIER_REGISTERED || t.first == TIER_REGISTRY_ONLY) {
+        if (t.first == TIER_REGISTERED || t.first == TIER_REGISTRY_PARTIAL
+            || t.first == TIER_REGISTRY_ONLY) {
             owned.push_back(t.second);
         }
     }
@@ -1726,6 +1744,10 @@ CephDeviceTierUpdate(int argc, const char** argv)
     // Registered, but there is no class or rule to move members between yet.
     // hex_sdk would say "no such device tier", which is true of Ceph and
     // misleading about the registry.
+    //
+    // A partial tier does not come in here either: one holding a class and a
+    // rule but no pool has members and can have them changed, and hex_sdk's
+    // update checks the two objects it needs itself.
     if (state == TIER_REGISTRY_ONLY) {
         CliPrintf("Device tier '%s' is registered but has nothing on the Ceph side, so it has no members to change. Build it with 'tier create %s <osd id>...', or take the registry entry out with 'tier delete %s'.",
             tier.c_str(), tier.c_str(), tier.c_str());
@@ -1827,6 +1849,14 @@ CephDeviceTierDelete(int argc, const char** argv)
     // state: Cinder advertises a volume type whose pool does not exist. The
     // Ceph-side delete would refuse here, because it cannot read the members of
     // a class that is not there.
+    //
+    // TIER_REGISTRY_PARTIAL deliberately does NOT come in here, and the state
+    // exists to keep it out. This branch tells the operator there is nothing
+    // on the Ceph side and then removes only the registry entry, so it has to
+    // be reached only when that is known to be true: a tier still holding a
+    // class, a rule or a pool would be silently orphaned by it -- objects with
+    // no owner and no record. A partial one goes down the full path below,
+    // where hex_sdk's delete takes each piece it actually finds.
     if (state == TIER_REGISTRY_ONLY) {
         CliPrintf("\nDevice tier '%s' has nothing on the Ceph side: no device class, CRUSH rule or pool. Only its registry entry and the Cinder backend generated from it will be removed. No data is affected.",
             tier.c_str());
