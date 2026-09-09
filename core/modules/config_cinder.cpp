@@ -44,6 +44,7 @@ static const char BACKUP[] = "volume-backups";
 
 // cinder common
 static const char RUNDIR[] = "/run/cinder";
+static const char USAGE_INPUT[] = "/etc/telegraf/telegraf.d/cube_storage_usage.conf";
 static const char STATDIR[] = "/store/cinder";
 
 /**
@@ -103,6 +104,12 @@ CONFIG_TUNING_STR(CINDER_VOLUME_TYPE_DEFAULT, "cinder.storage.volumeType.default
 
 // public tunigns
 CONFIG_TUNING_BOOL(CINDER_DEBUG, "cinder.debug.enabled", TUNING_PUB, "Set to true to enable cinder verbose log.", false);
+CONFIG_TUNING_BOOL(STORAGE_USAGE_ENABLED, "storage.usage.enabled", TUNING_PUB, "Set to true to sample per-volume and per-pool storage usage.", true);
+CONFIG_TUNING_UINT(STORAGE_USAGE_INTERVAL, "storage.usage.interval", TUNING_PUB, "Storage usage sampling interval in minutes.", 15, 5, 1440);
+CONFIG_TUNING_UINT(STORAGE_USAGE_SOFT, "storage.usage.threshold.soft", TUNING_PUB, "Storage pool used percentage that raises a warning.", 75, 1, 100);
+CONFIG_TUNING_UINT(STORAGE_USAGE_HARD, "storage.usage.threshold.hard", TUNING_PUB, "Storage pool used percentage that raises an error.", 85, 1, 100);
+CONFIG_TUNING_STR(STORAGE_USAGE_OVERSUB, "storage.usage.oversubscription.warn", TUNING_PUB, "Provisioned-to-capacity ratio that raises a warning.", "2.0", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_BOOL(STORAGE_USAGE_EXACT, "storage.usage.exact", TUNING_PUB, "Set to false to read ceph usage from the object map instead of scanning objects. Faster, but reports the high-water mark rather than what a disk now holds.", true);
 CONFIG_TUNING_BOOL(CINDER_BACKUP_OVERRIDE, "cinder.backup.override", TUNING_PUB, "Enable override cinder backup configurations.", false);
 CONFIG_TUNING_STR(CINDER_BACKUP_TYPE, "cinder.backup.type", TUNING_PUB, "Set cinder backup storage type <cube-storage|cube-swift>.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CINDER_BACKUP_ENDPOINT, "cinder.backup.endpoint", TUNING_PUB, "Set cinder backup storage endpoint.", "", ValidateRegex, DFT_REGEX_STR);
@@ -124,6 +131,12 @@ CONFIG_TUNING_SPEC_STR(NOVA_USERPASS);
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, CINDER_ENABLED);
 PARSE_TUNING_BOOL(s_debug, CINDER_DEBUG);
+PARSE_TUNING_BOOL(s_usageEnabled, STORAGE_USAGE_ENABLED);
+PARSE_TUNING_UINT(s_usageInterval, STORAGE_USAGE_INTERVAL);
+PARSE_TUNING_UINT(s_usageSoft, STORAGE_USAGE_SOFT);
+PARSE_TUNING_UINT(s_usageHard, STORAGE_USAGE_HARD);
+PARSE_TUNING_STR(s_usageOversub, STORAGE_USAGE_OVERSUB);
+PARSE_TUNING_BOOL(s_usageExact, STORAGE_USAGE_EXACT);
 PARSE_TUNING_STR(s_cinderPass, CINDER_USERPASS);
 PARSE_TUNING_STR(s_dbPass, CINDER_DBPASS);
 PARSE_TUNING_STR_ARRAY(s_storageBackends, CINDER_STORAGE_BACKEND);
@@ -1022,6 +1035,53 @@ CreateVolumeTypes(const TuningStringArray& storageBackends, const std::vector<st
     HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_clear %s", typesLine.str().c_str());
 }
 
+// The sampler reads its thresholds from an env file rather than re-deriving
+// them, so the CLI, the cron run and hex_config cannot disagree.
+static bool
+WriteStorageUsageInput(void)
+{
+    if (!s_usageEnabled) {
+        unlink(USAGE_INPUT);
+        return true;
+    }
+
+    int fd = open(USAGE_INPUT, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        HexLogError("Unable to open file %s", USAGE_INPUT);
+        return false;
+    }
+    FILE* fout = fdopen(fd, "w");
+    if (!fout) {
+        HexLogError("Unable to write storage usage sampler: %s", USAGE_INPUT);
+        close(fd);
+        return false;
+    }
+
+    // A telegraf exec input, not a cron entry: every other periodic hex_sdk
+    // sampler on the node is one, and the delivery path (kafka -> logstash ->
+    // the kapacitor write proxy) is the one the alert templates already read.
+    // The timeout must outlast a full pass -- an exact scan of a large pool is
+    // minutes, and a killed run writes a partial sample.
+    fprintf(fout, "[[inputs.exec]]\n");
+    fprintf(fout, "  commands = [ \"sudo " HEX_SDK " -f line storage_usage_collect\" ]\n");
+    fprintf(fout, "  interval = \"%um\"\n", s_usageInterval.newValue());
+    fprintf(fout, "  timeout = \"%um\"\n", s_usageInterval.newValue());
+    fprintf(fout, "  data_format = \"influx\"\n");
+    fclose(fout);
+
+    if (HexSetFileMode(USAGE_INPUT, "root", "root", 0644) != 0) {
+        HexLogError("Unable to set file %s mode/permission", USAGE_INPUT);
+        return false;
+    }
+
+    // telegraf reads telegraf.d once at startup, so a changed interval is inert
+    // until it is told. SIGHUP rather than a restart: the agent reloads its
+    // config in place and the other inputs on this node do not lose a cycle.
+    HexUtilSystemF(0, 30, "systemctl reload telegraf 2>/dev/null || true");
+
+    return true;
+}
+
 static bool
 Commit(bool modified, int dryLevel)
 {
@@ -1043,6 +1103,10 @@ Commit(bool modified, int dryLevel)
             HexLogError("failed to sync models from controls to this pure compute node");
         }
     }
+
+    // the usage sampler runs on control nodes and guards on VIP ownership
+    if (IsControl(s_eCubeRole) && !WriteStorageUsageInput())
+        HexLogWarning("failed to write the storage usage sampler input");
 
     // we only run Cinder services on control nodes
     if (!IsControl(s_eCubeRole) || !CommitCheck(modified, dryLevel))
