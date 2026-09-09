@@ -773,6 +773,30 @@ gpu_device_list()
 #   alias: string | null
 #   vmCountLimit: number | null
 # }
+
+# Card picker feed for hex_cli's CliMatchCmdDescHelper, which runs two commands
+# and pairs them line by line: the plain form emits the value it hands back
+# (the GPU UUID), VERBOSE=1 emits the line shown to the operator for the same
+# card in the same order. Same shape as os_nova_gpu_server_list.
+#
+# Failure propagates rather than degrading to an empty list, for the reason
+# gpu_device_list itself gives: an empty list reads as "this node has no GPUs",
+# which here would be an empty picker with no explanation.
+gpu_device_uuid_list()
+{
+    local devices
+    if ! devices=$(gpu_device_list); then
+        return 1
+    fi
+
+    if [ "$VERBOSE" == "1" ]; then
+        echo "$devices" | jq -r '.[] |
+            "\(.name) [\(.pciAddress)] \(.type)/\(.status)"'
+    else
+        echo "$devices" | jq -r '.[].id'
+    fi
+}
+
 gpu_vgpu_profile_list()
 {
     local gpu_id="$1"
@@ -935,6 +959,28 @@ EOF
 
         { sriov: ($sriovProfiles | withCountAndAlias), migBacked: ($migProfiles | withCountAndAlias) }
         '
+}
+
+# Human-readable rendering of gpu_vgpu_profile_list for hex_cli. The JSON that
+# function returns is the contract config_gpu.cpp and cube-cos-api read, and a
+# card offers ~73 profiles - as one unwrapped line it is unreadable in an
+# interactive shell, which is exactly what this story is trying to fix.
+gpu_vgpu_profile_summary()
+{
+    local gpu_id="$1"
+
+    local profiles
+    if ! profiles=$(gpu_vgpu_profile_list "$gpu_id"); then
+        return 1
+    fi
+
+    local group
+    for group in sriov migBacked; do
+        echo "$group:"
+        echo "$profiles" | jq -r --arg g "$group" '.[$g][]? |
+            "  id: \(.id), name: \(.name), vram: \(.vramMiB) MiB, count: \(.count)"
+            + (if .alias == null then "" else ", alias: \(.alias)" end)'
+    done
 }
 
 gpu_pgpu_attached_instance_get()
