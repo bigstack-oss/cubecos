@@ -6,7 +6,7 @@ BARBICAN_CONFDIR := $(ROOTDIR)/etc/barbican
 # barbican runs out of the caracal venv, not the antelope one it shared with every other
 # openstack service. 18.0.0 is the 2024.1 release (verified as the newest tag that is an
 # ancestor of upstream's unmaintained/2024.1; 19.0.0 has already diverged onto 2024.2), and
-# it needs python 3.11, so the service moves into $(CARACAL_OPENSTACK_HOME_DIR) -- skyline
+# it needs python 3.11, so the service moves into $(OPENSTACK_HOME_DIR) -- skyline
 # was the first occupant, then keystone, glance, cinder, nova/placement and neutron.
 #
 # PyKMIP: the kmip_secret_store plugin imports it unconditionally, oslo-config-generator
@@ -21,8 +21,8 @@ BARBICAN_CONFDIR := $(ROOTDIR)/etc/barbican
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		barbican==18.0.0 \
 		python-keystoneclient \
 		gunicorn \
@@ -50,20 +50,20 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-barbicanclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/barbican-db-manage /usr/bin/barbican-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/barbican-manage /usr/bin/barbican-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/barbican-retry /usr/bin/barbican-retry
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/barbican-status /usr/bin/barbican-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/pkcs11-kek-rewrap /usr/bin/pkcs11-kek-rewrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/pkcs11-key-generation /usr/bin/pkcs11-key-generation
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/barbican-wsgi-api /usr/bin/barbican-wsgi-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/barbican-worker /usr/bin/barbican-worker
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/barbican-keystone-listener /usr/bin/barbican-keystone-listener
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-db-manage /usr/bin/barbican-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-manage /usr/bin/barbican-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-retry /usr/bin/barbican-retry
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-status /usr/bin/barbican-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/pkcs11-kek-rewrap /usr/bin/pkcs11-kek-rewrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/pkcs11-key-generation /usr/bin/pkcs11-key-generation
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-wsgi-api /usr/bin/barbican-wsgi-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-worker /usr/bin/barbican-worker
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-keystone-listener /usr/bin/barbican-keystone-listener
 
 # prepare the build directory
 rootfs_install::

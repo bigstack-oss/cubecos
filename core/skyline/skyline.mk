@@ -11,9 +11,9 @@ SKYLINE_LOG_DIR := /var/log/skyline
 # set is 2024.1 and does not belong in the antelope venv either. gunicorn and alembic
 # come from skyline-apiserver's own requirements inside that venv, which is why
 # ROOTFS_PIP_NC no longer carries gunicorn -- nothing else used the system copy.
-SKYLINE_VENV := $(CARACAL_OPENSTACK_HOME_DIR)
+SKYLINE_VENV := $(OPENSTACK_HOME_DIR)
 SKYLINE_PIP := $(SKYLINE_VENV)/bin/pip
-SKYLINE_PIP_C := -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT)
+SKYLINE_PIP_C := -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT)
 
 # skyline user/group/directory
 rootfs_install::

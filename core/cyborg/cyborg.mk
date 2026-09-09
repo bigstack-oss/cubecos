@@ -9,18 +9,18 @@ CYBORG_RUN_DIR := /var/run/cyborg
 # https://releases.openstack.org/teams/cyborg.html
 # The service is a pinned pip install; nothing here is built from git any more,
 # so there is no checkout to patch and $(CYBORG_SRCDIR) is the installed package.
-CYBORG_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/cyborg
-CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(CARACAL_OPENSTACK_RELEASE)_patch
+CYBORG_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/cyborg
+CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(OPENSTACK_RELEASE)_patch
 
 # install cyborg into the caracal venv
 #
 # 12.0.0 is the 2024.1 release. The service moves into
-# $(CARACAL_OPENSTACK_HOME_DIR) with keystone, glance, cinder, nova/placement,
+# $(OPENSTACK_HOME_DIR) with keystone, glance, cinder, nova/placement,
 # neutron, manila and octavia.
 #
 # This also converts the install from `git clone` + `setup.py install` to a
 # pinned pip install, which is what every caracal hop before it does -- there is
-# no .mk in this tree that still reads $(CARACAL_OPS_GITHUB_BRANCH_0*), and
+# no .mk in this tree that still reads $(OPS_GITHUB_BRANCH_0*), and
 # stable/2024.1 does not exist on the github mirror anyway.
 #
 # The distribution is openstack-cyborg, not cyborg. `cyborg` on PyPI is an
@@ -38,20 +38,20 @@ CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(CARACAL_OPENSTACK_RELEASE)_patch
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		openstack-cyborg==12.0.0 \
 		PyMySQL \
 		\"oslo.messaging[kafka]\""
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg-agent /usr/bin/cyborg-agent
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg-api /usr/bin/cyborg-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg-conductor /usr/bin/cyborg-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg-dbsync /usr/bin/cyborg-dbsync
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg-status /usr/bin/cyborg-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg-wsgi-api /usr/bin/cyborg-wsgi-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-agent /usr/bin/cyborg-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-api /usr/bin/cyborg-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-conductor /usr/bin/cyborg-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-dbsync /usr/bin/cyborg-dbsync
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-status /usr/bin/cyborg-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-wsgi-api /usr/bin/cyborg-wsgi-api
 
 # the osc plugin
 #
@@ -72,13 +72,13 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-cyborgclient
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link the cli plugin's console script
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cyborg /usr/bin/cyborg
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg /usr/bin/cyborg
 
 rootfs_install::
 	$(Q)[ -d $(CYBORG_PATCHDIR) ] && cp -rf $(CYBORG_PATCHDIR)/* $(CYBORG_SRCDIR)/ || /bin/true
@@ -99,8 +99,8 @@ rootfs_install::
 	$(Q)# and only falls back to policy.json when no policy.yaml is found -- a
 	$(Q)# compatibility path its own TODO says will be removed. Installing it as
 	$(Q)# policy.json, as this did, worked solely through that fallback.
-	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/cyborg/api-paste.ini $(CYBORG_CONF_DIR)/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/cyborg/policy.yaml $(CYBORG_CONF_DIR)/policy.yaml
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/cyborg/api-paste.ini $(CYBORG_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/cyborg/policy.yaml $(CYBORG_CONF_DIR)/policy.yaml
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg_sudoers ./etc/sudoers.d/
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg.conf.def .$(CYBORG_CONF_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg-api.service ./lib/systemd/system

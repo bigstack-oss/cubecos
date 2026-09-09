@@ -3,7 +3,7 @@
 
 # https://releases.openstack.org/caracal/index.html#caracal-horizon
 #
-# The same version $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the
+# The same version $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the
 # two agree and neither decides the release on its own.
 HORIZON_VER := 24.0.2
 
@@ -22,7 +22,7 @@ MYSQLCLIENT_VER := 2.2.8
 # path, so a plain cp from the build host would follow it out to the *host* root
 # instead of into $(ROOTDIR).
 HORIZON_APP_DIR := /usr/share/openstack-dashboard
-HORIZON_VENV_SITE_PACKAGES := $(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
+HORIZON_VENV_SITE_PACKAGES := $(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
 HORIZON_DIR := $(HORIZON_VENV_SITE_PACKAGES)/openstack_dashboard
 HORIZON_ETCDIR := /etc/openstack-dashboard
 HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
@@ -81,15 +81,15 @@ rootfs_install::
 	$(Q)# horizon's sdist-only XStatic dependencies import a pkg_resources-declared
 	$(Q)# namespace from setup.py, so they have to be built against this venv's
 	$(Q)# setuptools 75.6.0 -- a current setuptools has no pkg_resources at all.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			--no-build-isolation \
 			horizon==$(HORIZON_VER)"
 	$(Q)# mysqlclient is the counter-example: it is also a source build, but its
 	$(Q)# pyproject.toml wants a setuptools newer than this venv's, so it keeps pip's
 	$(Q)# default build isolation and gets a current setuptools of its own.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			mysqlclient==$(MYSQLCLIENT_VER) \
 			pymemcache \
 			gunicorn"
@@ -246,7 +246,7 @@ rootfs_install::
 	$(Q)# folding the dump into a loop here is what dropped it.
 	$(Q)for ns in $(HORIZON_POLICY_NS) ; do \
 		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
-			$(CARACAL_OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
+			$(OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
 			--namespace $$ns \
 			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml || exit 1 ; \
 	done
@@ -260,9 +260,9 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/horizon/openstack-dashboard.conf ./etc/httpd/conf.d/
 
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compilemessages 2>&1 > /dev/null
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py collectstatic --noinput 2>&1 > /dev/null
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compress --force 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compilemessages 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py collectstatic --noinput 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compress --force 2>&1 > /dev/null
 	$(Q)chroot $(ROOTDIR) chmod 755 -R $(HORIZON_APP_DIR)
 	$(Q)chroot $(ROOTDIR) sh -c "chown root:apache -R $(HORIZON_POLICY_DIR)/*"
 	$(Q)chroot $(ROOTDIR) sh -c "chmod 640 -R $(HORIZON_POLICY_DIR)/*"

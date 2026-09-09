@@ -40,19 +40,19 @@ DESIGNAT_LOG_DIR := /var/log/designate
 
 # The console scripts patched below live in the caracal venv with the service. The
 # dashboard and the osc plugin do not follow it there -- see the install blocks.
-DESIGNATE_BINDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/bin
-DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(CARACAL_OPENSTACK_RELEASE)_bin_patch
+DESIGNATE_BINDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/bin
+DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(OPENSTACK_RELEASE)_bin_patch
 
 # install designate into the caracal venv
 #
 # 18.0.0 is the 2024.1 release, verified as the newest tag that is an ancestor of
 # upstream's unmaintained/2024.1. The service moves into
-# $(CARACAL_OPENSTACK_HOME_DIR) with keystone, glance, cinder, nova/placement,
+# $(OPENSTACK_HOME_DIR) with keystone, glance, cinder, nova/placement,
 # neutron, manila and octavia.
 #
 # This also converts the install from `git clone` + `setup.py install` to a pinned
 # pip install, which is what every caracal hop before it does -- there is no .mk in
-# this tree that still reads $(CARACAL_OPS_GITHUB_BRANCH_0*), and stable/2024.1 does
+# this tree that still reads $(OPS_GITHUB_BRANCH_0*), and stable/2024.1 does
 # not exist on the github mirror anyway.
 #
 # Two packages have to be named because designate's requirements.txt asks for
@@ -65,8 +65,8 @@ DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(CARACAL_OPENSTACK_RELEASE)_bin_
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		designate==18.0.0 \
 		PyMySQL \
 		\"oslo.messaging[kafka]\""
@@ -90,27 +90,27 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-designateclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		designate-dashboard==$(DESIGNATE_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-api /usr/bin/designate-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-api-wsgi /usr/bin/designate-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-central /usr/bin/designate-central
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-manage /usr/bin/designate-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-mdns /usr/bin/designate-mdns
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-producer /usr/bin/designate-producer
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-rootwrap /usr/bin/designate-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-sink /usr/bin/designate-sink
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-status /usr/bin/designate-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/designate-worker /usr/bin/designate-worker
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-api /usr/bin/designate-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-api-wsgi /usr/bin/designate-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-central /usr/bin/designate-central
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-manage /usr/bin/designate-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-mdns /usr/bin/designate-mdns
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-producer /usr/bin/designate-producer
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-rootwrap /usr/bin/designate-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-sink /usr/bin/designate-sink
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-status /usr/bin/designate-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-worker /usr/bin/designate-worker
 
 # install custom files
 # for designate
@@ -126,9 +126,9 @@ rootfs_install::
 	$(Q)# them there, and taking them from the install means they track the pinned
 	$(Q)# version instead of going stale silently. cinder.mk and glance.mk do the same.
 	$(Q)# They used to be copied from the git checkout, which pip replaced in #634.
-	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/designate/api-paste.ini $(DESIGNATE_CONF_DIR)/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/designate/rootwrap.conf.sample $(DESIGNATE_CONF_DIR)/rootwrap.conf
-	$(Q)chroot $(ROOTDIR) cp -rf $(CARACAL_OPENSTACK_HOME_DIR)/etc/designate/rootwrap.d $(DESIGNATE_CONF_DIR)/
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/designate/api-paste.ini $(DESIGNATE_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/designate/rootwrap.conf.sample $(DESIGNATE_CONF_DIR)/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/designate/rootwrap.d $(DESIGNATE_CONF_DIR)/
 	$(Q)# policy.yaml.sample is the one file designate's data_files does *not* ship, so
 	$(Q)# there is no venv prefix copy to take. It is generated from upstream's
 	$(Q)# designate-policy-generator.conf and checked in, the same way designate.conf.sample

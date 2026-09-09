@@ -4,8 +4,8 @@
 ROOTFS_DNF += qemu-img cryptsetup lvm2 iscsi-initiator-utils device-mapper-multipath sudo sshpass
 ROOTFS_DNF_NOARCH += nvmetcli targetcli
 
-CINDER_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/cinder
-CINDER_PATCHDIR := $(COREDIR)/cinder/$(CARACAL_OPENSTACK_RELEASE)_patch
+CINDER_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/cinder
+CINDER_PATCHDIR := $(COREDIR)/cinder/$(OPENSTACK_RELEASE)_patch
 
 CINDER_CONFDIR := $(ROOTDIR)/etc/cinder
 
@@ -13,7 +13,7 @@ CINDER_CONFDIR := $(ROOTDIR)/etc/cinder
 # 2023.1 service. cinder 24.5.0 pulls oslo.versionedobjects 3.3.0, oslo.rootwrap 7.2.0,
 # oslo.vmware 4.4.0 and tooz 6.2.0; installing that beside nova/neutron/manila would
 # have upgraded the whole antelope dependency set under them, so the block storage
-# service moves alone into $(CARACAL_OPENSTACK_HOME_DIR) (skyline was the first
+# service moves alone into $(OPENSTACK_HOME_DIR) (skyline was the first
 # occupant, keystone the second, glance the third). Resolved against
 # os-caracal-pip-upper-constraints.txt the two sets are disjoint -- cinder adds 36
 # packages there and changes no version skyline, keystone or glance already holds.
@@ -29,8 +29,8 @@ CINDER_CONFDIR := $(ROOTDIR)/etc/cinder
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			cinder==24.5.0 \
 			python-cinderclient \
 			python-keystoneclient \
@@ -41,17 +41,17 @@ rootfs_install::
 			pywbem"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder /usr/bin/cinder
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-api /usr/bin/cinder-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-backup /usr/bin/cinder-backup
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-manage /usr/bin/cinder-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-rootwrap /usr/bin/cinder-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-rtstool /usr/bin/cinder-rtstool
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-scheduler /usr/bin/cinder-scheduler
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-status /usr/bin/cinder-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-volume /usr/bin/cinder-volume
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-volume-usage-audit /usr/bin/cinder-volume-usage-audit
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/cinder-wsgi /usr/bin/cinder-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder /usr/bin/cinder
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-api /usr/bin/cinder-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-backup /usr/bin/cinder-backup
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-manage /usr/bin/cinder-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-rootwrap /usr/bin/cinder-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-rtstool /usr/bin/cinder-rtstool
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-scheduler /usr/bin/cinder-scheduler
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-status /usr/bin/cinder-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-volume /usr/bin/cinder-volume
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-volume-usage-audit /usr/bin/cinder-volume-usage-audit
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-wsgi /usr/bin/cinder-wsgi
 
 # prepare the build directory
 rootfs_install::
@@ -88,9 +88,9 @@ rootfs_install::
 	$(Q)# through its setup.cfg data_files. They used to be checked into core/cinder
 	$(Q)# verbatim, which meant they only ever moved when someone remembered to re-copy
 	$(Q)# them.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/cinder/api-paste.ini /etc/cinder/api-paste.ini
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/cinder/rootwrap.conf /etc/cinder/rootwrap.conf
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/cinder/resource_filters.json /etc/cinder/resource_filters.json
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/cinder/api-paste.ini /etc/cinder/api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/cinder/rootwrap.conf /etc/cinder/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/cinder/resource_filters.json /etc/cinder/resource_filters.json
 	$(Q)# install security configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/cinder/cinder-sudoers /etc/sudoers.d/cinder
 	$(Q)# install systemd unit files
@@ -99,7 +99,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/cinder/openstack-cinder-volume.service /usr/lib/systemd/system/openstack-cinder-volume.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/cinder/openstack-cinder-backup.service /usr/lib/systemd/system/openstack-cinder-backup.service
 	$(Q)# install rootwrap filters into system cinder deployment configuration
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/cinder/rootwrap.d/volume.filters /etc/cinder/rootwrap.d/
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/cinder/rootwrap.d/volume.filters /etc/cinder/rootwrap.d/
 
 # adjust file ownerships and permissions
 rootfs_install::

@@ -18,8 +18,8 @@ MASAKARI_RUN_DIR := /var/run/masakari
 # was re-derived against that release rather than moved: 10.0.0 adds 'vmoves' to the
 # panels tuple two lines above the change and renames ugettext_lazy to gettext_lazy, so
 # the 8.0.0 hunk's context no longer matches.
-MASAKARI_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
-MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(CARACAL_OPENSTACK_RELEASE)_patch
+MASAKARI_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(OPENSTACK_RELEASE)_patch
 
 # masakari common
 rootfs_install::
@@ -30,7 +30,7 @@ rootfs_install::
 #
 # 17.0.0 and 17.0.1 are the 2024.1 releases, verified as the newest tags that are
 # ancestors of upstream's unmaintained/2024.1. Both services move into
-# $(CARACAL_OPENSTACK_HOME_DIR) together: masakarimonitors is the only consumer of the
+# $(OPENSTACK_HOME_DIR) together: masakarimonitors is the only consumer of the
 # antelope venv's libvirt-python and the only thing still holding the
 # /usr/bin/privsep-helper symlink open, so leaving it behind would carry two
 # TEMPORARY arrangements into the next hop for no gain -- its three carried patches
@@ -38,7 +38,7 @@ rootfs_install::
 #
 # This also converts the install from `git clone` + `setup.py install` to a pinned pip
 # install, which is what every caracal hop before it does -- there is no .mk in this
-# tree that still reads $(CARACAL_OPS_GITHUB_BRANCH_0*), and stable/2024.1 does not
+# tree that still reads $(OPS_GITHUB_BRANCH_0*), and stable/2024.1 does not
 # exist on the github mirror anyway. The clone was pinned to nothing but a branch
 # name, so the same build inputs produced a different masakari on different days.
 #
@@ -58,8 +58,8 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		masakari==17.0.0 \
 		masakari-monitors==17.0.1 \
 		libvirt-python \
@@ -70,15 +70,15 @@ rootfs_install::
 	$(Q)# Link binaries -- masakari's four console_scripts plus its one wsgi_script,
 	$(Q)# and masakarimonitors' four. The units keep naming /usr/bin/*, so the
 	$(Q)# retarget here is the whole of their move.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-api /usr/bin/masakari-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-engine /usr/bin/masakari-engine
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-manage /usr/bin/masakari-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-status /usr/bin/masakari-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-wsgi /usr/bin/masakari-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-hostmonitor /usr/bin/masakari-hostmonitor
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-instancemonitor /usr/bin/masakari-instancemonitor
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-introspectiveinstancemonitor /usr/bin/masakari-introspectiveinstancemonitor
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/masakari-processmonitor /usr/bin/masakari-processmonitor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-api /usr/bin/masakari-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-engine /usr/bin/masakari-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-manage /usr/bin/masakari-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-status /usr/bin/masakari-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-wsgi /usr/bin/masakari-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-hostmonitor /usr/bin/masakari-hostmonitor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-instancemonitor /usr/bin/masakari-instancemonitor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-introspectiveinstancemonitor /usr/bin/masakari-introspectiveinstancemonitor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-processmonitor /usr/bin/masakari-processmonitor
 
 # the osc plugin and the dashboard
 #
@@ -106,12 +106,12 @@ MASAKARI_DASHBOARD_VER := 10.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-masakariclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		masakari-dashboard==$(MASAKARI_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
@@ -125,7 +125,7 @@ rootfs_install::
 	$(Q)# there, and taking it from the install means it tracks the pinned version
 	$(Q)# instead of going stale silently. cinder.mk, glance.mk and designate.mk do
 	$(Q)# the same.
-	$(Q)chroot $(ROOTDIR) cp -f $(CARACAL_OPENSTACK_HOME_DIR)/etc/masakari/api-paste.ini $(MASAKARI_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/masakari/api-paste.ini $(MASAKARI_CONF_DIR)/api-paste.ini
 	$(Q)# -f: treat the destination as the full target path. Without it the install
 	$(Q)# script takes masakari.conf.def for a directory and drops the sample inside
 	$(Q)# it, so config_masakari.cpp's LoadConfig() finds nothing to read.

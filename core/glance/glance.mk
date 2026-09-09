@@ -20,8 +20,8 @@ ROOTFS_DNF += qemu-img
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			glance==28.2.0 \
 			os-brick \
 			python-cinderclient \
@@ -30,19 +30,19 @@ rootfs_install::
 			pysendfile"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance /usr/bin/glance
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-api /usr/bin/glance-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-cache-cleaner /usr/bin/glance-cache-cleaner
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-cache-manage /usr/bin/glance-cache-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-cache-prefetcher /usr/bin/glance-cache-prefetcher
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-cache-pruner /usr/bin/glance-cache-pruner
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-control /usr/bin/glance-control
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-manage /usr/bin/glance-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-replicator /usr/bin/glance-replicator
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-rootwrap /usr/bin/glance-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-scrubber /usr/bin/glance-scrubber
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-status /usr/bin/glance-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/glance-wsgi-api /usr/bin/glance-wsgi-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance /usr/bin/glance
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-api /usr/bin/glance-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-cache-cleaner /usr/bin/glance-cache-cleaner
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-cache-manage /usr/bin/glance-cache-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-cache-prefetcher /usr/bin/glance-cache-prefetcher
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-cache-pruner /usr/bin/glance-cache-pruner
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-control /usr/bin/glance-control
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-manage /usr/bin/glance-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-replicator /usr/bin/glance-replicator
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-rootwrap /usr/bin/glance-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-scrubber /usr/bin/glance-scrubber
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-status /usr/bin/glance-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-wsgi-api /usr/bin/glance-wsgi-api
 
 # prepare the build directory
 rootfs_install::
@@ -79,22 +79,22 @@ rootfs_install::
 	$(Q)# which meant they only ever moved when someone remembered to re-copy them: the
 	$(Q)# carried metadefs were still glance 26.1.0's, three files behind 2024.1, and the
 	$(Q)# carried paste config still had the pre-bobcat pipeline layout.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/glance/glance-api-paste.ini /etc/glance/glance-api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/glance/glance-api-paste.ini /etc/glance/glance-api-paste.ini
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-cache.conf.sample /etc/glance/glance-cache.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-scrubber.conf.sample /etc/glance/glance-scrubber.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance-swift.conf /etc/glance/glance-swift.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance-image-import.conf.sample /etc/glance/glance-image-import.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-rootwrap.conf /etc/glance/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/schema-image.json /etc/glance/schema-image.json
-	$(Q)chroot $(ROOTDIR) bash -c "install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/glance/metadefs/*.json /etc/glance/metadefs/"
+	$(Q)chroot $(ROOTDIR) bash -c "install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/glance/metadefs/*.json /etc/glance/metadefs/"
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-api.service /usr/lib/systemd/system/openstack-glance-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-scrubber.service /usr/lib/systemd/system/openstack-glance-scrubber.service
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/run/glance
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/log/glance
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/glance/glance-sudoers /etc/sudoers.d/glance
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/glance/rootwrap.d
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/glance/rootwrap.d/glance_cinder_store.filters /etc/glance/rootwrap.d
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/os-brick/rootwrap.d/os-brick.filters /etc/glance/rootwrap.d
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/glance/rootwrap.d/glance_cinder_store.filters /etc/glance/rootwrap.d
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/os-brick/rootwrap.d/os-brick.filters /etc/glance/rootwrap.d
 
 # adjust file ownerships and permissions
 rootfs_install::

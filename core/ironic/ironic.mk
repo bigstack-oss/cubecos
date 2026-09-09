@@ -69,8 +69,8 @@ ROOTFS_DNF_NOARCH += syslinux-tftpboot
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		ironic==$(IRONIC_VER) \
 		ironic-inspector==$(IRONIC_INSP_VER)"
 	$(Q)# clean up dns configurations after downloading packages
@@ -79,24 +79,24 @@ rootfs_install::
 	$(Q)# built-in dnsmasq PXE filter that goes with the new "agent" inspect
 	$(Q)# interface. It is deliberately left unlinked: we stay on ironic-inspector
 	$(Q)# for introspection (see IRONIC_INSP_VER), so nothing would start it.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic /usr/bin/ironic
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-api /usr/bin/ironic-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-api-wsgi /usr/bin/ironic-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-conductor /usr/bin/ironic-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-dbsync /usr/bin/ironic-dbsync
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-rootwrap /usr/bin/ironic-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-status /usr/bin/ironic-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-inspector /usr/bin/ironic-inspector
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-inspector-api-wsgi /usr/bin/ironic-inspector-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-inspector-conductor /usr/bin/ironic-inspector-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-inspector-dbsync /usr/bin/ironic-inspector-dbsync
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-inspector-migrate-data /usr/bin/ironic-inspector-migrate-data
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-inspector-rootwrap /usr/bin/ironic-inspector-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic /usr/bin/ironic
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-api /usr/bin/ironic-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-api-wsgi /usr/bin/ironic-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-conductor /usr/bin/ironic-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-dbsync /usr/bin/ironic-dbsync
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-rootwrap /usr/bin/ironic-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-status /usr/bin/ironic-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector /usr/bin/ironic-inspector
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-api-wsgi /usr/bin/ironic-inspector-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-conductor /usr/bin/ironic-inspector-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-dbsync /usr/bin/ironic-inspector-dbsync
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-migrate-data /usr/bin/ironic-inspector-migrate-data
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-rootwrap /usr/bin/ironic-inspector-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
 	$(Q)# provided by networking-baremetal, installed with neutron -- so it follows
 	$(Q)# neutron's venv, not ironic's. Both are caracal now, so the split #1194 had
 	$(Q)# to reason about is gone; the link is unchanged.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
 
 # install the ironic web ui plugin
 #
@@ -110,8 +110,8 @@ rootfs_install::
 	$(Q)# --no-build-isolation: ironic-ui pulls horizon, whose sdist-only XStatic
 	$(Q)# dependencies cannot be built against a current setuptools. See the note by
 	$(Q)# the venv bootstrap in core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		ironic-ui==$(IRONIC_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages
@@ -159,7 +159,7 @@ rootfs_install::
 	$(Q)# 24.1.5's "DEPRECATED for removal: Ironic no longer needs root." notice
 	$(Q)# arrives without a repo edit. ironic-inspector carries no data_files at all,
 	$(Q)# so its two rootwrap files stay checked in.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.conf $(IRONIC_CONF_DIR)/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.conf $(IRONIC_CONF_DIR)/rootwrap.conf
 	$(Q)# rootwrap.d/ironic-utils.filters is the other data_file, and it is
 	$(Q)# deliberately NOT installed any more. 24.1.5 emptied it -- ironic's last two
 	$(Q)# run_as_root=True call sites (mount/umount in ironic/common/utils.py) are
@@ -177,7 +177,7 @@ rootfs_install::
 	$(Q)# ironic_lib/disk_utils.py and ironic_lib/disk_partitioner.py run with
 	$(Q)# run_as_root=True (blkid, blockdev, lsblk, qemu-img, wipefs, sgdisk, partprobe,
 	$(Q)# mkfs, dd, parted, ...), so ironic-rootwrap denies all of them if it is absent.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.d/ironic-lib.filters $(IRONIC_CONF_DIR)/rootwrap.d/ironic-lib.filters
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.d/ironic-lib.filters $(IRONIC_CONF_DIR)/rootwrap.d/ironic-lib.filters
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/ironic/inspector-rootwrap.conf $(IRONIC_INSP_CONF_DIR)/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/ironic/ironic-inspector.filters $(IRONIC_INSP_CONF_DIR)/rootwrap.d/ironic-inspector.filters
 	$(Q)# install security configurations
