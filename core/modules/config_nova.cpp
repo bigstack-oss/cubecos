@@ -18,6 +18,7 @@
 
 #include <cube/config_file.h>
 #include <cluster.hpp>
+#include <filesystem.hpp>
 #include <cube/systemd_util.h>
 #include <constant.hpp>
 
@@ -105,6 +106,11 @@ static bool s_bConfigChanged = false;
 static bool s_bLrChanged = false;
 static bool s_bEndpointChanged = false;
 static bool s_bCellChanged = false;
+
+// Per-instance CPU and memory for Watcher's prometheus datasource. hex_sdk writes a
+// node_exporter textfile from the local domains; config_prometheus.cpp points
+// node_exporter at the directory and owns the scrape.
+#define INSTANCE_METRICS_CRON "/etc/cron.d/prometheus_instance_metrics"
 
 static CubeRole_e s_eCubeRole;
 
@@ -724,6 +730,36 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
     return true;
 }
 
+// Watcher needs per-VM CPU and memory, and the only place those can be read is the node
+// running the domains -- which is why this lives in config_nova.cpp rather than beside the
+// rest of the prometheus wiring. `hex_sdk watcher_instance_metrics` enumerates the local
+// libvirt domains and writes them as a node_exporter textfile; the exporter, its textfile
+// directory and the scrape job are config_prometheus.cpp's.
+//
+// Installed for compute-capable roles only. A control-only node has no domains, so the
+// generator would write an empty file and the cron would be noise; nova's own compute
+// services are gated the same way just below.
+static bool
+WriteInstanceMetricsCronJob(bool enabled)
+{
+    if (!enabled) {
+        unlink(INSTANCE_METRICS_CRON);
+        return true;
+    }
+
+    std::string fsError;
+
+    const std::vector<std::string> cron = {
+        "* * * * * root " HEX_SDK " watcher_instance_metrics\n",
+    };
+    if (!WriteFile(fsError, INSTANCE_METRICS_CRON, cron)) {
+        HexLogError("%s", fsError.c_str());
+        return false;
+    }
+
+    return true;
+}
+
 static bool
 NovaService(bool enabled)
 {
@@ -994,6 +1030,9 @@ Commit(bool modified, int dryLevel)
 
     // 4. Service kickoff
     NovaService(s_enabled);
+    WriteInstanceMetricsCronJob(s_enabled && IsCompute(s_eCubeRole));
+    if (s_enabled && IsCompute(s_eCubeRole))
+        HexUtilSystemF(0, 30, HEX_SDK " watcher_instance_metrics");
     WriteLogRotateConf(nova_log_conf);
     WriteLogRotateConf(placement_log_conf);
 

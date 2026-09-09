@@ -99,11 +99,10 @@ static const char NAME[] = "prometheus";
 // The textfile collector's directory. node_exporter reads every *.prom in here on each
 // scrape, which is how the per-instance metrics Watcher needs reach Prometheus without a
 // separate exporter, port or scrape job -- this node's target already carries the fqdn
-// label. The writer is `hex_sdk watcher_instance_metrics` -- in sdk_watcher.sh, because
-// Watcher is the only consumer -- and WriteInstanceMetricsCronJob below runs it. Keep
+// label. The file itself is written by `hex_sdk watcher_instance_metrics`, which
+// config_nova.cpp crons on compute-capable nodes -- that is where the domains are. Keep
 // this path in step with that function's default.
 #define NODE_TEXTFILE_DIR "/var/lib/node_exporter/textfile"
-#define INSTANCE_METRICS_CRON "/etc/cron.d/prometheus_instance_metrics"
 #define NODE_EXPORTER_PORT "9101"
 #define BLACKBOX_EXPORTER "blackbox_exporter"
 #define BLACKBOX_EXPORTER_DEF "/etc/default/blackbox_exporter"
@@ -482,31 +481,6 @@ WriteExporterTargetsCronJob()
     return true;
 }
 
-// Refreshes the per-instance textfile on the same cadence as the target lists.
-//
-// The writer is `hex_sdk watcher_instance_metrics` and lives in sdk_watcher.sh, because
-// Watcher is the only consumer of those two series and hex_sdk resolves a module from the
-// function's own first token. The cron is written *here* rather than in
-// config_watcher.cpp for a role reason that overrides the tidier grouping: that module
-// returns early unless IsControl, while the instances whose CPU and memory this reports
-// live on compute nodes. This module's Commit runs on every role, which is the same
-// reason the exporters themselves are handled here.
-static bool
-WriteInstanceMetricsCronJob()
-{
-    std::string fsError;
-
-    const std::vector<std::string> cron = {
-        "* * * * * root " HEX_SDK " watcher_instance_metrics\n",
-    };
-    if (!WriteFile(fsError, INSTANCE_METRICS_CRON, cron)) {
-        HexLogError("%s", fsError.c_str());
-        return false;
-    }
-
-    return true;
-}
-
 // The schema is thanos's own EndpointConfig, not prometheus file_sd: a bare list of
 // targets parses and then silently discovers nothing.
 static bool
@@ -718,10 +692,6 @@ Commit(bool modified, int dryLevel)
     // that is the whole point of them -- so their config and their units are handled on
     // every role, and only the scrape side below is control-only.
     WriteExporterDefaults(enabled, G(MGMT_ADDR));
-    // Same reasoning: written on every role, because the VMs it reports on are not on the
-    // control nodes. The generator no-ops where there is no virsh.
-    WriteInstanceMetricsCronJob();
-    HexUtilSystemF(0, 30, HEX_SDK " watcher_instance_metrics");
     SystemdCommitService(true, NODE_EXPORTER);
     SystemdCommitService(true, IPMI_EXPORTER);
     SystemdCommitService(enabled, BLACKBOX_EXPORTER);
