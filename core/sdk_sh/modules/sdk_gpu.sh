@@ -55,55 +55,6 @@ gpu_is_installed()
     /usr/bin/nvidia-smi >/dev/null
 }
 
-gpu_vf_enable()
-{
-    local bus=${1:-ALL}
-
-    $NVIDIA_SRIOV -e $bus
-
-    # persist the change after reboot
-    rm -f /etc/modprobe.d/gpu-vfio.conf
-
-    for g in $(find /sys/kernel/iommu_groups/* -maxdepth 0 -type d 2>/dev/null | sort -V); do
-        for d in $g/devices/*; do
-            source $d/uevent
-            # nvidia vender id: 10de
-            if echo $PCI_ID | grep -iq "10de:"; then
-                pci_id=$(echo $PCI_ID | tr '[:upper:]' '[:lower:]')
-                echo "set device $pci_id at $PCI_SLOT_NAME driver to nvidia"
-                echo $PCI_SLOT_NAME > /sys/bus/pci/drivers/$DRIVER/unbind 2>/dev/null
-                echo $PCI_SLOT_NAME > /sys/bus/pci/drivers/nvidia/bind 2>/dev/null
-            fi
-        done
-    done
-}
-
-gpu_vf_disable()
-{
-    local bus=${1:-ALL}
-
-    $NVIDIA_SRIOV -d $bus
-
-    # pci passthrough support
-    modprobe vfio-pci
-
-    # persist the change after reboot
-    echo "options vfio-pci ids=$(gpu_iommu_list)" > /etc/modprobe.d/gpu-vfio.conf
-
-    for g in $(find /sys/kernel/iommu_groups/* -maxdepth 0 -type d 2>/dev/null | sort -V); do
-        for d in $g/devices/*; do
-            source $d/uevent
-            # nvidia vender id: 10de
-            if echo $PCI_ID | grep -iq "10de:"; then
-                pci_id=$(echo $PCI_ID | tr '[:upper:]' '[:lower:]')
-                echo "set device $pci_id at $PCI_SLOT_NAME driver to vfio-pci"
-                echo $PCI_SLOT_NAME > /sys/bus/pci/drivers/$DRIVER/unbind 2>/dev/null
-                echo $PCI_SLOT_NAME > /sys/bus/pci/drivers/vfio-pci/bind 2>/dev/null
-            fi
-        done
-    done
-}
-
 gpu_service_config()
 {
     if gpu_is_installed; then
@@ -113,6 +64,30 @@ gpu_service_config()
         /usr/bin/systemctl stop nvidia-vgpud
         /usr/bin/systemctl stop nvidia-vgpu-mgr
     fi
+}
+
+# Renders the per-card resource types recorded in the truth file for
+# gpu_device_status. Replaces the pre-#894 pair (gpu_nova_type_show reading
+# nova.conf's mdev-era enabled_vgpu_types, and gpu_supported_type_list emitting
+# mdev "nvidia-<decimal>" names) - neither of which reflects what the three
+# current resource types actually use, and neither of which reads config.json.
+gpu_resource_summary()
+{
+    local devices
+    if ! devices=$(gpu_device_list); then
+        echo "GPU resource configuration unavailable"
+        return 0
+    fi
+
+    if [ "$(echo "$devices" | jq -r 'length')" = "0" ]; then
+        echo "No GPU cards reported"
+        return 0
+    fi
+
+    echo "$devices" | jq -r '.[] |
+        "pci: \(.pciAddress), type: \(.type), status: \(.status), " +
+        "allocation: \(if .allocation == null then "-" else "\(.allocation.current)/\(.allocation.total)" end), " +
+        "name: \(.name)"'
 }
 
 gpu_device_status()
@@ -139,10 +114,8 @@ gpu_device_status()
         $NVIDIA_SMI vgpu
         printf "\n"
         $NVIDIA_SMI vgpu -m
-        printf "\nVirtualization:\n"
-        gpu_nova_type_show
-        printf "\nSupported vGPU types:\n"
-        VERBOSE=1 gpu_supported_type_list
+        printf "\nGPU resource types:\n"
+        gpu_resource_summary
     else
         echo "No Nvidia GPU managed by the host"
     fi
@@ -156,44 +129,6 @@ gpu_device_status()
     hex_sdk -v -f none health_cyborg_report
 
     printf "\n"
-}
-
-gpu_nova_type_show()
-{
-    local type=$(grep enabled_vgpu_types /etc/nova/nova.conf | awk '{print $3}')
-    if [ -n "$type" ]; then
-        echo "Using vGPU type \"$type\""
-    else
-        echo "No vGPU type configured"
-    fi
-}
-
-gpu_supported_type_list()
-{
-    for t in $($NVIDIA_SMI vgpu -s -v | grep "vGPU Type ID" | awk '{print $5}' | sort | uniq) ; do
-        local type=$(echo $t | awk '{print "nvidia-" strtonum($0)}')
-        if [ -z "$t" ]; then
-            continue
-        fi
-        if [ "$VERBOSE" == "1" ]; then
-            local desc=$($NVIDIA_SMI vgpu -s -v | grep $t -A 12 | head -n 13)
-            local name=$(echo "$desc"| grep "Name" | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print s }' | awk '{$1=$1;print}')
-            local heads=$(echo "$desc"| grep "Display Heads" | awk '{ print $4 }')
-            local frl=$(echo "$desc"| grep "Frame Rate Limit" | awk '{ print $5 }')
-            local buffer=$(echo "$desc"| grep "FB Memory" | awk '{ print $4 "M" }')
-            local max_x=$(echo "$desc"| grep "Maximum X Resolution" | awk '{ print $5 }')
-            local max_y=$(echo "$desc"| grep "Maximum Y Resolution" | awk '{ print $5 }')
-            local max_ins=$(echo "$desc"| grep "Max Instances" | awk '{ print $4 }')
-            printf "type: %s, name: %s, spec: heads=%s, frame_rate_limit=%s, framebuffer=%s, max_resolution=%sx%s, max_instance=%s\n" "$type" "$name" "$heads" "$frl" "$buffer" "$max_x" "$max_y" "$max_ins"
-        else
-            echo $type
-        fi
-    done
-}
-
-gpu_default_type_get()
-{
-    $HEX_SDK gpu_supported_type_list | head -n 1
 }
 
 # Slices `nvidia-smi -q` / `nvidia-smi vgpu -q` (on stdin) into whole records and
@@ -1095,9 +1030,10 @@ gpu_resource_set_check()
 # exact moment - retry briefly to absorb that race. A failure that isn't this
 # specific message is not retried and fails immediately.
 #
-# Unlike gpu_vf_disable() near the top of this file, this touches only the
-# given PF: it never rebinds anything to vfio-pci and never writes
-# modprobe.d persistence.
+# This touches only the given PF: it never rebinds anything to vfio-pci and
+# never writes modprobe.d persistence. The node-wide gpu_vf_disable that did
+# both was removed in #827 - it acted on every card behind config.json's back
+# and fought Commit()'s per-card re-apply on the next boot.
 gpu_sriov_disable_vfs()
 {
     local pci_addr="$1"
