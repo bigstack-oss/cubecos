@@ -26,7 +26,7 @@ BLKLST_DNF += python3-django    # CVE-2022-28347, CVE-2023-31047, CVE-2025-64459
 ROOTFS_PIP += python-jose       # CVE-2024-33663 Upgrade to version: 3.4.0
 # CVE-2022-2996. The rpm stays blacklisted; the ROOTFS_PIP entry that used to
 # replace it with 0.12.0 is gone. scciclient backs ironic's iRMC driver, ironic runs
-# in the antelope venv now, and core/ironic deliberately does not install it there --
+# in the openstack venv, and core/ironic deliberately does not install it there --
 # so the system python 3.9 copy had no importer left. Nothing in the image carries
 # scciclient at all now, which is the stronger answer to the CVE.
 BLKLST_DNF += python3-scciclient
@@ -217,23 +217,6 @@ $(call PROJ_INSTALL_DNF_NOARCH,-d "$(ROOTFS_DNF_DL_FROM)","$(ROOTFS_DNF)")
 $(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
 $(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_01)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
 
-# install python 3.10 for openstack antelope
-rootfs_install::
-	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
-	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
-	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
-	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
-	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
-	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-3.10
-	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-3.10/Python-3.10.20.tgz https://www.python.org/ftp/python/3.10.20/Python-3.10.20.tgz
-	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-3.10/Python-3.10.20.tgz -C /usr/src/python-3.10
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-3.10/Python-3.10.20 && ./configure --enable-optimizations"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-3.10/Python-3.10.20 && make altinstall"
-	$(Q)umount -l $(ROOTDIR)/dev || true
-	$(Q)# ensure python 3.10 is successfully built
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python3.10 ]
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip3.10 ]
-
 # install python 3.11 for openstack caracal
 rootfs_install::
 	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
@@ -251,29 +234,19 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(CARACAL_PYTHON_VER) ]
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(CARACAL_PYTHON_VER) ]
 
-# set up the execution context for openstack antelope
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p /opt/openstack-antelope
-	$(Q)chroot $(ROOTDIR) python3.10 -m venv /opt/openstack-antelope
-	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)/opt/openstack-antelope/
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && pip install --upgrade pip"
-	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
-
-# NOTE: setuptools in this venv is pinned to 65.7.0 by the constraints file -- the
-# version antelope's own upper-constraints names -- because setuptools 82 deleted
-# pkg_resources and the 2023-era services still import it (see cubecos#607/#1080).
+# NOTE: why the setuptools pin is applied at venv creation, below, rather than being
+# left to whichever later `pip install -c` happens to pull setuptools in as a
+# dependency. (Which version, and why that number, is the NOTE after the venv block.)
 #
-# The pin is applied here, at creation, rather than being left to whichever later
-# `pip install -c` happens to pull setuptools in as a dependency. It used to be:
-# `pip install --upgrade pip setuptools` put the *current* setuptools in the venv
-# (84.0.0 as of this writing) and nothing constrained it until some service install
-# further down resolved setuptools==65.7.0 and downgraded it. Everything installed in
-# between ran against a setuptools with no pkg_resources -- and core/ceph/ceph.mk is
-# in between, because ceph sits ahead of keystone in HEAVY_COMPONENTS. Its rados/rbd
-# bindings are a `setup.py install`, whose egg_info step loads pbr's entry point, and
-# pbr imports pkg_resources: "ModuleNotFoundError: No module named 'pkg_resources'".
-# Note also that this only broke once setuptools 82 shipped, so it fails on a date,
-# not on a commit -- pinning at creation is what removes that.
+# It used to be: `pip install --upgrade pip setuptools` put the *current* setuptools in
+# the venv and nothing constrained it until some service install further down resolved
+# the pinned version and downgraded it. Everything installed in between ran against a
+# setuptools with no pkg_resources -- and core/ceph/ceph.mk is in between, because ceph
+# sits ahead of keystone in HEAVY_COMPONENTS. Its rados/rbd bindings are a
+# `setup.py install`, whose egg_info step loads pbr's entry point, and pbr imports
+# pkg_resources: "ModuleNotFoundError: No module named 'pkg_resources'". Note also that
+# this only broke once setuptools 82 shipped, so it fails on a date, not on a commit --
+# pinning at creation is what removes that.
 #
 # That pin does *not* reach pip's PEP-517 build environments. pip builds every sdist
 # in a throwaway overlay and resolves the default backend requirement
@@ -285,10 +258,11 @@ rootfs_install::
 # sdist-only, and seven of those are XStatic packages whose setup.py imports a
 # pkg_resources-declared namespace, so they die in the overlay with
 # "ModuleNotFoundError: No module named 'pkg_resources'". The fix is
-# --no-build-isolation, which builds against this venv's own 65.7.0 instead. It is
+# --no-build-isolation, which builds against this venv's own pinned setuptools
+# instead. It is
 # spelled out on each pip install that needs it rather than turned on venv-wide,
 # because the requirement is not universal -- mysqlclient 2.2.8 is the counter-example
-# and needs a setuptools *newer* than 65.7.0, so it keeps the default isolation.
+# and needs a setuptools newer than the pin, so it keeps the default isolation.
 #
 # One ordering caveat: with --no-build-isolation an XStatic sdist can only be built
 # while no other XStatic package is installed yet, or the installed pkg_resources
