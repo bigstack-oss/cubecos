@@ -182,12 +182,20 @@ function lpesc(v) {
     gsub(/ /, "\\ ", v)
     return v
 }
+# Per-second rate of a libvirt counter, from the previous run of this function. Empty
+# unless there are two samples and a positive interval -- a VM that booted since the last
+# run publishes its first rate one run later, which is what monasca did too. A counter
+# below its previous value means the domain was recreated, so the delta is meaningless.
+function rate(key, cur) {
+    if (cur == "" || dt <= 0 || !(key in prevv) || cur + 0 < prevv[key]) return ""
+    return (cur - prevv[key]) / dt
+}
 function reset() {
     uuid = ""; domname = ""; name = ""; project = ""; project_name = ""; vcpus = ""
     in_meta = 0
     delete st
 }
-function flush(   i, cnt, dev, extra, avail, unused, usable, tags, pct) {
+function flush(   i, cnt, dev, extra, avail, unused, usable, tags, dtags, pct, r) {
     if (uuid == "") return
     # A domain libvirt is running but nova did not create. Nothing in CubeCOS makes one,
     # but the label still has to be defined rather than left holding the previous domain.
@@ -245,32 +253,65 @@ function flush(   i, cnt, dev, extra, avail, unused, usable, tags, pct) {
     # the ones monasca published, so re-sourcing those templates is a one-line dbrp change
     # and every threshold an operator has tuned keeps meaning what it meant. Only the
     # database moves.
-    if (st["cpu.time"] != "")
-        newcpu[uuid] = st["cpu.time"]
     tags = sprintf("resource_id=%s,tenant_id=%s,tenant_name=%s,vm_name=%s",
                    lpesc(uuid), lpesc(project), lpesc(project_name), lpesc(name))
 
-    # Two samples and a positive interval, or there is no rate to report -- a VM that
-    # booted since the last run publishes its first CPU point one run later, which is what
-    # monasca did too. The counter going backwards means the domain was recreated.
-    if (st["cpu.time"] != "" && vcpus + 0 > 0 && dt > 0 &&
-        (uuid in prev_cpu) && st["cpu.time"] + 0 >= prev_cpu[uuid]) {
-        pct = (st["cpu.time"] - prev_cpu[uuid]) / (dt * 1e9) * 100 / vcpus
-        if (pct > 100) pct = 100
-        printf "vm.cpu.utilization_norm_perc,%s value=%.6f %s\n", tags, pct, NOW
+    if (st["cpu.time"] != "") {
+        r = rate("cpu:" uuid, st["cpu.time"])
+        if (r != "" && vcpus + 0 > 0) {
+            pct = r / 1e9 * 100 / vcpus
+            if (pct > 100) pct = 100
+            printf "vm.cpu.utilization_norm_perc,%s value=%.6f %s\n", tags, pct, NOW
+        }
+        newst["cpu:" uuid] = st["cpu.time"]
     }
     # usable / available, the figure the monasca libvirt check publishes -- see the header.
     if (avail + 0 > 0 && usable != "")
         printf "vm.mem.free_perc,%s value=%.6f %s\n", tags, usable / avail * 100, NOW
+
+    # host_alive_status is what stats_inactive_vm_drop keys its pruning on: a resource_id
+    # that has stopped appearing is one whose series can go. Published for every running
+    # domain, which is the same statement monasca made with it.
+    printf "vm.host_alive_status,%s value=0 %s\n", tags, NOW
+
+    # The four per-second rates the UI reads through hex_sdk stats_topten_vm and
+    # stats_vm_chart. Pre-divided, unlike their Prometheus counterparts, because InfluxQL
+    # has no rate operator worth using -- which is the reason monasca published them this
+    # way and the reason those queries are shaped around it.
+    cnt = st["block.count"] + 0
+    for (i = 0; i < cnt; i++) {
+        dev = st["block." i ".name"]
+        if (dev == "") continue
+        dtags = tags sprintf(",device=%s", lpesc(dev))
+        r = rate("brd:" uuid ":" dev, st["block." i ".rd.bytes"])
+        if (r != "") printf "vm.io.read_bytes_sec,%s value=%.6f %s\n", dtags, r, NOW
+        r = rate("bwr:" uuid ":" dev, st["block." i ".wr.bytes"])
+        if (r != "") printf "vm.io.write_bytes_sec,%s value=%.6f %s\n", dtags, r, NOW
+        newst["brd:" uuid ":" dev] = st["block." i ".rd.bytes"]
+        newst["bwr:" uuid ":" dev] = st["block." i ".wr.bytes"]
+    }
+
+    cnt = st["net.count"] + 0
+    for (i = 0; i < cnt; i++) {
+        dev = st["net." i ".name"]
+        if (dev == "") continue
+        dtags = tags sprintf(",device=%s", lpesc(dev))
+        r = rate("nrx:" uuid ":" dev, st["net." i ".rx.bytes"])
+        if (r != "") printf "vm.net.in_bytes_sec,%s value=%.6f %s\n", dtags, r, NOW
+        r = rate("ntx:" uuid ":" dev, st["net." i ".tx.bytes"])
+        if (r != "") printf "vm.net.out_bytes_sec,%s value=%.6f %s\n", dtags, r, NOW
+        newst["nrx:" uuid ":" dev] = st["net." i ".rx.bytes"]
+        newst["ntx:" uuid ":" dev] = st["net." i ".tx.bytes"]
+    }
 }
 BEGIN {
-    # The previous CPU sample, for the rate the two Kapacitor templates consume. In /run
-    # rather than /var: a counter delta across a reboot is meaningless, so losing it there
-    # is correct, and the first run after boot simply publishes no CPU point.
+    # The previous sample of every counter that a consumer wants as a per-second rate. In
+    # /run rather than /var: a counter delta across a reboot is meaningless, so losing it
+    # there is correct, and the first run after boot simply publishes no rate.
     while ((getline line < STATE) > 0) {
         split(line, a, " ")
         if (a[1] == "@") { prev_t = a[2] + 0 ; continue }
-        prev_cpu[a[1]] = a[2] + 0
+        prevv[a[1]] = a[2] + 0
     }
     close(STATE)
     dt = NOW - prev_t
@@ -324,8 +365,8 @@ in_meta && /<nova:vcpus>/   { vcpus = tagval($0, "nova:vcpus") }
 in_meta && /<nova:project / { project = attrval($0, "uuid") ; project_name = tagval($0, "nova:project") }
 END {
     printf "@ %s\n", NOW > STATE
-    for (u in newcpu)
-        printf "%s %s\n", u, newcpu[u] > STATE
+    for (k in newst)
+        printf "%s %s\n", k, newst[k] > STATE
     close(STATE)
 }
 ' > "$lp" || { rm -f "$out.tmp" ; RemoveTempFiles ; return 1 ; }
