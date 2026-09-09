@@ -225,6 +225,7 @@ hex_cli_MODULES += cli_app.o
 hex_cli_MODULES += cli_k3s.o
 hex_cli_MODULES += cli_agent.o
 hex_cli_MODULES += cli_advisor.o
+hex_cli_MODULES += cli_storage_usage.o
 
 hex_cli_LIBS += $(PROJ_LIBDIR)/libcube_sdk.a
 
