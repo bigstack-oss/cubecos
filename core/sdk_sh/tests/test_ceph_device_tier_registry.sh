@@ -16,6 +16,11 @@
 #                                   rather than an empty answer when it cannot
 #                                   read, because the CLI refuses to decide on
 #                                   an answer nobody got
+#   _ceph_device_tier_health_ok  -- refuses on the checks that mean redundancy
+#                                   or availability is compromised right now,
+#                                   and only warns on the rest, so that one
+#                                   slow op cannot block a tier command for a
+#                                   day
 #
 # That last property is what the whole CLI layer rests on: it is the only
 # gatekeeper for device tier input (an indexed tuning array has no hex_config
@@ -110,6 +115,22 @@ JSON
     DEAD_PAT='^$'
     OS_DEAD=0
     REGISTRY_ADD_RC=0
+    HEALTH_STATUS=HEALTH_OK
+    HEALTH_CHECKS=
+    RECOVERING=null
+}
+
+# `ceph -s -f json` as this cluster model sees it. The checks are an object
+# keyed by check name, which is the shape _ceph_device_tier_health_ok reads.
+status_json() {
+    local checks="{}" n=
+    for n in $HEALTH_CHECKS ; do
+        checks=$(echo "$checks" | jq -c --arg n "$n" \
+            '. + {($n): {severity: "HEALTH_WARN", summary: {message: "stub"}}}')
+    done
+    jq -n -c --arg s "$HEALTH_STATUS" --argjson c "$checks" --arg r "$RECOVERING" \
+        '{health: {status: $s, checks: $c},
+          pgmap: {recovering_objects_per_sec: (if $r == "null" then null else ($r | tonumber) end)}}'
 }
 
 # osd tree, built from the class model so that a class change is visible to the
@@ -133,7 +154,7 @@ fake_ceph() {
     local pool= attr= id=
     case "$cmd" in
         '-s')                          : ;;
-        '-s -f json')                  echo '{"health":{"status":"HEALTH_OK"},"pgmap":{"recovering_objects_per_sec":null}}' ;;
+        '-s -f json')                  status_json ;;
         'osd crush class ls')          cut -d: -f2 "$TMP/classes" | awk 'length && !seen[$0]++' | jq -R . | jq -s -c . ;;
         'osd crush rule ls')           cat "$TMP/rules" ;;
         'osd pool ls')                 cat "$TMP/pools" ;;
@@ -381,6 +402,117 @@ ck "$(echo "$OUT" | sort | tr '\n' ',')" "bronze,gold," "3f the union of Ceph an
 reset_cluster
 rm -f "$SETTINGS_TXT"
 ck "$(ceph_device_tier_names)" "gold" "3f an unreadable registry still lists what Ceph has"
+
+# ==== the health gate (#840 WP-5) ========================================
+#
+# Requiring HEALTH_OK is not usable: measured on the 1cc, one BlueStore slow
+# operation raises BLUESTORE_SLOW_OP_ALERT for 24 hours (warn_threshold 1,
+# warn_lifetime 86400) while every PG is active+clean, and that blocked every
+# device tier command for a day. What the gate refuses on is a replica or PG
+# missing now, a failure domain down, or nowhere to put the data being moved.
+# Everything else is reported and let through.
+
+# ---- 4a. HEALTH_OK with nothing firing ----
+reset_cluster
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 0 "4a HEALTH_OK proceeds"
+ck "$OUT" "" "4a and says nothing"
+
+# ---- 4b. the slow-op family is a warning, not a refusal ----
+reset_cluster
+HEALTH_STATUS=HEALTH_WARN
+HEALTH_CHECKS="BLUESTORE_SLOW_OP_ALERT SLOW_OPS"
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 0 "4b a slow-op warning proceeds"
+ckhas "$OUT" "BLUESTORE_SLOW_OP_ALERT" "4b names the check it let through"
+ckhas "$OUT" "SLOW_OPS" "4b names both checks"
+ckhas "$OUT" "going ahead" "4b says it is going ahead"
+cklacks "$OUT" "Error" "4b is not an error"
+
+# ---- 4c. redundancy checks refuse ----
+for c in PG_AVAILABILITY PG_DEGRADED PG_DEGRADED_FULL PG_BACKFILL_FULL \
+         OSD_DOWN OSD_HOST_DOWN OSD_FULL POOL_FULL MON_DOWN OBJECT_UNFOUND ; do
+    reset_cluster
+    HEALTH_STATUS=HEALTH_WARN
+    HEALTH_CHECKS="$c"
+    OUT=$(_ceph_device_tier_health_ok 2>&1)
+    ck "$?" 1 "4c $c refuses"
+done
+
+# ---- 4d. a blocking check alongside a harmless one still refuses ----
+reset_cluster
+HEALTH_STATUS=HEALTH_WARN
+HEALTH_CHECKS="SLOW_OPS PG_DEGRADED OSDMAP_FLAGS"
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 1 "4d one blocking check is enough"
+ckhas "$OUT" "PG_DEGRADED" "4d names the blocking check"
+cklacks "$OUT" "going ahead" "4d does not claim it went ahead"
+
+# ---- 4e. the standing-property warnings are deliberately not blocking ----
+# Blocking on these would rebuild the trap this change exists to remove: they
+# describe how a cluster is configured or filled and do not clear on their own.
+reset_cluster
+HEALTH_STATUS=HEALTH_WARN
+HEALTH_CHECKS="POOL_NO_REDUNDANCY OSD_NEARFULL POOL_NEARFULL OSDMAP_FLAGS RECENT_CRASH"
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 0 "4e standing warnings proceed"
+ckhas "$OUT" "POOL_NO_REDUNDANCY" "4e still reports them"
+
+# ---- 4f. an unrecognised check is warned about, not blocked ----
+reset_cluster
+HEALTH_STATUS=HEALTH_WARN
+HEALTH_CHECKS="SOME_FUTURE_CHECK"
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 0 "4f an unknown check proceeds"
+ckhas "$OUT" "SOME_FUTURE_CHECK" "4f and is named"
+
+# ---- 4g. HEALTH_ERR is the backstop for everything unrecognised ----
+# An error-level check refuses whatever its name is, so an unknown severe
+# condition still stops here even though unknown warnings do not.
+reset_cluster
+HEALTH_STATUS=HEALTH_ERR
+HEALTH_CHECKS="SOME_FUTURE_CHECK"
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 1 "4g HEALTH_ERR refuses on any check"
+ckhas "$OUT" "HEALTH_ERR" "4g says why"
+ckhas "$OUT" "SOME_FUTURE_CHECK" "4g names what is firing"
+
+# ---- 4h. active recovery still refuses ----
+reset_cluster
+RECOVERING=42
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 1 "4h recovery in progress refuses"
+ckhas "$OUT" "while ceph is recovering" "4h keeps the pre-existing reason"
+
+# ---- 4i. a name matched whole, not as a substring ----
+reset_cluster
+HEALTH_STATUS=HEALTH_WARN
+HEALTH_CHECKS="PG_DEGRADED_SOMETHING_ELSE"
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 0 "4i PG_DEGRADED_SOMETHING_ELSE is not PG_DEGRADED"
+
+# ---- 4j. an unreadable or unparseable status is unknown, never OK ----
+reset_cluster
+DEAD_PAT='^-s -f json$'
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 1 "4j an unreadable status refuses"
+ckhas "$OUT" "cannot read ceph status" "4j says why"
+reset_cluster
+ceph_garbage() { case "$*" in '-s -f json') echo 'not json' ; return 0 ;; esac ; fake_ceph "$@" ; }
+CEPH=ceph_garbage
+OUT=$(_ceph_device_tier_health_ok 2>&1) ; ck "$?" 1 "4k an unparseable status refuses"
+ckhas "$OUT" "could not be parsed" "4k says why"
+CEPH=fake_ceph
+
+# ---- 4l. end to end: create runs with only a slow-op warning firing ----
+# The behaviour change, at the level an operator meets it.
+reset_cluster
+HEALTH_STATUS=HEALTH_WARN
+HEALTH_CHECKS="BLUESTORE_SLOW_OP_ALERT"
+OUT=$(ceph_device_tier_create silver 0 1 2>&1) ; RC=$?
+ck "$RC" 0 "4l create proceeds under a slow-op warning"
+ckhas "$OUT" "created on osd.0 osd.1" "4l and builds the tier"
+ck "$(grep -c 'registry_add silver' "$TMP/calls")" 1 "4l and registers it"
+
+# ---- 4m. end to end: create refuses with a degraded PG ----
+reset_cluster
+HEALTH_STATUS=HEALTH_WARN
+HEALTH_CHECKS="PG_DEGRADED"
+OUT=$(ceph_device_tier_create silver 0 1 2>&1) ; RC=$?
+ck "$RC" 1 "4m create refuses while a PG is degraded"
+ck "$(grep -c registry_add "$TMP/calls")" 0 "4m and touched nothing"
+ck "$(awk -F: '$2 == "silver"' "$TMP/classes" | wc -l | tr -d ' ')" 0 "4m no OSD changed class"
 
 echo "----"; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] && { echo "OK: device tier registry, list and CLI queries"; exit 0; } || exit 1

@@ -4113,18 +4113,107 @@ _ceph_device_tier_wait_recovery()
     return 1
 }
 
-# preflight shared by device tier create and update: both start data movement,
+# Preflight shared by device tier create and update: both start data movement,
 # and Ceph is much worse at two overlapping remappings than at one.
+#
+# What this refuses on is deliberately narrower than "not HEALTH_OK". Requiring
+# HEALTH_OK sounds safe and is not usable: measured on the 1cc, a single
+# BlueStore slow operation raises BLUESTORE_SLOW_OP_ALERT with
+# bluestore_slow_ops_warn_threshold = 1 and bluestore_slow_ops_warn_lifetime =
+# 86400, so one slow op blocks every device tier command for a day while all
+# 945 PGs sit active+clean. A gate that has to be worked around by restarting
+# OSDs is a gate operators learn to bypass.
+#
+# So the refusal is about the thing this operation can actually make worse: a
+# replica or a PG that is missing NOW, a failure domain that is down, or a
+# cluster with nowhere to put the data about to be moved. Everything else is
+# reported and allowed through.
+#
+# Three things are deliberately NOT in that list:
+#   - POOL_NO_REDUNDANCY, OSD_NEARFULL, POOL_NEARFULL: standing properties of
+#     how a cluster is configured or filled, not a replica that went missing.
+#     Blocking on those would rebuild the same trap -- a warning that never
+#     clears on its own.
+#   - the BlueStore / SLOW_OPS family and OSDMAP_FLAGS: latency and operator
+#     flags, no bearing on redundancy.
+#   - anything unrecognised: a check this list has not heard of is warned about,
+#     not blocked. HEALTH_ERR is the backstop -- every error-level check refuses
+#     regardless of its name, so an unknown severe condition still stops here.
+#
+# Reading the health is itself fail-closed: a status that cannot be read or
+# parsed is unknown, never OK.
 _ceph_device_tier_health_ok()
 {
-    if [ "$($CEPH -s -f json | jq -r .health.status)" != "HEALTH_OK" ] ; then
-        echo "Error: ceph health has to be OK to change device tier membership" >&2
+    # Checks meaning redundancy or availability is compromised right now, or
+    # that the cluster cannot accept the data this is about to move.
+    local unsafe="PG_AVAILABILITY PG_DEGRADED PG_DEGRADED_FULL PG_RECOVERY_FULL
+                  PG_BACKFILL_FULL PG_DAMAGED OBJECT_UNFOUND
+                  OSD_DOWN OSD_HOST_DOWN OSD_ROOT_DOWN OSD_FULL OSD_BACKFILLFULL
+                  POOL_FULL MON_DOWN"
+
+    local health=
+    health=$($CEPH -s -f json 2>/dev/null) || {
+        echo "Error: cannot read ceph status, so it cannot be established that changing" >&2
+        echo "       device tier membership is safe; not proceeding" >&2
+        return 1
+    }
+
+    local status=
+    status=$(echo "$health" | jq -r '.health.status // empty' 2>/dev/null)
+    if [ -z "$status" ] ; then
+        echo "Error: ceph status could not be parsed, so it cannot be established that" >&2
+        echo "       changing device tier membership is safe; not proceeding" >&2
         return 1
     fi
-    if [ "x$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)" != "xnull" ] ; then
+
+    # An absent checks object is an empty one; a checks object that cannot be
+    # read is not.
+    local names=
+    names=$(echo "$health" | jq -r '.health.checks // {} | keys[]' 2>/dev/null) || {
+        echo "Error: the ceph health checks could not be read; not changing device tier" >&2
+        echo "       membership" >&2
+        return 1
+    }
+
+    # Anchored, whole-name matching against the list above -- a check called
+    # PG_DEGRADED_FULL must not be recognised as PG_DEGRADED, and neither must
+    # a substring of anything else.
+    local unsafe_list=
+    unsafe_list=$(echo $unsafe | tr ' ' '\n')
+
+    local blocking= advisory= n=
+    for n in $names ; do
+        if echo "$unsafe_list" | grep -qxF -- "$n" ; then
+            blocking="$blocking $n"
+        else
+            advisory="$advisory $n"
+        fi
+    done
+
+    if [ "$status" = "HEALTH_ERR" ] ; then
+        local firing="$blocking$advisory"
+        echo "Error: ceph is in HEALTH_ERR (${firing# }); not changing device tier" >&2
+        echo "       membership" >&2
+        return 1
+    fi
+
+    if [ -n "$blocking" ] ; then
+        echo "Error: ceph reports${blocking} -- data redundancy or availability is already" >&2
+        echo "       compromised, and changing device tier membership moves data. Not" >&2
+        echo "       proceeding until that clears." >&2
+        return 1
+    fi
+
+    if [ "x$(echo "$health" | jq -r .pgmap.recovering_objects_per_sec)" != "xnull" ] ; then
         echo "Error: cannot change device tier membership while ceph is recovering" >&2
         return 1
     fi
+
+    if [ -n "$advisory" ] ; then
+        echo "Warning: ceph is $status (${advisory# }), but none of those checks is" >&2
+        echo "         about data redundancy or availability, so this is going ahead." >&2
+    fi
+
     return 0
 }
 
