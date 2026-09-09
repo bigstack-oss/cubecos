@@ -1412,6 +1412,33 @@ ResourceSetMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    // Record the card's framebuffer while it is still readable. The card is
+    // back on the nvidia driver at this point (gpu_unset_current_type above
+    // released whatever it was carved into), and for newType == pgpu the
+    // vfio-pci binding below is what makes it disappear from nvidia-smi - so
+    // this is the last moment the number can be read.
+    //
+    // It is persisted rather than recomputed on demand because nothing
+    // readable under a vfio binding yields it. Measured on cn13:
+    //   - the driver's vgpuConfig.xml carries per-vGPU-type framebuffers only,
+    //     with no card total;
+    //   - the largest vGPU profile is the nominal size - 98304 MiB against the
+    //     97887 nvidia-smi reports for the same card - so offering it to the UI
+    //     would let a user pick a carve that ValidateVgpuProfiles, which reads
+    //     the real number, then rejects;
+    //   - PCI BAR2 is a 131072 MiB address aperture, unrelated to VRAM.
+    //
+    // Consumers must treat it as the last known value: null when it could not
+    // be read, and stale for a card that was already pgpu before this field
+    // existed, until its next resource change.
+    const long totalVramMiB = GetGpuTotalVramMiB(gpuId);
+    if (totalVramMiB <= 0) {
+        HexLogWarning("gpu_resource_set: could not read the total framebuffer of GPU %s; "
+                      "recording it as unknown", gpuId);
+    }
+    const std::string totalVramArg =
+        (totalVramMiB > 0) ? std::to_string(totalVramMiB) : std::string("null");
+
     if (strcmp(newType, "pgpu") == 0) {
         if (HexUtilSystemF(0, 0, HEX_SDK " gpu_bind_vfio_pci %s", pciAddress.c_str()) != 0) {
             HexLogError("gpu_resource_set: failed to bind GPU %s to vfio-pci for passthrough", gpuId);
@@ -1426,9 +1453,9 @@ ResourceSetMain(int argc, char* argv[])
         tmpFile.close();
 
         if (HexUtilSystemF(0, 0,
-                "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" "
-                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"pgpu\", pciAddress:$pciAddress, profiles:null}]' %s > %s",
-                gpuId, name.c_str(), pciAddress.c_str(), GPU_CONFIG_FILE, tmpFile.path()) != 0) {
+                "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson totalVramMiB %s "
+                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"pgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profiles:null}]' %s > %s",
+                gpuId, name.c_str(), pciAddress.c_str(), totalVramArg.c_str(), GPU_CONFIG_FILE, tmpFile.path()) != 0) {
             HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
             return EXIT_FAILURE;
         }
@@ -1533,9 +1560,9 @@ ResourceSetMain(int argc, char* argv[])
         const std::string profilesDump = json11::Json(persistedProfiles).dump();
 
         if (HexUtilSystemF(0, 0,
-                "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson profiles '%s' "
-                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"sriovVgpu\", pciAddress:$pciAddress, profiles:$profiles}]' %s > %s",
-                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(),
+                "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson profiles '%s' --argjson totalVramMiB %s "
+                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"sriovVgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profiles:$profiles}]' %s > %s",
+                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(), totalVramArg.c_str(),
                 GPU_CONFIG_FILE, tmpFile.path()) != 0) {
             HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
             return EXIT_FAILURE;
@@ -1604,9 +1631,9 @@ ResourceSetMain(int argc, char* argv[])
         const std::string profilesDump = json11::Json(persistedProfiles).dump();
 
         if (HexUtilSystemF(0, 0,
-                "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson profiles '%s' "
-                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"migBackedVgpu\", pciAddress:$pciAddress, profiles:$profiles}]' %s > %s",
-                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(),
+                "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson profiles '%s' --argjson totalVramMiB %s "
+                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"migBackedVgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profiles:$profiles}]' %s > %s",
+                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(), totalVramArg.c_str(),
                 GPU_CONFIG_FILE, tmpFile.path()) != 0) {
             HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
             return EXIT_FAILURE;

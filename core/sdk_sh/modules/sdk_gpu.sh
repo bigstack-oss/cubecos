@@ -490,16 +490,25 @@ gpu_device_list()
     fi
 
     local gpu_csv
-    gpu_csv=$($NVIDIA_SMI --query-gpu=uuid,name,pci.bus_id --format=csv,noheader,nounits 2>/dev/null)
+    gpu_csv=$($NVIDIA_SMI --query-gpu=uuid,name,pci.bus_id,memory.total --format=csv,noheader,nounits 2>/dev/null)
 
     local output="[]"
 
-    while IFS=',' read -r uuid name pci_bus_id; do
+    while IFS=',' read -r uuid name pci_bus_id mem_total_mib; do
         [ -z "$uuid" ] && continue
 
         uuid=$(echo "$uuid" | xargs)
         name=$(echo "$name" | xargs)
         pci_bus_id=$(echo "$pci_bus_id" | xargs)
+
+        # The card is visible here, so its framebuffer is measured rather than
+        # remembered. A card nvidia-smi cannot see is handled in the pgpu pass
+        # below, which reads the value config.json recorded at carve time.
+        local total_vram_mib
+        total_vram_mib=$(echo "$mem_total_mib" | xargs)
+        case "$total_vram_mib" in
+            ''|*[!0-9]*) total_vram_mib="null" ;;
+        esac
 
         # Keep the probe's exit status instead of dropping it. On failure
         # support_types stays at its hardcoded ["pgpu"] below, so a
@@ -541,7 +550,8 @@ gpu_device_list()
                 --arg name "$name" \
                 --arg pciAddress "$pci_bus_id" \
                 --argjson supportTypes "$support_types" \
-                '. + [{ id: $id, name: $name, type:"unset", supportTypes: $supportTypes, pciAddress: $pciAddress, sriovVgpuProfileCountLimit: null, status: "unassigned", allocation: null }]')
+                --argjson totalVramMiB "$total_vram_mib" \
+                '. + [{ id: $id, name: $name, type:"unset", supportTypes: $supportTypes, pciAddress: $pciAddress, totalVramMiB: $totalVramMiB, sriovVgpuProfileCountLimit: null, status: "unassigned", allocation: null }]')
             continue
         fi
 
@@ -617,7 +627,8 @@ gpu_device_list()
             --argjson sriovVgpuProfileCountLimit "${sriov_vgpu_profile_count_limit:-null}" \
             --arg status "$status" \
             --argjson allocation "$allocation" \
-            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, status:$status, allocation:$allocation}]')
+            --argjson totalVramMiB "$total_vram_mib" \
+            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, status:$status, allocation:$allocation}]')
     done <<< "$gpu_csv"
 
     # GPUs already bound to vfio-pci (type "pgpu") are no longer enumerable
@@ -673,7 +684,8 @@ gpu_device_list()
             --arg status "$status" \
             --argjson supportTypes "$support_types" \
             --argjson allocation "$allocation" \
-            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
+            --argjson totalVramMiB "$total_vram_mib" \
+            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profileCountLimit:null, status:$status, allocation:$allocation}]')
     done <<< "$(echo "$pgpu_ids" | jq -c '.[]' 2>/dev/null)"
 
     # The union above only catches vfio-pci-bound GPUs that config.json
@@ -735,6 +747,14 @@ gpu_device_list()
         local support_types
         support_types=$(gpu_support_types_from_xml "$pci_address")
 
+        # This card is bound to vfio-pci and invisible to nvidia-smi, so its
+        # framebuffer cannot be measured here - report what config.json recorded
+        # while it was last readable. null for a card carved before the field
+        # existed, or one whose framebuffer could not be read at carve time.
+        local recorded_vram
+        recorded_vram=$(echo "$entry" | jq -c '.totalVramMiB // null' 2>/dev/null)
+        [ -z "$recorded_vram" ] && recorded_vram="null"
+
         output=$(echo "$output" | jq -c \
             --arg id "$uuid" \
             --arg name "$name" \
@@ -742,7 +762,8 @@ gpu_device_list()
             --arg status "$status" \
             --argjson supportTypes "$support_types" \
             --argjson allocation "$allocation" \
-            '. + [{id:$id, name:$name, type:"pgpu", supportTypes:$supportTypes, pciAddress:$pciAddress, profileCountLimit:null, status:$status, allocation:$allocation}]')
+            --argjson totalVramMiB "$recorded_vram" \
+            '. + [{id:$id, name:$name, type:"pgpu", supportTypes:$supportTypes, pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profileCountLimit:null, status:$status, allocation:$allocation}]')
     done
 
     # Every step above rebuilds $output through jq, so a single failed jq call
