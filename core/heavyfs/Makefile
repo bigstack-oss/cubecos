@@ -24,7 +24,6 @@ BLKLST_DNF += iptables-legacy iptables-legacy-libs python3-django3 ceph-mgr-k8se
 BLKLST_DNF += python3-PyMySQL   # CVE-2024-36039 Upgrade to version: 1.1.1
 BLKLST_DNF += python3-django    # CVE-2022-28347, CVE-2023-31047, CVE-2025-64459 CVE-2023-46695, CVE-2023-43665, CVE-2022-36359 Upgrade to version: 3.2.23
 ROOTFS_PIP += python-jose       # CVE-2024-33663 Upgrade to version: 3.4.0
-BLKLST_DNF += python3-monascaclient # Remove DNF managed package
 # CVE-2022-2996. The rpm stays blacklisted; the ROOTFS_PIP entry that used to
 # replace it with 0.12.0 is gone. scciclient backs ironic's iRMC driver, ironic runs
 # in the antelope venv now, and core/ironic deliberately does not install it there --
@@ -345,14 +344,14 @@ rootfs_install::
 # point, and entry points are only visible to the interpreter they were installed
 # under, so the copies pip put in a venv were invisible to the cli and every plugin
 # had to be held in 3.9 as well -- as an rpm (designate, heat, manila, octavia) or as
-# a second pip install (cyborg, watcher, monasca). #609 moved the cli into the
+# a second pip install (cyborg and watcher). #609 moved the cli into the
 # antelope venv and every plugin followed it there; #636 moves it again, into the
 # caracal venv, and the plugins follow it a second time.
 #
 # The second move is the same mechanism as the first, so the same rule decides where
 # each plugin goes: next to whichever interpreter runs /usr/bin/openstack. Each
 # component installs its own -- see core/{heat,manila,octavia,designate,masakari,
-# watcher,cyborg,barbican,monasca}. python-ironicclient needs no line of its own:
+# watcher,cyborg,barbican}. python-ironicclient needs no line of its own:
 # ironic-ui and python-watcher both declare it and both are in this venv.
 #
 # Measured on jim-1cc: 977 commands under the 3.9 cli against 1574 under the antelope
@@ -402,7 +401,7 @@ HEAVY_COMPONENTS += influxdb prometheus thanos exporters kapacitor elk telegraf 
 # that designate, masakari and watcher drop into local/enabled at install time.
 # RPM-installed plugins (heat, octavia, ironic, manila) land theirs in the dnf
 # phase and are collected either way; the source-installed ones are not.
-HEAVY_COMPONENTS += heat octavia barbican manila designate masakari monasca watcher cyborg horizon
+HEAVY_COMPONENTS += heat octavia barbican manila designate masakari watcher cyborg horizon
 HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl lachesis
 
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)

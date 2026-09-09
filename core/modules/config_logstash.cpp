@@ -118,8 +118,7 @@ WriteConfigs(const std::string &kafkaHosts)
     fprintf(fout, "    - /var/log/influxdb/*.log\n");
     fprintf(fout, "    - /var/log/kapacitor/*.log\n");
     fprintf(fout, "    - /var/log/telegraf/*.log\n");
-    // the below 2 logs should take care carefully otherwise they cause log loopping
-    fprintf(fout, "    - /var/log/monasca/*.log\n");
+    // take care with this one otherwise it causes log looping
     fprintf(fout, "    - /var/log/logstash/*.log\n");
 #endif
     fprintf(fout, "\n");

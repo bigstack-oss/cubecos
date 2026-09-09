@@ -14,8 +14,8 @@
 #include <hex/process.h>
 #include <hex/process_util.h>
 
-// httpd's only consumers are local: haproxy's openstack_horizon backend and the
-// monasca agent's server-status check. Binding loopback keeps 8080 off the
+// httpd's only consumers are local: haproxy's openstack_horizon backend and
+// apache_exporter's server-status scrape. Binding loopback keeps 8080 off the
 // management network, where vulnerability scanners were reaching it.
 #define HTTP_ADDR "127.0.0.1"
 #define HTTP_PORT 8080
@@ -301,7 +301,6 @@ CONFIG_REQUIRES(apache2, swift);
 CONFIG_REQUIRES(apache2, horizon);
 CONFIG_REQUIRES(apache2, heat);
 CONFIG_REQUIRES(apache2, barbican);
-CONFIG_REQUIRES(apache2, monasca);
 CONFIG_REQUIRES(apache2, masakari);
 // CONFIG_REQUIRES(apache2, keystone_idp);
 

@@ -111,8 +111,8 @@ rootfs_install::
 # /usr/bin/watcher is the client's own cli. It used to come from the system python 3.9
 # install as /usr/local/bin/watcher -- /usr/bin held only the watcher-* service scripts
 # linked above -- and since /usr/local/bin precedes /usr/bin in the PATH hex_sdk sets,
-# the replacement is this symlink, the same shape core/monasca uses. It points at the
-# client, which is now the same venv as the service.
+# the replacement is this symlink. It points at the client, which is now the same venv
+# as the service.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

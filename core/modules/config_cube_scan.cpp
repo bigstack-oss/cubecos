@@ -530,7 +530,6 @@ CONFIG_REQUIRES(cube_scan, standalone);
 CONFIG_PROVIDES_GLOBALS(cube_scan);
 
 CONFIG_MODULE(cube_last, 0, 0, 0, 0, CommitLast);
-CONFIG_REQUIRES(cube_last, monasca_setup);
 CONFIG_REQUIRES(cube_last, pacemaker_last);
 CONFIG_REQUIRES(cube_last, neutron_last);
 CONFIG_LAST(cube_last);

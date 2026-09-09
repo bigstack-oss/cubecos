@@ -159,7 +159,6 @@ hex_config_MODULES += config_heat.o
 hex_config_MODULES += config_barbican.o
 hex_config_MODULES += config_masakari.o
 hex_config_MODULES += config_manila.o
-hex_config_MODULES += config_monasca.o
 hex_config_MODULES += config_octavia.o
 hex_config_MODULES += config_designate.o
 hex_config_MODULES += config_watcher.o
