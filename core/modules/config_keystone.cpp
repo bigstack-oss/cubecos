@@ -531,6 +531,10 @@ Commit(bool modified, int dryLevel)
     // check for setup migration
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone");
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_service_role");
+    // monasca went in issue #672 phase 4 and took config_monasca.cpp with it, so the
+    // cleanup of what it left in the catalogue has to be driven from the module that owns
+    // the catalogue. Marker-guarded and a no-op on a cluster that never had it.
+    HexUtilSystemF(0, 0, HEX_SDK " migrate_monasca_retire");
 
     // 6. create endpoint
     if (s_bEndpointChanged) {

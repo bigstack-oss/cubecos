@@ -112,12 +112,60 @@ migrate_keystone_service_role()
 
     local u
     for u in barbican cinder cyborg designate glance heat ironic ironic-inspector \
-             masakari monasca neutron nova octavia placement skyline watcher ; do
+             masakari neutron nova octavia placement skyline watcher ; do
         $OPENSTACK user show $u >/dev/null 2>&1 || continue
         $OPENSTACK role add --project service --user $u service >/dev/null 2>&1
     done
 
     touch $STATE_DIR/keystone_service_role_migrated
+}
+
+# Monasca left three kinds of state that outlive the A/B partition swap, so removing it
+# from the build (issue #672 phase 4) does not remove them: its keystone catalog entries,
+# its MySQL database and the MySQL user that owns it. Everything else -- /etc/monasca, the
+# venv packages, the unit files -- lived only in the rootfs and is already gone.
+#
+# The keystone half is the part that has to be done rather than left. A service catalogue
+# entry is what clients discover, so a monitoring endpoint pointing at a port nothing
+# listens on is not untidiness: an SDK that asks for it gets a connection refused after
+# whatever timeout it uses, and `openstack endpoint list` shows an appliance advertising a
+# service it does not have.
+#
+# What is deliberately NOT done here:
+#
+#   the influxdb monasca database   it holds real history an operator may still want to
+#                                   read, and it ages out under the retention policy it
+#                                   was last given. Dropping it is the one irreversible
+#                                   step in this retirement and belongs to the operator.
+#   the monasca.* tunings           /etc/settings.txt is the appliance's own source of
+#                                   truth and editing it from the side is worse than the
+#                                   "Unknown settings name ... ignored" warning each
+#                                   leftover key logs on a commit.
+migrate_monasca_retire()
+{
+    if [ -f $STATE_DIR/monasca_retired ] ; then
+        return 0
+    fi
+
+    is_control_node || return 0
+
+    # Endpoints before the service: keystone refuses to delete a service that still has
+    # them on some releases, and an orphaned endpoint is the harder one to find later.
+    local ep
+    for ep in $($OPENSTACK endpoint list --service monitoring -f value -c ID 2>/dev/null) ; do
+        Quiet -n $OPENSTACK endpoint delete $ep
+    done
+    Quiet -n $OPENSTACK service delete monasca-api
+    Quiet -n $OPENSTACK user delete monasca
+
+    # Both the database and the grants. Leaving the user behind would leave an account with
+    # rights on a schema nothing owns any more.
+    $MYSQL -e "DROP DATABASE IF EXISTS monasca"
+    $MYSQL -e "DROP USER IF EXISTS 'monasca'@'%'"
+    $MYSQL -e "DROP USER IF EXISTS 'monasca'@'localhost'"
+    $MYSQL -e "FLUSH PRIVILEGES"
+
+    touch $STATE_DIR/monasca_retired
 }
 
 migrate_barbican_db()
@@ -497,19 +545,6 @@ migrate_masakari_db()
     fi
 
     touch $STATE_DIR/masakari_db_migrated
-}
-
-migrate_monasca_db()
-{
-    if [ -f $STATE_DIR/monasca_db_migrated ] ; then
-        return 0
-    fi
-
-    if is_control_node ; then
-        su -s /bin/sh -c "/usr/bin/monasca_db upgrade" monasca
-    fi
-
-    touch $STATE_DIR/monasca_db_migrated
 }
 
 migrate_designate_db()

@@ -1222,7 +1222,10 @@ health_httpd_check()
             ERR_MSG+="httpd on $node is not running\n"
         fi
         local i=2
-        for port in 8070 5000 8778 5443 ; do
+        # 8070 was monasca-api's vhost and went with it in issue #672 phase 4. Left in this
+        # list it is the one thing that turns every control node's httpd check NG on a
+        # cluster where nothing is wrong.
+        for port in 5000 8778 5443 ; do
             $CURL -sf http://$node:$port >/dev/null
             # 0: ok, 22: http error (page not found)                                                                                                                                                                                                      
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
@@ -1266,7 +1269,7 @@ health_httpd_repair()
         if ! is_remote_running $node httpd ; then
             remote_systemd_restart $node httpd
         fi
-        for port in 9090 8070 8776 5000 8778 ; do
+        for port in 9090 8776 5000 8778 ; do
             $CURL -sf http://$node:$port >/dev/null
             # 0: ok, 22: http error (page not found)
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
@@ -3202,70 +3205,6 @@ health_masakari_repair()
     cmd $HEX_CFG restart_masakari
 }
 
-health_monasca_report()
-{
-    _health_report ${FUNCNAME[0]}
-}
-
-health_monasca_check()
-{
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node monasca-persister ; then
-            ERR_MSG+="monasca-persister on $node is not running\n"
-            ERR_CODE=3
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-persister"
-        # monasca-api used to be hosted in-process by httpd, so httpd's own
-        # health covered it. It is a gunicorn service of its own now.
-        elif ! is_remote_running $node monasca-api ; then
-            ERR_MSG+="monasca-api on $node is not running\n"
-            ERR_CODE=7
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-api"
-        fi
-    done
-    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node monasca-collector ; then
-            ERR_MSG+="monasca-collector on $node is not running\n"
-            ERR_CODE=4
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-collector"
-        elif ! is_remote_running $node monasca-forwarder ; then
-            ERR_MSG+="monasca-forwarder on $node is not running\n"
-            ERR_CODE=5
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-forwarder"
-        elif ! is_remote_running $node monasca-statsd ; then
-            ERR_MSG+="monasca-statsd on $node is not running\n"
-            ERR_CODE=6
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-statsd"
-        fi
-    done
-
-    _health_fail_log
-}
-
-_health_monasca_auto_repair()
-{
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node monasca-persister ; then
-            remote_systemd_restart $node monasca-persister
-        elif ! is_remote_running $node monasca-api ; then
-            remote_systemd_restart $node monasca-api
-        fi
-    done
-    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node monasca-collector ; then
-            remote_systemd_restart $node monasca-collector
-        elif ! is_remote_running $node monasca-forwarder ; then
-            remote_systemd_restart $node monasca-forwarder
-        elif ! is_remote_running $node monasca-statsd ; then
-            remote_systemd_restart $node monasca-statsd
-        fi
-    done
-}
-
-health_monasca_repair()
-{
-    cmd $HEX_CFG restart_monasca
-}
-
 health_watcher_report()
 {
     [ "$VERBOSE" != "1" ] || $OPENSTACK optimize service list
@@ -3466,12 +3405,6 @@ health_kafka_check()
         ERR_MSG+="kafka fails to get sys/host metrics\n"
     fi
 
-    # check the last 5 minutes from monasca persister log
-    if ! awk -v dt="$(date '+%Y-%m-%d %T' -d '-5 minutes')" -F, '$1 > dt' /var/log/monasca/persister.log | grep -q "Processed .* messages from topic 'metrics'" ; then
-        ERR_CODE=3
-        ERR_MSG+="kafka fails to get instance metrics\n"
-    fi
-
     # check the last 3 seconds from logstash log
     if awk -v dt="$(date '+%Y-%m-%dT%H:%M:%S' -d '3 second ago')" -F'[[,]' '$2 > dt' /var/log/logstash/logstash.log | grep -q "NOT_LEADER_OR_FOLLOWER" ; then
         ERR_CODE=4
@@ -3484,7 +3417,9 @@ health_kafka_check()
     fi
 
     local queue_num=$($HEX_SDK kafka_stats | grep "PartitionCount: 6" | wc -l)
-    # the six most important queues: telegraf-metrics, telegraf-hc-metrics, metrics, logs, transformed-logs, alarms
+    # the six that carry the pipeline: telegraf-metrics, telegraf-hc-metrics,
+    # telegraf-events-metrics, logs, transformed-logs, events. It used to name metrics and
+    # alarms instead of two of those -- both were monasca's and went with it.
     if [ $queue_num -lt 6 ] ; then
         ERR_CODE=6
         ERR_MSG+="kafka has no built-in queues\n"
@@ -3505,9 +3440,6 @@ _health_kafka_auto_repair()
         if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-events-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-events-metrics"
         fi
-    elif [ "$ERR_CODE" == "3" ] ; then
-        $HEX_CFG recreate_kafka_topic "metrics"
-        cmd -c systemctl restart monasca-persister
     elif [ "$ERR_CODE" == "4" ] ; then
         $HEX_CFG recreate_kafka_topic "transformed-logs"
     elif [ "$ERR_CODE" == "5" ] ; then
@@ -4042,11 +3974,11 @@ _health_datapipe_deep_repair()
     fi
     echo "$_dp_now" > "$_dp_marker" 2>/dev/null
 
-    cmd -c systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c systemctl stop zookeeper kafka logstash kapacitor influxdb telegraf
     Quiet -n sleep 10
     cmd -c "rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*"
 
-    cmd -c  systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c  systemctl stop zookeeper kafka logstash kapacitor influxdb telegraf
     Quiet -n sleep 10
     cmd -c  rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*
 
@@ -4055,7 +3987,7 @@ _health_datapipe_deep_repair()
     cmd -c  $HEX_CFG bootstrap kapacitor
     Quiet -n $HEX_CFG update_kafka_topics
     cmd -c  systemctl reset-failed
-    cmd -c  systemctl start kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c  systemctl start kapacitor influxdb telegraf
     cmd -c  systemctl restart httpd
 }
 

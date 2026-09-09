@@ -2576,12 +2576,6 @@ os_instance_export_save()
     printf '%s\n' "done"
 }
 
-os_metric_name_list()
-{
-    local tid=$(os_get_project_id_by_name service)
-    monasca metric-name-list --tenant-id $tid
-}
-
 os_mgr_port_name()
 {
     local net_id=$1
