@@ -890,9 +890,22 @@ WriteNovaGpuConf(void)
         const std::string gpuId = entry["id"].string_value();
         const std::string type = entry["type"].string_value();
 
+        // A card that cannot be described must not veto the other cards. This
+        // file is regenerated in full from config.json, so an early return here
+        // aborts a carve aimed at a completely different, healthy card - which
+        // is what makes a single card in a bad state block GPU management for
+        // the whole node (#1460, the mechanism behind #1452).
+        //
+        // Skipping is also the more accurate answer: GetPciVfs fails when the
+        // VFs are not there (no virtfn link, or no vendor/device id), so the
+        // card has nothing for nova to claim. Leaving it out keeps gpu.conf
+        // describing VFs that exist, instead of whitelisting addresses that do
+        // not. No running instance can be holding one of those VFs either.
+        // BuildNovaGpuConfContent already skips a GPU absent from the map.
         if (!entry["pciAddress"].is_string() || entry["pciAddress"].string_value().empty()) {
-            HexLogError("GPU %s has type %s but no recorded pciAddress", gpuId.c_str(), type.c_str());
-            return false;
+            HexLogWarning("GPU %s has type %s but no recorded pciAddress; leaving it out of %s",
+                          gpuId.c_str(), type.c_str(), NOVA_GPU_CONF);
+            continue;
         }
 
         size_t assigned = 0;
@@ -902,8 +915,9 @@ WriteNovaGpuConf(void)
 
         std::vector<PciVf> vfs;
         if (!GetPciVfs(SysfsPciAddr(entry["pciAddress"].string_value()), assigned, &vfs)) {
-            HexLogError("Failed to resolve VFs of GPU %s for %s", gpuId.c_str(), NOVA_GPU_CONF);
-            return false;
+            HexLogWarning("Failed to resolve VFs of GPU %s; leaving it out of %s",
+                          gpuId.c_str(), NOVA_GPU_CONF);
+            continue;
         }
 
         vfsByGpuId[gpuId] = vfs;
