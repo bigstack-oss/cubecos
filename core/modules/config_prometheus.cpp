@@ -99,7 +99,7 @@ static const char NAME[] = "prometheus";
 // The textfile collector's directory. node_exporter reads every *.prom in here on each
 // scrape, which is how the per-instance metrics Watcher needs reach Prometheus without a
 // separate exporter, port or scrape job -- this node's target already carries the fqdn
-// label. The file itself is written by `hex_sdk watcher_instance_metrics`, which
+// label. The file itself is written by `hex_sdk instance_metrics_collect`, which
 // config_nova.cpp crons on compute-capable nodes -- that is where the domains are. Keep
 // this path in step with that function's default.
 #define NODE_TEXTFILE_DIR "/var/lib/node_exporter/textfile"
