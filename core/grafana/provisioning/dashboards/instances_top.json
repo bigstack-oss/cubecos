@@ -19,272 +19,265 @@
   "links": [],
   "panels": [
     {
-      "cacheTimeout": null,
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Usage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 75
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
         "y": 0
       },
-      "hideTimeOverride": false,
       "id": 6,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Usage"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": "value",
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "percent"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.cpu.utilization_norm_perc\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (clamp_max(rate(ceilometer_cpu{project_name=~\"$TENANT\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{project_name=~\"$TENANT\"}, 100)))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Top CPU Usage",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "Usage"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Usage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 75
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
         "y": 0
       },
-      "hideTimeOverride": false,
       "id": 4,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Usage"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": "value",
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "percent"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT 100 - mean(value) as used FROM \"vm.mem.free_perc\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) ((1 - cube_instance_memory_usable_mb{project_name=~\"$TENANT\"} / cube_instance_memory_visible_mb{project_name=~\"$TENANT\"}) * 100))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Top Memory Usage",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "Usage"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
@@ -322,539 +315,423 @@
       "type": "text"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bandwidth"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "Bps"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 0,
         "y": 9
       },
-      "hideTimeOverride": false,
       "id": 8,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Bandwidth"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": null,
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "Bps"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.io.read_bytes_sec\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (rate(ceilometer_disk_device_read_bytes{project_name=~\"$TENANT\"}[$__rate_interval])))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Read Bandwidth",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "Bandwidth"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bandwidth"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "Bps"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 6,
         "y": 9
       },
-      "hideTimeOverride": false,
       "id": 2,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Bandwidth"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": null,
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "Bps"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.io.write_bytes_sec\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (rate(ceilometer_disk_device_write_bytes{project_name=~\"$TENANT\"}[$__rate_interval])))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Write Bandwidth",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "Bandwidth"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "IO Rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "iops"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 12,
         "y": 9
       },
-      "hideTimeOverride": false,
       "id": 12,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "IO Rate"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": null,
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "ops"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.io.read_ops_sec\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (rate(ceilometer_disk_device_read_requests{project_name=~\"$TENANT\"}[$__rate_interval])))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Read IO Rate",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "IO Rate"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "IO Rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "iops"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 18,
         "y": 9
       },
-      "hideTimeOverride": false,
       "id": 14,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "IO Rate"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": null,
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "ops"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.io.write_ops_sec\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (rate(ceilometer_disk_device_write_requests{project_name=~\"$TENANT\"}[$__rate_interval])))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Write IO Rate",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "IO Rate"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
@@ -892,539 +769,423 @@
       "type": "text"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Traffic"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "Bps"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 0,
         "y": 18
       },
-      "hideTimeOverride": false,
       "id": 24,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Traffic"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": null,
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "Bps"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.net.in_bytes_sec\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (rate(ceilometer_network_incoming_bytes{project_name=~\"$TENANT\"}[$__rate_interval])))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Incoming Traffic",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "Traffic"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Traffic"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "Bps"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 6,
         "y": 18
       },
-      "hideTimeOverride": false,
       "id": 26,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Traffic"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": null,
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "Bps"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.net.out_bytes_sec\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (rate(ceilometer_network_outgoing_bytes{project_name=~\"$TENANT\"}[$__rate_interval])))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Outgoing Traffic",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "Traffic"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Packet Rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "pps"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 12,
         "y": 18
       },
-      "hideTimeOverride": false,
       "id": 30,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Packet Rate"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": null,
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "pps"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.net.in_packets_sec\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (rate(ceilometer_network_incoming_packets{project_name=~\"$TENANT\"}[$__rate_interval])))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Incoming Packet Rate",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "Packet Rate"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
-      "columns": [],
-      "datasource": "influxdb-monasca",
-      "fontSize": "100%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "View",
+                    "url": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__value.text}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Packet Rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "pps"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 18,
         "y": 18
       },
-      "hideTimeOverride": false,
       "id": 32,
-      "interval": "",
       "links": [],
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 2,
-        "desc": true
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Packet Rate"
+          }
+        ]
       },
-      "styles": [
-        {
-          "alias": "Usage",
-          "colorMode": null,
-          "colors": [
-            "rgba(50, 172, 45, 0.97)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(245, 54, 54, 0.9)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "top",
-          "thresholds": [
-            "75",
-            "90"
-          ],
-          "type": "number",
-          "unit": "pps"
-        },
-        {
-          "alias": "Instance",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 2,
-          "link": true,
-          "linkTooltip": "View",
-          "linkUrl": "d/PVW6vU7Wz/instance?var-TENANT=$TENANT&var-HOSTNAME=${__cell}",
-          "mappingType": 1,
-          "pattern": "vm_name",
-          "preserveFormat": false,
-          "sanitize": false,
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "MMMM D, YYYY LT",
-          "decimals": 2,
-          "mappingType": 1,
-          "pattern": "Time",
-          "thresholds": [],
-          "type": "hidden",
-          "unit": "short"
-        }
-      ],
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "hide": false,
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT vm_name, top(used, $TOP) FROM (SELECT mean(value) as used FROM \"vm.net.out_packets_sec\" WHERE tenant_name =~ /^$TENANT$/ and $timeFilter  GROUP BY resource_id, vm_name)\n\n",
-          "rawQuery": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk($TOP, sum by (resource, name) (rate(ceilometer_network_outgoing_packets{project_name=~\"$TENANT\"}[$__rate_interval])))",
           "refId": "A",
-          "resultFormat": "table",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [
-                  "last"
-                ],
-                "type": "top"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "tenant_name",
-              "operator": "=~",
-              "value": "/^$TENANT$/"
-            }
-          ]
+          "format": "table",
+          "instant": true
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Outgoing Packet Rate",
-      "transform": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "resource": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "name": "Instance",
+              "Value": "Packet Rate"
+            }
+          }
+        }
+      ],
       "type": "table"
     }
   ],
@@ -1502,15 +1263,18 @@
           "text": "admin",
           "value": "admin"
         },
-        "datasource": "influxdb-monasca",
-        "definition": "SHOW TAG VALUES FROM \"vm.host_alive_status\" WITH KEY = \"tenant_name\" WHERE tenant_id =~ /$TID/",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "P43CA22E17D0F9596"
+        },
+        "definition": "label_values(ceilometer_cpu{project=~\".*$TID.*\"}, project_name)",
         "hide": 0,
         "includeAll": false,
         "label": "Tenant",
         "multi": false,
         "name": "TENANT",
         "options": [],
-        "query": "SHOW TAG VALUES FROM \"vm.host_alive_status\" WITH KEY = \"tenant_name\" WHERE tenant_id =~ /$TID/",
+        "query": "label_values(ceilometer_cpu{project=~\".*$TID.*\"}, project_name)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

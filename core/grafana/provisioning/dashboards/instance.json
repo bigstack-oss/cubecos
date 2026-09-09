@@ -19,7 +19,10 @@
   "links": [],
   "panels": [
     {
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -63,54 +66,23 @@
       "pluginVersion": "7.5.11",
       "targets": [
         {
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "cpu.total_cores",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "queryType": "randomWalk",
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "last"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "ceilometer_vcpus{resource=~\"$UUID\"}",
+          "legendFormat": "cores",
+          "refId": "A"
         }
       ],
       "title": "Cores",
       "type": "stat"
     },
     {
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -155,48 +127,13 @@
       "pluginVersion": "7.5.11",
       "targets": [
         {
-          "alias": "",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "mem.total_gb",
-          "orderByTime": "ASC",
-          "policy": "default",
-          "queryType": "randomWalk",
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "last"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "cube_instance_memory_visible_mb{resource=~\"$UUID\"} / 1024",
+          "legendFormat": "memory",
+          "refId": "A"
         }
       ],
       "title": "Memory",
@@ -332,7 +269,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "decimals": null,
       "fieldConfig": {
         "defaults": {
@@ -384,85 +324,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "cpu.usage",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "clamp_max(rate(ceilometer_cpu{resource=~\"$UUID\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{resource=~\"$UUID\"}, 100)",
+          "legendFormat": "cpu",
+          "refId": "A"
         },
         {
-          "alias": "memory.usage",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "orderByTime": "ASC",
-          "policy": "default",
-          "query": "SELECT 100 - mean(\"value\") FROM \"def\".\"vm.mem.free_perc\" WHERE (\"resource_id\" =~ /^$UUID$/) AND $timeFilter GROUP BY time($__interval) fill(none)",
-          "rawQuery": true,
-          "refId": "B",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": []
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "(1 - cube_instance_memory_usable_mb{resource=~\"$UUID\"} / cube_instance_memory_visible_mb{resource=~\"$UUID\"}) * 100",
+          "legendFormat": "memory",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -511,7 +388,10 @@
       }
     },
     {
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "fieldConfig": {
         "defaults": {
           "displayName": "",
@@ -562,47 +442,13 @@
       "pluginVersion": "7.5.11",
       "targets": [
         {
-          "alias": "",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "cpu.utilization_norm_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "last"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "clamp_max(rate(ceilometer_cpu{resource=~\"$UUID\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{resource=~\"$UUID\"}, 100)",
+          "legendFormat": "cpu",
+          "refId": "A"
         }
       ],
       "timeFrom": null,
@@ -611,7 +457,10 @@
       "type": "gauge"
     },
     {
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "fieldConfig": {
         "defaults": {
           "displayName": "",
@@ -662,49 +511,13 @@
       "pluginVersion": "7.5.11",
       "targets": [
         {
-          "alias": "",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "null"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "mem.free_perc",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "query": "SELECT 100 - last(\"value\") FROM \"def\".\"mem.free_perc\" WHERE (\"resource_id\" =~ /^$UUID$/) AND $timeFilter GROUP BY time($__interval) fill(null)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "last"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "(1 - cube_instance_memory_usable_mb{resource=~\"$UUID\"} / cube_instance_memory_visible_mb{resource=~\"$UUID\"}) * 100",
+          "legendFormat": "memory",
+          "refId": "A"
         }
       ],
       "timeFrom": null,
@@ -731,7 +544,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "decimals": null,
       "fieldConfig": {
         "defaults": {
@@ -783,102 +599,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "read.bytes.$tag_device",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "device"
-              ],
-              "type": "tag"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.io.read_bytes_sec",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "rate(ceilometer_disk_device_read_bytes{resource=~\"$UUID\"}[$__rate_interval])",
+          "legendFormat": "{{device}} read",
+          "refId": "A"
         },
         {
-          "alias": "write.bytes.$tag_device",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "device"
-              ],
-              "type": "tag"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.io.write_bytes_sec",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "B",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "rate(ceilometer_disk_device_write_bytes{resource=~\"$UUID\"}[$__rate_interval])",
+          "legendFormat": "{{device}} write",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -931,7 +667,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "decimals": null,
       "fieldConfig": {
         "defaults": {
@@ -983,102 +722,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "read.ops.$tag_device",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "device"
-              ],
-              "type": "tag"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.io.read_ops_sec",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "rate(ceilometer_disk_device_read_requests{resource=~\"$UUID\"}[$__rate_interval])",
+          "legendFormat": "{{device}} read",
+          "refId": "A"
         },
         {
-          "alias": "write.ops.$tag_device",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "device"
-              ],
-              "type": "tag"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.io.write_ops_sec",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "B",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "rate(ceilometer_disk_device_write_requests{resource=~\"$UUID\"}[$__rate_interval])",
+          "legendFormat": "{{device}} write",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -1145,7 +804,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "decimals": null,
       "fieldConfig": {
         "defaults": {
@@ -1197,102 +859,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "incoming.$tag_device",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "device"
-              ],
-              "type": "tag"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.net.in_bytes_sec",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "rate(ceilometer_network_incoming_bytes{resource=~\"$UUID\"}[$__rate_interval])",
+          "legendFormat": "{{device}} in",
+          "refId": "A"
         },
         {
-          "alias": "outgoing.$tag_device",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "device"
-              ],
-              "type": "tag"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.net.out_bytes_sec",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "B",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "rate(ceilometer_network_outgoing_bytes{resource=~\"$UUID\"}[$__rate_interval])",
+          "legendFormat": "{{device}} out",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -1345,7 +927,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "influxdb-monasca",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
       "decimals": null,
       "fieldConfig": {
         "defaults": {
@@ -1397,102 +982,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "alias": "incoming.$tag_device",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "device"
-              ],
-              "type": "tag"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.net.in_packets_sec",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "A",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "rate(ceilometer_network_incoming_packets{resource=~\"$UUID\"}[$__rate_interval])",
+          "legendFormat": "{{device}} in",
+          "refId": "A"
         },
         {
-          "alias": "outgoing.$tag_device",
-          "groupBy": [
-            {
-              "params": [
-                "$__interval"
-              ],
-              "type": "time"
-            },
-            {
-              "params": [
-                "device"
-              ],
-              "type": "tag"
-            },
-            {
-              "params": [
-                "linear"
-              ],
-              "type": "fill"
-            }
-          ],
-          "measurement": "vm.net.out_packets_sec",
-          "orderByTime": "ASC",
-          "policy": "def",
-          "refId": "B",
-          "resultFormat": "time_series",
-          "select": [
-            [
-              {
-                "params": [
-                  "value"
-                ],
-                "type": "field"
-              },
-              {
-                "params": [],
-                "type": "mean"
-              }
-            ]
-          ],
-          "tags": [
-            {
-              "key": "resource_id",
-              "operator": "=~",
-              "value": "/^$UUID$/"
-            }
-          ]
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "rate(ceilometer_network_outgoing_packets{resource=~\"$UUID\"}[$__rate_interval])",
+          "legendFormat": "{{device}} out",
+          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -3019,8 +2524,11 @@
           "text": "admin",
           "value": "admin"
         },
-        "datasource": "influxdb-monasca",
-        "definition": "SHOW TAG VALUES FROM \"vm.host_alive_status\" WITH KEY = \"tenant_name\" WHERE tenant_id =~ /$TID/",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "P43CA22E17D0F9596"
+        },
+        "definition": "label_values(ceilometer_cpu{project=~\".*$TID.*\"}, project_name)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -3029,7 +2537,7 @@
         "multi": false,
         "name": "TENANT",
         "options": [],
-        "query": "SHOW TAG VALUES FROM \"vm.host_alive_status\" WITH KEY = \"tenant_name\" WHERE tenant_id =~ /$TID/",
+        "query": "label_values(ceilometer_cpu{project=~\".*$TID.*\"}, project_name)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -3047,8 +2555,11 @@
           "text": "amphora-e3fce522-087e-46e0-8128-deff835815d5",
           "value": "amphora-e3fce522-087e-46e0-8128-deff835815d5"
         },
-        "datasource": "influxdb-monasca",
-        "definition": "SHOW TAG VALUES FROM \"vm.host_alive_status\" WITH KEY = \"vm_name\" WHERE tenant_name =~ /^($TENANT)$/",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "P43CA22E17D0F9596"
+        },
+        "definition": "label_values(ceilometer_cpu{project_name=~\"$TENANT\"}, name)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -3057,7 +2568,7 @@
         "multi": false,
         "name": "HOSTNAME",
         "options": [],
-        "query": "SHOW TAG VALUES FROM \"vm.host_alive_status\" WITH KEY = \"vm_name\" WHERE tenant_name =~ /^($TENANT)$/",
+        "query": "label_values(ceilometer_cpu{project_name=~\"$TENANT\"}, name)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -3075,8 +2586,11 @@
           "text": "5c010694-c83d-4853-913b-fba1f86b767f",
           "value": "5c010694-c83d-4853-913b-fba1f86b767f"
         },
-        "datasource": "influxdb-monasca",
-        "definition": "SHOW TAG VALUES FROM \"vm.host_alive_status\" WITH KEY = \"resource_id\" WHERE tenant_name =~ /^($TENANT)$/ and vm_name =~ /^($HOSTNAME)$/",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "P43CA22E17D0F9596"
+        },
+        "definition": "label_values(ceilometer_cpu{project_name=~\"$TENANT\",name=~\"$HOSTNAME\"}, resource)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -3085,7 +2599,7 @@
         "multi": false,
         "name": "UUID",
         "options": [],
-        "query": "SHOW TAG VALUES FROM \"vm.host_alive_status\" WITH KEY = \"resource_id\" WHERE tenant_name =~ /^($TENANT)$/ and vm_name =~ /^($HOSTNAME)$/",
+        "query": "label_values(ceilometer_cpu{project_name=~\"$TENANT\",name=~\"$HOSTNAME\"}, resource)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
