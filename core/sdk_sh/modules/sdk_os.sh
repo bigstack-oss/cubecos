@@ -3003,14 +3003,7 @@ os_device_profile_create()
             profile_name=$(os_device_profile_name_for "$model" "$units") || continue
             if ! timeout $SRVTO openstack accelerator device profile list -f value -c name | grep -q "$profile_name" ; then
                 echo "Creating device profile for $model (resource unit: $units)"
-                profile="["
-                for i in $(seq $units) ; do
-                    if [ "$i" -gt "1" ] ; then
-                        profile="${profile},"
-                    fi
-                    profile="${profile}{\"resources:PGPU\": 1, \"trait:CUSTOM_GPU_PRODUCT_ID_$pid\": \"required\", \"trait:CUSTOM_GPU_NVIDIA\": \"required\"}"
-                done
-                profile="${profile}]"
+                profile=$(os_device_profile_groups_for "$pid" "$units") || continue
 
                 timeout $SRVTO openstack accelerator device profile create $profile_name "$profile"
             fi
@@ -3025,6 +3018,60 @@ os_device_profile_create()
 # Cyborg are indistinguishable to the caller otherwise, and the caller uses this
 # to decide whether a profile still needs creating (#1247 is the same mistake in
 # gpu_vgpu_profile_list).
+# The `groups` document of a pgpu device profile: <units> identical groups,
+# each asking for one PGPU carrying this card's vendor and product traits.
+#
+# Single source of the trait names on purpose. They are wrong on Caracal --
+# cyborg there emits CUSTOM_NVIDIA_<PID> as one trait instead of the pair below
+# (#1478) -- and when that is fixed this is the only place that has to change.
+# Note os_nova_pgpu_host_list_by_instance_id parses these back out by field
+# ordinal, so changing how many traits a group has breaks it silently.
+os_device_profile_groups_for()
+{
+    local pid=$(echo "$1" | tr '[:lower:]' '[:upper:]')
+    local units=${2:-1}
+    local groups="[" i
+
+    [ -n "$pid" ] || return 1
+
+    for i in $(seq $units) ; do
+        [ "$i" -gt "1" ] && groups="${groups},"
+        groups="${groups}{\"resources:PGPU\": 1, \"trait:CUSTOM_GPU_PRODUCT_ID_$pid\": \"required\", \"trait:CUSTOM_GPU_NVIDIA\": \"required\"}"
+    done
+
+    echo "${groups}]"
+}
+
+# Create one device profile from values the caller already has.
+#
+# Exists so a profile can be created without asking Cyborg anything: a card
+# just carved to pgpu does not appear in the accelerator inventory until the
+# agent's next period (periodic_interval, default 60s), so the carve path
+# cannot look its own card up there. Both values are available locally -- the
+# model name from hex's config.json, the product id from sysfs.
+os_device_profile_create_with()
+{
+    local name=$1 pid=$2 units=${3:-1}
+
+    if [ -z "$name" ] || [ -z "$pid" ] ; then
+        log_error "os_device_profile_create_with: name and product id are required"
+        return 1
+    fi
+
+    local groups
+    groups=$(os_device_profile_groups_for "$pid" "$units") || return 1
+
+    local out rc
+    out=$($OPENSTACK accelerator device profile create "$name" "$groups" 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ] ; then
+        log_error "os_device_profile_create_with: creating device profile $name exited $rc: ${out//$'\n'/ }"
+        return $rc
+    fi
+
+    echo "$name"
+}
+
 os_device_profile_names()
 {
     local out rc

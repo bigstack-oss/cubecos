@@ -1107,6 +1107,75 @@ gpu_device_profile_get()
     echo "$map" | jq -r --arg id "$gpu_id" '.[$id] // ""'
 }
 
+# Make sure a pgpu card has its Cyborg device profile, creating it if missing.
+# Prints the profile name. Idempotent -- safe to call on every carve.
+#
+# Deliberately asks Cyborg nothing about the card itself. gpu_resource_set calls
+# this the moment a carve succeeds, and at that moment the card is not in the
+# accelerator inventory yet: cyborg's nvidia driver reads hex's config.json to
+# decide which cards are passthrough, but only on its agent period
+# (periodic_interval, default 60s). Both values needed to create the profile are
+# available locally instead -- the model name from config.json, the product id
+# from sysfs, which stays readable even once the card is bound to vfio-pci.
+gpu_device_profile_ensure()
+{
+    local gpu_id="$1"
+
+    if [ -z "$gpu_id" ] ; then
+        log_error "gpu_device_profile_ensure: gpu id is required"
+        return 1
+    fi
+
+    if [ ! -f "$GPU_CONFIG_FILE_PATH" ] ; then
+        log_error "gpu_device_profile_ensure: $GPU_CONFIG_FILE_PATH does not exist"
+        return 1
+    fi
+
+    local entry
+    entry=$(jq -c --arg id "$gpu_id" '[.[] | select(.id == $id)] | .[0] // empty' \
+        "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
+    if [ -z "$entry" ] ; then
+        log_error "gpu_device_profile_ensure: GPU $gpu_id is not in $GPU_CONFIG_FILE_PATH"
+        return 1
+    fi
+
+    # Only pgpu needs one; vGPU cards are scheduled through their PCI alias.
+    if [ "$(echo "$entry" | jq -r '.type // ""')" != "pgpu" ] ; then
+        log_debug "gpu_device_profile_ensure: GPU $gpu_id is not a pgpu card, nothing to do"
+        return 0
+    fi
+
+    local profile_name
+    profile_name=$(os_device_profile_name_for "$(echo "$entry" | jq -r '.name // ""')")
+    if [ -z "$profile_name" ] ; then
+        log_error "gpu_device_profile_ensure: cannot derive a profile name for GPU $gpu_id"
+        return 1
+    fi
+
+    local existing
+    existing=$(os_device_profile_names) || return 1
+    if printf '%s\n' "$existing" | grep -qx "$profile_name" ; then
+        echo "$profile_name"
+        return 0
+    fi
+
+    local addr
+    addr=$(gpu_sysfs_pci_addr "$gpu_id")
+    if [ -z "$addr" ] ; then
+        log_error "gpu_device_profile_ensure: cannot resolve the PCI address of GPU $gpu_id"
+        return 1
+    fi
+
+    local pid
+    pid=$(sed 's/^0x//' "/sys/bus/pci/devices/$addr/device" 2>/dev/null)
+    if [ -z "$pid" ] ; then
+        log_error "gpu_device_profile_ensure: cannot read the product id of GPU $gpu_id at $addr"
+        return 1
+    fi
+
+    os_device_profile_create_with "$profile_name" "$pid"
+}
+
 gpu_resource_set_check()
 {
     local gpu_id="$1"
