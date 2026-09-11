@@ -1034,6 +1034,79 @@ gpu_pgpu_attached_instance_get()
 
 # Full validation for gpu_resource_set: gpu_id, new_type, profiles required-ness
 # for the given type, GPU existence, and in-use status.
+# Cyborg device profile name for every pgpu card on this node, as a JSON object
+# keyed by GPU id:  {"GPU-aaa": "rtx_a2000_1", "GPU-bbb": null}
+#
+# A pgpu card is unusable without this name -- it is what a flavor's
+# accel:device_profile has to be set to -- and until #818 the CLI was the only
+# way to obtain it. sriovVgpu/migBackedVgpu cards need nothing of the sort:
+# their PCI alias is minted by gpu_resource_set and already travels with the
+# card, which is why only pgpu cards appear here.
+#
+# One Openstack round trip for the whole node rather than one per card: that
+# call costs ~1.2s on a real node. A node with no pgpu card makes no call.
+#
+# A card whose profile does not exist yet is reported as null, not as the name
+# it would be given. The name is only worth showing if it resolves; handing the
+# operator one that was never created sends them to NoValidHost with no clue.
+gpu_device_profile_map()
+{
+    if [ ! -f "$GPU_CONFIG_FILE_PATH" ] ; then
+        log_error "gpu_device_profile_map: $GPU_CONFIG_FILE_PATH does not exist"
+        return 1
+    fi
+
+    local pgpus
+    pgpus=$(jq -c '[.[] | select(.type == "pgpu") | {id: .id, name: (.name // "")}]' \
+        "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
+    if [ -z "$pgpus" ] ; then
+        log_error "gpu_device_profile_map: cannot parse $GPU_CONFIG_FILE_PATH"
+        return 1
+    fi
+
+    if [ "$(echo "$pgpus" | jq 'length')" = "0" ] ; then
+        echo '{}'
+        return 0
+    fi
+
+    # Fails closed: an unreachable Cyborg must not look like "no profiles".
+    local existing
+    existing=$(os_device_profile_names) || return 1
+
+    local out id name profile
+    out='{}'
+    while IFS=$'\t' read -r id name ; do
+        [ -n "$id" ] || continue
+
+        profile=$(os_device_profile_name_for "$name") || profile=""
+        if [ -n "$profile" ] && ! printf '%s\n' "$existing" | grep -qx "$profile" ; then
+            profile=""
+        fi
+
+        out=$(echo "$out" | jq -c --arg id "$id" --arg p "$profile" \
+            '.[$id] = (if $p == "" then null else $p end)')
+    done <<< "$(echo "$pgpus" | jq -r '.[] | [.id, .name] | @tsv')"
+
+    echo "$out"
+}
+
+# Cyborg device profile name of one pgpu card, or empty when it has none.
+# Empty and "could not tell" are distinguished by the exit code, not the output.
+gpu_device_profile_get()
+{
+    local gpu_id="$1"
+
+    if [ -z "$gpu_id" ] ; then
+        log_error "gpu_device_profile_get: gpu id is required"
+        return 1
+    fi
+
+    local map
+    map=$(gpu_device_profile_map) || return 1
+
+    echo "$map" | jq -r --arg id "$gpu_id" '.[$id] // ""'
+}
+
 gpu_resource_set_check()
 {
     local gpu_id="$1"

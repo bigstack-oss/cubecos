@@ -3019,6 +3019,25 @@ os_device_profile_create()
     IFS="$OLDIFS"
 }
 
+# Names of every Cyborg device profile that currently exists, one per line.
+#
+# Fails loudly rather than reporting "none": an empty answer and an unreachable
+# Cyborg are indistinguishable to the caller otherwise, and the caller uses this
+# to decide whether a profile still needs creating (#1247 is the same mistake in
+# gpu_vgpu_profile_list).
+os_device_profile_names()
+{
+    local out rc
+    out=$($OPENSTACK accelerator device profile list -f value -c name 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ] ; then
+        log_error "os_device_profile_names: openstack accelerator device profile list exited $rc: ${out//$'\n'/ }"
+        return $rc
+    fi
+
+    printf '%s\n' "$out"
+}
+
 os_device_profile_delete()
 {
     $OPENSTACK accelerator device profile delete $1 2>/dev/null
