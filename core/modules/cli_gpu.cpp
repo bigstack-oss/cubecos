@@ -173,6 +173,43 @@ GpuResourceSetMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+// Ensure one pgpu card has its Cyborg device profile.
+//
+// device_profile_create above is the node-wide, model-keyed form: it walks
+// every NVIDIA device Cyborg can see and makes a profile per model. This one is
+// per card, which is what an operator actually holds -- and, unlike that form,
+// it works on a card Cyborg has not rescanned yet, because hex_config derives
+// everything from config.json and sysfs instead of the accelerator inventory.
+static int
+GpuEnsureDpMain(int argc, const char** argv)
+{
+    /*
+     * [0]="device_profile_ensure", [1]=<gpu uuid>
+     */
+    if (argc > 2)
+        return CLI_INVALID_ARGS;
+
+    std::string uuid;
+    int index;
+
+    std::string optCmd = HEX_SDK " gpu_device_uuid_list";
+    std::string descCmd = HEX_SDK " -v gpu_device_uuid_list";
+
+    if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &uuid,
+                              "Select a GPU card: ") != CLI_SUCCESS) {
+        CliPrintf("GPU card is missing or not found");
+        return CLI_INVALID_ARGS;
+    }
+
+    // -e for the same reason gpu_resource_set uses it: without it hex_config
+    // swallows stderr and a refusal reaches the operator as a bare exit code,
+    // with the reason left in /var/log/hex_config.log (#1452).
+    if (HexSpawn(0, HEX_CFG, "-e", "gpu_device_profile_ensure", uuid.c_str(), NULL) != 0)
+        return CLI_FAILURE;
+
+    return CLI_SUCCESS;
+}
+
 CLI_MODE(CLI_TOP_MODE, "gpu",
     "Work with GPU settings.",
     !HexStrictIsErrorState() && !FirstTimeSetupRequired());
@@ -200,6 +237,10 @@ CLI_MODE_COMMAND("gpu", "device_profile_create", GpuCreateDpMain, NULL,
 CLI_MODE_COMMAND("gpu", "device_profile_delete", GpuDeleteDpMain, NULL,
     "Delete device profile of the giving name.",
     "device_profile_delete [name]");
+
+CLI_MODE_COMMAND("gpu", "device_profile_ensure", GpuEnsureDpMain, NULL,
+    "Create the device profile of one pgpu card if it does not have one yet.",
+    "device_profile_ensure [<gpu uuid>]");
 
 static int
 GpuEnableNvlinkMain(int argc, const char** argv)
