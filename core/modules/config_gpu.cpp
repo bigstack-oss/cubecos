@@ -1481,6 +1481,22 @@ ResourceSetMain(int argc, char* argv[])
             }
         }
 
+        // A pgpu card stays unusable until a Cyborg device profile names it:
+        // that string is what a flavor's accel:device_profile has to be set to,
+        // and nothing in the product created one. Do it here, where the
+        // operator has just declared the intent (#818).
+        //
+        // A failure does not fail the carve. The card really is a pgpu now and
+        // all three views of it agree; what is missing is a convenience name
+        // that `hex_config gpu_device_profile_ensure` recreates on demand.
+        // Tearing down a good carve over a label would be the worse trade --
+        // and the teardown itself can fail, which is a far worse place to end.
+        if (HexUtilSystemF(0, 0, HEX_SDK " gpu_device_profile_ensure %s >/dev/null", gpuId) != 0) {
+            HexLogWarning("gpu_resource_set: GPU %s is now pgpu, but creating its Cyborg device "
+                          "profile failed; run 'hex_config gpu_device_profile_ensure %s' to retry",
+                          gpuId, gpuId);
+        }
+
         HexLogInfo("gpu_resource_set: successfully updated GPU %s to pgpu", gpuId);
         return EXIT_SUCCESS;
     } else if (strcmp(newType, "sriovVgpu") == 0) {
@@ -1784,4 +1800,45 @@ CONFIG_MODULE(gpu, 0, 0, 0, 0, Commit);
 
 CONFIG_MIGRATE(gpu, GPU_CONFIG_DIR);
 
+static void
+DeviceProfileEnsureUsage(void)
+{
+    fprintf(stderr, "Usage: %s gpu_device_profile_ensure <gpu_id>\n", HexLogProgramName());
+}
+
+// Give a pgpu card the Cyborg device profile it needs, if it has none.
+//
+// gpu_resource_set already does this on a successful carve, so this command is
+// for the two cases that path cannot cover: a carve whose profile creation
+// failed, and a card that was already pgpu before the product could create one.
+// Idempotent, and a no-op on a card that is not pgpu.
+static int
+DeviceProfileEnsureMain(int argc, char* argv[])
+{
+    /*
+     * [0]="gpu_device_profile_ensure", [1]=<gpu_id>
+     */
+    if (argc != 2) {
+        HexLogError("gpu_device_profile_ensure: invalid number of arguments");
+        DeviceProfileEnsureUsage();
+        return EXIT_FAILURE;
+    }
+
+    const char* gpuId = argv[1];
+
+    if (access(GPU_CONFIG_FILE, F_OK) != 0) {
+        HexLogError("gpu_device_profile_ensure: GPU config file not found at %s", GPU_CONFIG_FILE);
+        return EXIT_FAILURE;
+    }
+
+    if (HexUtilSystemF(0, 0, HEX_SDK " gpu_device_profile_ensure %s", gpuId) != 0) {
+        HexLogError("gpu_device_profile_ensure: failed to ensure the device profile of GPU %s", gpuId);
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_COMMAND(gpu_resource_set, ResourceSetMain, ResourceSetUsage);
+
+CONFIG_COMMAND(gpu_device_profile_ensure, DeviceProfileEnsureMain, DeviceProfileEnsureUsage);
