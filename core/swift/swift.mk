@@ -40,8 +40,8 @@
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-swiftclient==4.5.0"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -49,4 +49,4 @@ rootfs_install::
 	$(Q)# well: the pip-installed yoga copy that owned /usr/local/bin/swift -- which
 	$(Q)# precedes /usr/bin -- came in with horizon, and #609 moved horizon into the
 	$(Q)# venv, so a bare "swift" is caracal 4.5.0.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/swift /usr/bin/swift
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/swift /usr/bin/swift

@@ -297,7 +297,7 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
             // meter name (if meter == 'ceilometer_cpu' ...) and raises "Cannot process
             // prometheus meter" for anything it does not recognise, so an override would
             // break the query rather than redirect it. The names are matched at the
-            // source instead, by hex_sdk watcher_instance_metrics.
+            // source instead, by hex_sdk instance_metrics_collect.
             cfg["watcher_applier"]["workers"] = workers;
         }
     }

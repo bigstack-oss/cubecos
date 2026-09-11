@@ -732,7 +732,7 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
 
 // Watcher needs per-VM CPU and memory, and the only place those can be read is the node
 // running the domains -- which is why this lives in config_nova.cpp rather than beside the
-// rest of the prometheus wiring. `hex_sdk watcher_instance_metrics` enumerates the local
+// rest of the prometheus wiring. `hex_sdk instance_metrics_collect` enumerates the local
 // libvirt domains and writes them as a node_exporter textfile; the exporter, its textfile
 // directory and the scrape job are config_prometheus.cpp's.
 //
@@ -750,7 +750,7 @@ WriteInstanceMetricsCronJob(bool enabled)
     std::string fsError;
 
     const std::vector<std::string> cron = {
-        "* * * * * root " HEX_SDK " watcher_instance_metrics\n",
+        "* * * * * root " HEX_SDK " instance_metrics_collect\n",
     };
     if (!WriteFile(fsError, INSTANCE_METRICS_CRON, cron)) {
         HexLogError("%s", fsError.c_str());
@@ -1032,7 +1032,7 @@ Commit(bool modified, int dryLevel)
     NovaService(s_enabled);
     WriteInstanceMetricsCronJob(s_enabled && IsCompute(s_eCubeRole));
     if (s_enabled && IsCompute(s_eCubeRole))
-        HexUtilSystemF(0, 30, HEX_SDK " watcher_instance_metrics");
+        HexUtilSystemF(0, 30, HEX_SDK " instance_metrics_collect");
     WriteLogRotateConf(nova_log_conf);
     WriteLogRotateConf(placement_log_conf);
 

@@ -130,9 +130,9 @@ rootfs_install::
 	$(Q)for b in rados rbd ; do \
 		chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/$$b && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CEPH_HOME_DIR)/bin/pip wheel --no-build-isolation --no-deps -w $(CEPH_WHEEL_DIR) ." ; \
 	done
-	$(Q)chroot $(ROOTDIR) bash -c "$(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --no-deps $(CEPH_WHEEL_DIR)/rados-*.whl $(CEPH_WHEEL_DIR)/rbd-*.whl"
+	$(Q)chroot $(ROOTDIR) bash -c "$(OPENSTACK_HOME_DIR)/bin/pip install --no-deps $(CEPH_WHEEL_DIR)/rados-*.whl $(CEPH_WHEEL_DIR)/rbd-*.whl"
 	$(Q)# fail the build here rather than at first RBD I/O if either binding did not land
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/python -c "import rados, rbd"
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python -c "import rados, rbd"
 	$(Q)# tear the scaffolding down: the venv, its Cython, the wheels and the source
 	$(Q)# tree are all build-time only, and none of them belong in the shipped image
 	$(Q)chroot $(ROOTDIR) rm -rf $(CEPH_HOME_DIR) /usr/src/ceph
