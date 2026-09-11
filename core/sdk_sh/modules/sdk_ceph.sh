@@ -4830,18 +4830,49 @@ ceph_device_tier_list()
     local registry= registry_ok=0
     registry=$(_ceph_device_tier_registry) || registry_ok=1
 
+    # The four lists this table is built from, read once and checked once. The
+    # rule the queries further down this file follow applies here too: a list
+    # that could not be read is unknown, never empty. Reading them inside
+    # `for tier in $(... | jq ...)` threw the status away, and an enumeration
+    # that comes back empty because the mons were mid-election prints every
+    # registered tier as "registered-but-absent" -- which reads as "your tiers
+    # are gone" and sends the operator to rebuild what is already there.
+    local classes= class_names= rules= pools= vtypes=
+    classes=$($CEPH osd crush class ls 2>/dev/null) || {
+        echo "Error: cannot read the device class list; not listing device tiers" >&2
+        return 1
+    }
+    class_names=$(echo "$classes" | jq -r '.[]' 2>/dev/null) || {
+        echo "Error: cannot parse the device class list; not listing device tiers" >&2
+        return 1
+    }
+    rules=$($CEPH osd crush rule ls 2>/dev/null) || {
+        echo "Error: cannot read the CRUSH rule list; not listing device tiers" >&2
+        return 1
+    }
+    pools=$($CEPH osd pool ls 2>/dev/null) || {
+        echo "Error: cannot read the pool list; not listing device tiers" >&2
+        return 1
+    }
+    # A volume type list that cannot be read would put "no" in the VTYPE column
+    # of every row, which is the same false negative one column over.
+    vtypes=$($OPENSTACK volume type list --long --format value -c Name 2>/dev/null) || {
+        echo "Error: cannot read the volume type list; not listing device tiers" >&2
+        return 1
+    }
+
     printf "%-16s %-8s %-6s %-11s %-10s %-6s %-6s %s\n" \
         DEVICE_TIER OSD HOSTS POOL_SZ/MIN POOL_RULE VTYPE REGIST NOTE
     local tier= osds= hosts= size= min_size= prule= vtype= reg= note= seen=
-    for tier in $($CEPH osd crush class ls 2>/dev/null | jq -r '.[]') ; do
-        _ceph_device_tier_has_rule $tier || continue
-        _ceph_device_tier_has_pool $tier || continue
+    for tier in $class_names ; do
+        printf '%s\n' "$rules" | grep -qxF -- "$tier" || continue
+        printf '%s\n' "$pools" | grep -qxF -- "$tier" || continue
         osds=$($CEPH osd crush class ls-osd $tier 2>/dev/null | tr '\n' ',' | sed 's/,$//')
         hosts=$(_ceph_device_tier_class_hosts $tier)
         size=$($CEPH osd pool get $tier size -f json 2>/dev/null | jq -r '.size | numbers')
         min_size=$($CEPH osd pool get $tier min_size -f json 2>/dev/null | jq -r '.min_size | numbers')
         prule=$($CEPH osd pool get $tier crush_rule -f json 2>/dev/null | jq -r .crush_rule)
-        _ceph_device_tier_has_vtype $tier && vtype=yes || vtype=no
+        printf '%s\n' "$vtypes" | grep -qxF -- "$tier" && vtype=yes || vtype=no
         note=
         [ "$prule" = "$tier" ] || note="$note pool-not-on-its-rule"
         [ "$vtype" = "yes" ] || note="$note no-volume-type"
@@ -4870,7 +4901,7 @@ ceph_device_tier_list()
     while IFS= read -r entry ; do
         [ -n "$entry" ] || continue
         printf '%s' "$seen" | grep -qxF -- "$entry" && continue
-        _ceph_device_tier_has_vtype "$entry" && vtype=yes || vtype=no
+        printf '%s\n' "$vtypes" | grep -qxF -- "$entry" && vtype=yes || vtype=no
         printf "%-16s %-8s %-6s %-11s %-10s %-6s %-6s %s\n" \
             "$entry" "-" "-" "-/-" "-" "$vtype" yes "registered-but-absent"
     done <<< "$registry"

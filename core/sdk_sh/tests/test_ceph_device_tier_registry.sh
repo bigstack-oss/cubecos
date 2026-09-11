@@ -325,6 +325,39 @@ OUT=$(ceph_device_tier_list 2>&1)
 ck "$(echo "$OUT" | grep -c 'registered-but-absent')" 0 "2d the placeholder is not a missing tier"
 ck "$(echo "$OUT" | awk '$1 == "gold" { print $7 }')" "no" "2d and gold is genuinely unregistered"
 
+# ---- 2e. a list that cannot be read is unknown, not empty ----
+# `for tier in $(ceph osd crush class ls | jq ...)` threw the command's status
+# away, so a mon election emptied the enumeration and every registered tier was
+# reported "registered-but-absent" with rc 0 -- "your tiers are gone" to the
+# operator, when nothing had happened to them.
+reset_cluster
+DEAD_PAT='^osd crush class ls$'
+OUT=$(ceph_device_tier_list 2>&1) ; RC=$?
+ck "$RC" 1 "2e an unreadable class list refuses to list"
+ckhas "$OUT" "cannot read the device class list" "2e says which list"
+cklacks "$OUT" "registered-but-absent" "2e does not report live tiers as gone"
+
+reset_cluster
+DEAD_PAT='^osd crush rule ls$'
+OUT=$(ceph_device_tier_list 2>&1) ; RC=$?
+ck "$RC" 1 "2f an unreadable rule list refuses to list"
+cklacks "$OUT" "registered-but-absent" "2f invents no absent tiers either"
+
+reset_cluster
+DEAD_PAT='^osd pool ls$'
+OUT=$(ceph_device_tier_list 2>&1) ; RC=$?
+ck "$RC" 1 "2g an unreadable pool list refuses to list"
+
+# ---- 2h. the same rule one column over ----
+# An unreadable volume type list used to put "no" in VTYPE against every tier,
+# which is the identical false negative: the operator goes and recreates a
+# volume type that is already there.
+reset_cluster
+OS_DEAD=1
+OUT=$(ceph_device_tier_list 2>&1) ; RC=$?
+ck "$RC" 1 "2h an unreadable volume type list refuses to list"
+cklacks "$OUT" "no-volume-type" "2h does not claim the volume type is missing"
+
 # ==== the four queries the CLI validates against =========================
 #
 # Every one of these returns non-zero rather than an empty answer when it
