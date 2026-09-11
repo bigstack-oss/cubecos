@@ -317,6 +317,22 @@ ckhas "$OUT" "pool silver" "1g and names what is still there"
 ck "$(grep -cx silver "$TMP/pools")" 1 "1g the pool really is still there"
 ck "$(awk -F: '$1 == "0" { print $2 }' "$TMP/classes")" "hdd" "1g but the OSD classes were restored"
 
+# ---- 1h. the two reserved names are refused before anything is built ----
+# config_cinder.cpp refuses these while generating backends, which is one stage
+# too late: the class, the rule, the pool and the volume type all get created
+# first, and the volume type named "ceph" then resolves to the built-in backend
+# whose rbd_pool is cinder-volumes -- so the command reported success while the
+# tier it claimed to have built could never receive a volume.
+for reserved in ceph CubeStorage ; do
+    reset_cluster
+    OUT=$(ceph_device_tier_create $reserved 0 2>&1) ; RC=$?
+    ck "$RC" 1 "1h $reserved is refused"
+    ckhas "$OUT" "reserved" "1h $reserved says why"
+    ck "$(grep -cx "$reserved" "$TMP/rules")" 0 "1h $reserved built no rule"
+    ck "$(grep -c registry_add "$TMP/calls")" 0 "1h $reserved touched no registry"
+    ck "$(awk -F: -v c="$reserved" '$2 == c' "$TMP/classes" | wc -l | tr -d ' ')" 0 "1h $reserved reclassed no OSD"
+done
+
 # ==== ceph_device_tier_list: the two disagreements =======================
 
 # ---- 2a. a tier on Ceph that is not registered ----

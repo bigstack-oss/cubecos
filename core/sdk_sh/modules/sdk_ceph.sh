@@ -3990,6 +3990,17 @@ _ceph_device_tier_name_ok()
         echo "Error: device tier name $tier must not contain '-pool' or '-ssd'" >&2
         return 1
     fi
+    # The built-in backend and the built-in volume type, by name. config_cinder.cpp
+    # knows they are reserved (BUILTIN_STORAGE_BACKEND at :87, BUILTIN_VOLUME_TYPE
+    # from constant.hpp) but only refuses the registry entry, while generating
+    # backends -- which is after the class, the rule, the pool and the volume type
+    # have all been created under that name. A tier called "ceph" got built, took a
+    # volume type whose volume_backend_name resolves to the built-in backend, and
+    # reported success while its volumes went to cinder-volumes.
+    if [ "$tier" = "ceph" ] || [ "$tier" = "CubeStorage" ] ; then
+        echo "Error: device tier name $tier is reserved by the built-in storage backend" >&2
+        return 1
+    fi
     return 0
 }
 

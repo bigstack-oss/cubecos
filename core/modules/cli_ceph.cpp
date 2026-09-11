@@ -1228,6 +1228,20 @@ CephDeviceTierNameOk(const std::string& tier)
         return false;
     }
 
+    // The built-in backend and the built-in volume type, spelled out rather
+    // than taken from BUILTIN_STORAGE_BACKEND (config_cinder.cpp:87) and
+    // BUILTIN_VOLUME_TYPE (constant.hpp), neither of which this module has.
+    // config_cinder.cpp refuses these two as well, but only while generating
+    // backends -- by which point the class, the rule, the pool and the volume
+    // type exist under that name. "CubeStorage" is caught today only as a side
+    // effect of an object by that name already existing, which is not the same
+    // as refusing it, and "ceph" is caught by nothing until it is too late.
+    if (tier == "ceph" || tier == "CubeStorage") {
+        CliPrintf("Invalid device tier name '%s': it is reserved by the built-in storage backend.",
+            tier.c_str());
+        return false;
+    }
+
     return true;
 }
 
