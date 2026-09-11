@@ -522,7 +522,7 @@ cube_cluster_recreate()
     #systemctl stop rbd-target-gw rbd-target-api
 
     if is_control_node ; then
-        systemctl stop logstash monasca-persister
+        systemctl stop logstash
         systemctl stop opensearch influxdb kafka zookeeper
         systemctl stop mariadb rabbitmq-server
         hex_config purge_ceph_mon
@@ -940,11 +940,24 @@ check_service_memory_and_run()
     fi
 }
 
+# One line of JSON per service, for the array check_service_stats builds. The check's
+# own stdout is discarded, and that is load-bearing rather than tidiness: telegraf reads
+# this array with data_format = "json" (core/telegraf/telegraf-ctrl.conf.in), so anything
+# a check prints lands inside the document and the parse fails on the *document*. Every
+# service's status is lost, not just the noisy one, and alert_host_services stops raising
+# SRV00002W for any of them -- a cluster that reports nothing and alerts on nothing.
+#
+# It is not hypothetical and not one check's fault. Measured on the labs: health_heat_check
+# leaks "Failed to discover available identity versions" from the openstack CLI when the
+# API tier is unwell, and health_swift_check emits "Terminated" when its timeout fires --
+# different offenders on different clusters, same broken document. Nothing here reads the
+# check's stdout: the status is its exit code and the description comes from
+# health_errcode_lookup, so discarding it costs nothing.
 check_service()
 {
     local service=$1
 
-    $HEX_SDK health_${service}_check
+    $HEX_SDK health_${service}_check >/dev/null 2>&1
     local r=$?
     local desc=$($HEX_SDK health_errcode_lookup $service $r)
 
@@ -966,7 +979,7 @@ check_service_stats()
     done
 
     # openstack core services
-    local service_array=(nova cyborg neutron glance cinder manila swift heat octavia masakari monasca)
+    local service_array=(nova cyborg neutron glance cinder manila swift heat octavia masakari)
     for service in "${service_array[@]}" ; do
         check_service $service
     done

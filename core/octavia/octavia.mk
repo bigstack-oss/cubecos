@@ -22,9 +22,9 @@
 # the client is installed once.
 #
 # NOTE: unlike heat, health_octavia_check() is *not* what depends on this.
-# It checks systemd units, the monasca http_status metric and the octavia-hm0
-# OVN port, never the OSC CLI -- so `cluster check` would have stayed green
-# while the bootstrap paths above failed.
+# It checks systemd units, the blackbox_exporter probe of the API and the
+# octavia-hm0 OVN port, never the OSC CLI -- so `cluster check` would have
+# stayed green while the bootstrap paths above failed.
 #
 # openstack-octavia-ui, the Horizon dashboard plugin, is replaced by the
 # octavia-dashboard wheel installed further down. It was dropped when octavia moved
@@ -40,8 +40,8 @@
 OCTAVIA_CONF_DIR := /etc/octavia
 OCTAVIA_CONFDIR := $(ROOTDIR)$(OCTAVIA_CONF_DIR)
 
-OCTAVIA_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/octavia
-OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(CARACAL_OPENSTACK_RELEASE)_patch/octavia
+OCTAVIA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/octavia
+OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(OPENSTACK_RELEASE)_patch/octavia
 
 # https://releases.openstack.org/caracal/index.html#caracal-octavia -- last numeric
 # 2024.1 revision, the same rule #1206 used to land on 12.0.1. core/octavia/Makefile
@@ -84,8 +84,8 @@ rootfs_install::
 	$(Q)# interpreter /usr/bin/openstack runs under, so a dependency nothing asks for
 	$(Q)# is one that can disappear silently. It was in the antelope venv until #636
 	$(Q)# took the cli here.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			octavia==$(OCTAVIA_VER) \
 			octavia-lib \
 			kazoo \
@@ -99,13 +99,13 @@ rootfs_install::
 	$(Q)# unlinked on purpose. 2024.1 adds an eighth, octavia-wsgi, for serving the
 	$(Q)# api under a wsgi container; octavia-api.service execs octavia-api directly,
 	$(Q)# so that one is left unlinked too.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-api /usr/bin/octavia-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-worker /usr/bin/octavia-worker
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-health-manager /usr/bin/octavia-health-manager
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-housekeeping /usr/bin/octavia-housekeeping
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-db-manage /usr/bin/octavia-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-driver-agent /usr/bin/octavia-driver-agent
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/octavia-status /usr/bin/octavia-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-api /usr/bin/octavia-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-worker /usr/bin/octavia-worker
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-health-manager /usr/bin/octavia-health-manager
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-housekeeping /usr/bin/octavia-housekeeping
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-db-manage /usr/bin/octavia-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-driver-agent /usr/bin/octavia-driver-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-status /usr/bin/octavia-status
 
 # Whole-file downstream copies, if any -- anything under PATCHDIR that is not a
 # *.py.patch or its *.py.orig. Nothing uses this today: both carried changes are
@@ -150,8 +150,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		octavia-dashboard==$(OCTAVIA_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

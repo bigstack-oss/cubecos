@@ -40,6 +40,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_gpu.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_haproxy.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_health.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_hwdetect.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_instance.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_k3s.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_kafka.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_lachesis.sh
@@ -68,7 +69,6 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_thanos.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_toggle.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_update.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_util.sh
-hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_watcher.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_zookeeper.sh
 
 ## Install /usr/sbin/hex_sdk modules.post
@@ -159,7 +159,6 @@ hex_config_MODULES += config_heat.o
 hex_config_MODULES += config_barbican.o
 hex_config_MODULES += config_masakari.o
 hex_config_MODULES += config_manila.o
-hex_config_MODULES += config_monasca.o
 hex_config_MODULES += config_octavia.o
 hex_config_MODULES += config_designate.o
 hex_config_MODULES += config_watcher.o
@@ -189,7 +188,6 @@ hex_config_MODULES += config_advisor.o
 PROGRAMS += hex_config
 
 hex_cli_MODULES += cli_cubesys.o
-hex_cli_MODULES += cli_management_cleanup.o
 hex_cli_MODULES += cli_ssh.o
 hex_cli_MODULES += cli_appliance.o
 hex_cli_MODULES += cli_support.o

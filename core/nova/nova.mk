@@ -40,12 +40,12 @@ ROOTFS_DNF += $(LIBVIRT_LOCKED_RPMS) dosfstools python3-libvirt ksmtuned virt-v2
 # handled elsewhere: iptables
 ROOTFS_DNF_NOARCH += iptables-services novnc
 
-NOVA_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages/nova
-NOVA_PATCHDIR := $(COREDIR)/nova/$(CARACAL_OPENSTACK_RELEASE)_patch
+NOVA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/nova
+NOVA_PATCHDIR := $(COREDIR)/nova/$(OPENSTACK_RELEASE)_patch
 
 # nova and placement run out of the caracal venv. nova 29.4.0 is the last 2024.1
 # release and openstack-placement 11.0.1 its counterpart; both pull only new
-# packages into $(CARACAL_OPENSTACK_HOME_DIR) -- 17 of them, changing no version
+# packages into $(OPENSTACK_HOME_DIR) -- 17 of them, changing no version
 # skyline, keystone, glance or cinder already holds -- so the hop costs the other
 # occupants nothing.
 #
@@ -62,8 +62,8 @@ NOVA_PATCHDIR := $(COREDIR)/nova/$(CARACAL_OPENSTACK_RELEASE)_patch
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			nova==29.4.0 \
 			openstack-placement==11.0.1 \
 			python-novaclient \
@@ -78,29 +78,29 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link Nova binaries
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova /usr/bin/nova
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-api /usr/bin/nova-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-api-metadata /usr/bin/nova-api-metadata
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-api-os-compute /usr/bin/nova-api-os-compute
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-api-wsgi /usr/bin/nova-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-compute /usr/bin/nova-compute
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-conductor /usr/bin/nova-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-manage /usr/bin/nova-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-metadata-wsgi /usr/bin/nova-metadata-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-novncproxy /usr/bin/nova-novncproxy
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-policy /usr/bin/nova-policy
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-rootwrap /usr/bin/nova-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-rootwrap-daemon /usr/bin/nova-rootwrap-daemon
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-scheduler /usr/bin/nova-scheduler
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-serialproxy /usr/bin/nova-serialproxy
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-spicehtml5proxy /usr/bin/nova-spicehtml5proxy
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/nova-status /usr/bin/nova-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova /usr/bin/nova
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api /usr/bin/nova-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-metadata /usr/bin/nova-api-metadata
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-os-compute /usr/bin/nova-api-os-compute
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-wsgi /usr/bin/nova-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-compute /usr/bin/nova-compute
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-conductor /usr/bin/nova-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-manage /usr/bin/nova-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-metadata-wsgi /usr/bin/nova-metadata-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-novncproxy /usr/bin/nova-novncproxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-policy /usr/bin/nova-policy
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-rootwrap /usr/bin/nova-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-rootwrap-daemon /usr/bin/nova-rootwrap-daemon
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-scheduler /usr/bin/nova-scheduler
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-serialproxy /usr/bin/nova-serialproxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-spicehtml5proxy /usr/bin/nova-spicehtml5proxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-status /usr/bin/nova-status
 	$(Q)# Link Placement binaries (since they were removed from RPMs)
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/placement-api /usr/bin/placement-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/placement-manage /usr/bin/placement-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/placement-status /usr/bin/placement-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/placement-api /usr/bin/placement-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/placement-manage /usr/bin/placement-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/placement-status /usr/bin/placement-status
 	$(Q)# Link the uWSGI binary for Placement WSGI
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/uwsgi /usr/bin/uwsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/uwsgi /usr/bin/uwsgi
 
 # There is no /usr/bin/privsep-helper any more, and no oslo.privsep in the antelope
 # venv.
@@ -123,7 +123,7 @@ rootfs_install::
 #
 # nova still names oslo.privsep in the caracal pip install above, and that one is its
 # own: config_nova.cpp pins four helper_command values at
-# $(CARACAL_OPENSTACK_HOME_DIR)/bin/privsep-helper, since a python 3.10 helper cannot
+# $(OPENSTACK_HOME_DIR)/bin/privsep-helper, since a python 3.10 helper cannot
 # serve a caracal nova. Naming it rather than leaving it transitive is the same
 # reasoning that names python-designateclient in core/designate/designate.mk: a
 # dependency nothing asks for is one that disappears silently.
@@ -182,8 +182,8 @@ rootfs_install::
 	$(Q)# carries a second copy that only moves when someone remembers to re-copy it.
 	$(Q)# Unlike glance's, nova's rootwrap.conf never narrowed exec_dirs -- it was the
 	$(Q)# upstream default verbatim.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/nova/api-paste.ini /etc/nova/api-paste.ini
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(CARACAL_OPENSTACK_HOME_DIR)/etc/nova/rootwrap.conf /etc/nova/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/nova/api-paste.ini /etc/nova/api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/nova/rootwrap.conf /etc/nova/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/policy.json /etc/nova/policy.json
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/release /etc/nova/release
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement-dist.conf /usr/share/placement/placement-dist.conf
@@ -210,7 +210,7 @@ rootfs_install::
 	$(Q)# install rootwrap filters
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/nova/rootwrap
 	$(Q)# also the wheel's, through the etc/nova/rootwrap.d/* glob in data_files
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(CARACAL_OPENSTACK_HOME_DIR)/etc/nova/rootwrap.d/compute.filters /usr/share/nova/rootwrap/compute.filters
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/nova/rootwrap.d/compute.filters /usr/share/nova/rootwrap/compute.filters
 
 # adjust file ownerships and permissions
 rootfs_install::

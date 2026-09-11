@@ -24,10 +24,9 @@ BLKLST_DNF += iptables-legacy iptables-legacy-libs python3-django3 ceph-mgr-k8se
 BLKLST_DNF += python3-PyMySQL   # CVE-2024-36039 Upgrade to version: 1.1.1
 BLKLST_DNF += python3-django    # CVE-2022-28347, CVE-2023-31047, CVE-2025-64459 CVE-2023-46695, CVE-2023-43665, CVE-2022-36359 Upgrade to version: 3.2.23
 ROOTFS_PIP += python-jose       # CVE-2024-33663 Upgrade to version: 3.4.0
-BLKLST_DNF += python3-monascaclient # Remove DNF managed package
 # CVE-2022-2996. The rpm stays blacklisted; the ROOTFS_PIP entry that used to
 # replace it with 0.12.0 is gone. scciclient backs ironic's iRMC driver, ironic runs
-# in the antelope venv now, and core/ironic deliberately does not install it there --
+# in the openstack venv, and core/ironic deliberately does not install it there --
 # so the system python 3.9 copy had no importer left. Nothing in the image carries
 # scciclient at all now, which is the stronger answer to the CVE.
 BLKLST_DNF += python3-scciclient
@@ -75,21 +74,27 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
-	$(Q)# centos-release-openstack-antelope *requires* centos-release-ceph-quincy, so the
-	$(Q)# line above installs it every build and it cannot simply be erased: `rpm -e
-	$(Q)# --nodeps` leaves antelope with an unsatisfied dependency, which `dnf check`
-	$(Q)# reports for the life of the image ("has missing requires of
-	$(Q)# centos-release-ceph-quincy").
+	$(Q)# The release rpm pulls a ceph release rpm with it, and which one follows the
+	$(Q)# openstack release: antelope required centos-release-ceph-quincy, caracal
+	$(Q)# requires centos-release-ceph-reef -- which is the one core/ceph pins against.
 	$(Q)#
-	$(Q)# Disabling the repo gets what we actually want -- 17.2.z out of dnf's view --
-	$(Q)# while leaving the package installed, the dependency satisfied and the rpm
-	$(Q)# database clean. It matters because the quincy and reef release rpms own
-	$(Q)# differently-named CentOS-Ceph-*.repo files and neither Obsoletes the other, so
-	$(Q)# without this dnf sees 17.2.z and 18.2.z at once. The pinned NVRs in
-	$(Q)# core/ceph/ceph.mk would still resolve correctly, but any *unpinned* dependency
-	$(Q)# could be satisfied from the wrong release.
+	$(Q)# That is why the quincy handling this block used to carry is gone. Under
+	$(Q)# antelope, quincy arrived on every build and could not simply be erased (`rpm -e
+	$(Q)# --nodeps` left antelope with an unsatisfied dependency and `dnf check`
+	$(Q)# complaining for the life of the image), so the repo was disabled instead --
+	$(Q)# the quincy and reef release rpms own differently-named CentOS-Ceph-*.repo
+	$(Q)# files and neither Obsoletes the other, so dnf otherwise saw 17.2.z and 18.2.z
+	$(Q)# at once and any *unpinned* dependency could resolve from the wrong release.
+	$(Q)#
+	$(Q)# Caracal never installs quincy, so there is nothing to disable -- and leaving
+	$(Q)# the line in would fail the build rather than no-op: `dnf config-manager
+	$(Q)# --set-disabled` on a repo that does not exist exits 1 ("No matching repo to
+	$(Q)# modify"). Measured on jim-1cc after doing the swap by hand.
+	$(Q)#
+	$(Q)# reef is still named explicitly rather than left to the dependency: it is what
+	$(Q)# core/ceph pins against, and an openstack release that later pairs with squid
+	$(Q)# should show up here as a conflict rather than as a silent ceph bump.
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-reef
-	$(Q)chroot $(ROOTDIR) dnf config-manager --set-disabled centos-ceph-quincy
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled highavailability
 
 # ceph-nfs-ganesha repo needs to be installed before packages
@@ -218,23 +223,6 @@ $(call PROJ_INSTALL_DNF_NOARCH,-d "$(ROOTFS_DNF_DL_FROM)","$(ROOTFS_DNF)")
 $(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
 $(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_01)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
 
-# install python 3.10 for openstack antelope
-rootfs_install::
-	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
-	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
-	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
-	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
-	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
-	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-3.10
-	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-3.10/Python-3.10.20.tgz https://www.python.org/ftp/python/3.10.20/Python-3.10.20.tgz
-	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-3.10/Python-3.10.20.tgz -C /usr/src/python-3.10
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-3.10/Python-3.10.20 && ./configure --enable-optimizations"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-3.10/Python-3.10.20 && make altinstall"
-	$(Q)umount -l $(ROOTDIR)/dev || true
-	$(Q)# ensure python 3.10 is successfully built
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python3.10 ]
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip3.10 ]
-
 # install python 3.11 for openstack caracal
 rootfs_install::
 	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
@@ -242,39 +230,29 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
 	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
 	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
-	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(CARACAL_PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(CARACAL_PYTHON_PATCH_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz
-	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER).tgz -C /usr/src/python-$(CARACAL_PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER) && ./configure --enable-optimizations"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(CARACAL_PYTHON_VER)/Python-$(CARACAL_PYTHON_PATCH_VER) && make altinstall"
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(PYTHON_PATCH_VER)/Python-$(PYTHON_PATCH_VER).tgz
+	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz -C /usr/src/python-$(PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && ./configure --enable-optimizations"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && make altinstall"
 	$(Q)umount -l $(ROOTDIR)/dev || true
 	$(Q)# ensure python 3.11 is successfully built
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(CARACAL_PYTHON_VER) ]
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(CARACAL_PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(PYTHON_VER) ]
 
-# set up the execution context for openstack antelope
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p /opt/openstack-antelope
-	$(Q)chroot $(ROOTDIR) python3.10 -m venv /opt/openstack-antelope
-	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)/opt/openstack-antelope/
-	$(Q)chroot $(ROOTDIR) bash -c "source /opt/openstack-antelope/bin/activate && pip install --upgrade pip"
-	$(Q)chroot $(ROOTDIR) /opt/openstack-antelope/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
-
-# NOTE: setuptools in this venv is pinned to 65.7.0 by the constraints file -- the
-# version antelope's own upper-constraints names -- because setuptools 82 deleted
-# pkg_resources and the 2023-era services still import it (see cubecos#607/#1080).
+# NOTE: why the setuptools pin is applied at venv creation, below, rather than being
+# left to whichever later `pip install -c` happens to pull setuptools in as a
+# dependency. (Which version, and why that number, is the NOTE after the venv block.)
 #
-# The pin is applied here, at creation, rather than being left to whichever later
-# `pip install -c` happens to pull setuptools in as a dependency. It used to be:
-# `pip install --upgrade pip setuptools` put the *current* setuptools in the venv
-# (84.0.0 as of this writing) and nothing constrained it until some service install
-# further down resolved setuptools==65.7.0 and downgraded it. Everything installed in
-# between ran against a setuptools with no pkg_resources -- and core/ceph/ceph.mk is
-# in between, because ceph sits ahead of keystone in HEAVY_COMPONENTS. Its rados/rbd
-# bindings are a `setup.py install`, whose egg_info step loads pbr's entry point, and
-# pbr imports pkg_resources: "ModuleNotFoundError: No module named 'pkg_resources'".
-# Note also that this only broke once setuptools 82 shipped, so it fails on a date,
-# not on a commit -- pinning at creation is what removes that.
+# It used to be: `pip install --upgrade pip setuptools` put the *current* setuptools in
+# the venv and nothing constrained it until some service install further down resolved
+# the pinned version and downgraded it. Everything installed in between ran against a
+# setuptools with no pkg_resources -- and core/ceph/ceph.mk is in between, because ceph
+# sits ahead of keystone in HEAVY_COMPONENTS. Its rados/rbd bindings are a
+# `setup.py install`, whose egg_info step loads pbr's entry point, and pbr imports
+# pkg_resources: "ModuleNotFoundError: No module named 'pkg_resources'". Note also that
+# this only broke once setuptools 82 shipped, so it fails on a date, not on a commit --
+# pinning at creation is what removes that.
 #
 # That pin does *not* reach pip's PEP-517 build environments. pip builds every sdist
 # in a throwaway overlay and resolves the default backend requirement
@@ -286,10 +264,11 @@ rootfs_install::
 # sdist-only, and seven of those are XStatic packages whose setup.py imports a
 # pkg_resources-declared namespace, so they die in the overlay with
 # "ModuleNotFoundError: No module named 'pkg_resources'". The fix is
-# --no-build-isolation, which builds against this venv's own 65.7.0 instead. It is
+# --no-build-isolation, which builds against this venv's own pinned setuptools
+# instead. It is
 # spelled out on each pip install that needs it rather than turned on venv-wide,
 # because the requirement is not universal -- mysqlclient 2.2.8 is the counter-example
-# and needs a setuptools *newer* than 65.7.0, so it keeps the default isolation.
+# and needs a setuptools newer than the pin, so it keeps the default isolation.
 #
 # One ordering caveat: with --no-build-isolation an XStatic sdist can only be built
 # while no other XStatic package is installed yet, or the installed pkg_resources
@@ -299,24 +278,25 @@ rootfs_install::
 
 # set up the execution context for openstack caracal
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p $(CARACAL_OPENSTACK_HOME_DIR)
-	$(Q)chroot $(ROOTDIR) python$(CARACAL_PYTHON_VER) -m venv $(CARACAL_OPENSTACK_HOME_DIR)
-	$(Q)cp -f $(CARACAL_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
+	$(Q)chroot $(ROOTDIR) mkdir -p $(OPENSTACK_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) python$(PYTHON_VER) -m venv $(OPENSTACK_HOME_DIR)
+	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(OPENSTACK_HOME_DIR)/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
-# upper-constraints.txt copied down verbatim, save for one local delta -- unlike the
-# antelope file, which carries six. Upstream does not pin setuptools, so this venv used
+# upper-constraints.txt copied down verbatim, save for one local delta -- where the
+# antelope file it replaced carried six. Upstream does not pin setuptools, so this venv used
 # to land on whatever was current (84.0.0), which was fine while skyline was the only
 # occupant. keystone is not: keystonemiddleware 10.6.0 does `import pkg_resources` in
 # _common/config.py, and setuptools 82 deleted pkg_resources, so every gunicorn worker
 # died at import with ModuleNotFoundError and openstack-keystone never came up (#631).
 #
-# The pin is therefore settled now, as the same one line in the constraints file that
-# antelope uses -- but at 75.6.0, not antelope's 65.7.0. The two venvs have different
-# reasons for their numbers: antelope's is the version its own upper-constraints
-# names, while caracal's is a local delta with no upstream value to match, so it takes
+# The pin is therefore settled now, as one line in the constraints file, the same way
+# antelope pinned it -- but at 75.6.0, not antelope's 65.7.0. The two venvs had
+# different reasons for their numbers: antelope's was the version its own
+# upper-constraints named, while caracal's is a local delta with no upstream value to
+# match, so it takes
 # the newest release that clears both ceilings rather than a 2023 one inherited by
 # habit. 75.6.0 is the last setuptools of 2024 (2024-11-20), which puts it in the same
 # year as the release this venv carries.
@@ -345,14 +325,14 @@ rootfs_install::
 # point, and entry points are only visible to the interpreter they were installed
 # under, so the copies pip put in a venv were invisible to the cli and every plugin
 # had to be held in 3.9 as well -- as an rpm (designate, heat, manila, octavia) or as
-# a second pip install (cyborg, watcher, monasca). #609 moved the cli into the
+# a second pip install (cyborg and watcher). #609 moved the cli into the
 # antelope venv and every plugin followed it there; #636 moves it again, into the
 # caracal venv, and the plugins follow it a second time.
 #
 # The second move is the same mechanism as the first, so the same rule decides where
 # each plugin goes: next to whichever interpreter runs /usr/bin/openstack. Each
 # component installs its own -- see core/{heat,manila,octavia,designate,masakari,
-# watcher,cyborg,barbican,monasca}. python-ironicclient needs no line of its own:
+# watcher,cyborg,barbican}. python-ironicclient needs no line of its own:
 # ironic-ui and python-watcher both declare it and both are in this venv.
 #
 # Measured on jim-1cc: 977 commands under the 3.9 cli against 1574 under the antelope
@@ -367,13 +347,13 @@ rootfs_install::
 # tree calls it and no other venv console script is aliased that way, so it is not
 # recreated.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-openstackclient
 	$(Q)# Link the cli. hex_sdk reaches it by absolute path ($$OPENSTACK in
 	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/openstack), so
 	$(Q)# this symlink is what carries every caller over.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
 
 # Allow admin to be sudoers
 rootfs_install::
@@ -402,7 +382,7 @@ HEAVY_COMPONENTS += influxdb prometheus thanos exporters kapacitor elk telegraf 
 # that designate, masakari and watcher drop into local/enabled at install time.
 # RPM-installed plugins (heat, octavia, ironic, manila) land theirs in the dnf
 # phase and are collected either way; the source-installed ones are not.
-HEAVY_COMPONENTS += heat octavia barbican manila designate masakari monasca watcher cyborg horizon
+HEAVY_COMPONENTS += heat octavia barbican manila designate masakari watcher cyborg horizon
 HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl lachesis
 
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)

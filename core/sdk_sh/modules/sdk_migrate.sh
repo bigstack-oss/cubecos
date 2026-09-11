@@ -112,12 +112,104 @@ migrate_keystone_service_role()
 
     local u
     for u in barbican cinder cyborg designate glance heat ironic ironic-inspector \
-             masakari monasca neutron nova octavia placement skyline watcher ; do
+             masakari neutron nova octavia placement skyline watcher ; do
         $OPENSTACK user show $u >/dev/null 2>&1 || continue
         $OPENSTACK role add --project service --user $u service >/dev/null 2>&1
     done
 
     touch $STATE_DIR/keystone_service_role_migrated
+}
+
+# Retiring an OpenStack service leaves state behind that the A/B partition swap does not
+# take: its keystone catalogue entries, its MySQL database and the MySQL users that own it.
+# Everything under /etc, in a venv or in a unit file lives only in the rootfs and goes with
+# it; these three do not.
+#
+# The keystone half is the part that has to be done rather than left. A catalogue entry is
+# what clients discover, so an endpoint pointing at a port nothing listens on is not
+# untidiness: an SDK that asks for it waits out its own timeout, and `openstack endpoint
+# list` shows an appliance advertising a service it does not have.
+#
+# Endpoints go before the service, because keystone refuses to delete a service that still
+# has them on some releases and an orphaned endpoint is the harder one to find afterwards.
+# The user is domain-scoped: every service user is created with --domain, so deleting one
+# by bare name only works while the name happens to be unique across domains.
+_migrate_os_retire_keystone()
+{
+    local service=$1
+    local user=$2
+    local domain ep
+
+    source hex_tuning /etc/settings.txt cubesys.domain
+    domain=${T_cubesys_domain:-default}
+
+    for ep in $($OPENSTACK endpoint list --service "$service" -f value -c ID 2>/dev/null) ; do
+        Quiet -n $OPENSTACK endpoint delete $ep
+    done
+    Quiet -n $OPENSTACK service delete "$service"
+    [ -n "$user" ] && Quiet -n $OPENSTACK user delete --domain $domain "$user"
+
+    return 0
+}
+
+# Monasca, removed from the build by issue #672 phase 4.
+#
+# What is deliberately NOT done here:
+#
+#   the influxdb monasca database   it holds real history an operator may still want to
+#                                   read, and it ages out under the retention policy it
+#                                   was last given. Dropping it is the one irreversible
+#                                   step in this retirement and belongs to the operator.
+#   the monasca.* tunings           /etc/settings.txt is the appliance's own source of
+#                                   truth and editing it from the side is worse than the
+#                                   "Unknown settings name ... ignored" warning each
+#                                   leftover key logs on a commit.
+migrate_monasca_retire()
+{
+    if [ -f $STATE_DIR/monasca_retired ] ; then
+        return 0
+    fi
+
+    is_control_node || return 0
+
+    _migrate_os_retire_keystone monasca-api monasca
+
+    # Both the database and the grants. Leaving the users behind would leave accounts with
+    # rights on a schema nothing owns any more.
+    $MYSQL -e "DROP DATABASE IF EXISTS monasca"
+    $MYSQL -e "DROP USER IF EXISTS 'monasca'@'%'"
+    $MYSQL -e "DROP USER IF EXISTS 'monasca'@'localhost'"
+    $MYSQL -e "FLUSH PRIVILEGES"
+
+    touch $STATE_DIR/monasca_retired
+}
+
+# Senlin, removed from the build by d4550c91 back on the yoga train. Its cleanup used to be
+# an operator-invoked hex_cli command, `management cleanup cleanup_senlin`, which is the
+# reason this exists: a retirement that only happens when somebody remembers to type it
+# does not happen. Nothing tells an operator the command is there, nothing tells them which
+# release needs it, and a cluster that has rolled through three upgrades since still
+# advertises a clustering endpoint.
+#
+# It also only did half the job. config_senlin.cpp created a senlin database with grants to
+# 'senlin'@'localhost' and 'senlin'@'%'; the CLI command deleted the endpoints, the service
+# and the user and left all three of those behind, on every cluster upgraded from that era.
+migrate_senlin_retire()
+{
+    if [ -f $STATE_DIR/senlin_retired ] ; then
+        return 0
+    fi
+
+    is_control_node || return 0
+
+    _migrate_os_retire_keystone senlin senlin
+
+    $MYSQL -e "DROP DATABASE IF EXISTS senlin"
+    $MYSQL -e "DROP USER IF EXISTS 'senlin'@'%'"
+    $MYSQL -e "DROP USER IF EXISTS 'senlin'@'localhost'"
+    $MYSQL -e "FLUSH PRIVILEGES"
+
+    touch $STATE_DIR/senlin_retired
 }
 
 migrate_barbican_db()
@@ -497,19 +589,6 @@ migrate_masakari_db()
     fi
 
     touch $STATE_DIR/masakari_db_migrated
-}
-
-migrate_monasca_db()
-{
-    if [ -f $STATE_DIR/monasca_db_migrated ] ; then
-        return 0
-    fi
-
-    if is_control_node ; then
-        su -s /bin/sh -c "/usr/bin/monasca_db upgrade" monasca
-    fi
-
-    touch $STATE_DIR/monasca_db_migrated
 }
 
 migrate_designate_db()

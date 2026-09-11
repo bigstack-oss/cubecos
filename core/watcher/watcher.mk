@@ -29,8 +29,8 @@ WATCHER_RUN_DIR := /var/run/watcher
 # pip first, so the target is always pristine; it would fire in an incremental workspace.
 # Testing with --dry-run --reverse first detects the already-applied case and skips it,
 # which keeps the convention and makes the loop genuinely re-runnable.
-WATCHER_SRCDIR := $(ROOTDIR)$(CARACAL_OPENSTACK_HOME_DIR)/lib/python$(CARACAL_PYTHON_VER)/site-packages
-WATCHER_PATCHDIR := $(COREDIR)/watcher/$(CARACAL_OPENSTACK_RELEASE)_patch
+WATCHER_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch
 
 # https://releases.openstack.org/caracal/index.html#caracal-watcher-dashboard
 # Horizon plugins are not in the upper-constraints (that file only covers libraries),
@@ -47,7 +47,7 @@ WATCHER_DASHBOARD_VER := 11.0.0
 # upstream's unmaintained/2024.1: that branch's head, the 2024.1-eom tag and 12.1.0 are
 # all commit 8f8d537. The service joins keystone, glance, cinder, nova with placement,
 # neutron, manila, octavia, barbican, cyborg and designate in
-# $(CARACAL_OPENSTACK_HOME_DIR).
+# $(OPENSTACK_HOME_DIR).
 #
 # Nothing about the packaging changes here -- watcher was already a pinned pip install
 # when it lived in the antelope venv, so this hop only moves it. The RDO rpms
@@ -67,10 +67,10 @@ rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# python-observabilityclient is watcher's own dependency for the prometheus
 	$(Q)# datasource, which caracal's 12.1.0 does not carry -- the datasource landed in
-	$(Q)# 2025.1 and is backported in $(CARACAL_OPENSTACK_RELEASE)_patch. It is not in
+	$(Q)# 2025.1 and is backported in $(OPENSTACK_RELEASE)_patch. It is not in
 	$(Q)# requirements.txt for this version, so it is named here rather than pulled in.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(CARACAL_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-watcher==$(WATCHER_VER) \
 			python-observabilityclient"
 	$(Q)# clean up dns configurations after downloading packages
@@ -78,13 +78,13 @@ rootfs_install::
 	$(Q)# Link binaries. This is exactly the set the rpms put in /usr/bin, which is
 	$(Q)# every console_script watcher declares plus the one wsgi_script. 12.1.0's
 	$(Q)# setup.cfg [entry_points] is byte-identical to 10.0.0's, so the set is unchanged.
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-api /usr/bin/watcher-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-api-wsgi /usr/bin/watcher-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-applier /usr/bin/watcher-applier
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-db-manage /usr/bin/watcher-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-decision-engine /usr/bin/watcher-decision-engine
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-status /usr/bin/watcher-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher-sync /usr/bin/watcher-sync
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-api /usr/bin/watcher-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-api-wsgi /usr/bin/watcher-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-applier /usr/bin/watcher-applier
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-db-manage /usr/bin/watcher-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-decision-engine /usr/bin/watcher-decision-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-status /usr/bin/watcher-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-sync /usr/bin/watcher-sync
 
 # the osc plugin and the web ui plugin
 #
@@ -111,22 +111,22 @@ rootfs_install::
 # /usr/bin/watcher is the client's own cli. It used to come from the system python 3.9
 # install as /usr/local/bin/watcher -- /usr/bin held only the watcher-* service scripts
 # linked above -- and since /usr/local/bin precedes /usr/bin in the PATH hex_sdk sets,
-# the replacement is this symlink, the same shape core/monasca uses. It points at the
-# client, which is now the same venv as the service.
+# the replacement is this symlink. It points at the client, which is now the same venv
+# as the service.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-watcherclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(CARACAL_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		watcher-dashboard==$(WATCHER_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf $(CARACAL_OPENSTACK_HOME_DIR)/bin/watcher /usr/bin/watcher
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher /usr/bin/watcher
 
 # install system directories and files
 #

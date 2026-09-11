@@ -51,7 +51,7 @@ syslog:x:108:
 ssh_keys:x:999:
 sshd:x:74:
 tcpdump:x:72:
-sudo:x:27:masakari,monasca
+sudo:x:27:masakari
 crontab:x:109:
 ssh:x:110:
 messagebus:x:111:
@@ -66,7 +66,7 @@ keystone:x:119:apache
 ssl-cert:x:120:
 glance:x:121:
 kvm:x:122:qemu
-libvirt:x:123:nova,masakari,monasca
+libvirt:x:123:nova,masakari
 nova:x:124:
 haproxy:x:125:
 neutron:x:126:
@@ -81,8 +81,6 @@ barbican:x:135:apache
 manila:x:136:
 octavia:x:138:
 designate:x:139:
-mon-agent:x:990:
-monasca:x:991:apache
 masakari:x:992:
 logstash:x:994:
 telegraf:x:995:

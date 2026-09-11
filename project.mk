@@ -31,11 +31,12 @@ PROJ_NFS_PATH := /volume1/pxe-server
 PROJ_TEST_EXPORTS := "PS4=+[\\t]"
 
 # openstack version
-OPENSTACK_RELEASE := antelope
+OPENSTACK_RELEASE := caracal
 OPENSTACK_HOME_DIR := /opt/openstack-$(OPENSTACK_RELEASE)
-OPS_GITHUB_BRANCH_01 := stable/2023.1
-OPS_GITHUB_BRANCH_02 := unmaintained/2023.1
-PYTHON_VER := 3.10
+OPS_GITHUB_BRANCH_01 := stable/2024.1
+OPS_GITHUB_BRANCH_02 := unmaintained/2024.1
+PYTHON_VER := 3.11
+PYTHON_PATCH_VER := 3.11.15
 OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
 OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
 
@@ -47,7 +48,8 @@ OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEA
 # ansible-core, python-jose, numexpr, xmlsec), none of which the openstack constraint
 # files have. Deriving it from the release name would have quietly downgraded pillow
 # to 9.2.0 and waitress to 2.1.2 -- straight back into CVE-2023-50447 and
-# CVE-2024-49768 -- the moment OPENSTACK_RELEASE moved to antelope.
+# CVE-2024-49768 -- the moment OPENSTACK_RELEASE moved to antelope, and the same
+# holds for every hop after it. This pin does not follow the release name, ever.
 PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 
 # openstack next version -- left blank until the next hop, then filled in the way
@@ -61,25 +63,23 @@ NEXT_PYTHON_VER :=
 NEXT_OPENSTACK_PIP_CONSTRAINT ?=
 NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 
-# openstack caracal -- a second isolated runtime, kept apart from the antelope venv so
-# that caracal-era components do not drag their dependency versions into the 2023.1
-# services. skyline was the first occupant: its forks branch off upstream master at
-# 4.0.1 (apiserver) and 4.0.0.0rc1 (console), i.e. caracal, not antelope. keystone
-# (25.0.0) is the second -- #631, the first openstack service to make the hop -- and
-# glance (28.2.0) the third (#630), cinder (24.5.0) the fourth (#629), nova with
-# placement (29.4.0 / 11.0.1) the fifth (#627), neutron (24.2.2) the sixth (#628),
-# manila (18.3.0) the seventh (#638), octavia (14.0.2) the eighth (#640),
-# barbican (18.0.0) the ninth (#632), cyborg (12.0.0) the tenth (#633),
-# designate (18.0.0) the eleventh (#634), heat (22.0.1) the twelfth (#635),
-# ironic with ironic-inspector (24.1.5 / 12.1.1) the thirteenth (#637),
-# masakari with masakari-monitors (17.0.0 / 17.0.1) the fourteenth (#639),
-# watcher (12.1.0) the fifteenth (#643) and horizon (24.0.2) the sixteenth (#636),
-# which took the eight dashboard plugins and the openstack cli with it.
-# The services move one at a time and OPENSTACK_RELEASE is promoted once they all have.
-# (#642 moved python-swiftclient rather than a service, so it takes no place in that
-# count.) The ordinals are merge order into develop. #633 and #634 moved their services
-# without coming back to this comment and #635 and #637 then took the numbers they had
-# left free, so cyborg through ironic are renumbered here.
+# The caracal hop is complete -- the block above IS caracal now, and there is no second
+# runtime. /opt/openstack-caracal on python 3.11 was built alongside the antelope venv
+# so that caracal-era components would not drag their dependency versions into the
+# 2023.1 services, and the services moved into it one at a time:
+#
+#   skyline (first, its forks branch off upstream master at 4.0.1 / 4.0.0.0rc1, i.e.
+#   caracal rather than antelope), keystone 25.0.0 (#631), glance 28.2.0 (#630),
+#   cinder 24.5.0 (#629), nova with placement 29.4.0 / 11.0.1 (#627),
+#   neutron 24.2.2 (#628), manila 18.3.0 (#638), octavia 14.0.2 (#640),
+#   barbican 18.0.0 (#632), cyborg 12.0.0 (#633), designate 18.0.0 (#634),
+#   heat 22.0.1 (#635), ironic with ironic-inspector 24.1.5 / 12.1.1 (#637),
+#   masakari with masakari-monitors 17.0.0 / 17.0.1 (#639), watcher 12.1.0 (#643)
+#   and horizon 24.0.2 (#636), which took the eight dashboard plugins and the
+#   openstack cli with it.
+#
+# The ordinals are merge order into develop; #642 moved python-swiftclient rather than
+# a service, so it takes no place in that count.
 #
 # Several hops had to leave a piece behind: an osc plugin is a stevedore entry point,
 # visible only to the interpreter that runs /usr/bin/openstack, so barbican, designate,
@@ -88,18 +88,13 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 # dashboard plugin there too. #636 collected all of it: horizon, the eight dashboard
 # plugins, /usr/bin/openstack and the eight clients moved together.
 #
-# What is left in the antelope venv is no longer a service: monasca (core/monasca),
-# ospurge (core/appfw) and ceph's rados/rbd bindings (core/ceph, which builds a copy
-# into each venv). OPENSTACK_RELEASE is promoted when those are dealt with.
+# What was left after the services was not a service at all: monasca, retired by #672
+# phase 4, and ospurge, moved into this venv by #625 -- which is what emptied the
+# antelope venv, allowed its python 3.10 build to go, and let these values be promoted
+# from CARACAL_* into the block above. Nothing is left on 3.10.
 #
-# $(OPS_GITHUB_BRANCH_02) has no reader left after #636 -- the four dashboard clones
-# were the last -- but $(OPS_GITHUB_BRANCH_01) is still what core/heavyfs passes to
-# PROJ_INSTALL_PIP, so the pair is left intact.
-CARACAL_OPENSTACK_RELEASE := caracal
-CARACAL_OPENSTACK_HOME_DIR := /opt/openstack-$(CARACAL_OPENSTACK_RELEASE)
-CARACAL_OPS_GITHUB_BRANCH_01 := stable/2024.1
-CARACAL_OPS_GITHUB_BRANCH_02 := unmaintained/2024.1
-CARACAL_PYTHON_VER := 3.11
-CARACAL_PYTHON_PATCH_VER := 3.11.15
-CARACAL_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(CARACAL_OPENSTACK_RELEASE)-pip-upper-constraints.txt
-CARACAL_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(CARACAL_OPENSTACK_HOME_DIR)/os-$(CARACAL_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+# $(OPS_GITHUB_BRANCH_02) has no reader in this tree -- the four dashboard clones were
+# the last, and #636 took them -- but $(OPS_GITHUB_BRANCH_01) is still what
+# core/heavyfs passes to PROJ_INSTALL_PIP, so the pair is left intact. Note that the
+# ROOTFS_PIP entries it applies to name their own refs, so the branch is effectively
+# unused there too; it is kept because the next hop will want the pair.

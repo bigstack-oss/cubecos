@@ -57,16 +57,6 @@ filter {
       match => { "path" => "/var/log/%{NOTSPACE:component}/%{NOTSPACE:program}.log" }
     }
   }
-  else if [log][file][path] =~ /\/var\/log\/(monasca\/agent)\/\S+\.log/ {
-    # monasca agent log format
-    grok {
-      patterns_dir => ["/etc/logstash/patterns.txt"]
-      match => { "rawlog" => "^%{TS_MONASCA_AGENT:occurred_at} \| %{OS_LOGLEVEL:log_level} \| %{NOTSPACE:program} \| %{NOTSPACE:module} \| %{GREEDYDATA:message}" }
-      add_field => {
-        "format" => "monasca-agent"
-      }
-    }
-  }
   else if [path] =~ /\/var\/log\/httpd\/\S+\.log/ {
     # httpd access log format
     #

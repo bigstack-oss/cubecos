@@ -14,8 +14,8 @@
 #include <hex/process.h>
 #include <hex/process_util.h>
 
-// httpd's only consumers are local: haproxy's openstack_horizon backend and the
-// monasca agent's server-status check. Binding loopback keeps 8080 off the
+// httpd's only consumers are local: haproxy's openstack_horizon backend and
+// apache_exporter's server-status scrape. Binding loopback keeps 8080 off the
 // management network, where vulnerability scanners were reaching it.
 #define HTTP_ADDR "127.0.0.1"
 #define HTTP_PORT 8080
@@ -39,7 +39,6 @@ static CubeRole_e s_eCubeRole;
 static LogRotateConf log_conf("httpd", "/var/log/httpd/*.log", DAILY, 128, 0, true);
 
 // external global variables
-CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // public tunings
@@ -51,15 +50,11 @@ CONFIG_TUNING_BOOL(APACHE_ENABLED, "apache.enabled", TUNING_UNPUB, "Set to true 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
-CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
-CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_debugEnabled, APACHE_DEBUG_ENABLED);
 PARSE_TUNING_BOOL(s_enabled, APACHE_ENABLED);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
-PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
-PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 
 static bool
 WriteSiteConf(const char* hostname, const bool debug)
@@ -104,10 +99,21 @@ WriteSiteConf(const char* hostname, const bool debug)
 }
 
 /**
- * Write Apache mod_status server-status config for non-HA nodes.
+ * Write the mod_status Location block.
+ *
+ * Local access only, and that is the whole policy. apache_exporter is the only reader --
+ * config_prometheus.cpp points it at http://127.0.0.1:8080/server-status?auto -- and httpd
+ * binds HTTP_ADDR and nothing else, so every request that reaches this handler is sourced
+ * from 127.0.0.1.
+ *
+ * b0fd95ae used to add a `Require ip` line per control management address, from when httpd
+ * still listened on that address and monasca-agent could be pointed at a peer. 3a829848
+ * moved the listener to loopback, which made those lines unreachable, and #672 removed the
+ * agent that was the only reason to want a remote scrape. With them gone the content no
+ * longer varies by node or by HA, so this is one writer rather than two overloads.
  */
 static bool
-writeStatusConf(const std::string& myIp)
+writeStatusConf()
 {
     const std::vector<std::string> fileContent = {
         "<Location \"/server-status\">\n",
@@ -116,45 +122,10 @@ writeStatusConf(const std::string& myIp)
         // ban all requests to mitigate Apache mod_status information disclosure vulnerability
         "  Require all denied\n",
 
-        // allow Monasca agents to access
+        // ...except from this node itself, which is where apache_exporter scrapes
         "  Require local\n",
-        "  Require ip " + myIp + "\n",
         "</Location>\n",
     };
-
-    std::string fsError;
-    if (!WriteFile(
-            fsError,
-            STATUSCONF,
-            fileContent)) {
-        HexLogError("%s", fsError.c_str());
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Write Apache mod_status server-status config for HA clusters.
- */
-static bool
-writeStatusConf(const std::vector<std::string>& controlIps)
-{
-    std::vector<std::string> fileContent = {
-        "<Location \"/server-status\">\n",
-        "  SetHandler server-status\n",
-
-        // ban all requests to mitigate Apache mod_status information disclosure vulnerability
-        "  Require all denied\n",
-    };
-
-    // allow Monasca agents to access
-    fileContent.push_back("  Require local\n");
-    for (std::vector<std::string>::const_iterator it = controlIps.begin(); it != controlIps.end(); it++) {
-        fileContent.push_back("  Require ip " + (*it) + "\n");
-    }
-
-    fileContent.push_back("</Location>\n");
 
     std::string fsError;
     if (!WriteFile(
@@ -259,15 +230,10 @@ Commit(bool modified, int dryLevel)
         WriteSiteConf(s_hostname.c_str(), s_debugEnabled.newValue());
     }
 
-    if (s_ha.modified() || s_ctrlAddrs.modified() || G_MOD(MGMT_ADDR)) {
-        if (s_ha) {
-            const std::vector<std::string> controlIps = hex_string_util::split(s_ctrlAddrs, ',');
-            writeStatusConf(controlIps);
-        } else {
-            const std::string myIp = G(MGMT_ADDR);
-            writeStatusConf(myIp);
-        }
-    }
+    // Constant content, so there is nothing to gate on. Rewriting it every time this
+    // module commits is also what drops the stale per-control-node Require ip lines from a
+    // node upgraded across this change.
+    writeStatusConf();
 
     bool enabled = s_enabled && IsControl(s_eCubeRole);
     SystemdCommitService(enabled, NAME);
@@ -301,7 +267,6 @@ CONFIG_REQUIRES(apache2, swift);
 CONFIG_REQUIRES(apache2, horizon);
 CONFIG_REQUIRES(apache2, heat);
 CONFIG_REQUIRES(apache2, barbican);
-CONFIG_REQUIRES(apache2, monasca);
 CONFIG_REQUIRES(apache2, masakari);
 // CONFIG_REQUIRES(apache2, keystone_idp);
 

@@ -38,6 +38,33 @@ health_errcode_lookup()
     fi
 }
 
+# Is one OpenStack API answering through the VIP, as blackbox_exporter sees it?
+#
+# This is the replacement for monasca-agent's http_check plugin, whose http_status series
+# the six API health checks read: 0 meant the probe got an acceptable answer and anything
+# else meant it did not. probe_success states the same thing the other way round -- 1 is
+# up -- and carries the service label config_prometheus.cpp puts on each target, so the
+# lookup stays by name.
+#
+# "No such series" is deliberately NOT a failure, which is the one behaviour that changes.
+# Under monasca an absent point compared as null != 0 and read as "endpoint unreachable",
+# so a metric pipeline that was itself down turned all six checks NG and pointed the
+# operator at six innocent services. health_prometheus_check and health_influxdb_check
+# exist to report that; here the remaining conditions in each function -- the service
+# lists and the systemd states -- still run and still say something true.
+_health_api_reachable()
+{
+    local service=$1
+    local result
+
+    result=$($CURL -sf --get \
+                --data-urlencode "query=probe_success{job=\"blackbox-openstack\",service=\"$service\"}" \
+                http://localhost/prometheus/api/v1/query 2>/dev/null \
+                | jq -r '.data.result[0].value[1] // empty' 2>/dev/null)
+
+    [ "$result" != "0" ]
+}
+
 _health_report()
 {
     local tmp=${1%_report}
@@ -1195,7 +1222,10 @@ health_httpd_check()
             ERR_MSG+="httpd on $node is not running\n"
         fi
         local i=2
-        for port in 8070 5000 8778 5443 ; do
+        # 8070 was monasca-api's vhost and went with it in issue #672 phase 4. Left in this
+        # list it is the one thing that turns every control node's httpd check NG on a
+        # cluster where nothing is wrong.
+        for port in 5000 8778 5443 ; do
             $CURL -sf http://$node:$port >/dev/null
             # 0: ok, 22: http error (page not found)                                                                                                                                                                                                      
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
@@ -1239,7 +1269,7 @@ health_httpd_repair()
         if ! is_remote_running $node httpd ; then
             remote_systemd_restart $node httpd
         fi
-        for port in 9090 8070 8776 5000 8778 ; do
+        for port in 9090 8776 5000 8778 ; do
             $CURL -sf http://$node:$port >/dev/null
             # 0: ok, 22: http error (page not found)
             if [ "$?" -ne "0" -a "$?" -ne "22" ] ; then
@@ -2267,7 +2297,6 @@ health_nova_check()
 {
     stale_api_check_repair openstack-nova-api 8774 nova-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'compute'" | jq .results[0].series[0].values[0][1])
     local service_stats="$($OPENSTACK compute service list -f value -c Binary -c Host -c Status -c State 2>/dev/null)"
     local scheduler_up=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i up | wc -l )
     local scheduler_down=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i down | wc -l )
@@ -2276,7 +2305,7 @@ health_nova_check()
     local compute_up=$(echo "$service_stats" | grep compute | grep -v ironic | grep -i enabled | grep -i up | wc -l )
     local compute_down=$(echo "$service_stats" | grep compute | grep -v ironic | grep -i enabled | grep -i down | wc -l )
 
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable nova ; then
         ERR_CODE=1
         ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-nova-api"
     elif [ -z "$service_stats" ] ; then
@@ -2614,9 +2643,8 @@ health_glance_check()
 {
     stale_api_check_repair openstack-glance-api 9292 glance-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'image-service'" | jq .results[0].series[0].values[0][1])
     ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-glance-api"
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable glance ; then
         ERR_CODE=1
     else
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -2654,7 +2682,6 @@ health_cinder_check()
 {
     stale_api_check_repair openstack-cinder-api 8776 cinder-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'block-storage'" | jq .results[0].series[0].values[0][1])
     local service_stats="$($OPENSTACK volume service list -f value -c Binary -c Host -c Status -c State 2>/dev/null)"
     local scheduler_up=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i up | wc -l )
     local scheduler_down=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i down | wc -l )
@@ -2663,7 +2690,7 @@ health_cinder_check()
     local backup_up=$(echo "$service_stats" | grep backup | grep -i enabled | grep -i up | wc -l )
     local backup_down=$(echo "$service_stats" | grep backup | grep -i enabled | grep -i down | wc -l )
 
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable cinder ; then
         ERR_CODE=1
         ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-cinder-volume"
     elif [ -z "$service_stats" ] ; then
@@ -2817,12 +2844,19 @@ health_heat_check()
     stale_api_check_repair openstack-heat-api 8004 heat-api python3
     stale_api_check_repair openstack-heat-api-cfn 8000 heat-api-cfn python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'orchestration'" | jq .results[0].series[0].values[0][1])
-    local service_stats="$($OPENSTACK orchestration service list -f value -c Hostname -c Binary -c Status | sort | uniq 2>/dev/null)"
+    # The redirect belongs on the CLI, not on the tail of the pipeline. It was attached to
+    # uniq, which has never written to stderr in its life, while the openstack client -- the
+    # one command here that does -- was left unguarded. $( ) captures stdout only, so its
+    # diagnostics escape the substitution and land in whatever the caller's output is.
+    # Measured on accept-3cc against a keystone that closes the connection: two lines of
+    # discovery failure per call, reaching the caller on stdout. That is what voided the
+    # whole check_service_stats document before check_service started discarding the
+    # check's output.
+    local service_stats="$($OPENSTACK orchestration service list -f value -c Hostname -c Binary -c Status 2>/dev/null | sort | uniq)"
     local engine_up=$(echo "$service_stats" | grep -i up | wc -l )
     local engine_down=$(echo "$service_stats" | grep -i down | wc -l )
 
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable heat ; then
         ERR_CODE=1
     elif [ -z "$service_stats" ] ; then
         ERR_CODE=2
@@ -2872,8 +2906,7 @@ health_octavia_check()
 {
     stale_api_check_repair octavia-api 9876 octavia-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'octavia'" | jq .results[0].series[0].values[0][1])
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable octavia ; then
         ERR_CODE=1
     elif cube_cluster_ready && $HEX_SDK os_planned_maintenance_stale ; then
         # Ahead of the health-manager-down code, which is only its symptom.
@@ -3003,7 +3036,6 @@ health_designate_check()
 {
     stale_api_check_repair designate-api 9001 designate-api python3
 
-    local http_stats=$(influx -host $(shared_id) -database monasca -format json -execute "select last(value) from http_status where service = 'dns'" | jq .results[0].series[0].values[0][1])
     local service_stats="$($OPENSTACK dns service list -f value -c hostname -c service_name -c status 2>/dev/null)"
     local api_up=$(echo "$service_stats" | grep api | grep -i up | wc -l )
     local api_down=$(echo "$service_stats" | grep api | grep -i down | wc -l )
@@ -3016,7 +3048,7 @@ health_designate_check()
     local mdns_up=$(echo "$service_stats" | grep mdns | grep -i up | wc -l )
     local mdns_down=$(echo "$service_stats" | grep mdns | grep -i down | wc -l )
 
-    if [ "$http_stats" != "0" ] ; then
+    if ! _health_api_reachable designate ; then
         ERR_CODE=1
     elif [ -z "$service_stats" ] ; then
         ERR_CODE=2
@@ -3179,70 +3211,6 @@ _health_masakari_auto_repair()
 health_masakari_repair()
 {
     cmd $HEX_CFG restart_masakari
-}
-
-health_monasca_report()
-{
-    _health_report ${FUNCNAME[0]}
-}
-
-health_monasca_check()
-{
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node monasca-persister ; then
-            ERR_MSG+="monasca-persister on $node is not running\n"
-            ERR_CODE=3
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-persister"
-        # monasca-api used to be hosted in-process by httpd, so httpd's own
-        # health covered it. It is a gunicorn service of its own now.
-        elif ! is_remote_running $node monasca-api ; then
-            ERR_MSG+="monasca-api on $node is not running\n"
-            ERR_CODE=7
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-api"
-        fi
-    done
-    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node monasca-collector ; then
-            ERR_MSG+="monasca-collector on $node is not running\n"
-            ERR_CODE=4
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-collector"
-        elif ! is_remote_running $node monasca-forwarder ; then
-            ERR_MSG+="monasca-forwarder on $node is not running\n"
-            ERR_CODE=5
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-forwarder"
-        elif ! is_remote_running $node monasca-statsd ; then
-            ERR_MSG+="monasca-statsd on $node is not running\n"
-            ERR_CODE=6
-            ERR_LOG="journalctl -n $ERR_LOGSIZE -u monasca-statsd"
-        fi
-    done
-
-    _health_fail_log
-}
-
-_health_monasca_auto_repair()
-{
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node monasca-persister ; then
-            remote_systemd_restart $node monasca-persister
-        elif ! is_remote_running $node monasca-api ; then
-            remote_systemd_restart $node monasca-api
-        fi
-    done
-    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node monasca-collector ; then
-            remote_systemd_restart $node monasca-collector
-        elif ! is_remote_running $node monasca-forwarder ; then
-            remote_systemd_restart $node monasca-forwarder
-        elif ! is_remote_running $node monasca-statsd ; then
-            remote_systemd_restart $node monasca-statsd
-        fi
-    done
-}
-
-health_monasca_repair()
-{
-    cmd $HEX_CFG restart_monasca
 }
 
 health_watcher_report()
@@ -3445,12 +3413,6 @@ health_kafka_check()
         ERR_MSG+="kafka fails to get sys/host metrics\n"
     fi
 
-    # check the last 5 minutes from monasca persister log
-    if ! awk -v dt="$(date '+%Y-%m-%d %T' -d '-5 minutes')" -F, '$1 > dt' /var/log/monasca/persister.log | grep -q "Processed .* messages from topic 'metrics'" ; then
-        ERR_CODE=3
-        ERR_MSG+="kafka fails to get instance metrics\n"
-    fi
-
     # check the last 3 seconds from logstash log
     if awk -v dt="$(date '+%Y-%m-%dT%H:%M:%S' -d '3 second ago')" -F'[[,]' '$2 > dt' /var/log/logstash/logstash.log | grep -q "NOT_LEADER_OR_FOLLOWER" ; then
         ERR_CODE=4
@@ -3463,7 +3425,9 @@ health_kafka_check()
     fi
 
     local queue_num=$($HEX_SDK kafka_stats | grep "PartitionCount: 6" | wc -l)
-    # the six most important queues: telegraf-metrics, telegraf-hc-metrics, metrics, logs, transformed-logs, alarms
+    # the six that carry the pipeline: telegraf-metrics, telegraf-hc-metrics,
+    # telegraf-events-metrics, logs, transformed-logs, events. It used to name metrics and
+    # alarms instead of two of those -- both were monasca's and went with it.
     if [ $queue_num -lt 6 ] ; then
         ERR_CODE=6
         ERR_MSG+="kafka has no built-in queues\n"
@@ -3484,9 +3448,6 @@ _health_kafka_auto_repair()
         if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-events-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-events-metrics"
         fi
-    elif [ "$ERR_CODE" == "3" ] ; then
-        $HEX_CFG recreate_kafka_topic "metrics"
-        cmd -c systemctl restart monasca-persister
     elif [ "$ERR_CODE" == "4" ] ; then
         $HEX_CFG recreate_kafka_topic "transformed-logs"
     elif [ "$ERR_CODE" == "5" ] ; then
@@ -4021,11 +3982,11 @@ _health_datapipe_deep_repair()
     fi
     echo "$_dp_now" > "$_dp_marker" 2>/dev/null
 
-    cmd -c systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c systemctl stop zookeeper kafka logstash kapacitor influxdb telegraf
     Quiet -n sleep 10
     cmd -c "rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*"
 
-    cmd -c  systemctl stop zookeeper kafka logstash kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c  systemctl stop zookeeper kafka logstash kapacitor influxdb telegraf
     Quiet -n sleep 10
     cmd -c  rm -rf /tmp/zookeeper/* /var/lib/kafka/* /var/lib/logstash/*
 
@@ -4034,7 +3995,7 @@ _health_datapipe_deep_repair()
     cmd -c  $HEX_CFG bootstrap kapacitor
     Quiet -n $HEX_CFG update_kafka_topics
     cmd -c  systemctl reset-failed
-    cmd -c  systemctl start kapacitor influxdb monasca-forwarder monasca-persister telegraf
+    cmd -c  systemctl start kapacitor influxdb telegraf
     cmd -c  systemctl restart httpd
 }
 
