@@ -24,6 +24,17 @@ stats_safe_echo()
 # `hex_sdk instance_metrics_collect` is what writes them now -- including
 # vm.host_alive_status, which exists precisely so this function has a liveness signal to key
 # on rather than having to know which of the per-VM measurements is the reliable one.
+#
+# `drop series where resource_id = ...` is database-wide: it spans every measurement and
+# every retention policy in the database, so moving these series out of a database monasca
+# had to itself and into the shared telegraf one widened what that statement can reach. It
+# is still safe because nothing else in telegraf carries the tag. Measured on jim-1cc and
+# accept-3cc, `SHOW SERIES` returns resource_id on exactly the seven vm.* measurements
+# instance_metrics_collect writes and on nothing else -- the host and cluster series key on
+# other tags entirely (node.health on `node`, vm.health on `id`, the ceph_* and the telegraf
+# input measurements on `host`), so none of them is a candidate for deletion at any value of
+# $rid. That is the invariant to preserve: resource_id in the telegraf database means an
+# instance UUID, so a new writer must not reuse the tag name for another kind of object.
 stats_inactive_vm_drop()
 {
     local time=$1
