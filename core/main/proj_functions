@@ -522,7 +522,7 @@ cube_cluster_recreate()
     #systemctl stop rbd-target-gw rbd-target-api
 
     if is_control_node ; then
-        systemctl stop logstash monasca-persister
+        systemctl stop logstash
         systemctl stop opensearch influxdb kafka zookeeper
         systemctl stop mariadb rabbitmq-server
         hex_config purge_ceph_mon
