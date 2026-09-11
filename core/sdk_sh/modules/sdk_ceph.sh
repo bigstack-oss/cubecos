@@ -4250,15 +4250,40 @@ _ceph_device_tier_unwind_create()
     local tier=$1
     local made=$2
     local saved=$3
+    local left=
     echo "Error: device tier $tier was not completed; unwinding what this run created" >&2
     if echo "$made" | grep -qw vtype ; then
         Quiet -n $OPENSTACK volume type delete $tier
+        local vtypes=
+        if vtypes=$($OPENSTACK volume type list --long --format value -c Name 2>/dev/null) ; then
+            printf '%s\n' "$vtypes" | grep -qxF -- "$tier" && left="$left
+  volume type $tier    openstack volume type delete $tier"
+        else
+            left="$left
+  volume type $tier (could not be confirmed removed)"
+        fi
     fi
     if echo "$made" | grep -qw pool ; then
         Quiet -n $CEPH osd pool delete $tier $tier --yes-i-really-really-mean-it
+        local pools=
+        if pools=$($CEPH osd pool ls 2>/dev/null) ; then
+            printf '%s\n' "$pools" | grep -qxF -- "$tier" && left="$left
+  pool $tier           ceph osd pool delete $tier $tier --yes-i-really-really-mean-it"
+        else
+            left="$left
+  pool $tier (could not be confirmed removed)"
+        fi
     fi
     if echo "$made" | grep -qw rule ; then
         Quiet -n $CEPH osd crush rule rm $tier
+        local rules=
+        if rules=$($CEPH osd crush rule ls 2>/dev/null) ; then
+            printf '%s\n' "$rules" | grep -qxF -- "$tier" && left="$left
+  CRUSH rule $tier     ceph osd crush rule rm $tier"
+        else
+            left="$left
+  CRUSH rule $tier (could not be confirmed removed)"
+        fi
     fi
     if echo "$made" | grep -qw class ; then
         local id= cls=
@@ -4274,6 +4299,21 @@ _ceph_device_tier_unwind_create()
             fi
         done
     fi
+
+    # A rollback that could not roll back has to say so. Everything above runs
+    # through `Quiet -n`, which returns 0 whatever happened, so the only honest
+    # signal is a readback -- and a leftover rule and pool with no registry
+    # entry behind them are reported by nothing else: ceph_device_tier_names
+    # only calls a name unmanaged when all three of class, rule and pool are
+    # present, and the class has just been stripped. The operator would next
+    # meet this as "the name is already taken by a CRUSH rule" on their retry.
+    if [ -n "$left" ] ; then
+        echo "Error: the unwind did not remove everything. Still present:" >&2
+        echo "$left" >&2
+        echo "       Remove them before creating device tier $tier again." >&2
+        return 1
+    fi
+    return 0
 }
 
 # params:

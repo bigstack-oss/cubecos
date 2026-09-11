@@ -301,6 +301,22 @@ ck "$(awk -F: '$1 == "0" { print $2 }' "$TMP/classes")" "hdd" "1f osd.0 still ha
 ck "$(awk -F: '$2 == "silver"' "$TMP/classes" | wc -l | tr -d ' ')" 0 "1f and nothing was reclassed"
 ck "$(grep -c registry_add "$TMP/calls")" 0 "1f the registry was never touched"
 
+# ---- 1g. an unwind that could not undo says what is left ----
+# Every step of the unwind runs through `Quiet -n`, which returns 0 whatever
+# happened, and nothing read back. A create that failed at the crush_rule bind
+# on a cluster where pool deletion is refused left a pool behind and reported
+# only "was not completed" -- and a leftover rule+pool with the class already
+# stripped is reported by nothing else, because ceph_device_tier_names calls a
+# name unmanaged only when all three objects are present.
+reset_cluster
+DEAD_PAT='osd pool set .* crush_rule|osd pool delete'
+OUT=$(ceph_device_tier_create silver 0 1 2>&1) ; RC=$?
+ck "$RC" 1 "1g the create still fails"
+ckhas "$OUT" "unwind did not remove everything" "1g the unwind admits it did not finish"
+ckhas "$OUT" "pool silver" "1g and names what is still there"
+ck "$(grep -cx silver "$TMP/pools")" 1 "1g the pool really is still there"
+ck "$(awk -F: '$1 == "0" { print $2 }' "$TMP/classes")" "hdd" "1g but the OSD classes were restored"
+
 # ==== ceph_device_tier_list: the two disagreements =======================
 
 # ---- 2a. a tier on Ceph that is not registered ----
