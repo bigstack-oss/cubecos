@@ -138,7 +138,6 @@ CompMap s_comps = {
     { "masakari", { 0, Q } },
     { "zookeeper", { 0, Q } },
     { "kafka", { 0, Q } },
-    { "monasca", { 0, Q } },
     { "watcher", { 0, Q, R_CTRL_NOT_EDGE } },
     { "telegraf", { 0, Q } },
     { "lachesis", { 0, Q } },
@@ -193,7 +192,7 @@ CheckRepairItem s_services[] = {
     { S[InstanceHa], "masakari", true },
     { S[BusinessLogic], "watcher", true, R_CTRL_NOT_EDGE },
     { S[DataPipe], "zookeeper,kafka", true },
-    { S[Metrics], "monasca,telegraf,grafana,lachesis", true },
+    { S[Metrics], "telegraf,grafana,lachesis", true },
     // The metric persistence layer, kept apart from Metrics (collection/visualisation).
     // influxdb and kapacitor stay under Notifications for now: kapacitor is a write
     // proxy and alerting engine here, not only storage, so moving them is its own call.

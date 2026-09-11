@@ -531,6 +531,11 @@ Commit(bool modified, int dryLevel)
     // check for setup migration
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone");
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_service_role");
+    // Retired services leave their catalogue entries behind, and the modules that owned
+    // them are gone, so the cleanup is driven from the module that owns the catalogue.
+    // Both are marker-guarded and a no-op on a cluster that never had the service.
+    HexUtilSystemF(0, 0, HEX_SDK " migrate_monasca_retire");
+    HexUtilSystemF(0, 0, HEX_SDK " migrate_senlin_retire");
 
     // 6. create endpoint
     if (s_bEndpointChanged) {

@@ -19,19 +19,35 @@ stats_safe_echo()
     fi
 }
 
+# Prunes per-VM series whose instance has stopped reporting. The per-VM measurements moved
+# from the monasca database to telegraf.def when monasca was removed (issue #672), and
+# `hex_sdk instance_metrics_collect` is what writes them now -- including
+# vm.host_alive_status, which exists precisely so this function has a liveness signal to key
+# on rather than having to know which of the per-VM measurements is the reliable one.
+#
+# `drop series where resource_id = ...` is database-wide: it spans every measurement and
+# every retention policy in the database, so moving these series out of a database monasca
+# had to itself and into the shared telegraf one widened what that statement can reach. It
+# is still safe because nothing else in telegraf carries the tag. Measured on jim-1cc and
+# accept-3cc, `SHOW SERIES` returns resource_id on exactly the seven vm.* measurements
+# instance_metrics_collect writes and on nothing else -- the host and cluster series key on
+# other tags entirely (node.health on `node`, vm.health on `id`, the ceph_* and the telegraf
+# input measurements on `host`), so none of them is a candidate for deletion at any value of
+# $rid. That is the invariant to preserve: resource_id in the telegraf database means an
+# instance UUID, so a new writer must not reuse the tag name for another kind of object.
 stats_inactive_vm_drop()
 {
     local time=$1
-    local active=$(influx -host $(shared_id) -format json -database $MONASCA_DB -execute "select resource_id,last(value) from \"vm.host_alive_status\" where time >= now() - $time group by resource_id" | jq -r .results[].series[].tags.resource_id 2>/dev/null | tr '\n' ',')
+    local active=$(influx -host $(shared_id) -format json -database $TELEGRAF_DB -execute "select resource_id,last(value) from \"vm.host_alive_status\" where time >= now() - $time group by resource_id" | jq -r .results[].series[].tags.resource_id 2>/dev/null | tr '\n' ',')
 
-    readarray rid_array <<< "$(influx -host $(shared_id) -format json -database $MONASCA_DB -execute "select resource_id,last(value) from \"vm.host_alive_status\" group by resource_id" | jq -r .results[].series[].tags.resource_id 2>/dev/null)"
+    readarray rid_array <<< "$(influx -host $(shared_id) -format json -database $TELEGRAF_DB -execute "select resource_id,last(value) from \"vm.host_alive_status\" group by resource_id" | jq -r .results[].series[].tags.resource_id 2>/dev/null)"
     declare -p rid_array > /dev/null
     for rid_entry in "${rid_array[@]}" ; do
         local rid=$(echo $rid_entry | tr -d '\n')
         [ ! -n "$rid" ] && continue
         if ! echo ",$active" | grep -q ",$rid," ; then
             echo "drop stats of vm resource $rid"
-            influx -host $(shared_id) -format json -database $MONASCA_DB -execute "drop series where resource_id = '$rid'" >/dev/null
+            influx -host $(shared_id) -format json -database $TELEGRAF_DB -execute "drop series where resource_id = '$rid'" >/dev/null
         fi
     done
 
@@ -258,7 +274,7 @@ stats_topten_vm()
             ;;
     esac
 
-    local topten=$(influx -host $(shared_id) -format json -database "$MONASCA_DB" -execute "$query")
+    local topten=$(influx -host $(shared_id) -format json -database "$TELEGRAF_DB" -execute "$query")
     local rcs_id=$(echo $topten | jq .results[0].series[0].values[][1] | tr "\n" ",")
     echo "rcs_id=[${rcs_id%,}]"
     local vm_name=$(echo $topten | jq .results[0].series[0].values[][2] | tr "\n" ",")
@@ -301,7 +317,7 @@ stats_vm_chart()
             query="select value * 8 from \"vm.net.out_bytes_sec\" where resource_id = '$resource_id' and device = '$device' and time > now() - 1h"
             ;;
     esac
-    local chart=$(influx -host $(shared_id) -format json -database "$MONASCA_DB" -execute "$query" | jq -c .results[0].series[0].values)
+    local chart=$(influx -host $(shared_id) -format json -database "$TELEGRAF_DB" -execute "$query" | jq -c .results[0].series[0].values)
     echo "chart=$chart"
 }
 

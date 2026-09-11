@@ -113,7 +113,12 @@ CreateDBs(int rpDays, int sgpDays, int hcRpDays, int hcSgpDays)
     HexLogInfo("updating influxdb policies: def %dd/shard %dd, hc %dd/shard %dd",
                rpDays, sgpDays, hcRpDays, hcSgpDays);
 
-    std::string dbs[] = {"telegraf", "monasca", "events"};
+    // monasca is not listed any more: nothing writes it since issue #672 phase 4, and a
+    // CREATE DATABASE here would keep re-making it on a cluster where an operator had
+    // dropped it. On one that has not, the database keeps the retention policy it was
+    // last given and ages itself out; the history is left rather than dropped, because
+    // deleting an operator's metrics is the one irreversible thing in this retirement.
+    std::string dbs[] = {"telegraf", "events"};
 
     for (const std::string &db : dbs) {
         HexSystemF(0, "influx -execute 'CREATE DATABASE %s WITH DURATION %dd SHARD DURATION %dd NAME %s'",

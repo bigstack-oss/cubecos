@@ -54,7 +54,7 @@ rootfs_install:: $(foreach b,$(EXPORTER_BINS),$(EXPORTER_BLDDIR)/$(b))
 	# owns the write-then-enable ordering: it writes each /etc/default file before it enables
 	# the corresponding unit, so a configured exporter never starts without one.
 	$(Q)# node_exporter's textfile collector directory. Created here so the collector has
-	$(Q)# somewhere to write on first boot; hex_sdk watcher_instance_metrics fills it and
+	$(Q)# somewhere to write on first boot; hex_sdk instance_metrics_collect fills it and
 	$(Q)# config_prometheus points node_exporter at it.
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/prometheus/exporters /etc/default /var/lib/node_exporter/textfile
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/exporters/blackbox.yml ./etc/prometheus/exporters/

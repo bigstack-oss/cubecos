@@ -22,9 +22,9 @@
 # the client is installed once.
 #
 # NOTE: unlike heat, health_octavia_check() is *not* what depends on this.
-# It checks systemd units, the monasca http_status metric and the octavia-hm0
-# OVN port, never the OSC CLI -- so `cluster check` would have stayed green
-# while the bootstrap paths above failed.
+# It checks systemd units, the blackbox_exporter probe of the API and the
+# octavia-hm0 OVN port, never the OSC CLI -- so `cluster check` would have
+# stayed green while the bootstrap paths above failed.
 #
 # openstack-octavia-ui, the Horizon dashboard plugin, is replaced by the
 # octavia-dashboard wheel installed further down. It was dropped when octavia moved

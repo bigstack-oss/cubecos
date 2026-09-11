@@ -267,14 +267,6 @@ eval "ERR_DESC_$SRV[8]='host in maintenance, instance-HA off'"
 eval "ERR_DESC_$SRV[9]='planned-maintenance marker stuck, monitors gated off'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
-SRV="monasca"
-eval "ERR_DESC_$SRV[3]='persister down'"
-eval "ERR_DESC_$SRV[4]='collector down'"
-eval "ERR_DESC_$SRV[5]='forwarder down'"
-eval "ERR_DESC_$SRV[6]='statsd down'"
-eval "ERR_DESC_$SRV[7]='api down'"
-eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
-
 SRV="watcher"
 eval "ERR_DESC_$SRV[2]='api timeout'"
 eval "ERR_DESC_$SRV[3]='applier down'"
@@ -309,7 +301,6 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 SRV="kafka"
 eval "ERR_DESC_$SRV[1]='daemon down'"
 eval "ERR_DESC_$SRV[2]='failed to get sys/host metrics'"
-eval "ERR_DESC_$SRV[3]='failed to get instance metrics'"
 eval "ERR_DESC_$SRV[4]='queue has no leader'"
 eval "ERR_DESC_$SRV[5]='queue has no coordinator'"
 eval "ERR_DESC_$SRV[6]='built-in queues missing'"

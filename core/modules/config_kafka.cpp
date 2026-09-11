@@ -113,8 +113,13 @@ UpdateTopics(bool ha, bool run, const std::string sharedId)
     if (!run)
         return true;
 
-    std::string topics[] = { "telegraf-metrics", "telegraf-hc-metrics", "telegraf-events-metrics", "metrics", "logs", "audit-logs",
-                             "transformed-logs", "alarms", "notifications.info", "events" };
+    // "metrics" and "alarms" were monasca-agent -> monasca-persister and
+    // monasca-notification; both went with issue #672 phase 4. They are only dropped from
+    // this list, not deleted from a running cluster: an existing topic with no producer
+    // holds nothing new and expires under kafka's own retention, and deleting a topic is
+    // not something a config commit should do behind an operator.
+    std::string topics[] = { "telegraf-metrics", "telegraf-hc-metrics", "telegraf-events-metrics", "logs", "audit-logs",
+                             "transformed-logs", "notifications.info", "events" };
 
     for (const std::string &t : topics) {
         RecreateTopic(ha, true, sharedId, t.c_str());

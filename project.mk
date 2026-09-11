@@ -88,9 +88,10 @@ NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 # dashboard plugin there too. #636 collected all of it: horizon, the eight dashboard
 # plugins, /usr/bin/openstack and the eight clients moved together.
 #
-# What is left in the antelope venv is no longer a service: monasca (core/monasca),
-# ospurge (core/appfw) and ceph's rados/rbd bindings (core/ceph, which builds a copy
-# into each venv). OPENSTACK_RELEASE is promoted when those are dealt with.
+# What is left in the antelope venv is no longer a service: ospurge (core/appfw) and
+# ceph's rados/rbd bindings (core/ceph, which builds a copy into each venv). monasca
+# was the third and went with issue #672 phase 4. OPENSTACK_RELEASE is promoted when
+# the other two are dealt with.
 #
 # $(OPS_GITHUB_BRANCH_02) has no reader left after #636 -- the four dashboard clones
 # were the last -- but $(OPS_GITHUB_BRANCH_01) is still what core/heavyfs passes to

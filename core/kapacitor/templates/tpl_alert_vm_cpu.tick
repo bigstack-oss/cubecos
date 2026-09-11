@@ -1,4 +1,10 @@
-dbrp "monasca"."def"
+// The per-instance series these stream from used to be monasca-persister's. They are now
+// written by `hex_sdk instance_metrics_collect` straight to the kapacitor write proxy on
+// :9092, under the same measurement, tag and field names, so only the database moves --
+// see issue #672 phase 3. telegraf.def rather than a new database because it is already
+// the node-telemetry database: it has the retention policy, the relay task that copies a
+// write out to the peer control nodes, and the Grafana datasource.
+dbrp "telegraf"."def"
 
 var where_filter = lambda: TRUE
 

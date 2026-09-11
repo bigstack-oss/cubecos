@@ -61,7 +61,7 @@ TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD="/etc/cube/cos/terraform/values/keycl
 CURL="timeout $SRVTO /usr/bin/curl"
 MYSQL="timeout $SRVTO /usr/bin/mysql"
 
-RESERVED_USERS="admin_cli\|masakari\|placement\|heat\|glance\|monasca\|heat_domain_admin\|neutron\|nova\|cyborg\|cinder\|barbican\|manila\|octavia\|designate\|ironic\|ironic-inspector\|watcher"
+RESERVED_USERS="admin_cli\|masakari\|placement\|heat\|glance\|heat_domain_admin\|neutron\|nova\|cyborg\|cinder\|barbican\|manila\|octavia\|designate\|ironic\|ironic-inspector\|watcher"
 
 KUBECTL=/usr/local/bin/kubectl
 KP_BIN="/usr/bin/kapacitor"
@@ -82,4 +82,3 @@ NFS_DIR="/mnt/nfs"
 POLICY_DIR="/etc/policies"
 EVENTS_DB="events"
 TELEGRAF_DB="telegraf"
-MONASCA_DB="monasca"
