@@ -284,6 +284,22 @@ ck "$RC" 1 "1e a failed rule create returns non-zero"
 ck "$(grep -c registry_add "$TMP/calls")" 0 "1e the registry was never touched"
 ckhas "$OUT" "unwinding" "1e the earlier steps were unwound"
 ck "$(awk -F: '$2 == "silver"' "$TMP/classes" | wc -l | tr -d ' ')" 0 "1e no OSD kept the class"
+ck "$(awk -F: '$1 == "0" { print $2 }' "$TMP/classes")" "hdd" "1e osd.0 got its own class back"
+
+# ---- 1f. an OSD whose current class cannot be read is not touched ----
+# `ceph osd tree` failing used to be indistinguishable from "this OSD has no
+# class": the pipeline's status was jq's, and `// empty` prints nothing either
+# way. Create saved "0:" as the class to restore, so when a later step failed
+# the unwind stripped the new class and put nothing back -- osd.0 came out of a
+# rolled-back create with no class at all, having had hdd before it started.
+reset_cluster
+DEAD_PAT='^osd tree -f json$|rule create-replicated'
+OUT=$(ceph_device_tier_create silver 0 1 2>&1) ; RC=$?
+ck "$RC" 1 "1f an unreadable device class refuses the create"
+ckhas "$OUT" "cannot read the current device class" "1f says why"
+ck "$(awk -F: '$1 == "0" { print $2 }' "$TMP/classes")" "hdd" "1f osd.0 still has the class it started with"
+ck "$(awk -F: '$2 == "silver"' "$TMP/classes" | wc -l | tr -d ' ')" 0 "1f and nothing was reclassed"
+ck "$(grep -c registry_add "$TMP/calls")" 0 "1f the registry was never touched"
 
 # ==== ceph_device_tier_list: the two disagreements =======================
 

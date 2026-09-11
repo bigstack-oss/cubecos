@@ -4013,10 +4013,15 @@ _ceph_device_tier_osd_ids()
     done
 }
 
+# Non-zero when the class could not be read, so that "no class" and "could not
+# ask" stay apart. The create path saves this value to put back if it has to
+# unwind: an empty answer that really means "the read failed" is how an OSD
+# ends up with no class at all after a rollback that was supposed to restore it.
 _ceph_device_tier_class_of_osd()
 {
-    $CEPH osd tree -f json 2>/dev/null \
-        | jq -r --argjson id "${1#osd.}" '.nodes[] | select(.id == $id) | .device_class // empty'
+    local tree=
+    tree=$($CEPH osd tree -f json 2>/dev/null) || return 1
+    echo "$tree" | jq -r --argjson id "${1#osd.}" '.nodes[] | select(.id == $id) | .device_class // empty' 2>/dev/null || return 1
 }
 
 # how many distinct hosts carry an OSD of this device class
@@ -4261,6 +4266,9 @@ _ceph_device_tier_unwind_create()
             id=${pair%%:*}
             cls=${pair#*:}
             Quiet -n $CEPH osd crush rm-device-class osd.$id
+            # Empty here means the OSD genuinely had no class: create refuses to
+            # touch an OSD whose class it could not read, so no entry is ever
+            # recorded for one.
             if [ -n "$cls" ] ; then
                 Quiet -n $CEPH osd crush set-device-class $cls osd.$id
             fi
@@ -4316,7 +4324,12 @@ ceph_device_tier_create()
     #    set-device-class on an OSD that already has one fails with EBUSY.
     #    Create only ever adds; taking an OSD out of a tier is ceph_device_tier_update.
     for i in $ids ; do
-        cls=$(_ceph_device_tier_class_of_osd $i)
+        if ! cls=$(_ceph_device_tier_class_of_osd $i) ; then
+            echo "Error: cannot read the current device class of osd.$i;" >&2
+            echo "       not changing it, because it could not be put back" >&2
+            _ceph_device_tier_unwind_create "$tier" "$made" "$saved"
+            return 1
+        fi
         [ "$cls" = "$tier" ] && continue
         saved="$saved $i:$cls"
         made="$made class"
@@ -4489,7 +4502,7 @@ ceph_device_tier_update()
     local moved=
     local cls=
     for i in $add ; do
-        cls=$(_ceph_device_tier_class_of_osd $i)
+        cls=$(_ceph_device_tier_class_of_osd $i) || cls="(unknown)"
         if ! $CEPH osd crush rm-device-class osd.$i >/dev/null 2>&1 || \
            ! $CEPH osd crush set-device-class $tier osd.$i >/dev/null 2>&1 ; then
             failed="$failed osd.$i"
