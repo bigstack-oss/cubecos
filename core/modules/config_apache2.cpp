@@ -116,8 +116,16 @@ writeStatusConf(const std::string& myIp)
         // ban all requests to mitigate Apache mod_status information disclosure vulnerability
         "  Require all denied\n",
 
-        // allow Monasca agents to access
+        // ...except locally. apache_exporter is the only reader now that monasca-agent's
+        // apache plugin is gone (#672), and config_prometheus.cpp points it at
+        // http://127.0.0.1:8080/server-status?auto -- so this is the line that matters.
         "  Require local\n",
+
+        // The node's own management address, kept from the monasca-agent era, when a
+        // collector could be pointed at a peer. It is dead now and measured so on jim-1cc
+        // and accept-3cc: httpd binds 127.0.0.1:8080 only, so a request to this address
+        // never connects and one that does arrive is sourced from 127.0.0.1 and matched by
+        // Require local. Harmless, but not a working remote-scrape allowance.
         "  Require ip " + myIp + "\n",
         "</Location>\n",
     };
@@ -148,8 +156,12 @@ writeStatusConf(const std::vector<std::string>& controlIps)
         "  Require all denied\n",
     };
 
-    // allow Monasca agents to access
+    // ...except locally: every control node runs its own apache_exporter against its own
+    // 127.0.0.1:8080, so this is the line that matters here too.
     fileContent.push_back("  Require local\n");
+
+    // The per-control-node entries are the same monasca-agent-era remnant described in the
+    // non-HA overload above -- on accept-3cc a scrape of a peer's :8080 does not connect.
     for (std::vector<std::string>::const_iterator it = controlIps.begin(); it != controlIps.end(); it++) {
         fileContent.push_back("  Require ip " + (*it) + "\n");
     }
