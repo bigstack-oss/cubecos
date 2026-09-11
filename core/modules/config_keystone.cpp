@@ -333,8 +333,8 @@ UpdateConfig(std::string sharedId)
         // For grafana
         cfg["cors"]["allowed_origin"] = "http://" + sharedId + ":3000";
 
-        // For idp setup
-        cfg["auth"]["methods"] = "password,token,oauth1,mapped";
+        // Keystone's default less "external", which conflicts with federation.
+        cfg["auth"]["methods"] = "password,token,oauth1,mapped,application_credential";
         cfg["federation"]["trusted_dashboard"] =
             "https://" + sharedId + "/horizon/auth/websso/\ntrusted_dashboard = https://" + sharedId + ":9999/api/openstack/skyline/api/v1/websso";
         cfg["federation"]["sso_callback_template"] = "/etc/keystone/sso_callback_template.html";
