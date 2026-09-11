@@ -380,6 +380,13 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/sudoers.d
 	$(Q)echo "admin ALL=(root) NOPASSWD: ALL" > $(ROOTDIR)/etc/sudoers.d/admin
 
+# The advisor console account escalates through sudo so that it is logged.
+# hex_cli is setuid root and world-executable, so withholding sudo would not
+# confine the account -- it would only remove the auditable path.
+rootfs_install::
+	$(Q)mkdir -p $(ROOTDIR)/etc/sudoers.d
+	$(Q)echo "advisor ALL=(root) NOPASSWD: ALL" > $(ROOTDIR)/etc/sudoers.d/advisor
+
 # Default systemd service stop timeout
 rootfs_install::
 	$(Q)sed -i 's/#DefaultTimeoutStopSec.*/DefaultTimeoutStopSec=90s/' $(ROOTDIR)/etc/systemd/system.conf
