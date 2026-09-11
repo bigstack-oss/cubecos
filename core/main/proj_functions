@@ -966,7 +966,7 @@ check_service_stats()
     done
 
     # openstack core services
-    local service_array=(nova cyborg neutron glance cinder manila swift heat octavia masakari monasca)
+    local service_array=(nova cyborg neutron glance cinder manila swift heat octavia masakari)
     for service in "${service_array[@]}" ; do
         check_service $service
     done
