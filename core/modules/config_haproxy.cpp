@@ -268,7 +268,7 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
     // load-bearing rather than cosmetic: haproxy sections run to the next section header, so
     // a backend/frontend emitted above cube_cos_http's closing lines silently adopts them and
     // leaves :80 with no /api/ or /saml/ route and no default_backend. That form still parses
-    // and haproxy still starts, so nothing reports it. Add new sections here, at the end.
+    // and haproxy still starts, so nothing reports it.
     //
     // InfluxDB listens on 127.0.0.1 only, so every off-box client -- the kapacitor relay
     // on a peer, the prometheus scrape, health_influxdb_check, the $INFLUX calls aimed at
