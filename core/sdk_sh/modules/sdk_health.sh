@@ -2844,7 +2844,15 @@ health_heat_check()
     stale_api_check_repair openstack-heat-api 8004 heat-api python3
     stale_api_check_repair openstack-heat-api-cfn 8000 heat-api-cfn python3
 
-    local service_stats="$($OPENSTACK orchestration service list -f value -c Hostname -c Binary -c Status | sort | uniq 2>/dev/null)"
+    # The redirect belongs on the CLI, not on the tail of the pipeline. It was attached to
+    # uniq, which has never written to stderr in its life, while the openstack client -- the
+    # one command here that does -- was left unguarded. $( ) captures stdout only, so its
+    # diagnostics escape the substitution and land in whatever the caller's output is.
+    # Measured on accept-3cc against a keystone that closes the connection: two lines of
+    # discovery failure per call, reaching the caller on stdout. That is what voided the
+    # whole check_service_stats document before check_service started discarding the
+    # check's output.
+    local service_stats="$($OPENSTACK orchestration service list -f value -c Hostname -c Binary -c Status 2>/dev/null | sort | uniq)"
     local engine_up=$(echo "$service_stats" | grep -i up | wc -l )
     local engine_down=$(echo "$service_stats" | grep -i down | wc -l )
 
