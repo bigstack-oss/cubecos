@@ -3002,6 +3002,39 @@ os_neutron_version_uniform()
     [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
 }
 
+# Derive the Cyborg device profile name for a GPU model string.
+#
+# Accepts either of the two model strings the product has, because the callers
+# see different ones and neither can get the other's cheaply:
+#
+#   Cyborg's `model`  "NVIDIA Corporation GB202GL [RTX PRO 6000 Blackwell Server Edition]"
+#   hex's own `name`  "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+#
+# Both normalise to the same slug ("rtx_pro_6000_blackwell_server_edition"), which
+# is what keeps a profile created through the CLI and one looked up from a card's
+# own record naming the same object. A card that is bound to vfio-pci is invisible
+# to nvidia-smi and takes up to a cyborg agent period (60s) to appear in the
+# accelerator inventory, so the lookup path deliberately uses hex's string.
+os_device_profile_name_for()
+{
+    local model=$1
+    local units=${2:-1}
+    local name
+
+    # Cyborg carries the marketing name in brackets; hex's string does not and
+    # only needs the vendor prefix dropped.
+    if echo $model | grep -q '\[' ; then
+        name=$(echo $model | awk -F'[' '{print $2}' | awk -F']' '{print $1}')
+    else
+        name=$(echo $model | sed 's/^NVIDIA //')
+    fi
+
+    name=$(echo $name | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
+    [ -n "$name" ] || return 1
+
+    echo "${name}_${units}"
+}
+
 os_device_profile_create()
 {
     local units=${1:-1}
@@ -3013,8 +3046,8 @@ os_device_profile_create()
             pid=$(echo $d | awk '{ s = "" ; for (i = 2 ; i <= NF ; i++) s = s $i " " ; print s }' | jq -r .product_id | tr '[:lower:]' '[:upper:]')
             uuid=$(timeout $SRVTO openstack accelerator device list -f value -c uuid -c vendor -c std_board_info | grep $d | head -1 | awk '{print $1}')
             model=$(timeout $SRVTO openstack accelerator device show -f json $uuid | jq -r .model)
-            name=$(echo $model | awk -F'[' '{print $2}' | awk -F']' '{print $1}' | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
-            if ! timeout $SRVTO openstack accelerator device profile list -f value -c name | grep -q "${name}_${units}" ; then
+            profile_name=$(os_device_profile_name_for "$model" "$units") || continue
+            if ! timeout $SRVTO openstack accelerator device profile list -f value -c name | grep -q "$profile_name" ; then
                 echo "Creating device profile for $model (resource unit: $units)"
                 profile="["
                 for i in $(seq $units) ; do
@@ -3025,7 +3058,7 @@ os_device_profile_create()
                 done
                 profile="${profile}]"
 
-                timeout $SRVTO openstack accelerator device profile create ${name}_${units} "$profile"
+                timeout $SRVTO openstack accelerator device profile create $profile_name "$profile"
             fi
         fi
     done
