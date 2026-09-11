@@ -26,6 +26,7 @@ SRC="$DIR/../modules/sdk_ceph.sh"
 for f in ceph_device_tier_delete ceph_device_tier_update \
          _ceph_device_tier_has_rule _ceph_device_tier_has_class \
          _ceph_device_tier_rule_state _ceph_device_tier_registry_del \
+         _ceph_device_tier_registry_add _ceph_device_tier_registry_restore \
          _ceph_device_tier_rule_users _ceph_device_tier_class_of_osd ; do
     eval "$(awk -v n="^$f\\\\(\\\\)" '$0 ~ n {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ "$(type -t "$f")" = function ] || { echo "FAIL: $f not extracted"; exit 1; }
@@ -151,6 +152,9 @@ fake_openstack() {
             # $4, not ${*##* }: on "$*" the ## operator applies to each
             # positional parameter, so it hands back the whole command line
             echo "vtype_del $4" >> "$TMP/calls"
+            # VTYPE_DEL_STICKS=1 models the case the delete path is written for:
+            # the command is accepted and the type is still listed afterwards.
+            [ "${VTYPE_DEL_STICKS:-0}" = 0 ] || return 0
             grep -vx "$4" "$TMP/vtypes" > "$TMP/x"; mv "$TMP/x" "$TMP/vtypes" ;;
         *'volume type list'*) cat "$TMP/vtypes" ;;
         *'volume list'*)      echo '[]' ;;
@@ -183,6 +187,7 @@ HEX_SDK=fake_sdk
 pass=0 fail=0
 ck() { [ "$1" = "$2" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: $3 -> got '$1' want '$2'"; }; }
 ckhas() { case "$1" in *"$2"*) pass=$((pass+1));; *) fail=$((fail+1)); echo "FAIL: $3 -> output lacks '$2'";; esac; }
+cklacks() { case "$1" in *"$2"*) fail=$((fail+1)); echo "FAIL: $3 -> output should not contain '$2'";; *) pass=$((pass+1));; esac; }
 
 # ==== R6 =================================================================
 
@@ -413,6 +418,38 @@ ck "$RC" 1 "8c an in-use volume type is still refused"
 ckhas "$OUT" "still in use" "8c keeps the pre-existing reason"
 ck "$(grep -c registry_del "$TMP/calls")" 0 "8c the registry was not touched"
 ck "$(grep -cx gold "$TMP/registry")" 1 "8c the registry entry survives"
+
+# ---- 8d. a delete that fails after deregistering puts the entry back ----
+# The registry entry goes first on purpose (8a) -- a backend still in
+# enabled_backends keeps accepting volumes into a store that is about to go.
+# The cost was that any later failure left the Ceph objects with no registered
+# owner, and ownership is decided from the registry, so the CLI then refused to
+# finish the job it had started: "This CLI does not manage objects it did not
+# register." The operator had to re-register by hand before they could retry.
+reset_cluster
+VTYPE_DEL_STICKS=1
+fake_sdk() {
+    case "$1" in
+        cinder_is_volume_type_in_use) return 1 ;;
+        cinder_apply_storage_tier_deletion)
+            echo "registry_del $2" >> "$TMP/calls"
+            grep -vx "$2" "$TMP/registry" > "$TMP/x" 2>/dev/null; mv "$TMP/x" "$TMP/registry"
+            return 0 ;;
+        cinder_apply_storage_tier_creation)
+            echo "registry_add $2" >> "$TMP/calls"
+            echo "$2" >> "$TMP/registry"
+            return 0 ;;
+    esac
+    return 1
+}
+OUT=$(ceph_device_tier_delete gold 2>&1); RC=$?
+ck "$RC" 1 "8d a volume type that will not go still fails the delete"
+ck "$(grep -c 'registry_add gold' "$TMP/calls")" 1 "8d the registry entry is put back"
+ck "$(grep -cx gold "$TMP/registry")" 1 "8d so the tier is owned again"
+ckhas "$OUT" "put back" "8d and the operator is told it can retry"
+cklacks "$OUT" "leaving device tier gold in place" "8d drops the claim that nothing changed"
+ck "$(grep -cx gold "$TMP/pools")" 1 "8d the pool was left alone"
+VTYPE_DEL_STICKS=0
 
 echo "----"; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] && { echo "OK: device tier delete/update failure reporting"; exit 0; } || exit 1

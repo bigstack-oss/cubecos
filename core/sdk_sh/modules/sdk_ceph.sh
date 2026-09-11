@@ -4243,6 +4243,27 @@ _ceph_device_tier_registry_del()
     $HEX_SDK cinder_apply_storage_tier_deletion "$1"
 }
 
+# Delete takes the registry entry out first, on purpose: while a backend is
+# still in enabled_backends its cinder-volume service keeps accepting volumes
+# into a store that is about to go, and a volume left mid-delete cannot be
+# cleaned up afterwards. The cost of that order is that every later failure
+# leaves Ceph objects with no registered owner -- and ownership is decided from
+# the registry, so the CLI then refuses to finish the job it started. Put the
+# entry back, so the operator can fix the underlying problem and retry.
+_ceph_device_tier_registry_restore()
+{
+    local tier=$1
+    if _ceph_device_tier_registry_add "$tier" ; then
+        echo "       Its registry entry has been put back; fix the above and run" >&2
+        echo "       'tier delete $tier' again." >&2
+        return 0
+    fi
+    echo "       WARNING: its registry entry could not be put back either, so this" >&2
+    echo "       device tier is now unowned. Re-register it with" >&2
+    echo "       'hex_sdk cinder_apply_storage_tier_creation $tier' before retrying." >&2
+    return 1
+}
+
 # undo only what this create actually made. $2 is a word list out of
 # "class rule pool vtype"; $3 is "<id>:<previous class>" pairs.
 _ceph_device_tier_unwind_create()
@@ -4733,7 +4754,9 @@ ceph_device_tier_delete()
         done
         if [ $gone -ne 0 ] ; then
             echo "Error: volume type $tier was not confirmed deleted -- still listed, or" >&2
-            echo "       the list stopped being readable; leaving device tier $tier in place" >&2
+            echo "       the list stopped being readable; the pool and CRUSH rule are" >&2
+            echo "       left alone." >&2
+            _ceph_device_tier_registry_restore "$tier"
             return 1
         fi
     fi
@@ -4743,11 +4766,13 @@ ceph_device_tier_delete()
         Quiet -n $CEPH osd pool delete $tier $tier --yes-i-really-really-mean-it
         if ! pools=$($CEPH osd pool ls 2>/dev/null) ; then
             echo "Error: cannot confirm pool $tier was deleted; leaving its rule and" >&2
-            echo "       OSD classes alone" >&2
+            echo "       OSD classes alone." >&2
+            _ceph_device_tier_registry_restore "$tier"
             return 1
         fi
         if echo "$pools" | grep -qx "$tier" ; then
-            echo "Error: pool $tier was not deleted; leaving its rule and OSD classes alone" >&2
+            echo "Error: pool $tier was not deleted; leaving its rule and OSD classes alone." >&2
+            _ceph_device_tier_registry_restore "$tier"
             return 1
         fi
     fi
