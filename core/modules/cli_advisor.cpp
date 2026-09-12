@@ -96,11 +96,57 @@ StatusMain(int argc, const char** argv)
     if (argc > 1)
         return CLI_INVALID_ARGS;
 
+    // Read separately from whether the agent is installed: a node can hold an
+    // allowlist with no agent, and that is worth reporting, not hiding behind
+    // a failure below.
+    CliList targets;
+    if (CliPopulateList(targets, HEX_SDK " advisor_targets_list") == 0)
+        CliPrintf("%zu web target(s) allowed through the Advisor.", targets.size());
+
     if (access(ADVISOR_AGENT, X_OK) != 0) {
         CliPrintf("The Advisor agent is not installed on this node.");
         return CLI_SUCCESS;
     }
     HexSpawn(0, (char*)ADVISOR_AGENT, "status", NULL);
+    return CLI_SUCCESS;
+}
+
+static int
+TargetsMain(int argc, const char** argv)
+{
+    if (argc != 1 /* [0]="targets" */)
+        return CLI_INVALID_ARGS;
+
+    // advisor_targets_list prints the allowlist itself; nothing here to
+    // reformat or duplicate.
+    return HexSpawn(0, HEX_SDK, "advisor_targets_list", NULL) == 0 ? CLI_SUCCESS : CLI_FAILURE;
+}
+
+static int
+TargetSetMain(int argc, const char** argv)
+{
+    if (argc != 3 /* [0]="target_set" [1]=name [2]=host:port */)
+        return CLI_INVALID_ARGS;
+
+    // Name and address are validated by advisor_targets_set, which also owns
+    // the operator-facing refusal text -- not repeated here.
+    if (HexSpawn(0, HEX_SDK, "advisor_targets_set", argv[1], argv[2], NULL) != 0)
+        return CLI_FAILURE;
+
+    CliPrintf("The Advisor may now reach %s at %s.", argv[1], argv[2]);
+    return CLI_SUCCESS;
+}
+
+static int
+TargetUnsetMain(int argc, const char** argv)
+{
+    if (argc != 2 /* [0]="target_unset" [1]=name */)
+        return CLI_INVALID_ARGS;
+
+    if (HexSpawn(0, HEX_SDK, "advisor_targets_unset", argv[1], NULL) != 0)
+        return CLI_FAILURE;
+
+    CliPrintf("%s is no longer reachable through the Advisor.", argv[1]);
     return CLI_SUCCESS;
 }
 
@@ -136,3 +182,12 @@ CLI_MODE_COMMAND("advisor", "status", StatusMain, NULL,
 CLI_MODE_COMMAND("advisor", "verify", VerifyMain, NULL,
     "Verify a downloaded Advisor release without installing it.",
     "verify <directory>");
+
+CLI_MODE_COMMAND("advisor", "targets", TargetsMain, NULL,
+    "List the web endpoints this node will let the Advisor reach.", "targets");
+
+CLI_MODE_COMMAND("advisor", "target_set", TargetSetMain, NULL,
+    "Allow the Advisor to reach a web endpoint on this node.", "target_set <name> <host:port>");
+
+CLI_MODE_COMMAND("advisor", "target_unset", TargetUnsetMain, NULL,
+    "Stop allowing a web endpoint.", "target_unset <name>");
