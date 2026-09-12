@@ -4585,23 +4585,35 @@ ceph_device_tier_update()
 
     _ceph_device_tier_health_ok || return 1
 
-    # Unlike create, the rule already exists here, so a class change starts
-    # moving data the moment it lands. Take the OSDs out first so the movement
-    # is one remapping rather than two.
+    # The class change is the whole of the movement. It used to be preceded by
+    # `ceph osd out` on every OSD about to change class, on the theory that
+    # emptying them first made the movement one remapping rather than two.
+    # Measured on a three-node cluster it is the other way round (#1464):
+    #
+    #   `osd out` reweights an OSD to zero for EVERY pool, so every pool that
+    #   lands on it drains -- and on `osd in` refills. A pool bound to the
+    #   classless `replicated_rule`, which is what the pools of a default
+    #   deployment use, is not affected by a device class change at all, so
+    #   both of those movements are work done for nothing: 42182 of 305043
+    #   objects misplaced (13.8%) while the tier's own pool held 2806 objects,
+    #   with backfill on glance-images, cinder-volumes, cephfs_data,
+    #   default.rgw.* and ephemeral-vms -- and exactly one PG on the tier.
+    #
+    #   The create path is the control for that measurement: it makes the same
+    #   class change without `osd out`, and the cluster stays HEALTH_OK with
+    #   every PG active+clean.
+    #
+    # A pool bound to a class-scoped rule (`take default~<class>`) is the case
+    # `osd out` was written for, and it is not helped either: such a pool has
+    # to drain off an OSD that is leaving its class whether or not the OSD was
+    # marked out first, so `osd out` does not save it a remapping -- it only
+    # adds one for every other pool on that OSD. Leaving the OSDs in keeps the
+    # movement to the data whose placement actually changed.
     #
     # Nothing below is allowed to fail quietly. There is no data-level rollback
     # -- objects that have moved cannot be moved back, and pretending otherwise
     # would be the worse lie -- so the contract is: check every step, stop at
     # the first failure, say what state that leaves behind, and return non-zero.
-    # The one thing that must always be attempted is bringing the OSDs back in:
-    # an OSD left `out` is a cluster quietly running short.
-    local touched=
-    for i in $add $remove ; do touched="$touched osd.$i" ; done
-
-    if ! $CEPH osd out $touched >/dev/null 2>&1 ; then
-        echo "Error: cannot take$touched out; nothing has been changed" >&2
-        return 1
-    fi
 
     local rc=0
     local failed=
@@ -4645,12 +4657,6 @@ ceph_device_tier_update()
            ;;
         *) rc=1 ;;
     esac
-    if ! $CEPH osd in $touched >/dev/null 2>&1 ; then
-        echo "Error: could not bring$touched back in -- THOSE OSDs ARE STILL OUT" >&2
-        echo "       run 'ceph osd in$touched' once the cluster is reachable" >&2
-        rc=1
-    fi
-
     # membership changed, so the achievable RF may have too. ceph_adjust_pool_size
     # swallows its own failures, so the result is read back rather than trusted.
     #
