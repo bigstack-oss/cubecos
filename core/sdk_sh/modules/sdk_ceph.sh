@@ -4125,8 +4125,12 @@ _ceph_device_tier_wait_recovery()
             echo "recovering $recovering obj/sec"
         fi
     done
+    # 2, not 1: the caller has to be able to tell "I stopped waiting" apart from
+    # "the thing I was waiting on failed". Folding the two together made a
+    # successful membership change report Error, and the operator's natural
+    # response to that -- run it again -- is another whole-cluster rebalance.
     echo "Warning: still recovering after $((tries * 10))s; data movement continues in the background" >&2
-    return 1
+    return 2
 }
 
 # Preflight shared by device tier create and update: both start data movement,
@@ -4600,7 +4604,17 @@ ceph_device_tier_update()
     fi
 
     # data can be moving whether or not a step failed, so this is not skipped
-    _ceph_device_tier_wait_recovery || rc=1
+    _ceph_device_tier_wait_recovery
+    case $? in
+        0) ;;
+        2) # Timed out waiting, which is not a failure of the update: the class
+           #  change above either succeeded or was already reported. Recovery
+           #  finishing is Ceph's business and continues without us.
+           echo "Note: recovery for device tier $tier is still running in the background;" >&2
+           echo "      the membership change itself is complete. Check with 'ceph -s'." >&2
+           ;;
+        *) rc=1 ;;
+    esac
     if ! $CEPH osd in $touched >/dev/null 2>&1 ; then
         echo "Error: could not bring$touched back in -- THOSE OSDs ARE STILL OUT" >&2
         echo "       run 'ceph osd in$touched' once the cluster is reachable" >&2

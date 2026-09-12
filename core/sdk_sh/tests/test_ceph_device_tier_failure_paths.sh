@@ -372,6 +372,38 @@ ck "$URC" 1 "7g unreadable readback returns non-zero"
 ckhas "$UOUT" "could not be" "7g reports unknown"
 _ceph_device_tier_wait_recovery() { return 0; }
 
+# ---- 7h. a recovery wait that times out is not an update failure (#1465) ----
+# The wait is a fixed 600 s. Measured on a 3-node cluster with real data: it
+# gave up at 657 s and the cluster converged at 671 s -- 14 seconds apart -- and
+# the operator was told "did not complete" about an operation whose members were
+# already correct. Folding a timeout into rc sends them to re-run it, and
+# re-running is another whole-cluster rebalance (#1464).
+reset_cluster
+_ceph_device_tier_target_pool_size() { echo 3; }
+_ceph_device_tier_health_ok() { return 0; }
+_ceph_device_tier_osd_ids() { for a in "$@" ; do echo "${a#osd.}" ; done ; }
+_ceph_device_tier_class_of_osd() { echo gold; }
+ceph_adjust_pool_size() { return 0; }
+_ceph_device_tier_wait_recovery() { return 2; }        # timed out
+printf '2:gold\n6:gold\n10:gold\n' > "$TMP/classes"
+printf 'gold:3:2\ncinder-volumes:3:2\n' > "$TMP/poolattr"
+UOUT=$(ceph_device_tier_update gold 2 6 10 3 2>&1); URC=$?
+ck "$URC" 0 "7h a timed-out wait still reports success"
+ckhas "$UOUT" "still running in the background" "7h says recovery continues"
+cklacks "$UOUT" "did not complete" "7h does not deny the change landed"
+ckhas "$UOUT" "now consists of" "7h still reports the new membership"
+
+# ---- 7i. a wait that actually fails is still a failure ----
+# The point of 7h is telling the two apart, not treating every non-zero as fine.
+reset_cluster
+_ceph_device_tier_target_pool_size() { echo 3; }
+_ceph_device_tier_wait_recovery() { return 1; }        # a real failure
+printf '2:gold\n6:gold\n10:gold\n' > "$TMP/classes"
+printf 'gold:3:2\ncinder-volumes:3:2\n' > "$TMP/poolattr"
+UOUT=$(ceph_device_tier_update gold 2 6 10 3 2>&1); URC=$?
+ck "$URC" 1 "7i a failed wait is still non-zero"
+_ceph_device_tier_wait_recovery() { return 0; }
+
 # ==== step 2, the registry (#840 WP-5) ===================================
 #
 # The registry entry has to come out before the volume type and the pool do,
