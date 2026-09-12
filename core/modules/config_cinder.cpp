@@ -44,6 +44,8 @@ static const char BACKUP[] = "volume-backups";
 
 // cinder common
 static const char RUNDIR[] = "/run/cinder";
+static const char USAGE_CRON[] = "/etc/cron.d/cube_storage_usage";
+static const char USAGE_ENV[] = "/etc/cube/cos/storage_usage.env";
 static const char STATDIR[] = "/store/cinder";
 
 /**
@@ -103,6 +105,11 @@ CONFIG_TUNING_STR(CINDER_VOLUME_TYPE_DEFAULT, "cinder.storage.volumeType.default
 
 // public tunigns
 CONFIG_TUNING_BOOL(CINDER_DEBUG, "cinder.debug.enabled", TUNING_PUB, "Set to true to enable cinder verbose log.", false);
+CONFIG_TUNING_BOOL(STORAGE_USAGE_ENABLED, "storage.usage.enabled", TUNING_PUB, "Set to true to sample per-volume and per-pool storage usage.", true);
+CONFIG_TUNING_UINT(STORAGE_USAGE_INTERVAL, "storage.usage.interval", TUNING_PUB, "Storage usage sampling interval in minutes.", 15, 5, 1440);
+CONFIG_TUNING_UINT(STORAGE_USAGE_SOFT, "storage.usage.threshold.soft", TUNING_PUB, "Storage pool used percentage that raises a warning.", 75, 1, 100);
+CONFIG_TUNING_UINT(STORAGE_USAGE_HARD, "storage.usage.threshold.hard", TUNING_PUB, "Storage pool used percentage that raises an error.", 85, 1, 100);
+CONFIG_TUNING_STR(STORAGE_USAGE_OVERSUB, "storage.usage.oversubscription.warn", TUNING_PUB, "Provisioned-to-capacity ratio that raises a warning.", "2.0", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(CINDER_BACKUP_OVERRIDE, "cinder.backup.override", TUNING_PUB, "Enable override cinder backup configurations.", false);
 CONFIG_TUNING_STR(CINDER_BACKUP_TYPE, "cinder.backup.type", TUNING_PUB, "Set cinder backup storage type <cube-storage|cube-swift>.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CINDER_BACKUP_ENDPOINT, "cinder.backup.endpoint", TUNING_PUB, "Set cinder backup storage endpoint.", "", ValidateRegex, DFT_REGEX_STR);
@@ -124,6 +131,11 @@ CONFIG_TUNING_SPEC_STR(NOVA_USERPASS);
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, CINDER_ENABLED);
 PARSE_TUNING_BOOL(s_debug, CINDER_DEBUG);
+PARSE_TUNING_BOOL(s_usageEnabled, STORAGE_USAGE_ENABLED);
+PARSE_TUNING_UINT(s_usageInterval, STORAGE_USAGE_INTERVAL);
+PARSE_TUNING_UINT(s_usageSoft, STORAGE_USAGE_SOFT);
+PARSE_TUNING_UINT(s_usageHard, STORAGE_USAGE_HARD);
+PARSE_TUNING_STR(s_usageOversub, STORAGE_USAGE_OVERSUB);
 PARSE_TUNING_STR(s_cinderPass, CINDER_USERPASS);
 PARSE_TUNING_STR(s_dbPass, CINDER_DBPASS);
 PARSE_TUNING_STR_ARRAY(s_storageBackends, CINDER_STORAGE_BACKEND);
@@ -1022,6 +1034,48 @@ CreateVolumeTypes(const TuningStringArray& storageBackends, const std::vector<st
     HexUtilSystemF(0, 0, HEX_SDK " os_volume_type_clear %s", typesLine.str().c_str());
 }
 
+// The sampler reads its thresholds from an env file rather than re-deriving
+// them, so the CLI, the cron run and hex_config cannot disagree.
+static bool
+WriteStorageUsageCron(void)
+{
+    if (!s_usageEnabled) {
+        unlink(USAGE_CRON);
+        return true;
+    }
+
+    FILE* fenv = fopen(USAGE_ENV, "w");
+    if (!fenv) {
+        HexLogError("Unable to write %s", USAGE_ENV);
+        return false;
+    }
+    fprintf(fenv, "STORAGE_USAGE_SOFT=%u\n", s_usageSoft.newValue());
+    fprintf(fenv, "STORAGE_USAGE_HARD=%u\n", s_usageHard.newValue());
+    fprintf(fenv, "STORAGE_USAGE_OVERSUB_WARN=%s\n", s_usageOversub.newValue().c_str());
+    fclose(fenv);
+
+    int fd = open(USAGE_CRON, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        HexLogError("Unable to open file %s", USAGE_CRON);
+        return false;
+    }
+    FILE* fout = fdopen(fd, "w");
+    if (!fout) {
+        HexLogError("Unable to write storage usage sampler: %s", USAGE_CRON);
+        return false;
+    }
+
+    fprintf(fout, "*/%u * * * * root " HEX_SDK " storage_usage_collect\n", s_usageInterval.newValue());
+    fclose(fout);
+
+    if (HexSetFileMode(USAGE_CRON, "root", "root", 0644) != 0) {
+        HexLogError("Unable to set file %s mode/permission", USAGE_CRON);
+        return false;
+    }
+
+    return true;
+}
+
 static bool
 Commit(bool modified, int dryLevel)
 {
@@ -1043,6 +1097,10 @@ Commit(bool modified, int dryLevel)
             HexLogError("failed to sync models from controls to this pure compute node");
         }
     }
+
+    // the usage sampler runs on control nodes and guards on VIP ownership
+    if (IsControl(s_eCubeRole) && !WriteStorageUsageCron())
+        HexLogWarning("failed to write the storage usage sampler cron");
 
     // we only run Cinder services on control nodes
     if (!IsControl(s_eCubeRole) || !CommitCheck(modified, dryLevel))
