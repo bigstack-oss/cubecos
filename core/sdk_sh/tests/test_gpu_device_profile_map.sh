@@ -14,10 +14,11 @@ set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GPU_SRC="$DIR/../modules/sdk_gpu.sh"
 OS_SRC="$DIR/../modules/sdk_os.sh"
+eval "$(awk '/^_gpu_load_os_module\(\)/{f=1} f{print} f&&/^}/{exit}' "$GPU_SRC")"
 eval "$(awk '/^gpu_device_profile_map\(\)/{f=1} f{print} f&&/^}/{exit}' "$GPU_SRC")"
 eval "$(awk '/^gpu_device_profile_get\(\)/{f=1} f{print} f&&/^}/{exit}' "$GPU_SRC")"
 eval "$(awk '/^os_device_profile_name_for\(\)/{f=1} f{print} f&&/^}/{exit}' "$OS_SRC")"
-for fn in gpu_device_profile_map gpu_device_profile_get os_device_profile_name_for ; do
+for fn in _gpu_load_os_module gpu_device_profile_map gpu_device_profile_get os_device_profile_name_for ; do
     [ "$(type -t $fn)" = function ] || { echo "FAIL: $fn not extracted"; exit 1; }
 done
 
@@ -94,6 +95,40 @@ ck "$(gpu_device_profile_get GPU-b)" "" "get: profile missing -> empty"
 ck "$(gpu_device_profile_get GPU-nope)" "" "get: unknown card -> empty"
 gpu_device_profile_get "" >/dev/null 2>&1
 ck "$?" "1" "get: empty id -> non-zero"
+
+# --- 8. the cross-module load itself -------------------------------------------
+# hex_sdk sources only sdk_gpu.sh for a `gpu_*` command, so these functions have
+# to pull sdk_os.sh in themselves. Every test above stubs os_device_profile_names
+# and therefore never exercises that -- which is exactly how a "command not
+# found" reached a real node once. Here the stub is removed so the real load
+# path runs, against a fake SDK_DIR.
+unset -f os_device_profile_names
+SDK_DIR="$TMP/sdk"
+mkdir -p "$SDK_DIR/modules"
+cat > "$SDK_DIR/modules/sdk_os.sh" <<'FAKE'
+os_device_profile_names() { printf '%s' "rtx_a2000_1"; }
+FAKE
+
+echo "[$A2000]" > "$GPU_CONFIG_FILE_PATH"
+ck "$(gpu_device_profile_map | jq -r '."GPU-a"')" "rtx_a2000_1" "loads sdk_os.sh when the os helpers are absent"
+
+# Already loaded: must not source it a second time. Called without a command
+# substitution, because the load only persists within one shell -- and one shell
+# is exactly what a real `hex_sdk gpu_device_profile_map` process is.
+unset -f os_device_profile_names
+gpu_device_profile_map >/dev/null 2>"$TMP/noise1"
+cat > "$SDK_DIR/modules/sdk_os.sh" <<'FAKE'
+echo "RELOADED" >&2
+os_device_profile_names() { printf '%s' "rtx_a2000_1"; }
+FAKE
+gpu_device_profile_map >/dev/null 2>"$TMP/noise2"
+ck "$(cat "$TMP/noise2")" "" "does not re-source once loaded"
+
+# Missing module: fail rather than report every card as having no profile.
+unset -f os_device_profile_names
+rm -f "$SDK_DIR/modules/sdk_os.sh"
+gpu_device_profile_map >/dev/null 2>&1
+ck "$?" "1" "a missing sdk_os.sh is an error, not an empty answer"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]

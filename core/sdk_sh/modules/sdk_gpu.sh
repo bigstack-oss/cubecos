@@ -1034,6 +1034,25 @@ gpu_pgpu_attached_instance_get()
 
 # Full validation for gpu_resource_set: gpu_id, new_type, profiles required-ness
 # for the given type, GPU existence, and in-use status.
+# Pull sdk_os.sh in, once, for the functions below that need its Openstack
+# helpers.
+#
+# hex_sdk sources only the module matching a command's first underscore-
+# separated segment, so `hex_sdk gpu_...` never has sdk_os.sh loaded and a
+# cross-module call fails with "command not found" at runtime -- not at parse
+# time, and not in a unit test that stubs the callee.
+#
+# On demand rather than at the top of this file, which is what sdk_health.sh
+# does for sdk_ovn.sh: that one is 390 lines, sdk_os.sh is 3300 and drags in
+# os_cinder.sh as well. Paying that on every gpu_* call would tax
+# gpu_device_list, which the API runs on every single listing.
+_gpu_load_os_module()
+{
+    [ "$(type -t os_device_profile_names)" = function ] && return 0
+
+    source "${SDK_DIR}/modules/sdk_os.sh"
+}
+
 # Cyborg device profile name for every pgpu card on this node, as a JSON object
 # keyed by GPU id:  {"GPU-aaa": "rtx_a2000_1", "GPU-bbb": null}
 #
@@ -1068,6 +1087,8 @@ gpu_device_profile_map()
         echo '{}'
         return 0
     fi
+
+    _gpu_load_os_module || return 1
 
     # Fails closed: an unreachable Cyborg must not look like "no profiles".
     local existing
@@ -1145,6 +1166,8 @@ gpu_device_profile_ensure()
         return 0
     fi
 
+    _gpu_load_os_module || return 1
+
     local profile_name
     profile_name=$(os_device_profile_name_for "$(echo "$entry" | jq -r '.name // ""')")
     if [ -z "$profile_name" ] ; then
@@ -1159,10 +1182,22 @@ gpu_device_profile_ensure()
         return 0
     fi
 
+    # Address straight out of config.json, not gpu_sysfs_pci_addr. That helper
+    # asks nvidia-smi first and only falls back to config.json when the answer
+    # is empty -- but nvidia-smi prints "No devices were found" on *stdout*
+    # (rc 6, stderr empty) for a card bound to vfio-pci, so the answer is never
+    # empty and the fallback never fires. It returns that sentence as if it were
+    # an address. Every card this function cares about is a pgpu, i.e. exactly
+    # the case nvidia-smi cannot see, and config.json already has the address
+    # in the record read above.
+    #
+    # config.json stores an 8-digit PCI domain (00000001:04:00.0); sysfs uses 4
+    # (0001:04:00.0).
     local addr
-    addr=$(gpu_sysfs_pci_addr "$gpu_id")
+    addr=$(echo "$entry" | jq -r '.pciAddress // ""' \
+        | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
     if [ -z "$addr" ] ; then
-        log_error "gpu_device_profile_ensure: cannot resolve the PCI address of GPU $gpu_id"
+        log_error "gpu_device_profile_ensure: GPU $gpu_id has no recorded pciAddress"
         return 1
     fi
 
