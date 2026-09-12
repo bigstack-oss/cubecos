@@ -135,7 +135,12 @@ fake_ceph() {
             awk -F: -v p="$(echo "$all" | awk '{print $4}')" '$1==p{printf "{\"size\":%s}\n",$2}' "$TMP/poolattr" ;;
         'osd pool get '*' min_size -f json')
             awk -F: -v p="$(echo "$all" | awk '{print $4}')" '$1==p{printf "{\"min_size\":%s}\n",$3}' "$TMP/poolattr" ;;
-        'osd out '*|'osd in '*|'-s') : ;;
+        'osd out '*|'osd in '*)
+            # Recorded rather than ignored: what #1464 fixed is the absence
+            # of these two calls, and a stub that swallows them cannot tell
+            # the fix from a regression that puts them back.
+            echo "$all" >> "$TMP/calls" ;;
+        '-s') : ;;
         *) : ;;
     esac
     return 0
@@ -403,6 +408,43 @@ printf 'gold:3:2\ncinder-volumes:3:2\n' > "$TMP/poolattr"
 UOUT=$(ceph_device_tier_update gold 2 6 10 3 2>&1); URC=$?
 ck "$URC" 1 "7i a failed wait is still non-zero"
 _ceph_device_tier_wait_recovery() { return 0; }
+
+# ---- 7j. the update does not mark the OSDs out (#1464) ----
+# `osd out` reweights an OSD to zero for every pool on it, so every one of them
+# drains and then refills, while the class change itself only moves the pools
+# whose rule is scoped to a class -- none, on a default deployment. Measured on
+# a three-node cluster: 42182 of 305043 objects misplaced (13.8%) to move a
+# tier that held 2806 of them, with exactly one PG on the tier itself.
+#
+# The two counts below are the whole point of the case. Everything else here
+# would pass just as well with the `osd out` / `osd in` pair still in place.
+reset_cluster
+_ceph_device_tier_target_pool_size() { echo 3; }
+_ceph_device_tier_health_ok() { return 0; }
+_ceph_device_tier_osd_ids() { for a in "$@" ; do echo "${a#osd.}" ; done ; }
+_ceph_device_tier_class_of_osd() { echo gold; }
+ceph_adjust_pool_size() { return 0; }
+_ceph_device_tier_wait_recovery() { return 0; }
+printf '2:gold\n6:gold\n10:gold\n' > "$TMP/classes"
+printf 'gold:3:2\ncinder-volumes:3:2\n' > "$TMP/poolattr"
+UOUT=$(ceph_device_tier_update gold 2 6 10 3 2>&1); URC=$?
+ck "$URC" 0 "7j the membership change still succeeds"
+ck "$(grep -c 'osd out' "$TMP/calls")" 0 "7j no OSD is marked out"
+ck "$(grep -c 'osd in' "$TMP/calls")" 0 "7j and none has to be brought back in"
+ckhas "$UOUT" "now consists of" "7j the new membership is still reported"
+cklacks "$UOUT" "STILL OUT" "7j the out/in failure path goes with it"
+
+# ---- 7k. a removal-only update does not mark anything out either ----
+# The removal branch builds its own list, so it is a separate path through the
+# same fix: a tier losing a member used to take that OSD out as well.
+reset_cluster
+_ceph_device_tier_target_pool_size() { echo 3; }
+printf '2:gold\n6:gold\n10:gold\n' > "$TMP/classes"
+printf 'gold:3:2\ncinder-volumes:3:2\n' > "$TMP/poolattr"
+UOUT=$(ceph_device_tier_update gold 2 6 2>&1); URC=$?
+ck "$URC" 0 "7k dropping a member succeeds"
+ck "$(grep -c 'osd out' "$TMP/calls")" 0 "7k the dropped OSD is not marked out"
+ck "$(sort "$TMP/classes" | tr '\n' ',')" "2:gold,6:gold," "7k it really left the tier"
 
 # ==== step 2, the registry (#840 WP-5) ===================================
 #
