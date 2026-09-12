@@ -1,0 +1,32 @@
+# Recover a bond that has stopped carrying traffic.
+#
+# On accept-3cc a control node sat unreachable for 14 hours with every conventional
+# signal healthy: both slaves UP/LOWER_UP at 1000Mbps with MII Status up, the
+# provider bridge holding the management IP, OVS forwarding normally -- and ARP
+# failing to every peer in both directions. No health check looks at the bond, and
+# `link` is NO_REPAIR.
+#
+# The decision is reachability, not any LACP state variable. Two were tried and both
+# report healthy on a black-holed node: Actor Churn State reads `churned` on
+# perfectly healthy nodes here, because a bond whose partner never answers LACPDUs
+# runs permanently defaulted; and the active aggregator's Synchronization bit was
+# measured *set* (ps=79) on the node that could not reach its own gateway. The
+# aggregator details are logged as diagnostics only -- nothing decides on them.
+#
+# Scope is the bond carrying the management path, and only that one. The reachability
+# probes leave over the default route, so that is the only bond the signal says
+# anything about; a storage or overlay bond can be healthy at the same moment, and
+# bouncing it costs 5s down plus 12s up per slave on a path that is still working.
+#
+# This runs from cron rather than the health SDK on purpose. Every repair path in
+# sdk_health.sh is driven from a *reachable* node over ssh, and a node whose bond has
+# stopped carrying traffic is by definition unreachable -- it can only be fixed
+# locally, by itself. Cron rather than a telegraf exec input for the same reason: the
+# telemetry stack's outputs are all failing precisely when this is needed.
+#
+# network_bond_watchdog is cheap when healthy: one route lookup plus one ping that
+# answers. It will not arm until the node has been observed reachable at least once
+# (so a gateway that rejects ICMP never looks like a fault), requires three
+# consecutive failures, and holds off 900s between repairs so a fault it cannot fix
+# does not become a flap.
+*/2 * * * * root /usr/sbin/hex_sdk network_bond_watchdog >/dev/null 2>&1

@@ -378,3 +378,305 @@ airgap_sim_clear()
     iptables -F CUBE_AIRGAP 2>/dev/null
     iptables -X CUBE_AIRGAP 2>/dev/null
 }
+
+# Bond health.
+#
+# The failure this exists for: a control node sat unreachable for 14 hours with
+# every conventional signal healthy -- both slaves UP/LOWER_UP at 1000Mbps, MII
+# Status up, the provider bridge holding the management IP, OVS forwarding with a
+# NORMAL flow. The bond had simply stopped carrying traffic. Recovery both times
+# was a slave bounce, which forces LACP to renegotiate and the driver to reselect
+# an aggregator.
+#
+# The signal is REACHABILITY, not any LACP state variable. Two candidates were
+# tried and both give false healthies:
+#
+#   Actor Churn State  -- reads "churned" on perfectly healthy nodes here, because
+#                         a bond whose partner never answers LACPDUs runs
+#                         permanently defaulted.
+#   Synchronization bit of the active aggregator's actor port state -- measured
+#                         reporting "synced" on a node that could not reach its
+#                         own default gateway, because which aggregator is active
+#                         matters more than whether it synchronized.
+#
+# So the aggregator details below are logged as diagnostics only. Nothing decides
+# on them.
+# The one bond this watchdog is allowed to touch: the bond carrying the management
+# path, or empty if the management path is not on a bond at all.
+#
+# Scope matters because the signal and the action are about different things.
+# _network_bond_reachable() pings the default gateway and the cluster peers, all of
+# which leave over the default route -- so its answer is about *that* path, and says
+# nothing about any other bond. Bouncing every entry in bonding_masters on a
+# node-level signal is therefore unsound in both directions: a storage or overlay
+# bond can be perfectly healthy at that moment, the order of bonding_masters is not
+# defined so it may be bounced first, and each slave costs 5s down plus 12s up. On a
+# separate bond still carrying Ceph traffic that is new harm, inflicted because a
+# different path failed.
+#
+# Multiple bonds are a supported topology -- BondingConfig is a map keyed by bond
+# name and the firsttime CLI offers create/remove/update over it -- so this is not
+# hypothetical. Other bonds are also the ones with no guaranteed ping peer: nothing
+# promises a storage network answers ICMP, which is exactly the untrustworthy-signal
+# case BOND_REACHABLE_SEEN exists for.
+#
+# Resolution walks down from the default route's device. That device is an OVS bridge
+# in the shipped topology (the bond is an OVS port of `provider`, which holds the
+# management address), and OVS bridges expose no lower_* links, so ovs-vsctl has to be
+# asked; the lower_* walk covers a Linux bridge or VLAN stacked over a bond. Returning
+# empty when nothing resolves is deliberate -- the watchdog then does nothing, which is
+# the safe direction for a repair that briefly drops the link.
+_network_mgmt_bond()
+{
+    local dev port lower
+
+    dev=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
+    [ -n "$dev" ] || return 0
+
+    # the default route may sit directly on the bond
+    [ -d "/sys/class/net/$dev/bonding" ] && { echo "$dev" ; return 0 ; }
+
+    # an OVS bridge: the bond is one of its ports
+    if ovs-vsctl br-exists "$dev" 2>/dev/null ; then
+        for port in $(ovs-vsctl list-ports "$dev" 2>/dev/null) ; do
+            [ -d "/sys/class/net/$port/bonding" ] && { echo "$port" ; return 0 ; }
+        done
+    fi
+
+    # a linux bridge or a vlan: follow the kernel's lower links one level at a time
+    for lower in /sys/class/net/$dev/lower_* ; do
+        [ -e "$lower" ] || continue
+        lower=${lower##*/lower_}
+        [ -d "/sys/class/net/$lower/bonding" ] && { echo "$lower" ; return 0 ; }
+        if ovs-vsctl br-exists "$lower" 2>/dev/null ; then
+            for port in $(ovs-vsctl list-ports "$lower" 2>/dev/null) ; do
+                [ -d "/sys/class/net/$port/bonding" ] && { echo "$port" ; return 0 ; }
+            done
+        fi
+    done
+
+    return 0
+}
+
+# At least one slave with MII up. A bond whose every slave is physically down is a
+# cabling or NIC fault; bouncing cannot help and must not be attempted.
+_network_bond_has_live_slave()
+{
+    local bond=$1 f=/proc/net/bonding/$bond
+    [ -r "$f" ] || return 1
+    awk '/^Slave Interface:/{s=1} s&&/^MII Status: up/{found=1} END{exit(found?0:1)}' "$f"
+}
+
+# Every IPv4 address configured on this node, space-padded for substring matching.
+_network_local_addrs()
+{
+    echo " $(ip -4 -o addr show 2>/dev/null | awk '{split($4,a,"/"); print a[1]}' | tr '\n' ' ') "
+}
+
+# Persistent proof that this node's bonded network has ever carried traffic.
+# Created the first time a target actually replies, and never removed.
+#
+# _network_bond_reachable() already refuses to act when there is nothing to test
+# against, but "the only target exists and never answers ICMP" falls on the other
+# side of that check and looks identical to a black-holed bond -- forever. On a
+# single-node cluster CUBE_NODE_LIST_IPS holds only this node's own address, so
+# every peer is correctly excluded as local and the default gateway is the only
+# target; a gateway that filters ICMP then pins the check at unreachable for the
+# life of the node, and the watchdog bounces the slaves every holdoff period on a
+# perfectly healthy node. Reproduced on jim-1cc by dropping echo-requests to the
+# gateway alone: both slaves MII up, the provider bridge holding the management IP
+# and an ssh session live over the bond, and network_bond_check returned 1.
+#
+# Requiring one observed reply before ever arming separates the fault this exists
+# for -- was carrying traffic, then stopped -- from "was never measurable". A node
+# that comes up already wedged is therefore left alone, which is the right call:
+# it is indistinguishable from the filtered-gateway case, and unlike a node that
+# broke after months of working there is no evidence a bounce would help.
+#
+# Lives under $STATE_DIR rather than /run because it has to survive a reboot and
+# an A/B upgrade -- a node does not become unmeasurable because it restarted.
+BOND_REACHABLE_SEEN=${BOND_REACHABLE_SEEN:-$STATE_DIR/network_bond_reachable_seen}
+
+# Record the first observed reply. Always returns 0 so it can be chained onto a
+# success path without changing what the caller sees.
+_network_bond_mark_seen()
+{
+    [ -e "$BOND_REACHABLE_SEEN" ] || : > "$BOND_REACHABLE_SEEN" 2>/dev/null
+    return 0
+}
+
+# Ground truth: can this node reach anything over its bonded network? The default
+# gateway first, then every other cluster node. Returns 0 if ANY answers, and also
+# 0 when there is nothing to test against -- an isolated or half-configured node
+# must not be flapped by a watchdog that has no way to know better.
+#
+# Local addresses are excluded, and that exclusion is the whole correctness of this
+# function: pinging an address configured on this host succeeds through the
+# loopback path even when the bond is carrying nothing, so a self-ping is a
+# guaranteed false healthy. An earlier version compared only against
+# `hostname -i`, which does not cover every configured address -- on a single-node
+# cluster CUBE_NODE_LIST_IPS holds this node's own IP, the comparison missed, and
+# the watchdog reported a black-holed node as reachable and never fired.
+_network_bond_reachable()
+{
+    local gw peer targets=0 locals
+    locals=$(_network_local_addrs)
+
+    gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
+    case "$locals" in
+        *" $gw "*) gw="" ;;
+    esac
+    if [ -n "$gw" ] ; then
+        targets=1
+        ping -c 1 -W 2 "$gw" >/dev/null 2>&1 && { _network_bond_mark_seen ; return 0 ; }
+    fi
+
+    for peer in "${CUBE_NODE_LIST_IPS[@]}" ; do
+        case "$locals" in
+            *" $peer "*) continue ;;
+        esac
+        targets=1
+        ping -c 1 -W 2 "$peer" >/dev/null 2>&1 && { _network_bond_mark_seen ; return 0 ; }
+    done
+
+    # No target answered. Returning 0 here means "nothing to test against", which is
+    # not evidence of health -- deliberately not marked as an observed reply.
+    [ $targets -eq 0 ] && return 0
+    return 1
+}
+
+# One line of aggregator detail per bond, for the log. Diagnostic only.
+_network_bond_detail()
+{
+    local bond=$1 f=/proc/net/bonding/$bond
+    [ -r "$f" ] || return 0
+    awk '
+        /Active Aggregator Info:/ { inhdr = 1 ; next }
+        inhdr && /Aggregator ID:/ { active = $3 ; inhdr = 0 ; next }
+        /^Slave Interface:/       { slave = $3 ; next }
+        /^MII Status:/            { if (slave != "") mii[slave] = $3 ; next }
+        /^Aggregator ID:/         { agg[slave] = $3 ; next }
+        /details actor lacp pdu:/ { actor = 1 ; next }
+        actor && /port state:/    { ps[slave] = $3 ; actor = 0 }
+        END {
+            printf "active_agg=%s", active
+            for (s in ps) printf " %s(agg=%s,mii=%s,ps=%s)", s, agg[s], mii[s], ps[s]
+        }
+    ' "$f"
+}
+
+# 0 = this node's bonded network is carrying traffic, 1 = it is not.
+# Also the operator command:  hex_sdk network_bond_check
+#
+# Reports through log_* rather than stdout because the caller that matters is cron,
+# which discards both streams -- an echo here is thrown away exactly when the
+# diagnostic is worth having. The healthy path is log_debug so a check running every
+# two minutes on every node does not become its own log volume problem; the failing
+# path is log_error and carries the aggregator detail with it.
+network_bond_check()
+{
+    local bond detail=
+    bond=$(_network_mgmt_bond)
+    if [ -z "$bond" ] ; then
+        # Either no bond at all, or the management path does not run over one. Both
+        # are healthy as far as this check is concerned: the reachability signal only
+        # speaks about the management path, so with no bond under it there is nothing
+        # here to diagnose and nothing that a bounce could fix.
+        log_debug "network_bond_check: no bond on the management path"
+        return 0
+    fi
+
+    detail="$bond: $(_network_bond_detail "$bond")"
+
+    if _network_bond_reachable ; then
+        log_debug "network_bond_check: bonded network reachable [$detail]"
+        return 0
+    fi
+    log_error "network_bond_check: bonded network UNREACHABLE, no reply from the default gateway or any peer [$detail]"
+    return 1
+}
+
+# Bounce the slaves one at a time to force LACP renegotiation and aggregator
+# reselection, stopping as soon as the node can reach something again. Only ever
+# runs on a bond that is already carrying nothing.
+network_bond_repair()
+{
+    local bond slaves s
+    bond=$(_network_mgmt_bond)
+    [ -n "$bond" ] || {
+        log_error "network_bond_repair: no bond on the management path, nothing this can repair"
+        return 1
+    }
+
+    _network_bond_has_live_slave "$bond" || {
+        log_error "network_bond_repair: $bond has no slave with MII up, this is a link fault a bounce cannot fix"
+        return 1
+    }
+
+    slaves=$(cat /sys/class/net/$bond/bonding/slaves 2>/dev/null)
+    log_error "network_bond_repair: $bond is not carrying traffic, bouncing [$slaves]"
+    for s in $slaves ; do
+        ip link set "$s" down 2>/dev/null
+        sleep 5
+        ip link set "$s" up 2>/dev/null
+        sleep 12
+        if _network_bond_reachable ; then
+            log_info "network_bond_repair: $bond reachable again after bouncing $s [$(_network_bond_detail "$bond")]"
+            return 0
+        fi
+    done
+    log_error "network_bond_repair: $bond still unreachable after bouncing every slave"
+    return 1
+}
+
+# cron entry point. Deliberately not wired into the health SDK: every repair path
+# there is driven from a *reachable* node over ssh, and a node whose bond has
+# stopped carrying traffic is by definition not reachable -- it has to fix itself,
+# locally, with no dependency on the telemetry or cluster stack.
+network_bond_watchdog()
+{
+    local now fails stamp=/run/network_bond_watchdog.last
+    local counter=/run/network_bond_watchdog.fails
+
+    [ -n "$(_network_mgmt_bond)" ] || return 0
+    if network_bond_check >/dev/null 2>&1 ; then
+        rm -f $counter
+        return 0
+    fi
+
+    # Never arm on a node whose bonded network has not once been observed carrying
+    # traffic -- see BOND_REACHABLE_SEEN. This is what keeps a single-node cluster
+    # behind an ICMP-filtering gateway, which has no answerable target at all, from
+    # bouncing its slaves every holdoff period indefinitely.
+    if [ ! -e "$BOND_REACHABLE_SEEN" ] ; then
+        log_debug "network_bond_watchdog: bonded network has never been observed reachable, not arming"
+        return 0
+    fi
+
+    # Require consecutive failures. The check pings one target per peer plus the
+    # gateway, so on a multi-node cluster a lone dropped reply cannot decide
+    # anything -- but with a single target, which is exactly the single-node case
+    # above, one lost echo would otherwise be enough to bounce a healthy bond. At
+    # the cron interval of 2 min this delays a real repair by about four minutes,
+    # against the 14 hours the fault it exists for went unnoticed.
+    fails=$(( $(cat $counter 2>/dev/null || echo 0) + 1 ))
+    echo "$fails" > $counter
+    if [ "$fails" -lt "${BOND_WATCHDOG_FAILS:-3}" ] ; then
+        log_debug "network_bond_watchdog: bonded network unreachable, $fails of ${BOND_WATCHDOG_FAILS:-3} consecutive, not arming yet"
+        return 0
+    fi
+
+    # Rate limit. A bounce briefly drops the link, so a fault this cannot fix must
+    # not turn into a permanent flap.
+    now=$(date +%s)
+    if [ -r $stamp ] && [ $(( now - $(cat $stamp 2>/dev/null || echo 0) )) -lt ${BOND_WATCHDOG_HOLDOFF:-900} ] ; then
+        return 0
+    fi
+    echo "$now" > $stamp
+    rm -f $counter
+
+    /usr/sbin/hex_log_event -e ETH00003W "interface=host,host=$HOSTNAME,category=network,service=bonding,action=bond_not_carrying_traffic"
+    if network_bond_repair ; then
+        /usr/sbin/hex_log_event -e ETH00004I "interface=host,host=$HOSTNAME,category=network,service=bonding,action=bond_recovered"
+    fi
+}
