@@ -40,6 +40,15 @@ ADVISOR_SIGNATURE_NAME=manifest.txt.sig
 ADVISOR_AGENT_UNIT_NAME=cube-advisor-agent.service
 ADVISOR_AGENT_UNIT=/usr/lib/systemd/system/$ADVISOR_AGENT_UNIT_NAME
 
+# The node-local allowlist the agent will dial through the tunnel: symbolic
+# name -> routing address. The Advisor only ever holds name -> what the
+# upstream calls itself; this file is the other half, and only this file, so
+# one name can route to the management network and another to the provider
+# network without the Advisor ever learning either address. A name missing
+# here is a name the agent refuses to dial -- this file is the operator's
+# control over what we can reach, not ours, so nothing here repairs it.
+ADVISOR_TARGETS_FILE=/etc/cube-advisor-agent/web-targets.json
+
 # advisor_verify_release <dir> [artifact]
 #
 # Verifies the release in <dir>: the manifest's signature against the key
@@ -188,6 +197,176 @@ advisor_agent_arch()
     esac
 }
 
+# _advisor_target_name_valid <name>
+#
+# name is a URL path segment on the agent's own local dial API and becomes a
+# JSON object key here, so both ends care about its shape.
+_advisor_target_name_valid()
+{
+    case $1 in
+        '') return 1 ;;
+    esac
+    case $1 in
+        [a-z0-9]*) : ;;
+        *) return 1 ;;
+    esac
+    case $1 in
+        *[!a-z0-9-]*) return 1 ;;
+    esac
+    return 0
+}
+
+# _advisor_targets_write <json>
+#
+# Writes the allowlist atomically: a temp file in the same directory, then
+# mv. The agent can read this file at any moment, so a reader must never see
+# half of a write.
+_advisor_targets_write()
+{
+    local json=$1
+    local dir tmp
+
+    dir=$(dirname "$ADVISOR_TARGETS_FILE")
+    mkdir -p "$dir" || return 1
+
+    tmp=$(mktemp "$dir/web-targets.XXXXXX") || return 1
+    if ! printf '%s\n' "$json" > "$tmp" ; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if ! chmod 0644 "$tmp" || ! chown root:root "$tmp" ; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if ! mv -f "$tmp" "$ADVISOR_TARGETS_FILE" ; then
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
+# advisor_targets_init
+#
+# Seeds the allowlist with the one target every node can name for itself.
+# Never touches a file that is already there -- an operator who removed a
+# target removed it on purpose, and a helper that puts it back turns "delete
+# one line to revoke access" into "delete one line and wait for it to return".
+advisor_targets_init()
+{
+    [ -e "$ADVISOR_TARGETS_FILE" ] && return 0
+    _advisor_targets_write '{"dashboard":"127.0.0.1:8080"}'
+}
+
+# advisor_targets_list
+#
+# Prints the current allowlist, one "name host:port" pair per line. This file
+# is hand-edited -- an operator's editor, jq, python -m json.tool all
+# reformat it -- so it is read with jq rather than a regex that only
+# understands the exact layout this module happens to write. Silent, not an
+# error, if the file has not been seeded yet.
+advisor_targets_list()
+{
+    [ -r "$ADVISOR_TARGETS_FILE" ] || return 0
+    jq -r 'to_entries[] | "\(.key) \(.value)"' "$ADVISOR_TARGETS_FILE" 2>/dev/null
+}
+
+# advisor_targets_set <name> <host:port>
+#
+# Adds an entry, or replaces one by the same name. Validated here because the
+# agent dials whatever this file says: a malformed name or address is refused
+# where the message can still help someone, not left for the tunnel to fail
+# on later.
+advisor_targets_set()
+{
+    local name=$1 target=$2
+    local host port new rc
+
+    if [ -z "$name" ] || [ -z "$target" ] ; then
+        echo "Error: advisor_targets_set: usage <name> <host:port>" >&2
+        return 1
+    fi
+    if ! _advisor_target_name_valid "$name" ; then
+        echo "Error: target name must start with a lowercase letter or digit and contain only lowercase letters, digits and hyphens: $name" >&2
+        return 1
+    fi
+
+    case $target in
+        *:*) : ;;
+        *) echo "Error: target must be host:port: $target" >&2 ; return 1 ;;
+    esac
+    host=${target%:*}
+    port=${target##*:}
+    # The SaaS side accepts an IPv6 pool address; a node does not. Say so,
+    # rather than let this fall into the generic "not a literal host" refusal.
+    case $host in
+        *:*) echo "Error: IPv6 addresses are not supported as a target host (only a literal IPv4 address or hostname): $host" >&2 ; return 1 ;;
+    esac
+    case $host in
+        ''|*[!A-Za-z0-9.-]*) echo "Error: not a literal host: $host" >&2 ; return 1 ;;
+    esac
+    case $port in
+        ''|*[!0-9]*) echo "Error: port is not numeric: $port" >&2 ; return 1 ;;
+    esac
+    case $port in
+        0?*) echo "Error: port must not have a leading zero: $port" >&2 ; return 1 ;;
+    esac
+    if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ] ; then
+        echo "Error: port out of range (1-65535): $port" >&2
+        return 1
+    fi
+
+    # -e turns a file that will not parse as a JSON object into a refusal
+    # instead of "start from nothing" -- the difference between an
+    # operator's edit and this quietly emptying the allowlist under them. A
+    # file jq cannot even see, such as a genuinely empty one, still has to be
+    # caught by hand: jq runs its filter zero times over zero input values
+    # and calls that success.
+    if [ -e "$ADVISOR_TARGETS_FILE" ] ; then
+        new=$(jq -e --arg n "$name" --arg v "$target" \
+              'if type == "object" then .[$n] = $v else error("not a JSON object") end' \
+              "$ADVISOR_TARGETS_FILE" 2>/dev/null)
+        rc=$?
+    else
+        new=$(jq -n -e --arg n "$name" --arg v "$target" '{($n): $v}')
+        rc=$?
+    fi
+    if [ $rc -ne 0 ] || [ -z "$new" ] ; then
+        echo "Error: $ADVISOR_TARGETS_FILE does not read as a JSON object; nothing changed" >&2
+        return 1
+    fi
+    _advisor_targets_write "$new"
+}
+
+# advisor_targets_unset <name>
+#
+# Removes one entry. Removing a name that is not there is not an error -- the
+# file already says what the operator wants.
+advisor_targets_unset()
+{
+    local name=$1 new rc
+
+    if [ -z "$name" ] ; then
+        echo "Error: advisor_targets_unset: usage <name>" >&2
+        return 1
+    fi
+    if ! _advisor_target_name_valid "$name" ; then
+        echo "Error: not a valid target name: $name" >&2
+        return 1
+    fi
+
+    # Nothing to remove from an allowlist that does not exist yet.
+    [ -e "$ADVISOR_TARGETS_FILE" ] || return 0
+
+    new=$(jq -e --arg n "$name" \
+          'if type == "object" then del(.[$n]) else error("not a JSON object") end' \
+          "$ADVISOR_TARGETS_FILE" 2>/dev/null)
+    rc=$?
+    if [ $rc -ne 0 ] || [ -z "$new" ] ; then
+        echo "Error: $ADVISOR_TARGETS_FILE does not read as a JSON object; nothing changed" >&2
+        return 1
+    fi
+    _advisor_targets_write "$new"
+}
+
 # advisor_enroll <server> <token-file> <version>
 #
 # The whole node-side install path: fetch the release, verify it against the
@@ -254,7 +433,10 @@ advisor_enroll()
         -server "$server" -token-file "$token_file" -cluster "$cluster"
     rc=$?
     case $rc in
-        0) advisor_agent_service_enable ;;
+        0)
+            advisor_agent_service_enable
+            advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the dashboard target by hand" >&2
+            ;;
         3) echo "This node is already enrolled; nothing was changed." >&2 ;;
         4) echo "The pairing token was refused -- ask for a fresh one." >&2 ;;
         5) echo "The Advisor service was unreachable from this node." >&2 ;;
