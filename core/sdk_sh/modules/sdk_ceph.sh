@@ -1463,6 +1463,7 @@ ceph_osd_promote_disk()
     Quiet -n $CEPH osd crush rm-device-class $osd_list
     Quiet -n $CEPH osd crush set-device-class $rule $osd_list
 
+    local settled=1
     for i in {1..60} ; do
         sleep 10
         recovering=$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)
@@ -1470,14 +1471,28 @@ ceph_osd_promote_disk()
             sleep 5
             recovering_CONFIRM=$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)
             if [ "x$recovering_CONFIRM" = "xnull" ] ; then
-                $CEPH osd in $osd_list
-                Quiet -n ceph_adjust_cache_flush_bytes
+                settled=0
                 break
             fi
         else
             echo "recovering $recovering obj/sec"
         fi
     done
+
+    # Back in whatever happened. `osd in` used to live inside the loop, so a
+    # recovery that outlasted the 600 s ceiling left the OSDs marked out --
+    # silently losing their capacity and a replica's worth of redundancy -- and
+    # the function still returned 0, so no caller could tell. Bringing them back
+    # is right in both cases: the class change has already been made, and
+    # recovery continues with them in.
+    $CEPH osd in $osd_list
+    Quiet -n ceph_adjust_cache_flush_bytes
+    if [ $settled -ne 0 ] ; then
+        echo "Warning: still recovering after 600s; osd(s)$osd_list have been brought back in" >&2
+        echo "         and data movement continues in the background" >&2
+        return 1
+    fi
+    return 0
 }
 
 # params:
@@ -1504,6 +1519,7 @@ ceph_osd_demote_disk()
     Quiet -n $CEPH osd crush rm-device-class $osd_list
     Quiet -n $CEPH osd crush set-device-class $rule $osd_list
 
+    local settled=1
     for i in {1..60} ; do
         sleep 10
         recovering=$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)
@@ -1511,14 +1527,28 @@ ceph_osd_demote_disk()
             sleep 5
             recovering_CONFIRM=$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)
             if [ "x$recovering_CONFIRM" = "xnull" ] ; then
-                $CEPH osd in $osd_list
-                Quiet -n ceph_adjust_cache_flush_bytes
+                settled=0
                 break
             fi
         else
             echo "recovering $recovering obj/sec"
         fi
     done
+
+    # Back in whatever happened. `osd in` used to live inside the loop, so a
+    # recovery that outlasted the 600 s ceiling left the OSDs marked out --
+    # silently losing their capacity and a replica's worth of redundancy -- and
+    # the function still returned 0, so no caller could tell. Bringing them back
+    # is right in both cases: the class change has already been made, and
+    # recovery continues with them in.
+    $CEPH osd in $osd_list
+    Quiet -n ceph_adjust_cache_flush_bytes
+    if [ $settled -ne 0 ] ; then
+        echo "Warning: still recovering after 600s; osd(s)$osd_list have been brought back in" >&2
+        echo "         and data movement continues in the background" >&2
+        return 1
+    fi
+    return 0
 }
 
 # params:
