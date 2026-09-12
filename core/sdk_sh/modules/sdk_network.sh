@@ -401,9 +401,61 @@ airgap_sim_clear()
 #
 # So the aggregator details below are logged as diagnostics only. Nothing decides
 # on them.
-_network_bond_list()
+# The one bond this watchdog is allowed to touch: the bond carrying the management
+# path, or empty if the management path is not on a bond at all.
+#
+# Scope matters because the signal and the action are about different things.
+# _network_bond_reachable() pings the default gateway and the cluster peers, all of
+# which leave over the default route -- so its answer is about *that* path, and says
+# nothing about any other bond. Bouncing every entry in bonding_masters on a
+# node-level signal is therefore unsound in both directions: a storage or overlay
+# bond can be perfectly healthy at that moment, the order of bonding_masters is not
+# defined so it may be bounced first, and each slave costs 5s down plus 12s up. On a
+# separate bond still carrying Ceph traffic that is new harm, inflicted because a
+# different path failed.
+#
+# Multiple bonds are a supported topology -- BondingConfig is a map keyed by bond
+# name and the firsttime CLI offers create/remove/update over it -- so this is not
+# hypothetical. Other bonds are also the ones with no guaranteed ping peer: nothing
+# promises a storage network answers ICMP, which is exactly the untrustworthy-signal
+# case BOND_REACHABLE_SEEN exists for.
+#
+# Resolution walks down from the default route's device. That device is an OVS bridge
+# in the shipped topology (the bond is an OVS port of `provider`, which holds the
+# management address), and OVS bridges expose no lower_* links, so ovs-vsctl has to be
+# asked; the lower_* walk covers a Linux bridge or VLAN stacked over a bond. Returning
+# empty when nothing resolves is deliberate -- the watchdog then does nothing, which is
+# the safe direction for a repair that briefly drops the link.
+_network_mgmt_bond()
 {
-    cat /sys/class/net/bonding_masters 2>/dev/null
+    local dev port lower
+
+    dev=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
+    [ -n "$dev" ] || return 0
+
+    # the default route may sit directly on the bond
+    [ -d "/sys/class/net/$dev/bonding" ] && { echo "$dev" ; return 0 ; }
+
+    # an OVS bridge: the bond is one of its ports
+    if ovs-vsctl br-exists "$dev" 2>/dev/null ; then
+        for port in $(ovs-vsctl list-ports "$dev" 2>/dev/null) ; do
+            [ -d "/sys/class/net/$port/bonding" ] && { echo "$port" ; return 0 ; }
+        done
+    fi
+
+    # a linux bridge or a vlan: follow the kernel's lower links one level at a time
+    for lower in /sys/class/net/$dev/lower_* ; do
+        [ -e "$lower" ] || continue
+        lower=${lower##*/lower_}
+        [ -d "/sys/class/net/$lower/bonding" ] && { echo "$lower" ; return 0 ; }
+        if ovs-vsctl br-exists "$lower" 2>/dev/null ; then
+            for port in $(ovs-vsctl list-ports "$lower" 2>/dev/null) ; do
+                [ -d "/sys/class/net/$port/bonding" ] && { echo "$port" ; return 0 ; }
+            done
+        fi
+    done
+
+    return 0
 }
 
 # At least one slave with MII up. A bond whose every slave is physically down is a
@@ -523,17 +575,18 @@ _network_bond_detail()
 # path is log_error and carries the aggregator detail with it.
 network_bond_check()
 {
-    local bond bonds detail=
-    bonds=$(_network_bond_list)
-    if [ -z "$bonds" ] ; then
-        log_debug "network_bond_check: no bond configured"
+    local bond detail=
+    bond=$(_network_mgmt_bond)
+    if [ -z "$bond" ] ; then
+        # Either no bond at all, or the management path does not run over one. Both
+        # are healthy as far as this check is concerned: the reachability signal only
+        # speaks about the management path, so with no bond under it there is nothing
+        # here to diagnose and nothing that a bounce could fix.
+        log_debug "network_bond_check: no bond on the management path"
         return 0
     fi
 
-    for bond in $bonds ; do
-        detail+="$bond: $(_network_bond_detail "$bond") "
-    done
-    detail=${detail% }
+    detail="$bond: $(_network_bond_detail "$bond")"
 
     if _network_bond_reachable ; then
         log_debug "network_bond_check: bonded network reachable [$detail]"
@@ -549,25 +602,30 @@ network_bond_check()
 network_bond_repair()
 {
     local bond slaves s
-    for bond in $(_network_bond_list) ; do
-        _network_bond_has_live_slave "$bond" || {
-            log_error "network_bond_repair: $bond has no slave with MII up, this is a link fault a bounce cannot fix"
-            continue
-        }
-        slaves=$(cat /sys/class/net/$bond/bonding/slaves 2>/dev/null)
-        log_error "network_bond_repair: $bond is not carrying traffic, bouncing [$slaves]"
-        for s in $slaves ; do
-            ip link set "$s" down 2>/dev/null
-            sleep 5
-            ip link set "$s" up 2>/dev/null
-            sleep 12
-            if _network_bond_reachable ; then
-                log_info "network_bond_repair: $bond reachable again after bouncing $s [$(_network_bond_detail "$bond")]"
-                return 0
-            fi
-        done
-        log_error "network_bond_repair: $bond still unreachable after bouncing every slave"
+    bond=$(_network_mgmt_bond)
+    [ -n "$bond" ] || {
+        log_error "network_bond_repair: no bond on the management path, nothing this can repair"
+        return 1
+    }
+
+    _network_bond_has_live_slave "$bond" || {
+        log_error "network_bond_repair: $bond has no slave with MII up, this is a link fault a bounce cannot fix"
+        return 1
+    }
+
+    slaves=$(cat /sys/class/net/$bond/bonding/slaves 2>/dev/null)
+    log_error "network_bond_repair: $bond is not carrying traffic, bouncing [$slaves]"
+    for s in $slaves ; do
+        ip link set "$s" down 2>/dev/null
+        sleep 5
+        ip link set "$s" up 2>/dev/null
+        sleep 12
+        if _network_bond_reachable ; then
+            log_info "network_bond_repair: $bond reachable again after bouncing $s [$(_network_bond_detail "$bond")]"
+            return 0
+        fi
     done
+    log_error "network_bond_repair: $bond still unreachable after bouncing every slave"
     return 1
 }
 
@@ -580,7 +638,7 @@ network_bond_watchdog()
     local now fails stamp=/run/network_bond_watchdog.last
     local counter=/run/network_bond_watchdog.fails
 
-    [ -n "$(_network_bond_list)" ] || return 0
+    [ -n "$(_network_mgmt_bond)" ] || return 0
     if network_bond_check >/dev/null 2>&1 ; then
         rm -f $counter
         return 0
