@@ -175,4 +175,47 @@ mkvol in-use "$one" false None null ceph
 cinder_move_preflight v1 tier-nvme >$T/o 2>&1
 chk "clean volume has no blockers"      "$(codes)" ""
 
+# --- _pf_qos_differs() direct testing ---
+# Unset the stub and test the real function with mocked openstack
+unset -f _pf_qos_differs
+sed -n '/^_pf_qos_differs()/,/^}/p' $SRC > $T/qos_fn.sh
+source $T/qos_fn.sh
+
+# Mock openstack for QoS spec lookups
+openstack() {
+    if [ "$1" = "volume" ] && [ "$2" = "type" ] && [ "$3" = "show" ] ; then
+        case "$4" in
+            no-qos-src|no-qos-dst) echo '{"qos_specs_id":""}' ;;
+            backend-src) echo '{"qos_specs_id":"qos-backend-1"}' ;;
+            backend-dst) echo '{"qos_specs_id":"qos-backend-2"}' ;;
+            backend-pair) echo '{"qos_specs_id":"qos-backend-1"}' ;;
+            frontend-src) echo '{"qos_specs_id":"qos-frontend-1"}' ;;
+        esac
+    elif [ "$1" = "qos" ] && [ "$2" = "specs" ] && [ "$3" = "show" ] ; then
+        case "$4" in
+            qos-backend-1|qos-backend-2) echo '{"consumer":"back-end"}' ;;
+            qos-frontend-1) echo '{"consumer":"front-end"}' ;;
+        esac
+    fi
+}
+export -f openstack
+OPENSTACK=openstack
+
+_test_qos() {
+    local src="$1" dst="$2" want="$3" desc="$4"
+    _pf_qos_differs "$src" "$dst"
+    local got=$?
+    if [ $got -eq $want ] ; then
+        result="PASS"
+    else
+        result="FAIL(got $got)"
+    fi
+    printf '%-46s -> %-26s (want %s)\n' "$desc" "$result" "$want"
+}
+
+_test_qos "no-qos-src" "no-qos-dst" 1 "QoS: neither type has QoS"
+_test_qos "backend-src" "backend-dst" 1 "QoS: both back-end-only different specs"
+_test_qos "frontend-src" "backend-src" 0 "QoS: front-end on one side only"
+_test_qos "backend-pair" "backend-pair" 1 "QoS: identical spec id"
+
 rm -rf $T

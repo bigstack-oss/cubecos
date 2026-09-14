@@ -3507,17 +3507,42 @@ _pf_domain_probe()
 _pf_qos_differs()
 {
     local src="$1" dst="$2"
-    local src_qos dst_qos
-    src_qos=$($OPENSTACK volume type show "$src" -f json 2>/dev/null | jq -r '.qos_specs_id // ""')
-    dst_qos=$($OPENSTACK volume type show "$dst" -f json 2>/dev/null | jq -r '.qos_specs_id // ""')
+    local src_qos_id dst_qos_id
+    local src_consumer dst_consumer
+    local src_frontend dst_frontend
+
+    src_qos_id=$($OPENSTACK volume type show "$src" -f json 2>/dev/null | jq -r '.qos_specs_id // ""')
+    dst_qos_id=$($OPENSTACK volume type show "$dst" -f json 2>/dev/null | jq -r '.qos_specs_id // ""')
 
     # If either has no QoS, they don't differ (return 1)
-    if [ -z "$src_qos" ] || [ -z "$dst_qos" ] ; then
+    if [ -z "$src_qos_id" ] || [ -z "$dst_qos_id" ] ; then
         return 1
     fi
 
-    # If they're different, they differ (return 0)
-    [ "$src_qos" != "$dst_qos" ]
+    # If same spec ID, they don't differ (return 1)
+    if [ "$src_qos_id" == "$dst_qos_id" ] ; then
+        return 1
+    fi
+
+    # Get the consumer field for each spec
+    src_consumer=$($OPENSTACK qos specs show "$src_qos_id" -f json 2>/dev/null | jq -r '.consumer // ""')
+    dst_consumer=$($OPENSTACK qos specs show "$dst_qos_id" -f json 2>/dev/null | jq -r '.consumer // ""')
+
+    # Extract front-end-relevant QoS: "" if back-end only, spec ID if front-end or both
+    if [ "$src_consumer" = "back-end" ] ; then
+        src_frontend=""
+    else
+        src_frontend="$src_qos_id"
+    fi
+
+    if [ "$dst_consumer" = "back-end" ] ; then
+        dst_frontend=""
+    else
+        dst_frontend="$dst_qos_id"
+    fi
+
+    # Compare: return 0 if different, 1 if same
+    [ "$src_frontend" != "$dst_frontend" ]
 }
 
 # Can $1 move to tier $2? Prints JSON; 0 = may proceed.
