@@ -6,9 +6,51 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
-# Where the app framework's kubeconfig lives on a control node. A variable,
-# not inlined, so tests can point it at a fixture instead of the real path.
-APPFW_KUBECONFIG=/opt/appfw/kubeconfig
+# The kubeconfig the app-framework helpers below talk through. Empty by
+# default and supplied by the caller: nothing on a control node persists one,
+# so a fixed path here would name a file that never exists and every helper
+# gated on it would silently answer "no framework" on a healthy cluster.
+# app_kubeconfig fetches one; tests point this at a fixture.
+APPFW_KUBECONFIG=${APPFW_KUBECONFIG:-}
+
+# The rancher CLI app_kubeconfig authenticates through. A variable for the same
+# reason APPFW_KUBECONFIG is one: a hardcoded absolute path is a path no test
+# can reach, which is how a helper gated on an unreachable path shipped
+# unexercised in the first place.
+APPFW_RANCHER=${APPFW_RANCHER:-/usr/local/bin/rancher}
+
+# app_kubeconfig [framework]
+#
+# Fetches a kubeconfig for the app framework, prints its path, and leaves it to
+# the caller to remove. Credentials come from rancher -- which is where
+# app_framework_deploy gets its own -- because none are written to disk.
+#
+# The framework's name is read back rather than assumed: the installer chooses
+# it (the driver's installs are named "appfw", app_framework_deploy's own is
+# "app-framework"), so hardcoding either one breaks the other. Rancher's
+# built-in "local" cluster is never it.
+app_kubeconfig()
+{
+    local fw=${1:-} kc
+
+    [ -x "$APPFW_RANCHER" ] || return 1
+    if [ -z "$fw" ] ; then
+        fw=$(timeout 30 sudo "$APPFW_RANCHER" cluster ls \
+                 --format '{{.Cluster.Name}}' 2>/dev/null | grep -vx local | head -1)
+    fi
+    [ -n "$fw" ] || return 1
+
+    kc=$(mktemp -t appfw-kubeconfig.XXXXXX) || return 1
+    chmod 0600 "$kc"
+    # -s, not just the exit code: a rancher that authenticates but returns
+    # nothing leaves an empty file that kubectl reports as a parse error.
+    if ! timeout 60 sudo "$APPFW_RANCHER" cluster kf "$fw" > "$kc" 2>/dev/null ||
+         [ ! -s "$kc" ] ; then
+        rm -f "$kc"
+        return 1
+    fi
+    echo "$kc"
+}
 
 # app_ingress_address
 #
