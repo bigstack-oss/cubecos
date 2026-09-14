@@ -27,6 +27,10 @@ SRC="$DIR/../../config_advisor.cpp"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
+# The stub driver logs to a fixed filename in the current directory, so the
+# binary under test always runs from this scratch directory.
+cd "$WORK" || fail "cannot cd to scratch directory"
+
 # config_advisor.cpp embeds a release key; this test never verifies anything,
 # so any well-formed key will do.
 openssl ecparam -name prime256v1 -genkey -noout -out "$WORK/release.key" 2>/dev/null
@@ -40,11 +44,11 @@ ROOT="$WORK/root"
 
 # Two logs, kept apart so each assertion is about one thing: what systemctl was
 # asked to do directly (nothing, ever), and what the module decided the service
-# should do.
+# should do. The stub driver writes the commit log to a fixed name in the
+# directory the binary is run from, i.e. $WORK (see the cd above).
 SYSTEMCTL_LOG="$WORK/systemctl.log"
-COMMIT_LOG="$WORK/commit.log"
+COMMIT_LOG="$WORK/systemd_commit.log"
 export SYSTEMCTL_LOG
-export SYSTEMD_COMMIT_LOG="$COMMIT_LOG"
 
 # systemctl is called by name, so PATH is enough to catch it -- and catching it
 # is the whole point: nothing in this module may call it.
