@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <cube/systemd_util.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
@@ -14,16 +17,19 @@ const char *HexLogProgramName() { return "hex_config"; }
 // Records what the module decided the service should do, rather than doing it:
 // whether the advisor module asks for the agent to run is the thing under test,
 // and a real "systemctl stop" on a build host is not. The wording matches what
-// the real SystemdCommitService would go on to run.
+// the real SystemdCommitService would go on to run. Logs to a fixed file in the
+// current directory, so a test that wants it reads it back from there.
 bool
 SystemdCommitService(const bool enabled, const char *name, const bool /*retry*/)
 {
-    const char *path = getenv("SYSTEMD_COMMIT_LOG");
-    if (path) {
-        FILE *fp = fopen(path, "a");
+    int fd = open("systemd_commit.log", O_WRONLY | O_CREAT | O_APPEND, 0600);
+    if (fd >= 0) {
+        FILE *fp = fdopen(fd, "a");
         if (fp) {
             fprintf(fp, "%s %s\n", enabled ? "start" : "stop", name);
             fclose(fp);
+        } else {
+            close(fd);
         }
     }
     return true;
