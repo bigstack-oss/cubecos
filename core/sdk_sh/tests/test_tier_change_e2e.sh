@@ -3,27 +3,39 @@
 # This script creates and destroys real resources on a real cluster.
 # Requires two Cinder backends to be registered.
 #
-# Usage: test_tier_change_e2e.sh <DEST_TIER>
+# Usage: test_tier_change_e2e.sh <DEST_TIER> [DRY_RUN=1 for testing without cluster]
 # Example: test_tier_change_e2e.sh SSD
+# Example (dry-run): DRY_RUN=1 test_tier_change_e2e.sh SSD
 
 set -e
 
 # Configuration
-readonly DEST_TIER="${1:-}"
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly LOG_FILE="/tmp/tier_change_e2e_$(date +%s).log"
+DEST_TIER="${1:-}"
+LOG_FILE="/tmp/tier_change_e2e_$(date +%s).log"
+DRY_RUN="${DRY_RUN:-0}"
 
 # Volume and VM names
-readonly VOL_NAME="tier-e2e-$(date +%s | tail -c 6)"
-readonly VM_NAME="tier-e2e-vm-$(date +%s | tail -c 6)"
-readonly TEST_SIZE=2  # GiB
-readonly TEST_PATTERN=0xCD
-readonly TEST_DATA_SIZE=64M  # 64 MiB pattern
+VOL_NAME="tier-e2e-$(date +%s | tail -c 6)"
+VM_NAME="tier-e2e-vm-$(date +%s | tail -c 6)"
+TEST_SIZE=2  # GiB
+TEST_PATTERN=0xCD
+TEST_DATA_SIZE=64M  # 64 MiB pattern
 
 # Track resources for cleanup
 CREATED_VOL_ID=""
 CREATED_VM_ID=""
 CREATED_SNAPSHOT_ID=""
+
+# Migration signal tracking
+VOL_INITIAL_STATUS=""
+VOL_INITIAL_TYPE=""
+VOL_INITIAL_MIG_STATUS=""
+VOL_FINAL_STATUS=""
+VOL_FINAL_TYPE=""
+VOL_FINAL_MIG_STATUS=""
+VOL_STATUS_SETTLED_TIME=""
+VOL_TYPE_CHANGED_TIME=""
+VOL_MIG_STATUS_COMPLETE_TIME=""
 
 trap cleanup EXIT
 
@@ -40,8 +52,163 @@ fail() {
     exit 1
 }
 
+# Stub commands for dry-run mode
+if [ "$DRY_RUN" = "1" ]; then
+    DRY_RUN_MARKER="/tmp/dryrun_marker_$$"
+    openstack() {
+        case "$1" in
+            "volume")
+                case "$2" in
+                    "create")
+                        echo "vol-dryrun-12345"
+                        ;;
+                    "show")
+                        # Check for -f value -c <field> pattern
+                        if [ "$4" = "-f" ] && [ "$5" = "value" ] && [ "$6" = "-c" ]; then
+                            case "$7" in
+                                "volume_type")
+                                    # Simulate type change: first query returns CubeStorage, subsequent return SSD
+                                    if [ ! -f "$DRY_RUN_MARKER" ]; then
+                                        touch "$DRY_RUN_MARKER"
+                                        echo "CubeStorage"
+                                    else
+                                        echo "SSD"
+                                    fi
+                                    ;;
+                                "status")
+                                    echo "in-use"
+                                    ;;
+                                *)
+                                    return 127
+                                    ;;
+                            esac
+                        else
+                            # Full show output for grepping
+                            cat <<'EOF'
+| Property                             | Value                                |
+| os-vol-mig-status-attr:migration_status | success                           |
+| status                               | in-use                             |
+| volume_type                          | SSD                                |
+EOF
+                        fi
+                        ;;
+                    "delete")
+                        return 0
+                        ;;
+                    "snapshot")
+                        case "$3" in
+                            "create")
+                                echo "snap-dryrun-11111"
+                                touch "/tmp/dryrun_has_snapshot_$$"
+                                ;;
+                            "delete")
+                                rm -f "/tmp/dryrun_has_snapshot_$$"
+                                return 0
+                                ;;
+                        esac
+                        ;;
+                    "type")
+                        if [ "$3" = "list" ]; then
+                            echo "CubeStorage"
+                            echo "SSD"
+                        fi
+                        ;;
+                esac
+                ;;
+            "server")
+                case "$2" in
+                    "create")
+                        echo "vm-dryrun-67890"
+                        ;;
+                    "show")
+                        if [ "$4" = "-f" ] && [ "$5" = "value" ] && [ "$6" = "-c" ]; then
+                            case "$7" in
+                                "status")
+                                    echo "ACTIVE"
+                                    ;;
+                                *)
+                                    return 127
+                                    ;;
+                            esac
+                        else
+                            echo "ACTIVE"
+                        fi
+                        ;;
+                    "add")
+                        return 0
+                        ;;
+                    "remove")
+                        return 0
+                        ;;
+                    "stop")
+                        touch "/tmp/dryrun_vm_stopped_$$"
+                        return 0
+                        ;;
+                    "start")
+                        rm -f "/tmp/dryrun_vm_stopped_$$"
+                        return 0
+                        ;;
+                    "delete")
+                        return 0
+                        ;;
+                esac
+                ;;
+        esac
+    }
+    qemu-io() {
+        return 0
+    }
+    rbd() {
+        case "$1" in
+            "ls")
+                return 0
+                ;;
+            *)
+                return 127
+                ;;
+        esac
+    }
+    hex_sdk() {
+        case "$1" in
+            "cinder_move_preflight")
+                # Return E_VM_NOT_RUNNING if VM is stopped, E_HAS_SNAPSHOTS if snapshot exists
+                if [ -f "/tmp/dryrun_vm_stopped_$$" ]; then
+                    echo '{"ok":false,"code":"E_VM_NOT_RUNNING","reason":"VM not running","blockers":[{"code":"E_VM_NOT_RUNNING","reason":"VM is not running"}]}'
+                    return 1
+                elif [ -f "/tmp/dryrun_has_snapshot_$$" ]; then
+                    echo '{"ok":false,"code":"E_HAS_SNAPSHOTS","reason":"Volume has snapshots","blockers":[{"code":"E_HAS_SNAPSHOTS","reason":"Volume has one or more snapshots"}]}'
+                    return 1
+                else
+                    echo '{"ok":true,"code":"OK","reason":"ok","blockers":[],"src_type":"CubeStorage","dst_type":"SSD","size_gb":2,"attached_to":"vm-dryrun-67890"}'
+                    return 0
+                fi
+                ;;
+            "cinder_move_volume")
+                echo '{"ok":true,"code":"OK","reason":"ok","dispatched":true}'
+                return 0
+                ;;
+            "cinder_volume_image_name")
+                echo "volume-$2"
+                return 0
+                ;;
+            *)
+                return 127
+                ;;
+        esac
+    }
+    hex_cli() {
+        if [ "$1" = "-c" ] && [ "$2" = "cluster" ] && [ "$3" = "-c" ] && [ "$4" = "check" ]; then
+            echo "Storage  ok "
+            echo "Compute  ok "
+            return 0
+        else
+            return 127
+        fi
+    }
+fi
+
 cleanup() {
-    local exit_code=$?
+    exit_code=$?
     log "=== Cleanup phase ==="
 
     # Detach volume from VM
@@ -76,9 +243,7 @@ cleanup() {
 
     # Final cluster health check
     log "=== Final cluster health check ==="
-    local health_output
     health_output=$(hex_cli -c cluster -c check 2>&1 || true)
-    local not_ok
     not_ok=$(echo "$health_output" | grep -v ' ok ' || true)
     if [ -n "$not_ok" ]; then
         log_error "Cluster health check found issues:"
@@ -99,6 +264,7 @@ log "Destination tier: $DEST_TIER"
 log "Test volume size: ${TEST_SIZE} GiB"
 log "Test pattern size: $TEST_DATA_SIZE"
 log "Log file: $LOG_FILE"
+[ "$DRY_RUN" = "1" ] && log "DRY_RUN mode enabled - external commands stubbed"
 
 # Step 1: Create the volume
 log "=== Step 1: Creating volume ==="
@@ -109,9 +275,7 @@ sleep 10
 
 # Step 2: Write pattern to the volume
 log "=== Step 2: Writing test pattern to volume ==="
-if ! qemu-io -f raw -c "write -P $TEST_PATTERN 0 $TEST_DATA_SIZE" "rbd:cinder-volumes/volume-$CREATED_VOL_ID" 2>&1 | tee -a "$LOG_FILE"; then
-    fail "Failed to write pattern to volume"
-fi
+qemu-io -f raw -c "write -P $TEST_PATTERN 0 $TEST_DATA_SIZE" "rbd:cinder-volumes/volume-$CREATED_VOL_ID" 2>&1 | tee -a "$LOG_FILE" || fail "Failed to write pattern to volume"
 log "Pattern written successfully"
 
 # Step 3: Create VM and attach volume
@@ -122,59 +286,97 @@ log "VM created: $CREATED_VM_ID"
 sleep 5
 
 openstack server add volume "$CREATED_VM_ID" "$CREATED_VOL_ID"
-[ $? -eq 0 ] || fail "Failed to attach volume to VM"
 log "Volume attached to VM"
 sleep 20
 
 # Step 4: Run preflight check
 log "=== Step 4: Running preflight check ==="
-local pf_output
 pf_output=$(hex_sdk cinder_move_preflight "$CREATED_VOL_ID" "$DEST_TIER")
 log "Preflight output: $pf_output"
 
-local pf_ok
 pf_ok=$(echo "$pf_output" | jq -r '.ok // false')
 [ "$pf_ok" = "true" ] || fail "Preflight returned ok:false"
 log "Preflight check passed (ok:true)"
 
 # Step 5: Dispatch the move
 log "=== Step 5: Dispatching volume move ==="
-local move_output
 move_output=$(hex_sdk cinder_move_volume "$CREATED_VOL_ID" "$DEST_TIER")
 log "Move dispatch output: $move_output"
 
-local dispatched
 dispatched=$(echo "$move_output" | jq -r '.dispatched // false')
 [ "$dispatched" = "true" ] || fail "Move dispatch failed"
 log "Move dispatched successfully"
 
-# Step 6: Wait for migration completion
-log "=== Step 6: Waiting for migration to complete ==="
-local src_type=""
-local dst_type=""
-local max_wait=600
-local elapsed=0
+# Record initial state after move dispatch
+VOL_INITIAL_TYPE=$(openstack volume show "$CREATED_VOL_ID" -f value -c volume_type)
+VOL_INITIAL_STATUS=$(openstack volume show "$CREATED_VOL_ID" -f value -c status)
+VOL_INITIAL_MIG_STATUS=$(openstack volume show "$CREATED_VOL_ID" 2>&1 | awk -F'|' '/os-vol-mig-status-attr:migration_status/{print $3}' | tr -d ' ' || echo "UNAVAILABLE")
+log "Initial state - type:$VOL_INITIAL_TYPE status:$VOL_INITIAL_STATUS migration_status:$VOL_INITIAL_MIG_STATUS"
 
-src_type=$(openstack volume show "$CREATED_VOL_ID" -f value -c volume_type)
-log "Initial source type: $src_type"
+# Step 6: Wait for migration completion - both status settlement AND type change
+log "=== Step 6: Waiting for migration completion (status+type) ==="
+max_wait=600
+if [ "$DRY_RUN" = "1" ]; then
+    max_wait=20
+fi
+elapsed=0
+type_changed=0
+status_settled=0
 
 while [ $elapsed -lt $max_wait ]; do
-    dst_type=$(openstack volume show "$CREATED_VOL_ID" -f value -c volume_type)
-    if [ "$dst_type" != "$src_type" ]; then
-        log "Volume type changed to: $dst_type"
+    VOL_FINAL_TYPE=$(openstack volume show "$CREATED_VOL_ID" -f value -c volume_type)
+    VOL_FINAL_STATUS=$(openstack volume show "$CREATED_VOL_ID" -f value -c status)
+    VOL_FINAL_MIG_STATUS=$(openstack volume show "$CREATED_VOL_ID" 2>&1 | awk -F'|' '/os-vol-mig-status-attr:migration_status/{print $3}' | tr -d ' ' || echo "UNAVAILABLE")
+
+    # Check if type has changed
+    if [ "$type_changed" = "0" ] && [ "$VOL_FINAL_TYPE" != "$VOL_INITIAL_TYPE" ]; then
+        type_changed=1
+        VOL_TYPE_CHANGED_TIME="$elapsed seconds"
+        log "Type changed at $VOL_TYPE_CHANGED_TIME: $VOL_INITIAL_TYPE -> $VOL_FINAL_TYPE"
+    fi
+
+    # Check if status is settled (not in retyping/migrating states)
+    if [ "$status_settled" = "0" ]; then
+        case "$VOL_FINAL_STATUS" in
+            in-use|available)
+                status_settled=1
+                VOL_STATUS_SETTLED_TIME="$elapsed seconds"
+                log "Status settled at $VOL_STATUS_SETTLED_TIME: $VOL_FINAL_STATUS"
+                ;;
+            *)
+                : # Still migrating
+                ;;
+        esac
+    fi
+
+    # Check migration_status signal if available
+    if [ "$VOL_FINAL_MIG_STATUS" != "UNAVAILABLE" ] && [ "$VOL_FINAL_MIG_STATUS" = "success" ]; then
+        if [ -z "$VOL_MIG_STATUS_COMPLETE_TIME" ]; then
+            VOL_MIG_STATUS_COMPLETE_TIME="$elapsed seconds"
+            log "Migration status reached 'success' at $VOL_MIG_STATUS_COMPLETE_TIME"
+        fi
+    fi
+
+    # Both conditions met: proceed
+    if [ "$type_changed" = "1" ] && [ "$status_settled" = "1" ]; then
+        log "Migration complete: both type changed and status settled"
         break
     fi
-    log "Still migrating... ($elapsed/$max_wait seconds)"
+
+    log "Still migrating... type:$VOL_FINAL_TYPE status:$VOL_FINAL_STATUS migration_status:$VOL_FINAL_MIG_STATUS ($elapsed/$max_wait seconds)"
     sleep 10
     elapsed=$((elapsed + 10))
 done
 
-[ "$dst_type" != "$src_type" ] || fail "Migration did not complete within $max_wait seconds"
-log "Migration completed"
+[ "$type_changed" = "1" ] || fail "Volume type did not change within $max_wait seconds"
+[ "$status_settled" = "1" ] || fail "Volume status did not settle within $max_wait seconds"
+
+log "=== Step 6 Summary: Migration Signals ==="
+log "Signal timing - type_changed:$VOL_TYPE_CHANGED_TIME status_settled:$VOL_STATUS_SETTLED_TIME migration_status:$VOL_MIG_STATUS_COMPLETE_TIME"
+log "Final state - type:$VOL_FINAL_TYPE status:$VOL_FINAL_STATUS migration_status:$VOL_FINAL_MIG_STATUS"
 
 # Step 7: Record migration_status attribute visibility
 log "=== Step 7: Checking migration_status attribute visibility ==="
-local migration_status
 migration_status=$(openstack volume show "$CREATED_VOL_ID" 2>&1 || true)
 if echo "$migration_status" | grep -q "migration_status"; then
     log "FINDING: migration_status attribute IS visible to operator credentials"
@@ -184,15 +386,12 @@ fi
 
 # Step 8: Verify data integrity
 log "=== Step 8: Verifying data integrity ==="
-local img_name
 img_name=$(hex_sdk cinder_volume_image_name "$CREATED_VOL_ID")
 log "Resolved image name: $img_name"
 
 # Verify pattern reads back from destination
 log "Reading pattern from destination cluster..."
-if ! qemu-io -f raw -c "read -P $TEST_PATTERN 0 $TEST_DATA_SIZE" "rbd:cinder-volumes/$img_name" 2>&1 | tee -a "$LOG_FILE"; then
-    fail "Failed to read pattern from destination image or data mismatch"
-fi
+qemu-io -f raw -c "read -P $TEST_PATTERN 0 $TEST_DATA_SIZE" "rbd:cinder-volumes/$img_name" 2>&1 | tee -a "$LOG_FILE" || fail "Failed to read pattern from destination image or data mismatch"
 log "Data integrity verified on destination"
 
 # Verify image is gone from source
@@ -204,7 +403,6 @@ log "Source image confirmed removed"
 
 # Step 9: Verify VM is still ACTIVE
 log "=== Step 9: Verifying VM status ==="
-local vm_status
 vm_status=$(openstack server show "$CREATED_VM_ID" -f value -c status)
 [ "$vm_status" = "ACTIVE" ] || fail "VM status is $vm_status, expected ACTIVE"
 log "VM status confirmed: ACTIVE"
@@ -217,18 +415,15 @@ log "Testing E_VM_NOT_RUNNING refusal..."
 openstack server stop "$CREATED_VM_ID"
 sleep 10
 
-local refusal_output
 refusal_output=$(hex_sdk cinder_move_preflight "$CREATED_VOL_ID" "$(openstack volume type list -f value -c Name | head -n 1)" 2>&1 || true)
 log "Refusal output (stopped VM): $refusal_output"
 
-local refusal_code
 refusal_code=$(echo "$refusal_output" | jq -r '.code // ""')
 [ "$refusal_code" = "E_VM_NOT_RUNNING" ] || fail "Expected E_VM_NOT_RUNNING but got: $refusal_code"
 
-local blockers
 blockers=$(echo "$refusal_output" | jq -r '.blockers // []' | jq length)
 [ "$blockers" -gt 0 ] || fail "Expected blockers array but it is empty"
-log "Refusal path E_VM_NOT_RUNNING verified with $(jq length <<< "$(echo "$refusal_output" | jq '.blockers')") blockers"
+log "Refusal path E_VM_NOT_RUNNING verified with $blockers blockers"
 
 # Restart VM for next test
 openstack server start "$CREATED_VM_ID"
@@ -251,7 +446,7 @@ refusal_code=$(echo "$refusal_output" | jq -r '.code // ""')
 
 blockers=$(echo "$refusal_output" | jq -r '.blockers // []' | jq length)
 [ "$blockers" -gt 0 ] || fail "Expected blockers array but it is empty"
-log "Refusal path E_HAS_SNAPSHOTS verified with $(jq length <<< "$(echo "$refusal_output" | jq '.blockers')") blockers"
+log "Refusal path E_HAS_SNAPSHOTS verified with $blockers blockers"
 
 log "=== Acceptance run complete ==="
 log "All checks passed"
