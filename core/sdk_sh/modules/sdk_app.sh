@@ -6,6 +6,37 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+# Where the app framework's kubeconfig lives on a control node. A variable,
+# not inlined, so tests can point it at a fixture instead of the real path.
+APPFW_KUBECONFIG=/opt/appfw/kubeconfig
+
+# app_ingress_address
+#
+# Prints the app framework's ingress LoadBalancer address (what the CMP
+# portal and the app framework's Keycloak sit behind), or nothing with a
+# non-zero exit if there is none. app_framework_deploy creates this Service
+# as ingress-lb in the ingress-nginx namespace, but it has also been seen
+# live in kube-system -- so this looks it up by name across every
+# namespace instead of assuming one.
+#
+# Defensive throughout: no app framework, no kubeconfig, no kubectl, or a
+# kubectl that hangs must all come back as a clean "no address", never a
+# hang or an error on stderr.
+app_ingress_address()
+{
+    local addr
+
+    [ -r "$APPFW_KUBECONFIG" ] || return 1
+    command -v kubectl >/dev/null 2>&1 || return 1
+
+    addr=$(timeout 10 kubectl --kubeconfig="$APPFW_KUBECONFIG" --insecure-skip-tls-verify=true \
+           get svc --all-namespaces --field-selector metadata.name=ingress-lb \
+           -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+
+    [ -n "$addr" ] || return 1
+    echo "$addr"
+}
+
 app_framework_uninstall()
 {
     export PROJECT_NAME="app-framework"
@@ -158,7 +189,16 @@ app_framework_install()
         $appfw_pth/bin/rancher_client.py create_cluster
     fi
 
+    local rc
     app_framework_deploy $LOADBALANCER_IP
+    rc=$?
+
+    # CMP may already be enrolled with the Advisor; if so the ingress
+    # address only exists from this point on, so declare it now too. Not
+    # fatal: a cluster that never enrolled has nothing to declare it to.
+    $HEX_SDK advisor_targets_discover
+
+    return $rc
 }
 
 app_import()

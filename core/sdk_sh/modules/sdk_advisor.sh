@@ -369,6 +369,36 @@ advisor_targets_unset()
     _advisor_targets_write "$new"
 }
 
+# advisor_targets_discover
+#
+# Adds the endpoints behind the app framework's ingress, if there is one:
+# cube-cmp and app-fw-idp, both at <ingress>:443. Same address on purpose --
+# the portal and its identity provider must share one origin or the OIDC
+# state cookie is set on one and the callback lands on the other.
+#
+# Does nothing at all if the allowlist file does not exist (a cluster that
+# never enrolled must gain nothing from this, and must not have the file
+# created as a side effect) or if there is no ingress address (no app
+# framework, nothing to add).
+#
+# advisor_targets_set replaces by name, so a repeat run is harmless -- and
+# this deliberately brings cube-cmp back if an operator has unset it. That is
+# not the never-repair rule being broken: never-repair stops a *startup*
+# silently restoring a file someone deleted, while this only runs from an
+# install or enrolment event that is itself declaring the endpoint again.
+advisor_targets_discover()
+{
+    local addr
+
+    [ -e "$ADVISOR_TARGETS_FILE" ] || return 0
+
+    addr=$($HEX_SDK app_ingress_address) || return 0
+    [ -n "$addr" ] || return 0
+
+    advisor_targets_set cube-cmp "$addr:443"
+    advisor_targets_set app-fw-idp "$addr:443"
+}
+
 # advisor_enroll <server> <token-file> <version>
 #
 # The whole node-side install path: fetch the release, verify it against the
@@ -438,6 +468,10 @@ advisor_enroll()
         0)
             advisor_agent_service_start
             advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the dashboard target by hand" >&2
+            # CMP may already be installed; if so its ingress is reachable
+            # from the moment this cluster enrols. Same module, called
+            # directly (only cross-module calls route through $HEX_SDK).
+            advisor_targets_discover
             ;;
         3) echo "This node is already enrolled; nothing was changed." >&2 ;;
         4) echo "The pairing token was refused -- ask for a fresh one." >&2 ;;
