@@ -3642,3 +3642,12 @@ cinder_move_preflight()
     _cinder_preflight_json
     [ ${#_pf_codes[@]} -eq 0 ]
 }
+_civ_name_id() { $CINDER show "$1" 2>/dev/null | awk -F'|' '/os-vol-mig-status-attr:name_id/{print $3}' | tr -d ' '; }
+
+# The RBD image backing a volume. A migrated volume's image keeps the temporary
+# volume's id, carried on the record as name_id.
+cinder_volume_image_name()
+{
+    local nid=$(_civ_name_id "$1")
+    case "$nid" in ""|None|null) echo "volume-$1" ;; *) echo "volume-$nid" ;; esac
+}
