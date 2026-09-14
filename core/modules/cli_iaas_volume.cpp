@@ -1299,6 +1299,28 @@ MoveVolumeToBackendMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    const ExecSyncResult pf = ExecBashSync(
+        0, true, true, ParseOpenstackCliAuth(),
+        HEX_SDK " cinder_move_preflight \"" + volumeId + "\" \"" + destinationVolumeType + "\"");
+    if (pf.exitCode != 0) {
+        // the preflight owns the wording; print every reason so the operator
+        // does not fix one and rediscover the next on retry
+        std::string err;
+        const json11::Json v = json11::Json::parse(pf.stdoutOutput, err);
+        const json11::Json::array& blockers = v["blockers"].array_items();
+        CliPrintf("Cannot move this volume:");
+        if (blockers.empty()) {
+            CliPrintf("  - preflight refused");
+        }
+        for (const json11::Json& b : blockers) {
+            CliPrintf("  - %s (%s)",
+                      b["reason"].string_value().c_str(),
+                      b["code"].string_value().c_str());
+        }
+        HexLogError("volume move refused: %s", pf.stdoutOutput.c_str());
+        return CLI_FAILURE;
+    }
+
     const ExecSyncResult r = ExecBashSync(
         0,
         true,
