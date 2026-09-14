@@ -32,6 +32,14 @@ if [ ! -x "$HEX_CLI_BIN" ]; then
     echo "hex_cli binary not found/executable at $HEX_CLI_BIN" >&2
     exit 1
 fi
+# Checked BEFORE anything is stubbed: outside the jail this binary cannot load
+# its libraries, and the stubbing below moves /usr/sbin/hex_sdk, /usr/bin/openstack
+# and /usr/bin/cinder aside. Bailing out first leaves the host untouched.
+if ldd "$HEX_CLI_BIN" 2>/dev/null | grep -q 'not found'; then
+    echo "hex_cli at $HEX_CLI_BIN cannot resolve its libraries here; run this inside the centos9-jail" >&2
+    ldd "$HEX_CLI_BIN" 2>/dev/null | grep 'not found' >&2
+    exit 1
+fi
 
 FAILED=0
 chk() { # description, actual, expected

@@ -3376,6 +3376,7 @@ readonly ERROR_CINDER_MOVE_REPLICATED="volume must not be replicated"
 readonly ERROR_CINDER_MOVE_IN_GROUP="volume must not belong to a group"
 readonly ERROR_CINDER_MOVE_QOS_FRONTEND="front-end QoS differs between the tiers"
 readonly ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL="destination resolves to the same ceph cluster and pool"
+readonly ERROR_CINDER_MOVE_BACKEND_UNRESOLVED="the ceph cluster and pool behind one of the tiers cannot be determined"
 readonly ERROR_CINDER_MOVE_DOMAIN_MISSING="the instance has no libvirt domain on its recorded host"
 readonly ERROR_CINDER_MOVE_DOMAIN_NOT_LIVE="the instance's domain is not running or paused"
 readonly ERROR_CINDER_MOVE_DISK_NOT_IN_DOMAIN="the attached disk is not present in the instance's domain"
@@ -3410,16 +3411,44 @@ _pf_snapshots()   { $OPENSTACK volume snapshot list --volume "$1" -f value -c ID
 _pf_type_exists() { $OPENSTACK volume type list -f value -c Name 2>/dev/null | grep -qx "$1"; }
 _pf_vm_state()    { $OPENSTACK server show "$1" -f value -c status 2>/dev/null; }
 
-# "<fsid>:<pool>" for a backend, read from its cinder section + that cluster's conf.
+# The cinder.conf section a volume type's volumes land in. A volume type name
+# is NOT a section name: the built-in type is "CubeStorage" while its section
+# is "ceph". Every type config_cinder.cpp creates carries the section on its
+# volume_backend_name extra spec (os_volume_type_create <type> <section>), so
+# that is the mapping. Prints nothing and returns non-zero when the type does
+# not resolve.
+_pf_type_backend_section()
+{
+    local t="$1" b
+    b=$($OPENSTACK volume type show "$t" -f json 2>/dev/null | jq -r '.properties.volume_backend_name // ""')
+    b=$(echo "$b" | tr -d '[:space:]')
+    case "$b" in
+        ""|null)
+            # the built-in type predates the extra spec on some upgrades
+            [ "$t" == "CubeStorage" ] || return 1
+            echo ceph ;;
+        *)  echo "$b" ;;
+    esac
+}
+
+# "<fsid>:<pool>" for a backend section, read from its cinder section + that
+# cluster's conf. Returns non-zero with no output when the section does not
+# resolve to a pool or the cluster does not answer: an unresolved backend must
+# never be compared as though it were a real one, because two unresolved (or
+# one unresolved) sides silently differ and let the guard pass.
 _pf_backend_fsid_pool()
 {
-    local sec="$1" conf pool
+    local sec="$1" conf pool fsid
+    [ -n "$sec" ] || return 1
     conf=$(crudini --get /etc/cinder/cinder.conf "$sec" rbd_ceph_conf 2>/dev/null)
     conf=${conf:-$(crudini --get "/etc/cinder/cinder.d/ext_storage_${sec}.conf" "$sec" rbd_ceph_conf 2>/dev/null)}
     conf=${conf:-/etc/ceph/ceph.conf}
     pool=$(crudini --get /etc/cinder/cinder.conf "$sec" rbd_pool 2>/dev/null)
     pool=${pool:-$(crudini --get "/etc/cinder/cinder.d/ext_storage_${sec}.conf" "$sec" rbd_pool 2>/dev/null)}
-    echo "$(timeout 20 ceph -c "$conf" fsid 2>/dev/null):${pool}"
+    [ -n "$pool" ] || return 1
+    fsid=$(timeout 20 ceph -c "$conf" fsid 2>/dev/null)
+    [ -n "$fsid" ] || return 1
+    echo "${fsid}:${pool}"
 }
 
 _pf_type_multiattach() { [ "$($OPENSTACK volume type show "$1" -f json 2>/dev/null | jq -r '.properties.multiattach // ""')" == "<is> True" ]; }
@@ -3550,8 +3579,18 @@ cinder_move_preflight()
         _pf_block E_QOS_FRONTEND_DIFFERS "$ERROR_CINDER_MOVE_QOS_FRONTEND"
     fi
     # cubecos#1490: identical fsid AND pool means the driver would treat these as
-    # one place and repoint the volume without copying it.
-    if [ "$(_pf_backend_fsid_pool "$_pf_src_type")" == "$(_pf_backend_fsid_pool "$_pf_dst_type")" ] ; then
+    # one place and repoint the volume without copying it. The type has to be
+    # resolved to its cinder.conf section first, and a side that does not
+    # resolve is refused rather than compared -- an unresolvable section reads
+    # as "different" and would let the guard pass.
+    local src_sec dst_sec src_fp dst_fp
+    src_sec=$(_pf_type_backend_section "$_pf_src_type") || src_sec=""
+    dst_sec=$(_pf_type_backend_section "$_pf_dst_type") || dst_sec=""
+    src_fp=$(_pf_backend_fsid_pool "$src_sec") || src_fp=""
+    dst_fp=$(_pf_backend_fsid_pool "$dst_sec") || dst_fp=""
+    if [ -z "$src_fp" ] || [ -z "$dst_fp" ] ; then
+        _pf_block E_BACKEND_UNRESOLVED "$ERROR_CINDER_MOVE_BACKEND_UNRESOLVED"
+    elif [ "$src_fp" == "$dst_fp" ] ; then
         _pf_block E_SAME_CLUSTER_SAME_POOL "$ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL"
     fi
 
@@ -3585,7 +3624,7 @@ cinder_move_preflight()
     _cinder_preflight_json
     [ ${#_pf_codes[@]} -eq 0 ]
 }
-_civ_name_id() { $CINDER show "$1" 2>/dev/null | awk -F'|' '/os-vol-mig-status-attr:name_id/{print $3}' | tr -d ' '; }
+_civ_name_id() { ${CINDER:-/usr/bin/cinder} show "$1" 2>/dev/null | awk -F'|' '/os-vol-mig-status-attr:name_id/{print $3}' | tr -d ' '; }
 
 # The RBD image backing a volume. A migrated volume's image keeps the temporary
 # volume's id, carried on the record as name_id.
