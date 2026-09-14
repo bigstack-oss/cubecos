@@ -3420,3 +3420,200 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
         "$output_template"
     return 0
 }
+
+# Refusal reasons for cinder_move_preflight. Kept local to this module -- these
+# are user-facing strings, not health-check error codes.
+readonly ERROR_CINDER_MOVE_SAME_TYPE="destination tier is the volume's current tier"
+readonly ERROR_CINDER_MOVE_NO_SUCH_TYPE="destination tier does not exist"
+readonly ERROR_CINDER_MOVE_VM_NOT_RUNNING="the attached instance must be running or paused"
+readonly ERROR_CINDER_MOVE_MULTIATTACH="volume has more than one read/write attachment"
+readonly ERROR_CINDER_MOVE_MULTIATTACH_MISMATCH="the two tiers differ in multiattach capability, which an attached volume cannot cross"
+readonly ERROR_CINDER_MOVE_ENCRYPTED="an attached encrypted volume cannot be moved"
+readonly ERROR_CINDER_MOVE_HAS_SNAPSHOTS="volume must not have snapshots"
+readonly ERROR_CINDER_MOVE_REPLICATED="volume must not be replicated"
+readonly ERROR_CINDER_MOVE_IN_GROUP="volume must not belong to a group"
+readonly ERROR_CINDER_MOVE_QOS_FRONTEND="front-end QoS differs between the tiers"
+readonly ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL="destination resolves to the same ceph cluster and pool"
+readonly ERROR_CINDER_MOVE_DOMAIN_MISSING="the instance has no libvirt domain on its recorded host"
+readonly ERROR_CINDER_MOVE_DOMAIN_NOT_LIVE="the instance's domain is not running or paused"
+readonly ERROR_CINDER_MOVE_DISK_NOT_IN_DOMAIN="the attached disk is not present in the instance's domain"
+
+# Collected blockers. A preflight reports every reason a move cannot proceed,
+# not just the first -- a tenant who fixes one and retries should not discover
+# the next one at that point.
+_pf_block() { _pf_codes+=("$1"); _pf_reasons+=("$2"); }
+
+# Emit the verdict. "code"/"reason" carry the first blocker so single-line
+# callers stay simple; "blockers" carries all of them.
+_cinder_preflight_json()
+{
+    local i first_code="OK" first_reason="ok" blockers="" ok=true
+    if [ ${#_pf_codes[@]} -gt 0 ] ; then
+        ok=false
+        first_code="${_pf_codes[0]}"
+        first_reason="${_pf_reasons[0]}"
+        for i in "${!_pf_codes[@]}" ; do
+            [ -n "$blockers" ] && blockers="${blockers},"
+            blockers="${blockers}{\"code\":\"${_pf_codes[$i]}\",\"reason\":\"${_pf_reasons[$i]}\"}"
+        done
+    fi
+    printf '{"ok":%s,"code":"%s","reason":"%s","blockers":[%s],"src_type":"%s","dst_type":"%s","size_gb":%s,"attached_to":"%s"}\n' \
+        "$ok" "$first_code" "$first_reason" "$blockers" \
+        "$_pf_src_type" "$_pf_dst_type" "${_pf_size:-0}" "${_pf_attached:-}"
+}
+
+_pf_volume()      { $OPENSTACK volume show "$1" -f json 2>/dev/null; }
+_pf_snapshots()   { $OPENSTACK volume snapshot list --volume "$1" -f value -c ID 2>/dev/null; }
+_pf_type_exists() { $OPENSTACK volume type list -f value -c Name 2>/dev/null | grep -qx "$1"; }
+_pf_vm_state()    { $OPENSTACK server show "$1" -f value -c status 2>/dev/null; }
+
+# "<fsid>:<pool>" for a backend, read from its cinder section + that cluster's conf.
+_pf_backend_fsid_pool()
+{
+    local sec="$1" conf pool
+    conf=$(crudini --get /etc/cinder/cinder.conf "$sec" rbd_ceph_conf 2>/dev/null)
+    conf=${conf:-$(crudini --get "/etc/cinder/cinder.d/ext_storage_${sec}.conf" "$sec" rbd_ceph_conf 2>/dev/null)}
+    conf=${conf:-/etc/ceph/ceph.conf}
+    pool=$(crudini --get /etc/cinder/cinder.conf "$sec" rbd_pool 2>/dev/null)
+    pool=${pool:-$(crudini --get "/etc/cinder/cinder.d/ext_storage_${sec}.conf" "$sec" rbd_pool 2>/dev/null)}
+    echo "$(timeout 20 ceph -c "$conf" fsid 2>/dev/null):${pool}"
+}
+
+_pf_type_multiattach() { [ "$($OPENSTACK volume type show "$1" -f json 2>/dev/null | jq -r '.properties.multiattach // ""')" == "<is> True" ]; }
+_pf_type_encrypted()   { [ -n "$($OPENSTACK volume type show "$1" -f value -c encryption 2>/dev/null | tr -d '[:space:]')" ]; }
+
+# The libvirt disk target the attachment maps to: /dev/sdb -> sdb. Nova derives
+# the same value with mountpoint.rpartition("/")[2].
+_pf_attached_device() { $OPENSTACK volume show "$1" -f json 2>/dev/null | jq -r '.attachments[0].device // ""'; }
+
+# "<domstate>|<space-separated disk targets>" read from the compute node hosting
+# $1. Non-zero return means the probe could not run -- not that the move is bad.
+_pf_domain_probe()
+{
+    local inst="$1" host dom out
+    host=$($OPENSTACK server show "$inst" -f value -c OS-EXT-SRV-ATTR:host 2>/dev/null)
+    dom=$($OPENSTACK server show "$inst" -f value -c OS-EXT-SRV-ATTR:instance_name 2>/dev/null)
+    [ -n "$host" ] && [ -n "$dom" ] || return 1
+    out=$(timeout 30 cubectl node exec -o "$host" -pn \
+        "virsh domstate $dom 2>/dev/null | head -1; virsh domblklist $dom 2>/dev/null | awk 'NR>2{print \$1}'" \
+        2>/dev/null) || return 1
+    printf '%s|%s\n' \
+        "$(echo "$out" | head -1 | tr -d '\r')" \
+        "$(echo "$out" | tail -n +2 | tr '\n' ' ' | sed 's/ *$//')"
+}
+
+# Compare QoS front-end settings between two volume types.
+# Return 0 (true) if they differ, 1 (false) if they match or cannot be compared.
+_pf_qos_differs()
+{
+    local src="$1" dst="$2"
+    local src_qos dst_qos
+    src_qos=$($OPENSTACK volume type show "$src" -f json 2>/dev/null | jq -r '.qos_specs_id // ""')
+    dst_qos=$($OPENSTACK volume type show "$dst" -f json 2>/dev/null | jq -r '.qos_specs_id // ""')
+
+    # If either has no QoS, they don't differ (return 1)
+    if [ -z "$src_qos" ] || [ -z "$dst_qos" ] ; then
+        return 1
+    fi
+
+    # If they're different, they differ (return 0)
+    [ "$src_qos" != "$dst_qos" ]
+}
+
+# Can $1 move to tier $2? Prints JSON; 0 = may proceed.
+cinder_move_preflight()
+{
+    local vol_id="$1" _pf_dst_type="$2" v
+    local _pf_src_type="" _pf_size=0 _pf_attached=""
+    local _pf_codes=() _pf_reasons=()
+
+    v=$(_pf_volume "$vol_id")
+    _pf_src_type=$(echo "$v" | jq -r '.volume_type // ""')
+    _pf_size=$(echo "$v" | jq -r '.size // 0')
+    _pf_attached=$(echo "$v" | jq -r '.attachments[0].server_id // ""')
+
+    # These two stop the walk: with no valid distinct destination there is
+    # nothing further to evaluate about it.
+    if [ "$_pf_src_type" == "$_pf_dst_type" ] ; then
+        _pf_block E_SAME_TYPE "$ERROR_CINDER_MOVE_SAME_TYPE"
+        _cinder_preflight_json; return 1
+    fi
+    if ! _pf_type_exists "$_pf_dst_type" ; then
+        _pf_block E_NO_SUCH_TYPE "$ERROR_CINDER_MOVE_NO_SUCH_TYPE"
+        _cinder_preflight_json; return 1
+    fi
+
+    # From here every check accumulates.
+    if [ -n "$(_pf_snapshots "$vol_id")" ] ; then
+        _pf_block E_HAS_SNAPSHOTS "$ERROR_CINDER_MOVE_HAS_SNAPSHOTS"
+    fi
+    local rep=$(echo "$v" | jq -r '.replication_status // "None"')
+    if [ "$rep" != "None" ] && [ "$rep" != "disabled" ] && [ "$rep" != "not-capable" ] ; then
+        _pf_block E_REPLICATED "$ERROR_CINDER_MOVE_REPLICATED"
+    fi
+    if [ "$(echo "$v" | jq -r '.group_id // "null"')" != "null" ] ; then
+        _pf_block E_IN_GROUP "$ERROR_CINDER_MOVE_IN_GROUP"
+    fi
+    if [ "$(echo "$v" | jq -r '.attachments | length')" -gt 1 ] ; then
+        _pf_block E_MULTIATTACH "$ERROR_CINDER_MOVE_MULTIATTACH"
+    fi
+    # Capability differences between the two tiers. Neither is about a driver
+    # being "live capable" -- an attached move never enters either driver -- but
+    # both are refused for a volume that is not detached, in either direction.
+    if [ -n "$_pf_attached" ] ; then
+        local src_ma=no dst_ma=no
+        _pf_type_multiattach "$_pf_src_type" && src_ma=yes
+        _pf_type_multiattach "$_pf_dst_type" && dst_ma=yes
+        if [ "$src_ma" != "$dst_ma" ] ; then
+            _pf_block E_MULTIATTACH_MISMATCH "$ERROR_CINDER_MOVE_MULTIATTACH_MISMATCH"
+        fi
+        if _pf_type_encrypted "$_pf_src_type" || _pf_type_encrypted "$_pf_dst_type" ; then
+            _pf_block E_ENCRYPTED "$ERROR_CINDER_MOVE_ENCRYPTED"
+        fi
+    fi
+    local nova_state_bad=no
+    if [ -n "$_pf_attached" ] ; then
+        case "$(_pf_vm_state "$_pf_attached")" in
+            ACTIVE|PAUSED|RESIZED) ;;
+            *) _pf_block E_VM_NOT_RUNNING "$ERROR_CINDER_MOVE_VM_NOT_RUNNING"; nova_state_bad=yes ;;
+        esac
+    fi
+    if _pf_qos_differs "$_pf_src_type" "$_pf_dst_type" ; then
+        _pf_block E_QOS_FRONTEND_DIFFERS "$ERROR_CINDER_MOVE_QOS_FRONTEND"
+    fi
+    # cubecos#1490: identical fsid AND pool means the driver would treat these as
+    # one place and repoint the volume without copying it.
+    if [ "$(_pf_backend_fsid_pool "$_pf_src_type")" == "$(_pf_backend_fsid_pool "$_pf_dst_type")" ] ; then
+        _pf_block E_SAME_CLUSTER_SAME_POOL "$ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL"
+    fi
+
+    # Layer 2: the running domain, not nova's DB, is authoritative about whether
+    # QEMU can swap this disk. Advisory -- all of it can change before the swap,
+    # and a probe that cannot run must never invent a refusal.
+    if [ -n "$_pf_attached" ] ; then
+        local probe dom_state dom_disks dev
+        if probe=$(_pf_domain_probe "$_pf_attached") ; then
+            dom_state=${probe%%|*}
+            dom_disks=${probe#*|}
+            if [ -z "$dom_state" ] ; then
+                _pf_block E_DOMAIN_MISSING "$ERROR_CINDER_MOVE_DOMAIN_MISSING"
+            else
+                case "$dom_state" in
+                    running|paused) ;;
+                    # the same fact nova already reported; report it once
+                    *) [ "$nova_state_bad" == "no" ] && \
+                       _pf_block E_DOMAIN_NOT_LIVE "$ERROR_CINDER_MOVE_DOMAIN_NOT_LIVE" ;;
+                esac
+                dev=$(basename "$(_pf_attached_device "$vol_id")")
+                if [ -n "$dev" ] && ! echo " $dom_disks " | grep -q " $dev " ; then
+                    _pf_block E_DISK_NOT_IN_DOMAIN "$ERROR_CINDER_MOVE_DISK_NOT_IN_DOMAIN"
+                fi
+            fi
+        else
+            log_info "move preflight: domain probe unavailable for $_pf_attached, proceeding"
+        fi
+    fi
+
+    _cinder_preflight_json
+    [ ${#_pf_codes[@]} -eq 0 ]
+}
