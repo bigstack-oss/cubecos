@@ -9,6 +9,8 @@ echo "" > $T/name_id
 chk "never migrated" "$(cinder_volume_image_name aaa)" "volume-aaa"
 echo "None" > $T/name_id
 chk "name_id literal None" "$(cinder_volume_image_name aaa)" "volume-aaa"
+echo "null" > $T/name_id
+chk "name_id literal null" "$(cinder_volume_image_name aaa)" "volume-aaa"
 echo "bbb" > $T/name_id
 chk "migrated volume" "$(cinder_volume_image_name aaa)" "volume-bbb"
 
