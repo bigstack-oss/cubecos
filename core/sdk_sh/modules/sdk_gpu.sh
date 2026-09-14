@@ -489,8 +489,13 @@ gpu_device_list()
         return 1
     fi
 
+    # Same trap as gpu_sysfs_pci_addr (#1486): a failed query is answered on
+    # stdout ("No devices were found") with an empty stderr and a non-zero exit,
+    # so without this the sentence arrives below as a one-field CSV row and is
+    # enumerated as a card whose id is that sentence. Every card being invisible
+    # to nvidia-smi is the normal state of a node whose cards are all pgpu.
     local gpu_csv
-    gpu_csv=$($NVIDIA_SMI --query-gpu=uuid,name,pci.bus_id,memory.total --format=csv,noheader,nounits 2>/dev/null)
+    gpu_csv=$($NVIDIA_SMI --query-gpu=uuid,name,pci.bus_id,memory.total --format=csv,noheader,nounits 2>/dev/null) || gpu_csv=""
 
     local output="[]"
 
@@ -498,6 +503,14 @@ gpu_device_list()
         [ -z "$uuid" ] && continue
 
         uuid=$(echo "$uuid" | xargs)
+
+        # Belt to the exit-status brace above: only a row that names a card is a
+        # card. An nvidia-smi that reported a failure with exit 0 would otherwise
+        # still be enumerated.
+        case "$uuid" in
+            GPU-*|MIG-*) ;;
+            *) continue ;;
+        esac
         name=$(echo "$name" | xargs)
         pci_bus_id=$(echo "$pci_bus_id" | xargs)
 
@@ -676,6 +689,19 @@ gpu_device_list()
         local support_types
         support_types=$(gpu_support_types_from_xml "$pci_address")
 
+        # From this card's own record, not from $total_vram_mib: that one is
+        # local to the nvidia-smi loop above and holds whatever the last visible
+        # card measured, so every card unioned in here reported a neighbour's
+        # framebuffer. On a node with no visible card at all it was never
+        # assigned, and --argjson on an empty string fails the whole jq call --
+        # which the guard at the end of this function turns into a hard error,
+        # so an all-pgpu node listed no GPUs whatsoever. Until #1486 the phantom
+        # row built out of nvidia-smi's error sentence happened to set it to
+        # "null" first, which is what kept that path alive.
+        local recorded_vram
+        recorded_vram=$(echo "$entry" | jq -c '.totalVramMiB // null' 2>/dev/null)
+        [ -z "$recorded_vram" ] && recorded_vram="null"
+
         output=$(echo "$output" | jq -c \
             --arg id "$uuid" \
             --arg name "$name" \
@@ -684,7 +710,7 @@ gpu_device_list()
             --arg status "$status" \
             --argjson supportTypes "$support_types" \
             --argjson allocation "$allocation" \
-            --argjson totalVramMiB "$total_vram_mib" \
+            --argjson totalVramMiB "$recorded_vram" \
             '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profileCountLimit:null, status:$status, allocation:$allocation}]')
     done <<< "$(echo "$pgpu_ids" | jq -c '.[]' 2>/dev/null)"
 

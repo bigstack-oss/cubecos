@@ -10,13 +10,15 @@
 # vfio-pci (or an SR-IOV PF held by pci-pf-stub with no VFs enabled) is invisible
 # to nvidia-smi, which is precisely the case the affected code was written for.
 #
-# One reader is pinned here:
+# Two readers are pinned here:
 #
 #   gpu_sysfs_pci_addr -- returned the sentence as a PCI address, so callers
 #                         built paths like /sys/bus/pci/devices/no devices were
 #                         found/ and reported "cannot read X" against nonsense.
+#   gpu_device_list    -- read the sentence as a one-field CSV row and enumerated
+#                         it as a card with that sentence as its id.
 #
-# Section 3 is a negative control: the same stubs against the pre-fix code taken
+# Section 5 is a negative control: the same stubs against the pre-fix code taken
 # out of git, so a future refactor that quietly reintroduces the emptiness test
 # cannot leave these tests passing for the wrong reason.
 #
@@ -30,16 +32,25 @@ extract() { awk -v fn="^$1\\\\(\\\\)" '$0 ~ fn {f=1} f{print} f&&/^}/{exit}' "$2
 
 eval "$(extract gpu_pci_addr_normalize "$GPU_SRC")"
 eval "$(extract gpu_sysfs_pci_addr "$GPU_SRC")"
-for fn in gpu_pci_addr_normalize gpu_sysfs_pci_addr ; do
+eval "$(extract gpu_device_list "$GPU_SRC")"
+eval "$(extract gpu_probe_diagnosis "$GPU_SRC")"
+for fn in gpu_pci_addr_normalize gpu_sysfs_pci_addr gpu_device_list gpu_probe_diagnosis ; do
     [ "$(type -t $fn)" = function ] || { echo "FAIL: $fn not extracted"; exit 1; }
 done
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 GPU_CONFIG_FILE_PATH="$TMP/config.json"
+SRIOV_PROFILE_NAME_REGEX="^[A-Za-z0-9]+-[0-9]+[A-Za-z]+$"
+MIG_PROFILE_NAME_REGEX="^[A-Za-z0-9]+-[0-9]+-[0-9]+[A-Za-z]+$"
 
 log_error() { :; }
 log_debug() { :; }
+# The node has no vGPU XML, no running domains and nothing else on the PCI bus:
+# every card in these fixtures reaches the list through config.json alone.
+gpu_support_types_from_xml() { echo '["pgpu"]'; }
+virsh() { :; }
+lspci() { :; }
 
 # nvidia-smi stub. Driven through files rather than exported variables so the
 # same stub answers from inside a command substitution.
@@ -122,7 +133,33 @@ ck "$out" "" "no config.json -> no output"
 ck "$rc" "1" "no config.json -> non-zero"
 mv "$TMP/config.json.away" "$GPU_CONFIG_FILE_PATH"
 
-# --- 3. negative control: the pre-fix code, straight out of git ----------------
+# --- 3. gpu_device_list: the sentence must not become a card ------------------
+# A node whose only card is pgpu. nvidia-smi sees nothing, so the whole list is
+# built from config.json -- one card, and no phantom.
+echo "[$PGPU]" > "$GPU_CONFIG_FILE_PATH"
+no_devices
+list=$(gpu_device_list); rc=$?
+ck "$rc" "0" "all-pgpu node -> gpu_device_list succeeds"
+ck "$(echo "$list" | jq 'length')" "1" "all-pgpu node -> exactly one card"
+ck "$(echo "$list" | jq -r '.[0].id')" "$PGPU_ID" "all-pgpu node -> the real card"
+ck "$(echo "$list" | jq '[.[] | select(.id | test("devices were found"; "i"))] | length')" "0" \
+   "all-pgpu node -> no phantom card from the error sentence"
+
+# An empty config.json on such a node is an empty list, not a one-card list.
+echo "[]" > "$GPU_CONFIG_FILE_PATH"
+no_devices
+ck "$(gpu_device_list | jq 'length')" "0" "no cards at all -> empty list"
+
+# --- 4. a visible card still enumerates ---------------------------------------
+echo "[$VGPU]" > "$GPU_CONFIG_FILE_PATH"
+smi "GPU-c0ffee00-0000-0000-0000-000000000001, NVIDIA RTX A2000, 00000000:86:00.0, 6144"
+list=$(gpu_device_list)
+ck "$(echo "$list" | jq 'length')" "1" "visible card -> enumerated once"
+ck "$(echo "$list" | jq -r '.[0].id')" "GPU-c0ffee00-0000-0000-0000-000000000001" \
+   "visible card -> id from nvidia-smi"
+ck "$(echo "$list" | jq -r '.[0].totalVramMiB')" "6144" "visible card -> framebuffer measured"
+
+# --- 5. negative control: the pre-fix code, straight out of git ----------------
 # Pinned to the commit these fixtures were written against rather than a moving
 # branch, so the control keeps testing the code that actually had the defect.
 # Soft-skipped where git or the object is unavailable (exported trees, shallow
