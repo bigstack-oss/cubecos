@@ -949,8 +949,7 @@ check_service_memory_and_run()
 #
 # It is not hypothetical and not one check's fault. Measured on the labs: health_heat_check
 # leaks "Failed to discover available identity versions" from the openstack CLI when the
-# API tier is unwell, and health_swift_check emits "Terminated" when its timeout fires --
-# different offenders on different clusters, same broken document. Nothing here reads the
+# API tier is unwell. Nothing here reads the
 # check's stdout: the status is its exit code and the description comes from
 # health_errcode_lookup, so discarding it costs nothing.
 check_service()
