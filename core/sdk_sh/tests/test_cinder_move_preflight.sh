@@ -190,11 +190,15 @@ openstack() {
             backend-dst) echo '{"qos_specs_id":"qos-backend-2"}' ;;
             backend-pair) echo '{"qos_specs_id":"qos-backend-1"}' ;;
             frontend-src) echo '{"qos_specs_id":"qos-frontend-1"}' ;;
+            frontend-dst) echo '{"qos_specs_id":"qos-frontend-2"}' ;;
+            both-src) echo '{"qos_specs_id":"qos-both-1"}' ;;
+            both-dst) echo '{"qos_specs_id":"qos-both-2"}' ;;
         esac
     elif [ "$1" = "qos" ] && [ "$2" = "specs" ] && [ "$3" = "show" ] ; then
         case "$4" in
             qos-backend-1|qos-backend-2) echo '{"consumer":"back-end"}' ;;
-            qos-frontend-1) echo '{"consumer":"front-end"}' ;;
+            qos-frontend-1|qos-frontend-2) echo '{"consumer":"front-end"}' ;;
+            qos-both-1|qos-both-2) echo '{"consumer":"both"}' ;;
         esac
     fi
 }
@@ -217,5 +221,7 @@ _test_qos "no-qos-src" "no-qos-dst" 1 "QoS: neither type has QoS"
 _test_qos "backend-src" "backend-dst" 1 "QoS: both back-end-only different specs"
 _test_qos "frontend-src" "backend-src" 0 "QoS: front-end on one side only"
 _test_qos "backend-pair" "backend-pair" 1 "QoS: identical spec id"
+_test_qos "frontend-src" "frontend-dst" 0 "QoS: both front-end with different specs"
+_test_qos "both-src" "both-dst" 0 "QoS: both consumer=both with different specs"
 
 rm -rf $T
