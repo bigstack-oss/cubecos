@@ -48,12 +48,24 @@ KUBECONFIG_FILE="$WORK/kubeconfig"
 APPFW_KUBECONFIG="$KUBECONFIG_FILE"
 
 # --- no kubeconfig at all: clean refusal, no output -------------------------
+# Only one node of a cluster holds the kubeconfig, so this is the normal
+# answer on most nodes, not a fault -- it must stay silent.
 rm -f "$KUBECONFIG_FILE"
 PATH="$WORK/bin:$REAL_PATH"
 out="$(app_ingress_address 2>"$WORK/err")"; rc=$?
 check "no kubeconfig: prints nothing" "$out" ""
 [ $rc -ne 0 ] && ok || bad "no kubeconfig: exit was 0"
 check "no kubeconfig: nothing on stderr" "$(cat "$WORK/err")" ""
+
+# --- the variable never set at all: still a clean refusal under set -u ------
+# Callers run under set -u, and a node with no app framework never sources a
+# path for one; an unbound-variable error here would be noise on every node.
+unset APPFW_KUBECONFIG
+out="$(app_ingress_address 2>"$WORK/err")"; rc=$?
+check "unset kubeconfig path: prints nothing" "$out" ""
+[ $rc -ne 0 ] && ok || bad "unset kubeconfig path: exit was 0"
+check "unset kubeconfig path: nothing on stderr" "$(cat "$WORK/err")" ""
+APPFW_KUBECONFIG="$KUBECONFIG_FILE"
 
 # --- kubeconfig present, kubectl absent from PATH: clean refusal -----------
 : > "$KUBECONFIG_FILE"
