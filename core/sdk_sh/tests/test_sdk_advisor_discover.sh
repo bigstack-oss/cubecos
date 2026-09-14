@@ -36,7 +36,8 @@ for f in _advisor_target_name_valid _advisor_target_address_valid \
          _advisor_write_file _advisor_targets_write \
          advisor_discovered_set advisor_discovered_list \
          advisor_targets_init advisor_targets_list advisor_targets_set \
-         advisor_targets_unset advisor_targets_discover ; do
+         advisor_targets_unset advisor_targets_discover \
+         _advisor_discard_kubeconfig ; do
     fn="$(awk -v want="^$f\\\\(\\\\)" '$0 ~ want {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ -n "$fn" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
     eval "$fn"
@@ -59,6 +60,13 @@ MOCK_RELEASES=""
 mock_hex_sdk()
 {
     case "$1" in
+        app_kubeconfig)
+            # The real one fetches from rancher; the test only needs a path
+            # that exists, since the helpers it feeds are stubbed here too.
+            MOCK_KUBECONFIG="$WORK/kubeconfig.$$"
+            : > "$MOCK_KUBECONFIG"
+            echo "$MOCK_KUBECONFIG"
+            ;;
         app_ingress_address)
             [ -n "$MOCK_INGRESS_ADDR" ] || return 1
             echo "$MOCK_INGRESS_ADDR"

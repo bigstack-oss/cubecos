@@ -511,17 +511,39 @@ advisor_targets_unset()
 # never-repair rule being broken: never-repair stops a *startup* silently
 # restoring a file someone edited, while this only runs from an install or
 # enrolment event that is itself declaring the endpoint again.
+# _advisor_discard_kubeconfig <path>
+#
+# Removes a kubeconfig advisor_targets_discover fetched, and unsets the export
+# so a later call in the same shell fetches a fresh one. A no-op for the empty
+# path, which is what a caller-supplied APPFW_KUBECONFIG leaves behind.
+_advisor_discard_kubeconfig()
+{
+    [ -n "${1:-}" ] || return 0
+    rm -f "$1"
+    unset APPFW_KUBECONFIG
+}
+
 advisor_targets_discover()
 {
-    local addr node pairs=""
+    local addr node pairs="" kc=""
 
-    addr=$($HEX_SDK app_ingress_address) || return 0
-    [ -n "$addr" ] || return 0
+    # One kubeconfig for the three queries below, fetched here rather than in
+    # each helper: they run as separate hex_sdk processes, so a helper that
+    # fetched its own would authenticate to rancher three times per call.
+    # Exported because that is how those processes receive it.
+    if [ -z "${APPFW_KUBECONFIG:-}" ] ; then
+        kc=$($HEX_SDK app_kubeconfig) || return 0
+        export APPFW_KUBECONFIG=$kc
+    fi
+
+    addr=$($HEX_SDK app_ingress_address) || { _advisor_discard_kubeconfig "$kc" ; return 0 ; }
+    [ -n "$addr" ] || { _advisor_discard_kubeconfig "$kc" ; return 0 ; }
 
     # The app framework's own Keycloak, and the CMP portal. Each is declared by
     # whatever installed it, at the moment it is found installed.
     $HEX_SDK app_helm_release_deployed keycloak && pairs="$pairs app-fw-idp $addr:443"
     $HEX_SDK app_helm_release_deployed cube-portal && pairs="$pairs cube-cmp $addr:443"
+    _advisor_discard_kubeconfig "$kc"
     [ -n "$pairs" ] || return 0
 
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
