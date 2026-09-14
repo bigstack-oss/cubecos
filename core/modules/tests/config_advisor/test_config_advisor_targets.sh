@@ -16,6 +16,13 @@
 # implementations of the handful of calls those headers declare. The code
 # under test is byte-for-byte the code that ships.
 #
+# The status tests below also compile with -DADVISOR_TEST_TREE, the same
+# technique test_config_advisor_03.sh uses for config_advisor.cpp, so the
+# agent-binary check lands under a scratch tree instead of the real
+# /usr/local/bin. Whether the unit is active is the health framework's
+# question now (health_advisor_check/report/repair in sdk_health.sh), not
+# this command's, so status has nothing left to say about it here.
+#
 
 fail() { echo "FAIL: $1"; exit 1; }
 
@@ -53,12 +60,34 @@ esac
 EOF
 chmod +x "$FAKE_SDK"
 
+# Where the agent-binary check lands instead of the real /usr/local/bin.
+ROOT="$WORK/root"
+
 g++ -Wall -Werror -Wno-unused-parameter -I"$DIR/stub" \
-    -DHEX_SDK="\"$FAKE_SDK\"" \
+    -DHEX_SDK="\"$FAKE_SDK\"" -DADVISOR_TEST_TREE="\"$ROOT\"" \
     -o "$WORK/advisorctl" "$SRC" "$DIR/stub/cli_driver.cpp" \
     || fail "cli_advisor.cpp did not compile against the stub CLI headers"
 
 V="$WORK/advisorctl"
+
+IDENTITY_DIR="$ROOT/etc/cube/advisor-agent"
+CONF_DIR="$ROOT/etc/cube-advisor-agent"
+AGENT_BIN="$ROOT/usr/local/bin/cube-advisor-agent"
+
+# reset [installed] -- a scratch tree with no identity, and optionally a fake
+# agent binary standing in for an installed one.
+reset() {
+    rm -rf "$ROOT" "$CALL_LOG"
+    mkdir -p "$IDENTITY_DIR" "$CONF_DIR" "$(dirname "$AGENT_BIN")"
+    if [ "${1:-}" = installed ] ; then
+        cat > "$AGENT_BIN" <<'BIN'
+#!/bin/bash
+echo "cube-advisor-agent $*" >> "$CALL_LOG"
+exit 0
+BIN
+        chmod +x "$AGENT_BIN"
+    fi
+}
 
 # CLI_SUCCESS=0, CLI_INVALID_ARGS=1, CLI_FAILURE=3 (hex/cli_impl.h)
 
@@ -96,9 +125,7 @@ rm -f "$CALL_LOG"
     || fail "target_unset did not pass the name through unchanged: $(cat "$CALL_LOG")"
 
 # ---- status: names the target count, and succeeds with no agent installed ----
-# The real agent binary is an absolute path cli_advisor.cpp hardcodes
-# (/usr/local/bin/cube-advisor-agent); this build/test host has no such
-# binary, which is exactly the case being covered.
+reset
 out=$("$V" status)
 rc=$?
 [ "$rc" -eq 0 ] || fail "status failed when the Advisor agent is not installed (got $rc)"
@@ -109,6 +136,18 @@ esac
 case "$out" in
     *"not installed"*) ;;
     *) fail "status did not say the agent is not installed: [$out]" ;;
+esac
+
+# ---- status: agent installed -- says nothing about the unit's active state ----
+# Whether the unit is running is health_advisor_check/report/repair's question
+# now (sdk_health.sh), not this command's. A regression that puts a second
+# opinion back here is exactly what this guards against.
+reset installed
+out=$("$V" status)
+rc=$?
+[ "$rc" -eq 0 ] || fail "status failed with the agent installed (got $rc)"
+case "$out" in
+    *"is not running"*|*"journalctl"*|*"systemctl"*) fail "status still talks about the unit's active state: [$out]" ;;
 esac
 
 exit 0
