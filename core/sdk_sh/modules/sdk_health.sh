@@ -8,6 +8,7 @@ fi
 
 source ${SDK_DIR}/modules/errcodes
 source ${SDK_DIR}/modules/sdk_ovn.sh   # _ovn_metadata_* helpers used by health_neutron_check/repair
+source ${SDK_DIR}/modules/sdk_advisor.sh   # ADVISOR_AGENT_UNIT_NAME used by health_advisor_check
 # _check is invoked by lmi which lacks persmissions to run
 # ssh commands like is_remote_running. Wrap it with /usr/sbin/hex_config sdk_run
 ERR_CODE=${ERR_CODE:-0}         # health_check error code
@@ -397,6 +398,95 @@ health_license_check()
     done
 
     _health_fail_log
+}
+
+# Identity + binary the Cube AI Advisor agent check inspects. Starting and
+# stopping the unit stays hex_config's job (config_advisor.cpp) and
+# advisor_agent_service_start's (sdk_advisor.sh); this is read-only.
+ADVISOR_HEALTH_CERT=${ADVISOR_HEALTH_CERT:-/etc/cube/advisor-agent/agent.crt}
+ADVISOR_HEALTH_BIN=${ADVISOR_HEALTH_BIN:-/usr/local/bin/cube-advisor-agent}
+
+health_advisor_report()
+{
+    _health_report ${FUNCNAME[0]}
+}
+
+# The agent runs on every node, not only control nodes -- a compute or storage
+# node with its tunnel down loses its own console and web target just the same
+# -- so this fans out over CUBE_NODE_LIST_HOSTNAMES the way health_rbd_target_check
+# does, rather than looking only at the node cluster check happens to run on.
+#
+# Not enrolled is the normal case (no cluster is required to roll into the
+# Advisor), so no node holding an identity is healthy, not a fault -- same
+# precedent as fc_link's "no FC HBA installed". A node with no identity is
+# simply skipped, the same way health_rbd_target_check skips a node with no
+# OSDs: nothing here is enrolment's business to flag. Enrolled-but-inactive is
+# the fault this exists to catch, naming the affected node(s) so an operator
+# does not have to go hunting. Enrolled with the binary itself missing is a
+# separate code, also naming the node(s) -- re-enrolment, not a local repair,
+# is what fixes that, and it takes priority when a run has both.
+health_advisor_check()
+{
+    local node enrolled=() down=() missing=()
+
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        remote_run $node stat "$ADVISOR_HEALTH_CERT" >/dev/null 2>&1 || continue
+        enrolled+=("$node")
+        if ! remote_run $node test -x "$ADVISOR_HEALTH_BIN" >/dev/null 2>&1 ; then
+            missing+=("$node")
+        elif ! is_remote_running $node "$ADVISOR_AGENT_UNIT_NAME" ; then
+            down+=("$node")
+        fi
+    done
+
+    if [ "${#enrolled[@]}" -eq 0 ] ; then
+        DESCRIPTION="not enrolled"
+        _health_fail_log
+        return
+    fi
+
+    if [ "${#missing[@]}" -gt 0 ] ; then
+        ERR_CODE=2
+        ERR_MSG="agent binary missing on: ${missing[*]}"
+    elif [ "${#down[@]}" -gt 0 ] ; then
+        ERR_CODE=1
+        ERR_MSG="agent not running on: ${down[*]}"
+        ERR_LOG="journalctl -u $ADVISOR_AGENT_UNIT_NAME"
+    fi
+
+    _health_fail_log
+}
+
+# Code 1 (unit not active somewhere) only: restarting is cheap, so the auto
+# path may as well do it. Code 2 (binary missing somewhere) needs re-enrolment
+# -- no restart fixes that, and retrying it would only burn the auto-repair
+# budget for nothing. Same action as the operator path, just gated -- see
+# _health_clock_auto_repair for the same delegation.
+_health_advisor_auto_repair()
+{
+    if [ "$ERR_CODE" == "1" ] ; then
+        health_advisor_repair
+    fi
+}
+
+# Restarts the tunnel on every node that needs it, not just the one this runs
+# on -- hex_config already owns the unit going forward, this only kicks it
+# back up. Routed through $HEX_SDK on the remote node -- hex_sdk only
+# auto-loads sdk_<MOD>*.sh for the module it was invoked as, so calling
+# advisor_agent_service_start directly (bare, or via remote_systemd_restart,
+# which knows only "systemctl restart" and nothing of the unit file / enable
+# invariants advisor_agent_service_start already encodes) would either no-op
+# or duplicate that knowledge a second place. A node missing the binary is left
+# alone -- restarting cannot install it.
+health_advisor_repair()
+{
+    local node
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        remote_run $node stat "$ADVISOR_HEALTH_CERT" >/dev/null 2>&1 || continue
+        remote_run $node test -x "$ADVISOR_HEALTH_BIN" >/dev/null 2>&1 || continue
+        is_remote_running $node "$ADVISOR_AGENT_UNIT_NAME" && continue
+        remote_run $node $HEX_SDK advisor_agent_service_start
+    done
 }
 
 health_etcd_report()
