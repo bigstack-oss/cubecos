@@ -1313,16 +1313,44 @@ gpu_sriov_disable_vfs()
     return 1
 }
 
-# Renders the sysfs form of a GPU's PCI address: nvidia-smi reports an 8-char
-# domain in uppercase hex (00000000:BB:SS.F) but the sysfs directory name uses
-# a 4-char lowercase one (0000:bb:ss.f).
+# Renders the sysfs form of a PCI address, rejecting anything that is not one.
+# nvidia-smi and config.json both write an 8-char domain in hex (00000000:BB:SS.F)
+# while a sysfs directory name uses a 4-char lowercase one (0000:bb:ss.f); either
+# spelling is accepted and normalised, anything else is refused with a non-zero
+# return and no output. The shape check is the point: a caller that trimmed four
+# leading characters unconditionally turned a sentence into a plausible-looking
+# path fragment instead of an error (#1486).
+gpu_pci_addr_normalize()
+{
+    local raw
+    raw=$(printf '%s\n' "${1:-}" | head -n 1 | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+
+    echo "$raw" | grep -qE '^[0-9a-f]{4}([0-9a-f]{4})?:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9a-f]$' || return 1
+
+    # 16 chars is the 8-char-domain spelling; trim it down to the sysfs form.
+    if [ "${#raw}" -eq 16 ]; then
+        printf '%s\n' "${raw#????}"
+    else
+        printf '%s\n' "$raw"
+    fi
+}
+
+# Renders the sysfs form of a GPU's PCI address, from nvidia-smi when the card is
+# visible and from config.json when it is not. Returns non-zero with no output
+# when no address can be established.
 gpu_sysfs_pci_addr()
 {
     local gpu_id="$1"
 
-    local addr
-    addr=$($NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null \
-        | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+    # nvidia-smi reports "No devices were found" on *stdout* with an empty stderr
+    # and a non-zero exit, so `2>/dev/null` plus an emptiness test never sees the
+    # failure and the sentence flows on as if it were data. Gate on the exit
+    # status, then on the shape of the answer so that a future message which
+    # happens to exit 0 cannot get through either.
+    local raw addr=""
+    if raw=$($NVIDIA_SMI --query-gpu=pci.bus_id -i "$gpu_id" --format=csv,noheader,nounits 2>/dev/null); then
+        addr=$(gpu_pci_addr_normalize "$raw") || addr=""
+    fi
 
     # nvidia-smi cannot see a card whose PF is held by another driver: vfio-pci
     # for a pgpu, or pci-pf-stub for an SR-IOV PF that currently has no VFs
@@ -1333,9 +1361,11 @@ gpu_sysfs_pci_addr()
     if [ -z "$addr" ]; then
         addr=$(jq -r --arg id "$gpu_id" \
             'map(select(.id == $id)) | if length > 0 then (.[0].pciAddress // "") else "" end' \
-            "$GPU_CONFIG_FILE_PATH" 2>/dev/null \
-            | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+            "$GPU_CONFIG_FILE_PATH" 2>/dev/null)
+        addr=$(gpu_pci_addr_normalize "$addr") || addr=""
     fi
+
+    [ -n "$addr" ] || return 1
 
     echo "$addr"
 }
