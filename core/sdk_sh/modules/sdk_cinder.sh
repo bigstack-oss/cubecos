@@ -3437,6 +3437,7 @@ readonly ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL="destination resolves to the s
 readonly ERROR_CINDER_MOVE_DOMAIN_MISSING="the instance has no libvirt domain on its recorded host"
 readonly ERROR_CINDER_MOVE_DOMAIN_NOT_LIVE="the instance's domain is not running or paused"
 readonly ERROR_CINDER_MOVE_DISK_NOT_IN_DOMAIN="the attached disk is not present in the instance's domain"
+readonly ERROR_CINDER_MOVE_DISPATCH_FAILED="retype command failed"
 
 # Collected blockers. A preflight reports every reason a move cannot proceed,
 # not just the first -- a tenant who fixes one and retries should not discover
@@ -3650,4 +3651,34 @@ cinder_volume_image_name()
 {
     local nid=$(_civ_name_id "$1")
     case "$nid" in ""|None|null) echo "volume-$1" ;; *) echo "volume-$nid" ;; esac
+}
+
+# Dispatch a volume move between storage tiers. Checks preflight constraints,
+# then invokes the retype command if clear. Returns JSON with the result.
+cinder_move_volume()
+{
+    local vol_id="$1" dst_type="$2"
+    local pf_output
+
+    # Run preflight and capture output
+    pf_output=$(cinder_move_preflight "$vol_id" "$dst_type")
+
+    # If preflight refuses, pass the JSON through unchanged
+    if [ $? -ne 0 ] ; then
+        echo "$pf_output"
+        return 1
+    fi
+
+    # Preflight passed; invoke retype
+    if ! ${CINDER:-/usr/bin/cinder} retype --migration-policy on-demand "$vol_id" "$dst_type" >/dev/null 2>&1 ; then
+        jq -c -n \
+            --arg code "E_DISPATCH_FAILED" \
+            --arg reason "$ERROR_CINDER_MOVE_DISPATCH_FAILED" \
+            '{ok:false,"code":$code,"reason":$reason}'
+        return 1
+    fi
+
+    # Success
+    jq -c -n '{ok:true,"dispatched":true}'
+    return 0
 }
