@@ -40,6 +40,34 @@ app_ingress_address()
     echo "$addr"
 }
 
+# app_helm_release_deployed <release>
+#
+# True when <release> is a deployed Helm release on the app framework cluster.
+# A release is what "is this installed" actually means here: a namespace is
+# created early and stays behind after a removal, and an HTTP probe answers
+# "not yet" for everything that is still starting.
+#
+# Defensive the same way app_ingress_address is: no kubeconfig, no helm, or a
+# helm that hangs is a clean "no", never a hang or an error on stderr -- this
+# is on the path of installers that must not fail because of it.
+app_helm_release_deployed()
+{
+    local release=$1 kubeconfig=${APPFW_KUBECONFIG:-} out
+
+    [ -n "$release" ] || return 1
+    [ -n "$kubeconfig" ] && [ -r "$kubeconfig" ] || return 1
+    command -v helm >/dev/null 2>&1 || return 1
+
+    out=$(timeout 30 helm --kubeconfig="$kubeconfig" --kube-insecure-skip-tls-verify=true \
+          list --all-namespaces -o json 2>/dev/null)
+    # jq runs its filter zero times over zero input and calls that success, so
+    # a helm that printed nothing has to be caught here.
+    [ -n "$out" ] || return 1
+
+    printf '%s' "$out" |
+        jq -e --arg n "$release" 'any(.[]; .name == $n and .status == "deployed")' >/dev/null 2>&1
+}
+
 app_framework_uninstall()
 {
     export PROJECT_NAME="app-framework"
@@ -196,9 +224,8 @@ app_framework_install()
     app_framework_deploy $LOADBALANCER_IP
     rc=$?
 
-    # CMP may already be enrolled with the Advisor; if so the ingress
-    # address only exists from this point on, so declare it now too. Not
-    # fatal: a cluster that never enrolled has nothing to declare it to.
+    # The framework's own Keycloak exists from this point on; declare it. CMP
+    # is installed after this, by app_import, which declares its own.
     $HEX_SDK advisor_targets_discover
 
     return $rc
@@ -223,6 +250,12 @@ app_import()
     (cd $tmpdir && ENV_PROJ_NAME=$app_fw ./import.sh $skip_flag) || rc=$?
 
     rm -rf $tmpdir
+
+    # This is what installs CMP, so this is what declares cube-cmp. Only what
+    # is found installed is declared, so importing anything else declares
+    # nothing new.
+    $HEX_SDK advisor_targets_discover
+
     return $rc
 }
 
