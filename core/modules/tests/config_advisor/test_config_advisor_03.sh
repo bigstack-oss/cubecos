@@ -86,11 +86,12 @@ cat > "$FAKE_SDK" <<EOF
 set -u
 SRC="$ADVISOR_SDK"
 ADVISOR_TARGETS_FILE="$ROOT/etc/cube-advisor-agent/web-targets.json"
-ADVISOR_INGRESS_FILE="$ROOT/etc/cube-advisor-agent/ingress"
+ADVISOR_DISCOVERED_FILE="$ROOT/etc/cube-advisor-agent/discovered-targets"
 EOF
 cat >> "$FAKE_SDK" <<'EOF'
 echo "$*" >> "$SDK_CALL_LOG"
-for f in _advisor_write_file _advisor_targets_write advisor_ingress_address \
+for f in _advisor_target_name_valid _advisor_target_address_valid \
+         _advisor_write_file _advisor_targets_write advisor_discovered_list \
          advisor_targets_init ; do
     fn="$(awk -v want="^$f\\\\(\\\\)" '$0 ~ want {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ -n "$fn" ] || { echo "missing $f in $SRC" >&2 ; exit 1 ; }
@@ -109,7 +110,7 @@ V="$WORK/advisorctl"
 
 IDENTITY_DIR="$ROOT/etc/cube/advisor-agent"
 TARGETS_FILE="$ROOT/etc/cube-advisor-agent/web-targets.json"
-INGRESS_FILE="$ROOT/etc/cube-advisor-agent/ingress"
+DISCOVERED_FILE="$ROOT/etc/cube-advisor-agent/discovered-targets"
 
 # reset [enrolled] -- a node with or without the identity an upgrade carries
 # across.
@@ -226,17 +227,17 @@ grep -q '"cube-cos":"127.0.0.1:8080"' "$TARGETS_FILE" \
 grep -q advisor_targets_init "$SDK_CALL_LOG" \
     || fail "commit did not seed through hex_sdk: [$(cat "$SDK_CALL_LOG" 2>/dev/null)]"
 
-# ---- commit: with an ingress address, the CMP names are seeded too ----
-# The address is all a node is given (advisor_ingress_set writes it); turning
+# ---- commit: the discovered targets are seeded too ----
+# The set is all a node is given (advisor_discovered_set writes it); turning
 # it into entries is this node's own job, here.
 reset enrolled
-mkdir -p "$(dirname "$INGRESS_FILE")"
-printf '10.32.1.101\n' > "$INGRESS_FILE"
-"$V" commit control-converged >/dev/null 2>&1 || fail "commit failed with an ingress address present"
+mkdir -p "$(dirname "$DISCOVERED_FILE")"
+printf 'app-fw-idp 10.32.1.101:443\ncube-cmp 10.32.1.101:443\n' > "$DISCOVERED_FILE"
+"$V" commit control-converged >/dev/null 2>&1 || fail "commit failed with a discovered set present"
 grep -q '"cube-cmp":"10.32.1.101:443"' "$TARGETS_FILE" \
-    || fail "cube-cmp was not seeded at the ingress address: [$(cat "$TARGETS_FILE")]"
+    || fail "cube-cmp was not seeded at the discovered address: [$(cat "$TARGETS_FILE")]"
 grep -q '"app-fw-idp":"10.32.1.101:443"' "$TARGETS_FILE" \
-    || fail "app-fw-idp was not seeded at the ingress address: [$(cat "$TARGETS_FILE")]"
+    || fail "app-fw-idp was not seeded at the discovered address: [$(cat "$TARGETS_FILE")]"
 
 # ---- commit: an existing allowlist is never touched ----
 # The one that matters. Seeding means "a node with no allowlist gets one", not
@@ -244,8 +245,8 @@ grep -q '"app-fw-idp":"10.32.1.101:443"' "$TARGETS_FILE" \
 # "advisor target_unset cube-cmp" removed it deliberately; a commit that put it
 # back would make target_unset useless.
 reset enrolled
-mkdir -p "$(dirname "$INGRESS_FILE")"
-printf '10.32.1.101\n' > "$INGRESS_FILE"
+mkdir -p "$(dirname "$DISCOVERED_FILE")"
+printf 'app-fw-idp 10.32.1.101:443\ncube-cmp 10.32.1.101:443\n' > "$DISCOVERED_FILE"
 printf '{"cube-cos":"127.0.0.1:8080","app-fw-idp":"10.32.1.101:443"}\n' > "$TARGETS_FILE"
 before=$(cat "$TARGETS_FILE")
 "$V" commit control-converged >/dev/null 2>&1 || fail "commit failed on a node that already has an allowlist"

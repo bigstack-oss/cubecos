@@ -2,7 +2,7 @@
 #
 # Unit test for the node-side web-target allowlist helpers in
 # ../modules/sdk_advisor.sh: advisor_targets_init/list/set/unset, plus the
-# ingress address file init seeds the CMP names from.
+# discovered-targets file init seeds the rest of the names from.
 #
 # The allowlist is the node's veto over what the Advisor agent may dial, so
 # what matters here is not just that reads and writes work, but that the
@@ -19,8 +19,9 @@ set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_advisor.sh"
 
-for f in _advisor_target_name_valid _advisor_write_file _advisor_targets_write \
-         advisor_ingress_set advisor_ingress_address \
+for f in _advisor_target_name_valid _advisor_target_address_valid \
+         _advisor_write_file _advisor_targets_write \
+         advisor_discovered_set advisor_discovered_list \
          advisor_targets_init advisor_targets_list advisor_targets_set advisor_targets_unset ; do
     fn="$(awk -v want="^$f\\\\(\\\\)" '$0 ~ want {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ -n "$fn" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
@@ -36,10 +37,11 @@ bad()  { fail=$((fail+1)); echo "FAIL: $1"; }
 check() { if [ "$2" = "$3" ] ; then ok ; else bad "$1: got '$2', want '$3'" ; fi ; }
 
 ADVISOR_TARGETS_FILE="$WORK/etc/web-targets.json"
-# No ingress address recorded unless a case below records one.
-ADVISOR_INGRESS_FILE="$WORK/etc/ingress"
+# Nothing discovered unless a case below records something.
+ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
 
-# --- init seeds the one target every node can name for itself ---------------
+# --- nothing discovered: init seeds the one target every node can name for
+# --- itself, and only that ---------------------------------------------------
 advisor_targets_init
 check "init creates the file" "$(cat "$ADVISOR_TARGETS_FILE" 2>/dev/null)" \
       '{"cube-cos":"127.0.0.1:8080"}'
@@ -53,40 +55,73 @@ advisor_targets_init
 check "a second init leaves an edited file untouched" "$(cat "$ADVISOR_TARGETS_FILE")" \
       '{"cube-cos":"127.0.0.1:8080","cmp-portal":"10.32.1.101:443"}'
 
-# --- the ingress address a node was given, and what init makes of it --------
-ADVISOR_INGRESS_FILE="$WORK/etc/ingress"
-advisor_ingress_set 10.32.1.101
-check "ingress_set records the bare address and nothing else" \
-      "$(cat "$ADVISOR_INGRESS_FILE")" "10.32.1.101"
-check "ingress_address reads it back" "$(advisor_ingress_address)" "10.32.1.101"
+# --- the set a node was given, and what init makes of it --------------------
+ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
+advisor_discovered_set app-fw-idp 10.32.1.101:443 cube-cmp 10.32.1.101:443
+check "discovered_set records one name and address per line" \
+      "$(cat "$ADVISOR_DISCOVERED_FILE")" \
+      "$(printf 'app-fw-idp 10.32.1.101:443\ncube-cmp 10.32.1.101:443')"
+check "discovered_list reads it back" "$(advisor_discovered_list | sort)" \
+      "$(printf 'app-fw-idp 10.32.1.101:443\ncube-cmp 10.32.1.101:443')"
 
-if advisor_ingress_set "10.32.1.101 ; rm -rf /" 2>/dev/null ; then
-    bad "ingress_set accepted an address that is not a literal host"
+if advisor_discovered_set cube-cmp "10.32.1.101 ; rm -rf /:443" 2>/dev/null ; then
+    bad "discovered_set accepted an address that is not a literal host"
+else
+    ok
+fi
+if advisor_discovered_set Bad_Name 10.32.1.101:443 2>/dev/null ; then
+    bad "discovered_set accepted an invalid target name"
+else
+    ok
+fi
+if advisor_discovered_set cube-cmp 2>/dev/null ; then
+    bad "discovered_set accepted a name with no address"
 else
     ok
 fi
 
-# A node that was never told an address: silent, non-zero, no output.
-ADVISOR_INGRESS_FILE="$WORK/etc/no-such-ingress"
-out="$(advisor_ingress_address 2>"$WORK/err")" && bad "ingress_address succeeded with no file" || ok
-check "ingress_address prints nothing with no file" "$out" ""
-check "ingress_address says nothing on stderr with no file" "$(cat "$WORK/err")" ""
+# A node that was never told anything: silent, no output, not an error.
+ADVISOR_DISCOVERED_FILE="$WORK/etc/no-such-discovered"
+out="$(advisor_discovered_list 2>"$WORK/err")" || bad "discovered_list failed with no file"
+check "discovered_list prints nothing with no file" "$out" ""
+check "discovered_list says nothing on stderr with no file" "$(cat "$WORK/err")" ""
 
-# With an address recorded, init seeds the two CMP names at it as well. Both
+# A hand-mangled line is dropped rather than turned into an allowlist entry.
+ADVISOR_DISCOVERED_FILE="$WORK/etc/mangled"
+printf 'cube-cmp 10.32.1.101:443\nnot a valid line at all\nbad-port 10.0.0.1:abc\n' \
+    > "$ADVISOR_DISCOVERED_FILE"
+check "discovered_list keeps only the well-formed lines" "$(advisor_discovered_list)" \
+      "cube-cmp 10.32.1.101:443"
+
+# With a set recorded, init seeds exactly those names as well. Both CMP names
 # at the same address: the portal and its IdP must share one origin.
-ADVISOR_INGRESS_FILE="$WORK/etc/ingress"
-ADVISOR_TARGETS_FILE="$WORK/etc/seeded-with-ingress.json"
+ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
+ADVISOR_TARGETS_FILE="$WORK/etc/seeded-with-discovered.json"
 advisor_targets_init
 check "init seeds cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "127.0.0.1:8080"
-check "init seeds cube-cmp at the ingress address" \
+check "init seeds cube-cmp at the discovered address" \
       "$(advisor_targets_list | sed -n 's/^cube-cmp //p')" "10.32.1.101:443"
-check "init seeds app-fw-idp at the ingress address" \
+check "init seeds app-fw-idp at the discovered address" \
       "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "10.32.1.101:443"
 check "init seeds exactly those three" "$(advisor_targets_list | grep -c .)" "3"
+
+# The framework installed and CMP not: init seeds what was discovered and not
+# one name more. The ingress exists in both cases, so only the set can tell
+# these two apart.
+ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-framework-only"
+advisor_discovered_set app-fw-idp 10.32.1.101:443
+ADVISOR_TARGETS_FILE="$WORK/etc/seeded-framework-only.json"
+advisor_targets_init
+check "framework only: init seeds app-fw-idp" \
+      "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "10.32.1.101:443"
+check "framework only: init does not seed cube-cmp" \
+      "$(advisor_targets_list | grep -c '^cube-cmp ')" "0"
+check "framework only: init seeds exactly two" "$(advisor_targets_list | grep -c .)" "2"
 
 # ... and still never touches a file that exists, even one an operator has
 # taken a CMP target back out of. "A node with no allowlist gets one" is not
 # "every node is reconciled to a canonical set".
+ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
 ADVISOR_TARGETS_FILE="$WORK/etc/operator-edited.json"
 printf '{"cube-cos":"127.0.0.1:8080","app-fw-idp":"10.32.1.101:443"}\n' > "$ADVISOR_TARGETS_FILE"
 before="$(cat "$ADVISOR_TARGETS_FILE")"
@@ -96,7 +131,7 @@ check "init leaves an operator-edited allowlist byte-for-byte alone" \
 check "init did not put back the target the operator unset" \
       "$(advisor_targets_list | grep -c '^cube-cmp ')" "0"
 
-ADVISOR_INGRESS_FILE="$WORK/etc/no-such-ingress"
+ADVISOR_DISCOVERED_FILE="$WORK/etc/no-such-discovered"
 ADVISOR_TARGETS_FILE="$WORK/etc/web-targets.json"
 
 # --- set adds -----------------------------------------------------------
