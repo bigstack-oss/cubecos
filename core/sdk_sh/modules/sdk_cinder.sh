@@ -3679,6 +3679,6 @@ cinder_move_volume()
     fi
 
     # Success
-    jq -c -n '{ok:true,"dispatched":true}'
+    jq -c -n '{ok:true,"code":"OK","reason":"ok","dispatched":true}'
     return 0
 }
