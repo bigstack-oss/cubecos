@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -13,6 +14,37 @@
 #include <unistd.h>
 
 typedef std::vector<std::string> CliList;
+
+// Records the timeout HexSystemF was asked for alongside the command, when
+// HEX_SYSTEM_LOG names a file -- the same technique config_advisor's stub
+// driver uses, so a test can assert nothing here waits forever.
+static void
+LogSystem(int timeout, const char *cmd)
+{
+    const char *path = getenv("HEX_SYSTEM_LOG");
+    if (!path)
+        return;
+    FILE *fp = fopen(path, "a");
+    if (!fp)
+        return;
+    fprintf(fp, "%d %s\n", timeout, cmd);
+    fclose(fp);
+}
+
+// Same shape as the real HexSystemF: runs the formatted command through the
+// shell and returns its raw wait status. The timeout is recorded, not
+// enforced -- nothing spawned by this test runs long enough for that to matter.
+int
+HexSystemF(int timeout, const char *fmt, ...)
+{
+    char cmd[4096];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(cmd, sizeof(cmd), fmt, ap);
+    va_end(ap);
+    LogSystem(timeout, cmd);
+    return system(cmd);
+}
 
 // Runs arg0 with the given argv (NULL-terminated, as HexSpawn's callers write
 // it) and returns its raw wait status -- same shape as the real HexSpawn, so
