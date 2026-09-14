@@ -1,12 +1,20 @@
 #
-# TEST - what the advisor module says about an upgrade, and when it runs the
-#        agent.
+# TEST - what the advisor module says about an upgrade, when it runs the
+#        agent, and how a node with no allowlist gets one.
 #
-# Two things, and they are the whole module's behaviour outside verification.
+# Three things, and they are the whole module's behaviour outside verification.
 # The migrate registrations are what an upgrade carries onto the new partition:
 # everything a node was given at enrolment, and nothing that would make systemd
 # a second owner of the service. The commit hook is the only thing that starts
 # or stops the agent, and it decides from the identity alone.
+#
+# The third is the seeding. The agent runs on every node and reads its own
+# allowlist, but only the node someone enrolled on ever ran the seeding -- so
+# every other node refused every target. Commit runs everywhere, so it seeds
+# there. Seeding is not reconciling: an existing file must come out of a commit
+# byte-for-byte unchanged, including one an operator has removed an entry from,
+# or "advisor target_unset" would be undone by the next commit. That case is
+# the one below that matters most.
 #
 # This compiles the real config_advisor.cpp against the stub hex/*.h and
 # cube/*.h headers (the technique test_config_advisor_02.sh uses), with its path
@@ -62,19 +70,51 @@ chmod +x "$WORK/bin/systemctl"
 PATH="$WORK/bin:$PATH"
 export PATH
 
+# A stand-in for hex_sdk. It records the argv the module handed it, then runs
+# the real allowlist helpers straight out of sdk_advisor.sh with their two file
+# paths aimed at the scratch tree -- so what a commit triggers here is the code
+# that ships, not a second implementation of it that could drift from it.
+ADVISOR_SDK="$DIR/../../../sdk_sh/modules/sdk_advisor.sh"
+[ -f "$ADVISOR_SDK" ] || fail "cannot find sdk_advisor.sh at $ADVISOR_SDK"
+
+FAKE_SDK="$WORK/fake_hex_sdk"
+SDK_CALL_LOG="$WORK/hex_sdk.log"
+export SDK_CALL_LOG
+
+cat > "$FAKE_SDK" <<EOF
+#!/bin/bash
+set -u
+SRC="$ADVISOR_SDK"
+ADVISOR_TARGETS_FILE="$ROOT/etc/cube-advisor-agent/web-targets.json"
+ADVISOR_INGRESS_FILE="$ROOT/etc/cube-advisor-agent/ingress"
+EOF
+cat >> "$FAKE_SDK" <<'EOF'
+echo "$*" >> "$SDK_CALL_LOG"
+for f in _advisor_write_file _advisor_targets_write advisor_ingress_address \
+         advisor_targets_init ; do
+    fn="$(awk -v want="^$f\\\\(\\\\)" '$0 ~ want {f=1} f{print} f&&/^}/{exit}' "$SRC")"
+    [ -n "$fn" ] || { echo "missing $f in $SRC" >&2 ; exit 1 ; }
+    eval "$fn"
+done
+"$@"
+EOF
+chmod +x "$FAKE_SDK"
+
 g++ -Wall -Werror -Wno-unused-result -I"$WORK" -I"$DIR/stub" \
-    -DADVISOR_TEST_TREE="\"$ROOT\"" \
+    -DADVISOR_TEST_TREE="\"$ROOT\"" -DHEX_SDK="\"$FAKE_SDK\"" \
     -o "$WORK/advisorctl" "$SRC" "$DIR/stub/driver.cpp" -lcrypto \
     || fail "config_advisor.cpp did not compile against the stub headers"
 
 V="$WORK/advisorctl"
 
 IDENTITY_DIR="$ROOT/etc/cube/advisor-agent"
+TARGETS_FILE="$ROOT/etc/cube-advisor-agent/web-targets.json"
+INGRESS_FILE="$ROOT/etc/cube-advisor-agent/ingress"
 
 # reset [enrolled] -- a node with or without the identity an upgrade carries
 # across.
 reset() {
-    rm -rf "$ROOT" "$SYSTEMCTL_LOG" "$COMMIT_LOG"
+    rm -rf "$ROOT" "$SYSTEMCTL_LOG" "$COMMIT_LOG" "$SDK_CALL_LOG"
     mkdir -p "$IDENTITY_DIR"
     if [ "$1" = enrolled ] ; then
         printf 'cert\n' > "$IDENTITY_DIR/agent.crt"
@@ -173,5 +213,66 @@ reset enrolled
 case "$(commits)" in
     *enable*) fail "the module asked for the unit to be enabled: $(commits)" ;;
 esac
+
+# ---- commit: a node with no allowlist gets one ----
+# This is the bug the seeding exists for: only the node someone enrolled on
+# ever ran advisor_targets_init, so every other node in the cluster had no
+# allowlist at all and refused every web target.
+reset enrolled
+"$V" commit control-converged >/dev/null 2>&1 || fail "commit failed on an enrolled node"
+[ -s "$TARGETS_FILE" ] || fail "commit left the node with no allowlist"
+grep -q '"cube-cos":"127.0.0.1:8080"' "$TARGETS_FILE" \
+    || fail "the seeded allowlist does not name cube-cos: [$(cat "$TARGETS_FILE")]"
+grep -q advisor_targets_init "$SDK_CALL_LOG" \
+    || fail "commit did not seed through hex_sdk: [$(cat "$SDK_CALL_LOG" 2>/dev/null)]"
+
+# ---- commit: with an ingress address, the CMP names are seeded too ----
+# The address is all a node is given (advisor_ingress_set writes it); turning
+# it into entries is this node's own job, here.
+reset enrolled
+mkdir -p "$(dirname "$INGRESS_FILE")"
+printf '10.32.1.101\n' > "$INGRESS_FILE"
+"$V" commit control-converged >/dev/null 2>&1 || fail "commit failed with an ingress address present"
+grep -q '"cube-cmp":"10.32.1.101:443"' "$TARGETS_FILE" \
+    || fail "cube-cmp was not seeded at the ingress address: [$(cat "$TARGETS_FILE")]"
+grep -q '"app-fw-idp":"10.32.1.101:443"' "$TARGETS_FILE" \
+    || fail "app-fw-idp was not seeded at the ingress address: [$(cat "$TARGETS_FILE")]"
+
+# ---- commit: an existing allowlist is never touched ----
+# The one that matters. Seeding means "a node with no allowlist gets one", not
+# "every node is reconciled to a canonical set". An operator who ran
+# "advisor target_unset cube-cmp" removed it deliberately; a commit that put it
+# back would make target_unset useless.
+reset enrolled
+mkdir -p "$(dirname "$INGRESS_FILE")"
+printf '10.32.1.101\n' > "$INGRESS_FILE"
+printf '{"cube-cos":"127.0.0.1:8080","app-fw-idp":"10.32.1.101:443"}\n' > "$TARGETS_FILE"
+before=$(cat "$TARGETS_FILE")
+"$V" commit control-converged >/dev/null 2>&1 || fail "commit failed on a node that already has an allowlist"
+[ "$(cat "$TARGETS_FILE")" = "$before" ] \
+    || fail "commit changed an existing allowlist: [$(cat "$TARGETS_FILE")] was [$before]"
+grep -q cube-cmp "$TARGETS_FILE" \
+    && fail "commit restored a target the operator had unset: [$(cat "$TARGETS_FILE")]"
+
+# The same holds for an allowlist that has nothing this module would recognise:
+# it is the operator's file, and a commit only ever adds one that is not there.
+reset enrolled
+mkdir -p "$(dirname "$TARGETS_FILE")"
+printf '{"my-own":"10.0.0.9:8443"}\n' > "$TARGETS_FILE"
+before=$(cat "$TARGETS_FILE")
+"$V" commit control-converged >/dev/null 2>&1 || fail "commit failed on a hand-written allowlist"
+[ "$(cat "$TARGETS_FILE")" = "$before" ] \
+    || fail "commit rewrote a hand-written allowlist: [$(cat "$TARGETS_FILE")]"
+
+# ---- commit: the guards come first for seeding too ----
+# A node with no role is not configured yet, and a dry run decides nothing --
+# neither may leave a file behind.
+reset enrolled
+"$V" commit >/dev/null 2>&1 || fail "commit failed on a node with no role yet"
+[ -e "$TARGETS_FILE" ] && fail "an unconfigured node was given an allowlist"
+
+reset enrolled
+"$V" commit control-converged 2 >/dev/null 2>&1 || fail "commit failed on a dry run"
+[ -e "$TARGETS_FILE" ] && fail "a dry run wrote an allowlist"
 
 exit 0

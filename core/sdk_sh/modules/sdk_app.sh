@@ -21,15 +21,18 @@ APPFW_KUBECONFIG=/opt/appfw/kubeconfig
 #
 # Defensive throughout: no app framework, no kubeconfig, no kubectl, or a
 # kubectl that hangs must all come back as a clean "no address", never a
-# hang or an error on stderr.
+# hang or an error on stderr. Only one node of a cluster holds the
+# kubeconfig, so "no kubeconfig" is the normal answer on most nodes, not a
+# fault -- hence the default below, which keeps this quiet even for a caller
+# running under set -u with the variable never set.
 app_ingress_address()
 {
-    local addr
+    local addr kubeconfig=${APPFW_KUBECONFIG:-}
 
-    [ -r "$APPFW_KUBECONFIG" ] || return 1
+    [ -n "$kubeconfig" ] && [ -r "$kubeconfig" ] || return 1
     command -v kubectl >/dev/null 2>&1 || return 1
 
-    addr=$(timeout 10 kubectl --kubeconfig="$APPFW_KUBECONFIG" --insecure-skip-tls-verify=true \
+    addr=$(timeout 10 kubectl --kubeconfig="$kubeconfig" --insecure-skip-tls-verify=true \
            get svc --all-namespaces --field-selector metadata.name=ingress-lb \
            -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}' 2>/dev/null)
 

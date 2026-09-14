@@ -50,6 +50,14 @@ ADVISOR_AGENT_UNIT=/usr/lib/systemd/system/$ADVISOR_AGENT_UNIT_NAME
 # control over what we can reach, not ours, so nothing here repairs it.
 ADVISOR_TARGETS_FILE=/etc/cube-advisor-agent/web-targets.json
 
+# The app framework's ingress address, and nothing else -- one bare address on
+# one line. The agent runs on every node and reads its own allowlist, but only
+# a node holding the app framework's kubeconfig can look the address up; this
+# file is how the node that can look it up tells the nodes that cannot. Only
+# this address ever crosses a node boundary: each node's own hex_config commit
+# turns it into allowlist entries.
+ADVISOR_INGRESS_FILE=/etc/cube-advisor-agent/ingress
+
 # advisor_verify_release <dir> [artifact]
 #
 # Verifies the release in <dir>: the manifest's signature against the key
@@ -218,21 +226,21 @@ _advisor_target_name_valid()
     return 0
 }
 
-# _advisor_targets_write <json>
+# _advisor_write_file <path> <content>
 #
-# Writes the allowlist atomically: a temp file in the same directory, then
-# mv. The agent can read this file at any moment, so a reader must never see
-# half of a write.
-_advisor_targets_write()
+# Writes one of the agent's node-local files atomically: a temp file in the
+# same directory, then mv. The agent can read these at any moment, so a
+# reader must never see half of a write.
+_advisor_write_file()
 {
-    local json=$1
+    local path=$1 content=$2
     local dir tmp
 
-    dir=$(dirname "$ADVISOR_TARGETS_FILE")
+    dir=$(dirname "$path")
     mkdir -p "$dir" || return 1
 
-    tmp=$(mktemp "$dir/web-targets.XXXXXX") || return 1
-    if ! printf '%s\n' "$json" > "$tmp" ; then
+    tmp=$(mktemp "$dir/$(basename "$path").XXXXXX") || return 1
+    if ! printf '%s\n' "$content" > "$tmp" ; then
         rm -f "$tmp"
         return 1
     fi
@@ -240,22 +248,85 @@ _advisor_targets_write()
         rm -f "$tmp"
         return 1
     fi
-    if ! mv -f "$tmp" "$ADVISOR_TARGETS_FILE" ; then
+    if ! mv -f "$tmp" "$path" ; then
         rm -f "$tmp"
         return 1
     fi
 }
 
+# _advisor_targets_write <json>
+#
+# Writes the allowlist.
+_advisor_targets_write()
+{
+    _advisor_write_file "$ADVISOR_TARGETS_FILE" "$1"
+}
+
+# advisor_ingress_set <address>
+#
+# Records the app framework's ingress address on this node. Called on every
+# node by advisor_targets_discover, so it must be reachable through hex_sdk.
+# Writes only the address: what it becomes is advisor_targets_init's business,
+# on the node itself.
+advisor_ingress_set()
+{
+    local addr=$1
+
+    if [ -z "$addr" ] ; then
+        echo "Error: advisor_ingress_set: usage <address>" >&2
+        return 1
+    fi
+    case $addr in
+        *[!A-Za-z0-9.-]*) echo "Error: not a literal host: $addr" >&2 ; return 1 ;;
+    esac
+
+    _advisor_write_file "$ADVISOR_INGRESS_FILE" "$addr"
+}
+
+# advisor_ingress_address
+#
+# Prints the recorded ingress address, or nothing. Silent when the file is
+# absent: a cluster with no app framework is the normal case, not a fault.
+# Whitespace is stripped and the shape rechecked, so a hand-edited file can
+# never turn into a malformed allowlist entry.
+advisor_ingress_address()
+{
+    local addr
+
+    [ -r "$ADVISOR_INGRESS_FILE" ] || return 1
+    addr=$(head -1 "$ADVISOR_INGRESS_FILE" 2>/dev/null | tr -d '[:space:]')
+    [ -n "$addr" ] || return 1
+    case $addr in
+        *[!A-Za-z0-9.-]*) return 1 ;;
+    esac
+
+    echo "$addr"
+}
+
 # advisor_targets_init
 #
-# Seeds the allowlist with the one target every node can name for itself.
-# Never touches a file that is already there -- an operator who removed a
-# target removed it on purpose, and a helper that puts it back turns "delete
-# one line to revoke access" into "delete one line and wait for it to return".
+# Seeds the allowlist on a node that has none: cube-cos, which every node can
+# name for itself, plus cube-cmp and app-fw-idp when this node has been told
+# the app framework's ingress address (advisor_ingress_set). Both CMP names
+# share that one address on purpose -- the portal and its identity provider
+# must sit on one origin or the OIDC state cookie is set on one and the
+# callback lands on the other.
+#
+# Seeds, never reconciles. A file that is already there is left exactly as it
+# is -- an operator who removed a target removed it on purpose, and a helper
+# that puts it back turns "delete one line to revoke access" into "delete one
+# line and wait for it to return".
 advisor_targets_init()
 {
+    local addr
+
     [ -e "$ADVISOR_TARGETS_FILE" ] && return 0
-    _advisor_targets_write '{"dashboard":"127.0.0.1:8080"}'
+
+    if addr=$(advisor_ingress_address) ; then
+        _advisor_targets_write "{\"cube-cos\":\"127.0.0.1:8080\",\"cube-cmp\":\"$addr:443\",\"app-fw-idp\":\"$addr:443\"}"
+    else
+        _advisor_targets_write '{"cube-cos":"127.0.0.1:8080"}'
+    fi
 }
 
 # advisor_targets_list
@@ -371,29 +442,39 @@ advisor_targets_unset()
 
 # advisor_targets_discover
 #
-# Adds the endpoints behind the app framework's ingress, if there is one:
-# cube-cmp and app-fw-idp, both at <ingress>:443. Same address on purpose --
-# the portal and its identity provider must share one origin or the OIDC
-# state cookie is set on one and the callback lands on the other.
+# Publishes the app framework's ingress address to the whole cluster.
 #
-# Does nothing at all if the allowlist file does not exist (a cluster that
-# never enrolled must gain nothing from this, and must not have the file
-# created as a side effect) or if there is no ingress address (no app
-# framework, nothing to add).
+# This runs where the kubeconfig is -- one node -- but the agent runs on every
+# node and dials from every node, so every node needs the address. It is
+# written out with remote_run over CUBE_NODE_LIST_HOSTNAMES, the same fan-out
+# health_advisor_check uses. Only the address travels: each node's own
+# hex_config commit turns it into allowlist entries, so no node ever writes
+# another node's allowlist.
 #
-# advisor_targets_set replaces by name, so a repeat run is harmless -- and
-# this deliberately brings cube-cmp back if an operator has unset it. That is
-# not the never-repair rule being broken: never-repair stops a *startup*
-# silently restoring a file someone deleted, while this only runs from an
+# Does nothing at all if there is no ingress address (no app framework,
+# nothing to publish).
+#
+# On this node it also sets the two names outright, so the node that just
+# enrolled or just installed CMP does not wait for its next commit --  and
+# that deliberately brings cube-cmp back if an operator has unset it here.
+# Not the never-repair rule being broken: never-repair stops a *startup*
+# silently restoring a file someone edited, while this only runs from an
 # install or enrolment event that is itself declaring the endpoint again.
 advisor_targets_discover()
 {
-    local addr
-
-    [ -e "$ADVISOR_TARGETS_FILE" ] || return 0
+    local addr node
 
     addr=$($HEX_SDK app_ingress_address) || return 0
     [ -n "$addr" ] || return 0
+
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        remote_run $node "$HEX_SDK advisor_ingress_set $addr" >/dev/null 2>&1 || \
+            echo "Warning: could not record the ingress address on $node; it picks the address up at its next commit" >&2
+    done
+
+    # A cluster that never enrolled must not gain an allowlist as a side
+    # effect of installing CMP.
+    [ -e "$ADVISOR_TARGETS_FILE" ] || return 0
 
     advisor_targets_set cube-cmp "$addr:443"
     advisor_targets_set app-fw-idp "$addr:443"
@@ -467,7 +548,7 @@ advisor_enroll()
     case $rc in
         0)
             advisor_agent_service_start
-            advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the dashboard target by hand" >&2
+            advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the cube-cos target by hand" >&2
             # CMP may already be installed; if so its ingress is reachable
             # from the moment this cluster enrols. Same module, called
             # directly (only cross-module calls route through $HEX_SDK).

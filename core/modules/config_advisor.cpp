@@ -20,6 +20,7 @@
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/dryrun.h>
+#include <hex/process.h>
 
 #include <cube/systemd_util.h>
 
@@ -498,6 +499,12 @@ CommitCheck(bool modified, int dryLevel)
 // hex_config, never enabled, so systemd has no second uncoordinated opinion
 // about when it should be up.
 //
+// Also seeds this node's allowlist. The agent runs on every node and each one
+// reads its own file, but only the node an operator typed "advisor enroll" on
+// ran the seeding -- so every other node had no allowlist and refused every
+// target. This commit runs on every node, so a node that was down or was not
+// in the cluster at enrolment gets its allowlist on its next commit.
+//
 // Whether it runs is the identity, and only the identity. Not the role -- a
 // node holds an identity because someone enrolled it, and any node may be
 // enrolled; the role check above is "is this node configured yet", a different
@@ -512,6 +519,16 @@ Commit(bool modified, int dryLevel)
         return true;
 
     SystemdCommitService(IsEnrolled(), ADVISOR_AGENT_SERVICE);
+
+    // Seeding is not reconciling, and the difference is the whole point.
+    // advisor_targets_init writes only when there is no file at all: a node
+    // with no allowlist gets one, a node that has one is left exactly as the
+    // operator left it. Nothing here may add, remove or restore an entry in an
+    // existing file -- an operator who ran "advisor target_unset cube-cmp"
+    // meant it, and a commit that quietly put it back would make target_unset
+    // useless. hex_sdk only auto-loads sdk_<MOD>*.sh, so this goes through
+    // hex_sdk itself rather than being called from another module's helper.
+    HexSpawn(0, HEX_SDK, "advisor_targets_init", NULL);
     return true;
 }
 

@@ -47,7 +47,7 @@ cat > "$FAKE_SDK" <<'EOF'
 echo "$*" >> "$CALL_LOG"
 case "$1" in
     advisor_targets_list)
-        printf 'dashboard 127.0.0.1:8080\nconsole 10.0.0.5:9090\n'
+        printf 'cube-cos 127.0.0.1:8080\nconsole 10.0.0.5:9090\n'
         exit 0
         ;;
     advisor_targets_set|advisor_targets_unset)
@@ -93,7 +93,7 @@ BIN
 
 # ---- targets: prints exactly what the helper prints ----
 out=$("$V" targets) || fail "targets exited non-zero on a helper that succeeded"
-expected=$'dashboard 127.0.0.1:8080\nconsole 10.0.0.5:9090'
+expected=$'cube-cos 127.0.0.1:8080\nconsole 10.0.0.5:9090'
 [ "$out" = "$expected" ] || fail "targets did not pass the helper's output through unchanged: got [$out]"
 
 # ---- target_set: wrong arity is refused before the helper is ever called ----
