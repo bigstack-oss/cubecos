@@ -20,7 +20,16 @@
 // The work lives in hex_sdk (advisor_enroll, advisor_verify_release); this is
 // the thin operator-facing layer, as elsewhere in the CLI.
 
-static const char* ADVISOR_AGENT = "/usr/local/bin/cube-advisor-agent";
+// A test build aims every path below at a scratch tree by compiling this file
+// with -DADVISOR_TEST_TREE, the same technique config_advisor.cpp's own test
+// uses. Nothing else defines it, so a normal build gets the real root.
+#ifdef ADVISOR_TEST_TREE
+#define ADVISOR_ROOT ADVISOR_TEST_TREE
+#else
+#define ADVISOR_ROOT ""
+#endif
+
+static const char* ADVISOR_AGENT = ADVISOR_ROOT "/usr/local/bin/cube-advisor-agent";
 
 // Writes the pairing token to a file only its owner can read, and returns the
 // path.
@@ -107,6 +116,10 @@ StatusMain(int argc, const char** argv)
         CliPrintf("The Advisor agent is not installed on this node.");
         return CLI_SUCCESS;
     }
+
+    // Whether the unit is running, and any repair for it, is the health
+    // framework's job (health_advisor_check / health_advisor_repair), not a
+    // second thing printed here.
     HexSpawn(0, (char*)ADVISOR_AGENT, "status", NULL);
     return CLI_SUCCESS;
 }

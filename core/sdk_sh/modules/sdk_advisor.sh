@@ -36,7 +36,8 @@ ADVISOR_MANIFEST_NAME=manifest.txt
 ADVISOR_SIGNATURE_NAME=manifest.txt.sig
 
 # The agent's own unit, shipped by cube-advisor-agent and installed with the
-# image. Enabled only once a node has enrolled -- see advisor_agent_service_enable.
+# image. Never enabled: hex_config decides when it runs (the advisor module's
+# Commit), and advisor_agent_service_start starts it the moment a node enrols.
 ADVISOR_AGENT_UNIT_NAME=cube-advisor-agent.service
 ADVISOR_AGENT_UNIT=/usr/lib/systemd/system/$ADVISOR_AGENT_UNIT_NAME
 
@@ -109,28 +110,29 @@ advisor_install_release()
     return 0
 }
 
-# advisor_agent_service_enable
+# advisor_agent_service_start
 #
-# Start the tunnel and keep it started. Enrolment leaves the node holding a
-# valid certificate; without this it would hold one and never connect, which
-# looks from the Advisor exactly like a broken tunnel.
+# Start the tunnel now. Enrolment leaves the node holding a valid certificate;
+# without this it would hold one and never connect, which looks from the
+# Advisor exactly like a broken tunnel.
 #
-# Enabled here rather than at image build: an un-enrolled node has no identity,
-# so the unit would crash-loop from first boot until someone enrolled it.
-advisor_agent_service_enable()
+# Started, never enabled: in cubecos hex_config owns when a service runs (the
+# advisor module's Commit calls SystemdCommitService), so an enable symlink
+# would make systemd a second owner, starting the agent at multi-user.target on
+# a node hex_config had decided should not be running it.
+advisor_agent_service_start()
 {
     if [ ! -r "$ADVISOR_AGENT_UNIT" ] ; then
-        echo "Warning: $ADVISOR_AGENT_UNIT is missing; the tunnel will not start on its own" >&2
+        echo "Warning: $ADVISOR_AGENT_UNIT is missing; the tunnel cannot be started" >&2
         return 0
     fi
 
-    systemctl daemon-reload
-    if systemctl enable --now "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
-        echo "Tunnel service enabled; the agent will reconnect on its own after a reboot."
+    if systemctl start "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
+        echo "Tunnel service started; hex_config starts it on every boot from here."
     else
         # The identity is saved and enrolment did succeed, so this must not
         # fail the command -- say what is wrong and let the operator start it.
-        echo "Warning: could not enable $ADVISOR_AGENT_UNIT_NAME; start it manually with: systemctl enable --now $ADVISOR_AGENT_UNIT_NAME" >&2
+        echo "Warning: could not start $ADVISOR_AGENT_UNIT_NAME; start it manually with: systemctl start $ADVISOR_AGENT_UNIT_NAME" >&2
     fi
     return 0
 }
@@ -434,7 +436,7 @@ advisor_enroll()
     rc=$?
     case $rc in
         0)
-            advisor_agent_service_enable
+            advisor_agent_service_start
             advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the dashboard target by hand" >&2
             ;;
         3) echo "This node is already enrolled; nothing was changed." >&2 ;;

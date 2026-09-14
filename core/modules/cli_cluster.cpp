@@ -100,6 +100,7 @@ CompMap s_comps = {
     { "dns", { NO_REPAIR, 0, R_ALL } },
     { "bootstrap", { NO_REPAIR, 0, R_ALL } },
     { "license", { NO_REPAIR, 0, R_ALL } },
+    { "advisor", { 0, Q } },
     { "nodelist", { NO_REPAIR, 0, R_ALL } },
     { "etcd", { 0, Q } },
     { "hacluster", { 0, Q } },
@@ -169,7 +170,7 @@ struct CheckRepairItem {
 
 CheckRepairItem s_services[] = {
     { S[ClusterLink], "link,clock,dns", false, R_ALL, BLVL_STD },
-    { S[ClusterSys], "bootstrap,license", false, R_ALL, BLVL_STD },
+    { S[ClusterSys], "bootstrap,license,advisor", false, R_ALL, BLVL_STD },
     { S[ClusterSettings], "etcd,nodelist,mongodb", false },
     { S[HaCluster], "hacluster", false },
     { S[MsgQueue], "rabbitmq", false },

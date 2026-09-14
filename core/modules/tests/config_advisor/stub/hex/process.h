@@ -7,4 +7,11 @@
 // fake helper.
 #pragma once
 
+// The real header defines this; a test that needs its own helper overrides it
+// on the compile line.
+#ifndef HEX_SDK
+#define HEX_SDK "/usr/sbin/hex_sdk"
+#endif
+
 int HexSpawn(int timeout, const char *arg0, ...);
+int HexSystemF(int timeout, const char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
