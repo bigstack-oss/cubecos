@@ -1,11 +1,25 @@
 #!/bin/bash
+#
+# cinder_move_preflight: which volume/instance states refuse a tier change,
+# and that every reason is reported rather than only the first.
+#
+#   Run: bash test_cinder_move_preflight.sh
+#
 T=$(mktemp -d)
+trap 'rm -rf "$T"' EXIT
 SRC=$(dirname "${BASH_SOURCE[0]}")/../modules/sdk_cinder.sh
 sed -n '/^cinder_move_preflight()/,/^}/p' $SRC > $T/fn.sh
 sed -n '/^_cinder_preflight_json()/,/^}/p' $SRC >> $T/fn.sh
 sed -n '/^_pf_block()/p' $SRC >> $T/fn.sh            # one-liner
 source $T/fn.sh
-chk(){ printf '%-46s -> %-26s (want %s)\n' "$1" "$2" "$3"; }
+pass=0 fail=0
+chk(){ # description actual expected
+    if [ "$2" = "$3" ] ; then
+        pass=$((pass+1)); printf 'PASS %-46s -> %s\n' "$1" "$2"
+    else
+        fail=$((fail+1)); printf 'FAIL %-46s -> got "%s", want "%s"\n' "$1" "$2" "$3"
+    fi
+}
 # every blocker code, comma-joined; the leading match is the top-level "code"
 codes(){ grep -o '"code":"[^"]*"' $T/o | sed 's/.*:"//;s/"$//' | tail -n +2 | paste -sd, -; }
 
@@ -18,11 +32,17 @@ _pf_qos_differs() { return 1; }
 _pf_domain_probe(){ cat $T/domain; }
 _pf_type_multiattach(){ grep -qx "$1" $T/ma_types; }
 _pf_type_encrypted(){   grep -qx "$1" $T/enc_types; }
-_pf_backend_fsid_pool() { cat $T/fsidpool_$1; }
+_pf_type_backend_section() { local v; v=$(cat $T/section_$1 2>/dev/null); [ -n "$v" ] || return 1; echo "$v"; }
+_pf_backend_fsid_pool()    { local v; v=$(cat $T/fsidpool_$1 2>/dev/null); [ -n "$v" ] || return 1; echo "$v"; }
 
-printf 'ceph\ntier-nvme\n' > $T/types
+printf 'ceph\ntier-nvme\nCubeStorage\n' > $T/types
 echo 'ACTIVE' > $T/vmstate
 : > $T/snaps
+# volume type -> cinder.conf section. The built-in type is the one that is not
+# named after its section.
+echo 'ceph'        > $T/section_ceph
+echo 'tier-nvme'   > $T/section_tier-nvme
+echo 'ceph'        > $T/section_CubeStorage
 echo 'c6e64c49:cinder-volumes' > $T/fsidpool_ceph
 echo 'deadbeef:cinder-volumes' > $T/fsidpool_tier-nvme
 # layer-2 probe output: "<domstate>|<space-separated disk targets>"
@@ -74,6 +94,40 @@ mkvol available "[]" false None null ceph
 echo 'c6e64c49:cinder-volumes' > $T/fsidpool_tier-nvme
 cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
 chk "same fsid + same pool"            "$c" "E_SAME_CLUSTER_SAME_POOL"
+
+# the built-in type is called CubeStorage while its section is called ceph;
+# before the section lookup existed this pair resolved to nothing on both
+# sides and the guard was inert for every move off the built-in tier
+mkvol available "[]" false None null CubeStorage
+echo 'c6e64c49:cinder-volumes' > $T/fsidpool_tier-nvme
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+chk "built-in type resolves to ceph"   "$c" "E_SAME_CLUSTER_SAME_POOL"
+
+# ...and it still crosses to a genuinely different pool
+mkvol available "[]" false None null CubeStorage
+echo 'deadbeef:cinder-volumes' > $T/fsidpool_tier-nvme
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+chk "built-in type to another cluster" "$c" "OK"
+
+# an unresolvable side must be refused, never compared: two different strings
+# (or one empty one) would otherwise read as "different place" and pass
+mkvol available "[]" false None null ceph
+: > $T/section_tier-nvme
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+chk "destination type has no section"  "$c" "E_BACKEND_UNRESOLVED"
+echo 'tier-nvme' > $T/section_tier-nvme
+
+mkvol available "[]" false None null ceph
+: > $T/fsidpool_tier-nvme
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+chk "destination pool cannot be read"  "$c" "E_BACKEND_UNRESOLVED"
+echo 'deadbeef:cinder-volumes' > $T/fsidpool_tier-nvme
+
+mkvol available "[]" false None null ceph
+: > $T/fsidpool_ceph
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+chk "source pool cannot be read"       "$c" "E_BACKEND_UNRESOLVED"
+echo 'c6e64c49:cinder-volumes' > $T/fsidpool_ceph
 
 mkvol available "[]" false None null ceph
 cinder_move_preflight v1 nope >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
@@ -208,13 +262,7 @@ OPENSTACK=openstack
 _test_qos() {
     local src="$1" dst="$2" want="$3" desc="$4"
     _pf_qos_differs "$src" "$dst"
-    local got=$?
-    if [ $got -eq $want ] ; then
-        result="PASS"
-    else
-        result="FAIL(got $got)"
-    fi
-    printf '%-46s -> %-26s (want %s)\n' "$desc" "$result" "$want"
+    chk "$desc" "$?" "$want"
 }
 
 _test_qos "no-qos-src" "no-qos-dst" 1 "QoS: neither type has QoS"
@@ -224,4 +272,69 @@ _test_qos "backend-pair" "backend-pair" 1 "QoS: identical spec id"
 _test_qos "frontend-src" "frontend-dst" 0 "QoS: both front-end with different specs"
 _test_qos "both-src" "both-dst" 0 "QoS: both consumer=both with different specs"
 
-rm -rf $T
+# --- the real _pf_type_backend_section() ---------------------------------
+# The guard above is only as good as this lookup; a stub of it cannot show
+# that a volume type name is not a cinder.conf section name.
+unset -f _pf_type_backend_section
+sed -n '/^_pf_type_backend_section()/,/^}/p' $SRC > $T/sec_fn.sh
+source $T/sec_fn.sh
+
+openstack() {
+    if [ "$1 $2 $3" = "volume type show" ] ; then
+        case "$4" in
+            CubeStorage) echo '{"properties":{"volume_backend_name":"ceph"}}' ;;
+            tier-nvme)   echo '{"properties":{"volume_backend_name":"tier-nvme"}}' ;;
+            legacy)      echo '{"properties":{}}' ;;            # no extra spec
+            *)           return 1 ;;                            # no such type
+        esac
+    fi
+}
+export -f openstack
+OPENSTACK=openstack
+
+chk "section: built-in type -> ceph"   "$(_pf_type_backend_section CubeStorage)" "ceph"
+chk "section: tier named after it"     "$(_pf_type_backend_section tier-nvme)"   "tier-nvme"
+_pf_type_backend_section ghost >/dev/null 2>&1
+chk "section: unknown type fails"      "$?" "1"
+chk "section: unknown type is silent"  "$(_pf_type_backend_section ghost 2>/dev/null)" ""
+_pf_type_backend_section legacy >/dev/null 2>&1
+chk "section: no spec, not built-in"   "$?" "1"
+
+# a CubeStorage whose extra spec never got written still resolves
+openstack() { echo '{"properties":{}}' ; }
+export -f openstack
+chk "section: built-in without a spec" "$(_pf_type_backend_section CubeStorage)" "ceph"
+
+# --- the real _pf_backend_fsid_pool() ------------------------------------
+unset -f _pf_backend_fsid_pool
+sed -n '/^_pf_backend_fsid_pool()/,/^}/p' $SRC > $T/fp_fn.sh
+source $T/fp_fn.sh
+
+crudini() {  # --get <file> <section> <key>
+    case "$3:$4" in
+        ceph:rbd_ceph_conf) echo /etc/ceph/ceph.conf ;;
+        ceph:rbd_pool)      echo cinder-volumes ;;
+        *) return 1 ;;
+    esac
+}
+export -f crudini
+ceph() { echo c6e64c49 ; }
+export -f ceph
+timeout() { shift; "$@" ; }
+export -f timeout
+
+chk "fsid/pool: a real section"        "$(_pf_backend_fsid_pool ceph)" "c6e64c49:cinder-volumes"
+_pf_backend_fsid_pool nosuch >/dev/null 2>&1
+chk "fsid/pool: unknown section fails" "$?" "1"
+chk "fsid/pool: unknown is silent"     "$(_pf_backend_fsid_pool nosuch 2>/dev/null)" ""
+_pf_backend_fsid_pool "" >/dev/null 2>&1
+chk "fsid/pool: empty section fails"   "$?" "1"
+ceph() { return 1 ; }
+export -f ceph
+_pf_backend_fsid_pool ceph >/dev/null 2>&1
+chk "fsid/pool: silent cluster fails"  "$?" "1"
+
+echo "----"; echo "PASS=$pass FAIL=$fail"
+[ "$fail" -eq 0 ] || exit 1
+echo "OK: cinder_move_preflight"
+exit 0
