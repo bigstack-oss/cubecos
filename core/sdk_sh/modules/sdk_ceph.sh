@@ -1458,7 +1458,24 @@ ceph_osd_promote_disk()
     [ "$($CEPH -s -f json | jq -r .health.status)" = "HEALTH_OK" ] || Error "ceph health has to be OK to proceed disk promotion"
     [ "x$($CEPH -s -f json | jq -r .pgmap.recovering_objects_per_sec)" = "xnull" ] || Error "cannot promote disk while ceph is recovering"
     local osd_list=$(for i in $($HEX_SDK ceph_get_ids_by_dev $dev) ; do echo osd.$i ; done)
-    Quiet -n $CEPH osd out $osd_list
+    # The OSDs are deliberately NOT marked out first. That used to happen here,
+    # on the theory that emptying them made the movement one remapping rather
+    # than two. It does the opposite: `osd out` reweights an OSD to zero for
+    # every pool on it, so every one of them drains and then refills, while the
+    # class change alone moves only the pools whose rule is scoped to a class.
+    # Computed with crushtool against a three-node cluster's own map, 128 PGs
+    # per rule, promoting one disk from hdd to ssd:
+    #
+    #   rule                                    leaving it in   marking it out
+    #   replicated_rule (no cache tier)                     0   31 + 0 + 31 = 62
+    #   rule-hdd (what `cache switch on` pins to)          80   58 + 46 + 0 = 104
+    #   rule-ssd (the cachepool)                           71   0 + 55 + 48 = 103
+    #
+    # The last row settles it: `osd out` is free there (the disk is still hdd,
+    # so a rule selecting ssd never picked it), the class change costs 55, and
+    # `osd in` costs another 48 -- the pair splits into two the one remapping
+    # the comment it replaced claimed to be preventing. #1488, and #1464 for
+    # the same fix in ceph_device_tier_update.
     # move osd to $rule
     Quiet -n $CEPH osd crush rm-device-class $osd_list
     Quiet -n $CEPH osd crush set-device-class $rule $osd_list
@@ -1479,17 +1496,13 @@ ceph_osd_promote_disk()
         fi
     done
 
-    # Back in whatever happened. `osd in` used to live inside the loop, so a
-    # recovery that outlasted the 600 s ceiling left the OSDs marked out --
-    # silently losing their capacity and a replica's worth of redundancy -- and
-    # the function still returned 0, so no caller could tell. Bringing them back
-    # is right in both cases: the class change has already been made, and
-    # recovery continues with them in.
-    $CEPH osd in $osd_list
     Quiet -n ceph_adjust_cache_flush_bytes
     if [ $settled -ne 0 ] ; then
-        echo "Warning: still recovering after 600s; osd(s)$osd_list have been brought back in" >&2
-        echo "         and data movement continues in the background" >&2
+        # Not a failure of the class change -- that is already made. But the
+        # caller asked for a settled cluster and is not getting one, and the
+        # function used to return 0 here, so nothing downstream could tell.
+        echo "Warning: still recovering after 600s; the class change is done and" >&2
+        echo "         data movement continues in the background" >&2
         return 1
     fi
     return 0
@@ -1514,7 +1527,8 @@ ceph_osd_demote_disk()
     if [ "$(ceph_osd_test_cache)" == "on" ] ; then
         [ $nums -gt 2 ] || return 1
     fi
-    Quiet -n $CEPH osd out $osd_list
+    # Not marked out first, for the reasons measured in ceph_osd_promote_disk
+    # above -- this is the same transition in the opposite direction (#1488).
     # move osd to new $rule
     Quiet -n $CEPH osd crush rm-device-class $osd_list
     Quiet -n $CEPH osd crush set-device-class $rule $osd_list
@@ -1535,17 +1549,13 @@ ceph_osd_demote_disk()
         fi
     done
 
-    # Back in whatever happened. `osd in` used to live inside the loop, so a
-    # recovery that outlasted the 600 s ceiling left the OSDs marked out --
-    # silently losing their capacity and a replica's worth of redundancy -- and
-    # the function still returned 0, so no caller could tell. Bringing them back
-    # is right in both cases: the class change has already been made, and
-    # recovery continues with them in.
-    $CEPH osd in $osd_list
     Quiet -n ceph_adjust_cache_flush_bytes
     if [ $settled -ne 0 ] ; then
-        echo "Warning: still recovering after 600s; osd(s)$osd_list have been brought back in" >&2
-        echo "         and data movement continues in the background" >&2
+        # Not a failure of the class change -- that is already made. But the
+        # caller asked for a settled cluster and is not getting one, and the
+        # function used to return 0 here, so nothing downstream could tell.
+        echo "Warning: still recovering after 600s; the class change is done and" >&2
+        echo "         data movement continues in the background" >&2
         return 1
     fi
     return 0

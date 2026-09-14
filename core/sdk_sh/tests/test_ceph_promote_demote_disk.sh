@@ -1,14 +1,25 @@
 #!/bin/bash
 #
-# ceph_osd_promote_disk / ceph_osd_demote_disk: what happens when the recovery
-# wait runs out (#1466).
+# ceph_osd_promote_disk / ceph_osd_demote_disk: they do not mark the OSDs out
+# (#1488), and a recovery wait that runs out is reported (#1466).
 #
-# Both functions mark the OSDs `out`, change their device class, then wait for
-# recovery in a `for i in {1..60}` loop with `sleep 10` -- a fixed 600 s. The
-# `osd in` that undoes the `out` used to live INSIDE that loop, next to the
-# break, so a recovery that outlasted the ceiling never reached it: the OSDs
-# stayed `out`, and the function still returned 0. Nothing downstream could tell
-# that a promote had left the cluster a replica short.
+# Both functions change a disk's device class and then wait for recovery in a
+# `for i in {1..60}` loop with `sleep 10` -- a fixed 600 s.
+#
+# They used to mark the OSDs `out` first and bring them back `in` afterwards.
+# Two defects came out of that pair, and removing it answers both:
+#
+#   #1466  the `osd in` sat INSIDE the wait loop, next to the break, so a
+#          recovery that outlasted the ceiling never reached it: the OSDs stayed
+#          `out`, and the function still returned 0. Nothing downstream could
+#          tell that a promote had left the cluster a replica short.
+#   #1488  the `osd out` cost more movement than it saved in every rule layout
+#          measured -- on the cachepool's own rule it split one remapping into
+#          two, which is what it was supposed to be preventing.
+#
+# So the assertions below are mostly about calls that must NOT happen. That only
+# means something because the stub records them: a no-op stub could not tell the
+# fix from a regression that puts the pair back.
 #
 # Self-contained: extracts the two functions, stubs ceph / hex_sdk / Quiet and
 # -- critically -- `sleep`, so the 600 s timeout case runs instantly.
@@ -73,43 +84,57 @@ reset() { : > "$TMP/calls" ; CLASS_NOW=hdd ; }
 in_calls() { grep -c "^ceph osd in " "$TMP/calls" | tr -d ' ' ; }
 out_calls() { grep -c "^ceph osd out " "$TMP/calls" | tr -d ' ' ; }
 sleeps()   { grep -c '^sleep ' "$TMP/calls" | tr -d ' ' ; }
+# The class change is what has to keep happening once out/in are gone -- without
+# these two, every assertion above would pass on a function that did nothing.
+rmclass_calls()  { grep -c "^ceph osd crush rm-device-class " "$TMP/calls" | tr -d ' ' ; }
+setclass_calls() { grep -c "^ceph osd crush set-device-class " "$TMP/calls" | tr -d ' ' ; }
 
-# ---- 1a. promote, recovery settles: unchanged behaviour ----
+# ---- 1a. promote, recovery settles ----
+# The class change is the whole of the work: rm-device-class then
+# set-device-class, on every OSD of the device, and nothing marked out.
 reset
 RECOVERING=null
 OUT=$(ceph_osd_promote_disk /dev/sdb ssd 2>&1); RC=$?
 ck "$RC" 0 "1a a settled promote succeeds"
-ck "$(out_calls)" 1 "1a the OSDs were taken out"
-ck "$(in_calls)" 1 "1a and brought back in"
+ck "$(out_calls)" 0 "1a no OSD is marked out (#1488)"
+ck "$(in_calls)" 0 "1a and none has to be brought back in"
+ck "$(rmclass_calls)" 1 "1a the old class is removed"
+ck "$(setclass_calls)" 1 "1a and the new one set -- the work still happens"
+ckhas "$(cat "$TMP/calls")" "osd crush set-device-class ssd osd.3 osd.4" "1a on every OSD of the device"
 ck "$(grep -c flush_adjusted "$TMP/calls" | tr -d ' ')" 1 "1a the cache flush size was adjusted"
 
 # ---- 1b. promote, recovery outlasts the 600s ceiling ----
-# The defect: `osd in` sat inside the loop, so this path skipped it entirely and
-# still returned 0. The OSDs stayed out, quietly short a replica's worth of
-# capacity, and the caller was told everything was fine.
+# #1466 was that this path skipped the `osd in` and still returned 0. With the
+# pair gone there is no OSD left out to begin with -- but the caller asked for a
+# settled cluster and did not get one, so it is still told.
 reset
 RECOVERING=12.5
 OUT=$(ceph_osd_promote_disk /dev/sdb ssd 2>&1); RC=$?
 ck "$RC" 1 "1b a promote whose recovery times out reports non-zero"
-ck "$(in_calls)" 1 "1b the OSDs are brought back in ANYWAY"
-ckhas "$OUT" "brought back in" "1b says so"
+ck "$(out_calls)" 0 "1b nothing was marked out, so nothing can be left out"
+ck "$(in_calls)" 0 "1b and there is no osd in to skip"
+ckhas "$OUT" "class change is done" "1b says the change itself landed"
 ckhas "$OUT" "continues in the background" "1b says recovery is not finished"
 ck "$(sleeps)" 60 "1b the wait ran to its ceiling"
+ck "$(setclass_calls)" 1 "1b the class change happened before the wait"
 
-# ---- 1c. demote is the same function shape, and had the same defect ----
+# ---- 1c/1d. demote is the same shape and gets the same treatment ----
 reset
 RECOVERING=null
 CLASS_NOW=ssd
 OUT=$(ceph_osd_demote_disk /dev/sdb hdd 2>&1); RC=$?
 ck "$RC" 0 "1c a settled demote succeeds"
-ck "$(in_calls)" 1 "1c and brings the OSDs back in"
+ck "$(out_calls)" 0 "1c marks nothing out"
+ck "$(in_calls)" 0 "1c and brings nothing back in"
+ck "$(setclass_calls)" 1 "1c the class change still happens"
 
 reset
 RECOVERING=12.5
 CLASS_NOW=ssd
 OUT=$(ceph_osd_demote_disk /dev/sdb hdd 2>&1); RC=$?
 ck "$RC" 1 "1d a demote whose recovery times out reports non-zero"
-ck "$(in_calls)" 1 "1d the OSDs are brought back in ANYWAY"
+ck "$(out_calls)" 0 "1d marks nothing out"
+ck "$(in_calls)" 0 "1d and has no osd in to skip"
 
 # ---- 1e. the early exits are untouched ----
 reset
