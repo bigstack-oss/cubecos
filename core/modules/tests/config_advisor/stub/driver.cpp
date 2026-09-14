@@ -5,7 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <cerrno>
+#include <cstdarg>
+#include <vector>
+
 #include <fcntl.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <cube/systemd_util.h>
@@ -33,6 +38,39 @@ SystemdCommitService(const bool enabled, const char *name, const bool /*retry*/)
         }
     }
     return true;
+}
+
+// Runs arg0 with the given argv (NULL-terminated, as HexSpawn's callers write
+// it) and returns its raw wait status -- a real fork/exec, same shape as the
+// real HexSpawn, so a test can point HEX_SDK at a fake helper and see what the
+// module really asked hex_sdk to do.
+int
+HexSpawn(int /*timeout*/, const char *arg0, ...)
+{
+    std::vector<char*> argv;
+    argv.push_back(const_cast<char*>(arg0));
+
+    va_list ap;
+    va_start(ap, arg0);
+    for (;;) {
+        char *a = va_arg(ap, char*);
+        argv.push_back(a);
+        if (!a)
+            break;
+    }
+    va_end(ap);
+
+    pid_t pid = fork();
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        execv(arg0, argv.data());
+        _exit(127);
+    }
+    int status = 0;
+    while (waitpid(pid, &status, 0) == -1 && errno == EINTR)
+        ;
+    return status;
 }
 
 // Every path the module registers for migration, in the order it declares them.
