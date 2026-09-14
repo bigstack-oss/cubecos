@@ -10,23 +10,26 @@
 #include <string>
 #include <vector>
 
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 typedef std::vector<std::string> CliList;
 
-// Records the timeout HexSystemF was asked for alongside the command, when
-// HEX_SYSTEM_LOG names a file -- the same technique config_advisor's stub
-// driver uses, so a test can assert nothing here waits forever.
+// Records the timeout HexSystemF was asked for alongside the command, in a
+// fixed file in the current directory -- the same technique config_advisor's
+// stub driver uses, so a test can assert nothing here waits forever.
 static void
 LogSystem(int timeout, const char *cmd)
 {
-    const char *path = getenv("HEX_SYSTEM_LOG");
-    if (!path)
+    int fd = open("hex_system.log", O_WRONLY | O_CREAT | O_APPEND, 0600);
+    if (fd < 0)
         return;
-    FILE *fp = fopen(path, "a");
-    if (!fp)
+    FILE *fp = fdopen(fd, "a");
+    if (!fp) {
+        close(fd);
         return;
+    }
     fprintf(fp, "%d %s\n", timeout, cmd);
     fclose(fp);
 }
