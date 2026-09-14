@@ -1,12 +1,15 @@
 #!/bin/bash
 #
 # Unit test for the node-side web-target allowlist helpers in
-# ../modules/sdk_advisor.sh: advisor_targets_init/list/set/unset.
+# ../modules/sdk_advisor.sh: advisor_targets_init/list/set/unset, plus the
+# ingress address file init seeds the CMP names from.
 #
 # The allowlist is the node's veto over what the Advisor agent may dial, so
 # what matters here is not just that reads and writes work, but that the
 # file is never repaired out from under an operator and never left
-# half-written. Both are exercised below.
+# half-written. Both are exercised below. init seeds more than it used to --
+# every node now seeds its own at commit time -- and seeding still means
+# "write one where there is none", never "reconcile the one that is there".
 #
 # Self-contained: extracts only the functions under test, so it needs none of
 # sdk_advisor.sh's runtime prerequisites (PROG / SDK_DIR / errcodes).
@@ -16,7 +19,8 @@ set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_advisor.sh"
 
-for f in _advisor_target_name_valid _advisor_targets_write \
+for f in _advisor_target_name_valid _advisor_write_file _advisor_targets_write \
+         advisor_ingress_set advisor_ingress_address \
          advisor_targets_init advisor_targets_list advisor_targets_set advisor_targets_unset ; do
     fn="$(awk -v want="^$f\\\\(\\\\)" '$0 ~ want {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ -n "$fn" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
@@ -32,20 +36,68 @@ bad()  { fail=$((fail+1)); echo "FAIL: $1"; }
 check() { if [ "$2" = "$3" ] ; then ok ; else bad "$1: got '$2', want '$3'" ; fi ; }
 
 ADVISOR_TARGETS_FILE="$WORK/etc/web-targets.json"
+# No ingress address recorded unless a case below records one.
+ADVISOR_INGRESS_FILE="$WORK/etc/ingress"
 
 # --- init seeds the one target every node can name for itself ---------------
 advisor_targets_init
 check "init creates the file" "$(cat "$ADVISOR_TARGETS_FILE" 2>/dev/null)" \
-      '{"dashboard":"127.0.0.1:8080"}'
+      '{"cube-cos":"127.0.0.1:8080"}'
 check "init leaves the file root-owned and world-readable" \
       "$(stat -c %a "$ADVISOR_TARGETS_FILE" 2>/dev/null)" "644"
 
 # --- init must never repair or overwrite a file that is already there -------
 # An operator who removed a target removed it on purpose.
-printf '{"dashboard":"127.0.0.1:8080","cmp-portal":"10.32.1.101:443"}' > "$ADVISOR_TARGETS_FILE"
+printf '{"cube-cos":"127.0.0.1:8080","cmp-portal":"10.32.1.101:443"}' > "$ADVISOR_TARGETS_FILE"
 advisor_targets_init
 check "a second init leaves an edited file untouched" "$(cat "$ADVISOR_TARGETS_FILE")" \
-      '{"dashboard":"127.0.0.1:8080","cmp-portal":"10.32.1.101:443"}'
+      '{"cube-cos":"127.0.0.1:8080","cmp-portal":"10.32.1.101:443"}'
+
+# --- the ingress address a node was given, and what init makes of it --------
+ADVISOR_INGRESS_FILE="$WORK/etc/ingress"
+advisor_ingress_set 10.32.1.101
+check "ingress_set records the bare address and nothing else" \
+      "$(cat "$ADVISOR_INGRESS_FILE")" "10.32.1.101"
+check "ingress_address reads it back" "$(advisor_ingress_address)" "10.32.1.101"
+
+if advisor_ingress_set "10.32.1.101 ; rm -rf /" 2>/dev/null ; then
+    bad "ingress_set accepted an address that is not a literal host"
+else
+    ok
+fi
+
+# A node that was never told an address: silent, non-zero, no output.
+ADVISOR_INGRESS_FILE="$WORK/etc/no-such-ingress"
+out="$(advisor_ingress_address 2>"$WORK/err")" && bad "ingress_address succeeded with no file" || ok
+check "ingress_address prints nothing with no file" "$out" ""
+check "ingress_address says nothing on stderr with no file" "$(cat "$WORK/err")" ""
+
+# With an address recorded, init seeds the two CMP names at it as well. Both
+# at the same address: the portal and its IdP must share one origin.
+ADVISOR_INGRESS_FILE="$WORK/etc/ingress"
+ADVISOR_TARGETS_FILE="$WORK/etc/seeded-with-ingress.json"
+advisor_targets_init
+check "init seeds cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "127.0.0.1:8080"
+check "init seeds cube-cmp at the ingress address" \
+      "$(advisor_targets_list | sed -n 's/^cube-cmp //p')" "10.32.1.101:443"
+check "init seeds app-fw-idp at the ingress address" \
+      "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "10.32.1.101:443"
+check "init seeds exactly those three" "$(advisor_targets_list | grep -c .)" "3"
+
+# ... and still never touches a file that exists, even one an operator has
+# taken a CMP target back out of. "A node with no allowlist gets one" is not
+# "every node is reconciled to a canonical set".
+ADVISOR_TARGETS_FILE="$WORK/etc/operator-edited.json"
+printf '{"cube-cos":"127.0.0.1:8080","app-fw-idp":"10.32.1.101:443"}\n' > "$ADVISOR_TARGETS_FILE"
+before="$(cat "$ADVISOR_TARGETS_FILE")"
+advisor_targets_init
+check "init leaves an operator-edited allowlist byte-for-byte alone" \
+      "$(cat "$ADVISOR_TARGETS_FILE")" "$before"
+check "init did not put back the target the operator unset" \
+      "$(advisor_targets_list | grep -c '^cube-cmp ')" "0"
+
+ADVISOR_INGRESS_FILE="$WORK/etc/no-such-ingress"
+ADVISOR_TARGETS_FILE="$WORK/etc/web-targets.json"
 
 # --- set adds -----------------------------------------------------------
 rm -f "$ADVISOR_TARGETS_FILE"
@@ -144,12 +196,12 @@ check "a failed write leaves the previous file intact" "$(cat "$ADVISOR_TARGETS_
 ADVISOR_TARGETS_FILE="$WORK/pretty.json"
 cat > "$ADVISOR_TARGETS_FILE" <<'JSON'
 {
-  "dashboard": "127.0.0.1:8080",
+  "cube-cos": "127.0.0.1:8080",
   "cmp-portal": "10.32.1.101:443"
 }
 JSON
 check "list reads a pretty-printed file" "$(advisor_targets_list | sort)" \
-      "$(printf 'cmp-portal 10.32.1.101:443\ndashboard 127.0.0.1:8080')"
+      "$(printf 'cmp-portal 10.32.1.101:443\ncube-cos 127.0.0.1:8080')"
 advisor_targets_set new-one 1.2.3.4:80
 check "set on a pretty-printed file keeps the existing entries" \
       "$(advisor_targets_list | grep -c .)" "3"
