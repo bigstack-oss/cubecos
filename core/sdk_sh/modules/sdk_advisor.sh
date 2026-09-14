@@ -50,13 +50,17 @@ ADVISOR_AGENT_UNIT=/usr/lib/systemd/system/$ADVISOR_AGENT_UNIT_NAME
 # control over what we can reach, not ours, so nothing here repairs it.
 ADVISOR_TARGETS_FILE=/etc/cube-advisor-agent/web-targets.json
 
-# The app framework's ingress address, and nothing else -- one bare address on
-# one line. The agent runs on every node and reads its own allowlist, but only
-# a node holding the app framework's kubeconfig can look the address up; this
-# file is how the node that can look it up tells the nodes that cannot. Only
-# this address ever crosses a node boundary: each node's own hex_config commit
-# turns it into allowlist entries.
-ADVISOR_INGRESS_FILE=/etc/cube-advisor-agent/ingress
+# The targets discovery found installed on this cluster: "name host:port", one
+# per line. The agent runs on every node and reads its own allowlist, but only
+# a node holding the app framework's kubeconfig can see what is installed; this
+# file is how the node that can see it tells the nodes that cannot. Only this
+# set ever crosses a node boundary: each node's own hex_config commit turns it
+# into allowlist entries.
+#
+# The set, not an address: an address alone cannot say whether CMP is installed
+# behind it, and the ingress exists from the app framework's install onwards --
+# which is before CMP is installed, not after.
+ADVISOR_DISCOVERED_FILE=/etc/cube-advisor-agent/discovered-targets
 
 # advisor_verify_release <dir> [artifact]
 #
@@ -226,6 +230,30 @@ _advisor_target_name_valid()
     return 0
 }
 
+# _advisor_target_address_valid <host:port>
+#
+# The same shape advisor_targets_set enforces, checked silently: these lines
+# come from discovery and from a file discovery wrote, not from an operator
+# typing, so there is no one here to hand a specific message to.
+_advisor_target_address_valid()
+{
+    local host port
+
+    case $1 in
+        *:*) : ;;
+        *) return 1 ;;
+    esac
+    host=${1%:*}
+    port=${1##*:}
+    case $host in
+        ''|*[!A-Za-z0-9.-]*) return 1 ;;
+    esac
+    case $port in
+        ''|*[!0-9]*|0?*) return 1 ;;
+    esac
+    [ "$port" -ge 1 ] && [ "$port" -le 65535 ]
+}
+
 # _advisor_write_file <path> <content>
 #
 # Writes one of the agent's node-local files atomically: a temp file in the
@@ -262,55 +290,66 @@ _advisor_targets_write()
     _advisor_write_file "$ADVISOR_TARGETS_FILE" "$1"
 }
 
-# advisor_ingress_set <address>
+# advisor_discovered_set <name> <host:port> [<name> <host:port> ...]
 #
-# Records the app framework's ingress address on this node. Called on every
-# node by advisor_targets_discover, so it must be reachable through hex_sdk.
-# Writes only the address: what it becomes is advisor_targets_init's business,
-# on the node itself.
-advisor_ingress_set()
+# Records on this node the set of targets discovery found installed. Called on
+# every node by advisor_targets_discover, so it must be reachable through
+# hex_sdk. Replaces the file outright: the argument list is the whole answer,
+# and a target that is no longer named is no longer discovered.
+#
+# Records only what was found; what it becomes is advisor_targets_init's
+# business, on the node itself.
+advisor_discovered_set()
 {
-    local addr=$1
+    local name target content="" nl='
+'
 
-    if [ -z "$addr" ] ; then
-        echo "Error: advisor_ingress_set: usage <address>" >&2
+    if [ $# -lt 2 ] || [ $(($# % 2)) -ne 0 ] ; then
+        echo "Error: advisor_discovered_set: usage <name> <host:port> [<name> <host:port> ...]" >&2
         return 1
     fi
-    case $addr in
-        *[!A-Za-z0-9.-]*) echo "Error: not a literal host: $addr" >&2 ; return 1 ;;
-    esac
 
-    _advisor_write_file "$ADVISOR_INGRESS_FILE" "$addr"
+    while [ $# -ge 2 ] ; do
+        name=$1 ; target=$2 ; shift 2
+        if ! _advisor_target_name_valid "$name" ; then
+            echo "Error: not a valid target name: $name" >&2
+            return 1
+        fi
+        if ! _advisor_target_address_valid "$target" ; then
+            echo "Error: not a literal host:port: $target" >&2
+            return 1
+        fi
+        content="$content${content:+$nl}$name $target"
+    done
+
+    _advisor_write_file "$ADVISOR_DISCOVERED_FILE" "$content"
 }
 
-# advisor_ingress_address
+# advisor_discovered_list
 #
-# Prints the recorded ingress address, or nothing. Silent when the file is
-# absent: a cluster with no app framework is the normal case, not a fault.
-# Whitespace is stripped and the shape rechecked, so a hand-edited file can
-# never turn into a malformed allowlist entry.
-advisor_ingress_address()
+# Prints the recorded set, one "name host:port" pair per line. Silent when the
+# file is absent: a cluster with no app framework is the normal case, not a
+# fault. Every line's shape is rechecked, so a hand-edited file can never turn
+# into a malformed allowlist entry.
+advisor_discovered_list()
 {
-    local addr
+    local name target extra
 
-    [ -r "$ADVISOR_INGRESS_FILE" ] || return 1
-    addr=$(head -1 "$ADVISOR_INGRESS_FILE" 2>/dev/null | tr -d '[:space:]')
-    [ -n "$addr" ] || return 1
-    case $addr in
-        *[!A-Za-z0-9.-]*) return 1 ;;
-    esac
-
-    echo "$addr"
+    [ -r "$ADVISOR_DISCOVERED_FILE" ] || return 0
+    while read -r name target extra ; do
+        [ -n "$name" ] && [ -n "$target" ] && [ -z "$extra" ] || continue
+        _advisor_target_name_valid "$name" || continue
+        _advisor_target_address_valid "$target" || continue
+        echo "$name $target"
+    done < "$ADVISOR_DISCOVERED_FILE"
 }
 
 # advisor_targets_init
 #
 # Seeds the allowlist on a node that has none: cube-cos, which every node can
-# name for itself, plus cube-cmp and app-fw-idp when this node has been told
-# the app framework's ingress address (advisor_ingress_set). Both CMP names
-# share that one address on purpose -- the portal and its identity provider
-# must sit on one origin or the OIDC state cookie is set on one and the
-# callback lands on the other.
+# name for itself, plus exactly what discovery recorded on this node
+# (advisor_discovered_set). cube-cos always, because every node serves it
+# locally whatever else is installed.
 #
 # Seeds, never reconciles. A file that is already there is left exactly as it
 # is -- an operator who removed a target removed it on purpose, and a helper
@@ -318,15 +357,14 @@ advisor_ingress_address()
 # line and wait for it to return".
 advisor_targets_init()
 {
-    local addr
+    local discovered
 
     [ -e "$ADVISOR_TARGETS_FILE" ] && return 0
 
-    if addr=$(advisor_ingress_address) ; then
-        _advisor_targets_write "{\"cube-cos\":\"127.0.0.1:8080\",\"cube-cmp\":\"$addr:443\",\"app-fw-idp\":\"$addr:443\"}"
-    else
-        _advisor_targets_write '{"cube-cos":"127.0.0.1:8080"}'
-    fi
+    # awk, not a read loop: a loop on the right of a pipe runs in a subshell
+    # and would leave the string it built behind in it.
+    discovered=$(advisor_discovered_list | awk '{ printf ",\"%s\":\"%s\"", $1, $2 }')
+    _advisor_targets_write "{\"cube-cos\":\"127.0.0.1:8080\"$discovered}"
 }
 
 # advisor_targets_list
@@ -442,42 +480,71 @@ advisor_targets_unset()
 
 # advisor_targets_discover
 #
-# Publishes the app framework's ingress address to the whole cluster.
+# Publishes to the whole cluster the set of web targets that are actually
+# installed on it.
 #
 # This runs where the kubeconfig is -- one node -- but the agent runs on every
-# node and dials from every node, so every node needs the address. It is
-# written out with remote_run over CUBE_NODE_LIST_HOSTNAMES, the same fan-out
-# health_advisor_check uses. Only the address travels: each node's own
-# hex_config commit turns it into allowlist entries, so no node ever writes
-# another node's allowlist.
+# node and dials from every node, so every node needs the set. It is written
+# out with remote_run over CUBE_NODE_LIST_HOSTNAMES, the same fan-out
+# health_advisor_check uses. Only the set travels: each node's own hex_config
+# commit turns it into allowlist entries, so no node ever writes another
+# node's allowlist.
 #
-# Does nothing at all if there is no ingress address (no app framework,
-# nothing to publish).
+# What exists is decided per target from its Helm release, not from the
+# ingress: the ingress is created by the app framework's own install, which
+# happens before CMP is installed, so an address proves the framework is there
+# and says nothing about CMP. A release is the honest answer, and it is one a
+# namespace or an HTTP probe during an install is not.
 #
-# On this node it also sets the two names outright, so the node that just
-# enrolled or just installed CMP does not wait for its next commit --  and
-# that deliberately brings cube-cmp back if an operator has unset it here.
-# Not the never-repair rule being broken: never-repair stops a *startup*
-# silently restoring a file someone edited, while this only runs from an
-# install or enrolment event that is itself declaring the endpoint again.
+# Both names sit at that one address on purpose -- the portal and its identity
+# provider must share one origin or the OIDC state cookie is set on one and
+# the callback lands on the other.
+#
+# Callers are the installers (app_framework_install, app_import) and enrolment.
+# Idempotent, and each call declares only what it finds, so calling it from
+# every one of them is right: whichever ran last is the cluster's current
+# answer.
+#
+# On this node it also sets the names outright, so the node that just enrolled
+# or just installed CMP does not wait for its next commit -- and that
+# deliberately brings a name back if an operator has unset it here. Not the
+# never-repair rule being broken: never-repair stops a *startup* silently
+# restoring a file someone edited, while this only runs from an install or
+# enrolment event that is itself declaring the endpoint again.
 advisor_targets_discover()
 {
-    local addr node
+    local addr node pairs=""
 
     addr=$($HEX_SDK app_ingress_address) || return 0
     [ -n "$addr" ] || return 0
 
+    # The app framework's own Keycloak, and the CMP portal. Each is declared by
+    # whatever installed it, at the moment it is found installed.
+    $HEX_SDK app_helm_release_deployed keycloak && pairs="$pairs app-fw-idp $addr:443"
+    $HEX_SDK app_helm_release_deployed cube-portal && pairs="$pairs cube-cmp $addr:443"
+    [ -n "$pairs" ] || return 0
+
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        remote_run $node "$HEX_SDK advisor_ingress_set $addr" >/dev/null 2>&1 || \
-            echo "Warning: could not record the ingress address on $node; it picks the address up at its next commit" >&2
+        remote_run $node "$HEX_SDK advisor_discovered_set$pairs" >/dev/null 2>&1 || \
+            echo "Warning: could not record the discovered targets on $node; it picks them up at its next commit" >&2
     done
 
     # A cluster that never enrolled must not gain an allowlist as a side
     # effect of installing CMP.
+    #
+    # The fan-out above is deliberately on this side of that guard. An install
+    # normally runs long before anyone enrols, so the set has to be on every
+    # node by then: enrolment's own advisor_targets_init reads this file and
+    # seeds from it, which is the only way a cluster that installed CMP first
+    # ends up with cube-cmp in its allowlist at all.
     [ -e "$ADVISOR_TARGETS_FILE" ] || return 0
 
-    advisor_targets_set cube-cmp "$addr:443"
-    advisor_targets_set app-fw-idp "$addr:443"
+    set -- $pairs
+    while [ $# -ge 2 ] ; do
+        advisor_targets_set "$1" "$2"
+        shift 2
+    done
+    return 0
 }
 
 # advisor_enroll <server> <token-file> <version>
