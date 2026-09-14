@@ -5,6 +5,8 @@ sed -n '/^cinder_move_volume()/,/^}/p' $SRC > $T/fn.sh
 sed -n '/^cinder_move_preflight()/,/^}/p' $SRC >> $T/fn.sh
 sed -n '/^_cinder_preflight_json()/,/^}/p' $SRC >> $T/fn.sh
 sed -n '/^_pf_block()/p' $SRC >> $T/fn.sh
+# Extract error constant needed by cinder_move_volume
+sed -n '/^readonly ERROR_CINDER_MOVE_DISPATCH_FAILED=/p' $SRC >> $T/fn.sh
 source $T/fn.sh
 
 chk(){ printf '%-50s -> %-20s (want %s)\n' "$1" "$2" "$3"; }
@@ -66,21 +68,19 @@ else
     chk "preflight refuses: retype NOT invoked"     "PASS (code=$got_code)" "retype never called"
 fi
 
-# Test 2: preflight passes -> retype IS invoked with correct args
+# Test 2: preflight passes -> retype IS invoked with correct args AND success JSON contains code:OK
 printf 'ceph\ntier-nvme\n' > $T/types
 mkvol available "[]" ceph
 : > $CINDER_CALL_LOG
 cinder_move_volume v1 tier-nvme >$T/o 2>&1
 ret=$?
-if grep -q "cinder retype --migration-policy on-demand v1 tier-nvme" $CINDER_CALL_LOG ; then
-    chk "preflight passes: retype invoked"          "PASS (ret=$ret)" "0"
+got_code=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o | head -1)
+got_ok=$(sed -n 's/.*"ok":\([^,}]*\).*/\1/p' $T/o | head -1)
+if grep -q "cinder retype --migration-policy on-demand v1 tier-nvme" $CINDER_CALL_LOG && \
+   [ "$got_code" = "OK" ] && [ "$got_ok" = "true" ] ; then
+    chk "preflight passes: success JSON and retype"  "PASS" "code:OK, ok:true"
 else
-    got=$(cat $CINDER_CALL_LOG)
-    if [ -z "$got" ] ; then
-        chk "preflight passes: retype invoked"      "FAIL(no call)" "called with correct args"
-    else
-        chk "preflight passes: retype invoked"      "FAIL($got)" "called with correct args"
-    fi
+    chk "preflight passes: success JSON and retype"  "FAIL(code=$got_code,ok=$got_ok)" "code:OK, ok:true"
 fi
 
 # Test 3: retype fails -> E_DISPATCH_FAILED
