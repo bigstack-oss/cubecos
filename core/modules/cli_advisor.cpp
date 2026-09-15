@@ -65,10 +65,10 @@ WriteTokenFile(const std::string& token, std::string* path)
 static int
 EnrollMain(int argc, const char** argv)
 {
-    if (argc > 4 /* [0]="enroll" [1]=server [2]=version [3]=ca-file */)
+    if (argc > 5 /* [0]="enroll" [1]=server [2]=version [3]=ca-file [4]="force" */)
         return CLI_INVALID_ARGS;
 
-    std::string server, version, token, caFile;
+    std::string server, version, token, caFile, force;
 
     if (!CliReadInputStr(argc, argv, 1, "Advisor service URL: ", &server) || server.length() <= 0)
         return CLI_INVALID_ARGS;
@@ -84,6 +84,17 @@ EnrollMain(int argc, const char** argv)
     else
         CliReadLine("Advisor CA file (blank if already trusted): ", caFile);
 
+    // Positional keyword, matching how other cubecos commands take one
+    // (app_register's skip_flavor). Never prompted: replacing a working
+    // identity is not something to be walked into by pressing return.
+    if (argc > 4) {
+        if (std::string(argv[4]) != "force") {
+            CliPrintf("The fourth argument, if given, must be the word 'force'.");
+            return CLI_INVALID_ARGS;
+        }
+        force = argv[4];
+    }
+
     // Prompted, never taken from argv -- see WriteTokenFile.
     if (!CliReadLine("Pairing token: ", token) || token.length() <= 0) {
         CliPrintf("A pairing token is required. Ask your Advisor administrator to issue one.");
@@ -96,7 +107,7 @@ EnrollMain(int argc, const char** argv)
 
     int rc = HexSpawn(0, HEX_SDK, "advisor_enroll",
                       server.c_str(), tokenPath.c_str(), version.c_str(),
-                      caFile.c_str(), NULL);
+                      caFile.c_str(), force.c_str(), NULL);
 
     // Removed whatever happened. A pairing token left on disk after a failed
     // enrolment is a credential nobody is watching.
@@ -196,7 +207,7 @@ CLI_MODE(CLI_TOP_MODE, "advisor",
 
 CLI_MODE_COMMAND("advisor", "enroll", EnrollMain, NULL,
     "Install and enrol the Advisor agent on this node.",
-    "enroll [<service-url> [<version> [<ca-file>]]]");
+    "enroll [<service-url> [<version> [<ca-file> [force]]]]");
 
 CLI_MODE_COMMAND("advisor", "status", StatusMain, NULL,
     "Show whether this node is enrolled with the Advisor, and as which cluster.",
