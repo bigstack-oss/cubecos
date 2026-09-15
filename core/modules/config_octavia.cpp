@@ -311,30 +311,40 @@ HealthManagerIp(const std::string& mgmtCidr, const std::string& addr)
     return GetMgmtCidrIp(mgmtCidr, 0, octet4);
 }
 
-// Every controller runs a health manager, and each amphora has to know all of them:
-// the amphora agent round-robins its heartbeats across this list, so naming only the
-// local controller loses the heartbeats that land on the other two once an amphora
-// picks them.
+// The endpoint list amphorae round-robin their heartbeats across. It must name
+// every node that runs a health manager -- and CommitService starts one on the
+// first three COMPUTE nodes, not on the control nodes, so a list built from
+// cubesys.control.addrs points at hosts with no listener and no heartbeat ever
+// arrives, which silently disables automatic failover.
+//
+// The node list comes from /etc/settings.cluster.json, which config_cluster
+// migrates, so this resolves on a freshly rolled slot too. Keep the current
+// value if it cannot be read rather than authoring a wrong one.
 static std::string
-ControllerIpPortList(const bool ha, const std::string& mgmtCidr,
-                     const std::string& cidrIp, const std::string& ctrlAddrs)
+ControllerIpPortList(const std::string& mgmtCidr, const std::string& cidrIp, const std::string& prev)
 {
-    if (!ha)
-        return cidrIp + ":5555";
-
-    auto group = hex_string_util::split(ctrlAddrs, ',');
-    std::string list;
-    for (size_t i = 0; i < group.size(); i++) {
-        list += HealthManagerIp(mgmtCidr, group[i]) + ":5555";
-        if (i + 1 < group.size())
-            list += ",";
+    std::string addrs = HexUtilPOpen(HEX_SDK " os_octavia_hm_nodes");
+    if (addrs.empty()) {
+        HexLogWarning("octavia: health-manager node list empty, keeping controller_ip_port_list=%s",
+                      prev.c_str());
+        return prev.empty() ? cidrIp + ":5555" : prev;
     }
 
-    return list;
+    auto group = hex_string_util::split(addrs, ',');
+    std::string list;
+    for (size_t i = 0; i < group.size(); i++) {
+        if (group[i].empty())
+            continue;
+        if (!list.empty())
+            list += ",";
+        list += HealthManagerIp(mgmtCidr, group[i]) + ":5555";
+    }
+
+    return list.empty() ? (prev.empty() ? cidrIp + ":5555" : prev) : list;
 }
 
 static bool
-UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const std::string& adminCliPass, const std::string& cidrIp, const std::string& ctrlIpPortList, const std::string& jobboardHosts)
+UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const std::string& adminCliPass, const std::string& cidrIp, const std::string& mgmtCidr, const std::string& jobboardHosts)
 {
     if(IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
         cfg["DEFAULT"]["log_dir"] = "/var/log/octavia";
@@ -358,7 +368,8 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
         cfg["health_manager"]["heartbeat_key"] = "insecure";
         cfg["health_manager"]["bind_port"] = "5555";
         cfg["health_manager"]["bind_ip"] = cidrIp;
-        cfg["health_manager"]["controller_ip_port_list"] = ctrlIpPortList;
+        cfg["health_manager"]["controller_ip_port_list"] =
+            ControllerIpPortList(mgmtCidr, cidrIp, oldCfg["health_manager"]["controller_ip_port_list"]);
 
         // The jobboard is the half of amphorav2 that makes a lost flow
         // recoverable: workers claim jobs from it, so a worker that dies
@@ -612,11 +623,7 @@ Commit(bool modified, int dryLevel)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
     if (s_bConfigChanged) {
-        // Health-manager endpoints follow CLUSTER ha, not the amphora topology
-        // (s_lbHa): with one endpoint, rebooting that node black-holes every
-        // amphora's heartbeats and octavia marks them ERROR.
-        UpdateCfg(s_lbHa, s_cubeDomain, userPass, adminCliPass, cidrIp,
-                  ControllerIpPortList(s_ha, s_mgmtCidr.newValue(), cidrIp, s_ctrlAddrs.newValue()),
+        UpdateCfg(s_lbHa, s_cubeDomain, userPass, adminCliPass, cidrIp, s_mgmtCidr.newValue(),
                   s_ha ? s_ctrlAddrs.newValue() : ctrlIp);
         UpdateSharedId(sharedId);
         UpdateMyIp(myip);
@@ -792,6 +799,11 @@ ReconfigMain(int argc, char* argv[])
             HexLogWarning("octavia: lb-mgmt-sec-grp lookup empty, keeping amp_secgroup_list=%s",
                           curCfg["controller_worker"]["amp_secgroup_list"].c_str());
     }
+
+    std::string cidrIp = HealthManagerIp(s_mgmtCidr.newValue(), G(MGMT_ADDR));
+    curCfg["health_manager"]["controller_ip_port_list"] =
+        ControllerIpPortList(s_mgmtCidr.newValue(), cidrIp,
+                             curCfg["health_manager"]["controller_ip_port_list"]);
 
     WriteConfig(CONF, SB_SEC_WFMT, '=', curCfg);
     CommitService(enabled);
