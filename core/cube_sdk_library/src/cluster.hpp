@@ -3,6 +3,7 @@
 #ifndef CUBE_CLUSTER_H
 #define CUBE_CLUSTER_H
 
+#include <cube/config_file.h>
 #include <cube/network.h>
 #include <hex/crypto.h>
 #include <hex/log.h>
@@ -103,6 +104,27 @@ RabbitMqServers(
     const std::string& ctrlIp,
     const std::string& pass,
     const std::string& clusterGroup);
+
+/**
+ * Write one service's AMQP client settings into @p config.
+ *
+ * Shared by every OpenStack service that talks to RabbitMQ so that the client
+ * side has a single place to change. Role gating (IsControl / IsCompute) stays
+ * with the caller: which roles run a given service is a property of that
+ * service's deployment, not of the message queue.
+ *
+ * @p withRpcTimeout exists for neutron's VPN agent, which is the one call site
+ * that has never carried rpc_response_timeout. Preserved deliberately; do not
+ * "fix" it here without re-taking the generated-config evidence.
+ */
+void
+SetMqClientConfig(
+    Configs& config,
+    const bool ha,
+    const std::string& ctrlIp,
+    const std::string& pass,
+    const std::string& clusterGroup,
+    const bool withRpcTimeout = true);
 
 std::string
 KafkaServers(
