@@ -6,6 +6,7 @@ SUBDIRS += config_file
 SUBDIRS += utils
 SUBDIRS += third_party
 SUBDIRS += cubesys
+SUBDIRS += tests
 
 LIB = $(PROJ_LIBDIR)/libcube_sdk.a
 
