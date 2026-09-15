@@ -11,6 +11,7 @@ SRC=$(dirname "${BASH_SOURCE[0]}")/../modules/sdk_cinder.sh
 sed -n '/^cinder_move_preflight()/,/^}/p' $SRC > $T/fn.sh
 sed -n '/^_cinder_preflight_json()/,/^}/p' $SRC >> $T/fn.sh
 sed -n '/^_pf_block()/p' $SRC >> $T/fn.sh            # one-liner
+sed -n '/^_pf_warn()/p'  $SRC >> $T/fn.sh            # one-liner
 source $T/fn.sh
 pass=0 fail=0
 chk(){ # description actual expected
@@ -20,8 +21,14 @@ chk(){ # description actual expected
         fail=$((fail+1)); printf 'FAIL %-46s -> got "%s", want "%s"\n' "$1" "$2" "$3"
     fi
 }
-# every blocker code, comma-joined; the leading match is the top-level "code"
-codes(){ grep -o '"code":"[^"]*"' $T/o | sed 's/.*:"//;s/"$//' | tail -n +2 | paste -sd, -; }
+# every blocker code, comma-joined. Read the blockers array specifically: the
+# top-level "code" and the warnings array both carry "code" keys too.
+codes(){  sed -n 's/.*"blockers":\[\([^]]*\)\].*/\1/p' $T/o | grep -o '"code":"[^"]*"' | sed 's/.*:"//;s/"$//' | paste -sd, -; }
+wcodes(){ sed -n 's/.*"warnings":\[\([^]]*\)\].*/\1/p' $T/o | grep -o '"code":"[^"]*"' | sed 's/.*:"//;s/"$//' | paste -sd, -; }
+okflag(){ sed -n 's/.*"ok":\(true\|false\).*/\1/p' $T/o; }
+# the top-level verdict. Anchored: a greedy ".*\"code\":" would match the last
+# occurrence on the line, which is a blocker or a warning, not the verdict.
+topcode(){ sed -n 's/^{"ok":[^,]*,"code":"\([^"]*\)".*/\1/p' $T/o; }
 
 # stubs the function under test calls; each case overrides what it needs
 _pf_volume()      { cat $T/vol.json; }
@@ -57,80 +64,88 @@ mkvol() { # status attachments multiattach replication group type
 one='[{"server_id":"vm-1"}]'; two='[{"server_id":"vm-1"},{"server_id":"vm-2"}]'
 
 mkvol in-use "$one" false None null ceph
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "in-use, running VM, clean"        "$c" "OK"
 
 mkvol in-use "$one" false None null ceph
-cinder_move_preflight v1 ceph >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 ceph >$T/o 2>&1; c=$(topcode)
 chk "destination == source type"       "$c" "E_SAME_TYPE"
 
 mkvol in-use "$one" false None null ceph
 echo 'SHUTOFF' > $T/vmstate
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "attached to a stopped VM"         "$c" "E_VM_NOT_RUNNING"
 echo 'ACTIVE' > $T/vmstate
 
 mkvol in-use "$two" true None null ceph
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "two read/write attachments"       "$c" "E_MULTIATTACH"
 
 mkvol available "[]" false None null ceph
 echo 'snap-1' > $T/snaps
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "volume has a snapshot"            "$c" "E_HAS_SNAPSHOTS"
 : > $T/snaps
 
 mkvol available "[]" false enabled null ceph
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "replicated volume"                "$c" "E_REPLICATED"
 
 mkvol available "[]" false None '"g-1"' ceph
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "volume in a group"                "$c" "E_IN_GROUP"
 
-# cubecos#1490 guard: same fsid AND same pool means the destination is not
-# actually a different place, even though it is a different backend
+# cubecos#1490 is a `cinder migrate` defect, and retype cannot reach the rbd
+# driver's same-cluster shortcut, so identical fsid AND pool is advisory: it
+# means the copy is pointless, not that data would be lost. It must NOT refuse
+# -- every CubeCOS install ships the same hardcoded fsid and the same
+# "cinder-volumes" pool, so refusing would break real cluster-to-cluster moves.
 mkvol available "[]" false None null ceph
 echo 'c6e64c49:cinder-volumes' > $T/fsidpool_tier-nvme
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
-chk "same fsid + same pool"            "$c" "E_SAME_CLUSTER_SAME_POOL"
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
+chk "same fsid + same pool warns"      "$c" "OK"
+chk "  ...with the warning code"       "$(wcodes)" "W_SAME_CLUSTER_SAME_POOL"
+chk "  ...and stays ok"                "$(okflag)" "true"
+chk "  ...and blocks nothing"          "$(codes)" ""
 
 # the built-in type is called CubeStorage while its section is called ceph;
-# before the section lookup existed this pair resolved to nothing on both
-# sides and the guard was inert for every move off the built-in tier
+# without the section lookup this pair resolves to nothing on both sides and
+# the check is inert for every move off the built-in tier
 mkvol available "[]" false None null CubeStorage
 echo 'c6e64c49:cinder-volumes' > $T/fsidpool_tier-nvme
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
-chk "built-in type resolves to ceph"   "$c" "E_SAME_CLUSTER_SAME_POOL"
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1
+chk "built-in type resolves to ceph"   "$(wcodes)" "W_SAME_CLUSTER_SAME_POOL"
 
-# ...and it still crosses to a genuinely different pool
+# ...and a genuinely different pool says nothing at all
 mkvol available "[]" false None null CubeStorage
 echo 'deadbeef:cinder-volumes' > $T/fsidpool_tier-nvme
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "built-in type to another cluster" "$c" "OK"
+chk "  ...with no warning"             "$(wcodes)" ""
 
-# an unresolvable side must be refused, never compared: two different strings
-# (or one empty one) would otherwise read as "different place" and pass
+# an unresolvable side is reported, never compared -- two different strings (or
+# one empty one) would otherwise read as "different place" and say nothing
 mkvol available "[]" false None null ceph
 : > $T/section_tier-nvme
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
-chk "destination type has no section"  "$c" "E_BACKEND_UNRESOLVED"
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
+chk "destination type has no section"  "$(wcodes)" "W_BACKEND_UNRESOLVED"
+chk "  ...but does not refuse"         "$c" "OK"
 echo 'tier-nvme' > $T/section_tier-nvme
 
 mkvol available "[]" false None null ceph
 : > $T/fsidpool_tier-nvme
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
-chk "destination pool cannot be read"  "$c" "E_BACKEND_UNRESOLVED"
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1
+chk "destination pool cannot be read"  "$(wcodes)" "W_BACKEND_UNRESOLVED"
 echo 'deadbeef:cinder-volumes' > $T/fsidpool_tier-nvme
 
 mkvol available "[]" false None null ceph
 : > $T/fsidpool_ceph
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
-chk "source pool cannot be read"       "$c" "E_BACKEND_UNRESOLVED"
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1
+chk "source pool cannot be read"       "$(wcodes)" "W_BACKEND_UNRESOLVED"
 echo 'c6e64c49:cinder-volumes' > $T/fsidpool_ceph
 
 mkvol available "[]" false None null ceph
-cinder_move_preflight v1 nope >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 nope >$T/o 2>&1; c=$(topcode)
 chk "unknown destination type"         "$c" "E_NO_SUCH_TYPE"
 
 # --- source/target capability asymmetry ---
@@ -141,30 +156,30 @@ echo 'deadbeef:cinder-volumes' > $T/fsidpool_tier-nvme
 # 'available', whichever direction it goes.
 mkvol in-use "$one" false None null ceph
 echo 'tier-nvme' > $T/ma_types
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "attached, target multiattach only" "$c" "E_MULTIATTACH_MISMATCH"
 
 mkvol in-use "$one" false None null ceph
 echo 'ceph' > $T/ma_types
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "attached, source multiattach only" "$c" "E_MULTIATTACH_MISMATCH"
 
 # detached volumes may cross it
 mkvol available "[]" false None null ceph
 echo 'tier-nvme' > $T/ma_types
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "detached crosses multiattach"      "$c" "OK"
 : > $T/ma_types
 
 # nova refuses the swap when EITHER side is natively LUKS-encrypted
 mkvol in-use "$one" false None null ceph
 echo 'tier-nvme' > $T/enc_types
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "attached, target encrypted"        "$c" "E_ENCRYPTED"
 
 mkvol in-use "$one" false None null ceph
 echo 'ceph' > $T/enc_types
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "attached, source encrypted"        "$c" "E_ENCRYPTED"
 : > $T/enc_types
 
@@ -174,35 +189,35 @@ _pf_attached_device() { echo "/dev/sdb"; }
 
 mkvol in-use "$one" false None null ceph
 echo '|' > $T/domain
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "domain gone from its host"        "$c" "E_DOMAIN_MISSING"
 
 mkvol in-use "$one" false None null ceph
 echo 'shut off|sda sdb' > $T/domain
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "nova says ACTIVE, domain is not"  "$c" "E_DOMAIN_NOT_LIVE"
 
 mkvol in-use "$one" false None null ceph
 echo 'running|sda sdc' > $T/domain
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "bdm disk absent from the domain"  "$c" "E_DISK_NOT_IN_DOMAIN"
 
 mkvol in-use "$one" false None null ceph
 echo 'paused|sda sdb' > $T/domain
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "paused domain is still swappable" "$c" "OK"
 
 # probe could not run -> fail OPEN, never invent a refusal
 mkvol in-use "$one" false None null ceph
 _pf_domain_probe() { return 1; }
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "probe unreachable fails open"     "$c" "OK"
 _pf_domain_probe() { cat $T/domain; }
 
 # a detached volume has no domain to probe
 mkvol available "[]" false None null ceph
 echo '|' > $T/domain
-cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' $T/o)
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; c=$(topcode)
 chk "detached volume skips layer 2"    "$c" "OK"
 
 # --- every blocker is reported, not just the first ---

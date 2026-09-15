@@ -3375,8 +3375,8 @@ readonly ERROR_CINDER_MOVE_HAS_SNAPSHOTS="volume must not have snapshots"
 readonly ERROR_CINDER_MOVE_REPLICATED="volume must not be replicated"
 readonly ERROR_CINDER_MOVE_IN_GROUP="volume must not belong to a group"
 readonly ERROR_CINDER_MOVE_QOS_FRONTEND="front-end QoS differs between the tiers"
-readonly ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL="destination resolves to the same ceph cluster and pool"
-readonly ERROR_CINDER_MOVE_BACKEND_UNRESOLVED="the ceph cluster and pool behind one of the tiers cannot be determined"
+readonly WARN_CINDER_MOVE_SAME_CLUSTER_SAME_POOL="destination resolves to the same ceph cluster and pool, so the copy is pointless work"
+readonly WARN_CINDER_MOVE_BACKEND_UNRESOLVED="the ceph cluster and pool behind one of the tiers cannot be determined"
 readonly ERROR_CINDER_MOVE_DOMAIN_MISSING="the instance has no libvirt domain on its recorded host"
 readonly ERROR_CINDER_MOVE_DOMAIN_NOT_LIVE="the instance's domain is not running or paused"
 readonly ERROR_CINDER_MOVE_DISK_NOT_IN_DOMAIN="the attached disk is not present in the instance's domain"
@@ -3387,11 +3387,15 @@ readonly ERROR_CINDER_MOVE_DISPATCH_FAILED="retype command failed"
 # the next one at that point.
 _pf_block() { _pf_codes+=("$1"); _pf_reasons+=("$2"); }
 
+# Advisory. A warning never makes "ok" false -- it is for things worth saying
+# out loud that do not stop the move.
+_pf_warn()  { _pf_wcodes+=("$1"); _pf_wreasons+=("$2"); }
+
 # Emit the verdict. "code"/"reason" carry the first blocker so single-line
 # callers stay simple; "blockers" carries all of them.
 _cinder_preflight_json()
 {
-    local i first_code="OK" first_reason="ok" blockers="" ok=true
+    local i first_code="OK" first_reason="ok" blockers="" warnings="" ok=true
     if [ ${#_pf_codes[@]} -gt 0 ] ; then
         ok=false
         first_code="${_pf_codes[0]}"
@@ -3401,8 +3405,12 @@ _cinder_preflight_json()
             blockers="${blockers}{\"code\":\"${_pf_codes[$i]}\",\"reason\":\"${_pf_reasons[$i]}\"}"
         done
     fi
-    printf '{"ok":%s,"code":"%s","reason":"%s","blockers":[%s],"src_type":"%s","dst_type":"%s","size_gb":%s,"attached_to":"%s"}\n' \
-        "$ok" "$first_code" "$first_reason" "$blockers" \
+    for i in "${!_pf_wcodes[@]}" ; do
+        [ -n "$warnings" ] && warnings="${warnings},"
+        warnings="${warnings}{\"code\":\"${_pf_wcodes[$i]}\",\"reason\":\"${_pf_wreasons[$i]}\"}"
+    done
+    printf '{"ok":%s,"code":"%s","reason":"%s","blockers":[%s],"warnings":[%s],"src_type":"%s","dst_type":"%s","size_gb":%s,"attached_to":"%s"}\n' \
+        "$ok" "$first_code" "$first_reason" "$blockers" "$warnings" \
         "$_pf_src_type" "$_pf_dst_type" "${_pf_size:-0}" "${_pf_attached:-}"
 }
 
@@ -3541,6 +3549,7 @@ cinder_move_preflight()
     local vol_id="$1" _pf_dst_type="$2" v
     local _pf_src_type="" _pf_size=0 _pf_attached=""
     local _pf_codes=() _pf_reasons=()
+    local _pf_wcodes=() _pf_wreasons=()
 
     v=$(_pf_volume "$vol_id")
     # the client reports the tier as .type; .volume_type is a fallback for older output
@@ -3597,20 +3606,23 @@ cinder_move_preflight()
     if _pf_qos_differs "$_pf_src_type" "$_pf_dst_type" ; then
         _pf_block E_QOS_FRONTEND_DIFFERS "$ERROR_CINDER_MOVE_QOS_FRONTEND"
     fi
-    # cubecos#1490: identical fsid AND pool means the driver would treat these as
-    # one place and repoint the volume without copying it. The type has to be
-    # resolved to its cinder.conf section first, and a side that does not
-    # resolve is refused rather than compared -- an unresolvable section reads
-    # as "different" and would let the guard pass.
+    # Advisory only. The rbd driver's same-cluster shortcut (cubecos#1490) is
+    # unreachable from here: retype calls migrate_volume with a non-null
+    # new_type_id (manager.py retype), and the driver path is gated on
+    # "new_type_id is None" (manager.py _migrate_volume), so a retype always
+    # takes the generic copy. Identical fsid and pool therefore means wasted
+    # I/O, not lost data -- and since every CubeCOS install ships the same
+    # hardcoded fsid and the same "cinder-volumes" pool, blocking on it would
+    # refuse legitimate moves between two real clusters.
     local src_sec dst_sec src_fp dst_fp
     src_sec=$(_pf_type_backend_section "$_pf_src_type") || src_sec=""
     dst_sec=$(_pf_type_backend_section "$_pf_dst_type") || dst_sec=""
     src_fp=$(_pf_backend_fsid_pool "$src_sec") || src_fp=""
     dst_fp=$(_pf_backend_fsid_pool "$dst_sec") || dst_fp=""
     if [ -z "$src_fp" ] || [ -z "$dst_fp" ] ; then
-        _pf_block E_BACKEND_UNRESOLVED "$ERROR_CINDER_MOVE_BACKEND_UNRESOLVED"
+        _pf_warn W_BACKEND_UNRESOLVED "$WARN_CINDER_MOVE_BACKEND_UNRESOLVED"
     elif [ "$src_fp" == "$dst_fp" ] ; then
-        _pf_block E_SAME_CLUSTER_SAME_POOL "$ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL"
+        _pf_warn W_SAME_CLUSTER_SAME_POOL "$WARN_CINDER_MOVE_SAME_CLUSTER_SAME_POOL"
     fi
 
     # Layer 2: the running domain, not nova's DB, is authoritative about whether

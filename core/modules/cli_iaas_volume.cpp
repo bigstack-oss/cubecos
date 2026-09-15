@@ -1321,6 +1321,17 @@ MoveVolumeToBackendMain(int argc, const char** argv)
         return CLI_FAILURE;
     }
 
+    // warnings never refuse; say them before a copy that may run for hours
+    {
+        std::string err;
+        const json11::Json v = json11::Json::parse(pf.stdoutOutput, err);
+        for (const json11::Json& w : v["warnings"].array_items()) {
+            CliPrintf("Warning: %s (%s)",
+                      w["reason"].string_value().c_str(),
+                      w["code"].string_value().c_str());
+        }
+    }
+
     const ExecSyncResult r = ExecBashSync(
         0,
         true,
