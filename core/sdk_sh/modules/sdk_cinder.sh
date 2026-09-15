@@ -3494,17 +3494,35 @@ _pf_type_backend_section()
 # resolve to a pool or the cluster does not answer: an unresolved backend must
 # never be compared as though it were a real one, because two unresolved (or
 # one unresolved) sides silently differ and let the guard pass.
+# Read one key from an ini section. crudini is not installed on CubeCOS nodes.
+_pf_ini_get()
+{
+    [ -r "$1" ] || return 1
+    awk -F= -v s="[$2]" -v k="$3" '
+        $0 == s { inside = 1; next }
+        /^[[:space:]]*\[/ { inside = 0 }
+        inside {
+            key = $1; gsub(/[[:space:]]/, "", key)
+            if (key == k) {
+                sub(/^[^=]*=[[:space:]]*/, "", $0)
+                gsub(/[[:space:]]+$/, "", $0)
+                print; exit
+            }
+        }' "$1" 2>/dev/null
+}
+
 _pf_backend_fsid_pool()
 {
-    local sec="$1" conf pool fsid
-    [ -n "$sec" ] || return 1
-    conf=$(crudini --get /etc/cinder/cinder.conf "$sec" rbd_ceph_conf 2>/dev/null)
-    conf=${conf:-$(crudini --get "/etc/cinder/cinder.d/ext_storage_${sec}.conf" "$sec" rbd_ceph_conf 2>/dev/null)}
-    conf=${conf:-/etc/ceph/ceph.conf}
-    pool=$(crudini --get /etc/cinder/cinder.conf "$sec" rbd_pool 2>/dev/null)
-    pool=${pool:-$(crudini --get "/etc/cinder/cinder.d/ext_storage_${sec}.conf" "$sec" rbd_pool 2>/dev/null)}
+    local sec="$1" conf pool
+    conf=$(_pf_ini_get /etc/cinder/cinder.conf "$sec" rbd_ceph_conf)
+    [ -n "$conf" ] || conf=$(_pf_ini_get "/etc/cinder/cinder.d/ext_storage_${sec}.conf" "$sec" rbd_ceph_conf)
+    [ -n "$conf" ] || conf=/etc/ceph/ceph.conf
+    pool=$(_pf_ini_get /etc/cinder/cinder.conf "$sec" rbd_pool)
+    [ -n "$pool" ] || pool=$(_pf_ini_get "/etc/cinder/cinder.d/ext_storage_${sec}.conf" "$sec" rbd_pool)
     [ -n "$pool" ] || return 1
+    local fsid
     fsid=$(timeout 20 ceph -c "$conf" fsid 2>/dev/null)
+    # a cluster that answers nothing must not resolve to ":pool"
     [ -n "$fsid" ] || return 1
     echo "${fsid}:${pool}"
 }
@@ -3583,7 +3601,8 @@ cinder_move_preflight()
     local _pf_codes=() _pf_reasons=()
 
     v=$(_pf_volume "$vol_id")
-    _pf_src_type=$(echo "$v" | jq -r '.volume_type // ""')
+    # the client reports the tier as .type; .volume_type is a fallback for older output
+    _pf_src_type=$(echo "$v" | jq -r '.type // .volume_type // ""')
     _pf_size=$(echo "$v" | jq -r '.size // 0')
     _pf_attached=$(echo "$v" | jq -r '.attachments[0].server_id // ""')
 

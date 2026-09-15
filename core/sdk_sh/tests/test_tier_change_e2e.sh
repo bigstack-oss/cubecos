@@ -259,7 +259,8 @@ cleanup() {
 [ -n "$DEST_TIER" ] || fail "DEST_TIER parameter required (e.g., SSD)"
 
 log "=== Starting acceptance run ==="
-log "Source tier: CubeStorage"
+SOURCE_TIER="CubeStorage"
+log "Source tier: $SOURCE_TIER"
 log "Destination tier: $DEST_TIER"
 log "Test volume size: ${TEST_SIZE} GiB"
 log "Test pattern size: $TEST_DATA_SIZE"
@@ -268,7 +269,7 @@ log "Log file: $LOG_FILE"
 
 # Step 1: Create the volume
 log "=== Step 1: Creating volume ==="
-CREATED_VOL_ID=$(openstack volume create --type CubeStorage --size "$TEST_SIZE" "$VOL_NAME" -f value -c id)
+CREATED_VOL_ID=$(openstack volume create --type CubeStorage --size "$TEST_SIZE" "$VOL_NAME" -f value -c id | tr -d "[:space:]")
 [ -n "$CREATED_VOL_ID" ] || fail "Failed to create volume"
 log "Volume created: $CREATED_VOL_ID"
 sleep 10
@@ -280,7 +281,7 @@ log "Pattern written successfully"
 
 # Step 3: Create VM and attach volume
 log "=== Step 3: Creating VM and attaching volume ==="
-CREATED_VM_ID=$(openstack server create --image Cirros --flavor lr.small --network resizespine --wait "$VM_NAME" -f value -c id)
+CREATED_VM_ID=$(openstack server create --image Cirros --flavor lr.small --network resizespine --wait "$VM_NAME" -f value -c id | tr -d "[:space:]")
 [ -n "$CREATED_VM_ID" ] || fail "Failed to create VM"
 log "VM created: $CREATED_VM_ID"
 sleep 5
@@ -308,7 +309,7 @@ dispatched=$(echo "$move_output" | jq -r '.dispatched // false')
 log "Move dispatched successfully"
 
 # Record initial state after move dispatch
-VOL_INITIAL_TYPE=$(openstack volume show "$CREATED_VOL_ID" -f value -c volume_type)
+VOL_INITIAL_TYPE=$(openstack volume show "$CREATED_VOL_ID" -f value -c type)
 VOL_INITIAL_STATUS=$(openstack volume show "$CREATED_VOL_ID" -f value -c status)
 VOL_INITIAL_MIG_STATUS=$(openstack volume show "$CREATED_VOL_ID" 2>&1 | awk -F'|' '/os-vol-mig-status-attr:migration_status/{print $3}' | tr -d ' ' || echo "UNAVAILABLE")
 log "Initial state - type:$VOL_INITIAL_TYPE status:$VOL_INITIAL_STATUS migration_status:$VOL_INITIAL_MIG_STATUS"
@@ -324,7 +325,7 @@ type_changed=0
 status_settled=0
 
 while [ $elapsed -lt $max_wait ]; do
-    VOL_FINAL_TYPE=$(openstack volume show "$CREATED_VOL_ID" -f value -c volume_type)
+    VOL_FINAL_TYPE=$(openstack volume show "$CREATED_VOL_ID" -f value -c type)
     VOL_FINAL_STATUS=$(openstack volume show "$CREATED_VOL_ID" -f value -c status)
     VOL_FINAL_MIG_STATUS=$(openstack volume show "$CREATED_VOL_ID" 2>&1 | awk -F'|' '/os-vol-mig-status-attr:migration_status/{print $3}' | tr -d ' ' || echo "UNAVAILABLE")
 
@@ -389,10 +390,27 @@ log "=== Step 8: Verifying data integrity ==="
 img_name=$(hex_sdk cinder_volume_image_name "$CREATED_VOL_ID")
 log "Resolved image name: $img_name"
 
-# Verify pattern reads back from destination
+# The destination tier has its own pool and its own ceph.conf; read both from the
+# storage record rather than assuming the source cluster's defaults.
+dest_json=$(hex_sdk cinder_get_storage "{\"name\":\"$DEST_TIER\"}" 2>/dev/null)
+dest_pool=$(echo "$dest_json" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print(next((k["value"] for k in d["storage"]["service"]["driverSection"] if k["key"]=="rbd_pool"), ""))' 2>/dev/null)
+dest_conf=$(echo "$dest_json" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print(next((k["value"] for k in d["storage"]["service"]["driverSection"] if k["key"]=="rbd_ceph_conf"), ""))' 2>/dev/null)
+[ -n "$dest_pool" ] || fail "could not resolve the destination pool for $DEST_TIER"
+[ -n "$dest_conf" ] || fail "could not resolve the destination ceph.conf for $DEST_TIER"
+log "Destination pool: $dest_pool (conf: $dest_conf)"
+
+# Read WITHOUT a pipe so the exit status is qemu-io's own, not tee's.
 log "Reading pattern from destination cluster..."
-qemu-io -f raw -c "read -P $TEST_PATTERN 0 $TEST_DATA_SIZE" "rbd:cinder-volumes/$img_name" 2>&1 | tee -a "$LOG_FILE" || fail "Failed to read pattern from destination image or data mismatch"
-log "Data integrity verified on destination"
+read_out=$(qemu-io -f raw -r -c "read -P $TEST_PATTERN 0 $TEST_DATA_SIZE" \
+    "rbd:${dest_pool}/${img_name}:conf=${dest_conf}" 2>&1)
+read_rc=$?
+echo "$read_out" >> "$LOG_FILE"
+[ $read_rc -eq 0 ] || fail "destination read failed (rc=$read_rc): $read_out"
+log "Data integrity verified on destination ($TEST_DATA_SIZE of pattern $TEST_PATTERN)"
 
 # Verify image is gone from source
 log "Verifying image removed from source..."
@@ -415,7 +433,8 @@ log "Testing E_VM_NOT_RUNNING refusal..."
 openstack server stop "$CREATED_VM_ID"
 sleep 10
 
-refusal_output=$(hex_sdk cinder_move_preflight "$CREATED_VOL_ID" "$(openstack volume type list -f value -c Name | head -n 1)" 2>&1 || true)
+# the volume now sits on DEST_TIER, so the refusal probe must aim back at the source
+refusal_output=$(hex_sdk cinder_move_preflight "$CREATED_VOL_ID" "$SOURCE_TIER" 2>&1 || true)
 log "Refusal output (stopped VM): $refusal_output"
 
 refusal_code=$(echo "$refusal_output" | jq -r '.code // ""')
@@ -438,7 +457,7 @@ CREATED_SNAPSHOT_ID=$(openstack volume snapshot create --volume "$CREATED_VOL_ID
 log "Snapshot created: $CREATED_SNAPSHOT_ID"
 sleep 5
 
-refusal_output=$(hex_sdk cinder_move_preflight "$CREATED_VOL_ID" "$(openstack volume type list -f value -c Name | head -n 1)" 2>&1 || true)
+refusal_output=$(hex_sdk cinder_move_preflight "$CREATED_VOL_ID" "$SOURCE_TIER" 2>&1 || true)
 log "Refusal output (has snapshots): $refusal_output"
 
 refusal_code=$(echo "$refusal_output" | jq -r '.code // ""')
