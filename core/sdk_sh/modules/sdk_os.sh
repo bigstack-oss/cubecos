@@ -1815,6 +1815,15 @@ os_octavia_lb_failover_errored()
     done
 }
 
+# Management addresses of the nodes that actually run octavia-health-manager --
+# the first three compute nodes, matching CommitService. The endpoint list in
+# octavia.conf must name these, not the control nodes.
+os_octavia_hm_nodes()
+{
+    cubectl node list -r compute -j 2>/dev/null | \
+        jq -r '.[].ip.management' 2>/dev/null | grep -v '^null$' | head -3 | paste -sd, | tr -d '\n'
+}
+
 os_octavia_nid_get()
 {
     $OPENSTACK network list | awk '/ lb-mgmt-net / {print $2}' | tr -d '\n'
