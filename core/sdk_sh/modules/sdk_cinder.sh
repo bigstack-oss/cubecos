@@ -3421,8 +3421,7 @@ isTestVolumeSuccessful: $isTestVolumeSuccessful | test("true")
     return 0
 }
 
-# Refusal reasons for cinder_move_preflight. Kept local to this module -- these
-# are user-facing strings, not health-check error codes.
+# cinder_move_preflight refusal/warning strings
 readonly ERROR_CINDER_MOVE_SAME_TYPE="destination tier is the volume's current tier"
 readonly ERROR_CINDER_MOVE_NO_SUCH_TYPE="destination tier does not exist"
 readonly ERROR_CINDER_MOVE_VM_NOT_RUNNING="the attached instance must be running or paused"
@@ -3433,23 +3432,23 @@ readonly ERROR_CINDER_MOVE_HAS_SNAPSHOTS="volume must not have snapshots"
 readonly ERROR_CINDER_MOVE_REPLICATED="volume must not be replicated"
 readonly ERROR_CINDER_MOVE_IN_GROUP="volume must not belong to a group"
 readonly ERROR_CINDER_MOVE_QOS_FRONTEND="front-end QoS differs between the tiers"
-readonly ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL="destination resolves to the same ceph cluster and pool"
-readonly ERROR_CINDER_MOVE_BACKEND_UNRESOLVED="the ceph cluster and pool behind one of the tiers cannot be determined"
+readonly WARN_CINDER_MOVE_SAME_CLUSTER_SAME_POOL="destination resolves to the same ceph cluster and pool, so the copy is pointless work"
+readonly WARN_CINDER_MOVE_BACKEND_UNRESOLVED="the ceph cluster and pool behind one of the tiers cannot be determined"
 readonly ERROR_CINDER_MOVE_DOMAIN_MISSING="the instance has no libvirt domain on its recorded host"
 readonly ERROR_CINDER_MOVE_DOMAIN_NOT_LIVE="the instance's domain is not running or paused"
 readonly ERROR_CINDER_MOVE_DISK_NOT_IN_DOMAIN="the attached disk is not present in the instance's domain"
 readonly ERROR_CINDER_MOVE_DISPATCH_FAILED="retype command failed"
 
-# Collected blockers. A preflight reports every reason a move cannot proceed,
-# not just the first -- a tenant who fixes one and retries should not discover
-# the next one at that point.
+# record a blocker; all are reported, not just the first
 _pf_block() { _pf_codes+=("$1"); _pf_reasons+=("$2"); }
 
-# Emit the verdict. "code"/"reason" carry the first blocker so single-line
-# callers stay simple; "blockers" carries all of them.
+# record a warning; never makes ok false
+_pf_warn()  { _pf_wcodes+=("$1"); _pf_wreasons+=("$2"); }
+
+# print verdict JSON: first blocker as code/reason, plus all blockers/warnings
 _cinder_preflight_json()
 {
-    local i first_code="OK" first_reason="ok" blockers="" ok=true
+    local i first_code="OK" first_reason="ok" blockers="" warnings="" ok=true
     if [ ${#_pf_codes[@]} -gt 0 ] ; then
         ok=false
         first_code="${_pf_codes[0]}"
@@ -3459,8 +3458,12 @@ _cinder_preflight_json()
             blockers="${blockers}{\"code\":\"${_pf_codes[$i]}\",\"reason\":\"${_pf_reasons[$i]}\"}"
         done
     fi
-    printf '{"ok":%s,"code":"%s","reason":"%s","blockers":[%s],"src_type":"%s","dst_type":"%s","size_gb":%s,"attached_to":"%s"}\n' \
-        "$ok" "$first_code" "$first_reason" "$blockers" \
+    for i in "${!_pf_wcodes[@]}" ; do
+        [ -n "$warnings" ] && warnings="${warnings},"
+        warnings="${warnings}{\"code\":\"${_pf_wcodes[$i]}\",\"reason\":\"${_pf_wreasons[$i]}\"}"
+    done
+    printf '{"ok":%s,"code":"%s","reason":"%s","blockers":[%s],"warnings":[%s],"src_type":"%s","dst_type":"%s","size_gb":%s,"attached_to":"%s"}\n' \
+        "$ok" "$first_code" "$first_reason" "$blockers" "$warnings" \
         "$_pf_src_type" "$_pf_dst_type" "${_pf_size:-0}" "${_pf_attached:-}"
 }
 
@@ -3469,12 +3472,7 @@ _pf_snapshots()   { $OPENSTACK volume snapshot list --volume "$1" -f value -c ID
 _pf_type_exists() { $OPENSTACK volume type list -f value -c Name 2>/dev/null | grep -qx "$1"; }
 _pf_vm_state()    { $OPENSTACK server show "$1" -f value -c status 2>/dev/null; }
 
-# The cinder.conf section a volume type's volumes land in. A volume type name
-# is NOT a section name: the built-in type is "CubeStorage" while its section
-# is "ceph". Every type config_cinder.cpp creates carries the section on its
-# volume_backend_name extra spec (os_volume_type_create <type> <section>), so
-# that is the mapping. Prints nothing and returns non-zero when the type does
-# not resolve.
+# cinder.conf section of volume type $1, from its volume_backend_name
 _pf_type_backend_section()
 {
     local t="$1" b
@@ -3489,12 +3487,7 @@ _pf_type_backend_section()
     esac
 }
 
-# "<fsid>:<pool>" for a backend section, read from its cinder section + that
-# cluster's conf. Returns non-zero with no output when the section does not
-# resolve to a pool or the cluster does not answer: an unresolved backend must
-# never be compared as though it were a real one, because two unresolved (or
-# one unresolved) sides silently differ and let the guard pass.
-# Read one key from an ini section. crudini is not installed on CubeCOS nodes.
+# read key $3 from section $2 of ini file $1
 _pf_ini_get()
 {
     [ -r "$1" ] || return 1
@@ -3511,6 +3504,7 @@ _pf_ini_get()
         }' "$1" 2>/dev/null
 }
 
+# "<fsid>:<pool>" of backend section $1; non-zero if unresolved
 _pf_backend_fsid_pool()
 {
     local sec="$1" conf pool
@@ -3530,12 +3524,10 @@ _pf_backend_fsid_pool()
 _pf_type_multiattach() { [ "$($OPENSTACK volume type show "$1" -f json 2>/dev/null | jq -r '.properties.multiattach // ""')" == "<is> True" ]; }
 _pf_type_encrypted()   { [ -n "$($OPENSTACK volume type show "$1" -f value -c encryption 2>/dev/null | tr -d '[:space:]')" ]; }
 
-# The libvirt disk target the attachment maps to: /dev/sdb -> sdb. Nova derives
-# the same value with mountpoint.rpartition("/")[2].
+# attached device path of volume $1 (e.g. /dev/sdb)
 _pf_attached_device() { $OPENSTACK volume show "$1" -f json 2>/dev/null | jq -r '.attachments[0].device // ""'; }
 
-# "<domstate>|<space-separated disk targets>" read from the compute node hosting
-# $1. Non-zero return means the probe could not run -- not that the move is bad.
+# "<domstate>|<disk targets>" of instance $1; non-zero if the probe could not run
 _pf_domain_probe()
 {
     local inst="$1" host dom out
@@ -3599,6 +3591,7 @@ cinder_move_preflight()
     local vol_id="$1" _pf_dst_type="$2" v
     local _pf_src_type="" _pf_size=0 _pf_attached=""
     local _pf_codes=() _pf_reasons=()
+    local _pf_wcodes=() _pf_wreasons=()
 
     v=$(_pf_volume "$vol_id")
     # the client reports the tier as .type; .volume_type is a fallback for older output
@@ -3606,8 +3599,7 @@ cinder_move_preflight()
     _pf_size=$(echo "$v" | jq -r '.size // 0')
     _pf_attached=$(echo "$v" | jq -r '.attachments[0].server_id // ""')
 
-    # These two stop the walk: with no valid distinct destination there is
-    # nothing further to evaluate about it.
+    # no valid distinct destination: stop here
     if [ "$_pf_src_type" == "$_pf_dst_type" ] ; then
         _pf_block E_SAME_TYPE "$ERROR_CINDER_MOVE_SAME_TYPE"
         _cinder_preflight_json; return 1
@@ -3631,9 +3623,7 @@ cinder_move_preflight()
     if [ "$(echo "$v" | jq -r '.attachments | length')" -gt 1 ] ; then
         _pf_block E_MULTIATTACH "$ERROR_CINDER_MOVE_MULTIATTACH"
     fi
-    # Capability differences between the two tiers. Neither is about a driver
-    # being "live capable" -- an attached move never enters either driver -- but
-    # both are refused for a volume that is not detached, in either direction.
+    # attached volumes cannot cross a multiattach or encryption difference
     if [ -n "$_pf_attached" ] ; then
         local src_ma=no dst_ma=no
         _pf_type_multiattach "$_pf_src_type" && src_ma=yes
@@ -3655,25 +3645,19 @@ cinder_move_preflight()
     if _pf_qos_differs "$_pf_src_type" "$_pf_dst_type" ; then
         _pf_block E_QOS_FRONTEND_DIFFERS "$ERROR_CINDER_MOVE_QOS_FRONTEND"
     fi
-    # cubecos#1490: identical fsid AND pool means the driver would treat these as
-    # one place and repoint the volume without copying it. The type has to be
-    # resolved to its cinder.conf section first, and a side that does not
-    # resolve is refused rather than compared -- an unresolvable section reads
-    # as "different" and would let the guard pass.
+    # warn (not block) on same fsid+pool or an unresolved backend
     local src_sec dst_sec src_fp dst_fp
     src_sec=$(_pf_type_backend_section "$_pf_src_type") || src_sec=""
     dst_sec=$(_pf_type_backend_section "$_pf_dst_type") || dst_sec=""
     src_fp=$(_pf_backend_fsid_pool "$src_sec") || src_fp=""
     dst_fp=$(_pf_backend_fsid_pool "$dst_sec") || dst_fp=""
     if [ -z "$src_fp" ] || [ -z "$dst_fp" ] ; then
-        _pf_block E_BACKEND_UNRESOLVED "$ERROR_CINDER_MOVE_BACKEND_UNRESOLVED"
+        _pf_warn W_BACKEND_UNRESOLVED "$WARN_CINDER_MOVE_BACKEND_UNRESOLVED"
     elif [ "$src_fp" == "$dst_fp" ] ; then
-        _pf_block E_SAME_CLUSTER_SAME_POOL "$ERROR_CINDER_MOVE_SAME_CLUSTER_SAME_POOL"
+        _pf_warn W_SAME_CLUSTER_SAME_POOL "$WARN_CINDER_MOVE_SAME_CLUSTER_SAME_POOL"
     fi
 
-    # Layer 2: the running domain, not nova's DB, is authoritative about whether
-    # QEMU can swap this disk. Advisory -- all of it can change before the swap,
-    # and a probe that cannot run must never invent a refusal.
+    # check the live libvirt domain; skip if the probe cannot run
     if [ -n "$_pf_attached" ] ; then
         local probe dom_state dom_disks dev
         if probe=$(_pf_domain_probe "$_pf_attached") ; then
@@ -3703,31 +3687,26 @@ cinder_move_preflight()
 }
 _civ_name_id() { ${CINDER:-/usr/bin/cinder} show "$1" 2>/dev/null | awk -F'|' '/os-vol-mig-status-attr:name_id/{print $3}' | tr -d ' '; }
 
-# The RBD image backing a volume. A migrated volume's image keeps the temporary
-# volume's id, carried on the record as name_id.
+# RBD image name of volume $1 (uses name_id after a migration)
 cinder_volume_image_name()
 {
     local nid=$(_civ_name_id "$1")
     case "$nid" in ""|None|null) echo "volume-$1" ;; *) echo "volume-$nid" ;; esac
 }
 
-# Dispatch a volume move between storage tiers. Checks preflight constraints,
-# then invokes the retype command if clear. Returns JSON with the result.
+# preflight, then retype volume $1 to type $2; prints result JSON
 cinder_move_volume()
 {
     local vol_id="$1" dst_type="$2"
     local pf_output
 
-    # Run preflight and capture output
     pf_output=$(cinder_move_preflight "$vol_id" "$dst_type")
 
-    # If preflight refuses, pass the JSON through unchanged
     if [ $? -ne 0 ] ; then
         echo "$pf_output"
         return 1
     fi
 
-    # Preflight passed; invoke retype
     if ! ${CINDER:-/usr/bin/cinder} retype --migration-policy on-demand "$vol_id" "$dst_type" >/dev/null 2>&1 ; then
         jq -c -n \
             --arg code "E_DISPATCH_FAILED" \
@@ -3736,7 +3715,6 @@ cinder_move_volume()
         return 1
     fi
 
-    # Success
     jq -c -n '{ok:true,"code":"OK","reason":"ok","dispatched":true}'
     return 0
 }
