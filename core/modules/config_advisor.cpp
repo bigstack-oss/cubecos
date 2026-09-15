@@ -18,6 +18,13 @@
 
 #include <hex/log.h>
 #include <hex/config_module.h>
+#include <hex/config_tuning.h>
+#include <hex/dryrun.h>
+#include <hex/process.h>
+
+#include <cube/systemd_util.h>
+
+#include "include/role_cubesys.h"
 
 #include "advisor_key.h"
 
@@ -425,7 +432,133 @@ VerifyReleaseMain(int argc, char **argv)
     return VerifyRelease(dir, artifact) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-CONFIG_MODULE(advisor, 0, 0, 0, 0, 0);
+// Surviving an upgrade: the new firmware is installed onto the other partition
+// and booted, so anything a node was given at enrolment is on the old slot
+// unless it is migrated here.
+
+// Only the stub test sets a prefix, with -DADVISOR_TEST_TREE; any other attempt
+// collides with the define below and fails the build under -Werror.
+#ifdef ADVISOR_TEST_TREE
+#define ADVISOR_ROOT ADVISOR_TEST_TREE
+#else
+#define ADVISOR_ROOT ""
+#endif
+
+// The agent writes agent.crt, agent.key, enrollment-ca.crt and server/ here at
+// enrolment. The certificate is what says this node was enrolled.
+#define ADVISOR_IDENTITY_DIR     ADVISOR_ROOT "/etc/cube/advisor-agent"
+#define ADVISOR_AGENT_CERT       ADVISOR_IDENTITY_DIR "/agent.crt"
+#define ADVISOR_AGENT_BIN        ADVISOR_ROOT "/usr/local/bin/cube-advisor-agent"
+#define ADVISOR_TARGETS_FILE     ADVISOR_ROOT "/etc/cube-advisor-agent/web-targets.json"
+#define ADVISOR_CONSOLE_CA       ADVISOR_ROOT "/etc/ssh/console-ca/cube-advisor.pub"
+#define ADVISOR_SSHD_DROPIN      ADVISOR_ROOT "/etc/ssh/sshd_config.d/60-cube-advisor-console.conf"
+
+// The unit hex_config runs; shipped with the image, started only once enrolled.
+#define ADVISOR_AGENT_SERVICE    "cube-advisor-agent"
+
+// Enrolled: this node holds the identity the Advisor issued it.
+static bool
+IsEnrolled(void)
+{
+    return access(ADVISOR_AGENT_CERT, F_OK) == 0;
+}
+
+// The cluster role, which this module does not act on -- it only waits for it.
+// An unconfigured node does not yet know whether it is anything, and a module
+// that commits before then is committing against settings nobody has supplied.
+static CubeRole_e s_eCubeRole;
+static bool s_bCubeModified = false;
+
+CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
+PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
+
+static bool
+ParseCube(const char *name, const char *value, bool isNew)
+{
+    ParseTune(name, value, isNew, 1);
+    return true;
+}
+
+static void
+NotifyCube(bool modified)
+{
+    s_bCubeModified = IsModifiedTune(1);
+    s_eCubeRole = GetCubeRole(s_cubeRole);
+}
+
+static bool
+CommitCheck(bool modified, int dryLevel)
+{
+    if (IsBootstrap())
+        return true;
+
+    return modified | s_bCubeModified;
+}
+
+// Runs the agent's service, the way every other service here is run: started by
+// hex_config, never enabled, so systemd has no second uncoordinated opinion
+// about when it should be up.
+//
+// Also seeds this node's allowlist. The agent runs on every node and each one
+// reads its own file, but only the node an operator typed "advisor enroll" on
+// ran the seeding -- so every other node had no allowlist and refused every
+// target. This commit runs on every node, so a node that was down or was not
+// in the cluster at enrolment gets its allowlist on its next commit.
+//
+// Whether it runs is the identity, and only the identity. Not the role -- a
+// node holds an identity because someone enrolled it, and any node may be
+// enrolled; the role check above is "is this node configured yet", a different
+// question. Not the binary either: an enrolled node whose binary will not run
+// fails to start and says so in the journal, which "advisor status" points at.
+static bool
+Commit(bool modified, int dryLevel)
+{
+    HEX_DRYRUN_BARRIER(dryLevel, true);
+
+    if (IsUndef(s_eCubeRole) || !CommitCheck(modified, dryLevel))
+        return true;
+
+    SystemdCommitService(IsEnrolled(), ADVISOR_AGENT_SERVICE);
+
+    // Seeding is not reconciling, and the difference is the whole point.
+    // advisor_targets_init writes only when there is no file at all: a node
+    // with no allowlist gets one, a node that has one is left exactly as the
+    // operator left it. Nothing here may add, remove or restore an entry in an
+    // existing file -- an operator who ran "advisor target_unset cube-cmp"
+    // meant it, and a commit that quietly put it back would make target_unset
+    // useless. hex_sdk only auto-loads sdk_<MOD>*.sh, so this goes through
+    // hex_sdk itself rather than being called from another module's helper.
+    HexSpawn(0, HEX_SDK, "advisor_targets_init", NULL);
+    return true;
+}
+
+CONFIG_MODULE(advisor, 0, 0, 0, 0, Commit);
+
+// The agent dials out to the Advisor, so it must not be started before the
+// node has its addresses -- the same reason sshd requires this.
+CONFIG_REQUIRES(advisor, net_static);
+
+// Only for the role, which says whether this node is configured at all.
+CONFIG_OBSERVES(advisor, cubesys, ParseCube, NotifyCube);
 
 CONFIG_COMMAND(advisor_pubkey, PubkeyMain, PubkeyUsage);
 CONFIG_COMMAND(advisor_verify_release, VerifyReleaseMain, VerifyReleaseUsage);
+
+// The certificate and key the Advisor issued this node: not reissuable without
+// enrolling again.
+CONFIG_MIGRATE(advisor, ADVISOR_IDENTITY_DIR);
+// The agent itself. It is installed from a release the image's own key verified
+// at enrolment, and it lives on the same root filesystem as everything else
+// here, so carrying it across is no weaker than carrying the identity across.
+CONFIG_MIGRATE(advisor, ADVISOR_AGENT_BIN);
+// The operator's allowlist of what the agent may dial.
+CONFIG_MIGRATE(advisor, ADVISOR_TARGETS_FILE);
+// The console trust anchor and the sshd drop-in that loads it, written by the
+// agent at enrolment. rsync skips a path that is not there, so registering them
+// before that work lands costs nothing.
+CONFIG_MIGRATE(advisor, ADVISOR_CONSOLE_CA);
+CONFIG_MIGRATE(advisor, ADVISOR_SSHD_DROPIN);
+
+// Deliberately not migrated: the multi-user.target.wants symlink. hex_config
+// decides when this service runs, and a symlink carried across would make
+// systemd a second owner of it on the new partition.
