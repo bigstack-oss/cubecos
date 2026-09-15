@@ -32,6 +32,7 @@ fi
 #     openssl dgst -sha256 -verify release.pub -signature manifest.txt.sig manifest.txt
 #     sha256sum -c manifest.txt
 
+ADVISOR_TRUST_ANCHOR=/etc/pki/ca-trust/source/anchors/cube-advisor.crt
 ADVISOR_MANIFEST_NAME=manifest.txt
 ADVISOR_SIGNATURE_NAME=manifest.txt.sig
 
@@ -582,9 +583,49 @@ advisor_targets_discover()
 # Every step fails closed. A partial install -- a verified binary with no
 # identity, or an identity with no binary -- is worse than a clean failure the
 # operator can retry.
+# advisor_trust_ca <ca-file>
+#
+# Installs the Advisor's CA into this node's system trust store.
+#
+# Enrolment fetches the release over HTTPS with curl and then runs the agent,
+# which talks to the same endpoint through Go's TLS. Both read the system store
+# and neither takes a CA path, so an Advisor serving its own certificate -- the
+# normal case offline, where there is no public CA to lean on -- fails the fetch
+# with "self-signed certificate" and nothing after it runs. Passing -k instead
+# is not an option: the pairing token is a bearer credential on that request.
+#
+# Deliberately not migrated across a firmware upgrade. This is enrolment-time
+# trust; the tunnel's own trust is the enrollment CA the agent pins from its
+# identity directory, which is migrated. Verified on hardware: after an upgrade
+# that dropped this anchor, the agent reconnected on its own.
+advisor_trust_ca()
+{
+    local ca=$1
+
+    [ -n "$ca" ] || return 0
+    if [ ! -r "$ca" ] ; then
+        echo "Error: cannot read the Advisor CA file: $ca" >&2
+        return 1
+    fi
+    # A file that is not a certificate would install cleanly and then fail
+    # every TLS handshake with nothing pointing back here.
+    if ! openssl x509 -in "$ca" -noout >/dev/null 2>&1 ; then
+        echo "Error: $ca is not a PEM certificate" >&2
+        return 1
+    fi
+    install -m 0644 "$ca" "$ADVISOR_TRUST_ANCHOR" || return 1
+    if ! update-ca-trust extract >/dev/null 2>&1 ; then
+        echo "Error: could not rebuild this node's trust store" >&2
+        rm -f "$ADVISOR_TRUST_ANCHOR"
+        return 1
+    fi
+    echo "Trusting the Advisor's CA from $ca."
+    return 0
+}
+
 advisor_enroll()
 {
-    local server=$1 token_file=$2 version=$3
+    local server=$1 token_file=$2 version=$3 ca_file=${4:-}
     local arch artifact tmp rc
 
     if [ -z "$server" ] || [ -z "$token_file" ] || [ -z "$version" ] ; then
@@ -595,6 +636,10 @@ advisor_enroll()
         echo "Error: cannot read the pairing token file: $token_file" >&2
         return 1
     fi
+
+    # Before anything reaches the network: the fetch below and the agent that
+    # follows both verify against the system store.
+    advisor_trust_ca "$ca_file" || return 1
 
     # Enrolment is a cluster-level act, and the agent's tools are the control
     # plane's: cluster check, the CLI, the cube-cos-api reads. A compute or
