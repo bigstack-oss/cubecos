@@ -364,23 +364,8 @@ static bool
 UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::string ctrlAddrs)
 {
     if (IsControl(s_eCubeRole)) {
-        std::string dbconn = RabbitMqServers(ha, sharedId, password, ctrlAddrs);
-        cfg["DEFAULT"]["transport_url"] = dbconn;
-        cfg["DEFAULT"]["rpc_response_timeout"] = "1200";
-        inspCfg["DEFAULT"]["transport_url"] = dbconn;
-        inspCfg["DEFAULT"]["rpc_response_timeout"] = "1200";
-
-        if (ha) {
-            cfg["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
-            cfg["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
-            cfg["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
-            cfg["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
-
-            inspCfg["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
-            inspCfg["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
-            inspCfg["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
-            inspCfg["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
-        }
+        SetMqClientConfig(cfg, ha, sharedId, password, ctrlAddrs);
+        SetMqClientConfig(inspCfg, ha, sharedId, password, ctrlAddrs);
     }
 
     return true;
