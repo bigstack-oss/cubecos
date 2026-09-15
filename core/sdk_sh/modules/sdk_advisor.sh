@@ -33,6 +33,11 @@ fi
 #     sha256sum -c manifest.txt
 
 ADVISOR_TRUST_ANCHOR=/etc/pki/ca-trust/source/anchors/cube-advisor.crt
+# The identity an enrolled node holds. config_advisor.cpp names the same paths
+# (it decides from them whether the agent should run and migrates them across
+# an upgrade); repeated here because hex_sdk cannot read the C header.
+ADVISOR_IDENTITY_DIR=/etc/cube/advisor-agent
+ADVISOR_AGENT_CERT=$ADVISOR_IDENTITY_DIR/agent.crt
 ADVISOR_MANIFEST_NAME=manifest.txt
 ADVISOR_SIGNATURE_NAME=manifest.txt.sig
 
@@ -175,10 +180,23 @@ advisor_cluster_id()
         id=$(sed -n 's/^CUBE_CLUSTER_ID=//p' /etc/cube/phone-home-agent.env | head -1)
     fi
     if [ -z "$id" ] ; then
-        id=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "$T_cubesys_controller")
+        id=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "${T_cubesys_controller:-}")
+    fi
+    # An enrolled node already carries the answer in its own certificate, and
+    # that certificate is migrated across a firmware upgrade while the two
+    # sources above are not: phone-home-agent.env is written at deployment and
+    # does not survive, and cubesys.controller is absent on a converged
+    # single-node cluster. Both gone leaves an enrolled node unable to say
+    # which cluster it is -- so read back what it was enrolled as.
+    #
+    # Last, not first: the two above describe the cluster this node belongs to
+    # now, while the certificate records what it enrolled as once.
+    if [ -z "$id" ] && [ -r "$ADVISOR_AGENT_CERT" ] ; then
+        id=$(openssl x509 -in "$ADVISOR_AGENT_CERT" -noout -subject -nameopt multiline 2>/dev/null |
+             sed -n 's/^ *organizationalUnitName *= *//p' | head -1)
     fi
     if [ -z "$id" ] ; then
-        echo "Error: cannot tell which cluster this node belongs to (no CUBE_CLUSTER_ID, no cubesys.controller)" >&2
+        echo "Error: cannot tell which cluster this node belongs to (no CUBE_CLUSTER_ID, no cubesys.controller, no enrolled identity)" >&2
         return 1
     fi
 
@@ -625,7 +643,7 @@ advisor_trust_ca()
 
 advisor_enroll()
 {
-    local server=$1 token_file=$2 version=$3 ca_file=${4:-}
+    local server=$1 token_file=$2 version=$3 ca_file=${4:-} force=${5:-}
     local arch artifact tmp rc
 
     if [ -z "$server" ] || [ -z "$token_file" ] || [ -z "$version" ] ; then
@@ -676,8 +694,16 @@ advisor_enroll()
     # own public key says otherwise.
     advisor_install_release "$tmp" "$artifact" /usr/local/bin/cube-advisor-agent || return 1
 
+    # An Advisor that has been rebuilt signs with a new enrollment CA, which
+    # leaves every node holding an identity signed by one that no longer
+    # exists -- valid-looking, and useless. The agent refuses to replace an
+    # existing identity without being told to, correctly, so forcing has to be
+    # something the operator asks for rather than a retry that silently
+    # discards a working identity.
+    local force_arg=""
+    [ -n "$force" ] && force_arg="-force"
     /usr/local/bin/cube-advisor-agent enroll \
-        -server "$server" -token-file "$token_file" -cluster "$cluster"
+        -server "$server" -token-file "$token_file" -cluster "$cluster" $force_arg
     rc=$?
     case $rc in
         0)
@@ -688,7 +714,8 @@ advisor_enroll()
             # directly (only cross-module calls route through $HEX_SDK).
             advisor_targets_discover
             ;;
-        3) echo "This node is already enrolled; nothing was changed." >&2 ;;
+        3) echo "This node is already enrolled; nothing was changed." >&2
+           echo "If the Advisor was rebuilt, this node's identity was signed by a CA that no longer exists; re-run with the force argument to replace it." >&2 ;;
         4) echo "The pairing token was refused -- ask for a fresh one." >&2 ;;
         5) echo "The Advisor service was unreachable from this node." >&2 ;;
         *) echo "Error: enrolment failed (exit $rc)" >&2 ;;
