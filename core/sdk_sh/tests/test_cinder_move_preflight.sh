@@ -51,7 +51,7 @@ echo 'running|sda sdb' > $T/domain
 : > $T/enc_types     # tiers whose type is encrypted
 
 mkvol() { # status attachments multiattach replication group type
-  printf '{"status":"%s","attachments":%s,"multiattach":%s,"replication_status":"%s","group_id":%s,"volume_type":"%s","size":2}\n' \
+  printf '{"status":"%s","attachments":%s,"multiattach":%s,"replication_status":"%s","group_id":%s,"type":"%s","size":2}\n' \
     "$1" "$2" "$3" "$4" "$5" "$6" > $T/vol.json
 }
 one='[{"server_id":"vm-1"}]'; two='[{"server_id":"vm-1"},{"server_id":"vm-2"}]'
@@ -310,14 +310,15 @@ unset -f _pf_backend_fsid_pool
 sed -n '/^_pf_backend_fsid_pool()/,/^}/p' $SRC > $T/fp_fn.sh
 source $T/fp_fn.sh
 
-crudini() {  # --get <file> <section> <key>
-    case "$3:$4" in
+_pf_ini_get() {
+    # $1 file, $2 section, $3 key — stands in for the awk reader
+    case "$2:$3" in
         ceph:rbd_ceph_conf) echo /etc/ceph/ceph.conf ;;
         ceph:rbd_pool)      echo cinder-volumes ;;
         *) return 1 ;;
     esac
 }
-export -f crudini
+export -f _pf_ini_get
 ceph() { echo c6e64c49 ; }
 export -f ceph
 timeout() { shift; "$@" ; }

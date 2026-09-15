@@ -1,0 +1,41 @@
+driver: "cinder.volume.drivers.rbd.RBDDriver"
+vendor: "Generic"
+type: "Ceph"
+# RBD is a network disk: nothing is mapped through device-mapper, so there is no
+# multipath stanza and the image multipath settings stay off.
+multipath: []
+storage:
+  service:
+    driverSection:
+      # ceph.conf of the cluster this backend talks to. Ship that file as an
+      # extraConfigFiles entry so the feature distributes it, rather than copying
+      # it to every node by hand. The name is prefixed with the storage name on
+      # disk, so a file supplied as "ceph.conf" for a storage named "foo" must be
+      # referenced here as
+      #   /etc/cinder/external_storage_extra_configs/foo_ceph.conf
+      - key: "rbd_ceph_conf"
+        value: "/etc/cinder/external_storage_extra_configs/<storage_name>_ceph.conf"
+      - key: "rbd_pool"
+        value: "<pool on that cluster>"
+      # Set rbd_user only when the cluster runs with cephx enabled; Cinder then
+      # reports auth_enabled and every compute node needs a matching libvirt
+      # secret, whose usage name must differ from any already defined on the host
+      # (libvirt requires usage names to be unique). Leave it unset for a cluster
+      # with auth disabled and no secret is needed.
+      - key: "rados_connect_timeout"
+        value: "-1"
+      - key: "rbd_flatten_volume_from_snapshot"
+        value: "false"
+      - key: "rbd_max_clone_depth"
+        value: "5"
+      - key: "rbd_store_chunk_size"
+        value: "4"
+    extraSettings: []
+    extraConfigFiles: []
+  volumeType:
+    settings:
+      - key: "multiattach"
+        value: ""
+  image:
+    useMultipath: false
+    forceMultipath: false
