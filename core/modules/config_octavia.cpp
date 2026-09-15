@@ -36,6 +36,13 @@ static const char LOGDIR[] = "/var/log/octavia";
 static const char CAFILE[] = "/etc/octavia/certs/ca_01.pem";
 static const char KEYFILE[] = "/etc/octavia/octavia_ssh_key";
 static const char KEYFILE_PUB[] = "/etc/octavia/octavia_ssh_key.pub";
+// Cluster-discovered values that are NOT settings: the two lb-mgmt ids and the
+// health-manager endpoint list. octavia.conf is regenerated from the .def on every
+// slot, so a firmware roll loses them. Keep a copy here and migrate it, the way
+// nova carries /var/lib/nova/compute_id.
+static const char STATE_DIR[] = "/etc/cube/cos/octavia";
+static const char STATE_FILE[] = "/etc/cube/cos/octavia/lb_mgmt";
+
 static const char INIT_SYNC[] = "/etc/cron.d/octavia_init_sync";
 static const char HMGR_SYNC[] = "/etc/cron.d/octavia_hmgr_sync";
 
@@ -288,6 +295,82 @@ UpdateDebug(bool enabled)
     return true;
 }
 
+// Persist/restore the cluster-discovered values across a slot swap. Written
+// whenever they are known, read when octavia.conf has nothing (a rolled slot).
+static void
+SaveState(const std::string& nid, const std::string& sgid, const std::string& eps)
+{
+    if (nid.empty() || sgid.empty())
+        return;
+
+    if (HexMakeDir(STATE_DIR, "root", "root", 0755) != 0)
+        return;
+
+    FILE *fout = fopen(STATE_FILE, "w");
+    if (!fout) {
+        HexLogWarning("octavia: cannot write %s", STATE_FILE);
+        return;
+    }
+    fprintf(fout, "%s\n%s\n%s\n", nid.c_str(), sgid.c_str(), eps.c_str());
+    fclose(fout);
+    HexSetFileMode(STATE_FILE, "root", "root", 0600);
+}
+
+static std::string
+Chomp(const char* line)
+{
+    std::string v(line);
+    v.erase(0, v.find_first_not_of(" \t\r\n"));
+    size_t end = v.find_last_not_of(" \t\r\n");
+    return (end == std::string::npos) ? "" : v.substr(0, end + 1);
+}
+
+static bool
+LoadState(std::string& nid, std::string& sgid, std::string& eps)
+{
+    FILE *fin = fopen(STATE_FILE, "r");
+    if (!fin)
+        return false;
+
+    char n[80] = {0}, s[80] = {0}, e[1024] = {0};
+    bool ok = (fgets(n, sizeof(n), fin) && fgets(s, sizeof(s), fin));
+    if (ok && !fgets(e, sizeof(e), fin))
+        e[0] = 0;
+    fclose(fin);
+    if (!ok)
+        return false;
+
+    nid = Chomp(n);
+    sgid = Chomp(s);
+    eps = Chomp(e);
+
+    return !nid.empty() && !sgid.empty();
+}
+
+// A roll boots a freshly installed slot whose octavia.conf is the .def and holds
+// none of these values, so lift them off the previous slot before the new one's
+// first commit. Without this the upgrade that delivers the fix is itself the one
+// roll the fix cannot cover.
+static bool
+MigrateLbMgmtState(const char *prevVersion, const char *prevRootDir)
+{
+    std::string prev = std::string(prevRootDir) + CONF;
+    if (access(prev.c_str(), F_OK) != 0)
+        return true;
+
+    Configs prevCfg;
+    if (!LoadConfig(prev.c_str(), SB_SEC_RFMT, '=', prevCfg)) {
+        HexLogWarning("octavia: cannot read %s, lb-mgmt state not carried over", prev.c_str());
+        return true;
+    }
+
+    SaveState(prevCfg["controller_worker"]["amp_boot_network_list"],
+              prevCfg["controller_worker"]["amp_secgroup_list"],
+              prevCfg["health_manager"]["controller_ip_port_list"]);
+
+    return true;
+}
+
 // The health manager's own lb-mgmt address. This used to be hardcoded as
 // "172.16.0." + octet4, which is not the lb-mgmt network on any deployment: the
 // subnet comes from GetMgmtCidr(cubesys.mgmt.cidr, 0) in os_octavia_init(), and
@@ -368,8 +451,6 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
         cfg["health_manager"]["heartbeat_key"] = "insecure";
         cfg["health_manager"]["bind_port"] = "5555";
         cfg["health_manager"]["bind_ip"] = cidrIp;
-        cfg["health_manager"]["controller_ip_port_list"] =
-            ControllerIpPortList(mgmtCidr, cidrIp, oldCfg["health_manager"]["controller_ip_port_list"]);
 
         // The jobboard is the half of amphorav2 that makes a lost flow
         // recoverable: workers claim jobs from it, so a worker that dies
@@ -417,9 +498,28 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
 
         // Always carry these two forward. They are cluster-wide neutron ids
         // stamped by ReconfigMain, not settings, so a commit must never author
-        // them: on a genuine first init oldCfg has nothing and they stay empty.
-        cfg["controller_worker"]["amp_boot_network_list"] = oldCfg["controller_worker"]["amp_boot_network_list"];
-        cfg["controller_worker"]["amp_secgroup_list"] = oldCfg["controller_worker"]["amp_secgroup_list"];
+        // them. oldCfg is empty on a rolled slot, so fall back to the migrated
+        // state file; on a genuine first init neither has them.
+        std::string nid = oldCfg["controller_worker"]["amp_boot_network_list"];
+        std::string sgid = oldCfg["controller_worker"]["amp_secgroup_list"];
+        std::string eps = oldCfg["health_manager"]["controller_ip_port_list"];
+        if (nid.empty() || sgid.empty()) {
+            std::string sNid, sSgid, sEps;
+            if (LoadState(sNid, sSgid, sEps)) {
+                HexLogInfo("octavia: restoring lb-mgmt state from %s", STATE_FILE);
+                if (nid.empty())
+                    nid = sNid;
+                if (sgid.empty())
+                    sgid = sSgid;
+                if (eps.empty())
+                    eps = sEps;
+            }
+        }
+        cfg["controller_worker"]["amp_boot_network_list"] = nid;
+        cfg["controller_worker"]["amp_secgroup_list"] = sgid;
+        cfg["health_manager"]["controller_ip_port_list"] = ControllerIpPortList(mgmtCidr, cidrIp, eps);
+
+        SaveState(nid, sgid, cfg["health_manager"]["controller_ip_port_list"]);
 
         cfg["oslo_messaging"]["topic"] = "octavia_prov";
 
@@ -805,6 +905,10 @@ ReconfigMain(int argc, char* argv[])
         ControllerIpPortList(s_mgmtCidr.newValue(), cidrIp,
                              curCfg["health_manager"]["controller_ip_port_list"]);
 
+    SaveState(curCfg["controller_worker"]["amp_boot_network_list"],
+              curCfg["controller_worker"]["amp_secgroup_list"],
+              curCfg["health_manager"]["controller_ip_port_list"]);
+
     WriteConfig(CONF, SB_SEC_WFMT, '=', curCfg);
     CommitService(enabled);
 
@@ -890,6 +994,8 @@ CONFIG_OBSERVES(octavia, rabbitmq, ParseRabbitMQ, NotifyMQ);
 CONFIG_OBSERVES(octavia, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(octavia, keystone, ParseKeystone, NotifyKeystone);
 
+CONFIG_MIGRATE(octavia, MigrateLbMgmtState);
+CONFIG_MIGRATE(octavia, STATE_DIR);
 CONFIG_MIGRATE(octavia, "/etc/octavia/certs");
 CONFIG_MIGRATE(octavia, KEYFILE);
 CONFIG_MIGRATE(octavia, KEYFILE_PUB);
