@@ -404,6 +404,7 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
         // Always carry these two forward. They are cluster-wide neutron ids
         // stamped by ReconfigMain, not settings, so a commit must never author
         // them: on a genuine first init oldCfg has nothing and they stay empty.
+        // octavia.conf is migrated, so a rolled slot still has them.
         cfg["controller_worker"]["amp_boot_network_list"] = oldCfg["controller_worker"]["amp_boot_network_list"];
         cfg["controller_worker"]["amp_secgroup_list"] = oldCfg["controller_worker"]["amp_secgroup_list"];
 
@@ -876,6 +877,9 @@ CONFIG_OBSERVES(octavia, rabbitmq, ParseRabbitMQ, NotifyMQ);
 CONFIG_OBSERVES(octavia, cubesys, ParseCube, NotifyCube);
 CONFIG_OBSERVES(octavia, keystone, ParseKeystone, NotifyKeystone);
 
+// cfg is rebuilt from the .def on every commit; octavia.conf only feeds oldCfg,
+// so migrating it just keeps the lb-mgmt ids across a roll.
+CONFIG_MIGRATE(octavia, CONF);
 CONFIG_MIGRATE(octavia, "/etc/octavia/certs");
 CONFIG_MIGRATE(octavia, KEYFILE);
 CONFIG_MIGRATE(octavia, KEYFILE_PUB);
