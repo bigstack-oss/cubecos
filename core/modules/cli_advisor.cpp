@@ -65,15 +65,24 @@ WriteTokenFile(const std::string& token, std::string* path)
 static int
 EnrollMain(int argc, const char** argv)
 {
-    if (argc > 3 /* [0]="enroll" [1]=server [2]=version */)
+    if (argc > 4 /* [0]="enroll" [1]=server [2]=version [3]=ca-file */)
         return CLI_INVALID_ARGS;
 
-    std::string server, version, token;
+    std::string server, version, token, caFile;
 
     if (!CliReadInputStr(argc, argv, 1, "Advisor service URL: ", &server) || server.length() <= 0)
         return CLI_INVALID_ARGS;
     if (!CliReadInputStr(argc, argv, 2, "Agent version to install: ", &version) || version.length() <= 0)
         return CLI_INVALID_ARGS;
+
+    // Optional, and prompted with an empty answer allowed: an Advisor behind a
+    // certificate this node already trusts needs nothing here, while one
+    // serving its own -- the normal case offline -- cannot be reached at all
+    // without it.
+    if (argc > 3)
+        caFile = argv[3];
+    else
+        CliReadLine("Advisor CA file (blank if already trusted): ", caFile);
 
     // Prompted, never taken from argv -- see WriteTokenFile.
     if (!CliReadLine("Pairing token: ", token) || token.length() <= 0) {
@@ -86,7 +95,8 @@ EnrollMain(int argc, const char** argv)
         return CLI_UNEXPECTED_ERROR;
 
     int rc = HexSpawn(0, HEX_SDK, "advisor_enroll",
-                      server.c_str(), tokenPath.c_str(), version.c_str(), NULL);
+                      server.c_str(), tokenPath.c_str(), version.c_str(),
+                      caFile.c_str(), NULL);
 
     // Removed whatever happened. A pairing token left on disk after a failed
     // enrolment is a credential nobody is watching.
@@ -186,7 +196,7 @@ CLI_MODE(CLI_TOP_MODE, "advisor",
 
 CLI_MODE_COMMAND("advisor", "enroll", EnrollMain, NULL,
     "Install and enrol the Advisor agent on this node.",
-    "enroll [<service-url> [<version>]]");
+    "enroll [<service-url> [<version> [<ca-file>]]]");
 
 CLI_MODE_COMMAND("advisor", "status", StatusMain, NULL,
     "Show whether this node is enrolled with the Advisor, and as which cluster.",
