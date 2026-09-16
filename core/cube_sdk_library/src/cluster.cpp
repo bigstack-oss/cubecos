@@ -196,6 +196,27 @@ RabbitMqServers(const bool ha, const std::string& controller,
     }
 }
 
+void
+SetMqClientConfig(Configs& config, const bool ha, const std::string& ctrlIp,
+    const std::string& pass, const std::string& clusterGroup, const bool withRpcTimeout)
+{
+    // Unconditional: every AMQP client gets these regardless of cluster shape.
+    config["DEFAULT"]["transport_url"] = RabbitMqServers(ha, ctrlIp, pass, clusterGroup);
+
+    // neutron's VPN agent is the sole call site that omits this.
+    if (withRpcTimeout)
+        config["DEFAULT"]["rpc_response_timeout"] = "1200";
+
+    // HA-gated: a single-node cluster has no peer to fail over to, so these
+    // stay out of its configs entirely.
+    if (ha) {
+        config["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
+        config["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
+        config["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
+        config["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
+    }
+}
+
 std::string
 KafkaServers(const bool ha, const std::string& controller, const std::string& clusterGroup, bool quote)
 {

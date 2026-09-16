@@ -506,29 +506,6 @@ SetDatabaseConnection(
 }
 
 /**
- * Set the connection to the worker queue.
- */
-static void
-SetWorkerQueue(
-    Configs& config,
-    const bool isHa,
-    const std::string sharedId,
-    const std::string mqPass,
-    const std::string ctrlAddrs)
-{
-    std::string dbconn = RabbitMqServers(isHa, sharedId, mqPass, ctrlAddrs);
-    config["DEFAULT"]["transport_url"] = dbconn;
-    config["DEFAULT"]["rpc_response_timeout"] = "1200";
-
-    if (isHa) {
-        config["oslo_messaging_rabbit"]["rabbit_retry_interval"] = "1";
-        config["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
-        config["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
-        config["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
-    }
-}
-
-/**
  * Set the connection to the notification queue.
  */
 static void
@@ -1092,7 +1069,7 @@ Commit(bool modified, int dryLevel)
         SetDefaults(mainConfig, s_eCubeRole);
         SetEndpoint(mainConfig, ctrlIp);
         SetDatabaseConnection(mainConfig, sharedId, dbPass);
-        SetWorkerQueue(mainConfig, s_ha, sharedId, mqPass, s_ctrlAddrs);
+        SetMqClientConfig(mainConfig, s_ha, sharedId, mqPass, s_ctrlAddrs);
         SetNotificationQueue(mainConfig, sharedId);
         SetAuth(mainConfig, sharedId, domain, cinderPass);
         SetNovaInfo(mainConfig, sharedId, s_cubeRegion, domain, novaPass);
