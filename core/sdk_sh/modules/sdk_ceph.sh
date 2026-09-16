@@ -299,6 +299,88 @@ ceph_mon_map_iplist()
     echo -n $iplist
 }
 
+# Where the cluster's fsid is recorded; CONFIG_MIGRATE'd by the ceph module.
+CEPH_FSID_FILE=${CEPH_FSID_FILE:-/etc/cube/cos/ceph/fsid}
+
+# The fsid every cluster carried before it was derived per install (#1490).
+CEPH_LEGACY_FSID=c6e64c49-09cf-463b-9d1c-b6645b4b3b85
+
+_ceph_fsid_is_uuid()
+{
+    [[ "$1" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+}
+
+# fsid in ceph.conf $1, else in the local mon store.
+ceph_fsid_current()
+{
+    local conf=${1:-/etc/ceph/ceph.conf}
+    local fsid=""
+
+    if [ -f "$conf" ] ; then
+        fsid=$(awk -F= '/^[[:space:]]*fsid[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "$conf")
+        _ceph_fsid_is_uuid "$fsid" && { echo -n "$fsid" ; return 0 ; }
+    fi
+
+    rm -f $MAPFILE
+    ceph_mon_map_create >/dev/null 2>&1
+    fsid=$(monmaptool --print $MAPFILE 2>/dev/null | awk '/^fsid/ {print $2; exit}')
+    _ceph_fsid_is_uuid "$fsid" && { echo -n "$fsid" ; return 0 ; }
+
+    return 1
+}
+
+# fsid derived from cluster seed $1; the legacy fsid when the seed is empty.
+ceph_fsid_derive()
+{
+    local seed=$1
+
+    if [ -z "$seed" ] ; then
+        Warning "cubesys.seed is empty, using the legacy ceph fsid"
+        echo -n "$CEPH_LEGACY_FSID"
+        return 0
+    fi
+    uuidgen --sha1 --namespace @dns --name "$seed.ceph-fsid" | tr -d '[:space:]'
+}
+
+# Record fsid $1 once; never overwrites.
+ceph_fsid_record()
+{
+    local fsid=$1
+    _ceph_fsid_is_uuid "$fsid" || return 1
+    [ -s "$CEPH_FSID_FILE" ] && return 0
+    mkdir -p "$(dirname "$CEPH_FSID_FILE")"
+    echo -n "$fsid" > "$CEPH_FSID_FILE"
+    chmod 0644 "$CEPH_FSID_FILE"
+}
+
+# Print this node's fsid: recorded, else existing, else derived from seed $1.
+ceph_fsid_resolve()
+{
+    local seed=$1
+    local fsid=""
+
+    if [ -s "$CEPH_FSID_FILE" ] ; then
+        fsid=$(tr -d '[:space:]' < "$CEPH_FSID_FILE")
+    elif ! fsid=$(ceph_fsid_current) ; then
+        fsid=$(ceph_fsid_derive "$seed")
+    fi
+
+    _ceph_fsid_is_uuid "$fsid" || return 1
+    ceph_fsid_record "$fsid" || return 1
+    echo -n "$fsid"
+}
+
+# Post-migrate: record the fsid the pre-upgrade root at $1 carries.
+ceph_fsid_migrate()
+{
+    local prev=$1
+    local fsid=""
+
+    [ -s "$CEPH_FSID_FILE" ] && return 0
+    fsid=$(ceph_fsid_current "$prev/etc/ceph/ceph.conf") || fsid=$CEPH_LEGACY_FSID
+    ceph_fsid_record "$fsid"
+}
+
 ceph_mon_map_hosts()
 {
     ceph_mon_map_create $1

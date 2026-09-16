@@ -78,8 +78,6 @@ const static char ADMIN_KEYRING[] = "/etc/ceph/ceph.client.admin.keyring";
 const static char K8S_KEYRING[] = "/etc/ceph/ceph.client.k8s.keyring";
 const static char CEPHFS_CLIENT_AUTHKEY[] = "/etc/ceph/admin.key";
 
-static const char FSID[] = "c6e64c49-09cf-463b-9d1c-b6645b4b3b85";
-
 static const char CEPH_CACHE_POOL[] = "cachepool";
 static const char K8S_VOLUME[] = "k8s-volumes";
 static const char CINDER_VOLUME[] = "cinder-volumes";
@@ -129,7 +127,6 @@ CONFIG_TUNING_BOOL(CEPH_MIRROR_META_SYNC, "ceph.mirror.meta.sync", TUNING_PUB, "
 CONFIG_TUNING_BOOL(CEPH_ENABLED, "ceph.enabled", TUNING_UNPUB, "Set to true to enable ceph service.", true);
 CONFIG_TUNING_BOOL(CEPH_MON_ENABLED, "ceph.mon.enabled", TUNING_UNPUB, "Enable ceph monitor on this host.", false);
 CONFIG_TUNING_BOOL(CEPH_PERF_TUNED, "ceph.perf.tuned", TUNING_UNPUB, "Enable ceph performance tuning on this host.", true);
-CONFIG_TUNING_STR(CEPH_FSID, "ceph.fsid", TUNING_UNPUB, "Set the UUID of the ceph cluster.", FSID, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(CEPH_MIRROR_ENABLED, "ceph.mirror.enabled", TUNING_UNPUB, "Enable ceph rbd mirror.", false);
 CONFIG_TUNING_STR(CEPH_MIRROR_NAME, "ceph.mirror.name", TUNING_UNPUB, "Set local site name.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CEPH_MIRROR_PEER_NAME, "ceph.mirror.peer.%d.name", TUNING_UNPUB, "Set peer site name.", "", ValidateRegex, DFT_REGEX_STR);
@@ -151,7 +148,6 @@ CONFIG_TUNING_SPEC_STR(KEYSTONE_ADMIN_CLI_PASS);
 // parse tunings
 PARSE_TUNING_BOOL(s_debugEnabled, CEPH_DEBUG_ENABLED);
 PARSE_TUNING_BOOL(s_enabled, CEPH_ENABLED);
-PARSE_TUNING_STR(s_fsid, CEPH_FSID);
 PARSE_TUNING_BOOL(s_mirrorEnabled, CEPH_MIRROR_ENABLED);
 PARSE_TUNING_BOOL(s_monEnabled, CEPH_MON_ENABLED);
 PARSE_TUNING_BOOL(s_perfTuned, CEPH_PERF_TUNED);
@@ -558,7 +554,7 @@ SetupMds(std::string hostname)
 }
 
 static bool
-SetupOsd(std::string hostname, std::string fsid)
+SetupOsd(std::string hostname)
 {
     s_osdIds.clear();
     s_osdNewIds.clear();
@@ -1533,6 +1529,32 @@ NotifyKeystone(bool modified)
     s_bKeystoneModified = IsModifiedTune(2);
 }
 
+// Lowercase UUID shape check.
+static bool
+IsFsid(const std::string& s)
+{
+    if (s.length() != 36)
+        return false;
+    for (size_t i = 0; i < s.length(); i++) {
+        if (i == 8 || i == 13 || i == 18 || i == 23) {
+            if (s[i] != '-')
+                return false;
+        }
+        else if (!isxdigit((unsigned char)s[i]) || isupper((unsigned char)s[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Recorded fsid, else derived from seed; empty unless UUID-shaped.
+static std::string
+ResolveFsid(const std::string& seed)
+{
+    std::string fsid = HexUtilPOpen(HEX_SDK " ceph_fsid_resolve %s 2>/dev/null", seed.c_str());
+    return IsFsid(fsid) ? fsid : "";
+}
+
 static bool
 Validate()
 {
@@ -1625,6 +1647,13 @@ MigratePrepare(const char* prevVersion, const char* prevRootDir)
     return true;
 }
 
+// Record the pre-upgrade fsid.
+static bool
+MigrateFsid(const char* prevVersion, const char* prevRootDir)
+{
+    return HexUtilSystemF(0, 0, HEX_SDK " ceph_fsid_migrate %s", prevRootDir) == 0;
+}
+
 static bool
 CommitCheck(bool modified, int dryLevel)
 {
@@ -1643,7 +1672,6 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bConfigChanged = s_enabled.modified()
         | s_debugEnabled.modified()
-        | s_fsid.modified()
         | s_monEnabled.modified()
         | s_perfTuned.modified()
         | s_bNetModified
@@ -1702,7 +1730,7 @@ Commit(bool modified, int dryLevel)
         bool monEnabled = IsMonEnabled(s_ha, s_monEnabled, s_eCubeRole, s_ctrlHosts);
         bool isMaster = G(IS_MASTER);
 
-        std::string fsid = s_fsid;
+        std::string fsid = ResolveFsid(s_seed.newValue());
         std::string myIp = G(MGMT_ADDR);
         std::string ctrl = G(CTRL);
         std::string master = GetMaster(s_ha, ctrl, s_ctrlHosts);
@@ -1716,6 +1744,11 @@ Commit(bool modified, int dryLevel)
         std::string gwApiPass = GetSaltKey(s_saltkey, s_gwApiPass.newValue(), s_seed.newValue());
         std::string peer = master;
         std::string ctrlAddrs = s_ha ? s_ctrlAddrs : ctrlIp;
+
+        if (!IsFsid(fsid)) {
+            HexLogError("failed to resolve the ceph cluster fsid");
+            return false;
+        }
 
         int retry = 0;
         struct in_addr v4addr;
@@ -1802,7 +1835,7 @@ Commit(bool modified, int dryLevel)
             return false;
         CommitMgr(NAME, s_hostname.c_str());
 
-        if (!SetupOsd(s_hostname, fsid))
+        if (!SetupOsd(s_hostname))
             return false;
         CommitOsd(NAME);
 
@@ -1963,7 +1996,7 @@ RestartOsdMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    SetupOsd(s_hostname.newValue(), s_fsid.newValue());
+    SetupOsd(s_hostname.newValue());
     CommitOsd(NAME);
 
     return EXIT_SUCCESS;
@@ -1983,7 +2016,7 @@ RefreshOsdMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    SetupOsd(s_hostname.newValue(), s_fsid.newValue());
+    SetupOsd(s_hostname.newValue());
     CommitOsd(NAME, false);
 
     return EXIT_SUCCESS;
@@ -2042,7 +2075,7 @@ SyncConfigMain(int argc, char* argv[])
     }
 
     // update ceph.conf for using current monmap hosts
-    std::string fsid = s_fsid;
+    std::string fsid = ResolveFsid(s_seed.newValue());
     std::string ctrl = G(CTRL);
     std::string ctrlIp = G(CTRL_IP);
     std::string sharedId = G(SHARED_ID);
@@ -2053,7 +2086,11 @@ SyncConfigMain(int argc, char* argv[])
     std::string mdsIplist = HexUtilPOpen(HEX_SDK " ceph_mds_map_iplist %s", CONF);
     std::string adminCliPass = GetSaltKey(s_saltkey, s_adminCliPass.newValue(), s_seed.newValue());
 
-    // no usable monmap (sdk returns "1" on failure): keep the existing conf
+    // no usable monmap (sdk returns "1" on failure) or fsid: keep the existing conf
+    if (!IsFsid(fsid)) {
+        HexLogWarning("sync_ceph_config: no fsid available, keeping %s", CONF);
+        return EXIT_SUCCESS;
+    }
     if (monHosts.length() == 0 || monIplist.find('.') == std::string::npos) {
         HexLogWarning("sync_ceph_config: no monmap available, keeping %s", CONF);
         return EXIT_SUCCESS;
@@ -2164,7 +2201,7 @@ ClusterStartMain(int argc, char** argv)
     std::string port = DASHBOARD_PORT;
 
     SyncConfigMain(1, NULL);
-    SetupOsd(s_hostname.newValue(), s_fsid.newValue());
+    SetupOsd(s_hostname.newValue());
 
     HexUtilSystemF(0, 0, HEX_SDK " migrate_ceph");
     if (IsControl(s_eCubeRole)) {
@@ -2216,6 +2253,7 @@ CONFIG_MIGRATE(ceph, ADMIN_KEYRING);
 // be carried over too -- else /etc/ceph/admin.key is absent and cephfs won't mount.
 CONFIG_MIGRATE(ceph, CEPHFS_CLIENT_AUTHKEY);
 CONFIG_MIGRATE(ceph, K8S_KEYRING);
+CONFIG_MIGRATE_POST(ceph, MigrateFsid);
 
 CONFIG_SUPPORT_COMMAND(HEX_SDK " ceph_status details");
 CONFIG_SUPPORT_COMMAND("timeout 10 rados df");
