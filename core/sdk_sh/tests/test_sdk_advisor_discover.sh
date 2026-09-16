@@ -43,6 +43,11 @@ for f in _advisor_target_name_valid _advisor_target_address_valid \
     eval "$fn"
 done
 
+# The dashboard address comes from this node's settings, which a unit test has
+# none of. Stubbed to a fixed value: what these cases check is what gets seeded,
+# not how the address is discovered.
+advisor_dashboard_address() { echo "10.0.0.1:443"; }
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -169,7 +174,7 @@ REMOTE_LOG=""
 advisor_targets_discover
 check "no releases: no node is written to" "$(nodes_written)" ""
 check "no releases: the local file is untouched" "$(cat "$ADVISOR_TARGETS_FILE")" "$before"
-check "no releases: only cube-cos is allowed" "$(advisor_targets_list)" "cube-cos 127.0.0.1:8080"
+check "no releases: only cube-cos is allowed" "$(advisor_targets_list)" "cube-cos 10.0.0.1:443"
 MOCK_RELEASES="keycloak cube-portal"
 
 # --- no ingress address: nothing is published, nothing is added ------------
@@ -189,7 +194,7 @@ MOCK_INGRESS_ADDR="10.32.1.101"
 advisor_targets_discover
 check "discover adds cube-cmp" "$(advisor_targets_list | sed -n 's/^cube-cmp //p')" "10.32.1.101:443"
 check "discover adds app-fw-idp" "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "10.32.1.101:443"
-check "discover leaves cube-cos alone" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "127.0.0.1:8080"
+check "discover leaves cube-cos alone" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "10.0.0.1:443"
 check "discover added exactly two entries beyond cube-cos" "$(advisor_targets_list | grep -c .)" "3"
 
 # --- never enrolled: no allowlist is created as a side effect --------------

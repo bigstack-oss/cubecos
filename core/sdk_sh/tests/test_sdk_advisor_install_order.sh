@@ -37,6 +37,11 @@ for f in _advisor_target_name_valid _advisor_target_address_valid \
     eval "$fn"
 done
 
+# The dashboard address comes from this node's settings, which a unit test has
+# none of. Stubbed to a fixed value: what these cases check is what gets seeded,
+# not how the address is discovered.
+advisor_dashboard_address() { echo "10.0.0.1:443"; }
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -147,7 +152,7 @@ done
 
 for node in sky141 sky142 sky143 ; do
     on_node "$node"
-    check "$node allows cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "127.0.0.1:8080"
+    check "$node allows cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "10.0.0.1:443"
     check "$node allows cube-cmp" "$(advisor_targets_list | sed -n 's/^cube-cmp //p')" "$INGRESS:443"
     check "$node allows app-fw-idp" "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "$INGRESS:443"
     check "$node allows exactly those three" "$(advisor_targets_list | grep -c .)" "3"

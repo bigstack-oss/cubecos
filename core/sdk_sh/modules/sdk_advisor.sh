@@ -382,6 +382,28 @@ advisor_discovered_list()
 # is -- an operator who removed a target removed it on purpose, and a helper
 # that puts it back turns "delete one line to revoke access" into "delete one
 # line and wait for it to return".
+# advisor_dashboard_address
+#
+# Where this cluster's own web UI answers: the control VIP on an HA cluster,
+# this node's management address otherwise.
+#
+# Not 127.0.0.1:8080. That port is httpd, which answers 403 to everything --
+# nginx serves the dashboard on the management address. A target pointed at
+# loopback looks configured and refuses every request, with nothing in any log
+# to say why.
+advisor_dashboard_address()
+{
+    local addr
+
+    addr=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "${T_cubesys_control_vip:-}")
+    if [ -z "$addr" ] ; then
+        addr=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null
+               eval echo "\${T_net_if_addr_${T_cubesys_management}:-}")
+    fi
+    [ -n "$addr" ] || return 1
+    echo "$addr:443"
+}
+
 advisor_targets_init()
 {
     local discovered
@@ -391,7 +413,15 @@ advisor_targets_init()
     # awk, not a read loop: a loop on the right of a pipe runs in a subshell
     # and would leave the string it built behind in it.
     discovered=$(advisor_discovered_list | awk '{ printf ",\"%s\":\"%s\"", $1, $2 }')
-    _advisor_targets_write "{\"cube-cos\":\"127.0.0.1:8080\"$discovered}"
+    local dash
+    dash=$(advisor_dashboard_address) || dash=""
+    if [ -n "$dash" ] ; then
+        _advisor_targets_write "{\"cube-cos\":\"$dash\"$discovered}"
+    else
+        # No address to seed, so seed no dashboard rather than one that refuses
+        # every request; advisor target_set adds it once the address is known.
+        _advisor_targets_write "{${discovered#,}}"
+    fi
 }
 
 # advisor_targets_list
