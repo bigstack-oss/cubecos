@@ -28,6 +28,11 @@ for f in _advisor_target_name_valid _advisor_target_address_valid \
     eval "$fn"
 done
 
+# The dashboard address comes from this node's settings, which a unit test has
+# none of. Stubbed to a fixed value: what these cases check is what gets seeded,
+# not how the address is discovered.
+advisor_dashboard_address() { echo "10.0.0.1:443"; }
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -44,16 +49,16 @@ ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
 # --- itself, and only that ---------------------------------------------------
 advisor_targets_init
 check "init creates the file" "$(cat "$ADVISOR_TARGETS_FILE" 2>/dev/null)" \
-      '{"cube-cos":"127.0.0.1:8080"}'
+      '{"cube-cos":"10.0.0.1:443"}'
 check "init leaves the file root-owned and world-readable" \
       "$(stat -c %a "$ADVISOR_TARGETS_FILE" 2>/dev/null)" "644"
 
 # --- init must never repair or overwrite a file that is already there -------
 # An operator who removed a target removed it on purpose.
-printf '{"cube-cos":"127.0.0.1:8080","cmp-portal":"10.32.1.101:443"}' > "$ADVISOR_TARGETS_FILE"
+printf '{"cube-cos":"10.0.0.1:443","cmp-portal":"10.32.1.101:443"}' > "$ADVISOR_TARGETS_FILE"
 advisor_targets_init
 check "a second init leaves an edited file untouched" "$(cat "$ADVISOR_TARGETS_FILE")" \
-      '{"cube-cos":"127.0.0.1:8080","cmp-portal":"10.32.1.101:443"}'
+      '{"cube-cos":"10.0.0.1:443","cmp-portal":"10.32.1.101:443"}'
 
 # --- the set a node was given, and what init makes of it --------------------
 ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
@@ -98,7 +103,7 @@ check "discovered_list keeps only the well-formed lines" "$(advisor_discovered_l
 ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
 ADVISOR_TARGETS_FILE="$WORK/etc/seeded-with-discovered.json"
 advisor_targets_init
-check "init seeds cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "127.0.0.1:8080"
+check "init seeds cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "10.0.0.1:443"
 check "init seeds cube-cmp at the discovered address" \
       "$(advisor_targets_list | sed -n 's/^cube-cmp //p')" "10.32.1.101:443"
 check "init seeds app-fw-idp at the discovered address" \
@@ -123,7 +128,7 @@ check "framework only: init seeds exactly two" "$(advisor_targets_list | grep -c
 # "every node is reconciled to a canonical set".
 ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
 ADVISOR_TARGETS_FILE="$WORK/etc/operator-edited.json"
-printf '{"cube-cos":"127.0.0.1:8080","app-fw-idp":"10.32.1.101:443"}\n' > "$ADVISOR_TARGETS_FILE"
+printf '{"cube-cos":"10.0.0.1:443","app-fw-idp":"10.32.1.101:443"}\n' > "$ADVISOR_TARGETS_FILE"
 before="$(cat "$ADVISOR_TARGETS_FILE")"
 advisor_targets_init
 check "init leaves an operator-edited allowlist byte-for-byte alone" \
@@ -231,12 +236,12 @@ check "a failed write leaves the previous file intact" "$(cat "$ADVISOR_TARGETS_
 ADVISOR_TARGETS_FILE="$WORK/pretty.json"
 cat > "$ADVISOR_TARGETS_FILE" <<'JSON'
 {
-  "cube-cos": "127.0.0.1:8080",
+  "cube-cos": "10.0.0.1:443",
   "cmp-portal": "10.32.1.101:443"
 }
 JSON
 check "list reads a pretty-printed file" "$(advisor_targets_list | sort)" \
-      "$(printf 'cmp-portal 10.32.1.101:443\ncube-cos 127.0.0.1:8080')"
+      "$(printf 'cmp-portal 10.32.1.101:443\ncube-cos 10.0.0.1:443')"
 advisor_targets_set new-one 1.2.3.4:80
 check "set on a pretty-printed file keeps the existing entries" \
       "$(advisor_targets_list | grep -c .)" "3"
