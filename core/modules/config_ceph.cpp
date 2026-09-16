@@ -78,7 +78,10 @@ const static char ADMIN_KEYRING[] = "/etc/ceph/ceph.client.admin.keyring";
 const static char K8S_KEYRING[] = "/etc/ceph/ceph.client.k8s.keyring";
 const static char CEPHFS_CLIENT_AUTHKEY[] = "/etc/ceph/admin.key";
 
-static const char FSID[] = "c6e64c49-09cf-463b-9d1c-b6645b4b3b85";
+// The fsid every install shipped with before it was generated per cluster
+// (cubecos#1490). Kept only so an upgraded cluster can be recognised as already
+// carrying it -- nothing configures this value any more.
+static const char LEGACY_FSID[] = "c6e64c49-09cf-463b-9d1c-b6645b4b3b85";
 
 static const char CEPH_CACHE_POOL[] = "cachepool";
 static const char K8S_VOLUME[] = "k8s-volumes";
@@ -129,7 +132,9 @@ CONFIG_TUNING_BOOL(CEPH_MIRROR_META_SYNC, "ceph.mirror.meta.sync", TUNING_PUB, "
 CONFIG_TUNING_BOOL(CEPH_ENABLED, "ceph.enabled", TUNING_UNPUB, "Set to true to enable ceph service.", true);
 CONFIG_TUNING_BOOL(CEPH_MON_ENABLED, "ceph.mon.enabled", TUNING_UNPUB, "Enable ceph monitor on this host.", false);
 CONFIG_TUNING_BOOL(CEPH_PERF_TUNED, "ceph.perf.tuned", TUNING_UNPUB, "Enable ceph performance tuning on this host.", true);
-CONFIG_TUNING_STR(CEPH_FSID, "ceph.fsid", TUNING_UNPUB, "Set the UUID of the ceph cluster.", FSID, ValidateRegex, DFT_REGEX_STR);
+// Empty by default: the fsid is generated once per cluster and recorded, not
+// compiled in. Setting this pins an explicit one and overrides that.
+CONFIG_TUNING_STR(CEPH_FSID, "ceph.fsid", TUNING_UNPUB, "Set the UUID of the ceph cluster.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_BOOL(CEPH_MIRROR_ENABLED, "ceph.mirror.enabled", TUNING_UNPUB, "Enable ceph rbd mirror.", false);
 CONFIG_TUNING_STR(CEPH_MIRROR_NAME, "ceph.mirror.name", TUNING_UNPUB, "Set local site name.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(CEPH_MIRROR_PEER_NAME, "ceph.mirror.peer.%d.name", TUNING_UNPUB, "Set peer site name.", "", ValidateRegex, DFT_REGEX_STR);
@@ -1533,9 +1538,78 @@ NotifyKeystone(bool modified)
     s_bKeystoneModified = IsModifiedTune(2);
 }
 
+// An fsid is a UUID and nothing else; see ResolveFsid on why the shape is the
+// only thing that can be trusted here.
+static bool
+IsFsid(const std::string& s)
+{
+    if (s.length() != 36)
+        return false;
+    for (size_t i = 0; i < s.length(); i++) {
+        if (i == 8 || i == 13 || i == 18 || i == 23) {
+            if (s[i] != '-')
+                return false;
+        }
+        else if (!isxdigit((unsigned char)s[i]) || isupper((unsigned char)s[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The fsid to configure this node with, or empty when it is not knowable yet.
+//
+// Resolution order, and the reason for it:
+//   1. ceph.fsid, when an operator has pinned one explicitly.
+//   2. Whatever hex_sdk can already establish -- the recorded value, else the
+//      live cluster, its ceph.conf, or this node's mon store. An existing
+//      cluster's own fsid always wins, which is what keeps an upgrade on the
+//      fsid its mons and OSDs already carry, LEGACY_FSID included.
+//   3. Only the bootstrap node mints a new one, so a cluster gets exactly one.
+//      Every other node takes the bootstrap node's over ssh -- the same way it
+//      already learns the bootstrap mon ip a few lines below.
+//
+// Returns empty rather than guessing. HexUtilPOpen discards exit status, so the
+// shape of the answer is the only signal there is: anything that is not a UUID
+// is a failed probe, not an fsid (cubecos#1486).
+static std::string
+ResolveFsid(bool isMaster, const std::string& peer)
+{
+    if (!s_fsid.newValue().empty())
+        return s_fsid.newValue();
+
+    std::string fsid = HexUtilPOpen(HEX_SDK " ceph_fsid_resolve %d 2>/dev/null",
+                                    isMaster ? 1 : 0);
+    if (IsFsid(fsid))
+        return fsid;
+
+    if (isMaster)
+        return "";
+
+    // a joining node: the bootstrap node owns the answer, and may not have
+    // minted it yet -- the caller retries
+    fsid = HexUtilPOpen("ssh root@%s " HEX_SDK " ceph_fsid_resolve 1 2>/dev/null",
+                        peer.c_str());
+    if (!IsFsid(fsid))
+        return "";
+
+    // record it locally so every later commit on this node is answered from disk
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_fsid_record %s", fsid.c_str());
+    return fsid;
+}
+
 static bool
 Validate()
 {
+    // An operator-pinned fsid must be a UUID: ValidateRegex on the tunable only
+    // says "a string", and a malformed one would reach monmaptool.
+    if (s_fsid.modified() && !s_fsid.newValue().empty() &&
+        !IsFsid(s_fsid.newValue())) {
+        HexLogError("ceph.fsid must be a lowercase UUID: %s", s_fsid.newValue().c_str());
+        printf("ceph.fsid must be a lowercase UUID: %s\n", s_fsid.newValue().c_str());
+        return false;
+    }
+
     if (!IsBootstrap()) {
         if (!s_mirrorEnabled)
             return true;
@@ -1702,7 +1776,7 @@ Commit(bool modified, int dryLevel)
         bool monEnabled = IsMonEnabled(s_ha, s_monEnabled, s_eCubeRole, s_ctrlHosts);
         bool isMaster = G(IS_MASTER);
 
-        std::string fsid = s_fsid;
+        std::string fsid;
         std::string myIp = G(MGMT_ADDR);
         std::string ctrl = G(CTRL);
         std::string master = GetMaster(s_ha, ctrl, s_ctrlHosts);
@@ -1725,8 +1799,13 @@ Commit(bool modified, int dryLevel)
                 masterIp = HexUtilPOpen("ssh root@%s %s ceph_bootstrap_mon_ip 2>/dev/null", peer.c_str(), HEX_SDK);
             }
 
+            // Same wait, same reason: a joining node cannot know the fsid until
+            // the master has minted it, and the master mints it here.
+            if (fsid.length() == 0)
+                fsid = ResolveFsid(isMaster, peer);
+
             HexLogInfo("got ceph monintor bootstrap ip %s from %s", masterIp.c_str(), peer.c_str());
-            if (HexParseIP(masterIp.c_str(), AF_INET, &v4addr))
+            if (HexParseIP(masterIp.c_str(), AF_INET, &v4addr) && fsid.length() > 0)
                 break;
             else {
                 // wait out the master's mon bootstrap (~10 min) instead of failing
@@ -1737,6 +1816,14 @@ Commit(bool modified, int dryLevel)
 
         if (!HexParseIP(masterIp.c_str(), AF_INET, &v4addr)) {
             HexLogError("failed to get ceph monintor bootstrap ip");
+            return false;
+        }
+
+        // Refuse rather than fall back to a constant. A node that configured
+        // itself with the wrong fsid would build a monmap its peers reject, and
+        // the old behaviour -- everyone sharing one -- is the defect being fixed.
+        if (!IsFsid(fsid)) {
+            HexLogError("failed to resolve the ceph cluster fsid");
             return false;
         }
 
@@ -2041,8 +2128,10 @@ SyncConfigMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    // update ceph.conf for using current monmap hosts
-    std::string fsid = s_fsid;
+    // update ceph.conf for using current monmap hosts. Reads the record and
+    // nothing else -- this resyncs an already-bootstrapped node, so the answer
+    // exists; asking a peer for it here would ssh to self on a single node.
+    std::string fsid = HexUtilPOpen(HEX_SDK " ceph_fsid_resolve 0 2>/dev/null");
     std::string ctrl = G(CTRL);
     std::string ctrlIp = G(CTRL_IP);
     std::string sharedId = G(SHARED_ID);
@@ -2053,7 +2142,12 @@ SyncConfigMain(int argc, char* argv[])
     std::string mdsIplist = HexUtilPOpen(HEX_SDK " ceph_mds_map_iplist %s", CONF);
     std::string adminCliPass = GetSaltKey(s_saltkey, s_adminCliPass.newValue(), s_seed.newValue());
 
-    // no usable monmap (sdk returns "1" on failure): keep the existing conf
+    // no usable monmap (sdk returns "1" on failure), or no fsid: keep the
+    // existing conf rather than rewriting it with a worse one
+    if (!IsFsid(fsid)) {
+        HexLogWarning("sync_ceph_config: no fsid available, keeping %s", CONF);
+        return EXIT_SUCCESS;
+    }
     if (monHosts.length() == 0 || monIplist.find('.') == std::string::npos) {
         HexLogWarning("sync_ceph_config: no monmap available, keeping %s", CONF);
         return EXIT_SUCCESS;
