@@ -38,6 +38,14 @@ ADVISOR_TRUST_ANCHOR=/etc/pki/ca-trust/source/anchors/cube-advisor.crt
 # an upgrade); repeated here because hex_sdk cannot read the C header.
 ADVISOR_IDENTITY_DIR=/etc/cube/advisor-agent
 ADVISOR_AGENT_CERT=$ADVISOR_IDENTITY_DIR/agent.crt
+# The Advisor's SSH user CA, and the sshd drop-in that trusts it. Both are in
+# config_advisor.cpp's migrate list so a console survives a firmware upgrade;
+# these are the paths that write them.
+ADVISOR_CONSOLE_CA=/etc/ssh/console-ca/cube-advisor.pub
+ADVISOR_SSHD_DROPIN=/etc/ssh/sshd_config.d/60-cube-advisor-console.conf
+# The account a console certificate authorises. CubeCOS provisions it; the
+# Advisor must be configured with the same name or sshd refuses the principal.
+ADVISOR_CONSOLE_ACCOUNT=advisor
 ADVISOR_MANIFEST_NAME=manifest.txt
 ADVISOR_SIGNATURE_NAME=manifest.txt.sig
 
@@ -638,6 +646,67 @@ advisor_trust_ca()
         return 1
     fi
     echo "Trusting the Advisor's CA from $ca."
+    return 0
+}
+
+# advisor_console_trust <ca-file>
+#
+# Makes this node accept console certificates the Advisor mints.
+#
+# A console session is piped to this node's own sshd, so sshd is what decides
+# whether a certificate is good -- the Advisor only signs. Nothing pushes the
+# CA here: the Advisor prints it at install time and an operator installs it,
+# which is the same shape as trusting its TLS CA at enrolment.
+#
+# Both files are in config_advisor.cpp's migrate list, so once installed they
+# survive a firmware upgrade without being reinstalled.
+advisor_console_trust()
+{
+    local ca=$1
+
+    if [ -z "$ca" ] || [ ! -r "$ca" ] ; then
+        echo "Error: cannot read the console CA file: ${ca:-<none>}" >&2
+        return 1
+    fi
+    # One public key in sshd's own authorized-keys form. A private key, or a
+    # certificate, would install cleanly and then fail every login with
+    # nothing pointing back here.
+    if ! ssh-keygen -l -f "$ca" >/dev/null 2>&1 ; then
+        echo "Error: $ca is not an SSH public key" >&2
+        return 1
+    fi
+    case $(head -1 "$ca") in
+        ssh-*|ecdsa-*|sk-*) : ;;
+        *) echo "Error: $ca is not a public key line sshd can read" >&2 ; return 1 ;;
+    esac
+
+    mkdir -p "$(dirname "$ADVISOR_CONSOLE_CA")" || return 1
+    install -m 0644 "$ca" "$ADVISOR_CONSOLE_CA" || return 1
+
+    # The drop-in is written rather than appended to sshd_config: an append
+    # would duplicate on every re-run, and 50-redhat.conf is not ours to edit.
+    cat > "$ADVISOR_SSHD_DROPIN" <<EOF
+# Managed by CubeCOS. Trusts the Cube AI Advisor's console CA for the
+# $ADVISOR_CONSOLE_ACCOUNT account only, so a certificate it signs cannot be
+# presented as any other user.
+TrustedUserCAKeys $ADVISOR_CONSOLE_CA
+Match User $ADVISOR_CONSOLE_ACCOUNT
+    AuthorizedPrincipalsCommand /bin/echo $ADVISOR_CONSOLE_ACCOUNT
+    AuthorizedPrincipalsCommandUser nobody
+EOF
+    chmod 0600 "$ADVISOR_SSHD_DROPIN"
+
+    # A drop-in sshd refuses to parse would take sshd down on its next
+    # restart, which is a far worse outcome than a console that does not work.
+    if ! sshd -t 2>/dev/null ; then
+        rm -f "$ADVISOR_SSHD_DROPIN"
+        echo "Error: sshd rejected the console configuration; nothing was changed" >&2
+        return 1
+    fi
+    systemctl reload sshd >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1 || {
+        echo "Warning: could not reload sshd; the console starts working after the next reload" >&2
+    }
+    echo "This node now accepts Advisor console sessions as $ADVISOR_CONSOLE_ACCOUNT."
     return 0
 }
 
