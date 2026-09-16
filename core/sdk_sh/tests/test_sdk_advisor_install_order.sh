@@ -39,8 +39,10 @@ done
 
 # The dashboard address comes from this node's settings, which a unit test has
 # none of. Stubbed to a fixed value: what these cases check is what gets seeded,
-# not how the address is discovered.
+# not how the address is discovered. Its identity provider is derived from it,
+# and is stubbed here for the same reason.
 advisor_dashboard_address() { echo "10.0.0.1:443"; }
+advisor_idp_address() { echo "10.0.0.1:10443"; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -153,9 +155,10 @@ done
 for node in sky141 sky142 sky143 ; do
     on_node "$node"
     check "$node allows cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "10.0.0.1:443"
+    check "$node allows cube-cos-idp" "$(advisor_targets_list | sed -n 's/^cube-cos-idp //p')" "10.0.0.1:10443"
     check "$node allows cube-cmp" "$(advisor_targets_list | sed -n 's/^cube-cmp //p')" "$INGRESS:443"
     check "$node allows app-fw-idp" "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "$INGRESS:443"
-    check "$node allows exactly those three" "$(advisor_targets_list | grep -c .)" "3"
+    check "$node allows exactly those four" "$(advisor_targets_list | grep -c .)" "4"
 done
 
 # ---- and the operator still has the last word ------------------------------
