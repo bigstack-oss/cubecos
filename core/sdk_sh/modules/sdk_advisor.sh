@@ -387,10 +387,7 @@ advisor_discovered_list()
 # Where this cluster's own web UI answers: the control VIP on an HA cluster,
 # this node's management address otherwise.
 #
-# Not 127.0.0.1:8080. That port is httpd, which answers 403 to everything --
-# nginx serves the dashboard on the management address. A target pointed at
-# loopback looks configured and refuses every request, with nothing in any log
-# to say why.
+# Not 127.0.0.1:8080: that port is httpd, which answers 403 to everything.
 advisor_dashboard_address()
 {
     local addr
@@ -404,41 +401,42 @@ advisor_dashboard_address()
     echo "$addr:443"
 }
 
-# advisor_idp_address
+# advisor_own_targets
 #
-# Where this cluster's Keycloak answers: port 10443 of the dashboard's address.
+# The targets every node can name for itself, one "<name> <host:port>" per
+# line: this cluster's dashboard, and the endpoints the dashboard links out to
+# on other ports of the same address -- Keycloak, Skyline and the Ceph
+# dashboard.
 #
-# It has to be reachable in its own right. The dashboard hands the browser the
-# cluster address as a bare string and builds the login URL from it in script,
-# so nothing it serves ever names this endpoint in a form a proxy could
-# rewrite -- the browser simply leaves for :10443 and has to arrive somewhere.
-advisor_idp_address()
+# Each needs allowing in its own right: the dashboard builds those URLs in
+# script from the bare cluster address, so a proxy never sees them to rewrite.
+advisor_own_targets()
 {
-    local dash
+    local dash addr
 
     dash=$(advisor_dashboard_address) || return 1
-    echo "${dash%:*}:10443"
+    addr="${dash%:*}"
+    echo "cube-cos $dash"
+    echo "cube-cos-idp $addr:10443"
+    echo "cube-cos-skyline $addr:9999"
+    echo "cube-cos-ceph $addr:7443"
 }
 
 advisor_targets_init()
 {
-    local discovered
+    local discovered own all
 
     [ -e "$ADVISOR_TARGETS_FILE" ] && return 0
 
     # awk, not a read loop: a loop on the right of a pipe runs in a subshell
     # and would leave the string it built behind in it.
     discovered=$(advisor_discovered_list | awk '{ printf ",\"%s\":\"%s\"", $1, $2 }')
-    local dash idp
-    dash=$(advisor_dashboard_address) || dash=""
-    if [ -n "$dash" ] ; then
-        idp=$(advisor_idp_address)
-        _advisor_targets_write "{\"cube-cos\":\"$dash\",\"cube-cos-idp\":\"$idp\"$discovered}"
-    else
-        # No address to seed, so seed no dashboard rather than one that refuses
-        # every request; advisor target_set adds it once the address is known.
-        _advisor_targets_write "{${discovered#,}}"
-    fi
+    # Empty when this node has no address yet: seed no dashboard rather than
+    # one that refuses every request; advisor target_set adds it once the
+    # address is known.
+    own=$(advisor_own_targets 2>/dev/null | awk '{ printf ",\"%s\":\"%s\"", $1, $2 }')
+    all="$own$discovered"
+    _advisor_targets_write "{${all#,}}"
 }
 
 # advisor_targets_list

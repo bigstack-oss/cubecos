@@ -28,12 +28,15 @@ for f in _advisor_target_name_valid _advisor_target_address_valid \
     eval "$fn"
 done
 
-# The dashboard address comes from this node's settings, which a unit test has
-# none of. Stubbed to a fixed value: what these cases check is what gets seeded,
-# not how the address is discovered. Its identity provider is derived from it,
-# and is stubbed here for the same reason.
-advisor_dashboard_address() { echo "10.0.0.1:443"; }
-advisor_idp_address() { echo "10.0.0.1:10443"; }
+# The node's own targets come from its settings, which a unit test has none of.
+# Stubbed to fixed values: what these cases check is what gets seeded, not how
+# the address is discovered.
+advisor_own_targets() {
+    echo "cube-cos 10.0.0.1:443"
+    echo "cube-cos-idp 10.0.0.1:10443"
+    echo "cube-cos-skyline 10.0.0.1:9999"
+    echo "cube-cos-ceph 10.0.0.1:7443"
+}
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -54,7 +57,7 @@ ADVISOR_DISCOVERED_FILE="$WORK/etc/discovered-targets"
 # seeds a login that cannot complete.
 advisor_targets_init
 check "init creates the file" "$(cat "$ADVISOR_TARGETS_FILE" 2>/dev/null)" \
-      '{"cube-cos":"10.0.0.1:443","cube-cos-idp":"10.0.0.1:10443"}'
+      '{"cube-cos":"10.0.0.1:443","cube-cos-idp":"10.0.0.1:10443","cube-cos-skyline":"10.0.0.1:9999","cube-cos-ceph":"10.0.0.1:7443"}'
 check "init leaves the file root-owned and world-readable" \
       "$(stat -c %a "$ADVISOR_TARGETS_FILE" 2>/dev/null)" "644"
 
@@ -110,11 +113,13 @@ ADVISOR_TARGETS_FILE="$WORK/etc/seeded-with-discovered.json"
 advisor_targets_init
 check "init seeds cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "10.0.0.1:443"
 check "init seeds cube-cos-idp" "$(advisor_targets_list | sed -n 's/^cube-cos-idp //p')" "10.0.0.1:10443"
+check "init seeds cube-cos-skyline" "$(advisor_targets_list | sed -n 's/^cube-cos-skyline //p')" "10.0.0.1:9999"
+check "init seeds cube-cos-ceph" "$(advisor_targets_list | sed -n 's/^cube-cos-ceph //p')" "10.0.0.1:7443"
 check "init seeds cube-cmp at the discovered address" \
       "$(advisor_targets_list | sed -n 's/^cube-cmp //p')" "10.32.1.101:443"
 check "init seeds app-fw-idp at the discovered address" \
       "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "10.32.1.101:443"
-check "init seeds exactly those four" "$(advisor_targets_list | grep -c .)" "4"
+check "init seeds exactly those six" "$(advisor_targets_list | grep -c .)" "6"
 
 # The framework installed and CMP not: init seeds what was discovered and not
 # one name more. The ingress exists in both cases, so only the set can tell
@@ -127,7 +132,7 @@ check "framework only: init seeds app-fw-idp" \
       "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "10.32.1.101:443"
 check "framework only: init does not seed cube-cmp" \
       "$(advisor_targets_list | grep -c '^cube-cmp ')" "0"
-check "framework only: init seeds exactly three" "$(advisor_targets_list | grep -c .)" "3"
+check "framework only: init seeds exactly five" "$(advisor_targets_list | grep -c .)" "5"
 
 # ... and still never touches a file that exists, even one an operator has
 # taken a CMP target back out of. "A node with no allowlist gets one" is not
@@ -149,18 +154,18 @@ ADVISOR_TARGETS_FILE="$WORK/etc/web-targets.json"
 rm -f "$ADVISOR_TARGETS_FILE"
 advisor_targets_init >/dev/null
 advisor_targets_set cmp-portal 10.32.1.101:443
-check "set adds a new name" "$(advisor_targets_list | grep -c .)" "3"
+check "set adds a new name" "$(advisor_targets_list | grep -c .)" "5"
 check "set records the value" "$(advisor_targets_list | sed -n 's/^cmp-portal //p')" "10.32.1.101:443"
 
 # --- set on an existing name replaces, not duplicates -----------------------
 advisor_targets_set cmp-portal 10.32.1.101:8443
-check "set on an existing name still leaves one entry" "$(advisor_targets_list | grep -c .)" "3"
+check "set on an existing name still leaves one entry" "$(advisor_targets_list | grep -c .)" "5"
 check "set on an existing name replaces the value" "$(advisor_targets_list | sed -n 's/^cmp-portal //p')" "10.32.1.101:8443"
 
 # --- unset removes -----------------------------------------------------------
 advisor_targets_unset cmp-portal
 check "unset removes the name" "$(advisor_targets_list | sed -n 's/^cmp-portal //p')" ""
-check "unset leaves the rest of the file" "$(advisor_targets_list | grep -c .)" "2"
+check "unset leaves the rest of the file" "$(advisor_targets_list | grep -c .)" "4"
 
 # --- unset of an absent name is not an error --------------------------------
 if advisor_targets_unset never-was >/dev/null 2>&1 ; then

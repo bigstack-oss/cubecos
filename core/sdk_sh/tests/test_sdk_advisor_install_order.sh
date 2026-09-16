@@ -37,12 +37,15 @@ for f in _advisor_target_name_valid _advisor_target_address_valid \
     eval "$fn"
 done
 
-# The dashboard address comes from this node's settings, which a unit test has
-# none of. Stubbed to a fixed value: what these cases check is what gets seeded,
-# not how the address is discovered. Its identity provider is derived from it,
-# and is stubbed here for the same reason.
-advisor_dashboard_address() { echo "10.0.0.1:443"; }
-advisor_idp_address() { echo "10.0.0.1:10443"; }
+# The node's own targets come from its settings, which a unit test has none of.
+# Stubbed to fixed values: what these cases check is what gets seeded, not how
+# the address is discovered.
+advisor_own_targets() {
+    echo "cube-cos 10.0.0.1:443"
+    echo "cube-cos-idp 10.0.0.1:10443"
+    echo "cube-cos-skyline 10.0.0.1:9999"
+    echo "cube-cos-ceph 10.0.0.1:7443"
+}
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -156,9 +159,10 @@ for node in sky141 sky142 sky143 ; do
     on_node "$node"
     check "$node allows cube-cos" "$(advisor_targets_list | sed -n 's/^cube-cos //p')" "10.0.0.1:443"
     check "$node allows cube-cos-idp" "$(advisor_targets_list | sed -n 's/^cube-cos-idp //p')" "10.0.0.1:10443"
+    check "$node allows cube-cos-skyline" "$(advisor_targets_list | sed -n 's/^cube-cos-skyline //p')" "10.0.0.1:9999"
     check "$node allows cube-cmp" "$(advisor_targets_list | sed -n 's/^cube-cmp //p')" "$INGRESS:443"
     check "$node allows app-fw-idp" "$(advisor_targets_list | sed -n 's/^app-fw-idp //p')" "$INGRESS:443"
-    check "$node allows exactly those four" "$(advisor_targets_list | grep -c .)" "4"
+    check "$node allows exactly those six" "$(advisor_targets_list | grep -c .)" "6"
 done
 
 # ---- and the operator still has the last word ------------------------------
