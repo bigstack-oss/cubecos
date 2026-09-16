@@ -135,6 +135,11 @@ func (s *Settings) GetControlGroupIPs() []string {
 	return strings.Split(s.v.GetString("cubesys.control.addrs"), ",")
 }
 
+func GetControlGroupHosts() []string { return s.GetControlGroupHosts() }
+func (s *Settings) GetControlGroupHosts() []string {
+	return strings.Split(s.v.GetString("cubesys.control.hosts"), ",")
+}
+
 func GetMasterControllerIp() string { return s.GetMasterControllerIp() }
 func (s *Settings) GetMasterControllerIp() string {
 	return s.GetControlGroupIPs()[0]

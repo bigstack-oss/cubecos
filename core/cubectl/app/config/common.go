@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -55,6 +56,55 @@ func getIfaceIP(name string) (string, error) {
 	return "", nil
 }
 
+// buildCertSANs assembles the subjectAltName argument for the cluster's self-signed
+// certificate.
+//
+// Every control node has to be covered, not just the VIP: AMQP clients address the
+// nodes directly (RabbitMqServers() iterates cubesys.control.addrs), so a VIP-only
+// SAN makes the TLS handshake fail against every node. The certificate is signed once
+// on the master control node and rsynced to the rest, so one certificate has to carry
+// all of them.
+//
+// Empty values are dropped rather than emitted as a bare "IP:" - openssl rejects the
+// whole extension with "invalid null value", and cubesys.control.addrs is absent
+// altogether on a non-HA node.
+func buildCertSANs() string {
+	var sans []string
+	seen := map[string]bool{}
+
+	add := func(kind, value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+
+		entry := kind + ":" + value
+		if seen[entry] {
+			return
+		}
+		seen[entry] = true
+
+		sans = append(sans, entry)
+	}
+
+	add("DNS", "localhost")
+	add("DNS", "cube-controller")
+	add("DNS", cubeSettings.GetController())
+	add("IP", "127.0.0.1")
+	add("IP", cubeSettings.GetControllerIp())
+
+	if cubeSettings.IsHA() {
+		for _, addr := range cubeSettings.GetControlGroupIPs() {
+			add("IP", addr)
+		}
+		for _, host := range cubeSettings.GetControlGroupHosts() {
+			add("DNS", host)
+		}
+	}
+
+	return "subjectAltName=" + strings.Join(sans, ",")
+}
+
 func genSelfSignCerts() error {
 	os.MkdirAll(certsDir, 0755)
 
@@ -74,7 +124,7 @@ func genSelfSignCerts() error {
 		"-out", certFile,
 		"-days", "3650",
 		"-subj", "/CN="+cubeSettings.GetController(),
-		"-addext", "subjectAltName=DNS:localhost,DNS:cube-controller,IP:127.0.0.1,IP:"+cubeSettings.GetControllerIp(),
+		"-addext", buildCertSANs(),
 		// "-addext", "basicConstraints=CA:TRUE,pathlen:0",
 		// "-extensions", "san",
 		// "-config", sansConfFile,
