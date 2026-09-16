@@ -27,6 +27,7 @@ cubesys.control.vip = 127.0.0.10
 net.if.addr.eth0=127.0.0.1
 net.hostname=control-1
 cubesys.control.addrs = 127.0.0.1,127.0.0.2
+cubesys.control.hosts = control-1,control-2
 `
 
 		if err := cubeTesting.GenerateSettingsRaw(SettingsBootFile, settingsText); err != nil {
@@ -48,6 +49,7 @@ cubesys.control.addrs = 127.0.0.1,127.0.0.2
 			{"GetMgmtIfIp", s.GetMgmtIfIp(), "127.0.0.1"},
 			{"GetControllerIp", s.GetControllerIp(), "127.0.0.10"},
 			{"GetControlGroupIPs", s.GetControlGroupIPs(), []string{"127.0.0.1", "127.0.0.2"}},
+			{"GetControlGroupHosts", s.GetControlGroupHosts(), []string{"control-1", "control-2"}},
 			{"GetMasterControllerIp", s.GetMasterControllerIp(), "127.0.0.1"},
 			{"GetController", s.GetController(), "control-v"},
 			{"IsHA", s.IsHA(), true},
