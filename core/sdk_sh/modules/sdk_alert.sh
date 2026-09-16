@@ -16,17 +16,23 @@ alert_vm_event_list()
     local cpu_warn=$(cat /etc/kapacitor/templates/tpl_alert_vm_cpu.tick | grep "warn(lambda" | awk -F' |)' '{print $14}')
     local mem_crit=$(cat /etc/kapacitor/templates/tpl_alert_vm_mem.tick | grep "crit(lambda" | awk -F' |)' '{print $9}')
     local mem_warn=$(cat /etc/kapacitor/templates/tpl_alert_vm_mem.tick | grep "warn(lambda" | awk -F' |)' '{print $14}')
+    local disk_crit=$(cat /etc/kapacitor/templates/tpl_alert_vm_disk.tick | grep "crit(lambda" | awk -F' |)' '{print $9}')
+    local disk_warn=$(cat /etc/kapacitor/templates/tpl_alert_vm_disk.tick | grep "warn(lambda" | awk -F' |)' '{print $14}')
 
     if [ -n "$VERBOSE" ] ; then
         echo "CPU00006C (VM cpu usage exceeds $cpu_crit%)"
         echo "CPU00005W (VM cpu usage exceeds $cpu_warn%)"
         echo "MEM00006C (VM memory usage exceeds $mem_crit%)"
         echo "MEM00005W (VM memory usage exceeds $mem_warn%)"
+        echo "DSK00006C (VM filesystem disk usage exceeds $disk_crit%)"
+        echo "DSK00005W (VM filesystem disk usage exceeds $disk_warn%)"
     else
         echo "CPU00006C"
         echo "CPU00005W"
         echo "MEM00006C"
         echo "MEM00005W"
+        echo "DSK00006C"
+        echo "DSK00005W"
     fi
 }
 
@@ -131,6 +137,9 @@ alert_enable_project_by_id()
     $KP_BIN define-template tpl_alert_vm_mem -tick /etc/kapacitor/templates/tpl_alert_vm_mem.tick
     $KP_BIN define alert_vm_mem_$tenant_id -template tpl_alert_vm_mem -vars $VARS
     $KP_BIN enable alert_vm_mem_$tenant_id
+    $KP_BIN define-template tpl_alert_vm_disk -tick /etc/kapacitor/templates/tpl_alert_vm_disk.tick
+    $KP_BIN define alert_vm_disk_$tenant_id -template tpl_alert_vm_disk -vars $VARS
+    $KP_BIN enable alert_vm_disk_$tenant_id
 }
 
 # Usage: $PROG alert_disable_project_by_name $project_name

@@ -54,3 +54,7 @@ PLC00002I: cube cluster policy is successfully applied
 
 SRV01001I: service restart due to memory usage exceeds defined threshold
 SRV01002I: identified and fixed a stale API service
+STO00001W: storage pool crossed its soft capacity threshold
+STO00002E: storage pool crossed its hard capacity threshold
+STO00003I: storage pool capacity returned below threshold
+STO00004W: storage pool is over-subscribed beyond the configured ratio

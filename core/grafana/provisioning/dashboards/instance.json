@@ -340,13 +340,22 @@
           "expr": "(1 - cube_instance_memory_usable_mb{resource=~\"$UUID\"} / cube_instance_memory_visible_mb{resource=~\"$UUID\"}) * 100",
           "legendFormat": "memory",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "100 * sum(cube_instance_guest_used_bytes{resource=~\"$UUID\"}) / sum(cube_instance_guest_total_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "disk",
+          "refId": "C"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "CPU / Memory Usage",
+      "title": "CPU / Memory / Disk Usage",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -792,7 +801,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 30
       },
       "id": 10,
       "panels": [],
@@ -821,7 +830,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 31
       },
       "hiddenSeries": false,
       "id": 12,
@@ -944,7 +953,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 31
       },
       "hiddenSeries": false,
       "id": 14,
@@ -1052,7 +1061,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 39
       },
       "id": 41,
       "panels": [
@@ -1675,7 +1684,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 40
       },
       "id": 22,
       "panels": [
@@ -2489,6 +2498,379 @@
       ],
       "title": "Network Analyzer",
       "type": "row"
+    },
+    {
+      "id": 46,
+      "type": "stat",
+      "title": "Provisioned",
+      "description": "Disk size as provisioned: what the VM was promised.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 17
+      },
+      "targets": [
+        {
+          "expr": "sum(cube_storage_disk_provisioned_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "provisioned",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 47,
+      "type": "stat",
+      "title": "Allocated",
+      "description": "Bytes the backend physically holds. Thin provisioning never shrinks, so this stays high after the guest deletes files unless discard passed through.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 17
+      },
+      "targets": [
+        {
+          "expr": "sum(cube_storage_disk_allocated_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "allocated",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 48,
+      "type": "gauge",
+      "title": "Guest filesystem used",
+      "description": "What df reports inside the guest. Blank when the guest agent does not answer -- that is 'not measured', not 'empty'.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 17
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(cube_instance_guest_used_bytes{resource=~\"$UUID\"}) / sum(cube_instance_guest_total_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "guest used",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {},
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 49,
+      "type": "stat",
+      "title": "Thin ratio",
+      "description": "Provisioned over physically allocated. On CubeCOS this is the whole saving: compression is not enabled, so the reduction ratio is absent by design.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 12,
+        "y": 17
+      },
+      "targets": [
+        {
+          "expr": "sum(cube_storage_disk_provisioned_bytes{resource=~\"$UUID\"}) / sum(cube_storage_disk_allocated_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "provisioned / allocated",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 50,
+      "type": "stat",
+      "title": "Snapshots",
+      "description": "Allocated bytes attributable to snapshots. 'My VM grew and I did nothing' is usually this.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 16,
+        "y": 17
+      },
+      "targets": [
+        {
+          "expr": "sum(cube_storage_disk_snapshot_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "snapshots",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 51,
+      "type": "stat",
+      "title": "Filesystems",
+      "description": "Filesystems the guest agent reported, deduped by device.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 17
+      },
+      "targets": [
+        {
+          "expr": "count(cube_instance_fs_used_percent{resource=~\"$UUID\"})",
+          "legendFormat": "filesystems",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 52,
+      "type": "bargauge",
+      "title": "Per-filesystem usage",
+      "description": "Per mountpoint. A full / beside an empty /data averages to nothing, which is why this is not a single number.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "expr": "cube_instance_fs_used_percent{resource=~\"$UUID\"}",
+          "legendFormat": "{{mountpoint}} ({{device}})",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {},
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "Disk usage over time",
+      "description": "The three numbers side by side. They measure different things and are deliberately not blended.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "targets": [
+        {
+          "expr": "sum(cube_storage_disk_allocated_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "allocated",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "A"
+        },
+        {
+          "expr": "sum(cube_storage_disk_provisioned_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "provisioned",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "B"
+        },
+        {
+          "expr": "sum(cube_instance_guest_used_bytes{resource=~\"$UUID\"})",
+          "legendFormat": "guest used",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
     }
   ],
   "refresh": "5m",

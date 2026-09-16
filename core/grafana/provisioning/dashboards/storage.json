@@ -2344,6 +2344,124 @@
       ],
       "title": "Pools",
       "type": "row"
+    },
+    {
+      "id": 386,
+      "type": "row",
+      "title": "Pool Usage",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "panels": [
+        {
+          "id": 390,
+          "type": "timeseries",
+          "title": "Pool stored vs raw",
+          "description": "Ceph pools come from ceph-mgr (ceph_pool_*); other backends have no exporter and report through the storage-usage collector.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 31
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "ceph_pool_stored * on(pool_id) group_left(name) ceph_pool_metadata{name=~\"ephemeral-vms|cinder-volumes|glance-images|k8s-volumes\"}",
+              "legendFormat": "{{name}} stored",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
+              }
+            },
+            {
+              "refId": "B",
+              "expr": "ceph_pool_bytes_used * on(pool_id) group_left(name) ceph_pool_metadata{name=~\"ephemeral-vms|cinder-volumes|glance-images|k8s-volumes\"}",
+              "legendFormat": "{{name}} raw",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
+              }
+            },
+            {
+              "refId": "C",
+              "expr": "cube_storage_pool_stored_bytes",
+              "legendFormat": "{{pool}} stored",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {}
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": true
+            }
+          }
+        },
+        {
+          "id": 391,
+          "type": "timeseries",
+          "title": "Pool provisioned vs capacity",
+          "description": "Provisioned is summed from the collector disk rows; capacity is ceph-mgr stored + max_avail.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 31
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (pool) (cube_storage_disk_provisioned_bytes) / on(pool) group_left label_replace(sum by (name) ((ceph_pool_stored + ceph_pool_max_avail) * on(pool_id) group_left(name) ceph_pool_metadata{name=~\"ephemeral-vms|cinder-volumes|glance-images|k8s-volumes\"}), \"pool\", \"$1\", \"name\", \"(.*)\")",
+              "legendFormat": "{{pool}} over-subscription",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "P43CA22E17D0F9596"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {}
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": true
+            }
+          }
+        }
+      ]
     }
   ],
   "refresh": "5m",
