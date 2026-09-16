@@ -299,6 +299,91 @@ ceph_mon_map_iplist()
     echo -n $iplist
 }
 
+# Where the cluster's fsid is recorded. /etc/cube/cos/ceph is CONFIG_MIGRATE'd by
+# the ceph module, so this survives the partition switch an upgrade performs.
+CEPH_FSID_FILE=${CEPH_FSID_FILE:-/etc/cube/cos/ceph/fsid}
+
+# An fsid is a UUID and nothing else. Shape-check every value before it is
+# recorded or printed: HexUtilPOpen discards exit status, so a caller in C++
+# cannot tell a failure from an answer except by looking at what came back
+# (cubecos#1486 is the same lesson).
+_ceph_fsid_is_uuid()
+{
+    [[ "$1" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+}
+
+# This cluster's fsid as it already exists, or nothing. Only reached on a node
+# that predates the record, which means an upgrade.
+#
+# Not asked of a running cluster: `ceph fsid` needs $CONF to find the mons, so
+# it can never answer where reading $CONF could not.
+ceph_fsid_current()
+{
+    local fsid=""
+
+    if [ -f "$CONF" ] ; then
+        fsid=$(awk -F= '/^[[:space:]]*fsid[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "$CONF")
+        _ceph_fsid_is_uuid "$fsid" && { echo -n "$fsid" ; return 0 ; }
+    fi
+
+    # the local mon store, which /var/lib/ceph being CONFIG_MIGRATE'd keeps
+    # across an upgrade; ceph_mon_map_create extracts it with ceph down
+    ceph_mon_map_create >/dev/null 2>&1
+    fsid=$(monmaptool --print $MAPFILE 2>/dev/null | awk '/^fsid/ {print $2; exit}')
+    _ceph_fsid_is_uuid "$fsid" && { echo -n "$fsid" ; return 0 ; }
+
+    return 1
+}
+
+# Record $1 as this node's fsid, once. Never overwrites: the recorded value is
+# what every later commit reads, so changing it would repoint a live cluster's
+# monmap at an fsid its mons do not have.
+ceph_fsid_record()
+{
+    local fsid=$1
+    _ceph_fsid_is_uuid "$fsid" || return 1
+    [ -s "$CEPH_FSID_FILE" ] && return 0
+    mkdir -p "$(dirname "$CEPH_FSID_FILE")"
+    echo -n "$fsid" > "$CEPH_FSID_FILE"
+    chmod 0644 "$CEPH_FSID_FILE"
+}
+
+# The fsid to configure this node with. Prints it, or nothing and returns
+# non-zero when the answer is not knowable yet -- a joining node before the
+# bootstrap node has minted one. Never guesses.
+#
+# $1: 1 to mint a new fsid when there is no cluster and nothing recorded.
+#     Only the bootstrap node passes 1, so a cluster mints exactly one.
+#
+# Order matters. An existing cluster's own fsid outranks anything we would
+# generate, which is what keeps an upgraded cluster on the fsid its mons and
+# OSDs already carry -- including the old hardcoded constant.
+ceph_fsid_resolve()
+{
+    local may_generate=${1:-0}
+    local fsid=""
+
+    if [ -s "$CEPH_FSID_FILE" ] ; then
+        fsid=$(tr -d '[:space:]' < "$CEPH_FSID_FILE")
+        _ceph_fsid_is_uuid "$fsid" || return 1
+        echo -n "$fsid"
+        return 0
+    fi
+
+    if fsid=$(ceph_fsid_current) ; then
+        ceph_fsid_record "$fsid" || return 1
+        echo -n "$fsid"
+        return 0
+    fi
+
+    [ "$may_generate" == "1" ] || return 1
+
+    fsid=$(uuidgen | tr -d '[:space:]')
+    _ceph_fsid_is_uuid "$fsid" || return 1
+    ceph_fsid_record "$fsid" || return 1
+    echo -n "$fsid"
+}
+
 ceph_mon_map_hosts()
 {
     ceph_mon_map_create $1
