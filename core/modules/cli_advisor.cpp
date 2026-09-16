@@ -121,6 +121,23 @@ EnrollMain(int argc, const char** argv)
 }
 
 static int
+ConsoleTrustMain(int argc, const char** argv)
+{
+    if (argc > 2 /* [0]="console_trust" [1]=ca-file */)
+        return CLI_INVALID_ARGS;
+
+    std::string caFile;
+    if (!CliReadInputStr(argc, argv, 1, "Console CA file: ", &caFile) || caFile.length() <= 0)
+        return CLI_INVALID_ARGS;
+
+    if (HexSpawn(0, HEX_SDK, "advisor_console_trust", caFile.c_str(), NULL) != 0) {
+        CliPrintf("Could not install the console CA. Nothing was changed on this node.");
+        return CLI_FAILURE;
+    }
+    return CLI_SUCCESS;
+}
+
+static int
 StatusMain(int argc, const char** argv)
 {
     if (argc > 1)
@@ -208,6 +225,10 @@ CLI_MODE(CLI_TOP_MODE, "advisor",
 CLI_MODE_COMMAND("advisor", "enroll", EnrollMain, NULL,
     "Install and enrol the Advisor agent on this node.",
     "enroll [<service-url> [<version> [<ca-file> [force]]]]");
+
+CLI_MODE_COMMAND("advisor", "console_trust", ConsoleTrustMain, NULL,
+    "Accept console sessions signed by the Advisor's CA.",
+    "console_trust [<ca-file>]");
 
 CLI_MODE_COMMAND("advisor", "status", StatusMain, NULL,
     "Show whether this node is enrolled with the Advisor, and as which cluster.",
