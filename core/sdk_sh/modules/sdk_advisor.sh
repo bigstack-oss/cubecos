@@ -404,6 +404,22 @@ advisor_dashboard_address()
     echo "$addr:443"
 }
 
+# advisor_idp_address
+#
+# Where this cluster's Keycloak answers: port 10443 of the dashboard's address.
+#
+# It has to be reachable in its own right. The dashboard hands the browser the
+# cluster address as a bare string and builds the login URL from it in script,
+# so nothing it serves ever names this endpoint in a form a proxy could
+# rewrite -- the browser simply leaves for :10443 and has to arrive somewhere.
+advisor_idp_address()
+{
+    local dash
+
+    dash=$(advisor_dashboard_address) || return 1
+    echo "${dash%:*}:10443"
+}
+
 advisor_targets_init()
 {
     local discovered
@@ -413,10 +429,11 @@ advisor_targets_init()
     # awk, not a read loop: a loop on the right of a pipe runs in a subshell
     # and would leave the string it built behind in it.
     discovered=$(advisor_discovered_list | awk '{ printf ",\"%s\":\"%s\"", $1, $2 }')
-    local dash
+    local dash idp
     dash=$(advisor_dashboard_address) || dash=""
     if [ -n "$dash" ] ; then
-        _advisor_targets_write "{\"cube-cos\":\"$dash\"$discovered}"
+        idp=$(advisor_idp_address)
+        _advisor_targets_write "{\"cube-cos\":\"$dash\",\"cube-cos-idp\":\"$idp\"$discovered}"
     else
         # No address to seed, so seed no dashboard rather than one that refuses
         # every request; advisor target_set adds it once the address is known.
