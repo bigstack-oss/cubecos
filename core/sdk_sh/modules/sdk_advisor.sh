@@ -32,13 +32,49 @@ fi
 #     openssl dgst -sha256 -verify release.pub -signature manifest.txt.sig manifest.txt
 #     sha256sum -c manifest.txt
 
+ADVISOR_TRUST_ANCHOR=/etc/pki/ca-trust/source/anchors/cube-advisor.crt
+# The identity an enrolled node holds. config_advisor.cpp names the same paths
+# (it decides from them whether the agent should run and migrates them across
+# an upgrade); repeated here because hex_sdk cannot read the C header.
+ADVISOR_IDENTITY_DIR=/etc/cube/advisor-agent
+ADVISOR_AGENT_CERT=$ADVISOR_IDENTITY_DIR/agent.crt
+# The Advisor's SSH user CA, and the sshd drop-in that trusts it. Both are in
+# config_advisor.cpp's migrate list so a console survives a firmware upgrade;
+# these are the paths that write them.
+ADVISOR_CONSOLE_CA=/etc/ssh/console-ca/cube-advisor.pub
+ADVISOR_SSHD_DROPIN=/etc/ssh/sshd_config.d/60-cube-advisor-console.conf
+# The account a console certificate authorises. CubeCOS provisions it; the
+# Advisor must be configured with the same name or sshd refuses the principal.
+ADVISOR_CONSOLE_ACCOUNT=advisor
 ADVISOR_MANIFEST_NAME=manifest.txt
 ADVISOR_SIGNATURE_NAME=manifest.txt.sig
 
 # The agent's own unit, shipped by cube-advisor-agent and installed with the
-# image. Enabled only once a node has enrolled -- see advisor_agent_service_enable.
+# image. Never enabled: hex_config decides when it runs (the advisor module's
+# Commit), and advisor_agent_service_start starts it the moment a node enrols.
 ADVISOR_AGENT_UNIT_NAME=cube-advisor-agent.service
 ADVISOR_AGENT_UNIT=/usr/lib/systemd/system/$ADVISOR_AGENT_UNIT_NAME
+
+# The node-local allowlist the agent will dial through the tunnel: symbolic
+# name -> routing address. The Advisor only ever holds name -> what the
+# upstream calls itself; this file is the other half, and only this file, so
+# one name can route to the management network and another to the provider
+# network without the Advisor ever learning either address. A name missing
+# here is a name the agent refuses to dial -- this file is the operator's
+# control over what we can reach, not ours, so nothing here repairs it.
+ADVISOR_TARGETS_FILE=/etc/cube-advisor-agent/web-targets.json
+
+# The targets discovery found installed on this cluster: "name host:port", one
+# per line. The agent runs on every node and reads its own allowlist, but only
+# a node holding the app framework's kubeconfig can see what is installed; this
+# file is how the node that can see it tells the nodes that cannot. Only this
+# set ever crosses a node boundary: each node's own hex_config commit turns it
+# into allowlist entries.
+#
+# The set, not an address: an address alone cannot say whether CMP is installed
+# behind it, and the ingress exists from the app framework's install onwards --
+# which is before CMP is installed, not after.
+ADVISOR_DISCOVERED_FILE=/etc/cube-advisor-agent/discovered-targets
 
 # advisor_verify_release <dir> [artifact]
 #
@@ -100,28 +136,29 @@ advisor_install_release()
     return 0
 }
 
-# advisor_agent_service_enable
+# advisor_agent_service_start
 #
-# Start the tunnel and keep it started. Enrolment leaves the node holding a
-# valid certificate; without this it would hold one and never connect, which
-# looks from the Advisor exactly like a broken tunnel.
+# Start the tunnel now. Enrolment leaves the node holding a valid certificate;
+# without this it would hold one and never connect, which looks from the
+# Advisor exactly like a broken tunnel.
 #
-# Enabled here rather than at image build: an un-enrolled node has no identity,
-# so the unit would crash-loop from first boot until someone enrolled it.
-advisor_agent_service_enable()
+# Started, never enabled: in cubecos hex_config owns when a service runs (the
+# advisor module's Commit calls SystemdCommitService), so an enable symlink
+# would make systemd a second owner, starting the agent at multi-user.target on
+# a node hex_config had decided should not be running it.
+advisor_agent_service_start()
 {
     if [ ! -r "$ADVISOR_AGENT_UNIT" ] ; then
-        echo "Warning: $ADVISOR_AGENT_UNIT is missing; the tunnel will not start on its own" >&2
+        echo "Warning: $ADVISOR_AGENT_UNIT is missing; the tunnel cannot be started" >&2
         return 0
     fi
 
-    systemctl daemon-reload
-    if systemctl enable --now "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
-        echo "Tunnel service enabled; the agent will reconnect on its own after a reboot."
+    if systemctl start "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
+        echo "Tunnel service started; hex_config starts it on every boot from here."
     else
         # The identity is saved and enrolment did succeed, so this must not
         # fail the command -- say what is wrong and let the operator start it.
-        echo "Warning: could not enable $ADVISOR_AGENT_UNIT_NAME; start it manually with: systemctl enable --now $ADVISOR_AGENT_UNIT_NAME" >&2
+        echo "Warning: could not start $ADVISOR_AGENT_UNIT_NAME; start it manually with: systemctl start $ADVISOR_AGENT_UNIT_NAME" >&2
     fi
     return 0
 }
@@ -151,10 +188,23 @@ advisor_cluster_id()
         id=$(sed -n 's/^CUBE_CLUSTER_ID=//p' /etc/cube/phone-home-agent.env | head -1)
     fi
     if [ -z "$id" ] ; then
-        id=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "$T_cubesys_controller")
+        id=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "${T_cubesys_controller:-}")
+    fi
+    # An enrolled node already carries the answer in its own certificate, and
+    # that certificate is migrated across a firmware upgrade while the two
+    # sources above are not: phone-home-agent.env is written at deployment and
+    # does not survive, and cubesys.controller is absent on a converged
+    # single-node cluster. Both gone leaves an enrolled node unable to say
+    # which cluster it is -- so read back what it was enrolled as.
+    #
+    # Last, not first: the two above describe the cluster this node belongs to
+    # now, while the certificate records what it enrolled as once.
+    if [ -z "$id" ] && [ -r "$ADVISOR_AGENT_CERT" ] ; then
+        id=$(openssl x509 -in "$ADVISOR_AGENT_CERT" -noout -subject -nameopt multiline 2>/dev/null |
+             sed -n 's/^ *organizationalUnitName *= *//p' | head -1)
     fi
     if [ -z "$id" ] ; then
-        echo "Error: cannot tell which cluster this node belongs to (no CUBE_CLUSTER_ID, no cubesys.controller)" >&2
+        echo "Error: cannot tell which cluster this node belongs to (no CUBE_CLUSTER_ID, no cubesys.controller, no enrolled identity)" >&2
         return 1
     fi
 
@@ -188,6 +238,409 @@ advisor_agent_arch()
     esac
 }
 
+# _advisor_target_name_valid <name>
+#
+# name is a URL path segment on the agent's own local dial API and becomes a
+# JSON object key here, so both ends care about its shape.
+_advisor_target_name_valid()
+{
+    case $1 in
+        '') return 1 ;;
+    esac
+    case $1 in
+        [a-z0-9]*) : ;;
+        *) return 1 ;;
+    esac
+    case $1 in
+        *[!a-z0-9-]*) return 1 ;;
+    esac
+    return 0
+}
+
+# _advisor_target_address_valid <host:port>
+#
+# The same shape advisor_targets_set enforces, checked silently: these lines
+# come from discovery and from a file discovery wrote, not from an operator
+# typing, so there is no one here to hand a specific message to.
+_advisor_target_address_valid()
+{
+    local host port
+
+    case $1 in
+        *:*) : ;;
+        *) return 1 ;;
+    esac
+    host=${1%:*}
+    port=${1##*:}
+    case $host in
+        ''|*[!A-Za-z0-9.-]*) return 1 ;;
+    esac
+    case $port in
+        ''|*[!0-9]*|0?*) return 1 ;;
+    esac
+    [ "$port" -ge 1 ] && [ "$port" -le 65535 ]
+}
+
+# _advisor_write_file <path> <content>
+#
+# Writes one of the agent's node-local files atomically: a temp file in the
+# same directory, then mv. The agent can read these at any moment, so a
+# reader must never see half of a write.
+_advisor_write_file()
+{
+    local path=$1 content=$2
+    local dir tmp
+
+    dir=$(dirname "$path")
+    mkdir -p "$dir" || return 1
+
+    tmp=$(mktemp "$dir/$(basename "$path").XXXXXX") || return 1
+    if ! printf '%s\n' "$content" > "$tmp" ; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if ! chmod 0644 "$tmp" || ! chown root:root "$tmp" ; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if ! mv -f "$tmp" "$path" ; then
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
+# _advisor_targets_write <json>
+#
+# Writes the allowlist.
+_advisor_targets_write()
+{
+    _advisor_write_file "$ADVISOR_TARGETS_FILE" "$1"
+}
+
+# advisor_discovered_set <name> <host:port> [<name> <host:port> ...]
+#
+# Records on this node the set of targets discovery found installed. Called on
+# every node by advisor_targets_discover, so it must be reachable through
+# hex_sdk. Replaces the file outright: the argument list is the whole answer,
+# and a target that is no longer named is no longer discovered.
+#
+# Records only what was found; what it becomes is advisor_targets_init's
+# business, on the node itself.
+advisor_discovered_set()
+{
+    local name target content="" nl='
+'
+
+    if [ $# -lt 2 ] || [ $(($# % 2)) -ne 0 ] ; then
+        echo "Error: advisor_discovered_set: usage <name> <host:port> [<name> <host:port> ...]" >&2
+        return 1
+    fi
+
+    while [ $# -ge 2 ] ; do
+        name=$1 ; target=$2 ; shift 2
+        if ! _advisor_target_name_valid "$name" ; then
+            echo "Error: not a valid target name: $name" >&2
+            return 1
+        fi
+        if ! _advisor_target_address_valid "$target" ; then
+            echo "Error: not a literal host:port: $target" >&2
+            return 1
+        fi
+        content="$content${content:+$nl}$name $target"
+    done
+
+    _advisor_write_file "$ADVISOR_DISCOVERED_FILE" "$content"
+}
+
+# advisor_discovered_list
+#
+# Prints the recorded set, one "name host:port" pair per line. Silent when the
+# file is absent: a cluster with no app framework is the normal case, not a
+# fault. Every line's shape is rechecked, so a hand-edited file can never turn
+# into a malformed allowlist entry.
+advisor_discovered_list()
+{
+    local name target extra
+
+    [ -r "$ADVISOR_DISCOVERED_FILE" ] || return 0
+    while read -r name target extra ; do
+        [ -n "$name" ] && [ -n "$target" ] && [ -z "$extra" ] || continue
+        _advisor_target_name_valid "$name" || continue
+        _advisor_target_address_valid "$target" || continue
+        echo "$name $target"
+    done < "$ADVISOR_DISCOVERED_FILE"
+}
+
+# advisor_targets_init
+#
+# Seeds the allowlist on a node that has none: cube-cos, which every node can
+# name for itself, plus exactly what discovery recorded on this node
+# (advisor_discovered_set). cube-cos always, because every node serves it
+# locally whatever else is installed.
+#
+# Seeds, never reconciles. A file that is already there is left exactly as it
+# is -- an operator who removed a target removed it on purpose, and a helper
+# that puts it back turns "delete one line to revoke access" into "delete one
+# line and wait for it to return".
+# advisor_dashboard_address
+#
+# Where this cluster's own web UI answers: the control VIP on an HA cluster,
+# this node's management address otherwise.
+#
+# Not 127.0.0.1:8080: that port is httpd, which answers 403 to everything.
+advisor_dashboard_address()
+{
+    local addr
+
+    addr=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "${T_cubesys_control_vip:-}")
+    if [ -z "$addr" ] ; then
+        addr=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null
+               eval echo "\${T_net_if_addr_${T_cubesys_management}:-}")
+    fi
+    [ -n "$addr" ] || return 1
+    echo "$addr:443"
+}
+
+# advisor_own_targets
+#
+# The targets every node can name for itself, one "<name> <host:port>" per
+# line: this cluster's dashboard, and the endpoints the dashboard links out to
+# on other ports of the same address -- Keycloak, Skyline and the Ceph
+# dashboard.
+#
+# Each needs allowing in its own right: the dashboard builds those URLs in
+# script from the bare cluster address, so a proxy never sees them to rewrite.
+advisor_own_targets()
+{
+    local dash addr
+
+    dash=$(advisor_dashboard_address) || return 1
+    addr="${dash%:*}"
+    echo "cube-cos $dash"
+    echo "cube-cos-idp $addr:10443"
+    echo "cube-cos-skyline $addr:9999"
+    echo "cube-cos-ceph $addr:7443"
+}
+
+advisor_targets_init()
+{
+    local discovered own all
+
+    [ -e "$ADVISOR_TARGETS_FILE" ] && return 0
+
+    # awk, not a read loop: a loop on the right of a pipe runs in a subshell
+    # and would leave the string it built behind in it.
+    discovered=$(advisor_discovered_list | awk '{ printf ",\"%s\":\"%s\"", $1, $2 }')
+    # Empty when this node has no address yet: seed no dashboard rather than
+    # one that refuses every request; advisor target_set adds it once the
+    # address is known.
+    own=$(advisor_own_targets 2>/dev/null | awk '{ printf ",\"%s\":\"%s\"", $1, $2 }')
+    all="$own$discovered"
+    _advisor_targets_write "{${all#,}}"
+}
+
+# advisor_targets_list
+#
+# Prints the current allowlist, one "name host:port" pair per line. This file
+# is hand-edited -- an operator's editor, jq, python -m json.tool all
+# reformat it -- so it is read with jq rather than a regex that only
+# understands the exact layout this module happens to write. Silent, not an
+# error, if the file has not been seeded yet.
+advisor_targets_list()
+{
+    [ -r "$ADVISOR_TARGETS_FILE" ] || return 0
+    jq -r 'to_entries[] | "\(.key) \(.value)"' "$ADVISOR_TARGETS_FILE" 2>/dev/null
+}
+
+# advisor_targets_set <name> <host:port>
+#
+# Adds an entry, or replaces one by the same name. Validated here because the
+# agent dials whatever this file says: a malformed name or address is refused
+# where the message can still help someone, not left for the tunnel to fail
+# on later.
+advisor_targets_set()
+{
+    local name=$1 target=$2
+    local host port new rc
+
+    if [ -z "$name" ] || [ -z "$target" ] ; then
+        echo "Error: advisor_targets_set: usage <name> <host:port>" >&2
+        return 1
+    fi
+    if ! _advisor_target_name_valid "$name" ; then
+        echo "Error: target name must start with a lowercase letter or digit and contain only lowercase letters, digits and hyphens: $name" >&2
+        return 1
+    fi
+
+    case $target in
+        *:*) : ;;
+        *) echo "Error: target must be host:port: $target" >&2 ; return 1 ;;
+    esac
+    host=${target%:*}
+    port=${target##*:}
+    # The SaaS side accepts an IPv6 pool address; a node does not. Say so,
+    # rather than let this fall into the generic "not a literal host" refusal.
+    case $host in
+        *:*) echo "Error: IPv6 addresses are not supported as a target host (only a literal IPv4 address or hostname): $host" >&2 ; return 1 ;;
+    esac
+    case $host in
+        ''|*[!A-Za-z0-9.-]*) echo "Error: not a literal host: $host" >&2 ; return 1 ;;
+    esac
+    case $port in
+        ''|*[!0-9]*) echo "Error: port is not numeric: $port" >&2 ; return 1 ;;
+    esac
+    case $port in
+        0?*) echo "Error: port must not have a leading zero: $port" >&2 ; return 1 ;;
+    esac
+    if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ] ; then
+        echo "Error: port out of range (1-65535): $port" >&2
+        return 1
+    fi
+
+    # -e turns a file that will not parse as a JSON object into a refusal
+    # instead of "start from nothing" -- the difference between an
+    # operator's edit and this quietly emptying the allowlist under them. A
+    # file jq cannot even see, such as a genuinely empty one, still has to be
+    # caught by hand: jq runs its filter zero times over zero input values
+    # and calls that success.
+    if [ -e "$ADVISOR_TARGETS_FILE" ] ; then
+        new=$(jq -e --arg n "$name" --arg v "$target" \
+              'if type == "object" then .[$n] = $v else error("not a JSON object") end' \
+              "$ADVISOR_TARGETS_FILE" 2>/dev/null)
+        rc=$?
+    else
+        new=$(jq -n -e --arg n "$name" --arg v "$target" '{($n): $v}')
+        rc=$?
+    fi
+    if [ $rc -ne 0 ] || [ -z "$new" ] ; then
+        echo "Error: $ADVISOR_TARGETS_FILE does not read as a JSON object; nothing changed" >&2
+        return 1
+    fi
+    _advisor_targets_write "$new"
+}
+
+# advisor_targets_unset <name>
+#
+# Removes one entry. Removing a name that is not there is not an error -- the
+# file already says what the operator wants.
+advisor_targets_unset()
+{
+    local name=$1 new rc
+
+    if [ -z "$name" ] ; then
+        echo "Error: advisor_targets_unset: usage <name>" >&2
+        return 1
+    fi
+    if ! _advisor_target_name_valid "$name" ; then
+        echo "Error: not a valid target name: $name" >&2
+        return 1
+    fi
+
+    # Nothing to remove from an allowlist that does not exist yet.
+    [ -e "$ADVISOR_TARGETS_FILE" ] || return 0
+
+    new=$(jq -e --arg n "$name" \
+          'if type == "object" then del(.[$n]) else error("not a JSON object") end' \
+          "$ADVISOR_TARGETS_FILE" 2>/dev/null)
+    rc=$?
+    if [ $rc -ne 0 ] || [ -z "$new" ] ; then
+        echo "Error: $ADVISOR_TARGETS_FILE does not read as a JSON object; nothing changed" >&2
+        return 1
+    fi
+    _advisor_targets_write "$new"
+}
+
+# advisor_targets_discover
+#
+# Publishes to the whole cluster the set of web targets that are actually
+# installed on it.
+#
+# This runs where the kubeconfig is -- one node -- but the agent runs on every
+# node and dials from every node, so every node needs the set. It is written
+# out with remote_run over CUBE_NODE_LIST_HOSTNAMES, the same fan-out
+# health_advisor_check uses. Only the set travels: each node's own hex_config
+# commit turns it into allowlist entries, so no node ever writes another
+# node's allowlist.
+#
+# What exists is decided per target from its Helm release, not from the
+# ingress: the ingress is created by the app framework's own install, which
+# happens before CMP is installed, so an address proves the framework is there
+# and says nothing about CMP. A release is the honest answer, and it is one a
+# namespace or an HTTP probe during an install is not.
+#
+# Both names sit at that one address on purpose -- the portal and its identity
+# provider must share one origin or the OIDC state cookie is set on one and
+# the callback lands on the other.
+#
+# Callers are the installers (app_framework_install, app_import) and enrolment.
+# Idempotent, and each call declares only what it finds, so calling it from
+# every one of them is right: whichever ran last is the cluster's current
+# answer.
+#
+# On this node it also sets the names outright, so the node that just enrolled
+# or just installed CMP does not wait for its next commit -- and that
+# deliberately brings a name back if an operator has unset it here. Not the
+# never-repair rule being broken: never-repair stops a *startup* silently
+# restoring a file someone edited, while this only runs from an install or
+# enrolment event that is itself declaring the endpoint again.
+# _advisor_discard_kubeconfig <path>
+#
+# Removes a kubeconfig advisor_targets_discover fetched, and unsets the export
+# so a later call in the same shell fetches a fresh one. A no-op for the empty
+# path, which is what a caller-supplied APPFW_KUBECONFIG leaves behind.
+_advisor_discard_kubeconfig()
+{
+    [ -n "${1:-}" ] || return 0
+    rm -f "$1"
+    unset APPFW_KUBECONFIG
+}
+
+advisor_targets_discover()
+{
+    local addr node pairs="" kc=""
+
+    # One kubeconfig for the three queries below, fetched here rather than in
+    # each helper: they run as separate hex_sdk processes, so a helper that
+    # fetched its own would authenticate to rancher three times per call.
+    # Exported because that is how those processes receive it.
+    if [ -z "${APPFW_KUBECONFIG:-}" ] ; then
+        kc=$($HEX_SDK app_kubeconfig) || return 0
+        export APPFW_KUBECONFIG=$kc
+    fi
+
+    addr=$($HEX_SDK app_ingress_address) || { _advisor_discard_kubeconfig "$kc" ; return 0 ; }
+    [ -n "$addr" ] || { _advisor_discard_kubeconfig "$kc" ; return 0 ; }
+
+    # The app framework's own Keycloak, and the CMP portal. Each is declared by
+    # whatever installed it, at the moment it is found installed.
+    $HEX_SDK app_helm_release_deployed keycloak && pairs="$pairs app-fw-idp $addr:443"
+    $HEX_SDK app_helm_release_deployed cube-portal && pairs="$pairs cube-cmp $addr:443"
+    _advisor_discard_kubeconfig "$kc"
+    [ -n "$pairs" ] || return 0
+
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        remote_run $node "$HEX_SDK advisor_discovered_set$pairs" >/dev/null 2>&1 || \
+            echo "Warning: could not record the discovered targets on $node; it picks them up at its next commit" >&2
+    done
+
+    # A cluster that never enrolled must not gain an allowlist as a side
+    # effect of installing CMP.
+    #
+    # The fan-out above is deliberately on this side of that guard. An install
+    # normally runs long before anyone enrols, so the set has to be on every
+    # node by then: enrolment's own advisor_targets_init reads this file and
+    # seeds from it, which is the only way a cluster that installed CMP first
+    # ends up with cube-cmp in its allowlist at all.
+    [ -e "$ADVISOR_TARGETS_FILE" ] || return 0
+
+    set -- $pairs
+    while [ $# -ge 2 ] ; do
+        advisor_targets_set "$1" "$2"
+        shift 2
+    done
+    return 0
+}
+
 # advisor_enroll <server> <token-file> <version>
 #
 # The whole node-side install path: fetch the release, verify it against the
@@ -201,9 +654,110 @@ advisor_agent_arch()
 # Every step fails closed. A partial install -- a verified binary with no
 # identity, or an identity with no binary -- is worse than a clean failure the
 # operator can retry.
+# advisor_trust_ca <ca-file>
+#
+# Installs the Advisor's CA into this node's system trust store.
+#
+# Enrolment fetches the release over HTTPS with curl and then runs the agent,
+# which talks to the same endpoint through Go's TLS. Both read the system store
+# and neither takes a CA path, so an Advisor serving its own certificate -- the
+# normal case offline, where there is no public CA to lean on -- fails the fetch
+# with "self-signed certificate" and nothing after it runs. Passing -k instead
+# is not an option: the pairing token is a bearer credential on that request.
+#
+# Deliberately not migrated across a firmware upgrade. This is enrolment-time
+# trust; the tunnel's own trust is the enrollment CA the agent pins from its
+# identity directory, which is migrated. Verified on hardware: after an upgrade
+# that dropped this anchor, the agent reconnected on its own.
+advisor_trust_ca()
+{
+    local ca=$1
+
+    [ -n "$ca" ] || return 0
+    if [ ! -r "$ca" ] ; then
+        echo "Error: cannot read the Advisor CA file: $ca" >&2
+        return 1
+    fi
+    # A file that is not a certificate would install cleanly and then fail
+    # every TLS handshake with nothing pointing back here.
+    if ! openssl x509 -in "$ca" -noout >/dev/null 2>&1 ; then
+        echo "Error: $ca is not a PEM certificate" >&2
+        return 1
+    fi
+    install -m 0644 "$ca" "$ADVISOR_TRUST_ANCHOR" || return 1
+    if ! update-ca-trust extract >/dev/null 2>&1 ; then
+        echo "Error: could not rebuild this node's trust store" >&2
+        rm -f "$ADVISOR_TRUST_ANCHOR"
+        return 1
+    fi
+    echo "Trusting the Advisor's CA from $ca."
+    return 0
+}
+
+# advisor_console_trust <ca-file>
+#
+# Makes this node accept console certificates the Advisor mints.
+#
+# A console session is piped to this node's own sshd, so sshd is what decides
+# whether a certificate is good -- the Advisor only signs. Nothing pushes the
+# CA here: the Advisor prints it at install time and an operator installs it,
+# which is the same shape as trusting its TLS CA at enrolment.
+#
+# Both files are in config_advisor.cpp's migrate list, so once installed they
+# survive a firmware upgrade without being reinstalled.
+advisor_console_trust()
+{
+    local ca=$1
+
+    if [ -z "$ca" ] || [ ! -r "$ca" ] ; then
+        echo "Error: cannot read the console CA file: ${ca:-<none>}" >&2
+        return 1
+    fi
+    # One public key in sshd's own authorized-keys form. A private key, or a
+    # certificate, would install cleanly and then fail every login with
+    # nothing pointing back here.
+    if ! ssh-keygen -l -f "$ca" >/dev/null 2>&1 ; then
+        echo "Error: $ca is not an SSH public key" >&2
+        return 1
+    fi
+    case $(head -1 "$ca") in
+        ssh-*|ecdsa-*|sk-*) : ;;
+        *) echo "Error: $ca is not a public key line sshd can read" >&2 ; return 1 ;;
+    esac
+
+    mkdir -p "$(dirname "$ADVISOR_CONSOLE_CA")" || return 1
+    install -m 0644 "$ca" "$ADVISOR_CONSOLE_CA" || return 1
+
+    # The drop-in is written rather than appended to sshd_config: an append
+    # would duplicate on every re-run, and 50-redhat.conf is not ours to edit.
+    cat > "$ADVISOR_SSHD_DROPIN" <<EOF
+# Managed by CubeCOS. Trusts the Cube AI Advisor's console CA for the
+# $ADVISOR_CONSOLE_ACCOUNT account only, so a certificate it signs cannot be
+# presented as any other user.
+TrustedUserCAKeys $ADVISOR_CONSOLE_CA
+Match User $ADVISOR_CONSOLE_ACCOUNT
+    AuthorizedPrincipalsCommand /bin/echo $ADVISOR_CONSOLE_ACCOUNT
+    AuthorizedPrincipalsCommandUser nobody
+EOF
+    chmod 0600 "$ADVISOR_SSHD_DROPIN"
+
+    # A drop-in sshd refuses to parse would take sshd down on its next
+    # restart, which is a far worse outcome than a console that does not work.
+    if ! sshd -t 2>/dev/null ; then
+        rm -f "$ADVISOR_SSHD_DROPIN"
+        echo "Error: sshd rejected the console configuration; nothing was changed" >&2
+        return 1
+    fi
+    systemctl reload sshd >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1 || {
+        echo "Warning: could not reload sshd; the console starts working after the next reload" >&2
+    }
+    echo "This node now accepts Advisor console sessions as $ADVISOR_CONSOLE_ACCOUNT."
+    return 0
+}
+
 advisor_enroll()
 {
-    local server=$1 token_file=$2 version=$3
+    local server=$1 token_file=$2 version=$3 ca_file=${4:-} force=${5:-}
     local arch artifact tmp rc
 
     if [ -z "$server" ] || [ -z "$token_file" ] || [ -z "$version" ] ; then
@@ -214,6 +768,10 @@ advisor_enroll()
         echo "Error: cannot read the pairing token file: $token_file" >&2
         return 1
     fi
+
+    # Before anything reaches the network: the fetch below and the agent that
+    # follows both verify against the system store.
+    advisor_trust_ca "$ca_file" || return 1
 
     # Enrolment is a cluster-level act, and the agent's tools are the control
     # plane's: cluster check, the CLI, the cube-cos-api reads. A compute or
@@ -250,12 +808,28 @@ advisor_enroll()
     # own public key says otherwise.
     advisor_install_release "$tmp" "$artifact" /usr/local/bin/cube-advisor-agent || return 1
 
+    # An Advisor that has been rebuilt signs with a new enrollment CA, which
+    # leaves every node holding an identity signed by one that no longer
+    # exists -- valid-looking, and useless. The agent refuses to replace an
+    # existing identity without being told to, correctly, so forcing has to be
+    # something the operator asks for rather than a retry that silently
+    # discards a working identity.
+    local force_arg=""
+    [ -n "$force" ] && force_arg="-force"
     /usr/local/bin/cube-advisor-agent enroll \
-        -server "$server" -token-file "$token_file" -cluster "$cluster"
+        -server "$server" -token-file "$token_file" -cluster "$cluster" $force_arg
     rc=$?
     case $rc in
-        0) advisor_agent_service_enable ;;
-        3) echo "This node is already enrolled; nothing was changed." >&2 ;;
+        0)
+            advisor_agent_service_start
+            advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the cube-cos target by hand" >&2
+            # CMP may already be installed; if so its ingress is reachable
+            # from the moment this cluster enrols. Same module, called
+            # directly (only cross-module calls route through $HEX_SDK).
+            advisor_targets_discover
+            ;;
+        3) echo "This node is already enrolled; nothing was changed." >&2
+           echo "If the Advisor was rebuilt, this node's identity was signed by a CA that no longer exists; re-run with the force argument to replace it." >&2 ;;
         4) echo "The pairing token was refused -- ask for a fresh one." >&2 ;;
         5) echo "The Advisor service was unreachable from this node." >&2 ;;
         *) echo "Error: enrolment failed (exit $rc)" >&2 ;;
