@@ -1,4 +1,5 @@
-// +build no-compile
+//go:build ignore
+// +build ignore
 
 package config
 
