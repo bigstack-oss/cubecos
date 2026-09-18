@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -16,9 +18,12 @@ const (
 	mysqlSockFile = "/var/lib/mysql/mysql.sock"
 	mysqlPort     = 3306
 	certsDir      = "/var/www/certs/"
-	keyFile       = certsDir + "/server.key"
-	certFile      = certsDir + "/server.cert"
-	certKeyFile   = certsDir + "/server.pem"
+	keyBase       = "server.key"
+	certBase      = "server.cert"
+	certKeyBase   = "server.pem"
+	keyFile       = certsDir + keyBase
+	certFile      = certsDir + certBase
+	certKeyFile   = certsDir + certKeyBase
 	sansConfFile  = "/tmp/openssl-sans.cnf"
 
 	terraformWorkDir   = "/var/lib/terraform/"
@@ -55,8 +60,73 @@ func getIfaceIP(name string) (string, error) {
 	return "", nil
 }
 
+// buildCertSANs assembles the subjectAltName argument for the cluster's self-signed
+// certificate.
+//
+// Every control node has to be covered, not just the VIP: AMQP clients address the
+// nodes directly (RabbitMqServers() iterates cubesys.control.addrs), so a VIP-only
+// SAN makes the TLS handshake fail against every node. The certificate is signed once
+// on the master control node and rsynced to the rest, so one certificate has to carry
+// all of them.
+//
+// Empty values are dropped rather than emitted as a bare "IP:" - openssl rejects the
+// whole extension with "invalid null value", and cubesys.control.addrs is absent
+// altogether on a non-HA node.
+func buildCertSANs() string {
+	var sans []string
+	seen := map[string]bool{}
+
+	add := func(kind, value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+
+		entry := kind + ":" + value
+		if seen[entry] {
+			return
+		}
+		seen[entry] = true
+
+		sans = append(sans, entry)
+	}
+
+	add("DNS", "localhost")
+	add("DNS", "cube-controller")
+	add("DNS", cubeSettings.GetController())
+	add("IP", "127.0.0.1")
+	add("IP", cubeSettings.GetControllerIp())
+
+	if cubeSettings.IsHA() {
+		for _, addr := range cubeSettings.GetControlGroupIPs() {
+			add("IP", addr)
+		}
+		for _, host := range cubeSettings.GetControlGroupHosts() {
+			add("DNS", host)
+		}
+	}
+
+	return "subjectAltName=" + strings.Join(sans, ",")
+}
+
 func genSelfSignCerts() error {
-	os.MkdirAll(certsDir, 0755)
+	return genSelfSignCertsInto(certsDir)
+}
+
+// genSelfSignCertsInto writes a fresh self-signed certificate, key and combined pem
+// into dir.
+//
+// Regenerating an existing cluster's certificate signs into a staging directory
+// first, so that a failure part way through leaves the live certificate - which nine
+// services are serving - untouched.
+func genSelfSignCertsInto(dir string) error {
+	os.MkdirAll(dir, 0755)
+
+	var (
+		key     = filepath.Join(dir, keyBase)
+		cert    = filepath.Join(dir, certBase)
+		certKey = filepath.Join(dir, certKeyBase)
+	)
 
 	// 	sansStr := `
 	// [req]
@@ -70,11 +140,11 @@ func genSelfSignCerts() error {
 
 	if _, outErr, err := util.ExecCmd("openssl",
 		"req", "-x509", "-newkey", "rsa:2048", "-nodes",
-		"-keyout", keyFile,
-		"-out", certFile,
+		"-keyout", key,
+		"-out", cert,
 		"-days", "3650",
 		"-subj", "/CN="+cubeSettings.GetController(),
-		"-addext", "subjectAltName=DNS:localhost,DNS:cube-controller,IP:127.0.0.1,IP:"+cubeSettings.GetControllerIp(),
+		"-addext", buildCertSANs(),
 		// "-addext", "basicConstraints=CA:TRUE,pathlen:0",
 		// "-extensions", "san",
 		// "-config", sansConfFile,
@@ -82,11 +152,11 @@ func genSelfSignCerts() error {
 		return errors.Wrap(err, outErr)
 	}
 
-	if _, outErr, err := util.ExecShf("cat %s %s | tee %s", certFile, keyFile, certKeyFile); err != nil {
+	if _, outErr, err := util.ExecShf("cat %s %s | tee %s", cert, key, certKey); err != nil {
 		return errors.Wrap(err, outErr)
 	}
 
-	if err := os.Chmod(keyFile, 0644); err != nil {
+	if err := os.Chmod(key, 0644); err != nil {
 		return errors.WithStack(err)
 	}
 
