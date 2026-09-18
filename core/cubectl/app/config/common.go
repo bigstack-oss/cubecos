@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -17,9 +18,12 @@ const (
 	mysqlSockFile = "/var/lib/mysql/mysql.sock"
 	mysqlPort     = 3306
 	certsDir      = "/var/www/certs/"
-	keyFile       = certsDir + "/server.key"
-	certFile      = certsDir + "/server.cert"
-	certKeyFile   = certsDir + "/server.pem"
+	keyBase       = "server.key"
+	certBase      = "server.cert"
+	certKeyBase   = "server.pem"
+	keyFile       = certsDir + keyBase
+	certFile      = certsDir + certBase
+	certKeyFile   = certsDir + certKeyBase
 	sansConfFile  = "/tmp/openssl-sans.cnf"
 
 	terraformWorkDir   = "/var/lib/terraform/"
@@ -106,7 +110,23 @@ func buildCertSANs() string {
 }
 
 func genSelfSignCerts() error {
-	os.MkdirAll(certsDir, 0755)
+	return genSelfSignCertsInto(certsDir)
+}
+
+// genSelfSignCertsInto writes a fresh self-signed certificate, key and combined pem
+// into dir.
+//
+// Regenerating an existing cluster's certificate signs into a staging directory
+// first, so that a failure part way through leaves the live certificate - which nine
+// services are serving - untouched.
+func genSelfSignCertsInto(dir string) error {
+	os.MkdirAll(dir, 0755)
+
+	var (
+		key     = filepath.Join(dir, keyBase)
+		cert    = filepath.Join(dir, certBase)
+		certKey = filepath.Join(dir, certKeyBase)
+	)
 
 	// 	sansStr := `
 	// [req]
@@ -120,8 +140,8 @@ func genSelfSignCerts() error {
 
 	if _, outErr, err := util.ExecCmd("openssl",
 		"req", "-x509", "-newkey", "rsa:2048", "-nodes",
-		"-keyout", keyFile,
-		"-out", certFile,
+		"-keyout", key,
+		"-out", cert,
 		"-days", "3650",
 		"-subj", "/CN="+cubeSettings.GetController(),
 		"-addext", buildCertSANs(),
@@ -132,11 +152,11 @@ func genSelfSignCerts() error {
 		return errors.Wrap(err, outErr)
 	}
 
-	if _, outErr, err := util.ExecShf("cat %s %s | tee %s", certFile, keyFile, certKeyFile); err != nil {
+	if _, outErr, err := util.ExecShf("cat %s %s | tee %s", cert, key, certKey); err != nil {
 		return errors.Wrap(err, outErr)
 	}
 
-	if err := os.Chmod(keyFile, 0644); err != nil {
+	if err := os.Chmod(key, 0644); err != nil {
 		return errors.WithStack(err)
 	}
 
