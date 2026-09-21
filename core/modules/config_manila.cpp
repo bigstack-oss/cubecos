@@ -77,6 +77,7 @@ CONFIG_TUNING_STR(MANILA_VOLUME_TYPE, "manila.volume.type", TUNING_PUB, "Set man
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
+CONFIG_TUNING_SPEC_BOOL(RABBITMQ_SSL_ENABLED);
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
 CONFIG_TUNING_SPEC_STR(CUBESYS_DOMAIN);
 CONFIG_TUNING_SPEC_STR(CUBESYS_REGION);
@@ -96,6 +97,7 @@ PARSE_TUNING_STR(s_manilaPass, MANILA_USERPASS);
 PARSE_TUNING_STR(s_dbPass, MANILA_DBPASS);
 PARSE_TUNING_STR(s_volumeType, MANILA_VOLUME_TYPE);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
+PARSE_TUNING_X_BOOL(s_mqSsl, RABBITMQ_SSL_ENABLED, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 2);
 PARSE_TUNING_X_STR(s_cubeRegion, CUBESYS_REGION, 2);
@@ -747,7 +749,7 @@ Commit(bool modified, int dryLevel)
         SetDebug(config, s_debug);
         SetEndpoint(config, myip);
         SetDatabaseConnection(config, sharedId, dbPass);
-        SetMqClientConfig(config, s_ha, sharedId, mqPass, s_ctrlAddrs);
+        SetMqClientConfig(config, s_ha, sharedId, mqPass, s_ctrlAddrs, s_mqSsl.newValue());
         SetNotificationQueue(config, sharedId);
         SetAuth(config, sharedId, s_cubeDomain, manilaPass);
         SetCinderInfo(config, sharedId, s_cubeRegion, s_cubeDomain, adminCliPass);

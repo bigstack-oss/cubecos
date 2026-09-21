@@ -119,6 +119,7 @@ CONFIG_TUNING_STR(CINDER_BACKUP_POOL, "cinder.backup.pool", TUNING_PUB, "Set cin
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
+CONFIG_TUNING_SPEC_BOOL(RABBITMQ_SSL_ENABLED);
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
 CONFIG_TUNING_SPEC_STR(CUBESYS_DOMAIN);
 CONFIG_TUNING_SPEC_STR(CUBESYS_REGION);
@@ -149,6 +150,7 @@ PARSE_TUNING_STR(s_backupAccount, CINDER_BACKUP_ACCOUNT);
 PARSE_TUNING_STR(s_backupSecret, CINDER_BACKUP_SECRET);
 PARSE_TUNING_STR(s_backupPool, CINDER_BACKUP_POOL);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
+PARSE_TUNING_X_BOOL(s_mqSsl, RABBITMQ_SSL_ENABLED, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 2);
 PARSE_TUNING_X_STR(s_cubeRegion, CUBESYS_REGION, 2);
@@ -1133,7 +1135,7 @@ Commit(bool modified, int dryLevel)
         SetDefaults(mainConfig, s_eCubeRole);
         SetEndpoint(mainConfig, ctrlIp);
         SetDatabaseConnection(mainConfig, sharedId, dbPass);
-        SetMqClientConfig(mainConfig, s_ha, sharedId, mqPass, s_ctrlAddrs);
+        SetMqClientConfig(mainConfig, s_ha, sharedId, mqPass, s_ctrlAddrs, s_mqSsl.newValue());
         SetNotificationQueue(mainConfig, sharedId);
         SetAuth(mainConfig, sharedId, domain, cinderPass);
         SetNovaInfo(mainConfig, sharedId, s_cubeRegion, domain, novaPass);

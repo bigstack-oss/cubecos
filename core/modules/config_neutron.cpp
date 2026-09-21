@@ -152,6 +152,7 @@ CONFIG_TUNING_BOOL(NEUTRON_DEBUG, "neutron.debug.enabled", TUNING_PUB, "Set to t
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
 CONFIG_TUNING_SPEC_UINT(NET_IF_MTU);
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
+CONFIG_TUNING_SPEC_BOOL(RABBITMQ_SSL_ENABLED);
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
 CONFIG_TUNING_SPEC_STR(CUBESYS_DOMAIN);
 CONFIG_TUNING_SPEC_STR(CUBESYS_REGION);
@@ -171,6 +172,7 @@ PARSE_TUNING_STR(s_metaPass, NEUTRON_METAPASS);
 PARSE_TUNING_STR(s_dbPass, NEUTRON_DBPASS);
 PARSE_TUNING_BOOL(s_netHaEnabled, NEUTRON_HA_ENABLED);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
+PARSE_TUNING_X_BOOL(s_mqSsl, RABBITMQ_SSL_ENABLED, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 2);
 PARSE_TUNING_X_STR(s_cubeRegion, CUBESYS_REGION, 2);
@@ -388,13 +390,13 @@ static bool
 UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::string ctrlAddrs)
 {
     if (IsControl(s_eCubeRole)) {
-        SetMqClientConfig(cfg, ha, sharedId, password, ctrlAddrs);
+        SetMqClientConfig(cfg, ha, sharedId, password, ctrlAddrs, s_mqSsl.newValue());
     }
 
     if (IsCompute(s_eCubeRole)) {
         // The VPN agent has never been given rpc_response_timeout, unlike every
         // other AMQP client. Kept as-is so this refactor changes no output.
-        SetMqClientConfig(vpnAgtCfg, ha, sharedId, password, ctrlAddrs, false);
+        SetMqClientConfig(vpnAgtCfg, ha, sharedId, password, ctrlAddrs, s_mqSsl.newValue(), false);
     }
 
     return true;

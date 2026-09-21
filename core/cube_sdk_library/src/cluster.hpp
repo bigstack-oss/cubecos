@@ -113,12 +113,23 @@ MemcachedServers(
     const std::string& controller,
     const std::string& clusterGroup);
 
+/**
+ * Build the AMQP transport_url for one service.
+ *
+ * @p ssl selects the port only -- 5671 instead of 5672. The scheme stays
+ * "rabbit://" either way: oslo.messaging registers no "rabbit+ssl" driver
+ * (entry points are amqp/fake/kafka/kombu/rabbit), so TLS is turned on by the
+ * oslo_messaging_rabbit "ssl" option that SetMqClientConfig() writes, never by
+ * the URL. Changing the port without that option yields a plaintext client
+ * knocking on the TLS listener.
+ */
 std::string
 RabbitMqServers(
     const bool ha,
     const std::string& ctrlIp,
     const std::string& pass,
-    const std::string& clusterGroup);
+    const std::string& clusterGroup,
+    const bool ssl);
 
 /**
  * Write one service's AMQP client settings into @p config.
@@ -131,6 +142,11 @@ RabbitMqServers(
  * @p withRpcTimeout exists for neutron's VPN agent, which is the one call site
  * that has never carried rpc_response_timeout. Preserved deliberately; do not
  * "fix" it here without re-taking the generated-config evidence.
+ *
+ * @p ssl has no default on purpose: it sits before @p withRpcTimeout so that
+ * every existing five-argument call fails to compile until it states which
+ * transport it wants. Adding a default here would let a call site silently keep
+ * plaintext after the broker has closed 5672.
  */
 void
 SetMqClientConfig(
@@ -139,6 +155,7 @@ SetMqClientConfig(
     const std::string& ctrlIp,
     const std::string& pass,
     const std::string& clusterGroup,
+    const bool ssl,
     const bool withRpcTimeout = true);
 
 std::string

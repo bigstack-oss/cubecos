@@ -184,15 +184,17 @@ MemcachedServers(const bool ha, const std::string& controller, const std::string
 
 std::string
 RabbitMqServers(const bool ha, const std::string& controller,
-    const std::string& pass, const std::string& clusterGroup)
+    const std::string& pass, const std::string& clusterGroup, const bool ssl)
 {
+    const std::string port = ssl ? ":5671" : ":5672";
+
     if (!ha)
-        return "rabbit://openstack:" + pass + "@" + controller + ":5672";
+        return "rabbit://openstack:" + pass + "@" + controller + port;
     else {
         auto group = hex_string_util::split(clusterGroup, ',');
         std::string servers = "rabbit://";
         for (size_t i = 0; i < group.size(); i++) {
-            servers += "openstack:" + pass + "@" + group[i] + ":5672";
+            servers += "openstack:" + pass + "@" + group[i] + port;
             if (i + 1 < group.size())
                 servers += ",";
         }
@@ -203,14 +205,34 @@ RabbitMqServers(const bool ha, const std::string& controller,
 
 void
 SetMqClientConfig(Configs& config, const bool ha, const std::string& ctrlIp,
-    const std::string& pass, const std::string& clusterGroup, const bool withRpcTimeout)
+    const std::string& pass, const std::string& clusterGroup, const bool ssl,
+    const bool withRpcTimeout)
 {
     // Unconditional: every AMQP client gets these regardless of cluster shape.
-    config["DEFAULT"]["transport_url"] = RabbitMqServers(ha, ctrlIp, pass, clusterGroup);
+    config["DEFAULT"]["transport_url"] = RabbitMqServers(ha, ctrlIp, pass, clusterGroup, ssl);
 
     // neutron's VPN agent is the sole call site that omits this.
     if (withRpcTimeout)
         config["DEFAULT"]["rpc_response_timeout"] = "1200";
+
+    // TLS is a property of the broker, not of the cluster shape, so this sits
+    // outside the HA gate below: a single-node deployment pointed at 5671 needs
+    // it exactly as much as a three-node one does.
+    //
+    // ssl_ca_file is what turns encryption into authentication -- oslo sets
+    // cert_reqs=CERT_REQUIRED only when it is present (impl_rabbit.py
+    // _fetch_ssl_params). It costs nothing in compatibility: oslo never passes
+    // server_hostname to py-amqp, so the context runs with check_hostname off
+    // and the appliance's self-signed cert validates as its own issuer without
+    // needing the node's address in a SAN.
+    //
+    // ssl_cert_file / ssl_key_file stay unset: the broker runs
+    // fail_if_no_peer_cert=false and clients still authenticate with the
+    // openstack password. Mutual TLS is deferred.
+    if (ssl) {
+        config["oslo_messaging_rabbit"]["ssl"] = "true";
+        config["oslo_messaging_rabbit"]["ssl_ca_file"] = ClusterCaCertFile();
+    }
 
     // HA-gated: a single-node cluster has no peer to fail over to, so these
     // stay out of its configs entirely.

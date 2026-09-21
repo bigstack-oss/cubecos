@@ -92,6 +92,7 @@ CONFIG_TUNING_INT(MASAKARI_TARGET_WAIT, "masakari.target.wait", TUNING_PUB, "Set
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
+CONFIG_TUNING_SPEC_BOOL(RABBITMQ_SSL_ENABLED);
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
 CONFIG_TUNING_SPEC_STR(CUBESYS_DOMAIN);
 CONFIG_TUNING_SPEC_STR(CUBESYS_REGION);
@@ -111,6 +112,7 @@ PARSE_TUNING_BOOL(s_instProcessAll, MASAKARI_INST_PROCESS_ALL);
 PARSE_TUNING_INT(s_waitPeriod, MASAKARI_WAIT_PERIOD);
 PARSE_TUNING_INT(s_targetWait, MASAKARI_TARGET_WAIT);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 1);
+PARSE_TUNING_X_BOOL(s_mqSsl, RABBITMQ_SSL_ENABLED, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 2);
 PARSE_TUNING_X_STR(s_cubeRegion, CUBESYS_REGION, 2);
@@ -242,7 +244,7 @@ static bool
 UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::string ctrlAddrs)
 {
     if (IsControl(s_eCubeRole)) {
-        SetMqClientConfig(cfg, ha, sharedId, password, ctrlAddrs);
+        SetMqClientConfig(cfg, ha, sharedId, password, ctrlAddrs, s_mqSsl.newValue());
     }
 
     return true;

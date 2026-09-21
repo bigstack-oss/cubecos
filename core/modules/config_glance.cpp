@@ -98,6 +98,7 @@ CONFIG_TUNING_SPEC_BOOL(CUBESYS_SALTKEY);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
 CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
+CONFIG_TUNING_SPEC_BOOL(RABBITMQ_SSL_ENABLED);
 CONFIG_TUNING_SPEC_STR(CINDER_STORAGE_BACKEND);
 CONFIG_TUNING_SPEC_STR(CINDER_VOLUME_TYPE_DEFAULT);
 
@@ -117,6 +118,7 @@ PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
 PARSE_TUNING_X_STR(s_ctrlAddrs, CUBESYS_CONTROL_ADDRS, 1);
 PARSE_TUNING_X_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD, 2);
+PARSE_TUNING_X_BOOL(s_mqSsl, RABBITMQ_SSL_ENABLED, 2);
 PARSE_TUNING_X_STR_ARRAY(s_storageBackends, CINDER_STORAGE_BACKEND, 3);
 PARSE_TUNING_X_STR(s_volumeTypeDefault, CINDER_VOLUME_TYPE_DEFAULT, 3);
 
@@ -670,7 +672,7 @@ Commit(bool modified, int dryLevel)
         SetDebug(config, s_debug);
         SetEndpoint(config, myIp);
         SetDatabaseConnection(config, sharedId, dbPass);
-        SetMqClientConfig(config, s_ha, sharedId, mqPass, s_ctrlAddrs);
+        SetMqClientConfig(config, s_ha, sharedId, mqPass, s_ctrlAddrs, s_mqSsl.newValue());
         SetNotificationQueue(config, sharedId);
         SetAuth(config, sharedId, s_cubeDomain, glancePass);
         SetCinderInfo(config, s_cinderUseMultipath, s_cinderEnforceMultipath);
