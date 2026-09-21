@@ -25,8 +25,9 @@ $(GIT_DIR):
 		done, \
 		"  CLONE   $(GITHUB_URL)")
 
-# Build the static agent binary (deps resolved via the Go module proxy).
-$(APP): $(GIT_DIR)
+# Order-only on the clone: the driver build below writes into it, so a normal
+# prerequisite made the agent rebuild on every no-change run.
+$(APP): | $(GIT_DIR)
 	$(call RUN_CMD_TIMED, \
 		cd $(GIT_DIR) && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 		go build -trimpath -ldflags '-s -w' $(GOVERBOSE) \
@@ -34,7 +35,7 @@ $(APP): $(GIT_DIR)
 		"  GEN     $(APP)")
 
 # Build the server (SPA via Node 24 + pnpm, embedded into the Go binary).
-$(SRV): $(GIT_DIR)
+$(SRV): | $(GIT_DIR)
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(GIT_DIR) && nvm install 24 $(QEND)
