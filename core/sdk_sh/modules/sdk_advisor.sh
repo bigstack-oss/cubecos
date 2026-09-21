@@ -38,6 +38,14 @@ ADVISOR_TRUST_ANCHOR=/etc/pki/ca-trust/source/anchors/cube-advisor.crt
 # an upgrade); repeated here because hex_sdk cannot read the C header.
 ADVISOR_IDENTITY_DIR=/etc/cube/advisor-agent
 ADVISOR_AGENT_CERT=$ADVISOR_IDENTITY_DIR/agent.crt
+# The action level and consent dial this cluster serves (ADR 0011/0017). Files
+# in the agent's own directory, read by the agent at startup and authoritative
+# there -- the SaaS's mirror is only a hint. These are the paths an operator
+# sets them through; a name absent means the fail-closed default (observe /
+# always). The agent's own ParseLevel/ParseConsent own the vocabulary; the two
+# lists below are kept in step with them by hand.
+ADVISOR_LEVEL_FILE=$ADVISOR_IDENTITY_DIR/action-level
+ADVISOR_CONSENT_FILE=$ADVISOR_IDENTITY_DIR/consent
 # The Advisor's SSH user CA, and the sshd drop-in that trusts it. Both are in
 # config_advisor.cpp's migrate list so a console survives a firmware upgrade;
 # these are the paths that write them.
@@ -548,6 +556,77 @@ advisor_targets_unset()
         return 1
     fi
     _advisor_targets_write "$new"
+}
+
+# _advisor_agent_reload_setting
+#
+# Makes a level or consent change take effect. The agent reads both files once,
+# at startup, so a running agent must be restarted; a stopped one picks the file
+# up on its next start, so its absence is not an error. Restart rather than
+# reload: the agent has no reload path for these, and a bounced tunnel
+# reconnects on its own.
+_advisor_agent_reload_setting()
+{
+    systemctl is-active --quiet "$ADVISOR_AGENT_UNIT_NAME" || return 0
+    if ! systemctl restart "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
+        echo "Warning: wrote the setting but could not restart $ADVISOR_AGENT_UNIT_NAME;" \
+             "it takes effect on the next start" >&2
+    fi
+}
+
+# advisor_level_set <observe|operate|internal>
+#
+# Records the action level this cluster serves (ADR 0011). Written to the file
+# the agent reads as authoritative, so the value the executor enforces and the
+# value an operator set are one thing. The vocabulary is the agent's; a word
+# outside it is refused here rather than written for the agent to reject later.
+advisor_level_set()
+{
+    local level=$1
+    case "$level" in
+        observe|operate|internal) ;;
+        *)
+            echo "Error: not an action level: '$level'; expected observe, operate or internal" >&2
+            return 1
+            ;;
+    esac
+    _advisor_write_file "$ADVISOR_LEVEL_FILE" "$level" || return 1
+    _advisor_agent_reload_setting
+}
+
+# advisor_consent_set <always|destructive|never>
+#
+# Records how much this cluster asks a person before the agent acts (ADR 0011,
+# amended). Same custody as the level: the file the agent reads, the vocabulary
+# the agent owns.
+advisor_consent_set()
+{
+    local consent=$1
+    case "$consent" in
+        always|destructive|never) ;;
+        *)
+            echo "Error: not a consent setting: '$consent'; expected always, destructive or never" >&2
+            return 1
+            ;;
+    esac
+    _advisor_write_file "$ADVISOR_CONSENT_FILE" "$consent" || return 1
+    _advisor_agent_reload_setting
+}
+
+# advisor_level_show
+#
+# Prints the level and consent this node serves, one per line as "<field>
+# <value>". An absent file reads as the fail-closed default the agent would use,
+# named so an operator sees what is in force rather than a blank.
+advisor_level_show()
+{
+    local level consent
+    level=$(head -n1 "$ADVISOR_LEVEL_FILE" 2>/dev/null | tr -d '[:space:]')
+    consent=$(head -n1 "$ADVISOR_CONSENT_FILE" 2>/dev/null | tr -d '[:space:]')
+    [ -n "$level" ] || level="unset (observe)"
+    [ -n "$consent" ] || consent="unset (always)"
+    echo "level $level"
+    echo "consent $consent"
 }
 
 # advisor_targets_discover
