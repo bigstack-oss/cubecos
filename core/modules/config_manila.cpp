@@ -862,6 +862,7 @@ CONFIG_REQUIRES(manila, memcache);
 CONFIG_REQUIRES(manila, neutron);
 CONFIG_REQUIRES(manila, nova);
 CONFIG_REQUIRES(manila, cinder);
+CONFIG_REQUIRES(manila, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(manila, rabbitmq, ParseRabbitMQ, NotifyMQ);

@@ -486,6 +486,7 @@ CONFIG_COMMAND_WITH_SETTINGS(restart_heat, RestartMain, RestartUsage);
 CONFIG_MODULE(heat, Init, Parse, 0, 0, Commit);
 // startup sequence
 CONFIG_REQUIRES(heat, memcache);
+CONFIG_REQUIRES(heat, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(heat, rabbitmq, ParseRabbitMQ, NotifyMQ);

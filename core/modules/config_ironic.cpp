@@ -745,6 +745,7 @@ CONFIG_MODULE(ironic, Init, Parse, 0, 0, Commit);
 // startup sequence
 CONFIG_REQUIRES(ironic, memcache);
 CONFIG_REQUIRES(ironic, nova);
+CONFIG_REQUIRES(ironic, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(ironic, rabbitmq, ParseRabbitMQ, NotifyMQ);

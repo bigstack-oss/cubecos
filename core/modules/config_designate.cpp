@@ -708,6 +708,7 @@ CONFIG_MODULE(designate, Init, Parse, 0, 0, Commit);
 // startup sequence
 CONFIG_REQUIRES(designate, memcache);
 CONFIG_REQUIRES(designate, dns);
+CONFIG_REQUIRES(designate, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(designate, rabbitmq, ParseRabbitMQ, NotifyMQ);

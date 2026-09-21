@@ -480,6 +480,7 @@ CONFIG_MODULE(cyborg, Init, Parse, 0, 0, Commit);
 // startup sequence
 CONFIG_REQUIRES(cyborg, memcache);
 CONFIG_REQUIRES(cyborg, nova);
+CONFIG_REQUIRES(cyborg, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(cyborg, rabbitmq, ParseRabbitMQ, NotifyMQ);

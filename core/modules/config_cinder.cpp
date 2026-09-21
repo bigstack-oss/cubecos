@@ -1321,6 +1321,7 @@ CONFIG_REQUIRES(cinder, keystone);
 CONFIG_REQUIRES(cinder, memcache);
 CONFIG_REQUIRES(cinder, libvirtd);
 CONFIG_REQUIRES(cinder, ceph);
+CONFIG_REQUIRES(cinder, rabbitmq);
 
 CONFIG_MIGRATE(cinder, "/etc/cube/cos/cinder");
 CONFIG_MIGRATE(cinder, CINDER_BACKEND_DIR);

@@ -1074,6 +1074,7 @@ CONFIG_LAST(neutron_last);
 
 // startup sequence
 CONFIG_REQUIRES(neutron, memcache);
+CONFIG_REQUIRES(neutron, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(neutron, sys, ParseSys, 0);

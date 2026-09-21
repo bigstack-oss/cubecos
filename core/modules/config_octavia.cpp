@@ -873,6 +873,7 @@ CONFIG_MODULE(octavia, Init, Parse, 0, 0, Commit);
 
 // startup sequence
 CONFIG_REQUIRES(octavia, memcache);
+CONFIG_REQUIRES(octavia, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(octavia, rabbitmq, ParseRabbitMQ, NotifyMQ);

@@ -550,6 +550,7 @@ CONFIG_COMMAND_WITH_SETTINGS(restart_masakari, RestartMain, RestartUsage);
 CONFIG_MODULE(masakari, Init, Parse, 0, 0, Commit);
 // startup sequence
 CONFIG_REQUIRES(masakari, memcache);
+CONFIG_REQUIRES(masakari, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(masakari, net, ParseNet, NotifyNet);

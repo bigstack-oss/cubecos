@@ -482,6 +482,7 @@ CONFIG_MODULE(watcher, Init, Parse, 0, 0, Commit);
 
 // startup sequence
 CONFIG_REQUIRES(watcher, memcache);
+CONFIG_REQUIRES(watcher, rabbitmq);
 
 // extra tunings
 CONFIG_OBSERVES(watcher, rabbitmq, ParseRabbitMQ, NotifyMQ);
