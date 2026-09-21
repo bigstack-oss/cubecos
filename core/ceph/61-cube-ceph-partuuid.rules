@@ -1,0 +1,12 @@
+# Re-create by-partuuid / by-partlabel when the stock blkid import fails on a
+# partition (libblkid "ambivalent result" on raw BlueStore data, cubecos#1284)
+ACTION=="remove", GOTO="cube_ceph_partuuid_end"
+SUBSYSTEM!="block", GOTO="cube_ceph_partuuid_end"
+ENV{DEVTYPE}!="partition", GOTO="cube_ceph_partuuid_end"
+ENV{ID_PART_ENTRY_UUID}=="?*", GOTO="cube_ceph_partuuid_end"
+
+IMPORT{program}="/usr/sbin/blkid -p -n ceph_bluestore -o udev $devnode"
+ENV{ID_PART_ENTRY_UUID}=="?*", SYMLINK+="disk/by-partuuid/$env{ID_PART_ENTRY_UUID}"
+ENV{ID_PART_ENTRY_SCHEME}=="gpt", ENV{ID_PART_ENTRY_NAME}=="?*", SYMLINK+="disk/by-partlabel/$env{ID_PART_ENTRY_NAME}"
+
+LABEL="cube_ceph_partuuid_end"

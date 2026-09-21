@@ -2631,7 +2631,7 @@ ceph_osd_get_datapart()
     # check if osd meta partition exists
     [ -n "$(readlink -e $metapart)" ] || return 1
     datapart_partuuid=$(grep $metapart $CEPH_OSD_MAP 2>/dev/null | cut -d" " -f4)
-    datapart=$(blkid -o device --match-token PARTUUID=$datapart_partuuid 2>/dev/null)
+    datapart=$(ceph_osd_datapart_resolve "$datapart_partuuid" 2>/dev/null)
     if [ "x$datapart" = "x" ] ; then
         local metapart_num=$(echo ${metapart} | grep -o "[0-9]$")
         local metapart_stem=$(echo ${metapart} | sed "s/[0-9]$//")
@@ -2645,41 +2645,8 @@ ceph_osd_get_datapartuuid()
 {
     local metapart=$1
     local datapart="$(ceph_osd_get_datapart "$metapart")"
-    local datapart_partuuid="$(GetBlkPartUuid "$datapart")"
+    local datapart_partuuid="$(ceph_osd_partuuid_of "$datapart")"
     echo -n "$datapart_partuuid"
-}
-
-# Ask udev to re-read a disk and re-populate its /dev/disk entries. This is a
-# view refresh only: it writes nothing to the disk, does not touch the partition
-# table, and leaves every partition node in place (cubecos#1284).
-# params: $1 - partition device path (e.g. /dev/sde4, /dev/nvme0n1p4)
-# returns: 0 if the partition's PARTUUID is resolvable afterwards, 1 otherwise
-ceph_osd_refresh_links()
-{
-    local datapart=$1
-    local disk=
-
-    [ -n "$(GetBlkPartUuid "$datapart")" ] && return 0
-
-    if [[ "$datapart" =~ ^(.*[0-9]+)p[0-9]+$ ]] ; then
-        disk="${BASH_REMATCH[1]}"
-    elif [[ "$datapart" =~ ^(.*[a-z])[0-9]+$ ]] ; then
-        disk="${BASH_REMATCH[1]}"
-    else
-        log_error "ceph_osd_refresh_links: cannot derive parent disk from $datapart"
-        return 1
-    fi
-
-    log_warning "ceph_osd_refresh_links: $datapart has no live PARTUUID, re-triggering udev on $disk"
-    udevadm trigger --action=change "$disk" "$datapart" 2>/dev/null
-    udevadm settle --timeout=30 2>/dev/null
-
-    if [ -n "$(GetBlkPartUuid "$datapart")" ] ; then
-        return 0
-    fi
-
-    log_error "ceph_osd_refresh_links: $datapart still has no live PARTUUID after a udev refresh -- inspect the disk before taking any repair action"
-    return 1
 }
 
 # Remount a single down OSD whose metadata dir is missing or unmounted. Scoped
@@ -2711,9 +2678,14 @@ ceph_osd_remount_one()
         log_error "ceph_osd_remount_one: osd.$osd_id: datapart $datauuid resolves to no device -- not repairing"
         return 1
     fi
-    # the udev link may be missing even though the device is fine
+    # a change event lets 61-cube-ceph-partuuid.rules re-create a lost link
     if [ ! -e "/dev/disk/by-partuuid/$datauuid" ] ; then
-        ceph_osd_refresh_links "$(ceph_osd_datapart_resolve "$datauuid")" || return 1
+        udevadm trigger --action=change "$(ceph_osd_datapart_resolve "$datauuid")" 2>/dev/null
+        udevadm settle --timeout=30 2>/dev/null
+        if [ ! -e "/dev/disk/by-partuuid/$datauuid" ] ; then
+            log_error "ceph_osd_remount_one: osd.$osd_id: /dev/disk/by-partuuid/$datauuid still missing after a udev refresh -- inspect the disk before taking any repair action"
+            return 1
+        fi
     fi
 
     if systemctl is-active ceph-osd@$osd_id -q ; then
@@ -2815,7 +2787,7 @@ ceph_osd_create_map()
                 datapart_partuuid=$(echo $lvm_json | jq -r .[][].lv_uuid)
             else
                 datapart=$(echo $osdmap_json | jq -r ".\"$metapart_uuid\".device")
-                datapart_partuuid=$(blkid -o value -s PARTUUID $datapart)
+                datapart_partuuid=$(ceph_osd_partuuid_of $datapart)
             fi
             if [ "${datapart_partuuid:-datapart_partuuid}" != "datapart_partuuid" ] ; then
                 echo "${metapart:-metapart} ${osd_id:-osd_id} ${metapart_uuid:-metapart_uuid} ${datapart_partuuid:-datapart_partuuid}" >> $osdmap_new
@@ -2885,10 +2857,40 @@ ceph_osd_datapart_resolve()
 
     # blkid reads the GPT off the disk, so it resolves without the udev symlink
     local dev=$(blkid -o device --match-token PARTUUID=$uuid 2>/dev/null | head -1)
+    [ -n "$dev" ] || dev=$(ceph_osd_datapart_scan "$uuid")
     [ -n "$dev" ] || dev=$(lvs --noheadings -o lv_path -S lv_uuid=$uuid 2>/dev/null | head -1 | tr -d ' ')
     [ -n "$dev" ] || return 1
 
     echo -n "$dev"
+}
+
+# GPT PARTUUID of partition $1, probing only for ceph_bluestore so libblkid
+# cannot return "ambivalent" on raw BlueStore data (cubecos#1284)
+ceph_osd_partuuid_of()
+{
+    local dev=$1
+    [ -n "$dev" ] && [ -e "$dev" ] || return 1
+
+    local uuid=$(blkid -p -n ceph_bluestore -o value -s PART_ENTRY_UUID "$dev" 2>/dev/null)
+    [ -n "$uuid" ] || return 1
+
+    echo -n "$uuid"
+}
+
+# partition carrying GPT PARTUUID $1, among those udev has no PARTUUID for
+ceph_osd_datapart_scan()
+{
+    local uuid=$1
+    local dev
+
+    for dev in $(lsblk -lnpo NAME,TYPE,PARTUUID 2>/dev/null | awk '$2 == "part" && $3 == "" { print $1 }') ; do
+        if [ "$(ceph_osd_partuuid_of $dev)" = "$uuid" ] ; then
+            echo -n "$dev"
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 ceph_wait_for_services()
@@ -3460,8 +3462,9 @@ ceph_osd_restart()
         if [ -e $osd_pth ] ; then
             ( $CEPH tell osd.$id compact || true ; \
               systemctl stop ceph-osd@$id ; \
-              ceph-kvstore-tool bluestore-kv $osd_pth compact && \
-                  systemctl start ceph-osd@$id ) >/dev/null 2>&1 &
+              ceph-kvstore-tool bluestore-kv $osd_pth compact || \
+                  log_warning "ceph_osd_restart: osd.$id kvstore compact failed, starting it anyway" ; \
+              systemctl start ceph-osd@$id ) >/dev/null 2>&1 &
         fi
     done
 }

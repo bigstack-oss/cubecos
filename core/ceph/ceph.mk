@@ -148,6 +148,7 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/ceph-mgr@.service ./lib/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/ceph-umountfs.service ./lib/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/ceph-osd-compact.service ./lib/systemd/system
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/61-cube-ceph-partuuid.rules ./lib/udev/rules.d
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/ceph/ceph-osd-compact.timer ./lib/systemd/system
 	$(Q)chroot $(ROOTDIR) systemctl enable ceph-umountfs
 	$(Q)chroot $(ROOTDIR) systemctl enable ceph-osd-compact.timer
