@@ -404,7 +404,14 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         { "cyborg_api", "6666", "tcp", "ctrl sechdr hsclose" },
         { "memcache", "11211", "tcp", "" },
         { "opensearch", "9200", "http", "ctrl sechdr" },
-        { "rabbitmq", "5672", "tcp", " clitcpka" },
+        // 5671, the port the broker serves once rabbitmq.ssl.enabled is on. Pinned
+        // rather than following that tuning: a cluster still on plaintext shows this
+        // backend DOWN in the stats page, since every backend carries
+        // "check inter 2000 rise 2 fall 5". Accepted, because nothing travels through
+        // this listener -- AMQP clients address the nodes directly through
+        // transport_url -- so the effect is confined to the stats page and the promex
+        // metrics scraped off haproxy.
+        { "rabbitmq", "5671", "tcp", " clitcpka" },
         { "zookeeper", "2181", "tcp", "quorum" },
         { "kafka", "9095", "tcp", "" },
         { "mellon", "5443", "tcp", "" },
