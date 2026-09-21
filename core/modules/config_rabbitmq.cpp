@@ -389,6 +389,35 @@ Commit(bool modified, int dryLevel)
     if (s_ha)
         CreateCookie(cookie);
 
+    // Refuse to write an ssl listener the broker cannot start with. Getting this wrong
+    // is not merely "rabbitmq stays down": CommitRabbitMQ() below reads any start
+    // failure as corrupt state and runs "rm -rf /var/lib/rabbitmq/mnesia/*" before
+    // retrying, so a missing certificate would cost the broker's users, vhosts, queues
+    // and -- on an HA node -- its cluster membership. It would also go unreported,
+    // because Commit() discards CommitRabbitMQ()'s return value; the twelve AMQP
+    // clients commit after this module and would repoint themselves at 5671 against a
+    // broker that is not there.
+    //
+    // Returning false stops the whole run (hex_config's commit scheduler aborts on a
+    // module failure), and because this sits before WriteConfig() the broker keeps the
+    // configuration it is already serving.
+    //
+    // F_OK, not R_OK: hex_config runs as root, so R_OK would pass on a key only root
+    // can read, while the process that has to read it is the rabbitmq user. Whether
+    // the permissions suit that user is a separate question this cannot answer.
+    if (s_sslEnabled.newValue()) {
+        const std::string cacert = ClusterCaCertFile();
+        if (access(cacert.c_str(), F_OK) != 0 ||
+            access(CLUSTER_SRV_CRT, F_OK) != 0 ||
+            access(CLUSTER_SRV_KEY, F_OK) != 0) {
+            HexLogError("%s is on but the cluster certificate is incomplete "
+                        "(%s, %s, %s): refusing to configure the ssl listener",
+                        "rabbitmq.ssl.enabled", cacert.c_str(),
+                        CLUSTER_SRV_CRT, CLUSTER_SRV_KEY);
+            return false;
+        }
+    }
+
     WriteConfig(myip);
     CommitRabbitMQ(enabled, s_ha, s_hostname, s_ctrlHosts);
 
