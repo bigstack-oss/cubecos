@@ -79,9 +79,14 @@ install: $(BIN) $(INSTALL_SCRIPT)
 	$(Q)make install -C ingress-nginx
 	$(Q)make install -C ceph-csi
 
+# Stamp, not a phony recipe: a phony step re-runs on every no-change build.
+SHELL_IMAGE_STAMP := shell-image.stamp
 .PHONY: build-image
-build-image:
+build-image: $(SHELL_IMAGE_STAMP)
+
+$(SHELL_IMAGE_STAMP): $(SRCDIR)/build/buildah-image.sh
 	$(call RUN_CMD_TIMED, podman image inspect localhost/bigstack/shell >/dev/null || SRCDIR=$(SRCDIR) sh -x $(SRCDIR)/build/buildah-image.sh,"  BUILD   shell image")
+	$(Q)touch $@
 
 .PHONY: copy-image
 copy-image: build-image
