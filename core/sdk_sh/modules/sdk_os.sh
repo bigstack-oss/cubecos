@@ -1458,6 +1458,26 @@ EOF
     echo -n "$uuid"
 }
 
+# DO NOT MERGE -- cn13 compatibility, the other half of d36d1aa6.
+#
+# 6fadd29b split this helper into os_virsh_secret_uuid (derive) and
+# os_virsh_secret_define (derive + define), and dropped the combined
+# os_cinder_virsh_secret_create. d36d1aa6 put config_cinder back on the old name
+# because the March rootfs's hex_sdk still had it -- true while cn13 took only
+# the hex_config binary. It no longer is: this branch's sdk_os.sh is deployed
+# too, so the call had nothing to resolve to, hex_sdk answered with its usage
+# text on stdout, and HexUtilPOpen wrote that into cinder.conf as
+# rbd_secret_uuid (2026-08-26, again 2026-09-21).
+#
+# Restore the name here rather than moving config_cinder onto the new pair:
+# config_nova on this branch has no secret_define call, so cinder's commit is
+# still the only thing that defines the libvirt secret on this node.
+# os_virsh_secret_define has the identical body and echoes the same uuid.
+os_cinder_virsh_secret_create()
+{
+    os_virsh_secret_define "$@"
+}
+
 os_post_failure_host_evacuation()
 {
     local host=$1
