@@ -2,6 +2,11 @@
 
 #include "cluster.hpp"
 
+std::string ClusterCaCertFile()
+{
+    return access(CLUSTER_CA_CRT, F_OK) == 0 ? CLUSTER_CA_CRT : CLUSTER_SRV_CRT;
+}
+
 int GetControlWorkers(bool isConverged, bool isEdge)
 {
     if (isEdge) {

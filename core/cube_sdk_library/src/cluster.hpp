@@ -18,11 +18,26 @@
 
 #define ConvergedRatio 16
 
+// The appliance's own PKI, distributed to every node by "cubectl config cluster".
+#define CLUSTER_SRV_CRT "/var/www/certs/server.cert"
+#define CLUSTER_SRV_KEY "/var/www/certs/server.key"
+#define CLUSTER_CA_CRT  "/var/www/certs/ca.cert"
+
 #define GetController(isctrl, hostname, controller) (isctrl ? hostname : controller)
 
 int GetControlWorkers(
     bool isConverged,
     bool isEdge);
+
+/**
+ * The CA file that verifies this cluster's server.cert.
+ *
+ * The appliance signs its own server.cert and ships no separate CA, so the cert
+ * is normally its own issuer. A ca.cert exists only where an operator installed
+ * one; prefer it then. Broker and clients must resolve this the same way, which
+ * is why it lives here rather than in either config module.
+ */
+std::string ClusterCaCertFile();
 
 std::string
 GetSaltBytesInBase64(
