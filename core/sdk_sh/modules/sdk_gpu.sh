@@ -84,9 +84,35 @@ gpu_resource_summary()
         return 0
     fi
 
-    echo "$devices" | jq -r '.[] |
+    # The device profile name belongs on this line because it is the pgpu
+    # answer to a question this listing already answers for every other
+    # resource type: "what string does a flavor have to name to land on this
+    # card?". A vGPU card's answer is its PCI alias and `gpu profile_list`
+    # prints it; a pgpu card's answer was reachable only from `openstack
+    # accelerator device profile list`, the one view of a carve that lives
+    # outside the CLI.
+    #
+    # One Openstack round trip (~1.2s) on a node that has at least one pgpu
+    # card, none at all otherwise -- gpu_device_profile_map returns {} without
+    # calling anything when config.json records no pgpu. gpu_device_status
+    # inherits that cost through this function.
+    #
+    # A failure is absorbed rather than propagated: everything above comes from
+    # config.json and stays true when Cyborg is unreachable, so an unreachable
+    # Cyborg must not blank out the resource types as well. It is reported as
+    # "?" per card, which is deliberately not "none": a card that has no profile
+    # yet needs one created, a card whose profile could not be read may well
+    # have one, and "-" means this type needs no profile at all. Collapsing the
+    # three sends the operator to recreate something that already exists.
+    local profiles
+    profiles=$(gpu_device_profile_map) || profiles=""
+
+    echo "$devices" | jq -r --argjson profiles "${profiles:-null}" '.[] |
         "pci: \(.pciAddress), type: \(.type), status: \(.status), " +
         "allocation: \(if .allocation == null then "-" else "\(.allocation.current)/\(.allocation.total)" end), " +
+        "device profile: \(if .type != "pgpu" then "-"
+                           elif $profiles == null then "?"
+                           else ($profiles[.id] // "none") end), " +
         "name: \(.name)"'
 }
 
