@@ -225,8 +225,12 @@ UpdateSharedId(std::string sharedId)
 //
 // Nothing else in barbican needs the rpc transport here: queue/enable stays at its
 // default of false, which makes the api invoke workers synchronously in-process. If
-// queue/enable is ever turned on, this must move back to RabbitMqServers() first, the
-// oslo.messaging kafka driver does not implement rpc.
+// queue/enable is ever turned on, this must move back to AMQP first, the
+// oslo.messaging kafka driver does not implement rpc -- and it must go through
+// SetMqClientConfig(), not RabbitMqServers() on its own. That function only picks the
+// port; the [oslo_messaging_rabbit] ssl keys that make 5671 work are written by the
+// caller, so a bare RabbitMqServers() would hand barbican a plaintext client knocking
+// on the TLS listener.
 static bool
 UpdateMqConn(std::string sharedId)
 {
