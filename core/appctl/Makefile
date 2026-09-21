@@ -8,7 +8,7 @@ GITHUB_URL := https://github.com/bigstack-oss/$(PKG_NAME)
 ifneq ($(RC),)
 $(APPCTL_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O appctl.rpm $(GITHUB_URL)/releases/download/v3.1.10-rc1/$(PKG_NAME)-v3.1.0-1.fc35.63ea8fd.x86_64.rpm, \
+		wget -O appctl.rpm $(GITHUB_URL)/releases/download/v3.1.20-rc1/$(PKG_NAME)-v3.1.0-1.fc35.a36a0cf.x86_64.rpm, \
 		"  PULL    $(APPCTL_RPM)")
 else
 GIT_DIR := git

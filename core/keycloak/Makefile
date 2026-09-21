@@ -35,16 +35,17 @@ ifneq ($(RC),)
 # pushes a tag nothing loaded. It drifted before: IMG_BUILD said 17.1.0 while the pinned
 # rpm was 17.2.0.
 #
-# This pin is currently BEHIND the chart above. It is a Keycloak 18.0.2 image, while
-# CHART_NAME/CHART_VERSION now ship 22 and chart-values.yaml asks for the tag the matching
-# cube-cos-login carries. Until cube-cos-ui cuts a 22.x release for this to point at, RC
-# builds fail the bundled-registry check in keycloak.mk -- .push-img pushes the tag named
-# here and chart-values.yaml names a different one. Non-RC builds are unaffected: they
-# build the rpm from the cube-cos-ui default branch and take the tag from its package.json.
-# Move both this URL and the IMG_BUILD literal to that release when it exists.
+# 3.1.20 is where this pin catches up with the chart above. cube-cos-login-v3.1.20-rc1 is
+# the 22.x release 03054e90 was waiting for: package.json is 22.0.0, so the image lands as
+# localhost:5080/bigstack/keycloak:22.0.0 -- the tag chart-values.yaml asks for -- and
+# KEYCLOAK_VERSION is 22.0.5, so the spec builds on quay.io/keycloak/keycloak:22.0.5 and
+# the server inside is the one CHART_NAME/CHART_VERSION (keycloakx 2.3.0) is written
+# against. Keep the two numbers apart when bumping: the tag is the package.json version,
+# not the Keycloak version. While the pin sat at the 18 image beside a chart asking for 22,
+# RC builds failed the bundled-registry check in keycloak.mk.
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.10-rc1/$(PKG_NAME)-18.0.0-1.54a03f5.x86_64.rpm, \
+		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.20-rc1/$(PKG_NAME)-22.0.0-1.f17df86.x86_64.rpm, \
 		"  PULL    $(LOGIN_RPM)")
 else
 GIT_DIR := git
@@ -125,7 +126,7 @@ $(LOGIN_RPM): $(RPMBUILD_RPMS)
 endif
 
 ifneq ($(RC),)
-IMG_BUILD := localhost:5080/bigstack/keycloak:18.0.0
+IMG_BUILD := localhost:5080/bigstack/keycloak:22.0.0
 else
 IMG_BUILD := localhost:5080/bigstack/keycloak:`cat version`
 endif
