@@ -46,6 +46,8 @@ CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 
 // private tunings
 CONFIG_TUNING_BOOL(RABBITMQ_ENABLED, "rabbitmq.enabled", TUNING_UNPUB, "Set to true to enable rabbitmq.", true);
+CONFIG_TUNING_BOOL(RABBITMQ_SSL_ENABLED, "rabbitmq.ssl.enabled", TUNING_UNPUB, "Set to true to enable the AMQPS listener on 5671.", false);
+CONFIG_TUNING_BOOL(RABBITMQ_TCP_ENABLED, "rabbitmq.tcp.enabled", TUNING_UNPUB, "Set to false to close the plaintext AMQP listener on 5672.", true);
 CONFIG_TUNING_STR(RABBITMQ_GUEST_PASSWD, "rabbitmq.guest.password", TUNING_UNPUB, "Set rabbitmq guest password.", GUEST_PASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(RABBITMQ_OPENSTACK_PASSWD, "rabbitmq.openstack.password", TUNING_UNPUB, "Set rabbitmq openstack password.", OPENSTACK_PASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(RABBITMQ_COOKIE, "rabbitmq.cookie", TUNING_UNPUB, "Set rabbitmq erlang cookie.", ERLANG_COOKIE, ValidateRegex, DFT_REGEX_STR);
@@ -60,6 +62,8 @@ CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, RABBITMQ_ENABLED);
+PARSE_TUNING_BOOL(s_sslEnabled, RABBITMQ_SSL_ENABLED);
+PARSE_TUNING_BOOL(s_tcpEnabled, RABBITMQ_TCP_ENABLED);
 PARSE_TUNING_STR(s_guestPass, RABBITMQ_GUEST_PASSWD);
 PARSE_TUNING_STR(s_mqPass, RABBITMQ_OPENSTACK_PASSWD);
 PARSE_TUNING_STR(s_cookie, RABBITMQ_COOKIE);
@@ -92,6 +96,34 @@ WriteConfig(const std::string& myip)
     }
 
     fprintf(fout, "cluster_partition_handling = pause_minority\n");
+
+    // The two listener tunings are independent so a cluster can move in stages: bring
+    // the ssl listener up while the plaintext one is still serving, repoint the clients
+    // at 5671, then close 5672. Validate() rejects the one combination that would leave
+    // the broker with no AMQP listener at all.
+    if (!s_tcpEnabled.newValue())
+        fprintf(fout, "listeners.tcp = none\n");
+
+    if (s_sslEnabled.newValue()) {
+        // Bind the management address, not just the port. NODE_IP_ADDRESS in the env
+        // file reaches only the tcp listener; "listeners.ssl.default = 5671" on its own
+        // binds 0.0.0.0, which would widen the very exposure this listener exists to
+        // narrow. Same rule the prometheus listener below follows.
+        fprintf(fout, "listeners.ssl.default = %s:5671\n", myip.c_str());
+
+        // Same resolution the clients use (ClusterCaCertFile), so broker and client
+        // can never end up trusting different files.
+        fprintf(fout, "ssl_options.cacertfile = %s\n", ClusterCaCertFile().c_str());
+        fprintf(fout, "ssl_options.certfile = %s\n", CLUSTER_SRV_CRT);
+        fprintf(fout, "ssl_options.keyfile = %s\n", CLUSTER_SRV_KEY);
+
+        // No mutual TLS: clients still authenticate with the openstack password, and
+        // per-client certificates are deferred.
+        fprintf(fout, "ssl_options.verify = verify_none\n");
+        fprintf(fout, "ssl_options.fail_if_no_peer_cert = false\n");
+        fprintf(fout, "ssl_options.versions.1 = tlsv1.3\n");
+        fprintf(fout, "ssl_options.versions.2 = tlsv1.2\n");
+    }
 
     // rabbitmq_prometheus, enabled below, listens on 0.0.0.0:15692 by default. Bind the
     // management address instead, the same rule the prometheus and thanos listeners follow:
@@ -325,6 +357,20 @@ CommitCheck(bool modified, int dryLevel)
 }
 
 static bool
+Validate()
+{
+    if (!s_sslEnabled.newValue() && !s_tcpEnabled.newValue()) {
+        const char msg[] = "rabbitmq.ssl.enabled and rabbitmq.tcp.enabled cannot both be "
+                           "false: the broker would be left with no AMQP listener";
+        HexLogError("%s", msg);
+        printf("%s\n", msg);
+        return false;
+    }
+
+    return true;
+}
+
+static bool
 Commit(bool modified, int dryLevel)
 {
     // todo: remove this if support dry run
@@ -444,7 +490,7 @@ CONFIG_COMMAND_WITH_SETTINGS(rabbitmq_guest_password, GPassMain, GPassUsage);
 CONFIG_COMMAND(status_rabbitmq, StatusMain, StatusUsage);
 CONFIG_COMMAND_WITH_SETTINGS(restart_rabbitmq, RestartMain, RestartUsage);
 
-CONFIG_MODULE(rabbitmq, 0, Parse, 0, 0, Commit);
+CONFIG_MODULE(rabbitmq, 0, Parse, Validate, 0, Commit);
 CONFIG_REQUIRES(rabbitmq, cluster);
 
 // extra tunings
