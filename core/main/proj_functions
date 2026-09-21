@@ -428,6 +428,18 @@ cube_cluster_stop()
     touch /etc/appliance/state/mysql_new_cluster
 }
 
+# Cold-boot sweep for bootstrap_cube_config: per-node stop on every control
+# node (last first) + data-movement hold. Not `cluster stop`: that sets
+# pause/nodown, re-blocking I/O the master's ceph commit just unpaused.
+cube_cluster_boot_stop()
+{
+    local ip
+    for ip in $(cubectl node list -r control -j 2>/dev/null | jq -r .[].ip.management | tac) ; do
+        remote_run $ip "$HEX_SDK cube_cluster_stop" >/dev/null 2>&1 || true
+    done
+    $HEX_SDK ceph_hold_data_movement
+}
+
 cube_cluster_power()
 {
     case $1 in

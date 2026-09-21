@@ -332,6 +332,17 @@ ceph_mds_map_hosts()
     echo -n ${mdshosts%,}
 }
 
+# Data-movement hold only (no pause/nodown), safe from a booting node.
+# No-op without a mon quorum.
+ceph_hold_data_movement()
+{
+    $CEPH -s >/dev/null 2>&1 || return 0
+    Quiet $CEPH osd set noout
+    Quiet $CEPH osd set norecover
+    Quiet $CEPH osd set norebalance
+    Quiet $CEPH osd set nobackfill
+}
+
 ceph_enter_maintenance()
 {
     Quiet $CEPH osd set noout

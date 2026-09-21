@@ -153,7 +153,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
         # -- e.g. an unsshable peer on the master -- can't skip them.
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
-                echo "YES" | hex_cli -c cluster stop
+                hex_sdk cube_cluster_boot_stop
             fi
             BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
             PostBootRecovery
@@ -177,7 +177,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
             fi
         elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" ] ; then
             if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
-                echo "YES" | hex_cli -c cluster stop
+                hex_sdk cube_cluster_boot_stop
             fi
             (
                 cnt=0
