@@ -98,8 +98,14 @@ util_cron_run_every_minute_jobs()
         return 0
     fi
 
-    # run jobs
-    /usr/bin/bash "$CRON_EVERY_MINUTE_JOBS"
+    # run jobs; skip this tick while the previous run is still going
+    (
+        flock -n 201 || {
+            log_info "every minute jobs from the previous tick are still running, skipping"
+            return 0
+        }
+        /usr/bin/bash "$CRON_EVERY_MINUTE_JOBS"
+    ) 201>"${CRON_EVERY_MINUTE_JOBS}.running"
 }
 
 util_cron_add_every_minute_job()

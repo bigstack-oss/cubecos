@@ -1147,12 +1147,15 @@ ceph_osd_safe_remove()
     # if is not safe, set a timer to purge it 1 minute later
     # retry at most 30 times (30 minutes)
     # if it exceeds the limit (30 times), log it and restore the OSD
+    # give up early only when 3 consecutive readings show the same pg count
 
     local limit=30
+    local stall_limit=2
     local osd_id="${1#"osd."}"
     local original_crush_weight="${2:-"0"}"
     local nth_attempt="${3:-"${limit}"}"
     local last_pg_count="${4:-""}"
+    local stalled="${5:-0}"
 
     # clean up old jobs
     $HEX_SDK util_cron_delete_every_minute_job "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
@@ -1172,9 +1175,27 @@ ceph_osd_safe_remove()
             log_error "$exec_error"
         fi
 
+        # a long-dead OSD reports no stats, so safe-to-destroy cannot judge it
+        # while other pgs are still moving; with nothing mapped to it there is
+        # nothing left to move, so purge it instead of waiting on the stall clock
+        if echo "$exec_error" | grep -q "no reported stats" ; then
+            local osd_up="$($CEPH osd dump -f json 2>/dev/null | jq -r ".osds[] | select(.osd == ${osd_id}) | .up")"
+            local osd_pgs="$($CEPH osd df "osd.${osd_id}" -f json 2>/dev/null | jq -r ".nodes[] | select(.id == ${osd_id}) | .pgs")"
+            if [ "x$osd_up" = "x0" ] && [ "x${osd_pgs:-0}" = "x0" ] ; then
+                log_info "Ceph OSD ${osd_id} is down with no pgs mapped and no stats, purging it"
+                ceph_osd_purge "$osd_id"
+                return $?
+            fi
+        fi
+
         ((nth_attempt++))
         pg_count="$(echo "$exec_error" | egrep -o '[0-9]+ pgs' | tail -1)"
-        log_info "Ceph OSD ${osd_id} pg count: ${pg_count}"
+        if [[ "$pg_count" == "$last_pg_count" ]] ; then
+            ((stalled++))
+        else
+            stalled=0
+        fi
+        log_info "Ceph OSD ${osd_id} pg count: ${pg_count} (unchanged ${stalled} times)"
 
         if [ $nth_attempt -gt $limit ] ; then
             why_quitting="timed out moving data from disk"
@@ -1182,10 +1203,8 @@ ceph_osd_safe_remove()
             if [ $nth_attempt -ge 3 ] ; then
                 why_quitting="ceph would be in error state without this disk"
             fi
-        elif [[ "$pg_count" == "$last_pg_count" ]] ; then
-            if [ $nth_attempt -ge 3 ] ; then
-                why_quitting="pgs could not be moved likely due to too few disks or little space in the failure domain"
-            fi
+        elif [ $stalled -ge $stall_limit ] ; then
+            why_quitting="pgs could not be moved likely due to too few disks or little space in the failure domain"
         fi
 
         if [ "x$why_quitting" != "x" ] ; then
@@ -1197,17 +1216,12 @@ ceph_osd_safe_remove()
             # log it
             log_info "Ceph OSD ${osd_id} restored as ${why_quitting}"
         else
-            # retry
-            if [[ "$nth_attempt" == "2" ]] ; then
-                # wait 60s to move at least one pg, otherwise the recursion would be stopped
-                $HEX_SDK util_cron_add_every_minute_job \
-                    "sleep 60 && $HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\"" \
-                    "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
-            else
-                $HEX_SDK util_cron_add_every_minute_job \
-                    "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\"" \
-                    "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
-            fi
+            # retry next minute; never sleep inside the every-minute runner,
+            # a blocked runner overlaps the next tick and two readings seconds
+            # apart look like a stall
+            $HEX_SDK util_cron_add_every_minute_job \
+                "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\" \"$stalled\"" \
+                "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
 
             # log it
             log_info "set to try safe removal of Ceph OSD ${osd_id} with attempt ${nth_attempt}"
