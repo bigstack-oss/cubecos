@@ -277,20 +277,33 @@ func backupCerts() (string, error) {
 }
 
 // distributeCerts puts the regenerated certificate in front of every consumer that
-// reads it off disk, on every control node.
+// reads it off disk.
+//
+// The file goes to every node, not just the control group. A compute node holds a
+// copy of /var/www/certs from the moment it joins -- config_cluster.go rsyncs the
+// directory there regardless of role -- and it is not decoration: nova keeps a copy
+// of server.pem, and once the AMQP listener runs TLS every nova and neutron agent
+// on that node verifies the broker against this directory. Re-signing without
+// syncing it would leave those nodes trusting a certificate the cluster no longer
+// presents, and the failure would surface as agents dropping off rather than as
+// anything pointing back at this command.
+//
+// The restart below stays on the control group, because certConsumerUnits are
+// control-only services. Nothing on a compute node needs restarting for the new
+// file: py-amqp builds its SSL context per connection, reading ca_certs off disk
+// each time, so a reconnecting client picks the new certificate up on its own.
 func distributeCerts() error {
 	if _, outErr, err := util.ExecCmd("cubectl", "node", "rsync",
 		certsDir,
-		"--role=control",
 	); err != nil {
 		return errors.Wrap(err, outErr)
 	}
-	zap.L().Info("Cert data synced to control nodes")
+	zap.L().Info("Cert data synced to every node")
 
 	// nova holds a copy rather than reading /var/www/certs, and only refreshes it
-	// when the copy is gone.
+	// when the copy is gone. Compute nodes carry that copy too.
 	if _, outErr, err := util.ExecCmd("cubectl", "node", "exec",
-		"--role", "control", "--parallel",
+		"--parallel",
 		"rm", "-f", novaCertCopy,
 	); err != nil {
 		return errors.Wrap(err, outErr)
@@ -368,7 +381,7 @@ func regenCerts() error {
 		fmt.Println("subject:  /CN=" + cubeSettings.GetController())
 		fmt.Println(sans)
 		fmt.Println("would rewrite:      " + certFile + ", " + keyFile + ", " + certKeyFile)
-		fmt.Println("would sync to:      every control node")
+		fmt.Println("would sync to:      every node")
 		fmt.Println("would drop:         " + novaCertCopy + " (rebuilt on the next nova commit)")
 		fmt.Println("would restart:      " + strings.Join(certConsumerUnits, " "))
 		fmt.Println("would reconfigure:  ceph dashboard and mgr restful")
