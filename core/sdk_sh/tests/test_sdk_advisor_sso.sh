@@ -22,7 +22,10 @@ for f in _advisor_write_file _advisor_sso_origin_valid \
          advisor_sso_origins_set advisor_sso_origins_list \
          advisor_sso_origins_clear _advisor_sso_hosts \
          _advisor_sso_file_changed advisor_sso_apply \
-         advisor_sso_origins_set_cluster advisor_sso_origins_clear_cluster ; do
+         advisor_sso_origins_set_cluster advisor_sso_origins_clear_cluster \
+         advisor_sso_reported_list advisor_sso_reported_set \
+         advisor_sso_effective_list advisor_sso_report_read \
+         advisor_sso_report_apply advisor_sso_origins_show ; do
     fn="$(awk -v want="^$f\\\\(\\\\)" '$0 ~ want {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ -n "$fn" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
     eval "$fn"
@@ -37,6 +40,10 @@ bad()   { fail=$((fail+1)); echo "FAIL: $1"; }
 check() { if [ "$2" = "$3" ] ; then ok ; else bad "$1: got '$2', want '$3'" ; fi ; }
 
 ADVISOR_SSO_ORIGINS_FILE="$WORK/etc/cube-advisor-agent/sso-origins"
+ADVISOR_SSO_REPORTED_FILE="$WORK/etc/cube-advisor-agent/sso-origins-reported"
+ADVISOR_SSO_AGENT_REPORT="$WORK/etc/cube/advisor-agent/console-origins"
+ADVISOR_SSO_TARGET=cube-cos-skyline
+ADVISOR_SSO_CALLBACK_PATH=/api/openstack/skyline/api/v1/websso
 ADVISOR_SSO_KEYSTONE_FILE="$WORK/etc/keystone/cube-advisor-origins"
 ADVISOR_SSO_MELLON_FILE="$WORK/etc/httpd/conf.d/zz-cube-advisor-mellon.conf"
 
@@ -190,6 +197,97 @@ check "a rejected cluster set touches no node" "$(cat "$REMOTE_LOG")" ""
 : > "$REMOTE_LOG"
 advisor_sso_origins_clear_cluster
 check "clear reaches every node" "$(cut -f1 "$REMOTE_LOG" | tr '\n' ' ')" "ctrl1 ctrl2 ctrl3 "
+
+
+# --- the Advisor's own report -----------------------------------------------
+# What the agent was told on connect, turned into a callback URL and trusted
+# alongside whatever an operator declared. Two halves kept apart so the
+# Advisor's can withdraw itself without taking an operator's entry with it.
+mkdir -p "$(dirname "$ADVISOR_SSO_AGENT_REPORT")"
+advisor_sso_origins_clear
+advisor_sso_reported_set
+
+report() { printf '%s\n' "$@" > "$ADVISOR_SSO_AGENT_REPORT" ; }
+
+report "cube-cos https://10.32.1.61" "cube-cos-skyline https://10.32.1.61:9999"
+check "only the target keystone must know about is composed" \
+    "$(advisor_sso_report_read)" "$ADDR"
+
+# Domain mode reports a base with a wildcard where the session id goes; it has
+# to survive composition, because it is the only form that can name a
+# per-session origin at all.
+report "cube-cos-skyline https://cube-cos-skyline--*.adv.example.com"
+check "a wildcard base composes into a wildcard callback" \
+    "$(advisor_sso_report_read)" \
+    "https://cube-cos-skyline--*.adv.example.com/api/openstack/skyline/api/v1/websso"
+
+# A trailing slash on the base must not produce a doubled slash: keystone
+# compares the path exactly, so "//api/..." is a different origin.
+report "cube-cos-skyline https://10.32.1.61:9999/"
+check "a trailing slash does not double" "$(advisor_sso_report_read)" "$ADDR"
+
+# A report this release would not have written can still turn up — an older or
+# newer Advisor, or a file that crossed an upgrade.
+report "cube-cos-skyline http://10.32.1.61:9999" "cube-cos-skyline https://a b/x" "malformed"
+check "a report that does not validate is dropped" "$(advisor_sso_report_read)" ""
+
+# --- the union --------------------------------------------------------------
+advisor_sso_reported_set "$ADDR"
+advisor_sso_origins_set "$WILD"
+check "both halves are trusted" "$(advisor_sso_effective_list)" "$ADDR
+$WILD"
+
+advisor_sso_origins_set "$ADDR"
+check "a duplicate across the halves appears once" "$(advisor_sso_effective_list)" "$ADDR"
+
+# The Advisor withdrawing its origin must not touch the operator's.
+advisor_sso_origins_set "$WILD"
+advisor_sso_reported_set
+check "withdrawing the report leaves the operator record" \
+    "$(advisor_sso_effective_list)" "$WILD"
+
+# And an operator clearing theirs must not touch the Advisor's.
+advisor_sso_reported_set "$ADDR"
+advisor_sso_origins_clear
+check "clearing the operator record leaves the report" \
+    "$(advisor_sso_effective_list)" "$ADDR"
+
+# apply works off the union, so mellon gets both hosts.
+advisor_sso_origins_set "$WILD"
+restarts=0 reloads=0
+advisor_sso_apply
+check "keystone is given both halves" "$(cat "$ADVISOR_SSO_KEYSTONE_FILE")" "$ADDR
+$WILD"
+check "mellon is given both hosts" "$(cat "$ADVISOR_SSO_MELLON_FILE")" "<Location /v3>
+    MellonRedirectDomains [self] 10.32.1.61 cube-cos-skyline--*.adv.example.com
+</Location>"
+
+# An operator deciding whether to clear an entry has to be able to tell which
+# half it came from: one withdraws itself, the other does not.
+advisor_sso_reported_set "$ADDR"
+advisor_sso_origins_set "$WILD"
+check "show labels each entry with its source" "$(advisor_sso_origins_show)" \
+    "$ADDR (reported by the Advisor)
+$WILD (declared here)"
+
+# --- carrying the report to the cluster -------------------------------------
+# The agent runs only on enrolled nodes; keystone answers on every control node
+# behind the VIP. Reading the report in place would trust the origin on one
+# node and refuse it on the next.
+report "cube-cos-skyline https://10.32.1.61:9999"
+: > "$REMOTE_LOG"
+advisor_sso_report_apply
+check "the report reaches every node" "$(cut -f1 "$REMOTE_LOG" | tr '\n' ' ')" "ctrl1 ctrl2 ctrl3 "
+check "each node records and applies it" "$(head -1 "$REMOTE_LOG" | cut -f2)" \
+    "/usr/sbin/hex_sdk advisor_sso_reported_set '$ADDR' && /usr/sbin/hex_sdk advisor_sso_apply"
+
+# A report naming no console origin is a statement — the console was turned off
+# — and must withdraw the trust everywhere, not leave it behind.
+report "cube-cos https://10.32.1.61"
+: > "$REMOTE_LOG"
+advisor_sso_report_apply
+check "an empty report withdraws on every node" "$(head -1 "$REMOTE_LOG" | cut -f2)" \
+    "/usr/sbin/hex_sdk advisor_sso_reported_set && /usr/sbin/hex_sdk advisor_sso_apply"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

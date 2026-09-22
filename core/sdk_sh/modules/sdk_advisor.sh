@@ -90,6 +90,23 @@ ADVISOR_DISCOVERED_FILE=/etc/cube-advisor-agent/discovered-targets
 # them. config_advisor.cpp migrates this file; the two files below are rebuilt
 # from it by advisor_sso_apply and so are not migrated.
 ADVISOR_SSO_ORIGINS_FILE=/etc/cube-advisor-agent/sso-origins
+# What the Advisor itself reported, propagated to every control node. The
+# operator record above is an additional allowance on top of this, never a
+# replacement: both are deliberate acts, and advisor_sso_apply trusts their
+# union. Kept apart so the Advisor's half can be withdrawn the moment it stops
+# reporting an origin without taking an operator's entry with it.
+ADVISOR_SSO_REPORTED_FILE=/etc/cube-advisor-agent/sso-origins-reported
+# Where the agent writes what the Advisor told it on connect, one
+# "<target> <origin-base>" per line. Only on an enrolled node -- the agent runs
+# nowhere else -- which is why the reported set is propagated from here rather
+# than read directly: keystone answers on every control node, enrolled or not.
+ADVISOR_SSO_AGENT_REPORT=$ADVISOR_IDENTITY_DIR/console-origins
+# The target whose federated login returns through the console, and the path it
+# returns on. Skyline's, because it is the only cluster app that borrows
+# keystone's own SAML service provider and so the only one keystone has to be
+# told about.
+ADVISOR_SSO_TARGET=cube-cos-skyline
+ADVISOR_SSO_CALLBACK_PATH=/api/openstack/skyline/api/v1/websso
 # Read by cube_mellon_wsgi.py at import and merged into trusted_dashboard.
 ADVISOR_SSO_KEYSTONE_FILE=/etc/keystone/cube-advisor-origins
 # Sorts after v3_mellon_keycloak_master.conf, which is what lets it win the
@@ -888,14 +905,130 @@ advisor_sso_origins_clear_cluster()
     return $rc
 }
 
+# advisor_sso_reported_list
+#
+# The origins the Advisor reported, as callback URLs. Every line is rechecked
+# for the same reason the operator record's are: this file crosses a node
+# boundary and a firmware upgrade.
+advisor_sso_reported_list()
+{
+    local line
+
+    [ -r "$ADVISOR_SSO_REPORTED_FILE" ] || return 0
+    while read -r line ; do
+        case $line in ''|'#'*) continue ;; esac
+        _advisor_sso_origin_valid "$line" || continue
+        echo "$line"
+    done < "$ADVISOR_SSO_REPORTED_FILE"
+}
+
+# advisor_sso_effective_list
+#
+# What is actually trusted: the Advisor's report and the operator's record,
+# deduplicated. The Advisor's half is the live truth and withdraws itself; the
+# operator's half is an explicit act and only an operator removes it.
+advisor_sso_effective_list()
+{
+    { advisor_sso_reported_list ; advisor_sso_origins_list ; } | awk '!seen[$0]++'
+}
+
+# advisor_sso_origins_show
+#
+# What is trusted and where each entry came from. Two sources behave
+# differently -- one withdraws itself, the other does not -- so an operator
+# deciding whether to clear something has to be able to tell them apart.
+advisor_sso_origins_show()
+{
+    local url reported
+
+    reported=$(advisor_sso_reported_list)
+    advisor_sso_effective_list | while read -r url ; do
+        if echo "$reported" | grep -qxF "$url" ; then
+            echo "$url (reported by the Advisor)"
+        else
+            echo "$url (declared here)"
+        fi
+    done
+}
+
+# advisor_sso_report_read
+#
+# Turns the agent's "<target> <origin-base>" report into callback URLs for the
+# one target keystone must be told about. A base carrying a session wildcard is
+# kept as it is -- keystone's patched matcher globs the host, which is the only
+# form that can name a per-session origin at all.
+advisor_sso_report_read()
+{
+    local target base url
+
+    [ -r "$ADVISOR_SSO_AGENT_REPORT" ] || return 0
+    while read -r target base extra ; do
+        [ -n "$target" ] && [ -n "$base" ] && [ -z "$extra" ] || continue
+        [ "$target" = "$ADVISOR_SSO_TARGET" ] || continue
+        url="${base%/}$ADVISOR_SSO_CALLBACK_PATH"
+        _advisor_sso_origin_valid "$url" || continue
+        echo "$url"
+    done < "$ADVISOR_SSO_AGENT_REPORT"
+}
+
+# advisor_sso_report_apply
+#
+# What the agent's report turns into, cluster-wide. Run from a systemd path
+# unit watching the agent's file, so a console the Advisor re-addressed takes
+# effect without waiting for the next hex_config commit.
+#
+# Propagated rather than read in place: the agent only runs on enrolled nodes,
+# while keystone answers on every control node behind the VIP.
+advisor_sso_report_apply()
+{
+    local urls node args="" rc=0
+
+    urls=$(advisor_sso_report_read)
+    for url in $urls ; do
+        args="$args '$url'"
+    done
+
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        if ! remote_run "$node" "$HEX_SDK advisor_sso_reported_set$args && $HEX_SDK advisor_sso_apply" >/dev/null 2>&1 ; then
+            echo "Warning: could not carry the Advisor's console origins to $node; Skyline federated login will fail whenever that node answers" >&2
+            rc=1
+        fi
+    done
+    return $rc
+}
+
+# advisor_sso_reported_set [<url> ...]
+#
+# Records the Advisor's half on this node. No arguments withdraws it, which is
+# what a report naming no console origin means.
+advisor_sso_reported_set()
+{
+    local url content="" nl='
+'
+
+    for url in "$@" ; do
+        if ! _advisor_sso_origin_valid "$url" ; then
+            echo "Error: not an https origin URL without userinfo, query or fragment: $url" >&2
+            return 1
+        fi
+        content="$content${content:+$nl}$url"
+    done
+
+    if [ -z "$content" ] ; then
+        rm -f "$ADVISOR_SSO_REPORTED_FILE"
+        return 0
+    fi
+    _advisor_write_file "$ADVISOR_SSO_REPORTED_FILE" "$content"
+}
+
 # _advisor_sso_hosts
 #
-# The host of each recorded origin, deduplicated -- what mellon matches on.
+# The host of each trusted origin, deduplicated -- what mellon matches on.
 _advisor_sso_hosts()
 {
     local url host
 
-    advisor_sso_origins_list | while read -r url ; do
+    advisor_sso_effective_list | while read -r url ; do
         host=${url#https://}
         host=${host%%/*}
         echo "${host%:*}"
@@ -921,7 +1054,7 @@ advisor_sso_apply()
 {
     local origins hosts keystone_body mellon_body
 
-    origins=$(advisor_sso_origins_list)
+    origins=$(advisor_sso_effective_list)
     hosts=$(_advisor_sso_hosts)
 
     keystone_body=$origins

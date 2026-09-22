@@ -1,0 +1,15 @@
+[Unit]
+Description=Watch the console origins the Advisor reports
+# The agent rewrites this on every connect, but only when the content changed.
+# Without this watch a console the Advisor re-addressed would not be trusted
+# until the next hex_config commit, which may be days.
+After=cube-advisor-agent.service
+
+[Path]
+PathChanged=/etc/cube/advisor-agent/console-origins
+# The agent may have written it while this was not running -- at boot, or
+# between an upgrade and the first commit.
+Unit=cube-advisor-sso.service
+
+[Install]
+WantedBy=multi-user.target
