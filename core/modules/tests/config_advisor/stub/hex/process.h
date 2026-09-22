@@ -14,4 +14,5 @@
 #endif
 
 int HexSpawn(int timeout, const char *arg0, ...);
+int HexSpawnV(int timeout, char *const argv[]);
 int HexSystemF(int timeout, const char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
