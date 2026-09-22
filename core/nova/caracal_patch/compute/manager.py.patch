@@ -8,10 +8,11 @@
  import nova.conf
  import nova.context
  from nova import exception
-@@ -1299,6 +1300,17 @@
+@@ -1298,6 +1299,17 @@
+             # Live migration did not complete, but instance is on this
              # host. Abort ongoing migration if still running and reset state.
              self._reset_live_migration(context, instance)
- 
++
 +        if instance.task_state == task_states.LIVE_RESIZING:
 +            # cube live-resize died mid-flight: clear the stuck state and
 +            # re-align the allocation with the stored flavor
@@ -22,14 +23,32 @@
 +            instance.task_state = None
 +            instance.system_metadata.pop(clr.SYSMETA_FLAVOR_ID, None)
 +            instance.save()
-+
+ 
          db_state = instance.power_state
          drv_state = self._get_power_state(instance)
-         expect_running = (db_state == power_state.RUNNING and
-@@ -9058,6 +9070,77 @@
+@@ -1319,8 +1331,16 @@
+             self._get_instance_block_device_info(context, instance)
+ 
+         try:
++            # The ARQs carry the PCI address of the accelerator, and
++            # nothing else on this host does. Without them the domain
++            # XML is rebuilt with no device at all and the guest comes
++            # back silently stripped of its GPU, so a failure here has
++            # to land the instance in ERROR below rather than boot it
++            # bare.
++            accel_info = self._get_accel_info(context, instance)
+             self.driver.resume_state_on_host_boot(
+-                context, instance, net_info, block_device_info)
++                context, instance, net_info, block_device_info,
++                accel_info=accel_info)
+         except NotImplementedError:
+             LOG.warning('Hypervisor driver does not support '
+                         'resume guests', instance=instance)
+@@ -9057,9 +9077,80 @@
+                 instance.refresh()
                  self._set_instance_obj_error_state(instance,
                                                     clean_task_state=True)
- 
++
 +    def _lr_revert_allocations(self, context, instance):
 +        try:
 +            # DISK_GB comes back too when we claimed it. The disk grow runs
@@ -41,7 +60,7 @@
 +        except Exception:
 +            LOG.exception("live-resize: failed to revert allocations",
 +                          instance=instance)
-+
+ 
 +    def live_resize_grow_cpus(self, context, instance, flavor):
 +        """Cube live-resize: grow ONLY vCPUs, synchronously (RPC call).
 +
@@ -54,8 +73,8 @@
 +        self.driver.live_resize(context, instance, flavor,
 +                                cpus=True, memory=False)
 +
-+    @wrap_exception()
-+    @wrap_instance_event(prefix='compute')
+     @wrap_exception()
+     @wrap_instance_event(prefix='compute')
 +    @wrap_instance_fault
 +    def live_resize_instance(self, context, instance, flavor, cpus=True):
 +        """Cube live-resize: hotplug the running instance up to flavor.
@@ -101,6 +120,8 @@
 +        self._notify_about_instance_usage(context, instance,
 +                                          "live_resize.end")
 +
-     @wrap_exception()
-     @wrap_instance_event(prefix='compute')
++    @wrap_exception()
++    @wrap_instance_event(prefix='compute')
      @errors_out_migration
+     @wrap_instance_fault
+     def live_migration(self, context, dest, instance, block_migration,

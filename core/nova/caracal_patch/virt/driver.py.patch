@@ -1,0 +1,16 @@
+--- virt/driver.py
++++ virt/driver.py
+@@ -887,10 +887,12 @@
+         raise NotImplementedError()
+ 
+     def resume_state_on_host_boot(self, context, instance, network_info,
+-                                  block_device_info=None):
++                                  block_device_info=None,
++                                  accel_info=None):
+         """resume guest state when a host is booted.
+ 
+         :param instance: nova.objects.instance.Instance
++        :param accel_info: List of accelerator requests for this instance
+         """
+         raise NotImplementedError()
+ 

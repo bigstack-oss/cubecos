@@ -8,7 +8,27 @@
  from nova.db import constants as db_const
  from nova import exception
  from nova.i18n import _
-@@ -6001,19 +6002,22 @@
+@@ -4307,7 +4308,8 @@
+         guest.sync_guest_time()
+ 
+     def resume_state_on_host_boot(self, context, instance, network_info,
+-                                  block_device_info=None):
++                                  block_device_info=None,
++                                  accel_info=None):
+         """resume guest state when a host is booted."""
+         # Check if the instance is running already and avoid doing
+         # anything if it is.
+@@ -4328,7 +4330,8 @@
+         # Instance is not up and could be in an unknown state.
+         # Be as absolute as possible about getting it back into
+         # a known and running state.
+-        self._hard_reboot(context, instance, network_info, block_device_info)
++        self._hard_reboot(context, instance, network_info,
++                          block_device_info, accel_info=accel_info)
+ 
+     def rescue(self, context, instance, network_info, image_meta,
+                rescue_password, block_device_info):
+@@ -6001,19 +6004,22 @@
  
          return sysinfo
  
@@ -34,7 +54,7 @@
  
          return dev
  
-@@ -7413,6 +7417,8 @@
+@@ -7413,6 +7419,8 @@
  
          self._guest_add_iommu_device(guest, image_meta, flavor)
  
@@ -43,7 +63,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7430,6 +7436,161 @@
+@@ -7430,6 +7438,161 @@
              for resource in vpmem_resources]
          return vpmems
  
@@ -205,7 +225,7 @@
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
-@@ -7598,7 +7759,7 @@
+@@ -7598,7 +7761,7 @@
              dev.domain, dev.bus, dev.slot, dev.function = (
                  pci_addr['domain'], pci_addr['bus'],
                  pci_addr['device'], pci_addr['function'])
