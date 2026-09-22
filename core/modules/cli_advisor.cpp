@@ -3,6 +3,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <vector>
+
 #include <hex/process.h>
 #include <hex/log.h>
 #include <hex/strict.h>
@@ -229,6 +231,43 @@ LevelSetMain(int argc, const char** argv)
 }
 
 static int
+SsoOriginsMain(int argc, const char** argv)
+{
+    if (argc != 1 /* [0]="sso_origins" */)
+        return CLI_INVALID_ARGS;
+
+    return HexSpawn(0, HEX_SDK, "advisor_sso_origins_list", NULL) == 0 ? CLI_SUCCESS : CLI_FAILURE;
+}
+
+// Declaring which Advisor console origins may complete a Skyline federated
+// login. Every URL given replaces the set, because that is what the operator
+// is being asked: the whole list of origins keystone should trust, not one
+// more to add to whatever a previous release left behind.
+static int
+SsoOriginSetMain(int argc, const char** argv)
+{
+    if (argc < 2 /* [0]="sso_origin_set" [1..]=url */)
+        return CLI_INVALID_ARGS;
+
+    // Cluster-wide: haproxy sends a WebSSO callback to whichever control node
+    // it likes, so a list on one node makes the login succeed or fail by which
+    // backend answered. advisor_sso_origins_set_cluster validates and owns the
+    // refusal text.
+    std::vector<char*> args;
+    args.push_back(const_cast<char*>(HEX_SDK));
+    args.push_back(const_cast<char*>("advisor_sso_origins_set_cluster"));
+    for (int i = 1; i < argc; ++i)
+        args.push_back(const_cast<char*>(argv[i]));
+    args.push_back(NULL);
+
+    if (HexSpawnV(0, &args[0]) != 0)
+        return CLI_FAILURE;
+
+    CliPrintf("Skyline can now complete a federated login through the Advisor console.");
+    return CLI_SUCCESS;
+}
+
+static int
 ConsentSetMain(int argc, const char** argv)
 {
     if (argc != 2 /* [0]="consent_set" [1]=always|destructive|never */)
@@ -238,6 +277,20 @@ ConsentSetMain(int argc, const char** argv)
         return CLI_FAILURE;
 
     CliPrintf("This cluster's Advisor consent setting is now %s.", argv[1]);
+    return CLI_SUCCESS;
+}
+
+static int
+SsoOriginClearMain(int argc, const char** argv)
+{
+    if (argc != 1 /* [0]="sso_origin_clear" */)
+        return CLI_INVALID_ARGS;
+
+    if (HexSpawn(0, HEX_SDK, "advisor_sso_origins_clear_cluster", NULL) != 0)
+        return CLI_FAILURE;
+
+    CliPrintf("Skyline federated login through the Advisor console is withdrawn; "
+              "Keystone Credentials still works.");
     return CLI_SUCCESS;
 }
 
@@ -295,3 +348,15 @@ CLI_MODE_COMMAND("advisor", "level_set", LevelSetMain, NULL,
 
 CLI_MODE_COMMAND("advisor", "consent_set", ConsentSetMain, NULL,
     "Set how much the Advisor asks a person before it acts.", "consent_set <always|destructive|never>");
+
+CLI_MODE_COMMAND("advisor", "sso_origins", SsoOriginsMain, NULL,
+    "List the Advisor console origins Skyline may complete a federated login on.",
+    "sso_origins");
+
+CLI_MODE_COMMAND("advisor", "sso_origin_set", SsoOriginSetMain, NULL,
+    "Declare the Advisor console origins Skyline may complete a federated login on.",
+    "sso_origin_set <url> [<url> ...]");
+
+CLI_MODE_COMMAND("advisor", "sso_origin_clear", SsoOriginClearMain, NULL,
+    "Withdraw Skyline federated login through the Advisor console.",
+    "sso_origin_clear");

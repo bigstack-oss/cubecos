@@ -84,6 +84,18 @@ ADVISOR_TARGETS_FILE=/etc/cube-advisor-agent/web-targets.json
 # which is before CMP is installed, not after.
 ADVISOR_DISCOVERED_FILE=/etc/cube-advisor-agent/discovered-targets
 
+# The Advisor console origins whose Skyline WebSSO callbacks keystone should
+# trust, one URL per line. Supplied by whoever knows how the Advisor spells its
+# origins -- the installer, or an operator -- because the node cannot derive
+# them. config_advisor.cpp migrates this file; the two files below are rebuilt
+# from it by advisor_sso_apply and so are not migrated.
+ADVISOR_SSO_ORIGINS_FILE=/etc/cube-advisor-agent/sso-origins
+# Read by cube_mellon_wsgi.py at import and merged into trusted_dashboard.
+ADVISOR_SSO_KEYSTONE_FILE=/etc/keystone/cube-advisor-origins
+# Sorts after v3_mellon_keycloak_master.conf, which is what lets it win the
+# MellonRedirectDomains merge for <Location /v3>.
+ADVISOR_SSO_MELLON_FILE=/etc/httpd/conf.d/zz-cube-advisor-mellon.conf
+
 # advisor_verify_release <dir> [artifact]
 #
 # Verifies the release in <dir>: the manifest's signature against the key
@@ -428,6 +440,13 @@ advisor_own_targets()
     echo "cube-cos-idp $addr:10443"
     echo "cube-cos-skyline $addr:9999"
     echo "cube-cos-ceph $addr:7443"
+    # Skyline's federated login leaves Skyline: the browser is sent to
+    # keystone's public endpoint and then to the SAML service provider mellon
+    # hosts. Both are the Advisor's companions of cube-cos-skyline -- one
+    # session, one cookie jar -- but the agent still dials each by name, so
+    # each needs allowing in its own right.
+    echo "cube-cos-keystone $addr:5000"
+    echo "cube-cos-keystone-sso $addr:5443"
 }
 
 advisor_targets_init()
@@ -718,6 +737,246 @@ advisor_targets_discover()
         shift 2
     done
     return 0
+}
+
+# _advisor_sso_origin_valid <url>
+#
+# A WebSSO callback URL this node will let keystone post a token to. Checked
+# hard because that is exactly what the entry authorises: keystone substitutes
+# the matched origin into sso_callback_template.html as the form action, so a
+# line here is "send an unscoped token to this URL", not a display string.
+#
+# https only, no userinfo, no query or fragment, and "*" allowed only in the
+# host -- the same shape keystone's patched _origin_matches will compare.
+_advisor_sso_origin_valid()
+{
+    local rest host port path
+
+    case $1 in
+        https://*) rest=${1#https://} ;;
+        *) return 1 ;;
+    esac
+    # Anything that could move the authority: userinfo, or a second authority.
+    case $rest in
+        ''|*@*|*' '*|*'	'*) return 1 ;;
+    esac
+    path=/${rest#*/}
+    host=${rest%%/*}
+    [ "$host" != "$rest" ] || return 1
+    # A conservative whitelist rather than a list of what to reject. These
+    # strings are handed to a remote shell by advisor_sso_origins_set_cluster,
+    # and a callback path has no need of a quote, a space or a metacharacter.
+    case $path in
+        *[!A-Za-z0-9._~%/-]*) return 1 ;;
+    esac
+    case $host in
+        *:*) port=${host##*:} ; host=${host%:*} ;;
+        *) port= ;;
+    esac
+    if [ -n "$port" ] ; then
+        case $port in
+            ''|*[!0-9]*|0?*) return 1 ;;
+        esac
+        [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || return 1
+    fi
+    case $host in
+        ''|*[!A-Za-z0-9.*-]*) return 1 ;;
+    esac
+    return 0
+}
+
+# advisor_sso_origins_set <url> [<url> ...]
+#
+# Records the Advisor console origins whose WebSSO callbacks keystone should
+# trust, replacing whatever was recorded before.
+#
+# Supplied, never derived. In address mode the origin is an address out of the
+# Advisor's own pool and in domain mode it is <target>--<session>.<domain>;
+# neither is anything this node can work out from what it knows, and guessing
+# wrong here would mean trusting a host nobody chose. A node told nothing
+# trusts nothing extra, and Skyline still logs in with Keystone Credentials.
+advisor_sso_origins_set()
+{
+    local url content="" nl='
+'
+
+    [ $# -ge 1 ] || { echo "Error: advisor_sso_origins_set: usage <url> [<url> ...]" >&2 ; return 1 ; }
+    for url in "$@" ; do
+        if ! _advisor_sso_origin_valid "$url" ; then
+            echo "Error: not an https origin URL without userinfo, query or fragment: $url" >&2
+            return 1
+        fi
+        content="$content${content:+$nl}$url"
+    done
+
+    _advisor_write_file "$ADVISOR_SSO_ORIGINS_FILE" "$content"
+}
+
+# advisor_sso_origins_list
+#
+# Prints the recorded origins, one per line. Every line is rechecked: this file
+# migrates across a firmware upgrade, so what it held on the old partition is
+# not automatically what this release considers well formed.
+advisor_sso_origins_list()
+{
+    local line
+
+    [ -r "$ADVISOR_SSO_ORIGINS_FILE" ] || return 0
+    while read -r line ; do
+        case $line in ''|'#'*) continue ;; esac
+        _advisor_sso_origin_valid "$line" || continue
+        echo "$line"
+    done < "$ADVISOR_SSO_ORIGINS_FILE"
+}
+
+# advisor_sso_origins_clear
+advisor_sso_origins_clear()
+{
+    rm -f "$ADVISOR_SSO_ORIGINS_FILE"
+}
+
+# advisor_sso_origins_set_cluster <url> [<url> ...]
+#
+# The same, on every node, and applied there.
+#
+# Cluster-wide because keystone is: a WebSSO callback arrives at the control
+# VIP and haproxy hands it to whichever control node it likes, so a list that
+# is only on the node an operator typed it on makes the login succeed or fail
+# by which backend answered. Unlike the dial allowlist, which is deliberately
+# each node's own veto, this is one fact about the Advisor.
+#
+# Validated here first, so a bad URL is refused once rather than partly
+# applied across the cluster.
+advisor_sso_origins_set_cluster()
+{
+    local url node args="" rc=0
+
+    [ $# -ge 1 ] || { echo "Error: advisor_sso_origins_set_cluster: usage <url> [<url> ...]" >&2 ; return 1 ; }
+    for url in "$@" ; do
+        if ! _advisor_sso_origin_valid "$url" ; then
+            echo "Error: not an https origin URL without userinfo, query or fragment: $url" >&2
+            return 1
+        fi
+        # _advisor_sso_origin_valid admits no quote, space or metacharacter,
+        # so the URL survives the remote shell as one word.
+        args="$args '$url'"
+    done
+
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        if ! remote_run "$node" "$HEX_SDK advisor_sso_origins_set$args && $HEX_SDK advisor_sso_apply" >/dev/null 2>&1 ; then
+            echo "Warning: could not record the Advisor console origins on $node; Skyline federated login will fail whenever that node answers" >&2
+            rc=1
+        fi
+    done
+    return $rc
+}
+
+# advisor_sso_origins_clear_cluster
+#
+# Withdraws the trust everywhere it was granted. A node missed here keeps
+# trusting an origin the operator revoked, which is the direction that matters.
+advisor_sso_origins_clear_cluster()
+{
+    local node rc=0
+
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        if ! remote_run "$node" "$HEX_SDK advisor_sso_origins_clear && $HEX_SDK advisor_sso_apply" >/dev/null 2>&1 ; then
+            echo "Error: could not withdraw the Advisor console origins on $node; it still trusts them" >&2
+            rc=1
+        fi
+    done
+    return $rc
+}
+
+# _advisor_sso_hosts
+#
+# The host of each recorded origin, deduplicated -- what mellon matches on.
+_advisor_sso_hosts()
+{
+    local url host
+
+    advisor_sso_origins_list | while read -r url ; do
+        host=${url#https://}
+        host=${host%%/*}
+        echo "${host%:*}"
+    done | sort -u
+}
+
+# advisor_sso_apply
+#
+# Regenerates the two files that make Skyline's WebSSO work through the
+# console, from the recorded origins, and applies them only when they changed.
+#
+# Both are derived, so neither is migrated: the first commit on a new firmware
+# slot rebuilds them from the record, which is.
+#
+#   keystone   cube_mellon_wsgi.py merges this into trusted_dashboard at import.
+#              keystone.conf cannot carry it -- config_keystone.cpp owns
+#              [federation] and rewrites it every commit.
+#   mellon     a later <Location /v3> block wins the MellonRedirectDomains
+#              merge, so the Advisor's origin can be added without editing
+#              v3_mellon_keycloak_master.conf, which keystone_idp recreates
+#              from its .def on every commit of its own.
+advisor_sso_apply()
+{
+    local origins hosts keystone_body mellon_body
+
+    origins=$(advisor_sso_origins_list)
+    hosts=$(_advisor_sso_hosts)
+
+    keystone_body=$origins
+    if [ -n "$hosts" ] ; then
+        # [self] is mellon's default and is dropped the moment this directive
+        # is given at all; keystone's own redirects need it back.
+        mellon_body="<Location /v3>
+    MellonRedirectDomains [self] $(echo $hosts)
+</Location>"
+    else
+        mellon_body=""
+    fi
+
+    if _advisor_sso_file_changed "$ADVISOR_SSO_KEYSTONE_FILE" "$keystone_body" ; then
+        if [ -n "$keystone_body" ] ; then
+            _advisor_write_file "$ADVISOR_SSO_KEYSTONE_FILE" "$keystone_body" || return 1
+        else
+            rm -f "$ADVISOR_SSO_KEYSTONE_FILE"
+        fi
+        # The shim reads the file at import, so the running workers keep the
+        # old list until they are replaced. httpd only proxies to them.
+        if systemctl is-active --quiet openstack-keystone ; then
+            systemctl restart openstack-keystone
+        fi
+    fi
+
+    if _advisor_sso_file_changed "$ADVISOR_SSO_MELLON_FILE" "$mellon_body" ; then
+        if [ -n "$mellon_body" ] ; then
+            _advisor_write_file "$ADVISOR_SSO_MELLON_FILE" "$mellon_body" || return 1
+        else
+            rm -f "$ADVISOR_SSO_MELLON_FILE"
+        fi
+        if systemctl is-active --quiet httpd ; then
+            systemctl reload httpd
+        fi
+    fi
+    return 0
+}
+
+# _advisor_sso_file_changed <path> <content>
+#
+# True when writing <content> to <path> would change it, counting "should not
+# exist" as empty content. Restarting keystone on every commit would drop every
+# federated login in progress, so the comparison is the point, not an
+# optimisation.
+_advisor_sso_file_changed()
+{
+    local path=$1 content=$2
+
+    if [ -z "$content" ] ; then
+        [ -e "$path" ]
+        return
+    fi
+    [ -r "$path" ] || return 0
+    [ "$(cat "$path")" != "$content" ]
 }
 
 # advisor_enroll <server> <token-file> <version>

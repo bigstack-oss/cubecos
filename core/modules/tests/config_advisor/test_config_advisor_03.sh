@@ -133,9 +133,15 @@ commits() { [ -f "$COMMIT_LOG" ] && cat "$COMMIT_LOG" ; }
 # carrying it is no weaker than carrying that. The unit's enable symlink is not
 # and must never be: hex_config decides when the service runs, and a symlink
 # would make systemd a second owner of it on the new partition.
+#
+# sso-origins is on it and the two files derived from it are not: how the
+# Advisor spells its origins cannot be worked out again on the node, while
+# keystone's trusted_dashboard list and mellon's redirect domains are rebuilt
+# from it by the first commit on the new partition.
 expected="$ROOT/etc/cube/advisor-agent
 $ROOT/usr/local/bin/cube-advisor-agent
 $ROOT/etc/cube-advisor-agent/web-targets.json
+$ROOT/etc/cube-advisor-agent/sso-origins
 $ROOT/etc/ssh/console-ca/cube-advisor.pub
 $ROOT/etc/ssh/sshd_config.d/60-cube-advisor-console.conf"
 

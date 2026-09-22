@@ -19,7 +19,13 @@ Only these headers are honoured, and that same config unsets all of them at serv
 scope before mellon repopulates them, so a client cannot present its own.
 """
 
+import keystone.conf
 from keystone.server import wsgi as keystone_wsgi
+
+# Advisor console origins to trust for WebSSO, one URL per line, written by
+# config_advisor.cpp from what the node was told at enrolment. Absent on a node
+# that was never enrolled, which is why nothing here treats that as an error.
+_ADVISOR_ORIGINS = '/etc/keystone/cube-advisor-origins'
 
 # Exactly what idp_mapping_rules.json and remote_id_attribute consume, no more:
 # this is a header channel into an authentication decision, so it stays minimal.
@@ -34,7 +40,36 @@ _ASSERTION_HEADERS = {
     'HTTP_X_MELLON_GROUPS': 'MELLON_groups',
 }
 
+def _trust_advisor_origins():
+    """Add the Advisor's console origins to keystone's trusted_dashboard list.
+
+    Skyline's WebSSO callback runs on the Advisor's virtual origin, not on the
+    cluster address keystone.conf names, so keystone refuses the assertion
+    unless that origin is trusted too. It cannot go in keystone.conf:
+    config_keystone.cpp owns [federation] and rewrites it on every commit,
+    while this list is enrolment-time knowledge that changes without keystone
+    changing.
+
+    Once, at import, rather than per request: set_override on a live CONF from
+    a request handler is a write every worker thread shares.
+    """
+    try:
+        with open(_ADVISOR_ORIGINS) as f:
+            extra = [line.strip() for line in f
+                     if line.strip() and not line.startswith('#')]
+    except OSError:
+        return
+    if not extra:
+        return
+    conf = keystone.conf.CONF
+    conf.set_override('trusted_dashboard',
+                      list(conf.federation.trusted_dashboard) + extra,
+                      group='federation')
+
+
 _application = keystone_wsgi.initialize_public_application()
+# After initialize_public_application: that call is what configures CONF.
+_trust_advisor_origins()
 
 
 def application(environ, start_response):
