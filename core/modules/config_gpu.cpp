@@ -1359,11 +1359,35 @@ ResourceSetMain(int argc, char* argv[])
 
     const std::string currentType = device["type"].is_string() ? device["type"].string_value() : "";
 
-    // A pgpu is bound to vfio-pci, which makes it invisible to nvidia-smi -
-    // and both checks below read the card's supported vGPU types through
-    // nvidia-smi, so on a pgpu they would reject every profile as unsupported.
-    // Hand the card back to its native driver first, and re-bind it if the
-    // checks fail, so a rejected request still leaves it exactly as it was.
+    // The card's own pre-conditions - it exists, and no instance is attached to
+    // it - are settled before anything is touched.
+    //
+    // This used to run after the vfio-pci release below, and that made the
+    // in-use half of it useless for exactly the case it exists to catch.
+    // gpu_resource_set_check reads "is an instance attached" out of libvirt's
+    // live domain XML; releasing the PF from vfio-pci pulls the device out from
+    // under the running guest, libvirt drops the <hostdev> from that XML, and
+    // the check that follows sees an idle card and passes. Measured on cn13
+    // 2026-09-22: 17:08:03 gpu_unbind_vfio_pci, 17:08:04 qemu "vfio: error
+    // disconnecting group 49 from container" plus nova's DeviceRemovedEvent for
+    // hostdev0, 17:08:09 the check passes, 17:08:33 the card is re-carved - and
+    // the instance stays ACTIVE with no GPU in it. The guard destroyed its own
+    // evidence before reading it.
+    if (HexUtilSystemF(0, 0, HEX_SDK " gpu_resource_set_check %s %s %s", gpuId, newType, profiles) != 0) {
+        HexLogError("gpu_resource_set: pre-condition check failed for GPU %s", gpuId);
+        return EXIT_FAILURE;
+    }
+
+    // A pgpu is bound to vfio-pci, which makes it invisible to nvidia-smi - and
+    // migBackedVgpu's capacity rule reads the card's GPU-instance geometry
+    // through nvidia-smi, so on a pgpu it would reject every profile as
+    // unsupported. Hand the card back to its native driver first, and re-bind it
+    // if the profile validation fails, so a rejected request still leaves it
+    // exactly as it was.
+    //
+    // Only the profile validation needs this. It is deliberately the *second*
+    // gate, not the first: everything above decides whether the card may be
+    // touched at all, and releasing it from vfio-pci already touches it.
     const bool releasedFromVfio = (currentType == "pgpu" && strcmp(newType, "pgpu") != 0);
     if (releasedFromVfio &&
         HexUtilSystemF(0, 0, HEX_SDK " gpu_unbind_vfio_pci %s", pciAddress.c_str()) != 0) {
@@ -1380,14 +1404,10 @@ ResourceSetMain(int argc, char* argv[])
             ? ParseMigVgpuTypes(HexUtilPOpen("%s vgpu -s -v -i %s", NVIDIA_SMI, gpuId))
             : std::map<int, MigVgpuType>();
 
-    // Both checks run before gpu_unset_current_type below so that a bad
-    // request cannot tear down the GPU's existing configuration.
-    const bool preChecksPassed =
-        HexUtilSystemF(0, 0, HEX_SDK " gpu_resource_set_check %s %s %s", gpuId, newType, profiles) == 0 &&
-        (strcmp(newType, "pgpu") == 0 ||
-         ValidateVgpuProfiles(gpuId, newType, profiles, pciAddress, migTypes));
-
-    if (!preChecksPassed) {
+    // Still before gpu_unset_current_type below, so that a bad request cannot
+    // tear down the GPU's existing configuration.
+    if (strcmp(newType, "pgpu") != 0 &&
+        !ValidateVgpuProfiles(gpuId, newType, profiles, pciAddress, migTypes)) {
         HexLogError("gpu_resource_set: pre-condition check failed for GPU %s", gpuId);
 
         if (releasedFromVfio &&

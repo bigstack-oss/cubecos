@@ -34,7 +34,10 @@ eval "$(extract gpu_pci_addr_normalize "$GPU_SRC")"
 eval "$(extract gpu_sysfs_pci_addr "$GPU_SRC")"
 eval "$(extract gpu_device_list "$GPU_SRC")"
 eval "$(extract gpu_probe_diagnosis "$GPU_SRC")"
-for fn in gpu_pci_addr_normalize gpu_sysfs_pci_addr gpu_device_list gpu_probe_diagnosis ; do
+eval "$(extract gpu_pci_addr_hostdev_pattern "$GPU_SRC")"
+eval "$(extract gpu_pgpu_holding_domain "$GPU_SRC")"
+for fn in gpu_pci_addr_normalize gpu_sysfs_pci_addr gpu_device_list gpu_probe_diagnosis \
+          gpu_pci_addr_hostdev_pattern gpu_pgpu_holding_domain ; do
     [ "$(type -t $fn)" = function ] || { echo "FAIL: $fn not extracted"; exit 1; }
 done
 
@@ -144,6 +147,46 @@ ck "$(echo "$list" | jq 'length')" "1" "all-pgpu node -> exactly one card"
 ck "$(echo "$list" | jq -r '.[0].id')" "$PGPU_ID" "all-pgpu node -> the real card"
 ck "$(echo "$list" | jq '[.[] | select(.id | test("devices were found"; "i"))] | length')" "0" \
    "all-pgpu node -> no phantom card from the error sentence"
+
+# --- 3b. a vfio-bound pgpu attached to a guest still reads as inUse -----------
+# This is exactly the state gpu_resource_set_check is asked about now that it
+# runs *before* the card is released from vfio-pci: nvidia-smi is blind, the
+# card arrives through the config-file union, and the answer still has to be
+# "in use". Regression cover for the cn13 finding of 2026-09-22, where the
+# release ran first and libvirt had already dropped the <hostdev> by the time
+# the question was put.
+echo "[$PGPU]" > "$GPU_CONFIG_FILE_PATH"
+no_devices
+# PGPU sits at 00000001:04:00.0.
+virsh() {
+    case "$1" in
+        list)    echo holder ;;
+        dumpxml) echo "        <address domain='0x0001' bus='0x04' slot='0x00' function='0x0'/>" ;;
+    esac
+}
+ck "$(gpu_device_list | jq -r '.[0].status')" "inUse" \
+   "vfio-bound pgpu held by a guest -> inUse, with nvidia-smi blind"
+
+# The card one PCI domain over is a different card, not this one.
+virsh() {
+    case "$1" in
+        list)    echo holder ;;
+        dumpxml) echo "        <address domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>" ;;
+    esac
+}
+ck "$(gpu_device_list | jq -r '.[0].status')" "idle" \
+   "a hostdev at the same bus in another PCI domain is another card"
+
+# A guest-side address is not a hostdev, whatever bus it lands on.
+virsh() {
+    case "$1" in
+        list)    echo holder ;;
+        dumpxml) echo "        <address type='pci' domain='0x0001' bus='0x04' slot='0x00' function='0x0'/>" ;;
+    esac
+}
+ck "$(gpu_device_list | jq -r '.[0].status')" "idle" \
+   "a guest's own PCI address is not an attachment"
+virsh() { :; }
 
 # An empty config.json on such a node is an empty list, not a one-card list.
 echo "[]" > "$GPU_CONFIG_FILE_PATH"
