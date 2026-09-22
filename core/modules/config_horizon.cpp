@@ -19,6 +19,9 @@
 static const char USER[] = "horizon";
 static const char DBPASS[] = "ZdDtndK8NmBklLyg";
 
+// KDF input for the per-cluster signing key, not the key itself. Salted like DBPASS.
+static const char SECRETKEY[] = "nocG4gpLrCqtoaID";
+
 // The dashboard, gunicorn behind the httpd reverse proxy. Horizon used to run
 // in-process under mod_wsgi, so httpd starting was all it took; it lives in the
 // python 3.10 venv now and has a unit of its own to bring up.
@@ -50,6 +53,7 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // private tunings
 CONFIG_TUNING_STR(HORIZON_DBPASS, "horizon.db.password", TUNING_UNPUB, "Set horizon db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(HORIZON_SECRETKEY, "horizon.secret_key", TUNING_UNPUB, "Set horizon django secret key.", SECRETKEY, ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(TIME_TZ);
@@ -59,6 +63,7 @@ CONFIG_TUNING_SPEC_BOOL(CUBESYS_SALTKEY);
 
 // parse tunings
 PARSE_TUNING_STR(s_dbPass, HORIZON_DBPASS);
+PARSE_TUNING_STR(s_secretKey, HORIZON_SECRETKEY);
 PARSE_TUNING_X_STR(s_timezone, TIME_TZ, 1);
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 2);
 PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 2);
@@ -100,11 +105,12 @@ SetupService()
 }
 
 static bool
-WriteDjangoConf(const char* sharedId, const char* cachesrvs, const char* dbpass, const char* timezone)
+WriteDjangoConf(const char* sharedId, const char* cachesrvs, const char* dbpass, const char* timezone,
+                const char* secretkey)
 {
     if (HexSystemF(0, "sed -e \"s/@SHARED_ID@/%s/\" -e \"s/'@CACHE_SERVERS@'/%s/\" -e \"s/@HORIZON_DB_PASSWORD@/%s/\" "
-                      "-e \"s/@DOMAIN@/%s/\" -e \"s/@TIME_ZONE@/%s/\" %s > %s",
-                      sharedId, cachesrvs, dbpass, "Default", timezone, DJANGO_CONF_IN, DJANGO_CONF) != 0) {
+                      "-e \"s/@DOMAIN@/%s/\" -e \"s/@TIME_ZONE@/%s/\" -e \"s/@HORIZON_SECRET_KEY@/%s/\" %s > %s",
+                      sharedId, cachesrvs, dbpass, "Default", timezone, secretkey, DJANGO_CONF_IN, DJANGO_CONF) != 0) {
         HexLogError("failed to update %s", DJANGO_CONF);
         return false;
     }
@@ -181,6 +187,7 @@ Commit(bool modified, int dryLevel)
 
     std::string sharedId = G(SHARED_ID);
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass, s_seed);
+    std::string secretKey = GetSaltKey(s_saltkey, s_secretKey, s_seed);
 
     SetupCheck();
     if (!s_bSetup) {
@@ -197,7 +204,7 @@ Commit(bool modified, int dryLevel)
         std::string tz = s_timezone.newValue();
         for (size_t pos = 0; (pos = tz.find('/', pos)) != std::string::npos; pos += 2)
             tz.replace(pos, 1, "\\/");
-        WriteDjangoConf(sharedId.c_str(), cachesrvs.c_str(), dbPass.c_str(), tz.c_str());
+        WriteDjangoConf(sharedId.c_str(), cachesrvs.c_str(), dbPass.c_str(), tz.c_str(), secretKey.c_str());
     }
 
     if (!s_bSetup)

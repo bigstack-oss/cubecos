@@ -13,7 +13,7 @@ default:
   prometheus_basic_auth_user: ''
   prometheus_enable_basic_auth: false
   prometheus_endpoint: http://localhost:9091/prometheus
-  secret_key: aCtmgbcUqYUy_HNVg5BDXCaeJgJQzHJXwqbXr0Nmb2o
+  secret_key: @SKYLINE_SECRET_KEY@
   session_name: session
   ssl_enabled: true
 openstack:

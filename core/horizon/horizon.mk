@@ -136,6 +136,7 @@ rootfs_install::
 		-e 's/@CONTROLLER@/localhost/' -e 's/@TIME_ZONE@/America\/New_York/' \
 		-e 's/@SHARED_ID@/localhost/' -e "s/'@CACHE_SERVERS@'/'localhost:11211'/" \
 		-e 's/@DOMAIN@/Default/' -e 's/@HORIZON_DB_PASSWORD@/horizon_dbpass/' \
+		-e 's/@HORIZON_SECRET_KEY@/buildtime_placeholder_not_used_at_runtime/' \
 		$(ROOTDIR)/$(HORIZON_ETCDIR)/local_settings.in > $(ROOTDIR)/$(HORIZON_ETCDIR)/local_settings
 
 # cube theme

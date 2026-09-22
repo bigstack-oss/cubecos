@@ -22,6 +22,9 @@ static const char USER[] = "skyline";
 static const char DBPASS[] = "HXzkHNeeG6ReDojn";
 static const char USERPASS[] = "b7qfAoijy1LOZ8Fw";
 
+// KDF input for the per-cluster signing key, not the key itself. Salted like the passwords above.
+static const char SECRETKEY[] = "cJgwR3jNOWxVgd9W";
+
 static const char SKYLINE_CONF_IN[] = "/etc/skyline/skyline.yaml.in";
 static const char SKYLINE_CONF[] = "/etc/skyline/skyline.yaml";
 
@@ -48,6 +51,7 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_TUNING_BOOL(SKYLINE_ENABLED, "skyline.enabled", TUNING_UNPUB, "Set to true to enable skyline.", true);
 CONFIG_TUNING_STR(SKYLINE_USERPASS, "skyline.user.password", TUNING_UNPUB, "Set skyline user password.", USERPASS, ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(SKYLINE_DBPASS, "skyline.db.password", TUNING_UNPUB, "Set skyline db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(SKYLINE_SECRETKEY, "skyline.secret_key", TUNING_UNPUB, "Set skyline secret key.", SECRETKEY, ValidateRegex, DFT_REGEX_STR);
 
 // public tunigns
 CONFIG_TUNING_BOOL(SKYLINE_DEBUG, "skyline.debug.enabled", TUNING_PUB, "Set to true to enable skyline verbose log.", false);
@@ -63,6 +67,7 @@ PARSE_TUNING_BOOL(s_enabled, SKYLINE_ENABLED);
 PARSE_TUNING_BOOL(s_debug, SKYLINE_DEBUG);
 PARSE_TUNING_STR(s_userPass, SKYLINE_USERPASS);
 PARSE_TUNING_STR(s_dbPass, SKYLINE_DBPASS);
+PARSE_TUNING_STR(s_secretKey, SKYLINE_SECRETKEY);
 
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 PARSE_TUNING_X_STR(s_cubeDomain, CUBESYS_DOMAIN, 1);
@@ -112,11 +117,12 @@ SetupService(std::string domain, std::string userPass)
 }
 
 static bool
-WriteSkylineConf(bool debug, const char* domain, const char* sharedId, const char* userpass, const char* dbpass)
+WriteSkylineConf(bool debug, const char* domain, const char* sharedId, const char* userpass, const char* dbpass,
+                 const char* secretkey)
 {
     if (HexSystemF(0, "sed -e \"s/@SHARED_ID@/%s/\" -e \"s/@SKYLINE_SERVICE_PASSWORD@/%s/\" -e \"s/@SKYLINE_DB_PASSWORD@/%s/\" "
-                      "-e \"s/@DEBUG@/%s/\" -e \"s/@DOMAIN@/%s/\" %s > %s",
-            sharedId, userpass, dbpass, debug ? "true" : "false", domain, SKYLINE_CONF_IN, SKYLINE_CONF)
+                      "-e \"s/@DEBUG@/%s/\" -e \"s/@DOMAIN@/%s/\" -e \"s/@SKYLINE_SECRET_KEY@/%s/\" %s > %s",
+            sharedId, userpass, dbpass, debug ? "true" : "false", domain, secretkey, SKYLINE_CONF_IN, SKYLINE_CONF)
         != 0) {
         HexLogError("failed to update %s", SKYLINE_CONF);
         return false;
@@ -193,6 +199,7 @@ Commit(bool modified, int dryLevel)
     std::string sharedId = G(SHARED_ID);
     std::string userPass = GetSaltKey(s_saltkey, s_userPass, s_seed);
     std::string dbPass = GetSaltKey(s_saltkey, s_dbPass, s_seed);
+    std::string secretKey = GetSaltKey(s_saltkey, s_secretKey, s_seed);
 
     SetupCheck();
     if (!s_bSetup) {
@@ -203,7 +210,8 @@ Commit(bool modified, int dryLevel)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
     if (s_bConfigChanged) {
-        WriteSkylineConf(s_debug, s_cubeDomain.c_str(), sharedId.c_str(), userPass.c_str(), dbPass.c_str());
+        WriteSkylineConf(s_debug, s_cubeDomain.c_str(), sharedId.c_str(), userPass.c_str(), dbPass.c_str(),
+                         secretKey.c_str());
     }
 
     if (!s_bSetup)

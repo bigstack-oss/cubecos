@@ -109,7 +109,7 @@ STATIC_ROOT = '/usr/share/openstack-dashboard/static'
 # (usually behind a load-balancer). Either you have to make sure that a session
 # gets all requests routed to the same dashboard instance or you set the same
 # SECRET_KEY for all of them.
-SECRET_KEY='6019af84a6982dd4430c'
+SECRET_KEY='@HORIZON_SECRET_KEY@'
 # We recommend you use memcached for development; otherwise after every reload
 # of the django development server, you will have to login again. To use
 # memcached set CACHES to something like
