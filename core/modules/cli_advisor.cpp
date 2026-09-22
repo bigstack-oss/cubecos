@@ -236,7 +236,9 @@ SsoOriginsMain(int argc, const char** argv)
     if (argc != 1 /* [0]="sso_origins" */)
         return CLI_INVALID_ARGS;
 
-    return HexSpawn(0, HEX_SDK, "advisor_sso_origins_list", NULL) == 0 ? CLI_SUCCESS : CLI_FAILURE;
+    // Shows both sources: one withdraws itself when the Advisor stops
+    // reporting it, the other only an operator removes.
+    return HexSpawn(0, HEX_SDK, "advisor_sso_origins_show", NULL) == 0 ? CLI_SUCCESS : CLI_FAILURE;
 }
 
 // Declaring which Advisor console origins may complete a Skyline federated

@@ -1,0 +1,12 @@
+[Unit]
+Description=Trust the console origins the Advisor reported
+# Oneshot, driven by cube-advisor-sso.path. Never enabled on its own: there is
+# nothing to do until the agent has written a report.
+
+[Service]
+Type=oneshot
+# Carries the report to every control node and applies it there. keystone
+# answers on all of them behind the VIP, while the agent runs only on enrolled
+# nodes, so reading the file in place would trust the origin on one node and
+# refuse it on the next.
+ExecStart=/usr/sbin/hex_sdk advisor_sso_report_apply

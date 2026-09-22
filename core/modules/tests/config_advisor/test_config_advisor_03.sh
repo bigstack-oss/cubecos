@@ -142,6 +142,7 @@ expected="$ROOT/etc/cube/advisor-agent
 $ROOT/usr/local/bin/cube-advisor-agent
 $ROOT/etc/cube-advisor-agent/web-targets.json
 $ROOT/etc/cube-advisor-agent/sso-origins
+$ROOT/etc/cube-advisor-agent/sso-origins-reported
 $ROOT/etc/ssh/console-ca/cube-advisor.pub
 $ROOT/etc/ssh/sshd_config.d/60-cube-advisor-console.conf"
 
@@ -179,18 +180,24 @@ reset enrolled
 # ---- commit: the service runs exactly when this node has an identity ----
 # hex_config owns the service. The module's only job is to answer "should the
 # agent be running here", and the answer is the identity -- not the binary, not
-# the role. A node whose binary will not run has an identity all the same; the
+# the role.
+#
+# The path unit that watches the agent's console-origins report follows the
+# agent exactly: it is the agent that writes what the watch watches, so a node
+# with no agent has nothing to watch for. A node whose binary will not run has an identity all the same; the
 # start then fails and says so in the journal, which is the signal that belongs
 # there.
 reset enrolled
 "$V" commit control-converged >/dev/null 2>&1 || fail "commit failed on an enrolled node"
-[ "$(commits)" = "start cube-advisor-agent" ] \
+[ "$(commits)" = "start cube-advisor-agent
+start cube-advisor-sso.path" ] \
     || fail "an enrolled node did not commit the service as running: [$(commits)]"
 
 reset
 "$V" commit control-converged >/dev/null 2>&1 \
     || fail "commit failed on a node that was never enrolled"
-[ "$(commits)" = "stop cube-advisor-agent" ] \
+[ "$(commits)" = "stop cube-advisor-agent
+stop cube-advisor-sso.path" ] \
     || fail "an un-enrolled node did not commit the service as stopped: [$(commits)]"
 
 # The role is not part of the answer. Every module this one is modelled on
@@ -200,7 +207,8 @@ reset
 for role in compute storage network edge-core moderator ; do
     reset enrolled
     "$V" commit "$role" >/dev/null 2>&1 || fail "commit failed on a $role node"
-    [ "$(commits)" = "start cube-advisor-agent" ] \
+    [ "$(commits)" = "start cube-advisor-agent
+start cube-advisor-sso.path" ] \
         || fail "an enrolled $role node was not committed as running: [$(commits)]"
 done
 
@@ -209,7 +217,8 @@ done
 reset enrolled ; rm -f "$IDENTITY_DIR/agent.crt"
 "$V" commit control-converged >/dev/null 2>&1 \
     || fail "commit failed on a node whose identity is gone"
-[ "$(commits)" = "stop cube-advisor-agent" ] \
+[ "$(commits)" = "stop cube-advisor-agent
+stop cube-advisor-sso.path" ] \
     || fail "a node with no identity was committed as running: [$(commits)]"
 
 # The module never enables anything: SystemdCommitService stops and starts, and

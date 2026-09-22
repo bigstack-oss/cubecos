@@ -456,8 +456,18 @@ VerifyReleaseMain(int argc, char **argv)
 #define ADVISOR_CONSOLE_CA       ADVISOR_ROOT "/etc/ssh/console-ca/cube-advisor.pub"
 #define ADVISOR_SSHD_DROPIN      ADVISOR_ROOT "/etc/ssh/sshd_config.d/60-cube-advisor-console.conf"
 
+// The Advisor's half of the SSO origins, carried here from whichever node's
+// agent was told. Refreshed on every connect, so this is only what keeps a
+// federated login working between an upgrade and the first reconnect.
+#define ADVISOR_SSO_REPORTED_FILE ADVISOR_ROOT "/etc/cube-advisor-agent/sso-origins-reported"
+
 // The unit hex_config runs; shipped with the image, started only once enrolled.
 #define ADVISOR_AGENT_SERVICE    "cube-advisor-agent"
+
+// Watches the agent's report so a console the Advisor re-addressed is trusted
+// without waiting for the next commit. Tied to the agent: it is the agent that
+// writes what this watches.
+#define ADVISOR_SSO_WATCH        "cube-advisor-sso.path"
 
 // Enrolled: this node holds the identity the Advisor issued it.
 static bool
@@ -522,6 +532,7 @@ Commit(bool modified, int dryLevel)
         return true;
 
     SystemdCommitService(IsEnrolled(), ADVISOR_AGENT_SERVICE);
+    SystemdCommitService(IsEnrolled(), ADVISOR_SSO_WATCH);
 
     // Seeding is not reconciling, and the difference is the whole point.
     // advisor_targets_init writes only when there is no file at all: a node
@@ -573,6 +584,11 @@ CONFIG_MIGRATE(advisor, ADVISOR_TARGETS_FILE);
 // Skyline silently falling back to Keystone Credentials with no way to tell
 // why. The two files derived from it are rebuilt at the next commit.
 CONFIG_MIGRATE(advisor, ADVISOR_SSO_ORIGINS_FILE);
+// And the Advisor's own half. It is refreshed on the next connect, so carrying
+// it buys only the window between the new slot booting and the agent getting
+// back -- which is exactly when a federated login would otherwise start
+// failing for no reason anybody could see.
+CONFIG_MIGRATE(advisor, ADVISOR_SSO_REPORTED_FILE);
 // The console trust anchor and the sshd drop-in that loads it, written by the
 // agent at enrolment. rsync skips a path that is not there, so registering them
 // before that work lands costs nothing.
