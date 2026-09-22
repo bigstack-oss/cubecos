@@ -450,6 +450,9 @@ VerifyReleaseMain(int argc, char **argv)
 #define ADVISOR_AGENT_CERT       ADVISOR_IDENTITY_DIR "/agent.crt"
 #define ADVISOR_AGENT_BIN        ADVISOR_ROOT "/usr/local/bin/cube-advisor-agent"
 #define ADVISOR_TARGETS_FILE     ADVISOR_ROOT "/etc/cube-advisor-agent/web-targets.json"
+// The Advisor console origins keystone should trust for Skyline's WebSSO
+// callback. Supplied, not derived: see advisor_sso_origins_set.
+#define ADVISOR_SSO_ORIGINS_FILE ADVISOR_ROOT "/etc/cube-advisor-agent/sso-origins"
 #define ADVISOR_CONSOLE_CA       ADVISOR_ROOT "/etc/ssh/console-ca/cube-advisor.pub"
 #define ADVISOR_SSHD_DROPIN      ADVISOR_ROOT "/etc/ssh/sshd_config.d/60-cube-advisor-console.conf"
 
@@ -529,6 +532,17 @@ Commit(bool modified, int dryLevel)
     // useless. hex_sdk only auto-loads sdk_<MOD>*.sh, so this goes through
     // hex_sdk itself rather than being called from another module's helper.
     HexSpawn(0, HEX_SDK, "advisor_targets_init", NULL);
+
+    // Rebuilds what Skyline's WebSSO needs from the recorded console origins:
+    // keystone's extra trusted_dashboard entries and mellon's redirect
+    // domains. Both are derived, so they are not migrated -- this is what
+    // puts them back on the first commit of a new firmware slot, from the
+    // record that is. Reconciling, unlike the allowlist above: these two
+    // files are this module's output, not an operator's file.
+    //
+    // A node with nothing recorded writes nothing, which is every cluster
+    // with no Advisor and every Advisor whose consoles were never declared.
+    HexSpawn(0, HEX_SDK, "advisor_sso_apply", NULL);
     return true;
 }
 
@@ -553,6 +567,12 @@ CONFIG_MIGRATE(advisor, ADVISOR_IDENTITY_DIR);
 CONFIG_MIGRATE(advisor, ADVISOR_AGENT_BIN);
 // The operator's allowlist of what the agent may dial.
 CONFIG_MIGRATE(advisor, ADVISOR_TARGETS_FILE);
+// Which Advisor console origins keystone trusts for WebSSO. Nothing on the
+// node can work this out again -- it is how the Advisor spells its origins,
+// not anything about this cluster -- so losing it on an upgrade would mean
+// Skyline silently falling back to Keystone Credentials with no way to tell
+// why. The two files derived from it are rebuilt at the next commit.
+CONFIG_MIGRATE(advisor, ADVISOR_SSO_ORIGINS_FILE);
 // The console trust anchor and the sshd drop-in that loads it, written by the
 // agent at enrolment. rsync skips a path that is not there, so registering them
 // before that work lands costs nothing.

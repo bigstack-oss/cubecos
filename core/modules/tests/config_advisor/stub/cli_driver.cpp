@@ -49,6 +49,24 @@ HexSystemF(int timeout, const char *fmt, ...)
     return system(cmd);
 }
 
+// The array form, for a command whose argument count is not known when it is
+// written. argv[0] is the program, as in the real HexSpawnV.
+int
+HexSpawnV(int /*timeout*/, char *const argv[])
+{
+    pid_t pid = fork();
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        execv(argv[0], argv);
+        _exit(127);
+    }
+    int status = 0;
+    while (waitpid(pid, &status, 0) == -1 && errno == EINTR)
+        ;
+    return status;
+}
+
 // Runs arg0 with the given argv (NULL-terminated, as HexSpawn's callers write
 // it) and returns its raw wait status -- same shape as the real HexSpawn, so
 // a "!= 0 means it failed" check behaves the same here as it would in

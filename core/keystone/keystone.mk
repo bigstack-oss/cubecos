@@ -131,3 +131,17 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:root $(KEYSTONE_VENV_SITE_PACKAGES)/cube_mellon_wsgi.py
 	$(Q)chroot $(ROOTDIR) chmod 644 $(KEYSTONE_VENV_SITE_PACKAGES)/cube_mellon_wsgi.py
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/keystone/openstack-keystone.service ./lib/systemd/system
+
+KEYSTONE_PATCHDIR := $(COREDIR)/keystone/$(OPENSTACK_RELEASE)_patch
+KEYSTONE_SRCDIR   := $(ROOTDIR)$(KEYSTONE_VENV_SITE_PACKAGES)/keystone
+
+# Apply reviewable unified diffs (<rel>.py.patch beside pristine <rel>.py.orig,
+# same convention as core/nova/nova.mk). --forward keeps re-runs idempotent; a
+# failed hunk aborts the build instead of shipping drift silently.
+rootfs_install::
+	$(Q)set -e; for p in $$(find $(KEYSTONE_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(KEYSTONE_PATCHDIR)/}; tgt=$(KEYSTONE_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "keystone: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
