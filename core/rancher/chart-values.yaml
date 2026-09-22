@@ -1,4 +1,8 @@
-#rancherImage: localhost:5080/bigstack/rancher
+# Must be set, not just available: Docker Hub has no rancher/rancher past
+# v2.11.3, so the chart default is a dead reference.  This is the rebranded
+# image build-from-source.sh + buildah-image.sh produce, seeded into the
+# on-cluster registry by copy-images.sh.
+rancherImage: localhost:5080/bigstack/rancher
 
 replicas: 1
 

@@ -1,8 +1,9 @@
-docker.io/rancher/fleet-agent:v0.12.3
-docker.io/rancher/fleet:v0.12.3
-docker.io/rancher/rancher-webhook:v0.7.2
-docker.io/rancher/rancher:v2.11.2
-docker.io/rancher/shell:v0.4.1
+docker.io/rancher/fleet-agent:v0.12.18
+docker.io/rancher/fleet:v0.12.18
+docker.io/rancher/rancher-webhook:v0.7.10
+containers-storage:localhost/bigstack/rancher:v2.11.16
+containers-storage:localhost/rancher/rancher-agent:v2.11.16
+docker.io/rancher/shell:v0.4.4
 docker.io/rancher/system-upgrade-controller:v0.15.2
 docker.io/rancher/kubectl:v1.32.2
 docker.io/rancher/k3s-upgrade:v1.26.6-k3s1
