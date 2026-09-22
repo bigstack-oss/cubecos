@@ -7,4 +7,5 @@ for f in /usr/bin/nvidia-smi /usr/sbin/hex_sdk; do
 done
 
 rm -f /etc/cube/cos/gpu/config.json /tmp/mock-hetero-capability
+rm -f /tmp/gpu-order.log /tmp/gpu_order_case.log
 rm -f /etc/settings.txt

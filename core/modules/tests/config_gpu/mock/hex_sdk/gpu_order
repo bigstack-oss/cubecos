@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# Mock hex_sdk for the ordering test. Records every shell-out in call order, and
+# reports the card as a pgpu that gpu_resource_set_check refuses - which is what
+# an in-use pgpu looks like from ResourceSetMain's side.
+echo "$1" >> /tmp/gpu-order.log
+
+case "$1" in
+    gpu_device_list)
+        echo '[{"id":"GPU-order-test","name":"Test Card","type":"pgpu","pciAddress":"00000000:42:00.0"}]'
+        ;;
+    gpu_resource_set_check)
+        exit 1
+        ;;
+    *)
+        exit 0
+        ;;
+esac

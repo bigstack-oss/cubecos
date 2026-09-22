@@ -500,6 +500,82 @@ gpu_support_types_from_xml()
     echo "$support_types"
 }
 
+# The exact PCI-address element libvirt writes into a <hostdev>'s <source> for
+# the device at $1:
+#   <address domain='0x0000' bus='0x8c' slot='0x00' function='0x0'
+# libvirt formats a host PCI address with virPCIDeviceAddressFormat
+# (%.4x/%.2x/%.2x/%.1x) and emits domain= as its first attribute, while every
+# guest-side address it writes starts with type='pci' - so anchoring on
+# "<address domain=" keeps a guest's own bus numbering out of the answer. The
+# trailing "/>" is left off so an added attribute cannot break the match.
+#
+# All four fields are compared. Matching on bus+slot alone - what this did
+# before - is wrong twice over: on a node with cards in more than one PCI
+# domain (cn13 has 00000001:04:00.0 next to 00000000:8C:00.0) one card reads as
+# in-use because a VM holds the other, and a plain guest's own root port at
+# bus 0x04 slot 0x00 matches a card no VM has ever seen.
+#
+# Takes either spelling of the address - config.json/nvidia-smi's 8-digit PCI
+# domain or sysfs/lspci's 4-digit one. Exit 1 (and no output) when the argument
+# is not a PCI address, so a caller can tell "nothing holds it" apart from "the
+# question could not be asked".
+gpu_pci_addr_hostdev_pattern()
+{
+    local dom bus rest slot func
+    dom=$(echo "$1" | awk -F: '{print $1}' | tr '[:upper:]' '[:lower:]')
+    bus=$(echo "$1" | awk -F: '{print $2}' | tr '[:upper:]' '[:lower:]')
+    rest=$(echo "$1" | awk -F: '{print $3}' | tr '[:upper:]' '[:lower:]')
+    slot=${rest%%.*}
+    func=${rest#*.}
+
+    # An address with no ".function" leaves func == slot; that is not an address
+    # this can build a pattern from, rather than one whose function is the slot.
+    [ "$rest" != "$slot" ] || return 1
+
+    case "${dom}${bus}${slot}${func}" in
+        ''|*[!0-9a-f]*) return 1 ;;
+    esac
+    [ -n "$dom" ] && [ -n "$bus" ] && [ -n "$slot" ] && [ -n "$func" ] || return 1
+
+    printf "<address domain='0x%04x' bus='0x%02x' slot='0x%02x' function='0x%x'" \
+        "$((16#$dom))" "$((16#$bus))" "$((16#$slot))" "$((16#$func))"
+}
+
+# The active libvirt domain holding the device at $1 as a PCI hostdev, or
+# nothing. A PF can only be held by one domain, so the first hit is the answer.
+#
+# `virsh list` without --all lists every *active* domain whatever its state.
+# Asking for --state-running only - what this did before - left out paused and
+# pmsuspended guests, and those still hold their vfio device open.
+#
+# Exit 1 means the question could not be answered (unusable address, or virsh
+# itself failed). A caller guarding a destructive change must treat that as
+# in-use; a caller only rendering a listing may fall back to "idle".
+gpu_pgpu_holding_domain()
+{
+    local pattern
+    pattern=$(gpu_pci_addr_hostdev_pattern "$1") || return 1
+
+    # No libvirt on this node means no guest can be holding anything, which is
+    # an answer - not a failure to get one. Only a virsh that exists and then
+    # fails is "cannot tell": qemu keeps its vfio device open whether or not
+    # libvirtd is still answering.
+    command -v virsh >/dev/null 2>&1 || return 0
+
+    local domains
+    domains=$(virsh list --uuid 2>/dev/null) || return 1
+
+    local vm_id
+    for vm_id in $domains; do
+        if virsh dumpxml "$vm_id" 2>/dev/null | grep -qF "$pattern"; then
+            echo "$vm_id"
+            return 0
+        fi
+    done
+
+    return 0
+}
+
 gpu_device_list()
 {
     local gpu_config="[]"
@@ -605,20 +681,10 @@ gpu_device_list()
         local sriov_vgpu_profile_count_limit="null"
 
         if [ "$gpu_type" = "pgpu" ]; then
-            local pci_bus pci_slot
-            pci_bus=$(echo "$pci_bus_id" | awk -F: '{print tolower($2)}')
-            pci_slot=$(echo "$pci_bus_id" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
-
-            local in_use=0
-            for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
-                if virsh dumpxml "$vm_id" 2>/dev/null | \
-                    grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
-                    in_use=1
-                    break
-                fi
-            done
-
-            if [ "$in_use" = "1" ]; then
+            # A listing still has to render when libvirt cannot be asked, so a
+            # failed lookup degrades to "idle" here. gpu_resource_set_check does
+            # not have that luxury and asks again for itself.
+            if [ -n "$(gpu_pgpu_holding_domain "$pci_bus_id")" ]; then
                 status="inUse"
                 allocation='{"current":1,"total":1}'
             else
@@ -693,20 +759,7 @@ gpu_device_list()
         local allocation='{"current":0,"total":1}'
 
         if [ "$gpu_type" = "pgpu" ] && [ -n "$pci_address" ]; then
-            local pci_bus pci_slot
-            pci_bus=$(echo "$pci_address" | awk -F: '{print tolower($2)}')
-            pci_slot=$(echo "$pci_address" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
-
-            local in_use=0
-            for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
-                if virsh dumpxml "$vm_id" 2>/dev/null | \
-                    grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
-                    in_use=1
-                    break
-                fi
-            done
-
-            if [ "$in_use" = "1" ]; then
+            if [ -n "$(gpu_pgpu_holding_domain "$pci_address")" ]; then
                 status="inUse"
                 allocation='{"current":1,"total":1}'
             fi
@@ -776,22 +829,9 @@ gpu_device_list()
             pci_address="0000${sysfs_addr}"
         fi
 
-        local pci_bus pci_slot
-        pci_bus=$(echo "$sysfs_addr" | awk -F: '{print tolower($2)}')
-        pci_slot=$(echo "$sysfs_addr" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
-
-        local in_use=0
-        for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
-            if virsh dumpxml "$vm_id" 2>/dev/null | \
-                grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
-                in_use=1
-                break
-            fi
-        done
-
         local status="idle"
         local allocation='{"current":0,"total":1}'
-        if [ "$in_use" = "1" ]; then
+        if [ -n "$(gpu_pgpu_holding_domain "$pci_address")" ]; then
             status="inUse"
             allocation='{"current":1,"total":1}'
         fi
@@ -1065,21 +1105,20 @@ gpu_pgpu_attached_instance_get()
         return 1
     fi
 
-    local pci_bus pci_slot
-    pci_bus=$(echo "$pci_address" | awk -F: '{print tolower($2)}')
-    pci_slot=$(echo "$pci_address" | awk -F: '{print $3}' | awk -F. '{print tolower($1)}')
+    # A PF is held by at most one domain, so the old loop's "keep looking if
+    # Openstack does not name this one" branch could never reach a second
+    # candidate. An unnamed holder is reported as null, same as before.
+    local vm_id
+    vm_id=$(gpu_pgpu_holding_domain "$pci_address") || vm_id=""
 
-    for vm_id in $(virsh list --state-running --uuid 2>/dev/null); do
-        if virsh dumpxml "$vm_id" 2>/dev/null | \
-            grep -q "bus='0x${pci_bus}'.*slot='0x${pci_slot}'"; then
-            local vm_name
-            vm_name=$(openstack server show "$vm_id" -f value -c name 2>/dev/null)
-            if [ -n "$vm_name" ]; then
-                jq -c -n --arg id "$vm_id" --arg name "$vm_name" '{id:$id, name:$name}'
-                return 0
-            fi
+    if [ -n "$vm_id" ]; then
+        local vm_name
+        vm_name=$(openstack server show "$vm_id" -f value -c name 2>/dev/null)
+        if [ -n "$vm_name" ]; then
+            jq -c -n --arg id "$vm_id" --arg name "$vm_name" '{id:$id, name:$name}'
+            return 0
         fi
-    done
+    fi
 
     echo "null"
 }
@@ -1291,17 +1330,54 @@ gpu_resource_set_check()
     # validated by `hex_config gpu_resource_set` (config_gpu.cpp), which owns
     # the gpu_resource_set business logic.
 
-    local device
-    device=$(gpu_device_list | jq -c --arg id "$gpu_id" 'map(select(.id == $id)) | .[0] // null')
+    # Every branch below refuses rather than falls through. The pre-fix version
+    # only refused on the two answers it recognised, so a gpu_device_list that
+    # returned 1, printed nothing, or omitted .status left $device empty or
+    # .status unset -- jq reports neither as an error -- and the function
+    # returned 0. That is a pass for a card nobody could describe.
+    local devices
+    if ! devices=$(gpu_device_list); then
+        echo "Error: gpu_resource_set_check: cannot read this node's GPU list; refusing to reconfigure GPU $gpu_id" >&2
+        return 1
+    fi
 
-    if [ "$device" = "null" ]; then
+    local device
+    device=$(echo "$devices" | jq -c --arg id "$gpu_id" 'map(select(.id == $id)) | .[0] // null')
+
+    if [ -z "$device" ] || [ "$device" = "null" ]; then
         echo "Error: GPU UUID $gpu_id not found" >&2
         return 1
     fi
 
-    if [ "$(echo "$device" | jq -r '.status')" = "inUse" ]; then
-        echo "Error: GPU $gpu_id is in-use" >&2
-        return 1
+    case "$(echo "$device" | jq -r '.status // ""')" in
+        inUse)
+            echo "Error: GPU $gpu_id is in-use" >&2
+            return 1
+            ;;
+        idle|unassigned)
+            ;;
+        *)
+            echo "Error: GPU $gpu_id reports no usable status; refusing to reconfigure it" >&2
+            return 1
+            ;;
+    esac
+
+    # gpu_device_list answers "is this pgpu attached to a guest" from libvirt and
+    # degrades to "idle" when it cannot get an answer, because a listing still
+    # has to render. Here that would be a pass, and qemu keeps its vfio device
+    # open whether or not libvirtd is answering -- so ask again, and let "cannot
+    # tell" be a refusal.
+    if [ "$(echo "$device" | jq -r '.type // ""')" = "pgpu" ]; then
+        local holder
+        if ! holder=$(gpu_pgpu_holding_domain "$(echo "$device" | jq -r '.pciAddress // ""')"); then
+            echo "Error: cannot determine whether GPU $gpu_id is attached to an instance; refusing to reconfigure it" >&2
+            return 1
+        fi
+
+        if [ -n "$holder" ]; then
+            echo "Error: GPU $gpu_id is in-use by domain $holder" >&2
+            return 1
+        fi
     fi
 }
 
