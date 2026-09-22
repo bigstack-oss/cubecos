@@ -471,6 +471,30 @@ HasExternalStorageBackend()
     return false;
 }
 
+// HexUtilPOpen returns whatever the command wrote to stdout and never looks at its exit
+// code, so an absent sdk function hands back hex_sdk's usage banner and a pipe that could
+// not be opened hands back an empty string. std::stoul throws on both. Thrown from inside
+// the nova commit the exception is never caught, so it takes hex_config down and the
+// dataflow scheduler stops every module that had not committed yet. Reserve nothing
+// instead, and log what actually came back.
+static uint64_t
+HciReservedMemMb()
+{
+    std::string answer = HexUtilPOpen(HEX_SDK " os_nova_hci_reserved_mem_mb");
+
+    try {
+        return std::stoul(answer);
+    } catch (const std::exception& e) {
+        std::string shown = answer.substr(0, answer.find('\n'));
+        if (shown.length() > 120)
+            shown.resize(120);
+        HexLogError("os_nova_hci_reserved_mem_mb returned an unusable value, "
+                    "reserving no HCI memory: \"%s\" (%s)",
+                    shown.empty() ? "<empty>" : shown.c_str(), e.what());
+        return 0;
+    }
+}
+
 static bool
 UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::string hwType,
           std::string novaPass, std::string placePass, std::string neutronPass, std::string metaPass,
@@ -692,7 +716,7 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         if (IsCore(s_eCubeRole)) {
             ctrlMem = ctrlMem / 2;
         }
-        uint64_t reservedHci = std::stoul(HexUtilPOpen(HEX_SDK " os_nova_hci_reserved_mem_mb"));
+        uint64_t reservedHci = HciReservedMemMb();
         uint64_t mem = s_resvHostMem.newValue() + ctrlMem + reservedHci;
 
         struct sysinfo info;
