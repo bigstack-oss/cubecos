@@ -10,6 +10,7 @@ WorkingDirectory=/var/lib/cyborg
 PermissionsStartOnly=true
 ExecStart=/usr/bin/cyborg-conductor --config-file /etc/cyborg/cyborg.conf
 Restart=on-failure
+RestartSec=5s
 LimitNOFILE=65535
 TimeoutStopSec=15
 
