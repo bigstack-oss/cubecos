@@ -46,6 +46,13 @@ ADVISOR_AGENT_CERT=$ADVISOR_IDENTITY_DIR/agent.crt
 # lists below are kept in step with them by hand.
 ADVISOR_LEVEL_FILE=$ADVISOR_IDENTITY_DIR/action-level
 ADVISOR_CONSENT_FILE=$ADVISOR_IDENTITY_DIR/consent
+# Where this node enrolled, so `advisor upgrade` knows whom to ask. Written at
+# enrol from the token; older nodes fall back to the tunnel host on 443.
+ADVISOR_URL_FILE=$ADVISOR_IDENTITY_DIR/advisor-url
+# The agent release the Advisor named as current at the last connect. The
+# agent writes it (cube-advisor-agent#52); nothing here acts on it unasked.
+ADVISOR_CURRENT_RELEASE_FILE=$ADVISOR_IDENTITY_DIR/current-release
+ADVISOR_AGENT_KEY=$ADVISOR_IDENTITY_DIR/agent.key
 # The Advisor's SSH user CA, and the sshd drop-in that trusts it. Both are in
 # config_advisor.cpp's migrate list so a console survives a firmware upgrade;
 # these are the paths that write them.
@@ -204,7 +211,10 @@ advisor_agent_service_start()
         return 0
     fi
 
-    if systemctl start "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
+    # restart, not start: a forced re-enrolment replaces the identity under a
+    # running agent, which otherwise keeps its old connection open and the new
+    # identity never dials in. On a stopped unit restart is a start.
+    if systemctl restart "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
         echo "Tunnel service started; hex_config starts it on every boot from here."
     else
         # The identity is saved and enrolment did succeed, so this must not
@@ -1318,6 +1328,367 @@ EOF
     return 0
 }
 
+# _advisor_token_decode <token-string> <out-dir>
+#
+# Splits a pasted enrolment token into the files advisor_enroll wants. Writes
+# url, secret, ca (the HTTPS serving certificate) and console into <out-dir>.
+#
+# The token is one line of gzipped JSON behind a "cubeadv1." prefix, which is
+# why this is python and not cut: it is a format, not a delimiter.
+_advisor_token_decode()
+{
+    local token=$1 dir=$2
+
+    ADV_TOKEN="$token" ADV_DIR="$dir" python3 -c '
+import base64, gzip, json, os, sys
+
+tok = "".join(os.environ["ADV_TOKEN"].split())
+prefix = "cubeadv1."
+if not tok.startswith(prefix):
+    sys.stderr.write("not an enrolment token\n"); sys.exit(1)
+try:
+    body = tok[len(prefix):]
+    raw = gzip.decompress(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    e = json.loads(raw)
+except Exception:
+    sys.stderr.write("the token is malformed\n"); sys.exit(1)
+
+url, secret = e.get("url", ""), e.get("s", "")
+if not url.startswith("https://") or not secret:
+    sys.stderr.write("the token carries no https URL or no secret\n"); sys.exit(1)
+
+d = os.environ["ADV_DIR"]
+def put(name, text, mode):
+    path = os.path.join(d, name)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+
+put("url", url, 0o600)
+put("secret", secret, 0o600)
+put("console", "true" if e.get("console") else "false", 0o600)
+# The action level and consent the issuer chose. Seeds this node; the files
+# on the node stay authoritative and level_set / consent_set still override.
+for key in ("level", "consent"):
+    if e.get(key):
+        put(key, str(e[key]), 0o600)
+# Optional: a deployment behind a real terminator is covered by the system
+# store and the token says nothing here.
+if e.get("serverCa"):
+    put("ca", e["serverCa"], 0o600)
+' || return 1
+}
+
+# advisor_enroll_token <token-file> [<version>] [force]
+#
+# Enrol using only what the operator pasted. The token names the Advisor,
+# carries the certificate needed to verify it, and holds the secret -- so the
+# three arguments advisor_enroll used to need are read out of it rather than
+# typed, and the cluster id is not asked for at all because this node asserts
+# its own (cube-ai-advisor#242).
+#
+# <version> stays an argument until the Advisor serves a "latest": the token
+# cannot name an agent version, because which version is current changes after
+# the token is issued.
+# advisor_current_release <server> <token-file>
+#
+# Asks the Advisor which agent release pairs with it (GET /api/v1/releases/current).
+# Authenticated by the pairing token, which is not spent by asking.
+advisor_current_release()
+{
+    local server=$1 token_file=$2 out
+
+    out=$(curl -fsS --max-time 30 \
+            -H "Authorization: Bearer $(cat "$token_file")" \
+            "$server/api/v1/releases/current") || return 1
+    printf '%s' "$out" | python3 -c 'import json,sys; v=json.load(sys.stdin).get("version",""); print(v) if v else sys.exit(1)'
+}
+
+# advisor_fingerprint [<fingerprint>]
+#
+# Prints this node's identity fingerprint as the eleven numbered groups the
+# Advisor shows, so the two can be read to each other group by group -- or the
+# whole output pasted into the Advisor's compare box.
+advisor_fingerprint()
+{
+    local fp=$1
+
+    if [ -z "$fp" ] ; then
+        if [ ! -x /usr/local/bin/cube-advisor-agent ] ; then
+            echo "Error: the Advisor agent is not installed on this node" >&2
+            return 1
+        fi
+        fp=$(/usr/local/bin/cube-advisor-agent status 2>/dev/null | awk '/^Fingerprint:/ { sub(/^Fingerprint: */, "") ; print ; exit }')
+        if [ -z "$fp" ] ; then
+            echo "Error: this node holds no Advisor identity; enrol first" >&2
+            return 1
+        fi
+    fi
+    FP="$fp" python3 -c '
+import os
+fp = os.environ["FP"].strip()
+body = fp[len("SHA256:"):] if fp.startswith("SHA256:") else fp
+print("Fingerprint: " + fp)
+groups = [body[i:i+4] for i in range(0, len(body), 4)]
+print("  " + "  ".join("%d %s" % (n + 1, g) for n, g in enumerate(groups)))
+'
+}
+
+# advisor_url
+#
+# The Advisor this node enrolled with. Nodes enrolled before the URL was
+# recorded reach the same host the tunnel dials, on the default HTTPS port.
+advisor_url()
+{
+    if [ -r "$ADVISOR_URL_FILE" ] ; then
+        cat "$ADVISOR_URL_FILE"
+        return 0
+    fi
+    local host
+    host=$(cut -d: -f1 "$ADVISOR_IDENTITY_DIR/server" 2>/dev/null)
+    [ -n "$host" ] || return 1
+    echo "https://$host"
+}
+
+# advisor_installed_version -- the agent binary on this node, or nothing.
+advisor_installed_version()
+{
+    [ -x /usr/local/bin/cube-advisor-agent ] || return 1
+    /usr/local/bin/cube-advisor-agent version 2>/dev/null | awk '{ print $2 ; exit }'
+}
+
+# advisor_update_notice
+#
+# One line when the Advisor's current release is newer than what runs here;
+# silent otherwise. Read by `advisor status` and the health check, so the
+# operator hears it from CubeCOS without anything being changed for them.
+advisor_update_notice()
+{
+    local installed current
+    installed=$(advisor_installed_version) || return 0
+    current=$(cat "$ADVISOR_CURRENT_RELEASE_FILE" 2>/dev/null)
+    [ -n "$current" ] && [ "$current" != "$installed" ] || return 0
+    echo "A newer Advisor agent is available: $current (this node runs $installed). Run 'advisor upgrade' to install it."
+}
+
+# advisor_upgrade [force]
+#
+# Install the Advisor's current agent release on every enrolled node of this
+# cluster: each node fetches over its own identity on the tunnel port (client
+# certificate verified there; no token, no new identity, same fingerprint),
+# verifies the release against the key in this image, installs and restarts.
+# The one way an agent changes on a node, and it is the operator's command.
+advisor_upgrade()
+{
+    local force=${1:-} node rc=0 any=0
+
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        remote_run $node stat "$ADVISOR_AGENT_CERT" >/dev/null 2>&1 || continue
+        any=1
+        echo "== $node"
+        remote_run $node "$HEX_SDK advisor_upgrade_node $force" 2>&1 | sed 's/^/   /' || rc=1
+    done
+    if [ $any -eq 0 ] ; then
+        echo "Error: no node of this cluster is enrolled; run 'advisor enroll' first" >&2
+        return 1
+    fi
+    return $rc
+}
+
+# advisor_upgrade_node [force] -- this node only; advisor_upgrade fans it out.
+advisor_upgrade_node()
+{
+    local force=${1:-} base installed current arch artifact tmp out ca
+
+    if [ ! -r "$ADVISOR_AGENT_CERT" ] || [ ! -r "$ADVISOR_AGENT_KEY" ] ; then
+        echo "Error: this node is not enrolled; run 'advisor enroll' first" >&2
+        return 1
+    fi
+    # The tunnel address: the listener that verifies our certificate, whose
+    # own certificate is signed by the enrolment CA the agent pinned at enrol.
+    base="https://$(cat "$ADVISOR_IDENTITY_DIR/server" 2>/dev/null)"
+    ca="$ADVISOR_IDENTITY_DIR/enrollment-ca.crt"
+    [ "$base" != "https://" ] && [ -r "$ca" ] || {
+        echo "Error: this node has no tunnel address or enrolment CA on record; re-enrol" >&2
+        return 1
+    }
+    installed=$(advisor_installed_version)
+
+    out=$(curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+            "$base/api/v1/releases/current") || {
+        echo "Error: the Advisor at $base did not name a current release" >&2
+        return 1
+    }
+    current=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))')
+    if [ -z "$current" ] ; then
+        echo "Error: the Advisor named no release" >&2
+        return 1
+    fi
+    if [ "$current" = "$installed" ] && [ "$force" != force ] ; then
+        echo "Already current: $installed"
+        return 0
+    fi
+
+    arch=$(advisor_agent_arch) || return 1
+    artifact="cube-advisor-agent_linux_$arch"
+    tmp=$(mktemp -d /run/advisor-release.XXXXXX) || return 1
+    trap 'rm -rf "$tmp"' RETURN
+
+    local f
+    for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$artifact" ; do
+        curl -fsS --max-time 120 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+             -o "$tmp/$f" "$base/api/v1/releases/$current/$f" || {
+            echo "Error: cannot fetch $f for $current from $base" >&2
+            return 1
+        }
+    done
+
+    # Verification before anything is installed or executed, as at enrol.
+    advisor_install_release "$tmp" "$artifact" /usr/local/bin/cube-advisor-agent || return 1
+    advisor_agent_service_start
+    echo "Upgraded the Advisor agent: ${installed:-none} -> $current"
+}
+
+# advisor_enroll_peers [force]
+#
+# From an enrolled node: ask the Advisor for a node token for this cluster —
+# over the tunnel port, with this node's certificate; nothing typed, nothing
+# pasted — and enrol every node of the cluster that has no identity yet. Each
+# peer gets its own identity and prints its own fingerprint for the operator
+# to verify. Console access follows what this node has.
+advisor_enroll_peers()
+{
+    local force=${1:-} base ca console=false tok node rc=0 todo=()
+
+    if [ ! -r "$ADVISOR_AGENT_CERT" ] || [ ! -r "$ADVISOR_AGENT_KEY" ] ; then
+        echo "Error: this node is not enrolled; paste a token from the Advisor to enrol it first" >&2
+        return 1
+    fi
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        [ "$node" = "$HOSTNAME" ] && continue
+        if [ -n "$force" ] || ! remote_run $node stat "$ADVISOR_AGENT_CERT" >/dev/null 2>&1 ; then
+            todo+=("$node")
+        fi
+    done
+    if [ "${#todo[@]}" -eq 0 ] ; then
+        echo "Every node of this cluster is already enrolled."
+        return 0
+    fi
+
+    base="https://$(cat "$ADVISOR_IDENTITY_DIR/server" 2>/dev/null)"
+    ca="$ADVISOR_IDENTITY_DIR/enrollment-ca.crt"
+    [ "$base" != "https://" ] && [ -r "$ca" ] || {
+        echo "Error: this node has no tunnel address or enrolment CA on record; re-enrol" >&2
+        return 1
+    }
+    [ -r "$ADVISOR_CONSOLE_CA" ] && console=true
+    tok=$(curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+            -H 'Content-Type: application/json' -d "{\"console_access\":$console}" \
+            "$base/api/v1/node-tokens" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') || {
+        echo "Error: the Advisor refused to issue a node token to this node (is its identity verified?)" >&2
+        return 1
+    }
+
+    echo "Enrolling ${#todo[@]} node(s): ${todo[*]}"
+    for node in "${todo[@]}" ; do
+        echo "== $node"
+        # The token travels over the cluster's own ssh and lands in a root-only
+        # file the peer removes when done; never an argument, never in ps.
+        if ! printf '%s\n' "$tok" | remote_run $node "umask 077 && mkdir -p /run/advisor-peer && cat > /run/advisor-peer/token" ; then
+            echo "   Error: could not deliver the token to $node" >&2 ; rc=1 ; continue
+        fi
+        remote_run $node "$HEX_SDK advisor_enroll_token /run/advisor-peer/token '' $force; rc=\$?; rm -f /run/advisor-peer/token; exit \$rc" 2>&1 | sed 's/^/   /' || rc=1
+    done
+    [ $rc -eq 0 ] && echo "Verify each new node on the Advisor's enrolment page: its fingerprint is printed above."
+    return $rc
+}
+
+advisor_enroll_token()
+{
+    local token_file=$1 version=${2:-} force=${3:-} dir rc
+
+    if [ -z "$token_file" ] ; then
+        echo "Error: advisor_enroll_token: usage <token-file> [<version>] [force]" >&2
+        return 1
+    fi
+    if [ ! -r "$token_file" ] ; then
+        echo "Error: cannot read the token file: $token_file" >&2
+        return 1
+    fi
+
+    dir=$(mktemp -d /run/advisor-token.XXXXXX) || return 1
+    # The secret and the certificate land here; do not leave either behind.
+    trap 'rm -rf "$dir"' RETURN
+
+    if ! _advisor_token_decode "$(cat "$token_file")" "$dir" ; then
+        echo "Error: that does not look like an Advisor enrolment token" >&2
+        return 1
+    fi
+
+    local server ca_file=""
+    server=$(cat "$dir/url")
+    [ -r "$dir/ca" ] && ca_file="$dir/ca"
+    _advisor_write_file "$ADVISOR_URL_FILE" "$server" || return 1
+
+    # The token names the service, not the agent: which build pairs with the
+    # service changes after the token is issued, so the service is asked.
+    if [ -z "$version" ] ; then
+        advisor_trust_ca "$ca_file" || return 1
+        version=$(advisor_current_release "$server" "$dir/secret") || {
+            echo "Error: the Advisor did not name an agent release; pass a version explicitly" >&2
+            return 1
+        }
+        echo "Advisor's current agent release: $version"
+    fi
+
+    # The issuer's action level and consent are written before the agent is
+    # started, so the one restart in advisor_enroll picks them up — level_set
+    # and consent_set each restart the agent, and three restarts in a row is
+    # what made enrolment look stuck. Validated the same way those commands do.
+    local level consent
+    if [ -r "$dir/level" ] ; then
+        level=$(cat "$dir/level")
+        case "$level" in
+            observe|operate|internal) _advisor_write_file "$ADVISOR_LEVEL_FILE" "$level" || return 1 ;;
+            *) echo "Error: the token names an unknown action level '$level'" >&2 ; return 1 ;;
+        esac
+    fi
+    if [ -r "$dir/consent" ] ; then
+        consent=$(cat "$dir/consent")
+        case "$consent" in
+            always|destructive|never) _advisor_write_file "$ADVISOR_CONSENT_FILE" "$consent" || return 1 ;;
+            *) echo "Error: the token names an unknown consent setting '$consent'" >&2 ; return 1 ;;
+        esac
+    fi
+
+    advisor_enroll "$server" "$dir/secret" "$version" "$ca_file" "$force"
+    rc=$?
+    [ $rc -eq 0 ] || return $rc
+
+    # The agent writes the dials the Advisor actually serves this cluster at
+    # (its record, not the token) once it has enrolled; report those.
+    level=$(head -n1 "$ADVISOR_LEVEL_FILE" 2>/dev/null | tr -d '[:space:]')
+    consent=$(head -n1 "$ADVISOR_CONSENT_FILE" 2>/dev/null | tr -d '[:space:]')
+    [ -n "$level" ]   && echo "action level: $level"
+    [ -n "$consent" ] && echo "consent: $consent"
+
+    # Console access was decided when the token was issued; say what this node
+    # was granted rather than leaving the operator to infer it. The Advisor
+    # hands its console CA back with the identity (agent 0.4.14); a node that
+    # was granted console access trusts it here, so nothing is carried by hand.
+    if [ "$(cat "$dir/console")" = true ] ; then
+        if [ -r "$ADVISOR_IDENTITY_DIR/console-ca.pub" ] ; then
+            advisor_console_trust "$ADVISOR_IDENTITY_DIR/console-ca.pub" || \
+                echo "Warning: console access was granted but this node could not trust the Advisor's console CA; run 'advisor console_trust' by hand" >&2
+        else
+            echo "console access: granted, but the Advisor did not send its console CA; install it with 'advisor console_trust <ca-file>'" >&2
+        fi
+        echo "console access: enabled for this cluster"
+    else
+        echo "console access: not granted"
+    fi
+}
+
 advisor_enroll()
 {
     local server=$1 token_file=$2 version=$3 ca_file=${4:-} force=${5:-}
@@ -1384,6 +1755,8 @@ advisor_enroll()
     rc=$?
     case $rc in
         0)
+            # What the operator reads to the Advisor's screen, in the groups it shows.
+            advisor_fingerprint
             advisor_agent_service_start
             advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the cube-cos target by hand" >&2
             # The agent has just been told how its consoles are addressed, and

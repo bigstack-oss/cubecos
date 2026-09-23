@@ -432,6 +432,7 @@ health_license_check()
 # advisor_agent_service_start's (sdk_advisor.sh); this is read-only.
 ADVISOR_HEALTH_CERT=${ADVISOR_HEALTH_CERT:-/etc/cube/advisor-agent/agent.crt}
 ADVISOR_HEALTH_BIN=${ADVISOR_HEALTH_BIN:-/usr/local/bin/cube-advisor-agent}
+ADVISOR_HEALTH_CURRENT=${ADVISOR_HEALTH_CURRENT:-/etc/cube/advisor-agent/current-release}
 
 health_advisor_report()
 {
@@ -454,7 +455,7 @@ health_advisor_report()
 # is what fixes that, and it takes priority when a run has both.
 health_advisor_check()
 {
-    local node enrolled=() down=() missing=()
+    local node enrolled=() down=() missing=() outdated=() current=""
 
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
         remote_run $node stat "$ADVISOR_HEALTH_CERT" >/dev/null 2>&1 || continue
@@ -463,8 +464,22 @@ health_advisor_check()
             missing+=("$node")
         elif ! is_remote_running $node "$ADVISOR_AGENT_UNIT_NAME" ; then
             down+=("$node")
+        else
+            # Not a fault: the Advisor named a newer agent than this node runs.
+            # Said in the description so the operator hears it from cluster
+            # check; nothing is changed for them (advisor upgrade does that).
+            local want have
+            want=$(remote_run $node cat "$ADVISOR_HEALTH_CURRENT" 2>/dev/null | tr -d '[:space:]')
+            have=$(remote_run $node "$ADVISOR_HEALTH_BIN" version 2>/dev/null | awk '{ print $2 ; exit }')
+            if [ -n "$want" ] && [ -n "$have" ] && [ "$want" != "$have" ] ; then
+                outdated+=("$node")
+                current=$want
+            fi
         fi
     done
+    if [ "${#outdated[@]}" -gt 0 ] ; then
+        DESCRIPTION="agent $current available on: ${outdated[*]} (advisor upgrade)"
+    fi
 
     if [ "${#enrolled[@]}" -eq 0 ] ; then
         DESCRIPTION="not enrolled"

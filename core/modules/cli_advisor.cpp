@@ -31,6 +31,7 @@
 #endif
 
 static const char* ADVISOR_AGENT = ADVISOR_ROOT "/usr/local/bin/cube-advisor-agent";
+static const char* ADVISOR_AGENT_CERT = ADVISOR_ROOT "/etc/cube/advisor-agent/agent.crt";
 
 // Writes the pairing token to a file only its owner can read, and returns the
 // path.
@@ -63,6 +64,15 @@ WriteTokenFile(const std::string& token, std::string* path)
     return true;
 }
 
+// An enrolment token issued by the Advisor UI carries the service URL and the
+// certificate needed to reach it, so none of that has to be typed. Older
+// tokens are a bare secret and still take the long form.
+static bool
+IsEnrolmentToken(const std::string& token)
+{
+    return token.compare(0, 9, "cubeadv1.") == 0;
+}
+
 static int
 EnrollMain(int argc, const char** argv)
 {
@@ -71,44 +81,82 @@ EnrollMain(int argc, const char** argv)
 
     std::string server, version, token, caFile, force;
 
-    if (!CliReadInputStr(argc, argv, 1, "Advisor service URL: ", &server) || server.length() <= 0)
+    // Read first, because what it is decides what else has to be asked. A
+    // token from the UI answers the service URL and the CA between them.
+    // Prompted, never taken from argv -- see WriteTokenFile.
+    if (!CliReadLine("Enrolment token: ", token) || token.length() <= 0) {
+        // No token on an already-enrolled node means: enrol the peers that
+        // have no identity yet. The node fetches its own token from the
+        // Advisor over its certificate; nothing is typed here.
+        if (access(ADVISOR_AGENT_CERT, R_OK) == 0) {
+            const char* force = (argc > 1 && std::string(argv[1]) == "force") ? "force" : "";
+            if (HexSpawn(0, HEX_SDK, "advisor_enroll_peers", force, NULL) != 0)
+                return CLI_FAILURE;
+            return CLI_SUCCESS;
+        }
+        CliPrintf("An enrolment token is required. Issue one from the Advisor: Fleet -> Enrol cluster.");
         return CLI_INVALID_ARGS;
-    if (!CliReadInputStr(argc, argv, 2, "Agent version to install: ", &version) || version.length() <= 0)
-        return CLI_INVALID_ARGS;
+    }
+    const bool selfDescribing = IsEnrolmentToken(token);
 
-    // Optional, and prompted with an empty answer allowed: an Advisor behind a
-    // certificate this node already trusts needs nothing here, while one
-    // serving its own -- the normal case offline -- cannot be reached at all
-    // without it.
-    if (argc > 3)
-        caFile = argv[3];
-    else
-        CliReadLine("Advisor CA file (blank if already trusted): ", caFile);
+    if (!selfDescribing) {
+        if (!CliReadInputStr(argc, argv, 1, "Advisor service URL: ", &server) || server.length() <= 0)
+            return CLI_INVALID_ARGS;
+    }
+
+    // With a token the Advisor names its own current agent release, so a
+    // blank answer means "whatever the Advisor says". A bare URL has nothing
+    // to ask, so a version is still required there.
+    int forceAt = 4;
+    if (selfDescribing) {
+        // "enroll force" is a blank version plus the keyword; "enroll 0.4.9
+        // force" names one. Either way nothing is prompted once an argument
+        // was given.
+        forceAt = 1;
+        if (argc > 1 && std::string(argv[1]) != "force")
+            version = argv[forceAt++];
+        else if (argc <= 1)
+            CliReadLine("Agent version to install (blank = the Advisor's current): ", version);
+    } else if (!CliReadInputStr(argc, argv, 2, "Agent version to install: ", &version) ||
+               version.length() <= 0) {
+        return CLI_INVALID_ARGS;
+    }
+
+    if (!selfDescribing) {
+        // Optional, and prompted with an empty answer allowed: an Advisor
+        // behind a certificate this node already trusts needs nothing here,
+        // while one serving its own -- the normal case offline -- cannot be
+        // reached at all without it.
+        if (argc > 3)
+            caFile = argv[3];
+        else
+            CliReadLine("Advisor CA file (blank if already trusted): ", caFile);
+    }
 
     // Positional keyword, matching how other cubecos commands take one
     // (app_register's skip_flavor). Never prompted: replacing a working
     // identity is not something to be walked into by pressing return.
-    if (argc > 4) {
-        if (std::string(argv[4]) != "force") {
-            CliPrintf("The fourth argument, if given, must be the word 'force'.");
+    if (argc > forceAt) {
+        if (std::string(argv[forceAt]) != "force") {
+            CliPrintf("The last argument, if given, must be the word 'force'.");
             return CLI_INVALID_ARGS;
         }
-        force = argv[4];
-    }
-
-    // Prompted, never taken from argv -- see WriteTokenFile.
-    if (!CliReadLine("Pairing token: ", token) || token.length() <= 0) {
-        CliPrintf("A pairing token is required. Ask your Advisor administrator to issue one.");
-        return CLI_INVALID_ARGS;
+        force = argv[forceAt];
     }
 
     std::string tokenPath;
     if (!WriteTokenFile(token, &tokenPath))
         return CLI_UNEXPECTED_ERROR;
 
-    int rc = HexSpawn(0, HEX_SDK, "advisor_enroll",
+    int rc;
+    if (selfDescribing) {
+        rc = HexSpawn(0, HEX_SDK, "advisor_enroll_token",
+                      tokenPath.c_str(), version.c_str(), force.c_str(), NULL);
+    } else {
+        rc = HexSpawn(0, HEX_SDK, "advisor_enroll",
                       server.c_str(), tokenPath.c_str(), version.c_str(),
                       caFile.c_str(), force.c_str(), NULL);
+    }
 
     // Removed whatever happened. A pairing token left on disk after a failed
     // enrolment is a credential nobody is watching.
@@ -139,6 +187,36 @@ ConsoleTrustMain(int argc, const char** argv)
 }
 
 static int
+FingerprintMain(int argc, const char** argv)
+{
+    if (argc > 1)
+        return CLI_INVALID_ARGS;
+
+    // The same eleven numbered groups the Advisor shows; the sdk prints them.
+    if (HexSpawn(0, HEX_SDK, "advisor_fingerprint", NULL) != 0)
+        return CLI_FAILURE;
+    return CLI_SUCCESS;
+}
+
+static int
+UpgradeMain(int argc, const char** argv)
+{
+    if (argc > 2 /* [0]="upgrade" [1]="force" */)
+        return CLI_INVALID_ARGS;
+    std::string force;
+    if (argc > 1) {
+        if (std::string(argv[1]) != "force") {
+            CliPrintf("The argument, if given, must be the word 'force'.");
+            return CLI_INVALID_ARGS;
+        }
+        force = argv[1];
+    }
+    if (HexSpawn(0, HEX_SDK, "advisor_upgrade", force.c_str(), NULL) != 0)
+        return CLI_FAILURE;
+    return CLI_SUCCESS;
+}
+
+static int
 StatusMain(int argc, const char** argv)
 {
     if (argc > 1)
@@ -160,6 +238,8 @@ StatusMain(int argc, const char** argv)
     // framework's job (health_advisor_check / health_advisor_repair), not a
     // second thing printed here.
     HexSpawn(0, (char*)ADVISOR_AGENT, "status", NULL);
+    // Said here, where an operator looks, rather than only in the agent's log.
+    HexSpawn(0, HEX_SDK, "advisor_update_notice", NULL);
     return CLI_SUCCESS;
 }
 
@@ -275,12 +355,21 @@ CLI_MODE(CLI_TOP_MODE, "advisor",
          !HexStrictIsErrorState());
 
 CLI_MODE_COMMAND("advisor", "enroll", EnrollMain, NULL,
-    "Install and enrol the Advisor agent on this node.",
-    "enroll [<service-url> [<version> [<ca-file> [force]]]]");
+    "Install and enrol the Advisor agent on this node; with no token on an enrolled node, enrol the peers that have none.",
+    "enroll [[<version>] [force]]  (or, for a bare token: "
+    "enroll [<service-url> [<version> [<ca-file> [force]]]])");
 
 CLI_MODE_COMMAND("advisor", "console_trust", ConsoleTrustMain, NULL,
     "Accept console sessions signed by the Advisor's CA.",
     "console_trust [<ca-file>]");
+
+CLI_MODE_COMMAND("advisor", "fingerprint", FingerprintMain, NULL,
+    "Print this node's identity fingerprint as the numbered groups the Advisor shows.",
+    "fingerprint");
+
+CLI_MODE_COMMAND("advisor", "upgrade", UpgradeMain, NULL,
+    "Install the Advisor's current agent release on this node.",
+    "upgrade [force]");
 
 CLI_MODE_COMMAND("advisor", "status", StatusMain, NULL,
     "Show whether this node is enrolled with the Advisor, and as which cluster.",
