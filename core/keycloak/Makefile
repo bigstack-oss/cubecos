@@ -20,6 +20,10 @@ LOGIN_RPM := login.rpm
 KEYCLOAK_DIR := /opt/keycloak
 PKG_NAME := cube-cos-login
 GITHUB_URL := https://github.com/bigstack-oss/cube-cos-ui
+# Split from GITHUB_URL: release assets sit behind the object CDN that is throttled to ~40 KB/s
+# from our build network, while the clone below is unaffected (cubecos#1350). GITHUB_DL_BASE
+# defaults to https://github.com in project.mk.
+GITHUB_DL_URL := $(GITHUB_DL_BASE)/bigstack-oss/cube-cos-ui
 
 ifneq ($(RC),)
 # NOTE: this RPM and the IMG_BUILD tag below must be bumped together. .load-img does not
@@ -36,7 +40,7 @@ ifneq ($(RC),)
 # never drive the old 17.0.1-legacy image.
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O login.rpm $(GITHUB_URL)/releases/download/$(PKG_NAME)-v3.1.10-rc1/$(PKG_NAME)-18.0.0-1.54a03f5.x86_64.rpm, \
+		wget -O login.rpm $(GITHUB_DL_URL)/releases/download/$(PKG_NAME)-v3.1.10-rc1/$(PKG_NAME)-18.0.0-1.54a03f5.x86_64.rpm, \
 		"  PULL    $(LOGIN_RPM)")
 else
 GIT_DIR := git
