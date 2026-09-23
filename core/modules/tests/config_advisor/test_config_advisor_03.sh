@@ -134,14 +134,13 @@ commits() { [ -f "$COMMIT_LOG" ] && cat "$COMMIT_LOG" ; }
 # and must never be: hex_config decides when the service runs, and a symlink
 # would make systemd a second owner of it on the new partition.
 #
-# sso-origins is on it and the two files derived from it are not: how the
-# Advisor spells its origins cannot be worked out again on the node, while
-# keystone's trusted_dashboard list and mellon's redirect domains are rebuilt
-# from it by the first commit on the new partition.
+# The Advisor's own report is on it and the two files derived from it are not:
+# how the Advisor spells its origins cannot be worked out again on the node,
+# while keystone's trusted_dashboard list and mellon's redirect domains are
+# rebuilt from it by the first commit on the new partition.
 expected="$ROOT/etc/cube/advisor-agent
 $ROOT/usr/local/bin/cube-advisor-agent
 $ROOT/etc/cube-advisor-agent/web-targets.json
-$ROOT/etc/cube-advisor-agent/sso-origins
 $ROOT/etc/cube-advisor-agent/sso-origins-reported
 $ROOT/etc/ssh/console-ca/cube-advisor.pub
 $ROOT/etc/ssh/sshd_config.d/60-cube-advisor-console.conf"
@@ -182,22 +181,18 @@ reset enrolled
 # agent be running here", and the answer is the identity -- not the binary, not
 # the role.
 #
-# The path unit that watches the agent's console-origins report follows the
-# agent exactly: it is the agent that writes what the watch watches, so a node
-# with no agent has nothing to watch for. A node whose binary will not run has an identity all the same; the
+# A node whose binary will not run has an identity all the same; the
 # start then fails and says so in the journal, which is the signal that belongs
 # there.
 reset enrolled
 "$V" commit control-converged >/dev/null 2>&1 || fail "commit failed on an enrolled node"
-[ "$(commits)" = "start cube-advisor-agent
-start cube-advisor-sso.path" ] \
+[ "$(commits)" = "start cube-advisor-agent" ] \
     || fail "an enrolled node did not commit the service as running: [$(commits)]"
 
 reset
 "$V" commit control-converged >/dev/null 2>&1 \
     || fail "commit failed on a node that was never enrolled"
-[ "$(commits)" = "stop cube-advisor-agent
-stop cube-advisor-sso.path" ] \
+[ "$(commits)" = "stop cube-advisor-agent" ] \
     || fail "an un-enrolled node did not commit the service as stopped: [$(commits)]"
 
 # The role is not part of the answer. Every module this one is modelled on
@@ -207,8 +202,7 @@ stop cube-advisor-sso.path" ] \
 for role in compute storage network edge-core moderator ; do
     reset enrolled
     "$V" commit "$role" >/dev/null 2>&1 || fail "commit failed on a $role node"
-    [ "$(commits)" = "start cube-advisor-agent
-start cube-advisor-sso.path" ] \
+    [ "$(commits)" = "start cube-advisor-agent" ] \
         || fail "an enrolled $role node was not committed as running: [$(commits)]"
 done
 
@@ -217,8 +211,7 @@ done
 reset enrolled ; rm -f "$IDENTITY_DIR/agent.crt"
 "$V" commit control-converged >/dev/null 2>&1 \
     || fail "commit failed on a node whose identity is gone"
-[ "$(commits)" = "stop cube-advisor-agent
-stop cube-advisor-sso.path" ] \
+[ "$(commits)" = "stop cube-advisor-agent" ] \
     || fail "a node with no identity was committed as running: [$(commits)]"
 
 # The module never enables anything: SystemdCommitService stops and starts, and
@@ -237,8 +230,13 @@ esac
 reset enrolled
 "$V" commit control-converged >/dev/null 2>&1 || fail "commit failed on an enrolled node"
 [ -s "$TARGETS_FILE" ] || fail "commit left the node with no allowlist"
-grep -q '"cube-cos":"127.0.0.1:8080"' "$TARGETS_FILE" \
-    || fail "the seeded allowlist does not name cube-cos: [$(cat "$TARGETS_FILE")]"
+# A build host has no /etc/settings.txt, so advisor_own_targets resolves no
+# dashboard address and the seed is the empty object -- deliberately, rather
+# than entries pointing at an address this node does not have. That the file
+# is created at all is the bug this guards; what the node's own entries look
+# like once it has an address is sdk_advisor's business, not this module's.
+[ "$(cat "$TARGETS_FILE")" = "{}" ] \
+    || fail "the seed is not the empty object on a host with no cluster settings: [$(cat "$TARGETS_FILE")]"
 grep -q advisor_targets_init "$SDK_CALL_LOG" \
     || fail "commit did not seed through hex_sdk: [$(cat "$SDK_CALL_LOG" 2>/dev/null)]"
 

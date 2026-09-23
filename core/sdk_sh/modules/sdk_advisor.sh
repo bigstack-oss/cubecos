@@ -6,31 +6,11 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
-# Node-side helpers for the Cube AI Advisor agent.
+# Node-side helpers for the Cube AI Advisor agent (ADR 0003).
 #
-# The agent is released by Bigstack as signed per-arch artifacts and must be
-# verified before a node executes one. Two decisions from ADR 0003 shape what is
-# here:
-#
-#   * Verification lives in cubecos, not in the agent's own repository. A
-#     verifier must not share a build pipeline with the artifact it verifies, or
-#     one compromised pipeline produces both.
-#   * The trust anchor belongs to the OS, and is compiled into hex_config the
-#     same way hex compiles in the licence key -- so it is deliberately NOT
-#     configurable from here. A verifier whose trust anchor is chosen by its
-#     caller verifies nothing.
-#
-# The check itself is in hex_config rather than in this file. Key and check
-# belong in one place: this file lives under /usr/lib/hex_sdk where root can
-# edit it, so a shell verifier could have its check removed while the compiled-in
-# key stayed perfectly safe -- which protects the wrong half.
-#
-# A customer who would rather not trust our binary can still do the whole check
-# with standard tools, because the manifest is in sha256sum's own format:
-#
-#     hex_config advisor_pubkey > release.pub
-#     openssl dgst -sha256 -verify release.pub -signature manifest.txt.sig manifest.txt
-#     sha256sum -c manifest.txt
+# Releases are signed; the key and the check both live in hex_config, not here,
+# because root can edit this file. The manifest is in sha256sum's own format, so
+# a customer can repeat the check with openssl and sha256sum.
 
 ADVISOR_TRUST_ANCHOR=/etc/pki/ca-trust/source/anchors/cube-advisor.crt
 # The identity an enrolled node holds. config_advisor.cpp names the same paths
@@ -38,14 +18,18 @@ ADVISOR_TRUST_ANCHOR=/etc/pki/ca-trust/source/anchors/cube-advisor.crt
 # an upgrade); repeated here because hex_sdk cannot read the C header.
 ADVISOR_IDENTITY_DIR=/etc/cube/advisor-agent
 ADVISOR_AGENT_CERT=$ADVISOR_IDENTITY_DIR/agent.crt
-# The action level and consent dial this cluster serves (ADR 0011/0017). Files
-# in the agent's own directory, read by the agent at startup and authoritative
-# there -- the SaaS's mirror is only a hint. These are the paths an operator
-# sets them through; a name absent means the fail-closed default (observe /
-# always). The agent's own ParseLevel/ParseConsent own the vocabulary; the two
-# lists below are kept in step with them by hand.
+# The action level and consent this cluster serves (ADR 0011/0017), read by the
+# agent at startup and authoritative there. Absent means the fail-closed default.
+# The vocabulary is the agent's; the two lists below track it by hand.
 ADVISOR_LEVEL_FILE=$ADVISOR_IDENTITY_DIR/action-level
 ADVISOR_CONSENT_FILE=$ADVISOR_IDENTITY_DIR/consent
+# Where this node enrolled, so `advisor upgrade` knows whom to ask. Written at
+# enrol from the token; older nodes fall back to the tunnel host on 443.
+ADVISOR_URL_FILE=$ADVISOR_IDENTITY_DIR/advisor-url
+# The agent release the Advisor named as current at the last connect. The
+# agent writes it (cube-advisor-agent#52); nothing here acts on it unasked.
+ADVISOR_CURRENT_RELEASE_FILE=$ADVISOR_IDENTITY_DIR/current-release
+ADVISOR_AGENT_KEY=$ADVISOR_IDENTITY_DIR/agent.key
 # The Advisor's SSH user CA, and the sshd drop-in that trusts it. Both are in
 # config_advisor.cpp's migrate list so a console survives a firmware upgrade;
 # these are the paths that write them.
@@ -63,37 +47,20 @@ ADVISOR_SIGNATURE_NAME=manifest.txt.sig
 ADVISOR_AGENT_UNIT_NAME=cube-advisor-agent.service
 ADVISOR_AGENT_UNIT=/usr/lib/systemd/system/$ADVISOR_AGENT_UNIT_NAME
 
-# The node-local allowlist the agent will dial through the tunnel: symbolic
-# name -> routing address. The Advisor only ever holds name -> what the
-# upstream calls itself; this file is the other half, and only this file, so
-# one name can route to the management network and another to the provider
-# network without the Advisor ever learning either address. A name missing
-# here is a name the agent refuses to dial -- this file is the operator's
-# control over what we can reach, not ours, so nothing here repairs it.
+# The node-local allowlist the agent may dial: symbolic name -> address. The
+# Advisor never learns the address. A name missing here is one the agent
+# refuses to dial, so nothing in this module repairs this file.
 ADVISOR_TARGETS_FILE=/etc/cube-advisor-agent/web-targets.json
 
-# The targets discovery found installed on this cluster: "name host:port", one
-# per line. The agent runs on every node and reads its own allowlist, but only
-# a node holding the app framework's kubeconfig can see what is installed; this
-# file is how the node that can see it tells the nodes that cannot. Only this
-# set ever crosses a node boundary: each node's own hex_config commit turns it
-# into allowlist entries.
-#
-# The set, not an address: an address alone cannot say whether CMP is installed
-# behind it, and the ingress exists from the app framework's install onwards --
-# which is before CMP is installed, not after.
+# What discovery found installed, "name host:port" per line. Only a node with
+# the framework kubeconfig can see this, so it is fanned out; each node's own
+# commit turns it into allowlist entries. The set, not an address: the ingress
+# exists from the framework's install, before CMP is installed.
 ADVISOR_DISCOVERED_FILE=/etc/cube-advisor-agent/discovered-targets
 
-# The Advisor console origins whose Skyline WebSSO callbacks keystone should
-# trust, one URL per line. Supplied by whoever knows how the Advisor spells its
-# origins -- the installer, or an operator -- because the node cannot derive
-# them. config_advisor.cpp migrates this file; the two files below are rebuilt
-# from it by advisor_sso_apply and so are not migrated.
-# What the Advisor itself reported, propagated to every control node. The
-# operator record above is an additional allowance on top of this, never a
-# replacement: both are deliberate acts, and advisor_sso_apply trusts their
-# union. Kept apart so the Advisor's half can be withdrawn the moment it stops
-# reporting an origin without taking an operator's entry with it.
+# The Advisor console origins keystone should trust for Skyline WebSSO, as the
+# Advisor reported them, propagated to every control node. config_advisor.cpp
+# migrates this file; the two below are rebuilt from it by advisor_sso_apply.
 ADVISOR_SSO_REPORTED_FILE=/etc/cube-advisor-agent/sso-origins-reported
 # Where the agent writes what the Advisor told it on connect, one
 # "<target> <origin-base>" per line. Only on an enrolled node -- the agent runs
@@ -106,11 +73,8 @@ ADVISOR_SSO_AGENT_REPORT=$ADVISOR_IDENTITY_DIR/console-origins
 # told about.
 ADVISOR_SSO_TARGET=cube-cos-skyline
 ADVISOR_SSO_CALLBACK_PATH=/api/openstack/skyline/api/v1/websso
-# Keycloak's own admin console refuses to finish loading on an origin its
-# client does not list: the session-check iframe answers 403 and the UI spins
-# forever. The client is Keycloak's built-in, not one of the four this
-# cluster's terraform declares, so adding an origin here is not fought by the
-# next apply.
+# Keycloak's admin console needs its origin listed or the session-check iframe
+# 403s and the UI spins. Its built-in client, so terraform does not fight it.
 ADVISOR_SSO_KEYCLOAK_CLIENT=security-admin-console
 # The target whose origin Keycloak is served on. CubeCOS puts Keycloak and
 # Rancher on one port, so this is the same origin the tab labels Rancher.
@@ -129,11 +93,8 @@ ADVISOR_SSO_MELLON_FILE=/etc/httpd/conf.d/zz-cube-advisor-mellon.conf
 
 # advisor_verify_release <dir> [artifact]
 #
-# Verifies the release in <dir>: the manifest's signature against the key
-# compiled into this image, then every artifact digest the manifest lists. When
-# <artifact> is given, it must additionally be one the manifest names.
-#
-# Returns 0 only when every check passes. Every other outcome is a refusal.
+# Manifest signature against the image's key, then every digest it lists. With
+# <artifact>, that one must also be named. Anything but 0 is a refusal.
 advisor_verify_release()
 {
     # artifact is optional; default it so a one-argument call is not an
@@ -156,9 +117,8 @@ advisor_verify_release()
 
 # advisor_release_version <dir>
 #
-# Prints the version recorded in a release manifest. Reads a comment line, so it
-# must only ever be called on a manifest that advisor_verify_release has already
-# accepted — otherwise it is reporting whatever an attacker wrote.
+# The version a manifest records. Only call it on one advisor_verify_release
+# has accepted: it reads a comment line.
 advisor_release_version()
 {
     local dir=$1
@@ -189,14 +149,8 @@ advisor_install_release()
 
 # advisor_agent_service_start
 #
-# Start the tunnel now. Enrolment leaves the node holding a valid certificate;
-# without this it would hold one and never connect, which looks from the
-# Advisor exactly like a broken tunnel.
-#
-# Started, never enabled: in cubecos hex_config owns when a service runs (the
-# advisor module's Commit calls SystemdCommitService), so an enable symlink
-# would make systemd a second owner, starting the agent at multi-user.target on
-# a node hex_config had decided should not be running it.
+# Start the tunnel now, so a freshly enrolled node connects instead of holding
+# an unused identity. Started, never enabled: hex_config owns when it runs.
 advisor_agent_service_start()
 {
     if [ ! -r "$ADVISOR_AGENT_UNIT" ] ; then
@@ -204,7 +158,10 @@ advisor_agent_service_start()
         return 0
     fi
 
-    if systemctl start "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
+    # restart, not start: a forced re-enrolment replaces the identity under a
+    # running agent, which otherwise keeps its old connection open and the new
+    # identity never dials in. On a stopped unit restart is a start.
+    if systemctl restart "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
         echo "Tunnel service started; hex_config starts it on every boot from here."
     else
         # The identity is saved and enrolment did succeed, so this must not
@@ -216,21 +173,11 @@ advisor_agent_service_start()
 
 # advisor_cluster_id
 #
-# The cluster's identity for enrolment -- this cluster's, never this node's.
-# The Advisor makes it the certificate's common name and the primary key five
-# of its tables reference, none with ON UPDATE CASCADE, so it is chosen once
-# and effectively permanently. Two sources, in order:
-#
-#   1. CUBE_CLUSTER_ID, written by cube-cos-driver at deploy time. Derived from
-#      the cluster UUID the driver assigns, so it is unique by construction --
-#      and the Advisor's fleet then shows the same id the driver shows.
-#   2. cubesys.controller, the operator-chosen controller name: the VIP's name
-#      on an HA cluster and the single node's name otherwise. Identical on
-#      every node of the cluster, so enrolling from any control node yields
-#      one identity -- but a name, so two sites can collide on it.
-#
-# Never the hostname: a 3-node cluster would then enrol as whichever node the
-# operator happened to type the command on.
+# The cluster's identity for enrolment, chosen once and effectively permanent
+# (the Advisor keys five tables on it). CUBE_CLUSTER_ID from the driver first --
+# unique by construction -- then cubesys.controller, which is the same on every
+# node but can collide across sites. Never the hostname: a 3-node cluster would
+# enrol as whichever node the operator typed on.
 advisor_cluster_id()
 {
     local id=""
@@ -241,15 +188,9 @@ advisor_cluster_id()
     if [ -z "$id" ] ; then
         id=$(source /usr/sbin/hex_tuning /etc/settings.txt 2>/dev/null ; echo "${T_cubesys_controller:-}")
     fi
-    # An enrolled node already carries the answer in its own certificate, and
-    # that certificate is migrated across a firmware upgrade while the two
-    # sources above are not: phone-home-agent.env is written at deployment and
-    # does not survive, and cubesys.controller is absent on a converged
-    # single-node cluster. Both gone leaves an enrolled node unable to say
-    # which cluster it is -- so read back what it was enrolled as.
-    #
-    # Last, not first: the two above describe the cluster this node belongs to
-    # now, while the certificate records what it enrolled as once.
+    # Last resort: the certificate is migrated across a firmware upgrade while
+    # the two sources above are not. Last, not first -- they say what this
+    # cluster is now, the certificate what it enrolled as once.
     if [ -z "$id" ] && [ -r "$ADVISOR_AGENT_CERT" ] ; then
         id=$(openssl x509 -in "$ADVISOR_AGENT_CERT" -noout -subject -nameopt multiline 2>/dev/null |
              sed -n 's/^ *organizationalUnitName *= *//p' | head -1)
@@ -275,9 +216,8 @@ advisor_cluster_id()
 
 # advisor_agent_arch
 #
-# Maps this machine to the artifact naming the release manifest uses. Unknown
-# architectures are a refusal rather than a guess: installing the wrong binary
-# fails later and less clearly than not installing one.
+# This machine's artifact name in the manifest. An unknown architecture is a
+# refusal, not a guess.
 advisor_agent_arch()
 {
     local m
@@ -310,9 +250,8 @@ _advisor_target_name_valid()
 
 # _advisor_target_address_valid <host:port>
 #
-# The same shape advisor_targets_set enforces, checked silently: these lines
-# come from discovery and from a file discovery wrote, not from an operator
-# typing, so there is no one here to hand a specific message to.
+# advisor_targets_set's shape, checked silently: these lines come from
+# discovery, not from someone typing.
 _advisor_target_address_valid()
 {
     local host port
@@ -334,9 +273,8 @@ _advisor_target_address_valid()
 
 # _advisor_write_file <path> <content>
 #
-# Writes one of the agent's node-local files atomically: a temp file in the
-# same directory, then mv. The agent can read these at any moment, so a
-# reader must never see half of a write.
+# Atomic write (temp file in the same directory, then mv): the agent reads
+# these at any moment and must never see half of one.
 _advisor_write_file()
 {
     local path=$1 content=$2
@@ -370,13 +308,8 @@ _advisor_targets_write()
 
 # advisor_discovered_set <name> <host:port> [<name> <host:port> ...]
 #
-# Records on this node the set of targets discovery found installed. Called on
-# every node by advisor_targets_discover, so it must be reachable through
-# hex_sdk. Replaces the file outright: the argument list is the whole answer,
-# and a target that is no longer named is no longer discovered.
-#
-# Records only what was found; what it becomes is advisor_targets_init's
-# business, on the node itself.
+# Records what discovery found, replacing the file outright: the argument list
+# is the whole answer. What it becomes is advisor_targets_init's business.
 advisor_discovered_set()
 {
     local name target content="" nl='
@@ -405,10 +338,8 @@ advisor_discovered_set()
 
 # advisor_discovered_list
 #
-# Prints the recorded set, one "name host:port" pair per line. Silent when the
-# file is absent: a cluster with no app framework is the normal case, not a
-# fault. Every line's shape is rechecked, so a hand-edited file can never turn
-# into a malformed allowlist entry.
+# The recorded set, one "name host:port" per line; silent when absent (a
+# cluster with no app framework). Every line is rechecked.
 advisor_discovered_list()
 {
     local name target extra
@@ -424,21 +355,13 @@ advisor_discovered_list()
 
 # advisor_targets_init
 #
-# Seeds the allowlist on a node that has none: cube-cos, which every node can
-# name for itself, plus exactly what discovery recorded on this node
-# (advisor_discovered_set). cube-cos always, because every node serves it
-# locally whatever else is installed.
-#
-# Seeds, never reconciles. A file that is already there is left exactly as it
-# is -- an operator who removed a target removed it on purpose, and a helper
-# that puts it back turns "delete one line to revoke access" into "delete one
-# line and wait for it to return".
+# Seeds the allowlist on a node that has none: this cluster's own targets plus
+# what discovery recorded here. Seeds, never reconciles -- a file already there
+# is left exactly as the operator left it.
 # advisor_dashboard_address
 #
-# Where this cluster's own web UI answers: the control VIP on an HA cluster,
-# this node's management address otherwise.
-#
-# Not 127.0.0.1:8080: that port is httpd, which answers 403 to everything.
+# Where this cluster's web UI answers: the control VIP, else this node's
+# management address. Not 127.0.0.1:8080 -- that httpd answers 403.
 advisor_dashboard_address()
 {
     local addr
@@ -454,13 +377,9 @@ advisor_dashboard_address()
 
 # advisor_own_targets
 #
-# The targets every node can name for itself, one "<name> <host:port>" per
-# line: this cluster's dashboard, and the endpoints the dashboard links out to
-# on other ports of the same address -- Keycloak, Skyline and the Ceph
-# dashboard.
-#
-# Each needs allowing in its own right: the dashboard builds those URLs in
-# script from the bare cluster address, so a proxy never sees them to rewrite.
+# What every node can name for itself: this cluster's dashboard and the
+# endpoints it links out to on other ports. Each needs allowing in its own
+# right -- the dashboard builds those URLs in script, so no proxy rewrites them.
 advisor_own_targets()
 {
     local dash addr
@@ -471,11 +390,8 @@ advisor_own_targets()
     echo "cube-cos-idp $addr:10443"
     echo "cube-cos-skyline $addr:9999"
     echo "cube-cos-ceph $addr:7443"
-    # Skyline's federated login leaves Skyline: the browser is sent to
-    # keystone's public endpoint and then to the SAML service provider mellon
-    # hosts. Both are the Advisor's companions of cube-cos-skyline -- one
-    # session, one cookie jar -- but the agent still dials each by name, so
-    # each needs allowing in its own right.
+    # Skyline's federated login leaves Skyline for keystone and then mellon.
+    # Companions of cube-cos-skyline, but dialled by name, so each is listed.
     echo "cube-cos-keystone $addr:5000"
     echo "cube-cos-keystone-sso $addr:5443"
 }
@@ -499,11 +415,8 @@ advisor_targets_init()
 
 # advisor_targets_list
 #
-# Prints the current allowlist, one "name host:port" pair per line. This file
-# is hand-edited -- an operator's editor, jq, python -m json.tool all
-# reformat it -- so it is read with jq rather than a regex that only
-# understands the exact layout this module happens to write. Silent, not an
-# error, if the file has not been seeded yet.
+# The current allowlist, one "name host:port" per line. Read with jq, not a
+# regex: the file is hand-edited and reformatted by whatever touched it last.
 advisor_targets_list()
 {
     [ -r "$ADVISOR_TARGETS_FILE" ] || return 0
@@ -512,10 +425,8 @@ advisor_targets_list()
 
 # advisor_targets_set <name> <host:port>
 #
-# Adds an entry, or replaces one by the same name. Validated here because the
-# agent dials whatever this file says: a malformed name or address is refused
-# where the message can still help someone, not left for the tunnel to fail
-# on later.
+# Adds or replaces an entry. Validated here, where the message can still help
+# someone: the agent dials whatever this file says.
 advisor_targets_set()
 {
     local name=$1 target=$2
@@ -555,12 +466,8 @@ advisor_targets_set()
         return 1
     fi
 
-    # -e turns a file that will not parse as a JSON object into a refusal
-    # instead of "start from nothing" -- the difference between an
-    # operator's edit and this quietly emptying the allowlist under them. A
-    # file jq cannot even see, such as a genuinely empty one, still has to be
-    # caught by hand: jq runs its filter zero times over zero input values
-    # and calls that success.
+    # -e: an unparseable file is a refusal, never "start from nothing". An
+    # empty one still needs catching by hand -- jq calls zero inputs success.
     if [ -e "$ADVISOR_TARGETS_FILE" ] ; then
         new=$(jq -e --arg n "$name" --arg v "$target" \
               'if type == "object" then .[$n] = $v else error("not a JSON object") end' \
@@ -610,11 +517,8 @@ advisor_targets_unset()
 
 # _advisor_agent_reload_setting
 #
-# Makes a level or consent change take effect. The agent reads both files once,
-# at startup, so a running agent must be restarted; a stopped one picks the file
-# up on its next start, so its absence is not an error. Restart rather than
-# reload: the agent has no reload path for these, and a bounced tunnel
-# reconnects on its own.
+# Makes a level or consent change take effect: the agent reads both files once,
+# at startup. Restart, not reload -- it has no reload path for these.
 _advisor_agent_reload_setting()
 {
     systemctl is-active --quiet "$ADVISOR_AGENT_UNIT_NAME" || return 0
@@ -626,10 +530,8 @@ _advisor_agent_reload_setting()
 
 # advisor_level_set <observe|operate|internal>
 #
-# Records the action level this cluster serves (ADR 0011). Written to the file
-# the agent reads as authoritative, so the value the executor enforces and the
-# value an operator set are one thing. The vocabulary is the agent's; a word
-# outside it is refused here rather than written for the agent to reject later.
+# Records the action level this cluster serves (ADR 0011), in the file the
+# agent reads as authoritative. The vocabulary is the agent's.
 advisor_level_set()
 {
     local level=$1
@@ -646,9 +548,8 @@ advisor_level_set()
 
 # advisor_consent_set <always|destructive|never>
 #
-# Records how much this cluster asks a person before the agent acts (ADR 0011,
-# amended). Same custody as the level: the file the agent reads, the vocabulary
-# the agent owns.
+# How much this cluster asks a person before the agent acts (ADR 0011). Same
+# custody as the level.
 advisor_consent_set()
 {
     local consent=$1
@@ -665,9 +566,8 @@ advisor_consent_set()
 
 # advisor_level_show
 #
-# Prints the level and consent this node serves, one per line as "<field>
-# <value>". An absent file reads as the fail-closed default the agent would use,
-# named so an operator sees what is in force rather than a blank.
+# The level and consent this node serves, "<field> <value>" per line. An absent
+# file reads as the agent's fail-closed default rather than a blank.
 advisor_level_show()
 {
     local level consent
@@ -681,42 +581,19 @@ advisor_level_show()
 
 # advisor_targets_discover
 #
-# Publishes to the whole cluster the set of web targets that are actually
-# installed on it.
+# Publishes the set of web targets actually installed, from the one node with
+# the kubeconfig to every node (each node's commit turns it into allowlist
+# entries). Presence is decided per target from its Helm release, not the
+# ingress: the ingress predates CMP's install. CMP and its IdP share one
+# address deliberately -- one origin, or the OIDC state cookie is orphaned.
 #
-# This runs where the kubeconfig is -- one node -- but the agent runs on every
-# node and dials from every node, so every node needs the set. It is written
-# out with remote_run over CUBE_NODE_LIST_HOSTNAMES, the same fan-out
-# health_advisor_check uses. Only the set travels: each node's own hex_config
-# commit turns it into allowlist entries, so no node ever writes another
-# node's allowlist.
-#
-# What exists is decided per target from its Helm release, not from the
-# ingress: the ingress is created by the app framework's own install, which
-# happens before CMP is installed, so an address proves the framework is there
-# and says nothing about CMP. A release is the honest answer, and it is one a
-# namespace or an HTTP probe during an install is not.
-#
-# Both names sit at that one address on purpose -- the portal and its identity
-# provider must share one origin or the OIDC state cookie is set on one and
-# the callback lands on the other.
-#
-# Callers are the installers (app_framework_install, app_import) and enrolment.
-# Idempotent, and each call declares only what it finds, so calling it from
-# every one of them is right: whichever ran last is the cluster's current
-# answer.
-#
-# On this node it also sets the names outright, so the node that just enrolled
-# or just installed CMP does not wait for its next commit -- and that
-# deliberately brings a name back if an operator has unset it here. Not the
-# never-repair rule being broken: never-repair stops a *startup* silently
-# restoring a file someone edited, while this only runs from an install or
-# enrolment event that is itself declaring the endpoint again.
+# Called by the installers and by enrolment; idempotent, last call wins. On
+# this node it also sets the names outright, which does bring back a name an
+# operator unset -- the caller is an install declaring that endpoint again.
 # _advisor_discard_kubeconfig <path>
 #
-# Removes a kubeconfig advisor_targets_discover fetched, and unsets the export
-# so a later call in the same shell fetches a fresh one. A no-op for the empty
-# path, which is what a caller-supplied APPFW_KUBECONFIG leaves behind.
+# Removes a kubeconfig this module fetched and unsets the export. No-op for the
+# empty path a caller-supplied APPFW_KUBECONFIG leaves.
 _advisor_discard_kubeconfig()
 {
     [ -n "${1:-}" ] || return 0
@@ -752,14 +629,9 @@ advisor_targets_discover()
             echo "Warning: could not record the discovered targets on $node; it picks them up at its next commit" >&2
     done
 
-    # A cluster that never enrolled must not gain an allowlist as a side
-    # effect of installing CMP.
-    #
-    # The fan-out above is deliberately on this side of that guard. An install
-    # normally runs long before anyone enrols, so the set has to be on every
-    # node by then: enrolment's own advisor_targets_init reads this file and
-    # seeds from it, which is the only way a cluster that installed CMP first
-    # ends up with cube-cmp in its allowlist at all.
+    # A cluster that never enrolled must not gain an allowlist from installing
+    # CMP. The fan-out above is before this guard on purpose: an install runs
+    # long before enrolment, and advisor_targets_init seeds from what it left.
     [ -e "$ADVISOR_TARGETS_FILE" ] || return 0
 
     set -- $pairs
@@ -772,13 +644,10 @@ advisor_targets_discover()
 
 # _advisor_sso_origin_valid <url>
 #
-# A WebSSO callback URL this node will let keystone post a token to. Checked
-# hard because that is exactly what the entry authorises: keystone substitutes
-# the matched origin into sso_callback_template.html as the form action, so a
-# line here is "send an unscoped token to this URL", not a display string.
-#
-# https only, no userinfo, no query or fragment, and "*" allowed only in the
-# host -- the same shape keystone's patched _origin_matches will compare.
+# A WebSSO callback URL keystone may post a token to -- the matched origin
+# becomes the form action, so this authorises sending an unscoped token there.
+# https only, no userinfo, no query or fragment, "*" only in the host: the
+# shape keystone's patched _origin_matches compares.
 _advisor_sso_origin_valid()
 {
     local rest host port path
@@ -818,9 +687,8 @@ _advisor_sso_origin_valid()
 
 # _advisor_sso_base_valid <origin-base>
 #
-# "https://host[:port]" and nothing more: no path, because a base is what a
-# consumer appends its own path to. The host may carry "*" where a mode puts
-# the session id in the hostname.
+# "https://host[:port]" and nothing more -- a consumer appends its own path.
+# "*" allowed in the host, for a mode that puts the session id there.
 _advisor_sso_base_valid()
 {
     local rest host port
@@ -850,16 +718,10 @@ _advisor_sso_base_valid()
 
 # advisor_sso_reported_bases
 #
-# What the Advisor reported, one "<target> <origin-base>" per line.
-#
-# The raw report is what travels, not a URL composed from it. Three things
-# consume this and each needs a different part: keystone wants Skyline's
-# callback URL, mellon wants hostnames without ports, and Keycloak wants the
-# identity provider's origin with its port. Composing one of those at the
-# sending end left the other two with nothing to work from.
-#
-# Every line is rechecked: this file crosses a node boundary and a firmware
-# upgrade.
+# What the Advisor reported, "<target> <origin-base>" per line. The raw report
+# travels, not a composed URL: keystone wants a callback URL, mellon hostnames
+# without ports, Keycloak an origin with its port. Every line is rechecked --
+# this file crosses a node boundary and a firmware upgrade.
 advisor_sso_reported_bases()
 {
     local target base extra
@@ -884,10 +746,9 @@ advisor_sso_reported_base()
 
 # advisor_sso_reported_list
 #
-# The Advisor's half of what keystone should trust: Skyline's callback URL,
-# composed from its reported base. A base carrying a session wildcard is kept
-# as it is -- keystone's patched matcher globs the host, which is the only form
-# that can name a per-session origin at all.
+# What keystone should trust: Skyline's callback URL, composed from the
+# reported base. A session wildcard is kept -- keystone's patched matcher
+# globs the host, the only form that can name a per-session origin.
 advisor_sso_reported_list()
 {
     local base url
@@ -901,9 +762,8 @@ advisor_sso_reported_list()
 
 # advisor_sso_effective_list
 #
-# What is actually trusted. The Advisor reports its console origins to every
-# agent on connect, so its report is the only source: it is the live truth and
-# it withdraws itself when the Advisor stops claiming an origin.
+# What is actually trusted. The Advisor's report is the only source: it is live
+# truth, and it withdraws itself when the Advisor stops claiming an origin.
 advisor_sso_effective_list()
 {
     advisor_sso_reported_list | awk '!seen[$0]++'
@@ -911,9 +771,8 @@ advisor_sso_effective_list()
 
 # advisor_sso_origins_show
 #
-# What this node trusts, and who said so. One source now -- the Advisor's
-# report -- but the attribution stays: an operator looking at an origin they
-# did not choose needs to see that no one here declared it.
+# What this node trusts, and who said so -- an operator looking at an origin
+# they did not choose needs to see that nobody here declared it.
 advisor_sso_origins_show()
 {
     local url
@@ -925,9 +784,8 @@ advisor_sso_origins_show()
 
 # advisor_sso_report_read
 #
-# The agent's report, as "<target> <origin-base>" lines this release accepts.
-# Passed on whole rather than reduced to one composed URL: see
-# advisor_sso_reported_bases for why every consumer needs a different part.
+# The agent's report as "<target> <origin-base>" lines this release accepts,
+# whole rather than composed (see advisor_sso_reported_bases).
 advisor_sso_report_read()
 {
     local target base extra
@@ -943,12 +801,10 @@ advisor_sso_report_read()
 
 # advisor_sso_report_apply
 #
-# What the agent's report turns into, cluster-wide. Run from a systemd path
-# unit watching the agent's file, so a console the Advisor re-addressed takes
-# effect without waiting for the next hex_config commit.
-#
-# Propagated rather than read in place: the agent only runs on enrolled nodes,
-# while keystone answers on every control node behind the VIP.
+# What the agent's report turns into, cluster-wide. Called at enrolment and by
+# health_advisor_repair, which is what notices a report that arrives once the
+# node's fingerprint is verified. Propagated rather than read in place: the
+# agent runs on enrolled nodes, keystone on every control node behind the VIP.
 advisor_sso_report_apply()
 {
     local node word args="" rc=0
@@ -1024,9 +880,8 @@ _advisor_sso_hosts()
 
 # _advisor_keycloak_token <base-url>
 #
-# An admin token for the local Keycloak, from the password terraform already
-# keeps. Printed on stdout; empty on any failure, and every caller treats that
-# as "leave Keycloak alone" rather than as something to retry.
+# An admin token for the local Keycloak, from the password terraform keeps.
+# Empty on any failure: every caller then leaves Keycloak alone.
 _advisor_keycloak_token()
 {
     local base=$1 pw
@@ -1044,19 +899,13 @@ _advisor_keycloak_token()
 
 # advisor_sso_keycloak_apply
 #
-# Lets Keycloak's admin console load on the Advisor's console origins.
+# Lets Keycloak's admin console load on the Advisor's console origins: its
+# client's web origins are derived from this cluster's own address, so the
+# Advisor's is refused and the session-check iframe 403s.
 #
-# Its client lists the origins a browser may run it from, derived from redirect
-# URIs that are relative to this cluster's own address. The Advisor's origin
-# cannot be derived from anything, so the session-check iframe is refused with
-# a 403 and the UI never finishes loading -- the same shape as keystone's
-# trusted_dashboard, in a different component's allowlist.
-#
-# Idempotent, and careful about removal: it takes away only origins it added
-# before, recorded in ADVISOR_SSO_KEYCLOAK_STATE, so withdrawing a console
-# origin withdraws this too while an operator's own entries are left alone.
-# Best effort throughout -- a Keycloak that cannot be reached must not fail a
-# commit, and the next one tries again.
+# Idempotent, and removes only origins it added (recorded in
+# ADVISOR_SSO_KEYCLOAK_STATE). Best effort: an unreachable Keycloak must not
+# fail a commit.
 advisor_sso_keycloak_apply()
 {
     local base tok cid origins prev
@@ -1125,19 +974,14 @@ json.dump(c, sys.stdout)
 
 # advisor_sso_apply
 #
-# Regenerates the two files that make Skyline's WebSSO work through the
-# console, from the recorded origins, and applies them only when they changed.
+# Rebuilds the two files Skyline's WebSSO needs from the recorded origins, and
+# writes them only when they changed. Both are derived, so neither is migrated.
 #
-# Both are derived, so neither is migrated: the first commit on a new firmware
-# slot rebuilds them from the record, which is.
-#
-#   keystone   cube_mellon_wsgi.py merges this into trusted_dashboard at import.
-#              keystone.conf cannot carry it -- config_keystone.cpp owns
-#              [federation] and rewrites it every commit.
-#   mellon     a later <Location /v3> block wins the MellonRedirectDomains
-#              merge, so the Advisor's origin can be added without editing
-#              v3_mellon_keycloak_master.conf, which keystone_idp recreates
-#              from its .def on every commit of its own.
+#   keystone   cube_mellon_wsgi.py merges this into trusted_dashboard at import;
+#              keystone.conf cannot carry it (config_keystone.cpp owns
+#              [federation]).
+#   mellon     a later <Location /v3> wins the MellonRedirectDomains merge, so
+#              v3_mellon_keycloak_master.conf stays keystone_idp's.
 advisor_sso_apply()
 {
     local origins hosts keystone_body mellon_body
@@ -1188,10 +1032,8 @@ advisor_sso_apply()
 
 # _advisor_sso_file_changed <path> <content>
 #
-# True when writing <content> to <path> would change it, counting "should not
-# exist" as empty content. Restarting keystone on every commit would drop every
-# federated login in progress, so the comparison is the point, not an
-# optimisation.
+# True when writing <content> would change <path> ("should not exist" is empty
+# content). Not an optimisation: restarting keystone drops logins in progress.
 _advisor_sso_file_changed()
 {
     local path=$1 content=$2
@@ -1206,32 +1048,15 @@ _advisor_sso_file_changed()
 
 # advisor_enroll <server> <token-file> <version>
 #
-# The whole node-side install path: fetch the release, verify it against the
-# image's public key, install the agent, then enrol this cluster.
-#
-# The token is read from a file rather than an argument. A pairing token on a
-# command line is visible in ps to every user on the box for as long as the
-# process runs, and this function is exactly the place that would otherwise
-# leak it.
-#
-# Every step fails closed. A partial install -- a verified binary with no
-# identity, or an identity with no binary -- is worse than a clean failure the
-# operator can retry.
+# Fetch the release, verify it against the image's key, install the agent, enrol
+# this cluster. The token comes from a file: on a command line it is visible in
+# ps. Every step fails closed -- a half-install is worse than a clean failure.
 # advisor_trust_ca <ca-file>
 #
-# Installs the Advisor's CA into this node's system trust store.
-#
-# Enrolment fetches the release over HTTPS with curl and then runs the agent,
-# which talks to the same endpoint through Go's TLS. Both read the system store
-# and neither takes a CA path, so an Advisor serving its own certificate -- the
-# normal case offline, where there is no public CA to lean on -- fails the fetch
-# with "self-signed certificate" and nothing after it runs. Passing -k instead
-# is not an option: the pairing token is a bearer credential on that request.
-#
-# Deliberately not migrated across a firmware upgrade. This is enrolment-time
-# trust; the tunnel's own trust is the enrollment CA the agent pins from its
-# identity directory, which is migrated. Verified on hardware: after an upgrade
-# that dropped this anchor, the agent reconnected on its own.
+# Installs the Advisor's CA into the system trust store: curl and the agent
+# both read it, neither takes a CA path, and -k is not an option with a bearer
+# token on the request. Not migrated across a firmware upgrade -- this is
+# enrolment-time trust; the tunnel pins the enrollment CA, which is migrated.
 advisor_trust_ca()
 {
     local ca=$1
@@ -1259,15 +1084,9 @@ advisor_trust_ca()
 
 # advisor_console_trust <ca-file>
 #
-# Makes this node accept console certificates the Advisor mints.
-#
-# A console session is piped to this node's own sshd, so sshd is what decides
-# whether a certificate is good -- the Advisor only signs. Nothing pushes the
-# CA here: the Advisor prints it at install time and an operator installs it,
-# which is the same shape as trusting its TLS CA at enrolment.
-#
-# Both files are in config_advisor.cpp's migrate list, so once installed they
-# survive a firmware upgrade without being reinstalled.
+# Makes sshd accept the console certificates the Advisor mints. The CA arrives
+# with the identity (agent 0.4.14), so enrolment is the only caller. Both files
+# are migrated, so they survive a firmware upgrade.
 advisor_console_trust()
 {
     local ca=$1
@@ -1316,6 +1135,353 @@ EOF
     }
     echo "This node now accepts Advisor console sessions as $ADVISOR_CONSOLE_ACCOUNT."
     return 0
+}
+
+# _advisor_token_decode <token-string> <out-dir>
+#
+# Splits a pasted token into url, secret, ca and console files. python, not
+# cut: the token is gzipped JSON behind "cubeadv1.", a format not a delimiter.
+_advisor_token_decode()
+{
+    local token=$1 dir=$2
+
+    ADV_TOKEN="$token" ADV_DIR="$dir" python3 -c '
+import base64, gzip, json, os, sys
+
+tok = "".join(os.environ["ADV_TOKEN"].split())
+prefix = "cubeadv1."
+if not tok.startswith(prefix):
+    sys.stderr.write("not an enrolment token\n"); sys.exit(1)
+try:
+    body = tok[len(prefix):]
+    raw = gzip.decompress(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    e = json.loads(raw)
+except Exception:
+    sys.stderr.write("the token is malformed\n"); sys.exit(1)
+
+url, secret = e.get("url", ""), e.get("s", "")
+if not url.startswith("https://") or not secret:
+    sys.stderr.write("the token carries no https URL or no secret\n"); sys.exit(1)
+
+d = os.environ["ADV_DIR"]
+def put(name, text, mode):
+    path = os.path.join(d, name)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+
+put("url", url, 0o600)
+put("secret", secret, 0o600)
+put("console", "true" if e.get("console") else "false", 0o600)
+# The action level and consent the issuer chose. Seeds this node; the files
+# on the node stay authoritative and level_set / consent_set still override.
+for key in ("level", "consent"):
+    if e.get(key):
+        put(key, str(e[key]), 0o600)
+# Optional: a deployment behind a real terminator is covered by the system
+# store and the token says nothing here.
+if e.get("serverCa"):
+    put("ca", e["serverCa"], 0o600)
+' || return 1
+}
+
+# advisor_enroll_token <token-file> [<version>] [force]
+#
+# Enrol from what the operator pasted: the token names the Advisor, carries the
+# certificate to verify it and holds the secret, and the node asserts its own
+# cluster id (cube-ai-advisor#242). A blank <version> asks the Advisor which
+# release is current -- the token cannot name one, it is issued earlier.
+# advisor_current_release <server> <token-file>
+#
+# GET /api/v1/releases/current, authenticated by the pairing token, which
+# asking does not spend.
+advisor_current_release()
+{
+    local server=$1 token_file=$2 out
+
+    out=$(curl -fsS --max-time 30 \
+            -H "Authorization: Bearer $(cat "$token_file")" \
+            "$server/api/v1/releases/current") || return 1
+    printf '%s' "$out" | python3 -c 'import json,sys; v=json.load(sys.stdin).get("version",""); print(v) if v else sys.exit(1)'
+}
+
+# advisor_fingerprint [<fingerprint>]
+#
+# This node's identity fingerprint in the eleven numbered groups the Advisor
+# shows, to read out group by group or paste into its compare box.
+advisor_fingerprint()
+{
+    local fp=$1
+
+    if [ -z "$fp" ] ; then
+        if [ ! -x /usr/local/bin/cube-advisor-agent ] ; then
+            echo "Error: the Advisor agent is not installed on this node" >&2
+            return 1
+        fi
+        fp=$(/usr/local/bin/cube-advisor-agent status 2>/dev/null | awk '/^Fingerprint:/ { sub(/^Fingerprint: */, "") ; print ; exit }')
+        if [ -z "$fp" ] ; then
+            echo "Error: this node holds no Advisor identity; enrol first" >&2
+            return 1
+        fi
+    fi
+    FP="$fp" python3 -c '
+import os
+fp = os.environ["FP"].strip()
+body = fp[len("SHA256:"):] if fp.startswith("SHA256:") else fp
+print("Fingerprint: " + fp)
+groups = [body[i:i+4] for i in range(0, len(body), 4)]
+print("  " + "  ".join("%d %s" % (n + 1, g) for n, g in enumerate(groups)))
+'
+}
+
+# advisor_url
+#
+# The Advisor this node enrolled with. Nodes enrolled before the URL was
+# recorded reach the same host the tunnel dials, on the default HTTPS port.
+advisor_url()
+{
+    if [ -r "$ADVISOR_URL_FILE" ] ; then
+        cat "$ADVISOR_URL_FILE"
+        return 0
+    fi
+    local host
+    host=$(cut -d: -f1 "$ADVISOR_IDENTITY_DIR/server" 2>/dev/null)
+    [ -n "$host" ] || return 1
+    echo "https://$host"
+}
+
+# advisor_installed_version -- the agent binary on this node, or nothing.
+advisor_installed_version()
+{
+    [ -x /usr/local/bin/cube-advisor-agent ] || return 1
+    /usr/local/bin/cube-advisor-agent version 2>/dev/null | awk '{ print $2 ; exit }'
+}
+
+# advisor_update_notice
+#
+# One line when the Advisor's current release is newer than what runs here.
+# Read by `advisor status` and the health check; changes nothing.
+advisor_update_notice()
+{
+    local installed current
+    installed=$(advisor_installed_version) || return 0
+    current=$(cat "$ADVISOR_CURRENT_RELEASE_FILE" 2>/dev/null)
+    [ -n "$current" ] && [ "$current" != "$installed" ] || return 0
+    echo "A newer Advisor agent is available: $current (this node runs $installed). Run 'advisor upgrade' to install it."
+}
+
+# advisor_upgrade [force]
+#
+# Installs the Advisor's current release on every enrolled node: each fetches
+# over its own identity on the tunnel port (no token, same fingerprint),
+# verifies against the image's key, installs, restarts.
+advisor_upgrade()
+{
+    local force=${1:-} node rc=0 any=0
+
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        remote_run $node stat "$ADVISOR_AGENT_CERT" >/dev/null 2>&1 || continue
+        any=1
+        echo "== $node"
+        remote_run $node "$HEX_SDK advisor_upgrade_node $force" 2>&1 | sed 's/^/   /' || rc=1
+    done
+    if [ $any -eq 0 ] ; then
+        echo "Error: no node of this cluster is enrolled; run 'advisor enroll' first" >&2
+        return 1
+    fi
+    return $rc
+}
+
+# advisor_upgrade_node [force] -- this node only; advisor_upgrade fans it out.
+advisor_upgrade_node()
+{
+    local force=${1:-} base installed current arch artifact tmp out ca
+
+    if [ ! -r "$ADVISOR_AGENT_CERT" ] || [ ! -r "$ADVISOR_AGENT_KEY" ] ; then
+        echo "Error: this node is not enrolled; run 'advisor enroll' first" >&2
+        return 1
+    fi
+    # The tunnel address: the listener that verifies our certificate, whose
+    # own certificate is signed by the enrolment CA the agent pinned at enrol.
+    base="https://$(cat "$ADVISOR_IDENTITY_DIR/server" 2>/dev/null)"
+    ca="$ADVISOR_IDENTITY_DIR/enrollment-ca.crt"
+    [ "$base" != "https://" ] && [ -r "$ca" ] || {
+        echo "Error: this node has no tunnel address or enrolment CA on record; re-enrol" >&2
+        return 1
+    }
+    installed=$(advisor_installed_version)
+
+    out=$(curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+            "$base/api/v1/releases/current") || {
+        echo "Error: the Advisor at $base did not name a current release" >&2
+        return 1
+    }
+    current=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))')
+    if [ -z "$current" ] ; then
+        echo "Error: the Advisor named no release" >&2
+        return 1
+    fi
+    if [ "$current" = "$installed" ] && [ "$force" != force ] ; then
+        echo "Already current: $installed"
+        return 0
+    fi
+
+    arch=$(advisor_agent_arch) || return 1
+    artifact="cube-advisor-agent_linux_$arch"
+    tmp=$(mktemp -d /run/advisor-release.XXXXXX) || return 1
+    trap 'rm -rf "$tmp"' RETURN
+
+    local f
+    for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$artifact" ; do
+        curl -fsS --max-time 120 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+             -o "$tmp/$f" "$base/api/v1/releases/$current/$f" || {
+            echo "Error: cannot fetch $f for $current from $base" >&2
+            return 1
+        }
+    done
+
+    # Verification before anything is installed or executed, as at enrol.
+    advisor_install_release "$tmp" "$artifact" /usr/local/bin/cube-advisor-agent || return 1
+    advisor_agent_service_start
+    echo "Upgraded the Advisor agent: ${installed:-none} -> $current"
+}
+
+# advisor_enroll_peers [force]
+#
+# From an enrolled node: fetch a node token over this node's certificate and
+# enrol every node that has no identity yet. Each peer gets its own identity
+# and prints its own fingerprint to verify; console access follows this node.
+advisor_enroll_peers()
+{
+    local force=${1:-} base ca console=false tok node rc=0 todo=()
+
+    if [ ! -r "$ADVISOR_AGENT_CERT" ] || [ ! -r "$ADVISOR_AGENT_KEY" ] ; then
+        echo "Error: this node is not enrolled; paste a token from the Advisor to enrol it first" >&2
+        return 1
+    fi
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        [ "$node" = "$HOSTNAME" ] && continue
+        if [ -n "$force" ] || ! remote_run $node stat "$ADVISOR_AGENT_CERT" >/dev/null 2>&1 ; then
+            todo+=("$node")
+        fi
+    done
+    if [ "${#todo[@]}" -eq 0 ] ; then
+        echo "Every node of this cluster is already enrolled."
+        return 0
+    fi
+
+    base="https://$(cat "$ADVISOR_IDENTITY_DIR/server" 2>/dev/null)"
+    ca="$ADVISOR_IDENTITY_DIR/enrollment-ca.crt"
+    [ "$base" != "https://" ] && [ -r "$ca" ] || {
+        echo "Error: this node has no tunnel address or enrolment CA on record; re-enrol" >&2
+        return 1
+    }
+    [ -r "$ADVISOR_CONSOLE_CA" ] && console=true
+    tok=$(curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+            -H 'Content-Type: application/json' -d "{\"console_access\":$console}" \
+            "$base/api/v1/node-tokens" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') || {
+        echo "Error: the Advisor refused to issue a node token to this node (is its identity verified?)" >&2
+        return 1
+    }
+
+    echo "Enrolling ${#todo[@]} node(s): ${todo[*]}"
+    for node in "${todo[@]}" ; do
+        echo "== $node"
+        # The token travels over the cluster's own ssh and lands in a root-only
+        # file the peer removes when done; never an argument, never in ps.
+        if ! printf '%s\n' "$tok" | remote_run $node "umask 077 && mkdir -p /run/advisor-peer && cat > /run/advisor-peer/token" ; then
+            echo "   Error: could not deliver the token to $node" >&2 ; rc=1 ; continue
+        fi
+        remote_run $node "$HEX_SDK advisor_enroll_token /run/advisor-peer/token '' $force; rc=\$?; rm -f /run/advisor-peer/token; exit \$rc" 2>&1 | sed 's/^/   /' || rc=1
+    done
+    [ $rc -eq 0 ] && echo "Verify each new node on the Advisor's enrolment page: its fingerprint is printed above."
+    return $rc
+}
+
+advisor_enroll_token()
+{
+    local token_file=$1 version=${2:-} force=${3:-} dir rc
+
+    if [ -z "$token_file" ] ; then
+        echo "Error: advisor_enroll_token: usage <token-file> [<version>] [force]" >&2
+        return 1
+    fi
+    if [ ! -r "$token_file" ] ; then
+        echo "Error: cannot read the token file: $token_file" >&2
+        return 1
+    fi
+
+    dir=$(mktemp -d /run/advisor-token.XXXXXX) || return 1
+    # The secret and the certificate land here; do not leave either behind.
+    trap 'rm -rf "$dir"' RETURN
+
+    if ! _advisor_token_decode "$(cat "$token_file")" "$dir" ; then
+        echo "Error: that does not look like an Advisor enrolment token" >&2
+        return 1
+    fi
+
+    local server ca_file=""
+    server=$(cat "$dir/url")
+    [ -r "$dir/ca" ] && ca_file="$dir/ca"
+    _advisor_write_file "$ADVISOR_URL_FILE" "$server" || return 1
+
+    # The token names the service, not the agent: which build pairs with the
+    # service changes after the token is issued, so the service is asked.
+    if [ -z "$version" ] ; then
+        advisor_trust_ca "$ca_file" || return 1
+        version=$(advisor_current_release "$server" "$dir/secret") || {
+            echo "Error: the Advisor did not name an agent release; pass a version explicitly" >&2
+            return 1
+        }
+        echo "Advisor's current agent release: $version"
+    fi
+
+    # The issuer's action level and consent are written before the agent is
+    # started, so the one restart in advisor_enroll picks them up — level_set
+    # and consent_set each restart the agent, and three restarts in a row is
+    # what made enrolment look stuck. Validated the same way those commands do.
+    local level consent
+    if [ -r "$dir/level" ] ; then
+        level=$(cat "$dir/level")
+        case "$level" in
+            observe|operate|internal) _advisor_write_file "$ADVISOR_LEVEL_FILE" "$level" || return 1 ;;
+            *) echo "Error: the token names an unknown action level '$level'" >&2 ; return 1 ;;
+        esac
+    fi
+    if [ -r "$dir/consent" ] ; then
+        consent=$(cat "$dir/consent")
+        case "$consent" in
+            always|destructive|never) _advisor_write_file "$ADVISOR_CONSENT_FILE" "$consent" || return 1 ;;
+            *) echo "Error: the token names an unknown consent setting '$consent'" >&2 ; return 1 ;;
+        esac
+    fi
+
+    advisor_enroll "$server" "$dir/secret" "$version" "$ca_file" "$force"
+    rc=$?
+    [ $rc -eq 0 ] || return $rc
+
+    # The agent writes the dials the Advisor actually serves this cluster at
+    # (its record, not the token) once it has enrolled; report those.
+    level=$(head -n1 "$ADVISOR_LEVEL_FILE" 2>/dev/null | tr -d '[:space:]')
+    consent=$(head -n1 "$ADVISOR_CONSENT_FILE" 2>/dev/null | tr -d '[:space:]')
+    [ -n "$level" ]   && echo "action level: $level"
+    [ -n "$consent" ] && echo "consent: $consent"
+
+    # Console access was decided when the token was issued; say what this node
+    # was granted rather than leaving the operator to infer it. The Advisor
+    # hands its console CA back with the identity (agent 0.4.14); a node that
+    # was granted console access trusts it here, so nothing is carried by hand.
+    if [ "$(cat "$dir/console")" = true ] ; then
+        if [ -r "$ADVISOR_IDENTITY_DIR/console-ca.pub" ] ; then
+            advisor_console_trust "$ADVISOR_IDENTITY_DIR/console-ca.pub" || \
+                echo "Warning: console access was granted but this node could not trust the Advisor's console CA; see the journal, then re-run enroll" >&2
+        else
+            echo "console access: granted, but this Advisor does not send its console CA (it predates agent 0.4.14); upgrade the Advisor and re-run enroll" >&2
+        fi
+        echo "console access: enabled for this cluster"
+    else
+        echo "console access: not granted"
+    fi
 }
 
 advisor_enroll()
@@ -1371,12 +1537,9 @@ advisor_enroll()
     # own public key says otherwise.
     advisor_install_release "$tmp" "$artifact" /usr/local/bin/cube-advisor-agent || return 1
 
-    # An Advisor that has been rebuilt signs with a new enrollment CA, which
-    # leaves every node holding an identity signed by one that no longer
-    # exists -- valid-looking, and useless. The agent refuses to replace an
-    # existing identity without being told to, correctly, so forcing has to be
-    # something the operator asks for rather than a retry that silently
-    # discards a working identity.
+    # A rebuilt Advisor signs with a new CA, leaving every identity
+    # valid-looking and useless. The agent will not replace one unasked, so
+    # forcing stays the operator's word, never a retry.
     local force_arg=""
     [ -n "$force" ] && force_arg="-force"
     /usr/local/bin/cube-advisor-agent enroll \
@@ -1384,15 +1547,14 @@ advisor_enroll()
     rc=$?
     case $rc in
         0)
+            # What the operator reads to the Advisor's screen, in the groups it shows.
+            advisor_fingerprint
             advisor_agent_service_start
             advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the cube-cos target by hand" >&2
-            # The agent has just been told how its consoles are addressed, and
-            # nothing else will notice for a while: the watch that picks this
-            # up is started by the advisor module's commit, which has not run
-            # yet, and it triggers on a change rather than on a file that is
-            # already there. Without this, a freshly enrolled cluster waits for
-            # the Advisor to re-address something before a federated login
-            # works.
+            # Carries a report this node already has (a re-enrolment). A first
+            # enrolment has none -- the Advisor tells only an agent it admits,
+            # and admission waits for the fingerprint to be verified;
+            # health_advisor_check picks that one up.
             advisor_sso_report_apply || \
                 echo "Warning: could not apply the Advisor's console origins; run 'hex_cli -c advisor sso_origins' to check" >&2
             # CMP may already be installed; if so its ingress is reachable

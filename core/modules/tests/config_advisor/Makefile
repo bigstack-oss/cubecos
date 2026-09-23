@@ -6,7 +6,7 @@ hex_config_LIBS = $(PROJ_LIBDIR)/libcube_sdk.a
 
 TESTS_EXTRA_PROGRAMS = hex_config
 
-hex_config_MODULES = config_advisor.o
+hex_config_MODULES = config_dummies.o config_advisor.o
 
 CPPFLAGS += -I$(COREDIR)/modules -I$(TOP_SRCDIR)/hex/src/modules/include -I$(COREDIR)/cube_sdk_library/include
 

@@ -28,37 +28,15 @@
 
 #include "advisor_key.h"
 
-// Verification of Cube AI Advisor agent releases.
+// Verification of Cube AI Advisor agent releases (ADR 0003).
 //
-// The agent is released by Bigstack as signed per-arch artifacts and must be
-// verified before a node executes one. Two decisions from ADR 0003 shape what
-// is here:
+// Here rather than in the agent's repository, so a verifier and the artifact it
+// verifies do not share a build pipeline; and compiled in rather than read from
+// a file, the way hex holds the licence key -- a key file is replaceable by any
+// root process and the failure would be silent.
 //
-//   * This lives in cubecos, not in the agent's own repository. A verifier must
-//     not share a build pipeline with the artifact it verifies, or one
-//     compromised pipeline produces both.
-//   * The trust anchor belongs to the OS, and is compiled in rather than read
-//     from a file -- the same mechanism hex uses for the licence key. A key
-//     file on a node can be replaced by any root process, and the failure would
-//     be silent: verification would still report success, against the
-//     attacker's key. Compiled in, an attacker has to replace hex_config, which
-//     is part of the signed OS image.
-//
-// Verification is here rather than in shell for the same reason it is done this
-// way for licences: key and check belong in one place. A shell verifier reads a
-// key the image protects, but lives in a file under /usr/lib/hex_sdk that root
-// can edit -- so the check could be removed while the key stayed safe.
-//
-// advisor_pubkey still prints the key, deliberately. The manifest format is
-// sha256sum's own, so a customer who does not want to trust this binary can
-// extract the key and run the two standard commands themselves:
-//
-//     hex_config advisor_pubkey > release.pub
-//     openssl dgst -sha256 -verify release.pub -signature manifest.txt.sig manifest.txt
-//     sha256sum -c manifest.txt
-//
-// That independent path is a property of the published format, not of what this
-// verifier is written in, and it is worth keeping either way.
+// advisor_pubkey prints the key on purpose: the manifest is in sha256sum's own
+// format, so a customer can repeat the check with openssl and sha256sum.
 
 static const char MANIFEST_NAME[]  = "manifest.txt";
 static const char SIGNATURE_NAME[] = "manifest.txt.sig";
@@ -68,13 +46,8 @@ static const char SIGNATURE_NAME[] = "manifest.txt.sig";
 static const size_t MAX_MANIFEST_SIZE  = 1024 * 1024;
 static const size_t MAX_SIGNATURE_SIZE = 16 * 1024;
 
-// Opens name inside dirFd for reading.
-//
-// openat rather than building a path, and O_NOFOLLOW rather than trusting the
-// name: a release directory entry that is a symlink would otherwise be read
-// through, and every check below would then describe a file somewhere else
-// entirely. The name is already constrained to a bare file name; this makes
-// escaping it impossible rather than merely rejected.
+// Opens name inside dirFd for reading. openat + O_NOFOLLOW: a symlinked entry
+// would otherwise make every check below describe a file somewhere else.
 static FILE *
 OpenAt(int dirFd, const std::string& name)
 {
@@ -289,12 +262,10 @@ ParseManifest(const std::string& text, std::vector<Entry> *out)
 }
 
 // VerifyRelease checks the release in dir, and -- when requiredArtifact is not
-// empty -- that the manifest lists that artifact.
+// empty -- that the manifest lists it.
 //
-// Order is load-bearing. The signature is checked FIRST, because the digest
-// list is only worth applying once we know Bigstack wrote it. Checking digests
-// first would mean deciding a file is "the right file" according to a list an
-// attacker may have supplied; the list is the thing being attacked.
+// Signature first: the digest list is only worth applying once we know Bigstack
+// wrote it. The list is the thing being attacked.
 static bool
 VerifyRelease(const std::string& dir, const std::string& requiredArtifact)
 {
@@ -340,13 +311,10 @@ VerifyRelease(const std::string& dir, const std::string& requiredArtifact)
 
     // 2. Are the artifacts the ones it describes?
     //
-    // A release is signed for every architecture at once, but an install fetches
-    // only the one this node runs, so naming an artifact means "is this one
-    // genuine" and the siblings are legitimately absent. Naming none means "is
-    // this whole release intact" -- offline media, an audit -- and then every
-    // entry must be there. The required artifact is tracked rather than merely
-    // looked up: it is the file about to be executed, so being listed is not
-    // enough, it has to have been digested here.
+    // Naming an artifact asks "is this one genuine" (the siblings are other
+    // architectures, legitimately absent); naming none asks "is this release
+    // intact" and every entry must be there. The required one is tracked, not
+    // just looked up: it is the file about to be executed.
     bool requiredDigested = false;
     for (size_t i = 0; i < entries.size(); ++i) {
         std::string actual;
@@ -461,11 +429,6 @@ VerifyReleaseMain(int argc, char **argv)
 // The unit hex_config runs; shipped with the image, started only once enrolled.
 #define ADVISOR_AGENT_SERVICE    "cube-advisor-agent"
 
-// Watches the agent's report so a console the Advisor re-addressed is trusted
-// without waiting for the next commit. Tied to the agent: it is the agent that
-// writes what this watches.
-#define ADVISOR_SSO_WATCH        "cube-advisor-sso.path"
-
 // Enrolled: this node holds the identity the Advisor issued it.
 static bool
 IsEnrolled(void)
@@ -505,21 +468,11 @@ CommitCheck(bool modified, int dryLevel)
     return modified | s_bCubeModified;
 }
 
-// Runs the agent's service, the way every other service here is run: started by
-// hex_config, never enabled, so systemd has no second uncoordinated opinion
-// about when it should be up.
+// Runs the agent's service -- started by hex_config, never enabled -- and seeds
+// this node's allowlist, which only the node someone enrolled on had before.
 //
-// Also seeds this node's allowlist. The agent runs on every node and each one
-// reads its own file, but only the node an operator typed "advisor enroll" on
-// ran the seeding -- so every other node had no allowlist and refused every
-// target. This commit runs on every node, so a node that was down or was not
-// in the cluster at enrolment gets its allowlist on its next commit.
-//
-// Whether it runs is the identity, and only the identity. Not the role -- a
-// node holds an identity because someone enrolled it, and any node may be
-// enrolled; the role check above is "is this node configured yet", a different
-// question. Not the binary either: an enrolled node whose binary will not run
-// fails to start and says so in the journal, which "advisor status" points at.
+// Whether it runs is the identity and nothing else: not the role (any node may
+// be enrolled), not the binary (a missing one fails the start and says so).
 static bool
 Commit(bool modified, int dryLevel)
 {
@@ -529,34 +482,24 @@ Commit(bool modified, int dryLevel)
         return true;
 
     SystemdCommitService(IsEnrolled(), ADVISOR_AGENT_SERVICE);
-    SystemdCommitService(IsEnrolled(), ADVISOR_SSO_WATCH);
 
-    // Seeding is not reconciling, and the difference is the whole point.
-    // advisor_targets_init writes only when there is no file at all: a node
-    // with no allowlist gets one, a node that has one is left exactly as the
-    // operator left it. Nothing here may add, remove or restore an entry in an
-    // existing file -- an operator who ran "advisor target_unset cube-cmp"
-    // meant it, and a commit that quietly put it back would make target_unset
-    // useless. hex_sdk only auto-loads sdk_<MOD>*.sh, so this goes through
-    // hex_sdk itself rather than being called from another module's helper.
+    // Seeding, not reconciling: advisor_targets_init writes only when there is
+    // no file at all. Restoring an entry an operator unset would make
+    // target_unset useless. Through hex_sdk, which auto-loads sdk_advisor.sh.
     HexSpawn(0, HEX_SDK, "advisor_targets_init", NULL);
 
-    // Rebuilds what Skyline's WebSSO needs from the recorded console origins:
-    // keystone's extra trusted_dashboard entries and mellon's redirect
-    // domains. Both are derived, so they are not migrated -- this is what
-    // puts them back on the first commit of a new firmware slot, from the
-    // record that is. Reconciling, unlike the allowlist above: these two
-    // files are this module's output, not an operator's file.
-    //
-    // A node with nothing recorded writes nothing, which is every cluster
-    // with no Advisor and every Advisor whose consoles were never declared.
+    // Rebuilds keystone's trusted_dashboard entries and mellon's redirect
+    // domains from the recorded origins. Derived, so not migrated: this is what
+    // puts them back on a new firmware slot. Reconciling, unlike the allowlist
+    // above -- these are this module's files, not an operator's. Nothing
+    // recorded writes nothing.
     HexSpawn(0, HEX_SDK, "advisor_sso_apply", NULL);
 
     // And reconciles from the Advisor's own report, on a node that holds one.
-    // The watch that normally picks it up fires on a change; a report already
-    // written when the watch started -- which is every freshly enrolled node,
-    // and every node whose record went missing -- would otherwise never be
-    // acted on. advisor_sso_report_apply does nothing on a node with no
+    // The origins only change when the Advisor is installed with other
+    // addresses, and that reaches a node through `advisor enroll`, which
+    // applies the report then; this is the belt for a record that went
+    // missing. advisor_sso_report_apply does nothing on a node with no
     // identity, so this is a no-op everywhere the question does not arise.
     HexSpawn(0, HEX_SDK, "advisor_sso_report_apply", NULL);
     return true;
@@ -583,13 +526,10 @@ CONFIG_MIGRATE(advisor, ADVISOR_IDENTITY_DIR);
 CONFIG_MIGRATE(advisor, ADVISOR_AGENT_BIN);
 // The operator's allowlist of what the agent may dial.
 CONFIG_MIGRATE(advisor, ADVISOR_TARGETS_FILE);
-// Which Advisor console origins keystone trusts for WebSSO. Nothing on the
-// node can work this out again -- it is how the Advisor spells its origins,
-// not anything about this cluster. It is refreshed on the next connect, so
-// carrying it across an upgrade buys the window between the new slot booting
-// and the agent getting back -- exactly when a federated login would otherwise
-// start failing for no reason anybody could see. The two files derived from it
-// are rebuilt at the next commit.
+// Which Advisor console origins keystone trusts for WebSSO -- how the Advisor
+// spells its origins, which the node cannot work out again. Carrying it covers
+// the window between the new slot booting and the agent reconnecting. The two
+// files derived from it are rebuilt at the next commit.
 CONFIG_MIGRATE(advisor, ADVISOR_SSO_REPORTED_FILE);
 // The console trust anchor and the sshd drop-in that loads it, written by the
 // agent at enrolment. rsync skips a path that is not there, so registering them

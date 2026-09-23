@@ -1,28 +1,15 @@
 #!/bin/bash
 #
 # Unit test for advisor_targets_discover in ../modules/sdk_advisor.sh -- the
-# helper that publishes the set of web targets a cluster actually has to every
-# node in it.
+# helper that publishes the set of web targets a cluster actually has.
 #
-# The agent runs on every node and dials from every node, but only a node
-# holding the app framework's kubeconfig can see what is installed. So what
-# matters here is the fan-out: every node in CUBE_NODE_LIST_HOSTNAMES must be
-# given the set, not just the one this ran on -- that asymmetry is the bug this
-# replaced. Only the set crosses a node boundary; no node writes another node's
-# allowlist.
-#
-# And what goes in the set. The ingress address cannot answer "is CMP
-# installed": the app framework creates the ingress during its own install,
-# which happens before CMP is installed, so an address is a fact about the
-# framework and says nothing about the portal. Each name is declared only when
-# its own Helm release is deployed, and the cases below are the three states a
-# real cluster passes through: framework only, framework and CMP, neither.
-#
-# Also: a cluster with no ingress address must gain nothing, a cluster that
-# never enrolled must not have its local allowlist created as a side effect,
-# repeat runs must be harmless, and a locally unset entry must come back on
-# the next discover -- that last one is the documented, deliberate exception
-# to the never-repair rule (see the comment on advisor_targets_discover).
+# What is asserted: every node in CUBE_NODE_LIST_HOSTNAMES is given the set (the
+# asymmetry this replaced), presence comes from each target's Helm release and
+# not from the ingress address (which predates CMP's install), and the three
+# states a real cluster passes through. Plus: no ingress gains nothing, a
+# cluster that never enrolled gains no local allowlist, repeat runs are
+# harmless, and a locally unset entry does come back -- the documented
+# exception to never-repair.
 #
 # Self-contained: extracts only the functions under test, and stubs $HEX_SDK
 # and remote_run so this needs no app framework, no helm and no SSH.

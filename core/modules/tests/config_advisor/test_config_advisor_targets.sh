@@ -98,8 +98,8 @@ expected=$'cube-cos 127.0.0.1:8080\nconsole 10.0.0.5:9090'
 
 # ---- target_set: wrong arity is refused before the helper is ever called ----
 rm -f "$CALL_LOG"
-"$V" target_set onlyname >/dev/null 2>&1
-rc=$?
+rc=0
+"$V" target_set onlyname >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || fail "target_set with one argument did not return CLI_INVALID_ARGS (got $rc)"
 [ -e "$CALL_LOG" ] && fail "target_set with the wrong arity still invoked the helper"
 
@@ -112,8 +112,8 @@ rm -f "$CALL_LOG"
 
 # ---- target_unset: wrong arity is refused before the helper is called ----
 rm -f "$CALL_LOG"
-"$V" target_unset >/dev/null 2>&1
-rc=$?
+rc=0
+"$V" target_unset >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || fail "target_unset with no argument did not return CLI_INVALID_ARGS (got $rc)"
 [ -e "$CALL_LOG" ] && fail "target_unset with the wrong arity still invoked the helper"
 

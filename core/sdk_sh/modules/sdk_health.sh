@@ -432,29 +432,23 @@ health_license_check()
 # advisor_agent_service_start's (sdk_advisor.sh); this is read-only.
 ADVISOR_HEALTH_CERT=${ADVISOR_HEALTH_CERT:-/etc/cube/advisor-agent/agent.crt}
 ADVISOR_HEALTH_BIN=${ADVISOR_HEALTH_BIN:-/usr/local/bin/cube-advisor-agent}
+ADVISOR_HEALTH_CURRENT=${ADVISOR_HEALTH_CURRENT:-/etc/cube/advisor-agent/current-release}
 
 health_advisor_report()
 {
     _health_report ${FUNCNAME[0]}
 }
 
-# The agent runs on every node, not only control nodes -- a compute or storage
-# node with its tunnel down loses its own console and web target just the same
-# -- so this fans out over CUBE_NODE_LIST_HOSTNAMES the way health_rbd_target_check
-# does, rather than looking only at the node cluster check happens to run on.
+# Fans out over CUBE_NODE_LIST_HOSTNAMES like health_rbd_target_check: the agent
+# runs on every node, not only control nodes.
 #
-# Not enrolled is the normal case (no cluster is required to roll into the
-# Advisor), so no node holding an identity is healthy, not a fault -- same
-# precedent as fc_link's "no FC HBA installed". A node with no identity is
-# simply skipped, the same way health_rbd_target_check skips a node with no
-# OSDs: nothing here is enrolment's business to flag. Enrolled-but-inactive is
-# the fault this exists to catch, naming the affected node(s) so an operator
-# does not have to go hunting. Enrolled with the binary itself missing is a
-# separate code, also naming the node(s) -- re-enrolment, not a local repair,
-# is what fixes that, and it takes priority when a run has both.
+# No node enrolled is healthy, not a fault (fc_link's "no FC HBA" precedent), and
+# a node without an identity is skipped. The faults are enrolled-but-inactive and
+# enrolled-with-no-binary, each naming its nodes; the second takes priority,
+# since only re-enrolment fixes it.
 health_advisor_check()
 {
-    local node enrolled=() down=() missing=()
+    local node enrolled=() down=() missing=() outdated=() unapplied=() current=""
 
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
         remote_run $node stat "$ADVISOR_HEALTH_CERT" >/dev/null 2>&1 || continue
@@ -463,8 +457,35 @@ health_advisor_check()
             missing+=("$node")
         elif ! is_remote_running $node "$ADVISOR_AGENT_UNIT_NAME" ; then
             down+=("$node")
+        else
+            # Not a fault: the Advisor named a newer agent than this node runs.
+            # Said in the description so the operator hears it from cluster
+            # check; nothing is changed for them (advisor upgrade does that).
+            local want have
+            want=$(remote_run $node cat "$ADVISOR_HEALTH_CURRENT" 2>/dev/null | tr -d '[:space:]')
+            have=$(remote_run $node "$ADVISOR_HEALTH_BIN" version 2>/dev/null | awk '{ print $2 ; exit }')
+            if [ -n "$want" ] && [ -n "$have" ] && [ "$want" != "$have" ] ; then
+                outdated+=("$node")
+                current=$want
+            fi
+        fi
+
+        # The Advisor tells the agent its console origins on the first connect
+        # it admits -- after a human verified this node, so long after
+        # `advisor enroll` returned, with nothing else watching. An applied
+        # record that differs is Skyline's federated login quietly refusing
+        # whichever control node answers. An empty report means "not told
+        # yet", never "withdraw every origin".
+        local report applied
+        report=$(remote_run $node "$HEX_SDK advisor_sso_report_read" 2>/dev/null)
+        if [ -n "$report" ] ; then
+            applied=$(remote_run $node cat "$ADVISOR_SSO_REPORTED_FILE" 2>/dev/null)
+            [ "$report" = "$applied" ] || unapplied+=("$node")
         fi
     done
+    if [ "${#outdated[@]}" -gt 0 ] ; then
+        DESCRIPTION="agent $current available on: ${outdated[*]} (advisor upgrade)"
+    fi
 
     if [ "${#enrolled[@]}" -eq 0 ] ; then
         DESCRIPTION="not enrolled"
@@ -479,6 +500,9 @@ health_advisor_check()
         ERR_CODE=1
         ERR_MSG="agent not running on: ${down[*]}"
         ERR_LOG="journalctl -u $ADVISOR_AGENT_UNIT_NAME"
+    elif [ "${#unapplied[@]}" -gt 0 ] ; then
+        ERR_CODE=3
+        ERR_MSG="console origins reported but not applied from: ${unapplied[*]}"
     fi
 
     _health_fail_log
@@ -491,26 +515,29 @@ health_advisor_check()
 # _health_clock_auto_repair for the same delegation.
 _health_advisor_auto_repair()
 {
-    if [ "$ERR_CODE" == "1" ] ; then
+    if [ "$ERR_CODE" == "1" ] || [ "$ERR_CODE" == "3" ] ; then
         health_advisor_repair
     fi
 }
 
-# Restarts the tunnel on every node that needs it, not just the one this runs
-# on -- hex_config already owns the unit going forward, this only kicks it
-# back up. Routed through $HEX_SDK on the remote node -- hex_sdk only
-# auto-loads sdk_<MOD>*.sh for the module it was invoked as, so calling
-# advisor_agent_service_start directly (bare, or via remote_systemd_restart,
-# which knows only "systemctl restart" and nothing of the unit file / enable
-# invariants advisor_agent_service_start already encodes) would either no-op
-# or duplicate that knowledge a second place. A node missing the binary is left
-# alone -- restarting cannot install it.
+# Restarts the tunnel on every node that needs it, through $HEX_SDK on that node:
+# hex_sdk auto-loads sdk_<MOD>*.sh, and advisor_agent_service_start already holds
+# the unit-file and enable invariants. A node missing the binary is left alone.
 health_advisor_repair()
 {
-    local node
+    local node report applied
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
         remote_run $node stat "$ADVISOR_HEALTH_CERT" >/dev/null 2>&1 || continue
         remote_run $node test -x "$ADVISOR_HEALTH_BIN" >/dev/null 2>&1 || continue
+
+        # From the node the Advisor told -- the only one holding the report;
+        # advisor_sso_report_apply fans it out and rebuilds the derived files.
+        report=$(remote_run $node "$HEX_SDK advisor_sso_report_read" 2>/dev/null)
+        if [ -n "$report" ] ; then
+            applied=$(remote_run $node cat "$ADVISOR_SSO_REPORTED_FILE" 2>/dev/null)
+            [ "$report" = "$applied" ] || remote_run $node $HEX_SDK advisor_sso_report_apply
+        fi
+
         is_remote_running $node "$ADVISOR_AGENT_UNIT_NAME" && continue
         remote_run $node $HEX_SDK advisor_agent_service_start
     done

@@ -44,6 +44,7 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 SRV="advisor"
 eval "ERR_DESC_$SRV[1]='enrolled but agent not running'"
 eval "ERR_DESC_$SRV[2]='enrolled but agent binary missing'"
+eval "ERR_DESC_$SRV[3]='console origins reported but not applied'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="etcd"

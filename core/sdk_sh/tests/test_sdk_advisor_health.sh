@@ -1,28 +1,17 @@
 #!/bin/bash
 #
 # Unit test for health_advisor_check/report/repair/_auto_repair in
-# ../modules/sdk_health.sh -- the cluster-check entry that gives "cluster
-# check" visibility into the Cube AI Advisor agent, which it did not have
-# before.
+# ../modules/sdk_health.sh -- what "cluster check" says about the Advisor agent.
 #
-# The agent runs on every node in the cluster (not only control nodes, which
-# is where "cluster check" itself runs), so the check must fan out over
-# CUBE_NODE_LIST_HOSTNAMES rather than look only at the local node -- a
-# node-local check would be blind to every compute/storage node, which is
-# most of the fleet.
+# What is asserted: the check fans out over CUBE_NODE_LIST_HOSTNAMES (the agent
+# runs on every node, not only where cluster check does); no node enrolled stays
+# healthy; an identity whose agent is down is code 1, naming the node; an
+# identity whose binary is missing is code 2, also naming it, and the auto path
+# must not spend its retry budget on one only re-enrolment fixes.
 #
-# No node enrolled must stay healthy: a cluster that never rolled into the
-# Advisor is the normal case, not a fault. A node holding an identity whose
-# agent is not running is the fault this exists to catch, naming the node so
-# an operator does not have to go hunting. A node holding an identity whose
-# binary is missing is a distinct code, also naming the node: only
-# re-enrolment fixes that, so the auto path must never spend its retry budget
-# on it.
-#
-# Self-contained: extracts only the functions under test (plus the two small
-# framework helpers they call: _health_report and health_errcode_lookup), and
-# stubs _health_fail_log, remote_run and is_remote_running so this needs no
-# cluster and no SSH.
+# Self-contained: extracts only the functions under test (plus _health_report
+# and health_errcode_lookup) and stubs _health_fail_log, remote_run and
+# is_remote_running, so this needs no cluster and no SSH.
 # Run:  bash test_sdk_advisor_health.sh   (exit 0 = pass)
 #
 set -u

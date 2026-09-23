@@ -21,14 +21,9 @@ APPFW_RANCHER=${APPFW_RANCHER:-/usr/local/bin/rancher}
 
 # app_kubeconfig [framework]
 #
-# Fetches a kubeconfig for the app framework, prints its path, and leaves it to
-# the caller to remove. Credentials come from rancher -- which is where
-# app_framework_deploy gets its own -- because none are written to disk.
-#
-# The framework's name is read back rather than assumed: the installer chooses
-# it (the driver's installs are named "appfw", app_framework_deploy's own is
-# "app-framework"), so hardcoding either one breaks the other. Rancher's
-# built-in "local" cluster is never it.
+# Fetches a kubeconfig from rancher (no credentials are on disk), prints its
+# path, and leaves the caller to remove it. The framework name is read back
+# rather than assumed -- the installer chooses it -- and never "local".
 app_kubeconfig()
 {
     local fw=${1:-} kc
@@ -54,19 +49,12 @@ app_kubeconfig()
 
 # app_ingress_address
 #
-# Prints the app framework's ingress LoadBalancer address (what the CMP
-# portal and the app framework's Keycloak sit behind), or nothing with a
-# non-zero exit if there is none. app_framework_deploy creates this Service
-# as ingress-lb in the ingress-nginx namespace, but it has also been seen
-# live in kube-system -- so this looks it up by name across every
-# namespace instead of assuming one.
+# The ingress LoadBalancer address CMP and its Keycloak sit behind, or nothing
+# with a non-zero exit. Looked up by name across namespaces: ingress-lb has been
+# seen in both ingress-nginx and kube-system.
 #
-# Defensive throughout: no app framework, no kubeconfig, no kubectl, or a
-# kubectl that hangs must all come back as a clean "no address", never a
-# hang or an error on stderr. Only one node of a cluster holds the
-# kubeconfig, so "no kubeconfig" is the normal answer on most nodes, not a
-# fault -- hence the default below, which keeps this quiet even for a caller
-# running under set -u with the variable never set.
+# Defensive throughout -- no framework, no kubeconfig, no kubectl or a hanging
+# one all come back as a clean "no address". Most nodes have no kubeconfig.
 app_ingress_address()
 {
     local addr kubeconfig=${APPFW_KUBECONFIG:-}
@@ -84,14 +72,10 @@ app_ingress_address()
 
 # app_helm_release_deployed <release>
 #
-# True when <release> is a deployed Helm release on the app framework cluster.
-# A release is what "is this installed" actually means here: a namespace is
-# created early and stays behind after a removal, and an HTTP probe answers
-# "not yet" for everything that is still starting.
-#
-# Defensive the same way app_ingress_address is: no kubeconfig, no helm, or a
-# helm that hangs is a clean "no", never a hang or an error on stderr -- this
-# is on the path of installers that must not fail because of it.
+# True when <release> is a deployed Helm release. That is what "installed" means
+# here: a namespace outlives a removal, and an HTTP probe says "not yet" for
+# anything still starting. Defensive like app_ingress_address -- this is on the
+# installers' path and must not fail them.
 app_helm_release_deployed()
 {
     local release=$1 kubeconfig=${APPFW_KUBECONFIG:-} out

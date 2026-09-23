@@ -131,15 +131,29 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chmod 644 $(KEYSTONE_VENV_SITE_PACKAGES)/cube_mellon_wsgi.py
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/keystone/openstack-keystone.service ./lib/systemd/system
 
-KEYSTONE_PATCHDIR := $(COREDIR)/keystone/$(OPENSTACK_RELEASE)_patch
+# Named for the release keystone runs from -- the venv
+# KEYSTONE_VENV_SITE_PACKAGES points at, which is epoxy since #1555. Not
+# derived from a release variable: this set only applies to the keystone it
+# was diffed against, so the next hop renames the directory and refreshes
+# .orig from that release's sdist rather than silently applying these hunks
+# to a file they were never read against.
+KEYSTONE_PATCHDIR := $(COREDIR)/keystone/epoxy_patch
 KEYSTONE_SRCDIR   := $(ROOTDIR)$(KEYSTONE_VENV_SITE_PACKAGES)/keystone
 
 # Apply reviewable unified diffs (<rel>.py.patch beside pristine <rel>.py.orig,
-# same convention as core/nova/nova.mk). --forward keeps re-runs idempotent; a
-# failed hunk aborts the build instead of shipping drift silently.
+# the convention core/nova, core/masakari and core/watcher use). A failed hunk
+# aborts the build instead of shipping drift silently.
+#
+# Tested with --dry-run --reverse first, as core/watcher does and for its
+# reason: --forward skips hunks that are already applied but still exits 1 when
+# every one of them is, so an incremental re-run against an already-patched
+# tree would abort a build that has nothing wrong with it.
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(KEYSTONE_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(KEYSTONE_PATCHDIR)/}; tgt=$(KEYSTONE_SRCDIR)/$${rel%.patch}; \
+		if patch --dry-run --reverse --force "$$tgt" < "$$p" >/dev/null 2>&1; then \
+			echo "  PATCH $${rel%.patch} (already applied)"; continue; \
+		fi; \
 		echo "  PATCH $${rel%.patch}"; \
 		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
 			|| { echo "keystone: failed to apply $$p to $$tgt" >&2; exit 1; }; \

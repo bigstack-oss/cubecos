@@ -40,10 +40,13 @@ fail() { echo "FAIL: $1"; exit 1; }
 printf '[Unit]\n' > "$ADVISOR_AGENT_UNIT"
 
 # ---- enrolment: start it, and touch nothing else ----
+# restart, not start: a forced re-enrolment replaces the identity under a
+# running agent, which would otherwise keep its old connection and never dial
+# in with the new one. On a stopped unit restart is a start.
 : > "$CALLS"
 advisor_agent_service_start >/dev/null 2>&1 || fail "start returned non-zero"
-grep -q -- "systemctl start $ADVISOR_AGENT_UNIT_NAME" "$CALLS" \
-    || fail "the unit was not started: $(cat "$CALLS")"
+grep -q -- "systemctl restart $ADVISOR_AGENT_UNIT_NAME" "$CALLS" \
+    || fail "the unit was not restarted: $(cat "$CALLS")"
 
 # The assertion this file exists for: enabling would hand systemd a second
 # opinion about when the agent runs, which is hex_config's alone.
