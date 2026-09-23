@@ -17,10 +17,13 @@ IPMI_VER := 1.10.1
 MEMCACHED_VER := 0.17.0
 APACHE_VER := 1.1.1
 
-BLACKBOX_URL := https://github.com/prometheus/blackbox_exporter/releases/download/v$(BLACKBOX_VER)
-IPMI_URL := https://github.com/prometheus-community/ipmi_exporter/releases/download/v$(IPMI_VER)
-MEMCACHED_URL := https://github.com/prometheus/memcached_exporter/releases/download/v$(MEMCACHED_VER)
-APACHE_URL := https://github.com/Lusitaniae/apache_exporter/releases/download/v$(APACHE_VER)
+# $(GITHUB_DL_BASE) rather than a literal host: these are GitHub release assets, the class whose
+# throughput collapsed to ~40 KB/s from our build network (cubecos#1350). It defaults to
+# https://github.com in project.mk, so this is unchanged for anyone who does not set it.
+BLACKBOX_URL := $(GITHUB_DL_BASE)/prometheus/blackbox_exporter/releases/download/v$(BLACKBOX_VER)
+IPMI_URL := $(GITHUB_DL_BASE)/prometheus-community/ipmi_exporter/releases/download/v$(IPMI_VER)
+MEMCACHED_URL := $(GITHUB_DL_BASE)/prometheus/memcached_exporter/releases/download/v$(MEMCACHED_VER)
+APACHE_URL := $(GITHUB_DL_BASE)/Lusitaniae/apache_exporter/releases/download/v$(APACHE_VER)
 
 # $(1) binary/tarball basename, $(2) version, $(3) release download base url
 #

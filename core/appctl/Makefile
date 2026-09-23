@@ -4,11 +4,15 @@ include ../../build.mk
 APPCTL_RPM := appctl.rpm
 PKG_NAME := cube-cos-app-framework
 GITHUB_URL := https://github.com/bigstack-oss/$(PKG_NAME)
+# Split from GITHUB_URL: release assets sit behind the object CDN that is throttled to ~40 KB/s
+# from our build network, while the clone below is unaffected (cubecos#1350). GITHUB_DL_BASE
+# defaults to https://github.com in project.mk.
+GITHUB_DL_URL := $(GITHUB_DL_BASE)/bigstack-oss/$(PKG_NAME)
 
 ifneq ($(RC),)
 $(APPCTL_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O appctl.rpm $(GITHUB_URL)/releases/download/v3.1.20-rc1/$(PKG_NAME)-v3.1.0-1.fc35.a36a0cf.x86_64.rpm, \
+		wget -O appctl.rpm $(GITHUB_DL_URL)/releases/download/v3.1.20-rc1/$(PKG_NAME)-v3.1.0-1.fc35.a36a0cf.x86_64.rpm, \
 		"  PULL    $(APPCTL_RPM)")
 else
 GIT_DIR := git
