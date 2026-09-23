@@ -24,12 +24,23 @@ done
 BUNDLED=$@
 
 # Every distinct image the charts ask for, as repository:tag.
+# --wildcards is explicit: GNU tar 1.35 stopped enabling pattern matching by
+# default when extracting, so on a newer jail base the bare pattern matches
+# nothing, REQUIRED comes back empty and the whole check passes vacuously.
 REQUIRED=$(for chart in $CHARTS ; do
-    tar -xzOf "$chart" '*/values.yaml' | awk '
+    tar --wildcards -xzOf "$chart" '*/values.yaml' | awk '
         /repository:/ { repo = $2 ; next }
         /tag:/        { if (repo != "") { print repo ":" $2 ; repo = "" } }
     '
 done | sort -u)
+
+# A chart that yields no images means the extraction broke, not that there is
+# nothing to check. Fail closed -- this check is worthless if it can pass by
+# finding nothing.
+if [ -z "$REQUIRED" ] ; then
+    echo "ceph-csi: no images found in$CHARTS -- cannot verify the offline bundle" >&2
+    exit 1
+fi
 
 RC=0
 for image in $REQUIRED ; do
