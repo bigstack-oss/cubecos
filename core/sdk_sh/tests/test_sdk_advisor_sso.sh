@@ -25,7 +25,9 @@ for f in _advisor_write_file _advisor_sso_origin_valid \
          advisor_sso_origins_set_cluster advisor_sso_origins_clear_cluster \
          advisor_sso_reported_list advisor_sso_reported_set \
          advisor_sso_effective_list advisor_sso_report_read \
-         advisor_sso_report_apply advisor_sso_origins_show ; do
+         advisor_sso_report_apply advisor_sso_origins_show \
+         _advisor_sso_base_valid _advisor_target_name_valid \
+         advisor_sso_reported_bases advisor_sso_reported_base ; do
     fn="$(awk -v want="^$f\\\\(\\\\)" '$0 ~ want {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ -n "$fn" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
     eval "$fn"
@@ -49,6 +51,12 @@ ADVISOR_SSO_MELLON_FILE="$WORK/etc/httpd/conf.d/zz-cube-advisor-mellon.conf"
 
 # apply's only side effects on a real node. Recorded rather than run: what
 # matters is whether they happen at all, and how often.
+# Keycloak's half talks to a live server over the network, which a unit test
+# has none of. Recorded rather than run: what belongs here is that apply calls
+# it, not what it does when it gets an answer.
+keycloak_applies=0
+advisor_sso_keycloak_apply() { keycloak_applies=$((keycloak_applies+1)) ; return 0 ; }
+
 restarts=0 reloads=0
 systemctl() {
     case "$*" in
@@ -210,21 +218,22 @@ advisor_sso_reported_set
 report() { printf '%s\n' "$@" > "$ADVISOR_SSO_AGENT_REPORT" ; }
 
 report "cube-cos https://10.32.1.61" "cube-cos-skyline https://10.32.1.61:9999"
-check "only the target keystone must know about is composed" \
-    "$(advisor_sso_report_read)" "$ADDR"
+check "the whole report travels, not one composed url" \
+    "$(advisor_sso_report_read)" "cube-cos https://10.32.1.61
+cube-cos-skyline https://10.32.1.61:9999"
 
 # Domain mode reports a base with a wildcard where the session id goes; it has
 # to survive composition, because it is the only form that can name a
 # per-session origin at all.
 report "cube-cos-skyline https://cube-cos-skyline--*.adv.example.com"
-check "a wildcard base composes into a wildcard callback" \
+check "a wildcard base survives the trip" \
     "$(advisor_sso_report_read)" \
-    "https://cube-cos-skyline--*.adv.example.com/api/openstack/skyline/api/v1/websso"
+    "cube-cos-skyline https://cube-cos-skyline--*.adv.example.com"
 
 # A trailing slash on the base must not produce a doubled slash: keystone
 # compares the path exactly, so "//api/..." is a different origin.
-report "cube-cos-skyline https://10.32.1.61:9999/"
-check "a trailing slash does not double" "$(advisor_sso_report_read)" "$ADDR"
+advisor_sso_reported_set cube-cos-skyline https://10.32.1.61:9999
+check "a trailing slash does not double" "$(advisor_sso_reported_list)" "$ADDR"
 
 # A report this release would not have written can still turn up — an older or
 # newer Advisor, or a file that crossed an upgrade.
@@ -232,7 +241,7 @@ report "cube-cos-skyline http://10.32.1.61:9999" "cube-cos-skyline https://a b/x
 check "a report that does not validate is dropped" "$(advisor_sso_report_read)" ""
 
 # --- the union --------------------------------------------------------------
-advisor_sso_reported_set "$ADDR"
+advisor_sso_reported_set cube-cos-skyline https://10.32.1.61:9999
 advisor_sso_origins_set "$WILD"
 check "both halves are trusted" "$(advisor_sso_effective_list)" "$ADDR
 $WILD"
@@ -247,7 +256,7 @@ check "withdrawing the report leaves the operator record" \
     "$(advisor_sso_effective_list)" "$WILD"
 
 # And an operator clearing theirs must not touch the Advisor's.
-advisor_sso_reported_set "$ADDR"
+advisor_sso_reported_set cube-cos-skyline https://10.32.1.61:9999
 advisor_sso_origins_clear
 check "clearing the operator record leaves the report" \
     "$(advisor_sso_effective_list)" "$ADDR"
@@ -264,7 +273,7 @@ check "mellon is given both hosts" "$(cat "$ADVISOR_SSO_MELLON_FILE")" "<Locatio
 
 # An operator deciding whether to clear an entry has to be able to tell which
 # half it came from: one withdraws itself, the other does not.
-advisor_sso_reported_set "$ADDR"
+advisor_sso_reported_set cube-cos-skyline https://10.32.1.61:9999
 advisor_sso_origins_set "$WILD"
 check "show labels each entry with its source" "$(advisor_sso_origins_show)" \
     "$ADDR (reported by the Advisor)
@@ -279,15 +288,43 @@ report "cube-cos-skyline https://10.32.1.61:9999"
 advisor_sso_report_apply
 check "the report reaches every node" "$(cut -f1 "$REMOTE_LOG" | tr '\n' ' ')" "ctrl1 ctrl2 ctrl3 "
 check "each node records and applies it" "$(head -1 "$REMOTE_LOG" | cut -f2)" \
-    "/usr/sbin/hex_sdk advisor_sso_reported_set '$ADDR' && /usr/sbin/hex_sdk advisor_sso_apply"
+    "/usr/sbin/hex_sdk advisor_sso_reported_set 'cube-cos-skyline' 'https://10.32.1.61:9999' && /usr/sbin/hex_sdk advisor_sso_apply"
 
 # A report naming no console origin is a statement — the console was turned off
 # — and must withdraw the trust everywhere, not leave it behind.
-report "cube-cos https://10.32.1.61"
+: > "$ADVISOR_SSO_AGENT_REPORT"
 : > "$REMOTE_LOG"
 advisor_sso_report_apply
 check "an empty report withdraws on every node" "$(head -1 "$REMOTE_LOG" | cut -f2)" \
     "/usr/sbin/hex_sdk advisor_sso_reported_set && /usr/sbin/hex_sdk advisor_sso_apply"
+
+
+# --- what each consumer takes from the report -------------------------------
+# The three of them need different parts, which is why the raw report travels
+# rather than one composed URL. Keycloak's is the one that broke: it compares
+# the browser's Origin header, which carries a port, and the mellon helper
+# strips ports because mellon matches hostnames.
+advisor_sso_origins_clear
+advisor_sso_reported_set cube-cos https://10.32.1.61 \
+                         cube-cos-skyline https://10.32.1.61:9999 \
+                         cube-cos-idp https://10.32.1.61:10443
+
+check "keystone gets Skyline's callback url" "$(advisor_sso_reported_list)" "$ADDR"
+check "mellon gets hostnames, no ports" "$(_advisor_sso_hosts)" "10.32.1.61"
+check "keycloak gets the idp origin, with its port" \
+    "$(advisor_sso_reported_base cube-cos-idp)" "https://10.32.1.61:10443"
+check "a target that was not reported has no base" \
+    "$(advisor_sso_reported_base cube-cos-ceph)" ""
+
+# A base is an origin, not a URL: anything with a path would be appended to and
+# produce nonsense.
+for b in "https://10.32.1.61:10443" "https://h--*.d.example.com" "https://h" ; do
+    if _advisor_sso_base_valid "$b" ; then ok ; else bad "should accept base: $b" ; fi
+done
+for b in "http://10.32.1.61" "https://10.32.1.61/path" "https://u@h" "https://h:0" \
+         "https://h:99999" "https://" "" ; do
+    if _advisor_sso_base_valid "$b" ; then bad "should refuse base: $b" ; else ok ; fi
+done
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

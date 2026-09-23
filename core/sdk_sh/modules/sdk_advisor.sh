@@ -107,6 +107,21 @@ ADVISOR_SSO_AGENT_REPORT=$ADVISOR_IDENTITY_DIR/console-origins
 # told about.
 ADVISOR_SSO_TARGET=cube-cos-skyline
 ADVISOR_SSO_CALLBACK_PATH=/api/openstack/skyline/api/v1/websso
+# Keycloak's own admin console refuses to finish loading on an origin its
+# client does not list: the session-check iframe answers 403 and the UI spins
+# forever. The client is Keycloak's built-in, not one of the four this
+# cluster's terraform declares, so adding an origin here is not fought by the
+# next apply.
+ADVISOR_SSO_KEYCLOAK_CLIENT=security-admin-console
+# The target whose origin Keycloak is served on. CubeCOS puts Keycloak and
+# Rancher on one port, so this is the same origin the tab labels Rancher.
+ADVISOR_SSO_IDP_TARGET=cube-cos-idp
+ADVISOR_SSO_KEYCLOAK_CONSOLE_PATH=/auth/admin/master/console/*
+ADVISOR_KEYCLOAK_PASSWORD_FILE=/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars
+# What was last added to that client, so withdrawing an origin removes exactly
+# what this added and nothing else. Without it there is no telling an entry
+# this put there from one an operator did, and tidying up would delete theirs.
+ADVISOR_SSO_KEYCLOAK_STATE=/etc/cube-advisor-agent/sso-keycloak-applied
 # Read by cube_mellon_wsgi.py at import and merged into trusted_dashboard.
 ADVISOR_SSO_KEYSTONE_FILE=/etc/keystone/cube-advisor-origins
 # Sorts after v3_mellon_keycloak_master.conf, which is what lets it win the
@@ -905,21 +920,87 @@ advisor_sso_origins_clear_cluster()
     return $rc
 }
 
-# advisor_sso_reported_list
+# _advisor_sso_base_valid <origin-base>
 #
-# The origins the Advisor reported, as callback URLs. Every line is rechecked
-# for the same reason the operator record's are: this file crosses a node
-# boundary and a firmware upgrade.
-advisor_sso_reported_list()
+# "https://host[:port]" and nothing more: no path, because a base is what a
+# consumer appends its own path to. The host may carry "*" where a mode puts
+# the session id in the hostname.
+_advisor_sso_base_valid()
 {
-    local line
+    local rest host port
+
+    case $1 in
+        https://*) rest=${1#https://} ;;
+        *) return 1 ;;
+    esac
+    case $rest in
+        ''|*/*|*@*|*' '*|*'	'*) return 1 ;;
+    esac
+    case $rest in
+        *:*) host=${rest%:*} ; port=${rest##*:} ;;
+        *) host=$rest ; port= ;;
+    esac
+    if [ -n "$port" ] ; then
+        case $port in
+            ''|*[!0-9]*|0?*) return 1 ;;
+        esac
+        [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || return 1
+    fi
+    case $host in
+        ''|*[!A-Za-z0-9.*-]*) return 1 ;;
+    esac
+    return 0
+}
+
+# advisor_sso_reported_bases
+#
+# What the Advisor reported, one "<target> <origin-base>" per line.
+#
+# The raw report is what travels, not a URL composed from it. Three things
+# consume this and each needs a different part: keystone wants Skyline's
+# callback URL, mellon wants hostnames without ports, and Keycloak wants the
+# identity provider's origin with its port. Composing one of those at the
+# sending end left the other two with nothing to work from.
+#
+# Every line is rechecked: this file crosses a node boundary and a firmware
+# upgrade.
+advisor_sso_reported_bases()
+{
+    local target base extra
 
     [ -r "$ADVISOR_SSO_REPORTED_FILE" ] || return 0
-    while read -r line ; do
-        case $line in ''|'#'*) continue ;; esac
-        _advisor_sso_origin_valid "$line" || continue
-        echo "$line"
+    while read -r target base extra ; do
+        [ -n "$target" ] && [ -n "$base" ] && [ -z "$extra" ] || continue
+        case $target in '#'*) continue ;; esac
+        _advisor_target_name_valid "$target" || continue
+        _advisor_sso_base_valid "$base" || continue
+        echo "$target $base"
     done < "$ADVISOR_SSO_REPORTED_FILE"
+}
+
+# advisor_sso_reported_base <target>
+#
+# One target's reported origin base, empty when it was not reported.
+advisor_sso_reported_base()
+{
+    advisor_sso_reported_bases | awk -v t="$1" '$1 == t { print $2 ; exit }'
+}
+
+# advisor_sso_reported_list
+#
+# The Advisor's half of what keystone should trust: Skyline's callback URL,
+# composed from its reported base. A base carrying a session wildcard is kept
+# as it is -- keystone's patched matcher globs the host, which is the only form
+# that can name a per-session origin at all.
+advisor_sso_reported_list()
+{
+    local base url
+
+    base=$(advisor_sso_reported_base "$ADVISOR_SSO_TARGET")
+    [ -n "$base" ] || return 0
+    url="${base%/}$ADVISOR_SSO_CALLBACK_PATH"
+    _advisor_sso_origin_valid "$url" || return 0
+    echo "$url"
 }
 
 # advisor_sso_effective_list
@@ -953,21 +1034,19 @@ advisor_sso_origins_show()
 
 # advisor_sso_report_read
 #
-# Turns the agent's "<target> <origin-base>" report into callback URLs for the
-# one target keystone must be told about. A base carrying a session wildcard is
-# kept as it is -- keystone's patched matcher globs the host, which is the only
-# form that can name a per-session origin at all.
+# The agent's report, as "<target> <origin-base>" lines this release accepts.
+# Passed on whole rather than reduced to one composed URL: see
+# advisor_sso_reported_bases for why every consumer needs a different part.
 advisor_sso_report_read()
 {
-    local target base url
+    local target base extra
 
     [ -r "$ADVISOR_SSO_AGENT_REPORT" ] || return 0
     while read -r target base extra ; do
         [ -n "$target" ] && [ -n "$base" ] && [ -z "$extra" ] || continue
-        [ "$target" = "$ADVISOR_SSO_TARGET" ] || continue
-        url="${base%/}$ADVISOR_SSO_CALLBACK_PATH"
-        _advisor_sso_origin_valid "$url" || continue
-        echo "$url"
+        _advisor_target_name_valid "$target" || continue
+        _advisor_sso_base_valid "$base" || continue
+        echo "$target $base"
     done < "$ADVISOR_SSO_AGENT_REPORT"
 }
 
@@ -981,11 +1060,13 @@ advisor_sso_report_read()
 # while keystone answers on every control node behind the VIP.
 advisor_sso_report_apply()
 {
-    local urls node args="" rc=0
+    local node word args="" rc=0
 
-    urls=$(advisor_sso_report_read)
-    for url in $urls ; do
-        args="$args '$url'"
+    # Alternating name and base, the shape advisor_discovered_set already uses
+    # for the other set this fans out. Neither can carry a space: both are
+    # rechecked at the far end anyway.
+    for word in $(advisor_sso_report_read) ; do
+        args="$args '$word'"
     done
 
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
@@ -997,21 +1078,30 @@ advisor_sso_report_apply()
     return $rc
 }
 
-# advisor_sso_reported_set [<url> ...]
+# advisor_sso_reported_set [<target> <origin-base> ...]
 #
-# Records the Advisor's half on this node. No arguments withdraws it, which is
-# what a report naming no console origin means.
+# Records the Advisor's report on this node. No arguments withdraws it, which
+# is what a report naming no console origin means.
 advisor_sso_reported_set()
 {
-    local url content="" nl='
+    local target base content="" nl='
 '
 
-    for url in "$@" ; do
-        if ! _advisor_sso_origin_valid "$url" ; then
-            echo "Error: not an https origin URL without userinfo, query or fragment: $url" >&2
+    if [ $(($# % 2)) -ne 0 ] ; then
+        echo "Error: advisor_sso_reported_set: usage [<target> <origin-base> ...]" >&2
+        return 1
+    fi
+    while [ $# -ge 2 ] ; do
+        target=$1 ; base=$2 ; shift 2
+        if ! _advisor_target_name_valid "$target" ; then
+            echo "Error: not a valid target name: $target" >&2
             return 1
         fi
-        content="$content${content:+$nl}$url"
+        if ! _advisor_sso_base_valid "$base" ; then
+            echo "Error: not an https origin base: $base" >&2
+            return 1
+        fi
+        content="$content${content:+$nl}$target $base"
     done
 
     if [ -z "$content" ] ; then
@@ -1033,6 +1123,107 @@ _advisor_sso_hosts()
         host=${host%%/*}
         echo "${host%:*}"
     done | sort -u
+}
+
+# _advisor_keycloak_token <base-url>
+#
+# An admin token for the local Keycloak, from the password terraform already
+# keeps. Printed on stdout; empty on any failure, and every caller treats that
+# as "leave Keycloak alone" rather than as something to retry.
+_advisor_keycloak_token()
+{
+    local base=$1 pw
+
+    pw=$(sed -n 's/^keycloak_admin_password *= *"\?\([^"]*\)"\?.*/\1/p' \
+         "$ADVISOR_KEYCLOAK_PASSWORD_FILE" 2>/dev/null)
+    [ -n "$pw" ] || return 0
+
+    curl -sk --max-time 20 \
+        -d "client_id=admin-cli" -d "username=admin" --data-urlencode "password=$pw" \
+        -d "grant_type=password" \
+        "$base/auth/realms/master/protocol/openid-connect/token" 2>/dev/null |
+        sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p'
+}
+
+# advisor_sso_keycloak_apply
+#
+# Lets Keycloak's admin console load on the Advisor's console origins.
+#
+# Its client lists the origins a browser may run it from, derived from redirect
+# URIs that are relative to this cluster's own address. The Advisor's origin
+# cannot be derived from anything, so the session-check iframe is refused with
+# a 403 and the UI never finishes loading -- the same shape as keystone's
+# trusted_dashboard, in a different component's allowlist.
+#
+# Idempotent, and careful about removal: it takes away only origins it added
+# before, recorded in ADVISOR_SSO_KEYCLOAK_STATE, so withdrawing a console
+# origin withdraws this too while an operator's own entries are left alone.
+# Best effort throughout -- a Keycloak that cannot be reached must not fail a
+# commit, and the next one tries again.
+advisor_sso_keycloak_apply()
+{
+    local base tok cid origins prev
+
+    base=$(advisor_dashboard_address 2>/dev/null) || return 0
+    base="https://${base%:*}:10443"
+    tok=$(_advisor_keycloak_token "$base")
+    [ -n "$tok" ] || return 0
+
+    # jq, not a regex: the client object nests other objects with their own
+    # "id", and a greedy match picks the last one -- which is a real client id,
+    # so the write lands on some other client and quietly does nothing here.
+    cid=$(curl -sk --max-time 20 -H "Authorization: Bearer $tok" \
+          "$base/auth/admin/realms/master/clients?clientId=$ADVISOR_SSO_KEYCLOAK_CLIENT" 2>/dev/null |
+          jq -r '.[0].id // empty' 2>/dev/null)
+    [ -n "$cid" ] || return 0
+
+    # The identity provider's own origin, with its port: Keycloak compares the
+    # browser's Origin header, which carries one. Not _advisor_sso_hosts --
+    # that drops the port because mellon matches hostnames, and an origin
+    # without a port matches nothing here.
+    origins=$(advisor_sso_reported_base "$ADVISOR_SSO_IDP_TARGET")
+    prev=$(tr '\n' ' ' < "$ADVISOR_SSO_KEYCLOAK_STATE" 2>/dev/null)
+
+    curl -sk --max-time 20 -H "Authorization: Bearer $tok" \
+        "$base/auth/admin/realms/master/clients/$cid" 2>/dev/null |
+        ADVISOR_ORIGINS="$origins" ADVISOR_PREV="$prev" \
+        ADVISOR_CONSOLE_PATH="$ADVISOR_SSO_KEYCLOAK_CONSOLE_PATH" \
+        python3 -c '
+import json, os, sys
+
+path = os.environ["ADVISOR_CONSOLE_PATH"]
+want = set(os.environ["ADVISOR_ORIGINS"].split())
+# Only what this added before may be taken away. Anything else in the client
+# was put there by somebody else and is not ours to tidy up.
+stale = set(os.environ["ADVISOR_PREV"].split()) - want
+
+try:
+    c = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+
+c["webOrigins"] = sorted((set(c.get("webOrigins", [])) - stale) | want)
+c["redirectUris"] = sorted(
+    (set(c.get("redirectUris", [])) - {o + path for o in stale}) | {o + path for o in want})
+json.dump(c, sys.stdout)
+' > /tmp/.advisor-kc-client.$$ 2>/dev/null
+
+    # -f, so an HTTP error is a failure: without it curl exits 0 on a 4xx and
+    # the state below records an origin Keycloak never accepted.
+    if [ -s /tmp/.advisor-kc-client.$$ ] &&
+       curl -skf --max-time 20 -X PUT -H "Authorization: Bearer $tok" \
+           -H "Content-Type: application/json" --data @/tmp/.advisor-kc-client.$$ \
+           "$base/auth/admin/realms/master/clients/$cid" >/dev/null 2>&1 ; then
+        # Recorded only once Keycloak accepted it, so a failed push does not
+        # leave this believing it added something it did not.
+        if [ -n "$origins" ] ; then
+            _advisor_write_file "$ADVISOR_SSO_KEYCLOAK_STATE" "$origins"
+        else
+            rm -f "$ADVISOR_SSO_KEYCLOAK_STATE"
+        fi
+    fi
+    rm -f /tmp/.advisor-kc-client.$$
+    return 0
 }
 
 # advisor_sso_apply
@@ -1080,6 +1271,10 @@ advisor_sso_apply()
             systemctl restart openstack-keystone
         fi
     fi
+
+    # Keycloak keeps its allowlist in its own database, not in a file here, so
+    # there is nothing to compare -- the call is idempotent instead.
+    advisor_sso_keycloak_apply
 
     if _advisor_sso_file_changed "$ADVISOR_SSO_MELLON_FILE" "$mellon_body" ; then
         if [ -n "$mellon_body" ] ; then
