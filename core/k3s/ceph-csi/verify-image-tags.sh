@@ -24,23 +24,34 @@ done
 BUNDLED=$@
 
 # Every distinct image the charts ask for, as repository:tag.
-# --wildcards is explicit: GNU tar 1.35 stopped enabling pattern matching by
-# default when extracting, so on a newer jail base the bare pattern matches
-# nothing, REQUIRED comes back empty and the whole check passes vacuously.
-REQUIRED=$(for chart in $CHARTS ; do
-    tar --wildcards -xzOf "$chart" '*/values.yaml' | awk '
+#
+# --wildcards is explicit because upstream GNU tar has not globbed member names
+# by default since 1.15.91 (2006) -- '*/values.yaml' is otherwise taken as a
+# literal name and matches nothing. This jail globs only because RHEL carries a
+# downstream patch restoring the old behavior (tar.spec Patch3,
+# tar-1.29-wildcards.patch), which c9s/1.34 and c10s/1.35 both apply. So the tar
+# version is not what protects us and a newer one is not the risk: a jail base
+# off a non-RHEL distro stops matching at any version. Without the flag that
+# failure is silent -- nothing matches, so there is nothing to check, so the
+# check "passes".
+#
+# Fail closed per chart rather than on the union: tar's exit status is lost in
+# the `tar | awk` pipeline, so a chart whose extraction broke would otherwise
+# hide behind one that worked and its images would go unverified.
+REQUIRED=""
+for chart in $CHARTS ; do
+    found=$(tar --wildcards -xzOf "$chart" '*/values.yaml' | awk '
         /repository:/ { repo = $2 ; next }
         /tag:/        { if (repo != "") { print repo ":" $2 ; repo = "" } }
-    '
-done | sort -u)
-
-# A chart that yields no images means the extraction broke, not that there is
-# nothing to check. Fail closed -- this check is worthless if it can pass by
-# finding nothing.
-if [ -z "$REQUIRED" ] ; then
-    echo "ceph-csi: no images found in$CHARTS -- cannot verify the offline bundle" >&2
-    exit 1
-fi
+    ')
+    if [ -z "$found" ] ; then
+        echo "ceph-csi: no images found in $chart -- cannot verify the offline bundle" >&2
+        exit 1
+    fi
+    REQUIRED="$REQUIRED
+$found"
+done
+REQUIRED=$(echo "$REQUIRED" | sort -u)
 
 RC=0
 for image in $REQUIRED ; do
