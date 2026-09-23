@@ -72,7 +72,11 @@ verify-image-tags: $(CEPH_CSI_RBD_CHART) $(CEPH_CSI_FS_CHART)
 	    $(CSI_ATTACHER_IMG):$(CSI_ATTACHER_IMG_TAG) \
 	    $(CSI_NODE_DRIVER_REGISTER_IMG):$(CSI_NODE_DRIVER_REGISTER_IMG_TAG),"  CHECK   ceph-csi image tags")
 
-$(CEPH_CSI_IMAGES_TGZ): verify-image-tags $(CEPH_CSI_IMG_TAR) $(CSI_PROVISIONER_IMG_TAR) $(CSI_RESIZER_IMG_TAR) $(CSI_SNAPSHOTTER_IMG_TAR) $(CSI_ATTACHER_IMG_TAR) $(CSI_NODE_DRIVER_REGISTER_IMG_TAR)
+# verify-image-tags is order-only: it is phony, so as a normal prerequisite it
+# is never up to date and repacked the bundle (95s) on every no-change re-run.
+# Order-only still runs it -- and still aborts the build on a mismatch -- but
+# leaves the tarballs alone to decide whether the bundle needs regenerating.
+$(CEPH_CSI_IMAGES_TGZ): $(CEPH_CSI_IMG_TAR) $(CSI_PROVISIONER_IMG_TAR) $(CSI_RESIZER_IMG_TAR) $(CSI_SNAPSHOTTER_IMG_TAR) $(CSI_ATTACHER_IMG_TAR) $(CSI_NODE_DRIVER_REGISTER_IMG_TAR) | verify-image-tags
 	$(call RUN_CMD_TIMED,tar -czvf $(CEPH_CSI_IMAGES_TGZ) $(CEPH_CSI_IMG_TAR) $(CSI_PROVISIONER_IMG_TAR) $(CSI_RESIZER_IMG_TAR) $(CSI_SNAPSHOTTER_IMG_TAR) $(CSI_ATTACHER_IMG_TAR) $(CSI_NODE_DRIVER_REGISTER_IMG_TAR),"  GEN     $(CEPH_CSI_IMAGES_TGZ)")
 
 $(CEPH_CSI_RBD_CHART):
