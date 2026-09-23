@@ -1369,8 +1369,14 @@ os_nova_instance_hardreboot()
 
 os_nova_hci_reserved_mem_mb()
 {
-    local sysdev=$(df | grep ' /$' | awk '{print $1}' | awk -F'/' '{print $3}' | grep -o '.*[^0-9]' | tr -d '\n')
-    local size_in_bytes=$(lsblk -dlbn --sort name -o NAME,SIZE,TYPE,TRAN | /bin/grep disk | /bin/grep -v usb | grep -v $sysdev | awk '{print $2}' | paste -sd+ - | bc)
+    # Ask lsblk for the root partition's parent disk rather than stripping trailing
+    # digits off its name: '.*[^0-9]' turns nvme1n1p5 into nvme1n1p, which then matches
+    # nothing, so the system disk stays in the sum. sda5 -> sda happens to work, which is
+    # why this only shows up on nvme/mmcblk roots.
+    local sysdev=$(lsblk -no pkname "$(findmnt -no SOURCE /)" 2>/dev/null | head -1)
+    # Compare the whole NAME field: 'grep -v $sysdev' is a substring match (sda would also
+    # drop sdaa) and, when sysdev came back empty, dropped every line and reserved nothing.
+    local size_in_bytes=$(lsblk -dlbn --sort name -o NAME,SIZE,TYPE,TRAN | /bin/grep disk | /bin/grep -v usb | awk -v s="$sysdev" '$1 != s {print $2}' | paste -sd+ - | bc)
     local reserved_mem_mb=$(( size_in_bytes / 10000000000 * 17 ))
     echo -n $reserved_mem_mb
 }
