@@ -554,6 +554,14 @@ Commit(bool modified, int dryLevel)
     // A node with nothing recorded writes nothing, which is every cluster
     // with no Advisor and every Advisor whose consoles were never declared.
     HexSpawn(0, HEX_SDK, "advisor_sso_apply", NULL);
+
+    // And reconciles from the Advisor's own report, on a node that holds one.
+    // The watch that normally picks it up fires on a change; a report already
+    // written when the watch started -- which is every freshly enrolled node,
+    // and every node whose record went missing -- would otherwise never be
+    // acted on. advisor_sso_report_apply does nothing on a node with no
+    // identity, so this is a no-op everywhere the question does not arise.
+    HexSpawn(0, HEX_SDK, "advisor_sso_report_apply", NULL);
     return true;
 }
 

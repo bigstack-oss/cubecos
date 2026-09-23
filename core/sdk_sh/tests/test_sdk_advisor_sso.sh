@@ -44,6 +44,7 @@ check() { if [ "$2" = "$3" ] ; then ok ; else bad "$1: got '$2', want '$3'" ; fi
 ADVISOR_SSO_ORIGINS_FILE="$WORK/etc/cube-advisor-agent/sso-origins"
 ADVISOR_SSO_REPORTED_FILE="$WORK/etc/cube-advisor-agent/sso-origins-reported"
 ADVISOR_SSO_AGENT_REPORT="$WORK/etc/cube/advisor-agent/console-origins"
+ADVISOR_AGENT_CERT="$WORK/etc/cube/advisor-agent/agent.crt"
 ADVISOR_SSO_TARGET=cube-cos-skyline
 ADVISOR_SSO_CALLBACK_PATH=/api/openstack/skyline/api/v1/websso
 ADVISOR_SSO_KEYSTONE_FILE="$WORK/etc/keystone/cube-advisor-origins"
@@ -212,6 +213,9 @@ check "clear reaches every node" "$(cut -f1 "$REMOTE_LOG" | tr '\n' ' ')" "ctrl1
 # alongside whatever an operator declared. Two halves kept apart so the
 # Advisor's can withdraw itself without taking an operator's entry with it.
 mkdir -p "$(dirname "$ADVISOR_SSO_AGENT_REPORT")"
+# Enrolled, for the fan-out guard below. A node with no identity does not
+# speak for the Advisor and must not act on a report it could not have.
+: > "$ADVISOR_AGENT_CERT"
 advisor_sso_origins_clear
 advisor_sso_reported_set
 
@@ -325,6 +329,25 @@ for b in "http://10.32.1.61" "https://10.32.1.61/path" "https://u@h" "https://h:
          "https://h:99999" "https://" "" ; do
     if _advisor_sso_base_valid "$b" ; then bad "should refuse base: $b" ; else ok ; fi
 done
+
+
+# --- the guard on speaking for the Advisor ----------------------------------
+# A node with no identity has no agent and so no report. Absence there means
+# "nothing was told to me", not "the Advisor reports no console origin", and
+# acting on it would withdraw the whole cluster's trust from a node that was
+# never in a position to know.
+report "cube-cos-skyline https://10.32.1.61:9999"
+mv "$ADVISOR_AGENT_CERT" "$ADVISOR_AGENT_CERT.away"
+: > "$REMOTE_LOG"
+advisor_sso_report_apply
+check "an unenrolled node touches no node" "$(cat "$REMOTE_LOG")" ""
+mv "$ADVISOR_AGENT_CERT.away" "$ADVISOR_AGENT_CERT"
+
+# And with an identity it does act, so the guard is the identity and not a
+# permanent off switch.
+: > "$REMOTE_LOG"
+advisor_sso_report_apply
+check "an enrolled node fans out" "$(cut -f1 "$REMOTE_LOG" | tr '\n' ' ')" "ctrl1 ctrl2 ctrl3 "
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

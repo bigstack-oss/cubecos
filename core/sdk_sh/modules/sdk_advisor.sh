@@ -1062,6 +1062,12 @@ advisor_sso_report_apply()
 {
     local node word args="" rc=0
 
+    # Only a node holding an identity speaks for the Advisor. On any other the
+    # report's absence means "no agent here", not "the Advisor reports no
+    # console origin" -- and acting on that would withdraw the whole cluster's
+    # trust from a node that was never told anything.
+    [ -e "$ADVISOR_AGENT_CERT" ] || return 0
+
     # Alternating name and base, the shape advisor_discovered_set already uses
     # for the other set this fans out. Neither can carry a space: both are
     # rechecked at the far end anyway.
@@ -1489,6 +1495,15 @@ advisor_enroll()
         0)
             advisor_agent_service_start
             advisor_targets_init || echo "Warning: could not seed $ADVISOR_TARGETS_FILE; add the cube-cos target by hand" >&2
+            # The agent has just been told how its consoles are addressed, and
+            # nothing else will notice for a while: the watch that picks this
+            # up is started by the advisor module's commit, which has not run
+            # yet, and it triggers on a change rather than on a file that is
+            # already there. Without this, a freshly enrolled cluster waits for
+            # the Advisor to re-address something before a federated login
+            # works.
+            advisor_sso_report_apply || \
+                echo "Warning: could not apply the Advisor's console origins; run 'hex_cli -c advisor sso_origins' to check" >&2
             # CMP may already be installed; if so its ingress is reachable
             # from the moment this cluster enrols. Same module, called
             # directly (only cross-module calls route through $HEX_SDK).
