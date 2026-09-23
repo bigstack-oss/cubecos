@@ -1631,7 +1631,7 @@ cinder_apply_storage_creation()
     # edit the policy file
     local input_dir="$(MakeTempDir)"
     mkdir -p "${input_dir}/external_storage"
-    cp -f "/etc/policies/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/"
+    cp -f "$POLICY_DIR/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/"
     local ext_storage_policy_file="${input_dir}/external_storage/external_storage1_0.yml"
 
     # storage backends
@@ -1643,11 +1643,31 @@ cinder_apply_storage_creation()
 
     local backend_index="0"
     local blank_backend_index=""
+    local existing_name=""
     for backend_index in $(seq 0 "$backend_count_minus_one") ; do
-        if _hex_function exec_output exec_error \
+        if ! _hex_function exec_output exec_error \
             yq -r ".backends[${backend_index}].name" \
-            "$ext_storage_policy_file" \
-            && [ -z "$exec_output" ] ; then
+            "$ext_storage_policy_file" ; then
+            continue
+        fi
+        existing_name="$exec_output"
+        # An entry whose name is an EXPLICIT null reads back as the
+        # four-character string "null", not as blank, so the scan walks past
+        # it: the slot is never reused and never dropped, and
+        # config_cinder.cpp goes on generating a backend called null from it
+        # for good. That is the state #1454's round trip leaves on any node
+        # where an external backend was deleted before this fix, and clearing
+        # it is what lets such a node heal itself on its next create.
+        #
+        # The distinction is easy to get backwards, so it was measured on the
+        # 1cc with yq v4.45.1: an empty scalar (`- name:`, what the shipped
+        # policy carries) and an empty string (`- name: ""`, what
+        # policy_ext_storage.cpp writes back when the vector empties) BOTH
+        # already read as blank. Only the explicit null does not. (#1454)
+        if [ "$existing_name" == "null" ] ; then
+            existing_name=""
+        fi
+        if [ -z "$existing_name" ] ; then
             blank_backend_index="$backend_index"
             break
         fi
