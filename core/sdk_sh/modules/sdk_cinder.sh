@@ -2807,49 +2807,87 @@ cinder_apply_storage_deletion()
     # edit the policy file
     local input_dir="$(MakeTempDir)"
     mkdir -p "${input_dir}/external_storage"
-    cp -f "/etc/policies/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/"
+    if ! cp -f "$POLICY_DIR/external_storage/external_storage1_0.yml" "${input_dir}/external_storage/" ; then
+        return 1
+    fi
     local ext_storage_policy_file="${input_dir}/external_storage/external_storage1_0.yml"
 
     # storage backends
-    local policy="{}"
-    if ! _hex_function exec_output exec_error \
-        yq -p=yaml -o=json "$ext_storage_policy_file" ; then
+    #
+    # Edited in place with `yq -i`, NOT by round-tripping the whole document
+    # through `yq -p=yaml -o=json` -> jq -> `yq -p=json -o=yaml` (#1454). That
+    # round trip re-serialises every node, so keys this function was never
+    # asked to touch come back changed. Measured on the 1cc: `version: 1.0`
+    # came back as `version: 1`, the `---` header and the file's own comment
+    # were gone, and the empty-list placeholder `- name:` came back as
+    # `- name: null` -- which HexYmlParseString reads as the four-character
+    # string "null", putting a backend called null into enabled_backends,
+    # permanently down. Since #840 the same document also carries tiers:,
+    # whose placeholder rides the round trip with no rescue path at all.
+    #
+    # The name is compared in the shell rather than spliced into a jq filter,
+    # so a backend name holding a quote is data rather than filter syntax. It
+    # can hold one: `hex_config commit <settings>` writes this array without
+    # passing through the CLI's name guard.
+    #
+    # Unlike cinder_apply_storage_tier_deletion, which stops at the first
+    # match, EVERY entry carrying the name is removed -- that is what the jq
+    # filter this replaces did, and a duplicate the CLI cannot create is one
+    # `hex_config commit <settings>` can.
+    # The round trip this replaces checked the shape with `json_is_array` and
+    # refused a policy whose backends: was not a sequence. Keep that refusal:
+    # a length that parses as a number is NOT the same check. Measured on the
+    # 1cc (yq v4.45.1), `.backends | length` answers a mapping with its key
+    # count, the string "hello" with 5, and a missing key with 0 -- all rc 0,
+    # so all three would walk past a digits-only test, delete nothing, and
+    # still reach $HEX_CFG apply. The tag is unambiguous.
+    if ! _hex_function exec_output exec_error yq -r '.backends | tag' "$ext_storage_policy_file" ; then
         return 1
     fi
-    policy="$exec_output"
+    if [ "$exec_output" != "!!seq" ] ; then
+        return 1
+    fi
 
-    local backends="$(json_get_compact_value "$policy" ".backends")"
-    if ! json_is_array "$backends" ; then
+    if ! _hex_function exec_output exec_error yq '.backends | length' "$ext_storage_policy_file" ; then
         return 1
     fi
-    if ! _hex_function exec_output exec_error \
-        jq -c "map(select(.name != \"${storage_name}\"))" <(printf "%s" "$backends") ; then
+    local backend_count="$exec_output"
+    if ! echo "$backend_count" | grep -qE '^[0-9]+$' ; then
         return 1
-    fi
-    backends="$exec_output"
-
-    if ! _hex_function exec_output exec_error \
-        jq -r 'length' <(printf "%s" "$backends") ; then
-        return 1
-    fi
-    if [[ "$exec_output" -le 0 ]] ; then
-        backends="$(jq -c -n '[{name: ""}]')"
     fi
 
-    if ! _hex_function exec_output exec_error \
-        jq -c \
-        --argjson backends "$backends" \
-        '.backends = $backends' \
-        <(printf "%s" "$policy") ; then
-        return 1
-    fi
-    policy="$exec_output"
-    if ! _hex_function exec_output exec_error \
-        yq -p=json -o=yaml <(printf "%s" "$policy") ; then
-        return 1
-    fi
-    if ! filesystem_write_file "$ext_storage_policy_file" "$exec_output" ; then
-        return 1
+    local backend_index="0"
+    local matched_indexes=""
+    local existing_name=""
+    for backend_index in $(seq 0 $((backend_count - 1))) ; do
+        if ! _hex_function exec_output exec_error \
+            yq -r ".backends[${backend_index}].name" \
+            "$ext_storage_policy_file" ; then
+            return 1
+        fi
+        existing_name="$exec_output"
+        if [ "$existing_name" == "$storage_name" ] ; then
+            # highest index first, so deleting one does not shift the ones
+            # still to be deleted
+            matched_indexes="${backend_index} ${matched_indexes}"
+        fi
+    done
+
+    local removed="0"
+    for backend_index in $matched_indexes ; do
+        if ! _hex_function_ret yq -i "del(.backends[${backend_index}])" "$ext_storage_policy_file" ; then
+            return 1
+        fi
+        removed=$((removed + 1))
+    done
+
+    # the yml parser needs at least one child, so an emptied list keeps a blank
+    # entry -- the same one policy_ext_storage.cpp writes back when its vector
+    # is empty
+    if [ "$removed" -gt 0 ] && [ "$removed" -ge "$backend_count" ] ; then
+        if ! _hex_function_ret yq -i '.backends[0].name = ""' "$ext_storage_policy_file" ; then
+            return 1
+        fi
     fi
 
     # default volume type
