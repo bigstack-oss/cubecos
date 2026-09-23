@@ -3,7 +3,20 @@ DOCKER_BIN    := docker
 DOCKER_REG    := localhost:5000
 DOCKER_FLG    := --privileged --cgroupns=host -it -d --tmpfs=/tmp:exec -v /dev/dri:/dev/dri -v /var/run/dbus:/var/run/dbus --shm-size="1024m" -v /etc/localtime:/etc/localtime:ro
 DOCKER_SOC    := /var/run/docker.sock
-DOCKER_GITCFG := ~/.gitconfig:/root/.gitconfig
+# Optional git config fragment, mounted read-only as the container's *system* config
+# (/etc/gitconfig). Empty by default, so a normal developer build is unaffected.
+#
+# It exists so a CI runner can supply `url.<mirror>.insteadOf https://github.com/` from outside
+# this repo, without any internal hostname being committed here. /etc/gitconfig rather than
+# /root/.gitconfig deliberately: git reads system config first and global second, so the image's
+# own /root/.gitconfig (jail/centos9/root/.gitconfig, which carries the safe.directory entries)
+# still applies, and the `git config --global --add safe.directory` below still writes to the
+# container's own file instead of scribbling on the host's.
+#
+# Was `~/.gitconfig:/root/.gitconfig` and never referenced by anything; mounting a developer's
+# personal config over the image's would have dropped those safe.directory entries.
+DOCKER_GITCFG ?=
+DOCKER_GITCFG_FLG := $(if $(DOCKER_GITCFG),-v $(DOCKER_GITCFG):/etc/gitconfig:ro,)
 DOCKER_EXTRA  :=
 TOP_SRCDIR    := $(shell pwd -L)
 TOP_DIR       := $(shell TOP_SRCDIR=$(TOP_SRCDIR); if [ -e /home/jenkins/workspace ]; then echo /home ; else echo $${TOP_SRCDIR%/*} ; fi)
@@ -21,7 +34,7 @@ centos9-jail: $(TOP_JAILDIR)/jail.ubi9.dockerfile ubi9-base
 	$(Q)sudo rm -rf $(TOP_SRCDIR)/../$${PROJECT:-$(@F)}
 	$(Q)cp $(TOP_SRCDIR)/core/horizon/theme/static/images/cube-icon.png $(TOP_JAILDIR)/vnc/
 	$(Q)DOCKER_BUILDKIT=1 $(DOCKER_BIN) build $(DOCKER_BLD_FLG) --progress=plain --build-arg BLDDIR=$${BLDDIR:-/root/workspace/$${PROJECT:-$(@F)}} --build-arg PASSPHRASE=$(PASSPHRASE) --build-arg PRIVATE_PEM=$(PRIVATE_PEM) --build-arg PUBLIC_PEM=$(PUBLIC_PEM) --build-arg DIST=$(subst -jail,,$@) --build-arg WEAK_DEP=$(WEAK_DEP) --build-arg IPT_LEGACY=$(IPT_LEGACY) -t $(DOCKER_REG)/$(@F) -f $< $(TOP_JAILDIR) # --target tier1
-	$(Q)$(DOCKER_BIN) run -P $(DOCKER_FLG) -h $@ --name $${PROJECT:-$@} -e PROJECT=$${PROJECT:-$@} -v $(TOP_DIR):$(TOP_WORKDIR) -v /usr/lib/modules/$$(uname -r):/usr/lib/modules/$$(uname -r) $(DOCKER_EXTRA) $(DOCKER_REG)/$@
+	$(Q)$(DOCKER_BIN) run -P $(DOCKER_FLG) -h $@ --name $${PROJECT:-$@} -e PROJECT=$${PROJECT:-$@} -v $(TOP_DIR):$(TOP_WORKDIR) -v /usr/lib/modules/$$(uname -r):/usr/lib/modules/$$(uname -r) $(DOCKER_GITCFG_FLG) $(DOCKER_EXTRA) $(DOCKER_REG)/$@
 	$(Q)$(DOCKER_BIN) exec $${PROJECT:-$(filter centos%-jail,$(MAKECMDGOALS))} bash -c "git config --global --add safe.directory \$${PWD%/*}/cubecos"
 	$(Q)rm -f $(TOP_JAILDIR)/vnc/cube-icon.png
 
