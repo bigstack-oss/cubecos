@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Unit test for the Skyline-WebSSO helpers in ../modules/sdk_advisor.sh:
-# advisor_sso_origins_set/list/clear and advisor_sso_apply.
+# the Advisor's reported origins and advisor_sso_apply.
 #
 # A line in the origins file authorises keystone to post an unscoped token to
 # that URL -- keystone substitutes the matched origin into
@@ -19,10 +19,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_advisor.sh"
 
 for f in _advisor_write_file _advisor_sso_origin_valid \
-         advisor_sso_origins_set advisor_sso_origins_list \
-         advisor_sso_origins_clear _advisor_sso_hosts \
+         _advisor_sso_hosts \
          _advisor_sso_file_changed advisor_sso_apply \
-         advisor_sso_origins_set_cluster advisor_sso_origins_clear_cluster \
          advisor_sso_reported_list advisor_sso_reported_set \
          advisor_sso_effective_list advisor_sso_report_read \
          advisor_sso_report_apply advisor_sso_origins_show \
@@ -41,7 +39,6 @@ ok()    { pass=$((pass+1)); }
 bad()   { fail=$((fail+1)); echo "FAIL: $1"; }
 check() { if [ "$2" = "$3" ] ; then ok ; else bad "$1: got '$2', want '$3'" ; fi ; }
 
-ADVISOR_SSO_ORIGINS_FILE="$WORK/etc/cube-advisor-agent/sso-origins"
 ADVISOR_SSO_REPORTED_FILE="$WORK/etc/cube-advisor-agent/sso-origins-reported"
 ADVISOR_SSO_AGENT_REPORT="$WORK/etc/cube/advisor-agent/console-origins"
 ADVISOR_AGENT_CERT="$WORK/etc/cube/advisor-agent/agent.crt"
@@ -113,34 +110,15 @@ for url in \
     if _advisor_sso_origin_valid "$url" ; then bad "should refuse shell metacharacters: $url" ; else ok ; fi
 done
 
-# --- set / list / clear ----------------------------------------------------
-advisor_sso_origins_set "$ADDR" "$WILD"
-check "list returns both, in order" "$(advisor_sso_origins_list)" "$ADDR
-$WILD"
-
-# One bad entry fails the whole call: a partially applied trust list is worse
-# than none, because nobody can tell which half landed.
-before="$(advisor_sso_origins_list)"
-if advisor_sso_origins_set "$ADDR" 'http://evil.test/x' 2>/dev/null ; then
-    bad "set accepted a bad url"
-else
-    ok
-fi
-check "a rejected set changes nothing" "$(advisor_sso_origins_list)" "$before"
-
-# The file migrates across a firmware upgrade, so a line this release would
-# not have written can still turn up in it.
-printf '%s\n%s\n%s\n' "$ADDR" 'http://evil.test/x' '# a comment' > "$ADVISOR_SSO_ORIGINS_FILE"
-check "list drops lines this release rejects" "$(advisor_sso_origins_list)" "$ADDR"
-
 # --- apply ----------------------------------------------------------------
-advisor_sso_origins_set "$ADDR" "$WILD"
+# The Advisor's report is the only source, so everything below is seeded by
+# advisor_sso_reported_set rather than by an operator.
+advisor_sso_reported_set cube-cos-skyline 'https://cube-cos-skyline--*.adv.example.com'
 restarts=0 reloads=0
 advisor_sso_apply
-check "keystone gets the origins verbatim" "$(cat "$ADVISOR_SSO_KEYSTONE_FILE")" "$ADDR
-$WILD"
-check "mellon gets the hosts, with [self] kept" "$(cat "$ADVISOR_SSO_MELLON_FILE")" "<Location /v3>
-    MellonRedirectDomains [self] 10.32.1.61 cube-cos-skyline--*.adv.example.com
+check "keystone gets the origin verbatim" "$(cat "$ADVISOR_SSO_KEYSTONE_FILE")" "$WILD"
+check "mellon gets the host, with [self] kept" "$(cat "$ADVISOR_SSO_MELLON_FILE")" "<Location /v3>
+    MellonRedirectDomains [self] cube-cos-skyline--*.adv.example.com
 </Location>"
 check "keystone restarted once" "$restarts" "1"
 check "httpd reloaded once" "$reloads" "1"
@@ -152,16 +130,16 @@ advisor_sso_apply
 check "an unchanged apply restarts nothing" "$restarts" "0"
 check "an unchanged apply reloads nothing" "$reloads" "0"
 
-# Adding an origin is a change.
-advisor_sso_origins_set "$ADDR"
+# A different origin is a change.
+advisor_sso_reported_set cube-cos-skyline https://10.32.1.61:9999
 restarts=0 reloads=0
 advisor_sso_apply
-check "narrowing the list restarts keystone" "$restarts" "1"
-check "narrowing the list reloads httpd" "$reloads" "1"
+check "a changed origin restarts keystone" "$restarts" "1"
+check "a changed origin reloads httpd" "$reloads" "1"
 check "keystone file follows" "$(cat "$ADVISOR_SSO_KEYSTONE_FILE")" "$ADDR"
 
-# Clearing the record withdraws the trust rather than leaving it behind.
-advisor_sso_origins_clear
+# An empty report withdraws the trust rather than leaving it behind.
+advisor_sso_reported_set
 restarts=0 reloads=0
 advisor_sso_apply
 if [ -e "$ADVISOR_SSO_KEYSTONE_FILE" ] ; then bad "keystone file outlived the record" ; else ok ; fi
@@ -179,44 +157,22 @@ check "no record restarts nothing" "$restarts" "0"
 # --- cluster fan-out -------------------------------------------------------
 # keystone answers from every control node behind the VIP, so a list recorded
 # on one of them makes the login succeed or fail by which backend haproxy
-# picked. What matters here is that every node is visited and that the URL
-# survives the remote shell as one word -- the wildcard entry is a glob.
+# picked. The fan-out that matters now is advisor_sso_report_apply, exercised
+# below; this just sets up the remote_run double it uses.
 CUBE_NODE_LIST_HOSTNAMES=(ctrl1 ctrl2 ctrl3)
 HEX_SDK=/usr/sbin/hex_sdk
 REMOTE_LOG="$WORK/remote.log"
 remote_run() { printf '%s\t%s\n' "$1" "$2" >> "$REMOTE_LOG" ; }
 
-: > "$REMOTE_LOG"
-advisor_sso_origins_set_cluster "$ADDR" "$WILD"
-check "every node is visited" "$(cut -f1 "$REMOTE_LOG" | tr '\n' ' ')" "ctrl1 ctrl2 ctrl3 "
-check "the wildcard url is quoted for the remote shell" \
-    "$(head -1 "$REMOTE_LOG" | cut -f2)" \
-    "/usr/sbin/hex_sdk advisor_sso_origins_set '$ADDR' '$WILD' && /usr/sbin/hex_sdk advisor_sso_apply"
 
-# A bad URL is refused before any node is touched: half a cluster trusting an
-# origin is worse than none of it, because nothing says which half.
-: > "$REMOTE_LOG"
-if advisor_sso_origins_set_cluster "$ADDR" 'http://evil.test/x' 2>/dev/null ; then
-    bad "cluster set accepted a bad url"
-else
-    ok
-fi
-check "a rejected cluster set touches no node" "$(cat "$REMOTE_LOG")" ""
-
-: > "$REMOTE_LOG"
-advisor_sso_origins_clear_cluster
-check "clear reaches every node" "$(cut -f1 "$REMOTE_LOG" | tr '\n' ' ')" "ctrl1 ctrl2 ctrl3 "
-
-
-# --- the Advisor's own report -----------------------------------------------
-# What the agent was told on connect, turned into a callback URL and trusted
-# alongside whatever an operator declared. Two halves kept apart so the
-# Advisor's can withdraw itself without taking an operator's entry with it.
+# --- the Advisor's report, the only source ----------------------------------
+# What the agent was told on connect, turned into a callback URL. There is no
+# operator-declared half any more: the Advisor reports its origins on every
+# connect, so its report is the live truth and it withdraws itself.
 mkdir -p "$(dirname "$ADVISOR_SSO_AGENT_REPORT")"
 # Enrolled, for the fan-out guard below. A node with no identity does not
 # speak for the Advisor and must not act on a report it could not have.
 : > "$ADVISOR_AGENT_CERT"
-advisor_sso_origins_clear
 advisor_sso_reported_set
 
 report() { printf '%s\n' "$@" > "$ADVISOR_SSO_AGENT_REPORT" ; }
@@ -244,44 +200,29 @@ check "a trailing slash does not double" "$(advisor_sso_reported_list)" "$ADDR"
 report "cube-cos-skyline http://10.32.1.61:9999" "cube-cos-skyline https://a b/x" "malformed"
 check "a report that does not validate is dropped" "$(advisor_sso_report_read)" ""
 
-# --- the union --------------------------------------------------------------
+# --- one source, and it withdraws itself -------------------------------------
 advisor_sso_reported_set cube-cos-skyline https://10.32.1.61:9999
-advisor_sso_origins_set "$WILD"
-check "both halves are trusted" "$(advisor_sso_effective_list)" "$ADDR
-$WILD"
+check "the report is what is trusted" "$(advisor_sso_effective_list)" "$ADDR"
 
-advisor_sso_origins_set "$ADDR"
-check "a duplicate across the halves appears once" "$(advisor_sso_effective_list)" "$ADDR"
-
-# The Advisor withdrawing its origin must not touch the operator's.
-advisor_sso_origins_set "$WILD"
+# The Advisor withdrawing its origin withdraws the trust. Nothing else can keep
+# it alive, which is the point of having one source.
 advisor_sso_reported_set
-check "withdrawing the report leaves the operator record" \
-    "$(advisor_sso_effective_list)" "$WILD"
+check "withdrawing the report leaves nothing trusted" \
+    "$(advisor_sso_effective_list)" ""
 
-# And an operator clearing theirs must not touch the Advisor's.
+# apply follows the report all the way to both consumers.
 advisor_sso_reported_set cube-cos-skyline https://10.32.1.61:9999
-advisor_sso_origins_clear
-check "clearing the operator record leaves the report" \
-    "$(advisor_sso_effective_list)" "$ADDR"
-
-# apply works off the union, so mellon gets both hosts.
-advisor_sso_origins_set "$WILD"
 restarts=0 reloads=0
 advisor_sso_apply
-check "keystone is given both halves" "$(cat "$ADVISOR_SSO_KEYSTONE_FILE")" "$ADDR
-$WILD"
-check "mellon is given both hosts" "$(cat "$ADVISOR_SSO_MELLON_FILE")" "<Location /v3>
-    MellonRedirectDomains [self] 10.32.1.61 cube-cos-skyline--*.adv.example.com
+check "keystone is given the reported origin" "$(cat "$ADVISOR_SSO_KEYSTONE_FILE")" "$ADDR"
+check "mellon is given its host" "$(cat "$ADVISOR_SSO_MELLON_FILE")" "<Location /v3>
+    MellonRedirectDomains [self] 10.32.1.61
 </Location>"
 
-# An operator deciding whether to clear an entry has to be able to tell which
-# half it came from: one withdraws itself, the other does not.
-advisor_sso_reported_set cube-cos-skyline https://10.32.1.61:9999
-advisor_sso_origins_set "$WILD"
-check "show labels each entry with its source" "$(advisor_sso_origins_show)" \
-    "$ADDR (reported by the Advisor)
-$WILD (declared here)"
+# An operator looking at an origin they did not choose needs to see that no one
+# here declared it.
+check "show attributes the entry to the Advisor" "$(advisor_sso_origins_show)" \
+    "$ADDR (reported by the Advisor)"
 
 # --- carrying the report to the cluster -------------------------------------
 # The agent runs only on enrolled nodes; keystone answers on every control node
@@ -308,7 +249,6 @@ check "an empty report withdraws on every node" "$(head -1 "$REMOTE_LOG" | cut -
 # rather than one composed URL. Keycloak's is the one that broke: it compares
 # the browser's Origin header, which carries a port, and the mellon helper
 # strips ports because mellon matches hostnames.
-advisor_sso_origins_clear
 advisor_sso_reported_set cube-cos https://10.32.1.61 \
                          cube-cos-skyline https://10.32.1.61:9999 \
                          cube-cos-idp https://10.32.1.61:10443

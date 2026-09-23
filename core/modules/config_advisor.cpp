@@ -450,13 +450,10 @@ VerifyReleaseMain(int argc, char **argv)
 #define ADVISOR_AGENT_CERT       ADVISOR_IDENTITY_DIR "/agent.crt"
 #define ADVISOR_AGENT_BIN        ADVISOR_ROOT "/usr/local/bin/cube-advisor-agent"
 #define ADVISOR_TARGETS_FILE     ADVISOR_ROOT "/etc/cube-advisor-agent/web-targets.json"
-// The Advisor console origins keystone should trust for Skyline's WebSSO
-// callback. Supplied, not derived: see advisor_sso_origins_set.
-#define ADVISOR_SSO_ORIGINS_FILE ADVISOR_ROOT "/etc/cube-advisor-agent/sso-origins"
 #define ADVISOR_CONSOLE_CA       ADVISOR_ROOT "/etc/ssh/console-ca/cube-advisor.pub"
 #define ADVISOR_SSHD_DROPIN      ADVISOR_ROOT "/etc/ssh/sshd_config.d/60-cube-advisor-console.conf"
 
-// The Advisor's half of the SSO origins, carried here from whichever node's
+// The SSO origins the Advisor reported, carried here from whichever node's
 // agent was told. Refreshed on every connect, so this is only what keeps a
 // federated login working between an upgrade and the first reconnect.
 #define ADVISOR_SSO_REPORTED_FILE ADVISOR_ROOT "/etc/cube-advisor-agent/sso-origins-reported"
@@ -588,14 +585,11 @@ CONFIG_MIGRATE(advisor, ADVISOR_AGENT_BIN);
 CONFIG_MIGRATE(advisor, ADVISOR_TARGETS_FILE);
 // Which Advisor console origins keystone trusts for WebSSO. Nothing on the
 // node can work this out again -- it is how the Advisor spells its origins,
-// not anything about this cluster -- so losing it on an upgrade would mean
-// Skyline silently falling back to Keystone Credentials with no way to tell
-// why. The two files derived from it are rebuilt at the next commit.
-CONFIG_MIGRATE(advisor, ADVISOR_SSO_ORIGINS_FILE);
-// And the Advisor's own half. It is refreshed on the next connect, so carrying
-// it buys only the window between the new slot booting and the agent getting
-// back -- which is exactly when a federated login would otherwise start
-// failing for no reason anybody could see.
+// not anything about this cluster. It is refreshed on the next connect, so
+// carrying it across an upgrade buys the window between the new slot booting
+// and the agent getting back -- exactly when a federated login would otherwise
+// start failing for no reason anybody could see. The two files derived from it
+// are rebuilt at the next commit.
 CONFIG_MIGRATE(advisor, ADVISOR_SSO_REPORTED_FILE);
 // The console trust anchor and the sshd drop-in that loads it, written by the
 // agent at enrolment. rsync skips a path that is not there, so registering them

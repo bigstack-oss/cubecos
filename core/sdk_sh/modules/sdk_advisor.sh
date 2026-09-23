@@ -89,7 +89,6 @@ ADVISOR_DISCOVERED_FILE=/etc/cube-advisor-agent/discovered-targets
 # origins -- the installer, or an operator -- because the node cannot derive
 # them. config_advisor.cpp migrates this file; the two files below are rebuilt
 # from it by advisor_sso_apply and so are not migrated.
-ADVISOR_SSO_ORIGINS_FILE=/etc/cube-advisor-agent/sso-origins
 # What the Advisor itself reported, propagated to every control node. The
 # operator record above is an additional allowance on top of this, never a
 # replacement: both are deliberate acts, and advisor_sso_apply trusts their
@@ -796,8 +795,8 @@ _advisor_sso_origin_valid()
     host=${rest%%/*}
     [ "$host" != "$rest" ] || return 1
     # A conservative whitelist rather than a list of what to reject. These
-    # strings are handed to a remote shell by advisor_sso_origins_set_cluster,
-    # and a callback path has no need of a quote, a space or a metacharacter.
+    # strings come from the Advisor and reach keystone's config and a remote
+    # shell; a callback path has no need of a quote, space or metacharacter.
     case $path in
         *[!A-Za-z0-9._~%/-]*) return 1 ;;
     esac
@@ -815,109 +814,6 @@ _advisor_sso_origin_valid()
         ''|*[!A-Za-z0-9.*-]*) return 1 ;;
     esac
     return 0
-}
-
-# advisor_sso_origins_set <url> [<url> ...]
-#
-# Records the Advisor console origins whose WebSSO callbacks keystone should
-# trust, replacing whatever was recorded before.
-#
-# Supplied, never derived. In address mode the origin is an address out of the
-# Advisor's own pool and in domain mode it is <target>--<session>.<domain>;
-# neither is anything this node can work out from what it knows, and guessing
-# wrong here would mean trusting a host nobody chose. A node told nothing
-# trusts nothing extra, and Skyline still logs in with Keystone Credentials.
-advisor_sso_origins_set()
-{
-    local url content="" nl='
-'
-
-    [ $# -ge 1 ] || { echo "Error: advisor_sso_origins_set: usage <url> [<url> ...]" >&2 ; return 1 ; }
-    for url in "$@" ; do
-        if ! _advisor_sso_origin_valid "$url" ; then
-            echo "Error: not an https origin URL without userinfo, query or fragment: $url" >&2
-            return 1
-        fi
-        content="$content${content:+$nl}$url"
-    done
-
-    _advisor_write_file "$ADVISOR_SSO_ORIGINS_FILE" "$content"
-}
-
-# advisor_sso_origins_list
-#
-# Prints the recorded origins, one per line. Every line is rechecked: this file
-# migrates across a firmware upgrade, so what it held on the old partition is
-# not automatically what this release considers well formed.
-advisor_sso_origins_list()
-{
-    local line
-
-    [ -r "$ADVISOR_SSO_ORIGINS_FILE" ] || return 0
-    while read -r line ; do
-        case $line in ''|'#'*) continue ;; esac
-        _advisor_sso_origin_valid "$line" || continue
-        echo "$line"
-    done < "$ADVISOR_SSO_ORIGINS_FILE"
-}
-
-# advisor_sso_origins_clear
-advisor_sso_origins_clear()
-{
-    rm -f "$ADVISOR_SSO_ORIGINS_FILE"
-}
-
-# advisor_sso_origins_set_cluster <url> [<url> ...]
-#
-# The same, on every node, and applied there.
-#
-# Cluster-wide because keystone is: a WebSSO callback arrives at the control
-# VIP and haproxy hands it to whichever control node it likes, so a list that
-# is only on the node an operator typed it on makes the login succeed or fail
-# by which backend answered. Unlike the dial allowlist, which is deliberately
-# each node's own veto, this is one fact about the Advisor.
-#
-# Validated here first, so a bad URL is refused once rather than partly
-# applied across the cluster.
-advisor_sso_origins_set_cluster()
-{
-    local url node args="" rc=0
-
-    [ $# -ge 1 ] || { echo "Error: advisor_sso_origins_set_cluster: usage <url> [<url> ...]" >&2 ; return 1 ; }
-    for url in "$@" ; do
-        if ! _advisor_sso_origin_valid "$url" ; then
-            echo "Error: not an https origin URL without userinfo, query or fragment: $url" >&2
-            return 1
-        fi
-        # _advisor_sso_origin_valid admits no quote, space or metacharacter,
-        # so the URL survives the remote shell as one word.
-        args="$args '$url'"
-    done
-
-    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        if ! remote_run "$node" "$HEX_SDK advisor_sso_origins_set$args && $HEX_SDK advisor_sso_apply" >/dev/null 2>&1 ; then
-            echo "Warning: could not record the Advisor console origins on $node; Skyline federated login will fail whenever that node answers" >&2
-            rc=1
-        fi
-    done
-    return $rc
-}
-
-# advisor_sso_origins_clear_cluster
-#
-# Withdraws the trust everywhere it was granted. A node missed here keeps
-# trusting an origin the operator revoked, which is the direction that matters.
-advisor_sso_origins_clear_cluster()
-{
-    local node rc=0
-
-    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        if ! remote_run "$node" "$HEX_SDK advisor_sso_origins_clear && $HEX_SDK advisor_sso_apply" >/dev/null 2>&1 ; then
-            echo "Error: could not withdraw the Advisor console origins on $node; it still trusts them" >&2
-            rc=1
-        fi
-    done
-    return $rc
 }
 
 # _advisor_sso_base_valid <origin-base>
@@ -1005,30 +901,25 @@ advisor_sso_reported_list()
 
 # advisor_sso_effective_list
 #
-# What is actually trusted: the Advisor's report and the operator's record,
-# deduplicated. The Advisor's half is the live truth and withdraws itself; the
-# operator's half is an explicit act and only an operator removes it.
+# What is actually trusted. The Advisor reports its console origins to every
+# agent on connect, so its report is the only source: it is the live truth and
+# it withdraws itself when the Advisor stops claiming an origin.
 advisor_sso_effective_list()
 {
-    { advisor_sso_reported_list ; advisor_sso_origins_list ; } | awk '!seen[$0]++'
+    advisor_sso_reported_list | awk '!seen[$0]++'
 }
 
 # advisor_sso_origins_show
 #
-# What is trusted and where each entry came from. Two sources behave
-# differently -- one withdraws itself, the other does not -- so an operator
-# deciding whether to clear something has to be able to tell them apart.
+# What this node trusts, and who said so. One source now -- the Advisor's
+# report -- but the attribution stays: an operator looking at an origin they
+# did not choose needs to see that no one here declared it.
 advisor_sso_origins_show()
 {
-    local url reported
+    local url
 
-    reported=$(advisor_sso_reported_list)
     advisor_sso_effective_list | while read -r url ; do
-        if echo "$reported" | grep -qxF "$url" ; then
-            echo "$url (reported by the Advisor)"
-        else
-            echo "$url (declared here)"
-        fi
+        echo "$url (reported by the Advisor)"
     done
 }
 
