@@ -21,6 +21,26 @@ HEX_AGENT_ENV_DIR := /etc/cube
 # policy source tree
 CORE_POLICYDIR := $(COREDIR)/policies
 
+# Base URL for GitHub *release assets* (the `/<org>/<repo>/releases/download/...` objects we
+# wget, not the git remotes we clone).
+#
+# It is a variable, and only a variable, because those two surfaces have very different
+# throughput. Release assets and git-LFS objects are served from GitHub's object CDN, and that
+# path has been shaped to ~40-70 KB/s from our build network for weeks -- a 16 MB exporter
+# tarball takes ~400s -- while `git clone` against github.com itself still runs at ~2 MB/s.
+# Authenticating does not lift it, so it is path shaping rather than an account rate limit and a
+# token is not the answer. Measured 2026-09-23 against builds #743/#747/#748/#750, see
+# cubecos#1350.
+#
+# The default is the public host, so a clean checkout builds exactly as it always has and nothing
+# here needs to change for anyone outside our CI. A build that has a mirror available overrides it
+# from the environment -- like RC and FW_VER, this is never assigned anywhere in this repo, so no
+# internal hostname is committed here.
+#
+# Deliberately NOT used for the `git clone` URLs: git transport is not the bottleneck, and
+# rewriting clone remotes would need `url.insteadOf` instead of a URL variable anyway.
+GITHUB_DL_BASE ?= https://github.com
+
 # cubecos shared build envs
 GOLANG_VERSION := 1.24.2
 PROJ_NFS_SERVER := 10.32.0.200
