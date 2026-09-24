@@ -318,8 +318,17 @@ VerifyRelease(const std::string& dir, const std::string& requiredArtifact)
     // 1. Is this manifest Bigstack's?
     if (!VerifySignature(manifest, signature)) {
         HexLogError("advisor: release manifest signature does not verify in %s", dir.c_str());
+        // Name the anchor. The usual cause is not a tampered release but a
+        // release signed with a different key than this image was built
+        // against -- a build mints a throwaway pair when none is injected, so
+        // any rebuild of the build environment strands images made before it.
+        // Printing the key turns a half-hour of archaeology into one diff.
         fprintf(stderr, "Error: release manifest signature does not verify against the "
-                        "release key in this image\n");
+                        "release key in this image.\n"
+                        "This image trusts:\n%s"
+                        "Compare with the signing key's public half; if they differ, the "
+                        "release was signed for a different image.\n",
+                ADVISOR_RELEASE_PUBLIC_KEY);
         close(dirFd);
         return false;
     }

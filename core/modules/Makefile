@@ -27,6 +27,10 @@ $(ADVISOR_PUB_PEM):
 	$(Q)openssl ecparam -name prime256v1 -genkey -noout -out $(ADVISOR_PRIV_PEM)
 	$(Q)chmod 600 $(ADVISOR_PRIV_PEM)
 	$(Q)openssl ec -in $(ADVISOR_PRIV_PEM) -pubout -out $@ 2>/dev/null
+	$(Q)echo "WARNING: minted a throwaway advisor release keypair at $(ADVISOR_PRIV_PEM)." >&2
+	$(Q)echo "         Images from this build accept releases signed only by it, and the" >&2
+	$(Q)echo "         next build environment that lacks $(ADVISOR_PUB_PEM) will replace it," >&2
+	$(Q)echo "         stranding them. Pass ADVISOR_PUB_PEM= to pin a real anchor." >&2
 
 advisor_key.h: $(ADVISOR_PUB_PEM)
 	$(Q)echo "#define ADVISOR_RELEASE_PUBLIC_KEY \"$(shell cat $< | awk '{printf "%s\\n", $$0}')\"" > $@
