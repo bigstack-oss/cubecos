@@ -1,5 +1,7 @@
 // CUBE SDK
 
+#include <cstring>
+
 #include <hex/cli_module.h>
 #include <hex/cli_util.h>
 #include <hex/exec.hpp>
@@ -102,24 +104,42 @@ GpuResourceSetMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    CliList types;
-    types.push_back("pgpu");
-    types.push_back("sriovVgpu");
-    types.push_back("migBackedVgpu");
+    /*
+     * Only the types this card supports are offered, so an operator is never
+     * walked into a profile prompt that can only end in a refusal. uuid came out
+     * of the list above, so it is safe to hand to the shell here.
+     */
+    optCmd = HEX_SDK " gpu_resource_type_list " + uuid;
+    descCmd = HEX_SDK " -v gpu_resource_type_list " + uuid;
 
-    if (CliMatchListHelper(argc, argv, 2, types, &index, &type) != 0) {
-        CliPrintf("resource type is missing or not found");
+    int rc = CliMatchCmdDescHelper(argc, argv, 2, optCmd, descCmd, &index, &type,
+                                   "Select a resource type: ");
+    if (rc == -1) {
+        CliPrintf("cannot read the supported resource types of GPU %s", uuid.c_str());
+        return CLI_FAILURE;
+    }
+    if (rc != CLI_SUCCESS) {
+        // A type given on the command line that is valid but not supported by
+        // this card gets the same answer the API gives, not "not found".
+        if (argc > 2 &&
+            (strcmp(argv[2], "pgpu") == 0 ||
+             strcmp(argv[2], "sriovVgpu") == 0 ||
+             strcmp(argv[2], "migBackedVgpu") == 0)) {
+            CliPrintf("GPU %s does not support '%s' resource type", uuid.c_str(), argv[2]);
+        } else {
+            CliPrintf("resource type is missing or not found");
+        }
         return CLI_INVALID_ARGS;
     }
 
     /*
      * profiles is a JSON array of {id, count}, required by the two vGPU types
      * and omitted for pgpu. It is passed through untouched: every rule about
-     * what a valid carve is - the card's own supported types, the profile ids,
-     * the total VRAM - is enforced fail-closed inside hex_config's
-     * gpu_resource_set, after it has released the card from vfio-pci. Checking
-     * any of it a second time here would run before that release, i.e. at the
-     * one point in the sequence where the answer cannot be read.
+     * what a valid carve is - the profile ids, the total VRAM, and the card's
+     * supported types once more - is enforced fail-closed inside hex_config's
+     * gpu_resource_set, which is also reached without going through this menu.
+     * The profile rules need nvidia-smi, which cannot see a pgpu until
+     * hex_config has released it from vfio-pci, so they cannot move here.
      *
      * HexSpawn is execv-based, so the JSON crosses as one argv element and
      * never meets a shell. Its stdout and stderr go straight to the terminal:

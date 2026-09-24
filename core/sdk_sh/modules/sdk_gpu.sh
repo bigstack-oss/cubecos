@@ -919,6 +919,46 @@ gpu_device_uuid_list()
     fi
 }
 
+# Resource type picker feed for hex_cli, in the same two-command shape as
+# gpu_device_uuid_list: the plain form emits the types card <gpu_id> can be set
+# to, VERBOSE=1 a description of each in the same order. It lists the card's
+# supportTypes and nothing else, so a type the card cannot take is never
+# offered - the same set the Web UI leaves selectable.
+#
+# Fails, with nothing on stdout, when the card cannot be described: pgpu is
+# always in supportTypes, so an empty list would only ever mean "unknown", and a
+# picker must not present that as a card that supports nothing.
+gpu_resource_type_list()
+{
+    local gpu_id="$1"
+
+    local devices
+    if ! devices=$(gpu_device_list); then
+        return 1
+    fi
+
+    local types
+    types=$(echo "$devices" | jq -r --arg id "$gpu_id" \
+        'map(select(.id == $id)) | .[0].supportTypes // [] | .[]')
+    if [ -z "$types" ]; then
+        return 1
+    fi
+
+    if [ "$VERBOSE" == "1" ]; then
+        local type
+        for type in $types; do
+            case "$type" in
+                pgpu)          echo "pgpu - whole card passed through to one instance" ;;
+                sriovVgpu)     echo "sriovVgpu - time-sliced vGPU over SR-IOV virtual functions" ;;
+                migBackedVgpu) echo "migBackedVgpu - vGPU backed by MIG GPU instances" ;;
+                *)             echo "$type" ;;
+            esac
+        done
+    else
+        echo "$types"
+    fi
+}
+
 gpu_vgpu_profile_list()
 {
     local gpu_id="$1"
