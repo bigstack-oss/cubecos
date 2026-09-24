@@ -346,7 +346,7 @@ power_roll_plan()
         | [ .[] | select(($sel|length)==0 or (.hostname as $h | $sel | index($h))) ]
         | if $kind == "upgrade" then
               sort_by((if .hostname==$m then 0 else 1 end),
-                      (if (.role|test("control")) then 0 elif (.role|test("storage")) then 1 else 2 end))
+                      (if (.role|test("control")) or .role=="edge-core" or .role=="moderator" then 0 elif (.role|test("storage")) then 1 else 2 end))
           else
               sort_by((if (.role|test("compute")) then 0 elif (.role|test("storage")) then 1 else 2 end),
                       (if .hostname==$m then 1 else 0 end))
@@ -615,6 +615,9 @@ power_roll_start()
         # order differs by kind: restart = compute->storage->control, master
         # LAST (control plane up longest); upgrade = master FIRST (shortest
         # mixed-version window)
+        # edge-core and moderator carry the control bit (cubectl role.go) without
+        # "control" in the name, so the upgrade tier names them; matched on the
+        # word alone they sorted after storage, i.e. OSDs before their mons
         local nodes=$(cubectl node list -j | jq -c --arg m "$master" --arg want "$want" --arg kind "$kind" '
             ($want | split(" ") | map(select(length > 0))) as $sel
             | [ .[]
@@ -623,7 +626,7 @@ power_roll_start()
             | if $kind == "upgrade" then
                   sort_by(
                     (if .hostname==$m then 0 else 1 end),
-                    (if (.role|test("control")) then 0 elif (.role|test("storage")) then 1 else 2 end))
+                    (if (.role|test("control")) or .role=="edge-core" or .role=="moderator" then 0 elif (.role|test("storage")) then 1 else 2 end))
               else
                   sort_by(
                     (if (.role|test("compute")) then 0 elif (.role|test("storage")) then 1 else 2 end),
