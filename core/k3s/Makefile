@@ -37,12 +37,16 @@ $(K3S_SRC_DIR):
 # fetch -- so skipping it buys reliability as well as time. See cubecos#1350.
 K3S_CACHE ?=
 
-# $(QEND) so the probe's own chatter obeys VERBOSE like every other step, leaving one labelled
-# line on a hit. Not RUN_CMD_TIMED: that swallows its command's output into a tmpfile, which would
-# also swallow the source build's own per-step labels on the fallback path below.
+# Only stdout is silenced when VERBOSE=0, so the probe's routine chatter obeys VERBOSE like every
+# other step and leaves one labelled line on a hit. Not $(QEND), which is `>/dev/null 2>&1`: the
+# script puts routine misses on stdout but anomalies (bad checksum, wrong version) on stderr, and
+# dropping those turns a poisoned cache entry into a silent 81-min source build on every single
+# run with nothing in the log saying why. Not RUN_CMD_TIMED either: that swallows its command's
+# output into a tmpfile, which would also swallow the source build's own per-step labels on the
+# fallback path below.
 $(BIN):
 	$(Q)K3S_CACHE="$(K3S_CACHE)" VERSION="$(VERSION)" OUT="$(CURDIR)/$(BIN)" \
-		sh $(SRCDIR)/build/fetch-or-build.sh $(QEND) \
+		sh $(SRCDIR)/build/fetch-or-build.sh $(if $(Q),>/dev/null) \
 		&& echo "  K3S     $(VERSION) restored from cache" \
 		|| $(MAKE) $(BIN)-from-source
 
