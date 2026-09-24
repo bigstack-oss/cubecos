@@ -1084,6 +1084,7 @@
             "y": 9
           },
           "hiddenSeries": false,
+          "description": "vGPU compute workload % of this VM, as reported by the host. Sampled every 5 minutes: a workload shorter than that may not appear. MIG-backed vGPUs report no utilization; pGPU (passthrough) VMs have no GPU data.",
           "id": 36,
           "legend": {
             "avg": false,
@@ -1223,6 +1224,7 @@
             "y": 9
           },
           "hiddenSeries": false,
+          "description": "Total is the framebuffer of this VM's vGPU. Used is what the host driver reports for the vGPU: it does not follow allocations inside the guest in real time and can stay at the idle value while a workload runs. Sampled every 5 minutes. pGPU (passthrough) VMs have no GPU data.",
           "id": 37,
           "legend": {
             "avg": false,
@@ -1414,6 +1416,7 @@
             "y": 9
           },
           "hiddenSeries": false,
+          "description": "vGPU encoder utilization % of this VM, as reported by the host. Sampled every 5 minutes: a workload shorter than that may not appear.",
           "id": 38,
           "legend": {
             "avg": false,
@@ -1553,6 +1556,7 @@
             "y": 9
           },
           "hiddenSeries": false,
+          "description": "vGPU decoder utilization % of this VM, as reported by the host. Sampled every 5 minutes: a workload shorter than that may not appear.",
           "id": 39,
           "legend": {
             "avg": false,

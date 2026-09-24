@@ -2821,7 +2821,7 @@
           "title": "GPU Utilization",
           "type": "timeseries",
           "datasource": "influxdb-telegraf",
-          "description": "Physical GPU compute workload % per card. Grouped by PCI ID and GPU model name.",
+          "description": "Physical GPU compute workload % per card. Grouped by PCI ID and GPU model name. Sampled every 5 minutes: a workload shorter than that may not appear.",
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
           "fieldConfig": {
             "defaults": {
@@ -2851,7 +2851,7 @@
           "title": "GPU VRAM Usage",
           "type": "timeseries",
           "datasource": "influxdb-telegraf",
-          "description": "Physical GPU framebuffer (VRAM) used and total per card in MiB.",
+          "description": "Physical GPU framebuffer (VRAM) used and total per card in MiB. On a card carved into vGPUs, 'used' is the framebuffer allocated to running vGPU VMs: it steps when a VM starts or stops, not when a workload inside a VM allocates memory. Sampled every 5 minutes.",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
           "fieldConfig": {
             "defaults": { "unit": "decmbytes", "custom": { "lineWidth": 2, "fillOpacity": 10 } },
