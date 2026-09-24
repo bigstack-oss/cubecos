@@ -41,6 +41,48 @@ CORE_POLICYDIR := $(COREDIR)/policies
 # rewriting clone remotes would need `url.insteadOf` instead of a URL variable anyway.
 GITHUB_DL_BASE ?= https://github.com
 
+# The same idea for every other upstream we fetch binaries from, one variable each rather than a
+# single switch. Throttling has shown up on one host at a time -- github.com's object CDN and
+# registry.k8s.io, while quay.io and artifacts.opensearch.org stayed fast -- so the useful unit is
+# per-host. These carry the scheme+host only; the path and version stay with the component that
+# owns them, so a mirror is configured without teaching the CI repo our version numbers.
+#
+# All default to the public host: unset, the build is byte-identical to what it has always done.
+# Routing one of them is a decision to make on evidence, and the evidence is a throughput
+# measurement of that host, not a hunch -- the mirror serves cached objects at a few MB/s, which
+# is *slower* than several of these upstreams when they are healthy.
+APACHE_DL_HOST   ?= https://archive.apache.org
+MARIADB_DL_HOST  ?= https://archive.mariadb.org
+ELASTIC_DL_HOST  ?= https://artifacts.elastic.co
+KOJIHUB_DL_HOST  ?= https://kojihub.stream.centos.org
+CBS_DL_HOST      ?= https://cbs.centos.org
+
+# PyPI index. Empty by default, so pip resolves against pypi.org exactly as before.
+#
+# Exported as an environment variable rather than written as a pip.conf into $(ROOTDIR),
+# deliberately: most pip installs in this tree run as `chroot $(ROOTDIR) ... pip install`, chroot
+# inherits the environment, and one export therefore reaches every one of them -- the ~40 openstack
+# service installs, the venv bootstraps, and the ceph binding build -- while leaving nothing inside
+# the image that would have to be scrubbed before packing. A pip.conf under $(ROOTDIR)/etc would
+# ship; cube-post.mk's guard would catch it, but not creating it is better than catching it.
+#
+# It also reaches pip's PEP-517 build isolation, which resolves the build backend from the live
+# index and ignores `-c` (see the NOTE in core/heavyfs/Makefile) -- the one place a constraint file
+# cannot help.
+#
+# files.pythonhosted.org measured 148 KB/s from the build network on 2026-09-24 against 1.81 MB/s
+# for the same wheel from a warm mirror, so this is worth routing. Note the mirror is a
+# pull-through proxy: a package it has not seen is fetched from that same slow upstream, so the
+# first build after pointing this at a mirror is no faster than before.
+PIP_INDEX_URL ?=
+PIP_TRUSTED_HOST ?=
+ifneq ($(PIP_INDEX_URL),)
+export PIP_INDEX_URL
+ifneq ($(PIP_TRUSTED_HOST),)
+export PIP_TRUSTED_HOST
+endif
+endif
+
 # cubecos shared build envs
 GOLANG_VERSION := 1.24.2
 PROJ_NFS_SERVER := 10.32.0.200
