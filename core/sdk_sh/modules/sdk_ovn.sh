@@ -385,3 +385,55 @@ ovn_sb_evacuate_host()
     fi
     return 0
 }
+
+# --- the OVN 23.03 central beside 24.03, for the 3.1.10 -> 3.1.20 roll -----------------
+#
+# OVN supports an ovn-controller newer than ovn-northd and the NB/SB databases, never
+# older: a newer northd writes logical flows an older controller cannot parse (24.03's
+# lr_in_learn_neighbor mac_cache_use drops every routed packet on a 23.03 chassis). A roll
+# reboots every control node before any compute, so an upgraded control node keeps the
+# 23.03 central it carried across until every chassis runs 24.03. How pacemaker runs it
+# is in core/neutron/cube-ovndb-servers. Delete this block with the next OVN hop.
+#
+# The 23.03 databases in OVN_COMPAT_DB_DIR are the mode itself -- no separate marker to
+# drift -- and /etc/ovn is CONFIG_MIGRATE'd where /etc/appliance/state is not. Paths
+# named, not inlined: the tests point them somewhere writable.
+OVN_COMPAT_DIR=${OVN_COMPAT_DIR:-/opt/ovn-23.03}
+OVN_COMPAT_DB_DIR=${OVN_COMPAT_DB_DIR:-/etc/ovn/compat-23.03}
+OVN_DB_DIR=${OVN_DB_DIR:-/etc/ovn}
+
+ovn_central_compat_active()
+{
+    [ -e $OVN_COMPAT_DB_DIR/ovnnb_db.db ]
+}
+
+# CONFIG_MIGRATE_POST(neutron), on the first boot of the new partition: after /etc/ovn is
+# copied across and before bootstrap starts pacemaker, whose first start of this node's
+# ovndb_servers would otherwise hand the 23.03 databases to 24.03's ovn-ctl to convert.
+# Role and HA come from the previous root, since the new one is not configured yet.
+ovn_central_compat_enter()   # <prev-root-dir>
+{
+    local prev=$1 d
+    [ -d $OVN_COMPAT_DIR ] || return 0
+    [ -e $OVN_DB_DIR/ovnnb_db.db ] && [ -e $OVN_DB_DIR/ovnsb_db.db ] || return 0
+    ovn_central_compat_active && return 0
+
+    source hex_tuning $prev/etc/settings.txt cubesys.role
+    source hex_tuning $prev/etc/settings.txt cubesys.ha
+    case "$T_cubesys_role" in
+        control|control-network|control-converged|edge-core|moderator) ;;
+        *) return 0 ;;
+    esac
+    # a lone control node reboots its central and its chassis together: no mixed window
+    [ "$T_cubesys_ha" = "true" ] || return 0
+
+    # only a 23.03 central's databases; anything else is 24.03 already
+    for d in nb sb ; do
+        [ "$(ovsdb-tool db-version $OVN_DB_DIR/ovn${d}_db.db 2>/dev/null)" = \
+          "$(ovsdb-tool schema-version $OVN_COMPAT_DIR/share/ovn/ovn-$d.ovsschema 2>/dev/null)" ] || return 0
+    done
+
+    mkdir -p $OVN_COMPAT_DB_DIR || return 1
+    mv -f $OVN_DB_DIR/ovnnb_db.db $OVN_DB_DIR/ovnsb_db.db $OVN_COMPAT_DB_DIR/ || return 1
+    log_info "ovn_central_compat_enter: keeping the OVN 23.03 central until every chassis runs 24.03"
+}
