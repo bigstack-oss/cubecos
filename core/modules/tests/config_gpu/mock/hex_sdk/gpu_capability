@@ -1,0 +1,17 @@
+#!/bin/sh
+#
+# Mock hex_sdk for the supportTypes test. Records every shell-out in call order,
+# like gpu_order, and reports a pgpu card whose pre-condition check passes. The
+# card's supportTypes member is read from /tmp/mock-support-types verbatim
+# (e.g. `,"supportTypes":["pgpu","sriovVgpu"]`), so an empty file is a card
+# that reports no supportTypes at all.
+echo "$1" >> /tmp/gpu-capability.log
+
+case "$1" in
+    gpu_device_list)
+        echo "[{\"id\":\"GPU-cap-test\",\"name\":\"Test Card\",\"type\":\"pgpu\",\"pciAddress\":\"00000000:42:00.0\"$(cat /tmp/mock-support-types 2>/dev/null)}]"
+        ;;
+    *)
+        exit 0
+        ;;
+esac

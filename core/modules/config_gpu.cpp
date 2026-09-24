@@ -1378,6 +1378,28 @@ ResourceSetMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    // A type the card cannot be carved into is refused here, by name.
+    // ValidateVgpuProfiles would refuse it as well, but only as "profile id N is
+    // not a valid <type> profile" - and for a pgpu only after the vfio-pci
+    // release below, which it needs in order to read the card. supportTypes
+    // needs no such release: gpu_device_list derives it from the driver's static
+    // vgpuConfig.xml for a vfio-bound card. Same rule and wording as
+    // cube-cos-api's isSupportedType, so CLI and API refuse alike.
+    std::string supported;
+    bool typeSupported = false;
+    for (const json11::Json& t : device["supportTypes"].array_items()) {
+        if (!t.is_string())
+            continue;
+        supported += (supported.empty() ? "" : ", ") + t.string_value();
+        if (t.string_value() == newType)
+            typeSupported = true;
+    }
+    if (!typeSupported) {
+        HexLogError("gpu_resource_set: GPU %s does not support '%s' resource type (supported: %s)",
+                    gpuId, newType, supported.empty() ? "unknown" : supported.c_str());
+        return EXIT_FAILURE;
+    }
+
     // A pgpu is bound to vfio-pci, which makes it invisible to nvidia-smi - and
     // migBackedVgpu's capacity rule reads the card's GPU-instance geometry
     // through nvidia-smi, so on a pgpu it would reject every profile as

@@ -5,10 +5,11 @@
 # The device is reported as sriovVgpu rather than pgpu on purpose: a pgpu sends
 # ResourceSetMain through gpu_unbind_vfio_pci first, which is a path this test
 # is not about. pciAddress must be non-empty - ResourceSetMain refuses the
-# request outright without one.
+# request outright without one. supportTypes has to include sriovVgpu for the
+# same reason: ResourceSetMain refuses a type the card does not list.
 case "$1" in
     gpu_device_list)
-        echo '[{"id":"GPU-1316-test","name":"Test Card","type":"sriovVgpu","pciAddress":"00000000:42:00.0"}]'
+        echo '[{"id":"GPU-1316-test","name":"Test Card","type":"sriovVgpu","pciAddress":"00000000:42:00.0","supportTypes":["pgpu","sriovVgpu"]}]'
         ;;
     gpu_vgpu_profile_list)
         # two profiles of one size and one of another, so the test can build both
