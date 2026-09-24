@@ -346,7 +346,7 @@ power_roll_plan()
         | [ .[] | select(($sel|length)==0 or (.hostname as $h | $sel | index($h))) ]
         | if $kind == "upgrade" then
               sort_by((if .hostname==$m then 0 else 1 end),
-                      (if (.role|test("control")) then 0 elif (.role|test("storage")) then 1 else 2 end))
+                      (if (.role|test("control")) or .role=="edge-core" or .role=="moderator" then 0 elif (.role|test("storage")) then 1 else 2 end))
           else
               sort_by((if (.role|test("compute")) then 0 elif (.role|test("storage")) then 1 else 2 end),
                       (if .hostname==$m then 1 else 0 end))
@@ -615,6 +615,9 @@ power_roll_start()
         # order differs by kind: restart = compute->storage->control, master
         # LAST (control plane up longest); upgrade = master FIRST (shortest
         # mixed-version window)
+        # edge-core and moderator carry the control bit (cubectl role.go) without
+        # "control" in the name, so the upgrade tier names them; matched on the
+        # word alone they sorted after storage, i.e. OSDs before their mons
         local nodes=$(cubectl node list -j | jq -c --arg m "$master" --arg want "$want" --arg kind "$kind" '
             ($want | split(" ") | map(select(length > 0))) as $sel
             | [ .[]
@@ -623,7 +626,7 @@ power_roll_start()
             | if $kind == "upgrade" then
                   sort_by(
                     (if .hostname==$m then 0 else 1 end),
-                    (if (.role|test("control")) then 0 elif (.role|test("storage")) then 1 else 2 end))
+                    (if (.role|test("control")) or .role=="edge-core" or .role=="moderator" then 0 elif (.role|test("storage")) then 1 else 2 end))
               else
                   sort_by(
                     (if (.role|test("compute")) then 0 elif (.role|test("storage")) then 1 else 2 end),
@@ -751,10 +754,17 @@ power_roll_advance()
 
     local next=$(jq -r 'first(.nodes[]|select(.status=="pending")|.hostname) // ""' $ROLLING_JOB)
     if [ -z "$next" ] ; then
+        _power_roll_watchdog_disarm
+        # Chassis first, central last: every node now runs the new firmware, so move the
+        # OVN central off the version the control nodes carried across (a no-op when
+        # there is none). Before the job is marked done, so auto-repair still stands
+        # down for the seconds the NB/SB are stopped; after the watchdog is disarmed, so
+        # the switch cannot run the last node past its deadline. See ovn_central_switch
+        # (sdk_ovn.sh); it logs its own outcome on the VIP holder.
+        ( remote_run $master "$HEX_SDK ovn_central_switch" ) >/dev/null 2>&1
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
-        _power_roll_watchdog_disarm
         # The full check_repair pass belongs here -- when the ROLL is done --
         # not when a single node's boot is done. Running it mid-roll evaluates a
         # cluster with a node deliberately down and tries to "repair" it.
