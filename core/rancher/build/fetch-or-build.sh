@@ -72,10 +72,17 @@ fi
 
 # The chart's rancherImage default is the one thing a wrongly-packaged chart gets silently wrong:
 # a chart built with REGISTRY=registry.rancher.com bakes in the Prime image path, which we cannot
-# redistribute. Fail here rather than ship it.
+# redistribute. Fail here rather than ship it -- this is the one case where a configured cache can
+# make the build fail instead of falling back, and that is deliberate: a cache serving an
+# unredistributable chart is a problem to fix, not to paper over with a silent source build.
+#
+# Remove it first. $(CHART) is a bare file target with no prerequisites and the tree sets no
+# .DELETE_ON_ERROR, so a rejected chart left on disk is reported up to date by the next
+# incremental make, and install: would ship the very chart this check just refused.
 if ! tar xzOf "$CHART" rancher/values.yaml | grep -qE '^rancherImage: *rancher/rancher$' ; then
     echo "ERROR: cached chart's rancherImage is not the community rancher/rancher:" >&2
     tar xzOf "$CHART" rancher/values.yaml | grep -E '^rancherImage:' >&2 || true
+    rm -f "$CHART"
     exit 1
 fi
 

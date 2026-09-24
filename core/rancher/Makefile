@@ -9,7 +9,9 @@ APP_VERSION := 2.11.16
 # server chart, as "<host>/<repo>". EMPTY BY DEFAULT: unset, the images are built from upstream
 # source exactly as before, so a clean checkout needs access to nothing of ours. build/fetch-or-
 # build.sh also falls back to the source build if the cache is unreachable or does not hold this
-# version, so configuring it can make the build faster but never makes it fail.
+# version, so configuring it can make the build faster. The one exception is a cache serving a
+# chart whose rancherImage is the unredistributable Prime path: that is refused outright rather
+# than falling back, because it is a poisoned cache to fix, not a slow build to work around.
 #
 # Worth caching because the source build is 66 min (prod #750) and reruns on *every* build --
 # the jail container is recreated each time and podman's storage goes with it -- for a version
