@@ -401,6 +401,7 @@ ovn_sb_evacuate_host()
 OVN_COMPAT_DIR=${OVN_COMPAT_DIR:-/opt/ovn-23.03}
 OVN_COMPAT_DB_DIR=${OVN_COMPAT_DB_DIR:-/etc/ovn/compat-23.03}
 OVN_DB_DIR=${OVN_DB_DIR:-/etc/ovn}
+OVN_SCHEMA_DIR=${OVN_SCHEMA_DIR:-/usr/share/ovn}
 
 ovn_central_compat_active()
 {
@@ -436,4 +437,157 @@ ovn_central_compat_enter()   # <prev-root-dir>
     mkdir -p $OVN_COMPAT_DB_DIR || return 1
     mv -f $OVN_DB_DIR/ovnnb_db.db $OVN_DB_DIR/ovnsb_db.db $OVN_COMPAT_DB_DIR/ || return 1
     log_info "ovn_central_compat_enter: keeping the OVN 23.03 central until every chassis runs 24.03"
+}
+
+# 0 only if every chassis-bearing node runs this node's OVN minor -- the precondition for
+# moving the central to it. Chassis-bearing by role bit (cubectl -r compute: compute,
+# control-converged, edge-core) and read from the running daemon, not the package. Same
+# fail-safe contract as os_neutron_version_uniform(): unreachable = unknown = not uniform.
+ovn_chassis_version_uniform()
+{
+    local want h v hosts
+    want=$(ovn-northd --version 2>/dev/null | awk 'NR==1{print $NF}' | cut -d. -f1,2)
+    hosts=$(cubectl node list -r compute -j 2>/dev/null | jq -r '.[].hostname')
+    [ -n "$want" ] && [ -n "$hosts" ] || return 1
+    for h in $hosts ; do
+        v=$(remote_run $h "ovn-appctl -t ovn-controller version 2>/dev/null" | awk 'NR==1{print $NF}' | cut -d. -f1,2)
+        if [ "$v" != "$want" ] ; then
+            log_info "ovn_chassis_version_uniform: $h runs ovn-controller ${v:-(unknown)}, not $want"
+            return 1
+        fi
+    done
+}
+
+# On one node, with its ovndb_servers stopped: convert the 23.03 databases into the
+# default location and drop the mode. The 23.03 files are kept as the backup #1276 asked
+# for -- the conversion is one-way.
+ovn_central_convert_local()   # <timestamp>
+{
+    ovn_central_compat_active || return 0
+    local bk=$OVN_DB_DIR/backup-23.03-$1 d
+    mkdir -p $bk || return 1
+    for d in nb sb ; do
+        # a default database this node had before it took the 23.03 one: keep it aside
+        if [ -e $OVN_DB_DIR/ovn${d}_db.db ] ; then
+            mv -f $OVN_DB_DIR/ovn${d}_db.db $bk/ovn${d}_db.db.24.03 || return 1
+        fi
+        cp -a $OVN_COMPAT_DB_DIR/ovn${d}_db.db $bk/ || return 1
+        # compact first, as ovs-lib's upgrade_db does: convert replays every log record
+        # against the new schema, not just the final state
+        ovsdb-tool compact $OVN_COMPAT_DB_DIR/ovn${d}_db.db || return 1
+        ovsdb-tool convert $OVN_COMPAT_DB_DIR/ovn${d}_db.db $OVN_SCHEMA_DIR/ovn-$d.ovsschema \
+            $OVN_DB_DIR/ovn${d}_db.db || return 1
+    done
+    rm -rf $OVN_COMPAT_DB_DIR
+}
+
+# Undo ovn_central_convert_local <timestamp> on a node, for a switch that failed part-way.
+ovn_central_restore_local()   # <timestamp>
+{
+    local bk=$OVN_DB_DIR/backup-23.03-$1 d
+    [ -e $bk/ovnnb_db.db ] && [ -e $bk/ovnsb_db.db ] || return 0
+    mkdir -p $OVN_COMPAT_DB_DIR || return 1
+    for d in nb sb ; do
+        cp -a $bk/ovn${d}_db.db $OVN_COMPAT_DB_DIR/ || return 1
+        rm -f $OVN_DB_DIR/ovn${d}_db.db
+        if [ -e $bk/ovn${d}_db.db.24.03 ] ; then
+            mv -f $bk/ovn${d}_db.db.24.03 $OVN_DB_DIR/ovn${d}_db.db || return 1
+        fi
+    done
+}
+
+# ssh for ovn_central_switch, bounded the way cmd() is (connect, liveness and total
+# time) and without remote_run's Error exit: once the central is stopped, every
+# failure has to be handled, not abort the switch half-way or hang it on a wedged node.
+_ovn_ssh()   # <host> <command>
+{
+    timeout ${CMD_SSH_TIMEOUT:-600} ssh -o LogLevel=quiet -o ConnectTimeout=10 \
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o BatchMode=yes root@"$@"
+}
+
+# Move the OVN central from 23.03 to 24.03 once every chassis runs 24.03. Called when a
+# roll completes, from cluster_start, or by hand; a no-op unless a control node still
+# runs the 23.03 central.
+#
+# One step, not node by node: a 24.03 backup cannot replicate from a 23.03 active, nor
+# the other way round (the NB and SB schemas change column types), so a node switched
+# early would hold a stale copy and promoting it would drop everything written since.
+# Instead the central is stopped everywhere, every node's 23.03 databases are converted,
+# and it is started again. The VIP holder -- promoted before and after, the promotion
+# follows the VIP -- converts the authoritative copy and the others resync from it. The
+# chassis keep their flows while the NB/SB are down: seconds of control plane, no data
+# plane.
+ovn_central_switch()
+{
+    is_control_node || return 0
+    source hex_tuning $SETTINGS_TXT cubesys.ha
+    [ "$T_cubesys_ha" = "true" ] || return 0
+    source hex_tuning $SETTINGS_TXT cubesys.control.vip
+    local vip=$T_cubesys_control_vip
+    [ -n "$vip" ] || return 1
+
+    # one orchestrator, the node whose databases are the ones that count
+    if ! ip -o addr show | grep -qF " $vip/" ; then
+        remote_run $vip "$HEX_SDK ovn_central_switch"
+        return $?
+    fi
+    exec 9>/run/ovn_central_switch.lock
+    flock -n 9 || { log_info "ovn_central_switch: already running" ; return 0 ; }
+
+    local want h compat="" ctrls
+    want=$(ovn-northd --version 2>/dev/null | awk 'NR==1{print $NF}' | cut -d. -f1,2)
+    ctrls=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
+    [ -n "$want" ] && [ -n "$ctrls" ] || return 1
+
+    # Nothing is touched until every control node is reachable and has the new central:
+    # past the disable below a failure has to be undone, not just reported.
+    for h in $ctrls ; do
+        if ! is_sshable $h ; then
+            log_info "ovn_central_switch: $h is unreachable; staying on the 23.03 central"
+            return 1
+        fi
+        if [ "$(_ovn_ssh $h 'ovn-northd --version 2>/dev/null' | awk 'NR==1{print $NF}' | cut -d. -f1,2)" != "$want" ] ; then
+            log_info "ovn_central_switch: $h is not on OVN $want yet"
+            return 0
+        fi
+        _ovn_ssh $h "test -e $OVN_COMPAT_DB_DIR/ovnnb_db.db" && compat="$compat $h"
+    done
+    [ -n "$compat" ] || return 0
+    ovn_chassis_version_uniform || return 0
+
+    local ts=$(date +%Y%m%d-%H%M%S) done="" rc=0
+    log_info "ovn_central_switch: moving the OVN central to $want (23.03 on$compat)"
+    trap 'pcs resource enable ovndb_servers-clone' EXIT
+    if ! pcs resource disable ovndb_servers-clone --wait=180 ; then
+        log_error "ovn_central_switch: ovndb_servers did not stop; staying on the 23.03 central"
+        return 1
+    fi
+    for h in $ctrls ; do
+        if _ovn_ssh $h "$HEX_SDK ovn_central_convert_local $ts" ; then
+            done="$done $h"
+        else
+            log_error "ovn_central_switch: converting the databases on $h failed; restoring 23.03"
+            rc=1
+            break
+        fi
+    done
+    if [ $rc -ne 0 ] ; then
+        for h in $done $h ; do
+            _ovn_ssh $h "$HEX_SDK ovn_central_restore_local $ts" || \
+                log_error "ovn_central_switch: could not restore the 23.03 databases on $h"
+        done
+    fi
+    trap - EXIT
+    if ! pcs resource enable ovndb_servers-clone --wait=180 ; then
+        log_error "ovn_central_switch: ovndb_servers did not come back"
+        return 1
+    fi
+    [ $rc -eq 0 ] || return 1
+
+    local nb=$(ovsdb-client get-schema-version unix:/var/run/ovn/ovnnb_db.sock OVN_Northbound 2>/dev/null)
+    if [ "$nb" != "$(ovsdb-tool schema-version $OVN_SCHEMA_DIR/ovn-nb.ovsschema)" ] ; then
+        log_error "ovn_central_switch: the promoted northbound is at ${nb:-(unreachable)}"
+        return 1
+    fi
+    log_info "ovn_central_switch: the OVN central runs $want on every control node (23.03 databases kept in $OVN_DB_DIR/backup-23.03-$ts)"
 }

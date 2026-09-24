@@ -1083,6 +1083,19 @@ ClusterStartMain(int argc, char **argv)
         HexLogError("failed to run neutron post-migration actions");
     }
 
+    // Chassis first, central last: rolling_update moves the OVN central off 23.03 when
+    // the roll completes; this is the retry for an upgrade that did not finish through
+    // it. A no-op unless a control node still runs 23.03 and every chassis runs 24.03.
+    const ExecSyncResult s = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        HEX_SDK " ovn_central_switch");
+    if (s.exitCode != 0) {
+        HexLogError("failed to move the OVN central to the new version");
+    }
+
     return EXIT_SUCCESS;
 }
 
