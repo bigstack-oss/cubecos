@@ -25,7 +25,24 @@ export IMGS
 $(K3S_SRC_DIR):
 	$(call RUN_CMD_TIMED,git clone --depth 1 -b $(VERSION) $(K3S_REPO) $(K3S_SRC_DIR),"  CLONE   k3s")
 
-$(BIN): $(K3S_SRC_DIR) .dapper
+# Optional base URL holding a prebuilt k3s for this version, e.g.
+# https://<host>/api/v1/repositories/cubecos-build-cache-files/download. EMPTY BY DEFAULT: unset,
+# the binary is built from source exactly as before, so a clean checkout needs access to nothing
+# of ours. fetch-or-build.sh exits non-zero on any miss -- unset, unreachable, absent, bad
+# checksum, wrong version -- and the build falls through to k3s-from-source below.
+#
+# Worth caching because the dapper build is the most expensive step in the whole build (4876 s in
+# prod #750) and reruns every time: the jail container is recreated per build, so its podman
+# storage goes with it. It is also the most fragile -- prod #146 died inside it on an Alpine apk
+# fetch -- so skipping it buys reliability as well as time. See cubecos#1350.
+K3S_CACHE ?=
+
+$(BIN):
+	$(Q)K3S_CACHE="$(K3S_CACHE)" VERSION="$(VERSION)" OUT="$(CURDIR)/$(BIN)" \
+		sh $(SRCDIR)/build/fetch-or-build.sh || $(MAKE) $(BIN)-from-source
+
+.PHONY: $(BIN)-from-source
+$(BIN)-from-source: $(K3S_SRC_DIR) .dapper
 	$(Q)rm -rf $(K3S_SRC_DIR)/build $(K3S_SRC_DIR)/dist $(K3S_SRC_DIR)/bin
 	$(Q)cp $(SRCDIR)/build/Dockerfile.dapper $(K3S_SRC_DIR)/Dockerfile.dapper
 	$(Q)cp $(SRCDIR)/build/log.go $(K3S_SRC_DIR)/pkg/cli/cmds/log.go
