@@ -754,10 +754,17 @@ power_roll_advance()
 
     local next=$(jq -r 'first(.nodes[]|select(.status=="pending")|.hostname) // ""' $ROLLING_JOB)
     if [ -z "$next" ] ; then
+        _power_roll_watchdog_disarm
+        # Chassis first, central last: every node now runs the new firmware, so move the
+        # OVN central off the version the control nodes carried across (a no-op when
+        # there is none). Before the job is marked done, so auto-repair still stands
+        # down for the seconds the NB/SB are stopped; after the watchdog is disarmed, so
+        # the switch cannot run the last node past its deadline. See ovn_central_switch
+        # (sdk_ovn.sh); it logs its own outcome on the VIP holder.
+        ( remote_run $master "$HEX_SDK ovn_central_switch" ) >/dev/null 2>&1
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
-        _power_roll_watchdog_disarm
         # The full check_repair pass belongs here -- when the ROLL is done --
         # not when a single node's boot is done. Running it mid-roll evaluates a
         # cluster with a node deliberately down and tries to "repair" it.
