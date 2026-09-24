@@ -3,7 +3,9 @@
 
 THANOS_VER := 0.42.4
 THANOS_TGZ := thanos-$(THANOS_VER).linux-amd64.tar.gz
-THANOS_DL_URL := https://github.com/thanos-io/thanos/releases/download/v$(THANOS_VER)
+# $(GITHUB_DL_BASE), not a literal host: this is a GitHub release asset, the class throttled to
+# ~40 KB/s from our build network (cubecos#1350). Defaults to https://github.com in project.mk.
+THANOS_DL_URL := $(GITHUB_DL_BASE)/thanos-io/thanos/releases/download/v$(THANOS_VER)
 
 # Thanos publishes no detached signature, only a sha256sums.txt covering the whole
 # release, so that is what is checked. It comes from the same host as the tarball, which

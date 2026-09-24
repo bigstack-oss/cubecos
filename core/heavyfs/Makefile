@@ -165,7 +165,7 @@ QEMU_VER := -10.1.0-23.el9
 # Filename NVR (no epoch); kojihub keeps builds the c9s mirror rotates away, so an
 # air-gapped rebuild resolves the exact NVR (same pattern as mysql.mk).
 QEMU_NVR := 10.1.0-23.el9
-QEMU_URL := https://kojihub.stream.centos.org/kojifiles/packages/qemu-kvm/10.1.0/23.el9/x86_64
+QEMU_URL := $(KOJIHUB_DL_HOST)/kojifiles/packages/qemu-kvm/10.1.0/23.el9/x86_64
 QEMU_PKGS := qemu-kvm qemu-kvm-device-display-virtio-gpu-pci qemu-kvm-device-display-virtio-gpu
 QEMU_PKGS += qemu-kvm-device-display-virtio-vga qemu-kvm-device-usb-redirect qemu-kvm-device-usb-host
 QEMU_PKGS += qemu-guest-agent qemu-kvm-block-rbd qemu-kvm-block-blkio qemu-kvm-common qemu-kvm-core
