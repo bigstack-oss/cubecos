@@ -8,7 +8,7 @@ KAFKA_RUN_DIR := /var/run/kafka
 
 KAFKA_VER := 3.9.2
 KAFKA_TGZ := kafka_2.13-$(KAFKA_VER).tgz
-KAFKA_DL_URL := https://archive.apache.org/dist/kafka/$(KAFKA_VER)
+KAFKA_DL_URL := $(APACHE_DL_HOST)/dist/kafka/$(KAFKA_VER)
 # The Apache release manager who signed this release. Apache signs per-signer rather than
 # per-project, so this belongs next to KAFKA_VER and moves with it -- a bump that forgets
 # it fails the build instead of quietly trusting whatever the KEYS file carries. Find the

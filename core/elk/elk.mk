@@ -63,7 +63,7 @@ LOGSTASH_LIB_DIR := /var/lib/logstash
 LOGSTASH_JDK := $(LOGSTASH_HOME)/jdk
 
 LOGSTASH_TGZ := logstash-$(LOGSTASH_VER)-linux-x86_64.tar.gz
-LOGSTASH_DL_URL := https://artifacts.elastic.co/downloads/logstash
+LOGSTASH_DL_URL := $(ELASTIC_DL_HOST)/downloads/logstash
 # Elastic has signed every release with this key since 2013. Pinning the fingerprint is
 # what makes the check worth anything: the key travels the same channel as the tarball,
 # so accepting whatever key that channel hands back would verify nothing.

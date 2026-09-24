@@ -4,7 +4,7 @@ include ../../build.mk
 
 OVN_REPO := centos-release-nfv-openvswitch
 OVN_PREFIX := ovn24.03
-OVN_SRPM := https://cbs.centos.org/kojifiles/packages/ovn24.03/24.03.8/31.el9s/src/ovn24.03-24.03.8-31.el9s.src.rpm
+OVN_SRPM := $(CBS_DL_HOST)/kojifiles/packages/ovn24.03/24.03.8/31.el9s/src/ovn24.03-24.03.8-31.el9s.src.rpm
 
 RPMBUILD_DIR := /root/rpmbuild
 OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)

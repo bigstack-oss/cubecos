@@ -22,7 +22,7 @@
 # allowed to be skipped.
 MARIADB_VER := 10.11.18-1.el9
 GALERA_VER := 26.4.27-1.el9
-MARIADB_URL := https://archive.mariadb.org/yum/10.11/rocky9-amd64/rpms
+MARIADB_URL := $(MARIADB_DL_HOST)/yum/10.11/rocky9-amd64/rpms
 
 # Official MariaDB package list
 # Note: we dropped errmsg and server-utils as they are now bundled
