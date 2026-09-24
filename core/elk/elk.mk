@@ -36,7 +36,7 @@ ROOTFS_PIP_NC += curator-$(OSEARCH)
 
 LOGSTASH_TGZ := logstash-$(LOGSTASH_VER)-linux-x86_64.tar.gz
 $(ARCS_DIR)/$(LOGSTASH_TGZ):
-	$(Q)wget https://artifacts.elastic.co/downloads/logstash/$(LOGSTASH_TGZ) -O $@
+	$(Q)wget $(ELASTIC_DL_HOST)/downloads/logstash/$(LOGSTASH_TGZ) -O $@
 
 rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 	$(Q)tar xf $< -C $(ROOTDIR)/usr/share/
