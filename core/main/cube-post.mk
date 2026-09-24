@@ -48,15 +48,23 @@ rootfs_install::
 # The address has to sit on an endpoint-bearing key rather than anywhere in the file. /root/.gitconfig
 # is the reason: config_* writes `email = <host>@<mgmt-ip>` there at first boot, so matching the bare
 # address would fail every build on a node identity that has nothing to do with package sources.
+#
+# git is the exception that needs a second branch. `git config url.<mirror>.insteadOf <public>` puts
+# the mirror in the SECTION HEADER, and the key line only ever carries the public URL:
+#     [url "http://10.32.0.5/github/"]
+#             insteadOf = https://github.com/
+# so an `insteadOf =` key match can never see it. Hence the `[url "` alternative. `url` is in the key
+# list for the other half of the same hole -- our own CI writes `[lfs] url = ...@<mirror>` through
+# DOCKER_GITCFG, which no other key in this list matches.
 MIRROR_LEAK_HOSTS ?=
-MIRROR_LEAK_KEYS := (baseurl|metalink|mirrorlist|gpgkey|proxy|index-url|extra-index-url|trusted-host|registry|location|mirror|insteadOf)
+MIRROR_LEAK_KEYS := (baseurl|metalink|mirrorlist|gpgkey|proxy|index-url|extra-index-url|trusted-host|registry|location|mirror|insteadOf|url)
 SHIPPED_NET_CFG := etc/yum.repos.d etc/dnf/dnf.conf etc/pip.conf etc/gitconfig root/.gitconfig \
                    etc/containers etc/npmrc root/.npmrc etc/wgetrc root/.wgetrc root/.curlrc root/.pip
 
 rootfs_install::
 	$(Q)hosts='10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+' ; \
 	for h in $(MIRROR_LEAK_HOSTS) ; do hosts="$$hosts|$$h" ; done ; \
-	pats='$(MIRROR_LEAK_KEYS)[[:space:]]*=.*('"$$hosts"')' ; \
+	pats='($(MIRROR_LEAK_KEYS)[[:space:]]*=|^[[:space:]]*\[url[[:space:]]+").*('"$$hosts"')' ; \
 	rc=0 ; \
 	for p in $(SHIPPED_NET_CFG) ; do \
 		[ -e $(ROOTDIR)/$$p ] || continue ; \
