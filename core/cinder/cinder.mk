@@ -146,6 +146,20 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/cinder
 
 # install custom files
+#
+# Each carried file sits beside the upstream 26.3.0 file it was made from (*.orig), so
+# `diff x.orig x` is the whole local change:
+# volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
+#   upstream still does not provide
+# volume/drivers/rbd.py: upstream's proposed fix for bug 2153099,
+#   https://review.opendev.org/c/openstack/cinder/+/989051 (patch set 5), not merged at
+#   26.3.0. _delete_volume returns on a successful rbd remove before it walks up to the
+#   parent, so a volume cloned from another volume -- which takes a protected
+#   <clone>.clone_snap on its source -- leaves that snapshot behind when it is deleted
+#   first, and deleting the source then leaves volume-<id>.deleted in the pool for
+#   good. enable_deferred_deletion does not help: that fast path never reads it, and a
+#   .deleted image is not in the trash its purge task empties. Drop the file once a
+#   release carries the fix.
 rootfs_install::
 	$(Q)[ -d $(CINDER_PATCHDIR) ] && cp -rf $(CINDER_PATCHDIR)/* $(CINDER_SRCDIR)/ || /bin/true
 
