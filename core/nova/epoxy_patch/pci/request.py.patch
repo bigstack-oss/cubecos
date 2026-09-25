@@ -15,7 +15,7 @@
 +        # 4 times out of 4, in both boot orders; with this property in place,
 +        # 4 times out of 4 correct.
 +        #
-+        # Everything needed downstream already works: _get_alias_from_config()
++        # Everything needed downstream already works: get_alias_from_config()
 +        # leaves unrecognised alias keys in the spec, that spec becomes
 +        # InstancePCIRequest.spec (a ListOfDictOfNullableStrings, so arbitrary
 +        # keys survive), PciDeviceStats keeps unrecognised device_spec keys as
