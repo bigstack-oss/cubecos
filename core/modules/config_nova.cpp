@@ -135,7 +135,6 @@ CONFIG_TUNING_UINT(NOVA_RESV_HOST_VCPU, "nova.control.host.vcpu", TUNING_PUB, "A
                    0, 0, 128);
 CONFIG_TUNING_UINT(NOVA_RESV_HOST_MEM, "nova.control.host.memory", TUNING_PUB, "Amount of memory in MB to reserve for the control host.",
                    0, 0, 524288);
-CONFIG_TUNING_STR(NOVA_GPU_TYPE, "nova.gpu.type", TUNING_PUB, "Specifiy a supported gpu type instances would get.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_OC_CPU_RATIO, "nova.overcommit.cpu.ratio", TUNING_PUB, "Specifiy an allowed CPU overcommitted ratio.", "16.0", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_OC_RAM_RATIO, "nova.overcommit.ram.ratio", TUNING_PUB, "Specifiy an allowed RAM overcommitted ratio.", "1.0", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_OC_DISK_RATIO, "nova.overcommit.disk.ratio", TUNING_PUB, "Specifiy an allowed DISK overcommitted ratio.", "1.5", ValidateRegex, DFT_REGEX_STR);
@@ -172,7 +171,6 @@ PARSE_TUNING_STR(s_dbPass, NOVA_DBPASS);
 PARSE_TUNING_STR(s_plaDbPass, NOVA_PLA_DBPASS);
 PARSE_TUNING_UINT(s_resvHostVcpu, NOVA_RESV_HOST_VCPU);
 PARSE_TUNING_UINT(s_resvHostMem, NOVA_RESV_HOST_MEM);
-PARSE_TUNING_STR(s_gpuType, NOVA_GPU_TYPE);
 PARSE_TUNING_STR(s_ocCpuRatio, NOVA_OC_CPU_RATIO);
 PARSE_TUNING_STR(s_ocRamRatio, NOVA_OC_RAM_RATIO);
 PARSE_TUNING_STR(s_ocDiskRatio, NOVA_OC_DISK_RATIO);
@@ -609,9 +607,6 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["instance_usage_audit"] = "True";
         cfg["DEFAULT"]["instance_usage_audit_period"] = "hour";
         cfg["notifications"]["notify_on_state_change"] = "vm_and_task_state";
-
-        if (s_gpuType.length())
-            cfg["devices"]["enabled_vgpu_types"] = s_gpuType.newValue();
 
         ironicCfg["DEFAULT"]["host"] = hostname + "-ironic";
         ironicCfg["DEFAULT"]["compute_driver"] = "ironic.IronicDriver";
