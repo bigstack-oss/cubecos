@@ -18,10 +18,10 @@
              # There are 2 possibilities here:
              #
              # 1. The target volume already exists but bdm.volume_size is not
-@@ -4195,9 +4197,57 @@
-     @block_shares_not_supported()
-     # TODO(stephenfin): This logic would be so much easier to grok if we
-     # finally split resize and cold migration into separate code paths
+@@ -4192,12 +4194,60 @@
+ 
+         return node
+ 
 +    def _lr_validate(self, context, instance, old, new, is_bfv):
 +        # cube live-resize preconditions (grow-only, within the ceiling)
 +        def _bad(reason):
@@ -70,6 +70,9 @@
 +        self.compute_task_api.live_resize_instance(context, instance,
 +                                                   new_flavor)
 +
+     @block_shares_not_supported()
+     # TODO(stephenfin): This logic would be so much easier to grok if we
+     # finally split resize and cold migration into separate code paths
      @block_extended_resource_request
      @block_port_accelerators()
 -    @block_accelerators()
