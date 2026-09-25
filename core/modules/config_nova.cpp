@@ -564,7 +564,16 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["compute_driver"] = "libvirt.LibvirtDriver";
         cfg["DEFAULT"]["state_path"] = "/var/lib/nova";
         cfg["DEFAULT"]["instances_path"] = "$state_path/instances";
-        cfg["libvirt"]["hw_machine_type"] = hwType.c_str();
+        // [libvirt] hw_machine_type takes host-arch=machine-type pairs, not a machine
+        // type. nova skips an entry without the '=' ("Invalid hw_machine_type config
+        // value") and falls back to its own default, which for x86_64 is pc rather than
+        // q35, so nova.hardware.type never reached a guest whose image carries no
+        // hw_machine_type property. A bare value is taken as the x86_64 machine type; an
+        // empty one, or one that is already a list of pairs, is written as it is.
+        if (hwType.empty() || hwType.find('=') != std::string::npos)
+            cfg["libvirt"]["hw_machine_type"] = hwType;
+        else
+            cfg["libvirt"]["hw_machine_type"] = "x86_64=" + hwType;
         cfg["libvirt"]["num_pcie_ports"] = "28";
         cfg["libvirt"]["swtpm_enabled"] = "True";
         cfg["libvirt"]["images_type"] = "rbd";
