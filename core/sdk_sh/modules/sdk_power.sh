@@ -762,6 +762,12 @@ power_roll_advance()
         # the switch cannot run the last node past its deadline. See ovn_central_switch
         # (sdk_ovn.sh); it logs its own outcome on the VIP holder.
         ( remote_run $master "$HEX_SDK ovn_central_switch" ) >/dev/null 2>&1
+        # Finish MariaDB's system-table upgrade on every control node. It is per node and
+        # waits until the whole control tier runs one version, so each node that rolled
+        # before the last one found the versions mixed at its upgrade boot and deferred;
+        # nothing commits mysql on it again before its next boot. See upgrade_mysql in
+        # config_mysql.cpp; a node with nothing pending returns at once.
+        Quiet -n cmd -c $HEX_CFG upgrade_mysql
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling

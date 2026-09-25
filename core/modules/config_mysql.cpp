@@ -410,6 +410,31 @@ RestartMain(int argc, char* argv[])
     return EXIT_SUCCESS;
 }
 
+static void
+UpgradeUsage(void)
+{
+    fprintf(stderr, "Usage: %s upgrade_mysql\n", HexLogProgramName());
+}
+
+// Run a pending mariadb-upgrade outside a commit.
+//
+// UpdateCheck() runs from Commit(), so a rolling upgrade reaches it once per node, at
+// that node's own upgrade boot -- and every node but the last to roll finds the control
+// tier still on two versions, defers, and keeps its BACKDIR. Nothing commits mysql on
+// those nodes again until they next boot, so until then they would run the new server
+// on the old system tables. power_roll_advance calls this on every control node once
+// the roll is complete; a node with no BACKDIR returns at once.
+static int
+UpgradeMain(int argc, char* argv[])
+{
+    if (argc != 1) {
+        UpgradeUsage();
+        return EXIT_FAILURE;
+    }
+
+    return UpdateCheck() ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
 static int
 SnapshotCreate(const char* snapdir)
 {
@@ -418,6 +443,7 @@ SnapshotCreate(const char* snapdir)
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_mysql, RestartMain, RestartUsage);
+CONFIG_COMMAND_WITH_SETTINGS(upgrade_mysql, UpgradeMain, UpgradeUsage);
 
 CONFIG_MODULE(mysql, 0, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(mysql, cube_scan);
