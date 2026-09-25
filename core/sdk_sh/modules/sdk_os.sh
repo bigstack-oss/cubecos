@@ -2589,6 +2589,18 @@ os_instance_export_save()
     printf '%s\n' "done"
 }
 
+# The os_mgr_port_* helpers query neutron over TCP, as the neutron user, on whichever
+# node $host names -- os_nova_instance_ping runs them on a compute node against the
+# VIP holder. That is why every such query passes --skip-ssl-verify-server-cert.
+#
+# The 11.4 client verifies the server certificate by default, and verifying means
+# requiring TLS, which a 10.11 server does not offer: the connection fails with
+# "SSL is required, but the server does not support it". Mid-roll, an upgraded compute
+# querying a VIP holder that is not yet upgraded finds no port, and
+# os_mgr_port_create then creates another one on every telegraf run, each taking an
+# address from the tenant subnet. Without verification the client still uses TLS
+# where the server offers it, and falls back to plaintext where it does not -- which
+# is all a 10.11 client ever did. The flag is accepted by the 10.11 client too.
 os_mgr_port_name()
 {
     local net_id=$1
@@ -2614,7 +2626,7 @@ os_mgr_port_remove()
     $ip_netns_exec ip link set $pname down 2>/dev/null
     /sbin/ip netns del $netns 2>/dev/null
     /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
-    local port_id=$(mariadb -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -n +2)
+    local port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -n +2)
     if [ -n "$port_id" ] ; then
         $OPENSTACK port delete $port_id
     fi
@@ -2626,7 +2638,7 @@ os_mgr_port_clear()
     local dbpass=$2
     local cols="id,ports.network_id,device_id,ip_address,project_id"
     local joined_tables="ports INNER JOIN ipallocations ON ports.id = ipallocations.port_id"
-    local stats=$(mariadb -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT $cols FROM $joined_tables WHERE device_owner ='compute:nova'" | tail -n +2)
+    local stats=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT $cols FROM $joined_tables WHERE device_owner ='compute:nova'" | tail -n +2)
     for n in $(echo "$stats" | awk '{print $2}' | sort | uniq) ; do
         local proj_ids=$(echo "$stats" | grep $n | awk '{print $5}'| sort | uniq)
         for p in $proj_ids ; do
@@ -2646,14 +2658,14 @@ os_mgr_port_create()
     local suffix=$(echo $net_id | cut -c 1-8)
     local netns="mgr-$suffix"
 
-    local port_id=$(mariadb -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
-    local status=$(mariadb -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT status FROM ports WHERE name = '$pname'" | tail -1)
+    local port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
+    local status=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT status FROM ports WHERE name = '$pname'" | tail -1)
     if [ -n "$port_id" -a "$status" != "ACTIVE" ] ; then
         $OPENSTACK port delete $port_id
         /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
     fi
 
-    port_id=$(mariadb -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
+    port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
     if [ -z "$port_id" ] ; then
         port_id=$($OPENSTACK port create --project $proj_id --device-owner cube:mgr --host=$(hostname) -c id -f value --network $net_id $pname 2>/dev/null)
         /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
@@ -2665,7 +2677,7 @@ os_mgr_port_create()
 
     local cols="mac_address,ip_address"
     local joined_tables="ports INNER JOIN ipallocations ON ports.id = ipallocations.port_id"
-    local stats=$(mariadb -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT $cols FROM $joined_tables WHERE id ='$port_id'" | tail -1)
+    local stats=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT $cols FROM $joined_tables WHERE id ='$port_id'" | tail -1)
     local pmac=$(echo $stats | awk '{print $1}')
     local pip=$(echo $stats | awk '{print $2}')
 
