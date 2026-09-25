@@ -302,8 +302,12 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
-# upper-constraints.txt copied down verbatim, save for one local delta -- where the
-# antelope file it replaced carried six. Upstream does not pin setuptools, so this venv used
+# upper-constraints.txt copied down verbatim, save for two local deltas -- where the
+# antelope file it replaced carried six. One is libvirt-python, raised to 11.10.0 so
+# that it builds against the libvirt-devel headers core/nova/nova.mk holds;
+# core/masakari/masakari.mk is what installs it into this venv since nova moved on to
+# the epoxy one. The other is setuptools, and it is what this NOTE is about.
+# Upstream does not pin setuptools, so this venv used
 # to land on whatever was current (84.0.0), which was fine while skyline was the only
 # occupant. keystone is not: keystonemiddleware 10.6.0 does `import pkg_resources` in
 # _common/config.py, and setuptools 82 deleted pkg_resources, so every gunicorn worker
