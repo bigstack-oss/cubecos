@@ -232,28 +232,31 @@ rootfs_install::
 # DEFAULT_POLICY_FILES points at came from the openstack-dashboard rpm, and the
 # masakari one from masakari.mk running this same command under python 3.9. Generate
 # them all here instead, from the services that are actually running -- every one of
-# these namespaces is an oslo.policy.policies entry point in the venv this dashboard
-# now shares with them.
+# these namespaces is an oslo.policy.policies entry point in the venv its service runs
+# from.
 #
-# There used to be a second list, dumped by the antelope venv's python, because
-# stevedore only sees entry points registered in the interpreter it is running under
-# and one python could not dump them all. It emptied out as the services hopped, and
-# horizon following them is what removes the split: every namespace below is a caracal
-# package's entry point, and this dashboard runs on caracal. A namespace whose service
-# is still in the antelope venv cannot be dumped from here -- it fails the build with
-# 'The requested namespace "<x>" is not found' -- so nothing may be added to this list
-# ahead of its service.
+# stevedore only sees entry points registered in the interpreter it is running under,
+# so one python cannot dump them all while the services span two venvs. The caracal
+# hop split this into two lists, one per venv, and horizon following its services
+# closed the split; the epoxy hop opens it again. Each list is dumped by the
+# dashboard that shares its venv: the served one in the caracal venv, and the copy
+# installed above for the epoxy one. A namespace listed against the venv that does
+# not hold its service fails the build with 'The requested namespace "<x>" is not
+# found' -- so move it to the epoxy list when its service makes the hop, and not
+# before.
 #
 # Note the octavia and masakari entries follow the *service*, not the panel: the
 # oslo.policy.policies entry points named "octavia" and "masakari" are registered by
 # the octavia and masakari packages, not by their dashboard plugins.
-HORIZON_POLICY_NS := keystone nova cinder glance neutron octavia masakari
+HORIZON_POLICY_NS := nova cinder glance neutron octavia masakari
+NEXT_HORIZON_POLICY_NS := keystone
 
-# django-admin rather than $(HORIZON_APP_DIR)/manage.py. Both resolve to this venv now
-# that the symlinks in that directory point here, so the cross-venv import hazard that
-# used to force the console script is gone; it stays because a console script has no
-# directory of its own leading sys.path, and DJANGO_SETTINGS_MODULE is set explicitly
-# below anyway.
+# django-admin rather than $(HORIZON_APP_DIR)/manage.py, and for the epoxy list it is
+# not optional. manage.py sits in a directory whose horizon and openstack_dashboard
+# entries are symlinks into the *caracal* venv, and a script's own directory leads
+# sys.path -- so running it with the epoxy python would import python3.11 packages
+# under python3.12. A console script has no directory of its own, and
+# DJANGO_SETTINGS_MODULE is set explicitly below, so both venvs take the same shape.
 #
 # --skip-checks because the dump reads oslo.policy entry points and needs nothing
 # else: no cache, no database, no static tree. django's system checks instantiate
@@ -261,7 +264,7 @@ HORIZON_POLICY_NS := keystone nova cinder glance neutron octavia masakari
 # anything, so skipping them keeps the dump independent of what the rest of the build
 # has done so far.
 #
-# The loop is noisy on stderr -- the USE_L10N notice, a debreach distutils warning,
+# Both loops are noisy on stderr -- the USE_L10N notice, a debreach distutils warning,
 # and oslo.policy grumbling about upstream nova/cinder rules that set deprecated_since
 # on the RuleDefault instead of the DeprecatedRule. It is left alone: PYTHONWARNINGS
 # does not reach it (something under settings resets the filters), and stderr has to
@@ -277,6 +280,15 @@ rootfs_install::
 	$(Q)for ns in $(HORIZON_POLICY_NS) ; do \
 		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
 			$(OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
+			--namespace $$ns \
+			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml || exit 1 ; \
+	done
+	$(Q)# "No local_settings file found." from this loop is expected: nothing ever
+	$(Q)# configures the epoxy copy, and openstack_dashboard/settings.py warns and
+	$(Q)# carries on.
+	$(Q)for ns in $(NEXT_HORIZON_POLICY_NS) ; do \
+		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
+			$(NEXT_OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
 			--namespace $$ns \
 			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml || exit 1 ; \
 	done
