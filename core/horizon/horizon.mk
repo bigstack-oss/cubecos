@@ -73,9 +73,9 @@ $(PROJ_HEAVYFS): $(COREDIR)/horizon/local_settings.in $(CUBE_THEME_SRCS)
 #     runs on 4.2.
 #   - gunicorn is what openstack-dashboard.service execs. It was never named while
 #     the dashboard was in the antelope venv, because core/monasca put it there and
-#     monasca is not moving; keystone.mk and barbican.mk put it in this one, but a
-#     dependency nothing asks for is one that disappears silently -- the reason
-#     barbican.mk names it even though keystone.mk already installs it.
+#     monasca is not moving; barbican.mk puts it in this one, but a dependency
+#     nothing asks for is one that disappears silently -- as keystone.mk's copy did
+#     when keystone moved to the epoxy venv (#657).
 #
 # These are two pip invocations rather than one because the two halves want opposite
 # build environments, and a single command can only have one. See the note by the venv

@@ -53,8 +53,8 @@ rootfs_install::
 # PyMySQL: config_masakari.cpp:194 writes a mysql+pymysql:// connection
 # oslo.messaging[kafka]: config_masakari.cpp:231 points the notification transport at
 #   kafka://
-# The last two are in this venv already (keystone.mk installs them), but a dependency
-# nothing asks for is one that disappears silently.
+# The last two are in this venv already, but a dependency nothing asks for is one that
+# disappears silently.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
