@@ -240,6 +240,23 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(PYTHON_VER) ]
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(PYTHON_VER) ]
 
+# install python 3.12 for openstack epoxy
+rootfs_install::
+	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
+	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
+	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
+	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
+	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(NEXT_PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(NEXT_PYTHON_PATCH_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz
+	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz -C /usr/src/python-$(NEXT_PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER) && ./configure --enable-optimizations"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER) && make altinstall"
+	$(Q)umount -l $(ROOTDIR)/dev || true
+	$(Q)# ensure python 3.12 is successfully built
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(NEXT_PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(NEXT_PYTHON_VER) ]
+
 # NOTE: why the setuptools pin is applied at venv creation, below, rather than being
 # left to whichever later `pip install -c` happens to pull setuptools in as a
 # dependency. (Which version, and why that number, is the NOTE after the venv block.)
