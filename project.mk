@@ -21,6 +21,68 @@ HEX_AGENT_ENV_DIR := /etc/cube
 # policy source tree
 CORE_POLICYDIR := $(COREDIR)/policies
 
+# Base URL for GitHub *release assets* (the `/<org>/<repo>/releases/download/...` objects we
+# wget, not the git remotes we clone).
+#
+# It is a variable, and only a variable, because those two surfaces have very different
+# throughput. Release assets and git-LFS objects are served from GitHub's object CDN, and that
+# path has been shaped to ~40-70 KB/s from our build network for weeks -- a 16 MB exporter
+# tarball takes ~400s -- while `git clone` against github.com itself still runs at ~2 MB/s.
+# Authenticating does not lift it, so it is path shaping rather than an account rate limit and a
+# token is not the answer. Measured 2026-09-23 against builds #743/#747/#748/#750, see
+# cubecos#1350.
+#
+# The default is the public host, so a clean checkout builds exactly as it always has and nothing
+# here needs to change for anyone outside our CI. A build that has a mirror available overrides it
+# from the environment -- like RC and FW_VER, this is never assigned anywhere in this repo, so no
+# internal hostname is committed here.
+#
+# Deliberately NOT used for the `git clone` URLs: git transport is not the bottleneck, and
+# rewriting clone remotes would need `url.insteadOf` instead of a URL variable anyway.
+GITHUB_DL_BASE ?= https://github.com
+
+# The same idea for every other upstream we fetch binaries from, one variable each rather than a
+# single switch. Throttling has shown up on one host at a time -- github.com's object CDN and
+# registry.k8s.io, while quay.io and artifacts.opensearch.org stayed fast -- so the useful unit is
+# per-host. These carry the scheme+host only; the path and version stay with the component that
+# owns them, so a mirror is configured without teaching the CI repo our version numbers.
+#
+# All default to the public host: unset, the build is byte-identical to what it has always done.
+# Routing one of them is a decision to make on evidence, and the evidence is a throughput
+# measurement of that host, not a hunch -- the mirror serves cached objects at a few MB/s, which
+# is *slower* than several of these upstreams when they are healthy.
+APACHE_DL_HOST   ?= https://archive.apache.org
+MARIADB_DL_HOST  ?= https://archive.mariadb.org
+ELASTIC_DL_HOST  ?= https://artifacts.elastic.co
+KOJIHUB_DL_HOST  ?= https://kojihub.stream.centos.org
+CBS_DL_HOST      ?= https://cbs.centos.org
+
+# PyPI index. Empty by default, so pip resolves against pypi.org exactly as before.
+#
+# Exported as an environment variable rather than written as a pip.conf into $(ROOTDIR),
+# deliberately: most pip installs in this tree run as `chroot $(ROOTDIR) ... pip install`, chroot
+# inherits the environment, and one export therefore reaches every one of them -- the ~40 openstack
+# service installs, the venv bootstraps, and the ceph binding build -- while leaving nothing inside
+# the image that would have to be scrubbed before packing. A pip.conf under $(ROOTDIR)/etc would
+# ship; cube-post.mk's guard would catch it, but not creating it is better than catching it.
+#
+# It also reaches pip's PEP-517 build isolation, which resolves the build backend from the live
+# index and ignores `-c` (see the NOTE in core/heavyfs/Makefile) -- the one place a constraint file
+# cannot help.
+#
+# files.pythonhosted.org measured 148 KB/s from the build network on 2026-09-24 against 1.81 MB/s
+# for the same wheel from a warm mirror, so this is worth routing. Note the mirror is a
+# pull-through proxy: a package it has not seen is fetched from that same slow upstream, so the
+# first build after pointing this at a mirror is no faster than before.
+PIP_INDEX_URL ?=
+PIP_TRUSTED_HOST ?=
+ifneq ($(PIP_INDEX_URL),)
+export PIP_INDEX_URL
+ifneq ($(PIP_TRUSTED_HOST),)
+export PIP_TRUSTED_HOST
+endif
+endif
+
 # cubecos shared build envs
 GOLANG_VERSION := 1.24.2
 PROJ_NFS_SERVER := 10.32.0.200
@@ -52,21 +114,26 @@ OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEA
 # holds for every hop after it. This pin does not follow the release name, ever.
 PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 
-# openstack next version -- left blank until the next hop, then filled in the way
-# antelope's were while it was NEXT_*: a second venv is built from these, components
-# move into it one at a time, and the values are promoted above once the move is done.
-NEXT_OPENSTACK_RELEASE :=
-NEXT_OPENSTACK_HOME_DIR :=
-NEXT_OPS_GITHUB_BRANCH_01 :=
-NEXT_OPS_GITHUB_BRANCH_02 :=
-NEXT_PYTHON_VER :=
-NEXT_OPENSTACK_PIP_CONSTRAINT ?=
-NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
+# openstack next version -- filled in the way antelope's were while it was NEXT_*: a
+# second venv is built from these, components move into it one at a time, and the
+# values are promoted above once the move is done.
+#
+# The next hop is epoxy (2025.1), the SLURP release after caracal. It gets its own
+# python rather than sharing the caracal venv's 3.11: 3.12 is the newest runtime
+# 2025.1 is tested on, and #652 moves CubeCOS to it. keystone is the first occupant.
+NEXT_OPENSTACK_RELEASE := epoxy
+NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
+NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1
+NEXT_OPS_GITHUB_BRANCH_02 := unmaintained/2025.1
+NEXT_PYTHON_VER := 3.12
+NEXT_PYTHON_PATCH_VER := 3.12.14
+NEXT_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(NEXT_OPENSTACK_HOME_DIR)/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
 
-# The caracal hop is complete -- the block above IS caracal now, and there is no second
-# runtime. /opt/openstack-caracal on python 3.11 was built alongside the antelope venv
-# so that caracal-era components would not drag their dependency versions into the
-# 2023.1 services, and the services moved into it one at a time:
+# The caracal hop is complete -- the "openstack version" block IS caracal now, and the
+# antelope runtime is gone. /opt/openstack-caracal on python 3.11 was built alongside
+# the antelope venv so that caracal-era components would not drag their dependency
+# versions into the 2023.1 services, and the services moved into it one at a time:
 #
 #   skyline (first, its forks branch off upstream master at 4.0.1 / 4.0.0.0rc1, i.e.
 #   caracal rather than antelope), keystone 25.0.0 (#631), glance 28.2.0 (#630),
