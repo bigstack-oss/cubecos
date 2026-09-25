@@ -248,8 +248,9 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         // helper cannot serve a 3.11 cyborg. That combination has been seen on
         // jim-1cc for glance (see config_glance.cpp): the service ran from
         // /opt/openstack-caracal/bin/python3.11 while its helper ran from
-        // /opt/openstack-antelope/bin/python3.10. cinder, glance, neutron, nova and
-        // manila all pin the caracal path for the same reason.
+        // /opt/openstack-antelope/bin/python3.10. neutron and manila pin the caracal
+        // path for the same reason, and glance, cinder and nova, which have moved on
+        // to the epoxy venv, pin that venv's helper.
         //
         // /etc/sudoers.d/cyborg authorises exactly this path -- the two have to move
         // together, or privsep is refused by sudo instead of failing to import.

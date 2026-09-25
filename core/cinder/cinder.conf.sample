@@ -370,8 +370,12 @@
 # Number of backup processes to launch. Improves performance with concurrent
 # backups. (integer value)
 # Minimum value: 1
-# Maximum value: 12
-#backup_workers = 1
+# Maximum value: 80
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#backup_workers = 8
 
 # Maximum number of concurrent memory heavy operations: backup and restore.
 # Value of 0 means unlimited (integer value)
@@ -828,16 +832,14 @@
 #volume_clear_ionice = <None>
 
 # Target user-land tool to use. tgtadm is default, use lioadm for LIO iSCSI
-# support, scstadmin for SCST target support, ietadm for iSCSI Enterprise
-# Target, iscsictl for Chelsio iSCSI Target, nvmet for NVMEoF support, spdk-
-# nvmeof for SPDK NVMe-oF, or fake for testing. Note: The IET driver is
-# deprecated and will be removed in the V release. (string value)
+# support, scstadmin for SCST target support, iscsictl for Chelsio iSCSI
+# Target, nvmet for NVMEoF support, spdk-nvmeof for SPDK NVMe-oF, or fake for
+# testing. (string value)
 # Possible values:
 # tgtadm - <No description provided>
 # lioadm - <No description provided>
 # scstadmin - <No description provided>
 # iscsictl - <No description provided>
-# ietadm - <No description provided>
 # nvmet - <No description provided>
 # spdk-nvmeof - <No description provided>
 # fake - <No description provided>
@@ -846,22 +848,19 @@
 # Volume configuration file storage directory (string value)
 #volumes_dir = $state_path/volumes
 
-# DEPRECATED: IET configuration file (string value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: IET target driver is no longer supported.
-#iet_conf = /etc/iet/ietd.conf
-
 # Chiscsi (CXT) global defaults configuration file (string value)
 #chiscsi_conf = /etc/chelsio-iscsi/chiscsi.conf
 
-# Sets the behavior of the iSCSI target to either perform blockio or fileio
-# optionally, auto can be set and Cinder will autodetect type of backing device
-# (string value)
+# DEPRECATED: Sets the behavior of the iSCSI target to either perform blockio
+# or fileio optionally, auto can be set and Cinder will autodetect type of
+# backing device (string value)
 # Possible values:
 # blockio - <No description provided>
 # fileio - <No description provided>
 # auto - <No description provided>
+# This option is deprecated for removal since 2024.2.
+# Its value may be silently ignored in the future.
+# Reason: No longer used (was for ietadm).
 #iscsi_iotype = fileio
 
 # The default block size used when copying/clearing volumes (string value)
@@ -986,22 +985,38 @@
 # backends. (string value)
 #backend_availability_zone = <None>
 
-# The maximum number of times to rescan iSER target to find volume (integer
-# value)
+# DEPRECATED: The maximum number of times to rescan iSER target to find volume
+# (integer value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Mitaka release.
 #num_iser_scan_tries = 3
 
-# Prefix for iSER volumes (string value)
+# DEPRECATED: Prefix for iSER volumes (string value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Mitaka release.
 #iser_target_prefix = iqn.2010-10.org.openstack:
 
-# The IP address that the iSER daemon is listening on (string value)
+# DEPRECATED: The IP address that the iSER daemon is listening on (string
+# value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Mitaka release.
 #iser_ip_address = $my_ip
 
-# The port that the iSER daemon is listening on (port value)
+# DEPRECATED: The port that the iSER daemon is listening on (port value)
 # Minimum value: 0
 # Maximum value: 65535
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Mitaka release.
 #iser_port = 3260
 
-# The name of the iSER target user-land tool to use (string value)
+# DEPRECATED: The name of the iSER target user-land tool to use (string value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Havana release.
 #iser_helper = tgtadm
 
 # NVMe os-brick connector has 2 different connection info formats, this allows
@@ -1619,11 +1634,15 @@
 # Deprecated group/name - [DEFAULT]/logdir
 #log_dir = <None>
 
-# Uses logging handler designed to watch file system. When log file is moved or
-# removed this handler will open a new log file with specified path
+# DEPRECATED: Uses logging handler designed to watch file system. When log file
+# is moved or removed this handler will open a new log file with specified path
 # instantaneously. It makes sense only if log_file option is specified and
 # Linux platform is used. This option is ignored if log_config_append is set.
 # (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This function is known to have bene broken for long time, and depends
+# on the unmaintained library
 #watch_log_file = false
 
 # Use syslog for logging. Existing syslog format is DEPRECATED and will be
@@ -1649,11 +1668,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# DEPRECATED: Log output to Windows Event Log. (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Windows support is no longer maintained.
-#use_eventlog = false
+# (Optional) Set the 'color' key according to log levels. This option takes
+# effect only when logging to stderr or stdout is used. This option is ignored
+# if log_config_append is set. (boolean value)
+#log_color = false
 
 # The amount of time before the log files are rotated. This option is ignored
 # unless log_rotation_type is set to "interval". (integer value)
@@ -1727,10 +1745,16 @@
 # Maximum number of logged messages per rate_limit_interval. (integer value)
 #rate_limit_burst = 0
 
-# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG
-# or empty string. Logs with level greater or equal to rate_limit_except_level
-# are not filtered. An empty string means that all levels are filtered. (string
-# value)
+# Log level name used by rate limiting. Logs with level greater or equal to
+# rate_limit_except_level are not filtered. An empty string means that all
+# levels are filtered. (string value)
+# Possible values:
+# CRITICAL - <No description provided>
+# ERROR - <No description provided>
+# INFO - <No description provided>
+# WARNING - <No description provided>
+# DEBUG - <No description provided>
+# '' - <No description provided>
 #rate_limit_except_level = CRITICAL
 
 # Enables or disables fatal status of deprecations. (boolean value)
@@ -1739,16 +1763,6 @@
 #
 # From oslo.messaging
 #
-
-# Size of RPC connection pool. (integer value)
-# Minimum value: 1
-#rpc_conn_pool_size = 30
-
-# The pool size limit for connections expiration policy (integer value)
-#conn_pool_min_size = 2
-
-# The time-to-live in sec of idle connections in the pool (integer value)
-#conn_pool_ttl = 1200
 
 # Size of executor thread pool when executor is threading or eventlet. (integer
 # value)
@@ -1791,19 +1805,28 @@
 # From oslo.service.service
 #
 
-# Enable eventlet backdoor.  Acceptable values are 0, <port>, and
+# DEPRECATED: Enable eventlet backdoor.  Acceptable values are 0, <port>, and
 # <start>:<end>, where 0 results in listening on a random tcp port number;
 # <port> results in listening on the specified port number (and not enabling
 # backdoor if that port is in use); and <start>:<end> results in listening on
 # the smallest unused port number within the specified range of port numbers.
 # The chosen port is displayed in the service's log file. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'backdoor_port' option is deprecated and will be removed in a
+# future release.
 #backdoor_port = <None>
 
-# Enable eventlet backdoor, using the provided path as a unix socket that can
-# receive connections. This option is mutually exclusive with 'backdoor_port'
-# in that only one should be provided. If both are provided then the existence
-# of this option overrides the usage of that option. Inside the path {pid} will
-# be replaced with the PID of the current process. (string value)
+# DEPRECATED: Enable eventlet backdoor, using the provided path as a unix
+# socket that can receive connections. This option is mutually exclusive with
+# 'backdoor_port' in that only one should be provided. If both are provided
+# then the existence of this option overrides the usage of that option. Inside
+# the path {pid} will be replaced with the PID of the current process. (string
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'backdoor_socket' option is deprecated and will be removed in a
+# future release.
 #backdoor_socket = <None>
 
 # Enables or disables logging values of all registered options when starting a
@@ -1818,37 +1841,73 @@
 # From oslo.service.wsgi
 #
 
-# File name for the paste.deploy config for api service (string value)
+# DEPRECATED: File name for the paste.deploy config for api service (string
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'api_paste_config' option is deprecated and will be removed in a
+# future release.
 #api_paste_config = api-paste.ini
 
-# A python format string that is used as the template to generate log lines.
-# The following values can beformatted into it: client_ip, date_time,
-# request_line, status_code, body_length, wall_seconds. (string value)
+# DEPRECATED: A python format string that is used as the template to generate
+# log lines. The following values can beformatted into it: client_ip,
+# date_time, request_line, status_code, body_length, wall_seconds. (string
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'wsgi_log_format' option is deprecated and will be removed in a
+# future release.
 #wsgi_log_format = %(client_ip)s "%(request_line)s" status: %(status_code)s  len: %(body_length)s time: %(wall_seconds).7f
 
-# Sets the value of TCP_KEEPIDLE in seconds for each server socket. Not
-# supported on OS X. (integer value)
+# DEPRECATED: Sets the value of TCP_KEEPIDLE in seconds for each server socket.
+# Not supported on OS X. (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'tcp_keepidle' option is deprecated and will be removed in a
+# future release.
 #tcp_keepidle = 600
 
-# Size of the pool of greenthreads used by wsgi (integer value)
+# DEPRECATED: Size of the pool of greenthreads used by wsgi (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'wsgi_default_pool_size' option is deprecated and will be removed
+# in a future release.
 #wsgi_default_pool_size = 100
 
-# Maximum line size of message headers to be accepted. max_header_line may need
-# to be increased when using large tokens (typically those generated when
-# keystone is configured to use PKI tokens with big service catalogs). (integer
-# value)
+# DEPRECATED: Maximum line size of message headers to be accepted.
+# max_header_line may need to be increased when using large tokens (typically
+# those generated when keystone is configured to use PKI tokens with big
+# service catalogs). (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'max_header_line' option is deprecated and will be removed in a
+# future release.
 #max_header_line = 16384
 
-# If False, closes the client socket connection explicitly. (boolean value)
+# DEPRECATED: If False, closes the client socket connection explicitly.
+# (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'wsgi_keep_alive' option is deprecated and will be removed in a
+# future release.
 #wsgi_keep_alive = true
 
-# Timeout for client connections' socket operations. If an incoming connection
-# is idle for this number of seconds it will be closed. A value of '0' means
-# wait forever. (integer value)
+# DEPRECATED: Timeout for client connections' socket operations. If an incoming
+# connection is idle for this number of seconds it will be closed. A value of
+# '0' means wait forever. (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'client_socket_timeout' option is deprecated and will be removed
+# in a future release.
 #client_socket_timeout = 900
 
-# True if the server should send exception tracebacks to the clients on 500
-# errors. If False, the server will respond with empty bodies. (boolean value)
+# DEPRECATED: True if the server should send exception tracebacks to the
+# clients on 500 errors. If False, the server will respond with empty bodies.
+# (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'wsgi_server_debug' option is deprecated and will be removed in a
+# future release.
 #wsgi_server_debug = false
 
 
@@ -1914,16 +1973,14 @@
 #volume_clear_ionice = <None>
 
 # Target user-land tool to use. tgtadm is default, use lioadm for LIO iSCSI
-# support, scstadmin for SCST target support, ietadm for iSCSI Enterprise
-# Target, iscsictl for Chelsio iSCSI Target, nvmet for NVMEoF support, spdk-
-# nvmeof for SPDK NVMe-oF, or fake for testing. Note: The IET driver is
-# deprecated and will be removed in the V release. (string value)
+# support, scstadmin for SCST target support, iscsictl for Chelsio iSCSI
+# Target, nvmet for NVMEoF support, spdk-nvmeof for SPDK NVMe-oF, or fake for
+# testing. (string value)
 # Possible values:
 # tgtadm - <No description provided>
 # lioadm - <No description provided>
 # scstadmin - <No description provided>
 # iscsictl - <No description provided>
-# ietadm - <No description provided>
 # nvmet - <No description provided>
 # spdk-nvmeof - <No description provided>
 # fake - <No description provided>
@@ -1932,22 +1989,19 @@
 # Volume configuration file storage directory (string value)
 #volumes_dir = $state_path/volumes
 
-# DEPRECATED: IET configuration file (string value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: IET target driver is no longer supported.
-#iet_conf = /etc/iet/ietd.conf
-
 # Chiscsi (CXT) global defaults configuration file (string value)
 #chiscsi_conf = /etc/chelsio-iscsi/chiscsi.conf
 
-# Sets the behavior of the iSCSI target to either perform blockio or fileio
-# optionally, auto can be set and Cinder will autodetect type of backing device
-# (string value)
+# DEPRECATED: Sets the behavior of the iSCSI target to either perform blockio
+# or fileio optionally, auto can be set and Cinder will autodetect type of
+# backing device (string value)
 # Possible values:
 # blockio - <No description provided>
 # fileio - <No description provided>
 # auto - <No description provided>
+# This option is deprecated for removal since 2024.2.
+# Its value may be silently ignored in the future.
+# Reason: No longer used (was for ietadm).
 #iscsi_iotype = fileio
 
 # The default block size used when copying/clearing volumes (string value)
@@ -2072,22 +2126,38 @@
 # backends. (string value)
 #backend_availability_zone = <None>
 
-# The maximum number of times to rescan iSER target to find volume (integer
-# value)
+# DEPRECATED: The maximum number of times to rescan iSER target to find volume
+# (integer value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Mitaka release.
 #num_iser_scan_tries = 3
 
-# Prefix for iSER volumes (string value)
+# DEPRECATED: Prefix for iSER volumes (string value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Mitaka release.
 #iser_target_prefix = iqn.2010-10.org.openstack:
 
-# The IP address that the iSER daemon is listening on (string value)
+# DEPRECATED: The IP address that the iSER daemon is listening on (string
+# value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Mitaka release.
 #iser_ip_address = $my_ip
 
-# The port that the iSER daemon is listening on (port value)
+# DEPRECATED: The port that the iSER daemon is listening on (port value)
 # Minimum value: 0
 # Maximum value: 65535
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Mitaka release.
 #iser_port = 3260
 
-# The name of the iSER target user-land tool to use (string value)
+# DEPRECATED: The name of the iSER target user-land tool to use (string value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: Has been unused since the Havana release.
 #iser_helper = tgtadm
 
 # NVMe os-brick connector has 2 different connection info formats, this allows
@@ -2422,6 +2492,16 @@
 # Connect PowerStore volumes using NVMe-OF. (boolean value)
 #powerstore_nvme = false
 
+# Use this value to specify the connect timeout value (in seconds) for REST API
+# calls to the PowerStore backend. (integer value)
+# Minimum value: 1
+#rest_api_call_connect_timeout = 30
+
+# Use this value to specify the read timeout value (in seconds) for REST API
+# calls to the PowerStore backend. (integer value)
+# Minimum value: 1
+#rest_api_call_read_timeout = 30
+
 # File with the list of available NFS shares. (string value)
 #nfs_shares_config = /etc/cinder/nfs_shares
 
@@ -2611,6 +2691,16 @@
 # Config file for cinder eternus_dx volume driver. (string value)
 #cinder_eternus_config_file = /etc/cinder/cinder_fujitsu_eternus_dx.xml
 
+# Use SSH key to connect to storage. (boolean value)
+#fujitsu_passwordless = true
+
+# Filename of private key for ETERNUS CLI. This option must be set when the
+# fujitsu_passwordless is True. (string value)
+#fujitsu_private_key_path = $state_path/eternus
+
+# If True use CLI command to create snapshot. (boolean value)
+#fujitsu_use_cli_copy = false
+
 # Product number of the storage system. (string value)
 #hitachi_storage_id = <None>
 
@@ -2660,6 +2750,10 @@
 # Minimum value: 1
 # Maximum value: 600
 #hitachi_async_copy_check_interval = 10
+
+# If true, the driver will create a driver managed vClone parent for each non-
+# cloned DRS volume it creates. (boolean value)
+#hitachi_manage_drs_volumes = false
 
 # Enable port scheduling of WWNs to the configured ports so that WWNs are
 # registered to ports in a round-robin fashion. (boolean value)
@@ -2755,26 +2849,28 @@
 # storage system provided that FC zoning manager is enabled. (boolean value)
 #hitachi_zoning_request = false
 
-# WSAPI Server URL. This setting applies to: 3PAR, Primera and Alletra 9k
+# WSAPI Server URL. This setting applies to: 3PAR, Primera, Alletra 9k and
+# Alletra MP
 #        Example 1: for 3PAR, URL is:
 #        https://<3par ip>:8080/api/v1
-#        Example 2: for Primera/Alletra 9k, URL is:
+#        Example 2: for Primera/Alletra 9k/Alletra MP, URL is:
 #        https://<primera ip>:443/api/v1 (string value)
 #hpe3par_api_url =
 
-# 3PAR/Primera/Alletra 9k username with the 'edit' role (string value)
+# 3PAR/Primera/Alletra 9k/Alletra MP username with the 'edit' role (string
+# value)
 #hpe3par_username =
 
-# 3PAR/Primera/Alletra 9k password for the user specified in hpe3par_username
-# (string value)
+# 3PAR/Primera/Alletra 9k/Alletra MP password for the user specified in
+# hpe3par_username (string value)
 #hpe3par_password =
 
-# List of the 3PAR/Primera/Alletra 9k CPG(s) to use for volume creation (list
-# value)
+# List of the 3PAR/Primera/Alletra 9k/Alletra MP CPG(s) to use for volume
+# creation (list value)
 #hpe3par_cpg = OpenStack
 
-# The 3PAR/Primera/Alletra 9k CPG to use for snapshots of volumes. If empty the
-# userCPG will be used. (string value)
+# The 3PAR/Primera/Alletra 9k/Alletra MP CPG to use for snapshots of volumes.
+# If empty the userCPG will be used (string value)
 #hpe3par_cpg_snap =
 
 # The time in hours to retain a snapshot.  You can't delete it before this
@@ -2785,7 +2881,7 @@
 # larger than expiration (string value)
 #hpe3par_snapshot_expiration =
 
-# Enable HTTP debugging to 3PAR/Primera/Alletra 9k (boolean value)
+# Enable HTTP debugging to 3PAR/Primera/Alletra 9k/Alletra MP (boolean value)
 #hpe3par_debug = false
 
 # List of target iSCSI addresses to use. (list value)
@@ -2794,10 +2890,11 @@
 # Enable CHAP authentication for iSCSI connections. (boolean value)
 #hpe3par_iscsi_chap_enabled = false
 
-# The nsp of 3PAR/Primera/Alletra 9k backend to be used when: (1) multipath is
-# not enabled in cinder.conf. (2) Fiber Channel Zone Manager is not used. (3)
-# the backend is prezoned with this specific nsp only. For example if nsp is 2
-# 1 2, the format of the option's value is 2:1:2 (string value)
+# The nsp of 3PAR/Primera/Alletra 9k/Alletra MP backend to be used when: (1)
+# multipath is not enabled in cinder.conf. (2) Fiber Channel Zone Manager is
+# not used. (3) the backend is prezoned with this specific nsp only. For
+# example if nsp is 2 1 2, the format of the option's value is 2:1:2 (string
+# value)
 #hpe3par_target_nsp =
 
 # Nimble Controller pool name (string value)
@@ -2859,6 +2956,10 @@
 # Minimum value: 1
 # Maximum value: 600
 #hpexp_async_copy_check_interval = 10
+
+# If true, the driver will create a driver managed vClone parent for each non-
+# cloned DRS volume it creates. (boolean value)
+#hpexp_manage_drs_volumes = false
 
 # It may take some time to detach volume after I/O. This option will allow
 # detaching volume to complete immediately. (boolean value)
@@ -3278,6 +3379,17 @@
 # (integer value)
 #lightos_api_service_timeout = 30
 
+# IPACL work in conjunction with the standard NVME ACL. A host must be in both
+# the IPACL and the ACL of a volume to access that volume. Cinder always sets
+# the volume`s ACL. If lightos_use_ipacl is set to True, Cinder will also add
+# the host`s IP addresses to a volume IPACL. If set to False, any IP address
+# may access the volume. The default is True. (boolean value)
+#lightos_use_ipacl = true
+
+# The maximum number of calls to the LightOS when creating snapshots. The
+# default is 5 calls. (integer value)
+#lightos_api_service_snapshots_max_calls = 5
+
 # Default Volume Group name for LINSTOR. Not Cinder Volume. (string value)
 #linstor_default_volume_group_name = drbd-vg
 
@@ -3455,6 +3567,10 @@
 # Maximum value: 600
 #nec_v_async_copy_check_interval = 10
 
+# If true, the driver will create a driver managed vClone parent for each non-
+# cloned DRS volume it creates. (boolean value)
+#nec_v_manage_drs_volumes = false
+
 # It may take some time to detach volume after I/O. This option will allow
 # detaching volume to complete immediately. (boolean value)
 #nec_v_rest_disable_io_wait = true
@@ -3588,6 +3704,85 @@
 # option. (string value)
 #netapp_password = <None>
 
+#
+#                      This option is applicable for both self signed and ca
+#                      verified certificates.
+#
+#                      For self signed certificate: Absolute path to the file
+#                      containing the private key associated with the self
+#                      signed certificate. It is a sensitive file that should
+#                      be kept secure and protected. The private key is used
+#                      to sign the certificate and establish the authenticity
+#                      and integrity of the certificate during the
+#                      authentication process.
+#
+#                      For ca verified certificate: Absolute path to the file
+#                      containing the private key associated with the
+#                      certificate. It is generated when creating the
+#                      certificate signingrequest (CSR) and should be kept
+#                      secure and protected. The private key is used to sign
+#                      the CSR and later used to establish secure connections
+#                      and authenticate the entity.
+#                       (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#netapp_private_key_file = /path/to/private_key.key
+
+#
+#                      This option is applicable for both self signed and ca
+#                      verified certificates.
+#
+#                      For self signed certificate: Absolute path to the file
+#                      containing the self-signed digital certificate itself.
+#                      It includes information about the entity such as the
+#                      common name (e.g., domain name), organization details,
+#                      validity period, and public key. The certificate file
+#                      is generated based on the private key and is used by
+#                      clients or systems to verify the entity identity during
+#                      the authentication process.
+#
+#                      For ca verified certificate: Absolute path to the file
+#                      containing the digital certificate issued by the
+#                      trusted third-party certificate authority (CA). It
+#                      includes information about the entity identity, public
+#                      key, and the CA that issued the certificate. The
+#                      certificate file is used by clients or systems to verify
+#                      the authenticity and integrity of the entity during the
+#                      authentication process.
+#                       (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#netapp_certificate_file = /path/to/certificate.pem
+
+#
+#                      This option is applicable only for a ca verified
+#                      certificate.
+#
+#                      Ca verified file: Absolute path to the file containing
+#                      the public key certificate of the trusted third-party
+#                      certificate authority (CA) that issued the certificate.
+#                      It is used by clients or systems to validate the
+#                      authenticity of the certificate presented by the
+#                      entity. The CA certificate file is typically pre
+#                      configured in the trust store of clients or systems to
+#                      establish trust in certificates issued by that CA.
+#                       (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#netapp_ca_certificate_file = /path/to/ca_certificate.crt
+
+# This option is used only if netapp_private_key_file and
+# netapp_certificate_file files are passed in the configuration. By default
+# certificate verification is disabled and to verify the certificates please
+# set the value to True. (boolean value)
+#netapp_certificate_host_validation = false
+
 # This option specifies the virtual storage server (Vserver) name on the
 # storage cluster on which provisioning of block storage volumes should occur.
 # (string value)
@@ -3693,6 +3888,12 @@
 # go online. (integer value)
 # Minimum value: 60
 #netapp_replication_volume_online_timeout = 360
+
+# This option defines the replication policy to be used while creating
+# snapmirror relationship. Default is MirrorAllSnapshots which is based on
+# async-mirror.User can pass values like Sync, StrictSync for synchronous
+# snapmirror relationship (SM-S) to achieve zero RPO (string value)
+#netapp_replication_policy = MirrorAllSnapshots
 
 # A regular expression to limit the API tracing. This option is honored only if
 # enabling ``api`` tracing with the ``trace_flags`` option. By default, all
@@ -3913,8 +4114,11 @@
 # NexentaEdge iSCSI LUN object replication count. (integer value)
 #nexenta_replication_count = 3
 
-# Defines whether NexentaEdge iSCSI LUN object has encryption enabled. (boolean
-# value)
+# DEPRECATED: Defines whether NexentaEdge iSCSI LUN object has encryption
+# enabled. (boolean value)
+# This option is deprecated for removal since 2024.2.
+# Its value may be silently ignored in the future.
+# Reason: Unused option
 #nexenta_encryption = false
 
 # DPL pool uuid in which DPL volumes are stored. (string value)
@@ -4672,8 +4876,7 @@
 # verify_ssl is False, this is ignored. (string value)
 #verify_ssl_path = <None>
 
-# Specifies the type of endpoint.  Allowed values are: public, private, and
-# admin (string value)
+# Specifies the type of endpoint. (string value)
 # Possible values:
 # public - <No description provided>
 # internal - <No description provided>
@@ -4875,6 +5078,14 @@
 # (string value)
 #slave_connection = <None>
 
+# The SQLAlchemy asyncio connection string to use to connect to the database.
+# (string value)
+#asyncio_connection = <None>
+
+# The SQLAlchemy asyncio connection string to use to connect to the slave
+# database. (string value)
+#asyncio_slave_connection = <None>
+
 # The SQL mode to be used for MySQL sessions. This option, including the
 # default, overrides any server-set SQL mode. To use whatever SQL mode is set
 # by the server configuration, set this to no value. Example: mysql_sql_mode=
@@ -5012,6 +5223,10 @@
 # is running on a port. Expects a "port:path" list of strings. Used by
 # DisableByFilesPortsHealthcheck plugin. (list value)
 #disable_by_file_paths =
+
+# Check the presence of files. Used by EnableByFilesHealthcheck plugin. (list
+# value)
+#enable_by_file_paths =
 
 
 [key_manager]
@@ -5252,6 +5467,16 @@
 # used to validate tokens that have restricted access rules. (string value)
 #service_type = <None>
 
+# Enable the SASL(Simple Authentication and Security Layer) if the SASL_enable
+# is true, else disable. (boolean value)
+#memcache_sasl_enabled = false
+
+# the user name for the SASL (string value)
+#memcache_username =
+
+# the username password for SASL (string value)
+#memcache_password =
+
 # Authentication type to load (string value)
 # Deprecated group/name - [keystone_authtoken]/auth_plugin
 #auth_type = <None>
@@ -5357,192 +5582,6 @@
 #lock_path = <None>
 
 
-[oslo_messaging_amqp]
-
-#
-# From oslo.messaging
-#
-
-# Name for the AMQP container. must be globally unique. Defaults to a generated
-# UUID (string value)
-#container_name = <None>
-
-# Timeout for inactive connections (in seconds) (integer value)
-#idle_timeout = 0
-
-# Debug: dump AMQP frames to stdout (boolean value)
-#trace = false
-
-# Attempt to connect via SSL. If no other ssl-related parameters are given, it
-# will use the system's CA-bundle to verify the server's certificate. (boolean
-# value)
-#ssl = false
-
-# CA certificate PEM file used to verify the server's certificate (string
-# value)
-#ssl_ca_file =
-
-# Self-identifying certificate PEM file for client authentication (string
-# value)
-#ssl_cert_file =
-
-# Private key PEM file used to sign ssl_cert_file certificate (optional)
-# (string value)
-#ssl_key_file =
-
-# Password for decrypting ssl_key_file (if encrypted) (string value)
-#ssl_key_password = <None>
-
-# By default SSL checks that the name in the server's certificate matches the
-# hostname in the transport_url. In some configurations it may be preferable to
-# use the virtual hostname instead, for example if the server uses the Server
-# Name Indication TLS extension (rfc6066) to provide a certificate per virtual
-# host. Set ssl_verify_vhost to True if the server's SSL certificate uses the
-# virtual host name instead of the DNS name. (boolean value)
-#ssl_verify_vhost = false
-
-# Space separated list of acceptable SASL mechanisms (string value)
-#sasl_mechanisms =
-
-# Path to directory that contains the SASL configuration (string value)
-#sasl_config_dir =
-
-# Name of configuration file (without .conf suffix) (string value)
-#sasl_config_name =
-
-# SASL realm to use if no realm present in username (string value)
-#sasl_default_realm =
-
-# Seconds to pause before attempting to re-connect. (integer value)
-# Minimum value: 1
-#connection_retry_interval = 1
-
-# Increase the connection_retry_interval by this many seconds after each
-# unsuccessful failover attempt. (integer value)
-# Minimum value: 0
-#connection_retry_backoff = 2
-
-# Maximum limit for connection_retry_interval + connection_retry_backoff
-# (integer value)
-# Minimum value: 1
-#connection_retry_interval_max = 30
-
-# Time to pause between re-connecting an AMQP 1.0 link that failed due to a
-# recoverable error. (integer value)
-# Minimum value: 1
-#link_retry_delay = 10
-
-# The maximum number of attempts to re-send a reply message which failed due to
-# a recoverable error. (integer value)
-# Minimum value: -1
-#default_reply_retry = 0
-
-# The deadline for an rpc reply message delivery. (integer value)
-# Minimum value: 5
-#default_reply_timeout = 30
-
-# The deadline for an rpc cast or call message delivery. Only used when caller
-# does not provide a timeout expiry. (integer value)
-# Minimum value: 5
-#default_send_timeout = 30
-
-# The deadline for a sent notification message delivery. Only used when caller
-# does not provide a timeout expiry. (integer value)
-# Minimum value: 5
-#default_notify_timeout = 30
-
-# The duration to schedule a purge of idle sender links. Detach link after
-# expiry. (integer value)
-# Minimum value: 1
-#default_sender_link_timeout = 600
-
-# Indicates the addressing mode used by the driver.
-# Permitted values:
-# 'legacy'   - use legacy non-routable addressing
-# 'routable' - use routable addresses
-# 'dynamic'  - use legacy addresses if the message bus does not support routing
-# otherwise use routable addressing (string value)
-#addressing_mode = dynamic
-
-# Enable virtual host support for those message buses that do not natively
-# support virtual hosting (such as qpidd). When set to true the virtual host
-# name will be added to all message bus addresses, effectively creating a
-# private 'subnet' per virtual host. Set to False if the message bus supports
-# virtual hosting using the 'hostname' field in the AMQP 1.0 Open performative
-# as the name of the virtual host. (boolean value)
-#pseudo_vhost = true
-
-# address prefix used when sending to a specific server (string value)
-#server_request_prefix = exclusive
-
-# address prefix used when broadcasting to all servers (string value)
-#broadcast_prefix = broadcast
-
-# address prefix when sending to any server in group (string value)
-#group_request_prefix = unicast
-
-# Address prefix for all generated RPC addresses (string value)
-#rpc_address_prefix = openstack.org/om/rpc
-
-# Address prefix for all generated Notification addresses (string value)
-#notify_address_prefix = openstack.org/om/notify
-
-# Appended to the address prefix when sending a fanout message. Used by the
-# message bus to identify fanout messages. (string value)
-#multicast_address = multicast
-
-# Appended to the address prefix when sending to a particular RPC/Notification
-# server. Used by the message bus to identify messages sent to a single
-# destination. (string value)
-#unicast_address = unicast
-
-# Appended to the address prefix when sending to a group of consumers. Used by
-# the message bus to identify messages that should be delivered in a round-
-# robin fashion across consumers. (string value)
-#anycast_address = anycast
-
-# Exchange name used in notification addresses.
-# Exchange name resolution precedence:
-# Target.exchange if set
-# else default_notification_exchange if set
-# else control_exchange if set
-# else 'notify' (string value)
-#default_notification_exchange = <None>
-
-# Exchange name used in RPC addresses.
-# Exchange name resolution precedence:
-# Target.exchange if set
-# else default_rpc_exchange if set
-# else control_exchange if set
-# else 'rpc' (string value)
-#default_rpc_exchange = <None>
-
-# Window size for incoming RPC Reply messages. (integer value)
-# Minimum value: 1
-#reply_link_credit = 200
-
-# Window size for incoming RPC Request messages (integer value)
-# Minimum value: 1
-#rpc_server_credit = 100
-
-# Window size for incoming Notification messages (integer value)
-# Minimum value: 1
-#notify_server_credit = 100
-
-# Send messages of this type pre-settled.
-# Pre-settled messages will not receive acknowledgement
-# from the peer. Note well: pre-settled messages may be
-# silently discarded if the delivery fails.
-# Permitted values:
-# 'rpc-call' - send RPC Calls pre-settled
-# 'rpc-reply'- send RPC Replies pre-settled
-# 'rpc-cast' - Send RPC Casts pre-settled
-# 'notify'   - Send Notifications pre-settled
-#  (multi valued)
-#pre_settled = rpc-cast
-#pre_settled = rpc-reply
-
-
 [oslo_messaging_kafka]
 
 #
@@ -5554,26 +5593,6 @@
 
 # Default timeout(s) for Kafka consumers (floating point value)
 #kafka_consumer_timeout = 1.0
-
-# DEPRECATED: Pool Size for Kafka Consumers (integer value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#pool_size = 10
-
-# DEPRECATED: The pool size limit for connections expiration policy (integer
-# value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#conn_pool_min_size = 2
-
-# DEPRECATED: The time-to-live in sec of idle connections in the pool (integer
-# value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#conn_pool_ttl = 1200
 
 # Group id for Kafka consumer. Consumers in one group will coordinate message
 # consumption (string value)
@@ -5635,17 +5654,13 @@
 
 # The Drivers(s) to handle sending notifications. Possible values are
 # messaging, messagingv2, routing, log, test, noop (multi valued)
-# Deprecated group/name - [DEFAULT]/notification_driver
 #driver =
 
 # A URL representing the messaging driver to use for notifications. If not set,
 # we fall back to the same configuration used for RPC. (string value)
-# Deprecated group/name - [DEFAULT]/notification_transport_url
 #transport_url = <None>
 
 # AMQP topic used for OpenStack notifications. (list value)
-# Deprecated group/name - [rpc_notifier2]/topics
-# Deprecated group/name - [DEFAULT]/notification_topics
 #topics = notifications
 
 # The maximum number of attempts to re-send a notification message which failed
@@ -5667,27 +5682,39 @@
 # Auto-delete queues in AMQP. (boolean value)
 #amqp_auto_delete = false
 
+# Size of RPC connection pool. (integer value)
+# Minimum value: 1
+#rpc_conn_pool_size = 30
+
+# The pool size limit for connections expiration policy (integer value)
+#conn_pool_min_size = 2
+
+# The time-to-live in sec of idle connections in the pool (integer value)
+#conn_pool_ttl = 1200
+
 # Connect over SSL. (boolean value)
-# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_use_ssl
 #ssl = false
 
 # SSL version to use (valid only if SSL enabled). Valid values are TLSv1 and
 # SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be available on some
 # distributions. (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_version
 #ssl_version =
 
 # SSL key file (valid only if SSL enabled). (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_keyfile
 #ssl_key_file =
 
 # SSL cert file (valid only if SSL enabled). (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_certfile
 #ssl_cert_file =
 
 # SSL certification authority file (valid only if SSL enabled). (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
 #ssl_ca_file =
+
+# When true, verify the broker hostname against the certificate when
+# ``ssl_ca_file`` is set. When false (default on stable branches), ``ssl`` with
+# ``ssl_ca_file`` still validates the certificate chain but does not verify the
+# broker hostname. ``ssl=true`` without ``ssl_ca_file`` never enables hostname
+# verification. (boolean value)
+#ssl_enforce_hostname_verification = false
 
 # Global toggle for enforcing the OpenSSL FIPS mode. This feature requires
 # Python support. This is available in Python 3.9 in all environments and may
@@ -5696,12 +5723,18 @@
 # be raised. (boolean value)
 #ssl_enforce_fips_mode = false
 
-# Run the health check heartbeat thread through a native python thread by
-# default. If this option is equal to False then the health check heartbeat
-# will inherit the execution model from the parent process. For example if the
-# parent process has monkey patched the stdlib by using eventlet/greenlet then
-# the heartbeat will be run through a green thread. This option should be set
-# to True only for the wsgi services. (boolean value)
+# DEPRECATED: (DEPRECATED) It is recommend not to use this option anymore. Run
+# the health check heartbeat thread through a native python thread by default.
+# If this option is equal to False then the health check heartbeat will inherit
+# the execution model from the parent process. For example if the parent
+# process has monkey patched the stdlib by using eventlet/greenlet then the
+# heartbeat will be run through a green thread. This option should be set to
+# True only for the wsgi services. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The option is related to Eventlet which will be removed. In addition
+# this has never worked as expected with services using eventlet for core
+# service framework.
 #heartbeat_in_pthread = false
 
 # How long to wait (in seconds) before reconnecting in response to an AMQP
@@ -5709,6 +5742,11 @@
 # Minimum value: 0.0
 # Maximum value: 4.5
 #kombu_reconnect_delay = 1.0
+
+# Random time to wait for when reconnecting in response to an AMQP consumer
+# cancel notification. (floating point value)
+# Minimum value: 0.0
+#kombu_reconnect_splay = 0.0
 
 # EXPERIMENTAL: Possible values are: gzip, bz2. If not set compression will not
 # be used. This option may not be available in future versions. (string value)
@@ -5736,14 +5774,16 @@
 #rabbit_login_method = AMQPLAIN
 
 # How frequently to retry connecting with RabbitMQ. (integer value)
+# Minimum value: 1
 #rabbit_retry_interval = 1
 
 # How long to backoff for between retries when connecting to RabbitMQ. (integer
 # value)
+# Minimum value: 0
 #rabbit_retry_backoff = 2
 
-# Maximum interval of RabbitMQ connection retries. Default is 30 seconds.
-# (integer value)
+# Maximum interval of RabbitMQ connection retries. (integer value)
+# Minimum value: 1
 #rabbit_interval_max = 30
 
 # Try to use HA queues in RabbitMQ (x-ha-policy: all). If you change this
@@ -5795,7 +5835,12 @@
 # deleted. The parameter affects only reply and fanout queues. Setting 0 as
 # value will disable the x-expires. If doing so, make sure you have a rabbitmq
 # policy to delete the queues or you deployment will create an infinite number
-# of queue over time. (integer value)
+# of queue over time.In case rabbit_stream_fanout is set to True, this option
+# will control data retention policy (x-max-age) for messages in the fanout
+# queue rather then the queue duration itself. So the oldest data in the stream
+# queue will be discarded from it once reaching TTL Setting to 0 will disable
+# x-max-age for stream which make stream grow indefinitely filling up the
+# diskspace (integer value)
 # Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
@@ -5829,11 +5874,20 @@
 # Should we use consistant queue names or random ones (boolean value)
 #use_queue_manager = false
 
-# Hostname used by queue manager (string value)
-#hostname = cc1
+# Hostname used by queue manager. Defaults to the value returned by
+# socket.gethostname(). (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#hostname = node1.example.com
 
 # Process name used by queue manager (string value)
-#processname = oslo-config-generator
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#processname = nova-api
 
 # Use stream queues in RabbitMQ (x-queue-type: stream). Streams are a new
 # persistent and replicated data structure ("queue type") in RabbitMQ which
@@ -5868,12 +5922,17 @@
 # From oslo.policy
 #
 
-# This option controls whether or not to enforce scope when evaluating
-# policies. If ``True``, the scope of the token used in the request is compared
-# to the ``scope_types`` of the policy being enforced. If the scopes do not
-# match, an ``InvalidScope`` exception will be raised. If ``False``, a message
-# will be logged informing operators that policies are being invoked with
-# mismatching scope. (boolean value)
+# DEPRECATED: This option controls whether or not to enforce scope when
+# evaluating policies. If ``True``, the scope of the token used in the request
+# is compared to the ``scope_types`` of the policy being enforced. If the
+# scopes do not match, an ``InvalidScope`` exception will be raised. If
+# ``False``, a message will be logged informing operators that policies are
+# being invoked with mismatching scope. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This configuration was added temporarily to facilitate a smooth
+# transition to the new RBAC. OpenStack will always enforce scope checks. This
+# configuration option is deprecated and will be removed in the 2025.2 cycle.
 #enforce_scope = false
 
 # This option controls whether or not to use old deprecated defaults when
@@ -5920,6 +5979,10 @@
 
 # Absolute path client key file REST based policy check (string value)
 #remote_ssl_client_key_file = <None>
+
+# Timeout in seconds for REST based policy check (floating point value)
+# Minimum value: 0
+#remote_timeout = 60
 
 
 [oslo_reports]
@@ -6295,14 +6358,14 @@
 # ID of the trust to use as a trustee use (string value)
 #trust_id = <None>
 
-# User ID (string value)
+# User's user ID (string value)
 #user_id = <None>
 
-# Username (string value)
+# User's username (string value)
 # Deprecated group/name - [service_user]/user_name
 #username = <None>
 
-# User's domain id (string value)
+# User's domain ID (string value)
 #user_domain_id = <None>
 
 # User's domain name (string value)
@@ -6340,25 +6403,45 @@
 # From oslo.service.sslutils
 #
 
-# CA certificate file to use to verify connecting clients. (string value)
-# Deprecated group/name - [DEFAULT]/ssl_ca_file
+# DEPRECATED: CA certificate file to use to verify connecting clients. (string
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'ca_file' option is deprecated and will be removed in a future
+# release.
 #ca_file = <None>
 
-# Certificate file to use when starting the server securely. (string value)
-# Deprecated group/name - [DEFAULT]/ssl_cert_file
+# DEPRECATED: Certificate file to use when starting the server securely.
+# (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'cert_file' option is deprecated and will be removed in a future
+# release.
 #cert_file = <None>
 
-# Private key file to use when starting the server securely. (string value)
-# Deprecated group/name - [DEFAULT]/ssl_key_file
+# DEPRECATED: Private key file to use when starting the server securely.
+# (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'key_file' option is deprecated and will be removed in a future
+# release.
 #key_file = <None>
 
-# SSL version to use (valid only if SSL enabled). Valid values are TLSv1 and
-# SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be available on some
+# DEPRECATED: SSL version to use (valid only if SSL enabled). Valid values are
+# TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be available on some
 # distributions. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'version' option is deprecated and will be removed in a future
+# release.
 #version = <None>
 
-# Sets the list of available ciphers. value should be a string in the OpenSSL
-# cipher list format. (string value)
+# DEPRECATED: Sets the list of available ciphers. value should be a string in
+# the OpenSSL cipher list format. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'ciphers' option is deprecated and will be removed in a future
+# release.
 #ciphers = <None>
 
 
@@ -6399,3 +6482,6 @@
 # Vault Namespace to use for all requests to Vault. Vault Namespaces feature is
 # available only in Vault Enterprise (string value)
 #namespace = <None>
+
+# Timeout (in seconds) in each request to Vault (floating point value)
+#timeout = 60

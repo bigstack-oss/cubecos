@@ -1151,6 +1151,11 @@
 #          "old_rule_name": "new_rule_name".
 # "os_compute_api:os-used-limits": "rule:os_compute_api:limits:other_project"
 
+# Live resize (vCPU/memory hot-add) a server. Cube downstream.
+# POST  /servers/{server_id}/action (live-resize)
+# Intended scope(s): project
+#"os_compute_api:servers:live_resize": "rule:context_is_admin"
+
 # Lock a server
 # POST  /servers/{server_id}/action (lock)
 # Intended scope(s): project
@@ -1334,7 +1339,7 @@
 # Intended scope(s): project
 #"os_compute_api:os-quota-sets:detail": "rule:project_reader_or_admin"
 
-# Generate a URL to access remove server console.
+# Generate a URL to access remote server console.
 #
 # This policy is for ``POST /remote-consoles`` API and below Server
 # actions APIs are deprecated:
@@ -1715,6 +1720,26 @@
 #          rules is:
 #          "old_rule_name": "new_rule_name".
 # "os_compute_api:os-server-password": "rule:os_compute_api:os-server-password:clear"
+
+# List all shares for given server
+# GET  /servers/{server_id}/shares
+# Intended scope(s): project
+#"os_compute_api:os-server-shares:index": "rule:project_reader_api"
+
+# Attach a share to the specified server
+# POST  /servers/{server_id}/shares
+# Intended scope(s): project
+#"os_compute_api:os-server-shares:create": "rule:project_member_api"
+
+# Show a share configured for the specified server
+# GET  /servers/{server_id}/shares/{share_id}
+# Intended scope(s): project
+#"os_compute_api:os-server-shares:show": "rule:project_reader_api"
+
+# Detach a share to the specified server
+# DELETE  /servers/{server_id}/shares/{share_id}
+# Intended scope(s): project
+#"os_compute_api:os-server-shares:delete": "rule:project_member_api"
 
 # Delete all the server tags
 # DELETE  /servers/{server_id}/tags

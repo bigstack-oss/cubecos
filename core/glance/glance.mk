@@ -3,46 +3,65 @@
 
 ROOTFS_DNF += qemu-img
 
-# glance runs out of the caracal venv, not the antelope one it shared with every other
-# 2023.1 service. glance 28.2.0 pulls glance-store 4.7.1, os-brick 6.7.3, taskflow 5.6
-# and castellan 5.0; installing that beside nova/neutron/cinder would have upgraded
-# the whole antelope dependency set under them, so the image service moves alone into
-# /opt/openstack-caracal (skyline was the first occupant, keystone the second).
-# Resolved against os-caracal-pip-upper-constraints.txt the two sets are disjoint --
-# glance adds 25 packages there and changes no version keystone or skyline already
-# holds.
+# glance runs out of the epoxy venv, not the caracal one it shares with every other
+# 2024.1 service. glance 30.2.0 pulls glance-store 4.9.1, os-brick 6.11.1, taskflow
+# 5.12 and castellan 5.2; installing that beside nova/cinder/manila would have
+# upgraded the whole caracal dependency set under them, so the image service moves
+# alone into /opt/openstack-epoxy -- the same shape as its caracal hop (#630), one
+# release on, with keystone (#657) as the venv's only other occupant. Resolved
+# against os-epoxy-pip-upper-constraints.txt the two sets are disjoint -- glance adds
+# 36 packages there and changes no version keystone already holds.
+#
+# 30.2.0 is the newest 2025.1 release, the same choice #630 made with 28.2.0 for
+# 2024.1, and the one to take: it is the security release that closes the SSRF holes
+# in the web-download, glance-download and OVF import paths (bugs 2138602, 2138672,
+# 2138675).
 #
 # The /usr/bin/glance-* symlinks are the only thing outside this venv that has to
 # follow: the service units, config_glance.cpp and hex_sdk all reach glance through
 # them. The glance-3 and glance-rootwrap-3 links are gone -- they were RDO console
 # script names that no pip-installed glance has ever provided, so they have been
 # dangling since the yoga-to-antelope hop moved this component off the rpm.
+#
+# Three packages have to be named because glance's requirements ask for none of them
+# and pip will not pull them in transitively:
+# PyMySQL: config_glance.cpp writes a mysql+pymysql:// connection
+# oslo.messaging[kafka]: config_glance.cpp points the notification transport at
+#   kafka://
+# python-memcached: config_glance.cpp writes [keystone_authtoken] memcached_servers,
+#   which makes keystonemiddleware import memcache on its first token validation
+# keystone.mk happens to install all three into this venv too, but a dependency
+# nothing asks for is one that disappears silently -- in the caracal venv glance only
+# ever had them because other components named them.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			glance==28.2.0 \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			glance==30.2.0 \
 			os-brick \
 			python-cinderclient \
 			python-glanceclient \
 			pyxattr \
-			pysendfile"
+			pysendfile \
+			PyMySQL \
+			\"oslo.messaging[kafka]\" \
+			python-memcached"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance /usr/bin/glance
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-api /usr/bin/glance-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-cache-cleaner /usr/bin/glance-cache-cleaner
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-cache-manage /usr/bin/glance-cache-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-cache-prefetcher /usr/bin/glance-cache-prefetcher
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-cache-pruner /usr/bin/glance-cache-pruner
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-control /usr/bin/glance-control
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-manage /usr/bin/glance-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-replicator /usr/bin/glance-replicator
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-rootwrap /usr/bin/glance-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-scrubber /usr/bin/glance-scrubber
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-status /usr/bin/glance-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-wsgi-api /usr/bin/glance-wsgi-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance /usr/bin/glance
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-api /usr/bin/glance-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-cache-cleaner /usr/bin/glance-cache-cleaner
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-cache-manage /usr/bin/glance-cache-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-cache-prefetcher /usr/bin/glance-cache-prefetcher
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-cache-pruner /usr/bin/glance-cache-pruner
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-control /usr/bin/glance-control
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-manage /usr/bin/glance-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-replicator /usr/bin/glance-replicator
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-rootwrap /usr/bin/glance-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-scrubber /usr/bin/glance-scrubber
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-status /usr/bin/glance-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/glance-wsgi-api /usr/bin/glance-wsgi-api
 
 # prepare the build directory
 rootfs_install::
@@ -79,22 +98,22 @@ rootfs_install::
 	$(Q)# which meant they only ever moved when someone remembered to re-copy them: the
 	$(Q)# carried metadefs were still glance 26.1.0's, three files behind 2024.1, and the
 	$(Q)# carried paste config still had the pre-bobcat pipeline layout.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/glance/glance-api-paste.ini /etc/glance/glance-api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(NEXT_OPENSTACK_HOME_DIR)/etc/glance/glance-api-paste.ini /etc/glance/glance-api-paste.ini
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-cache.conf.sample /etc/glance/glance-cache.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-scrubber.conf.sample /etc/glance/glance-scrubber.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance-swift.conf /etc/glance/glance-swift.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/glance-image-import.conf.sample /etc/glance/glance-image-import.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/glance-rootwrap.conf /etc/glance/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/glance/schema-image.json /etc/glance/schema-image.json
-	$(Q)chroot $(ROOTDIR) bash -c "install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/glance/metadefs/*.json /etc/glance/metadefs/"
+	$(Q)chroot $(ROOTDIR) bash -c "install -p -D -m 640 $(NEXT_OPENSTACK_HOME_DIR)/etc/glance/metadefs/*.json /etc/glance/metadefs/"
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-api.service /usr/lib/systemd/system/openstack-glance-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/glance/openstack-glance-scrubber.service /usr/lib/systemd/system/openstack-glance-scrubber.service
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/run/glance
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /var/log/glance
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/glance/glance-sudoers /etc/sudoers.d/glance
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/glance/rootwrap.d
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/glance/rootwrap.d/glance_cinder_store.filters /etc/glance/rootwrap.d
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/os-brick/rootwrap.d/os-brick.filters /etc/glance/rootwrap.d
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(NEXT_OPENSTACK_HOME_DIR)/etc/glance/rootwrap.d/glance_cinder_store.filters /etc/glance/rootwrap.d
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(NEXT_OPENSTACK_HOME_DIR)/etc/os-brick/rootwrap.d/os-brick.filters /etc/glance/rootwrap.d
 
 # adjust file ownerships and permissions
 rootfs_install::

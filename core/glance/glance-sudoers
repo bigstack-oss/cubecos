@@ -1,4 +1,4 @@
 Defaults:glance !requiretty
 
 glance ALL = (root) NOPASSWD: /usr/bin/glance-rootwrap /etc/glance/rootwrap.conf *
-glance ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *
+glance ALL = (root) NOPASSWD: /opt/openstack-epoxy/bin/privsep-helper *
