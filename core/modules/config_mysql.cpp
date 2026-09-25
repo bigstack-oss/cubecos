@@ -124,12 +124,12 @@ UpdateCheck()
         return true;
 
     // No pending upgrade: BACKDIR is created only by the migrate hook and removed
-    // after a successful mysql_upgrade, so a missing BACKDIR means FTS or a normal
+    // after a successful mariadb-upgrade, so a missing BACKDIR means FTS or a normal
     // reconfig -- nothing to do, and skip the version-uniformity probe entirely.
     if (access(BACKDIR, F_OK) != 0)
         return true;
 
-    // Defer mysql_upgrade until every control node runs the same MariaDB version.
+    // Defer mariadb-upgrade until every control node runs the same MariaDB version.
     //
     // The gate stays, but not for the reason recorded here before: --skip-write-binlog
     // sets sql_log_bin=0, and galera carries TOI DDL over that same binlog path, so the
@@ -147,7 +147,7 @@ UpdateCheck()
         return true;
 
     std::vector<const char*> command;
-    command.push_back("/usr/bin/mysql_upgrade");
+    command.push_back("/usr/bin/mariadb-upgrade");
     command.push_back("-u");
     command.push_back("root");
     command.push_back("--skip-write-binlog");
