@@ -343,9 +343,11 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-epoxy-pip-upper-constraints.txt is upstream's stable/2025.1
-# upper-constraints.txt copied down verbatim, save for the one local delta the caracal
-# file also carries: setuptools, which upstream does not pin. It is pinned at venv
-# creation above for the reason the NOTE before the caracal venv gives.
+# upper-constraints.txt copied down verbatim, save for two local deltas the caracal
+# file also carries: libvirt-python, raised to 11.10.0 to match the libvirt-devel
+# headers core/nova/nova.mk holds, and setuptools, which upstream does not pin.
+# setuptools is pinned at venv creation above for the reason the NOTE before the
+# caracal venv gives.
 #
 # The runtime half of the caracal argument has gone: keystonemiddleware 10.9.1 no
 # longer imports pkg_resources, and pbr 7.0.0 reaches for it only when

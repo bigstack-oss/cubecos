@@ -31,7 +31,7 @@ SETTINGS_SYS=/etc/settings.sys
 
 IP="timeout $SRVTO /sbin/ip"
 OPENSTACK="timeout $SRVTO /usr/bin/openstack"
-# /usr/bin, not /usr/local/bin: core/nova links the antelope venv's client there.
+# /usr/bin, not /usr/local/bin: core/nova links the epoxy venv's client there.
 NOVA="timeout $SRVSTO /usr/bin/nova"
 MANILA="timeout $SRVTO /usr/bin/manila"
 DNF="/usr/bin/dnf"

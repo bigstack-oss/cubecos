@@ -80,7 +80,7 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * Naming the caracal helper explicitly avoided both.
  *
  * The pin therefore has to follow cinder across every venv boundary, and it moved to
- * the epoxy venv with cinder (#655). The caracal helper is still installed -- nova
+ * the epoxy venv with cinder (#655). The caracal helper is still installed -- neutron
  * and manila escalate through it -- so leaving the pin behind would fail the same two
  * ways one release on: cinder.privsep.sys_admin_pctxt dies with
  * FailedToDropPrivileges on a fresh build, whose caracal venv holds no cinder, or
