@@ -785,7 +785,7 @@ IsVfBackedType(const json11::Json& type)
 }
 
 // Builds the /etc/nova/nova.d/gpu.conf content from config.json entries:
-// one [pci] alias per profile and one passthrough_whitelist per assigned VF
+// one [pci] alias per profile and one [pci] device_spec per assigned VF
 // of every sriovVgpu/migBackedVgpu GPU. Regenerating everything from the
 // truth file means entries for GPUs switched away from either type
 // disappear without any dedicated cleanup logic.
@@ -800,6 +800,14 @@ IsVfBackedType(const json11::Json& type)
 // orders. The tag has to appear on *every* entry, including single-profile
 // cards - an alias without it is unconstrained by that key and will match a
 // tagged pool belonging to a different card.
+//
+// The VF entries are written as device_spec, the name nova 26.0.0 gave the
+// option. passthrough_whitelist, which this used to emit, is only its deprecated
+// alias. Each also carries "managed": "no", so that nova does not have libvirt
+// detach the VF from the host before a boot and re-attach it afterwards: the host
+// itself keeps the VF bound to NVIDIA's vfio variant driver. nova reads the tag
+// itself since 31.0.0 (epoxy); CubeCOS carried a backport of that support until
+// nova's epoxy hop (#653).
 static std::string
 BuildNovaGpuConfContent(const json11::Json& gpuConfig,
                         const std::map<std::string, std::vector<PciVf>>& vfsByGpuId)
@@ -824,7 +832,7 @@ BuildNovaGpuConfContent(const json11::Json& gpuConfig,
         // Walks the profiles in request order and consumes that many VFs each -
         // the same expansion BuildVfAssignmentPlan performs when it writes the
         // types, so profiles[0] owns the first block of VFs, profiles[1] the
-        // next, and so on. That correspondence is what lets a whitelist entry
+        // next, and so on. That correspondence is what lets a device_spec entry
         // be tagged with the profile its VF actually carries.
         //
         // vfIndex advances even for a profile whose alias is unusable: skipping
@@ -851,7 +859,7 @@ BuildNovaGpuConfContent(const json11::Json& gpuConfig,
                        "\", \"vgpu_type\": \"" + vgpuType + "\" }\n";
 
             for (long i = 0; i < count && vfIndex < vfs.size(); i++, vfIndex++) {
-                content += "passthrough_whitelist = { \"vendor_id\": \"" + vfs[vfIndex].vendorId +
+                content += "device_spec = { \"vendor_id\": \"" + vfs[vfIndex].vendorId +
                            "\", \"product_id\": \"" + vfs[vfIndex].productId +
                            "\", \"address\": \"" + vfs[vfIndex].address +
                            "\", \"vgpu_type\": \"" + vgpuType +
@@ -899,7 +907,7 @@ WriteNovaGpuConf(void)
         // Skipping is also the more accurate answer: GetPciVfs fails when the
         // VFs are not there (no virtfn link, or no vendor/device id), so the
         // card has nothing for nova to claim. Leaving it out keeps gpu.conf
-        // describing VFs that exist, instead of whitelisting addresses that do
+        // describing VFs that exist, instead of offering nova addresses that do
         // not. No running instance can be holding one of those VFs either.
         // BuildNovaGpuConfContent already skips a GPU absent from the map.
         if (!entry["pciAddress"].is_string() || entry["pciAddress"].string_value().empty()) {
@@ -955,7 +963,7 @@ WriteNovaGpuConf(void)
 // Used on the failed-apply path. By the time an apply can fail,
 // gpu_unset_current_type has already released the card's previous carve, so the
 // entry that is still in config.json describes hardware state that no longer
-// exists - and the Nova drop-in generated from it whitelists VF addresses that
+// exists - and the Nova drop-in generated from it offers VF addresses that
 // are gone (three-way divergence measured on cn13 2026-08-20, resolved until
 // then only by the next successful carve or a reboot). Dropping the entry
 // records what is actually true: this card has no carve.
@@ -1508,7 +1516,7 @@ ResourceSetMain(int argc, char* argv[])
         }
 
         // Switching a card away from sriovVgpu must also drop its stale
-        // alias/whitelist entries from the Nova drop-in (regenerated from
+        // alias/device_spec entries from the Nova drop-in (regenerated from
         // the just-updated truth file). Nodes that never had a drop-in are
         // left untouched.
         if (access(NOVA_GPU_CONF, F_OK) == 0) {
@@ -1577,7 +1585,7 @@ ResourceSetMain(int argc, char* argv[])
             // previous carve is unrecoverable at this point - it was torn down
             // before the apply was attempted - so the honest record is "no
             // carve", and the drop-in has to be regenerated from that or it
-            // keeps whitelisting VFs that no longer exist.
+            // keeps offering VFs that no longer exist.
             //
             // Re-applying the previous layout is deliberately not attempted: it
             // can fail for the same reason this apply did, and a retry loop on
