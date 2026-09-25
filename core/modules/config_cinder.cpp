@@ -619,7 +619,19 @@ SetCeph(
     config[BUILTIN_STORAGE_BACKEND]["rbd_max_clone_depth"] = "5";
     config[BUILTIN_STORAGE_BACKEND]["enable_deferred_deletion"] = "true";
     config[BUILTIN_STORAGE_BACKEND]["rbd_flatten_volume_from_snapshot"] = "false";
-    config[BUILTIN_STORAGE_BACKEND]["image_upload_use_cinder_backend"] = "true";
+    // No image_upload_use_cinder_backend. It makes an upload clone the volume into an
+    // image volume and register that with glance as cinder://<id> instead of copying
+    // the data, which only a glance cinder store can serve -- and config_glance.cpp
+    // creates one per external backend alone (http:http,cube:rbd,<volumeType>:cinder).
+    // Nothing built on this cluster's Ceph gets one. Caracal's cinder learned that
+    // straight away: glance refused the location, and cinder deleted the clone and fell
+    // back to the ordinary upload -- but not before the clone had left the source
+    // volume's .clone_snap behind. Epoxy's cinder registers through glance's
+    // asynchronous location API instead, which accepts the request (202) and fails it
+    // afterwards in a background task ("Unknown scheme 'cinder'"), so cinder never
+    // falls back: the image stays queued, and the image volume stays behind, orphaned,
+    // once the image is deleted. The ordinary upload is the only path that has ever
+    // worked here, so it is now the one taken.
 }
 
 /**
@@ -806,7 +818,8 @@ AddCephPoolAsStorageBackend(
     config[pool]["rbd_max_clone_depth"] = "5";
     config[pool]["enable_deferred_deletion"] = "true";
     config[pool]["rbd_flatten_volume_from_snapshot"] = "false";
-    config[pool]["image_upload_use_cinder_backend"] = "true";
+    // no image_upload_use_cinder_backend, for the reason SetCeph() gives: glance has no
+    // cinder store for a Ceph pool of this cluster either
 }
 
 /**
