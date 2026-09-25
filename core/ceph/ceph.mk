@@ -61,9 +61,9 @@ CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; e
 #
 # These venvs are scaffolding, not runtime environments. Nothing on a running node
 # imports from them: the wheels they produce are installed into the openstack venvs
-# that hold a service talking to the built-in RBD store -- the caracal one, where
-# cinder, nova and manila live, and the epoxy one, where glance does -- and once that
-# is done there is no consumer left. They are deleted at the end of the binding step
+# that hold a service talking to the built-in RBD store -- the caracal one, where nova
+# and manila live, and the epoxy one, where glance and cinder do -- and once that is
+# done there is no consumer left. They are deleted at the end of the binding step
 # so the shipped image carries neither them nor Cython.
 #
 # They cannot host ceph itself, either, which is worth stating so it is not tried
