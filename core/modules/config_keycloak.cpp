@@ -17,7 +17,7 @@ static const std::string DB_NAME = "keycloak";
 // createKeycloakDbSecrets() can hand the directory straight to kubectl. The database
 // account is created from the same files, so the two cannot drift apart.
 static const char KEYCLOAK_DB_DIR[] = "/opt/keycloak/db";
-static const char MYSQL[] = "/usr/bin/mysql";
+static const char MYSQL[] = "/usr/bin/mariadb";
 static const char KEYCLOAK_SAML_METADATA_FILE[] = "/etc/keycloak/saml-metadata.xml";
 static const std::string KEYCLOAK_ADMIN_PASSWORD_K8S_SECRET = "admin-password";
 static const std::string KEYCLOAK_ADMIN_PASSWORD_TERRAFORM_VARIABLE_FILE
@@ -125,14 +125,14 @@ readKeycloakDbField(const std::string& field)
  * Run one statement on the local mysql socket as root.
  *
  * @param rows the statement's output, empty when it selected nothing
- * @return true if mysql exited zero
+ * @return true if mariadb exited zero
  */
 static bool
 execDatabaseSQL(const std::string& sql, std::string& rows)
 {
     Cmd c;
     c.path = MYSQL;
-    // an argv rather than a shell line, so the account name and password reach mysql
+    // an argv rather than a shell line, so the account name and password reach mariadb
     // verbatim and never get a chance to be re-parsed as shell syntax
     c.args = { "-sNe", sql };
     c.captureStdout = true;

@@ -15,9 +15,9 @@ BARBICAN_CONFDIR := $(ROOTDIR)/etc/barbican
 #   both survive the hop.
 # PyMySQL: config_barbican.cpp writes a mysql+pymysql:// connection URI
 # oslo.messaging[kafka]: config_barbican.cpp points the notification transport at kafka
-# python-keystoneclient / gunicorn: keystone.mk already installs both into this venv, but
-#   they stay named here for the same reason the two above do -- a dependency nothing asks
-#   for is one that disappears silently, and keystone is free to stop needing gunicorn.
+# python-keystoneclient / gunicorn: named for the same reason the two above are -- a
+#   dependency nothing asks for is one that disappears silently. keystone.mk installed
+#   both into this venv too, until keystone moved to the epoxy one (#657).
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

@@ -4,36 +4,6 @@
 # From glance.scrubber
 #
 
-# DEPRECATED:
-# Allow users to add additional/custom properties to images.
-#
-# Glance defines a standard set of properties (in its schema) that
-# appear on every image. These properties are also known as
-# ``base properties``. In addition to these properties, Glance
-# allows users to add custom properties to images. These are known
-# as ``additional properties``.
-#
-# By default, this configuration option is set to ``True`` and users
-# are allowed to add additional properties. The number of additional
-# properties that can be added to an image can be controlled via
-# ``image_property_quota`` configuration option.
-#
-# Possible values:
-#     * True
-#     * False
-#
-# Related options:
-#     * image_property_quota
-#
-#  (boolean value)
-# This option is deprecated for removal since Ussuri.
-# Its value may be silently ignored in the future.
-# Reason:
-# This option is redundant.  Control custom image property usage via the
-# 'image_property_quota' configuration option.  This option is scheduled
-# to be removed during the Victoria development cycle.
-#allow_additional_image_properties = true
-
 #
 # Secure hashing algorithm used for computing the 'os_hash_value' property.
 #
@@ -85,12 +55,6 @@
 #
 # This enforces an upper limit on the number of additional properties an image
 # can have. Any negative value is interpreted as unlimited.
-#
-# NOTE: This won't have any impact if additional properties are disabled. Please
-# refer to ``allow_additional_image_properties``.
-#
-# Related options:
-#     * ``allow_additional_image_properties``
 #
 #  (integer value)
 #image_property_quota = 128
@@ -178,8 +142,8 @@
 # image location is shown under the image property ``direct_url``.
 #
 # When multiple image locations exist for an image, the best location
-# is displayed based on the location strategy indicated by the
-# configuration option ``location_strategy``.
+# is displayed based on the store weightage assigned for each store
+# indicated by the configuration option ``weight``.
 #
 # NOTES:
 #     * Revealing image locations can present a GRAVE SECURITY RISK as
@@ -196,7 +160,7 @@
 #
 # Related options:
 #     * show_multiple_locations
-#     * location_strategy
+#     * weight
 #
 #  (boolean value)
 #show_image_direct_url = false
@@ -207,9 +171,9 @@
 # This configuration option indicates whether to show all the image
 # locations when returning image details to the user. When multiple
 # image locations exist for an image, the locations are ordered based
-# on the location strategy indicated by the configuration opt
-# ``location_strategy``. The image locations are shown under the
-# image property ``locations``.
+# on the store weightage assigned for each store indicated by the
+# configuration option ``weight``. The image locations are shown
+# under the image property ``locations``.
 #
 # NOTES:
 #     * Revealing image locations can present a GRAVE SECURITY RISK as
@@ -228,7 +192,7 @@
 #
 # Related options:
 #     * show_image_direct_url
-#     * location_strategy
+#     * weight
 #
 #  (boolean value)
 # This option is deprecated for removal since Newton.
@@ -242,6 +206,24 @@
 # on the Glance release notes to stay up to date on progress in addressing this
 # issue.
 #show_multiple_locations = false
+
+#
+# Calculate hash and checksum for the image.
+#
+# This configuration option indicates that /v2/images/{image_id}/locations
+# POST API will calculate hash and checksum of the image on the fly.
+# If False it will silently ignore the hash and checksum calculation.
+#
+# Possible values:
+#     * True
+#     * False
+#  (boolean value)
+#do_secure_hash = true
+
+#
+# The number of times to retry when any operation fails.
+#  (integer value)
+#http_retries = 3
 
 #
 # Maximum size of image a user can upload in bytes.
@@ -349,7 +331,7 @@
 # Maximum value: 65535
 #pydev_worker_debug_port = 5678
 
-#
+# DEPRECATED:
 # AES key for encrypting store location metadata.
 #
 # Provide a string value representing the AES cipher to use for
@@ -365,9 +347,18 @@
 #     * None
 #
 #  (string value)
+# This option is deprecated for removal since Dalmatian.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option doesnt serves the purpose of encryption of location metadata,
+# whereas it encrypts location url only for specific APIs. Also if enabled
+# this during an upgrade may disrupt existing deployments, as it does not
+# support/provide db upgrade script to encrypt existing location URLs.
+# Moreover, its functionality for encrypting location URLs is inconsistent
+# which is resulting in download failures.
 #metadata_encryption_key = <None>
 
-#
+# DEPRECATED:
 # Digest algorithm to use for digital signature.
 #
 # Provide a string value representing the digest algorithm to
@@ -391,6 +382,10 @@
 #     * None
 #
 #  (string value)
+# This option is deprecated for removal since Dalmatian.
+# Its value may be silently ignored in the future.
+# Reason:
+# This option has had no effect since the removal of native SSL support.
 #digest_algorithm = sha256
 
 #
@@ -644,11 +639,15 @@
 # Deprecated group/name - [DEFAULT]/logdir
 #log_dir = <None>
 
-# Uses logging handler designed to watch file system. When log file is moved or
-# removed this handler will open a new log file with specified path
+# DEPRECATED: Uses logging handler designed to watch file system. When log file
+# is moved or removed this handler will open a new log file with specified path
 # instantaneously. It makes sense only if log_file option is specified and Linux
 # platform is used. This option is ignored if log_config_append is set. (boolean
 # value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This function is known to have bene broken for long time, and depends
+# on the unmaintained library
 #watch_log_file = false
 
 # Use syslog for logging. Existing syslog format is DEPRECATED and will be
@@ -674,11 +673,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# DEPRECATED: Log output to Windows Event Log. (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Windows support is no longer maintained.
-#use_eventlog = false
+# (Optional) Set the 'color' key according to log levels. This option takes
+# effect only when logging to stderr or stdout is used. This option is ignored
+# if log_config_append is set. (boolean value)
+#log_color = false
 
 # The amount of time before the log files are rotated. This option is ignored
 # unless log_rotation_type is set to "interval". (integer value)
@@ -750,10 +748,16 @@
 # Maximum number of logged messages per rate_limit_interval. (integer value)
 #rate_limit_burst = 0
 
-# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG or
-# empty string. Logs with level greater or equal to rate_limit_except_level are
-# not filtered. An empty string means that all levels are filtered. (string
-# value)
+# Log level name used by rate limiting. Logs with level greater or equal to
+# rate_limit_except_level are not filtered. An empty string means that all
+# levels are filtered. (string value)
+# Possible values:
+# CRITICAL - <No description provided>
+# ERROR - <No description provided>
+# INFO - <No description provided>
+# WARNING - <No description provided>
+# DEBUG - <No description provided>
+# '' - <No description provided>
 #rate_limit_except_level = CRITICAL
 
 # Enables or disables fatal status of deprecations. (boolean value)
@@ -779,6 +783,14 @@
 # The SQLAlchemy connection string to use to connect to the slave database.
 # (string value)
 #slave_connection = <None>
+
+# The SQLAlchemy asyncio connection string to use to connect to the database.
+# (string value)
+#asyncio_connection = <None>
+
+# The SQLAlchemy asyncio connection string to use to connect to the slave
+# database. (string value)
+#asyncio_slave_connection = <None>
 
 # The SQL mode to be used for MySQL sessions. This option, including the
 # default, overrides any server-set SQL mode. To use whatever SQL mode is set by
@@ -2615,12 +2627,17 @@
 # From oslo.policy
 #
 
-# This option controls whether or not to enforce scope when evaluating policies.
-# If ``True``, the scope of the token used in the request is compared to the
-# ``scope_types`` of the policy being enforced. If the scopes do not match, an
-# ``InvalidScope`` exception will be raised. If ``False``, a message will be
-# logged informing operators that policies are being invoked with mismatching
-# scope. (boolean value)
+# DEPRECATED: This option controls whether or not to enforce scope when
+# evaluating policies. If ``True``, the scope of the token used in the request
+# is compared to the ``scope_types`` of the policy being enforced. If the scopes
+# do not match, an ``InvalidScope`` exception will be raised. If ``False``, a
+# message will be logged informing operators that policies are being invoked
+# with mismatching scope. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This configuration was added temporarily to facilitate a smooth
+# transition to the new RBAC. OpenStack will always enforce scope checks. This
+# configuration option is deprecated and will be removed in the 2025.2 cycle.
 #enforce_scope = true
 
 # This option controls whether or not to use old deprecated defaults when
@@ -2667,3 +2684,7 @@
 
 # Absolute path client key file REST based policy check (string value)
 #remote_ssl_client_key_file = <None>
+
+# Timeout in seconds for REST based policy check (floating point value)
+# Minimum value: 0
+#remote_timeout = 60
