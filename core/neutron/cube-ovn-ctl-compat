@@ -1,0 +1,15 @@
+#!/bin/sh
+#
+# ovn-ctl for the OVN 23.03 central kept under /opt/ovn-23.03 for the 3.1.10 -> 3.1.20
+# roll (see cube-ovndb-servers): the binaries and schemas come from the 23.03 tree, and
+# the databases from a directory of their own, so neither central can open -- or
+# convert -- the other's files.
+#
+# The ovn-ctl under /opt/ovn-23.03 is the image's own 24.03 one with its northd renamed
+# to ovn-northd-23.03 (core/neutron/neutron.mk has why), so it is the patched 23.03 northd
+# that OVN_BINDIR supplies and not /usr/bin/ovn-northd.
+OVN_COMPAT_DIR=/opt/ovn-23.03
+export OVN_BINDIR=$OVN_COMPAT_DIR/bin
+export OVN_PKGDATADIR=$OVN_COMPAT_DIR/share/ovn
+export OVN_DBDIR=/etc/ovn/compat-23.03
+exec $OVN_COMPAT_DIR/share/ovn/scripts/ovn-ctl "$@"
