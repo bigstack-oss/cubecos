@@ -449,7 +449,6 @@ InitConfig(Configs& config)
         "keystone_authtoken",
         "nova",
         "oslo_concurrency",
-        "oslo_messaging_amqp",
         "oslo_messaging_kafka",
         "oslo_messaging_notifications",
         "oslo_messaging_rabbit",
