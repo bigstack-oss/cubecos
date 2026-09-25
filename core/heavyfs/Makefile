@@ -334,6 +334,34 @@ rootfs_install::
 # under --no-build-isolation, ceph's rados and rbd bindings produce the same flat
 # .so + .dist-info layout as under 65.7.0 and import, and pkg_resources is present.
 
+# set up the execution context for openstack epoxy
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p $(NEXT_OPENSTACK_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) python$(NEXT_PYTHON_VER) -m venv $(NEXT_OPENSTACK_HOME_DIR)
+	$(Q)cp -f $(NEXT_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
+
+# NOTE: os-epoxy-pip-upper-constraints.txt is upstream's stable/2025.1
+# upper-constraints.txt copied down verbatim, save for the one local delta the caracal
+# file also carries: setuptools, which upstream does not pin. It is pinned at venv
+# creation above for the reason the NOTE before the caracal venv gives.
+#
+# The runtime half of the caracal argument has gone: keystonemiddleware 10.9.1 no
+# longer imports pkg_resources, and pbr 7.0.0 reaches for it only when
+# importlib.metadata is missing, which it never is on 3.12 -- keystone's whole import
+# chain loads with pkg_resources blocked. The build half has not: every
+# --no-build-isolation install in this venv builds against this setuptools, and four
+# of the sdists horizon 25.3.2 pulls in are XStatic packages whose setup.py imports a
+# pkg_resources-declared namespace. Built without pip's wheel cache, all four fail
+# under setuptools 82.0.0 with "No module named 'pkg_resources'" and build under
+# 79.0.1. So the ceilings are the caracal ones, below 82 and below 80, and so is the
+# rule for the number: the newest release that clears both. That is 79.0.1
+# (2025-04-23), the last before 80.0.0, and three weeks after epoxy shipped. Python
+# 3.12 sets a floor rather than a ceiling -- it removed pkgutil.ImpImporter, which
+# pkg_resources references unconditionally before setuptools 66.1 -- and 79.0.1
+# clears it.
+
 # install the openstack cli inside the python 3.11 virtual environment
 #
 # /usr/bin/openstack was the python3-openstackclient rpm, so it ran as
