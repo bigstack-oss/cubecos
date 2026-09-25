@@ -384,7 +384,13 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/placement";
 
         plaCfg["placement_database"]["connection"] = dbconn;
-        plaCfg["placement_database"]["mysql_wsrep_sync_wait"] = "1";
+        // placement registers its own [placement_database] options rather than oslo.db's
+        // [database] set, and mysql_wsrep_sync_wait is not one of them, so writing it here
+        // the way the two groups above do was ignored without a word: every placement
+        // session ran at the server's wsrep_sync_wait of 0. connection_parameters is one
+        // of placement's own options. oslo.db appends it to the connection URL, and
+        // PyMySQL runs init_command on every connection it opens.
+        plaCfg["placement_database"]["connection_parameters"] = "init_command=SET%20SESSION%20wsrep_sync_wait%3D1";
     }
 
     return true;
