@@ -121,7 +121,8 @@ PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 # The next hop is epoxy (2025.1), the SLURP release after caracal. It gets its own
 # python rather than sharing the caracal venv's 3.11: 3.12 is the newest runtime
 # 2025.1 is tested on, and #652 moves CubeCOS to it. keystone (27.1.0) is the first
-# occupant (#657) and glance (30.2.0) the second (#656).
+# occupant (#657), glance (30.2.0) the second (#656) and cinder (26.3.0) the third
+# (#655).
 NEXT_OPENSTACK_RELEASE := epoxy
 NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
 NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1

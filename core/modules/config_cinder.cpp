@@ -77,10 +77,19 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * rootfs the antelope venv holds no cinder at all and the context would die with
  * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
  * imports the cinder 22.3.0 still sitting there and answers a 24.5.0 parent.
- * Naming the caracal helper explicitly avoids both; /etc/sudoers.d/cinder authorises
- * exactly this path.
+ * Naming the caracal helper explicitly avoided both.
+ *
+ * The pin therefore has to follow cinder across every venv boundary, and it moved to
+ * the epoxy venv with cinder (#655). The caracal helper is still installed -- nova
+ * and manila escalate through it -- so leaving the pin behind would fail the same two
+ * ways one release on: cinder.privsep.sys_admin_pctxt dies with
+ * FailedToDropPrivileges on a fresh build, whose caracal venv holds no cinder, or
+ * imports a stale 24.5.0 on a node upgraded in place, and os_brick.privileged.default
+ * silently pairs a python 3.12 cinder on os-brick 6.11.1 with a python 3.11 helper on
+ * 6.7.3. /etc/sudoers.d/cinder authorises exactly this path, so the two move
+ * together.
  */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
 static const char USERPASS[] = "8YHpMKC1394HbTmL";
 static const char DBPASS[] = "hhyCDG3IdNmcQaJo";
