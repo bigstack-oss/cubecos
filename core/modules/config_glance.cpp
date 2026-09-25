@@ -49,13 +49,20 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * /opt/openstack-caracal/bin/python3.11 while its os_brick.privileged.default helper
  * ran from /opt/openstack-antelope/bin/python3.10.
  *
- * That pairing happens to work today -- os_brick.privileged exposes the same 23
+ * That pairing happened to work -- os_brick.privileged exposed the same 23
  * callables with the same signatures in the antelope venv's 6.2.5 as in caracal's
- * 6.7.3, so the image upload succeeds and nothing is logged. It is still wrong, and
- * it stopped working exactly as predicted: #639 took the last service that needed
+ * 6.7.3, so the image upload succeeded and nothing was logged. It was still wrong,
+ * and it stopped working exactly as predicted: #639 took the last service that needed
  * that symlink to caracal and removed it, so glance's rootwrap lookup now has nothing
  * to find. Naming the caracal helper removed the dependency on another component's
- * symlink before that happened; /etc/sudoers.d/glance authorises exactly this path.
+ * symlink before that happened.
+ *
+ * The pin therefore has to follow glance across every venv boundary, and it moved to
+ * the epoxy venv with glance (#656). The caracal helper is still installed -- cinder,
+ * nova and manila escalate through it -- so leaving the pin behind would not fail: it
+ * would keep a python 3.12 glance-api on os-brick 6.11.1 driving a python 3.11 helper
+ * on 6.7.3, the silent cross-venv pairing this pin exists to rule out.
+ * /etc/sudoers.d/glance authorises exactly this path, so the two move together.
  *
  * helper_command is what takes rootwrap out of the path -- oslo.privsep documents
  * root_helper as "ignored if context's helper_command config option is set". It also
@@ -63,7 +70,7 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * capabilities come from os-brick's own decorator, and the helper was verified to
  * still start with CAP_SYS_ADMIN either way.
  */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
 static const char USERPASS[] = "0ZsvkS1bHXYsywTx";
 static const char DBPASS[] = "g6CEJCNFT6ufPY22";

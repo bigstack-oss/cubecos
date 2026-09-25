@@ -248,8 +248,8 @@ rootfs_install::
 # Note the octavia and masakari entries follow the *service*, not the panel: the
 # oslo.policy.policies entry points named "octavia" and "masakari" are registered by
 # the octavia and masakari packages, not by their dashboard plugins.
-HORIZON_POLICY_NS := nova cinder glance neutron octavia masakari
-NEXT_HORIZON_POLICY_NS := keystone
+HORIZON_POLICY_NS := nova cinder neutron octavia masakari
+NEXT_HORIZON_POLICY_NS := keystone glance
 
 # django-admin rather than $(HORIZON_APP_DIR)/manage.py, and for the epoxy list it is
 # not optional. manage.py sits in a directory whose horizon and openstack_dashboard
