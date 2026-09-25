@@ -69,14 +69,15 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * /usr/bin/privsep-helper -- a symlink core/nova/nova.mk used to keep pointed at the
  * *antelope* venv, for the services that were still living there. #639 took the last of
  * them (masakari) to caracal, so nova.mk no longer creates it and the bare name resolves
- * to nothing at all. It could never have served nova anyway: on a freshly built rootfs
- * the antelope venv holds no nova at all and the context dies with
- * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
- * imports the nova 27.5.1 still sitting there and answers a 29.4.0 parent with no error
- * at all. Naming the caracal helper explicitly avoids both; /etc/sudoers.d/nova
- * authorises exactly this path.
+ * to nothing at all. nova has moved on to the epoxy venv (#653), and the caracal helper
+ * it pinned until then stays installed for neutron, manila, cyborg and masakari -- but it
+ * cannot serve nova either: on a freshly built rootfs the caracal venv holds no nova at
+ * all and the context dies with FailedToDropPrivileges, and on a node upgraded in place
+ * it is worse -- the helper imports the nova 29.4.0 still sitting there and answers a
+ * 31.3.1 parent with no error at all. Naming the epoxy helper explicitly avoids both;
+ * /etc/sudoers.d/nova authorises exactly this path.
  */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
 static const char USERPASS[] = "8YdO3T0l3qaEgdjT";
 static const char PLACEPASS[] = "TXh08jAWj1gDdd82";
