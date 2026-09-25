@@ -7,6 +7,11 @@
 # two agree and neither decides the release on its own.
 HORIZON_VER := 24.0.2
 
+# The epoxy dashboard, installed alongside it in the epoxy venv. Nothing serves this
+# one -- see the note by its install block below -- and the version is the one
+# $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the two agree.
+NEXT_HORIZON_VER := 25.3.2
+
 # Not in the caracal upper-constraints either, so pinned here for reproducibility.
 # This is also a source build (see core/mysql/mysql.mk), which is the other reason not
 # to leave it floating.
@@ -93,6 +98,30 @@ rootfs_install::
 			mysqlclient==$(MYSQLCLIENT_VER) \
 			pymemcache \
 			gunicorn"
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+
+# the same dashboard again, one release on, in the epoxy venv
+#
+# Nothing serves this copy. openstack-dashboard.service, gunicorn-config.py and the
+# httpd reverse proxy all point at the caracal tree above, and every dashboard plugin
+# installs next to that one. This copy exists so that dump_default_policies can run
+# under the interpreter that owns the epoxy services' oslo.policy entry points -- see
+# the policy block near the end of this file. It is the caracal hop's arrangement
+# again (#1339): the dashboard followed its services there with a copy that was a
+# down payment on its own move, and 25.3.2 is likewise what horizon's epoxy hop will
+# install, so the dependency set lands once.
+#
+# --no-build-isolation for the XStatic sdists, exactly as above -- the epoxy venv's
+# setuptools is pinned below 82 for them, so the pkg_resources those setup.py files
+# import is there.
+rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			--no-build-isolation \
+			horizon==$(NEXT_HORIZON_VER)"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
