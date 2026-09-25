@@ -114,21 +114,26 @@ OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEA
 # holds for every hop after it. This pin does not follow the release name, ever.
 PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 
-# openstack next version -- left blank until the next hop, then filled in the way
-# antelope's were while it was NEXT_*: a second venv is built from these, components
-# move into it one at a time, and the values are promoted above once the move is done.
-NEXT_OPENSTACK_RELEASE :=
-NEXT_OPENSTACK_HOME_DIR :=
-NEXT_OPS_GITHUB_BRANCH_01 :=
-NEXT_OPS_GITHUB_BRANCH_02 :=
-NEXT_PYTHON_VER :=
-NEXT_OPENSTACK_PIP_CONSTRAINT ?=
-NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
+# openstack next version -- filled in the way antelope's were while it was NEXT_*: a
+# second venv is built from these, components move into it one at a time, and the
+# values are promoted above once the move is done.
+#
+# The next hop is epoxy (2025.1), the SLURP release after caracal. It gets its own
+# python rather than sharing the caracal venv's 3.11: 3.12 is the newest runtime
+# 2025.1 is tested on, and #652 moves CubeCOS to it. keystone is the first occupant.
+NEXT_OPENSTACK_RELEASE := epoxy
+NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
+NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1
+NEXT_OPS_GITHUB_BRANCH_02 := unmaintained/2025.1
+NEXT_PYTHON_VER := 3.12
+NEXT_PYTHON_PATCH_VER := 3.12.14
+NEXT_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(NEXT_OPENSTACK_HOME_DIR)/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
 
-# The caracal hop is complete -- the block above IS caracal now, and there is no second
-# runtime. /opt/openstack-caracal on python 3.11 was built alongside the antelope venv
-# so that caracal-era components would not drag their dependency versions into the
-# 2023.1 services, and the services moved into it one at a time:
+# The caracal hop is complete -- the "openstack version" block IS caracal now, and the
+# antelope runtime is gone. /opt/openstack-caracal on python 3.11 was built alongside
+# the antelope venv so that caracal-era components would not drag their dependency
+# versions into the 2023.1 services, and the services moved into it one at a time:
 #
 #   skyline (first, its forks branch off upstream master at 4.0.1 / 4.0.0.0rc1, i.e.
 #   caracal rather than antelope), keystone 25.0.0 (#631), glance 28.2.0 (#630),
