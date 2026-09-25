@@ -19,6 +19,7 @@ import errno
 import os
 import tempfile
 import time
+from typing import Dict, Tuple
 
 from castellan import key_manager
 from os_brick.remotefs import remotefs as remotefs_brick
@@ -34,6 +35,7 @@ from cinder.i18n import _
 from cinder.image import image_utils
 from cinder import interface
 from cinder import objects
+from cinder.objects.volume import Volume
 from cinder import utils
 from cinder.volume import configuration
 from cinder.volume.drivers import remotefs
@@ -187,7 +189,7 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         # If both nas_host and nas_share_path are set we are not
         # going to use the nfs_shares_config file.  So, only check
         # for its existence if it is going to be used.
-        if((not nas_host) or (not nas_share_path)):
+        if ((not nas_host) or (not nas_share_path)):
             config = self.configuration.nfs_shares_config
             if not config:
                 msg = (_("There's no NFS config file configured (%s)") %
@@ -699,3 +701,152 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
                                       data=snap_backing_file_img_info)
 
         self._set_rw_permissions_for_all(path_to_new_vol)
+
+    def _get_existing(self, existing_ref: Dict[str, str]) -> Tuple[str, str, str]:
+        # Validate the existing_ref format
+        if 'source-name' not in existing_ref:
+            reason = _('Reference must contain source-name element.')
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref,
+                reason=reason)
+
+        source_name = existing_ref['source-name']
+
+        # Verify the source file is on a mounted NFS share,
+        # and sort out the corresponding share and path on the share
+        mounted = False
+        source_share = ''
+        source_path = ''
+        for share in self.shares:
+            if source_name.startswith(share):
+                mounted = True
+                source_share = share
+
+                # Ensure source_path is a relative path
+                if share.endswith('/'):
+                    source_path = source_name.removeprefix(share)
+                else:
+                    source_path = source_name.removeprefix(share + '/')
+
+                break
+
+        if not mounted:
+            reason = _('Source file %(source)s is not on a mounted NFS share. '
+                      'Mounted shares: %(shares)s') % {
+                'source': source_name,
+                'shares': ', '.join(self.shares)
+            }
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref,
+                reason=reason)
+
+        # Get the local path of the volume
+        volume_path = os.path.join(
+            self._get_mount_point_for_share(source_share),
+            source_path)
+
+        # Verify the source file exists
+        if not os.path.exists(volume_path):
+            reason = _('Specified volume file does not exist: %s') % volume_path
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref,
+                reason=reason)
+
+        # Verify it's a regular file
+        if not os.path.isfile(volume_path):
+            reason = _('Specified path is not a regular file: %s') % volume_path
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref,
+                reason=reason)
+
+        return source_name, source_share, volume_path
+
+    def manage_existing(self, volume: Volume, existing_ref: Dict[str, str]) -> None:
+        """
+        Brings an existing backend storage object under Cinder management.
+
+        existing_ref is passed straight through from the API request's
+        manage_existing_ref value, and it is up to the driver how this should
+        be interpreted. It should be sufficient to identify a storage object
+        that the driver should somehow associate with the newly-created cinder
+        volume structure.
+
+        :param volume:       Cinder volume to manage
+        :param existing_ref: Dictionary with reference to existing volume
+        :returns:            model_update dictionary
+        """
+        source_name, source_share, volume_path = self._get_existing(existing_ref)
+
+        # Generate the new volume path
+        new_volume_name = volume['id']
+        new_volume_path = os.path.join(
+            self._get_mount_point_for_share(source_share),
+            'volume-' + new_volume_name)
+
+        # Check if destination already exists
+        if os.path.exists(new_volume_path):
+            reason = _('Destination volume path already exists: %s') % new_volume_path
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref,
+                reason=reason)
+
+        try:
+            # Rename the existing volume to the new location
+            LOG.debug('Managing existing volume: renaming %(src)s to %(dst)s',
+                     {'src': volume_path, 'dst': new_volume_path})
+
+            os.rename(volume_path, new_volume_path)
+
+            # Set proper permissions
+            self._set_rw_permissions(new_volume_path)
+
+            LOG.info('Successfully managed existing volume: %(src)s -> %(dst)s',
+                    {'src': volume_path, 'dst': new_volume_path})
+
+        except (OSError, IOError) as e:
+            reason = _('Failed to manage existing volume %(source)s: %(error)s') % {
+                'source': source_name,
+                'error': str(e)
+            }
+            LOG.exception(reason)
+            raise exception.VolumeBackendAPIException(data=reason)
+
+        # Return model update with provider_location
+        return {'provider_location': source_share}
+
+    def manage_existing_get_size(self, volume, existing_ref):
+        """
+        Return size of volume to be managed by manage_existing.
+
+        When calculating the size, round up to the next GB.
+
+        :param volume:       Cinder volume to manage
+        :param existing_ref: Dictionary with reference to existing volume
+        :returns:            Size in GB
+        """
+        source_name, _, volume_path = self._get_existing(existing_ref)
+
+        try:
+            # Get the file size in bytes
+            file_size_bytes = os.path.getsize(volume_path)
+
+            # Convert to GB and round up
+            file_size_gb = int(file_size_bytes / (1024 ** 3))
+            if file_size_bytes % (1024 ** 3) > 0:
+                file_size_gb += 1
+
+            LOG.debug('Existing volume size: %(path)s = %(size)s bytes '
+                     '(%(size_gb)s GB)',
+                     {'path': volume_path,
+                      'size': file_size_bytes,
+                      'size_gb': file_size_gb})
+
+            return file_size_gb
+
+        except (OSError, IOError) as e:
+            reason = _('Failed to get size of volume %(source)s: %(error)s') % {
+                'source': source_name,
+                'error': str(e)
+            }
+            LOG.exception(reason)
+            raise exception.VolumeBackendAPIException(data=reason)

@@ -871,7 +871,7 @@ _health_mysql_node_state()
     unit=$(remote_run $node "systemctl is-active mariadb 2>/dev/null")
     [ "x$unit" = "xactivating" ] && { echo joining ; return 0 ; }
 
-    state=$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_local_state_comment'\" 2>/dev/null | awk '{print \$2}'")
+    state=$(remote_run $node "mariadb -u root -N -e \"show status like 'wsrep_local_state_comment'\" 2>/dev/null | awk '{print \$2}'")
     case "$state" in
         Synced)                         echo synced  ;;
         Joining*|Joined|Donor/Desynced) echo joining ;;
@@ -918,7 +918,7 @@ _health_mysql_repair()
     # If a galera primary is still live, rejoin it instead of bootstrapping (avoids split-brain).
     local primary=""
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if [ "$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'")" = "Primary" ] ; then
+        if [ "$(remote_run $node "mariadb -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'")" = "Primary" ] ; then
             primary=$node ; break
         fi
     done
@@ -926,7 +926,7 @@ _health_mysql_repair()
     if [ -n "$primary" ] ; then
         # rejoin every non-Synced node: clear wedged unit, disarm bootstrap, plain start
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            [ "$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_local_state_comment'\" 2>/dev/null | awk '{print \$2}'")" = "Synced" ] && continue
+            [ "$(remote_run $node "mariadb -u root -N -e \"show status like 'wsrep_local_state_comment'\" 2>/dev/null | awk '{print \$2}'")" = "Synced" ] && continue
             remote_run $node "systemctl kill -s KILL mariadb ; killall -9 mariadbd 2>/dev/null ; systemctl reset-failed mariadb ; rm -f /var/lib/mysql/mysql.sock ; sed -i 's/safe_to_bootstrap: 1/safe_to_bootstrap: 0/' /var/lib/mysql/grastate.dat ; systemctl start mariadb"
         done
         return 0
