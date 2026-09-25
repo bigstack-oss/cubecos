@@ -295,6 +295,44 @@ migrate_cinder_ext_storage_unsupported()
     touch $STATE_DIR/cinder_ext_storage_unsupported_migrated
 }
 
+migrate_cinder_ext_storage_fujitsu_password()
+{
+    local f
+
+    if [ -f $STATE_DIR/cinder_ext_storage_fujitsu_password_migrated ] ; then
+        return 0
+    fi
+
+    if ! is_control_node ; then
+        touch $STATE_DIR/cinder_ext_storage_fujitsu_password_migrated
+        return 0
+    fi
+
+    # Epoxy's ETERNUS DX driver logs into the array's CLI with an SSH key unless
+    # told otherwise: fujitsu_passwordless is new in 2025.1 and defaults to True,
+    # and the key it then reads is fujitsu_private_key_path, which nothing on
+    # CubeCOS provisions. Caracal always logged in with the EternusUser and
+    # EternusPassword of the backend's cinder_eternus_config_file, which is how the
+    # built-in models are set up, so every CLI call an upgraded Fujitsu backend
+    # makes would fail -- upstream's upgrade note tells existing users to pin
+    # fujitsu_passwordless = False. The models carry that pin now, but a model only
+    # reaches backends created or re-applied after the upgrade, so the backends
+    # /etc/cinder/backends already holds are pinned here, the same way and for the
+    # same reasons migrate_cinder_ext_storage_unsupported opts SC backends in.
+    #
+    # A backend that already names fujitsu_passwordless is left alone: that is an
+    # operator's choice, made after the option existed.
+    for f in /etc/cinder/backends/ext_storage_*.conf ; do
+        [ -f "$f" ] || continue
+        grep -qE "^volume_driver[[:space:]]*=.*eternus_dx_(fc|iscsi)\." "$f" || continue
+        grep -qE "^fujitsu_passwordless" "$f" && continue
+        sed -i "/^volume_driver[[:space:]]*=.*eternus_dx_/a fujitsu_passwordless = False" "$f"
+        log_info "migrate_cinder_ext_storage_fujitsu_password: kept $f on the ETERNUS password login"
+    done
+
+    touch $STATE_DIR/cinder_ext_storage_fujitsu_password_migrated
+}
+
 migrate_glance_db()
 {
     if [ -f $STATE_DIR/glance_db_migrated ] ; then

@@ -839,6 +839,10 @@ SetStorageBackend(
     // Bounded so a wedged migration cannot block the commit, and with it the node's
     // slot in a rolling upgrade.
     HexUtilSystemF(0, 120, HEX_SDK " migrate_cinder_ext_storage_unsupported");
+    // Keep an upgraded cluster's Fujitsu ETERNUS backends on the password login that
+    // Epoxy no longer defaults to -- here for the same reasons, and bounded the same
+    // way.
+    HexUtilSystemF(0, 120, HEX_SDK " migrate_cinder_ext_storage_fujitsu_password");
 
     // move exta config files for external storage backends to Cinder config directory
     std::string fsError;
