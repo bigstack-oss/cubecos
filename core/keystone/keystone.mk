@@ -80,7 +80,6 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/keystone/keystone-schema.json $(ROOTDIR)/tmp/keystone/
 	$(Q)cp -f $(COREDIR)/keystone/policy.json $(ROOTDIR)/tmp/keystone/
 	$(Q)cp -f $(COREDIR)/keystone/logging.conf.sample $(ROOTDIR)/tmp/keystone/
-	$(Q)cp -f $(COREDIR)/keystone/default_catalog.templates $(ROOTDIR)/tmp/keystone/
 	$(Q)cp -f $(COREDIR)/keystone/sso_callback_template.html $(ROOTDIR)/tmp/keystone/
 
 # install system directories and files
@@ -90,7 +89,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/keystone.conf.sample /etc/keystone/keystone.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/policy.json /etc/keystone/policy.json
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/logging.conf.sample /etc/keystone/logging.conf
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/default_catalog.templates /etc/keystone/default_catalog.templates
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/sso_callback_template.html /etc/keystone/sso_callback_template.html
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/keystone
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/keystone/keystone-schema.yaml /usr/share/keystone/keystone-schema.yaml
@@ -115,8 +113,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:keystone /etc/keystone/logging.conf
 	$(Q)chroot $(ROOTDIR) chmod 0640 /etc/keystone/policy.json
 	$(Q)chroot $(ROOTDIR) chown root:keystone /etc/keystone/policy.json
-	$(Q)chroot $(ROOTDIR) chmod 0640 /etc/keystone/default_catalog.templates
-	$(Q)chroot $(ROOTDIR) chown root:keystone /etc/keystone/default_catalog.templates
 	$(Q)chroot $(ROOTDIR) chmod 0640 /etc/keystone/sso_callback_template.html
 	$(Q)chroot $(ROOTDIR) chown keystone:keystone /etc/keystone/sso_callback_template.html
 	$(Q)chroot $(ROOTDIR) chown keystone:keystone /var/lib/keystone
