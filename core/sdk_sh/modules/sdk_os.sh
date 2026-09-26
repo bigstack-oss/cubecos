@@ -1149,8 +1149,8 @@ os_keystone_idp_config()
 # admin and member -- yoga wired admin -> member directly -- so admin now reaches member
 # only through manager. Measured on cc1: delete the manager->member link alone and admin's
 # effective roles collapse from {admin,manager,member,reader} to {admin,manager}. Any
-# policy that defaults to role:member then denies admin, barbican's secrets:post among
-# them (cubecos#1374).
+# policy that defaults to role:member alone then denies admin. barbican's secrets:post is
+# not one: barbican has only ever enforced its legacy rules (cubecos#658).
 #
 # The links are the part that goes missing. Caracal marks the default roles immutable, so
 # on a caracal cluster the roles themselves cannot be deleted -- the loop below is for a
