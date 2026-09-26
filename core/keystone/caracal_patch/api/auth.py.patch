@@ -1,0 +1,53 @@
+--- auth.py
++++ auth.py
+@@ -11,6 +11,7 @@
+ #    under the License.
+ 
+ # This file handles all flask-restful resources for /v3/auth
++import fnmatch
+ import string
+ 
+ import flask
+@@ -63,6 +64,32 @@
+             ('X-auth-url', service_provider['auth_url'].encode('utf-8'))]
+ 
+ 
++def _origin_matches(origin, trusted):
++    """Match an origin against one trusted_dashboard entry.
++
++    Equality, except that a "*" in the entry matches within the host only.
++    Scheme, port and path are still compared exactly: the origin becomes the
++    form action the token is posted to, so a wildcard allowed to span "/" or
++    "?" would match a host the entry never named.
++    """
++    if '*' not in trusted:
++        return origin == trusted
++    try:
++        o = urllib.parse.urlsplit(origin)
++        t = urllib.parse.urlsplit(trusted)
++        ports = (o.port, t.port)
++    except ValueError:
++        return False
++    if o.username or o.password or t.username or t.password:
++        return False
++    if not o.hostname or not t.hostname:
++        return False
++    if (o.scheme, ports[0], o.path, o.query, o.fragment) != (
++            t.scheme, ports[1], t.path, t.query, t.fragment):
++        return False
++    return fnmatch.fnmatchcase(o.hostname, t.hostname)
++
++
+ def _get_sso_origin_host():
+     """Validate and return originating dashboard URL.
+ 
+@@ -90,7 +117,8 @@
+     trusted_dashboards = [k_utils.lower_case_hostname(trusted)
+                           for trusted in CONF.federation.trusted_dashboard]
+ 
+-    if host not in trusted_dashboards:
++    if not any(_origin_matches(host, trusted)
++               for trusted in trusted_dashboards):
+         msg = '%(host)s is not a trusted dashboard host' % {'host': host}
+         tr_msg = _('%(host)s is not a trusted dashboard host') % {
+             'host': host}

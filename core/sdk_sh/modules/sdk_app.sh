@@ -6,6 +6,110 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+# The kubeconfig the app-framework helpers below talk through. Empty by
+# default and supplied by the caller: nothing on a control node persists one,
+# so a fixed path here would name a file that never exists and every helper
+# gated on it would silently answer "no framework" on a healthy cluster.
+# app_kubeconfig fetches one; tests point this at a fixture.
+APPFW_KUBECONFIG=${APPFW_KUBECONFIG:-}
+
+# The rancher CLI app_kubeconfig authenticates through. A variable for the same
+# reason APPFW_KUBECONFIG is one: a hardcoded absolute path is a path no test
+# can reach, which is how a helper gated on an unreachable path shipped
+# unexercised in the first place.
+APPFW_RANCHER=${APPFW_RANCHER:-/usr/local/bin/rancher}
+
+# app_kubeconfig [framework]
+#
+# Fetches a kubeconfig for the app framework, prints its path, and leaves it to
+# the caller to remove. Credentials come from rancher -- which is where
+# app_framework_deploy gets its own -- because none are written to disk.
+#
+# The framework's name is read back rather than assumed: the installer chooses
+# it (the driver's installs are named "appfw", app_framework_deploy's own is
+# "app-framework"), so hardcoding either one breaks the other. Rancher's
+# built-in "local" cluster is never it.
+app_kubeconfig()
+{
+    local fw=${1:-} kc
+
+    [ -x "$APPFW_RANCHER" ] || return 1
+    if [ -z "$fw" ] ; then
+        fw=$(timeout 30 sudo "$APPFW_RANCHER" cluster ls \
+                 --format '{{.Cluster.Name}}' 2>/dev/null | grep -vx local | head -1)
+    fi
+    [ -n "$fw" ] || return 1
+
+    kc=$(mktemp -t appfw-kubeconfig.XXXXXX) || return 1
+    chmod 0600 "$kc"
+    # -s, not just the exit code: a rancher that authenticates but returns
+    # nothing leaves an empty file that kubectl reports as a parse error.
+    if ! timeout 60 sudo "$APPFW_RANCHER" cluster kf "$fw" > "$kc" 2>/dev/null ||
+         [ ! -s "$kc" ] ; then
+        rm -f "$kc"
+        return 1
+    fi
+    echo "$kc"
+}
+
+# app_ingress_address
+#
+# Prints the app framework's ingress LoadBalancer address (what the CMP
+# portal and the app framework's Keycloak sit behind), or nothing with a
+# non-zero exit if there is none. app_framework_deploy creates this Service
+# as ingress-lb in the ingress-nginx namespace, but it has also been seen
+# live in kube-system -- so this looks it up by name across every
+# namespace instead of assuming one.
+#
+# Defensive throughout: no app framework, no kubeconfig, no kubectl, or a
+# kubectl that hangs must all come back as a clean "no address", never a
+# hang or an error on stderr. Only one node of a cluster holds the
+# kubeconfig, so "no kubeconfig" is the normal answer on most nodes, not a
+# fault -- hence the default below, which keeps this quiet even for a caller
+# running under set -u with the variable never set.
+app_ingress_address()
+{
+    local addr kubeconfig=${APPFW_KUBECONFIG:-}
+
+    [ -n "$kubeconfig" ] && [ -r "$kubeconfig" ] || return 1
+    command -v kubectl >/dev/null 2>&1 || return 1
+
+    addr=$(timeout 10 kubectl --kubeconfig="$kubeconfig" --insecure-skip-tls-verify=true \
+           get svc --all-namespaces --field-selector metadata.name=ingress-lb \
+           -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+
+    [ -n "$addr" ] || return 1
+    echo "$addr"
+}
+
+# app_helm_release_deployed <release>
+#
+# True when <release> is a deployed Helm release on the app framework cluster.
+# A release is what "is this installed" actually means here: a namespace is
+# created early and stays behind after a removal, and an HTTP probe answers
+# "not yet" for everything that is still starting.
+#
+# Defensive the same way app_ingress_address is: no kubeconfig, no helm, or a
+# helm that hangs is a clean "no", never a hang or an error on stderr -- this
+# is on the path of installers that must not fail because of it.
+app_helm_release_deployed()
+{
+    local release=$1 kubeconfig=${APPFW_KUBECONFIG:-} out
+
+    [ -n "$release" ] || return 1
+    [ -n "$kubeconfig" ] && [ -r "$kubeconfig" ] || return 1
+    command -v helm >/dev/null 2>&1 || return 1
+
+    out=$(timeout 30 helm --kubeconfig="$kubeconfig" --kube-insecure-skip-tls-verify=true \
+          list --all-namespaces -o json 2>/dev/null)
+    # jq runs its filter zero times over zero input and calls that success, so
+    # a helm that printed nothing has to be caught here.
+    [ -n "$out" ] || return 1
+
+    printf '%s' "$out" |
+        jq -e --arg n "$release" 'any(.[]; .name == $n and .status == "deployed")' >/dev/null 2>&1
+}
+
 app_framework_uninstall()
 {
     export PROJECT_NAME="app-framework"
@@ -158,7 +262,15 @@ app_framework_install()
         $appfw_pth/bin/rancher_client.py create_cluster
     fi
 
+    local rc
     app_framework_deploy $LOADBALANCER_IP
+    rc=$?
+
+    # The framework's own Keycloak exists from this point on; declare it. CMP
+    # is installed after this, by app_import, which declares its own.
+    $HEX_SDK advisor_targets_discover
+
+    return $rc
 }
 
 app_import()
@@ -180,6 +292,12 @@ app_import()
     (cd $tmpdir && ENV_PROJ_NAME=$app_fw ./import.sh $skip_flag) || rc=$?
 
     rm -rf $tmpdir
+
+    # This is what installs CMP, so this is what declares cube-cmp. Only what
+    # is found installed is declared, so importing anything else declares
+    # nothing new.
+    $HEX_SDK advisor_targets_discover
+
     return $rc
 }
 
