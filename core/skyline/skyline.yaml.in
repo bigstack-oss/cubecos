@@ -18,7 +18,7 @@ default:
   ssl_enabled: true
 openstack:
   base_domains:
-  - default
+  - heat
   default_region: RegionOne
   enforce_new_defaults: true
   extension_mapping:
