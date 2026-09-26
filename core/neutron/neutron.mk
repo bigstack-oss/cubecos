@@ -351,6 +351,12 @@ rootfs_install::
 # The carried files are whole modules, each beside the upstream .orig it was made from:
 # - plugins/ml2/drivers/ovn/agent/neutron_agent.py: an agent whose chassis record has no
 #   hostname reports '-' as its host instead of raising AttributeError.
+# - plugins/ml2/drivers/ovn/mech_driver/ovsdb/impl_idl_ovn.py: 26.0.4's, i.e. 26.0.6's
+#   with d039edc05f (bug 2158611) reverted. That change gives the RPC workers IDLs that
+#   process no OVN events, and neutron-vpnaas hooks its VPN agent into the OVN agent
+#   cache only through one of those events; the RPC worker then finds no VPN agent on
+#   any host, get_vpn_services_on_host answers nothing, and every IPsec site connection
+#   stays PENDING_CREATE. Drop it once upstream stops depending on the event there.
 # - neutron-vpnaas' libreswan_ipsec.py: libreswan 4.x renamed pluto's detailed-logging
 #   option, and config_neutron.cpp turns detailed logging on.
 rootfs_install::
