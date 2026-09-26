@@ -2,7 +2,10 @@
 # neutron installation
 
 # OVN is held at 24.03.8-31.el9s on Open vSwitch 3.3.8-7.el9s -- the newest of each in
-# centos-nfv-openvswitch, and the pair the caracal image resolves to. The pin is not
+# centos-nfv-openvswitch, and the pair the caracal image resolves to. The epoxy hop keeps
+# it (#1277): 24.03 / 3.3 is what neutron's stable/2025.1 gate runs, from the Ubuntu
+# 24.04 packages, while RDO's 24.09 / 3.4 and the cloud archive's 25.03 / 3.5 are not;
+# and 26.03 is newer than anything epoxy was tested with. The pin is not
 # housekeeping: core/neutron/Makefile builds the DR-SNAT-patched ovn-northd from the
 # ovn24.03-24.03.8-31.el9s src rpm and core/neutron/ovn_patch/$(HEX_DIST) ships that
 # binary, so letting the RPMs float would put a northd built from one OVN release next
@@ -21,32 +24,6 @@ RDOOVN_VERSION := -24.03-1.el9s
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn$(RDOOVN_VERSION).noarch.rpm
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
-
-# The OVN 23.03 central, carried beside 24.03 for the 3.1.10 -> 3.1.20 hop only. OVN
-# supports an ovn-controller newer than ovn-northd and the NB/SB databases, never older,
-# and a roll reboots every control node before any compute: an upgraded control node
-# therefore keeps running this central until every chassis runs 24.03, and
-# ovn_central_switch (sdk_ovn.sh) then moves the cluster over in one step. Delete this
-# block, cube-ovndb-servers and cube-ovn-ctl-compat with the next OVN hop.
-#
-# Unpacked, never rpm-installed: ovn23.03 and ovn24.03 own the same paths and neither
-# obsoletes the other, and their scriptlets stop and disable the services. Only the
-# 23.03 schemas are taken from its RPM; the northd is the DR-SNAT-patched binary 3.1.10
-# shipped (20c40987^:core/neutron/ovn_patch/centos9/ovn-northd), and the image's own
-# ovn-ctl drives both -- see the rootfs_install rule below for why.
-OVN_COMPAT_VER := 23.03
-OVN_COMPAT_NVR := 23.03.0-69.el9s
-OVN_COMPAT_DIR := /opt/ovn-$(OVN_COMPAT_VER)
-OVN_COMPAT_URL := https://cbs.centos.org/kojifiles/packages/ovn$(OVN_COMPAT_VER)/23.03.0/69.el9s/x86_64
-OVN_COMPAT_RPM := $(ARCS_DIR)/ovn$(OVN_COMPAT_VER)-central-$(OVN_COMPAT_NVR).x86_64.rpm
-OVN_COMPAT_SHA256 := eb0e529da53dd45ce2bd388973c18d18f96a2a608bd301a3d405bc10e828c062
-
-# Same shape as the kafka tarball: download to .part and only rename once the pinned
-# checksum matches, so a truncated object is never unpacked as a finished download.
-$(OVN_COMPAT_RPM):
-	$(Q)wget $(OVN_COMPAT_URL)/$(notdir $@) -O $@.part
-	$(Q)echo "$(OVN_COMPAT_SHA256)  $@.part" | sha256sum -c --quiet
-	$(Q)mv $@.part $@
 
 # System requirements formerly pulled in by openstack-neutron RPMs
 # handled elsewhere: iptables
@@ -333,35 +310,28 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/ovn-controller.service ./lib/systemd/system
 	$(Q)$(INSTALL_PROGRAM) $(ROOTDIR) $(OVN_PATCHDIR)/ovn-northd ./usr/bin/
 
-# The OVN 23.03 central (see OVN_COMPAT_VER), laid out the way ovn-ctl expects so that
-# cube-ovn-ctl-compat only has to point its directory variables here.
+# Chassis first, central last (#1551). OVN supports an ovn-controller newer than
+# ovn-northd and the NB/SB databases, never older, and an upgrade roll reboots every
+# control node before any compute: so on a hop that moves OVN, an upgraded control node
+# keeps running the central it carried across until every chassis runs this image's
+# OVN, and ovn_central_switch (sdk_ovn.sh) then moves the cluster over in one step.
 #
-# The ovn-ctl is a copy of the image's 24.03 one, not 23.03's: 23.03's reads the
-# replication state from the first line of ovsdb-server/sync-status, which OVS 3.3 turned
-# into a "database:" line, so pacemaker never sees its servers come up. The two scripts
-# otherwise differ only in options for clustered databases and the retired ddlog northd.
-# In the copy the northd is renamed: ovn-ctl starts it by name, and ovs-lib's init
-# functions reset PATH to the system directories before ovn-ctl appends its own, so a
-# second binary called ovn-northd could never win over /usr/bin's. The grep fails the
-# build if a new ovn-ctl stops matching, rather than running the 24.03 northd silently.
-# ovn-ctl finds ovs-lib relative to itself; the ovsdb-server it drives is OVS 3.3's.
+# The epoxy image does not move OVN (#1277), so it carries no previous central -- no
+# /opt/ovn-<minor> tree -- and cube-ovndb-servers, cube-ovn-ctl-compat and the
+# ovn-northd drop-in, which only act where that tree is, never engage. They stay
+# installed for the next hop that moves OVN, which lays the tree out again the way
+# 3.1.20 laid out 23.03's (#1552): the previous minor's schemas unpacked from its
+# pinned, checksummed central RPM, never rpm-installed, since two OVN minors own the
+# same paths and neither obsoletes the other; the previous image's DR-SNAT-patched
+# northd, renamed ovn-northd-<minor>, because ovs-lib's init functions reset PATH
+# before ovn-ctl looks the northd up by name; and a copy of this image's ovn-ctl
+# pointed at it, because an older ovn-ctl can misread a newer ovsdb-server's
+# sync-status -- then re-points OVN_COMPAT_VER in sdk_ovn.sh and the files it names.
 #
 # The agent symlink is repointed in the image rather than at runtime: the rootfs is a git
 # worktree of the image, so a runtime edit of that tracked path would show in git status
 # and be stashed away by the next git fan-out.
-OVN_COMPAT_TMP = $(TOP_BLDDIR)/core/neutron/ovn-compat
-rootfs_install:: $(OVN_COMPAT_RPM)
-	$(Q)rm -rf $(OVN_COMPAT_TMP) && mkdir -p $(OVN_COMPAT_TMP)
-	$(Q)cd $(OVN_COMPAT_TMP) && rpm2cpio $< | cpio -idm --quiet
-	$(Q)$(INSTALL_PROGRAM) -f $(ROOTDIR) $(OVN_PATCHDIR)/ovn$(OVN_COMPAT_VER)/ovn-northd .$(OVN_COMPAT_DIR)/bin/ovn-northd-$(OVN_COMPAT_VER)
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(addprefix $(OVN_COMPAT_TMP)/usr/share/ovn/,ovn-nb.ovsschema ovn-sb.ovsschema) .$(OVN_COMPAT_DIR)/share/ovn/
-	$(Q)rm -rf $(OVN_COMPAT_TMP)
-	$(Q)install -d $(ROOTDIR)$(OVN_COMPAT_DIR)/share/ovn/scripts
-	$(Q)sed 's/^OVN_NORTHD_BIN=ovn-northd$$/OVN_NORTHD_BIN=ovn-northd-$(OVN_COMPAT_VER)/' $(ROOTDIR)/usr/share/ovn/scripts/ovn-ctl > $(ROOTDIR)$(OVN_COMPAT_DIR)/share/ovn/scripts/ovn-ctl
-	$(Q)grep -qx 'OVN_NORTHD_BIN=ovn-northd-$(OVN_COMPAT_VER)' $(ROOTDIR)$(OVN_COMPAT_DIR)/share/ovn/scripts/ovn-ctl
-	$(Q)chmod 0755 $(ROOTDIR)$(OVN_COMPAT_DIR)/share/ovn/scripts/ovn-ctl
-	$(Q)cp -f $(ROOTDIR)/usr/share/ovn/scripts/ovn-lib $(ROOTDIR)$(OVN_COMPAT_DIR)/share/ovn/scripts/
-	$(Q)chroot $(ROOTDIR) ln -sfn /usr/share/openvswitch $(OVN_COMPAT_DIR)/share/openvswitch
+rootfs_install::
 	$(Q)$(INSTALL_SCRIPT) $(ROOTDIR) $(COREDIR)/neutron/cube-ovn-ctl-compat $(COREDIR)/neutron/cube-ovndb-servers ./usr/sbin/
 	$(Q)chroot $(ROOTDIR) ln -sf /usr/sbin/cube-ovndb-servers /usr/lib/ocf/resource.d/ovn/ovndb-servers
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/ovn-northd-compat.conf ./etc/systemd/system/ovn-northd.service.d/
