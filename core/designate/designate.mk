@@ -7,8 +7,9 @@ ROOTFS_DNF += bind bind-utils
 # health_designate_check() drives as `openstack dns service list`, counting the
 # api/central/worker/producer/mdns rows that report UP. It is installed by its own
 # block further down, which #634 split out to hold it in the antelope venv while the
-# service moved to caracal; #636 took /usr/bin/openstack to caracal too, so the block
-# now installs alongside the service and only the separation remains.
+# service moved to caracal. #636 took /usr/bin/openstack to caracal too, which closed
+# the split; the epoxy hop opens it again, so the block holds the client in the
+# caracal venv while the service runs from the epoxy one.
 #
 # It used to be the yoga python3-designateclient rpm under the *system* python 3.9,
 # because /usr/bin/openstack was itself `#!/usr/bin/python3` and a stevedore entry point
@@ -31,47 +32,69 @@ NAMED_APP_DIR := /var/named
 # branch name was chosen while the dashboard had to match an antelope horizon, and a
 # branch resolves to whatever its tip is on build day. Now that the panel follows
 # horizon into the caracal venv the version has to change anyway, so it changes to a
-# number.
+# number. It stays the caracal release when the service moves to epoxy: the panel
+# follows horizon, not designate, and talks to the service only through its REST API.
 DESIGNATE_DASHBOARD_VER := 18.0.0
 
 DESIGNATE_CONF_DIR := /etc/designate
 DESIGNATE_APP_DIR := /var/lib/designate
 DESIGNAT_LOG_DIR := /var/log/designate
 
-# The console scripts patched below live in the caracal venv with the service. The
+# The console scripts patched below live in the epoxy venv with the service. The
 # dashboard and the osc plugin do not follow it there -- see the install blocks.
-DESIGNATE_BINDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/bin
-DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(OPENSTACK_RELEASE)_bin_patch
+DESIGNATE_BINDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/bin
+DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(NEXT_OPENSTACK_RELEASE)_bin_patch
 
-# install designate into the caracal venv
+# install designate into the epoxy venv
 #
-# 18.0.0 is the 2024.1 release, verified as the newest tag that is an ancestor of
-# upstream's unmaintained/2024.1. The service moves into
-# $(OPENSTACK_HOME_DIR) with keystone, glance, cinder, nova/placement,
-# neutron, manila and octavia.
+# designate runs out of the epoxy venv, not the caracal one it shares with every
+# other 2024.1 service. 20.0.2 is the newest 2025.1 release: 20.0.0 was the cycle's,
+# and the two point releases on stable/2025.1 add bug fixes only, the last of them
+# the cross-pool zone ownership check (bug 2160533). It cannot be bumped in place:
+# 20.x requires oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds
+# at 4.3.0 for octavia, heat, manila and the other 2024.1 services still in the
+# caracal venv. So the service moves alone into $(NEXT_OPENSTACK_HOME_DIR), the same
+# shape as its caracal hop (#634), one release on, after keystone, glance, cinder,
+# nova/placement, neutron, barbican and cyborg.
 #
-# This also converts the install from `git clone` + `setup.py install` to a pinned
-# pip install, which is what every caracal hop before it does -- there is no .mk in
-# this tree that still reads $(OPS_GITHUB_BRANCH_0*), and stable/2024.1 does
-# not exist on the github mirror anyway.
-#
-# Two packages have to be named because designate's requirements.txt asks for
-# neither and pip will not pull them in transitively:
+# Three packages have to be named because designate's requirements.txt asks for
+# none of them and pip will not pull them in transitively:
 # PyMySQL: config_designate.cpp writes a mysql+pymysql:// connection
 # oslo.messaging[kafka]: config_designate.cpp points the notification transport at
 #   kafka://
-# Both happen to be in this venv already (keystone.mk installs them), but a
-# dependency nothing asks for is one that disappears silently.
+# python-memcached: config_designate.cpp writes [keystone_authtoken]
+#   memcached_servers, which makes keystonemiddleware import memcache on its first
+#   token validation
+# All three happen to be in this venv already, but a dependency nothing asks for is
+# one that disappears silently.
+#
+# The /usr/bin/designate-* links follow the service: the five units,
+# config_designate.cpp, hex_sdk's migrate_designate_db and the sudoers rule all
+# reach designate through them. designate-rootwrap is the one that matters beyond
+# startup: the worker runs every rndc call through `sudo designate-rootwrap`, and
+# sudo matches the rule by that /usr/bin path, so the rule needs no edit.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-		designate==18.0.0 \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		designate==20.0.2 \
 		PyMySQL \
-		\"oslo.messaging[kafka]\""
+		\"oslo.messaging[kafka]\" \
+		python-memcached"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+	$(Q)# Link binaries
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-api /usr/bin/designate-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-api-wsgi /usr/bin/designate-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-central /usr/bin/designate-central
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-manage /usr/bin/designate-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-mdns /usr/bin/designate-mdns
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-producer /usr/bin/designate-producer
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-rootwrap /usr/bin/designate-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-sink /usr/bin/designate-sink
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-status /usr/bin/designate-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-worker /usr/bin/designate-worker
 
 # the osc plugin and the dashboard
 #
@@ -80,13 +103,17 @@ rootfs_install::
 # to sit next to /usr/bin/openstack or health_designate_check()'s `openstack dns
 # service list` cannot run at all -- which is how this was first found, as
 # "DNSaaS NG [ designate(9 api not all up) ]" while every designate unit was active.
-# That held it in the antelope venv from #634 until #636 moved the cli here; #632 had
-# the same constraint for python-barbicanclient.
+# That held it in the antelope venv from #634 until #636 moved the cli here. The
+# epoxy hop opens the split once more: /usr/bin/openstack is still the caracal
+# venv's, so the client stays here until the cli moves too, the same as barbican's
+# (#658) and cyborg's (#659). The epoxy venv gets its own copy as a designate
+# requirement, and nothing points at it.
 #
 # designate-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
 # horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
-# caracal, so the panel is a caracal-venv install now.
+# caracal, and the epoxy horizon copy in horizon.mk serves nothing, so the panel is
+# still a caracal-venv install.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -100,17 +127,6 @@ rootfs_install::
 		designate-dashboard==$(DESIGNATE_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)# Link binaries
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-api /usr/bin/designate-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-api-wsgi /usr/bin/designate-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-central /usr/bin/designate-central
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-manage /usr/bin/designate-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-mdns /usr/bin/designate-mdns
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-producer /usr/bin/designate-producer
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-rootwrap /usr/bin/designate-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-sink /usr/bin/designate-sink
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-status /usr/bin/designate-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-worker /usr/bin/designate-worker
 
 # install custom files
 # for designate
@@ -126,9 +142,11 @@ rootfs_install::
 	$(Q)# them there, and taking them from the install means they track the pinned
 	$(Q)# version instead of going stale silently. cinder.mk and glance.mk do the same.
 	$(Q)# They used to be copied from the git checkout, which pip replaced in #634.
-	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/designate/api-paste.ini $(DESIGNATE_CONF_DIR)/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/designate/rootwrap.conf.sample $(DESIGNATE_CONF_DIR)/rootwrap.conf
-	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/designate/rootwrap.d $(DESIGNATE_CONF_DIR)/
+	$(Q)# 20.0.0 ships rootwrap.conf under its real name instead of as
+	$(Q)# rootwrap.conf.sample; the content is unchanged.
+	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/designate/api-paste.ini $(DESIGNATE_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/designate/rootwrap.conf $(DESIGNATE_CONF_DIR)/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) cp -rf $(NEXT_OPENSTACK_HOME_DIR)/etc/designate/rootwrap.d $(DESIGNATE_CONF_DIR)/
 	$(Q)# policy.yaml.sample is the one file designate's data_files does *not* ship, so
 	$(Q)# there is no venv prefix copy to take. It is generated from upstream's
 	$(Q)# designate-policy-generator.conf and checked in, the same way designate.conf.sample

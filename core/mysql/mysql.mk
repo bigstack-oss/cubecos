@@ -5,24 +5,25 @@
 # which core/heavyfs/Makefile disables. The commented ROOTFS_DNF line below is what that
 # used to be; the warning that sat beside it -- "Unknown system variable 'innodb_version'
 # since MariaDB 10.10" -- is obsolete and has been dropped. Nothing in this tree or in
-# the telegraf fork reads innodb_version, and 10.11.18 starts clean on the config
-# core/modules/config_mysql.cpp generates (verified on cc1).
+# the telegraf fork reads innodb_version, and 11.4.12 starts clean on the config
+# core/modules/config_mysql.cpp generates, [galera] block included (verified on cc1).
 # ROOTFS_DNF += mariadb-server mariadb-server-galera rsync
 # rpmfind.net is often not responsive
 # MARIADB_URL := https://rpmfind.net/linux/centos-stream/9-stream/AppStream/x86_64/os/Packages
 
-# 10.11 is the series OpenStack Caracal targets (cubecos#651). galera-4 is published at
-# the same 26.4.27 under the 10.11 tree, so only the series directory moves.
+# 11.4 is the series OpenStack Epoxy targets (cubecos#676). galera-4 is published at
+# the same 26.4.27 under the 11.4 tree, so the provider does not move, and a node on
+# either side of the roll replicates through the identical library.
 #
-# MariaDB-server 10.11 adds a hard, rich dependency that 10.6 did not have:
+# MariaDB-server has carried a hard, rich dependency since 10.11:
 #   (mysql-selinux >= 1.0.14 if selinux-policy-targeted)
 # selinux-policy-targeted is in the rootfs, so mysql-selinux is pulled in for real. It
 # lives in appstream and is NOT part of the mariadb module, so the module being disabled
-# does not hide it and it needs no entry here. lsof/pv/socat are new *weak* deps and are
+# does not hide it and it needs no entry here. lsof/pv/socat are *weak* deps and are
 # allowed to be skipped.
-MARIADB_VER := 10.11.18-1.el9
+MARIADB_VER := 11.4.12-1.el9
 GALERA_VER := 26.4.27-1.el9
-MARIADB_URL := https://archive.mariadb.org/yum/10.11/rocky9-amd64/rpms
+MARIADB_URL := $(MARIADB_DL_HOST)/yum/11.4/rocky9-amd64/rpms
 
 # Official MariaDB package list
 # Note: we dropped errmsg and server-utils as they are now bundled
@@ -39,14 +40,30 @@ MARIADB_LOCKED_RPMS := MariaDB-client-$(MARIADB_VER) \
                        MariaDB-gssapi-server-$(MARIADB_VER) \
                        MariaDB-devel-$(MARIADB_VER)
 
+# 11.x moved every mysql* program name out of MariaDB-client and MariaDB-server into
+# two noarch packages of symlinks: MariaDB-client-compat (mysql, mysqldump, ...) and
+# MariaDB-server-compat (mysql_upgrade, mysqld, ...). The main packages only Recommend
+# them, and a weak dependency has nothing to resolve against here -- these rpms come by
+# URL, not from a repo dnf can search -- so both are named.
+#
+# This tree calls the mariadb* names, but a 3.1.20 peer does not. Mid-roll it probes
+# this node with `mysql` over remote_run, and without the symlink the probe prints
+# nothing: _health_mysql_node_state reads a Synced node as down, and
+# _health_mysql_repair SIGKILLs every node that did not answer Synced; an old master's
+# os_galera_live_primary misses a live Primary and bootstraps a second one. The mysql*
+# names still work through these, with a "Deprecated program name" line on stderr.
+MARIADB_COMPAT_RPMS := MariaDB-client-compat-$(MARIADB_VER) \
+                       MariaDB-server-compat-$(MARIADB_VER)
+
 # Galera library is versioned differently than the database engine
 GALERA_RPM := galera-4-$(GALERA_VER)
 
-LOCKED_DNF += $(MARIADB_LOCKED_RPMS) $(GALERA_RPM)
+LOCKED_DNF += $(MARIADB_LOCKED_RPMS) $(MARIADB_COMPAT_RPMS) $(GALERA_RPM)
 BLKLST_DNF += mariadb-connector-c mariadb-connector-c-config
 
 # Map URLs for MariaDB packages
 $(foreach mariadb_rpm,$(MARIADB_LOCKED_RPMS),$(eval ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(mariadb_rpm).x86_64.rpm))
+$(foreach mariadb_rpm,$(MARIADB_COMPAT_RPMS),$(eval ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(mariadb_rpm).noarch.rpm))
 
 # Map URL for Galera package
 ROOTFS_DNF_DL_FROM += $(MARIADB_URL)/$(GALERA_RPM).x86_64.rpm

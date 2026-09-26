@@ -1,11 +1,11 @@
 # Unit tests for the cube live-resize helpers.
 #
-# Deliberately outside core/nova/caracal_patch/: nova.mk installs everything in
+# Deliberately outside core/nova/epoxy_patch/: nova.mk installs everything in
 # the patch dir verbatim onto the rootfs, so tests placed there would ship to
 # every node.
 #
-# Run against a node's caracal venv (nova already importable):
-#   /opt/openstack-caracal/bin/python -m unittest discover -s . -p 'test_*.py' -v
+# Run against a node's epoxy venv (nova already importable):
+#   /opt/openstack-epoxy/bin/python -m unittest discover -s . -p 'test_*.py' -v
 
 import unittest
 

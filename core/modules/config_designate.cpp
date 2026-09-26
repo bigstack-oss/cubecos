@@ -299,7 +299,12 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/designate";
 
         cfg["storage:sqlalchemy"]["connection"] = dbconn;
-        cfg["storage:sqlalchemy"]["mysql_wsrep_sync_wait"] = "1";
+        // The causal-read guard goes under [database], not next to the connection.
+        // Since 17.0.0 designate opens every session through oslo.db's global
+        // enginefacade, which reads [database]; designate only copies the
+        // [storage:sqlalchemy] connection in as that group's default, so the same key
+        // written there is registered but never reaches a session.
+        cfg["database"]["mysql_wsrep_sync_wait"] = "1";
     }
 
     return true;

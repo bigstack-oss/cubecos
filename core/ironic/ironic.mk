@@ -94,9 +94,13 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-rootwrap /usr/bin/ironic-inspector-rootwrap
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
 	$(Q)# provided by networking-baremetal, installed with neutron -- so it follows
-	$(Q)# neutron's venv, not ironic's. Both are caracal now, so the split #1194 had
-	$(Q)# to reason about is gone; the link is unchanged.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
+	$(Q)# neutron's venv, not ironic's, and neutron is in the epoxy one (#654). The
+	$(Q)# split #1194 had to reason about is back the other way round: the agent reports
+	$(Q)# chassis state to neutron-server over RPC and imports nothing from ironic, so an
+	$(Q)# epoxy agent beside a caracal ironic is fine, while a caracal one beside an
+	$(Q)# epoxy neutron-server would be a python 3.11 networking-baremetal 6.3.1 that
+	$(Q)# no fresh build installs at all.
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
 
 # install the ironic web ui plugin
 #
