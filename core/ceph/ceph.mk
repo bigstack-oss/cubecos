@@ -49,32 +49,36 @@ ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
 
 CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
 
-# ceph's python 3.11 BUILD context -- removed again before the image ships
+# ceph's python BUILD contexts, one per openstack interpreter -- removed again before
+# the image ships
 #
 # Ceph is the only component that needed build tooling inside somebody else's venv:
 # the rados/rbd bindings are Cython C extensions, so building them used to mean
 # `pip install "Cython<3"` into the antelope venv *and* the caracal venv, leaving a
 # build-time compiler installed in two openstack runtime environments for the life of
-# the image. That tooling lives here instead, so neither openstack venv is touched by
+# the image. That tooling lives here instead, so no openstack venv is touched by
 # ceph any more.
 #
-# This venv is scaffolding, not a runtime environment. Nothing on a running node
-# imports from it: the wheels it produces are installed into the caracal venv, which
-# is where cinder, glance and manila -- the services that talk to the built-in RBD
-# store -- actually live, and once that is done there is no consumer left. It is
-# deleted at the end of the binding step so the shipped image carries neither it nor
-# Cython.
+# These venvs are scaffolding, not runtime environments. Nothing on a running node
+# imports from them: the wheels they produce are installed into the openstack venvs
+# that hold a service talking to the built-in RBD store -- the caracal one, where
+# manila lives, and the epoxy one, where glance, cinder and nova do -- and once that is
+# done there is no consumer left. They are deleted at the end of the binding step
+# so the shipped image carries neither them nor Cython.
 #
-# It cannot host ceph itself, either, which is worth stating so it is not tried
+# They cannot host ceph itself, either, which is worth stating so it is not tried
 # again: mon, osd, mds and radosgw declare no python dependency at all (pure C++),
 # and ceph-mgr embeds its interpreter via a hard libpython3.9.so.1.0 link, so its
 # modules can only ever load from /usr/lib64/python3.9/site-packages. Moving the mgr
 # to 3.11 is a `-DWITH_PYTHON3=3.11` source build of ceph, not a venv.
 #
-# 3.11 to match the caracal venv: a C extension is only importable by the minor it
-# was built for. The antelope venv no longer holds an RBD consumer, which is why the
-# second (cpython-310) build that used to run here is gone.
-CEPH_PYTHON_VER := 3.11
+# One venv per openstack interpreter, because a C extension is only importable by the
+# minor it was built for: 3.11 for the caracal venv and 3.12 for the epoxy one. glance
+# is the first epoxy occupant to need the bindings -- keystone never touched ceph --
+# which is why this built once until now (#656). The antelope venv no longer holds an
+# RBD consumer, which is why the cpython-310 build that used to run here is gone.
+CEPH_PYTHON_VERS := $(PYTHON_VER) $(NEXT_PYTHON_VER)
+CEPH_OPENSTACK_VENVS := $(OPENSTACK_HOME_DIR) $(NEXT_OPENSTACK_HOME_DIR)
 CEPH_HOME_DIR := /opt/ceph
 
 # setuptools is pinned rather than left to float. Unpinned, the version is whatever
@@ -103,37 +107,55 @@ CEPH_PYBIND_SRCDIR := /usr/src/ceph/ceph-$(CEPH_PYBIND_VERSION)
 CEPH_PYBIND_CFLAGS := -I$(CEPH_PYBIND_SRCDIR)/src/include
 CEPH_WHEEL_DIR := /usr/src/ceph/wheels
 
-# create the ceph venv and its build tooling
+# create one ceph venv per interpreter, each with its own build tooling
+#
+# || exit 1 per iteration: a for loop only returns the status of its *last*
+# iteration, so without it a failure for the caracal interpreter would be hidden by
+# a successful epoxy one.
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(CEPH_HOME_DIR)
-	$(Q)chroot $(ROOTDIR) python$(CEPH_PYTHON_VER) -m venv $(CEPH_HOME_DIR)
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(CEPH_HOME_DIR)/bin/pip install --upgrade pip
-	$(Q)chroot $(ROOTDIR) $(CEPH_HOME_DIR)/bin/pip install --upgrade setuptools==$(CEPH_VENV_SETUPTOOLS)
-	$(Q)chroot $(ROOTDIR) $(CEPH_HOME_DIR)/bin/pip install $(CEPH_VENV_BUILD_REQS)
+	$(Q)for v in $(CEPH_PYTHON_VERS) ; do \
+		chroot $(ROOTDIR) python$$v -m venv $(CEPH_HOME_DIR)/$$v && \
+		chroot $(ROOTDIR) $(CEPH_HOME_DIR)/$$v/bin/pip install --upgrade pip && \
+		chroot $(ROOTDIR) $(CEPH_HOME_DIR)/$$v/bin/pip install --upgrade setuptools==$(CEPH_VENV_SETUPTOOLS) && \
+		chroot $(ROOTDIR) $(CEPH_HOME_DIR)/$$v/bin/pip install $(CEPH_VENV_BUILD_REQS) || exit 1 ; \
+	done
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
-# build the rados/rbd bindings once, here, then install the wheels into the caracal venv
+# build the rados/rbd bindings once per interpreter, here, then install each pair into
+# the openstack venv that runs that interpreter
 #
-# `pip wheel`, not `pip install .`: the artifact has to be installable into a second
+# `pip wheel`, not `pip install .`: the artifact has to be installable into another
 # venv, and a wheel is the only output that carries over. --no-build-isolation keeps
 # the build against this venv's own Cython and setuptools instead of the throwaway
 # overlay pip would otherwise create (which would resolve Cython off the index, and
 # a Cython 3 at that). --no-deps because neither binding declares a dependency, so
 # nothing should be resolved against the index at this point.
+#
+# Both interpreters' wheels land in the one directory -- rados-2.0.0-cp311-* and
+# rados-2.0.0-cp312-* -- so each venv installs by name from it with --no-index
+# --find-links rather than by glob, and pip picks the one wheel whose tag that
+# interpreter accepts.
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/ceph $(CEPH_WHEEL_DIR)
 	$(Q)chroot $(ROOTDIR) wget -O /usr/src/ceph/ceph-v$(CEPH_PYBIND_VERSION).tar.gz https://github.com/ceph/ceph/archive/refs/tags/v$(CEPH_PYBIND_VERSION).tar.gz
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) tar -xzf /usr/src/ceph/ceph-v$(CEPH_PYBIND_VERSION).tar.gz -C /usr/src/ceph
-	$(Q)for b in rados rbd ; do \
-		chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/$$b && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CEPH_HOME_DIR)/bin/pip wheel --no-build-isolation --no-deps -w $(CEPH_WHEEL_DIR) ." ; \
+	$(Q)for v in $(CEPH_PYTHON_VERS) ; do \
+		for b in rados rbd ; do \
+			chroot $(ROOTDIR) bash -c "cd $(CEPH_PYBIND_SRCDIR)/src/pybind/$$b && CFLAGS='$(CEPH_PYBIND_CFLAGS)' $(CEPH_HOME_DIR)/$$v/bin/pip wheel --no-build-isolation --no-deps -w $(CEPH_WHEEL_DIR) ." || exit 1 ; \
+		done ; \
 	done
-	$(Q)chroot $(ROOTDIR) bash -c "$(OPENSTACK_HOME_DIR)/bin/pip install --no-deps $(CEPH_WHEEL_DIR)/rados-*.whl $(CEPH_WHEEL_DIR)/rbd-*.whl"
+	$(Q)for venv in $(CEPH_OPENSTACK_VENVS) ; do \
+		chroot $(ROOTDIR) $$venv/bin/pip install --no-deps --no-index --find-links $(CEPH_WHEEL_DIR) rados rbd || exit 1 ; \
+	done
 	$(Q)# fail the build here rather than at first RBD I/O if either binding did not land
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python -c "import rados, rbd"
-	$(Q)# tear the scaffolding down: the venv, its Cython, the wheels and the source
+	$(Q)for venv in $(CEPH_OPENSTACK_VENVS) ; do \
+		chroot $(ROOTDIR) $$venv/bin/python -c "import rados, rbd" || exit 1 ; \
+	done
+	$(Q)# tear the scaffolding down: the venvs, their Cython, the wheels and the source
 	$(Q)# tree are all build-time only, and none of them belong in the shipped image
 	$(Q)chroot $(ROOTDIR) rm -rf $(CEPH_HOME_DIR) /usr/src/ceph
 	$(Q)# guard against a future edit leaving either behind

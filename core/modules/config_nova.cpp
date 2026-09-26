@@ -69,14 +69,15 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * /usr/bin/privsep-helper -- a symlink core/nova/nova.mk used to keep pointed at the
  * *antelope* venv, for the services that were still living there. #639 took the last of
  * them (masakari) to caracal, so nova.mk no longer creates it and the bare name resolves
- * to nothing at all. It could never have served nova anyway: on a freshly built rootfs
- * the antelope venv holds no nova at all and the context dies with
- * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
- * imports the nova 27.5.1 still sitting there and answers a 29.4.0 parent with no error
- * at all. Naming the caracal helper explicitly avoids both; /etc/sudoers.d/nova
- * authorises exactly this path.
+ * to nothing at all. nova has moved on to the epoxy venv (#653), and the caracal helper
+ * it pinned until then stays installed for manila and masakari -- but it
+ * cannot serve nova either: on a freshly built rootfs the caracal venv holds no nova at
+ * all and the context dies with FailedToDropPrivileges, and on a node upgraded in place
+ * it is worse -- the helper imports the nova 29.4.0 still sitting there and answers a
+ * 31.3.1 parent with no error at all. Naming the epoxy helper explicitly avoids both;
+ * /etc/sudoers.d/nova authorises exactly this path.
  */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
 static const char USERPASS[] = "8YdO3T0l3qaEgdjT";
 static const char PLACEPASS[] = "TXh08jAWj1gDdd82";
@@ -134,7 +135,6 @@ CONFIG_TUNING_UINT(NOVA_RESV_HOST_VCPU, "nova.control.host.vcpu", TUNING_PUB, "A
                    0, 0, 128);
 CONFIG_TUNING_UINT(NOVA_RESV_HOST_MEM, "nova.control.host.memory", TUNING_PUB, "Amount of memory in MB to reserve for the control host.",
                    0, 0, 524288);
-CONFIG_TUNING_STR(NOVA_GPU_TYPE, "nova.gpu.type", TUNING_PUB, "Specifiy a supported gpu type instances would get.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_OC_CPU_RATIO, "nova.overcommit.cpu.ratio", TUNING_PUB, "Specifiy an allowed CPU overcommitted ratio.", "16.0", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_OC_RAM_RATIO, "nova.overcommit.ram.ratio", TUNING_PUB, "Specifiy an allowed RAM overcommitted ratio.", "1.0", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(NOVA_OC_DISK_RATIO, "nova.overcommit.disk.ratio", TUNING_PUB, "Specifiy an allowed DISK overcommitted ratio.", "1.5", ValidateRegex, DFT_REGEX_STR);
@@ -171,7 +171,6 @@ PARSE_TUNING_STR(s_dbPass, NOVA_DBPASS);
 PARSE_TUNING_STR(s_plaDbPass, NOVA_PLA_DBPASS);
 PARSE_TUNING_UINT(s_resvHostVcpu, NOVA_RESV_HOST_VCPU);
 PARSE_TUNING_UINT(s_resvHostMem, NOVA_RESV_HOST_MEM);
-PARSE_TUNING_STR(s_gpuType, NOVA_GPU_TYPE);
 PARSE_TUNING_STR(s_ocCpuRatio, NOVA_OC_CPU_RATIO);
 PARSE_TUNING_STR(s_ocRamRatio, NOVA_OC_RAM_RATIO);
 PARSE_TUNING_STR(s_ocDiskRatio, NOVA_OC_DISK_RATIO);
@@ -385,7 +384,13 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += "/placement";
 
         plaCfg["placement_database"]["connection"] = dbconn;
-        plaCfg["placement_database"]["mysql_wsrep_sync_wait"] = "1";
+        // placement registers its own [placement_database] options rather than oslo.db's
+        // [database] set, and mysql_wsrep_sync_wait is not one of them, so writing it here
+        // the way the two groups above do was ignored without a word: every placement
+        // session ran at the server's wsrep_sync_wait of 0. connection_parameters is one
+        // of placement's own options. oslo.db appends it to the connection URL, and
+        // PyMySQL runs init_command on every connection it opens.
+        plaCfg["placement_database"]["connection_parameters"] = "init_command=SET%20SESSION%20wsrep_sync_wait%3D1";
     }
 
     return true;
@@ -559,7 +564,16 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["compute_driver"] = "libvirt.LibvirtDriver";
         cfg["DEFAULT"]["state_path"] = "/var/lib/nova";
         cfg["DEFAULT"]["instances_path"] = "$state_path/instances";
-        cfg["libvirt"]["hw_machine_type"] = hwType.c_str();
+        // [libvirt] hw_machine_type takes host-arch=machine-type pairs, not a machine
+        // type. nova skips an entry without the '=' ("Invalid hw_machine_type config
+        // value") and falls back to its own default, which for x86_64 is pc rather than
+        // q35, so nova.hardware.type never reached a guest whose image carries no
+        // hw_machine_type property. A bare value is taken as the x86_64 machine type; an
+        // empty one, or one that is already a list of pairs, is written as it is.
+        if (hwType.empty() || hwType.find('=') != std::string::npos)
+            cfg["libvirt"]["hw_machine_type"] = hwType;
+        else
+            cfg["libvirt"]["hw_machine_type"] = "x86_64=" + hwType;
         cfg["libvirt"]["num_pcie_ports"] = "28";
         cfg["libvirt"]["swtpm_enabled"] = "True";
         cfg["libvirt"]["images_type"] = "rbd";
@@ -608,9 +622,6 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["instance_usage_audit"] = "True";
         cfg["DEFAULT"]["instance_usage_audit_period"] = "hour";
         cfg["notifications"]["notify_on_state_change"] = "vm_and_task_state";
-
-        if (s_gpuType.length())
-            cfg["devices"]["enabled_vgpu_types"] = s_gpuType.newValue();
 
         ironicCfg["DEFAULT"]["host"] = hostname + "-ironic";
         ironicCfg["DEFAULT"]["compute_driver"] = "ironic.IronicDriver";

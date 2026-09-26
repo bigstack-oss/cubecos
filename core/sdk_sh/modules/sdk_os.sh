@@ -674,7 +674,7 @@ os_export_volume()
     declare -p vol_array > /dev/null
     for vol_id in ${vol_array[@]} ; do
         local vol_temp=$(MakeTemp)
-        /usr/bin/mysqldump --no-create-db --no-create-info --replace cinder volumes -w"id='$vol_id'" > $vol_temp
+        /usr/bin/mariadb-dump --no-create-db --no-create-info --replace cinder volumes -w"id='$vol_id'" > $vol_temp
 
         local user_id=$(cat $vol_temp | grep REPLACE | awk -F',' '{print $7}' | sed "s/'//g")
         local proj_id=$(cat $vol_temp | grep REPLACE | awk -F',' '{print $8}' | sed "s/'//g")
@@ -683,7 +683,7 @@ os_export_volume()
         local service_uuid=$(cat $vol_temp | grep REPLACE | awk -F',' '{print $38}' | sed "s/'//g")
         cat $vol_temp | sed -e "s/${user_id}/%user_id%/g" -e "s/${proj_id}/%proj_id%/g" -e "s/${host}/%host%/g" -e "s/${type_id}/%type_id%/g" \
                             -e "s/${service_uuid}/%service_uuid%/g" -e "s/in-use/available/g" -e "s/attached/detached/g" >> $vol_meta_file
-        /usr/bin/mysqldump --no-create-db --no-create-info --replace \
+        /usr/bin/mariadb-dump --no-create-db --no-create-info --replace \
                            cinder volume_admin_metadata volume_glance_metadata volume_metadata -w"volume_id='$vol_id'" >> $vol_meta_file
     done
 }
@@ -699,22 +699,22 @@ os_import_volume()
     local proj_id=$(os_get_project_id_by_name $2)
     local host=$3
     local type_id=$($OPENSTACK volume type show $4 | awk '/ id /{print $4}')
-    local service_uuid=$(/usr/bin/mysql -u root -D cinder -e "select uuid from services where topic = 'cinder-volume'" -E | grep uuid | awk '{print $2}')
+    local service_uuid=$(/usr/bin/mariadb -u root -D cinder -e "select uuid from services where topic = 'cinder-volume'" -E | grep uuid | awk '{print $2}')
     local vol_meta_file=$5
     local vol_sql_file=$(MakeTemp)
 
     cat $vol_meta_file | sed -e "s/%user_id%/${user_id}/g" -e "s/%proj_id%/${proj_id}/g" -e "s/%host%/${host}/g" -e "s/%type_id%/${type_id}/g" -e "s/%service_uuid%/${service_uuid}/g" > $vol_sql_file
-    mysql cinder < $vol_sql_file
+    mariadb cinder < $vol_sql_file
 }
 
 os_imported_volume_delete()
 {
     local volume_id=$1
 
-    /usr/bin/mysql -u root -D cinder -e "delete from volume_admin_metadata where volume_id='$volume_id'"
-    /usr/bin/mysql -u root -D cinder -e "delete from volume_glance_metadata where volume_id='$volume_id'"
-    /usr/bin/mysql -u root -D cinder -e "delete from volume_attachment where volume_id='$volume_id'"
-    /usr/bin/mysql -u root -D cinder -e "delete from volumes where id='$volume_id'"
+    /usr/bin/mariadb -u root -D cinder -e "delete from volume_admin_metadata where volume_id='$volume_id'"
+    /usr/bin/mariadb -u root -D cinder -e "delete from volume_glance_metadata where volume_id='$volume_id'"
+    /usr/bin/mariadb -u root -D cinder -e "delete from volume_attachment where volume_id='$volume_id'"
+    /usr/bin/mariadb -u root -D cinder -e "delete from volumes where id='$volume_id'"
 }
 
 os_volume_meta_sync()
@@ -1106,9 +1106,9 @@ os_keystone_endpoint_update()
     local pub_id=$(cat $EP_SNAPSHOT | grep " identity " | grep public | awk '{print $1}' | tr -d '\n')
     local admin_id=$(cat $EP_SNAPSHOT | grep " identity " | grep admin | awk '{print $1}' | tr -d '\n')
     local intr_id=$(cat $EP_SNAPSHOT | grep " identity " | grep internal | awk '{print $1}' | tr -d '\n')
-    /usr/bin/mysql -u root -D keystone -e "UPDATE endpoint set url='$pub' where id='$pub_id'"
-    /usr/bin/mysql -u root -D keystone -e "UPDATE endpoint set url='$adm' where id='$admin_id'"
-    /usr/bin/mysql -u root -D keystone -e "UPDATE endpoint set url='$intr' where id='$intr_id'"
+    /usr/bin/mariadb -u root -D keystone -e "UPDATE endpoint set url='$pub' where id='$pub_id'"
+    /usr/bin/mariadb -u root -D keystone -e "UPDATE endpoint set url='$adm' where id='$admin_id'"
+    /usr/bin/mariadb -u root -D keystone -e "UPDATE endpoint set url='$intr' where id='$intr_id'"
 }
 
 os_keystone_idp_config()
@@ -1149,8 +1149,8 @@ os_keystone_idp_config()
 # admin and member -- yoga wired admin -> member directly -- so admin now reaches member
 # only through manager. Measured on cc1: delete the manager->member link alone and admin's
 # effective roles collapse from {admin,manager,member,reader} to {admin,manager}. Any
-# policy that defaults to role:member then denies admin, barbican's secrets:post among
-# them (cubecos#1374).
+# policy that defaults to role:member alone then denies admin. barbican's secrets:post is
+# not one: barbican has only ever enforced its legacy rules (cubecos#658).
 #
 # The links are the part that goes missing. Caracal marks the default roles immutable, so
 # on a caracal cluster the roles themselves cannot be deleted -- the loop below is for a
@@ -1298,7 +1298,7 @@ os_nova_service_remove()
     local binary=$2
     local srv_ironic_id=$($OPENSTACK compute service list -f value -c ID -c Host -c Binary | grep "$binary.*$host-ironic" | awk '{print $1}')
     if [ -n "$srv_ironic_id" ] ; then
-        /usr/bin/mysql -u root -D nova -e "delete from services where id = '$srv_ironic_id'"
+        /usr/bin/mariadb -u root -D nova -e "delete from services where id = '$srv_ironic_id'"
     fi
     local srv_id=$($OPENSTACK compute service list -f value -c ID -c Host -c Binary | grep "$binary.*$host" | awk '{print $1}')
     if [ -n "$srv_id" ] ; then
@@ -1431,7 +1431,7 @@ os_cinder_volume_force_detach()
 
     server_id=$($OPENSTACK volume show $volume_id -f json | jq -r .attachments[].server_id)
     if [ -n "$server_id" ] ; then
-        /usr/bin/mysql -u root -D nova -e "UPDATE block_device_mapping SET deleted=id, deleted_at=NOW() WHERE deleted_at is NULL and volume_id ='$volume_id' LIMIT 1;"
+        /usr/bin/mariadb -u root -D nova -e "UPDATE block_device_mapping SET deleted=id, deleted_at=NOW() WHERE deleted_at is NULL and volume_id ='$volume_id' LIMIT 1;"
         os_cinder_volume_reset $volume_id
         $OPENSTACK server reboot --hard $server_id
     fi
@@ -1958,7 +1958,7 @@ os_octavia_port_remove()
 {
     local lb_id=$1
 
-    readarray pid_array <<<"$(/usr/bin/mysql -u root -D octavia -e "select * from amphora where load_balancer_id = '$lb_id'" | grep $lb_id | awk '{print $1}')"
+    readarray pid_array <<<"$(/usr/bin/mariadb -u root -D octavia -e "select * from amphora where load_balancer_id = '$lb_id'" | grep $lb_id | awk '{print $1}')"
     declare -p pid_array > /dev/null
     for pid in "${pid_array[@]}" ; do
         local port_id=$(echo $pid | tr -d '\n')
@@ -1986,7 +1986,7 @@ os_octavia_lb_fix()
 
     lb_id=$($OPENSTACK loadbalancer show $lb_nameid -f json | jq -r .id)
     if [ -n "$lb_id" ] ; then
-        /usr/bin/mysql -u root -D octavia -e "update load_balancer set provisioning_status='ERROR' where id='$lb_id'"
+        /usr/bin/mariadb -u root -D octavia -e "update load_balancer set provisioning_status='ERROR' where id='$lb_id'"
         echo "Fixing load balancer... $lb_id"
         $OPENSTACK loadbalancer failover $lb_id --wait
     fi
@@ -2193,7 +2193,7 @@ os_manila_service_remove()
     local binary=$2
     local srv_id=$(manila service-list | grep "$binary.*$host" | awk '{print $2}')
     if [ -n "$srv_id" ] ; then
-        /usr/bin/mysql -u root -D manila -e "delete from services where id = '$srv_id'"
+        /usr/bin/mariadb -u root -D manila -e "delete from services where id = '$srv_id'"
     fi
 }
 
@@ -2589,6 +2589,18 @@ os_instance_export_save()
     printf '%s\n' "done"
 }
 
+# The os_mgr_port_* helpers query neutron over TCP, as the neutron user, on whichever
+# node $host names -- os_nova_instance_ping runs them on a compute node against the
+# VIP holder. That is why every such query passes --skip-ssl-verify-server-cert.
+#
+# The 11.4 client verifies the server certificate by default, and verifying means
+# requiring TLS, which a 10.11 server does not offer: the connection fails with
+# "SSL is required, but the server does not support it". Mid-roll, an upgraded compute
+# querying a VIP holder that is not yet upgraded finds no port, and
+# os_mgr_port_create then creates another one on every telegraf run, each taking an
+# address from the tenant subnet. Without verification the client still uses TLS
+# where the server offers it, and falls back to plaintext where it does not -- which
+# is all a 10.11 client ever did. The flag is accepted by the 10.11 client too.
 os_mgr_port_name()
 {
     local net_id=$1
@@ -2614,7 +2626,7 @@ os_mgr_port_remove()
     $ip_netns_exec ip link set $pname down 2>/dev/null
     /sbin/ip netns del $netns 2>/dev/null
     /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
-    local port_id=$(mysql -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -n +2)
+    local port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -n +2)
     if [ -n "$port_id" ] ; then
         $OPENSTACK port delete $port_id
     fi
@@ -2626,7 +2638,7 @@ os_mgr_port_clear()
     local dbpass=$2
     local cols="id,ports.network_id,device_id,ip_address,project_id"
     local joined_tables="ports INNER JOIN ipallocations ON ports.id = ipallocations.port_id"
-    local stats=$(mysql -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT $cols FROM $joined_tables WHERE device_owner ='compute:nova'" | tail -n +2)
+    local stats=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT $cols FROM $joined_tables WHERE device_owner ='compute:nova'" | tail -n +2)
     for n in $(echo "$stats" | awk '{print $2}' | sort | uniq) ; do
         local proj_ids=$(echo "$stats" | grep $n | awk '{print $5}'| sort | uniq)
         for p in $proj_ids ; do
@@ -2646,14 +2658,14 @@ os_mgr_port_create()
     local suffix=$(echo $net_id | cut -c 1-8)
     local netns="mgr-$suffix"
 
-    local port_id=$(mysql -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
-    local status=$(mysql -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT status FROM ports WHERE name = '$pname'" | tail -1)
+    local port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
+    local status=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT status FROM ports WHERE name = '$pname'" | tail -1)
     if [ -n "$port_id" -a "$status" != "ACTIVE" ] ; then
         $OPENSTACK port delete $port_id
         /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
     fi
 
-    port_id=$(mysql -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
+    port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
     if [ -z "$port_id" ] ; then
         port_id=$($OPENSTACK port create --project $proj_id --device-owner cube:mgr --host=$(hostname) -c id -f value --network $net_id $pname 2>/dev/null)
         /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
@@ -2665,7 +2677,7 @@ os_mgr_port_create()
 
     local cols="mac_address,ip_address"
     local joined_tables="ports INNER JOIN ipallocations ON ports.id = ipallocations.port_id"
-    local stats=$(mysql -B -h $host -u neutron -p$dbpass -D neutron -e "SELECT $cols FROM $joined_tables WHERE id ='$port_id'" | tail -1)
+    local stats=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT $cols FROM $joined_tables WHERE id ='$port_id'" | tail -1)
     local pmac=$(echo $stats | awk '{print $1}')
     local pip=$(echo $stats | awk '{print $2}')
 
@@ -2734,14 +2746,14 @@ os_nova_instance_ping()
     local dbpass=$(cat /etc/neutron/neutron.conf | grep connection | awk -F':|@' '{print $3}')
     local cols="id,ports.network_id,device_id,ip_address,project_id"
     local joined_tables="ports INNER JOIN ipallocations ON ports.id = ipallocations.port_id"
-    local stats=$(mysql -B -u root -D neutron -e "SELECT $cols FROM $joined_tables WHERE device_owner ='compute:nova'" | tail -n +2)
+    local stats=$(mariadb -B -u root -D neutron -e "SELECT $cols FROM $joined_tables WHERE device_owner ='compute:nova'" | tail -n +2)
     for n in $(echo "$stats" | awk '{print $2}' | sort | uniq) ; do
-        local n_name=$(mysql -B -u root -D neutron -e "SELECT name FROM networks WHERE id ='$n'" | tail -n +2)
+        local n_name=$(mariadb -B -u root -D neutron -e "SELECT name FROM networks WHERE id ='$n'" | tail -n +2)
         local netns_exec=
         if [ "$n_name" != "manila_service_network" ] ; then
             local netns_exec="/sbin/ip netns exec mgr-$(echo $n | cut -c 1-8)"
             local proj_ids=$(echo "$stats" | grep $n | awk '{print $5}'| sort | uniq)
-            local cidrs=$(mysql -B -u root -D neutron -e "SELECT cidr FROM subnets WHERE network_id ='$n'" | tail -n +2)
+            local cidrs=$(mariadb -B -u root -D neutron -e "SELECT cidr FROM subnets WHERE network_id ='$n'" | tail -n +2)
             for p in $proj_ids ; do
                 for c in $cidrs ; do
                     # echo $n $p $c $active_host $dbpass
@@ -2894,7 +2906,7 @@ os_galera_live_primary()
     local me=$(hostname) node st
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         [ "x$node" = "x$me" ] && continue
-        st=$(remote_run $node "mysql -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'")
+        st=$(remote_run $node "mariadb -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'")
         if [ "x$st" = "xPrimary" ] ; then
             echo "$node"
             return 0
@@ -2964,7 +2976,7 @@ os_segment_host_maintenance()   # $1=host  $2=True|False (default True)
 }
 
 # 0 (uniform) only if every control node reports the same MariaDB major.minor
-# -- the precondition for mysql_upgrade; a control-tier signal, not firmware
+# -- the precondition for mariadb-upgrade; a control-tier signal, not firmware
 os_mariadb_version_uniform()
 {
     # fail-safe: every control node must be reachable AND matching;
@@ -2973,7 +2985,7 @@ os_mariadb_version_uniform()
     hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
     [ -n "$hosts" ] || return 1
     for h in $hosts ; do
-        v=$(remote_run "$h" "mysql -N -e 'SELECT VERSION()' 2>/dev/null" | cut -d- -f1 | cut -d. -f1,2)
+        v=$(remote_run "$h" "mariadb -N -e 'SELECT VERSION()' 2>/dev/null" | cut -d- -f1 | cut -d. -f1,2)
         [ -n "$v" ] || return 1
         vers="$vers $v"
     done
@@ -2992,23 +3004,6 @@ os_rabbitmq_version_uniform()
     [ -n "$hosts" ] || return 1
     for h in $hosts ; do
         v=$(remote_run "$h" "rabbitmqctl version 2>/dev/null" | cut -d. -f1,2)
-        [ -n "$v" ] || return 1
-        vers="$vers $v"
-    done
-    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
-}
-
-os_neutron_version_uniform()
-{
-    # Same fail-safe contract as os_rabbitmq_version_uniform(): every control node
-    # must be reachable AND report the same neutron major version; unreachable =
-    # unknown, any miss => not uniform. Yoga reports 20.x, Antelope 22.x,
-    # Caracal 24.x.
-    local hosts h v vers=
-    hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
-    [ -n "$hosts" ] || return 1
-    for h in $hosts ; do
-        v=$(remote_run "$h" "neutron-server --version 2>&1 | tail -1" | awk '{print $NF}' | cut -d. -f1)
         [ -n "$v" ] || return 1
         vers="$vers $v"
     done
@@ -3191,7 +3186,7 @@ os_nova_pgpu_host_list_by_instance_id()
     declare -A rpids
 
     for rp in $($OPENSTACK allocation candidate list --resource PGPU=1 -f value -c "resource provider" -c traits | grep "$gvendor.*$gid" | awk '{print $1}' | sort) ; do
-        local host=$(/usr/bin/mysql -u root -D placement -e "select uuid,name from resource_providers where uuid='$rp'" | grep $rp | awk '{print $2}' | awk -F"_" '{print $1}')
+        local host=$(/usr/bin/mariadb -u root -D placement -e "select uuid,name from resource_providers where uuid='$rp'" | grep $rp | awk '{print $2}' | awk -F"_" '{print $1}')
         (( hosts[$host]++ ))
         if [ "${hosts[${host}]}" -le "$gcount" ] ; then
             rpids[$host]="${rpids[${host}]},$rp"
@@ -3209,6 +3204,49 @@ os_nova_pgpu_host_list_by_instance_id()
     done
 }
 
+# A value from nova.conf's [service_user], the identity nova sends its service token as.
+_os_nova_service_user()
+{
+    awk -v k="$1" '
+        /^\[/ { s = $0; next }
+        s == "[service_user]" {
+            n = $0; sub(/[ \t]*=.*/, "", n)
+            if (n == k) { sub(/^[^=]*=[ \t]*/, ""); print; exit }
+        }' /etc/nova/nova.conf
+}
+
+# Make one of the ARQ calls cyborg keeps for nova: bind, unbind, or delete a bound ARQ.
+#
+# cyborg 14.1.0 (CVE-2026-40214) refuses those three with 403 unless the request also
+# carries a service token whose user holds the service role -- how it stops a tenant
+# from rewriting the ARQs nova manages. nova does no ARQ bookkeeping for a cold
+# migration, so os_instance_pgpu_migrate does it itself and has to present the token
+# nova would: nova's own [service_user] identity, from nova.conf on this control node.
+# The osc cli has no way to attach a service token, hence curl.
+#
+# $1 = method, $2 = path under the accelerator endpoint, $3 = json body (optional).
+# Returns non-zero, and logs the status, unless cyborg answers 2xx.
+_os_arq_as_nova()
+{
+    local url token stoken code
+
+    url=$($OPENSTACK endpoint list --service accelerator --interface internal -f value -c URL | head -1)
+    token=$($OPENSTACK token issue -f value -c id)
+    stoken=$(OS_USERNAME=$(_os_nova_service_user username) \
+             OS_PASSWORD=$(_os_nova_service_user password) \
+             OS_PROJECT_NAME=$(_os_nova_service_user project_name) \
+             OS_USER_DOMAIN_NAME=$(_os_nova_service_user user_domain_name) \
+             OS_PROJECT_DOMAIN_NAME=$(_os_nova_service_user project_domain_name) \
+             $OPENSTACK token issue -f value -c id)
+    code=$(timeout $SRVTO curl -s -o /dev/null -w '%{http_code}' -X $1 \
+               -H "X-Auth-Token: $token" -H "X-Service-Token: $stoken" \
+               -H "OpenStack-API-Version: accelerator 2.1" \
+               -H "Content-Type: application/json" ${3:+-d "$3"} "$url$2")
+    [ "${code:0:1}" = "2" ] && return 0
+    log_error "_os_arq_as_nova: $1 $2 returned HTTP $code"
+    return 1
+}
+
 os_instance_pgpu_migrate()
 {
     local instance_id=$1
@@ -3220,8 +3258,9 @@ os_instance_pgpu_migrate()
 
     echo -n "unbinding accelerator from the original host ... "
     for arq in $(echo "$arqs_state" | awk '{print $1}') ; do
-        $OPENSTACK accelerator arq unbind $arq >/dev/null 2>&1
-        $OPENSTACK accelerator arq delete $arq >/dev/null 2>&1
+        _os_arq_as_nova PATCH /accelerator_requests \
+            "{\"$arq\": [{\"path\": \"/hostname\", \"op\": \"remove\"}, {\"path\": \"/device_rp_uuid\", \"op\": \"remove\"}, {\"path\": \"/instance_uuid\", \"op\": \"remove\"}]}"
+        _os_arq_as_nova DELETE "/accelerator_requests?arqs=$arq"
     done
     $OPENSTACK resource provider allocation unset --resource-class PGPU $instance_id >/dev/null 2>&1
     echo "done"
@@ -3242,7 +3281,11 @@ os_instance_pgpu_migrate()
     local alloc_str=
     local idx=0
     for rp in $(echo $rps | tr ',' ' ') ; do
-        $OPENSTACK accelerator arq bind ${arq_arr[${idx}]} $host $instance_id $rp $project_id >/dev/null 2>&1
+        # project_id makes the ARQ the instance owner's: cyborg 14.1.0 shows a
+        # non-admin caller -- nova acting for that owner included -- only the ARQs of
+        # its own project, and would otherwise stamp the caller's, admin's, on it.
+        _os_arq_as_nova PATCH /accelerator_requests \
+            "{\"${arq_arr[${idx}]}\": [{\"path\": \"/hostname\", \"op\": \"add\", \"value\": \"$host\"}, {\"path\": \"/device_rp_uuid\", \"op\": \"add\", \"value\": \"$rp\"}, {\"path\": \"/instance_uuid\", \"op\": \"add\", \"value\": \"$instance_id\"}, {\"path\": \"/project_id\", \"op\": \"add\", \"value\": \"$project_id\"}]}"
         alloc_str="$alloc_str --allocation rp=$rp,PGPU=1"
         idx=$(( idx + 1 ))
     done

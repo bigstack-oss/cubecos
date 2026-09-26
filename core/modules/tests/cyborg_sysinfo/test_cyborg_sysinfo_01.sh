@@ -34,7 +34,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 # fallback is for a by-hand run from the source directory, which is four levels
 # down from the top.
 TOP="${TOP_SRCDIR:-$DIR/../../../..}"
-SYSINFO="$TOP/core/cyborg/caracal_patch/accelerator/drivers/gpu/nvidia/sysinfo.py"
+SYSINFO="$TOP/core/cyborg/epoxy_patch/accelerator/drivers/gpu/nvidia/sysinfo.py"
 
 if [ ! -f "$SYSINFO" ]; then
     echo "FAIL: cannot find the patch under test at $SYSINFO"

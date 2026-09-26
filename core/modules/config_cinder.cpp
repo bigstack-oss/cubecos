@@ -77,10 +77,19 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * rootfs the antelope venv holds no cinder at all and the context would die with
  * FailedToDropPrivileges, and on a node upgraded in place it is worse -- the helper
  * imports the cinder 22.3.0 still sitting there and answers a 24.5.0 parent.
- * Naming the caracal helper explicitly avoids both; /etc/sudoers.d/cinder authorises
- * exactly this path.
+ * Naming the caracal helper explicitly avoided both.
+ *
+ * The pin therefore has to follow cinder across every venv boundary, and it moved to
+ * the epoxy venv with cinder (#655). The caracal helper is still installed -- manila
+ * and masakari escalate through it -- so leaving the pin behind would fail the same two
+ * ways one release on: cinder.privsep.sys_admin_pctxt dies with
+ * FailedToDropPrivileges on a fresh build, whose caracal venv holds no cinder, or
+ * imports a stale 24.5.0 on a node upgraded in place, and os_brick.privileged.default
+ * silently pairs a python 3.12 cinder on os-brick 6.11.1 with a python 3.11 helper on
+ * 6.7.3. /etc/sudoers.d/cinder authorises exactly this path, so the two move
+ * together.
  */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
 static const char USERPASS[] = "8YHpMKC1394HbTmL";
 static const char DBPASS[] = "hhyCDG3IdNmcQaJo";
@@ -440,7 +449,6 @@ InitConfig(Configs& config)
         "keystone_authtoken",
         "nova",
         "oslo_concurrency",
-        "oslo_messaging_amqp",
         "oslo_messaging_kafka",
         "oslo_messaging_notifications",
         "oslo_messaging_rabbit",
@@ -611,7 +619,19 @@ SetCeph(
     config[BUILTIN_STORAGE_BACKEND]["rbd_max_clone_depth"] = "5";
     config[BUILTIN_STORAGE_BACKEND]["enable_deferred_deletion"] = "true";
     config[BUILTIN_STORAGE_BACKEND]["rbd_flatten_volume_from_snapshot"] = "false";
-    config[BUILTIN_STORAGE_BACKEND]["image_upload_use_cinder_backend"] = "true";
+    // No image_upload_use_cinder_backend. It makes an upload clone the volume into an
+    // image volume and register that with glance as cinder://<id> instead of copying
+    // the data, which only a glance cinder store can serve -- and config_glance.cpp
+    // creates one per external backend alone (http:http,cube:rbd,<volumeType>:cinder).
+    // Nothing built on this cluster's Ceph gets one. Caracal's cinder learned that
+    // straight away: glance refused the location, and cinder deleted the clone and fell
+    // back to the ordinary upload -- but not before the clone had left the source
+    // volume's .clone_snap behind. Epoxy's cinder registers through glance's
+    // asynchronous location API instead, which accepts the request (202) and fails it
+    // afterwards in a background task ("Unknown scheme 'cinder'"), so cinder never
+    // falls back: the image stays queued, and the image volume stays behind, orphaned,
+    // once the image is deleted. The ordinary upload is the only path that has ever
+    // worked here, so it is now the one taken.
 }
 
 /**
@@ -798,7 +818,8 @@ AddCephPoolAsStorageBackend(
     config[pool]["rbd_max_clone_depth"] = "5";
     config[pool]["enable_deferred_deletion"] = "true";
     config[pool]["rbd_flatten_volume_from_snapshot"] = "false";
-    config[pool]["image_upload_use_cinder_backend"] = "true";
+    // no image_upload_use_cinder_backend, for the reason SetCeph() gives: glance has no
+    // cinder store for a Ceph pool of this cluster either
 }
 
 /**
@@ -818,6 +839,10 @@ SetStorageBackend(
     // Bounded so a wedged migration cannot block the commit, and with it the node's
     // slot in a rolling upgrade.
     HexUtilSystemF(0, 120, HEX_SDK " migrate_cinder_ext_storage_unsupported");
+    // Keep an upgraded cluster's Fujitsu ETERNUS backends on the password login that
+    // Epoxy no longer defaults to -- here for the same reasons, and bounded the same
+    // way.
+    HexUtilSystemF(0, 120, HEX_SDK " migrate_cinder_ext_storage_fujitsu_password");
 
     // move exta config files for external storage backends to Cinder config directory
     std::string fsError;

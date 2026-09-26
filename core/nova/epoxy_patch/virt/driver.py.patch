@@ -1,0 +1,20 @@
+--- virt/driver.py
++++ virt/driver.py
+@@ -1003,7 +1003,8 @@
+         raise NotImplementedError()
+ 
+     def resume_state_on_host_boot(self, context, instance, network_info,
+-                                  share_info, block_device_info=None):
++                                  share_info, block_device_info=None,
++                                  accel_info=None):
+         """resume guest state when a host is booted.
+ 
+         :param instance: nova.objects.instance.Instance
+@@ -1012,6 +1013,7 @@
+         :param share_info: a ShareMappingList containing the attached shares.
+         :param dict block_device_info:
+             The block device mapping of the instance.
++        :param accel_info: List of accelerator requests for this instance
+         """
+         raise NotImplementedError()
+ 

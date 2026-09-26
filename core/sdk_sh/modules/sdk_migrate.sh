@@ -295,6 +295,44 @@ migrate_cinder_ext_storage_unsupported()
     touch $STATE_DIR/cinder_ext_storage_unsupported_migrated
 }
 
+migrate_cinder_ext_storage_fujitsu_password()
+{
+    local f
+
+    if [ -f $STATE_DIR/cinder_ext_storage_fujitsu_password_migrated ] ; then
+        return 0
+    fi
+
+    if ! is_control_node ; then
+        touch $STATE_DIR/cinder_ext_storage_fujitsu_password_migrated
+        return 0
+    fi
+
+    # Epoxy's ETERNUS DX driver logs into the array's CLI with an SSH key unless
+    # told otherwise: fujitsu_passwordless is new in 2025.1 and defaults to True,
+    # and the key it then reads is fujitsu_private_key_path, which nothing on
+    # CubeCOS provisions. Caracal always logged in with the EternusUser and
+    # EternusPassword of the backend's cinder_eternus_config_file, which is how the
+    # built-in models are set up, so every CLI call an upgraded Fujitsu backend
+    # makes would fail -- upstream's upgrade note tells existing users to pin
+    # fujitsu_passwordless = False. The models carry that pin now, but a model only
+    # reaches backends created or re-applied after the upgrade, so the backends
+    # /etc/cinder/backends already holds are pinned here, the same way and for the
+    # same reasons migrate_cinder_ext_storage_unsupported opts SC backends in.
+    #
+    # A backend that already names fujitsu_passwordless is left alone: that is an
+    # operator's choice, made after the option existed.
+    for f in /etc/cinder/backends/ext_storage_*.conf ; do
+        [ -f "$f" ] || continue
+        grep -qE "^volume_driver[[:space:]]*=.*eternus_dx_(fc|iscsi)\." "$f" || continue
+        grep -qE "^fujitsu_passwordless" "$f" && continue
+        sed -i "/^volume_driver[[:space:]]*=.*eternus_dx_/a fujitsu_passwordless = False" "$f"
+        log_info "migrate_cinder_ext_storage_fujitsu_password: kept $f on the ETERNUS password login"
+    done
+
+    touch $STATE_DIR/cinder_ext_storage_fujitsu_password_migrated
+}
+
 migrate_glance_db()
 {
     if [ -f $STATE_DIR/glance_db_migrated ] ; then
@@ -339,82 +377,25 @@ migrate_neutron_db()
         # upgrade to 2.2.0
         su -s /bin/sh -c "neutron-db-manage --subproject neutron-vpnaas upgrade heads" neutron
 
-        # Antelope <-> Caracal compatibility shim for the mixed-version window.
+        # No compatibility shim for the caracal <-> epoxy window: every migration
+        # 2024.2 and 2025.1 add is an additive expand (numa_affinity_policy's
+        # 'socket', the porttrusted table, networks.qinq), the contract head does not
+        # move, and a caracal neutron-server names none of them.
         #
-        # Exactly one such shim is carried at a time. The supported upgrade path
-        # is stepwise -- 3.1.0 (Yoga) -> 3.1.10 (Antelope) -> 3.1.20 (Caracal),
-        # no jumping -- so a Caracal build can never meet a Yoga neutron-server,
-        # and the Yoga <-> Antelope portforwardings shim that used to live here
-        # was dead code the moment this build stopped shipping Antelope.
-        #
-        # 2023.2/expand/93f394357a27_remove_in_use_on_subnets.py drops
-        # subnets.in_use. Upstream put it in the *expand* branch -- it declares an
-        # expand_drop_exceptions() to opt out of the no-drops-in-expand rule -- so
-        # there is no phased form of this migration that leaves the column
-        # standing: the moment the first node migrates the shared schema, every
-        # still-Antelope neutron-server on the other control nodes answers 500 to
-        # any subnet query with
-        #   (1054, "Unknown column 'subnets.in_use' in 'SELECT'")
-        # Antelope's models_v2.HasInUse declares in_use as a real column and
-        # Subnet mixes it in, so this is not confined to one call: it takes out
-        # the subnet API on 2 of 3 servers behind the VIP, and with it the live
-        # migration that rolling_upgrade drains each node with. Observed on
-        # cube4510 2026-09-05 -- 0 of 13 VMs could be evacuated off cube452.
-        #
-        # Deferring the migration instead does not help; it only inverts which
-        # servers are broken, and worse, the healthy pool then shrinks as the
-        # roll proceeds instead of growing. Caracal does not use the column at
-        # all -- 2024.1's models_v2.HasInUse carries no in_use attribute, both
-        # lock registers take the row lock with SELECT ... FOR UPDATE / LOCK IN
-        # SHARE MODE alone -- so nothing on the new side names it, and it is
-        # enough that the value reads false. Re-add it in exactly the shape
-        # ussuri/expand/d8bdf05313f4_add_in_use_to_subnet.py created it, which
-        # is the shape Antelope's ORM still expects.
-        #
-        # Deliberately a plain column and not a generated one. Antelope's
-        # HasInUse declares in_use with a *python-side* default (default=False),
-        # so SQLAlchemy names it in the INSERT for every subnet it creates, and
-        # MariaDB refuses a supplied value for a generated column: ERROR 1906
-        # under any strict sql_mode, which covers both oslo.db's
-        # mysql_sql_mode=TRADITIONAL default (nothing in this tree overrides it)
-        # and our own server-wide STRICT_TRANS_TABLES. A generated column would
-        # therefore keep subnet *reads* alive and break subnet *create* on every
-        # still-Antelope server for the length of the window. A plain column
-        # answers both dialects -- Antelope names it and the value is accepted,
-        # Caracal does not name it and takes the DEFAULT -- and because neither
-        # release's lock register ever writes the column, the shim costs no
-        # locking guarantee on either side.
-        #
-        # migrate_neutron_db_post() drops it once no Antelope server is left.
-        if [ "$($MYSQL -N -u root -D neutron -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'neutron' AND TABLE_NAME = 'subnets' AND COLUMN_NAME = 'in_use'")" = "0" ] ; then
-            $MYSQL -u root -D neutron -e "ALTER TABLE subnets ADD COLUMN in_use tinyint(1) NOT NULL DEFAULT 0"
-        fi
+        # Exactly one such shim is carried at a time. The supported upgrade path is
+        # stepwise -- 3.1.10 (Antelope) -> 3.1.20 (Caracal) -> 3.2.0 (Epoxy), no jumping -- so
+        # an epoxy build can never meet an Antelope neutron-server, and the
+        # Antelope <-> Caracal subnets.in_use shim that used to live here (#1431) is
+        # dead code. Its leftover is not: the shim re-added the column for the mixed
+        # window and left dropping it to migrate_neutron_db_post(), which only
+        # cluster_start ran, and a master-first roll never reaches it -- so a 3.1.20
+        # cluster can still carry the column. Neither caracal's nor epoxy's ORM names
+        # it (HasInUse is only the two lock registers in both), so it goes here, on the
+        # first control node that migrates, whatever the others still run.
+        $MYSQL -u root -D neutron -e "ALTER TABLE subnets DROP COLUMN IF EXISTS in_use"
     fi
 
     touch $STATE_DIR/neutron_db_migrated
-}
-
-migrate_neutron_db_post()
-{
-    if [ -f $STATE_DIR/neutron_db_post_migrated ] ; then
-        return 0
-    fi
-
-    if ! is_control_node ; then
-        touch $STATE_DIR/neutron_db_post_migrated
-        return 0
-    fi
-
-    # Drop the mixed-window compatibility shim migrate_neutron_db() added, but
-    # only once every control node runs Caracal's neutron-server. An unreachable
-    # node counts as unknown and holds the shim, so a half-finished roll never
-    # loses the column out from under an Antelope server; carrying one unused
-    # column for one more cluster_start costs nothing.
-    $HEX_SDK os_neutron_version_uniform || return 0
-
-    $MYSQL -u root -D neutron -e "ALTER TABLE subnets DROP COLUMN IF EXISTS in_use"
-
-    touch $STATE_DIR/neutron_db_post_migrated
 }
 
 migrate_neutron_ovn_sync()
@@ -638,9 +619,20 @@ migrate_cyborg_db()
 
     if is_control_node ; then
         su -s /bin/sh -c "cyborg-dbsync --config-file /etc/cyborg/cyborg.conf upgrade" cyborg
+        # cyborg 14.1.0 (CVE-2026-40214) scopes an ARQ to its project_id, a column
+        # 12.0.0 never filled in -- nova's bind does not send one -- so every ARQ bound
+        # before the upgrade would drop out of what a non-admin caller can see, nova
+        # acting for the instance's owner included. online_data_migrations backfills
+        # it from nova's record of each bound instance, the step upstream's upgrade
+        # notes place between the schema upgrade and the service restart.
+        # cyborg-conductor repeats it at startup, but only logs a failure there. Chain
+        # the marker to it, the way migrate_nova_db_post() does, so a failure is
+        # retried by the next Commit() rather than recorded as done.
+        ( su -s /bin/sh -c "cyborg-dbsync --config-file /etc/cyborg/cyborg.conf online_data_migrations" cyborg && \
+              touch $STATE_DIR/cyborg_db_migrated ) || true
+    else
+        touch $STATE_DIR/cyborg_db_migrated
     fi
-
-    touch $STATE_DIR/cyborg_db_migrated
 }
 
 migrate_ceph()

@@ -1146,8 +1146,8 @@ _essential_check_one()
 # With 'repair': a failed check triggers its surgical repair once, then
 # re-checks -- a healthy pass has zero side effects. 0 = ready, 1 = timeout.
 # Repair the one cause the gate named, at most once per cause per run. Causes
-# with no branch (ceph, ceph-osd-down, drain-host-nova-down) are wait-only on
-# purpose.
+# with no branch (ceph, ceph-osd-down, rabbitmq-sync, drain-host-nova-down) are
+# wait-only on purpose.
 _live_migration_repair()
 {
     local why=$1 _h
@@ -1192,8 +1192,26 @@ live_migration_gate()
     while [ $SECONDS -lt $deadline ] ; do
         why=
         # version-SAFE cluster membership (true/false regardless of version)
-        $HEX_SDK health_mysql_check    >/dev/null 2>&1 || why=galera
-        [ -z "$why" ] && { $HEX_SDK health_rabbitmq_check >/dev/null 2>&1 || why=rabbitmq ; }
+        #
+        # -m force, or the answer may not be this node's. _hex_exec runs a
+        # health_*_check only when no control node holds its /run/<check>ing marker;
+        # otherwise it returns this node's last cached result, and 0 when there is
+        # none. The marker is taken by the periodic checks on every node, and it is
+        # never tested for a live pid, so a check killed mid-run leaves it behind for
+        # good. Unforced, a node whose mariadb is down passes this gate whenever
+        # another node happens to be checking -- and a node that has just booted has
+        # no cached result at all, so it passes with 0: exactly the node the roll is
+        # asking about.
+        $HEX_SDK -m force health_mysql_check    >/dev/null 2>&1 || why=galera
+        [ -z "$why" ] && { $HEX_SDK -m force health_rabbitmq_check >/dev/null 2>&1 || why=rabbitmq ; }
+        # rejoined is not synchronised: a returning broker's mirrors start empty,
+        # and until ha-sync-mode:automatic has filled them, releasing the next
+        # node leaves those queues on only the nodes that never left. Wait-only,
+        # the sync is already running
+        [ -z "$why" ] && {
+            local _unsync=$($HEX_SDK rabbitmq_unsynced_mirror_count 2>/dev/null)
+            [ "${_unsync:-0}" -gt 0 ] 2>/dev/null && why=rabbitmq-sync
+        }
         [ -z "$why" ] && { $CEPH health 2>/dev/null | grep -qiE 'HEALTH_ERR|inactive|incomplete|peering|stale' && why=ceph ; }
         # wait for the rebooted node's OSDs to rejoin (in-but-down = not back);
         # tolerates degraded/recovering, does not require active+clean
@@ -1235,7 +1253,8 @@ live_migration_gate()
         fi
         # repair mode: fix what the failed check names, once per cause, then
         # re-check immediately. ceph/ceph-osd-down get no repair -- OSD rejoin
-        # is time-based and the rolling noout guard already prevents churn.
+        # is time-based and the rolling noout guard already prevents churn --
+        # and neither does rabbitmq-sync, which the broker is already doing.
         if [ "$repair" = "repair" ] ; then
             case " $repaired " in
                 *" $why "*) : ;;    # already repaired this cause; just wait
