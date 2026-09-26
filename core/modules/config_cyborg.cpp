@@ -240,21 +240,22 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         // Cyborg ships no rootwrap, so unlike cinder/glance the helper cannot be
         // resolved through rootwrap exec_dirs and has to be named here.
         //
-        // The caracal helper is named in full rather than reached through
+        // The helper is named in full rather than reached through
         // /usr/bin/privsep-helper, which core/nova/nova.mk kept pointed at the
         // *antelope* venv until #639 removed it. A privsep helper runs the caller's
-        // own code -- it imports
-        // cyborg and executes the entrypoint the client asks for -- so a python 3.10
-        // helper cannot serve a 3.11 cyborg. That combination has been seen on
-        // jim-1cc for glance (see config_glance.cpp): the service ran from
-        // /opt/openstack-caracal/bin/python3.11 while its helper ran from
-        // /opt/openstack-antelope/bin/python3.10. manila and masakari pin the caracal
-        // path for the same reason, and glance, cinder, nova and neutron, which have
-        // moved on to the epoxy venv, pin that venv's helper.
+        // own code -- it imports cyborg and executes the entrypoint the client asks
+        // for -- so it has to follow cyborg across every venv boundary. It moved to
+        // the caracal venv with #633 and to the epoxy venv with #659. The caracal
+        // helper is still installed for manila and masakari, so leaving the pin
+        // behind would not fail loudly: on a freshly built rootfs the caracal venv
+        // holds no cyborg and the agent dies with FailedToDropPrivileges, and on a
+        // node upgraded in place it imports the cyborg 12.0.0 still sitting there and
+        // answers a 14.1.0 parent with no error at all. glance, cinder, nova and
+        // neutron pin the epoxy helper for the same reason.
         //
         // /etc/sudoers.d/cyborg authorises exactly this path -- the two have to move
         // together, or privsep is refused by sudo instead of failing to import.
-        cfg["cyborg_sys_admin"]["helper_command"] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+        cfg["cyborg_sys_admin"]["helper_command"] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
         cfg["placement"].clear();
         cfg["placement"]["auth_type"] = "password";

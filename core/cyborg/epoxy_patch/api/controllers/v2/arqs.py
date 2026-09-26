@@ -30,6 +30,7 @@ from cyborg.common import authorize_wsgi
 from cyborg.common import constants
 from cyborg.common import exception
 from cyborg.common.i18n import _
+from cyborg.common import service_token_utils
 from cyborg import objects
 
 LOG = log.getLogger(__name__)
@@ -97,6 +98,39 @@ class ARQCollection(base.APIBase):
         return collection
 
 
+def _require_service_token(context, action):
+    """Raise if the request does not carry a valid service token.
+
+    Used for operations that must only be performed by Nova on
+    behalf of a user (bind, unbind, delete-by-instance).
+    """
+    if not service_token_utils.is_service_request(context):
+        raise exception.Forbidden(
+            message=_(
+                'This operation requires a service token. '
+                'Use the Compute API to manage instance accelerators.'
+            )
+        )
+
+
+def _check_bound_arq_service_token(context, extarq, action):
+    """Reject direct user operations on bound ARQs.
+
+    Once an ARQ has instance_uuid set, only Nova (identified
+    by a service token) may modify or delete it.
+    """
+    if extarq.arq.instance_uuid and not service_token_utils.is_service_request(
+        context
+    ):
+        raise exception.Forbidden(
+            message=_(
+                'ARQ %(arq)s is bound to instance %(instance)s. '
+                'Use the Compute API to manage instance accelerators.'
+            )
+            % {'arq': extarq.arq.uuid, 'instance': extarq.arq.instance_uuid}
+        )
+
+
 class ARQsController(base.CyborgController):
     """REST controller for ARQs.
 
@@ -155,6 +189,7 @@ class ARQsController(base.CyborgController):
             arq_fields = {
                 'device_profile_name': devprof.name,
                 'device_profile_group_id': group_id,
+                'project_id': context.project_id,
             }
             for i in range(num_accels):
                 obj_arq = objects.ARQ(context, **arq_fields)
@@ -169,7 +204,7 @@ class ARQsController(base.CyborgController):
         LOG.info('[arqs] post returned: %s', ret)
         return ret
 
-    @authorize_wsgi.authorize_wsgi("cyborg:arq", "get_one")
+    @authorize_wsgi.authorize_wsgi("cyborg:arq", "get_one", False)
     @expose.expose(ARQ, types.uuid)
     def get_one(self, uuid):
         """Get a single ARQ by UUID."""
@@ -244,11 +279,15 @@ class ARQsController(base.CyborgController):
                 reason='Provide either an ARQ uuid list or an instance UUID')
         elif arqs:
             LOG.info("[arqs] delete. arqs=(%s)", arqs)
-            pecan.request.conductor_api.arq_delete_by_uuid(context, arqs)
+            arqlist = arqs.split(',')
+            for arq_uuid in arqlist:
+                extarq = objects.ExtARQ.get(context, arq_uuid)
+                _check_bound_arq_service_token(context, extarq, 'delete')
+            objects.ExtARQ.delete_by_uuid(context, arqlist)
         else:  # instance is not None
             LOG.info("[arqs] delete. instance=(%s)", instance)
-            pecan.request.conductor_api.arq_delete_by_instance_uuid(
-                context, instance)
+            _require_service_token(context, 'delete')
+            objects.ExtARQ.delete_by_instance(context, instance)
 
     def _validate_arq_patch(self, patch):
         """Validate a single patch for an ARQ.
@@ -258,9 +297,12 @@ class ARQsController(base.CyborgController):
             value field of arq_uuid in patch() method below.
         :returns: dict of valid fields
         """
-        valid_fields = {'hostname': None,
-                        'device_rp_uuid': None,
-                        'instance_uuid': None}
+        context = pecan.request.context
+        valid_fields = {
+            'hostname': None,
+            'device_rp_uuid': None,
+            'instance_uuid': None,
+        }
         if utils.allow_project_id():
             valid_fields['project_id'] = None
         if ((not all(p['op'] == 'add' for p in patch)) and
@@ -270,19 +312,40 @@ class ARQsController(base.CyborgController):
 
         for p in patch:
             path = p['path'].lstrip('/')
-            if path == 'project_id' and not utils.allow_project_id():
-                raise exception.NotAcceptable(_(
-                    "Request not acceptable. The minimal required API "
-                    "version should be %(base)s.%(opr)s") %
-                    {'base': versions.BASE_VERSION,
-                     'opr': versions.MINOR_1_PROJECT_ID})
+            if path == 'project_id':
+                if not utils.allow_project_id():
+                    raise exception.NotAcceptable(
+                        _(
+                            "Request not acceptable. The minimal required API "
+                            "version should be %(base)s.%(opr)s"
+                        )
+                        % {
+                            'base': versions.BASE_VERSION,
+                            'opr': versions.MINOR_1_PROJECT_ID,
+                        }
+                    )
+                # Only cloud admins may set or change project_id in a patch;
+                # other callers get ownership from the request context below.
+                if not context.is_admin:
+                    raise exception.HTTPForbidden(resource='cyborg:arq:update')
             if path not in valid_fields.keys():
                 reason = 'Invalid path in patch {}'.format(p['path'])
                 raise exception.PatchError(reason=reason)
             if p['op'] == 'add':
                 valid_fields[path] = p['value']
-        not_found = [field for field, value in valid_fields.items()
-                     if value is None]
+
+        if patch[0]['op'] == 'add':
+            provided_pid = valid_fields.get('project_id')
+            # Always set project_id from context when not explicitly provided
+            # by an admin, or when using API < 2.1 (no project_id in patch).
+            if not provided_pid:
+                valid_fields['project_id'] = context.project_id
+
+        not_found = [
+            field
+            for field, value in valid_fields.items()
+            if value is None and field != 'project_id'
+        ]
         if patch[0]['op'] == 'add' and len(not_found) > 0:
             msg = ','.join(not_found)
             reason = _('Fields absent in patch {}').format(msg)
@@ -322,8 +385,9 @@ class ARQsController(base.CyborgController):
                ],
              "$arq_uuid": [...]
             }
-            In particular, all and only these 4 fields must be present,
-            and only 'add' or 'remove' ops are allowed.
+            In particular, all required bind fields must be present. At API
+            v2.1+, administrators may also set optional ``/project_id``.
+            Only 'add' or 'remove' ops are allowed.
         """
         LOG.info('[arqs] patch. list=(%s)', patch_list)
         context = pecan.request.context
@@ -341,8 +405,11 @@ class ARQsController(base.CyborgController):
         # So, for bind requests, we first check that no ARQs are already
         # associated with the instance specified in the binding.
         patch = list(patch_list.values())[0]
-        #if patch[0]['op'] == 'add':
-        #    self._check_if_already_bound(context, valid_fields)
+        if patch[0]['op'] == 'add':
+            _require_service_token(context, 'update')
+            #self._check_if_already_bound(context, valid_fields)
+        elif patch[0]['op'] == 'remove':
+            _require_service_token(context, 'update')
 
         pecan.request.conductor_api.arq_apply_patch(
             context, patch_list, valid_fields)
