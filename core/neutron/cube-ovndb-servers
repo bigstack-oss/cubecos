@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# pacemaker's ocf:ovn:ovndb-servers on CubeCOS: /usr/lib/ocf/resource.d/ovn/ovndb-servers
+# points here instead of at the agent itself.
+#
+# OVN supports an ovn-controller newer than ovn-northd and the NB/SB databases, never
+# older, but an upgrade roll reboots every control node before any compute. So on a hop
+# that moves OVN, a control node that carried the previous central across keeps running
+# it (ovn_central_compat_enter, sdk_ovn.sh) until every chassis runs the image's OVN, and
+# ovn_central_switch then moves the whole cluster over in one step.
+#
+# The agent is byte-identical across OVN releases; only the ovn-ctl it drives differs,
+# and it takes that from its ovn_ctl parameter. The parameter cannot be set on the
+# resource: the CIB is shared with control nodes still on the previous release, which
+# have no copy of that central here. So the choice is made per node, here, from whether
+# this node holds the previous central's databases and this image carries that central.
+# An image that does not move OVN carries none, and this always runs the RPM's agent as
+# it is. OVN_COMPAT_VER is sdk_ovn.sh's: re-point both together.
+OVN_COMPAT_VER=23.03
+if [ -z "$OCF_RESKEY_ovn_ctl" ] && [ -e /etc/ovn/compat-$OVN_COMPAT_VER/ovnnb_db.db ] &&
+   [ -x /opt/ovn-$OVN_COMPAT_VER/share/ovn/scripts/ovn-ctl ] ; then
+    export OCF_RESKEY_ovn_ctl=/usr/sbin/cube-ovn-ctl-compat
+fi
+exec /usr/share/ovn/scripts/ovndb-servers.ocf "$@"

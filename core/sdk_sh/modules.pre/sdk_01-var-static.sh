@@ -31,7 +31,7 @@ SETTINGS_SYS=/etc/settings.sys
 
 IP="timeout $SRVTO /sbin/ip"
 OPENSTACK="timeout $SRVTO /usr/bin/openstack"
-# /usr/bin, not /usr/local/bin: core/nova links the antelope venv's client there.
+# /usr/bin, not /usr/local/bin: core/nova links the epoxy venv's client there.
 NOVA="timeout $SRVSTO /usr/bin/nova"
 MANILA="timeout $SRVTO /usr/bin/manila"
 DNF="/usr/bin/dnf"
@@ -59,7 +59,7 @@ ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
 TERRAFORM_CUBE="/usr/local/bin/terraform-cube.sh"
 TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD="/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars"
 CURL="timeout $SRVTO /usr/bin/curl"
-MYSQL="timeout $SRVTO /usr/bin/mysql"
+MYSQL="timeout $SRVTO /usr/bin/mariadb"
 
 RESERVED_USERS="admin_cli\|masakari\|placement\|heat\|glance\|heat_domain_admin\|neutron\|nova\|cyborg\|cinder\|barbican\|manila\|octavia\|designate\|ironic\|ironic-inspector\|watcher"
 

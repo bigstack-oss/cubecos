@@ -165,7 +165,7 @@ QEMU_VER := -10.1.0-23.el9
 # Filename NVR (no epoch); kojihub keeps builds the c9s mirror rotates away, so an
 # air-gapped rebuild resolves the exact NVR (same pattern as mysql.mk).
 QEMU_NVR := 10.1.0-23.el9
-QEMU_URL := https://kojihub.stream.centos.org/kojifiles/packages/qemu-kvm/10.1.0/23.el9/x86_64
+QEMU_URL := $(KOJIHUB_DL_HOST)/kojifiles/packages/qemu-kvm/10.1.0/23.el9/x86_64
 QEMU_PKGS := qemu-kvm qemu-kvm-device-display-virtio-gpu-pci qemu-kvm-device-display-virtio-gpu
 QEMU_PKGS += qemu-kvm-device-display-virtio-vga qemu-kvm-device-usb-redirect qemu-kvm-device-usb-host
 QEMU_PKGS += qemu-guest-agent qemu-kvm-block-rbd qemu-kvm-block-blkio qemu-kvm-common qemu-kvm-core
@@ -240,6 +240,23 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(PYTHON_VER) ]
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(PYTHON_VER) ]
 
+# install python 3.12 for openstack epoxy
+rootfs_install::
+	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
+	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
+	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
+	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
+	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(NEXT_PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(NEXT_PYTHON_PATCH_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz
+	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz -C /usr/src/python-$(NEXT_PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER) && ./configure --enable-optimizations"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER) && make altinstall"
+	$(Q)umount -l $(ROOTDIR)/dev || true
+	$(Q)# ensure python 3.12 is successfully built
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(NEXT_PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(NEXT_PYTHON_VER) ]
+
 # NOTE: why the setuptools pin is applied at venv creation, below, rather than being
 # left to whichever later `pip install -c` happens to pull setuptools in as a
 # dependency. (Which version, and why that number, is the NOTE after the venv block.)
@@ -285,8 +302,12 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
-# upper-constraints.txt copied down verbatim, save for one local delta -- where the
-# antelope file it replaced carried six. Upstream does not pin setuptools, so this venv used
+# upper-constraints.txt copied down verbatim, save for two local deltas -- where the
+# antelope file it replaced carried six. One is libvirt-python, raised to 11.10.0 so
+# that it builds against the libvirt-devel headers core/nova/nova.mk holds;
+# core/masakari/masakari.mk is what installs it into this venv since nova moved on to
+# the epoxy one. The other is setuptools, and it is what this NOTE is about.
+# Upstream does not pin setuptools, so this venv used
 # to land on whatever was current (84.0.0), which was fine while skyline was the only
 # occupant. keystone is not: keystonemiddleware 10.6.0 does `import pkg_resources` in
 # _common/config.py, and setuptools 82 deleted pkg_resources, so every gunicorn worker
@@ -316,6 +337,36 @@ rootfs_install::
 # Verified in a python 3.11 venv before the bump: horizon 24.0.2's six sdists build
 # under --no-build-isolation, ceph's rados and rbd bindings produce the same flat
 # .so + .dist-info layout as under 65.7.0 and import, and pkg_resources is present.
+
+# set up the execution context for openstack epoxy
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p $(NEXT_OPENSTACK_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) python$(NEXT_PYTHON_VER) -m venv $(NEXT_OPENSTACK_HOME_DIR)
+	$(Q)cp -f $(NEXT_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
+
+# NOTE: os-epoxy-pip-upper-constraints.txt is upstream's stable/2025.1
+# upper-constraints.txt copied down verbatim, save for two local deltas the caracal
+# file also carries: libvirt-python, raised to 11.10.0 to match the libvirt-devel
+# headers core/nova/nova.mk holds, and setuptools, which upstream does not pin.
+# setuptools is pinned at venv creation above for the reason the NOTE before the
+# caracal venv gives.
+#
+# The runtime half of the caracal argument has gone: keystonemiddleware 10.9.1 no
+# longer imports pkg_resources, and pbr 7.0.0 reaches for it only when
+# importlib.metadata is missing, which it never is on 3.12 -- keystone's whole import
+# chain loads with pkg_resources blocked. The build half has not: every
+# --no-build-isolation install in this venv builds against this setuptools, and four
+# of the sdists horizon 25.3.2 pulls in are XStatic packages whose setup.py imports a
+# pkg_resources-declared namespace. Built without pip's wheel cache, all four fail
+# under setuptools 82.0.0 with "No module named 'pkg_resources'" and build under
+# 79.0.1. So the ceilings are the caracal ones, below 82 and below 80, and so is the
+# rule for the number: the newest release that clears both. That is 79.0.1
+# (2025-04-23), the last before 80.0.0, and three weeks after epoxy shipped. Python
+# 3.12 sets a floor rather than a ceiling -- it removed pkgutil.ImpImporter, which
+# pkg_resources references unconditionally before setuptools 66.1 -- and 79.0.1
+# clears it.
 
 # install the openstack cli inside the python 3.11 virtual environment
 #

@@ -1,0 +1,200 @@
+--- virt/libvirt/driver.py
++++ virt/libvirt/driver.py
+@@ -86,6 +86,7 @@
+ from nova.console import type as ctype
+ from nova import context as nova_context
+ from nova import crypto
++from nova import cube_live_resize as clr
+ from nova.db import constants as db_const
+ from nova import exception
+ from nova.i18n import _
+@@ -4545,7 +4546,8 @@
+         guest.sync_guest_time()
+ 
+     def resume_state_on_host_boot(self, context, instance, network_info,
+-                                  share_info, block_device_info=None):
++                                  share_info, block_device_info=None,
++                                  accel_info=None):
+         """resume guest state when a host is booted."""
+         # Check if the instance is running already and avoid doing
+         # anything if it is.
+@@ -4567,7 +4569,7 @@
+         # Be as absolute as possible about getting it back into
+         # a known and running state.
+         self._hard_reboot(context, instance, network_info,
+-            share_info, block_device_info
++            share_info, block_device_info, accel_info=accel_info
+         )
+ 
+     def rescue(self, context, instance, network_info, image_meta,
+@@ -7676,6 +7678,8 @@
+ 
+         self._guest_add_iommu_device(guest, image_meta, flavor)
+ 
++        self._guest_add_live_resize_headroom(guest, flavor, instance)
++
+         return guest
+ 
+     def _get_ordered_vpmems(self, instance, flavor):
+@@ -7693,6 +7697,161 @@
+             for resource in vpmem_resources]
+         return vpmems
+ 
++    def _guest_add_live_resize_headroom(self, guest, flavor, instance=None):
++        # cube live-resize: declare the hotplug ceiling at boot; (0, 0)
++        # means the flavor is blocked or opted out.
++        max_vcpus, max_mem_mb = clr.headroom(flavor)
++        if max_vcpus > flavor.vcpus and guest.cpu is not None:
++            # libvirt requires sockets*cores*threads == MAX vcpus; scale
++            # sockets, or skip cpu headroom if it does not divide evenly.
++            per_socket = (guest.cpu.cores or 1) * (guest.cpu.threads or 1)
++            if max_vcpus % per_socket == 0:
++                guest.cpu.sockets = max_vcpus // per_socket
++            else:
++                max_vcpus = 0
++        if max_vcpus > flavor.vcpus:
++            guest.vcpus = max_vcpus
++            guest.vcpus_current = flavor.vcpus
++        if max_mem_mb > flavor.memory_mb:
++            if guest.max_memory_size is not None:
++                return  # vpmem already owns maxMemory; don't fight it
++            guest.max_memory_size = max_mem_mb * units.Ki
++            guest.max_memory_slots = clr.MEM_SLOTS
++            # libvirt requires a guest NUMA topology for memory hotplug;
++            # synthesize one flat cell when the instance has none.
++            if guest.cpu is not None and not guest.cpu.numa:
++                cell = vconfig.LibvirtConfigGuestCPUNUMACell()
++                cell.id = 0
++                cell.cpus = set(range(guest.vcpus))
++                cell.memory = flavor.memory_mb * units.Ki
++                numa = vconfig.LibvirtConfigGuestCPUNUMA()
++                numa.cells = [cell]
++                guest.cpu.numa = numa
++        if instance is not None:
++            # record what was actually baked in, after the sockets-divisibility
++            # adjustment above may have zeroed the vCPU half
++            clr.record_headroom(instance, max_vcpus, max_mem_mb)
++
++    def check_live_resize(self, instance, new_flavor):
++        # cube live-resize: can the RUNNING domain grow to new_flavor?
++        # The domain's baked-in ceiling is authoritative, not the config.
++        guest = self._host.get_guest(instance)
++        old = instance.flavor
++        if new_flavor.vcpus > old.vcpus:
++            max_vcpus = guest._domain.maxVcpus()
++            if max_vcpus < new_flavor.vcpus:
++                raise exception.LiveResizeError(reason=_(
++                    "domain vCPU ceiling %(max)d < requested %(want)d "
++                    "(instance must be rebooted to gain headroom)") % {
++                        "max": max_vcpus, "want": new_flavor.vcpus})
++        if new_flavor.memory_mb > old.memory_mb:
++            tree = etree.fromstring(guest.get_xml_desc())
++            maxmem = tree.find("./maxMemory")
++            if maxmem is None or int(maxmem.text) < (
++                    new_flavor.memory_mb * units.Ki):
++                raise exception.LiveResizeError(reason=_(
++                    "domain memory ceiling missing or too small "
++                    "(instance must be rebooted to gain headroom)"))
++        # A boot-from-volume instance has no image_ref and no 'disk' image --
++        # its root is cinder's. Same test nova uses where context is absent.
++        if new_flavor.root_gb > old.root_gb and instance.image_ref:
++            # Image.resize_image is a no-op on the base class, so a backend
++            # that never overrode it would silently leave the guest short.
++            image = self.image_backend.by_name(instance, "disk")
++            if type(image).resize_image is imagebackend.Image.resize_image:
++                raise exception.LiveResizeError(reason=_(
++                    "image backend %(be)s cannot grow a root disk in place") %
++                    {"be": type(image).__name__})
++
++    def _live_grow_root(self, guest, instance, new_flavor):
++        """Grow the root image, then tell the running guest.
++
++        Same two steps nova uses for an attached volume in extend_volume().
++        This grows the block device only -- growpart/resizefs are cloud-init
++        boot-time modules, so the guest's partition and filesystem stay at the
++        old size until it reboots or grows them itself.
++        """
++        size = new_flavor.root_gb * units.Gi
++        image = self.image_backend.by_name(instance, "disk")
++        try:
++            image.resize_image(size)
++        except Exception as ex:
++            raise exception.LiveResizeError(reason=_(
++                "could not grow the root image: %s") % ex)
++        # blockResize wants the target dev. Image.path is an rbd connection
++        # string it rejects, so match the disk the way the backend built it.
++        names = {image.path}
++        rbd_name = getattr(image, "rbd_name", None)
++        if rbd_name:
++            names.add("%s/%s" % (image.driver.pool, rbd_name))
++        dev = None
++        for disk in guest.get_all_disks():
++            if disk.source_path in names or disk.source_name in names:
++                dev = disk.target_dev
++                break
++        if dev is None:
++            LOG.warning("live-resize: root grown to %dG but its disk was not "
++                        "found in the domain config; the guest keeps the old "
++                        "size until it reboots", new_flavor.root_gb,
++                        instance=instance)
++            return
++        try:
++            guest.get_block_device(dev).resize(size)
++        except libvirt.libvirtError as ex:
++            # The image is bigger; the guest just has not been told. A hard
++            # reboot picks the new size up, so the flavor change still stands.
++            LOG.warning("live-resize: root grown to %(gb)dG but the guest was "
++                        "not notified: %(err)s",
++                        {"gb": new_flavor.root_gb, "err": ex},
++                        instance=instance)
++        LOG.info("live-resize: root disk grown to %dG", new_flavor.root_gb,
++                 instance=instance)
++
++    def live_resize(self, context, instance, new_flavor, cpus=True,
++                    memory=True):
++        # cube live-resize: memory first (clean abort), then vCPUs; the
++        # cpus/memory flags split the grow around a live migration.
++        guest = self._host.get_guest(instance)
++        old = instance.flavor
++        mem_delta_kb = (new_flavor.memory_mb - old.memory_mb) * units.Ki
++        if not memory:
++            mem_delta_kb = 0
++        dev = None
++        if mem_delta_kb > 0:
++            dev = vconfig.LibvirtConfigGuestMemoryDevice()
++            dev.target_size = mem_delta_kb
++            dev.target_node = 0
++            try:
++                guest.attach_device(dev, persistent=True, live=True)
++            except libvirt.libvirtError as ex:
++                raise exception.LiveResizeError(reason=str(ex))
++        if cpus and new_flavor.vcpus > old.vcpus:
++            flags = (libvirt.VIR_DOMAIN_AFFECT_LIVE |
++                     libvirt.VIR_DOMAIN_AFFECT_CONFIG)
++            try:
++                guest._domain.setVcpusFlags(new_flavor.vcpus, flags)
++            except libvirt.libvirtError as ex:
++                if dev is None:
++                    raise exception.LiveResizeError(reason=str(ex))
++                try:
++                    guest.detach_device(dev, persistent=True, live=True)
++                except Exception:
++                    LOG.exception("live-resize: DIMM rollback failed",
++                                  instance=instance)
++                    raise exception.LiveResizePartial(reason=str(ex))
++                raise exception.LiveResizeError(reason=str(ex))
++        # Last: growing is irreversible while the hotplugs roll back, and the
++        # allocation revert restores the old flavor wholesale. See PR #1429.
++        if new_flavor.root_gb > old.root_gb and instance.image_ref:
++            self._live_grow_root(guest, instance, new_flavor)
++        LOG.info("live-resize applied: %(ov)d->%(nv)d vCPU, "
++                 "%(om)d->%(nm)d MB",
++                 {"ov": old.vcpus,
++                  "nv": new_flavor.vcpus if cpus else old.vcpus,
++                  "om": old.memory_mb,
++                  "nm": new_flavor.memory_mb if memory else old.memory_mb},
++                 instance=instance)
++
+     def _guest_add_vpmems(self, guest, vpmems):
+         guest.max_memory_size = guest.memory
+         guest.max_memory_slots = 0

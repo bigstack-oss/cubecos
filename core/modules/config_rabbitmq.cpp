@@ -173,7 +173,7 @@ SetupCheck(const std::string& mqPass, const std::string& hostname)
         HexSystemF(0, CONTROL_FMT "set_permissions openstack \".*\" \".*\" \".*\" >/dev/null", hostname.c_str());
     }
 
-    // rabbitmq needs no exporter: rabbitmq_prometheus ships with 3.11 and exposes the
+    // rabbitmq needs no exporter: rabbitmq_prometheus ships with the broker and exposes the
     // broker's own counters, so enabling it is the whole of what a rabbitmq exporter would
     // have been. It is shipped disabled, which is why this is not a no-op.
     HexSystemF(0, "env LANG=en_US.utf8 HOSTNAME=%s /usr/sbin/rabbitmq-plugins enable rabbitmq_management rabbitmq_prometheus >/dev/null", hostname.c_str());

@@ -124,12 +124,12 @@ UpdateCheck()
         return true;
 
     // No pending upgrade: BACKDIR is created only by the migrate hook and removed
-    // after a successful mysql_upgrade, so a missing BACKDIR means FTS or a normal
+    // after a successful mariadb-upgrade, so a missing BACKDIR means FTS or a normal
     // reconfig -- nothing to do, and skip the version-uniformity probe entirely.
     if (access(BACKDIR, F_OK) != 0)
         return true;
 
-    // Defer mysql_upgrade until every control node runs the same MariaDB version.
+    // Defer mariadb-upgrade until every control node runs the same MariaDB version.
     //
     // The gate stays, but not for the reason recorded here before: --skip-write-binlog
     // sets sql_log_bin=0, and galera carries TOI DDL over that same binlog path, so the
@@ -147,7 +147,7 @@ UpdateCheck()
         return true;
 
     std::vector<const char*> command;
-    command.push_back("/usr/bin/mysql_upgrade");
+    command.push_back("/usr/bin/mariadb-upgrade");
     command.push_back("-u");
     command.push_back("root");
     command.push_back("--skip-write-binlog");
@@ -410,6 +410,31 @@ RestartMain(int argc, char* argv[])
     return EXIT_SUCCESS;
 }
 
+static void
+UpgradeUsage(void)
+{
+    fprintf(stderr, "Usage: %s upgrade_mysql\n", HexLogProgramName());
+}
+
+// Run a pending mariadb-upgrade outside a commit.
+//
+// UpdateCheck() runs from Commit(), so a rolling upgrade reaches it once per node, at
+// that node's own upgrade boot -- and every node but the last to roll finds the control
+// tier still on two versions, defers, and keeps its BACKDIR. Nothing commits mysql on
+// those nodes again until they next boot, so until then they would run the new server
+// on the old system tables. power_roll_advance calls this on every control node once
+// the roll is complete; a node with no BACKDIR returns at once.
+static int
+UpgradeMain(int argc, char* argv[])
+{
+    if (argc != 1) {
+        UpgradeUsage();
+        return EXIT_FAILURE;
+    }
+
+    return UpdateCheck() ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
 static int
 SnapshotCreate(const char* snapdir)
 {
@@ -418,6 +443,7 @@ SnapshotCreate(const char* snapdir)
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_mysql, RestartMain, RestartUsage);
+CONFIG_COMMAND_WITH_SETTINGS(upgrade_mysql, UpgradeMain, UpgradeUsage);
 
 CONFIG_MODULE(mysql, 0, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(mysql, cube_scan);

@@ -4,6 +4,19 @@ include ../../build.mk
 include $(SRCDIR)/rancher.mk
 
 APP_VERSION := 2.11.16
+
+# Optional registry holding a prebuilt copy of this version's server and agent images and the
+# server chart, as "<host>/<repo>". EMPTY BY DEFAULT: unset, the images are built from upstream
+# source exactly as before, so a clean checkout needs access to nothing of ours. build/fetch-or-
+# build.sh also falls back to the source build if the cache is unreachable or does not hold this
+# version, so configuring it can make the build faster. The one exception is a cache serving a
+# chart whose rancherImage is the unredistributable Prime path: that is refused outright rather
+# than falling back, because it is a poisoned cache to fix, not a slow build to work around.
+#
+# Worth caching because the source build is 66 min (prod #750) and reruns on *every* build --
+# the jail container is recreated each time and podman's storage goes with it -- for a version
+# that only moves on a deliberate bump. See cubecos#1350.
+RANCHER_CACHE ?=
 CLI_VERSION := 2.11.16
 
 CLI_REPO    := https://github.com/rancher/cli.git
@@ -34,8 +47,8 @@ $(CLI_BIN): $(CLI_SRC_DIR)
 # The chart is the make-visible artifact, so it stands in for both.
 $(CHART):
 	$(call RUN_CMD_TIMED, \
-		sh $(SRCDIR)/build/build-from-source.sh v$(APP_VERSION) $(CURDIR) \
-		,"  BUILD   rancher server image + chart from source")
+		RANCHER_CACHE=$(RANCHER_CACHE) sh $(SRCDIR)/build/fetch-or-build.sh v$(APP_VERSION) $(CURDIR) \
+		,"  RANCHER server image + chart")
 
 .PHONY: build-image
 build-image: $(CHART)
