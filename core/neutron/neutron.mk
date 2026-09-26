@@ -48,7 +48,7 @@ NEUTRON_VPNAAS_DASHBOARD_VER := 10.0.0
 # neutron runs out of the epoxy venv, not the caracal one it shared with the rest of
 # the 2024.1 services. neutron 26.0.6 is the newest 2025.1 release, and neutron-vpnaas
 # 26.0.0 and networking-baremetal 6.5.0 the only 2025.1 releases of theirs. None of
-# them can be installed beside manila/cyborg/heat: neutron 26.0.6 requires os-ken 3.0
+# them can be installed beside manila/heat: neutron 26.0.6 requires os-ken 3.0
 # and ovsdbapp 2.11, and neutron-vpnaas 26.0.0 neutron-lib 3.18, where the caracal venv
 # holds 2.8.2, 2.6.1 and 3.11.1 -- and openstack-heat resolves neutron-lib out of that
 # venv too. So all three move into /opt/openstack-epoxy, the same shape as their

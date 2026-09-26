@@ -5,6 +5,6 @@ neutron ALL = (root) NOPASSWD: /usr/bin/neutron-rootwrap-daemon /etc/neutron/roo
 # This is what the six helper_command pins config_neutron.cpp writes point at.
 # There is no /usr/bin/privsep-helper any more -- it pointed at the antelope venv until
 # #639 took the last service that needed it to caracal -- and the caracal helper, still
-# installed for manila, cyborg and masakari, could not serve an epoxy neutron anyway, so
+# installed for manila and masakari, could not serve an epoxy neutron anyway, so
 # the path is spelled out rather than left to the exec_dirs in rootwrap.conf.
 neutron ALL = (root) NOPASSWD: /opt/openstack-epoxy/bin/privsep-helper *
