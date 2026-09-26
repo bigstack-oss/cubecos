@@ -1146,8 +1146,8 @@ _essential_check_one()
 # With 'repair': a failed check triggers its surgical repair once, then
 # re-checks -- a healthy pass has zero side effects. 0 = ready, 1 = timeout.
 # Repair the one cause the gate named, at most once per cause per run. Causes
-# with no branch (ceph, ceph-osd-down, drain-host-nova-down) are wait-only on
-# purpose.
+# with no branch (ceph, ceph-osd-down, rabbitmq-sync, drain-host-nova-down) are
+# wait-only on purpose.
 _live_migration_repair()
 {
     local why=$1 _h
@@ -1204,6 +1204,14 @@ live_migration_gate()
         # asking about.
         $HEX_SDK -m force health_mysql_check    >/dev/null 2>&1 || why=galera
         [ -z "$why" ] && { $HEX_SDK -m force health_rabbitmq_check >/dev/null 2>&1 || why=rabbitmq ; }
+        # rejoined is not synchronised: a returning broker's mirrors start empty,
+        # and until ha-sync-mode:automatic has filled them, releasing the next
+        # node leaves those queues on only the nodes that never left. Wait-only,
+        # the sync is already running
+        [ -z "$why" ] && {
+            local _unsync=$($HEX_SDK rabbitmq_unsynced_mirror_count 2>/dev/null)
+            [ "${_unsync:-0}" -gt 0 ] 2>/dev/null && why=rabbitmq-sync
+        }
         [ -z "$why" ] && { $CEPH health 2>/dev/null | grep -qiE 'HEALTH_ERR|inactive|incomplete|peering|stale' && why=ceph ; }
         # wait for the rebooted node's OSDs to rejoin (in-but-down = not back);
         # tolerates degraded/recovering, does not require active+clean
@@ -1245,7 +1253,8 @@ live_migration_gate()
         fi
         # repair mode: fix what the failed check names, once per cause, then
         # re-check immediately. ceph/ceph-osd-down get no repair -- OSD rejoin
-        # is time-based and the rolling noout guard already prevents churn.
+        # is time-based and the rolling noout guard already prevents churn --
+        # and neither does rabbitmq-sync, which the broker is already doing.
         if [ "$repair" = "repair" ] ; then
             case " $repaired " in
                 *" $why "*) : ;;    # already repaired this cause; just wait
