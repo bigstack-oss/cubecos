@@ -35,6 +35,11 @@ rootfs_install::
 
 rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/rabbitmq/epmd@.socket ./lib/systemd/system
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/rabbitmq/epmd@.service ./lib/systemd/system
+	$(Q)# listen from sockets.target on: any erl that runs before the socket does --
+	$(Q)# rpm scriptlets and health checks call rabbitmqctl -- finds 4369 closed,
+	$(Q)# spawns its own `epmd -daemon`, and the socket then cannot bind
+	$(Q)chroot $(ROOTDIR) systemctl enable epmd@0.0.0.0.socket
 	$(Q)chroot $(ROOTDIR) sh -c 'sed "s/\/var\/run\//\/run\//g" /usr/lib/tmpfiles.d/rabbitmq-server.conf > /etc/tmpfiles.d/rabbitmq-server.conf'
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/rabbitmq-server.service.d
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/rabbitmq/rabbitmq-server-overrides.conf ./etc/systemd/system/rabbitmq-server.service.d/
