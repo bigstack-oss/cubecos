@@ -240,7 +240,7 @@
 # Create Recordset
 # POST  /v2/zones/{zone_id}/recordsets
 # Intended scope(s): project
-#"create_recordset": "(role:member and project_id:%(project_id)s) and ('PRIMARY':%(zone_type)s) or (role:admin) and ('PRIMARY':%(zone_type)s) or (role:admin) and ('SECONDARY':%(zone_type)s) or ("True":%(zone_shared)s) and ('PRIMARY':%(zone_type)s)"
+#"create_recordset": "(role:member and project_id:%(project_id)s) and ('PRIMARY':%(zone_type)s) or (role:admin) and ('PRIMARY':%(zone_type)s) or (role:admin) and ('SECONDARY':%(zone_type)s) or ('True':%(zone_shared)s) and ('PRIMARY':%(zone_type)s)"
 
 # DEPRECATED
 # "create_recordset":"('PRIMARY':%(zone_type)s AND
@@ -249,7 +249,7 @@
 # since W in favor of "create_recordset":"(role:member and
 # project_id:%(project_id)s) and ('PRIMARY':%(zone_type)s) or
 # (role:admin) and ('PRIMARY':%(zone_type)s) or (role:admin) and
-# ('SECONDARY':%(zone_type)s) or ("True":%(zone_shared)s) and
+# ('SECONDARY':%(zone_type)s) or ('True':%(zone_shared)s) and
 # ('PRIMARY':%(zone_type)s)".
 # The record set API now supports system scope and default roles.
 
@@ -265,13 +265,13 @@
 # Get recordset
 # GET  /v2/zones/{zone_id}/recordsets/{recordset_id}
 # Intended scope(s): project
-#"get_recordset": "(role:admin) or (role:reader and project_id:%(project_id)s) or ("True":%(zone_shared)s)"
+#"get_recordset": "(role:admin) or (role:reader and project_id:%(project_id)s) or ('True':%(zone_shared)s)"
 
 # DEPRECATED
-# "get_recordset":"rule:admin_or_owner or ("True":%(zone_shared)s)"
+# "get_recordset":"rule:admin_or_owner or ('True':%(zone_shared)s)"
 # has been deprecated since W in favor of
 # "get_recordset":"(role:admin) or (role:reader and
-# project_id:%(project_id)s) or ("True":%(zone_shared)s)".
+# project_id:%(project_id)s) or ('True':%(zone_shared)s)".
 # The record set API now supports system scope and default roles.
 
 # List a Recordset in a Zone
@@ -567,13 +567,13 @@
 # Get Zone
 # GET  /v2/zones/{zone_id}
 # Intended scope(s): project
-#"get_zone": "(role:admin) or (role:reader and project_id:%(project_id)s) or ("True":%(zone_shared)s)"
+#"get_zone": "(role:admin) or (role:reader and project_id:%(project_id)s) or ('True':%(zone_shared)s)"
 
 # DEPRECATED
-# "get_zone":"rule:admin_or_owner or ("True":%(zone_shared)s)" has
+# "get_zone":"rule:admin_or_owner or ('True':%(zone_shared)s)" has
 # been deprecated since W in favor of "get_zone":"(role:admin) or
 # (role:reader and project_id:%(project_id)s) or
-# ("True":%(zone_shared)s)".
+# ('True':%(zone_shared)s)".
 # The zone API now supports system scope and default roles.
 
 # Intended scope(s): project
