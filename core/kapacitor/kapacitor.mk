@@ -28,3 +28,10 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/kapacitor/config_handlers $(ROOTDIR)/var/alert_resp $(ROOTDIR)/var/response
 	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube/cos/kapacitor
 	$(Q)cp -f $(COREDIR)/kapacitor/event.yaml $(ROOTDIR)/usr/share/cube/cos/kapacitor/
+
+# SMTP delivery watcher. Installed with no extension: cron.d ignores files whose
+# names contain a dot.
+rootfs_install::
+	$(Q)mkdir -p $(ROOTDIR)/etc/cron.d
+	$(Q)cp -f $(COREDIR)/kapacitor/alert_smtp_check.cron $(ROOTDIR)/etc/cron.d/alert_smtp_check
+	$(Q)chmod 0644 $(ROOTDIR)/etc/cron.d/alert_smtp_check
