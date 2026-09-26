@@ -34,6 +34,17 @@ rabbitmq_queue_repair()
     env LANG=en_US.utf8 HOSTNAME=$(hostname) /usr/sbin/rabbitmqctl list_queues -s | awk '{ print $1 }' | xargs -L1 -P8 $HEX_SDK rabbitmq_quorum_queue_set
 }
 
+# Count the classic mirrored queues that hold a mirror which has not caught up
+# with its master yet. A broker that has just rejoined starts every mirror it
+# hosts empty, and ha-sync-mode:automatic then copies the master's backlog into
+# it; until that is done the queue only survives losing its master through the
+# nodes that never left. A single broker mirrors nothing, so it always prints 0.
+rabbitmq_unsynced_mirror_count()
+{
+    env LANG=en_US.utf8 HOSTNAME=$(hostname) /usr/sbin/rabbitmqctl -q list_queues name slave_pids synchronised_slave_pids --formatter json 2>/dev/null \
+        | jq '[.[] | select(((.slave_pids // []) | length) > ((.synchronised_slave_pids // []) | length))] | length'
+}
+
 rabbitmq_unhealthy_queue_clear()
 {
     readarray queue_array <<<"$(env LANG=en_US.utf8 HOSTNAME=$(hostname) /usr/sbin/rabbitmqctl list_unresponsive_queues | sed '1,2d')"

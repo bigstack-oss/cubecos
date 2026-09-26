@@ -7,7 +7,7 @@
 #include <hex/process.h>
 
 //FIXME: change to use mysql C library
-const static char MYSQL[] = "/usr/bin/mysql";
+const static char MYSQL[] = "/usr/bin/mariadb";
 
 bool
 MysqlUtilIsDbExist(const char* dbname)

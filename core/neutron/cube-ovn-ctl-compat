@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# ovn-ctl for the previous OVN central, kept under /opt/ovn-$OVN_COMPAT_VER on a hop that
+# moves OVN (see cube-ovndb-servers): the binaries and schemas come from that tree, and
+# the databases from a directory of their own, so neither central can open -- or convert
+# -- the other's files. OVN_COMPAT_VER is sdk_ovn.sh's: re-point both together.
+#
+# The ovn-ctl in that tree is a copy of the image's own with its northd renamed to
+# ovn-northd-$OVN_COMPAT_VER (core/neutron/neutron.mk has why), so it is the previous,
+# patched northd that OVN_BINDIR supplies and not /usr/bin/ovn-northd.
+OVN_COMPAT_VER=23.03
+OVN_COMPAT_DIR=/opt/ovn-$OVN_COMPAT_VER
+export OVN_BINDIR=$OVN_COMPAT_DIR/bin
+export OVN_PKGDATADIR=$OVN_COMPAT_DIR/share/ovn
+export OVN_DBDIR=/etc/ovn/compat-$OVN_COMPAT_VER
+exec $OVN_COMPAT_DIR/share/ovn/scripts/ovn-ctl "$@"

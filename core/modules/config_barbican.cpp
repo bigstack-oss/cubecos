@@ -177,25 +177,19 @@ UpdateDbConn(std::string sharedId, std::string password)
         dbconn += sharedId;
         dbconn += "/barbican";
 
-        // [database] connection, not [DEFAULT] sql_connection: barbican 18.0.0 moved the
-        // database options into their own group (barbican/common/config.py registers
-        // core_db_opts under OptGroup(name='database')). The old spelling survives as a
-        // deprecated alias, so writing it would still work today -- but the regenerated
-        // barbican.conf.sample only documents the new one, and leaving the two disagreeing
-        // hands the next hop a failure that produces no error at all: the option's default
-        // is `sqlite:///barbican.sqlite`, so once the alias goes barbican does not complain
-        // about a missing URI, it quietly opens a per-node sqlite file. Each control node
-        // would then serve its own empty key store while every service and health check
-        // reported success.
-        //
-        // No mysql_wsrep_sync_wait here, unlike the eleven other upgraded modules. It
-        // would be a dead key: barbican does not use oslo.db's enginefacade and does not
-        // register oslo.db's [database] options. barbican/model/repositories.py builds
-        // engine_args itself from exactly three values -- connection_recycle_time,
-        // max_pool_size, max_overflow -- and hands them to
-        // oslo_db.sqlalchemy.session.create_engine(), which only applies
-        // mysql_wsrep_sync_wait when it arrives as a kwarg. Nothing would read it.
+        // [database] connection, not [DEFAULT] sql_connection. The old spelling is gone:
+        // barbican 20.0.0 registers oslo.db's own [database] options, which carry no
+        // sql_connection alias, and the option's default is `sqlite:///barbican.sqlite`.
+        // So a stale spelling would not fail -- barbican would quietly open a per-node
+        // sqlite file, and each control node would serve its own empty key store while
+        // every service and health check reported success.
         cfg["database"]["connection"] = dbconn;
+        // Up to 18.0.0 this key had no reader: barbican built its engine itself from
+        // three values and never registered oslo.db's options. 20.0.0 builds it with
+        // oslo.db's enginefacade instead, which reads the whole [database] group from the
+        // conf barbican installs as cfg.CONF, so the causal-read guard the other upgraded
+        // modules write now reaches barbican's sessions too.
+        cfg["database"]["mysql_wsrep_sync_wait"] = "1";
     }
 
     return true;

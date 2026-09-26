@@ -42,11 +42,15 @@
 # Deprecated group/name - [DEFAULT]/logdir
 #log_dir = <None>
 
-# Uses logging handler designed to watch file system. When log file is moved or
-# removed this handler will open a new log file with specified path
+# DEPRECATED: Uses logging handler designed to watch file system. When log file
+# is moved or removed this handler will open a new log file with specified path
 # instantaneously. It makes sense only if log_file option is specified and
 # Linux platform is used. This option is ignored if log_config_append is set.
 # (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This function is known to have bene broken for long time, and depends
+# on the unmaintained library
 #watch_log_file = false
 
 # Use syslog for logging. Existing syslog format is DEPRECATED and will be
@@ -72,11 +76,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# DEPRECATED: Log output to Windows Event Log. (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Windows support is no longer maintained.
-#use_eventlog = false
+# (Optional) Set the 'color' key according to log levels. This option takes
+# effect only when logging to stderr or stdout is used. This option is ignored
+# if log_config_append is set. (boolean value)
+#log_color = false
 
 # The amount of time before the log files are rotated. This option is ignored
 # unless log_rotation_type is set to "interval". (integer value)
@@ -150,10 +153,16 @@
 # Maximum number of logged messages per rate_limit_interval. (integer value)
 #rate_limit_burst = 0
 
-# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG
-# or empty string. Logs with level greater or equal to rate_limit_except_level
-# are not filtered. An empty string means that all levels are filtered. (string
-# value)
+# Log level name used by rate limiting. Logs with level greater or equal to
+# rate_limit_except_level are not filtered. An empty string means that all
+# levels are filtered. (string value)
+# Possible values:
+# CRITICAL - <No description provided>
+# ERROR - <No description provided>
+# INFO - <No description provided>
+# WARNING - <No description provided>
+# DEBUG - <No description provided>
+# '' - <No description provided>
 #rate_limit_except_level = CRITICAL
 
 # Enables or disables fatal status of deprecations. (boolean value)
@@ -246,6 +255,26 @@
 #
 # From neutron.ml2.ovs.agent
 #
+
+# Local metadata CIDR for VMs metadata traffic, will be used as the IP range to
+# generate the VM's metadata IP. (string value)
+#provider_cidr = 240.0.0.0/16
+
+# The metadata tap device local vlan ID. This is only available on the metadata
+# bridge device. (integer value)
+#provider_vlan_id = 1
+
+# The base MAC address Neutron Openvswitch agent will use for metadata traffic.
+# (string value)
+#provider_base_mac = fa:16:ee:00:00:00
+
+# Host haproxy listen port for metadata path. This is transparent for metadata
+# traffic, VMs still try to access 169.254.169.254:80 for metadata. But in the
+# metadata datapath flow pipeline, the destination TCP port 80 will be changed
+# to the value of `host_proxy_listen_port` which the host haproxy will listen
+# on. For return traffic, the TCP source port will be changed back to 80.
+# (integer value)
+#host_proxy_listen_port = 80
 
 # Certificate Authority public key (CA cert) file for ssl (string value)
 #auth_ca_cert = <None>
@@ -394,12 +423,10 @@
 # inventories (dict value)
 #resource_provider_packet_processing_inventory_defaults = allocation_ratio:1.0,min_unit:1,reserved:0,step_size:1
 
-# OVS datapath to use. 'system' is the default value and corresponds to the
-# kernel datapath. To enable the userspace datapath set this value to 'netdev'.
-# (string value)
+# OVS datapath to use. (string value)
 # Possible values:
-# system - <No description provided>
-# netdev - <No description provided>
+# system - Kernel datapath
+# netdev - Userspace datapath
 #datapath_type = system
 
 # OVS vhost-user socket directory. (string value)
@@ -430,6 +457,11 @@
 # of ``_constants.AGENT_RES_PROCESSING_STEP`` number of OpenFlow rules.
 # (boolean value)
 #openflow_processed_per_port = false
+
+# Whether to enable the Openvswitch meter bandwidth limit features which will
+# add meter kbps rules and apply them to the OpenFlow flow table
+# BANDWIDTH_RATE_LIMIT for VM ports. (boolean value)
+#qos_meter_bandwidth = false
 
 # The connection string for the OVSDB backend. Will be used for all OVSDB
 # commands and by ovsdb-client when monitoring (string value)

@@ -50,6 +50,11 @@ static const char IRONIC_AGENT_NAME[] = "ironic-neutron-agent";
 static const char OVS_NAME[] = "openvswitch";
 static const char OVNND_NAME[] = "ovn-northd";
 static const char OVNCTL_NAME[] = "ovn-controller";
+// Both present while this node runs the previous OVN central through a roll that moves
+// OVN: its databases, and this image's copy of it. An image that does not move OVN
+// carries no copy. 23.03 is sdk_ovn.sh's OVN_COMPAT_VER: re-point them together.
+static const char OVN_COMPAT_NB[] = "/etc/ovn/compat-23.03/ovnnb_db.db";
+static const char OVN_COMPAT_CTL[] = "/opt/ovn-23.03/share/ovn/scripts/ovn-ctl";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 static const char AGENT_CACHE[] = "/etc/cron.d/neutron_agent_cache_renew";
@@ -67,19 +72,20 @@ static const char DBPASS[] = "KNaHKGg62djyeJ6M";
  * neutron-rootwrap then resolves the bare name off the exec_dirs in
  * rootwrap.conf, and /usr/bin comes first -- so it would land on
  * /usr/bin/privsep-helper, the symlink core/nova/nova.mk kept pointed at the
- * *antelope* venv for masakari until #639 removed it. A python 3.10 helper cannot
- * serve a caracal neutron, and the failure has two shapes, only one of them
- * loud: on a freshly built rootfs the antelope venv holds no neutron at all and
- * the agent dies with FailedToDropPrivileges, while on a node upgraded in place
- * the neutron 22.2.1 still sitting there imports fine and answers a 24.2.2
- * parent with no error anywhere.
+ * *antelope* venv for masakari until #639 removed it. neutron has moved on to the
+ * epoxy venv (#654), and the caracal helper it pinned until then stays installed for
+ * manila and masakari -- but it cannot serve neutron either, and the failure
+ * has two shapes, only one of them loud: on a freshly built rootfs the caracal venv
+ * holds no neutron at all and the agent dies with FailedToDropPrivileges, while on a
+ * node upgraded in place the neutron 24.2.2 still sitting there imports fine and
+ * answers a 26.0.6 parent with no error anywhere.
  *
  * helper_command wins over the root_helper prefix (oslo.privsep documents
  * root_helper as "ignored if context's helper_command config option is set"), so
  * naming it here takes rootwrap out of the path entirely and
  * /etc/sudoers.d/neutron authorises exactly this path.
  */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
 static Configs cfg;
 static Configs ml2Cfg;
@@ -608,7 +614,16 @@ OvnService(bool enabled, bool isMaster, bool forceRun, bool ha)
     }
 
     if (isMaster) {
-        if (forceRun || !ha)
+        // A boot commit force-runs the unit until pacemaker takes the central over. Not
+        // while this node runs the previous central carried across a roll that moves OVN:
+        // pacemaker already runs it, and the unit is this image's, whose northd would
+        // attach to the same local sockets and write newer logical flows into the older
+        // southbound. See ovn_central_compat_enter (sdk_ovn.sh); the unit's drop-in
+        // refuses it as well.
+        if (forceRun && ha && access(OVN_COMPAT_NB, F_OK) == 0 &&
+            access(OVN_COMPAT_CTL, X_OK) == 0)
+            HexLogInfo("holding the carried OVN central until every chassis runs this image's OVN");
+        else if (forceRun || !ha)
             SystemdCommitService(enabled , OVNND_NAME, true);   // ovn-northd
         else if (ha)
             HexUtilSystemF(0, 0, "pcs resource restart ovndb_servers-clone");
@@ -1049,18 +1064,34 @@ ClusterStartMain(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    // post actions for db migration
-    const ExecSyncResult r = ExecBashSync(
+    // Chassis first, central last: rolling_update moves the OVN central off the version
+    // the control nodes carried across when the roll completes; this is the retry for an
+    // upgrade that did not finish through it. A no-op unless a control node still runs
+    // the carried central and every chassis runs this image's OVN.
+    const ExecSyncResult s = ExecBashSync(
         0,
         false,
         false,
         {},
-        HEX_SDK " migrate_neutron_db_post");
-    if (r.exitCode != 0) {
-        HexLogError("failed to run neutron post-migration actions");
+        HEX_SDK " ovn_central_switch");
+    if (s.exitCode != 0) {
+        HexLogError("failed to move the OVN central to the new version");
     }
 
     return EXIT_SUCCESS;
+}
+
+// First boot of the new partition, before bootstrap: on a hop that moves OVN, a control
+// node that carried the previous central's databases across keeps running that central
+// until every chassis runs this image's OVN; on one that does not, a node the previous
+// roll left on its carried central converts those databases instead
+// (ovn_central_compat_enter, sdk_ovn.sh). A post function, so it runs after the
+// CONFIG_MIGRATE(neutron, "/etc/ovn") copy below.
+static bool
+MigrateOvnCentral(const char *prevVersion, const char *prevRootDir)
+{
+    HexSystemF(0, HEX_SDK " ovn_central_compat_enter %s", prevRootDir);
+    return true;
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_neutron, RestartMain, RestartUsage);
@@ -1107,6 +1138,9 @@ CONFIG_MIGRATE(neutron, "/etc/openvswitch/");
 // place (NB 7.0.0 -> 7.3.0 and SB 20.27.0 -> 20.33.0 were verified byte-identical
 // in ovn-nbctl/ovn-sbctl show), and on a failed convert it creates an empty
 // database -- i.e. degrades to exactly the behaviour we have without this line.
+// Except on a hop that moves OVN, where a control node must not convert early:
+// MigrateOvnCentral hands the previous central's databases to that central instead, and
+// ovn_central_switch converts them once every chassis runs this image's OVN.
 //
 // (Replaces a stale "/var/lib/ovn" entry. Neither ovn23.03 nor ovn24.03 owns
 // anything under that path and 3.1.10 nodes have no such directory at all, so it
@@ -1114,6 +1148,7 @@ CONFIG_MIGRATE(neutron, "/etc/openvswitch/");
 // partition to partition. Verified on cube4510: rpm -qf on the files there reports
 // "not owned by any package".)
 CONFIG_MIGRATE(neutron, "/etc/ovn");
+CONFIG_MIGRATE_POST(neutron, MigrateOvnCentral);
 
 CONFIG_TRIGGER_WITH_SETTINGS(neutron, "cluster_start", ClusterStartMain);
 

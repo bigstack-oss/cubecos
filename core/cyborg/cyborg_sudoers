@@ -6,7 +6,8 @@ Defaults:cyborg !requiretty
 # is refused with "cyborg : command not allowed", before privsep gets far enough to
 # report anything of its own.
 #
-# The path is the caracal venv's own helper, not the /usr/bin/privsep-helper symlink
-# core/nova/nova.mk keeps pointed at the antelope venv -- #633 moved cyborg into the
-# python 3.11 venv, and a 3.10 helper cannot import a 3.11 cyborg.
-cyborg ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *
+# The path is the epoxy venv's own helper. A privsep helper imports the caller's own
+# package, so it has to follow cyborg across every venv boundary: #633 moved it into the
+# python 3.11 caracal venv, and #659 moved it on into the python 3.12 epoxy one, whose
+# helper is the only one that can import cyborg 14.1.0.
+cyborg ALL = (root) NOPASSWD: /opt/openstack-epoxy/bin/privsep-helper *
