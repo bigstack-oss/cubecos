@@ -1064,17 +1064,6 @@ ClusterStartMain(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    // post actions for db migration
-    const ExecSyncResult r = ExecBashSync(
-        0,
-        false,
-        false,
-        {},
-        HEX_SDK " migrate_neutron_db_post");
-    if (r.exitCode != 0) {
-        HexLogError("failed to run neutron post-migration actions");
-    }
-
     // Chassis first, central last: rolling_update moves the OVN central off the version
     // the control nodes carried across when the roll completes; this is the retry for an
     // upgrade that did not finish through it. A no-op unless a control node still runs

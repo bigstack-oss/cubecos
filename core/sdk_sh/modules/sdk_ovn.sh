@@ -470,7 +470,7 @@ ovn_central_compat_enter()   # <prev-root-dir>
 # 0 only if every chassis-bearing node runs this node's OVN minor -- the precondition for
 # moving the central to it. Chassis-bearing by role bit (cubectl -r compute: compute,
 # control-converged, edge-core) and read from the running daemon, not the package. Same
-# fail-safe contract as os_neutron_version_uniform(): unreachable = unknown = not uniform.
+# fail-safe contract as os_rabbitmq_version_uniform(): unreachable = unknown = not uniform.
 ovn_chassis_version_uniform()
 {
     local want h v hosts
