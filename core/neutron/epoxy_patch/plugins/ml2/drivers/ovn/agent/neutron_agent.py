@@ -29,8 +29,9 @@ from neutron.common import utils
 LOG = logging.getLogger(__name__)
 
 
-class DeletedChassis(object):
+class DeletedChassis:
     external_ids = {}
+    other_config = {}
     hostname = '("Chassis" register deleted)'
     name = '("Chassis" register deleted)'
 
@@ -75,7 +76,7 @@ class NeutronAgent(abc.ABC):
     def as_dict(self):
         return {
             'binary': self.binary,
-            'host': self.chassis.hostname,
+            'host': self.chassis.hostname if hasattr(self.chassis, 'hostname') else '-',
             'heartbeat_timestamp': timeutils.normalize_time(
                 self.updated_at.replace(microsecond=0)),
             'availability_zone': ', '.join(
@@ -253,7 +254,7 @@ class OVNNeutronAgent(NeutronAgent):
 
 
 @utils.SingletonDecorator
-class AgentCache(object):
+class AgentCache:
     def __init__(self, driver=None):
         # This is just to make pylint happy because it doesn't like calls to
         # AgentCache() with no arguments, despite init only being called the

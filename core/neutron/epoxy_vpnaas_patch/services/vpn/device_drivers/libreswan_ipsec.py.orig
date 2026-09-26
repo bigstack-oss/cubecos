@@ -13,10 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 import os
-import os.path
 
 from neutron.agent.linux import ip_lib
-
 from neutron_vpnaas.services.vpn.device_drivers import ipsec
 
 
@@ -25,11 +23,12 @@ class LibreSwanProcess(ipsec.OpenSwanProcess):
 
     Libreswan needs nssdb initialised before running pluto daemon.
     """
+    IPSEC_CONF_NAT_TRAVERSAL = None
+
     # pylint: disable=useless-super-delegation
     def __init__(self, conf, process_id, vpnservice, namespace):
         self._rootwrap_cfg = self._get_rootwrap_config()
-        super(LibreSwanProcess, self).__init__(conf, process_id,
-                                              vpnservice, namespace)
+        super().__init__(conf, process_id, vpnservice, namespace)
 
     def _ipsec_execute(self, cmd, check_exit_code=True, extra_ok_codes=None):
         """Execute ipsec command on namespace.
@@ -39,9 +38,9 @@ class LibreSwanProcess(ipsec.OpenSwanProcess):
         """
         ip_wrapper = ip_lib.IPWrapper(namespace=self.namespace)
         mount_paths = {'/etc': '%s/etc' % self.config_dir,
-                       '/var/run': '%s/var/run' % self.config_dir}
+                       '/run': '%s/var/run' % self.config_dir}
         mount_paths_str = ','.join(
-            "%s:%s" % (source, target)
+            "{}:{}".format(source, target)
             for source, target in mount_paths.items())
         ns_wrapper = self.get_ns_wrapper()
         return ip_wrapper.netns.execute(
@@ -49,7 +48,7 @@ class LibreSwanProcess(ipsec.OpenSwanProcess):
              '--mount_paths=%s' % mount_paths_str,
              ('--rootwrap_config=%s' % self._rootwrap_cfg
                  if self._rootwrap_cfg else ''),
-             '--cmd=%s,%s' % (self.binary, ','.join(cmd))],
+             '--cmd={},{}'.format(self.binary, ','.join(cmd))],
             check_exit_code=check_exit_code,
             extra_ok_codes=extra_ok_codes)
 
@@ -75,7 +74,7 @@ class LibreSwanProcess(ipsec.OpenSwanProcess):
         if os.path.exists(secrets_file):
             self._execute(['rm', '-f', secrets_file])
 
-        super(LibreSwanProcess, self).ensure_configs()
+        super().ensure_configs()
 
         # LibreSwan uses the capabilities library to restrict access to
         # ipsec.secrets to users that have explicit access. Since pluto is
@@ -106,7 +105,7 @@ class LibreSwanProcess(ipsec.OpenSwanProcess):
 
     def start_pluto(self):
         cmd = ['pluto',
-               '--use-netkey',
+               '--use-xfrm',
                '--uniqueids']
 
         if self.conf.ipsec.enable_detailed_logging:

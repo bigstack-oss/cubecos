@@ -72,19 +72,20 @@ static const char DBPASS[] = "KNaHKGg62djyeJ6M";
  * neutron-rootwrap then resolves the bare name off the exec_dirs in
  * rootwrap.conf, and /usr/bin comes first -- so it would land on
  * /usr/bin/privsep-helper, the symlink core/nova/nova.mk kept pointed at the
- * *antelope* venv for masakari until #639 removed it. A python 3.10 helper cannot
- * serve a caracal neutron, and the failure has two shapes, only one of them
- * loud: on a freshly built rootfs the antelope venv holds no neutron at all and
- * the agent dies with FailedToDropPrivileges, while on a node upgraded in place
- * the neutron 22.2.1 still sitting there imports fine and answers a 24.2.2
- * parent with no error anywhere.
+ * *antelope* venv for masakari until #639 removed it. neutron has moved on to the
+ * epoxy venv (#654), and the caracal helper it pinned until then stays installed for
+ * manila, cyborg and masakari -- but it cannot serve neutron either, and the failure
+ * has two shapes, only one of them loud: on a freshly built rootfs the caracal venv
+ * holds no neutron at all and the agent dies with FailedToDropPrivileges, while on a
+ * node upgraded in place the neutron 24.2.2 still sitting there imports fine and
+ * answers a 26.0.6 parent with no error anywhere.
  *
  * helper_command wins over the root_helper prefix (oslo.privsep documents
  * root_helper as "ignored if context's helper_command config option is set"), so
  * naming it here takes rootwrap out of the path entirely and
  * /etc/sudoers.d/neutron authorises exactly this path.
  */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
 static Configs cfg;
 static Configs ml2Cfg;
