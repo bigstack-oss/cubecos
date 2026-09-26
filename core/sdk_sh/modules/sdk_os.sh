@@ -3204,6 +3204,49 @@ os_nova_pgpu_host_list_by_instance_id()
     done
 }
 
+# A value from nova.conf's [service_user], the identity nova sends its service token as.
+_os_nova_service_user()
+{
+    awk -v k="$1" '
+        /^\[/ { s = $0; next }
+        s == "[service_user]" {
+            n = $0; sub(/[ \t]*=.*/, "", n)
+            if (n == k) { sub(/^[^=]*=[ \t]*/, ""); print; exit }
+        }' /etc/nova/nova.conf
+}
+
+# Make one of the ARQ calls cyborg keeps for nova: bind, unbind, or delete a bound ARQ.
+#
+# cyborg 14.1.0 (CVE-2026-40214) refuses those three with 403 unless the request also
+# carries a service token whose user holds the service role -- how it stops a tenant
+# from rewriting the ARQs nova manages. nova does no ARQ bookkeeping for a cold
+# migration, so os_instance_pgpu_migrate does it itself and has to present the token
+# nova would: nova's own [service_user] identity, from nova.conf on this control node.
+# The osc cli has no way to attach a service token, hence curl.
+#
+# $1 = method, $2 = path under the accelerator endpoint, $3 = json body (optional).
+# Returns non-zero, and logs the status, unless cyborg answers 2xx.
+_os_arq_as_nova()
+{
+    local url token stoken code
+
+    url=$($OPENSTACK endpoint list --service accelerator --interface internal -f value -c URL | head -1)
+    token=$($OPENSTACK token issue -f value -c id)
+    stoken=$(OS_USERNAME=$(_os_nova_service_user username) \
+             OS_PASSWORD=$(_os_nova_service_user password) \
+             OS_PROJECT_NAME=$(_os_nova_service_user project_name) \
+             OS_USER_DOMAIN_NAME=$(_os_nova_service_user user_domain_name) \
+             OS_PROJECT_DOMAIN_NAME=$(_os_nova_service_user project_domain_name) \
+             $OPENSTACK token issue -f value -c id)
+    code=$(timeout $SRVTO curl -s -o /dev/null -w '%{http_code}' -X $1 \
+               -H "X-Auth-Token: $token" -H "X-Service-Token: $stoken" \
+               -H "OpenStack-API-Version: accelerator 2.1" \
+               -H "Content-Type: application/json" ${3:+-d "$3"} "$url$2")
+    [ "${code:0:1}" = "2" ] && return 0
+    log_error "_os_arq_as_nova: $1 $2 returned HTTP $code"
+    return 1
+}
+
 os_instance_pgpu_migrate()
 {
     local instance_id=$1
@@ -3215,8 +3258,9 @@ os_instance_pgpu_migrate()
 
     echo -n "unbinding accelerator from the original host ... "
     for arq in $(echo "$arqs_state" | awk '{print $1}') ; do
-        $OPENSTACK accelerator arq unbind $arq >/dev/null 2>&1
-        $OPENSTACK accelerator arq delete $arq >/dev/null 2>&1
+        _os_arq_as_nova PATCH /accelerator_requests \
+            "{\"$arq\": [{\"path\": \"/hostname\", \"op\": \"remove\"}, {\"path\": \"/device_rp_uuid\", \"op\": \"remove\"}, {\"path\": \"/instance_uuid\", \"op\": \"remove\"}]}"
+        _os_arq_as_nova DELETE "/accelerator_requests?arqs=$arq"
     done
     $OPENSTACK resource provider allocation unset --resource-class PGPU $instance_id >/dev/null 2>&1
     echo "done"
@@ -3237,7 +3281,11 @@ os_instance_pgpu_migrate()
     local alloc_str=
     local idx=0
     for rp in $(echo $rps | tr ',' ' ') ; do
-        $OPENSTACK accelerator arq bind ${arq_arr[${idx}]} $host $instance_id $rp $project_id >/dev/null 2>&1
+        # project_id makes the ARQ the instance owner's: cyborg 14.1.0 shows a
+        # non-admin caller -- nova acting for that owner included -- only the ARQs of
+        # its own project, and would otherwise stamp the caller's, admin's, on it.
+        _os_arq_as_nova PATCH /accelerator_requests \
+            "{\"${arq_arr[${idx}]}\": [{\"path\": \"/hostname\", \"op\": \"add\", \"value\": \"$host\"}, {\"path\": \"/device_rp_uuid\", \"op\": \"add\", \"value\": \"$rp\"}, {\"path\": \"/instance_uuid\", \"op\": \"add\", \"value\": \"$instance_id\"}, {\"path\": \"/project_id\", \"op\": \"add\", \"value\": \"$project_id\"}]}"
         alloc_str="$alloc_str --allocation rp=$rp,PGPU=1"
         idx=$(( idx + 1 ))
     done
