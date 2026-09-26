@@ -6,7 +6,7 @@ After=syslog.target network.target
 Type=simple
 User=placement
 Group=placement
-# /usr/bin/uwsgi is a symlink into the caracal venv (core/nova/nova.mk); the venv
+# /usr/bin/uwsgi is a symlink into the epoxy venv (core/nova/nova.mk); the venv
 # itself is named by `home` in placement-uwsgi.ini
 ExecStart=/usr/bin/uwsgi --ini /etc/placement/placement-uwsgi.ini
 Restart=on-failure

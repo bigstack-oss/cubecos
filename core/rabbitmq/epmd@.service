@@ -1,0 +1,36 @@
+# The service half of core/rabbitmq/epmd@.socket.
+#
+# The split el9s erlang-erts rpm used to ship both epmd@ units, and we only ever
+# replaced its socket. The monolithic erlang rpm the 3.9 -> 3.10 hop moved to
+# ships neither, so from then on the socket triggered a service that did not
+# exist: systemd refused to listen ("Socket service epmd@0.0.0.0.service not
+# loaded, refusing") every time rabbitmq-server pulled it in, and epmd ran as an
+# unmanaged `epmd -daemon` spawned by whichever erl process happened to start
+# first.
+#
+# This is erlang-erts-24.3.4.2-1.el9s's epmd@.service with one fix: Requires=
+# names this instance's socket, where the rpm's named the bare template.
+# rabbitmq.mk enables epmd@0.0.0.0.socket so it is listening before any erl runs.
+
+[Unit]
+Description=Erlang Port Mapper Daemon
+After=network.target
+Requires=epmd@%i.socket
+
+[Service]
+ExecStart=/usr/bin/epmd -systemd
+Type=notify
+StandardOutput=journal
+StandardError=journal
+DeviceAllow=/dev/null rw
+PrivateTmp=true
+NoNewPrivileges=true
+Restart=always
+LimitNPROC=1
+LimitFSIZE=0
+User=epmd
+Group=epmd
+
+[Install]
+Also=epmd@.socket
+WantedBy=multi-user.target

@@ -48,7 +48,7 @@ support_mysql_backup_create()
 
     support_backup_folder_init $dstdir
 
-    /usr/bin/mysqldump -u root --all-databases | gzip > $dstdir/mysql-$(hostname)-$(date +%Y%m%d-%H%M%S).sql.gz
+    /usr/bin/mariadb-dump -u root --all-databases | gzip > $dstdir/mysql-$(hostname)-$(date +%Y%m%d-%H%M%S).sql.gz
 }
 
 support_mysql_backup_apply()
@@ -63,7 +63,7 @@ support_mysql_backup_apply()
         return 0
     fi
 
-    zcat $CEPHFS_BACKUP_DIR/$bak_file | /usr/bin/mysql -u root
+    zcat $CEPHFS_BACKUP_DIR/$bak_file | /usr/bin/mariadb -u root
 }
 
 support_mysql_backup_rotate()

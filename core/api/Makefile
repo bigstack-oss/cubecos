@@ -4,11 +4,16 @@ include ../../build.mk
 API_RPM := api.rpm
 PKG_NAME := cube-cos-api
 GITHUB_URL := https://github.com/bigstack-oss/cube-cos-api
+# Split from GITHUB_URL because the two surfaces behave differently: the clone below runs at full
+# speed, while release assets are served from the object CDN that is throttled to ~40 KB/s from
+# our build network (cubecos#1350). Only the asset URL is redirectable; GITHUB_DL_BASE defaults to
+# https://github.com in project.mk, so this is unchanged unless a mirror is configured.
+GITHUB_DL_URL := $(GITHUB_DL_BASE)/bigstack-oss/cube-cos-api
 
 ifneq ($(RC),)
 $(API_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O api.rpm $(GITHUB_URL)/releases/download/v3.1.20-rc1/cube-cos-api-v3.1.0-1.fc35.a9fdf17.x86_64.rpm, \
+		wget -O api.rpm $(GITHUB_DL_URL)/releases/download/v3.1.20-rc1/cube-cos-api-v3.1.0-1.fc35.a9fdf17.x86_64.rpm, \
 		"  PULL    $(API_RPM)")
 else
 GIT_DIR := git

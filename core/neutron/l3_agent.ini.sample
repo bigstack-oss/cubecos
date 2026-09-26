@@ -10,7 +10,7 @@
 #ovs_use_veth = false
 
 # The driver used to manage virtual interfaces. (string value)
-#interface_driver = <None>
+#interface_driver = openvswitch
 
 # Maximum seconds to wait for a response from an RPC call. (integer value)
 #rpc_response_max_timeout = 600
@@ -19,25 +19,21 @@
 # From neutron.l3.agent
 #
 
-# The working mode for the agent. Allowed modes are: 'legacy' - this preserves
-# the existing behavior where the L3 agent is deployed on a centralized
-# networking node to provide L3 services like DNAT and SNAT. Use this mode if
-# you do not want to adopt DVR. 'dvr' - this mode enables DVR functionality and
-# must be used for an L3 agent that runs on a compute host. 'dvr_snat' - this
-# enables centralized SNAT support in conjunction with DVR. This mode must be
-# used for an L3 agent running on a centralized node (or in single-host
-# deployments, e.g. devstack). dvr_snat mode is not supported on a compute
-# host. 'dvr_no_external' - this mode enables only East/West DVR routing
-# functionality for an L3 agent that runs on a compute host, the North/South
-# functionality such as DNAT and SNAT will be provided by the centralized
-# network node that is running in 'dvr_snat' mode. This mode should be used
-# when there is no external network connectivity on the compute host. (string
-# value)
+# The working mode for the agent. (string value)
 # Possible values:
-# dvr - <No description provided>
-# dvr_snat - <No description provided>
-# legacy - <No description provided>
-# dvr_no_external - <No description provided>
+# dvr - Enable DVR functionality and must be used for an L3 agent that runs on
+# a compute host.
+# dvr_snat - Enable centralized SNAT support in conjunction with DVR. This mode
+# must be used for an L3 agent running on a centralized node (or in single-host
+# deployments, e.g. devstack).
+# legacy - Preserve the existing behavior where the L3 agent is deployed on a
+# centralized networking node to provide L3 services like DNAT and SNAT. Use
+# this mode if you do not want to adopt DVR.
+# dvr_no_external - Enable only East/West DVR routing functionality for an L3
+# agent that runs on a compute host, while the North/South functionality such
+# as DNAT and SNAT will be provided by the centralized network node that is
+# running in 'dvr_snat' mode. This mode should be used when there is no
+# external network connectivity on the compute host.
 #agent_mode = legacy
 
 # TCP Port used by Neutron metadata namespace proxy. (port value)
@@ -63,11 +59,6 @@
 # desired, it needs to be done via a subnet allocated to the network and not
 # through this parameter. (string value)
 #ipv6_gateway =
-
-# Driver used for IPv6 Prefix Delegation. This needs to be an entry point
-# defined in the neutron.agent.linux.pd_drivers namespace. See setup.cfg for
-# entry points included with the Neutron source code. (string value)
-#prefix_delegation_driver = dibbler
 
 # Allow running metadata proxy. (boolean value)
 #enable_metadata_proxy = true
@@ -153,12 +144,40 @@
 # connection. (integer value)
 #ha_vrrp_health_check_interval = 0
 
-# Location to store IPv6 Prefix Delegation files. (string value)
-#pd_confs = $state_path/pd
+# Enable conntrackd to synchronize connection tracking states between HA
+# routers. (boolean value)
+#ha_conntrackd_enabled = false
 
-# A decimal value as Vendor's Registered Private Enterprise Number as required
-# by RFC3315 DUID-EN. (string value)
-#vendor_pen = 8888
+# Number of buckets in the cache hashtable (integer value)
+#ha_conntrackd_hashsize = 32768
+
+# Maximum number of conntracks (integer value)
+#ha_conntrackd_hashlimit = 131072
+
+# Unix socket backlog (integer value)
+#ha_conntrackd_unix_backlog = 20
+
+# Socket buffer size for events (integer value)
+#ha_conntrackd_socketbuffersize = 262142
+
+# Maximum size of socket buffer (integer value)
+#ha_conntrackd_socketbuffersize_max_grown = 655355
+
+# Multicast address: The address that you use as destination in the
+# synchronization messages (string value)
+#ha_conntrackd_ipv4_mcast_addr = 225.0.0.50
+
+# The multicast base port number. The generated virtual router ID added to this
+# value. (integer value)
+#ha_conntrackd_group = 3780
+
+# Buffer used to enqueue the packets that are going to be transmitted (integer
+# value)
+#ha_conntrackd_sndsocketbuffer = 24985600
+
+# Buffer used to enqueue the packets that the socket is pending to handle
+# (integer value)
+#ha_conntrackd_rcvsocketbuffer = 24985600
 
 # Location to store IPv6 Router Advertisement config files (string value)
 #ra_confs = $state_path/ra
@@ -204,11 +223,15 @@
 # Deprecated group/name - [DEFAULT]/logdir
 #log_dir = <None>
 
-# Uses logging handler designed to watch file system. When log file is moved or
-# removed this handler will open a new log file with specified path
+# DEPRECATED: Uses logging handler designed to watch file system. When log file
+# is moved or removed this handler will open a new log file with specified path
 # instantaneously. It makes sense only if log_file option is specified and
 # Linux platform is used. This option is ignored if log_config_append is set.
 # (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This function is known to have bene broken for long time, and depends
+# on the unmaintained library
 #watch_log_file = false
 
 # Use syslog for logging. Existing syslog format is DEPRECATED and will be
@@ -234,11 +257,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# DEPRECATED: Log output to Windows Event Log. (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Windows support is no longer maintained.
-#use_eventlog = false
+# (Optional) Set the 'color' key according to log levels. This option takes
+# effect only when logging to stderr or stdout is used. This option is ignored
+# if log_config_append is set. (boolean value)
+#log_color = false
 
 # The amount of time before the log files are rotated. This option is ignored
 # unless log_rotation_type is set to "interval". (integer value)
@@ -312,10 +334,16 @@
 # Maximum number of logged messages per rate_limit_interval. (integer value)
 #rate_limit_burst = 0
 
-# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG
-# or empty string. Logs with level greater or equal to rate_limit_except_level
-# are not filtered. An empty string means that all levels are filtered. (string
-# value)
+# Log level name used by rate limiting. Logs with level greater or equal to
+# rate_limit_except_level are not filtered. An empty string means that all
+# levels are filtered. (string value)
+# Possible values:
+# CRITICAL - <No description provided>
+# ERROR - <No description provided>
+# INFO - <No description provided>
+# WARNING - <No description provided>
+# DEBUG - <No description provided>
+# '' - <No description provided>
 #rate_limit_except_level = CRITICAL
 
 # Enables or disables fatal status of deprecations. (boolean value)
