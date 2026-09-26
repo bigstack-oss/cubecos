@@ -122,8 +122,8 @@ PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 # python rather than sharing the caracal venv's 3.11: 3.12 is the newest runtime
 # 2025.1 is tested on, and #652 moves CubeCOS to it. keystone (27.1.0) is the first
 # occupant (#657), glance (30.2.0) the second (#656), cinder (26.3.0) the third (#655),
-# nova with placement (31.3.1 / 13.0.0) the fourth (#653) and neutron (26.0.6) the
-# fifth (#654).
+# nova with placement (31.3.1 / 13.0.0) the fourth (#653), neutron (26.0.6) the
+# fifth (#654) and barbican (20.0.0) the sixth (#658).
 NEXT_OPENSTACK_RELEASE := epoxy
 NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
 NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1
