@@ -124,7 +124,7 @@ PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 # occupant (#657), glance (30.2.0) the second (#656), cinder (26.3.0) the third (#655),
 # nova with placement (31.3.1 / 13.0.0) the fourth (#653), neutron (26.0.6) the
 # fifth (#654), barbican (20.0.0) the sixth (#658), cyborg (14.1.0) the seventh
-# (#659) and designate (20.0.2) the eighth (#660).
+# (#659), designate (20.0.2) the eighth (#660) and heat (24.1.1) the ninth (#661).
 NEXT_OPENSTACK_RELEASE := epoxy
 NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
 NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1

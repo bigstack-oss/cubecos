@@ -12,12 +12,16 @@
 # invisible to it -- an entry point is only visible to the interpreter it was
 # installed under. #609 moved the CLI into the antelope venv and the plugin followed
 # it; when heat moved to caracal the plugin had to stay behind, because the CLI had
-# not; #636 moved the CLI too, so the plugin sits with the service again.
+# not; #636 moved the CLI too, so the plugin sat with the service again. The epoxy hop
+# opens the split once more: /usr/bin/openstack is still the caracal venv's, so the
+# client stays there in a block of its own while the service runs from the epoxy one,
+# the same as barbican's (#658), cyborg's (#659) and designate's (#660).
 #
 # It is named explicitly rather than left transitive. heat's own requirements.txt
-# asks for it today, but designate.mk carries the story of what happens when the only
-# thing asking for a client is some other install: it disappears the day that install
-# moves, and `cluster check` reports the service NG while every unit is active.
+# asks for it, but that pulls it into whichever venv heat is in -- the epoxy one now,
+# where nothing looks for it -- and designate.mk carries the story of what happens when
+# the only thing asking for a client is some other install: it disappears the day that
+# install moves, and `cluster check` reports the service NG while every unit is active.
 #
 # /usr/bin/heat, the client's own CLI, follows it: it is python-heatclient's console
 # script, not heat's. Nothing in this tree calls it, but it has always been on the
@@ -37,9 +41,14 @@
 HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 
 # the release is needed twice: once to pin the wheel, once for [revision] heat_revision
-# https://releases.openstack.org/caracal/index.html#caracal-heat -- last numeric
-# 2024.1 revision, the same rule #1191 used to land on 20.0.1.
-HEAT_VER := 22.0.1
+# https://releases.openstack.org/epoxy/index.html#epoxy-heat -- 24.1.1 is the newest
+# 2025.1 release. 24.0.0 was the cycle's; 24.1.0 deprecates the heat-api and
+# heat-api-cfn console scripts; 24.1.1 adds the one fix CubeCOS cannot do without:
+# keystone 27.1.0 (#657) carries the OSSA-2025-002 fix, which puts POST /v3/ec2tokens
+# behind rule:service_or_admin, and only 24.1.1's ec2token middleware authenticates that
+# call -- 24.1.0 and every earlier heat send it anonymously and are refused, so no
+# pre-signed AWS::CloudFormation::WaitCondition URL can be signalled.
+HEAT_VER := 24.1.1
 
 # heat-dashboard follows horizon, not the heat service: it installs next to horizon
 # because that is where collectstatic collects panels from. #636 moved horizon into
@@ -48,34 +57,72 @@ HEAT_VER := 22.0.1
 # no 11.0.1: the comment this replaces named one, and it does not exist on PyPI.
 # heat-dashboard talks to the API over HTTP through heatclient and imports nothing
 # from heat, so it never had to move when the service did. Horizon plugins are not in
-# the upper-constraints (that file only covers libraries), so the pin is explicit.
+# the upper-constraints (that file only covers libraries), so the pin is explicit. It
+# stays the caracal release when the service moves to epoxy, for the same reason: the
+# served horizon is still the caracal venv's.
 HEAT_DASHBOARD_VER := 11.0.0
 
-# install heat
+# install heat into the epoxy venv
+#
+# heat runs out of the epoxy venv, not the caracal one it shares with every other
+# 2024.1 service. It cannot be bumped in place: 24.x requires oslo.policy>=4.5.0, which
+# os-caracal-pip-upper-constraints.txt holds at 4.3.0 for octavia, manila and the other
+# 2024.1 services still in the caracal venv. So the service moves alone into
+# $(NEXT_OPENSTACK_HOME_DIR), the same shape as its caracal hop (#635), one release on,
+# after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg and
+# designate.
+#
+# Three packages have to be named because heat's requirements.txt asks for none of
+# them and pip will not pull them in transitively:
+# PyMySQL: config_heat.cpp writes a mysql+pymysql:// connection
+# oslo.messaging[kafka]: config_heat.cpp points the notification transport at kafka://
+# python-memcached: config_heat.cpp writes [keystone_authtoken] memcached_servers,
+#   which makes keystonemiddleware import memcache on its first token validation
+# All three happen to be in this venv already, but a dependency nothing asks for is
+# one that disappears silently.
+#
+# The /usr/bin/heat-* links follow the service: the units, config_heat.cpp, hex_sdk's
+# migrate_heat_db and os_heat_service_clean all reach heat through them.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)# python-heatclient owns the "orchestration" osc plugin and /usr/bin/heat. It
-	$(Q)# is named explicitly: an entry point is only visible to the interpreter
-	$(Q)# /usr/bin/openstack runs under, so a dependency nothing asks for is one that
-	$(Q)# can disappear silently and take `openstack orchestration ...` with it.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			openstack-heat==$(HEAT_VER) \
-			python-heatclient"
+			PyMySQL \
+			\"oslo.messaging[kafka]\" \
+			python-memcached"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link the six console scripts heat declares. The venv also gains
-	$(Q)# heat-db-setup and heat-keystone-setup{,-domain} (manual deployment helpers
+	$(Q)# heat-db-setup and heat-keystone-setup-domain (manual deployment helpers
 	$(Q)# that hex_config replaces) and heat-wsgi-api{,-cfn} (only used when heat is
 	$(Q)# hosted under a wsgi server, which is not the layout here); those are left
-	$(Q)# unlinked on purpose. 2024.1 adds none and removes none.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-all /usr/bin/heat-all
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-api /usr/bin/heat-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-api-cfn /usr/bin/heat-api-cfn
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-engine /usr/bin/heat-engine
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-manage /usr/bin/heat-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-status /usr/bin/heat-status
+	$(Q)# unlinked on purpose. 2025.1 adds no console script and drops only
+	$(Q)# heat-keystone-setup, which was never linked. heat-api, heat-api-cfn and
+	$(Q)# heat-all are deprecated in favour of the wsgi scripts but still ship.
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-all /usr/bin/heat-all
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-api /usr/bin/heat-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-api-cfn /usr/bin/heat-api-cfn
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-engine /usr/bin/heat-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-manage /usr/bin/heat-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-status /usr/bin/heat-status
+
+# the osc plugin
+#
+# python-heatclient owns the "orchestration" osc plugin and /usr/bin/heat. It stays in
+# the caracal venv next to /usr/bin/openstack -- see the note at the top. The epoxy
+# venv gets a copy of its own as a heat requirement, and nothing points at it. No
+# version is named: os-caracal-pip-upper-constraints.txt already carries
+# python-heatclient, so a version here could only drift from that file.
+rootfs_install::
+	$(Q)# enable dns in the rootfs for downloading packages
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+			python-heatclient"
+	$(Q)# clean up dns configurations after downloading packages
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# the heatclient CLI, which is python-heatclient's console script.
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
 
@@ -106,11 +153,13 @@ rootfs_install::
 	$(Q)# api-paste.ini, environment.d and templates ship inside the wheel, so
 	$(Q)# pip lands them under the venv prefix; relocate them into /etc/heat the
 	$(Q)# same way the RDO spec's %install does. All three are byte-identical
-	$(Q)# between 20.0.1 and 22.0.1, and heat's data_files list is unchanged, so
-	$(Q)# the hop moves only where they are read from.
-	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/heat/api-paste.ini /etc/heat/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/heat/environment.d /etc/heat/
-	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/heat/templates /etc/heat/
+	$(Q)# from 20.0.1 through 24.1.1, and heat's data_files list is unchanged, so
+	$(Q)# each hop moves only which venv prefix they are read from. The httpd and
+	$(Q)# uwsgi samples 2025.1 adds to etc/heat are not data_files, so they never
+	$(Q)# reach the prefix.
+	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/heat/api-paste.ini /etc/heat/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -rf $(NEXT_OPENSTACK_HOME_DIR)/etc/heat/environment.d /etc/heat/
+	$(Q)chroot $(ROOTDIR) cp -rf $(NEXT_OPENSTACK_HOME_DIR)/etc/heat/templates /etc/heat/
 	$(Q)# install systemd unit files
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/heat/openstack-heat-api.service /usr/lib/systemd/system/openstack-heat-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/heat/openstack-heat-api-cfn.service /usr/lib/systemd/system/openstack-heat-api-cfn.service
