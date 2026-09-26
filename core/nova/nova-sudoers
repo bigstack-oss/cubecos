@@ -4,6 +4,6 @@ nova ALL = (root) NOPASSWD: /usr/bin/nova-rootwrap /etc/nova/rootwrap.conf *
 # This is what the four helper_command pins config_nova.cpp writes point at.
 # There is no /usr/bin/privsep-helper any more -- it pointed at the antelope venv until
 # #639 took the last service that needed it to caracal -- and the caracal helper, still
-# installed for neutron, manila, cyborg and masakari, could not serve an epoxy nova
+# installed for manila, cyborg and masakari, could not serve an epoxy nova
 # anyway, so the path is spelled out rather than left to sudo's secure_path.
 nova ALL = (root) NOPASSWD: /opt/openstack-epoxy/bin/privsep-helper *

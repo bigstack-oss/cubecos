@@ -70,7 +70,7 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * *antelope* venv, for the services that were still living there. #639 took the last of
  * them (masakari) to caracal, so nova.mk no longer creates it and the bare name resolves
  * to nothing at all. nova has moved on to the epoxy venv (#653), and the caracal helper
- * it pinned until then stays installed for neutron, manila, cyborg and masakari -- but it
+ * it pinned until then stays installed for manila, cyborg and masakari -- but it
  * cannot serve nova either: on a freshly built rootfs the caracal venv holds no nova at
  * all and the context dies with FailedToDropPrivileges, and on a node upgraded in place
  * it is worse -- the helper imports the nova 29.4.0 still sitting there and answers a
