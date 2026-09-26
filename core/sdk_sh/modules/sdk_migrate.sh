@@ -619,9 +619,20 @@ migrate_cyborg_db()
 
     if is_control_node ; then
         su -s /bin/sh -c "cyborg-dbsync --config-file /etc/cyborg/cyborg.conf upgrade" cyborg
+        # cyborg 14.1.0 (CVE-2026-40214) scopes an ARQ to its project_id, a column
+        # 12.0.0 never filled in -- nova's bind does not send one -- so every ARQ bound
+        # before the upgrade would drop out of what a non-admin caller can see, nova
+        # acting for the instance's owner included. online_data_migrations backfills
+        # it from nova's record of each bound instance, the step upstream's upgrade
+        # notes place between the schema upgrade and the service restart.
+        # cyborg-conductor repeats it at startup, but only logs a failure there. Chain
+        # the marker to it, the way migrate_nova_db_post() does, so a failure is
+        # retried by the next Commit() rather than recorded as done.
+        ( su -s /bin/sh -c "cyborg-dbsync --config-file /etc/cyborg/cyborg.conf online_data_migrations" cyborg && \
+              touch $STATE_DIR/cyborg_db_migrated ) || true
+    else
+        touch $STATE_DIR/cyborg_db_migrated
     fi
-
-    touch $STATE_DIR/cyborg_db_migrated
 }
 
 migrate_ceph()
