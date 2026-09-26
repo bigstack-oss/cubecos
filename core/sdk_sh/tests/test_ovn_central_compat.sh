@@ -1,8 +1,10 @@
 #!/bin/bash
 #
-# Unit test for the OVN 23.03-beside-24.03 central in ../modules/sdk_ovn.sh: which nodes
-# enter the 23.03 mode at the A/B migrate, the chassis gate that holds the switch, and
-# the per-node convert/restore the switch is built from.
+# Unit test for the chassis-first, central-last OVN machinery in ../modules/sdk_ovn.sh:
+# which nodes enter the carried-central mode at the A/B migrate, what a node does with a
+# carried central's databases when the image has no such central, the chassis gate that
+# holds the switch, and the per-node convert/restore the switch is built from. The
+# carried minor is 23.03, as 3.1.20 left it.
 #
 # Self-contained: extracts just these functions and mocks hex_tuning, ovsdb-tool,
 # cubectl, remote_run and the local northd, so it needs no cluster and no OVN. A mock
@@ -13,7 +15,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_ovn.sh"
 T=$(mktemp -d)
 
-export OVN_COMPAT_DIR=$T/opt/ovn-23.03 OVN_COMPAT_DB_DIR=$T/etc/ovn/compat-23.03
+export OVN_COMPAT_VER=23.03 OVN_COMPAT_DIR=$T/opt/ovn-23.03 OVN_COMPAT_DB_DIR=$T/etc/ovn/compat-23.03
 export OVN_DB_DIR=$T/etc/ovn OVN_SCHEMA_DIR=$T/usr/share/ovn
 for fn in ovn_central_compat_active ovn_central_compat_enter ovn_chassis_version_uniform \
           ovn_central_convert_local ovn_central_restore_local ; do
@@ -30,6 +32,7 @@ yes_if(){ "$@" && echo y || echo n; }
 
 # --- mocks
 log_info(){ echo "info $*" >> "$LOG" ; }
+log_warning(){ echo "warning $*" >> "$LOG" ; }
 log_error(){ echo "error $*" >> "$LOG" ; }
 mkdir -p $T/bin && cat > $T/bin/hex_tuning <<'EOS'
 v=$(awk -F' = ' -v k="$2" '$1==k{print $2}' "$1")
@@ -126,7 +129,7 @@ chk "6 second run is a no-op"       "$(yes_if ovn_central_convert_local 20260924
 node control-converged true 7.0.0 20.27.0 ; ovn_central_compat_enter $T/prev
 printf '7.3.0\nold-default\n' > $OVN_DB_DIR/ovnnb_db.db
 ovn_central_convert_local 20260924-000002
-chk "7 old default kept aside"      "$(tail -1 $OVN_DB_DIR/backup-23.03-20260924-000002/ovnnb_db.db.24.03)" "old-default"
+chk "7 old default kept aside"      "$(tail -1 $OVN_DB_DIR/backup-23.03-20260924-000002/ovnnb_db.db.default)" "old-default"
 
 # 8. a failed convert is undone: 23.03 mode back, original rows, no half-converted default
 node control-converged true 7.0.0 20.27.0 ; ovn_central_compat_enter $T/prev
@@ -138,6 +141,36 @@ ovn_central_restore_local 20260924-000003
 chk "8 back in the 23.03 mode"      "$(yes_if ovn_central_compat_active)" "y"
 chk "8 23.03 nb restored"           "$(head -1 $OVN_COMPAT_DB_DIR/ovnnb_db.db)" "7.0.0"
 chk "8 no converted nb left"        "$(yes_if test -e $OVN_DB_DIR/ovnnb_db.db)" "n"
+
+# 9. an image with no 23.03 central (epoxy): a node the previous roll left on its 23.03
+#    central converts the databases at the migrate instead of handing them to pacemaker
+node control-converged true 7.0.0 20.27.0 ; ovn_central_compat_enter $T/prev
+mv $OVN_COMPAT_DIR $T/hidden ; : > "$LOG"
+ovn_central_compat_enter $T/prev ; rc=$?
+chk "9 converts"                    "$rc" "0"
+chk "9 leaves the 23.03 mode"       "$(yes_if ovn_central_compat_active)" "n"
+chk "9 nb now 24.03"                "$(head -1 $OVN_DB_DIR/ovnnb_db.db)" "7.3.0"
+chk "9 sb rows carried"             "$(tail -1 $OVN_DB_DIR/ovnsb_db.db)" "sb-rows"
+chk "9 23.03 copy kept as backup"   "$(ls -d $OVN_DB_DIR/backup-23.03-* 2>/dev/null | wc -l | tr -d ' ')" "1"
+chk "9 warns"                       "$(saw 'warning ovn_central_compat_enter')" "y"
+
+# 10. ... and a failed conversion there puts the 23.03 databases back and says so
+node control-converged true 7.0.0 20.27.0 ; mv $T/hidden $OVN_COMPAT_DIR
+ovn_central_compat_enter $T/prev ; mv $OVN_COMPAT_DIR $T/hidden ; : > "$LOG"
+FAIL_CONVERT=ovnsb_db.db
+ovn_central_compat_enter $T/prev ; rc=$?
+FAIL_CONVERT=""
+chk "10 reports the failure"        "$([ $rc -ne 0 ] && echo y || echo n)" "y"
+chk "10 23.03 databases restored"   "$(head -1 $OVN_COMPAT_DB_DIR/ovnsb_db.db)" "20.27.0"
+chk "10 no converted nb left"       "$(yes_if test -e $OVN_DB_DIR/ovnnb_db.db)" "n"
+chk "10 logs the error"             "$(saw 'error ovn_central_compat_enter')" "y"
+
+# 11. no 23.03 central and nothing carried: the migrate touches nothing
+node control-converged true 7.3.0 20.33.0 ; ovn_central_compat_enter $T/prev ; rc=$?
+chk "11 no-op"                      "$rc" "0"
+chk "11 default nb untouched"       "$(head -1 $OVN_DB_DIR/ovnnb_db.db)" "7.3.0"
+chk "11 no backup made"             "$(ls -d $OVN_DB_DIR/backup-* 2>/dev/null | wc -l | tr -d ' ')" "0"
+mv $T/hidden $OVN_COMPAT_DIR
 
 rm -rf "$T"
 echo "----" ; echo "PASS=$pass FAIL=$fail"

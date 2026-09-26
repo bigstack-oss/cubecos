@@ -50,8 +50,11 @@ static const char IRONIC_AGENT_NAME[] = "ironic-neutron-agent";
 static const char OVS_NAME[] = "openvswitch";
 static const char OVNND_NAME[] = "ovn-northd";
 static const char OVNCTL_NAME[] = "ovn-controller";
-// present while this node runs the 23.03 central for the 3.1.10 -> 3.1.20 roll
+// Both present while this node runs the previous OVN central through a roll that moves
+// OVN: its databases, and this image's copy of it. An image that does not move OVN
+// carries no copy. 23.03 is sdk_ovn.sh's OVN_COMPAT_VER: re-point them together.
 static const char OVN_COMPAT_NB[] = "/etc/ovn/compat-23.03/ovnnb_db.db";
+static const char OVN_COMPAT_CTL[] = "/opt/ovn-23.03/share/ovn/scripts/ovn-ctl";
 
 static const char OPENRC[] = "/etc/admin-openrc.sh";
 static const char AGENT_CACHE[] = "/etc/cron.d/neutron_agent_cache_renew";
@@ -611,12 +614,14 @@ OvnService(bool enabled, bool isMaster, bool forceRun, bool ha)
 
     if (isMaster) {
         // A boot commit force-runs the unit until pacemaker takes the central over. Not
-        // while this node runs the 23.03 central for the 3.1.10 -> 3.1.20 roll: pacemaker
-        // already runs it, and the unit is the 24.03 one, whose northd would attach to the
-        // same local sockets and write 24.03 logical flows into the 23.03 southbound. See
-        // ovn_central_compat_enter (sdk_ovn.sh); the unit's drop-in refuses it as well.
-        if (forceRun && ha && access(OVN_COMPAT_NB, F_OK) == 0)
-            HexLogInfo("holding the OVN 23.03 central until every chassis runs 24.03");
+        // while this node runs the previous central carried across a roll that moves OVN:
+        // pacemaker already runs it, and the unit is this image's, whose northd would
+        // attach to the same local sockets and write newer logical flows into the older
+        // southbound. See ovn_central_compat_enter (sdk_ovn.sh); the unit's drop-in
+        // refuses it as well.
+        if (forceRun && ha && access(OVN_COMPAT_NB, F_OK) == 0 &&
+            access(OVN_COMPAT_CTL, X_OK) == 0)
+            HexLogInfo("holding the carried OVN central until every chassis runs this image's OVN");
         else if (forceRun || !ha)
             SystemdCommitService(enabled , OVNND_NAME, true);   // ovn-northd
         else if (ha)
@@ -1069,9 +1074,10 @@ ClusterStartMain(int argc, char **argv)
         HexLogError("failed to run neutron post-migration actions");
     }
 
-    // Chassis first, central last: rolling_update moves the OVN central off 23.03 when
-    // the roll completes; this is the retry for an upgrade that did not finish through
-    // it. A no-op unless a control node still runs 23.03 and every chassis runs 24.03.
+    // Chassis first, central last: rolling_update moves the OVN central off the version
+    // the control nodes carried across when the roll completes; this is the retry for an
+    // upgrade that did not finish through it. A no-op unless a control node still runs
+    // the carried central and every chassis runs this image's OVN.
     const ExecSyncResult s = ExecBashSync(
         0,
         false,
@@ -1085,9 +1091,11 @@ ClusterStartMain(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
-// First boot of the new partition, before bootstrap: a control node that carried an OVN
-// 23.03 central's databases across keeps running that central until every chassis runs
-// 24.03 (ovn_central_compat_enter, sdk_ovn.sh). A post function, so it runs after the
+// First boot of the new partition, before bootstrap: on a hop that moves OVN, a control
+// node that carried the previous central's databases across keeps running that central
+// until every chassis runs this image's OVN; on one that does not, a node the previous
+// roll left on its carried central converts those databases instead
+// (ovn_central_compat_enter, sdk_ovn.sh). A post function, so it runs after the
 // CONFIG_MIGRATE(neutron, "/etc/ovn") copy below.
 static bool
 MigrateOvnCentral(const char *prevVersion, const char *prevRootDir)
@@ -1140,9 +1148,9 @@ CONFIG_MIGRATE(neutron, "/etc/openvswitch/");
 // place (NB 7.0.0 -> 7.3.0 and SB 20.27.0 -> 20.33.0 were verified byte-identical
 // in ovn-nbctl/ovn-sbctl show), and on a failed convert it creates an empty
 // database -- i.e. degrades to exactly the behaviour we have without this line.
-// Except on the 3.1.10 -> 3.1.20 hop, where a control node must not convert early:
-// MigrateOvnCentral hands the 23.03 databases to the 23.03 central instead, and
-// ovn_central_switch converts them once every chassis runs 24.03.
+// Except on a hop that moves OVN, where a control node must not convert early:
+// MigrateOvnCentral hands the previous central's databases to that central instead, and
+// ovn_central_switch converts them once every chassis runs this image's OVN.
 //
 // (Replaces a stale "/var/lib/ovn" entry. Neither ovn23.03 nor ovn24.03 owns
 // anything under that path and 3.1.10 nodes have no such directory at all, so it
