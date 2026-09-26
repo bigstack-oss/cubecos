@@ -33,8 +33,8 @@ CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(OPENSTACK_RELEASE)_patch
 # PyMySQL: config_cyborg.cpp writes a mysql+pymysql:// connection
 # oslo.messaging[kafka]: config_cyborg.cpp points the notification transport at
 #   kafka://
-# Both happen to be in this venv already (keystone.mk installs them), but a
-# dependency nothing asks for is one that disappears silently.
+# Both happen to be in this venv already, but a dependency nothing asks for is one
+# that disappears silently.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

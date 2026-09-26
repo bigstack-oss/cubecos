@@ -60,8 +60,8 @@ DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(OPENSTACK_RELEASE)_bin_patch
 # PyMySQL: config_designate.cpp writes a mysql+pymysql:// connection
 # oslo.messaging[kafka]: config_designate.cpp points the notification transport at
 #   kafka://
-# Both happen to be in this venv already (keystone.mk installs them), but a
-# dependency nothing asks for is one that disappears silently.
+# Both happen to be in this venv already, but a dependency nothing asks for is one
+# that disappears silently.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

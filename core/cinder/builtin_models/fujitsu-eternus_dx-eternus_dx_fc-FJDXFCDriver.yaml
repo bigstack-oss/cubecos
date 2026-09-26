@@ -18,6 +18,13 @@ storage:
     driverSection:
       - key: "cinder_eternus_config_file"
         value: "/etc/cinder/external_storage_extra_configs/<storage_name>_eternus_dx_fc.xml"
+      # Epoxy's driver logs into the ETERNUS CLI with an SSH key unless told
+      # otherwise -- fujitsu_passwordless is new in 2025.1 and defaults to True --
+      # but this model authenticates with the EternusUser and EternusPassword of
+      # the XML file above and provisions no key, so it keeps the password login
+      # upstream's upgrade note asks existing users to pin.
+      - key: "fujitsu_passwordless"
+        value: "False"
     extraSettings: []
     extraConfigFiles:
       - name: "eternus_dx_fc.xml"

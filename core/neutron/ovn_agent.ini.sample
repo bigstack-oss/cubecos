@@ -1,6 +1,81 @@
 [DEFAULT]
 
 #
+# From neutron.ml2.ovn.agent
+#
+
+# Location for Metadata Proxy UNIX domain socket. (string value)
+#metadata_proxy_socket = $state_path/metadata_proxy
+
+# User (uid or name) running metadata proxy after its initialization (if empty:
+# agent effective user). (string value)
+#metadata_proxy_user =
+
+# Group (gid or name) running metadata proxy after its initialization (if
+# empty: agent effective group). (string value)
+#metadata_proxy_group =
+
+# Metadata Proxy UNIX domain socket mode, 4 values allowed: 'deduce': deduce
+# mode from metadata_proxy_user/group values, 'user': set metadata proxy socket
+# mode to 0o644, to use when metadata_proxy_user is agent effective user or
+# root, 'group': set metadata proxy socket mode to 0o664, to use when
+# metadata_proxy_group is agent effective group or root, 'all': set metadata
+# proxy socket mode to 0o666, to use otherwise. (string value)
+# Possible values:
+# deduce - <No description provided>
+# user - <No description provided>
+# group - <No description provided>
+# all - <No description provided>
+#metadata_proxy_socket_mode = deduce
+
+# Number of separate worker processes for metadata server (defaults to 0 when
+# used with ML2/OVN and half of the number of CPUs with other backend drivers)
+# (integer value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#metadata_workers = <num_of_cpus> / 2
+
+# Number of backlog requests to configure the metadata server socket with
+# (integer value)
+#metadata_backlog = 4096
+
+# Certificate Authority public key (CA cert) file for ssl (string value)
+#auth_ca_cert = <None>
+
+# IP address or DNS name of Nova metadata server. (host address value)
+#nova_metadata_host = 127.0.0.1
+
+# TCP Port used by Nova metadata server. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#nova_metadata_port = 8775
+
+# When proxying metadata requests, Neutron signs the Instance-ID header with a
+# shared secret to prevent spoofing. You may select any string for a secret,
+# but it must match here and in the configuration used by the Nova metadata
+# server. NOTE: Nova uses the same config key, but in [neutron] section.
+# (string value)
+#metadata_proxy_shared_secret =
+
+# Protocol to access Nova metadata, http or https (string value)
+# Possible values:
+# http - <No description provided>
+# https - <No description provided>
+#nova_metadata_protocol = http
+
+# Allow to perform insecure SSL (https) requests to Nova metadata (boolean
+# value)
+#nova_metadata_insecure = false
+
+# Client certificate for Nova metadata api server. (string value)
+#nova_client_cert =
+
+# Private key of client certificate. (string value)
+#nova_client_priv_key =
+
+#
 # From oslo.log
 #
 
@@ -35,11 +110,15 @@
 # Deprecated group/name - [DEFAULT]/logdir
 #log_dir = <None>
 
-# Uses logging handler designed to watch file system. When log file is moved or
-# removed this handler will open a new log file with specified path
+# DEPRECATED: Uses logging handler designed to watch file system. When log file
+# is moved or removed this handler will open a new log file with specified path
 # instantaneously. It makes sense only if log_file option is specified and
 # Linux platform is used. This option is ignored if log_config_append is set.
 # (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This function is known to have bene broken for long time, and depends
+# on the unmaintained library
 #watch_log_file = false
 
 # Use syslog for logging. Existing syslog format is DEPRECATED and will be
@@ -65,11 +144,10 @@
 # set. (boolean value)
 #use_stderr = false
 
-# DEPRECATED: Log output to Windows Event Log. (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Windows support is no longer maintained.
-#use_eventlog = false
+# (Optional) Set the 'color' key according to log levels. This option takes
+# effect only when logging to stderr or stdout is used. This option is ignored
+# if log_config_append is set. (boolean value)
+#log_color = false
 
 # The amount of time before the log files are rotated. This option is ignored
 # unless log_rotation_type is set to "interval". (integer value)
@@ -143,14 +221,49 @@
 # Maximum number of logged messages per rate_limit_interval. (integer value)
 #rate_limit_burst = 0
 
-# Log level name used by rate limiting: CRITICAL, ERROR, INFO, WARNING, DEBUG
-# or empty string. Logs with level greater or equal to rate_limit_except_level
-# are not filtered. An empty string means that all levels are filtered. (string
-# value)
+# Log level name used by rate limiting. Logs with level greater or equal to
+# rate_limit_except_level are not filtered. An empty string means that all
+# levels are filtered. (string value)
+# Possible values:
+# CRITICAL - <No description provided>
+# ERROR - <No description provided>
+# INFO - <No description provided>
+# WARNING - <No description provided>
+# DEBUG - <No description provided>
+# '' - <No description provided>
 #rate_limit_except_level = CRITICAL
 
 # Enables or disables fatal status of deprecations. (boolean value)
 #fatal_deprecations = false
+
+
+[metadata_rate_limiting]
+
+#
+# From neutron.ml2.ovn.agent
+#
+
+# Enable rate limiting on the metadata API. (boolean value)
+#rate_limit_enabled = false
+
+# Comma separated list of the metadata address IP versions (4, 6) for which
+# rate limiting will be enabled. The default is to rate limit only for the
+# metadata IPv4 address. NOTE: at the moment, the open source version of
+# HAProxy only allows us to rate limit for IPv4 or IPv6, but not both at the
+# same time. (list value)
+#ip_versions = 4
+
+# Duration (seconds) of the base window on the metadata API. (integer value)
+#base_window_duration = 10
+
+# Max number of queries to accept during the base window. (integer value)
+#base_query_rate_limit = 10
+
+# Duration (seconds) of the burst window on the metadata API. (integer value)
+#burst_window_duration = 10
+
+# Max number of queries to accept during the burst window. (integer value)
+#burst_query_rate_limit = 10
 
 
 [ovn]
@@ -166,7 +279,7 @@
 # Use unix:FILE for unix domain socket connection.
 # Multiple connections can be specified by a comma separated string. See also:
 # https://github.com/openvswitch/ovs/blob/ab4d3bfbef37c31331db5a9dbe7c22eb8d5e5e5f/python/ovs/db/idl.py#L215-L216
-# (string value)
+# (list value)
 #ovn_nb_connection = tcp:127.0.0.1:6641
 
 # The PEM file with private key for SSL connection to OVN-NB-DB (string value)
@@ -187,7 +300,7 @@
 # Use unix:FILE for unix domain socket connection.
 # Multiple connections can be specified by a comma separated string. See also:
 # https://github.com/openvswitch/ovs/blob/ab4d3bfbef37c31331db5a9dbe7c22eb8d5e5e5f/python/ovs/db/idl.py#L215-L216
-# (string value)
+# (list value)
 #ovn_sb_connection = tcp:127.0.0.1:6642
 
 # The PEM file with private key for SSL connection to OVN-SB-DB (string value)
@@ -214,30 +327,26 @@
 # Minimum value: 0
 #ovsdb_probe_interval = 60000
 
-# The synchronization mode of OVN_Northbound OVSDB with Neutron DB.
-# off - synchronization is off
-# log - during neutron-server startup, check to see if OVN is in sync with the
-# Neutron database.  Log warnings for any inconsistencies found so that an
-# admin can investigate
-# repair - during neutron-server startup, automatically create resources found
-# in Neutron but not in OVN. Also remove resources from OVN that are no longer
-# in Neutron.migrate - This mode is to OVS to OVN migration. It will sync the
-# DB just like repair mode but it will additionally fix the Neutron DB resource
-# from OVS to OVN. (string value)
+# The synchronization mode of OVN_Northbound OVSDB with Neutron DB. (string
+# value)
 # Possible values:
-# off - <No description provided>
-# log - <No description provided>
-# repair - <No description provided>
-# migrate - <No description provided>
+# off - Synchronization is off.
+# log - During neutron-server startup, check to see if OVN is in sync with the
+# Neutron database. Log warnings for any inconsistencies found so that an admin
+# can investigate.
+# repair - During neutron-server startup, automatically create resources found
+# in Neutron but not in OVN. Also remove resources from OVN that are no longer
+# found in Neutron.
+# migrate - This mode is to OVS to OVN migration. It will sync the DB just like
+# repair mode but it will additionally fix the Neutron DB resource from OVS to
+# OVN.
 #neutron_sync_mode = log
 
 # The OVN L3 Scheduler type used to schedule router gateway ports on
-# hypervisors/chassis.
-# leastloaded - chassis with fewest gateway ports selected
-# chance - chassis randomly selected (string value)
+# hypervisors/chassis. (string value)
 # Possible values:
-# leastloaded - <No description provided>
-# chance - <No description provided>
+# leastloaded - Select chassis with fewest gateway ports.
+# chance - Select chassis randomly.
 #ovn_l3_scheduler = leastloaded
 
 # Enable distributed floating IP support.
@@ -273,11 +382,19 @@
 # server will be used. (list value)
 #dns_servers =
 
+# Whether to consider DNS records local to OVN or not. For OVN version 24.03
+# and above if this option is set to True, DNS records will be treated local to
+# the OVN controller and it will respond to the queries for the records and
+# record types known to it, else it will forward them to the configured DNS
+# server(s). (boolean value)
+#dns_records_ovn_owned = false
+
 # Dictionary of global DHCPv4 options which will be automatically set on each
 # subnet upon creation and on all existing subnets when Neutron starts.
 # An empty value for a DHCP option will cause that option to be unset globally.
+# Multiple values should be separated by semi-colon.
 # EXAMPLES:
-# - ntp_server:1.2.3.4,wpad:1.2.3.5 - Set ntp_server and wpad
+# - ntp_server:1.2.3.4,wpad:1.2.3.5;1.2.3.6 - Set ntp_server and wpad
 # - ntp_server:,wpad:1.2.3.5 - Unset ntp_server and set wpad
 # See the ovn-nb(5) man page for available options. (dict value)
 #ovn_dhcp4_global_options =
@@ -285,16 +402,20 @@
 # Dictionary of global DHCPv6 options which will be automatically set on each
 # subnet upon creation and on all existing subnets when Neutron starts.
 # An empty value for a DHCPv6 option will cause that option to be unset
-# globally.
+# globally. Multiple values should be separated by semi-colon.
 # See the ovn-nb(5) man page for available options. (dict value)
 #ovn_dhcp6_global_options =
 
-# Configure OVN to emit "need to frag" packets in case of MTU mismatches.
-# Before enabling this option make sure that it is supported by the host kernel
-# (version >= 5.2) or by checking the output of the following command:
+# DEPRECATED: Configure OVN to emit "need to frag" packets in case of MTU
+# mismatches.
+# You may have to disable this option if you are running an old host kernel
+# (version < 5.2). You may check the output of the following command:
 # ovs-appctl -t ovs-vswitchd dpif/show-dp-features br-int | grep "Check pkt
 # length action". (boolean value)
-#ovn_emit_need_to_frag = false
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: The option is useful only on very old Linux kernels (version < 5.2).
+#ovn_emit_need_to_frag = true
 
 # Disable OVN's built-in DHCP for baremetal ports (VNIC type "baremetal"). This
 # allows operators to plug their own DHCP server of choice for PXE booting
@@ -303,14 +424,6 @@
 # provisioning over IPv6 this option should be set to "True" and neutron-dhcp-
 # agent should be used instead. Defaults to "False". (boolean value)
 #disable_ovn_dhcp_for_baremetal_ports = false
-
-# DEPRECATED: If OVN older than 21.06 is used together with Neutron, this
-# option should be set to ``False`` in order to disable the ``stateful-
-# security-group`` API extension as ``allow-stateless`` keyword is only
-# supported by OVN >= 21.06. (boolean value)
-# This option is deprecated for removal since 2023.1.
-# Its value may be silently ignored in the future.
-#allow_stateless_action_supported = true
 
 # If enabled it will allow localnet ports to learn MAC addresses and store them
 # in FDB SB table. This avoids flooding for traffic towards unknown IPs when
@@ -328,10 +441,24 @@
 # Minimum value: 0
 #mac_binding_age_threshold = 0
 
+# If enabled (default) OVN will flood ARP requests to all attached ports on a
+# network. If set to False, ARP requests are only sent to routers on that
+# network if the target MAC address matches. ARP requests that do not match a
+# router will only be forwarded to non-router ports. Supported by OVN >= 23.06.
+# (boolean value)
+#broadcast_arps_to_all_routers = true
+
 # Whether to configure SNAT for all nested subnets connected to the router
 # through any other routers, similar to the default ML2/OVS behavior. Defaults
 # to "False". (boolean value)
 #ovn_router_indirect_snat = false
+
+# Activation strategy to use for live migration. (string value)
+# Possible values:
+# rarp - Expect the hypervisor to send a Reverse ARP request through the
+# migrated port after migration is complete.
+# '' - A migrated port is immediately activated on the destination host.
+#live_migration_activation_strategy = rarp
 
 
 [ovs]
