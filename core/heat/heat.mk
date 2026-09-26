@@ -40,6 +40,9 @@
 
 HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 
+HEAT_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/heat
+HEAT_PATCHDIR := $(COREDIR)/heat/$(NEXT_OPENSTACK_RELEASE)_patch
+
 # the release is needed twice: once to pin the wheel, once for [revision] heat_revision
 # https://releases.openstack.org/epoxy/index.html#epoxy-heat -- 24.1.1 is the newest
 # 2025.1 release. 24.0.0 was the cycle's; 24.1.0 deprecates the heat-api and
@@ -184,6 +187,29 @@ rootfs_install::
 # clean up the build directory
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/heat
+
+# Apply reviewable unified diffs (<rel>.py.patch beside pristine <rel>.py.orig, the same
+# convention as core/nova/nova.mk). A failed hunk aborts the build instead of shipping
+# drift silently.
+#
+# db/api.py: upstream's fix for snapshot_get_all_by_stack (stable/2025.1 d85ad0bb,
+#   "Execute query under session scope"), merged after 24.1.1 and in no release yet. The
+#   function returns an unexecuted Query from under @context_manager.reader, so the
+#   query runs after enginefacade has closed the session, on a new one that nothing
+#   closes, and its pooled connection stays checked out until the cycle collector frees
+#   it. Every stack delete takes that path, and so does `stack snapshot list`. Under
+#   python 3.12 the collector often runs from the eventlet hub, where the pool's reset
+#   raises "do not call blocking functions from the mainloop" and the connection is
+#   invalidated. Under 22.0.1's python 3.11 and SQLAlchemy 1.4 the same code left the
+#   connections checked out for good. Drop the patch once a 24.1.x release carries the
+#   fix.
+rootfs_install::
+	$(Q)set -e; for p in $$(find $(HEAT_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(HEAT_PATCHDIR)/}; tgt=$(HEAT_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "heat: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
 
 # heat-dist.conf is not shipped (see openstack-heat-api.service), and everything it
 # carried is either dead, already written by config_heat.cpp, or a restatement of the
