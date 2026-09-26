@@ -14,7 +14,7 @@
 #   haproxy    2.8 is built +PROMEX ("Available services : prometheus-exporter"), so
 #              config_haproxy exposes it with one use-service line on the stats listener it
 #              already binds. No haproxy_exporter.
-#   rabbitmq   3.11 ships rabbitmq_prometheus -- shipped DISABLED, so config_rabbitmq has to
+#   rabbitmq   3.12 ships rabbitmq_prometheus -- shipped DISABLED, so config_rabbitmq has to
 #              enable it. "Speaks Prometheus" is not "is turned on".
 #   influxdb   1.12 serves /metrics, though on 1.x it carries only go/process/promhttp series
 #              and nothing about the database. Scraped anyway, because 2.x reports properly
