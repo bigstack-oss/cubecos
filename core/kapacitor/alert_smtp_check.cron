@@ -1,0 +1,13 @@
+# Raise an event when kapacitor fails to deliver alert mail.
+#
+# kapacitor queues mail and sends it in the background, so a dial or auth failure
+# never reaches the alert or `kapacitor service-tests smtp` -- it is only logged to
+# /var/log/kapacitor/kapacitor.log on the node that tried to send. A customer's relay
+# rejected every alert mail this way and nobody knew until the outage it failed to
+# report.
+#
+# Cron rather than a telegraf exec input: the check must not depend on the telemetry
+# stack whose alerts it is guarding. alert_smtp_delivery_check is one stat and a read
+# of whatever the log gained since the last run, and is a no-op on nodes without
+# kapacitor.
+*/2 * * * * root /usr/sbin/hex_sdk alert_smtp_delivery_check >/dev/null 2>&1

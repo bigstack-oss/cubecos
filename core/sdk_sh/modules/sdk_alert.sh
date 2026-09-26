@@ -760,6 +760,79 @@ alert_get_event_list()
     yq -o=json "$event_list" | jq -c ".events"
 }
 
+ALERT_SMTP_LOG=/var/log/kapacitor/kapacitor.log
+ALERT_SMTP_STATE=/var/lib/cube/alert_smtp_delivery
+ALERT_SMTP_QUIET=1800
+ALERT_SMTP_HEX_LOG_EVENT=/usr/sbin/hex_log_event
+
+# cron entry point (/etc/cron.d/alert_smtp_check).
+#
+# kapacitor's smtp service is fire-and-forget: SendMail() only queues the mail, so
+# neither an alert handler nor `kapacitor service-tests smtp` ever sees a dial or
+# auth failure. The only trace is an error line in kapacitor.log on the node that
+# tried to send, which nothing ships off-node. This turns those lines into an event.
+#
+# Fires SRV00004E once on the first smtp error, stays silent while errors keep
+# coming, and fires SRV00005I after ALERT_SMTP_QUIET seconds with no new error.
+# Quiet only means no mail failed; with no alert raised in that window, no mail
+# was tried either. Both keys are kept off email handlers by config_kapacitor.
+#
+# Only nodes running kapacitor have the log; everywhere else this is a no-op.
+alert_smtp_delivery_check()
+{
+    local log=$ALERT_SMTP_LOG state=$ALERT_SMTP_STATE
+    local inode size offset prev last now lines count err
+
+    [ -r "$log" ] || return 0
+    inode=$(ls -di "$log" | awk '{print $1}')
+    size=$(wc -c < "$log" | tr -d ' ')
+    now=$(date +%s)
+
+    if [ ! -f "$state" ] ; then
+        # first run: start from the end, a stale error from before install is not news
+        mkdir -p $(dirname $state) 2>/dev/null
+        printf "inode=%s\noffset=%s\nstate=ok\nlast=0\n" "$inode" "$size" > $state
+        return 0
+    fi
+
+    offset=$(awk -F= '$1=="offset"{print $2}' $state)
+    prev=$(awk -F= '$1=="state"{print $2}' $state)
+    last=$(awk -F= '$1=="last"{print $2}' $state)
+    [ "$offset" -ge 0 ] 2>/dev/null || offset=0
+    [ "$last" -ge 0 ] 2>/dev/null || last=0
+
+    # logrotate copytruncate keeps the inode but shrinks the file; a moved or
+    # recreated log has a new inode. Either way, read the current file from the top.
+    if [ "$inode" != "$(awk -F= '$1=="inode"{print $2}' $state)" ] || [ "$size" -lt "$offset" ] ; then
+        offset=0
+    fi
+
+    lines=
+    if [ "$size" -gt "$offset" ] ; then
+        lines=$(tail -c +$(( offset + 1 )) "$log" 2>/dev/null | head -c $(( size - offset )) | grep 'service=smtp' | grep 'lvl=error')
+    fi
+    count=$(echo -n "$lines" | grep -c .)
+
+    if [ "$count" -gt 0 ] ; then
+        last=$now
+        if [ "$prev" != "failing" ] ; then
+            # kapacitor logs a dial or auth failure as "error closing connection to
+            # SMTP server"; the reason is in err=. It becomes an influx tag, so keep
+            # only tag-safe characters.
+            err=$(echo "$lines" | tail -n 1 | sed -n 's/.* err="\([^"]*\)".*/\1/p')
+            [ -n "$err" ] || err=$(echo "$lines" | tail -n 1 | sed -n 's/.* msg="\([^"]*\)".*/\1/p')
+            err=$(echo -n "${err:-unknown}" | tr -c 'A-Za-z0-9._:@/-' '_' | tr -s '_' | cut -c 1-120)
+            $ALERT_SMTP_HEX_LOG_EVENT -e SRV00004E "interface=system,host=$HOSTNAME,service=smtp,action=delivery_failed,errors=$count,error=$err"
+            prev=failing
+        fi
+    elif [ "$prev" = "failing" ] && [ $(( now - last )) -ge $ALERT_SMTP_QUIET ] ; then
+        $ALERT_SMTP_HEX_LOG_EVENT -e SRV00005I "interface=system,host=$HOSTNAME,service=smtp,action=delivery_recovered,quiet_seconds=$(( now - last ))"
+        prev=ok
+    fi
+
+    printf "inode=%s\noffset=%s\nstate=%s\nlast=%s\n" "$inode" "$size" "${prev:-ok}" "$last" > $state
+}
+
 alert_get_trigger()
 {
     # output format: [
