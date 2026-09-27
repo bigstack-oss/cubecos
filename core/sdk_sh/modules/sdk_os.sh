@@ -2377,7 +2377,11 @@ os_ironic_config_sync()
             local gateway=$(echo $info | jq -r .gateway_ip)
             echo "dhcp-option=3,$gateway" >> $dhcp
             local nameservers=$(echo $info | jq -r .dns_nameservers[] | tr "\n" "," | head -c -1)
-            echo "dhcp-option=6,$nameservers" >> $dhcp
+            # dnsmasq rejects the whole file over an empty "dhcp-option=6," ("bad IP
+            # address"), which takes TFTP down with DHCP, and the unit is only restarted
+            # again when this file changes. A subnet with no dns_nameservers gets no
+            # option 6: with port=0 dnsmasq does not advertise itself as DNS either.
+            [ -n "$nameservers" ] && echo "dhcp-option=6,$nameservers" >> $dhcp
             # list non virtual ports on public network
             local ports=$($OPENSTACK port list --network $name --device-owner compute:nova -f value | grep -v " fa:16:3e:")
             for mac in $(echo "$ports" | awk '{print $2}') ; do
