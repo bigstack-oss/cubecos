@@ -2352,46 +2352,57 @@ os_ironic_deploy_initramfs_import()
     cp -f $initramfs /tftpboot/deploy.initrd
 }
 
+# The flat external network ironic cleans, deploys and inspects on: the first one neutron
+# lists. config_ironic.cpp writes it into [neutron] cleaning_network, and
+# os_ironic_config_sync checks against it; printed without a newline for HexUtilPOpen().
+os_ironic_flat_network()
+{
+    $OPENSTACK network list --provider-network-type flat --external -f json | jq -j '.[0].Name // empty'
+}
+
+# dnsmasq's DHCP settings for the nodes it answers, those under introspection: the flat
+# external network's subnet (the network os_ironic_flat_network names), its first
+# allocation pool as the range, its gateway, and its dns servers when it has any.
+# config_ironic.cpp's WriteDhcpTftpConfig() appends them to dnsmasq.conf. There are no
+# dhcp-host pins: neutron's OVN DHCP serves a deployed node's port its own address, and
+# ironic-inspector's dnsmasq PXE filter keeps dnsmasq away from every other MAC.
+os_ironic_flat_dhcp_config()
+{
+    local subnet=$($OPENSTACK network list --provider-network-type flat --external -f json | jq -r '.[0].Subnets[0] // empty')
+    [ -n "$subnet" ] || return 0
+    local info=$($OPENSTACK subnet show $subnet -f json)
+    echo "$info" | jq -r '.allocation_pools[0] // empty | "dhcp-range=\(.start),\(.end)"'
+    echo "$info" | jq -r '.gateway_ip // empty | "dhcp-option=3,\(.)"'
+    # dnsmasq rejects the whole file over an empty "dhcp-option=6," ("bad IP address"),
+    # which takes TFTP down with DHCP. A subnet with no dns_nameservers gets no option 6:
+    # with port=0 dnsmasq does not advertise itself as DNS either. A subnet with no
+    # gateway gets no option 3, for the same reason.
+    echo "$info" | jq -r 'select(.dns_nameservers | length > 0) | "dhcp-option=6," + (.dns_nameservers | join(","))'
+}
+
+# The reconciler for a flat network or subnet created or changed after the last ironic
+# commit, run by cron every three minutes while ironic.deploy.server is on. hex_config
+# writes both files whole on every commit -- cleaning_network from
+# os_ironic_flat_network, dnsmasq.conf with os_ironic_flat_dhcp_config -- so in steady
+# state this changes nothing and restarts nothing.
 os_ironic_config_sync()
 {
     local ironic=/etc/ironic/ironic.conf
     local dhcp=/etc/ironic-inspector/dnsmasq.conf
 
-    local flat=$($OPENSTACK network list --provider-network-type flat --external -f json)
+    local name=$(os_ironic_flat_network)
+    [ -n "$name" ] || return 0
 
-    if [ -n "$flat" -a "$flat" != "null" ] ; then
+    if ! grep -qx "cleaning_network = $name" $ironic ; then
+        sed -i "/^cleaning_network /s/=.*$/= $name/" $ironic
+        systemctl restart openstack-ironic-conductor
+    fi
 
-        local name=$(echo $flat | jq -r .[0].Name)
-        if ! grep -q "cleaning_network = $name" $ironic ; then
-            sed -i "/^cleaning_network /s/=.*$/= $name/" $ironic
-            systemctl restart openstack-ironic-conductor
-        fi
-
-        local subnet=$(echo $flat | jq -r .[0].Subnets[0])
-        if [ -n "$subnet" -a "$subnet" != "null" ] ; then
-            cp -f $dhcp $dhcp.prev
-            $HEX_CFG init_ironic_dhcp_config;
-            local range=$($OPENSTACK subnet show $subnet | awk '/ allocation_pools /{print $4}' | tr '-' ',')
-            echo "dhcp-range=$range" >> $dhcp
-            local info=$($OPENSTACK subnet show $subnet -f json)
-            local gateway=$(echo $info | jq -r .gateway_ip)
-            echo "dhcp-option=3,$gateway" >> $dhcp
-            local nameservers=$(echo $info | jq -r .dns_nameservers[] | tr "\n" "," | head -c -1)
-            # dnsmasq rejects the whole file over an empty "dhcp-option=6," ("bad IP
-            # address"), which takes TFTP down with DHCP, and the unit is only restarted
-            # again when this file changes. A subnet with no dns_nameservers gets no
-            # option 6: with port=0 dnsmasq does not advertise itself as DNS either.
-            [ -n "$nameservers" ] && echo "dhcp-option=6,$nameservers" >> $dhcp
-            # No dhcp-host pin for a deployed node's port: neutron's OVN DHCP serves that
-            # port its own address, and ironic-inspector's dnsmasq PXE filter keeps
-            # dnsmasq away from every MAC not under introspection (config_ironic.cpp).
-            # The pins used to arrive up to three minutes after nova created the port,
-            # so a node that booted first kept a stale dynamic lease.
-            if ! cmp -s $dhcp $dhcp.prev ; then
-                rm -f /var/lib/dnsmasq/dnsmasq.leases
-                systemctl restart openstack-ironic-inspector-dnsmasq
-            fi
-        fi
+    cp -f $dhcp $dhcp.prev
+    $HEX_CFG init_ironic_dhcp_config
+    if ! cmp -s $dhcp $dhcp.prev ; then
+        rm -f /var/lib/dnsmasq/dnsmasq.leases
+        systemctl restart openstack-ironic-inspector-dnsmasq
     fi
 }
 

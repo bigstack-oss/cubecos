@@ -155,6 +155,15 @@ WriteDhcpTftpConfig()
     if (!IsControl(s_eCubeRole))
         return true;
 
+    // DHCP for the nodes dnsmasq answers, those under introspection: the flat external
+    // network's subnet settings, looked up before the file is opened, and only while
+    // dnsmasq runs. os_ironic_config_sync used to append them up to three minutes after
+    // every commit, so dnsmasq was restarted without a range and could not boot a node
+    // for introspection until the sync restarted it again.
+    std::string subnetCfg;
+    if (s_enabled.newValue() && s_deployEnabled.newValue())
+        subnetCfg = HexUtilPOpen(HEX_SDK " os_ironic_flat_dhcp_config");
+
     FILE *fout = fopen(DHCP_TFTP_CFG, "w");
     if (!fout) {
         HexLogError("Unable to write %s", DHCP_TFTP_CFG);
@@ -176,6 +185,8 @@ WriteDhcpTftpConfig()
     // let ironic-inspector decide which MACs get an answer -- see the [pxe_filter]
     // settings in UpdateCfg()
     fprintf(fout, "dhcp-hostsdir=%s\n", DHCP_HOSTSDIR);
+
+    fputs(subnetCfg.c_str(), fout);
     fclose(fout);
 
     return true;
@@ -430,7 +441,18 @@ UpdateCfg(std::string domain, std::string ironicPass, std::string inspPass)
         cfg["dhcp"]["dhcp_provider"] = "neutron";
 
         cfg["conductor"]["automated_clean"] = "false";
-        cfg["neutron"]["cleaning_network"] = "";
+        // The flat network interface's validate() requires cleaning_network even with
+        // automated cleaning off, so no node can be deployed without it ("UUID or name
+        // of cleaning_network is not set in configuration or in node driver_info"). It
+        // is the operator's flat external network, known only once neutron has it, so
+        // it is looked up here instead of written empty and patched in afterwards:
+        // os_ironic_config_sync used to sed it back up to three minutes after every
+        // commit and restart the conductor to read it, which had the API answering 503
+        // until the conductor was back. The sync now finds it already set, and only
+        // acts on a flat network created since the last commit. Not looked up while
+        // ironic is disabled, where nothing reads it.
+        cfg["neutron"]["cleaning_network"] = s_enabled.newValue() ?
+            HexUtilPOpen(HEX_SDK " os_ironic_flat_network") : "";
 
         cfg["agent"]["image_download_source"] = "http";
         cfg["agent"]["deploy_logs_local_path"] = "/var/log/ironic";
