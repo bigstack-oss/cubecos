@@ -51,6 +51,9 @@ static const char FILE_NAME[] = "openstack-ironic-file-server";
 // tftp/pxe server
 static const char TFTP_ROOT[] = "/tftpboot";
 static const char DHCP_TFTP_CFG[] = "/etc/ironic-inspector/dnsmasq.conf";
+// per-MAC allow/deny records ironic-inspector's dnsmasq PXE filter maintains, and dnsmasq
+// rereads through inotify; ironic.mk creates the directory
+static const char DHCP_HOSTSDIR[] = "/var/lib/ironic-inspector/dhcp-hostsdir";
 static const char PXE_CFG[] = "/tftpboot/pxelinux.cfg/default";
 static const char IRONIC_CFG_SYNC[] = "/etc/cron.d/ironic_config_sync";
 
@@ -169,6 +172,10 @@ WriteDhcpTftpConfig()
 
     // enable pxe
     fprintf(fout, "dhcp-boot=pxelinux.0\n");
+
+    // let ironic-inspector decide which MACs get an answer -- see the [pxe_filter]
+    // settings in UpdateCfg()
+    fprintf(fout, "dhcp-hostsdir=%s\n", DHCP_HOSTSDIR);
     fclose(fout);
 
     return true;
@@ -460,6 +467,30 @@ UpdateCfg(std::string domain, std::string ironicPass, std::string inspPass)
 
         inspCfg["DEFAULT"]["log_dir"] = "/var/log/ironic-inspector";
         inspCfg["DEFAULT"]["standalone"] = "true";
+
+        // The deploy server's dnsmasq serves DHCP on the flat external network, where
+        // neutron's OVN DHCP already answers every port, bare metal included: ironic's
+        // neutron DHCP provider puts the PXE options on the node's VIF port, and OVN
+        // serves that port's address from the port's own external LSP. So dnsmasq has
+        // to answer only the one client neutron does not know, a node being inspected,
+        // which boots before it has a port. Anything else it answers races OVN with an
+        // address from its own range: a deployed node or an ordinary VM that takes
+        // dnsmasq's offer comes up on an address neutron did not give it.
+        //
+        // The dnsmasq PXE filter is the inspector's mechanism for exactly that. It
+        // writes "<mac>,ignore" into dhcp_hostsdir for every ironic port not under
+        // introspection and an allow record for those that are, when an introspection
+        // starts and ends and every sync_period (15 s), and dnsmasq rereads the
+        // directory through inotify. deny_unknown_macs keeps the wildcard record at
+        // "ignore" during an introspection too, so a MAC ironic does not know -- every
+        // VM -- never gets an answer. A node now needs an enrolled port before it is
+        // inspected; [processing] node_not_found_hook stays unset, so a machine ironic
+        // does not know could not be enrolled by booting it anyway. The iptables
+        // driver this replaces was inert here: it filters on [iptables]
+        // dnsmasq_interface, whose default br-ctlplane does not exist on CubeCOS.
+        inspCfg["pxe_filter"]["driver"] = "dnsmasq";
+        inspCfg["pxe_filter"]["deny_unknown_macs"] = "true";
+        inspCfg["dnsmasq_pxe_filter"]["dhcp_hostsdir"] = DHCP_HOSTSDIR;
 
         inspCfg["keystone_authtoken"].clear();
         inspCfg["keystone_authtoken"]["auth_type"] = "password";

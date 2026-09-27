@@ -2382,12 +2382,11 @@ os_ironic_config_sync()
             # again when this file changes. A subnet with no dns_nameservers gets no
             # option 6: with port=0 dnsmasq does not advertise itself as DNS either.
             [ -n "$nameservers" ] && echo "dhcp-option=6,$nameservers" >> $dhcp
-            # list non virtual ports on public network
-            local ports=$($OPENSTACK port list --network $name --device-owner compute:nova -f value | grep -v " fa:16:3e:")
-            for mac in $(echo "$ports" | awk '{print $2}') ; do
-                local ip=$(echo "$ports" | grep $mac | awk -F"'" '{print $8}')
-                echo "dhcp-host=$mac,$ip" >> $dhcp
-            done
+            # No dhcp-host pin for a deployed node's port: neutron's OVN DHCP serves that
+            # port its own address, and ironic-inspector's dnsmasq PXE filter keeps
+            # dnsmasq away from every MAC not under introspection (config_ironic.cpp).
+            # The pins used to arrive up to three minutes after nova created the port,
+            # so a node that booted first kept a stale dynamic lease.
             if ! cmp -s $dhcp $dhcp.prev ; then
                 rm -f /var/lib/dnsmasq/dnsmasq.leases
                 systemctl restart openstack-ironic-inspector-dnsmasq
