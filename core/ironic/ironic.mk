@@ -4,24 +4,29 @@
 IRONIC_CONF_DIR := /etc/ironic
 IRONIC_INSP_CONF_DIR := /etc/ironic-inspector
 
-# https://releases.openstack.org/caracal/index.html#caracal-ironic -- last numeric
-# 2024.1 revision. The caracal cycle for ironic runs 23.1.0 -> 24.1.5; 24.1.5 is the
-# same "last numeric revision of the series" rule #1194 used to land on 21.4.4.
-IRONIC_VER := 24.1.5
+# https://releases.openstack.org/epoxy/index.html#epoxy-ironic -- 29.1.0 is the newest
+# 2025.1 release. ironic is cycle-with-intermediary: 27.0.0 and 28.0.0 were the cycle's
+# intermediary releases on bugfix branches, and stable/2025.1 starts at 29.0.0. 29.1.0
+# is 29.0.6 plus the socat serial console fix, which CubeCOS does not use. The
+# stable releases since 29.0.0 carry the branch's security fixes: kernel_append_params
+# sanitising (CVE-2026-46447), the pxe_template override, the IPMI send_raw step, the
+# anaconda ISO path check (CVE-2026-48681) and the bootloader-install switch
+# (CVE-2026-43003).
+IRONIC_VER := 29.1.0
 
-# https://releases.openstack.org/caracal/index.html#caracal-ironic-inspector -- the
-# 2024.1 cycle runs 11.8.0 -> 12.1.1, so 12.1.1 is its last numeric revision.
+# https://releases.openstack.org/epoxy/index.html#epoxy-ironic-inspector -- 12.4.0 is the
+# only 2025.1 release, and the project is in maintenance mode: upstream says to move
+# to ironic's built-in in-band inspection and to expect no further releases.
 #
-# ironic-inspector is kept rather than replaced by the in-band inspection ironic
-# 24.1.5 grows of its own ("enabled_inspect_interfaces = agent", the new
-# ironic.inspection.hooks entry points and the ironic-pxe-filter service). That is a
-# new feature of the release, and this issue's "ignore the new features introduced in
-# the new version" criterion says not to adopt it here. config_ironic.cpp pins
-# enabled_inspect_interfaces to "inspector" and rewrites it on every Commit(), so the
-# built-in path stays unreachable -- which is also what makes 24.1.5's new
-# migrate_to_builtin_inspection online data migration a no-op: it returns (0, 0)
-# while "inspector" is still in that list.
-IRONIC_INSP_VER := 12.1.1
+# It is still kept rather than replaced by that built-in inspection ("enabled_inspect
+# interfaces = agent", the ironic.inspection.hooks entry points and the
+# ironic-pxe-filter service), because the migration is the adoption of a new feature
+# and this issue's "ignore the new features introduced in the new version" criterion
+# says not to adopt it here. config_ironic.cpp pins enabled_inspect_interfaces to
+# "inspector" and rewrites it on every Commit(), so the built-in path stays
+# unreachable -- which is also what keeps the migrate_to_builtin_inspection online
+# data migration a no-op: it returns (0, 0) while "inspector" is still in that list.
+IRONIC_INSP_VER := 12.4.0
 
 # ironic-ui follows horizon, not the ironic service: it installs next to horizon
 # because that is where collectstatic collects panels from. #636 moved horizon into
@@ -30,6 +35,8 @@ IRONIC_INSP_VER := 12.1.1
 # api over HTTP through python-ironicclient and imports nothing from ironic, so it
 # never had to move when the service did. Horizon plugins are not in the caracal
 # upper-constraints either (that file only covers libraries), so the pin is explicit.
+# It stays the caracal release when the service moves to epoxy, for the same reason:
+# the served horizon is still the caracal venv's.
 IRONIC_UI_VER := 6.3.0
 
 # python-ironicclient owns the `baremetal` osc plugin, and an entry point is only
@@ -39,7 +46,12 @@ IRONIC_UI_VER := 6.3.0
 # python-watcher (core/watcher) both declare it and both are in that venv, so it is
 # guaranteed there rather than lucky. Two declarers is what makes it safe to leave
 # implicit here where heat and manila had to be explicit -- see designate.mk for the
-# failure mode a single transitive declarer produces.
+# failure mode a single transitive declarer produces. The epoxy hop does not change
+# that: /usr/bin/openstack is still the caracal venv's and both declarers stay there,
+# so unlike barbican's, cyborg's, designate's and heat's clients this one needs no
+# block of its own. The epoxy venv already holds a copy as an openstack-heat
+# requirement (heat.mk), and nothing points at it; nova's ironic driver talks to the
+# API through openstacksdk, not through this client.
 #
 # System requirements formerly pulled in by the openstack-ironic RPMs.
 # ipmitool backs enabled_hardware_types=ipmi / enabled_management_interfaces=ipmitool
@@ -60,8 +72,34 @@ IRONIC_UI_VER := 6.3.0
 ROOTFS_DNF += tftp-server ipmitool qemu-img mtools dosfstools xorriso
 ROOTFS_DNF_NOARCH += syslinux-tftpboot
 
-# install ironic and ironic-inspector inside the caracal python 3.11 virtual
-# environment
+# install ironic and ironic-inspector into the epoxy venv
+#
+# ironic runs out of the epoxy venv, not the caracal one it shares with the 2024.1
+# services still there. It cannot be bumped in place: 29.x and 12.4.0 both require
+# oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds at 4.3.0 for
+# octavia, manila and the other 2024.1 services. So the pair moves alone into
+# $(NEXT_OPENSTACK_HOME_DIR), the same shape as its caracal hop (#637), one release on,
+# after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg, designate
+# and heat.
+#
+# Four packages have to be named because neither service's requirements.txt asks for
+# them and pip will not pull them in transitively:
+# PyMySQL: config_ironic.cpp writes a mysql+pymysql:// connection for both services
+# oslo.messaging[kafka]: config_ironic.cpp points both notification transports at
+#   kafka://
+# python-memcached: config_ironic.cpp writes [keystone_authtoken] memcached_servers
+#   for both, which makes keystonemiddleware import memcache on its first token
+#   validation
+# tooz[memcached]: config_ironic.cpp writes the inspector's [coordination]
+#   backend_url as memcached://, and tooz's memcached driver imports pymemcache. The
+#   caracal venv only ever had it because horizon.mk installs it for django's cache,
+#   and nothing in this venv does. Without it the inspector does not fail: in
+#   standalone mode it logs "Coordination backend cannot be started, assuming no
+#   other instances are running" and carries on, so on a multi-control cluster each
+#   node's inspector would run as if it were the only one.
+# The first three happen to be in this venv already, but a dependency nothing asks
+# for is one that disappears silently.
+#
 # NOTE: networking-baremetal (the 'baremetal' ML2 driver plus the
 # ironic-neutron-agent binary) is pip installed by core/neutron/neutron.mk,
 # because config_neutron.cpp always sets ml2.mechanism_drivers=ovn,baremetal.
@@ -69,37 +107,42 @@ ROOTFS_DNF_NOARCH += syslinux-tftpboot
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		ironic==$(IRONIC_VER) \
-		ironic-inspector==$(IRONIC_INSP_VER)"
+		ironic-inspector==$(IRONIC_INSP_VER) \
+		PyMySQL \
+		\"oslo.messaging[kafka]\" \
+		python-memcached \
+		\"tooz[memcached]\""
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)# Link binaries. 24.1.5 adds one console script, ironic-pxe-filter -- the
-	$(Q)# built-in dnsmasq PXE filter that goes with the new "agent" inspect
-	$(Q)# interface. It is deliberately left unlinked: we stay on ironic-inspector
-	$(Q)# for introspection (see IRONIC_INSP_VER), so nothing would start it.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic /usr/bin/ironic
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-api /usr/bin/ironic-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-api-wsgi /usr/bin/ironic-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-conductor /usr/bin/ironic-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-dbsync /usr/bin/ironic-dbsync
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-rootwrap /usr/bin/ironic-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-status /usr/bin/ironic-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector /usr/bin/ironic-inspector
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-api-wsgi /usr/bin/ironic-inspector-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-conductor /usr/bin/ironic-inspector-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-dbsync /usr/bin/ironic-inspector-dbsync
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-migrate-data /usr/bin/ironic-inspector-migrate-data
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-rootwrap /usr/bin/ironic-inspector-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
+	$(Q)# Link binaries. Two console scripts are deliberately left unlinked, both new
+	$(Q)# features: ironic-pxe-filter (2024.1), the built-in dnsmasq PXE filter that
+	$(Q)# goes with the "agent" inspect interface -- we stay on ironic-inspector for
+	$(Q)# introspection (see IRONIC_INSP_VER), so nothing would start it -- and
+	$(Q)# ironic-novncproxy (2025.1), the graphical console proxy, which needs a [vnc]
+	$(Q)# section config_ironic.cpp does not write. The share/ironic/vnc-container
+	$(Q)# data_files that goes with it stays under the venv prefix, unused.
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic /usr/bin/ironic
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-api /usr/bin/ironic-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-api-wsgi /usr/bin/ironic-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-conductor /usr/bin/ironic-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-dbsync /usr/bin/ironic-dbsync
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-rootwrap /usr/bin/ironic-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-status /usr/bin/ironic-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector /usr/bin/ironic-inspector
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-api-wsgi /usr/bin/ironic-inspector-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-conductor /usr/bin/ironic-inspector-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-dbsync /usr/bin/ironic-inspector-dbsync
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-migrate-data /usr/bin/ironic-inspector-migrate-data
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-rootwrap /usr/bin/ironic-inspector-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
 	$(Q)# provided by networking-baremetal, installed with neutron -- so it follows
-	$(Q)# neutron's venv, not ironic's, and neutron is in the epoxy one (#654). The
-	$(Q)# split #1194 had to reason about is back the other way round: the agent reports
-	$(Q)# chassis state to neutron-server over RPC and imports nothing from ironic, so an
-	$(Q)# epoxy agent beside a caracal ironic is fine, while a caracal one beside an
-	$(Q)# epoxy neutron-server would be a python 3.11 networking-baremetal 6.3.1 that
-	$(Q)# no fresh build installs at all.
+	$(Q)# neutron's venv, not ironic's. neutron moved to the epoxy one first (#654)
+	$(Q)# and reopened the split #1194 had to reason about; with ironic in the epoxy
+	$(Q)# venv too, the agent and the service it reports for share an interpreter
+	$(Q)# again, as they did after #637.
 	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
 
 # install the ironic web ui plugin
@@ -158,30 +201,28 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/ironic/inspector-dist.conf $(IRONIC_INSP_CONF_DIR)/inspector-dist.conf
 	$(Q)# install rootwrap configurations. ironic ships rootwrap.conf as a wheel
 	$(Q)# data_file ([files] data_files in its setup.cfg), so pip lands it under the
-	$(Q)# venv prefix and it is relocated from there rather than checked in -- the
-	$(Q)# same treatment ironic-lib.filters has had since #1194, and the reason
-	$(Q)# 24.1.5's "DEPRECATED for removal: Ironic no longer needs root." notice
-	$(Q)# arrives without a repo edit. ironic-inspector carries no data_files at all,
-	$(Q)# so its two rootwrap files stay checked in.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.conf $(IRONIC_CONF_DIR)/rootwrap.conf
+	$(Q)# venv prefix and it is relocated from there rather than checked in, which
+	$(Q)# is how 24.1.5's "DEPRECATED for removal: Ironic no longer needs root."
+	$(Q)# notice arrived without a repo edit. 29.1.0's copy is byte-identical.
+	$(Q)# ironic-inspector carries no data_files at all, so its two rootwrap files
+	$(Q)# stay checked in.
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(NEXT_OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.conf $(IRONIC_CONF_DIR)/rootwrap.conf
 	$(Q)# rootwrap.d/ironic-utils.filters is the other data_file, and it is
-	$(Q)# deliberately NOT installed any more. 24.1.5 emptied it -- ironic's last two
+	$(Q)# deliberately NOT installed. 24.1.5 emptied it -- ironic's last two
 	$(Q)# run_as_root=True call sites (mount/umount in ironic/common/utils.py) are
-	$(Q)# gone, so all that is left is three comment lines and no [Filters] section.
-	$(Q)# oslo_rootwrap.wrapper.load_filters() calls filterconfig.items("Filters") for
-	$(Q)# every file under filters_path, so one sectionless file raises
-	$(Q)# NoSectionError and takes down the *whole* filter set -- installing it would
-	$(Q)# make ironic-rootwrap refuse every command ironic-lib.filters authorises.
-	$(Q)# Verified A/B on the node: with the 24.1.5 file present, `ironic-rootwrap
-	$(Q)# ... blkid` exits 1 with NoSectionError; without it, blkid, lsblk, sgdisk,
-	$(Q)# partprobe and wipefs all pass and an unfiltered command is still refused.
-	$(Q)# ironic-lib carries a second filter set as wheel data, which RDO relocates in
-	$(Q)# python-ironic-lib.spec rather than in the ironic spec -- easy to lose when only
-	$(Q)# the service's own spec is ported. It authorises the commands
-	$(Q)# ironic_lib/disk_utils.py and ironic_lib/disk_partitioner.py run with
-	$(Q)# run_as_root=True (blkid, blockdev, lsblk, qemu-img, wipefs, sgdisk, partprobe,
-	$(Q)# mkfs, dd, parted, ...), so ironic-rootwrap denies all of them if it is absent.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.d/ironic-lib.filters $(IRONIC_CONF_DIR)/rootwrap.d/ironic-lib.filters
+	$(Q)# gone, so all that is left is three comment lines and no [Filters] section,
+	$(Q)# and 29.1.0 ships the same file. oslo_rootwrap.wrapper.load_filters() calls
+	$(Q)# filterconfig.items("Filters") for every file under filters_path, so one
+	$(Q)# sectionless file raises NoSectionError and takes down the *whole* filter
+	$(Q)# set -- installing it made ironic-rootwrap refuse every command on 24.1.5.
+	$(Q)#
+	$(Q)# rootwrap.d/ironic-lib.filters, which #1194 relocated from the prefix for
+	$(Q)# ironic-lib's disk utilities, is gone with ironic-lib: 2025.1 retired the
+	$(Q)# library, and neither ironic 29.1.0 nor ironic-inspector 12.4.0 requires it,
+	$(Q)# so nothing installs the file any more. Nothing needs it either: ironic
+	$(Q)# 29.1.0 has no run_as_root=True call site left, and
+	$(Q)# ironic.common.utils.execute() now drops the flag with a DeprecationWarning.
+	$(Q)# So rootwrap.d stays empty, and ironic-rootwrap authorises nothing.
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/ironic/inspector-rootwrap.conf $(IRONIC_INSP_CONF_DIR)/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/ironic/ironic-inspector.filters $(IRONIC_INSP_CONF_DIR)/rootwrap.d/ironic-inspector.filters
 	$(Q)# install security configurations
@@ -212,7 +253,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:ironic $(IRONIC_CONF_DIR)/ironic.conf
 	$(Q)chroot $(ROOTDIR) chmod 0640 $(IRONIC_CONF_DIR)/ironic.conf
 	$(Q)chroot $(ROOTDIR) chown root:ironic $(IRONIC_CONF_DIR)/rootwrap.conf
-	$(Q)chroot $(ROOTDIR) chown root:root $(IRONIC_CONF_DIR)/rootwrap.d/ironic-lib.filters
 	$(Q)chroot $(ROOTDIR) chown root:ironic-inspector $(IRONIC_INSP_CONF_DIR)
 	$(Q)chroot $(ROOTDIR) chown root:ironic-inspector $(IRONIC_INSP_CONF_DIR)/inspector.conf
 	$(Q)chroot $(ROOTDIR) chmod 0640 $(IRONIC_INSP_CONF_DIR)/inspector.conf

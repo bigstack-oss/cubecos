@@ -435,10 +435,12 @@ UpdateCfg(std::string domain, std::string ironicPass, std::string inspPass)
 
         cfg["oslo_messaging_notifications"]["driver"] = "messagingv2";
 
-        // ironic 24.1.5 calls oslo_policy.opts.set_defaults(..., enforce_scope=True,
+        // ironic 24.1.5 called oslo_policy.opts.set_defaults(..., enforce_scope=True,
         // enforce_new_defaults=True) from ironic/common/policy.py, which 21.4.4 did
-        // not, so the 2024.1 secure-RBAC check strings now apply with no deprecated
-        // fallback. Most of them read SYSTEM_READER, which is
+        // not, so the 2024.1 secure-RBAC check strings apply with no deprecated
+        // fallback. 29.x drops that call, and oslo.policy 4.5 defaults both flags to
+        // true, so the posture is the same. Most of the check strings read
+        // SYSTEM_READER, which is
         //   "(role:reader and system_scope:all) or (role:service and
         //    system_scope:all) or rule:service_role"
         // and rule:service_role is
