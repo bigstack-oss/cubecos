@@ -469,8 +469,15 @@ UpdateCfg(std::string domain, std::string ironicPass, std::string inspPass)
         inspCfg["keystone_authtoken"]["username"] = "ironic-inspector";
         inspCfg["keystone_authtoken"]["password"] = inspPass.c_str();
 
-        inspCfg["ironic"]["ramdisk_logs_dir"] = "/var/log/ironic-inspector/ramdisk";
-        inspCfg["ironic"]["store_data"] = "swift";
+        // ramdisk_logs_dir and store_data are [processing] options, in 12.1.1 and
+        // 12.4.0 alike, and nothing registers them under [ironic], where they were
+        // written until now. oslo.config drops an unknown key in a registered group
+        // without a word, so neither ever took effect: the ramdisk logs ironic.mk
+        // creates /var/log/ironic-inspector/ramdisk for were never kept, and
+        // introspection data stayed at store_data's default of "none", so
+        // `openstack baremetal introspection data save` had nothing to return.
+        inspCfg["processing"]["ramdisk_logs_dir"] = "/var/log/ironic-inspector/ramdisk";
+        inspCfg["processing"]["store_data"] = "swift";
 
         inspCfg["ironic"]["auth_section"] = "keystone_authtoken";
         inspCfg["swift"]["auth_section"] = "keystone_authtoken";
