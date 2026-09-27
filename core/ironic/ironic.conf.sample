@@ -6,7 +6,8 @@
 
 # Authentication strategy used by ironic-api. "noauth" should
 # not be used in a production environment because all
-# authentication will be disabled. (string value)
+# authentication will be disabled creating insecure operating
+# conditions. (string value)
 # Possible values:
 # noauth - no authentication
 # keystone - use the Identity service for authentication
@@ -16,6 +17,17 @@
 # Path to Apache format user authentication file used when
 # auth_strategy=http_basic (string value)
 #http_basic_auth_user_file = /etc/ironic/htpasswd
+
+# DEPRECATED: If True, Ironic allows access to Glance images
+# if an auth_token is present in the request context. (boolean
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+#allow_image_access_via_auth_token = true
+
+# If True, allows admin tasks to access image withoutmatching
+# project_id (boolean value)
+#ignore_project_check_for_admin_tasks = true
 
 # Return server tracebacks in the API response for any error
 # responses. WARNING: this is insecure and should not be used
@@ -504,9 +516,8 @@
 
 # Name of this node. This can be an opaque identifier. It is
 # not necessarily a hostname, FQDN, or IP address. However,
-# the node name must be valid within an AMQP key, and if using
-# ZeroMQ (will be removed in the Stein release), a valid
-# hostname, FQDN, or IP address. (string value)
+# the node name must be valid within an AMQP key. (string
+# value)
 #
 # This option has a sample default set, which means that
 # its actual default value may vary from the one documented
@@ -525,6 +536,12 @@
 # yoga - "yoga" release
 # antelope - "antelope" release
 # 9.2 - "9.2" release
+# 29.0 - "29.0" release
+# 28.0 - "28.0" release
+# 27.0 - "27.0" release
+# 26.1 - "26.1" release
+# 26.0 - "26.0" release
+# 25.0 - "25.0" release
 # 24.1 - "24.1" release
 # 24.0 - "24.0" release
 # 23.1 - "23.1" release
@@ -536,6 +553,8 @@
 # 21.2 - "21.2" release
 # 21.1 - "21.1" release
 # 21.0 - "21.0" release
+# 2025.1 - "2025.1" release
+# 2024.2 - "2024.2" release
 # 2024.1 - "2024.1" release
 # 2023.2 - "2023.2" release
 # 2023.1 - "2023.1" release
@@ -629,7 +648,10 @@
 
 # Connection timeout when accessing/interacting with remote
 # web servers with images or other artifacts being accessed.
-# (integer value)
+# An excessive value here is not advisable as excessive
+# requests to an unreachable endpoint can result in Ironic
+# service resources being consumed waiting for the connection
+# to timeout. (integer value)
 #webserver_connection_timeout = 60
 
 # Enable elevated access for users with service role belonging
@@ -654,7 +676,7 @@
 # projects, then a custom policy must be used to override the
 # default "service_role" rule. It should be noted that the
 # value of "service" is a default convention for OpenStack
-# deployments, but the requsite access and details around end
+# deployments, but the requisite access and details around end
 # configuration are largely up to an operator if they are
 # doing an OpenStack deployment manually. (string value)
 #rbac_service_project_name = service
@@ -665,20 +687,20 @@
 # times. Changing the algorithm requires an offline update.
 # (string value)
 # Possible values:
-# sha3_512 - <No description provided>
-# shake_128 - <No description provided>
 # sha384 - <No description provided>
-# sha3_224 - <No description provided>
-# sha512 - <No description provided>
-# blake2s - <No description provided>
-# sha3_384 - <No description provided>
-# sha3_256 - <No description provided>
-# shake_256 - <No description provided>
-# sha224 - <No description provided>
-# sha1 - <No description provided>
+# shake_128 - <No description provided>
 # sha256 - <No description provided>
-# blake2b - <No description provided>
+# sha224 - <No description provided>
+# sha3_224 - <No description provided>
+# blake2s - <No description provided>
 # md5 - <No description provided>
+# sha3_256 - <No description provided>
+# sha1 - <No description provided>
+# sha3_384 - <No description provided>
+# blake2b - <No description provided>
+# shake_256 - <No description provided>
+# sha512 - <No description provided>
+# sha3_512 - <No description provided>
 # Advanced Option: intended for advanced users and not used
 # by the majority of users, and might have a significant
 # effect on stability and/or performance.
@@ -723,12 +745,16 @@
 # Deprecated group/name - [DEFAULT]/logdir
 #log_dir = <None>
 
-# Uses logging handler designed to watch file system. When log
-# file is moved or removed this handler will open a new log
-# file with specified path instantaneously. It makes sense
-# only if log_file option is specified and Linux platform is
-# used. This option is ignored if log_config_append is set.
-# (boolean value)
+# DEPRECATED: Uses logging handler designed to watch file
+# system. When log file is moved or removed this handler will
+# open a new log file with specified path instantaneously. It
+# makes sense only if log_file option is specified and Linux
+# platform is used. This option is ignored if
+# log_config_append is set. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This function is known to have bene broken for long
+# time, and depends on the unmaintained library
 #watch_log_file = false
 
 # Use syslog for logging. Existing syslog format is DEPRECATED
@@ -755,11 +781,11 @@
 # log_config_append is set. (boolean value)
 #use_stderr = false
 
-# DEPRECATED: Log output to Windows Event Log. (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Windows support is no longer maintained.
-#use_eventlog = false
+# (Optional) Set the 'color' key according to log levels. This
+# option takes effect only when logging to stderr or stdout is
+# used. This option is ignored if log_config_append is set.
+# (boolean value)
+#log_color = false
 
 # The amount of time before the log files are rotated. This
 # option is ignored unless log_rotation_type is set to
@@ -817,7 +843,7 @@
 
 # List of package logging levels in logger=LEVEL pairs. This
 # option is ignored if log_config_append is set. (list value)
-#default_log_levels = amqp=WARNING,amqplib=WARNING,qpid.messaging=INFO,oslo.messaging=INFO,oslo_messaging=INFO,stevedore=INFO,eventlet.wsgi.server=INFO,iso8601=WARNING,requests=WARNING,glanceclient=WARNING,urllib3.connectionpool=WARNING,keystonemiddleware.auth_token=INFO,keystoneauth.session=INFO,openstack=WARNING,oslo_policy=WARNING,oslo_concurrency.lockutils=WARNING
+#default_log_levels = amqp=WARNING,amqplib=WARNING,qpid.messaging=INFO,oslo.messaging=INFO,oslo_messaging=INFO,stevedore=INFO,eventlet.wsgi.server=INFO,iso8601=WARNING,requests=WARNING,urllib3.connectionpool=WARNING,keystonemiddleware.auth_token=INFO,keystoneauth.session=INFO,openstack=WARNING,oslo_policy=WARNING,oslo_concurrency.lockutils=WARNING
 
 # Enables or disables publication of error events. (boolean
 # value)
@@ -839,10 +865,17 @@
 # (integer value)
 #rate_limit_burst = 0
 
-# Log level name used by rate limiting: CRITICAL, ERROR, INFO,
-# WARNING, DEBUG or empty string. Logs with level greater or
-# equal to rate_limit_except_level are not filtered. An empty
-# string means that all levels are filtered. (string value)
+# Log level name used by rate limiting. Logs with level
+# greater or equal to rate_limit_except_level are not
+# filtered. An empty string means that all levels are
+# filtered. (string value)
+# Possible values:
+# CRITICAL - <No description provided>
+# ERROR - <No description provided>
+# INFO - <No description provided>
+# WARNING - <No description provided>
+# DEBUG - <No description provided>
+# '' - <No description provided>
 #rate_limit_except_level = CRITICAL
 
 # Enables or disables fatal status of deprecations. (boolean
@@ -852,18 +885,6 @@
 #
 # From oslo.messaging
 #
-
-# Size of RPC connection pool. (integer value)
-# Minimum value: 1
-#rpc_conn_pool_size = 30
-
-# The pool size limit for connections expiration policy
-# (integer value)
-#conn_pool_min_size = 2
-
-# The time-to-live in sec of idle connections in the pool
-# (integer value)
-#conn_pool_ttl = 1200
 
 # Size of executor thread pool when executor is threading or
 # eventlet. (integer value)
@@ -908,23 +929,31 @@
 # From oslo.service.service
 #
 
-# Enable eventlet backdoor.  Acceptable values are 0, <port>,
-# and <start>:<end>, where 0 results in listening on a random
-# tcp port number; <port> results in listening on the
-# specified port number (and not enabling backdoor if that
+# DEPRECATED: Enable eventlet backdoor.  Acceptable values are
+# 0, <port>, and <start>:<end>, where 0 results in listening
+# on a random tcp port number; <port> results in listening on
+# the specified port number (and not enabling backdoor if that
 # port is in use); and <start>:<end> results in listening on
 # the smallest unused port number within the specified range
-# of port numbers.  The chosen port is displayed in the
+# of port numbers. The chosen port is displayed in the
 # service's log file. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'backdoor_port' option is deprecated and will be
+# removed in a future release.
 #backdoor_port = <None>
 
-# Enable eventlet backdoor, using the provided path as a unix
-# socket that can receive connections. This option is mutually
-# exclusive with 'backdoor_port' in that only one should be
-# provided. If both are provided then the existence of this
-# option overrides the usage of that option. Inside the path
-# {pid} will be replaced with the PID of the current process.
-# (string value)
+# DEPRECATED: Enable eventlet backdoor, using the provided
+# path as a unix socket that can receive connections. This
+# option is mutually exclusive with 'backdoor_port' in that
+# only one should be provided. If both are provided then the
+# existence of this option overrides the usage of that option.
+# Inside the path {pid} will be replaced with the PID of the
+# current process. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'backdoor_socket' option is deprecated and will
+# be removed in a future release.
 #backdoor_socket = <None>
 
 # Enables or disables logging values of all registered options
@@ -942,9 +971,12 @@
 # From ironic
 #
 
-# Whether Ironic will manage booting of the agent ramdisk. If
-# set to False, you will need to configure your mechanism to
-# allow booting the agent ramdisk. (boolean value)
+# DEPRECATED: Whether Ironic will manage booting of the agent
+# ramdisk. If set to False, you will need to configure your
+# mechanism to allow booting the agent ramdisk. Deprecated for
+# removal in 2025.2 release. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
 #manage_agent_boot = true
 
 # The memory size in MiB consumed by agent when it is booted
@@ -1029,7 +1061,13 @@
 # Note: This option can be changed without restarting.
 #image_download_source = http
 
-# Timeout (in seconds) for IPA commands. (integer value)
+# Timeout (in seconds) for IPA commands. A large timeout value
+# may result in the conductor free worker pool becoming
+# exhausted should a multi-node network connectivity issue
+# arise during inband operations. These commands also cause
+# the individual node lock to be held while in progress, which
+# prevents new requests from being acted upon for the impacted
+# nodes until the issue has been resolved. (integer value)
 # Note: This option can be changed without restarting.
 #command_timeout = 60
 
@@ -1062,10 +1100,12 @@
 # agent status. (integer value)
 #neutron_agent_status_retry_interval = 10
 
-# If set to True, callback URLs without https:// will be
-# rejected by the conductor. (boolean value)
+# If set to False, callback URLs without https:// will be
+# permitted by the conductor, which may be needed for
+# backwards compatibility outside of the supported version
+# window. (boolean value)
 # Note: This option can be changed without restarting.
-#require_tls = false
+#require_tls = true
 
 # Path to store auto-generated TLS certificates used to
 # validate connections to the ramdisk. (string value)
@@ -1088,6 +1128,13 @@
 # value)
 #allow_md5_checksum = true
 
+# When enabled, enables agent support for partition images
+# which require a legacy bootloader -- and a call to ``grub-
+# install``. Generally, this should remain disabled for
+# maximum security, however, this option allows it to be re-
+# enabled for compatibility. (boolean value)
+#enable_bios_bootloader_install = true
+
 
 [anaconda]
 
@@ -1102,7 +1149,7 @@
 #default_ks_template = $pybasedir/drivers/modules/ks.cfg.template
 
 # Option to allow the kickstart configuration to be informed
-# if SSL/TLS certificate verificaiton should be enforced, or
+# if SSL/TLS certificate verification should be enforced, or
 # not. This option exists largely to facilitate easy testing
 # and use of the ``anaconda`` deployment interface. When this
 # option is set, heartbeat operations, depending on the
@@ -1287,7 +1334,8 @@
 #enable_ssl_api = false
 
 # Whether to restrict the lookup API to only nodes in certain
-# states. (boolean value)
+# states. Setting this to False can be insecure and is not
+# advisable. (boolean value)
 # Note: This option can be changed without restarting.
 #restrict_lookup = true
 
@@ -1305,6 +1353,71 @@
 # value)
 # Note: This option can be changed without restarting.
 #project_admin_can_manage_own_nodes = true
+
+# Specifies a list of boot modes that are not allowed during
+# enrollment. Eg: ['bios'] (list value)
+# Note: This option can be changed without restarting.
+#disallowed_enrollment_boot_modes =
+
+# List of steps not allowed across the deploy workflow. Each
+# entry should be in 'interface.step' format, e.g.
+# ['raid.apply_configuration']. Applies to user-requested
+# steps, deploy template steps, and driver steps alike. (list
+# value)
+# Note: This option can be changed without restarting.
+#disallow_deploy_steps = vendor.send_raw
+
+# List of steps not allowed across the service workflow. Each
+# entry should be in 'interface.step' format, e.g.
+# ['bios.factory_reset','bios.apply_configuration']. Applies
+# to user-requested steps and driver steps alike. (list value)
+# Note: This option can be changed without restarting.
+#disallow_service_steps = vendor.send_raw
+
+# List of steps not allowed across the clean workflow. Each
+# entry should be in 'interface.step' format, e.g.
+# ['bios.factory_reset','bios.apply_configuration']. Applies
+# to user-requested (manual) steps, automated cleaning steps,
+# and runbook steps alike. (list value)
+# Note: This option can be changed without restarting.
+#disallow_clean_steps = vendor.send_raw
+
+# Maximum JSON nesting depth allowed in API request bodies.
+# Requests exceeding this depth are rejected with HTTP 400 to
+# prevent recursion-based crashes in the JSON parser. The
+# deepest known legitimate structure in the Ironic API is
+# approximately 7 levels (configdrive network_data). (integer
+# value)
+# Minimum value: 8
+# Note: This option can be changed without restarting.
+#max_json_body_depth = 25
+
+# Maximum size of a JSON request body, in KiB. Requests with a
+# Content-Length exceeding this value are rejected with HTTP
+# 413 before the body is read into memory. The node provision
+# and inspection endpoints use the separate
+# [api]max_json_body_size_provision and
+# [api]max_json_body_size_inspection limits respectively.
+# Defaults to 1 MiB. (integer value)
+# Minimum value: 4
+# Note: This option can be changed without restarting.
+#max_json_body_size = 1024
+
+# Maximum size of a JSON request body for the node provision
+# state endpoint, in KiB. This endpoint may carry configdrive
+# data and deploy steps. Defaults to 64 MiB. (integer value)
+# Minimum value: 4
+# Note: This option can be changed without restarting.
+#max_json_body_size_provision = 65536
+
+# Maximum size of a JSON request body for the
+# continue_inspection endpoint, in KiB. Inspection data from
+# the ramdisk may include system logs such as the journal,
+# making the payload significantly larger than normal API
+# requests. Defaults to 16 MiB. (integer value)
+# Minimum value: 4
+# Note: This option can be changed without restarting.
+#max_json_body_size_inspection = 16384
 
 
 [audit]
@@ -1465,8 +1578,12 @@
 # If not set default to  [503] (list value)
 #retriable_status_codes = <None>
 
-# Client retries in the case of a failed request connection.
+# DEPRECATED: Client retries in the case of a failed request.
 # (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Replaced by status_code_retries and
+# status_code_retry_delay.
 #retries = 3
 
 # The default service_name for endpoint URL discovery. (string
@@ -1678,6 +1795,13 @@
 # Minimum value: 0
 #clean_callback_timeout = 1800
 
+# Timeout (seconds) to wait for a callback from the ramdisk
+# doing the servicing. If the timeout is reached the node will
+# be put in the "service failed" provision state. Set to 0 to
+# disable timeout. (integer value)
+# Minimum value: 0
+#service_callback_timeout = 1800
+
 # Timeout (seconds) to wait for a callback from the rescue
 # ramdisk. If the timeout is reached the node will be put in
 # the "rescue failed" provision state. Set to 0 to disable
@@ -1780,7 +1904,7 @@
 # hashed version of the rescue password, permitting rescue
 # with older ironic-python-agent ramdisks. (boolean value)
 # Note: This option can be changed without restarting.
-#require_rescue_password_hashed = false
+#require_rescue_password_hashed = true
 
 # Glance ID, http:// or file:// URL of the EFI system
 # partition image containing EFI boot loader. This image will
@@ -1855,15 +1979,33 @@
 # Note: This option can be changed without restarting.
 #verify_step_priority_override =
 
-# If the conductor should record the Project ID indicated by
-# Keystone for a requested deployment. Allows rights to be
-# granted to directly access the deployed node as a lessee
-# within the RBAC security model. The conductor does *not*
-# record this value otherwise, and this information is not
-# backfilled for prior instances which have been deployed.
-# (boolean value)
+# DEPRECATED: Deprecated. If Ironic should set the node.lessee
+# field at deployment. Use
+# ['conductor']/automatic_lessee_source instead. (boolean
+# value)
 # Note: This option can be changed without restarting.
-#automatic_lessee = false
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+#automatic_lessee = true
+
+# Source for Project ID the Ironic should record at deployment
+# time in node.lessee field. If set to none, Ironic will not
+# set a lessee field. If set to instance (default), uses
+# Project ID indicated in instance metadata set by Nova or
+# another external deployment service. If set to keystone,
+# Ironic uses Project ID indicated by Keystone context.
+# (string value)
+# Possible values:
+# instance - Populates node.lessee field using metadata from
+# node.instance_info['project_id'] at deployment time. Useful
+# for Nova-fronted deployments.
+# request - Populates node.lessee field using metadata from
+# request context. Only useful for direct deployment requests
+# to Ironic; not those proxied via an external service like
+# Nova.
+# none - Ironic will not populate the node.lessee field.
+# Note: This option can be changed without restarting.
+#automatic_lessee_source = instance
 
 # The maximum number of concurrent nodes in deployment which
 # are permitted in this Ironic system. If this limit is
@@ -1924,6 +2066,11 @@
 # Note: This option can be changed without restarting.
 #max_conductor_wait_step_seconds = 30
 
+# Specifies a list of boot modes that are not allowed during
+# deployment. Eg: ['bios'] (list value)
+# Note: This option can be changed without restarting.
+#disallowed_deployment_boot_modes =
+
 # Security Option to permit an operator to disable file
 # content inspections. Under normal conditions, the conductor
 # will inspect requested image contents which are transferred
@@ -1954,7 +2101,7 @@
 # list is detected, the image validation logic will fail the
 # deployment process. (list value)
 # Note: This option can be changed without restarting.
-#permitted_image_formats = raw,qcow2,iso
+#permitted_image_formats = raw,gpt,qcow2,iso
 
 # DEPRECATED: Deprecated Security option: In the default case,
 # image files have their checksums verified before undergoing
@@ -1974,6 +2121,14 @@
 # in an unexpected fashion. (boolean value)
 #disable_support_for_checksum_files = false
 
+# Option to enable disabling transparent decompression of
+# files which are compressed with Zstandard compression. This
+# option is provided should operators wish to disable this
+# functionality, otherwise it is automaticly applied by the
+# conductor should a compressed artifact be detected. (boolean
+# value)
+#disable_zstandard_decompression = false
+
 # List of paths that are allowed to be used as file:// URLs.
 # Files in /boot, /dev, /etc, /proc, /sys and othersystem
 # paths are always disallowed for security reasons. Any files
@@ -1984,6 +2139,14 @@
 # contain path traversal mechanisms, such as "..". (list
 # value)
 #file_url_allowed_paths = /var/lib/ironic,/shared/html,/templates,/opt/cache/files,/vagrant
+
+# Disable parsing of kernel parameters. Kernel parameter
+# parsing allows Ironic to detect and prevent malformed kernel
+# parameters before they are passed to nodes. Malformed kernel
+# parameters can pose a security risk therefore it is not
+# recommended to disable this option unless absolutely
+# necessary. (boolean value)
+#disable_kernel_parameter_parsing = false
 
 
 [console]
@@ -2109,6 +2272,14 @@
 # slave database. (string value)
 #slave_connection = <None>
 
+# The SQLAlchemy asyncio connection string to use to connect
+# to the database. (string value)
+#asyncio_connection = <None>
+
+# The SQLAlchemy asyncio connection string to use to connect
+# to the slave database. (string value)
+#asyncio_slave_connection = <None>
+
 # The SQL mode to be used for MySQL sessions. This option,
 # including the default, overrides any server-set SQL mode. To
 # use whatever SQL mode is set by the server configuration,
@@ -2193,7 +2364,7 @@
 #
 
 # ironic-conductor node's HTTP server URL. Example:
-# http://192.1.2.3:8080 (string value)
+# http://192.1.2.3:8080 (uri value)
 #http_url = <None>
 
 # ironic-conductor node's HTTP root path. (string value)
@@ -2227,13 +2398,13 @@
 # URL of the ironic-conductor node's HTTP server for boot
 # methods such as virtual media, where images could be served
 # outside of the provisioning network. Does not apply when
-# Swift is used. Defaults to http_url. (string value)
+# Swift is used. Defaults to http_url. (uri value)
 #external_http_url = <None>
 
 # Agent callback URL of the bare metal API for boot methods
 # such as virtual media, where images could be served outside
 # of the provisioning network. Defaults to the configuration
-# from [service_catalog]. (string value)
+# from [service_catalog]. (uri value)
 #external_callback_url = <None>
 
 # Whether to support the use of ATA Secure Erase during the
@@ -2416,40 +2587,10 @@
 #dhcp_provider = neutron
 
 
-[disk_partitioner]
-
-#
-# From ironic_lib.disk_partitioner
-#
-
-# After Ironic has completed creating the partition table, it
-# continues to check for activity on the attached iSCSI device
-# status at this interval prior to copying the image to the
-# node, in seconds (integer value)
-#check_device_interval = 1
-
-# The maximum number of times to check that the device is not
-# accessed by another process. If the device is still busy
-# after that, the disk partitioning will be treated as having
-# failed. (integer value)
-#check_device_max_retries = 20
-
-
 [disk_utils]
 
 #
 # From ironic
-#
-
-# Memory limit for "qemu-img convert" in MiB. Implemented via
-# the address space resource limit. (integer value)
-#image_convert_memory_limit = 2048
-
-# Number of attempts to convert an image. (integer value)
-#image_convert_attempts = 3
-
-#
-# From ironic_lib.qemu_img
 #
 
 # Memory limit for "qemu-img convert" in MiB. Implemented via
@@ -2498,6 +2639,19 @@
 # (integer value)
 # Minimum value: 1
 #raid_job_timeout = 300
+
+
+[errors]
+
+#
+# From ironic
+#
+
+# Used if there is a formatting error when generating an
+# exception message (a programming error). If True, raise an
+# exception; if False, use the unformatted message. (boolean
+# value)
+#fatal_exception_format_errors = false
 
 
 [glance]
@@ -2664,7 +2818,7 @@
 # "https://swift.example.com". If using RADOS Gateway,
 # endpoint may also contain /swift path; if it does not, it
 # will be appended. Used for temporary URLs, will be fetched
-# from the service catalog, if not provided. (string value)
+# from the service catalog, if not provided. (uri value)
 #swift_endpoint_url = <None>
 
 # This should match a config by the same name in the Glance
@@ -2798,6 +2952,10 @@
 # list of strings. Used by DisableByFilesPortsHealthcheck
 # plugin. (list value)
 #disable_by_file_paths =
+
+# Check the presence of files. Used by
+# EnableByFilesHealthcheck plugin. (list value)
+#enable_by_file_paths =
 
 
 [ilo]
@@ -2980,11 +3138,12 @@
 #default_domain_name = <None>
 
 # A comma-separated lists of inspection hooks that are run by
-# default. In most cases, the operators will not modify this.
-# The default (somewhat conservative) hooks will raise an
-# exception in case the ramdisk reports an error, validate
-# interfaces in the inventory, create ports and set the node's
-# cpu architecture property. (string value)
+# default for the "agent" inspection interface. In most cases,
+# the operators will not modify this. The default (somewhat
+# conservative) hooks will raise an exception in case the
+# ramdisk reports an error, validate interfaces in the
+# inventory, create ports and set the node's cpu architecture
+# property. (string value)
 #default_hooks = ramdisk-error,validate-interfaces,ports,architecture
 
 # Whether to leave 1 GiB of disk size untouched for
@@ -3019,8 +3178,9 @@
 #extra_kernel_params =
 
 # Comma-separated list of enabled hooks for processing
-# pipeline. The default for this is $default_hooks. Hooks can
-# be added before or after the defaults like this:
+# pipeline for the "agent" inspection interface. The default
+# for this is $default_hooks. Hooks can be added before or
+# after the defaults like this:
 # "prehook,$default_hooks,posthook". (string value)
 #hooks = $default_hooks
 
@@ -3230,7 +3390,9 @@
 # Kill `ipmitool` process invoked by ironic to read node power
 # state if `ipmitool` process does not exit after
 # `command_retry_timeout` timeout expires. Recommended setting
-# is True (boolean value)
+# is True. Setting to False may present an operational issue
+# and will result in unexpected and undesirable behavior.
+# (boolean value)
 # Note: This option can be changed without restarting.
 #kill_on_timeout = true
 
@@ -3254,6 +3416,10 @@
 # mode. (boolean value)
 # Note: This option can be changed without restarting.
 #debug = false
+
+# Boolean flag to determine IPMI password persistence method.
+# Defaults to False (file-based persistence).  (boolean value)
+#store_cred_in_env = false
 
 # List of possible cipher suites versions that can be
 # supported by the hardware in case the field `cipher_suite`
@@ -3400,36 +3566,20 @@
 # `instance_info/kernel_append_params` property. (string
 # value)
 # Note: This option can be changed without restarting.
-#kernel_append_params = <None>
-
-
-[ironic_lib]
-
-#
-# From ironic_lib.exception
-#
-
-# Used if there is a formatting error when generating an
-# exception message (a programming error). If True, raise an
-# exception; if False, use the unformatted message. (boolean
-# value)
-#fatal_exception_format_errors = false
-
-#
-# From ironic_lib.utils
-#
-
-# Command that is prefixed to commands that are run as root.
-# If not specified, no commands are run as root. (string
-# value)
-#root_helper = sudo ironic-rootwrap /etc/ironic/rootwrap.conf
+#kernel_append_params = nofb vga=normal
 
 
 [json_rpc]
 
 #
-# From ironic_lib.json_rpc
+# From ironic
 #
+
+# List of roles allowed to use JSON RPC (list value)
+#allowed_roles = admin
+
+# Authentication URL (string value)
+#auth_url = <None>
 
 # Authentication strategy used by JSON RPC. Defaults to the
 # global auth_strategy setting. (string value)
@@ -3438,50 +3588,6 @@
 # keystone - use the Identity service for authentication
 # http_basic - HTTP basic authentication
 #auth_strategy = <None>
-
-# Path to Apache format user authentication file used when
-# auth_strategy=http_basic (string value)
-#http_basic_auth_user_file = /etc/ironic/htpasswd-json-rpc
-
-# The IP address or hostname on which JSON RPC will listen.
-# (host address value)
-#host_ip = ::
-
-# The port to use for JSON RPC (port value)
-# Minimum value: 0
-# Maximum value: 65535
-#port = 8089
-
-# Whether to use TLS for JSON RPC (boolean value)
-#use_ssl = false
-
-# DEPRECATED: Name of the user to use for HTTP Basic
-# authentication client requests. (string value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Use username instead
-#http_basic_username = <None>
-
-# DEPRECATED: Password to use for HTTP Basic authentication
-# client requests. (string value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Use password instead
-#http_basic_password = <None>
-
-# List of roles allowed to use JSON RPC (list value)
-#allowed_roles = admin
-
-# Unix socket to listen on. Disables host_ip and port. (string
-# value)
-#unix_socket = <None>
-
-# File mode (an octal number) of the unix socket to listen on.
-# Ignored if unix_socket is not set. (integer value)
-#unix_socket_mode = <None>
-
-# Authentication URL (string value)
-#auth_url = <None>
 
 # Authentication type to load (string value)
 # Deprecated group/name - [json_rpc]/auth_plugin
@@ -3513,6 +3619,28 @@
 # Domain name to scope to (string value)
 #domain_name = <None>
 
+# The IP address or hostname on which JSON RPC will listen.
+# (host address value)
+#host_ip = ::
+
+# Path to Apache format user authentication file used when
+# auth_strategy=http_basic (string value)
+#http_basic_auth_user_file = /etc/ironic/htpasswd-json-rpc
+
+# DEPRECATED: Password to use for HTTP Basic authentication
+# client requests. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Use password instead
+#http_basic_password = <None>
+
+# DEPRECATED: Name of the user to use for HTTP Basic
+# authentication client requests. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: Use username instead
+#http_basic_username = <None>
+
 # Verify HTTPS connections. (boolean value)
 #insecure = false
 
@@ -3521,6 +3649,11 @@
 
 # User's password (string value)
 #password = <None>
+
+# The port to use for JSON RPC (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#port = 8089
 
 # Domain ID containing project (string value)
 #project_domain_id = <None>
@@ -3553,6 +3686,17 @@
 
 # ID of the trust to use as a trustee use (string value)
 #trust_id = <None>
+
+# Unix socket to listen on. Disables host_ip and port. (string
+# value)
+#unix_socket = <None>
+
+# File mode (an octal number) of the unix socket to listen on.
+# Ignored if unix_socket is not set. (integer value)
+#unix_socket_mode = <None>
+
+# Whether to use TLS for JSON RPC (boolean value)
+#use_ssl = false
 
 # User's domain id (string value)
 #user_domain_id = <None>
@@ -3743,6 +3887,16 @@
 # restricted access rules. (string value)
 #service_type = <None>
 
+# Enable the SASL(Simple Authentication and Security Layer) if
+# the SASL_enable is true, else disable. (boolean value)
+#memcache_sasl_enabled = false
+
+# the user name for the SASL (string value)
+#memcache_username =
+
+# the username password for SASL (string value)
+#memcache_password =
+
 # Authentication type to load (string value)
 # Deprecated group/name - [keystone_authtoken]/auth_plugin
 #auth_type = <None>
@@ -3755,7 +3909,7 @@
 [mdns]
 
 #
-# From ironic_lib.mdns
+# From ironic
 #
 
 # Number of attempts to register a service. Currently has to
@@ -3782,6 +3936,31 @@
 #
 # From ironic
 #
+
+# Backend to use for the metrics system. (string value)
+# Possible values:
+# noop - Do nothing in relation to metrics.
+# statsd - Transmits metrics data to a statsd backend.
+# collector - Collects metrics data and saves it in memory for
+# use by the running application.
+#backend = noop
+
+# Prepend the hostname to all metric names. The format of
+# metric names is
+# [global_prefix.][host_name.]prefix.metric_name. (boolean
+# value)
+#prepend_host = false
+
+# Split the prepended host value by "." and reverse it (to
+# better match the reverse hierarchical form of domain names).
+# (boolean value)
+#prepend_host_reverse = true
+
+# Prefix all metric names with this value. By default, there
+# is no global prefix. The format of metric names is
+# [global_prefix.][host_name.]prefix.metric_name. (string
+# value)
+#global_prefix = <None>
 
 # Backend for the agent ramdisk to use for metrics. Default
 # possible backends are "noop" and "statsd". (string value)
@@ -3810,41 +3989,20 @@
 # (string value)
 #agent_global_prefix = <None>
 
-#
-# From ironic_lib.metrics
-#
-
-# Backend to use for the metrics system. (string value)
-# Possible values:
-# noop - Do nothing in relation to metrics.
-# statsd - Transmits metrics data to a statsd backend.
-# collector - Collects metrics data and saves it in memory for
-# use by the running application.
-#backend = noop
-
-# Prepend the hostname to all metric names. The format of
-# metric names is
-# [global_prefix.][host_name.]prefix.metric_name. (boolean
-# value)
-#prepend_host = false
-
-# Split the prepended host value by "." and reverse it (to
-# better match the reverse hierarchical form of domain names).
-# (boolean value)
-#prepend_host_reverse = true
-
-# Prefix all metric names with this value. By default, there
-# is no global prefix. The format of metric names is
-# [global_prefix.][host_name.]prefix.metric_name. (string
-# value)
-#global_prefix = <None>
-
 
 [metrics_statsd]
 
 #
 # From ironic
 #
+
+# Host for use with the statsd backend. (string value)
+#statsd_host = localhost
+
+# Port to use with the statsd backend. (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#statsd_port = 8125
 
 # Host for the agent ramdisk to use with the statsd backend.
 # This must be accessible from networks the agent is booted
@@ -3856,18 +4014,6 @@
 # Minimum value: 0
 # Maximum value: 65535
 #agent_statsd_port = 8125
-
-#
-# From ironic_lib.metrics_statsd
-#
-
-# Host for use with the statsd backend. (string value)
-#statsd_host = localhost
-
-# Port to use with the statsd backend. (port value)
-# Minimum value: 0
-# Maximum value: 65535
-#statsd_port = 8125
 
 
 [molds]
@@ -3910,6 +4056,13 @@
 # value)
 # Note: This option can be changed without restarting.
 #add_all_ports = false
+
+# By default, nodes with disable_power_off set to True cannot
+# be used with the Neutron network interface because during
+# tear-down they will be left with the instance image still
+# running. Set this option to True to disable this validation.
+# (boolean value)
+#allow_disabling_power_off = false
 
 # Authentication URL (string value)
 #auth_url = <None>
@@ -4345,6 +4498,39 @@
 #version = <None>
 
 
+[oci]
+
+#
+# From ironic
+#
+
+# An option which signals to the OCI Container Registry client
+# which remote endpoints are fronted by Content Distribution
+# Networks which we may receive redirects to in order to
+# download the requested artifacts, where the OCI client
+# should go ahead and issue the download request with
+# authentication headers before being asked by the remote
+# server for user authentication. (list value)
+#secure_cdn_registries = registry.redhat.io,registry.access.redhat.com,docker.io,registry-1.docker.io
+
+# An option which allows pre-shared authorization keys to be
+# utilized by the Ironic service to facilitate authentication
+# with remote image registries which may require
+# authentication for all interactions. Ironic will utilize
+# these credentials to access general artifacts, but Ironic
+# will *also* prefer user credentials, if supplied, for disk
+# images. This file is in the same format utilized in the
+# container ecosystem for the same purpose. Structured as a
+# JSON document with an ``auths`` key, with remote registry
+# domain FQDNs as keys, and a nested ``auth`` key within that
+# value which holds the actual pre-shared secret. Ironic does
+# not cache the contents of this file at launch, and the file
+# can be updated as Ironic operates in the event pre-shared
+# tokens need to be regenerated. (string value)
+# Note: This option can be changed without restarting.
+#authentication_config = <None>
+
+
 [oslo_concurrency]
 
 #
@@ -4362,216 +4548,6 @@
 #lock_path = <None>
 
 
-[oslo_messaging_amqp]
-
-#
-# From oslo.messaging
-#
-
-# Name for the AMQP container. must be globally unique.
-# Defaults to a generated UUID (string value)
-#container_name = <None>
-
-# Timeout for inactive connections (in seconds) (integer
-# value)
-#idle_timeout = 0
-
-# Debug: dump AMQP frames to stdout (boolean value)
-#trace = false
-
-# Attempt to connect via SSL. If no other ssl-related
-# parameters are given, it will use the system's CA-bundle to
-# verify the server's certificate. (boolean value)
-#ssl = false
-
-# CA certificate PEM file used to verify the server's
-# certificate (string value)
-#ssl_ca_file =
-
-# Self-identifying certificate PEM file for client
-# authentication (string value)
-#ssl_cert_file =
-
-# Private key PEM file used to sign ssl_cert_file certificate
-# (optional) (string value)
-#ssl_key_file =
-
-# Password for decrypting ssl_key_file (if encrypted) (string
-# value)
-#ssl_key_password = <None>
-
-# By default SSL checks that the name in the server's
-# certificate matches the hostname in the transport_url. In
-# some configurations it may be preferable to use the virtual
-# hostname instead, for example if the server uses the Server
-# Name Indication TLS extension (rfc6066) to provide a
-# certificate per virtual host. Set ssl_verify_vhost to True
-# if the server's SSL certificate uses the virtual host name
-# instead of the DNS name. (boolean value)
-#ssl_verify_vhost = false
-
-# Space separated list of acceptable SASL mechanisms (string
-# value)
-#sasl_mechanisms =
-
-# Path to directory that contains the SASL configuration
-# (string value)
-#sasl_config_dir =
-
-# Name of configuration file (without .conf suffix) (string
-# value)
-#sasl_config_name =
-
-# SASL realm to use if no realm present in username (string
-# value)
-#sasl_default_realm =
-
-# Seconds to pause before attempting to re-connect. (integer
-# value)
-# Minimum value: 1
-#connection_retry_interval = 1
-
-# Increase the connection_retry_interval by this many seconds
-# after each unsuccessful failover attempt. (integer value)
-# Minimum value: 0
-#connection_retry_backoff = 2
-
-# Maximum limit for connection_retry_interval +
-# connection_retry_backoff (integer value)
-# Minimum value: 1
-#connection_retry_interval_max = 30
-
-# Time to pause between re-connecting an AMQP 1.0 link that
-# failed due to a recoverable error. (integer value)
-# Minimum value: 1
-#link_retry_delay = 10
-
-# The maximum number of attempts to re-send a reply message
-# which failed due to a recoverable error. (integer value)
-# Minimum value: -1
-#default_reply_retry = 0
-
-# The deadline for an rpc reply message delivery. (integer
-# value)
-# Minimum value: 5
-#default_reply_timeout = 30
-
-# The deadline for an rpc cast or call message delivery. Only
-# used when caller does not provide a timeout expiry. (integer
-# value)
-# Minimum value: 5
-#default_send_timeout = 30
-
-# The deadline for a sent notification message delivery. Only
-# used when caller does not provide a timeout expiry. (integer
-# value)
-# Minimum value: 5
-#default_notify_timeout = 30
-
-# The duration to schedule a purge of idle sender links.
-# Detach link after expiry. (integer value)
-# Minimum value: 1
-#default_sender_link_timeout = 600
-
-# Indicates the addressing mode used by the driver.
-# Permitted values:
-# 'legacy'   - use legacy non-routable addressing
-# 'routable' - use routable addresses
-# 'dynamic'  - use legacy addresses if the message bus does
-# not support routing otherwise use routable addressing
-# (string value)
-#addressing_mode = dynamic
-
-# Enable virtual host support for those message buses that do
-# not natively support virtual hosting (such as qpidd). When
-# set to true the virtual host name will be added to all
-# message bus addresses, effectively creating a private
-# 'subnet' per virtual host. Set to False if the message bus
-# supports virtual hosting using the 'hostname' field in the
-# AMQP 1.0 Open performative as the name of the virtual host.
-# (boolean value)
-#pseudo_vhost = true
-
-# address prefix used when sending to a specific server
-# (string value)
-#server_request_prefix = exclusive
-
-# address prefix used when broadcasting to all servers (string
-# value)
-#broadcast_prefix = broadcast
-
-# address prefix when sending to any server in group (string
-# value)
-#group_request_prefix = unicast
-
-# Address prefix for all generated RPC addresses (string
-# value)
-#rpc_address_prefix = openstack.org/om/rpc
-
-# Address prefix for all generated Notification addresses
-# (string value)
-#notify_address_prefix = openstack.org/om/notify
-
-# Appended to the address prefix when sending a fanout
-# message. Used by the message bus to identify fanout
-# messages. (string value)
-#multicast_address = multicast
-
-# Appended to the address prefix when sending to a particular
-# RPC/Notification server. Used by the message bus to identify
-# messages sent to a single destination. (string value)
-#unicast_address = unicast
-
-# Appended to the address prefix when sending to a group of
-# consumers. Used by the message bus to identify messages that
-# should be delivered in a round-robin fashion across
-# consumers. (string value)
-#anycast_address = anycast
-
-# Exchange name used in notification addresses.
-# Exchange name resolution precedence:
-# Target.exchange if set
-# else default_notification_exchange if set
-# else control_exchange if set
-# else 'notify' (string value)
-#default_notification_exchange = <None>
-
-# Exchange name used in RPC addresses.
-# Exchange name resolution precedence:
-# Target.exchange if set
-# else default_rpc_exchange if set
-# else control_exchange if set
-# else 'rpc' (string value)
-#default_rpc_exchange = <None>
-
-# Window size for incoming RPC Reply messages. (integer value)
-# Minimum value: 1
-#reply_link_credit = 200
-
-# Window size for incoming RPC Request messages (integer
-# value)
-# Minimum value: 1
-#rpc_server_credit = 100
-
-# Window size for incoming Notification messages (integer
-# value)
-# Minimum value: 1
-#notify_server_credit = 100
-
-# Send messages of this type pre-settled.
-# Pre-settled messages will not receive acknowledgement
-# from the peer. Note well: pre-settled messages may be
-# silently discarded if the delivery fails.
-# Permitted values:
-# 'rpc-call' - send RPC Calls pre-settled
-# 'rpc-reply'- send RPC Replies pre-settled
-# 'rpc-cast' - Send RPC Casts pre-settled
-# 'notify'   - Send Notifications pre-settled
-#  (multi valued)
-#pre_settled = rpc-cast
-#pre_settled = rpc-reply
-
-
 [oslo_messaging_kafka]
 
 #
@@ -4584,26 +4560,6 @@
 # Default timeout(s) for Kafka consumers (floating point
 # value)
 #kafka_consumer_timeout = 1.0
-
-# DEPRECATED: Pool Size for Kafka Consumers (integer value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#pool_size = 10
-
-# DEPRECATED: The pool size limit for connections expiration
-# policy (integer value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#conn_pool_min_size = 2
-
-# DEPRECATED: The time-to-live in sec of idle connections in
-# the pool (integer value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#conn_pool_ttl = 1200
 
 # Group id for Kafka consumer. Consumers in one group will
 # coordinate message consumption (string value)
@@ -4671,18 +4627,14 @@
 # The Drivers(s) to handle sending notifications. Possible
 # values are messaging, messagingv2, routing, log, test, noop
 # (multi valued)
-# Deprecated group/name - [DEFAULT]/notification_driver
 #driver =
 
 # A URL representing the messaging driver to use for
 # notifications. If not set, we fall back to the same
 # configuration used for RPC. (string value)
-# Deprecated group/name - [DEFAULT]/notification_transport_url
 #transport_url = <None>
 
 # AMQP topic used for OpenStack notifications. (list value)
-# Deprecated group/name - [rpc_notifier2]/topics
-# Deprecated group/name - [DEFAULT]/notification_topics
 #topics = notifications
 
 # The maximum number of attempts to re-send a notification
@@ -4705,28 +4657,43 @@
 # Auto-delete queues in AMQP. (boolean value)
 #amqp_auto_delete = false
 
+# Size of RPC connection pool. (integer value)
+# Minimum value: 1
+#rpc_conn_pool_size = 30
+
+# The pool size limit for connections expiration policy
+# (integer value)
+#conn_pool_min_size = 2
+
+# The time-to-live in sec of idle connections in the pool
+# (integer value)
+#conn_pool_ttl = 1200
+
 # Connect over SSL. (boolean value)
-# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_use_ssl
 #ssl = false
 
 # SSL version to use (valid only if SSL enabled). Valid values
 # are TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may
 # be available on some distributions. (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_version
 #ssl_version =
 
 # SSL key file (valid only if SSL enabled). (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_keyfile
 #ssl_key_file =
 
 # SSL cert file (valid only if SSL enabled). (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_certfile
 #ssl_cert_file =
 
 # SSL certification authority file (valid only if SSL
 # enabled). (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
 #ssl_ca_file =
+
+# When true, verify the broker hostname against the
+# certificate when ``ssl_ca_file`` is set. When false (default
+# on stable branches), ``ssl`` with ``ssl_ca_file`` still
+# validates the certificate chain but does not verify the
+# broker hostname. ``ssl=true`` without ``ssl_ca_file`` never
+# enables hostname verification. (boolean value)
+#ssl_enforce_hostname_verification = false
 
 # Global toggle for enforcing the OpenSSL FIPS mode. This
 # feature requires Python support. This is available in Python
@@ -4736,14 +4703,20 @@
 # exception will be raised. (boolean value)
 #ssl_enforce_fips_mode = false
 
-# Run the health check heartbeat thread through a native
-# python thread by default. If this option is equal to False
-# then the health check heartbeat will inherit the execution
-# model from the parent process. For example if the parent
-# process has monkey patched the stdlib by using
+# DEPRECATED: (DEPRECATED) It is recommend not to use this
+# option anymore. Run the health check heartbeat thread
+# through a native python thread by default. If this option is
+# equal to False then the health check heartbeat will inherit
+# the execution model from the parent process. For example if
+# the parent process has monkey patched the stdlib by using
 # eventlet/greenlet then the heartbeat will be run through a
 # green thread. This option should be set to True only for the
 # wsgi services. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The option is related to Eventlet which will be
+# removed. In addition this has never worked as expected with
+# services using eventlet for core service framework.
 #heartbeat_in_pthread = false
 
 # How long to wait (in seconds) before reconnecting in
@@ -4752,6 +4725,11 @@
 # Minimum value: 0.0
 # Maximum value: 4.5
 #kombu_reconnect_delay = 1.0
+
+# Random time to wait for when reconnecting in response to an
+# AMQP consumer cancel notification. (floating point value)
+# Minimum value: 0.0
+#kombu_reconnect_splay = 0.0
 
 # EXPERIMENTAL: Possible values are: gzip, bz2. If not set
 # compression will not be used. This option may not be
@@ -4783,14 +4761,17 @@
 
 # How frequently to retry connecting with RabbitMQ. (integer
 # value)
+# Minimum value: 1
 #rabbit_retry_interval = 1
 
 # How long to backoff for between retries when connecting to
 # RabbitMQ. (integer value)
+# Minimum value: 0
 #rabbit_retry_backoff = 2
 
-# Maximum interval of RabbitMQ connection retries. Default is
-# 30 seconds. (integer value)
+# Maximum interval of RabbitMQ connection retries. (integer
+# value)
+# Minimum value: 1
 #rabbit_interval_max = 30
 
 # Try to use HA queues in RabbitMQ (x-ha-policy: all). If you
@@ -4851,8 +4832,14 @@
 # only reply and fanout queues. Setting 0 as value will
 # disable the x-expires. If doing so, make sure you have a
 # rabbitmq policy to delete the queues or you deployment will
-# create an infinite number of queue over time. (integer
-# value)
+# create an infinite number of queue over time.In case
+# rabbit_stream_fanout is set to True, this option will
+# control data retention policy (x-max-age) for messages in
+# the fanout queue rather then the queue duration itself. So
+# the oldest data in the stream queue will be discarded from
+# it once reaching TTL Setting to 0 will disable x-max-age for
+# stream which make stream grow indefinitely filling up the
+# diskspace (integer value)
 # Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
@@ -4891,11 +4878,20 @@
 # value)
 #use_queue_manager = false
 
-# Hostname used by queue manager (string value)
-#hostname = centos9_cubecos_jim_200.13-1cc
+# Hostname used by queue manager. Defaults to the value
+# returned by socket.gethostname(). (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#hostname = node1.example.com
 
 # Process name used by queue manager (string value)
-#processname = oslo-config-generator
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#processname = nova-api
 
 # Use stream queues in RabbitMQ (x-queue-type: stream).
 # Streams are a new persistent and replicated data structure
@@ -4924,14 +4920,21 @@
 # From oslo.policy
 #
 
-# This option controls whether or not to enforce scope when
-# evaluating policies. If ``True``, the scope of the token
-# used in the request is compared to the ``scope_types`` of
-# the policy being enforced. If the scopes do not match, an
-# ``InvalidScope`` exception will be raised. If ``False``, a
-# message will be logged informing operators that policies are
-# being invoked with mismatching scope. (boolean value)
-#enforce_scope = false
+# DEPRECATED: This option controls whether or not to enforce
+# scope when evaluating policies. If ``True``, the scope of
+# the token used in the request is compared to the
+# ``scope_types`` of the policy being enforced. If the scopes
+# do not match, an ``InvalidScope`` exception will be raised.
+# If ``False``, a message will be logged informing operators
+# that policies are being invoked with mismatching scope.
+# (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This configuration was added temporarily to
+# facilitate a smooth transition to the new RBAC. OpenStack
+# will always enforce scope checks. This configuration option
+# is deprecated and will be removed in the 2025.2 cycle.
+#enforce_scope = true
 
 # This option controls whether or not to use old deprecated
 # defaults when evaluating policies. If ``True``, the old
@@ -4945,13 +4948,13 @@
 # new policy check string, allowing for a graceful upgrade
 # experience between releases with new policies, which is the
 # default behavior. (boolean value)
-#enforce_new_defaults = false
+#enforce_new_defaults = true
 
 # The relative or absolute path of a file that maps roles to
 # permissions for a given service. Relative paths must be
 # specified in relation to the configuration file setting this
 # option. (string value)
-#policy_file = policy.json
+#policy_file = policy.yaml
 
 # Default rule. Enforced when a requested rule is not found.
 # (string value)
@@ -4988,6 +4991,11 @@
 # Absolute path client key file REST based policy check
 # (string value)
 #remote_ssl_client_key_file = <None>
+
+# Timeout in seconds for REST based policy check (floating
+# point value)
+# Minimum value: 0
+#remote_timeout = 60
 
 
 [oslo_reports]
@@ -5314,12 +5322,21 @@
 # (string value)
 #uefi_ipxe_bootfile_name = snponly.efi
 
-# Bootfile DHCP parameter per node architecture. For example:
-# aarch64:grubaa64.efi (dict value)
+# Bootfile DHCP parameter per node architecture. Keys can be a
+# cpu_arch value (e.g. aarch64) or a composite key of arch-
+# boot_mode (e.g. x86_64-uefi, x86_64-bios). The composite key
+# is tried first, then the arch-only key as a fallback. For
+# example: aarch64:grubaa64.efi or
+# x86_64-bios:pxelinux.0,x86_64-uefi:bootx64.efi (dict value)
 #pxe_bootfile_name_by_arch =
 
-# Bootfile DHCP parameter per node architecture. For example:
-# aarch64:ipxe_aa64.efi (dict value)
+# Bootfile DHCP parameter per node architecture. Keys can be a
+# cpu_arch value (e.g. aarch64) or a composite key of arch-
+# boot_mode (e.g. x86_64-uefi, x86_64-bios). The composite key
+# is tried first, then the arch-only key as a fallback. For
+# example: aarch64:ipxe_aa64.efi or
+# x86_64-bios:undionly.kpxe,x86_64-uefi:snponly.efi (dict
+# value)
 #ipxe_bootfile_name_by_arch =
 
 # On ironic-conductor node, the path to the main iPXE script
@@ -5393,6 +5410,13 @@
 # value)
 #initial_grub_template = $pybasedir/drivers/modules/initial_grub_cfg.template
 
+# If node level pxe_template override is permitted to be used
+# in this Ironic deployment. This is an insecure pattern filed
+# under CVE-2026-44917 and the feature this guards this is
+# expected to be removed in Ironic release 2027.2. (boolean
+# value)
+#enable_insecure_template_override = false
+
 
 [redfish]
 
@@ -5432,7 +5456,7 @@
 # to false, images are placed on the ironic-conductor node and
 # served over its local HTTP server. (boolean value)
 # Note: This option can be changed without restarting.
-#use_swift = true
+#use_swift = false
 
 # The Swift container to store Redfish driver data. Applies
 # only when `use_swift` is enabled. (string value)
@@ -5767,28 +5791,47 @@
 # From oslo.service.sslutils
 #
 
-# CA certificate file to use to verify connecting clients.
-# (string value)
-# Deprecated group/name - [DEFAULT]/ssl_ca_file
+# DEPRECATED: CA certificate file to use to verify connecting
+# clients. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'ca_file' option is deprecated and will be
+# removed in a future release.
 #ca_file = <None>
 
-# Certificate file to use when starting the server securely.
-# (string value)
-# Deprecated group/name - [DEFAULT]/ssl_cert_file
+# DEPRECATED: Certificate file to use when starting the server
+# securely. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'cert_file' option is deprecated and will be
+# removed in a future release.
 #cert_file = <None>
 
-# Private key file to use when starting the server securely.
-# (string value)
-# Deprecated group/name - [DEFAULT]/ssl_key_file
+# DEPRECATED: Private key file to use when starting the server
+# securely. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'key_file' option is deprecated and will be
+# removed in a future release.
 #key_file = <None>
 
-# SSL version to use (valid only if SSL enabled). Valid values
-# are TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may
-# be available on some distributions. (string value)
+# DEPRECATED: SSL version to use (valid only if SSL enabled).
+# Valid values are TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1,
+# and TLSv1_2 may be available on some distributions. (string
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'version' option is deprecated and will be
+# removed in a future release.
 #version = <None>
 
-# Sets the list of available ciphers. value should be a string
-# in the OpenSSL cipher list format. (string value)
+# DEPRECATED: Sets the list of available ciphers. value should
+# be a string in the OpenSSL cipher list format. (string
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'ciphers' option is deprecated and will be
+# removed in a future release.
 #ciphers = <None>
 
 
@@ -5949,32 +5992,117 @@
 #version = <None>
 
 
-[xclarity]
+[vnc]
 
 #
 # From ironic
 #
 
-# IP address of the XClarity Controller. Configuration here is
-# deprecated and will be removed in the Stein release. Please
-# update the driver_info field to use "xclarity_manager_ip"
-# instead (string value)
-#manager_ip = <None>
+# Enable VNC related features. Guests will get created with
+# graphical devices to support this. Clients (for example
+# Horizon) can then establish a VNC connection to the guest.
+# (boolean value)
+#enabled = false
 
-# Username for the XClarity Controller. Configuration here is
-# deprecated and will be removed in the Stein release. Please
-# update the driver_info field to use "xclarity_username"
-# instead (string value)
-#username = <None>
+# The IP address or hostname on which ironic-novncproxy
+# listens. (host address value)
+#host_ip = 0.0.0.0
 
-# Password for XClarity Controller username. Configuration
-# here is deprecated and will be removed in the Stein release.
-# Please update the driver_info field to use
-# "xclarity_password" instead (string value)
-#password = <None>
-
-# Port to be used for XClarity Controller connection. (port
+# The TCP port on which ironic-novncproxy listens. (port
 # value)
 # Minimum value: 0
 # Maximum value: 65535
-#port = 443
+#port = 6090
+
+# Public URL to use when building the links to the noVNC
+# client browser page (for example,
+# "http://127.0.0.1:6090/vnc_auto.html"). If the API is
+# operating behind a proxy, you will want to change this to
+# represent the proxy's URL. Defaults to None.  (string value)
+# Note: This option can be changed without restarting.
+#public_url = <None>
+
+# Enable the integrated stand-alone noVNC to service requests
+# via HTTPS instead of HTTP. If there is a front-end service
+# performing HTTPS offloading from the service, this option
+# should be False; note, you will want to configure
+# [vnc]public_endpoint option to set URLs in responses to the
+# SSL terminated one. (boolean value)
+#enable_ssl = false
+
+# Path to directory with content which will be served by a web
+# server. (string value)
+#novnc_web = /usr/share/novnc
+
+# Filename that will be used for storing websocket frames
+# received and sent by a VNC proxy service running on this
+# host. If this is not set, no recording will be done. (string
+# value)
+#novnc_record = <None>
+
+# The allowed authentication schemes to use with proxied VNC
+# connections (list value)
+#novnc_auth_schemes = none
+
+# When True, keyboard and mouse events will not be passed to
+# the console. (boolean value)
+#read_only = false
+
+# The lifetime of a console auth token (in seconds). (integer
+# value)
+# Minimum value: 10
+#token_timeout = 600
+
+# Interval (in seconds) between periodic checks to determine
+# whether active console sessions have expired and need to be
+# closed. (integer value)
+# Minimum value: 1
+#expire_console_session_interval = 120
+
+# Console container provider which manages the containers that
+# expose a VNC service to ironic-novncproxy or nova-
+# novncproxy. Each container runs an X11 session and a browser
+# showing the actual BMC console. "systemd" manages containers
+# as systemd units via podman Quadlet support. The default is
+# "fake" which returns an unusable VNC host and port. This
+# needs to be changed if enabled is True (string value)
+#container_provider = fake
+
+# Container image reference for the "systemd" console
+# container provider, and any other out-of-tree provider which
+# requires a configurable image reference. (string value)
+# Note: This option can be changed without restarting.
+#console_image = <None>
+
+# For the systemd provider, path to the template for defining
+# a console container. The default template requires that
+# "console_image" be set. (string value)
+# Note: This option can be changed without restarting.
+#systemd_container_template = $pybasedir/console/container/ironic-console.container.template
+
+# Equivalent to the podman run --port argument for the mapping
+# of VNC port 5900 to the host. An IP address is required to
+# bind to, defaulting to $my_ip. The VNC port exposed on the
+# host will be a randomly allocated high port. These
+# containers expose VNC servers which must be accessible by
+# ironic-novncproxy and/or nova-novncproxy. The VNC servers
+# have no authentication or encryption so they also should not
+# be exposed to public access. Additionally, the containers
+# need to be able to access BMC management endpoints.  (string
+# value)
+#systemd_container_publish_port = $my_ip::5900
+
+# Certificate file to use when starting the server securely.
+# (string value)
+#ssl_cert_file = <None>
+
+# Private key file to use when starting the server securely.
+# (string value)
+#ssl_key_file = <None>
+
+# The minimum SSL version to use. (string value)
+#ssl_minimum_version = <None>
+
+# Sets the list of available ciphers. value should be a string
+# in the OpenSSL cipher list format. (string value)
+#ssl_ciphers = <None>
