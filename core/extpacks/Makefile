@@ -14,7 +14,7 @@ PKGCLEAN += $(PROJ_EXT)
 NAS := $(TOP_BLDDIR)/nas
 
 AMPHORA := $(TOP_BLDDIR)/../amphora-x64-haproxy_caracal.qcow2
-MANILA  := $(TOP_BLDDIR)/../manila-service-image_caracal.qcow2
+MANILA  := $(TOP_BLDDIR)/../manila-service-image_epoxy.qcow2
 RANCHER := $(TOP_BLDDIR)/../rancher-cluster-image-rke2-v1.32.4.raw
 EXTPACK := $(AMPHORA) $(MANILA) $(RANCHER)
 EXTPACK_MD5 := $(shell for E in $(EXTPACK); do echo $${E}.md5 ; done)
@@ -46,20 +46,20 @@ $(AMPHORA): $(NAS)
 $(AMPHORA).md5: $(AMPHORA)
 	$(Q)diff $@ $(NAS)/app-image/caracal/amphora-x64-haproxy_caracal.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/caracal/amphora-x64-haproxy_caracal.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
 
-# The manila service image follows the venv, so it moves to app-image/caracal/ with
-# #638. The artifact is a base-OS refresh, not a manila rebuild -- the guest runs
-# nfs-kernel-server and samba, never manila -- but it is versioned by the release it
-# ships with, the way the amphora and rancher images are.
+# The manila service image follows the venv, so it moved to app-image/caracal/ with
+# #638 and moves to app-image/epoxy/ with #664. The artifact is a base-OS refresh, not
+# a manila rebuild -- the guest runs nfs-kernel-server and samba, never manila -- but it
+# is versioned by the release it ships with, the way the amphora and rancher images are.
 # Its .md5 sidecar on the NAS has to be the *bare hash*, i.e.
 # `md5sum <file> | awk '{print $$1}'`: the diff below compares this file byte for byte,
 # so a full-format `md5sum` line never matches and silently re-copies ~1 GB over NFS on
 # every build.
 $(MANILA): $(NAS)
-	$(Q)cp $</app-image/caracal/manila-service-image_caracal.qcow2 $@
+	$(Q)cp $</app-image/epoxy/manila-service-image_epoxy.qcow2 $@
 
 .PHONY: $(MANILA).md5
 $(MANILA).md5: $(MANILA)
-	$(Q)diff $@ $(NAS)/app-image/caracal/manila-service-image_caracal.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/caracal/manila-service-image_caracal.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
+	$(Q)diff $@ $(NAS)/app-image/epoxy/manila-service-image_epoxy.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/epoxy/manila-service-image_epoxy.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
 
 $(RANCHER): $(NAS)
 	$(Q)cp $</app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw $@

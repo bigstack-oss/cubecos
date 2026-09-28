@@ -9,8 +9,8 @@ include ../../build.mk
 #
 # NOTE: unlike every other openstack deliverable, manila-image-elements has no
 # release branches at all -- master is the only branch upstream publishes, so
-# there is no stable/2024.1 or unmaintained/2024.1 to clone and no such thing as
-# a "caracal" manila service image; the qcow2 is named for the release it ships
+# there is no stable/2025.1 or unmaintained/2025.1 to clone and no such thing as
+# an "epoxy" manila service image; the qcow2 is named for the release it ships
 # with, not for anything in it. The elements are release-independent: the
 # guest runs nfs-kernel-server and samba, not manila. Rebuilding is therefore a
 # base-OS refresh, which is the point -- see the commit that added this target.
@@ -47,7 +47,13 @@ include ../../build.mk
 # symlink, and valid_distro loses a missing-space bash bug that only fires with -d. So the
 # pin tracks upstream while the artifact is unchanged in substance -- the refresh comes
 # from debootstrap picking up current jammy packages.
-MANILA_IMAGE_ELEMENTS_COMMIT := 68a7e4beccbe36ca6c3c601c85aca041ddd7f326
+#
+# #664 moved it again, 68a7e4be to ff7320c0 (master as of 2026-09-06), and rebuilt. Those
+# four commits touch only pyproject.toml and test-requirements.txt -- a hacking bump and
+# docutils dropped from the test requirements -- so neither the six elements nor
+# bin/manila-image-create changed, and manila-ssh's fetch-public-ssh-keys.service still
+# carries the Type=oneshot the rule below removes. The refresh is debootstrap's again.
+MANILA_IMAGE_ELEMENTS_COMMIT := ff7320c0fd003c60db9955f7b54d4d76605ad7b4
 
 # The checkout is keyed on the SHA, not on the directory.
 #
