@@ -57,7 +57,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-console
-	$(Q)for i in {1..3} ; do timeout 120 git clone --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
+	$(Q)for i in {1..3} ; do timeout 120 git clone -b arashi.li/3.2.0-batch-it --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(ROOTDIR)/skyline-console && nvm install $(QEND)

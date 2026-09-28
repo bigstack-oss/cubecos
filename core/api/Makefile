@@ -27,7 +27,7 @@ RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone -b arashi.li/3.2.0-batch-it --depth 1 $(GITHUB_URL).git $@ && break ; \
 		done,\
 		"  CLONE   $(GITHUB_URL)")
 
