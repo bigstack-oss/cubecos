@@ -235,6 +235,6 @@ rootfs_install::
 	$(Q)# config_manila.cpp does not take its section list from the .def:
 	$(Q)# InitConfig() spells the sections out, because manila.conf needs a [generic]
 	$(Q)# backend section that no generated sample can contain. LoadConfig() on an
-	$(Q)# empty file is what keeps the two from fighting; feeding it the caracal
+	$(Q)# empty file is what keeps the two from fighting; feeding it the 20.0.2
 	$(Q)# sample would only add [oslo_reports].
 	$(Q)touch $(ROOTDIR)$(MANILA_CONF_DIR)/manila.conf.def

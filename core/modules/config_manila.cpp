@@ -304,7 +304,6 @@ InitConfig(Configs& config)
         "neutron",
         "nova",
         "oslo_concurrency",
-        "oslo_messaging_amqp",
         "oslo_messaging_kafka",
         "oslo_messaging_notifications",
         "oslo_messaging_rabbit",

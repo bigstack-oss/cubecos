@@ -118,6 +118,26 @@
 # (list value)
 #admin_only_metadata = __affinity_same_host,__affinity_different_host
 
+# Metadata keys that will decide which share metadata (element of the
+# list is <driver_updatable_key>, i.e max_files) can be passed to
+# share drivers as part of metadata create/update operations. (list
+# value)
+#driver_updatable_metadata =
+
+# Metadata keys that will decide which share network subnet metadata
+# (element of the list is <driver_updatable_key>, e.g. pnfs) can be
+# passed to share drivers as part of metadata create/update
+# operations. (list value)
+#driver_updatable_subnet_metadata =
+
+# Whether Manila should update the status of all shares within a
+# backend during ongoing ensure_shares run. (boolean value)
+#update_shares_status_on_ensure = true
+
+# Metadata keys for export locations that should only be manipulated
+# by administrators. (list value)
+#admin_only_el_metadata = preferred
+
 # The full class name of the Compute API class to use. (string value)
 #compute_api_class = manila.compute.nova.API
 
@@ -421,6 +441,11 @@
 # (boolean value)
 #use_scheduler_creating_share_from_snapshot = false
 
+# Default prefix that will be used if none is providedthrough
+# share_type extra specs. Prefix will only beused if share_type
+# support mount_point_name. (string value)
+#default_mount_point_prefix = {project_id}_
+
 # Whether to delete shares and share snapshots in a deferred manner.
 # Setting this option to True will cause quotas to be released
 # immediately if a deletion request is accepted. Deletions may
@@ -512,6 +537,7 @@
 # physical capacity. A ratio of 1.0 means provisioned capacity cannot
 # exceed the total physical capacity. A ratio lower than 1.0 is
 # invalid. (floating point value)
+# Minimum value: 1.0
 #max_over_subscription_ratio = 20.0
 
 # List of files and folders to be ignored when migrating shares. Items
@@ -607,23 +633,36 @@
 # NFS - <No description provided>
 #cephfs_protocol_helper_type = CEPHFS
 
-# Whether the NFS-Ganesha server is remote to the driver. (boolean
-# value)
+# DEPRECATED: Whether the NFS-Ganesha server is remote to the driver.
+# (boolean value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: This option is used by the deprecated NFSProtocolHelper
 #cephfs_ganesha_server_is_remote = false
 
 # The IP address of the NFS-Ganesha server. (host address value)
 #cephfs_ganesha_server_ip = <None>
 
-# The username to authenticate as in the remote NFS-Ganesha server
-# host. (string value)
+# DEPRECATED: The username to authenticate as in the remote NFS-
+# Ganesha server host. (string value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: This option is used by the deprecated NFSProtocolHelper
 #cephfs_ganesha_server_username = root
 
-# The path of the driver host's private SSH key file. (string value)
+# DEPRECATED: The path of the driver host's private SSH key file.
+# (string value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: This option is used by the deprecated NFSProtocolHelper
 #cephfs_ganesha_path_to_private_key = <None>
 
-# The password to authenticate as the user in the remote Ganesha
-# server host. This is not required if
+# DEPRECATED: The password to authenticate as the user in the remote
+# Ganesha server host. This is not required if
 # 'cephfs_ganesha_path_to_private_key' is configured. (string value)
+# This option is deprecated for removal since 2025.1.
+# Its value may be silently ignored in the future.
+# Reason: This option is used by the deprecated NFSProtocolHelper
 #cephfs_ganesha_server_password = <None>
 
 # List of IPs to export shares. If not supplied, then the value of
@@ -645,6 +684,12 @@
 # shares and this action isn't always required, unless something has
 # been administratively modified on CephFS. (string value)
 #cephfs_ensure_all_shares_salt = manila_cephfs_reef_caracal
+
+# The maximum time in seconds that the cached pool data will be
+# considered updated. If it is expired when trying to read the pool
+# data, it must be refreshed. (integer value)
+# Minimum value: 0
+#cephfs_cached_allocated_capacity_update_interval = 60
 
 # Linux bridge used by container hypervisor to plug host-side veth to.
 # It will be unplugged from here by the driver. (string value)
@@ -1225,6 +1270,50 @@
 # netapp_login option. (string value)
 #netapp_password = <None>
 
+# Example: /path/to/private_key.key, For self signed certificate: This
+# file contains the private key associated with the self-signed
+# certificate. It is a sensitive file that should be kept secure and
+# protected. The private key is used to sign the certificate and
+# establish the authenticity and integrity of the certificate during
+# the authentication process. For ca verified certificate: This file
+# contains the private key associated with the certificate. It is
+# generated when creating the certificate signing request (CSR) and
+# should be kept secure and protected. The private key is used to sign
+# the CSR and later used to establish secure connections and
+# authenticate the entity. Please provide absolute path. (string
+# value)
+#netapp_private_key_file = <None>
+
+# Example: /path/to/certificate.pem or /path/to/certificate.crt, For
+# self signed certificate: This file contains the self-signed digital
+# certificate itself. It includes information about the entity such as
+# the common name (e.g., domain name), organization details, validity
+# period, and public key. The certificate file is generated based on
+# the private key and is used by clients or systems to verify the
+# entity identity during the authentication process. For ca verified
+# certificate: This file contains the digital certificate issued by
+# the trusted third-party certificate authority (CA). It includes
+# information about the entity identity, public key, and the CA that
+# issued the certificate. The certificate file is used by clients or
+# systems to verify the authenticity and integrity of the entity
+# during the authentication process. Please provide absolute path.
+# (string value)
+#netapp_certificate_file = <None>
+
+# This is applicable only for ca verified certificate.Example:
+# /path/to/ca_certificate.crt, This file contains the public key
+# certificate of the trusted third-party certificate authority (CA)
+# that issued the certificate. It is used by clients or systems to
+# validate the authenticity of the certificate presented by the
+# entity. The CA certificate file is typically pre-configured in the
+# trust store of clients or systems to establish trust in certificates
+# issued by that CA. Please provide absolute path. (string value)
+#netapp_ca_certificate_file = <None>
+
+# By default certificate verification is disabled and to verify please
+# assign True to this option (boolean value)
+#netapp_certificate_host_validation = false
+
 # The NFS protocol versions that will be enabled. Supported values
 # include nfs3, nfs4.0, nfs4.1. This option only applies when the
 # option driver_handles_share_servers is set to True.  (list value)
@@ -1259,6 +1348,11 @@
 
 # Root volume name. (string value)
 #netapp_root_volume = root
+
+# The number of hours that a deleted volume should be retained before
+# the delete is completed. (integer value)
+# Minimum value: 0
+#netapp_delete_retention_hours = 12
 
 # The percentage of share space set aside as reserve for snapshot
 # usage; valid values range from 0 to 90. (integer value)
@@ -1347,6 +1441,13 @@
 # Maximum value: 3652
 #netapp_security_cert_expire_days = 365
 
+# Prevent the creation of a share server if total number of data LIFs
+# on one node of HA pair, including those that can be migrated in case
+# of failure, exceeds the maximum data LIFs supported by the node.
+# This option guarantees that, in the event of a node failure, the
+# partner node will be able to takeover all data LIFs. (boolean value)
+#netapp_restrict_lif_creation_per_ha_pair = false
+
 # The maximum time in seconds to wait for existing snapmirror
 # transfers to complete before aborting when promoting a replica.
 # (integer value)
@@ -1364,11 +1465,6 @@
 # considered when creating a new replica, or promoting a replica
 # (string value)
 #netapp_snapmirror_schedule = hourly
-
-# This option set the last transfer size limit (in KB) of snapmirror
-# to decide whether replica is in sync or out of sync. (integer value)
-# Minimum value: 512
-#netapp_snapmirror_last_transfer_size_limit = 1024
 
 # The maximum time in seconds to wait for the completion of a volume
 # move operation after the cutover was triggered. (integer value)
@@ -1524,7 +1620,6 @@
 # off - <No description provided>
 # sha256 - <No description provided>
 # verify - <No description provided>
-# sha256, verify - <No description provided>
 #nexenta_dataset_dedupe = off
 
 # If True shares will not be space guaranteed and overprovisioning
@@ -1905,13 +2000,13 @@
 #automatic_share_server_cleanup = true
 
 # Unallocated share servers reclamation time interval (minutes).
-# Minimum value is 10 minutes, maximum is 60 minutes. The reclamation
+# Minimum value is 10 minutes, maximum is 720 minutes. The reclamation
 # function is run every 10 minutes and delete share servers which were
 # unused more than unused_share_server_cleanup_interval option
 # defines. This value reflects the shortest time Manila will wait for
 # a share server to go unutilized before deleting it. (integer value)
 # Minimum value: 10
-# Maximum value: 60
+# Maximum value: 720
 #unused_share_server_cleanup_interval = 10
 
 # This value, specified in seconds, determines how often the share
@@ -1929,6 +2024,13 @@
 # in the storage backend, for a migrating share server. (integer
 # value)
 #server_migration_driver_continue_update_interval = 900
+
+# If set to True, neutron network are extended to destination host
+# during share server migration. This option should only be enabled if
+# using NeutronNetworkPlugin or its derivatives and when multiple
+# bindings of Manila ports are supported by Neutron ML2 plugin.
+# (boolean value)
+#server_migration_extend_neutron_network = false
 
 # This value, specified in seconds, determines how often the share
 # manager will poll the driver to update the share usage size in the
@@ -1986,6 +2088,27 @@
 # on OS X. (integer value)
 #tcp_keepalive_count = <None>
 
+# Hostname or IP address VAST storage system management VIP. (host
+# address value)
+#vast_mgmt_host = <None>
+
+# Port for VAST management (port value)
+# Minimum value: 0
+# Maximum value: 65535
+#vast_mgmt_port = 443
+
+# Name of Virtual IP pool (string value)
+#vast_vippool_name = <None>
+
+# Base path for shares (string value)
+#vast_root_export = manila
+
+# Username for VAST management (string value)
+#vast_mgmt_user = <None>
+
+# Password for VAST management (string value)
+#vast_mgmt_password = <None>
+
 #
 # From oslo.log
 #
@@ -2022,11 +2145,15 @@
 # Deprecated group/name - [DEFAULT]/logdir
 #log_dir = <None>
 
-# Uses logging handler designed to watch file system. When log file is
-# moved or removed this handler will open a new log file with
-# specified path instantaneously. It makes sense only if log_file
+# DEPRECATED: Uses logging handler designed to watch file system. When
+# log file is moved or removed this handler will open a new log file
+# with specified path instantaneously. It makes sense only if log_file
 # option is specified and Linux platform is used. This option is
 # ignored if log_config_append is set. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This function is known to have bene broken for long time,
+# and depends on the unmaintained library
 #watch_log_file = false
 
 # Use syslog for logging. Existing syslog format is DEPRECATED and
@@ -2053,11 +2180,10 @@
 # log_config_append is set. (boolean value)
 #use_stderr = false
 
-# DEPRECATED: Log output to Windows Event Log. (boolean value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Windows support is no longer maintained.
-#use_eventlog = false
+# (Optional) Set the 'color' key according to log levels. This option
+# takes effect only when logging to stderr or stdout is used. This
+# option is ignored if log_config_append is set. (boolean value)
+#log_color = false
 
 # The amount of time before the log files are rotated. This option is
 # ignored unless log_rotation_type is set to "interval". (integer
@@ -2134,10 +2260,16 @@
 # value)
 #rate_limit_burst = 0
 
-# Log level name used by rate limiting: CRITICAL, ERROR, INFO,
-# WARNING, DEBUG or empty string. Logs with level greater or equal to
-# rate_limit_except_level are not filtered. An empty string means that
-# all levels are filtered. (string value)
+# Log level name used by rate limiting. Logs with level greater or
+# equal to rate_limit_except_level are not filtered. An empty string
+# means that all levels are filtered. (string value)
+# Possible values:
+# CRITICAL - <No description provided>
+# ERROR - <No description provided>
+# INFO - <No description provided>
+# WARNING - <No description provided>
+# DEBUG - <No description provided>
+# '' - <No description provided>
 #rate_limit_except_level = CRITICAL
 
 # Enables or disables fatal status of deprecations. (boolean value)
@@ -2146,18 +2278,6 @@
 #
 # From oslo.messaging
 #
-
-# Size of RPC connection pool. (integer value)
-# Minimum value: 1
-#rpc_conn_pool_size = 30
-
-# The pool size limit for connections expiration policy (integer
-# value)
-#conn_pool_min_size = 2
-
-# The time-to-live in sec of idle connections in the pool (integer
-# value)
-#conn_pool_ttl = 1200
 
 # Size of executor thread pool when executor is threading or eventlet.
 # (integer value)
@@ -2201,21 +2321,29 @@
 # From oslo.service.service
 #
 
-# Enable eventlet backdoor.  Acceptable values are 0, <port>, and
-# <start>:<end>, where 0 results in listening on a random tcp port
-# number; <port> results in listening on the specified port number
-# (and not enabling backdoor if that port is in use); and
+# DEPRECATED: Enable eventlet backdoor.  Acceptable values are 0,
+# <port>, and <start>:<end>, where 0 results in listening on a random
+# tcp port number; <port> results in listening on the specified port
+# number (and not enabling backdoor if that port is in use); and
 # <start>:<end> results in listening on the smallest unused port
-# number within the specified range of port numbers.  The chosen port
+# number within the specified range of port numbers. The chosen port
 # is displayed in the service's log file. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'backdoor_port' option is deprecated and will be removed
+# in a future release.
 #backdoor_port = <None>
 
-# Enable eventlet backdoor, using the provided path as a unix socket
-# that can receive connections. This option is mutually exclusive with
-# 'backdoor_port' in that only one should be provided. If both are
-# provided then the existence of this option overrides the usage of
-# that option. Inside the path {pid} will be replaced with the PID of
-# the current process. (string value)
+# DEPRECATED: Enable eventlet backdoor, using the provided path as a
+# unix socket that can receive connections. This option is mutually
+# exclusive with 'backdoor_port' in that only one should be provided.
+# If both are provided then the existence of this option overrides the
+# usage of that option. Inside the path {pid} will be replaced with
+# the PID of the current process. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'backdoor_socket' option is deprecated and will be
+# removed in a future release.
 #backdoor_socket = <None>
 
 # Enables or disables logging values of all registered options when
@@ -2230,40 +2358,74 @@
 # From oslo.service.wsgi
 #
 
-# File name for the paste.deploy config for api service (string value)
+# DEPRECATED: File name for the paste.deploy config for api service
+# (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'api_paste_config' option is deprecated and will be
+# removed in a future release.
 #api_paste_config = api-paste.ini
 
-# A python format string that is used as the template to generate log
-# lines. The following values can beformatted into it: client_ip,
-# date_time, request_line, status_code, body_length, wall_seconds.
-# (string value)
+# DEPRECATED: A python format string that is used as the template to
+# generate log lines. The following values can beformatted into it:
+# client_ip, date_time, request_line, status_code, body_length,
+# wall_seconds. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'wsgi_log_format' option is deprecated and will be
+# removed in a future release.
 #wsgi_log_format = %(client_ip)s "%(request_line)s" status: %(status_code)s  len: %(body_length)s time: %(wall_seconds).7f
 
-# Sets the value of TCP_KEEPIDLE in seconds for each server socket.
-# Not supported on OS X. (integer value)
+# DEPRECATED: Sets the value of TCP_KEEPIDLE in seconds for each
+# server socket. Not supported on OS X. (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'tcp_keepidle' option is deprecated and will be removed
+# in a future release.
 #tcp_keepidle = 600
 
-# Size of the pool of greenthreads used by wsgi (integer value)
+# DEPRECATED: Size of the pool of greenthreads used by wsgi (integer
+# value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'wsgi_default_pool_size' option is deprecated and will
+# be removed in a future release.
 #wsgi_default_pool_size = 100
 
-# Maximum line size of message headers to be accepted. max_header_line
-# may need to be increased when using large tokens (typically those
-# generated when keystone is configured to use PKI tokens with big
-# service catalogs). (integer value)
+# DEPRECATED: Maximum line size of message headers to be accepted.
+# max_header_line may need to be increased when using large tokens
+# (typically those generated when keystone is configured to use PKI
+# tokens with big service catalogs). (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'max_header_line' option is deprecated and will be
+# removed in a future release.
 #max_header_line = 16384
 
-# If False, closes the client socket connection explicitly. (boolean
-# value)
+# DEPRECATED: If False, closes the client socket connection
+# explicitly. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'wsgi_keep_alive' option is deprecated and will be
+# removed in a future release.
 #wsgi_keep_alive = true
 
-# Timeout for client connections' socket operations. If an incoming
-# connection is idle for this number of seconds it will be closed. A
-# value of '0' means wait forever. (integer value)
+# DEPRECATED: Timeout for client connections' socket operations. If an
+# incoming connection is idle for this number of seconds it will be
+# closed. A value of '0' means wait forever. (integer value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'client_socket_timeout' option is deprecated and will be
+# removed in a future release.
 #client_socket_timeout = 900
 
-# True if the server should send exception tracebacks to the clients
-# on 500 errors. If False, the server will respond with empty bodies.
-# (boolean value)
+# DEPRECATED: True if the server should send exception tracebacks to
+# the clients on 500 errors. If False, the server will respond with
+# empty bodies. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'wsgi_server_debug' option is deprecated and will be
+# removed in a future release.
 #wsgi_server_debug = false
 
 
@@ -2281,6 +2443,13 @@
 #http_retries = 3
 
 # Endpoint type to be used with cinder client calls. (string value)
+# Possible values:
+# publicURL - <No description provided>
+# internalURL - <No description provided>
+# adminURL - <No description provided>
+# public - <No description provided>
+# internal - <No description provided>
+# admin - <No description provided>
 #endpoint_type = publicURL
 
 # Region name for connecting to cinder. (string value)
@@ -2420,6 +2589,14 @@
 # database. (string value)
 #slave_connection = <None>
 
+# The SQLAlchemy asyncio connection string to use to connect to the
+# database. (string value)
+#asyncio_connection = <None>
+
+# The SQLAlchemy asyncio connection string to use to connect to the
+# slave database. (string value)
+#asyncio_slave_connection = <None>
+
 # The SQL mode to be used for MySQL sessions. This option, including
 # the default, overrides any server-set SQL mode. To use whatever SQL
 # mode is set by the server configuration, set this to no value.
@@ -2503,6 +2680,13 @@
 #region_name = RegionOne
 
 # Endpoint type to be used with glance client calls. (string value)
+# Possible values:
+# publicURL - <No description provided>
+# internalURL - <No description provided>
+# adminURL - <No description provided>
+# public - <No description provided>
+# internal - <No description provided>
+# admin - <No description provided>
 #endpoint_type = publicURL
 
 # Authentication URL (string value)
@@ -2626,6 +2810,10 @@
 # application is running on a port. Expects a "port:path" list of
 # strings. Used by DisableByFilesPortsHealthcheck plugin. (list value)
 #disable_by_file_paths =
+
+# Check the presence of files. Used by EnableByFilesHealthcheck
+# plugin. (list value)
+#enable_by_file_paths =
 
 
 [keystone_authtoken]
@@ -2793,6 +2981,16 @@
 # rules. (string value)
 #service_type = <None>
 
+# Enable the SASL(Simple Authentication and Security Layer) if the
+# SASL_enable is true, else disable. (boolean value)
+#memcache_sasl_enabled = false
+
+# the user name for the SASL (string value)
+#memcache_username =
+
+# the username password for SASL (string value)
+#memcache_password =
+
 # Authentication type to load (string value)
 # Deprecated group/name - [keystone_authtoken]/auth_plugin
 #auth_type = <None>
@@ -2828,6 +3026,13 @@
 #auth_strategy = keystone
 
 # Endpoint type to be used with neutron client calls. (string value)
+# Possible values:
+# publicURL - <No description provided>
+# internalURL - <No description provided>
+# adminURL - <No description provided>
+# public - <No description provided>
+# internal - <No description provided>
+# admin - <No description provided>
 #endpoint_type = publicURL
 
 # Region name for connecting to neutron in admin context. (string
@@ -2926,6 +3131,13 @@
 #api_microversion = 2.10
 
 # Endpoint type to be used with nova client calls. (string value)
+# Possible values:
+# publicURL - <No description provided>
+# internalURL - <No description provided>
+# adminURL - <No description provided>
+# public - <No description provided>
+# internal - <No description provided>
+# admin - <No description provided>
 #endpoint_type = publicURL
 
 # Region name for connecting to nova. (string value)
@@ -3029,196 +3241,6 @@
 #lock_path = <None>
 
 
-[oslo_messaging_amqp]
-
-#
-# From oslo.messaging
-#
-
-# Name for the AMQP container. must be globally unique. Defaults to a
-# generated UUID (string value)
-#container_name = <None>
-
-# Timeout for inactive connections (in seconds) (integer value)
-#idle_timeout = 0
-
-# Debug: dump AMQP frames to stdout (boolean value)
-#trace = false
-
-# Attempt to connect via SSL. If no other ssl-related parameters are
-# given, it will use the system's CA-bundle to verify the server's
-# certificate. (boolean value)
-#ssl = false
-
-# CA certificate PEM file used to verify the server's certificate
-# (string value)
-#ssl_ca_file =
-
-# Self-identifying certificate PEM file for client authentication
-# (string value)
-#ssl_cert_file =
-
-# Private key PEM file used to sign ssl_cert_file certificate
-# (optional) (string value)
-#ssl_key_file =
-
-# Password for decrypting ssl_key_file (if encrypted) (string value)
-#ssl_key_password = <None>
-
-# By default SSL checks that the name in the server's certificate
-# matches the hostname in the transport_url. In some configurations it
-# may be preferable to use the virtual hostname instead, for example
-# if the server uses the Server Name Indication TLS extension
-# (rfc6066) to provide a certificate per virtual host. Set
-# ssl_verify_vhost to True if the server's SSL certificate uses the
-# virtual host name instead of the DNS name. (boolean value)
-#ssl_verify_vhost = false
-
-# Space separated list of acceptable SASL mechanisms (string value)
-#sasl_mechanisms =
-
-# Path to directory that contains the SASL configuration (string
-# value)
-#sasl_config_dir =
-
-# Name of configuration file (without .conf suffix) (string value)
-#sasl_config_name =
-
-# SASL realm to use if no realm present in username (string value)
-#sasl_default_realm =
-
-# Seconds to pause before attempting to re-connect. (integer value)
-# Minimum value: 1
-#connection_retry_interval = 1
-
-# Increase the connection_retry_interval by this many seconds after
-# each unsuccessful failover attempt. (integer value)
-# Minimum value: 0
-#connection_retry_backoff = 2
-
-# Maximum limit for connection_retry_interval +
-# connection_retry_backoff (integer value)
-# Minimum value: 1
-#connection_retry_interval_max = 30
-
-# Time to pause between re-connecting an AMQP 1.0 link that failed due
-# to a recoverable error. (integer value)
-# Minimum value: 1
-#link_retry_delay = 10
-
-# The maximum number of attempts to re-send a reply message which
-# failed due to a recoverable error. (integer value)
-# Minimum value: -1
-#default_reply_retry = 0
-
-# The deadline for an rpc reply message delivery. (integer value)
-# Minimum value: 5
-#default_reply_timeout = 30
-
-# The deadline for an rpc cast or call message delivery. Only used
-# when caller does not provide a timeout expiry. (integer value)
-# Minimum value: 5
-#default_send_timeout = 30
-
-# The deadline for a sent notification message delivery. Only used
-# when caller does not provide a timeout expiry. (integer value)
-# Minimum value: 5
-#default_notify_timeout = 30
-
-# The duration to schedule a purge of idle sender links. Detach link
-# after expiry. (integer value)
-# Minimum value: 1
-#default_sender_link_timeout = 600
-
-# Indicates the addressing mode used by the driver.
-# Permitted values:
-# 'legacy'   - use legacy non-routable addressing
-# 'routable' - use routable addresses
-# 'dynamic'  - use legacy addresses if the message bus does not
-# support routing otherwise use routable addressing (string value)
-#addressing_mode = dynamic
-
-# Enable virtual host support for those message buses that do not
-# natively support virtual hosting (such as qpidd). When set to true
-# the virtual host name will be added to all message bus addresses,
-# effectively creating a private 'subnet' per virtual host. Set to
-# False if the message bus supports virtual hosting using the
-# 'hostname' field in the AMQP 1.0 Open performative as the name of
-# the virtual host. (boolean value)
-#pseudo_vhost = true
-
-# address prefix used when sending to a specific server (string value)
-#server_request_prefix = exclusive
-
-# address prefix used when broadcasting to all servers (string value)
-#broadcast_prefix = broadcast
-
-# address prefix when sending to any server in group (string value)
-#group_request_prefix = unicast
-
-# Address prefix for all generated RPC addresses (string value)
-#rpc_address_prefix = openstack.org/om/rpc
-
-# Address prefix for all generated Notification addresses (string
-# value)
-#notify_address_prefix = openstack.org/om/notify
-
-# Appended to the address prefix when sending a fanout message. Used
-# by the message bus to identify fanout messages. (string value)
-#multicast_address = multicast
-
-# Appended to the address prefix when sending to a particular
-# RPC/Notification server. Used by the message bus to identify
-# messages sent to a single destination. (string value)
-#unicast_address = unicast
-
-# Appended to the address prefix when sending to a group of consumers.
-# Used by the message bus to identify messages that should be
-# delivered in a round-robin fashion across consumers. (string value)
-#anycast_address = anycast
-
-# Exchange name used in notification addresses.
-# Exchange name resolution precedence:
-# Target.exchange if set
-# else default_notification_exchange if set
-# else control_exchange if set
-# else 'notify' (string value)
-#default_notification_exchange = <None>
-
-# Exchange name used in RPC addresses.
-# Exchange name resolution precedence:
-# Target.exchange if set
-# else default_rpc_exchange if set
-# else control_exchange if set
-# else 'rpc' (string value)
-#default_rpc_exchange = <None>
-
-# Window size for incoming RPC Reply messages. (integer value)
-# Minimum value: 1
-#reply_link_credit = 200
-
-# Window size for incoming RPC Request messages (integer value)
-# Minimum value: 1
-#rpc_server_credit = 100
-
-# Window size for incoming Notification messages (integer value)
-# Minimum value: 1
-#notify_server_credit = 100
-
-# Send messages of this type pre-settled.
-# Pre-settled messages will not receive acknowledgement
-# from the peer. Note well: pre-settled messages may be
-# silently discarded if the delivery fails.
-# Permitted values:
-# 'rpc-call' - send RPC Calls pre-settled
-# 'rpc-reply'- send RPC Replies pre-settled
-# 'rpc-cast' - Send RPC Casts pre-settled
-# 'notify'   - Send Notifications pre-settled
-#  (multi valued)
-#pre_settled = rpc-cast
-#pre_settled = rpc-reply
-
-
 [oslo_messaging_kafka]
 
 #
@@ -3230,26 +3252,6 @@
 
 # Default timeout(s) for Kafka consumers (floating point value)
 #kafka_consumer_timeout = 1.0
-
-# DEPRECATED: Pool Size for Kafka Consumers (integer value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#pool_size = 10
-
-# DEPRECATED: The pool size limit for connections expiration policy
-# (integer value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#conn_pool_min_size = 2
-
-# DEPRECATED: The time-to-live in sec of idle connections in the pool
-# (integer value)
-# This option is deprecated for removal.
-# Its value may be silently ignored in the future.
-# Reason: Driver no longer uses connection pool.
-#conn_pool_ttl = 1200
 
 # Group id for Kafka consumer. Consumers in one group will coordinate
 # message consumption (string value)
@@ -3313,18 +3315,14 @@
 
 # The Drivers(s) to handle sending notifications. Possible values are
 # messaging, messagingv2, routing, log, test, noop (multi valued)
-# Deprecated group/name - [DEFAULT]/notification_driver
 #driver =
 
 # A URL representing the messaging driver to use for notifications. If
 # not set, we fall back to the same configuration used for RPC.
 # (string value)
-# Deprecated group/name - [DEFAULT]/notification_transport_url
 #transport_url = <None>
 
 # AMQP topic used for OpenStack notifications. (list value)
-# Deprecated group/name - [rpc_notifier2]/topics
-# Deprecated group/name - [DEFAULT]/notification_topics
 #topics = notifications
 
 # The maximum number of attempts to re-send a notification message
@@ -3347,28 +3345,42 @@
 # Auto-delete queues in AMQP. (boolean value)
 #amqp_auto_delete = false
 
+# Size of RPC connection pool. (integer value)
+# Minimum value: 1
+#rpc_conn_pool_size = 30
+
+# The pool size limit for connections expiration policy (integer
+# value)
+#conn_pool_min_size = 2
+
+# The time-to-live in sec of idle connections in the pool (integer
+# value)
+#conn_pool_ttl = 1200
+
 # Connect over SSL. (boolean value)
-# Deprecated group/name - [oslo_messaging_rabbit]/rabbit_use_ssl
 #ssl = false
 
 # SSL version to use (valid only if SSL enabled). Valid values are
 # TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be
 # available on some distributions. (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_version
 #ssl_version =
 
 # SSL key file (valid only if SSL enabled). (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_keyfile
 #ssl_key_file =
 
 # SSL cert file (valid only if SSL enabled). (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_certfile
 #ssl_cert_file =
 
 # SSL certification authority file (valid only if SSL enabled).
 # (string value)
-# Deprecated group/name - [oslo_messaging_rabbit]/kombu_ssl_ca_certs
 #ssl_ca_file =
+
+# When true, verify the broker hostname against the certificate when
+# ``ssl_ca_file`` is set. When false (default on stable branches),
+# ``ssl`` with ``ssl_ca_file`` still validates the certificate chain
+# but does not verify the broker hostname. ``ssl=true`` without
+# ``ssl_ca_file`` never enables hostname verification. (boolean value)
+#ssl_enforce_hostname_verification = false
 
 # Global toggle for enforcing the OpenSSL FIPS mode. This feature
 # requires Python support. This is available in Python 3.9 in all
@@ -3378,13 +3390,19 @@
 # value)
 #ssl_enforce_fips_mode = false
 
-# Run the health check heartbeat thread through a native python thread
-# by default. If this option is equal to False then the health check
-# heartbeat will inherit the execution model from the parent process.
-# For example if the parent process has monkey patched the stdlib by
-# using eventlet/greenlet then the heartbeat will be run through a
-# green thread. This option should be set to True only for the wsgi
-# services. (boolean value)
+# DEPRECATED: (DEPRECATED) It is recommend not to use this option
+# anymore. Run the health check heartbeat thread through a native
+# python thread by default. If this option is equal to False then the
+# health check heartbeat will inherit the execution model from the
+# parent process. For example if the parent process has monkey patched
+# the stdlib by using eventlet/greenlet then the heartbeat will be run
+# through a green thread. This option should be set to True only for
+# the wsgi services. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The option is related to Eventlet which will be removed. In
+# addition this has never worked as expected with services using
+# eventlet for core service framework.
 #heartbeat_in_pthread = false
 
 # How long to wait (in seconds) before reconnecting in response to an
@@ -3392,6 +3410,11 @@
 # Minimum value: 0.0
 # Maximum value: 4.5
 #kombu_reconnect_delay = 1.0
+
+# Random time to wait for when reconnecting in response to an AMQP
+# consumer cancel notification. (floating point value)
+# Minimum value: 0.0
+#kombu_reconnect_splay = 0.0
 
 # EXPERIMENTAL: Possible values are: gzip, bz2. If not set compression
 # will not be used. This option may not be available in future
@@ -3421,14 +3444,16 @@
 #rabbit_login_method = AMQPLAIN
 
 # How frequently to retry connecting with RabbitMQ. (integer value)
+# Minimum value: 1
 #rabbit_retry_interval = 1
 
 # How long to backoff for between retries when connecting to RabbitMQ.
 # (integer value)
+# Minimum value: 0
 #rabbit_retry_backoff = 2
 
-# Maximum interval of RabbitMQ connection retries. Default is 30
-# seconds. (integer value)
+# Maximum interval of RabbitMQ connection retries. (integer value)
+# Minimum value: 1
 #rabbit_interval_max = 30
 
 # Try to use HA queues in RabbitMQ (x-ha-policy: all). If you change
@@ -3483,8 +3508,13 @@
 # automatically deleted. The parameter affects only reply and fanout
 # queues. Setting 0 as value will disable the x-expires. If doing so,
 # make sure you have a rabbitmq policy to delete the queues or you
-# deployment will create an infinite number of queue over time.
-# (integer value)
+# deployment will create an infinite number of queue over time.In case
+# rabbit_stream_fanout is set to True, this option will control data
+# retention policy (x-max-age) for messages in the fanout queue rather
+# then the queue duration itself. So the oldest data in the stream
+# queue will be discarded from it once reaching TTL Setting to 0 will
+# disable x-max-age for stream which make stream grow indefinitely
+# filling up the diskspace (integer value)
 # Minimum value: 0
 #rabbit_transient_queues_ttl = 1800
 
@@ -3520,11 +3550,20 @@
 # Should we use consistant queue names or random ones (boolean value)
 #use_queue_manager = false
 
-# Hostname used by queue manager (string value)
-#hostname = centos9-jail
+# Hostname used by queue manager. Defaults to the value returned by
+# socket.gethostname(). (string value)
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#hostname = node1.example.com
 
 # Process name used by queue manager (string value)
-#processname = oslo-config-generator
+#
+# This option has a sample default set, which means that
+# its actual default value may vary from the one documented
+# below.
+#processname = nova-api
 
 # Use stream queues in RabbitMQ (x-queue-type: stream). Streams are a
 # new persistent and replicated data structure ("queue type") in
@@ -3560,13 +3599,20 @@
 # From oslo.policy
 #
 
-# This option controls whether or not to enforce scope when evaluating
-# policies. If ``True``, the scope of the token used in the request is
-# compared to the ``scope_types`` of the policy being enforced. If the
-# scopes do not match, an ``InvalidScope`` exception will be raised.
-# If ``False``, a message will be logged informing operators that
-# policies are being invoked with mismatching scope. (boolean value)
-#enforce_scope = false
+# DEPRECATED: This option controls whether or not to enforce scope
+# when evaluating policies. If ``True``, the scope of the token used
+# in the request is compared to the ``scope_types`` of the policy
+# being enforced. If the scopes do not match, an ``InvalidScope``
+# exception will be raised. If ``False``, a message will be logged
+# informing operators that policies are being invoked with mismatching
+# scope. (boolean value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: This configuration was added temporarily to facilitate a
+# smooth transition to the new RBAC. OpenStack will always enforce
+# scope checks. This configuration option is deprecated and will be
+# removed in the 2025.2 cycle.
+#enforce_scope = true
 
 # This option controls whether or not to use old deprecated defaults
 # when evaluating policies. If ``True``, the old deprecated defaults
@@ -3578,7 +3624,7 @@
 # policy check string is logically OR'd with the new policy check
 # string, allowing for a graceful upgrade experience between releases
 # with new policies, which is the default behavior. (boolean value)
-#enforce_new_defaults = false
+#enforce_new_defaults = true
 
 # The relative or absolute path of a file that maps roles to
 # permissions for a given service. Relative paths must be specified in
@@ -3618,6 +3664,11 @@
 
 # Absolute path client key file REST based policy check (string value)
 #remote_ssl_client_key_file = <None>
+
+# Timeout in seconds for REST based policy check (floating point
+# value)
+# Minimum value: 0
+#remote_timeout = 60
 
 
 [oslo_reports]
@@ -3716,26 +3767,43 @@
 # From oslo.service.sslutils
 #
 
-# CA certificate file to use to verify connecting clients. (string
-# value)
-# Deprecated group/name - [DEFAULT]/ssl_ca_file
+# DEPRECATED: CA certificate file to use to verify connecting clients.
+# (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'ca_file' option is deprecated and will be removed in a
+# future release.
 #ca_file = <None>
 
-# Certificate file to use when starting the server securely. (string
-# value)
-# Deprecated group/name - [DEFAULT]/ssl_cert_file
+# DEPRECATED: Certificate file to use when starting the server
+# securely. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'cert_file' option is deprecated and will be removed in
+# a future release.
 #cert_file = <None>
 
-# Private key file to use when starting the server securely. (string
-# value)
-# Deprecated group/name - [DEFAULT]/ssl_key_file
+# DEPRECATED: Private key file to use when starting the server
+# securely. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'key_file' option is deprecated and will be removed in a
+# future release.
 #key_file = <None>
 
-# SSL version to use (valid only if SSL enabled). Valid values are
-# TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be
-# available on some distributions. (string value)
+# DEPRECATED: SSL version to use (valid only if SSL enabled). Valid
+# values are TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may
+# be available on some distributions. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'version' option is deprecated and will be removed in a
+# future release.
 #version = <None>
 
-# Sets the list of available ciphers. value should be a string in the
-# OpenSSL cipher list format. (string value)
+# DEPRECATED: Sets the list of available ciphers. value should be a
+# string in the OpenSSL cipher list format. (string value)
+# This option is deprecated for removal.
+# Its value may be silently ignored in the future.
+# Reason: The 'ciphers' option is deprecated and will be removed in a
+# future release.
 #ciphers = <None>
