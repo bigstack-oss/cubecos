@@ -1621,13 +1621,28 @@ os_octavia_image_import()
     local dir=$1
     local file=$2
 
+    # An old image a live amphora still boots from cannot be deleted: the amphora's disk
+    # is an RBD clone of the image's protected snapshot, so glance refuses, and on a
+    # cluster upgraded with load balancers in place that is every old image. So tag
+    # only the image imported here, and take the tag off each old one that survived.
+    # octavia boots every new amphora, and every failover, from the newest image tagged
+    # amp_image_tag ("amphora"), and warns when more than one carries it; tagging "the"
+    # image by name tagged nothing once two shared it, and left the amphorae on the old
+    # agent. A survivor is harmless untagged and goes at the next import once no
+    # amphora uses it.
     local olds=$($OPENSTACK image list -f value --property name=amphora-x64-haproxy -c ID)
     if [ -n "$olds" ] ; then
         $OPENSTACK image delete $olds 2>/dev/null
     fi
     os_image_import $dir $file amphora-x64-haproxy "--visibility private"
-    local amphora_id=$($OPENSTACK image list -f value --property name=amphora-x64-haproxy -c ID)
-    $OPENSTACK image set --tag amphora $amphora_id
+    local id news=$($OPENSTACK image list -f value --property name=amphora-x64-haproxy -c ID | grep -vxF "$olds")
+    [ -n "$news" ] || return 1
+    for id in $news ; do
+        $OPENSTACK image set --tag amphora $id
+    done
+    for id in $($OPENSTACK image list -f value --property name=amphora-x64-haproxy -c ID | grep -xF "$olds") ; do
+        $OPENSTACK image unset --tag amphora $id
+    done
 }
 
 os_octavia_init()
