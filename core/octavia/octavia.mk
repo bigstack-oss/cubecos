@@ -224,13 +224,12 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/octavia
 	$(Q)chroot $(ROOTDIR) mkdir -p /tmp/octavia
 
-# stage the checked-in sample config, policy, dist conf and systemd units
+# stage the checked-in sample config, dist conf and systemd units
 # NOTE: core/octavia/oslo-config-generator/octavia.conf is not staged. It is the
 # input that produced octavia.conf.sample and is kept in the repo for the next
 # release hop; the image has no use for it.
 rootfs_install::
 	$(Q)cp -f $(COREDIR)/octavia/octavia.conf.sample $(ROOTDIR)/tmp/octavia/
-	$(Q)cp -f $(COREDIR)/octavia/policy.yaml $(ROOTDIR)/tmp/octavia/
 	$(Q)cp -f $(COREDIR)/octavia/octavia-dist.conf $(ROOTDIR)/tmp/octavia/
 	$(Q)cp -f $(COREDIR)/octavia/octavia-api.service $(ROOTDIR)/tmp/octavia/
 	$(Q)cp -f $(COREDIR)/octavia/octavia-worker.service $(ROOTDIR)/tmp/octavia/
@@ -253,38 +252,30 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/octavia/conf.d/octavia-housekeeping
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /etc/octavia/conf.d/octavia-health-manager
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/octavia/octavia.conf.sample /etc/octavia/octavia.conf
-	$(Q)# policy.yaml reverts the API to the legacy admin-or-owner RBAC, where a
-	$(Q)# project member can manage the load balancers they own. Without it the
-	$(Q)# stock default RBAC applies and every non-admin call needs an
-	$(Q)# explicit load-balancer_* role.
+	$(Q)# No policy.yaml is installed: octavia runs its own default RBAC. #1206
+	$(Q)# through #640 carried upstream's etc/policy/admin_or_owner-policy.yaml as
+	$(Q)# /etc/octavia/policy.yaml, the same file the RPM delivered, because the
+	$(Q)# default then was octavia's advanced RBAC, under which every non-admin call
+	$(Q)# needed an explicit load-balancer_* role -- and CubeCOS grants none.
 	$(Q)#
-	$(Q)# This is a verbatim copy of upstream etc/policy/admin_or_owner-policy.yaml
-	$(Q)# (md5 c53952746cfb39f5c66f97bbe3bcb263), which is the same file the RPM
-	$(Q)# delivered: openstack-octavia.spec:234 renames that exact path to
-	$(Q)# /etc/octavia/policy.yaml and the spec carries no patches at all. That file
-	$(Q)# is byte-identical at 12.0.1, 14.0.2 and 16.1.0, so neither the caracal nor
-	$(Q)# the epoxy hop moves it. The 0640 root:octavia set further down matches the
-	$(Q)# %attr the spec put on it.
+	$(Q)# 16.0.0 made keystone's default roles the default instead: a project's member
+	$(Q)# reads and writes its own load balancers, a reader only reads them, and
+	$(Q)# admin is admin. Those are the roles CubeCOS actually hands out --
+	$(Q)# cube_admins and appfw project users hold admin, federated cube_users hold
+	$(Q)# member -- so for every one of them the default answers exactly as the file
+	$(Q)# did, and carrying it would only pin octavia to a posture upstream has left,
+	$(Q)# which no other service's hop has done with its new defaults. Two principals
+	$(Q)# lose what the file gave them: a reader-only user can no longer write, which
+	$(Q)# is what the role means, and a user holding only the legacy _member_ role is
+	$(Q)# refused, as nova's default already refuses it a server. That is the
+	$(Q)# direction #216 set: member is the role upstream policy is written against,
+	$(Q)# horizon hands it to new project users, and `hex_cli iaas identity
+	$(Q)# migrate_legacy_member_role` grants it to every principal still holding only
+	$(Q)# _member_, which is kept for old assignments and nothing new.
 	$(Q)#
-	$(Q)# It is also why the epoxy hop moves no effective RBAC. 16.0.0 made keystone's
-	$(Q)# default roles octavia's default policy in place of the advanced RBAC, and
-	$(Q)# oslo.policy 4.5.1 turns enforce_new_defaults and enforce_scope on. But every
-	$(Q)# os_load-balancer_api:* rule is written in terms of seven load-balancer:*
-	$(Q)# rules, and this file overrides six of them -- read, read-global, write,
-	$(Q)# read-quota, read-quota-global, write-quota -- plus context_is_admin. The
-	$(Q)# seventh, load-balancer:admin, gates the 25 operator-only rules (amphorae,
-	$(Q)# flavors, availability zones, providers, failover), and its new default
-	$(Q)# `is_admin:True or role:admin` still admits everyone 14.0.2's did:
-	$(Q)# is_admin is evaluated through this file's context_is_admin, which keeps
-	$(Q)# role:load-balancer_admin. Only its system-admin clause goes, and
-	$(Q)# enforce_scope refuses a system-scoped token on these project-scoped rules
-	$(Q)# anyway. hex_sdk calls octavia with a project-scoped admin.
-	$(Q)#
-	$(Q)# It has to keep being carried: unlike manila's api-paste.ini or glance's
-	$(Q)# metadefs, octavia's wheel data_files are only share/octavia/{LICENSE,
-	$(Q)# README.rst,diskimage-create/*} -- nothing under etc/ reaches the venv
-	$(Q)# prefix, so there is no installed copy to relocate from.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/octavia/policy.yaml /etc/octavia/policy.yaml
+	$(Q)# oslo.policy treats a missing policy file as "use the registered defaults"
+	$(Q)# and logs it at debug, and octavia-status's YAML Policy File check only
+	$(Q)# reads the policy_file option's suffix, so neither notices it is gone.
 	$(Q)# 644, not 640: the units run as User=octavia and must be able to read
 	$(Q)# this. It holds no secrets.
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/octavia/octavia-dist.conf /usr/share/octavia/octavia-dist.conf
@@ -314,8 +305,6 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:octavia /etc/octavia/octavia.conf
 	$(Q)chroot $(ROOTDIR) chmod 0640 /etc/octavia/octavia.conf
-	$(Q)chroot $(ROOTDIR) chown root:octavia /etc/octavia/policy.yaml
-	$(Q)chroot $(ROOTDIR) chmod 0640 /etc/octavia/policy.yaml
 	$(Q)chroot $(ROOTDIR) chown octavia:octavia /var/lib/octavia
 	$(Q)chroot $(ROOTDIR) chmod 0755 /var/lib/octavia
 	$(Q)chroot $(ROOTDIR) chown octavia:octavia /var/log/octavia
