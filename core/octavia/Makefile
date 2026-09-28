@@ -20,9 +20,17 @@ include ../../build.mk
 #
 # diskimage-create.sh is called with only -o on purpose: everything else takes the
 # upstream defaults for the tag cloned above, which is how the base OS is chosen.
-# For 2024.1 that default is still ubuntu-minimal/jammy -- the same base OS the
-# antelope image already used -- so this hop does not move it. What changes inside
-# the image is the amphora agent, from octavia 12.0.x to 14.0.x.
+# For 2024.1 that default was still ubuntu-minimal/jammy, the base the antelope image
+# already used. 2025.1 moved it: 16.1.0 carries upstream's 39aa5a3d ("Update
+# diskimage-create.sh to use noble as default"), so the epoxy image is
+# ubuntu-minimal/noble, 24.04, with the haproxy and kernel that release ships. That
+# is the base upstream's own 2025.1 amphora jobs test, and the same commit drops
+# `option http-use-htx` from the controllers' haproxy template, because newer haproxy
+# rejects it -- the controllers and the image come from one tag, so the two cannot
+# disagree. The same commit adds the amphora-apparmor element to ubuntu builds, which
+# lets rsyslog create the log socket the amphora writes to under noble's apparmor. What
+# changes inside the image besides the base is the amphora agent, from octavia 14.0.x
+# to 16.1.x.
 #
 # NOTE: bump OCTAVIA_VER in core/octavia/octavia.mk when octavia moves, then rebuild,
 # re-upload and re-md5 the image on the NAS in the same change -- the pin and the
@@ -30,10 +38,11 @@ include ../../build.mk
 OCTAVIA_VER := $(shell sed -n 's/^OCTAVIA_VER := //p' $(COREDIR)/octavia/octavia.mk)
 
 # The amphora also builds octavia-lib from source (see the note on the build rule), and
-# that one is not versioned with octavia -- 3.5.0 is caracal's. Read from the same
+# that one is not versioned with octavia -- 3.8.0 is epoxy's. Read from the same
 # constraint file the venv install resolves it under, so the guest and the controllers
-# agree on it for the same reason and without a second pin to remember.
-OCTAVIA_LIB_VER := $(shell sed -n 's/^octavia-lib===//p' $(OPENSTACK_PIP_CONSTRAINT))
+# agree on it for the same reason and without a second pin to remember. That is the
+# epoxy file since #667 moved octavia into the epoxy venv.
+OCTAVIA_LIB_VER := $(shell sed -n 's/^octavia-lib===//p' $(NEXT_OPENSTACK_PIP_CONSTRAINT))
 
 # Everything this Makefile reads or writes is anchored at $(TOP_BLDDIR), never at the
 # directory make happens to be standing in. Make's CURDIR and hex's own BLDDIR (which
@@ -48,12 +57,14 @@ OCTAVIA_BLDDIR := $(TOP_BLDDIR)/core/octavia
 # The artifact core/extpacks/Makefile copies off the NAS, named for the release it
 # ships with the way the manila service and rancher cluster images are. Written
 # here rather than renamed by hand after the fact, so the name is part of the build.
+# The release is the venv octavia runs from, the epoxy one since #667, so the image
+# is amphora-x64-haproxy_epoxy.qcow2.
 #
 # The .md5 sidecar is the *bare hash*, i.e. `md5sum <file> | awk '{print $$1}'`:
 # core/extpacks/Makefile diffs its NAS copy byte for byte against a file it produces
 # the same way, so a full-format `md5sum` line never matches and silently re-copies
 # ~340 MB over NFS on every build.
-AMPHORA_IMAGE := $(OCTAVIA_BLDDIR)/amphora-x64-haproxy_$(OPENSTACK_RELEASE).qcow2
+AMPHORA_IMAGE := $(OCTAVIA_BLDDIR)/amphora-x64-haproxy_$(NEXT_OPENSTACK_RELEASE).qcow2
 
 # The checkout is keyed on the tag, not on the directory.
 #
@@ -81,8 +92,10 @@ $(OCTAVIA_SRC_STAMP):
 	$(Q)touch $@
 
 # The two build-host preconditions core/manila's image target already documents.
-# They are not manila-specific: both images are ubuntu-minimal/jammy, so both go
-# through DIB's 08-debootstrap hook and hit the same two things.
+# They are not manila-specific: both images are ubuntu-minimal (manila's jammy, this
+# one noble since #667), so both go through DIB's 08-debootstrap hook and hit the same
+# two things. debootstrap has to know the release too; EPEL's 1.0.140 ships a noble
+# script.
 #
 #   debootstrap  upstream diskimage-builder dropped it from need_required_packages()
 #                for rhel/centos (manila-image-elements' ff78b8cb did the same), so
@@ -102,7 +115,7 @@ $(OCTAVIA_SRC_STAMP):
 #                is a no-op either way.
 haproxy_amphora_image: $(OCTAVIA_SRC_STAMP)
 	$(Q)[ -n "$(OCTAVIA_LIB_VER)" ] || \
-		{ echo "haproxy_amphora_image: no octavia-lib=== pin in $(OPENSTACK_PIP_CONSTRAINT); without it DIB falls back to the element's dead stable/2024.1" >&2; exit 1; }
+		{ echo "haproxy_amphora_image: no octavia-lib=== pin in $(NEXT_OPENSTACK_PIP_CONSTRAINT); without it DIB falls back to the element's moving stable/2025.1" >&2; exit 1; }
 	$(Q)command -v debootstrap >/dev/null || \
 		{ echo "haproxy_amphora_image: debootstrap missing, and upstream no longer installs it on rhel/centos -- dnf install debootstrap" >&2; exit 1; }
 	$(Q)grep -qhE '^[[:space:]]*timeout[[:space:]]*=' /root/.wgetrc /etc/wgetrc 2>/dev/null || \
@@ -110,12 +123,14 @@ haproxy_amphora_image: $(OCTAVIA_SRC_STAMP)
 	$(Q)rm -f $(AMPHORA_IMAGE) $(AMPHORA_IMAGE).md5
 	$(Q)# The amphora agent is installed *from source* inside the guest, and the ref
 	$(Q)# it is cloned at is not the tag cloned above -- it comes from the element's
-	$(Q)# own elements/amphora-agent/source-repository-amphora-agent, which at 14.0.2
-	$(Q)# still names `stable/2024.1`. That branch no longer exists on opendev either
-	$(Q)# (2024.1 is EOM; only unmaintained/2024.1 and the tags remain), so the build
-	$(Q)# dies mid-run with "Failed to find reference to stable/2024.1" -- a stale
-	$(Q)# string upstream never refreshed when the branch was deleted, and one that
-	$(Q)# does not point back here.
+	$(Q)# own elements/amphora-agent/source-repository-amphora-agent. At 14.0.2 that
+	$(Q)# named `stable/2024.1`, which opendev had deleted at EOM (only
+	$(Q)# unmaintained/2024.1 and the tags remain), so the build died mid-run with
+	$(Q)# "Failed to find reference to stable/2024.1" -- a stale string upstream never
+	$(Q)# refreshed, and one that does not point back here. At 16.1.0 it names
+	$(Q)# `stable/2025.1`, which still exists but is a moving branch: an unpinned
+	$(Q)# build would take whatever agent commit it pointed at that day, and once
+	$(Q)# 2025.1 reaches EOM the branch goes and the build breaks the same way.
 	$(Q)#
 	$(Q)# DIB_REPOREF_<repo> overrides that ref, so the agent is built from the same
 	$(Q)# commit the controllers run rather than from a moving branch. Set in the
@@ -123,7 +138,7 @@ haproxy_amphora_image: $(OCTAVIA_SRC_STAMP)
 	$(Q)# rewrites DIB_REPOLOCATION_upper_constraints to
 	$(Q)# .../requirements/raw/branch/<arg>/upper-constraints.txt -- a branch path,
 	$(Q)# which neither a tag nor a SHA is. Left unset, the element's own default
-	$(Q)# (releases.openstack.org/constraints/upper/2024.1) is correct and stable.
+	$(Q)# (releases.openstack.org/constraints/upper/2025.1) is correct and stable.
 	$(Q)#
 	$(Q)# The *commit*, not the tag name: DIB's 98-source-repositories fetches with
 	$(Q)# `+$$REPOREF:$$REPOREF` and then `$$REPOREF:fetch_$$REPOREF`, i.e. it writes
@@ -133,8 +148,8 @@ haproxy_amphora_image: $(OCTAVIA_SRC_STAMP)
 	$(Q)# derived from the clone above rather than pinned separately, so OCTAVIA_VER
 	$(Q)# stays the single pin.
 	$(Q)#
-	$(Q)# elements/octavia-lib is in the same sequence and carries the identical stale
-	$(Q)# ref, so it needs the same treatment -- but not the same value: octavia-lib
+	$(Q)# elements/octavia-lib is in the same sequence and carries the identical
+	$(Q)# branch ref, so it needs the same treatment -- but not the same value: octavia-lib
 	$(Q)# is versioned 3.x independently of octavia, so it is resolved from its own
 	$(Q)# pin. Both tags are annotated, and `ls-remote <tag>^{} <tag>` prints the
 	$(Q)# peeled commit last when it is, or the commit alone when it is not, so the
