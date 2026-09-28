@@ -384,8 +384,9 @@ rootfs_install::
 # The second move is the same mechanism as the first, so the same rule decides where
 # each plugin goes: next to whichever interpreter runs /usr/bin/openstack. Each
 # component installs its own -- see core/{heat,manila,octavia,designate,masakari,
-# watcher,cyborg,barbican}. python-ironicclient needs no line of its own:
-# ironic-ui and python-watcher both declare it and both are in this venv.
+# watcher,cyborg,barbican,ironic}. python-ironicclient had no line of its own while
+# ironic-ui and python-watcher both declared it in this venv; #670 took python-watcher
+# to the epoxy venv, so core/ironic names it now.
 #
 # Measured on jim-1cc: 977 commands under the 3.9 cli against 1574 under the antelope
 # one, because a venv resolves plugins 3.9 never had -- `openstack baremetal ...`
