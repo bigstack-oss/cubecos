@@ -314,17 +314,27 @@ UpdateCfg(std::string region, std::string domain, std::string userPass, std::str
 
         // masakari-monitors ships no rootwrap, so unlike cinder/glance the helper
         // cannot be resolved through rootwrap exec_dirs and has to be named here.
-        // It names the caracal venv's own helper, not the /usr/bin/privsep-helper
+        // It is named in full rather than reached through the /usr/bin/privsep-helper
         // symlink core/nova/nova.mk used to keep pointed at the antelope venv: #639
         // moved masakarimonitors into the python 3.11 venv, and a 3.10 helper cannot
         // import a 3.11 masakarimonitors. That symlink had no other consumer left, so
         // #639 removed it and the antelope oslo.privsep install behind it.
         //
+        // A privsep helper runs the caller's own code -- it imports masakarimonitors
+        // and executes the entrypoint the client asks for -- so it has to follow
+        // masakari-monitors across every venv boundary. It moved to the caracal venv
+        // with #639 and to the epoxy venv with #665. Leaving it behind would not fail
+        // loudly: on a freshly built rootfs the caracal venv holds no masakarimonitors
+        // and hostmonitor dies with FailedToDropPrivileges, and on a node upgraded in
+        // place the helper imports the 17.0.1 still sitting there and answers a 19.0.0
+        // parent. glance, cinder, nova, neutron, cyborg and manila pin the epoxy
+        // helper for the same reason.
+        //
         // /etc/sudoers.d/masakari authorises exactly this path -- the two have to move
         // together, or privsep is refused by sudo instead of failing to import. A
         // mismatch here is what makes every root command in hostmonitor (cibadmin,
         // crm_mon, corosync-cfgtool) fail with FailedToDropPrivileges.
-        monCfg["masakarimonitors_privileged"]["helper_command"] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+        monCfg["masakarimonitors_privileged"]["helper_command"] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
         monCfg["api"].clear();
         monCfg["api"]["region"] = region;

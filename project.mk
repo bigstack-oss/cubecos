@@ -125,8 +125,9 @@ PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 # nova with placement (31.3.1 / 13.0.0) the fourth (#653), neutron (26.0.6) the
 # fifth (#654), barbican (20.0.0) the sixth (#658), cyborg (14.1.0) the seventh
 # (#659), designate (20.0.2) the eighth (#660), heat (24.1.1) the ninth (#661),
-# ironic with ironic-inspector (29.1.0 / 12.4.0) the tenth (#663) and manila (20.0.2)
-# the eleventh (#664).
+# ironic with ironic-inspector (29.1.0 / 12.4.0) the tenth (#663), manila (20.0.2)
+# the eleventh (#664) and masakari with masakari-monitors (19.1.0 / 19.0.0) the
+# twelfth (#665).
 NEXT_OPENSTACK_RELEASE := epoxy
 NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
 NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1

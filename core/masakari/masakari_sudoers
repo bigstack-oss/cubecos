@@ -7,8 +7,8 @@ Defaults:masakari !requiretty
 # "masakari : command not allowed", before privsep gets far enough to report anything
 # of its own.
 #
-# The path is the caracal venv's own helper, not the /usr/bin/privsep-helper symlink
-# core/nova/nova.mk used to keep pointed at the antelope venv -- #639 moved
-# masakari-monitors into the python 3.11 venv, and a 3.10 helper cannot import a 3.11
-# masakarimonitors.
-masakari ALL = (root) NOPASSWD: /opt/openstack-caracal/bin/privsep-helper *
+# The path is the epoxy venv's own helper. There is no /usr/bin/privsep-helper any more
+# -- it pointed at the antelope venv until #639 took masakari-monitors to caracal -- and
+# the caracal helper #639 named instead cannot import the masakarimonitors that moved to
+# the python 3.12 venv with the epoxy hop (#665).
+masakari ALL = (root) NOPASSWD: /opt/openstack-epoxy/bin/privsep-helper *

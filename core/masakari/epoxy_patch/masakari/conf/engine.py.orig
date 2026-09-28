@@ -32,16 +32,16 @@ whenever an RPC call to the masakari engine is made.
 
 * Possible values:
 
-    Any string, but there is almost never any reason to ever change this value
-    from its default of 'engine'.
+  Any string, but there is almost never any reason to ever change this value
+  from its default of 'engine'.
 
 * Services that use this:
 
-    ``masakari-engine``
+  ``masakari-engine``
 
 * Related options:
 
-    None
+  None
 """),
 ]
 
