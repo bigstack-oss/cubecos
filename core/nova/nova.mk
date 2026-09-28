@@ -166,7 +166,7 @@ rootfs_install::
 # nova names oslo.privsep in the epoxy pip install above, and that one is its own:
 # config_nova.cpp pins four helper_command values at
 # $(NEXT_OPENSTACK_HOME_DIR)/bin/privsep-helper, since the caracal helper -- still
-# installed for manila and masakari -- cannot serve an epoxy nova.
+# installed for masakari -- cannot serve an epoxy nova.
 # Naming it rather than leaving it transitive is the same reasoning that names
 # python-designateclient in core/designate/designate.mk: a dependency nothing asks for
 # is one that disappears silently.
