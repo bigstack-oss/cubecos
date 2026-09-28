@@ -246,12 +246,12 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         // own code -- it imports cyborg and executes the entrypoint the client asks
         // for -- so it has to follow cyborg across every venv boundary. It moved to
         // the caracal venv with #633 and to the epoxy venv with #659. The caracal
-        // helper is still installed for masakari, so leaving the pin
+        // helper has had no user since masakari followed (#665), so leaving the pin
         // behind would not fail loudly: on a freshly built rootfs the caracal venv
         // holds no cyborg and the agent dies with FailedToDropPrivileges, and on a
         // node upgraded in place it imports the cyborg 12.0.0 still sitting there and
         // answers a 14.1.0 parent with no error at all. glance, cinder, nova,
-        // neutron and manila pin the epoxy helper for the same reason.
+        // neutron, manila and masakari pin the epoxy helper for the same reason.
         //
         // /etc/sudoers.d/cyborg authorises exactly this path -- the two have to move
         // together, or privsep is refused by sudo instead of failing to import.

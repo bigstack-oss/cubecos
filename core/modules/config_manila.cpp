@@ -51,12 +51,12 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * explicitly.
  *
  * The pin therefore has to follow manila across every venv boundary, and it moved to
- * the epoxy venv with manila (#664). The caracal helper is still installed -- masakari
- * escalates through it -- so leaving the pin behind would not fail loudly: on a freshly
+ * the epoxy venv with manila (#664). The caracal helper has had no user since masakari
+ * followed (#665), so leaving the pin behind would not fail loudly: on a freshly
  * built rootfs the caracal venv holds no manila and the context dies with
  * FailedToDropPrivileges, and on a node upgraded in place the helper imports the manila
  * 18.3.0 still sitting there and answers a 20.0.2 parent. glance, cinder, nova,
- * neutron and cyborg pin the epoxy helper for the same reason.
+ * neutron, cyborg and masakari pin the epoxy helper for the same reason.
  *
  * Only the lvm and glusterfs drivers reach privsep and enabled_share_backends is pinned
  * to generic, so this never fires today -- it is here so it does not become a latent bug

@@ -58,10 +58,10 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * symlink before that happened.
  *
  * The pin therefore has to follow glance across every venv boundary, and it moved to
- * the epoxy venv with glance (#656). The caracal helper is still installed --
- * masakari escalates through it -- so leaving the pin behind would not
- * fail: it would keep a python 3.12 glance-api on os-brick 6.11.1 driving a python
- * 3.11 helper on 6.7.3, the silent cross-venv pairing this pin exists to rule out.
+ * the epoxy venv with glance (#656). The caracal helper has had no user since masakari
+ * followed (#665), so leaving the pin behind would fail on a fresh build, which has no
+ * caracal helper, and on a node upgraded in place would keep a python 3.12 glance-api
+ * on os-brick 6.11.1 driving the leftover 3.11 helper on 6.7.3, the silent pairing.
  * /etc/sudoers.d/glance authorises exactly this path, so the two move together.
  *
  * helper_command is what takes rootwrap out of the path -- oslo.privsep documents

@@ -73,8 +73,8 @@ static const char DBPASS[] = "KNaHKGg62djyeJ6M";
  * rootwrap.conf, and /usr/bin comes first -- so it would land on
  * /usr/bin/privsep-helper, the symlink core/nova/nova.mk kept pointed at the
  * *antelope* venv for masakari until #639 removed it. neutron has moved on to the
- * epoxy venv (#654), and the caracal helper it pinned until then stays installed for
- * masakari -- but it cannot serve neutron either, and the failure
+ * epoxy venv (#654), and the caracal helper it pinned until then has had no user
+ * since masakari followed (#665) -- it cannot serve neutron either, and the failure
  * has two shapes, only one of them loud: on a freshly built rootfs the caracal venv
  * holds no neutron at all and the agent dies with FailedToDropPrivileges, while on a
  * node upgraded in place the neutron 24.2.2 still sitting there imports fine and
