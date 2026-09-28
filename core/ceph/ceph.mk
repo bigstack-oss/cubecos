@@ -61,10 +61,10 @@ CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; e
 #
 # These venvs are scaffolding, not runtime environments. Nothing on a running node
 # imports from them: the wheels they produce are installed into the openstack venvs
-# that hold a service talking to the built-in RBD store -- the caracal one, where
-# manila lives, and the epoxy one, where glance, cinder and nova do -- and once that is
-# done there is no consumer left. They are deleted at the end of the binding step
-# so the shipped image carries neither them nor Cython.
+# that hold a service talking to the built-in RBD store -- the epoxy one, where glance,
+# cinder, nova and manila live -- and once that is done there is no consumer left. They
+# are deleted at the end of the binding step so the shipped image carries neither them
+# nor Cython.
 #
 # They cannot host ceph itself, either, which is worth stating so it is not tried
 # again: mon, osd, mds and radosgw declare no python dependency at all (pure C++),
@@ -72,13 +72,17 @@ CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; e
 # modules can only ever load from /usr/lib64/python3.9/site-packages. Moving the mgr
 # to 3.11 is a `-DWITH_PYTHON3=3.11` source build of ceph, not a venv.
 #
-# One venv per openstack interpreter, because a C extension is only importable by the
-# minor it was built for: 3.11 for the caracal venv and 3.12 for the epoxy one. glance
-# is the first epoxy occupant to need the bindings -- keystone never touched ceph --
-# which is why this built once until now (#656). The antelope venv no longer holds an
-# RBD consumer, which is why the cpython-310 build that used to run here is gone.
-CEPH_PYTHON_VERS := $(PYTHON_VER) $(NEXT_PYTHON_VER)
-CEPH_OPENSTACK_VENVS := $(OPENSTACK_HOME_DIR) $(NEXT_OPENSTACK_HOME_DIR)
+# One venv per openstack interpreter that holds an RBD consumer, because a C extension
+# is only importable by the minor it was built for. glance was the first epoxy occupant
+# to need the bindings -- keystone never touched ceph -- which is why this built for
+# both 3.11 and 3.12 from #656 on. manila was the caracal venv's last consumer: its
+# CephFS native and NFS drivers load rados through importutils, and cinder, nova and
+# glance_store, the other importers there, had already left. With manila in the epoxy
+# venv (#664) the caracal one holds none, so the cpython-311 build went the way the
+# antelope venv's cpython-310 one did, and only 3.12 is built. The loops below keep
+# their shape, so a consumer on another interpreter is one entry in each list.
+CEPH_PYTHON_VERS := $(NEXT_PYTHON_VER)
+CEPH_OPENSTACK_VENVS := $(NEXT_OPENSTACK_HOME_DIR)
 CEPH_HOME_DIR := /opt/ceph
 
 # setuptools is pinned rather than left to float. Unpinned, the version is whatever
@@ -110,8 +114,8 @@ CEPH_WHEEL_DIR := /usr/src/ceph/wheels
 # create one ceph venv per interpreter, each with its own build tooling
 #
 # || exit 1 per iteration: a for loop only returns the status of its *last*
-# iteration, so without it a failure for the caracal interpreter would be hidden by
-# a successful epoxy one.
+# iteration, so without it a failure for one interpreter would be hidden by a
+# successful later one the day the list holds two again.
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(CEPH_HOME_DIR)
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -133,10 +137,10 @@ rootfs_install::
 # a Cython 3 at that). --no-deps because neither binding declares a dependency, so
 # nothing should be resolved against the index at this point.
 #
-# Both interpreters' wheels land in the one directory -- rados-2.0.0-cp311-* and
-# rados-2.0.0-cp312-* -- so each venv installs by name from it with --no-index
-# --find-links rather than by glob, and pip picks the one wheel whose tag that
-# interpreter accepts.
+# Every interpreter's wheels land in the one directory -- rados-2.0.0-cp312-* today,
+# with a cp311 pair beside it while the caracal venv still needed one -- so each venv
+# installs by name from it with --no-index --find-links rather than by glob, and pip
+# picks the one wheel whose tag that interpreter accepts.
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/ceph $(CEPH_WHEEL_DIR)
