@@ -174,18 +174,22 @@ rootfs_install::
 # watcher.conf.sample is generated and checked in so builds stay reproducible and
 # config diffs remain reviewable. It is oslo-config-generator run over
 # oslo-config-generator/watcher.conf, which is still byte-identical to upstream's
-# copy -- the file did not change between the 10.0.0 tag and unmaintained/2024.1 --
-# with the same two adjustments the RDO spec also makes or needs:
+# copy -- the file did not change between the 10.0.0 and 14.1.2 tags -- over pristine
+# upstream sources: the carried .orig files put back and the allocation_balance entry
+# point left out, so the sample is upstream's alone. Two adjustments the RDO spec also
+# makes or needs:
 #   - #pybasedir is stripped; its default is the build path and is meaningless here.
 #   - watcher.objects.register_all() is called before the generator, otherwise
 #     stevedore fails to load the "taskflow" opts entry point ("module
 #     watcher.objects has no attribute action_plan") and the sample silently loses
-#     the [watcher_workflow_engines.taskflow] section.
-# Regenerated against 12.1.0 the sample gains one section, [maas_client], for the
-# datasource upstream added, and loses none: 45 sections become 46. That is the only
-# structural change, and it changes nothing at runtime, because every option in a
-# generator sample is commented out -- the file carries zero uncommented keys before
-# and after, so LoadConfig() reads the same empty sections it always did.
+#     the [watcher_workflow_engines.taskflow] section. 14.1.2 still needs it.
+# Regenerated against 14.1.2 the sample loses two sections and gains one, 46 becoming
+# 45: [ceilometer_client] goes with the ceilometer datasource upstream removed,
+# [oslo_messaging_amqp] with oslo.messaging's AMQP 1.0 driver, and [prometheus_client]
+# arrives as upstream's own now that the datasource is. Every option in a generator
+# sample is still commented out -- zero uncommented keys before and after -- so
+# LoadConfig() reads empty sections as it always did, and the watcher.conf
+# config_watcher.cpp writes loses only the two empty section headers.
 #
 # NOTE: core/watcher/oslo-config-generator/watcher.conf is not staged. It is the
 # input that produced watcher.conf.sample and is kept in the repo for the next
