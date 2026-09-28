@@ -47,14 +47,22 @@ static const char OPENRC[] = "/etc/admin-openrc.sh";
  * resolve to /usr/bin/privsep-helper, a symlink core/nova/nova.mk kept pointed at the
  * *antelope* venv. #639 took the last service that needed it (masakari) to caracal, so
  * the symlink is gone and the bare name resolves to nothing. A python 3.10 helper could
- * not have served a caracal manila in any case, so the caracal path is named
- * explicitly; config_nova.cpp and config_neutron.cpp pin theirs for the same reason.
+ * not have served a caracal manila in any case, so the caracal path was named
+ * explicitly.
+ *
+ * The pin therefore has to follow manila across every venv boundary, and it moved to
+ * the epoxy venv with manila (#664). The caracal helper is still installed -- masakari
+ * escalates through it -- so leaving the pin behind would not fail loudly: on a freshly
+ * built rootfs the caracal venv holds no manila and the context dies with
+ * FailedToDropPrivileges, and on a node upgraded in place the helper imports the manila
+ * 18.3.0 still sitting there and answers a 20.0.2 parent. glance, cinder, nova,
+ * neutron and cyborg pin the epoxy helper for the same reason.
  *
  * Only the lvm and glusterfs drivers reach privsep and enabled_share_backends is pinned
  * to generic, so this never fires today -- it is here so it does not become a latent bug
  * the day a backend changes. /etc/sudoers.d/manila authorises exactly this path.
  */
-static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-caracal/bin/privsep-helper";
+static const char PRIVSEP_HELPER[] = "sudo /opt/openstack-epoxy/bin/privsep-helper";
 
 static const char USERPASS[] = "iSH2oRU3cwyOG6vj";
 static const char DBPASS[] = "vSV8gnW0PtuFgnHA";
