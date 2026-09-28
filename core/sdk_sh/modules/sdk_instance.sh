@@ -45,8 +45,8 @@ _instance_metrics_dump()
 # ceilometer_memory_usage in METRIC_MAP, and _build_prometheus_query then dispatches on the
 # meter name and raises "Cannot process prometheus meter" for anything it does not
 # recognise. metric_map_path can rename the meter but that only breaks the dispatch, so
-# emitting the ceilometer names is what keeps the backported datasource pristine -- and lets
-# the patch be dropped entirely on Epoxy, which ships it. The rest of the family follows the
+# emitting the ceilometer names kept the backported datasource pristine, which let #670 drop
+# the patch entirely on Epoxy, which ships it. The rest of the family follows the
 # same convention, the ceilometer meter name with dots turned to underscores, so that if
 # CubeCOS ever does adopt ceilometer every consumer here keeps working unchanged.
 #

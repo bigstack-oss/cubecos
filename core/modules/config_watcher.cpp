@@ -248,8 +248,8 @@ UpdateCfg(const std::string& domain, const std::string& userPass, const std::str
         cfg["keystone_authtoken"]["password"] = userPass;
         cfg["keystone_authtoken"]["service_token_roles_required"] = "true";
 
-        // The prometheus datasource, backported into caracal from 2025.1. Pointed at the
-        // watcher_prometheus listener config_haproxy writes rather than at :9091 directly:
+        // The prometheus datasource, 2025.1's own since #670 (a backport before). Pointed at
+        // the watcher_prometheus listener config_haproxy writes rather than :9091 directly:
         // the datasource builds "<host>:<port>/api/v1/..." with nowhere to put a path, and
         // Prometheus serves under a /prometheus route prefix, so a direct target 404s on
         // every query. Through the listener watcher follows the same route as the UI -- the
