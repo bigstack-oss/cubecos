@@ -2303,8 +2303,10 @@ os_manila_backend_types_init()
     manila type-key tenant_share_type set share_backend_name=GENERIC
 
     # create: idempotent check-then-create, same shape as os_volume_type_create
+    # (types are listed through the osc plugin: the legacy manila shell has no
+    # -f/-c, so a `manila type-list -f value -c Name` printed nothing at all)
     for vt in $configured_types ; do
-        if ! manila type-list -f value -c Name | grep -qx "$vt" ; then
+        if ! $OPENSTACK share type list -f value -c Name | grep -qx "$vt" ; then
             manila type-create --snapshot_support true --create_share_from_snapshot_support true "$vt" true
             manila type-key "$vt" set share_backend_name="$vt"
         fi
@@ -2312,12 +2314,12 @@ os_manila_backend_types_init()
 
     # prune: delete share types no longer configured, unless shares still
     # reference them (refuse-if-in-use, mirrors cinder_is_volume_type_in_use)
-    for existing in $(manila type-list -f value -c Name | grep -v '^tenant_share_type$') ; do
+    for existing in $($OPENSTACK share type list -f value -c Name | grep -v '^tenant_share_type$') ; do
         if echo " $configured_types " | grep -q " $existing " ; then
             continue
         fi
 
-        if $OPENSTACK share list --all-tenants --share-type "$existing" -f value -c ID | grep -q . ; then
+        if $OPENSTACK share list --all-projects --share-type "$existing" -f value -c ID | grep -q . ; then
             echo "skip delete: share type $existing still has shares"
             continue
         fi
