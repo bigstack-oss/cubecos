@@ -127,8 +127,9 @@ PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 # (#659), designate (20.0.2) the eighth (#660), heat (24.1.1) the ninth (#661),
 # ironic with ironic-inspector (29.1.0 / 12.4.0) the tenth (#663), manila (20.0.2)
 # the eleventh (#664), masakari with masakari-monitors (19.1.0 / 19.0.0) the
-# twelfth (#665) and octavia (16.1.0) the thirteenth (#667). #669 moved
-# python-swiftclient (4.7.1) rather than a service, so it takes no place in that count.
+# twelfth (#665), octavia (16.1.0) the thirteenth (#667) and watcher (14.1.2) the
+# fourteenth (#670). #669 moved python-swiftclient (4.7.1) rather than a service, so it
+# takes no place in that count.
 NEXT_OPENSTACK_RELEASE := epoxy
 NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
 NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1

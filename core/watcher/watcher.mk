@@ -1,15 +1,26 @@
 # Cube SDK
 # watcher installation
 
-# https://releases.openstack.org/caracal/index.html#caracal-watcher
-WATCHER_VER := 12.1.0
+# https://releases.openstack.org/epoxy/index.html#epoxy-watcher -- 14.1.2 is the newest
+# 2025.1 release, the same "last numeric revision of the series" rule #1204 and #643 used
+# to land on 10.0.0 and 12.1.0. Over 14.0.0 it carries upstream's fixes for the
+# prometheus host queries (fqdn_label instead of the instance label, host_ram_usage in
+# KiB), an action plan now reported FAILED when one of its actions failed rather than
+# SUCCEEDED, 400 instead of 500 for a malformed audit, host_maintenance no longer
+# migrating onto disabled hosts, a policy check on the webhook trigger, and service
+# start/stop logs that no longer print the transport URL.
+# stable/2025.1 carries two commits past it, both unreleased: "Add strategy as filter on
+# /v1/audits/detail endpoint", an api feature, and "Fix allowed_nodes corruption in
+# ComputeScope" (LP#1988981), which only reaches audits scoped by availability zone --
+# a pre-existing bug, in 12.1.0 as well, and nothing in this tree creates such an audit.
+WATCHER_VER := 14.1.2
 
 WATCHER_CONF_DIR := /etc/watcher
 WATCHER_APP_DIR := /var/cache/watcher
 WATCHER_LOG_DIR := /var/log/watcher
 WATCHER_RUN_DIR := /var/run/watcher
 
-# The service moves into the caracal venv; the osc plugin and the dashboard do not follow
+# The service moves into the epoxy venv; the osc plugin and the dashboard do not follow
 # it -- see the second install block. WATCHER_SRCDIR deliberately stops at site-packages
 # instead of descending into watcher/ the way cyborg.mk, nova.mk and neutron.mk do,
 # because the entry point registration at the bottom of this file reaches the dist-info
@@ -29,8 +40,24 @@ WATCHER_RUN_DIR := /var/run/watcher
 # pip first, so the target is always pristine; it would fire in an incremental workspace.
 # Testing with --dry-run --reverse first detects the already-applied case and skips it,
 # which keeps the convention and makes the loop genuinely re-runnable.
-WATCHER_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
-WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch
+#
+# epoxy_patch/ carries two of caracal_patch/'s five changes. The prometheus datasource
+# caracal_patch/ backported from 2025.1 is 14.1.2's own now: its datasources/prometheus.py
+# and conf/prometheus_client.py were verbatim upstream and are byte-identical to
+# 14.1.2's, and 14.1.2's datasources/manager.py and conf/__init__.py register them with
+# exactly the lines the two caracal patches added, so all four files go. What is left:
+#   decision_engine/strategy/strategies/workload_balance.py
+#       the workload_cache.get() guard for an instance the cache does not hold, the
+#       note on why ceilometer_memory_usage takes no unit conversion, and the
+#       diagnostics at INFO. 14.1.2 adopted the destination-host and host-usage lines
+#       itself (d6750e40) at DEBUG, so the patch now raises upstream's own lines
+#       instead of adding its own, and the host_metric it computed is upstream's too.
+#   decision_engine/strategy/strategies/allocation_balance.py
+#       the CubeCOS strategy, installed verbatim and byte-identical to caracal's. It
+#       has no upstream counterpart; strategies/base.py is unchanged between 12.1.0
+#       and 14.1.2 and the model methods it calls kept their signatures.
+WATCHER_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
+WATCHER_PATCHDIR := $(COREDIR)/watcher/$(NEXT_OPENSTACK_RELEASE)_patch
 
 # https://releases.openstack.org/caracal/index.html#caracal-watcher-dashboard
 # Horizon plugins are not in the upper-constraints (that file only covers libraries),
@@ -38,53 +65,63 @@ WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch
 # watcher-dashboard publishes neither stable/2023.1 nor unmaintained/2023.1 -- both
 # branches were deleted at EOL, so there was no branch for installpip's fallback chain
 # to resolve. #636 moved the panel to the caracal release, which is on PyPI as a wheel,
-# and the tag hack goes with it.
+# and the tag hack goes with it. It stays the caracal release when the service moves to
+# epoxy: the served horizon is still the caracal venv's, and the panel talks to the api
+# over HTTP, whose maximum microversion is 1.4 in both 12.1.0 and 14.1.2.
 WATCHER_DASHBOARD_VER := 11.0.0
 
-# install watcher inside the python 3.11 caracal virtual environment
+# install watcher into the epoxy venv
 #
-# 12.1.0 is the 2024.1 release, verified as the newest tag that is an ancestor of
-# upstream's unmaintained/2024.1: that branch's head, the 2024.1-eom tag and 12.1.0 are
-# all commit 8f8d537. The service joins keystone, glance, cinder, nova with placement,
-# neutron, manila, octavia, barbican, cyborg and designate in
-# $(OPENSTACK_HOME_DIR).
+# watcher runs out of the epoxy venv, not the caracal one it shared with horizon,
+# skyline and the osc clients. It cannot be bumped in place: 14.x requires
+# oslo.policy>=4.5.0 and python-observabilityclient>=0.3.0, which
+# os-caracal-pip-upper-constraints.txt holds at 4.3.0 and 0.1.1. So the service moves
+# alone into $(NEXT_OPENSTACK_HOME_DIR), the same shape as its caracal hop (#643), one
+# release on, after keystone, glance, cinder, nova/placement, neutron, barbican,
+# cyborg, designate, heat, ironic, manila, masakari and octavia.
 #
-# Nothing about the packaging changes here -- watcher was already a pinned pip install
-# when it lived in the antelope venv, so this hop only moves it. The RDO rpms
-# openstack-watcher-{api,applier,decision-engine,common} and python3-watcher were
-# dropped at that earlier hop, not this one. openstack-watcher.spec has no
-# watcher-dist.conf, no rootwrap and no sudoers, and it deletes the wheel's whole
+# Nothing about the packaging changes -- watcher was already a pinned pip install when
+# it lived in the antelope venv, so this hop only moves it. openstack-watcher.spec has
+# no watcher-dist.conf, no rootwrap and no sudoers, and it deletes the wheel's whole
 # /usr/etc tree -- the only data_files there are the config sample, a README and the
 # two generator inputs -- so unlike heat, ironic and manila there is nothing to
 # relocate out of the venv prefix. The watcher user and group come from
 # core/heavyfs/account/centos9 statically, so shadow-utils is not needed either.
 #
-# requirements.txt differs from 10.0.0's by exactly one line, oslo.messaging raised to
-# >=14.1.0 for the messaging.RPCClient -> messaging.get_rpc_client rename, and
-# os-caracal-pip-upper-constraints.txt already pins every one of them.
+# python-observabilityclient, which this file used to name for the backported
+# datasource, is in 14.1.2's own requirements.txt now, so it is not named any more.
+# Three packages are, because watcher's requirements.txt asks for none of them:
+#   PyMySQL                config_watcher.cpp writes a mysql+pymysql:// connection
+#   oslo.messaging[kafka]  config_watcher.cpp points the notification transport at
+#                          kafka://
+#   python-memcached       config_watcher.cpp writes memcached_servers, which makes
+#                          keystonemiddleware import memcache on its first token
+#                          validation
+# All three happen to be in this venv already, but a dependency nothing asks for is
+# one that disappears silently.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)# python-observabilityclient is watcher's own dependency for the prometheus
-	$(Q)# datasource, which caracal's 12.1.0 does not carry -- the datasource landed in
-	$(Q)# 2025.1 and is backported in $(OPENSTACK_RELEASE)_patch. It is not in
-	$(Q)# requirements.txt for this version, so it is named here rather than pulled in.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-watcher==$(WATCHER_VER) \
-			python-observabilityclient"
+			PyMySQL \
+			\"oslo.messaging[kafka]\" \
+			python-memcached"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries. This is exactly the set the rpms put in /usr/bin, which is
-	$(Q)# every console_script watcher declares plus the one wsgi_script. 12.1.0's
-	$(Q)# setup.cfg [entry_points] is byte-identical to 10.0.0's, so the set is unchanged.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-api /usr/bin/watcher-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-api-wsgi /usr/bin/watcher-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-applier /usr/bin/watcher-applier
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-db-manage /usr/bin/watcher-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-decision-engine /usr/bin/watcher-decision-engine
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-status /usr/bin/watcher-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-sync /usr/bin/watcher-sync
+	$(Q)# every console_script watcher declares plus the one wsgi_script; 2025.1
+	$(Q)# declares the same seven as 2024.1. The units, config_watcher.cpp and
+	$(Q)# hex_sdk's migrate_watcher_db all reach the service through these, so the
+	$(Q)# retarget here is the whole of their move.
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-api /usr/bin/watcher-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-api-wsgi /usr/bin/watcher-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-applier /usr/bin/watcher-applier
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-db-manage /usr/bin/watcher-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-decision-engine /usr/bin/watcher-decision-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-status /usr/bin/watcher-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-sync /usr/bin/watcher-sync
 
 # the osc plugin and the web ui plugin
 #
@@ -94,7 +131,11 @@ rootfs_install::
 # is the caracal venv's since #636, so the plugin lives here or the health check cannot
 # run its query at all. It had to stay in antelope while the cli did, which is the
 # constraint #632, #633 and #634 also hit for python-barbicanclient,
-# python-cyborgclient and python-designateclient.
+# python-cyborgclient and python-designateclient. The epoxy hop moves only the
+# service: /usr/bin/openstack is still the caracal venv's, so the client stays here
+# while watcher runs from the epoxy venv, the same split heat's (#661), masakari's
+# (#665) and octavia's (#667) hops made. It talks HTTP, and watcher's api still tops
+# out at microversion 1.4, so the caracal client drives 14.1.2 as it drove 12.1.0.
 #
 # It is named explicitly rather than left to watcher-dashboard's requirements.txt, which
 # also asks for it. designate.mk carries the story: a client that arrives only as a side
@@ -106,13 +147,13 @@ rootfs_install::
 # watcher-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
 # horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
-# caracal, so the panel is a caracal-venv install now.
+# caracal, so the panel is a caracal-venv install, and stays one while horizon does.
 #
 # /usr/bin/watcher is the client's own cli. It used to come from the system python 3.9
 # install as /usr/local/bin/watcher -- /usr/bin held only the watcher-* service scripts
 # linked above -- and since /usr/local/bin precedes /usr/bin in the PATH hex_sdk sets,
-# the replacement is this symlink. It points at the client, which is now the same venv
-# as the service.
+# the replacement is this symlink. It points at the client, so it stays in the caracal
+# venv while the watcher-* service links above name the epoxy one.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/

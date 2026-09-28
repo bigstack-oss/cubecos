@@ -192,15 +192,30 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
             if (free_res['vcpu'] >= required_cores and
                     free_res['memory'] >= required_mem and
                     free_res['disk'] >= required_disk):
-                if (self._meter == 'instance_cpu_usage' and
-                    ((src_instance_workload + workload) <
-                     self.threshold / 100 * host.vcpus)):
-                    destination_hosts.append(instance_data)
-                if (self._meter == 'instance_ram_usage' and
-                    ((src_instance_workload + workload) <
-                     self.threshold / 100 * host.memory)):
-                    destination_hosts.append(instance_data)
-
+                if self._meter == 'instance_cpu_usage':
+                    usage = src_instance_workload + workload
+                    usage_percent = usage / host.vcpus * 100
+                    limit = self.threshold / 100 * host.vcpus
+                    if usage < limit:
+                        destination_hosts.append(instance_data)
+                    LOG.debug(f"Host {host.hostname} evaluated as destination "
+                              f"for {instance_to_migrate.uuid}. Host usage "
+                              f"for cpu would be {usage_percent}."
+                              f"The threshold is: {self.threshold}. "
+                              f"selected: {usage < limit}"
+                              )
+                if self._meter == 'instance_ram_usage':
+                    usage = src_instance_workload + workload
+                    usage_percent = usage / host.memory * 100
+                    limit = self.threshold / 100 * host.memory
+                    if usage < limit:
+                        destination_hosts.append(instance_data)
+                    LOG.debug(f"Host {host.hostname} evaluated as destination "
+                              f"for {instance_to_migrate.uuid}. Host usage "
+                              f"for ram would be {usage_percent}."
+                              f"The threshold is: {self.threshold}. "
+                              f"selected: {usage < limit}"
+                              )
         return destination_hosts
 
     def group_hosts_by_cpu_or_ram_util(self):
@@ -251,8 +266,10 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
             cluster_workload += node_workload
             if self._meter == 'instance_cpu_usage':
                 node_util = node_workload / node.vcpus * 100
+                host_metric = 'host_cpu_usage_percent'
             else:
                 node_util = node_workload / node.memory * 100
+                host_metric = 'host_ram_usage_percent'
 
             instance_data = {
                 'compute_node': node, self._meter: node_util,
@@ -262,6 +279,9 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
                 overload_hosts.append(instance_data)
             else:
                 nonoverload_hosts.append(instance_data)
+            LOG.debug(f"Host usage for {node_id}: {host_metric} is "
+                      f"{node_util}. Higher than threshold {self.threshold}: "
+                      f"{node_util >= self.threshold}")
 
         avg_workload = 0
         if cluster_size != 0:
