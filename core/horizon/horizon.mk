@@ -248,8 +248,12 @@ rootfs_install::
 # Note the octavia and masakari entries follow the *service*, not the panel: the
 # oslo.policy.policies entry points named "octavia" and "masakari" are registered by
 # the octavia and masakari packages, not by their dashboard plugins.
-HORIZON_POLICY_NS := octavia
-NEXT_HORIZON_POLICY_NS := keystone glance cinder nova neutron masakari
+#
+# The caracal list is empty since octavia, its last entry, moved to epoxy (#667). The
+# loop stays, a no-op, the way the antelope one did while it was empty: the split
+# closes when horizon follows its services, and not before.
+HORIZON_POLICY_NS :=
+NEXT_HORIZON_POLICY_NS := keystone glance cinder nova neutron masakari octavia
 
 # django-admin rather than $(HORIZON_APP_DIR)/manage.py, and for the epoxy list it is
 # not optional. manage.py sits in a directory whose horizon and openstack_dashboard
