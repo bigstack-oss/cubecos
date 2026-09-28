@@ -52,6 +52,8 @@ RUG00004I: rebooting node for rolling upgrade
 PLC00001I: cube node policy is successfully applied
 PLC00002I: cube cluster policy is successfully applied
 
+SRV00004E: alert email delivery to the SMTP server failed, please check the email sender settings
+SRV00005I: alert email delivery errors have stopped
 SRV01001I: service restart due to memory usage exceeds defined threshold
 SRV01002I: identified and fixed a stale API service
 STO00001W: storage pool crossed its soft capacity threshold
