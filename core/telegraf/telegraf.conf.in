@@ -89,6 +89,19 @@ interval = "5m"
 timeout = "1m"
 data_format = "influx"
 
+# These sample for 285 s (sdk_gpu.sh); 295 s still ends each run inside its interval.
+[[inputs.exec]]
+commands = [ ["sudo", "/usr/sbin/hex_sdk", "-f", "line", "gpu_host_util_window"] ]
+interval = "5m"
+timeout = "295s"
+data_format = "influx"
+
+[[inputs.exec]]
+commands = [ ["sudo", "/usr/sbin/hex_sdk", "-f", "line", "gpu_vm_util_window"] ]
+interval = "5m"
+timeout = "295s"
+data_format = "influx"
+
 [[inputs.exec]]
 commands = [ ["sudo", "/usr/sbin/hex_sdk", "network_host_ping"] ]
 interval = "5m"
