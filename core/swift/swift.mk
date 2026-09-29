@@ -15,8 +15,8 @@
 # of this file in HEAVY_COMPONENTS and, since #655, installs cinder into the epoxy venv
 # without --no-deps; cinder declares python-swiftclient, so the ===4.7.1 pinned in
 # os-epoxy-pip-upper-constraints.txt:104 is already installed by the time this file
-# runs. heat, python-heatclient and python-troveclient (heat.mk) and horizon's epoxy
-# copy (horizon.mk) declare it there too. Naming it here keeps the object-store client
+# runs. heat, python-heatclient and python-troveclient (heat.mk) and horizon
+# (horizon.mk) declare it there too. Naming it here keeps the object-store client
 # an explicit part of the object-store story rather than an accident of other
 # components' dependency sets -- the same reason it was named in the antelope and
 # caracal venvs.
@@ -34,10 +34,11 @@
 # Left in caracal, a bare "swift" would have been a different client from the one
 # cinder-backup and heat-engine import.
 #
-# The caracal venv keeps its own 4.5.0, and nothing removes it: the served horizon
-# (24.0.2, whose Object Store panel imports swiftclient) and python-heatclient, both of
-# which stay there next to /usr/bin/openstack, declare it. That copy is theirs now,
-# not this file's.
+# The caracal venv had kept a 4.5.0 of its own for the served horizon (24.0.2, whose
+# Object Store panel imports swiftclient) and python-heatclient, which stayed there
+# next to /usr/bin/openstack. #662 took all three to the epoxy venv, so a fresh build's
+# caracal venv holds no python-swiftclient at all, and horizon's panel imports this
+# file's 4.7.1.
 #
 # History, in case the paths below read as over-specified: the pip-installed yoga copy
 # that owned /usr/local/bin/swift -- which precedes /usr/bin on PATH -- went away in
