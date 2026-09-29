@@ -776,6 +776,9 @@ ALERT_SMTP_HEX_LOG_EVENT=/usr/sbin/hex_log_event
 # coming, and fires SRV00005I after ALERT_SMTP_QUIET seconds with no new error.
 # Quiet only means no mail failed; with no alert raised in that window, no mail
 # was tried either. Both keys are kept off email handlers by config_kapacitor.
+# category=service matches the built-in SRV00001I/SRV00002W; the API reads the
+# event category from metadata, and the mapper keeps it there while dropping the
+# duplicate influx tag (d1634d3e), so without it the event shows no category.
 #
 # Only nodes running kapacitor have the log; everywhere else this is a no-op.
 alert_smtp_delivery_check()
@@ -822,11 +825,11 @@ alert_smtp_delivery_check()
             err=$(echo "$lines" | tail -n 1 | sed -n 's/.* err="\([^"]*\)".*/\1/p')
             [ -n "$err" ] || err=$(echo "$lines" | tail -n 1 | sed -n 's/.* msg="\([^"]*\)".*/\1/p')
             err=$(echo -n "${err:-unknown}" | tr -c 'A-Za-z0-9._:@/-' '_' | tr -s '_' | cut -c 1-120)
-            $ALERT_SMTP_HEX_LOG_EVENT -e SRV00004E "interface=system,host=$HOSTNAME,service=smtp,action=delivery_failed,errors=$count,error=$err"
+            $ALERT_SMTP_HEX_LOG_EVENT -e SRV00004E "interface=system,host=$HOSTNAME,category=service,service=smtp,action=delivery_failed,errors=$count,error=$err"
             prev=failing
         fi
     elif [ "$prev" = "failing" ] && [ $(( now - last )) -ge $ALERT_SMTP_QUIET ] ; then
-        $ALERT_SMTP_HEX_LOG_EVENT -e SRV00005I "interface=system,host=$HOSTNAME,service=smtp,action=delivery_recovered,quiet_seconds=$(( now - last ))"
+        $ALERT_SMTP_HEX_LOG_EVENT -e SRV00005I "interface=system,host=$HOSTNAME,category=service,service=smtp,action=delivery_recovered,quiet_seconds=$(( now - last ))"
         prev=ok
     fi
 

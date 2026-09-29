@@ -53,7 +53,7 @@ chk "failure fires"              "$(grep -c SRV00004E $EV)"         "1"
 chk "host carried"               "$(grep -c 'host=cc1' $EV)"        "1"
 chk "count carried"              "$(grep -c 'errors=2' $EV)"        "1"
 chk "error is tag-safe"          "$(grep -c 'error=535_Authentication_block' $EV)" "1"
-chk "no category attr"           "$(grep -c 'category=' $EV)"       "0"
+chk "category carried"           "$(grep -c 'SRV00004E .*category=service,' $EV)" "1"
 
 smtp_err
 run
@@ -64,6 +64,7 @@ chk "no recovery before quiet"   "$(grep -c . $EV)"                 "0"
 
 age 1800; run
 chk "recovery after quiet"       "$(grep -c SRV00005I $EV)"         "1"
+chk "recovery category carried"  "$(grep -c 'SRV00005I .*category=service,' $EV)" "1"
 run
 chk "recovery once"              "$(grep -c . $EV)"                 "0"
 
