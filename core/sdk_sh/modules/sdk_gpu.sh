@@ -411,6 +411,50 @@ gpu_probe_diagnosis()
     echo "${text:-(no output)}"
 }
 
+# How many SR-IOV vGPUs a card can host: the smaller of the VFs its PF exposes
+# and the most vGPUs the driver hosts on it - the largest "Max Instances" among
+# its SR-IOV types in `nvidia-smi vgpu -s -v`. sriov_totalvfs alone is not the
+# limit: an RTX PRO 6000 Blackwell exposes 48 VFs but hosts at most 32 vGPUs,
+# and the 33rd fails at apply time (cn13, 2026-09-29, #1583).
+#
+# Prints a number, or null when sriov_totalvfs is unreadable. When the driver's
+# number is missing it falls back to sriov_totalvfs - no worse than before, and
+# gpu_resource_set still refuses such a request because its own check of the
+# same ceiling fails closed.
+#
+# Usage: gpu_sriov_vgpu_count_limit <`vgpu -s -v` output> <sriov_totalvfs>
+gpu_sriov_vgpu_count_limit()
+{
+    local vgpu_support_out="$1" sriov_totalvfs="$2"
+
+    if ! echo "$sriov_totalvfs" | grep -qE '^[0-9]+$'; then
+        echo null
+        return 0
+    fi
+
+    # Exact key match on "Max Instances", so "Max Instances Per VM" and
+    # "Max Instances Per GI" do not count. MIG-backed types are excluded by name.
+    local driver_max
+    driver_max=$(echo "$vgpu_support_out" | awk -v re="$SRIOV_PROFILE_NAME_REGEX" '
+        function trim(s) { gsub(/^[ \t]+|[ \t\r]+$/, "", s); return s }
+        {
+            colon = index($0, ":")
+            if (colon == 0) next
+            key = trim(substr($0, 1, colon - 1))
+            val = trim(substr($0, colon + 1))
+        }
+        key == "vGPU Type ID" { name = "" }
+        key == "Name" { n = split(val, w, " "); name = w[n] }
+        key == "Max Instances" && name ~ re && val ~ /^[0-9]+$/ && val + 0 > max { max = val + 0 }
+        END { if (max > 0) print max }')
+
+    if [ -n "$driver_max" ] && [ "$driver_max" -lt "$sriov_totalvfs" ]; then
+        echo "$driver_max"
+    else
+        echo "$sriov_totalvfs"
+    fi
+}
+
 # Returns a stringified JSON array conforming to the following schema:
 # {
 #   id: string
@@ -723,11 +767,9 @@ gpu_device_list()
             if [ "$gpu_type" = "sriovVgpu" ]; then
                 local pci_sysfs
                 pci_sysfs=$(echo "$pci_bus_id" | tr '[:upper:]' '[:lower:]' | cut -c5-)
-                local sriov_totalvfs 
+                local sriov_totalvfs
                 sriov_totalvfs=$(cat "/sys/bus/pci/devices/${pci_sysfs}/sriov_totalvfs" 2>/dev/null | tr -d '[:space:]')
-                if echo "$sriov_totalvfs" | grep -qE '^[0-9]+$'; then
-                    sriov_vgpu_profile_count_limit="$sriov_totalvfs"
-                fi
+                sriov_vgpu_profile_count_limit=$(gpu_sriov_vgpu_count_limit "$vgpu_support_out" "$sriov_totalvfs")
             fi
 
         fi
@@ -1081,7 +1123,10 @@ EOF
         # `Max Instances                     : 4` - how many of this type the
         # whole card can host. Anchored on the colon so it cannot match
         # `Max Instances Per VM` or `Max Instances Per GI`, which both contain
-        # this string. Absent on SR-IOV types, which carry no such limit.
+        # this string. SR-IOV types print it too, but only MIG-backed ones
+        # report it below: an SR-IOV type's own value is its framebuffer budget
+        # (DC-48Q: 2), not validated yet (#1584). The card-wide SR-IOV count
+        # comes from gpu_sriov_vgpu_count_limit instead.
         max_instances=$(echo "$block" | \
             grep -E "^[[:space:]]*Max Instances[[:space:]]*:" | head -1 | awk '{print $NF}')
         [ -z "$max_instances" ] && max_instances="null"
