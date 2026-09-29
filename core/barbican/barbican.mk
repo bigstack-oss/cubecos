@@ -51,8 +51,7 @@ rootfs_install::
 
 # python-barbicanclient
 #
-# It is kept in a block of its own because it is the one part of barbican that cannot
-# follow the service into the epoxy venv: it is what the openstack cli loads rather than
+# It is kept in a block of its own because it is what the openstack cli loads rather than
 # what barbican runs. python-barbicanclient contributes an [openstack.cli.extension] entry
 # point plus sixteen [openstack.key_manager.v1] commands (secret store/get/list/delete/
 # update, the container and consumer families, and the order family), and a stevedore entry
@@ -60,16 +59,19 @@ rootfs_install::
 # /usr/bin/openstack or `openstack secret ...` leaves the node entirely.
 #
 # #632 was the first caracal hop to hit that, and #636 ended that split by moving the cli.
-# The epoxy hop opens it again: /usr/bin/openstack is still the caracal venv's, so the
-# client stays here until the cli moves too. keystone, glance, cinder, nova and neutron
-# escaped it because `openstack identity|image|volume|server|network ...` are osc
-# built-ins -- their clients contribute no [openstack.cli.extension] at all. The epoxy venv
-# gets a python-barbicanclient of its own anyway, which castellan and cinder both require.
+# The epoxy hop opened it again (#658), and #662 ended it the same way: /usr/bin/openstack
+# is the epoxy venv's, so the client is installed there with the service. keystone,
+# glance, cinder, nova and neutron never met it because `openstack
+# identity|image|volume|server|network ...` are osc built-ins -- their clients contribute
+# no [openstack.cli.extension] at all. castellan and cinder both require
+# python-barbicanclient as well, so this line is a re-declaration in a fresh build; it is
+# named anyway, for the cli, because a client nothing names for the cli is one that
+# disappears the day its other declarers move.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-barbicanclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf

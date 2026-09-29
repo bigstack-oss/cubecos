@@ -129,20 +129,18 @@ rootfs_install::
 # python-watcherclient owns the "optimize" osc plugin entry point, which hex_sdk's
 # health_watcher_check() drives as `openstack optimize service list`. A stevedore entry
 # point is only visible to the interpreter it was installed under, and /usr/bin/openstack
-# is the caracal venv's since #636, so the plugin lives here or the health check cannot
+# is the epoxy venv's since #662, so the plugin lives there or the health check cannot
 # run its query at all. It had to stay in antelope while the cli did, which is the
 # constraint #632, #633 and #634 also hit for python-barbicanclient,
-# python-cyborgclient and python-designateclient. The epoxy hop moves only the
-# service: /usr/bin/openstack is still the caracal venv's, so the client stays here
-# while watcher runs from the epoxy venv, the same split heat's (#661), masakari's
-# (#665) and octavia's (#667) hops made. It talks HTTP, and watcher's api still tops
-# out at microversion 1.4, so the caracal client drives 14.1.2 as it drove 12.1.0.
+# python-cyborgclient and python-designateclient, and in caracal from #670, which
+# moved only the service, until #662 moved the cli -- the split heat's (#661),
+# masakari's (#665) and octavia's (#667) hops made too.
 #
 # It is named explicitly rather than left to watcher-dashboard's requirements.txt, which
 # also asks for it. designate.mk carries the story: a client that arrives only as a side
 # effect of some other install disappears silently the day that install moves, and the
 # symptom is `cluster check` reporting the service NG while every unit is active. No
-# version is named, the same way cyborg.mk does not name one: the caracal constraints
+# version is named, the same way cyborg.mk does not name one: the epoxy constraints
 # file already carries python-watcherclient, so a version here could only drift from it.
 #
 # watcher-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
@@ -153,13 +151,13 @@ rootfs_install::
 # /usr/bin/watcher is the client's own cli. It used to come from the system python 3.9
 # install as /usr/local/bin/watcher -- /usr/bin held only the watcher-* service scripts
 # linked above -- and since /usr/local/bin precedes /usr/bin in the PATH hex_sdk sets,
-# the replacement is this symlink. It points at the client, so it stays in the caracal
-# venv while the watcher-* service links above name the epoxy one.
+# the replacement is this symlink. It points at the client, so it follows the client
+# rather than the watcher-* service links above -- into the epoxy venv with #662.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-watcherclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
@@ -168,7 +166,7 @@ rootfs_install::
 		watcher-dashboard==$(WATCHER_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher /usr/bin/watcher
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher /usr/bin/watcher
 
 # install system directories and files
 #

@@ -369,7 +369,7 @@ rootfs_install::
 # pkg_resources references unconditionally before setuptools 66.1 -- and 79.0.1
 # clears it.
 
-# install the openstack cli inside the python 3.11 virtual environment
+# install the openstack cli inside the python 3.12 virtual environment
 #
 # /usr/bin/openstack was the python3-openstackclient rpm, so it ran as
 # `#!/usr/bin/python3` (3.9). That shebang is what pinned half a dozen osc plugins
@@ -378,35 +378,34 @@ rootfs_install::
 # under, so the copies pip put in a venv were invisible to the cli and every plugin
 # had to be held in 3.9 as well -- as an rpm (designate, heat, manila, octavia) or as
 # a second pip install (cyborg and watcher). #609 moved the cli into the
-# antelope venv and every plugin followed it there; #636 moves it again, into the
-# caracal venv, and the plugins follow it a second time.
+# antelope venv and every plugin followed it there; #636 moved it into the caracal
+# venv and #662 into the epoxy one, and the plugins followed it each time.
 #
-# The second move is the same mechanism as the first, so the same rule decides where
-# each plugin goes: next to whichever interpreter runs /usr/bin/openstack. Each
-# component installs its own -- see core/{heat,manila,octavia,designate,masakari,
-# watcher,cyborg,barbican,ironic}. python-ironicclient had no line of its own while
-# ironic-ui and python-watcher both declared it in this venv; #670 took python-watcher
-# to the epoxy venv, so core/ironic names it now.
+# Every move is the same mechanism, so the same rule decides where each plugin goes:
+# next to whichever interpreter runs /usr/bin/openstack. Each component installs its
+# own -- see core/{heat,manila,octavia,designate,masakari,watcher,cyborg,barbican,
+# ironic}, and core/nova for osc-placement.
 #
 # Measured on jim-1cc: 977 commands under the 3.9 cli against 1574 under the antelope
 # one, because a venv resolves plugins 3.9 never had -- `openstack baremetal ...`
 # among them, which used to fall through to osc's did-you-mean list.
 #
 # No version is pinned. python-openstackclient is a client, so
-# os-caracal-pip-upper-constraints.txt already carries it (6.6.1) and naming it again
-# here could only drift from that file.
+# os-epoxy-pip-upper-constraints.txt already carries it (7.5.1) and naming it again
+# here could only drift from that file. This block has to stay below the epoxy venv
+# bootstrap above: double-colon rules run in file order.
 #
 # The rpm also owned /usr/bin/openstack-3, the Fedora python3 alias. Nothing in this
 # tree calls it and no other venv console script is aliased that way, so it is not
 # recreated.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-openstackclient
 	$(Q)# Link the cli. hex_sdk reaches it by absolute path ($$OPENSTACK in
 	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/openstack), so
 	$(Q)# this symlink is what carries every caller over.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
 
 # Allow admin to be sudoers
 rootfs_install::

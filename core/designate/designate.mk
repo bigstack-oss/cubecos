@@ -8,8 +8,8 @@ ROOTFS_DNF += bind bind-utils
 # api/central/worker/producer/mdns rows that report UP. It is installed by its own
 # block further down, which #634 split out to hold it in the antelope venv while the
 # service moved to caracal. #636 took /usr/bin/openstack to caracal too, which closed
-# the split; the epoxy hop opens it again, so the block holds the client in the
-# caracal venv while the service runs from the epoxy one.
+# the split; the epoxy hop opened it again (#660), and #662 closed it the same way by
+# taking the cli to epoxy, so the block installs the client beside the service.
 #
 # It used to be the yoga python3-designateclient rpm under the *system* python 3.9,
 # because /usr/bin/openstack was itself `#!/usr/bin/python3` and a stevedore entry point
@@ -40,8 +40,8 @@ DESIGNATE_CONF_DIR := /etc/designate
 DESIGNATE_APP_DIR := /var/lib/designate
 DESIGNAT_LOG_DIR := /var/log/designate
 
-# The console scripts patched below live in the epoxy venv with the service. The osc
-# plugin does not follow it there -- see the install blocks.
+# The console scripts patched below live in the epoxy venv with the service, and so,
+# since #662, do the dashboard and the osc plugin -- see the install blocks.
 DESIGNATE_BINDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/bin
 DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(NEXT_OPENSTACK_RELEASE)_bin_patch
 
@@ -103,11 +103,10 @@ rootfs_install::
 # to sit next to /usr/bin/openstack or health_designate_check()'s `openstack dns
 # service list` cannot run at all -- which is how this was first found, as
 # "DNSaaS NG [ designate(9 api not all up) ]" while every designate unit was active.
-# That held it in the antelope venv from #634 until #636 moved the cli here. The
-# epoxy hop opens the split once more: /usr/bin/openstack is still the caracal
-# venv's, so the client stays here until the cli moves too, the same as barbican's
-# (#658) and cyborg's (#659). The epoxy venv gets its own copy as a designate
-# requirement, and nothing points at it.
+# That held it in the antelope venv from #634 until #636 moved the cli to caracal,
+# and in the caracal venv from #660 until #662 moved it to epoxy. The service
+# requires the client too, so in the epoxy venv this line is a re-declaration; it is
+# named anyway, for the cli, for the reason the note at the top gives.
 #
 # designate-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
@@ -116,8 +115,8 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-designateclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \

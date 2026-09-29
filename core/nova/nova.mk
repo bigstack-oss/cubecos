@@ -124,22 +124,23 @@ rootfs_install::
 	$(Q)# Link the uWSGI binary for Placement WSGI
 	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/uwsgi /usr/bin/uwsgi
 
-# keep osc-placement in the caracal venv nova has just left
+# osc-placement, next to the openstack cli
 #
 # It is an osc plugin -- "openstack resource provider ...", "openstack allocation
 # candidate ..." -- and a stevedore entry point is only visible to the interpreter it
-# was installed under, so it has to sit next to /usr/bin/openstack, which is the
-# caracal venv's (core/heavyfs/Makefile). hex_sdk depends on it: the PGPU health check
-# (sdk_health.sh) lists resource providers, and gpu instance migration (sdk_os.sh) walks
-# allocation candidates and moves PGPU allocations. Nothing in that venv requires it, so
-# moving the install above would have dropped it from a fresh build and turned all
-# three into "unknown command". The same rule has held osc plugins next to the cli
-# since #609; see core/masakari/masakari.mk for another.
+# was installed under, so it has to sit next to /usr/bin/openstack (core/heavyfs/Makefile).
+# hex_sdk depends on it: the PGPU health check (sdk_health.sh) lists resource
+# providers, and gpu instance migration (sdk_os.sh) walks allocation candidates and
+# moves PGPU allocations. Nothing requires it, so it has always needed a line of its
+# own: #653 kept it in the caracal venv when nova left for epoxy, because the cli was
+# still there, and #662 moved it to epoxy with the cli. Without it all three would be
+# "unknown command". The same rule has held osc plugins next to the cli since #609; see
+# core/masakari/masakari.mk for another.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		osc-placement
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf

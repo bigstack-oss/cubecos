@@ -102,13 +102,11 @@ rootfs_install::
 # which hex_sdk's os_masakari_maintenance_hosts drives), and a stevedore entry point is
 # only visible to the interpreter it was installed under, so the plugin has to sit next
 # to /usr/bin/openstack. That held it in the antelope venv from #639 until #636 moved
-# the cli here. The epoxy hop moves only the services: /usr/bin/openstack is still the
-# caracal venv's, so the client stays here while masakari runs from the epoxy venv, the
-# same split heat's (#661) and manila's (#664) hops made. It talks HTTP and the
-# masakari API still tops out at microversion 1.3, so the caracal client drives
-# 19.1.0 as it drove 17.0.0. It owns no console script of its own, so nothing needs
-# relinking. The constraints file decides its version, the way core/designate does it
-# for python-designateclient -- it is not a branch-name clone.
+# the cli to caracal, and in the caracal venv from #665, which moved only the
+# services, until #662 moved the cli to epoxy. It sits with the services again now.
+# It owns no console script of its own, so nothing needs relinking. The constraints
+# file decides its version, the way core/designate does it for python-designateclient
+# -- it is not a branch-name clone.
 #
 # masakari-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
@@ -127,8 +125,8 @@ MASAKARI_DASHBOARD_VER := 12.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-masakariclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
 	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \

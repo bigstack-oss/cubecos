@@ -67,9 +67,8 @@ rootfs_install::
 # under, so the plugin has to sit next to /usr/bin/openstack or those commands
 # disappear from the cli. That held it in the antelope venv while the cli was
 # there, and #636 moved the cli so it sat with the service again. The epoxy hop
-# opens the split once more: /usr/bin/openstack is still the caracal venv's, so
-# the client stays here until the cli moves too, the same as barbican's (#658).
-# Every service whose client owns an osc plugin meets this on its way over.
+# opened the split once more (#659), and #662 closed it the same way: the cli is the
+# epoxy venv's, so the client is installed there with the service.
 #
 # Nothing in hex_sdk drives it as a health check -- health_cyborg_check() only
 # asks systemd whether the three units are running -- so what would go quiet is
@@ -77,18 +76,18 @@ rootfs_install::
 # sdk_os.sh's gpu device-profile helpers and health_cyborg_report.
 #
 # It is a pip install rather than a git checkout for the same reason the service
-# is, and no version is named: os-caracal-pip-upper-constraints.txt already
+# is, and no version is named: os-epoxy-pip-upper-constraints.txt already
 # carries python-cyborgclient, so a version here could only drift from that file.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-cyborgclient
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link the cli plugin's console script
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg /usr/bin/cyborg
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/cyborg /usr/bin/cyborg
 
 rootfs_install::
 	$(Q)[ -d $(CYBORG_PATCHDIR) ] && cp -rf $(CYBORG_PATCHDIR)/* $(CYBORG_SRCDIR)/ || /bin/true

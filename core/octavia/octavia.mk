@@ -21,10 +21,10 @@
 # there is no second consumer: octavia ships no standalone CLI and nothing in hex_sdk
 # runs one, so the client is installed once.
 #
-# The epoxy hop splits them again. The service moves to the epoxy venv, but
-# /usr/bin/openstack is still the caracal venv's, so the client stays there in a block
-# of its own, the same split heat's (#661), manila's (#664) and masakari's (#665) hops
-# made. It talks HTTP, so the caracal constraints' 3.7.1 drives the 16.1.0 api.
+# The epoxy hop split them again: #667 moved the service to the epoxy venv and left
+# the client in the caracal one, next to /usr/bin/openstack, in a block of its own.
+# #662 moved the CLI to epoxy, so that block installs the client there now, 3.10.0
+# beside the 16.1.0 api.
 #
 # NOTE: unlike heat, health_octavia_check() is *not* what depends on this.
 # It checks systemd units, the blackbox_exporter probe of the API and the
@@ -139,18 +139,18 @@ rootfs_install::
 
 # the osc plugin
 #
-# python-octaviaclient owns the "loadbalancer" osc plugin, and stays in the caracal
-# venv next to /usr/bin/openstack -- see the note at the top. It is named explicitly
+# python-octaviaclient owns the "loadbalancer" osc plugin, and sits in the epoxy venv
+# next to /usr/bin/openstack -- see the note at the top. It is named explicitly
 # because an entry point is only visible to the interpreter /usr/bin/openstack runs
 # under, so a dependency nothing asks for is one that can disappear silently. No
-# version is named: os-caracal-pip-upper-constraints.txt already carries
+# version is named: os-epoxy-pip-upper-constraints.txt already carries
 # python-octaviaclient, so a version here could only drift from that file. It owns no
 # console script, so nothing needs linking.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-octaviaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf

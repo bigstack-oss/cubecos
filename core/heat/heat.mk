@@ -13,15 +13,16 @@
 # installed under. #609 moved the CLI into the antelope venv and the plugin followed
 # it; when heat moved to caracal the plugin had to stay behind, because the CLI had
 # not; #636 moved the CLI too, so the plugin sat with the service again. The epoxy hop
-# opens the split once more: /usr/bin/openstack is still the caracal venv's, so the
-# client stays there in a block of its own while the service runs from the epoxy one,
-# the same as barbican's (#658), cyborg's (#659) and designate's (#660).
+# opened the split once more (#661), holding the client in the caracal venv in a block
+# of its own, and #662 closed it the same way: the CLI is the epoxy venv's, so the block
+# installs the client there, beside the service.
 #
 # It is named explicitly rather than left transitive. heat's own requirements.txt
-# asks for it, but that pulls it into whichever venv heat is in -- the epoxy one now,
-# where nothing looks for it -- and designate.mk carries the story of what happens when
-# the only thing asking for a client is some other install: it disappears the day that
-# install moves, and `cluster check` reports the service NG while every unit is active.
+# asks for it, and so does heat-dashboard's, but that only pulls it into whichever venv
+# those two are in -- which is where the CLI is today, not a promise -- and designate.mk
+# carries the story of what happens when the only thing asking for a client is some
+# other install: it disappears the day that install moves, and `cluster check` reports
+# the service NG while every unit is active.
 #
 # /usr/bin/heat, the client's own CLI, follows it: it is python-heatclient's console
 # script, not heat's. Nothing in this tree calls it, but it has always been on the
@@ -112,21 +113,20 @@ rootfs_install::
 
 # the osc plugin
 #
-# python-heatclient owns the "orchestration" osc plugin and /usr/bin/heat. It stays in
-# the caracal venv next to /usr/bin/openstack -- see the note at the top. The epoxy
-# venv gets a copy of its own as a heat requirement, and nothing points at it. No
-# version is named: os-caracal-pip-upper-constraints.txt already carries
-# python-heatclient, so a version here could only drift from that file.
+# python-heatclient owns the "orchestration" osc plugin and /usr/bin/heat. It sits in
+# the epoxy venv next to /usr/bin/openstack -- see the note at the top. No version is
+# named: os-epoxy-pip-upper-constraints.txt already carries python-heatclient, so a
+# version here could only drift from that file.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-heatclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# the heatclient CLI, which is python-heatclient's console script.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
 
 # prepare the build directory
 rootfs_install::

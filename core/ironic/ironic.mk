@@ -40,18 +40,17 @@ IRONIC_UI_VER := 6.5.0
 
 # python-ironicclient owns the `baremetal` osc plugin, and an entry point is only
 # visible to the interpreter it was installed under, so it has to sit next to whichever
-# interpreter runs /usr/bin/openstack. #636 made that the caracal venv. It used to be
-# present there without a pip line of its own, because ironic-ui (installed below) and
-# python-watcher (core/watcher) both declared it and both were in that venv -- two
-# declarers was what made leaving it implicit safe where heat and manila had to be
-# explicit. #670 took python-watcher to the epoxy venv and left ironic-ui as the only
-# one, which is the failure mode designate.mk records for a single transitive
-# declarer: the client would leave with the panel, whatever the cli needs. So the web
-# ui block below names it. /usr/bin/openstack is still the caracal venv's, so it
-# stays in that venv's block rather than getting one of its own the way barbican's,
-# cyborg's, designate's and heat's clients did. The epoxy venv already holds a copy
-# as an openstack-heat and python-watcher requirement, and nothing points at it;
-# nova's ironic driver talks to the API through openstacksdk, not through this client.
+# interpreter runs /usr/bin/openstack. #636 made that the caracal venv and #662 the
+# epoxy one. It used to be present in the caracal venv without a pip line of its own,
+# because ironic-ui (installed below) and python-watcher (core/watcher) both declared
+# it and both were in that venv -- two declarers was what made leaving it implicit
+# safe where heat and manila had to be explicit. #670 took python-watcher to the epoxy
+# venv and left ironic-ui as the only one, which is the failure mode designate.mk
+# records for a single transitive declarer: the client would leave with the panel,
+# whatever the cli needs. So the web ui block below names it, and it followed the cli
+# to epoxy in that block. The epoxy venv holds it as an openstack-heat, python-watcher
+# and ironic-ui requirement too; the line is named for the cli regardless, and nova's
+# ironic driver talks to the API through openstacksdk, not through this client.
 #
 # System requirements formerly pulled in by the openstack-ironic RPMs.
 # ipmitool backs enabled_hardware_types=ipmi / enabled_management_interfaces=ipmitool
@@ -148,7 +147,7 @@ rootfs_install::
 # install the osc plugin and the ironic web ui plugin
 #
 # python-ironicclient is named for the cli -- see the note at the top. No version is
-# named: os-caracal-pip-upper-constraints.txt already carries it, so a version here
+# named: os-epoxy-pip-upper-constraints.txt already carries it, so a version here
 # could only drift from that file. Nothing is linked: the cli reaches it through
 # /usr/bin/openstack, not through its own baremetal script.
 #
@@ -159,8 +158,8 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-ironicclient
 	$(Q)# --no-build-isolation: ironic-ui pulls horizon, whose sdist-only XStatic
 	$(Q)# dependencies cannot be built against a current setuptools. See the note by

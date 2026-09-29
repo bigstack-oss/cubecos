@@ -7,31 +7,32 @@
 #
 # Those two wanted different venvs between #638 and #636, so it was installed twice.
 # #636 took /usr/bin/openstack to caracal, where the api and the standalone cli already
-# were, so one install served all three consumers again. The epoxy hop moves only the
-# service: /usr/bin/openstack is still the caracal venv's, so the client stays there in
-# a block of its own while manila runs from the epoxy one, the same as heat's (#661).
+# were, so one install served all three consumers again. The epoxy hop split them once
+# more -- #664 moved only the service, and the client stayed in the caracal venv in a
+# block of its own -- and #662 closed the split the way #636 did, by taking
+# /usr/bin/openstack and manila-ui to epoxy, so the block installs the client there.
 #
 # The osc plugin has to sit with the interpreter that runs /usr/bin/openstack, because
 # an entry point is only visible to the interpreter it was installed under. `openstack
 # share` is reached from sdk_os.sh (os_manila_share_delete and the share-type
 # reconcile), so a copy in the wrong venv breaks those four call sites silently. Unlike
 # volume/compute/image, share is not built into python-openstackclient; it is a
-# separate plugin, which is why cinder could take its client to caracal wholesale and
-# manila had to wait.
+# separate plugin, which is why cinder could take its client along on both hops and
+# manila had to wait for the cli each time.
 #
-# /usr/bin/manila is the standalone cli hex_sdk drives. #638 took it to caracal with the
-# api it queries, 4.8.1 against 18.3.0, and this hop leaves it there: it is the client's
-# console script, not the service's, and the osc plugin pins the client to the caracal
-# venv anyway. It talks HTTP and negotiates its microversion, so 4.8.1 (max 2.85)
-# drives the 20.0.2 api (max 2.89) at 2.85 -- the shape heat's, designate's and cyborg's
-# clis already have. The epoxy venv holds a 5.4.1 copy as an openstack-heat and
-# manila-ui requirement, and only manila-ui imports it.
+# /usr/bin/manila is the standalone cli hex_sdk drives. It is the client's console
+# script, not the service's, so it goes where the client goes: #638 took it to caracal
+# with the api it queries, and #664 left it there when the service moved on, 4.8.1 (max
+# microversion 2.83) driving the 20.0.2 api at 2.83. #662 took it to epoxy, where the
+# 5.4.1 client negotiates up to 2.88. manila-ui and heat require python-manilaclient in
+# this venv as well, so the line below is a re-declaration in a fresh build; it is named
+# for the two clis, which nothing else speaks for.
 #
 # manila-ui is the third consumer: it declares
 # `Requires-Dist: python-manilaclient >=2.7.0` and imports it in four modules,
 # manila_ui/api/manila.py and manila_ui/exceptions.py among them. It moved to caracal
 # with horizon in #636, which is what emptied the antelope side out, and to epoxy with
-# it in #662.
+# it in #662, so all three consumers share one install again.
 #
 # openstack-manila-ui is replaced by the manila-ui wheel installed further down --
 # see the note above it.
@@ -122,15 +123,15 @@ rootfs_install::
 
 # the client, its osc plugin and its cli
 #
-# python-manilaclient stays in the caracal venv next to /usr/bin/openstack and
+# python-manilaclient sits in the epoxy venv next to /usr/bin/openstack and
 # manila-ui -- see the note at the top. No version is named:
-# os-caracal-pip-upper-constraints.txt already carries python-manilaclient, so a
+# os-epoxy-pip-upper-constraints.txt already carries python-manilaclient, so a
 # version here could only drift from that file.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-manilaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -138,7 +139,7 @@ rootfs_install::
 	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/manila, the path
 	$(Q)# python3-manilaclient used to own. The rpm also shipped /usr/bin/manila-3,
 	$(Q)# the Fedora python3 alias, which nothing calls and which is not recreated.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila /usr/bin/manila
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila /usr/bin/manila
 
 # install the manila web ui plugin, the openstack-manila-ui rpm's replacement.
 # Registering its panels and policy files is core/horizon's job, where every
