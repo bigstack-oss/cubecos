@@ -142,12 +142,33 @@ DATABASES = {
     }
 }
 
+# template_fragments keeps the one fragment horizon caches -- the angular template list
+# _scripts.html wraps in {% cache %} -- in each process instead of in memcached; django's
+# cache tag uses a cache of that name when one is defined. Every controller shares the
+# memcached behind @CACHE_SERVERS@, and the fragment's key carries only the theme, so a
+# dashboard of another version (the release before an upgrade, or the other nodes
+# during a rolling one) leaves its own list under the same key. The next compress bakes
+# that stale list's hash into the offline manifest and then clears the fragment
+# (horizon's post_compress hook), so every page the workers render misses the manifest
+# with OfflineGenerationError, a 500, until the dashboard restarts again. Kept local,
+# compress and each worker render the templates this node has, at the cost of one render
+# per worker start.
+#
+# COMPRESS_CACHE_BACKEND follows it because that hook clears the fragment from
+# caches[COMPRESS_CACHE_BACKEND] -- horizon assumes the two are one cache. Left on
+# 'default', the hook would reach for memcached, which the build's compress has none of:
+# pymemcache raises on a server's first failure, and whether compress survived that
+# used to depend on which cache call came first.
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
         'LOCATION': '@CACHE_SERVERS@',
     },
+    'template_fragments': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    },
 }
+COMPRESS_CACHE_BACKEND = 'template_fragments'
 
 #CACHES = {
 #    'default': {
