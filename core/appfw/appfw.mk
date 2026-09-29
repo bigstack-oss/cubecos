@@ -5,47 +5,52 @@ ROOTFS_PIP += ansible-core
 ROOTFS_PIP += git+https://github.com/rancher/client-python.git@master
 
 # ospurge, driven by hex_sdk's os_purge_project(), was the last openstack consumer
-# left in the system python 3.9, and then the last one left in the antelope venv.
-# It moves here with #625, which is what empties that venv and lets the release
-# variables be promoted -- ospurge is not a service, so no component hop carried it.
+# left in the system python 3.9, then the last one left in the antelope venv (#625),
+# and then the last one left in the caracal venv. It moves here with #652, which is
+# what empties that venv and lets the release variables be promoted -- ospurge is not
+# a service, so no component hop carried it.
 #
 # ospurge goes in with --no-deps, rather than a plain install: it requires the
-# "typing" *backport*, which on python 3.11 is dead weight at best -- pip drops a
+# "typing" *backport*, which on python 3.12 is dead weight at best -- pip drops a
 # typing.py into site-packages that only the stdlib's precedence keeps from shadowing
 # the real module. openstacksdk is the only requirement that matters and the
-# constraint file pins it (3.0.0), so it is named in an install of its own, which
+# constraint file pins it (4.4.1), so it is named in an install of its own, which
 # brings its dependencies without the backport.
 #
 # The rest of what ospurge imports it does not declare: pbr and six, so those are named
-# too. All three used to arrive with something else in this venv -- the services, then
-# horizon and the cli, and last skyline's apiserver -- which is why --no-deps on both
-# ospurge and openstacksdk once worked. With skyline gone to the epoxy venv (#668), a
-# fresh build's caracal venv held pip, setuptools, wheel, ospurge and openstacksdk and
-# nothing else, and "import ospurge.main" failed on pbr.
+# too. In the caracal venv all three used to arrive with something else -- the
+# services, then horizon and the cli, and last skyline's apiserver -- which is why
+# --no-deps on both ospurge and openstacksdk once worked. With skyline gone to the
+# epoxy venv (#668), a fresh build's caracal venv held pip, setuptools, wheel, ospurge
+# and openstacksdk and nothing else, and "import ospurge.main" failed on pbr. This
+# venv already carries all three at the pinned versions (the openstack cli needs
+# openstacksdk), so the install changes nothing here; it stays so that ospurge never
+# again depends on who else happens to share its venv.
 OSPURGE_REPO_URL := git+https://opendev.org/x/ospurge.git
-OSPURGE_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
-OSPURGE_PATCHDIR := $(COREDIR)/appfw/$(OPENSTACK_RELEASE)_patch
+OSPURGE_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
+OSPURGE_PATCHDIR := $(COREDIR)/appfw/$(NEXT_OPENSTACK_RELEASE)_patch
 
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --no-deps \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install --no-deps \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		$(OSPURGE_REPO_URL)
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		openstacksdk pbr six
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# sdk_os.sh calls a bare "ospurge". The 3.9 install used to own
 	$(Q)# /usr/local/bin/ospurge, which precedes /usr/bin in the PATH hex_sdk sets;
 	$(Q)# with that gone, /usr/bin is where the console script belongs.
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ospurge /usr/bin/ospurge
+	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ospurge /usr/bin/ospurge
 
 # ospurge is unmaintained upstream (x/ospurge, last release 2018) and its swift
-# resource does not survive openstacksdk 1.0 -- nor 3.0.0, which is what caracal
-# pins: the same KeyError('container_name is not found...') reproduces unchanged
-# there, so the patch carries forward rather than being dropped with the hop.
+# resource does not survive openstacksdk 1.0 -- nor 3.0.0 (caracal), nor 4.4.1, which
+# is what epoxy pins: the same KeyError('container_name is not found...') reproduces
+# unchanged under both, so the patch carries forward rather than being dropped with
+# the hop.
 # Copied unconditionally rather than through the usual "[ -d ] && cp || /bin/true"
 # guard: this patch is a correctness fix, not a decoration, and a silent skip here
 # means os_purge_project() leaves every object behind while reporting success.
