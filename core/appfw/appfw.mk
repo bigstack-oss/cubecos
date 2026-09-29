@@ -9,17 +9,19 @@ ROOTFS_PIP += git+https://github.com/rancher/client-python.git@master
 # It moves here with #625, which is what empties that venv and lets the release
 # variables be promoted -- ospurge is not a service, so no component hop carried it.
 #
-# --no-deps with openstacksdk named alongside, rather than a plain install: ospurge
-# requires the "typing" *backport*, which on python 3.11 is dead weight at best --
-# pip drops a typing.py into site-packages that only the stdlib's precedence keeps
-# from shadowing the real module. openstacksdk is the only requirement that matters
-# and the constraint file pins it (3.0.0), so naming it directly gets the closure
-# right without the backport.
+# ospurge goes in with --no-deps, rather than a plain install: it requires the
+# "typing" *backport*, which on python 3.11 is dead weight at best -- pip drops a
+# typing.py into site-packages that only the stdlib's precedence keeps from shadowing
+# the real module. openstacksdk is the only requirement that matters and the
+# constraint file pins it (3.0.0), so it is named in an install of its own, which
+# brings its dependencies without the backport.
 #
-# The rest of what ospurge imports it does not declare and does not get from --no-deps:
-# pbr and six. Both are already in the caracal venv (six===1.16.0 is in caracal's own
-# upper-constraints, and every service pulls pbr), which is the only reason this works
-# -- a venv holding ospurge alone would fail at "import ospurge.main".
+# The rest of what ospurge imports it does not declare: pbr and six, so those are named
+# too. All three used to arrive with something else in this venv -- the services, then
+# horizon and the cli, and last skyline's apiserver -- which is why --no-deps on both
+# ospurge and openstacksdk once worked. With skyline gone to the epoxy venv (#668), a
+# fresh build's caracal venv held pip, setuptools, wheel, ospurge and openstacksdk and
+# nothing else, and "import ospurge.main" failed on pbr.
 OSPURGE_REPO_URL := git+https://opendev.org/x/ospurge.git
 OSPURGE_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
 OSPURGE_PATCHDIR := $(COREDIR)/appfw/$(OPENSTACK_RELEASE)_patch
@@ -29,8 +31,10 @@ rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --no-deps \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-		$(OSPURGE_REPO_URL) \
-		openstacksdk
+		$(OSPURGE_REPO_URL)
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		openstacksdk pbr six
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# sdk_os.sh calls a bare "ospurge". The 3.9 install used to own
