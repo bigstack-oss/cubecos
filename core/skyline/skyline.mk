@@ -53,11 +53,11 @@ heavyfs_install::
 # at build time, so the patched python-jose floor is what pip resolves against, pip check
 # stays clean, and the sbom sees the python-jose that is actually installed.
 rootfs_install::
-	$(Q)# the uninstalls clear the copies earlier layouts left -- system python 3.9
-	$(Q)# before #641, the caracal venv before #668: an RC build starts from a
-	$(Q)# published rootfs that may still carry one, and nothing points at them any more
-	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-apiserver
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip uninstall -y skyline-apiserver
+	$(Q)# only the epoxy venv is cleared: an RC build starts from its release's published
+	$(Q)# full build, whose skyline lives there too. Neither that nor a fresh build has a
+	$(Q)# copy in the system python 3.9 (skyline left it in #641) or in the caracal venv
+	$(Q)# (#641 to #668, and the venv itself is gone since #652), so there is nothing else
+	$(Q)# to clear
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) download --no-deps --no-binary :all: \
@@ -79,8 +79,6 @@ rootfs_install::
 
 # for RC builds -- the same pinned release, so the same recipe
 heavyfs_install::
-	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-apiserver
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip uninstall -y skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-apiserver
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) download --no-deps --no-binary :all: \
@@ -108,8 +106,6 @@ heavyfs_install::
 # So it follows the apiserver into the epoxy venv without a version change; its pages
 # talk to the service APIs directly through nginx, and those have been epoxy since #670.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-console
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-console
 	$(Q)for i in {1..3} ; do timeout 120 git clone --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
@@ -125,8 +121,6 @@ rootfs_install::
 
 # for RC builds
 heavyfs_install::
-	$(Q)chroot $(ROOTDIR) pip3 uninstall -y skyline-console
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-console
 	$(Q)for i in {1..3} ; do timeout 120 git clone -b v3.1.20-rc1 --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done

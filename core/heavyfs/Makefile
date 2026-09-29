@@ -223,23 +223,6 @@ $(call PROJ_INSTALL_DNF_NOARCH,-d "$(ROOTFS_DNF_DL_FROM)","$(ROOTFS_DNF)")
 $(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
 $(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_01)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
 
-# install python 3.11 for openstack caracal
-rootfs_install::
-	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
-	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
-	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
-	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
-	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
-	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(PYTHON_PATCH_VER)/Python-$(PYTHON_PATCH_VER).tgz
-	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz -C /usr/src/python-$(PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && ./configure --enable-optimizations"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && make altinstall"
-	$(Q)umount -l $(ROOTDIR)/dev || true
-	$(Q)# ensure python 3.11 is successfully built
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(PYTHON_VER) ]
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(PYTHON_VER) ]
-
 # install python 3.12 for openstack epoxy
 rootfs_install::
 	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
@@ -293,14 +276,6 @@ rootfs_install::
 # from 'xstatic.pkg' (unknown location)". A single pip invocation is fine -- pip
 # builds every sdist before installing any of them.
 
-# set up the execution context for openstack caracal
-rootfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p $(OPENSTACK_HOME_DIR)
-	$(Q)chroot $(ROOTDIR) python$(PYTHON_VER) -m venv $(OPENSTACK_HOME_DIR)
-	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(OPENSTACK_HOME_DIR)/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
-
 # NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
 # upper-constraints.txt copied down verbatim, save for two local deltas -- where the
 # antelope file it replaced carried six. One is libvirt-python, raised to 11.10.0 so
@@ -351,8 +326,8 @@ rootfs_install::
 # upper-constraints.txt copied down verbatim, save for two local deltas the caracal
 # file also carries: libvirt-python, raised to 11.10.0 to match the libvirt-devel
 # headers core/nova/nova.mk holds, and setuptools, which upstream does not pin.
-# setuptools is pinned at venv creation above for the reason the NOTE before the
-# caracal venv gives.
+# setuptools is pinned at venv creation above for the reason the first NOTE before
+# the venv block gives.
 #
 # The runtime half of the caracal argument has gone: keystonemiddleware 10.9.1 no
 # longer imports pkg_resources, and pbr 7.0.0 reaches for it only when

@@ -135,8 +135,9 @@ PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 # skyline-console fork unchanged. #669 moved python-swiftclient (4.7.1) rather than a
 # service, so it takes no place in that count.
 #
-# What #668 left in the caracal venv is not a service: ospurge (core/appfw). It is what
-# these values are now waiting on to be promoted.
+# What #668 left in the caracal venv was not a service: ospurge (core/appfw). #652
+# moved it here, which emptied the caracal venv and let it go with its python 3.11
+# build, so these values are now only waiting to be promoted.
 NEXT_OPENSTACK_RELEASE := epoxy
 NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
 NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1
