@@ -56,11 +56,15 @@ build-image: $(CHART)
 		podman image inspect localhost/bigstack/rancher:v$(APP_VERSION) >/dev/null || SRCDIR=$(SRCDIR) sh -x $(SRCDIR)/build/buildah-image.sh v$(APP_VERSION) \
 		,"  BUILD   rancher image")
 
+# images.txt lists the server and agent images build-image produces, and the registry
+# stage runs this before the rancher subdir builds, so it must build them itself (as
+# k3s's copy-image does). RUN_CMD_TIMED runs the body as an if-condition, where set -e
+# is off, so each failure has to be carried to the exit status explicitly.
 .PHONY: copy-image
-copy-image:
+copy-image: build-image
 	$(call RUN_CMD_TIMED, \
-		sh -x $(COREDIR)/docker/copy-images.sh $(IMG_LIST); \
-		for dir in $(SUBDIRS); do make copy-image -C $$dir/; done; \
+		sh -x $(COREDIR)/docker/copy-images.sh $(IMG_LIST) && \
+		for dir in $(SUBDIRS); do make copy-image -C $$dir/ || exit 1; done \
 		,"  COPY    rancher image")
 
 install: $(CLI_BIN) $(CHART)
