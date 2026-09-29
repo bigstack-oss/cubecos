@@ -13,7 +13,12 @@
     stroke-dashoffset: 0;
     stroke-linecap: round;
     stroke: #db652d;
-    @include animation(material-loader-dash 1.5s ease-in-out infinite, material-loader-color 6s ease-in-out infinite);
+    // One argument, a comma list: the doubled parentheses are load-bearing. The
+    // vendor-prefixes animation mixin takes a single $animation, and libsass (horizon
+    // 25.x) rejects the two bare arguments pyScss used to accept with "wrong number of
+    // arguments (2 for 1)", failing compress. Upstream's material theme quotes the list
+    // instead, which compiles but emits a quoted string browsers drop.
+    @include animation((material-loader-dash 1.5s ease-in-out infinite, material-loader-color 6s ease-in-out infinite));
   }
 }
 

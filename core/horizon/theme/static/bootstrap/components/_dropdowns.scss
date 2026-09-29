@@ -22,8 +22,13 @@
   }
 }
 
+// Only the overrides that move the arrow to the right. The arrow itself comes from
+// .dropdown-menu, which bootstrap always pairs .dropdown-menu-right with. This used to
+// open with a bare `@include dropdown_arrow;`, which pyScss never ran -- it has no
+// zero-argument dropdown_arrow, so it logged "Mixin not found" and dropped the call --
+// and which libsass (horizon 25.x) rejects with "missing argument $size", failing
+// compress. Removing it leaves the compiled css byte-identical to what pyScss emitted.
 @mixin dropdown_arrow_right($size, $offset) {
-  @include dropdown_arrow;
   &:before, &:after {
     left: auto;
   }
