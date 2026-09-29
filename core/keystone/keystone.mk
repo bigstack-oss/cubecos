@@ -43,30 +43,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/keystone-wsgi-admin /usr/bin/keystone-wsgi-admin
 	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/keystone-wsgi-public /usr/bin/keystone-wsgi-public
 
-# keep python-memcached in the caracal venv keystone has just left
-#
-# Every service still in that venv has its config_<svc>.cpp write
-# [keystone_authtoken] memcached_servers, and with it set keystonemiddleware's
-# auth_token imports memcache the first time it validates a token -- by way of
-# oslo_cache._memcache_pool under the default memcache_use_advanced_pool = True, or
-# directly without it (auth_token/_cache.py). nova's [cache] backend =
-# dogpile.cache.memcached imports it too. None of them declares it:
-# keystonemiddleware lists it only under its test extra and nothing else in the venv
-# requires it, so it was there only because the keystone install above named it,
-# into the same venv, for keystone's own [cache]. Moving keystone out would have
-# dropped it from a fresh build, and every request that needs a token validated
-# would have failed on ImportError. The rest of what keystone took with it --
-# python-ldap, ldappool, pysaml2, scrypt, passlib, oauthlib, flask-restful and their
-# dependencies -- is either keystone's alone or an optional, guarded import.
-rootfs_install::
-	$(Q)# enable dns in the rootfs for downloading packages
-	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-		python-memcached
-	$(Q)# clean up dns configurations after downloading packages
-	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-
 # prepare the build directory
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/keystone
