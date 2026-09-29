@@ -210,13 +210,6 @@ mgmt_ip()
     echo -n "${!mgmt_ip_key}"
 }
 
-cube_control_strf_addrs()
-{
-    local strf=$(cubectl node list -r control -j | jq -r .[].ip.storage | tr '\n' ',')
-    strf=${strf:-1}
-    echo -n "$strf"
-}
-
 cube_edge_cfg()
 {
     if ! is_core_node ; then
