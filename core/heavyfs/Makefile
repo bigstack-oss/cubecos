@@ -439,7 +439,10 @@ rootfs_install::
 	$(Q)echo "blacklist usb_storage" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 	$(Q)echo "install usb_storage /bin/true" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 
-# note: install skyline pkgs first since it doesn't follow yoga constraint
+# note: skyline went first when it did not follow the constraints the rest of the rootfs
+# did. It follows the epoxy ones like every service now (#668), and the packages it caps
+# -- fastapi, pydantic, starlette, uvicorn, loguru -- are ones nothing else in that venv
+# installs, so its place in this list no longer matters.
 HEAVY_COMPONENTS += nvidia
 HEAVY_COMPONENTS += yq api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana

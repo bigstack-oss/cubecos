@@ -128,14 +128,15 @@ PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 # ironic with ironic-inspector (29.1.0 / 12.4.0) the tenth (#663), manila (20.0.2)
 # the eleventh (#664), masakari with masakari-monitors (19.1.0 / 19.0.0) the
 # twelfth (#665), octavia (16.1.0) the thirteenth (#667), watcher (14.1.2) the
-# fourteenth (#670) and horizon (25.3.2) the fifteenth (#662), which took the eight
+# fourteenth (#670), horizon (25.3.2) the fifteenth (#662), which took the eight
 # dashboard plugins, /usr/bin/openstack and its plugin clients with it -- the clients
-# every service hop before it had left in the caracal venv beside the cli. #669 moved
-# python-swiftclient (4.7.1) rather than a service, so it takes no place in that count.
+# every service hop before it had left in the caracal venv beside the cli, and skyline
+# the sixteenth (#668): upstream's skyline-apiserver 6.0.1 in place of our fork, and our
+# skyline-console fork unchanged. #669 moved python-swiftclient (4.7.1) rather than a
+# service, so it takes no place in that count.
 #
-# What #662 left in the caracal venv is not a service: skyline, whose own hop is #668,
-# and ospurge (core/appfw). Those two are what these values are now waiting on to be
-# promoted.
+# What #668 left in the caracal venv is not a service: ospurge (core/appfw). It is what
+# these values are now waiting on to be promoted.
 NEXT_OPENSTACK_RELEASE := epoxy
 NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
 NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1
