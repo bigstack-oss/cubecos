@@ -25,6 +25,21 @@ ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
 ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
 
+# rdo-ovn requires the "openvswitch" and "network-scripts-openvswitch3.3" capabilities,
+# which only the openstack release repo supplies: rdo-openvswitch and
+# openstack-network-scripts-openvswitch3.3. centos-openstack-caracal carries the 3.3
+# builds; centos-openstack-epoxy does not -- it has rdo-openvswitch 3.4-1 alone, which
+# Obsoletes openvswitch3.3 < 3.4, and no network-scripts subpackage for 3.3 at all. So
+# with the epoxy repo the OVN set above no longer resolves ("rdo-ovn ... requires
+# openvswitch, but none of the providers can be installed"), and an unpinned solve
+# would move OVS to 3.4 under the 24.03 northd. Fetching the two 3.3 builds from koji,
+# like rdo-ovn itself, keeps the pair on 3.3 whichever repo is enabled. These are the
+# NVRs the caracal repo resolves to, so under caracal nothing changes.
+# openstack-network-scripts itself (the unversioned "network-scripts" it needs) is
+# fine from either repo.
+ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-openvswitch-3.3-1.el9s.noarch.rpm
+ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/openstack-network-scripts/10.11.1/6.el9s/x86_64/openstack-network-scripts-openvswitch3.3-10.11.1-6.el9s.x86_64.rpm
+
 # System requirements formerly pulled in by openstack-neutron RPMs
 # handled elsewhere: iptables
 # dibbler-client went with neutron 2025.1, which removed the l3 agent's dibbler-based
