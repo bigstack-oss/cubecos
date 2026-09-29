@@ -518,3 +518,13 @@ WEBSSO_IDP_MAPPING = {
 }
 
 WEBSSO_INITIAL_CHOICE = "cube_idp_mapped"
+
+# Validate the token keystone's websso page POSTs back against OPENSTACK_KEYSTONE_URL,
+# the endpoint every other horizon call uses, rather than one derived from the POST's
+# Referer. The Referer is whatever the browser sends: normally the origin of that
+# keystone page, http://<shared id>:5000, since mellon returns the browser to the 5000
+# URL it intercepted, but https://<shared id>:5443 when the flow runs on mellon's own
+# listener -- and there horizon's TLS check fails against the cluster's self-signed
+# certificate, "Login failed: An error occurred authenticating". The view is csrf-exempt,
+# so the header is also whatever the page submitting the form chose.
+WEBSSO_USE_HTTP_REFERER = False
