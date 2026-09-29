@@ -3564,9 +3564,11 @@ _pf_qos_differs()
         return 1
     fi
 
-    # Get the consumer field for each spec
-    src_consumer=$($OPENSTACK qos specs show "$src_qos_id" -f json 2>/dev/null | jq -r '.consumer // ""')
-    dst_consumer=$($OPENSTACK qos specs show "$dst_qos_id" -f json 2>/dev/null | jq -r '.consumer // ""')
+    # Get the consumer field for each spec. It is "volume qos show": osc has no
+    # "qos specs" command, and a lookup that fails here reads as consumer "", i.e. as
+    # front-end, which blocks moves between two back-end-only specs.
+    src_consumer=$($OPENSTACK volume qos show "$src_qos_id" -f json 2>/dev/null | jq -r '.consumer // ""')
+    dst_consumer=$($OPENSTACK volume qos show "$dst_qos_id" -f json 2>/dev/null | jq -r '.consumer // ""')
 
     # Extract front-end-relevant QoS: "" if back-end only, spec ID if front-end or both
     if [ "$src_consumer" = "back-end" ] ; then

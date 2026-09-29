@@ -263,7 +263,7 @@ openstack() {
             both-src) echo '{"qos_specs_id":"qos-both-1"}' ;;
             both-dst) echo '{"qos_specs_id":"qos-both-2"}' ;;
         esac
-    elif [ "$1" = "qos" ] && [ "$2" = "specs" ] && [ "$3" = "show" ] ; then
+    elif [ "$1" = "volume" ] && [ "$2" = "qos" ] && [ "$3" = "show" ] ; then
         case "$4" in
             qos-backend-1|qos-backend-2) echo '{"consumer":"back-end"}' ;;
             qos-frontend-1|qos-frontend-2) echo '{"consumer":"front-end"}' ;;
