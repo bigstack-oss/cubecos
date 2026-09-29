@@ -173,11 +173,10 @@ SetupPublicAdminUser(std::string name, std::string password, std::string sharedI
     // `member` is deliberately kept now: keystone-manage bootstrap creates admin/member/
     // reader plus the member->reader implication, and deleting member took that whole
     // chain with it, so every upstream "new default" policy keyed on role:member could
-    // never match -- see cubecos#216. os_keystone_legacy_member_role_setup restores the
-    // chain and bridges _member_ onto member; it is idempotent, so it also repairs a
-    // cluster upgraded from a release that did delete the role.
+    // never match -- see cubecos#216. The _member_ -> member bridge is not built here:
+    // this only runs on a first install, and the bridge also has to reach upgraded
+    // clusters, so migrate_keystone_member_role in Commit() builds it for both.
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role create _member_" RETRY_FMT_F, env.c_str(), OPENSTACK_CLI);
-    HexUtilSystemF(0, 0, HEX_SDK " os_keystone_legacy_member_role_setup");
 
     HexUtilSystemF(0, 0, RETRY_FMT_H "%s %s role add --user admin --domain %s admin" RETRY_FMT_F,
                          env.c_str(), OPENSTACK_CLI, domain.c_str());
@@ -531,6 +530,8 @@ Commit(bool modified, int dryLevel)
     // check for setup migration
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone");
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_service_role");
+    // after SetupPublicAdminUser: on a first install that is what creates _member_
+    HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_member_role");
     // Retired services leave their catalogue entries behind, and the modules that owned
     // them are gone, so the cleanup is driven from the module that owns the catalogue.
     // Both are marker-guarded and a no-op on a cluster that never had the service.
