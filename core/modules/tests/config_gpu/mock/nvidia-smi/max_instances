@@ -1,0 +1,39 @@
+#!/bin/sh
+#
+# Mock nvidia-smi for the SR-IOV driver-ceiling rule (#1583). Only `vgpu -s -v`
+# matters: ValidateVgpuProfiles takes the card's vGPU ceiling from the Max
+# Instances of its SR-IOV types. The value for type 1519 comes from a marker
+# file so one mock serves every case in the test script:
+#
+#   "32"          -> the driver hosts at most 32 vGPUs on the card
+#   (empty file)  -> the field is absent, i.e. unreadable
+#
+# Two decoys guard the parse. 1519's "Max Instances Per VM" is larger than its
+# "Max Instances", so a prefix match would raise the ceiling. Type 0x640 (1600)
+# reports a larger Max Instances but is not an SR-IOV profile of this card
+# (mock/hex_sdk/gpu does not list it), so it must not count either.
+max=$(cat /tmp/mock-max-instances 2>/dev/null)
+
+case "$*" in
+    *vgpu*-s*)
+        echo "GPU 00000000:42:00.0"
+        echo "    vGPU Type ID                          : 0x5ef"
+        echo "        Name                              : NVIDIA Test DC-3Q"
+        echo "        GPU Instance Profile ID           : N/A"
+        if [ -n "$max" ]; then
+            echo "        Max Instances                     : $max"
+        fi
+        echo "        Max Instances Per VM              : 64"
+        echo "        Max Instances Per GI              : N/A"
+        echo "        FB Memory                         : 3072 MiB"
+        echo "    vGPU Type ID                          : 0x640"
+        echo "        Name                              : NVIDIA Test DC-1-2Q"
+        echo "        GPU Instance Profile ID           : 19"
+        echo "        Max Instances                     : 48"
+        echo "        Max Instances Per VM              : 1"
+        echo "        Max Instances Per GI              : 1"
+        echo "        FB Memory                         : 2048 MiB"
+        ;;
+esac
+
+exit 0

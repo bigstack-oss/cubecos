@@ -343,6 +343,49 @@ GetVgpuTypeNames(const char* gpuId)
     return ParseVgpuTypeNames(HexUtilPOpen("%s vgpu -s -v -i %s", NVIDIA_SMI, gpuId));
 }
 
+// Parses `nvidia-smi vgpu -s -v` output into a map of vGPU type id (decimal)
+// -> Max Instances, how many vGPUs of that type the whole card can host:
+//   vGPU Type ID                      : 0x5ee
+//       Name                          : NVIDIA RTX Pro 6000 Blackwell DC-2B
+//       Max Instances                 : 32
+// SR-IOV time-sliced types print the field too, not only MIG-backed ones
+// (all 29 SR-IOV types on cn13's RTX PRO 6000 Blackwell, driver 580.105.06,
+// 2026-09-29). A type whose block carries no parsable value is left out.
+static std::map<int, long>
+ParseVgpuMaxInstances(const std::string& smiOutput)
+{
+    std::map<int, long> maxInstances;
+    std::istringstream stream(smiOutput);
+    std::string line;
+    int currentId = -1;
+
+    while (std::getline(stream, line)) {
+        const size_t colon = line.find(':');
+        if (colon == std::string::npos) {
+            continue;
+        }
+
+        std::string key = line.substr(0, colon);
+        key.erase(0, key.find_first_not_of(" \t"));
+        key.erase(key.find_last_not_of(" \t") + 1);
+
+        std::string value = line.substr(colon + 1);
+        value.erase(0, value.find_first_not_of(" \t"));
+        value.erase(value.find_last_not_of(" \t\r") + 1);
+
+        if (key == "vGPU Type ID") {
+            currentId = (int)strtol(value.c_str(), NULL, 16);
+        } else if (key == "Max Instances" && currentId >= 0 &&
+                   !value.empty() && value.find_first_not_of("0123456789") == std::string::npos) {
+            // Exact key match, so this cannot pick up "Max Instances Per VM" or
+            // "Max Instances Per GI" - both contain this string.
+            maxInstances[currentId] = strtol(value.c_str(), NULL, 10);
+        }
+    }
+
+    return maxInstances;
+}
+
 // Derives the Nova PCI alias for a profile following the #894 convention:
 // lowercase the full vGPU type name, map non-alphanumerics to '_' (squeezing
 // repeats), then append "_<id>".
@@ -1041,8 +1084,18 @@ GetGpuTotalVramMiB(const char* gpuId)
 //   ahead of the capacity rule below because it reads nothing from sysfs: a
 //   card that cannot serve the request at all should say so by name even on a
 //   node where sriov_totalvfs happens to be unreadable.
-// - capacity (SR-IOV): each vGPU instance occupies one VF, so the total
-//   requested count must fit within the PF's sriov_totalvfs
+// - capacity (SR-IOV), two ceilings on the total requested count:
+//     1. the most vGPUs the driver hosts on the card - the largest Max
+//        Instances among its SR-IOV types. This is the one that binds: an RTX
+//        PRO 6000 Blackwell exposes 48 VFs but hosts at most 32 vGPUs, and
+//        the 33rd write to current_vgpu_type fails (cn13, 2026-09-29, #1583).
+//        Checked ahead of rule 2 for the same reason as the heterogeneity
+//        rule: it reads nothing from sysfs.
+//     2. each vGPU instance occupies one VF, so it must also fit within the
+//        PF's sriov_totalvfs
+//   Neither covers framebuffer or placement fit (DC-48Q x3, or DC-3Q x2 +
+//   DC-96C, fit both ceilings and still fail at apply). That is a known gap,
+//   tracked in #1584.
 // - capacity (MIG-backed), three rules:
 //     1. each type's requested count must fit within its own vmCountLimit
 //        (Max Instances - how many of that type the whole card can host)
@@ -1067,9 +1120,13 @@ GetGpuTotalVramMiB(const char* gpuId)
 // than a memory division: a 1g.24gb partition reports 23.12 GiB usable but the
 // driver budgets vGPUs against the profile's nominal 24576 MiB, so eight
 // 3072 MiB vGPUs fit where 23674/3072 would have allowed only seven (cn13 R4).
+//
+// sriovMaxInstances is the same output's Max Instances per type, for SR-IOV
+// capacity rule 1; it is empty for non-SR-IOV requests.
 static bool
 ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profiles,
-                     const std::string& pciAddress, const std::map<int, MigVgpuType>& migTypes)
+                     const std::string& pciAddress, const std::map<int, MigVgpuType>& migTypes,
+                     const std::map<int, long>& sriovMaxInstances)
 {
     std::string jsonError;
     const json11::Json parsed = json11::Json::parse(profiles, jsonError);
@@ -1167,6 +1224,36 @@ ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profile
                         "does not report 'Heterogenous Multi-vGPU : Supported'; a single-size "
                         "request is required on this card",
                         requestedSizes.size(), gpuId);
+            return false;
+        }
+
+        // Capacity rule 1. The card-wide ceiling is the largest Max Instances
+        // among its SR-IOV types rather than the requested types' own: a type's
+        // Max Instances below that is its framebuffer budget, which is #1584's
+        // known gap, not a count. No mix of types can exceed it - the type that
+        // reaches it is the smallest one, and every other type takes more of
+        // the card per vGPU.
+        long driverMax = 0;
+        for (const int id : availableIds) {
+            const std::map<int, long>::const_iterator it = sriovMaxInstances.find(id);
+            if (it != sriovMaxInstances.end() && it->second > driverMax) {
+                driverMax = it->second;
+            }
+        }
+
+        // Fails closed, like rule 2 below: without the driver's number there is
+        // nothing but sriov_totalvfs left to check against, and that is the
+        // number that let 33-48 vGPU requests through to fail at apply.
+        if (driverMax <= 0) {
+            HexLogError("gpu_resource_set: could not read how many vGPUs GPU %s can host "
+                        "(no Max Instances reported for its SR-IOV types); cannot verify the request fits",
+                        gpuId);
+            return false;
+        }
+
+        if (requestedTotal > driverMax) {
+            HexLogError("gpu_resource_set: requested %ld vGPU(s) exceeds the %ld vGPU(s) the driver can host "
+                        "on GPU %s", requestedTotal, driverMax, gpuId);
             return false;
         }
     }
@@ -1426,18 +1513,26 @@ ResourceSetMain(int argc, char* argv[])
     }
 
     // Read once here rather than inside each consumer: the same `vgpu -s -v`
-    // output drives the capacity check's GPU-instance rule and the name/alias
-    // enrichment further down. It has to come after the vfio-pci release above,
-    // since a pgpu is invisible to nvidia-smi while bound to vfio-pci.
+    // output drives the capacity checks - the MIG GPU-instance rule and the
+    // SR-IOV driver ceiling - and the name/alias enrichment further down. It has
+    // to come after the vfio-pci release above, since a pgpu is invisible to
+    // nvidia-smi while bound to vfio-pci.
+    const std::string vgpuTypesOutput = (strcmp(newType, "pgpu") != 0)
+        ? HexUtilPOpen("%s vgpu -s -v -i %s", NVIDIA_SMI, gpuId)
+        : std::string();
     const std::map<int, MigVgpuType> migTypes =
         (strcmp(newType, "migBackedVgpu") == 0)
-            ? ParseMigVgpuTypes(HexUtilPOpen("%s vgpu -s -v -i %s", NVIDIA_SMI, gpuId))
+            ? ParseMigVgpuTypes(vgpuTypesOutput)
             : std::map<int, MigVgpuType>();
+    const std::map<int, long> sriovMaxInstances =
+        (strcmp(newType, "sriovVgpu") == 0)
+            ? ParseVgpuMaxInstances(vgpuTypesOutput)
+            : std::map<int, long>();
 
     // Still before gpu_unset_current_type below, so that a bad request cannot
     // tear down the GPU's existing configuration.
     if (strcmp(newType, "pgpu") != 0 &&
-        !ValidateVgpuProfiles(gpuId, newType, profiles, pciAddress, migTypes)) {
+        !ValidateVgpuProfiles(gpuId, newType, profiles, pciAddress, migTypes, sriovMaxInstances)) {
         HexLogError("gpu_resource_set: pre-condition check failed for GPU %s", gpuId);
 
         if (releasedFromVfio &&
