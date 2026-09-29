@@ -117,7 +117,7 @@ ceph_get_sn_by_dev()
     local smart_log=$(smartctl $smart_flg $dev)
 
     if smartctl $smart_flg $dev | grep -q -i 'megaraid,N' ; then
-        selected_dev=$(lshw -class disk -json 2>/dev/null | jq -r ".[] | select(.logicalname == \"${dev}\")")
+        selected_dev=$(lshw -class disk -disable network -json 2>/dev/null | jq -r ".[] | select(.logicalname == \"${dev}\")")
         selected_dev_id=$(echo $selected_dev | jq -r .id | cut -d":" -f2)
         smart_flg+=" -d megaraid,${selected_dev_id}"
     fi
@@ -3790,7 +3790,7 @@ _ceph_osd_list()
 {
     local osd_id=${1#osd.}
     local osd_ids=$osd_id
-    local hw_ls=$(lshw -class disk -json 2>/dev/null)
+    local hw_ls=$(lshw -class disk -disable network -json 2>/dev/null)
     local blkdevs=$(lsblk -J | jq -r .blockdevices[])
     local lvm=$(ceph-volume lvm list --format json)
     local valid_output="overall-health self-assessment test result:"
