@@ -66,7 +66,7 @@ NEUTRON_VPNAAS_DASHBOARD_VER := 12.0.0
 # 26.0.0 and networking-baremetal 6.5.0 the only 2025.1 releases of theirs. None of
 # them can be installed beside manila/heat: neutron 26.0.6 requires os-ken 3.0
 # and ovsdbapp 2.11, and neutron-vpnaas 26.0.0 neutron-lib 3.18, where the caracal venv
-# holds 2.8.2, 2.6.1 and 3.11.1 -- and openstack-heat resolves neutron-lib out of that
+# held 2.8.2, 2.6.1 and 3.11.1 -- and openstack-heat resolved neutron-lib out of that
 # venv too. So all three move into /opt/openstack-epoxy, the same shape as their
 # caracal hop (#628), one release on, with keystone (#657), glance (#656), cinder
 # (#655) and nova with placement (#653) as the venv's other occupants. Resolved against

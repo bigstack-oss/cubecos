@@ -10,10 +10,10 @@ ROOTFS_DNF += httpd mod_ssl mod_auth_mellon openldap-devel
 
 KEYSTONE_CONF_DIR := /etc/keystone
 
-# keystone runs out of the epoxy venv, not the caracal one it shares with every other
+# keystone runs out of the epoxy venv, not the caracal one it shared with every other
 # 2024.1 service. keystone 27.1.0 resolves oslo.db 17, oslo.messaging 16.1 and
 # oslo.policy 4.5 against os-epoxy-pip-upper-constraints.txt; installing that beside
-# nova/neutron/cinder would upgrade the whole caracal dependency set under them, so
+# nova/neutron/cinder would have upgraded the caracal dependency set under them, so
 # the identity service moves alone into /opt/openstack-epoxy instead, and is its
 # first occupant -- the same shape as its caracal hop (#631), one release on.
 #

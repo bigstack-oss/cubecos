@@ -3,7 +3,7 @@
 
 ROOTFS_DNF += qemu-img
 
-# glance runs out of the epoxy venv, not the caracal one it shares with every other
+# glance runs out of the epoxy venv, not the caracal one it shared with every other
 # 2024.1 service. glance 30.2.0 pulls glance-store 4.9.1, os-brick 6.11.1, taskflow
 # 5.12 and castellan 5.2; installing that beside nova/cinder/manila would have
 # upgraded the whole caracal dependency set under them, so the image service moves

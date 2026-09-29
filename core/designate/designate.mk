@@ -47,13 +47,13 @@ DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(OPENSTACK_RELEASE)_bin_patch
 
 # install designate into the epoxy venv
 #
-# designate runs out of the epoxy venv, not the caracal one it shares with every
+# designate runs out of the epoxy venv, not the caracal one it shared with every
 # other 2024.1 service. 20.0.2 is the newest 2025.1 release: 20.0.0 was the cycle's,
 # and the two point releases on stable/2025.1 add bug fixes only, the last of them
-# the cross-pool zone ownership check (bug 2160533). It cannot be bumped in place:
-# 20.x requires oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds
-# at 4.3.0 for octavia, heat, manila and the other 2024.1 services still in the
-# caracal venv. So the service moves alone into $(OPENSTACK_HOME_DIR), the same
+# the cross-pool zone ownership check (bug 2160533). It could not be bumped in place:
+# 20.x requires oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt held
+# at 4.3.0 for octavia, heat, manila and the other 2024.1 services then in the
+# caracal venv. So the service moved alone into $(OPENSTACK_HOME_DIR), the same
 # shape as its caracal hop (#634), one release on, after keystone, glance, cinder,
 # nova/placement, neutron, barbican and cyborg.
 #

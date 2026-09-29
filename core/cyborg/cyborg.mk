@@ -14,13 +14,13 @@ CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(OPENSTACK_RELEASE)_patch
 
 # install cyborg into the epoxy venv
 #
-# cyborg runs out of the epoxy venv, not the caracal one it shares with every other
+# cyborg runs out of the epoxy venv, not the caracal one it shared with every other
 # 2024.1 service. 14.1.0 is the newest 2025.1 release: 14.0.0 was the cycle's, and
 # 14.1.0 adds upstream's SQLAlchemy 2.0 session refactor and the fixes for
-# CVE-2026-40213 and CVE-2026-40214 on stable/2025.1. It cannot be bumped in place:
-# 14.x requires oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds
-# at 4.3.0 for octavia, heat, manila and the other 2024.1 services still in the
-# caracal venv. So the service moves alone into $(OPENSTACK_HOME_DIR), the same
+# CVE-2026-40213 and CVE-2026-40214 on stable/2025.1. It could not be bumped in place:
+# 14.x requires oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt held
+# at 4.3.0 for octavia, heat, manila and the other 2024.1 services then in the
+# caracal venv. So the service moved alone into $(OPENSTACK_HOME_DIR), the same
 # shape as its caracal hop (#633), one release on, after keystone, glance, cinder,
 # nova/placement, neutron and barbican.
 #

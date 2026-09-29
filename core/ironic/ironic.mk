@@ -73,10 +73,10 @@ ROOTFS_DNF_NOARCH += syslinux-tftpboot
 
 # install ironic and ironic-inspector into the epoxy venv
 #
-# ironic runs out of the epoxy venv, not the caracal one it shares with the 2024.1
-# services still there. It cannot be bumped in place: 29.x and 12.4.0 both require
-# oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds at 4.3.0 for
-# octavia, manila and the other 2024.1 services. So the pair moves alone into
+# ironic runs out of the epoxy venv, not the caracal one it shared with the 2024.1
+# services still there. It could not be bumped in place: 29.x and 12.4.0 both
+# require oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt held at 4.3.0
+# for octavia, manila and the other 2024.1 services. So the pair moved alone into
 # $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#637), one release on,
 # after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg, designate
 # and heat.

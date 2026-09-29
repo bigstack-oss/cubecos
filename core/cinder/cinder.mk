@@ -9,9 +9,9 @@ CINDER_PATCHDIR := $(COREDIR)/cinder/$(OPENSTACK_RELEASE)_patch
 
 CINDER_CONFDIR := $(ROOTDIR)/etc/cinder
 
-# cinder runs out of the epoxy venv, not the caracal one it shares with every other
+# cinder runs out of the epoxy venv, not the caracal one it shared with every other
 # 2024.1 service. cinder 26.3.0 requires os-brick 6.10 and oslo.policy 4.5 -- the
-# caracal venv holds 6.7.3 and 4.3.0 -- and resolves oslo.versionedobjects 3.6,
+# caracal venv held 6.7.3 and 4.3.0 -- and resolves oslo.versionedobjects 3.6,
 # oslo.rootwrap 7.5, oslo.vmware 4.6 and tooz 6.3; installing that beside
 # nova/neutron/manila would have upgraded the whole caracal dependency set under them,
 # so the block storage service moves alone into /opt/openstack-epoxy -- the same shape

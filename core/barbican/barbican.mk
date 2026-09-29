@@ -3,12 +3,12 @@
 
 BARBICAN_CONFDIR := $(ROOTDIR)/etc/barbican
 
-# barbican runs out of the epoxy venv, not the caracal one it shares with every other
+# barbican runs out of the epoxy venv, not the caracal one it shared with every other
 # 2024.1 service. 20.0.0 is the 2025.1 release, and the only one: stable/2025.1 has
 # gained a pyproject.toml, wsgi module paths and a doc note since, but no second tag.
-# It cannot be bumped in place: 20.0.0 requires oslo.policy>=4.5.0, which
-# os-caracal-pip-upper-constraints.txt holds at 4.3.0 for octavia, heat, manila and the
-# other 2024.1 services still in the caracal venv. So the service moves alone into
+# It could not be bumped in place: 20.0.0 requires oslo.policy>=4.5.0, which
+# os-caracal-pip-upper-constraints.txt held at 4.3.0 for octavia, heat, manila and the
+# other 2024.1 services then in the caracal venv. So the service moved alone into
 # $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#632), one release on,
 # after keystone, glance, cinder, nova/placement and neutron.
 #

@@ -78,12 +78,13 @@ MANILA_UI_VER := 13.0.0
 
 # install manila into the epoxy venv
 #
-# manila runs out of the epoxy venv, not the caracal one it shares with the 2024.1
-# services still there. It cannot be bumped in place: 20.x requires oslo.policy>=4.5.0,
-# which os-caracal-pip-upper-constraints.txt holds at 4.3.0 for octavia and the other
-# 2024.1 services. So the service moves alone into $(OPENSTACK_HOME_DIR), the same
-# shape as its caracal hop (#638), one release on, after keystone, glance, cinder,
-# nova/placement, neutron, barbican, cyborg, designate, heat and ironic.
+# manila runs out of the epoxy venv, not the caracal one it shared with the 2024.1
+# services still there. It could not be bumped in place: 20.x requires
+# oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt held at 4.3.0 for
+# octavia and the other 2024.1 services. So the service moved alone into
+# $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#638), one release on,
+# after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg,
+# designate, heat and ironic.
 #
 # Three packages have to be named because manila's requirements.txt asks for none of
 # them and pip will not pull them in transitively:

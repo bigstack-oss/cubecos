@@ -74,9 +74,9 @@ WATCHER_DASHBOARD_VER := 13.0.0
 # install watcher into the epoxy venv
 #
 # watcher runs out of the epoxy venv, not the caracal one it shared with horizon,
-# skyline and the osc clients. It cannot be bumped in place: 14.x requires
+# skyline and the osc clients. It could not be bumped in place: 14.x requires
 # oslo.policy>=4.5.0 and python-observabilityclient>=0.3.0, which
-# os-caracal-pip-upper-constraints.txt holds at 4.3.0 and 0.1.1. So the service moves
+# os-caracal-pip-upper-constraints.txt held at 4.3.0 and 0.1.1. So the service moved
 # alone into $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#643), one
 # release on, after keystone, glance, cinder, nova/placement, neutron, barbican,
 # cyborg, designate, heat, ironic, manila, masakari and octavia.

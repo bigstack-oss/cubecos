@@ -43,11 +43,11 @@ ROOTFS_DNF_NOARCH += iptables-services novnc
 NOVA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/nova
 NOVA_PATCHDIR := $(COREDIR)/nova/$(OPENSTACK_RELEASE)_patch
 
-# nova and placement run out of the epoxy venv, not the caracal one they share with
+# nova and placement run out of the epoxy venv, not the caracal one they shared with
 # every other 2024.1 service. nova 31.3.1 is the newest 2025.1 release and
 # openstack-placement 13.0.0 the only one. Neither can be installed beside
 # manila: nova 31.3.1 requires oslo.utils 8.0, oslo.policy 4.5,
-# os-brick 6.10, os-traits 3.3 and openstacksdk 4.4, where the caracal venv holds 7.1.0,
+# os-brick 6.10, os-traits 3.3 and openstacksdk 4.4, where the caracal venv held 7.1.0,
 # 4.3.0, 6.7.3, 3.0.0 and 3.0.0, and placement 13.0.0 needs the same oslo.policy and
 # os-traits. So both move into /opt/openstack-epoxy -- the same shape as their caracal
 # hop (#627), one release on, with keystone (#657), glance (#656) and cinder (#655) as

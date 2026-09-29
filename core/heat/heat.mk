@@ -67,10 +67,10 @@ HEAT_DASHBOARD_VER := 13.0.0
 
 # install heat into the epoxy venv
 #
-# heat runs out of the epoxy venv, not the caracal one it shares with every other
-# 2024.1 service. It cannot be bumped in place: 24.x requires oslo.policy>=4.5.0, which
-# os-caracal-pip-upper-constraints.txt holds at 4.3.0 for octavia, manila and the other
-# 2024.1 services still in the caracal venv. So the service moves alone into
+# heat runs out of the epoxy venv, not the caracal one it shared with every other
+# 2024.1 service. It could not be bumped in place: 24.x requires oslo.policy>=4.5.0,
+# which os-caracal-pip-upper-constraints.txt held at 4.3.0 for octavia, manila and the
+# other 2024.1 services then in the caracal venv. So the service moved alone into
 # $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#635), one release on,
 # after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg and
 # designate.

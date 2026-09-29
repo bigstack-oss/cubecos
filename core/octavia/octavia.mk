@@ -70,13 +70,13 @@ OCTAVIA_DASHBOARD_VER := 15.0.1
 
 # install octavia into the epoxy venv
 #
-# octavia runs out of the epoxy venv, not the caracal one it shares with the 2024.1
-# services still there. It cannot be bumped in place: 16.x requires octavia-lib>=3.8.0
-# and taskflow>=5.9.0, which os-caracal-pip-upper-constraints.txt holds at 3.5.0 and
-# 5.6.0 for watcher, which stayed on 2024.1 until #670. So the service moves alone into
-# $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#640), one release on,
-# after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg, designate,
-# heat, ironic, manila and masakari.
+# octavia runs out of the epoxy venv, not the caracal one it shared with the 2024.1
+# services still there. It could not be bumped in place: 16.x requires
+# octavia-lib>=3.8.0 and taskflow>=5.9.0, which os-caracal-pip-upper-constraints.txt
+# held at 3.5.0 and 5.6.0 for watcher, which stayed on 2024.1 until #670. So the
+# service moved alone into $(OPENSTACK_HOME_DIR), the same shape as its caracal hop
+# (#640), one release on, after keystone, glance, cinder, nova/placement, neutron,
+# barbican, cyborg, designate, heat, ironic, manila and masakari.
 #
 # The /usr/bin/octavia-* links follow the service: the four units, config_octavia.cpp
 # and hex_sdk's migrate_octavia_db all reach octavia through them.

@@ -43,9 +43,9 @@ rootfs_install::
 # this deployment runs.
 #
 # Both services run out of the epoxy venv, not the caracal one they shared with the
-# 2024.1 services still there. They cannot be bumped in place: 19.x requires
-# oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds at 4.3.0 for
-# octavia and the other 2024.1 services. So they move into $(OPENSTACK_HOME_DIR)
+# 2024.1 services then still there. They could not be bumped in place: 19.x requires
+# oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt held at 4.3.0 for
+# octavia and the other 2024.1 services. So they moved into $(OPENSTACK_HOME_DIR)
 # together, the same shape as their caracal hop (#639), one release on, after
 # keystone, glance, cinder, nova/placement, neutron, barbican, cyborg, designate, heat,
 # ironic and manila. masakari-monitors' three carried patches apply to 19.0.0
