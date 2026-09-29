@@ -584,11 +584,14 @@ migrate_masakari_db()
         return 0
     fi
 
+    # Mark only a sync that succeeded, as cinder's and nova's post-migration do: a
+    # failed one is retried on the next Commit() rather than recorded as done.
     if is_control_node ; then
-        su -s /bin/sh -c "/usr/bin/masakari-manage db sync" masakari
+        ( su -s /bin/sh -c "/usr/bin/masakari-manage db sync" masakari && \
+              touch $STATE_DIR/masakari_db_migrated ) || true
+    else
+        touch $STATE_DIR/masakari_db_migrated
     fi
-
-    touch $STATE_DIR/masakari_db_migrated
 }
 
 migrate_designate_db()
