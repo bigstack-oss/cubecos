@@ -18,6 +18,12 @@ MASAKARI_RUN_DIR := /var/run/masakari
 # was re-derived against that release rather than moved: 10.0.0 adds 'vmoves' to the
 # panels tuple two lines above the change and renames ugettext_lazy to gettext_lazy, so
 # the 8.0.0 hunk's context no longer matches.
+#
+# The db/sqlalchemy/migration.py patch is upstream's ca1e09dee2, which landed in 18.0.0.
+# 17.0.0's legacy check reads the default alembic_version table, which taskflow owns in
+# this same database, so an upgraded cluster is taken for already-alembic, never
+# stamped, and `db sync` then fails re-creating failover_segments (#639's QA, cube36).
+# Drop the pair when masakari leaves 17.0.0.
 MASAKARI_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
 MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(OPENSTACK_RELEASE)_patch
 

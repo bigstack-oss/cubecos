@@ -1,0 +1,23 @@
+--- masakari/db/sqlalchemy/migration.py
++++ masakari/db/sqlalchemy/migration.py
+@@ -47,7 +47,9 @@ def _migrate_legacy_database(engine, connection, config):
+ 
+     # Likewise, if we've already migrated to alembic, we don't have anything to
+     # do
+-    context = alembic_migration.MigrationContext.configure(connection)
++    context = alembic_migration.MigrationContext.configure(
++        connection,
++        opts={'version_table': 'masakari_alembic_version'})
+     if context.get_current_revision():
+         return
+ 
+@@ -175,5 +177,8 @@ def db_version():
+     """Get database version."""
+     engine = db_api.get_engine()
+     with engine.connect() as connection:
+-        m_context = alembic_migration.MigrationContext.configure(connection)
++        m_context = alembic_migration.MigrationContext.configure(
++            connection,
++            opts={'version_table': 'masakari_alembic_version'}
++        )
+         return m_context.get_current_revision()
