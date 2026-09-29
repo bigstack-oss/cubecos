@@ -1,0 +1,11 @@
+--- requirements.txt
++++ requirements.txt
+@@ -3,7 +3,7 @@
+ pydantic>=1.9.0,<2.0.0
+ uvicorn<=0.17.6 # BSD License (3 clause)
+ gunicorn>=20.1.0 # MIT
+-python-jose<=3.3.0 # MIT
++python-jose>=3.4.0 # MIT
+ databases>=0.9.0 # BSD License (3 clause)
+ aiomysql>=0.2.0 # MIT
+ aiosqlite>=0.20.0 # MIT
