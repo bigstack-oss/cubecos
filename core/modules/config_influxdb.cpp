@@ -127,20 +127,27 @@ CreateDBs(int rpDays, int sgpDays, int hcRpDays, int hcSgpDays)
         HexSystemF(0, "influx -execute 'CREATE RETENTION POLICY %s ON %s DURATION %dd "
                       "REPLICATION 1 SHARD DURATION %dd'",
                       TSDB_RP, db.c_str(), rpDays, sgpDays);
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DURATION %dd DEFAULT'",
-                      TSDB_RP, db.c_str(), rpDays);
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DEFAULT'",
-                      TSDB_RP, db.c_str());
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s SHARD DURATION %dd DEFAULT'",
-                      TSDB_RP, db.c_str(), sgpDays);
+
+        // Duration and shard duration go in one statement. InfluxDB rejects any policy whose
+        // duration is shorter than its shard duration, and checks each ALTER on its own, so
+        // whichever of the two goes first can be refused: duration-first fails a shrink
+        // (364d/35d -> 14d fails on the 35d shard, which is how every cluster upgraded past
+        // the 14d/7d default kept 364d, #672), and shard-first fails a grow past the old
+        // duration. One ALTER is checked against the final pair, so both directions pass.
+        if (HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DURATION %dd "
+                          "SHARD DURATION %dd DEFAULT'",
+                          TSDB_RP, db.c_str(), rpDays, sgpDays) != 0)
+            HexLogError("influxdb: failed to set %s.%s to %dd/shard %dd",
+                        db.c_str(), TSDB_RP, rpDays, sgpDays);
 
         HexSystemF(0, "influx -execute 'CREATE RETENTION POLICY %s ON %s DURATION %dd "
                       "REPLICATION 1 SHARD DURATION %dd'",
                       HC_TSDB_RP, db.c_str(), hcRpDays, hcSgpDays);
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DURATION %dd'",
-                      HC_TSDB_RP, db.c_str(), hcRpDays);
-        HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s SHARD DURATION %dd'",
-                      HC_TSDB_RP, db.c_str(), hcSgpDays);
+        if (HexSystemF(0, "influx -execute 'ALTER RETENTION POLICY %s ON %s DURATION %dd "
+                          "SHARD DURATION %dd'",
+                          HC_TSDB_RP, db.c_str(), hcRpDays, hcSgpDays) != 0)
+            HexLogError("influxdb: failed to set %s.%s to %dd/shard %dd",
+                        db.c_str(), HC_TSDB_RP, hcRpDays, hcSgpDays);
     }
 
     return true;
