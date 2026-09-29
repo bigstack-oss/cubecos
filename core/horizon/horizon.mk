@@ -1,18 +1,14 @@
 # Cube SDK
 # horizon installation
 
-# https://releases.openstack.org/caracal/index.html#caracal-horizon
+# https://releases.openstack.org/epoxy/index.html#epoxy-horizon -- 25.3.2 is the newest
+# 2025.1 release.
 #
-# The same version $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the
+# The same version $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the
 # two agree and neither decides the release on its own.
-HORIZON_VER := 24.0.2
+HORIZON_VER := 25.3.2
 
-# The epoxy dashboard, installed alongside it in the epoxy venv. Nothing serves this
-# one -- see the note by its install block below -- and the version is the one
-# $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) already pins, so the two agree.
-NEXT_HORIZON_VER := 25.3.2
-
-# Not in the caracal upper-constraints either, so pinned here for reproducibility.
+# Not in the epoxy upper-constraints either, so pinned here for reproducibility.
 # This is also a source build (see core/mysql/mysql.mk), which is the other reason not
 # to leave it floating.
 MYSQLCLIENT_VER := 2.2.8
@@ -27,7 +23,7 @@ MYSQLCLIENT_VER := 2.2.8
 # path, so a plain cp from the build host would follow it out to the *host* root
 # instead of into $(ROOTDIR).
 HORIZON_APP_DIR := /usr/share/openstack-dashboard
-HORIZON_VENV_SITE_PACKAGES := $(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+HORIZON_VENV_SITE_PACKAGES := $(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
 HORIZON_DIR := $(HORIZON_VENV_SITE_PACKAGES)/openstack_dashboard
 HORIZON_ETCDIR := /etc/openstack-dashboard
 HORIZON_POLICY_DIR := $(HORIZON_ETCDIR)/default_policies
@@ -50,18 +46,23 @@ CUBE_THEME_SRCS := $(shell find $(CUBE_THEME_SRCDIR) -type f 2>/dev/null)
 
 $(PROJ_HEAVYFS): $(COREDIR)/horizon/local_settings.in $(CUBE_THEME_SRCS)
 
-# install horizon inside the python 3.11 virtual environment
+# install horizon inside the python 3.12 virtual environment
 #
 # The rpms this replaces are openstack-dashboard, openstack-dashboard-theme and
 # python3-django-horizon. Each dashboard plugin is pip installed by the component
 # that owns it; registering the panels and running manage.py is this file's job, and
 # horizon is built last so all of it happens once every plugin is in the venv.
 #
-# This used to be two installs: the served dashboard in the antelope venv, and a
-# second 24.0.2 copy here whose only job was to give dump_default_policies an
-# interpreter that could see the caracal services' oslo.policy entry points. That
-# copy was a down payment on this move -- same version, so the dependency set landed
-# once -- and this is the move, so there is one install again.
+# This used to be two installs: the served 24.0.2 dashboard in the caracal venv, and
+# a second 25.3.2 copy here whose only job was to give dump_default_policies an
+# interpreter that could see the epoxy services' oslo.policy entry points (e5f9b011,
+# with keystone's hop). That copy was a down payment on this move -- same version, so
+# the dependency set landed then -- and this is the move, so there is one install
+# again, the way #636 left it.
+#
+# 25.x compiles the theme's scss with libsass rather than pyScss and django-pyscss,
+# which it no longer requires. libsass is a stricter compiler; see the note on the
+# cube theme's loader in theme/static/horizon/components/_loader_circular_example.scss.
 #
 # Three dependencies that are not horizon requirements and so have to be named:
 #   - mysqlclient replaces the python3-mysqlclient rpm. local_settings.in uses
@@ -69,13 +70,12 @@ $(PROJ_HEAVYFS): $(COREDIR)/horizon/local_settings.in $(CUBE_THEME_SRCS)
 #     imports MySQLdb. PyMySQL is already in the venv but django rejects it: 4.2
 #     wants MySQLdb >= 1.4.3 and PyMySQL reports 1.0.2.
 #   - pymemcache backs the PyMemcacheCache cache backend. python-memcached is in
-#     the venv already, but MemcachedCache was removed in django 4.1, and 24.0.2
+#     the venv already, but MemcachedCache was removed in django 4.1, and 25.3.2
 #     runs on 4.2.
-#   - gunicorn is what openstack-dashboard.service execs. It was never named while
-#     the dashboard was in the antelope venv, because core/monasca put it there and
-#     monasca is not moving; barbican.mk puts it in this one, but a dependency
-#     nothing asks for is one that disappears silently -- as keystone.mk's copy did
-#     when keystone moved to the epoxy venv (#657).
+#   - gunicorn is what openstack-dashboard.service execs. keystone.mk and
+#     barbican.mk both put it in this venv, but a dependency nothing asks for is one
+#     that disappears silently -- as keystone.mk's caracal copy did when keystone
+#     moved here (#657).
 #
 # These are two pip invocations rather than one because the two halves want opposite
 # build environments, and a single command can only have one. See the note by the venv
@@ -85,43 +85,19 @@ rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# horizon's sdist-only XStatic dependencies import a pkg_resources-declared
 	$(Q)# namespace from setup.py, so they have to be built against this venv's
-	$(Q)# setuptools 75.6.0 -- a current setuptools has no pkg_resources at all.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)# setuptools 79.0.1 -- a current setuptools has no pkg_resources at all.
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			--no-build-isolation \
 			horizon==$(HORIZON_VER)"
 	$(Q)# mysqlclient is the counter-example: it is also a source build, but its
 	$(Q)# pyproject.toml wants a setuptools newer than this venv's, so it keeps pip's
 	$(Q)# default build isolation and gets a current setuptools of its own.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			mysqlclient==$(MYSQLCLIENT_VER) \
 			pymemcache \
 			gunicorn"
-	$(Q)# clean up dns configurations after downloading packages
-	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-
-# the same dashboard again, one release on, in the epoxy venv
-#
-# Nothing serves this copy. openstack-dashboard.service, gunicorn-config.py and the
-# httpd reverse proxy all point at the caracal tree above, and every dashboard plugin
-# installs next to that one. This copy exists so that dump_default_policies can run
-# under the interpreter that owns the epoxy services' oslo.policy entry points -- see
-# the policy block near the end of this file. It is the caracal hop's arrangement
-# again (#1339): the dashboard followed its services there with a copy that was a
-# down payment on its own move, and 25.3.2 is likewise what horizon's epoxy hop will
-# install, so the dependency set lands once.
-#
-# --no-build-isolation for the XStatic sdists, exactly as above -- the epoxy venv's
-# setuptools is pinned below 82 for them, so the pkg_resources those setup.py files
-# import is there.
-rootfs_install::
-	$(Q)# enable dns in the rootfs for downloading packages
-	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-			--no-build-isolation \
-			horizon==$(NEXT_HORIZON_VER)"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
@@ -194,7 +170,7 @@ rootfs_install::
 #   - ironic-ui and neutron-vpnaas-dashboard ship one enabled/*.py each and no policy
 #     file.
 #   - watcher_policy.json is json, not yaml. oslo.policy warns about that on load;
-#     it is what watcher-dashboard 2023.1 ships.
+#     it is what watcher-dashboard ships, 13.0.0 included.
 rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/$(HORIZON_DIR)/local/enabled
 	$(Q)mkdir -p $(ROOTDIR)/$(HORIZON_DIR)/local/local_settings.d
@@ -232,35 +208,29 @@ rootfs_install::
 # DEFAULT_POLICY_FILES points at came from the openstack-dashboard rpm, and the
 # masakari one from masakari.mk running this same command under python 3.9. Generate
 # them all here instead, from the services that are actually running -- every one of
-# these namespaces is an oslo.policy.policies entry point in the venv its service runs
-# from.
+# these namespaces is an oslo.policy.policies entry point in the venv this dashboard
+# now shares with them.
 #
-# stevedore only sees entry points registered in the interpreter it is running under,
-# so one python cannot dump them all while the services span two venvs. The caracal
-# hop split this into two lists, one per venv, and horizon following its services
-# closed the split; the epoxy hop opens it again. Each list is dumped by the
-# dashboard that shares its venv: the served one in the caracal venv, and the copy
-# installed above for the epoxy one. A namespace listed against the venv that does
-# not hold its service fails the build with 'The requested namespace "<x>" is not
-# found' -- so move it to the epoxy list when its service makes the hop, and not
-# before.
+# There used to be a second list, dumped by an unserved epoxy copy of horizon, because
+# stevedore only sees entry points registered in the interpreter it is running under
+# and one python could not dump them all while the services spanned two venvs. The
+# caracal list emptied out as the services hopped, and horizon following them is what
+# removes the split again, as it did on the caracal hop: every namespace below is an
+# epoxy package's entry point, and this dashboard runs on epoxy. A namespace whose
+# service is not in this venv cannot be dumped from here -- it fails the build with
+# 'The requested namespace "<x>" is not found' -- so nothing may be added to this list
+# ahead of its service.
 #
 # Note the octavia and masakari entries follow the *service*, not the panel: the
 # oslo.policy.policies entry points named "octavia" and "masakari" are registered by
 # the octavia and masakari packages, not by their dashboard plugins.
-#
-# The caracal list is empty since octavia, its last entry, moved to epoxy (#667). The
-# loop stays, a no-op, the way the antelope one did while it was empty: the split
-# closes when horizon follows its services, and not before.
-HORIZON_POLICY_NS :=
-NEXT_HORIZON_POLICY_NS := keystone glance cinder nova neutron masakari octavia
+HORIZON_POLICY_NS := keystone glance cinder nova neutron masakari octavia
 
-# django-admin rather than $(HORIZON_APP_DIR)/manage.py, and for the epoxy list it is
-# not optional. manage.py sits in a directory whose horizon and openstack_dashboard
-# entries are symlinks into the *caracal* venv, and a script's own directory leads
-# sys.path -- so running it with the epoxy python would import python3.11 packages
-# under python3.12. A console script has no directory of its own, and
-# DJANGO_SETTINGS_MODULE is set explicitly below, so both venvs take the same shape.
+# django-admin rather than $(HORIZON_APP_DIR)/manage.py. Both resolve to this venv now
+# that the symlinks in that directory point here, so the cross-venv import hazard that
+# forced the console script while the epoxy copy was unserved is gone; it stays because
+# a console script has no directory of its own leading sys.path, and
+# DJANGO_SETTINGS_MODULE is set explicitly below anyway.
 #
 # --skip-checks because the dump reads oslo.policy entry points and needs nothing
 # else: no cache, no database, no static tree. django's system checks instantiate
@@ -268,11 +238,8 @@ NEXT_HORIZON_POLICY_NS := keystone glance cinder nova neutron masakari octavia
 # anything, so skipping them keeps the dump independent of what the rest of the build
 # has done so far.
 #
-# Both loops are noisy on stderr -- the USE_L10N notice, a debreach distutils warning,
-# and oslo.policy grumbling about upstream nova/cinder rules that set deprecated_since
-# on the RuleDefault instead of the DeprecatedRule. It is left alone: PYTHONWARNINGS
-# does not reach it (something under settings resets the filters), and stderr has to
-# stay open anyway for the namespace failure above to be visible.
+# A good run of the loop prints nothing. stderr is left open all the same, so that the
+# namespace failure above is visible when it happens.
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -d -m 755 $(HORIZON_POLICY_DIR)
 	$(Q)# || exit 1 per iteration: a for loop only returns the status of its *last*
@@ -282,15 +249,6 @@ rootfs_install::
 	$(Q)# state this guarantee explicitly ("that command exits 1 and the build fails");
 	$(Q)# folding the dump into a loop here is what dropped it.
 	$(Q)for ns in $(HORIZON_POLICY_NS) ; do \
-		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
-			$(OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
-			--namespace $$ns \
-			--output-file $(HORIZON_POLICY_DIR)/$$ns.yaml || exit 1 ; \
-	done
-	$(Q)# "No local_settings file found." from this loop is expected: nothing ever
-	$(Q)# configures the epoxy copy, and openstack_dashboard/settings.py warns and
-	$(Q)# carries on.
-	$(Q)for ns in $(NEXT_HORIZON_POLICY_NS) ; do \
 		chroot $(ROOTDIR) env DJANGO_SETTINGS_MODULE=openstack_dashboard.settings \
 			$(NEXT_OPENSTACK_HOME_DIR)/bin/django-admin dump_default_policies --skip-checks \
 			--namespace $$ns \
@@ -306,9 +264,9 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/horizon/openstack-dashboard.conf ./etc/httpd/conf.d/
 
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compilemessages 2>&1 > /dev/null
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py collectstatic --noinput 2>&1 > /dev/null
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compress --force 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compilemessages 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py collectstatic --noinput 2>&1 > /dev/null
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/python $(HORIZON_APP_DIR)/manage.py compress --force 2>&1 > /dev/null
 	$(Q)chroot $(ROOTDIR) chmod 755 -R $(HORIZON_APP_DIR)
 	$(Q)chroot $(ROOTDIR) sh -c "chown root:apache -R $(HORIZON_POLICY_DIR)/*"
 	$(Q)chroot $(ROOTDIR) sh -c "chmod 640 -R $(HORIZON_POLICY_DIR)/*"

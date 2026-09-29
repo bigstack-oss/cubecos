@@ -39,11 +39,12 @@ NEUTRON_CONFDIR := $(ROOTDIR)/etc/neutron
 
 OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)
 
-# https://releases.openstack.org/caracal/index.html#caracal-neutron-vpnaas-dashboard
+# https://releases.openstack.org/epoxy/index.html#epoxy-neutron-vpnaas-dashboard --
+# 12.0.0 is the epoxy release, and the only one of the series.
 # Horizon plugins are not in the upper-constraints (that file only covers libraries),
-# so the pin is explicit. It replaces a $(OPS_GITHUB_BRANCH_02) clone, whose version
-# was whatever the branch tip was on build day.
-NEUTRON_VPNAAS_DASHBOARD_VER := 10.0.0
+# so the pin is explicit. It replaced a $(OPS_GITHUB_BRANCH_02) clone in #636, whose
+# version was whatever the branch tip was on build day.
+NEUTRON_VPNAAS_DASHBOARD_VER := 12.0.0
 
 # neutron runs out of the epoxy venv, not the caracal one it shared with the rest of
 # the 2024.1 services. neutron 26.0.6 is the newest 2025.1 release, and neutron-vpnaas
@@ -149,17 +150,17 @@ rootfs_install::
 
 # set up the neutron-vpnaas VPN panel
 #
-# The dashboard is a horizon plugin, so it lives where horizon lives: #636 moved
-# horizon into the caracal venv, and 10.0.0 -- the 2024.1 dashboard -- is what wants a
-# caracal horizon. It talks to neutron over the API, which is why it is free to sit a
-# release behind the service: it stays here, beside the served dashboard, until horizon
-# makes its own epoxy hop.
+# The dashboard is a horizon plugin, so it lives where horizon lives: #662 moved
+# horizon into the epoxy venv, and 12.0.0 -- the 2025.1 dashboard -- is what wants an
+# epoxy horizon. It talks to neutron over the API, which is why it could sit a release
+# behind the service, beside the served caracal dashboard, until horizon made its own
+# epoxy hop.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		neutron-vpnaas-dashboard==$(NEUTRON_VPNAAS_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

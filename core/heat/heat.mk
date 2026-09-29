@@ -35,8 +35,8 @@
 # openstack-heat-ui, the Horizon dashboard plugin, is replaced by the
 # heat-dashboard wheel installed further down. It was dropped when heat moved to
 # pip because horizon was still on python 3.9; #609 moved horizon into the antelope
-# venv and #636 into the caracal one, and the wheel has followed horizon both times
-# -- see the note above it.
+# venv, #636 into the caracal one and #662 into the epoxy one, and the wheel has
+# followed horizon each time -- see the note above it.
 
 HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 
@@ -54,16 +54,15 @@ HEAT_PATCHDIR := $(COREDIR)/heat/$(NEXT_OPENSTACK_RELEASE)_patch
 HEAT_VER := 24.1.1
 
 # heat-dashboard follows horizon, not the heat service: it installs next to horizon
-# because that is where collectstatic collects panels from. #636 moved horizon into
-# the caracal venv, so this moved with it. 11.0.0 is the caracal release --
-# https://releases.openstack.org/caracal/index.html#caracal-heat-dashboard. There is
-# no 11.0.1: the comment this replaces named one, and it does not exist on PyPI.
+# because that is where collectstatic collects panels from. #662 moved horizon into
+# the epoxy venv, so this moved with it. 13.0.0 is the epoxy release, and the only one
+# of the series -- https://releases.openstack.org/epoxy/index.html#epoxy-heat-dashboard.
 # heat-dashboard talks to the API over HTTP through heatclient and imports nothing
-# from heat, so it never had to move when the service did. Horizon plugins are not in
-# the upper-constraints (that file only covers libraries), so the pin is explicit. It
-# stays the caracal release when the service moves to epoxy, for the same reason: the
-# served horizon is still the caracal venv's.
-HEAT_DASHBOARD_VER := 11.0.0
+# from heat, which is why it could stay a release behind the service while horizon
+# did; it cannot stay behind horizon, since 13.0.0 requires horizon>=25.0.0. Horizon
+# plugins are not in the upper-constraints (that file only covers libraries), so the
+# pin is explicit.
+HEAT_DASHBOARD_VER := 13.0.0
 
 # install heat into the epoxy venv
 #
@@ -240,8 +239,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		heat-dashboard==$(HEAT_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

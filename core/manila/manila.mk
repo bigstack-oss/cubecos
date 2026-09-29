@@ -21,17 +21,17 @@
 #
 # /usr/bin/manila is the standalone cli hex_sdk drives. #638 took it to caracal with the
 # api it queries, 4.8.1 against 18.3.0, and this hop leaves it there: it is the client's
-# console script, not the service's, and the other two consumers pin the client to the
-# caracal venv anyway. It talks HTTP and negotiates its microversion, so 4.8.1 (max 2.85)
+# console script, not the service's, and the osc plugin pins the client to the caracal
+# venv anyway. It talks HTTP and negotiates its microversion, so 4.8.1 (max 2.85)
 # drives the 20.0.2 api (max 2.89) at 2.85 -- the shape heat's, designate's and cyborg's
-# clis already have. The epoxy venv holds a 5.4.1 copy as an openstack-heat requirement
-# (heat.mk), and nothing points at it.
+# clis already have. The epoxy venv holds a 5.4.1 copy as an openstack-heat and
+# manila-ui requirement, and only manila-ui imports it.
 #
 # manila-ui is the third consumer: it declares
-# `Requires-Dist: python-manilaclient (>=2.7.0)` and imports it from 15 modules,
-# including manila_ui/api/manila.py and manila_ui/exceptions.py. It moved to caracal
-# with horizon in #636, which is what emptied the antelope side out, and it stays there
-# with the served horizon.
+# `Requires-Dist: python-manilaclient >=2.7.0` and imports it in four modules,
+# manila_ui/api/manila.py and manila_ui/exceptions.py among them. It moved to caracal
+# with horizon in #636, which is what emptied the antelope side out, and to epoxy with
+# it in #662.
 #
 # openstack-manila-ui is replaced by the manila-ui wheel installed further down --
 # see the note above it.
@@ -68,13 +68,12 @@ MANILA_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VE
 MANILA_PATCHDIR := $(COREDIR)/manila/$(NEXT_OPENSTACK_RELEASE)_patch
 
 # manila-ui follows horizon, not the manila service: it installs next to horizon
-# because that is where collectstatic collects panels from. #636 moved horizon into
-# the caracal venv, so this moved with it. 11.0.1 is the caracal release --
-# https://releases.openstack.org/caracal/index.html#caracal-manila-ui. Horizon plugins
-# are not in the upper-constraints (that file only covers libraries), so the pin is
-# explicit. It stays the caracal release when the service moves to epoxy, for the same
-# reason: the served horizon is still the caracal venv's.
-MANILA_UI_VER := 11.0.1
+# because that is where collectstatic collects panels from. #662 moved horizon into
+# the epoxy venv, so this moved with it. 13.0.0 is the epoxy release, and the only one
+# of the series -- https://releases.openstack.org/epoxy/index.html#epoxy-manila-ui.
+# Horizon plugins are not in the upper-constraints (that file only covers libraries),
+# so the pin is explicit.
+MANILA_UI_VER := 13.0.0
 
 # install manila into the epoxy venv
 #
@@ -150,8 +149,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		manila-ui==$(MANILA_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages

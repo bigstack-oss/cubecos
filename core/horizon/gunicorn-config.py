@@ -1,6 +1,6 @@
 # gunicorn settings for the horizon dashboard.
 #
-# Horizon runs out of the python 3.11 venv at /opt/openstack-caracal, and
+# Horizon runs out of the python 3.12 venv at /opt/openstack-epoxy, and
 # mod_wsgi is built against the system python 3.9, so httpd can no longer host
 # the application in-process. It reverse-proxies this socket instead, the same
 # arrangement keystone, barbican and monasca-api already use.

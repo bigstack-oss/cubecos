@@ -29,15 +29,14 @@ IRONIC_VER := 29.1.0
 IRONIC_INSP_VER := 12.4.0
 
 # ironic-ui follows horizon, not the ironic service: it installs next to horizon
-# because that is where collectstatic collects panels from. #636 moved horizon into
-# the caracal venv, so this moved with it. 6.3.0 is the caracal release --
-# https://releases.openstack.org/caracal/index.html#caracal-ironic-ui. It reaches the
-# api over HTTP through python-ironicclient and imports nothing from ironic, so it
-# never had to move when the service did. Horizon plugins are not in the caracal
-# upper-constraints either (that file only covers libraries), so the pin is explicit.
-# It stays the caracal release when the service moves to epoxy, for the same reason:
-# the served horizon is still the caracal venv's.
-IRONIC_UI_VER := 6.3.0
+# because that is where collectstatic collects panels from. #662 moved horizon into
+# the epoxy venv, so this moved with it. 6.5.0 is the epoxy release, and the only one
+# of the series -- https://releases.openstack.org/epoxy/index.html#epoxy-ironic-ui. It
+# reaches the api over HTTP through python-ironicclient and imports nothing from
+# ironic, which is why it could stay a release behind the service while horizon did.
+# Horizon plugins are not in the epoxy upper-constraints either (that file only covers
+# libraries), so the pin is explicit.
+IRONIC_UI_VER := 6.5.0
 
 # python-ironicclient owns the `baremetal` osc plugin, and an entry point is only
 # visible to the interpreter it was installed under, so it has to sit next to whichever
@@ -166,8 +165,8 @@ rootfs_install::
 	$(Q)# --no-build-isolation: ironic-ui pulls horizon, whose sdist-only XStatic
 	$(Q)# dependencies cannot be built against a current setuptools. See the note by
 	$(Q)# the venv bootstrap in core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		ironic-ui==$(IRONIC_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages

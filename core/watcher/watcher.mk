@@ -59,16 +59,17 @@ WATCHER_RUN_DIR := /var/run/watcher
 WATCHER_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
 WATCHER_PATCHDIR := $(COREDIR)/watcher/$(NEXT_OPENSTACK_RELEASE)_patch
 
-# https://releases.openstack.org/caracal/index.html#caracal-watcher-dashboard
+# https://releases.openstack.org/epoxy/index.html#epoxy-watcher-dashboard -- 13.0.0 is
+# the epoxy release, and the only one of the series.
 # Horizon plugins are not in the upper-constraints (that file only covers libraries),
 # so the pin is explicit. This used to be a git clone of the 2023.1-eol *tag*, because
 # watcher-dashboard publishes neither stable/2023.1 nor unmaintained/2023.1 -- both
 # branches were deleted at EOL, so there was no branch for installpip's fallback chain
 # to resolve. #636 moved the panel to the caracal release, which is on PyPI as a wheel,
-# and the tag hack goes with it. It stays the caracal release when the service moves to
-# epoxy: the served horizon is still the caracal venv's, and the panel talks to the api
-# over HTTP, whose maximum microversion is 1.4 in both 12.1.0 and 14.1.2.
-WATCHER_DASHBOARD_VER := 11.0.0
+# and the tag hack went with it; #662 took it on to epoxy with horizon. The panel talks
+# to the api over HTTP, whose maximum microversion is 1.4 in both 12.1.0 and 14.1.2,
+# which is why it could stay a release behind the service while horizon did.
+WATCHER_DASHBOARD_VER := 13.0.0
 
 # install watcher into the epoxy venv
 #
@@ -146,8 +147,8 @@ rootfs_install::
 #
 # watcher-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
-# horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
-# caracal, so the panel is a caracal-venv install, and stays one while horizon does.
+# horizon runs in, so the dashboard goes where horizon goes. #662 took horizon to
+# epoxy, so the panel is an epoxy-venv install now.
 #
 # /usr/bin/watcher is the client's own cli. It used to come from the system python 3.9
 # install as /usr/local/bin/watcher -- /usr/bin held only the watcher-* service scripts
@@ -161,8 +162,8 @@ rootfs_install::
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-watcherclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		watcher-dashboard==$(WATCHER_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

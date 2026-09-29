@@ -1,4 +1,4 @@
-#!/opt/openstack-caracal/bin/python
+#!/opt/openstack-epoxy/bin/python
 import os
 import sys
 

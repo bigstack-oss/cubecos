@@ -12,22 +12,21 @@ MASAKARI_RUN_DIR := /var/run/masakari
 # horizon plugin and horizon was still antelope's. #636 moved horizon, so the
 # dashboard patch rejoined the others under caracal_patch/ and antelope_patch/ went.
 #
-# The epoxy hop splits them the same way again. masakari and masakari-monitors move to
-# the epoxy venv, so their five and three pairs are epoxy_patch/ and apply to that
-# venv's site-packages; masakaridashboard stays with the served horizon, which is
-# still the caracal venv's, so its pair stays caracal_patch/. The loop at the bottom
-# runs once per venv.
+# The epoxy hop split them the same way again: #665 took masakari and
+# masakari-monitors, and their five and three pairs, to epoxy_patch/, while
+# masakaridashboard stayed with the served caracal horizon. #662 moved horizon too,
+# so the dashboard pair rejoined the others under epoxy_patch/, caracal_patch/ is
+# gone, and one loop at the bottom applies all nine.
 #
 # The dashboard patch matters -- upstream sets default_panel = 'default', a panel whose
 # urls.py has no index, so an unpatched masakaridashboard makes the sidebar raise
-# NoReverseMatch and every page 500s. Upstream has not fixed it at 10.0.0, so the patch
-# was re-derived against that release rather than moved: 10.0.0 adds 'vmoves' to the
-# panels tuple two lines above the change and renames ugettext_lazy to gettext_lazy, so
-# the 8.0.0 hunk's context no longer matches.
+# NoReverseMatch and every page 500s. Upstream has not fixed it at 12.0.0 either, and
+# dashboard.py is byte-identical between 10.0.0 and 12.0.0, so the pair moved as it
+# was. It was last re-derived for 10.0.0, which added 'vmoves' to the panels tuple two
+# lines above the change and renamed ugettext_lazy to gettext_lazy, so the 8.0.0
+# hunk's context no longer matched.
 MASAKARI_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
 MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch
-MASAKARI_DASHBOARD_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
-MASAKARI_DASHBOARD_PATCHDIR := $(COREDIR)/masakari/$(OPENSTACK_RELEASE)_patch
 
 # masakari common
 rootfs_install::
@@ -113,18 +112,17 @@ rootfs_install::
 #
 # masakari-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
-# horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
-# caracal, so the panel is a caracal-venv install now. 10.0.0 is the caracal release --
-# https://releases.openstack.org/caracal/index.html#caracal-masakari-dashboard. Horizon
+# horizon runs in, so the dashboard goes where horizon goes. #662 took horizon to
+# epoxy, so the panel is an epoxy-venv install now. 12.0.0 is the epoxy release, and
+# the only one of the series --
+# https://releases.openstack.org/epoxy/index.html#epoxy-masakari-dashboard. Horizon
 # plugins are not in the upper-constraints (that file only covers libraries), so the
-# pin is explicit; it replaces a $(OPS_GITHUB_BRANCH_02) clone, whose version was
-# whatever the branch tip was on build day. It stays the caracal release when the
-# services move to epoxy, for the same reason: the served horizon is still the caracal
-# venv's.
+# pin is explicit; it replaced a $(OPS_GITHUB_BRANCH_02) clone in #636, whose version
+# was whatever the branch tip was on build day.
 #
-# 10.0.0 brings the vmoves panel with it. The API behind it has been there since
-# masakari 17.0.0 (#639); only the panel was missing, and this is what supplies it.
-MASAKARI_DASHBOARD_VER := 10.0.0
+# The vmoves panel came with 10.0.0 (#636). The API behind it has been there since
+# masakari 17.0.0 (#639); only the panel was missing.
+MASAKARI_DASHBOARD_VER := 12.0.0
 
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
@@ -133,8 +131,8 @@ rootfs_install::
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-masakariclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		masakari-dashboard==$(MASAKARI_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
@@ -179,17 +177,13 @@ rootfs_install::
 # Each patch sits at <PATCHDIR>/<rel>.py.patch and targets <SRCDIR>/<rel>.py;
 # a <rel>.py.orig alongside it is the pristine upstream file, kept only for
 # review. --forward makes re-runs idempotent; a failed hunk aborts the build
-# (so upstream drift is caught at build time, not shipped silently). One loop per
-# venv -- see the note on the patch dirs at the top.
+# (so upstream drift is caught at build time, not shipped silently). One loop, now
+# that the dashboard shares the services' venv -- see the note on the patch dir at the
+# top. A second loop over the same dir would re-apply every patch, and --forward
+# exits 1 on a patch that is already applied.
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(MASAKARI_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(MASAKARI_PATCHDIR)/}; tgt=$(MASAKARI_SRCDIR)/$${rel%.patch}; \
-		echo "  PATCH $${rel%.patch}"; \
-		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
-			|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \
-	done
-	$(Q)set -e; for p in $$(find $(MASAKARI_DASHBOARD_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
-		rel=$${p#$(MASAKARI_DASHBOARD_PATCHDIR)/}; tgt=$(MASAKARI_DASHBOARD_SRCDIR)/$${rel%.patch}; \
 		echo "  PATCH $${rel%.patch}"; \
 		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
 			|| { echo "masakari: failed to apply $$p to $$tgt" >&2; exit 1; }; \

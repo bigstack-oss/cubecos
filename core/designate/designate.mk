@@ -26,22 +26,22 @@ ROOTFS_DNF += bind bind-utils
 NAMED_CONF_FILES := /etc/named*
 NAMED_APP_DIR := /var/named
 
-# https://releases.openstack.org/caracal/index.html#caracal-designate-dashboard
+# https://releases.openstack.org/epoxy/index.html#epoxy-designate-dashboard -- 20.0.1
+# is the newest 2025.1 release.
 # Horizon plugins are not in the upper-constraints (that file only covers libraries),
-# so the pin is explicit. This was a $(OPS_GITHUB_BRANCH_02) clone until #636: the
-# branch name was chosen while the dashboard had to match an antelope horizon, and a
-# branch resolves to whatever its tip is on build day. Now that the panel follows
-# horizon into the caracal venv the version has to change anyway, so it changes to a
-# number. It stays the caracal release when the service moves to epoxy: the panel
-# follows horizon, not designate, and talks to the service only through its REST API.
-DESIGNATE_DASHBOARD_VER := 18.0.0
+# so the pin is explicit. This was a $(OPS_GITHUB_BRANCH_02) clone until #636, which
+# turned it into a number when the panel followed horizon into the caracal venv; #662
+# took it on to epoxy with horizon. The panel follows horizon, not designate, and talks
+# to the service only through its REST API, which is why it could stay a release
+# behind the service while horizon did.
+DESIGNATE_DASHBOARD_VER := 20.0.1
 
 DESIGNATE_CONF_DIR := /etc/designate
 DESIGNATE_APP_DIR := /var/lib/designate
 DESIGNAT_LOG_DIR := /var/log/designate
 
-# The console scripts patched below live in the epoxy venv with the service. The
-# dashboard and the osc plugin do not follow it there -- see the install blocks.
+# The console scripts patched below live in the epoxy venv with the service. The osc
+# plugin does not follow it there -- see the install blocks.
 DESIGNATE_BINDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/bin
 DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(NEXT_OPENSTACK_RELEASE)_bin_patch
 
@@ -111,9 +111,8 @@ rootfs_install::
 #
 # designate-dashboard is a horizon plugin: core/horizon/horizon.mk copies its enabled
 # panels out of $(HORIZON_VENV_SP), which is the site-packages of whichever venv
-# horizon runs in, so the dashboard goes where horizon goes. #636 took horizon to
-# caracal, and the epoxy horizon copy in horizon.mk serves nothing, so the panel is
-# still a caracal-venv install.
+# horizon runs in, so the dashboard goes where horizon goes. #662 took horizon to
+# epoxy, so the panel is an epoxy-venv install now.
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -121,8 +120,8 @@ rootfs_install::
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-designateclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		designate-dashboard==$(DESIGNATE_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

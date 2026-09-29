@@ -24,7 +24,7 @@ static const char SECRETKEY[] = "nocG4gpLrCqtoaID";
 
 // The dashboard, gunicorn behind the httpd reverse proxy. Horizon used to run
 // in-process under mod_wsgi, so httpd starting was all it took; it lives in the
-// python 3.10 venv now and has a unit of its own to bring up.
+// python 3.12 venv now and has a unit of its own to bring up.
 static const char NAME[] = "openstack-dashboard";
 
 // Nothing rotates /var/log/horizon on its own any more. gunicorn's stdout/stderr and
@@ -97,9 +97,9 @@ SetupService()
 
     HexLogInfo("Setting up horizon");
 
-    // horizon lives in the python 3.11 venv now; /usr/bin/python3 (3.9) can no
+    // horizon lives in the python 3.12 venv now; /usr/bin/python3 (3.9) can no
     // longer import openstack_dashboard or any of its plugins.
-    HexUtilSystemF(0, 0, "/opt/openstack-caracal/bin/python /usr/share/openstack-dashboard/manage.py migrate --noinput 2>/dev/null");
+    HexUtilSystemF(0, 0, "/opt/openstack-epoxy/bin/python /usr/share/openstack-dashboard/manage.py migrate --noinput 2>/dev/null");
 
     return true;
 }

@@ -35,8 +35,8 @@
 # octavia-dashboard wheel installed further down. It was dropped when octavia moved
 # to pip because Horizon still ran on the system python 3.9 and could not import a
 # package from a venv; #609 moved Horizon into the antelope venv, so the Load Balancer
-# panel came back, and #636 moved both to caracal. Registering it is core/horizon's
-# job, where every dashboard action lives.
+# panel came back, #636 moved both to caracal and #662 to epoxy. Registering it is
+# core/horizon's job, where every dashboard action lives.
 #
 # The octavia user and group are carried statically by
 # core/heavyfs/account/centos9 (uid/gid 138), so the RDO spec's shadow-utils
@@ -60,15 +60,13 @@ OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(NEXT_OPENSTACK_RELEASE)_patch/octavia
 OCTAVIA_VER := 16.1.0
 
 # octavia-dashboard follows horizon, not the octavia service: it installs next to
-# horizon because that is where collectstatic collects panels from. #636 moved horizon
-# into the caracal venv, so this moved with it. 13.0.1 is the caracal release --
-# https://releases.openstack.org/caracal/index.html#caracal-octavia-dashboard. It talks
-# to the API over HTTP and imports nothing from octavia, so it never had to move when
-# the service did. Horizon plugins are not in the upper-constraints (that file only
-# covers libraries), so the pin is explicit. It stays the caracal release when the
-# service moves to epoxy, for the same reason: the served horizon is still the caracal
-# venv's.
-OCTAVIA_DASHBOARD_VER := 13.0.1
+# horizon because that is where collectstatic collects panels from. #662 moved horizon
+# into the epoxy venv, so this moved with it. 15.0.1 is the newest epoxy release --
+# https://releases.openstack.org/epoxy/index.html#epoxy-octavia-dashboard. It talks
+# to the API over HTTP and imports nothing from octavia, which is why it could stay a
+# release behind the service while horizon did. Horizon plugins are not in the
+# upper-constraints (that file only covers libraries), so the pin is explicit.
+OCTAVIA_DASHBOARD_VER := 15.0.1
 
 # install octavia into the epoxy venv
 #
@@ -212,8 +210,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		octavia-dashboard==$(OCTAVIA_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
