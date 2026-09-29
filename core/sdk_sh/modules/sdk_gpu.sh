@@ -395,6 +395,136 @@ gpu_vm_stats()
     fi
 }
 
+# gpu_vm_stats / gpu_host_stats are snapshots: telegraf runs them every 5
+# minutes and they keep whatever utilization nvidia-smi reports at that one
+# instant, so a workload that starts and ends between two snapshots never shows
+# up (#1547: a 2-minute busy loop in a vGPU VM on cn13 left no trace). The
+# window collectors sample once a second for most of the interval instead and
+# write the peak and the mean into the same series as the snapshot.
+#
+# Turns those 1 s samples (on stdin) into InfluxDB line protocol, one line per
+# vGPU (mode "vm", `nvidia-smi vgpu -u`) or per GPU (mode "host", the CSV of
+# `--query-gpu=pci.bus_id,utilization.gpu,utilization.memory`).
+#
+# Tags are not rebuilt here. $2 holds `<id>\t<measurement,tags>` lines cut from
+# gpu_stats_parse output, so a window point lands in exactly the series of the
+# snapshot for the same vGPU/GPU; an id with no tags there (a VM shut down
+# during the window) is dropped.
+#
+# `vgpu -u` columns are located by its header, not by position: the column set
+# has grown across drivers (jpg, ofa), and rows read without the header cannot
+# be told apart from a different layout, so they are reported and dropped. No
+# rows at all (a node without vGPUs) is silent. A value that is not a number
+# (`-`, N/A: a MIG-backed vGPU has no utilization counter) drops that one
+# sample only.
+#   $1  mode: host|vm   $2  tag file   $3  timestamp (epoch ns) for every line
+gpu_util_window_parse()
+{
+    awk -v mode="$1" -v tagfile="$2" -v ts="$3" '
+    function warn(m) { print "gpu_" mode "_util_window: " m > "/dev/stderr" }
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    function add(id, f, v) {
+        if (v !~ /^[0-9]+(\.[0-9]+)?$/) return
+        v += 0
+        if (!((id, f) in cnt) || v > top[id, f]) top[id, f] = v
+        sum[id, f] += v; cnt[id, f]++
+        seen[id] = 1
+    }
+
+    BEGIN {
+        while ((getline l < tagfile) > 0)
+            if ((t = index(l, "\t")) > 0) tags[substr(l, 1, t - 1)] = substr(l, t + 1)
+        close(tagfile)
+    }
+
+    mode == "vm" && /^[ \t]*#/ {
+        if (c_id) next
+        h = tolower($0); sub(/^[ \t]*#[ \t]*/, "", h)
+        n = split(h, hc, /[ \t]+/)
+        for (i = 1; i <= n; i++) {
+            if (hc[i] == "vgpu") ci = i
+            else if (hc[i] == "sm") cs = i
+            else if (hc[i] == "mem") cm = i
+        }
+        if (ci && cs && cm) { c_id = ci; c_sm = cs; c_mem = cm }
+        ci = cs = cm = 0
+        next
+    }
+    mode == "vm" {
+        if ($0 !~ /^[ \t]*[0-9]+[ \t]+[0-9]+[ \t]/) next
+        if (!c_id) { headless++; next }
+        add($c_id, "util_gpu", $c_sm)
+        add($c_id, "util_mem", $c_mem)
+        next
+    }
+    mode == "host" {
+        if (split($0, c, ",") != 3) next
+        id = trim(c[1])
+        if (id !~ /^[0-9A-Fa-f]+:[0-9A-Fa-f]+:[0-9A-Fa-f]+\.[0-9A-Fa-f]$/) next
+        add(id, "util_gpu", trim(c[2]))
+        add(id, "util_mem", trim(c[3]))
+    }
+
+    END {
+        if (headless) warn(headless " sample(s) read without a column header, dropped")
+        for (id in seen) {
+            if (!(id in tags)) {
+                warn(id ": not in the snapshot taken after sampling, dropped"); continue
+            }
+            f = ""
+            if ((id, "util_gpu") in cnt)
+                f = sprintf("util_gpu_max=%g,util_gpu_mean=%.1f",
+                            top[id, "util_gpu"], sum[id, "util_gpu"] / cnt[id, "util_gpu"])
+            if ((id, "util_mem") in cnt)
+                f = f (f == "" ? "" : ",") sprintf("util_mem_max=%g,util_mem_mean=%.1f",
+                            top[id, "util_mem"], sum[id, "util_mem"] / cnt[id, "util_mem"])
+            if ((id, "util_gpu") in cnt) f = f ",util_samples=" cnt[id, "util_gpu"] "i"
+            line = tags[id] " " f " " ts
+            # Same guard as gpu_stats_parse: telegraf rejects the whole batch
+            # on one malformed line.
+            if (split(line, parts, / /) == 3) print line
+            else warn(id ": malformed line protocol, record dropped")
+        }
+    }'
+}
+
+# Prints `<value of tag $1>\t<measurement,tags>` for every line of
+# gpu_stats_parse output on stdin: the tag file gpu_util_window_parse reads.
+gpu_util_window_tags()
+{
+    awk -v key="$1" '{
+        if (match($1, "," key "=[^,]*"))
+            print substr($1, RSTART + length(key) + 2, RLENGTH - length(key) - 2) "\t" $1
+    }'
+}
+
+# One window of `nvidia-smi vgpu -u` (which never exits on its own; timeout
+# ending it with 124 is the normal case). 285 s of the 5-minute interval leaves
+# room for the snapshot and hex_sdk start-up inside telegraf's 295 s timeout.
+# The snapshot that supplies the tags is taken after sampling, so a VM booted
+# during the window is still matched.
+gpu_vm_util_window()
+{
+    if ! gpu_is_installed; then
+        return 0
+    fi
+
+    local ts samples tags rc
+    ts="$(date +%s)000000000"
+    samples=$(mktemp) || return 1
+    tags=$(mktemp) || { rm -f "$samples"; return 1; }
+
+    timeout "${GPU_UTIL_WINDOW_SEC:-285}" $NVIDIA_SMI vgpu -u > "$samples"
+    rc=$?
+    if [ $rc -ne 0 ] && [ $rc -ne 124 ] && grep -qE '^[[:blank:]]*[0-9]+[[:blank:]]+[0-9]+[[:blank:]]' "$samples"; then
+        echo "gpu_vm_util_window: nvidia-smi vgpu -u exited $rc before the window ended, keeping the samples read" >&2
+    fi
+
+    $NVIDIA_SMI vgpu -q 2>/dev/null | gpu_stats_parse vm "" 2>/dev/null | gpu_util_window_tags gid > "$tags"
+    gpu_util_window_parse vm "$tags" "$ts" < "$samples"
+    rm -f "$samples" "$tags"
+}
+
 # What to put in a log line about a failed nvidia-smi probe. nvidia-smi prints
 # "No devices were found" on stdout and leaves stderr empty (measured on cn13:
 # a nonexistent GPU is exit 6, empty stderr), so a message built from stderr
@@ -1945,4 +2075,31 @@ gpu_host_stats()
     else
         $NVIDIA_SMI -q | gpu_stats_record '^GPU [0-9A-Fa-f]' "$pciid" "$HOSTNAME"
     fi
+}
+
+# Whole-card counterpart of gpu_vm_util_window. A card follows its vGPUs'
+# workload (dev util 98-99 during the cn13 busy loop), so panel 50 gets the
+# peak too; a MIG card reports [N/A] and produces no window line.
+gpu_host_util_window()
+{
+    if ! gpu_is_installed; then
+        return 0
+    fi
+
+    local ts samples tags rc
+    ts="$(date +%s)000000000"
+    samples=$(mktemp) || return 1
+    tags=$(mktemp) || { rm -f "$samples"; return 1; }
+
+    timeout "${GPU_UTIL_WINDOW_SEC:-285}" $NVIDIA_SMI \
+        --query-gpu=pci.bus_id,utilization.gpu,utilization.memory \
+        --format=csv,noheader,nounits -l 1 > "$samples"
+    rc=$?
+    if [ $rc -ne 0 ] && [ $rc -ne 124 ] && [ -s "$samples" ]; then
+        echo "gpu_host_util_window: nvidia-smi --query-gpu exited $rc before the window ended, keeping the samples read" >&2
+    fi
+
+    $NVIDIA_SMI -q 2>/dev/null | gpu_stats_parse host "" 2>/dev/null | gpu_util_window_tags pciid > "$tags"
+    gpu_util_window_parse host "$tags" "$ts" < "$samples"
+    rm -f "$samples" "$tags"
 }
