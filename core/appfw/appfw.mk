@@ -55,8 +55,25 @@ rootfs_install::
 # guard: this patch is a correctness fix, not a decoration, and a silent skip here
 # means os_purge_project() leaves every object behind while reporting success.
 # See the file for the detail.
+#
+# The two .patch files (each against the pristine .orig beside it) keep the purge
+# inside the project it was asked to purge, which upstream does not:
+#   - main.py hands connect_as_project() the project *name*, which with hex_sdk's OS_*
+#     credentials leaves the purge connection scoped to the operator's own project.
+#     What that connection lists by scope rather than by an explicit project filter is
+#     then the operator's: `os_purge_project <p>` emptied the admin project's swift
+#     account -- every container and object, volume-backups and log included -- instead
+#     of <p>'s, and never saw <p>'s own volumes. Measured on openstacksdk 3.0.0 and
+#     4.4.1 alike.
+#   - resources/heat.py lists stacks with list_stacks(), and heat hands the admin role
+#     ospurge grants itself every project's stacks, so even a correctly scoped purge
+#     deleted the stacks of every project in the cloud.
+# Applied the same unconditional way: patch exits non-zero on a missing file or a hunk
+# that no longer applies.
 rootfs_install::
 	$(Q)cp -f $(OSPURGE_PATCHDIR)/ospurge/resources/swift.py $(OSPURGE_SRCDIR)/ospurge/resources/swift.py
+	$(Q)patch --forward --no-backup-if-mismatch -r - $(OSPURGE_SRCDIR)/ospurge/main.py < $(OSPURGE_PATCHDIR)/ospurge/main.py.patch
+	$(Q)patch --forward --no-backup-if-mismatch -r - $(OSPURGE_SRCDIR)/ospurge/resources/heat.py < $(OSPURGE_PATCHDIR)/ospurge/resources/heat.py.patch
 
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf

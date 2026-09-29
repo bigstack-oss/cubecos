@@ -1,0 +1,34 @@
+--- ospurge/resources/heat.py
++++ ospurge/resources/heat.py
+@@ -18,7 +18,30 @@
+     def list(self):
+         if not self.cloud.has_service('orchestration'):
+             return []
+-        return self.cloud.list_stacks()
++        # Not list_stacks(): ospurge grants the operator the admin role on
++        # the purge project, and heat lists every project's stacks to an
++        # admin context whatever the token's scope. The SDK cannot narrow
++        # that -- its project_id filter goes out as tenant_id, which heat
++        # ignores, and its Stack carries no owner, so should_delete() lets
++        # every stack through. heat's own "tenant" filter does work, so ask
++        # for this project's stacks with it, one page at a time, and tag
++        # each with its owner for should_delete() to check again.
++        stacks, marker = [], None
++        while True:
++            params = {'tenant': self.cleanup_project_id}
++            if marker:
++                params['marker'] = marker
++            page = self.cloud.orchestration.get(
++                '/stacks', params=params).json()['stacks']
++            if not page:
++                return stacks
++            # heat only includes "project" for an admin context; without it
++            # the tenant filter above is all there is to go on.
++            stacks.extend(dict(s, name=s['stack_name'],
++                               project_id=s.get('project',
++                                                self.cleanup_project_id))
++                          for s in page)
++            marker = page[-1]['id']
+ 
+     def delete(self, resource):
+         self.cloud.delete_stack(resource['id'], wait=True)

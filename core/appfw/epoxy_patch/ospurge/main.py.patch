@@ -1,0 +1,22 @@
+--- ospurge/main.py
++++ ospurge/main.py
+@@ -125,8 +125,17 @@
+             self.disable_project_after_purge = not project.is_enabled
+ 
+             self.admin_cloud = self.cloud
+-            self.cloud = self.admin_cloud.connect_as_project(
+-                options.purge_project)
++            # Pass the project resource, not the name: connect_as_project()
++            # sets only project_name from a string, and when the operator's
++            # credentials come from OS_* environment variables, get_one()
++            # re-applies OS_PROJECT_NAME over it -- the "purge" connection
++            # stays scoped to the operator's own project. Whatever it lists by
++            # scope rather than by an explicit project filter is then the
++            # operator's: the swift account it empties is the operator's, and
++            # the purge project's own volumes are never seen. A dict (which a
++            # Project resource is) also carries project_id, which keystoneauth
++            # prefers, so the scope is the purge project's.
++            self.cloud = self.admin_cloud.connect_as_project(project)
+ 
+         logging.warning(
+             "Going to list and/or delete resources from project '%s'",
