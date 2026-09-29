@@ -27,24 +27,24 @@ ROOTFS_PIP += git+https://github.com/rancher/client-python.git@master
 # openstacksdk), so the install changes nothing here; it stays so that ospurge never
 # again depends on who else happens to share its venv.
 OSPURGE_REPO_URL := git+https://opendev.org/x/ospurge.git
-OSPURGE_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
-OSPURGE_PATCHDIR := $(COREDIR)/appfw/$(NEXT_OPENSTACK_RELEASE)_patch
+OSPURGE_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+OSPURGE_PATCHDIR := $(COREDIR)/appfw/$(OPENSTACK_RELEASE)_patch
 
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install --no-deps \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --no-deps \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		$(OSPURGE_REPO_URL)
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		openstacksdk pbr six
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# sdk_os.sh calls a bare "ospurge". The 3.9 install used to own
 	$(Q)# /usr/local/bin/ospurge, which precedes /usr/bin in the PATH hex_sdk sets;
 	$(Q)# with that gone, /usr/bin is where the console script belongs.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ospurge /usr/bin/ospurge
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ospurge /usr/bin/ospurge
 
 # ospurge is unmaintained upstream (x/ospurge, last release 2018) and its swift
 # resource does not survive openstacksdk 1.0 -- nor 3.0.0 (caracal), nor 4.4.1, which

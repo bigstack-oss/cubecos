@@ -45,8 +45,8 @@
 OCTAVIA_CONF_DIR := /etc/octavia
 OCTAVIA_CONFDIR := $(ROOTDIR)$(OCTAVIA_CONF_DIR)
 
-OCTAVIA_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/octavia
-OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(NEXT_OPENSTACK_RELEASE)_patch/octavia
+OCTAVIA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/octavia
+OCTAVIA_PATCHDIR := $(COREDIR)/octavia/$(OPENSTACK_RELEASE)_patch/octavia
 
 # https://releases.openstack.org/epoxy/index.html#epoxy-octavia -- 16.1.0 is the newest
 # 2025.1 release, the same "last numeric revision of the series" rule #1206 and #640
@@ -74,7 +74,7 @@ OCTAVIA_DASHBOARD_VER := 15.0.1
 # services still there. It cannot be bumped in place: 16.x requires octavia-lib>=3.8.0
 # and taskflow>=5.9.0, which os-caracal-pip-upper-constraints.txt holds at 3.5.0 and
 # 5.6.0 for watcher, which stayed on 2024.1 until #670. So the service moves alone into
-# $(NEXT_OPENSTACK_HOME_DIR), the same shape as its caracal hop (#640), one release on,
+# $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#640), one release on,
 # after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg, designate,
 # heat, ironic, manila and masakari.
 #
@@ -112,8 +112,8 @@ rootfs_install::
 	$(Q)#                          first token validation
 	$(Q)# All five happen to be in this venv already, but a dependency nothing asks
 	$(Q)# for is one that disappears silently.
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			octavia==$(OCTAVIA_VER) \
 			octavia-lib \
 			kazoo \
@@ -129,13 +129,13 @@ rootfs_install::
 	$(Q)# unlinked on purpose. octavia-wsgi, for serving the api under a wsgi
 	$(Q)# container, is left unlinked too: octavia-api.service execs octavia-api
 	$(Q)# directly. 2025.1 declares the same set as 2024.1.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/octavia-api /usr/bin/octavia-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/octavia-worker /usr/bin/octavia-worker
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/octavia-health-manager /usr/bin/octavia-health-manager
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/octavia-housekeeping /usr/bin/octavia-housekeeping
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/octavia-db-manage /usr/bin/octavia-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/octavia-driver-agent /usr/bin/octavia-driver-agent
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/octavia-status /usr/bin/octavia-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-api /usr/bin/octavia-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-worker /usr/bin/octavia-worker
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-health-manager /usr/bin/octavia-health-manager
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-housekeeping /usr/bin/octavia-housekeeping
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-db-manage /usr/bin/octavia-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-driver-agent /usr/bin/octavia-driver-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/octavia-status /usr/bin/octavia-status
 
 # the osc plugin
 #
@@ -149,8 +149,8 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-octaviaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -210,8 +210,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		octavia-dashboard==$(OCTAVIA_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

@@ -65,8 +65,8 @@ MANILA_APP_DIR := /var/lib/manila
 MANILA_LOG_DIR := /var/log/manila
 MANILA_RUN_DIR := /var/run/manila
 
-MANILA_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/manila
-MANILA_PATCHDIR := $(COREDIR)/manila/$(NEXT_OPENSTACK_RELEASE)_patch
+MANILA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/manila
+MANILA_PATCHDIR := $(COREDIR)/manila/$(OPENSTACK_RELEASE)_patch
 
 # manila-ui follows horizon, not the manila service: it installs next to horizon
 # because that is where collectstatic collects panels from. #662 moved horizon into
@@ -81,7 +81,7 @@ MANILA_UI_VER := 13.0.0
 # manila runs out of the epoxy venv, not the caracal one it shares with the 2024.1
 # services still there. It cannot be bumped in place: 20.x requires oslo.policy>=4.5.0,
 # which os-caracal-pip-upper-constraints.txt holds at 4.3.0 for octavia and the other
-# 2024.1 services. So the service moves alone into $(NEXT_OPENSTACK_HOME_DIR), the same
+# 2024.1 services. So the service moves alone into $(OPENSTACK_HOME_DIR), the same
 # shape as its caracal hop (#638), one release on, after keystone, glance, cinder,
 # nova/placement, neutron, barbican, cyborg, designate, heat and ironic.
 #
@@ -100,8 +100,8 @@ MANILA_UI_VER := 13.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			manila==$(MANILA_VER) \
 			PyMySQL \
 			\"oslo.messaging[kafka]\" \
@@ -112,14 +112,14 @@ rootfs_install::
 	$(Q)# every console script 20.0.2 declares. manila-all, which the RDO spec deleted
 	$(Q)# before packaging ("files unneeded in production"), is no longer declared at
 	$(Q)# all: upstream dropped the broken script (bug 2097445). 2025.1 adds none.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila-api /usr/bin/manila-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila-data /usr/bin/manila-data
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila-manage /usr/bin/manila-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila-rootwrap /usr/bin/manila-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila-scheduler /usr/bin/manila-scheduler
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila-share /usr/bin/manila-share
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila-status /usr/bin/manila-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila-wsgi /usr/bin/manila-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-api /usr/bin/manila-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-data /usr/bin/manila-data
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-manage /usr/bin/manila-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-rootwrap /usr/bin/manila-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-scheduler /usr/bin/manila-scheduler
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-share /usr/bin/manila-share
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-status /usr/bin/manila-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-wsgi /usr/bin/manila-wsgi
 
 # the client, its osc plugin and its cli
 #
@@ -130,8 +130,8 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-manilaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -139,7 +139,7 @@ rootfs_install::
 	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/manila, the path
 	$(Q)# python3-manilaclient used to own. The rpm also shipped /usr/bin/manila-3,
 	$(Q)# the Fedora python3 alias, which nothing calls and which is not recreated.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/manila /usr/bin/manila
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila /usr/bin/manila
 
 # install the manila web ui plugin, the openstack-manila-ui rpm's replacement.
 # Registering its panels and policy files is core/horizon's job, where every
@@ -150,8 +150,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		manila-ui==$(MANILA_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages
@@ -203,9 +203,9 @@ rootfs_install::
 	$(Q)# 0644, not 0640: the spec's %files marks both %attr(-, root, manila), i.e.
 	$(Q)# keep whatever mode the build produced, and `mv` off the wheel leaves 0644.
 	$(Q)# Verified against cc1, where both are -rw-r--r-- root:manila.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(NEXT_OPENSTACK_HOME_DIR)/etc/manila/api-paste.ini $(MANILA_CONF_DIR)/api-paste.ini
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(NEXT_OPENSTACK_HOME_DIR)/etc/manila/rootwrap.conf $(MANILA_CONF_DIR)/rootwrap.conf
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(NEXT_OPENSTACK_HOME_DIR)/etc/manila/rootwrap.d/share.filters $(MANILA_DATA_DIR)/rootwrap/share.filters
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/manila/api-paste.ini $(MANILA_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/manila/rootwrap.conf $(MANILA_CONF_DIR)/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/manila/rootwrap.d/share.filters $(MANILA_DATA_DIR)/rootwrap/share.filters
 	$(Q)# install security configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/manila/manila-sudoers /etc/sudoers.d/manila
 	$(Q)# install systemd unit files

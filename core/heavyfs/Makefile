@@ -75,8 +75,10 @@ rootfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
 	$(Q)# The release rpm pulls a ceph release rpm with it, and which one follows the
-	$(Q)# openstack release: antelope required centos-release-ceph-quincy, caracal
-	$(Q)# requires centos-release-ceph-reef -- which is the one core/ceph pins against.
+	$(Q)# openstack release: antelope required centos-release-ceph-quincy, caracal and
+	$(Q)# epoxy both require centos-release-ceph-reef -- which is the one core/ceph pins
+	$(Q)# against. (epoxy's also requires the same cloud, nfv-openvswitch and
+	$(Q)# rabbitmq-38 release rpms caracal's did.)
 	$(Q)#
 	$(Q)# That is why the quincy handling this block used to carry is gone. Under
 	$(Q)# antelope, quincy arrived on every build and could not simply be erased (`rpm -e
@@ -86,14 +88,20 @@ rootfs_install::
 	$(Q)# files and neither Obsoletes the other, so dnf otherwise saw 17.2.z and 18.2.z
 	$(Q)# at once and any *unpinned* dependency could resolve from the wrong release.
 	$(Q)#
-	$(Q)# Caracal never installs quincy, so there is nothing to disable -- and leaving
-	$(Q)# the line in would fail the build rather than no-op: `dnf config-manager
-	$(Q)# --set-disabled` on a repo that does not exist exits 1 ("No matching repo to
-	$(Q)# modify"). Measured on jim-1cc after doing the swap by hand.
+	$(Q)# Neither caracal nor epoxy installs quincy, so there is nothing to disable --
+	$(Q)# and leaving the line in would fail the build rather than no-op: `dnf
+	$(Q)# config-manager --set-disabled` on a repo that does not exist exits 1 ("No
+	$(Q)# matching repo to modify"). Measured on jim-1cc after doing the swap by hand.
 	$(Q)#
 	$(Q)# reef is still named explicitly rather than left to the dependency: it is what
 	$(Q)# core/ceph pins against, and an openstack release that later pairs with squid
 	$(Q)# should show up here as a conflict rather than as a silent ceph bump.
+	$(Q)#
+	$(Q)# What the openstack repo itself still supplies, now that no service comes
+	$(Q)# from an rpm, is the openvswitch glue rdo-ovn needs and part of the system
+	$(Q)# python 3.9 rpm set. The glue changes between releases -- epoxy's
+	$(Q)# rdo-openvswitch is 3.4 and Obsoletes the openvswitch3.3 core/neutron pins --
+	$(Q)# which is why core/neutron fetches the 3.3 builds from koji instead.
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-reef
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled highavailability
 
@@ -230,15 +238,15 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
 	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
 	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
-	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(NEXT_PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(NEXT_PYTHON_PATCH_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz
-	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER).tgz -C /usr/src/python-$(NEXT_PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER) && ./configure --enable-optimizations"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(NEXT_PYTHON_VER)/Python-$(NEXT_PYTHON_PATCH_VER) && make altinstall"
+	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(PYTHON_PATCH_VER)/Python-$(PYTHON_PATCH_VER).tgz
+	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz -C /usr/src/python-$(PYTHON_VER)
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && ./configure --enable-optimizations"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && make altinstall"
 	$(Q)umount -l $(ROOTDIR)/dev || true
 	$(Q)# ensure python 3.12 is successfully built
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(NEXT_PYTHON_VER) ]
-	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(NEXT_PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(PYTHON_VER) ]
+	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/pip$(PYTHON_VER) ]
 
 # NOTE: why the setuptools pin is applied at venv creation, below, rather than being
 # left to whichever later `pip install -c` happens to pull setuptools in as a
@@ -276,73 +284,43 @@ rootfs_install::
 # from 'xstatic.pkg' (unknown location)". A single pip invocation is fine -- pip
 # builds every sdist before installing any of them.
 
-# NOTE: os-caracal-pip-upper-constraints.txt is upstream's unmaintained/2024.1
-# upper-constraints.txt copied down verbatim, save for two local deltas -- where the
-# antelope file it replaced carried six. One is libvirt-python, raised to 11.10.0 so
-# that it builds against the libvirt-devel headers core/nova/nova.mk holds;
-# core/masakari/masakari.mk installed it into this venv after nova moved on to the
-# epoxy one, until masakari followed (#665), so nothing installs it here now. The
-# other is setuptools, and it is what this NOTE is about.
-# Upstream does not pin setuptools, so this venv used
-# to land on whatever was current (84.0.0), which was fine while skyline was the only
-# occupant. keystone is not: keystonemiddleware 10.6.0 does `import pkg_resources` in
-# _common/config.py, and setuptools 82 deleted pkg_resources, so every gunicorn worker
-# died at import with ModuleNotFoundError and openstack-keystone never came up (#631).
-#
-# The pin is therefore settled now, as one line in the constraints file, the same way
-# antelope pinned it -- but at 75.6.0, not antelope's 65.7.0. The two venvs had
-# different reasons for their numbers: antelope's was the version its own
-# upper-constraints named, while caracal's is a local delta with no upstream value to
-# match, so it takes
-# the newest release that clears both ceilings rather than a 2023 one inherited by
-# habit. 75.6.0 is the last setuptools of 2024 (2024-11-20), which puts it in the same
-# year as the release this venv carries.
-#
-# The two ceilings, both still honoured:
-#   - below 82 (2026-02-08), which deleted pkg_resources. That is the hard one, and
-#     it is a runtime requirement as much as a build one -- keystonemiddleware above,
-#     plus pbr's egg_info writer on every --no-build-isolation build in this venv.
-#   - below 80 (2025-04-27), which removed `setup.py install`. Nothing anywhere in
-#     the tree invokes that command any more: ceph's bindings moved to `pip install`
-#     (see core/ceph/ceph.mk), skyline's did too, and #636 converted the last four --
-#     the designate, masakari, watcher and neutron-vpnaas dashboards -- from a git
-#     clone to a pinned pip install as they followed horizon here. The ceiling is
-#     kept anyway: it costs nothing, and it is what makes a future `setup.py`
-#     install fail on review rather than on build day.
-#
-# Verified in a python 3.11 venv before the bump: horizon 24.0.2's six sdists build
-# under --no-build-isolation, ceph's rados and rbd bindings produce the same flat
-# .so + .dist-info layout as under 65.7.0 and import, and pkg_resources is present.
-
 # set up the execution context for openstack epoxy
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p $(NEXT_OPENSTACK_HOME_DIR)
-	$(Q)chroot $(ROOTDIR) python$(NEXT_PYTHON_VER) -m venv $(NEXT_OPENSTACK_HOME_DIR)
-	$(Q)cp -f $(NEXT_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
+	$(Q)chroot $(ROOTDIR) mkdir -p $(OPENSTACK_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) python$(PYTHON_VER) -m venv $(OPENSTACK_HOME_DIR)
+	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(OPENSTACK_HOME_DIR)/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-epoxy-pip-upper-constraints.txt is upstream's stable/2025.1
-# upper-constraints.txt copied down verbatim, save for two local deltas the caracal
-# file also carries: libvirt-python, raised to 11.10.0 to match the libvirt-devel
-# headers core/nova/nova.mk holds, and setuptools, which upstream does not pin.
-# setuptools is pinned at venv creation above for the reason the first NOTE before
-# the venv block gives.
+# upper-constraints.txt copied down verbatim, save for two local deltas: libvirt-python,
+# raised to 11.10.0 to match the libvirt-devel headers core/nova/nova.mk holds, and
+# setuptools, which upstream does not pin. setuptools is pinned at venv creation above
+# for the reason the NOTE before the venv block gives.
 #
-# The runtime half of the caracal argument has gone: keystonemiddleware 10.9.1 no
-# longer imports pkg_resources, and pbr 7.0.0 reaches for it only when
-# importlib.metadata is missing, which it never is on 3.12 -- keystone's whole import
-# chain loads with pkg_resources blocked. The build half has not: every
-# --no-build-isolation install in this venv builds against this setuptools, and four
-# of the sdists horizon 25.3.2 pulls in are XStatic packages whose setup.py imports a
-# pkg_resources-declared namespace. Built without pip's wheel cache, all four fail
-# under setuptools 82.0.0 with "No module named 'pkg_resources'" and build under
-# 79.0.1. So the ceilings are the caracal ones, below 82 and below 80, and so is the
-# rule for the number: the newest release that clears both. That is 79.0.1
-# (2025-04-23), the last before 80.0.0, and three weeks after epoxy shipped. Python
-# 3.12 sets a floor rather than a ceiling -- it removed pkgutil.ImpImporter, which
-# pkg_resources references unconditionally before setuptools 66.1 -- and 79.0.1
-# clears it.
+# The pin has two ceilings:
+#   - below 82 (2026-02-08), which deleted pkg_resources. On caracal that was a runtime
+#     requirement as well as a build one: keystonemiddleware 10.6.0 did `import
+#     pkg_resources`, so every keystone gunicorn worker died at import (#631). The
+#     runtime half has gone -- keystonemiddleware 10.9.1 no longer imports it, and
+#     pbr 7.0.0 reaches for it only when importlib.metadata is missing, which it never
+#     is on 3.12, so keystone's whole import chain loads with pkg_resources blocked.
+#     The build half has not: every --no-build-isolation install in this venv builds
+#     against this setuptools, and four of the sdists horizon 25.3.2 pulls in are
+#     XStatic packages whose setup.py imports a pkg_resources-declared namespace.
+#     Built without pip's wheel cache, all four fail under setuptools 82.0.0 with "No
+#     module named 'pkg_resources'" and build under 79.0.1.
+#   - below 80 (2025-04-27), which removed `setup.py install`. Nothing anywhere in the
+#     tree invokes that command any more: ceph's bindings moved to `pip install` (see
+#     core/ceph/ceph.mk), skyline's did too, and #636 converted the last four -- the
+#     designate, masakari, watcher and neutron-vpnaas dashboards -- from a git clone to
+#     a pinned pip install. The ceiling is kept anyway: it costs nothing, and it is
+#     what makes a future `setup.py` install fail on review rather than on build day.
+#
+# The number is the newest release that clears both: 79.0.1 (2025-04-23), the last
+# before 80.0.0, and three weeks after epoxy shipped. Python 3.12 sets a floor rather
+# than a ceiling -- it removed pkgutil.ImpImporter, which pkg_resources references
+# unconditionally before setuptools 66.1 -- and 79.0.1 clears it.
 
 # install the openstack cli inside the python 3.12 virtual environment
 #
@@ -374,13 +352,13 @@ rootfs_install::
 # tree calls it and no other venv console script is aliased that way, so it is not
 # recreated.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-openstackclient
 	$(Q)# Link the cli. hex_sdk reaches it by absolute path ($$OPENSTACK in
 	$(Q)# core/sdk_sh/modules.pre/sdk_01-var-static.sh is /usr/bin/openstack), so
 	$(Q)# this symlink is what carries every caller over.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/openstack /usr/bin/openstack
 
 # Allow admin to be sudoers
 rootfs_install::

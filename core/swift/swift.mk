@@ -48,11 +48,11 @@
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-swiftclient==4.7.1"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries. Nothing else owns this path, and it wins PATH (see above), so
 	$(Q)# a bare "swift" is epoxy 4.7.1.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/swift /usr/bin/swift
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/swift /usr/bin/swift

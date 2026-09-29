@@ -40,8 +40,8 @@ ROOTFS_DNF += $(LIBVIRT_LOCKED_RPMS) dosfstools python3-libvirt ksmtuned virt-v2
 # handled elsewhere: iptables
 ROOTFS_DNF_NOARCH += iptables-services novnc
 
-NOVA_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/nova
-NOVA_PATCHDIR := $(COREDIR)/nova/$(NEXT_OPENSTACK_RELEASE)_patch
+NOVA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/nova
+NOVA_PATCHDIR := $(COREDIR)/nova/$(OPENSTACK_RELEASE)_patch
 
 # nova and placement run out of the epoxy venv, not the caracal one they share with
 # every other 2024.1 service. nova 31.3.1 is the newest 2025.1 release and
@@ -82,8 +82,8 @@ NOVA_PATCHDIR := $(COREDIR)/nova/$(NEXT_OPENSTACK_RELEASE)_patch
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			nova==31.3.1 \
 			openstack-placement==13.0.0 \
 			python-novaclient \
@@ -100,29 +100,29 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link Nova binaries
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova /usr/bin/nova
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-api /usr/bin/nova-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-api-metadata /usr/bin/nova-api-metadata
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-api-os-compute /usr/bin/nova-api-os-compute
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-api-wsgi /usr/bin/nova-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-compute /usr/bin/nova-compute
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-conductor /usr/bin/nova-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-manage /usr/bin/nova-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-metadata-wsgi /usr/bin/nova-metadata-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-novncproxy /usr/bin/nova-novncproxy
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-policy /usr/bin/nova-policy
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-rootwrap /usr/bin/nova-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-rootwrap-daemon /usr/bin/nova-rootwrap-daemon
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-scheduler /usr/bin/nova-scheduler
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-serialproxy /usr/bin/nova-serialproxy
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-spicehtml5proxy /usr/bin/nova-spicehtml5proxy
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/nova-status /usr/bin/nova-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova /usr/bin/nova
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api /usr/bin/nova-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-metadata /usr/bin/nova-api-metadata
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-os-compute /usr/bin/nova-api-os-compute
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-wsgi /usr/bin/nova-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-compute /usr/bin/nova-compute
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-conductor /usr/bin/nova-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-manage /usr/bin/nova-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-metadata-wsgi /usr/bin/nova-metadata-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-novncproxy /usr/bin/nova-novncproxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-policy /usr/bin/nova-policy
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-rootwrap /usr/bin/nova-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-rootwrap-daemon /usr/bin/nova-rootwrap-daemon
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-scheduler /usr/bin/nova-scheduler
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-serialproxy /usr/bin/nova-serialproxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-spicehtml5proxy /usr/bin/nova-spicehtml5proxy
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-status /usr/bin/nova-status
 	$(Q)# Link Placement binaries (since they were removed from RPMs)
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/placement-api /usr/bin/placement-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/placement-manage /usr/bin/placement-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/placement-status /usr/bin/placement-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/placement-api /usr/bin/placement-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/placement-manage /usr/bin/placement-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/placement-status /usr/bin/placement-status
 	$(Q)# Link the uWSGI binary for Placement WSGI
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/uwsgi /usr/bin/uwsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/uwsgi /usr/bin/uwsgi
 
 # osc-placement, next to the openstack cli
 #
@@ -139,8 +139,8 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		osc-placement
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -166,7 +166,7 @@ rootfs_install::
 #
 # nova names oslo.privsep in the epoxy pip install above, and that one is its own:
 # config_nova.cpp pins four helper_command values at
-# $(NEXT_OPENSTACK_HOME_DIR)/bin/privsep-helper, since the caracal helper -- which has
+# $(OPENSTACK_HOME_DIR)/bin/privsep-helper, since the caracal helper -- which has
 # had no user since masakari followed (#665) -- cannot serve an epoxy nova.
 # Naming it rather than leaving it transitive is the same reasoning that names
 # python-designateclient in core/designate/designate.mk: a dependency nothing asks for
@@ -226,8 +226,8 @@ rootfs_install::
 	$(Q)# carries a second copy that only moves when someone remembers to re-copy it.
 	$(Q)# Unlike glance's, nova's rootwrap.conf never narrowed exec_dirs -- it was the
 	$(Q)# upstream default verbatim.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(NEXT_OPENSTACK_HOME_DIR)/etc/nova/api-paste.ini /etc/nova/api-paste.ini
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(NEXT_OPENSTACK_HOME_DIR)/etc/nova/rootwrap.conf /etc/nova/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/nova/api-paste.ini /etc/nova/api-paste.ini
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/nova/rootwrap.conf /etc/nova/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/policy.json /etc/nova/policy.json
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/release /etc/nova/release
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement-dist.conf /usr/share/placement/placement-dist.conf
@@ -254,7 +254,7 @@ rootfs_install::
 	$(Q)# install rootwrap filters
 	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/nova/rootwrap
 	$(Q)# also the wheel's, through the etc/nova/rootwrap.d/* glob in data_files
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(NEXT_OPENSTACK_HOME_DIR)/etc/nova/rootwrap.d/compute.filters /usr/share/nova/rootwrap/compute.filters
+	$(Q)chroot $(ROOTDIR) install -p -D -m 644 $(OPENSTACK_HOME_DIR)/etc/nova/rootwrap.d/compute.filters /usr/share/nova/rootwrap/compute.filters
 
 # adjust file ownerships and permissions
 rootfs_install::

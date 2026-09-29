@@ -9,7 +9,7 @@ BARBICAN_CONFDIR := $(ROOTDIR)/etc/barbican
 # It cannot be bumped in place: 20.0.0 requires oslo.policy>=4.5.0, which
 # os-caracal-pip-upper-constraints.txt holds at 4.3.0 for octavia, heat, manila and the
 # other 2024.1 services still in the caracal venv. So the service moves alone into
-# $(NEXT_OPENSTACK_HOME_DIR), the same shape as its caracal hop (#632), one release on,
+# $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#632), one release on,
 # after keystone, glance, cinder, nova/placement and neutron.
 #
 # PyKMIP: the kmip_secret_store plugin imports it unconditionally, oslo-config-generator
@@ -28,8 +28,8 @@ BARBICAN_CONFDIR := $(ROOTDIR)/etc/barbican
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		barbican==20.0.0 \
 		python-keystoneclient \
 		gunicorn \
@@ -39,15 +39,15 @@ rootfs_install::
 		python-memcached"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/barbican-db-manage /usr/bin/barbican-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/barbican-manage /usr/bin/barbican-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/barbican-retry /usr/bin/barbican-retry
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/barbican-status /usr/bin/barbican-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/pkcs11-kek-rewrap /usr/bin/pkcs11-kek-rewrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/pkcs11-key-generation /usr/bin/pkcs11-key-generation
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/barbican-wsgi-api /usr/bin/barbican-wsgi-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/barbican-worker /usr/bin/barbican-worker
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/barbican-keystone-listener /usr/bin/barbican-keystone-listener
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-db-manage /usr/bin/barbican-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-manage /usr/bin/barbican-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-retry /usr/bin/barbican-retry
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-status /usr/bin/barbican-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/pkcs11-kek-rewrap /usr/bin/pkcs11-kek-rewrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/pkcs11-key-generation /usr/bin/pkcs11-key-generation
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-wsgi-api /usr/bin/barbican-wsgi-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-worker /usr/bin/barbican-worker
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/barbican-keystone-listener /usr/bin/barbican-keystone-listener
 
 # python-barbicanclient
 #
@@ -70,8 +70,8 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-barbicanclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf

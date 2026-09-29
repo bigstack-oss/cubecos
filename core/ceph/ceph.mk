@@ -81,8 +81,8 @@ CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; e
 # venv (#664) the caracal one holds none, so the cpython-311 build went the way the
 # antelope venv's cpython-310 one did, and only 3.12 is built. The loops below keep
 # their shape, so a consumer on another interpreter is one entry in each list.
-CEPH_PYTHON_VERS := $(NEXT_PYTHON_VER)
-CEPH_OPENSTACK_VENVS := $(NEXT_OPENSTACK_HOME_DIR)
+CEPH_PYTHON_VERS := $(PYTHON_VER)
+CEPH_OPENSTACK_VENVS := $(OPENSTACK_HOME_DIR)
 CEPH_HOME_DIR := /opt/ceph
 
 # setuptools is pinned rather than left to float. Unpinned, the version is whatever

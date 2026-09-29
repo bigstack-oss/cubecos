@@ -9,8 +9,8 @@ CYBORG_RUN_DIR := /var/run/cyborg
 # https://releases.openstack.org/teams/cyborg.html
 # The service is a pinned pip install; nothing here is built from git any more,
 # so there is no checkout to patch and $(CYBORG_SRCDIR) is the installed package.
-CYBORG_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/cyborg
-CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(NEXT_OPENSTACK_RELEASE)_patch
+CYBORG_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/cyborg
+CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(OPENSTACK_RELEASE)_patch
 
 # install cyborg into the epoxy venv
 #
@@ -20,7 +20,7 @@ CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(NEXT_OPENSTACK_RELEASE)_patch
 # CVE-2026-40213 and CVE-2026-40214 on stable/2025.1. It cannot be bumped in place:
 # 14.x requires oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds
 # at 4.3.0 for octavia, heat, manila and the other 2024.1 services still in the
-# caracal venv. So the service moves alone into $(NEXT_OPENSTACK_HOME_DIR), the same
+# caracal venv. So the service moves alone into $(OPENSTACK_HOME_DIR), the same
 # shape as its caracal hop (#633), one release on, after keystone, glance, cinder,
 # nova/placement, neutron and barbican.
 #
@@ -44,8 +44,8 @@ CYBORG_PATCHDIR := $(COREDIR)/cyborg/$(NEXT_OPENSTACK_RELEASE)_patch
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		openstack-cyborg==14.1.0 \
 		PyMySQL \
 		\"oslo.messaging[kafka]\" \
@@ -53,12 +53,12 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/cyborg-agent /usr/bin/cyborg-agent
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/cyborg-api /usr/bin/cyborg-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/cyborg-conductor /usr/bin/cyborg-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/cyborg-dbsync /usr/bin/cyborg-dbsync
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/cyborg-status /usr/bin/cyborg-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/cyborg-wsgi-api /usr/bin/cyborg-wsgi-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-agent /usr/bin/cyborg-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-api /usr/bin/cyborg-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-conductor /usr/bin/cyborg-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-dbsync /usr/bin/cyborg-dbsync
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-status /usr/bin/cyborg-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg-wsgi-api /usr/bin/cyborg-wsgi-api
 
 # the osc plugin
 #
@@ -81,13 +81,13 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-cyborgclient
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link the cli plugin's console script
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/cyborg /usr/bin/cyborg
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cyborg /usr/bin/cyborg
 
 rootfs_install::
 	$(Q)[ -d $(CYBORG_PATCHDIR) ] && cp -rf $(CYBORG_PATCHDIR)/* $(CYBORG_SRCDIR)/ || /bin/true
@@ -107,8 +107,8 @@ rootfs_install::
 	$(Q)# oslo.policy's own default for CONF.oslo_policy.policy_file. 14.x removed
 	$(Q)# the policy.json fallback 12.0.0 still carried, so a policy.json would not
 	$(Q)# be read at all now.
-	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/cyborg/api-paste.ini $(CYBORG_CONF_DIR)/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/cyborg/policy.yaml $(CYBORG_CONF_DIR)/policy.yaml
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/cyborg/api-paste.ini $(CYBORG_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/cyborg/policy.yaml $(CYBORG_CONF_DIR)/policy.yaml
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg_sudoers ./etc/sudoers.d/
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg.conf.def .$(CYBORG_CONF_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/cyborg/cyborg-api.service ./lib/systemd/system

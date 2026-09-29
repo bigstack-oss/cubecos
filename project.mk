@@ -93,12 +93,12 @@ PROJ_NFS_PATH := /volume1/pxe-server
 PROJ_TEST_EXPORTS := "PS4=+[\\t]"
 
 # openstack version
-OPENSTACK_RELEASE := caracal
+OPENSTACK_RELEASE := epoxy
 OPENSTACK_HOME_DIR := /opt/openstack-$(OPENSTACK_RELEASE)
-OPS_GITHUB_BRANCH_01 := stable/2024.1
-OPS_GITHUB_BRANCH_02 := unmaintained/2024.1
-PYTHON_VER := 3.11
-PYTHON_PATCH_VER := 3.11.15
+OPS_GITHUB_BRANCH_01 := stable/2025.1
+OPS_GITHUB_BRANCH_02 := unmaintained/2025.1
+PYTHON_VER := 3.12
+PYTHON_PATCH_VER := 3.12.14
 OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
 OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
 
@@ -114,71 +114,48 @@ OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEA
 # holds for every hop after it. This pin does not follow the release name, ever.
 PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 
-# openstack next version -- filled in the way antelope's were while it was NEXT_*: a
-# second venv is built from these, components move into it one at a time, and the
-# values are promoted above once the move is done.
-#
-# The next hop is epoxy (2025.1), the SLURP release after caracal. It gets its own
-# python rather than sharing the caracal venv's 3.11: 3.12 is the newest runtime
-# 2025.1 is tested on, and #652 moves CubeCOS to it. keystone (27.1.0) is the first
-# occupant (#657), glance (30.2.0) the second (#656), cinder (26.3.0) the third (#655),
-# nova with placement (31.3.1 / 13.0.0) the fourth (#653), neutron (26.0.6) the
-# fifth (#654), barbican (20.0.0) the sixth (#658), cyborg (14.1.0) the seventh
-# (#659), designate (20.0.2) the eighth (#660), heat (24.1.1) the ninth (#661),
-# ironic with ironic-inspector (29.1.0 / 12.4.0) the tenth (#663), manila (20.0.2)
-# the eleventh (#664), masakari with masakari-monitors (19.1.0 / 19.0.0) the
-# twelfth (#665), octavia (16.1.0) the thirteenth (#667), watcher (14.1.2) the
-# fourteenth (#670), horizon (25.3.2) the fifteenth (#662), which took the eight
-# dashboard plugins, /usr/bin/openstack and its plugin clients with it -- the clients
-# every service hop before it had left in the caracal venv beside the cli, and skyline
-# the sixteenth (#668): upstream's skyline-apiserver 6.0.1 in place of our fork, and our
-# skyline-console fork unchanged. #669 moved python-swiftclient (4.7.1) rather than a
-# service, so it takes no place in that count.
-#
-# What #668 left in the caracal venv was not a service: ospurge (core/appfw). #652
-# moved it here, which emptied the caracal venv and let it go with its python 3.11
-# build, so these values are now only waiting to be promoted.
-NEXT_OPENSTACK_RELEASE := epoxy
-NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
-NEXT_OPS_GITHUB_BRANCH_01 := stable/2025.1
-NEXT_OPS_GITHUB_BRANCH_02 := unmaintained/2025.1
-NEXT_PYTHON_VER := 3.12
-NEXT_PYTHON_PATCH_VER := 3.12.14
-NEXT_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
-NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(NEXT_OPENSTACK_HOME_DIR)/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+# openstack next version -- left blank until the next hop, then filled in the way
+# epoxy's were while it was NEXT_*: a second venv is built from these, components move
+# into it one at a time, and the values are promoted above once the move is done.
+NEXT_OPENSTACK_RELEASE :=
+NEXT_OPENSTACK_HOME_DIR :=
+NEXT_OPS_GITHUB_BRANCH_01 :=
+NEXT_OPS_GITHUB_BRANCH_02 :=
+NEXT_PYTHON_VER :=
+NEXT_PYTHON_PATCH_VER :=
+NEXT_OPENSTACK_PIP_CONSTRAINT ?=
+NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
 
-# The caracal hop is complete -- the "openstack version" block IS caracal now, and the
-# antelope runtime is gone. /opt/openstack-caracal on python 3.11 was built alongside
-# the antelope venv so that caracal-era components would not drag their dependency
-# versions into the 2023.1 services, and the services moved into it one at a time:
+# The epoxy hop is complete -- the block above IS epoxy (2025.1, the SLURP release
+# after caracal) now, and there is no second runtime. /opt/openstack-epoxy was built
+# alongside the caracal venv with a python of its own, 3.12 -- the newest runtime
+# 2025.1 is tested on, and what #652 asked for -- and the services moved into it one
+# at a time:
 #
-#   skyline (first, its forks branch off upstream master at 4.0.1 / 4.0.0.0rc1, i.e.
-#   caracal rather than antelope), keystone 25.0.0 (#631), glance 28.2.0 (#630),
-#   cinder 24.5.0 (#629), nova with placement 29.4.0 / 11.0.1 (#627),
-#   neutron 24.2.2 (#628), manila 18.3.0 (#638), octavia 14.0.2 (#640),
-#   barbican 18.0.0 (#632), cyborg 12.0.0 (#633), designate 18.0.0 (#634),
-#   heat 22.0.1 (#635), ironic with ironic-inspector 24.1.5 / 12.1.1 (#637),
-#   masakari with masakari-monitors 17.0.0 / 17.0.1 (#639), watcher 12.1.0 (#643)
-#   and horizon 24.0.2 (#636), which took the eight dashboard plugins and the
-#   openstack cli with it.
+#   keystone 27.1.0 (#657), glance 30.2.0 (#656), cinder 26.3.0 (#655), nova with
+#   placement 31.3.1 / 13.0.0 (#653), neutron 26.0.6 (#654), barbican 20.0.0 (#658),
+#   cyborg 14.1.0 (#659), designate 20.0.2 (#660), heat 24.1.1 (#661), ironic with
+#   ironic-inspector 29.1.0 / 12.4.0 (#663), manila 20.0.2 (#664), masakari with
+#   masakari-monitors 19.1.0 / 19.0.0 (#665), octavia 16.1.0 (#667), watcher 14.1.2
+#   (#670), horizon 25.3.2 (#662), and skyline (#668): upstream's skyline-apiserver
+#   6.0.1 in place of our fork, and our skyline-console fork unchanged.
 #
-# The ordinals are merge order into develop; #642 moved python-swiftclient rather than
-# a service, so it takes no place in that count.
+# #669 moved python-swiftclient (4.7.1) rather than a service, so it takes no place in
+# that list.
 #
-# Several hops had to leave a piece behind: an osc plugin is a stevedore entry point,
-# visible only to the interpreter that runs /usr/bin/openstack, so barbican, designate,
-# masakari, octavia, watcher, cyborg, heat and manila each left their client in the
-# antelope venv, and designate, masakari, watcher and neutron-vpnaas left their horizon
-# dashboard plugin there too. #636 collected all of it: horizon, the eight dashboard
-# plugins, /usr/bin/openstack and the eight clients moved together.
+# As on the caracal hop, every service hop left its osc plugin client behind beside
+# /usr/bin/openstack -- a plugin is a stevedore entry point, visible only to the
+# interpreter that runs the cli -- and horizon's hop (#662) collected them: horizon,
+# the eight dashboard plugins, /usr/bin/openstack and its plugin clients moved together.
 #
-# What was left after the services was not a service at all: monasca, retired by #672
-# phase 4, and ospurge, moved into this venv by #625 -- which is what emptied the
-# antelope venv, allowed its python 3.10 build to go, and let these values be promoted
-# from CARACAL_* into the block above. Nothing is left on 3.10.
+# What was left after the services was not a service: ospurge, moved into this venv by
+# #652 -- which is what emptied the caracal venv, allowed its python 3.11 build to go,
+# and let these values be promoted from NEXT_* into the block above. Nothing is left on
+# 3.11.
 #
 # $(OPS_GITHUB_BRANCH_02) has no reader in this tree -- the four dashboard clones were
 # the last, and #636 took them -- but $(OPS_GITHUB_BRANCH_01) is still what
-# core/heavyfs passes to PROJ_INSTALL_PIP, so the pair is left intact. Note that the
-# ROOTFS_PIP entries it applies to name their own refs, so the branch is effectively
-# unused there too; it is kept because the next hop will want the pair.
+# core/heavyfs passes to PROJ_INSTALL_PIP, so the pair is left intact. That -b only
+# reaches the git clones installpip makes for ROOTFS_PIP_DL_FROM, and nothing in the
+# tree sets ROOTFS_PIP_DL_FROM, so the branch is effectively unused there too; it is
+# kept because the next hop will want the pair.

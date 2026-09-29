@@ -41,8 +41,8 @@
 
 HEAT_CONFDIR := $(ROOTDIR)/etc/heat
 
-HEAT_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages/heat
-HEAT_PATCHDIR := $(COREDIR)/heat/$(NEXT_OPENSTACK_RELEASE)_patch
+HEAT_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/heat
+HEAT_PATCHDIR := $(COREDIR)/heat/$(OPENSTACK_RELEASE)_patch
 
 # the release is needed twice: once to pin the wheel, once for [revision] heat_revision
 # https://releases.openstack.org/epoxy/index.html#epoxy-heat -- 24.1.1 is the newest
@@ -71,7 +71,7 @@ HEAT_DASHBOARD_VER := 13.0.0
 # 2024.1 service. It cannot be bumped in place: 24.x requires oslo.policy>=4.5.0, which
 # os-caracal-pip-upper-constraints.txt holds at 4.3.0 for octavia, manila and the other
 # 2024.1 services still in the caracal venv. So the service moves alone into
-# $(NEXT_OPENSTACK_HOME_DIR), the same shape as its caracal hop (#635), one release on,
+# $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#635), one release on,
 # after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg and
 # designate.
 #
@@ -89,8 +89,8 @@ HEAT_DASHBOARD_VER := 13.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			openstack-heat==$(HEAT_VER) \
 			PyMySQL \
 			\"oslo.messaging[kafka]\" \
@@ -104,12 +104,12 @@ rootfs_install::
 	$(Q)# unlinked on purpose. 2025.1 adds no console script and drops only
 	$(Q)# heat-keystone-setup, which was never linked. heat-api, heat-api-cfn and
 	$(Q)# heat-all are deprecated in favour of the wsgi scripts but still ship.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-all /usr/bin/heat-all
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-api /usr/bin/heat-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-api-cfn /usr/bin/heat-api-cfn
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-engine /usr/bin/heat-engine
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-manage /usr/bin/heat-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat-status /usr/bin/heat-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-all /usr/bin/heat-all
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-api /usr/bin/heat-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-api-cfn /usr/bin/heat-api-cfn
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-engine /usr/bin/heat-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-manage /usr/bin/heat-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat-status /usr/bin/heat-status
 
 # the osc plugin
 #
@@ -120,13 +120,13 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-heatclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# the heatclient CLI, which is python-heatclient's console script.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
 
 # prepare the build directory
 rootfs_install::
@@ -159,9 +159,9 @@ rootfs_install::
 	$(Q)# each hop moves only which venv prefix they are read from. The httpd and
 	$(Q)# uwsgi samples 2025.1 adds to etc/heat are not data_files, so they never
 	$(Q)# reach the prefix.
-	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/heat/api-paste.ini /etc/heat/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -rf $(NEXT_OPENSTACK_HOME_DIR)/etc/heat/environment.d /etc/heat/
-	$(Q)chroot $(ROOTDIR) cp -rf $(NEXT_OPENSTACK_HOME_DIR)/etc/heat/templates /etc/heat/
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/heat/api-paste.ini /etc/heat/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/heat/environment.d /etc/heat/
+	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/heat/templates /etc/heat/
 	$(Q)# install systemd unit files
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/heat/openstack-heat-api.service /usr/lib/systemd/system/openstack-heat-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/heat/openstack-heat-api-cfn.service /usr/lib/systemd/system/openstack-heat-api-cfn.service
@@ -239,8 +239,8 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		heat-dashboard==$(HEAT_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages

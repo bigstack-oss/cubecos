@@ -42,8 +42,8 @@ DESIGNAT_LOG_DIR := /var/log/designate
 
 # The console scripts patched below live in the epoxy venv with the service, and so,
 # since #662, do the dashboard and the osc plugin -- see the install blocks.
-DESIGNATE_BINDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/bin
-DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(NEXT_OPENSTACK_RELEASE)_bin_patch
+DESIGNATE_BINDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/bin
+DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(OPENSTACK_RELEASE)_bin_patch
 
 # install designate into the epoxy venv
 #
@@ -53,7 +53,7 @@ DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(NEXT_OPENSTACK_RELEASE)_bin_pat
 # the cross-pool zone ownership check (bug 2160533). It cannot be bumped in place:
 # 20.x requires oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds
 # at 4.3.0 for octavia, heat, manila and the other 2024.1 services still in the
-# caracal venv. So the service moves alone into $(NEXT_OPENSTACK_HOME_DIR), the same
+# caracal venv. So the service moves alone into $(OPENSTACK_HOME_DIR), the same
 # shape as its caracal hop (#634), one release on, after keystone, glance, cinder,
 # nova/placement, neutron, barbican and cyborg.
 #
@@ -76,8 +76,8 @@ DESIGNATE_BIN_PATCHDIR := $(COREDIR)/designate/$(NEXT_OPENSTACK_RELEASE)_bin_pat
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		designate==20.0.2 \
 		PyMySQL \
 		\"oslo.messaging[kafka]\" \
@@ -85,16 +85,16 @@ rootfs_install::
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link binaries
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-api /usr/bin/designate-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-api-wsgi /usr/bin/designate-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-central /usr/bin/designate-central
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-manage /usr/bin/designate-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-mdns /usr/bin/designate-mdns
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-producer /usr/bin/designate-producer
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-rootwrap /usr/bin/designate-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-sink /usr/bin/designate-sink
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-status /usr/bin/designate-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/designate-worker /usr/bin/designate-worker
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-api /usr/bin/designate-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-api-wsgi /usr/bin/designate-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-central /usr/bin/designate-central
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-manage /usr/bin/designate-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-mdns /usr/bin/designate-mdns
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-producer /usr/bin/designate-producer
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-rootwrap /usr/bin/designate-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-sink /usr/bin/designate-sink
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-status /usr/bin/designate-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/designate-worker /usr/bin/designate-worker
 
 # the osc plugin and the dashboard
 #
@@ -115,12 +115,12 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-designateclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		designate-dashboard==$(DESIGNATE_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
@@ -142,9 +142,9 @@ rootfs_install::
 	$(Q)# They used to be copied from the git checkout, which pip replaced in #634.
 	$(Q)# 20.0.0 ships rootwrap.conf under its real name instead of as
 	$(Q)# rootwrap.conf.sample; the content is unchanged.
-	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/designate/api-paste.ini $(DESIGNATE_CONF_DIR)/api-paste.ini
-	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/designate/rootwrap.conf $(DESIGNATE_CONF_DIR)/rootwrap.conf
-	$(Q)chroot $(ROOTDIR) cp -rf $(NEXT_OPENSTACK_HOME_DIR)/etc/designate/rootwrap.d $(DESIGNATE_CONF_DIR)/
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/designate/api-paste.ini $(DESIGNATE_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/designate/rootwrap.conf $(DESIGNATE_CONF_DIR)/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) cp -rf $(OPENSTACK_HOME_DIR)/etc/designate/rootwrap.d $(DESIGNATE_CONF_DIR)/
 	$(Q)# policy.yaml.sample is the one file designate's data_files does *not* ship, so
 	$(Q)# there is no venv prefix copy to take. It is generated from upstream's
 	$(Q)# designate-policy-generator.conf and checked in, the same way designate.conf.sample

@@ -10,9 +10,9 @@ SKYLINE_LOG_DIR := /var/log/skyline
 # caracal one #641 gave it. gunicorn and alembic come from skyline-apiserver's own
 # requirements inside that venv, which is why ROOTFS_PIP_NC carries no gunicorn --
 # nothing else used the system copy.
-SKYLINE_VENV := $(NEXT_OPENSTACK_HOME_DIR)
+SKYLINE_VENV := $(OPENSTACK_HOME_DIR)
 SKYLINE_PIP := $(SKYLINE_VENV)/bin/pip
-SKYLINE_PIP_C := -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT)
+SKYLINE_PIP_C := -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT)
 
 # https://releases.openstack.org/epoxy/index.html#epoxy-skyline-apiserver -- 6.0.1 is
 # the newest 2025.1 release.
@@ -35,7 +35,7 @@ SKYLINE_APISERVER_VER := 6.0.1
 # Reviewable unified diffs against the sdist, <rel>.patch beside a pristine <rel>.orig.
 # They are applied to a freshly unpacked tree on every build, so --forward never sees
 # an already-patched file.
-SKYLINE_PATCHDIR := $(COREDIR)/skyline/$(NEXT_OPENSTACK_RELEASE)_patch
+SKYLINE_PATCHDIR := $(COREDIR)/skyline/$(OPENSTACK_RELEASE)_patch
 
 # skyline user/group/directory
 rootfs_install::

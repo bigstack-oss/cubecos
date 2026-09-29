@@ -25,8 +25,8 @@ MASAKARI_RUN_DIR := /var/run/masakari
 # was. It was last re-derived for 10.0.0, which added 'vmoves' to the panels tuple two
 # lines above the change and renamed ugettext_lazy to gettext_lazy, so the 8.0.0
 # hunk's context no longer matched.
-MASAKARI_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
-MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(NEXT_OPENSTACK_RELEASE)_patch
+MASAKARI_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+MASAKARI_PATCHDIR := $(COREDIR)/masakari/$(OPENSTACK_RELEASE)_patch
 
 # masakari common
 rootfs_install::
@@ -45,7 +45,7 @@ rootfs_install::
 # Both services run out of the epoxy venv, not the caracal one they shared with the
 # 2024.1 services still there. They cannot be bumped in place: 19.x requires
 # oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds at 4.3.0 for
-# octavia and the other 2024.1 services. So they move into $(NEXT_OPENSTACK_HOME_DIR)
+# octavia and the other 2024.1 services. So they move into $(OPENSTACK_HOME_DIR)
 # together, the same shape as their caracal hop (#639), one release on, after
 # keystone, glance, cinder, nova/placement, neutron, barbican, cyborg, designate, heat,
 # ironic and manila. masakari-monitors' three carried patches apply to 19.0.0
@@ -73,8 +73,8 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		masakari==19.1.0 \
 		masakari-monitors==19.0.0 \
 		libvirt-python \
@@ -86,15 +86,15 @@ rootfs_install::
 	$(Q)# Link binaries -- masakari's four console_scripts plus its one wsgi_script,
 	$(Q)# and masakarimonitors' four; 2025.1 declares the same nine as 2024.1. The
 	$(Q)# units keep naming /usr/bin/*, so the retarget here is the whole of their move.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-api /usr/bin/masakari-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-engine /usr/bin/masakari-engine
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-manage /usr/bin/masakari-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-status /usr/bin/masakari-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-wsgi /usr/bin/masakari-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-hostmonitor /usr/bin/masakari-hostmonitor
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-instancemonitor /usr/bin/masakari-instancemonitor
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-introspectiveinstancemonitor /usr/bin/masakari-introspectiveinstancemonitor
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/masakari-processmonitor /usr/bin/masakari-processmonitor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-api /usr/bin/masakari-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-engine /usr/bin/masakari-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-manage /usr/bin/masakari-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-status /usr/bin/masakari-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-wsgi /usr/bin/masakari-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-hostmonitor /usr/bin/masakari-hostmonitor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-instancemonitor /usr/bin/masakari-instancemonitor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-introspectiveinstancemonitor /usr/bin/masakari-introspectiveinstancemonitor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/masakari-processmonitor /usr/bin/masakari-processmonitor
 
 # the osc plugin and the dashboard
 #
@@ -125,12 +125,12 @@ MASAKARI_DASHBOARD_VER := 12.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-masakariclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		masakari-dashboard==$(MASAKARI_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
@@ -145,7 +145,7 @@ rootfs_install::
 	$(Q)# instead of going stale silently. cinder.mk, glance.mk and designate.mk do
 	$(Q)# the same. It is byte-identical between 17.0.0 and 19.1.0, so the hop moves
 	$(Q)# only which venv prefix it is read from.
-	$(Q)chroot $(ROOTDIR) cp -f $(NEXT_OPENSTACK_HOME_DIR)/etc/masakari/api-paste.ini $(MASAKARI_CONF_DIR)/api-paste.ini
+	$(Q)chroot $(ROOTDIR) cp -f $(OPENSTACK_HOME_DIR)/etc/masakari/api-paste.ini $(MASAKARI_CONF_DIR)/api-paste.ini
 	$(Q)# -f: treat the destination as the full target path. Without it the install
 	$(Q)# script takes masakari.conf.def for a directory and drops the sample inside
 	$(Q)# it, so config_masakari.cpp's LoadConfig() finds nothing to read.

@@ -56,8 +56,8 @@ WATCHER_RUN_DIR := /var/run/watcher
 #       the CubeCOS strategy, installed verbatim and byte-identical to caracal's. It
 #       has no upstream counterpart; strategies/base.py is unchanged between 12.1.0
 #       and 14.1.2 and the model methods it calls kept their signatures.
-WATCHER_SRCDIR := $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/lib/python$(NEXT_PYTHON_VER)/site-packages
-WATCHER_PATCHDIR := $(COREDIR)/watcher/$(NEXT_OPENSTACK_RELEASE)_patch
+WATCHER_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch
 
 # https://releases.openstack.org/epoxy/index.html#epoxy-watcher-dashboard -- 13.0.0 is
 # the epoxy release, and the only one of the series.
@@ -77,7 +77,7 @@ WATCHER_DASHBOARD_VER := 13.0.0
 # skyline and the osc clients. It cannot be bumped in place: 14.x requires
 # oslo.policy>=4.5.0 and python-observabilityclient>=0.3.0, which
 # os-caracal-pip-upper-constraints.txt holds at 4.3.0 and 0.1.1. So the service moves
-# alone into $(NEXT_OPENSTACK_HOME_DIR), the same shape as its caracal hop (#643), one
+# alone into $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#643), one
 # release on, after keystone, glance, cinder, nova/placement, neutron, barbican,
 # cyborg, designate, heat, ironic, manila, masakari and octavia.
 #
@@ -103,8 +103,8 @@ WATCHER_DASHBOARD_VER := 13.0.0
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-watcher==$(WATCHER_VER) \
 			PyMySQL \
 			\"oslo.messaging[kafka]\" \
@@ -116,13 +116,13 @@ rootfs_install::
 	$(Q)# declares the same seven as 2024.1. The units, config_watcher.cpp and
 	$(Q)# hex_sdk's migrate_watcher_db all reach the service through these, so the
 	$(Q)# retarget here is the whole of their move.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-api /usr/bin/watcher-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-api-wsgi /usr/bin/watcher-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-applier /usr/bin/watcher-applier
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-db-manage /usr/bin/watcher-db-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-decision-engine /usr/bin/watcher-decision-engine
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-status /usr/bin/watcher-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher-sync /usr/bin/watcher-sync
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-api /usr/bin/watcher-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-api-wsgi /usr/bin/watcher-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-applier /usr/bin/watcher-applier
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-db-manage /usr/bin/watcher-db-manage
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-decision-engine /usr/bin/watcher-decision-engine
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-status /usr/bin/watcher-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher-sync /usr/bin/watcher-sync
 
 # the osc plugin and the web ui plugin
 #
@@ -156,17 +156,17 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-watcherclient
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		watcher-dashboard==$(WATCHER_DASHBOARD_VER)
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/watcher /usr/bin/watcher
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/watcher /usr/bin/watcher
 
 # install system directories and files
 #

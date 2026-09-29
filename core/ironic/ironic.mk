@@ -77,7 +77,7 @@ ROOTFS_DNF_NOARCH += syslinux-tftpboot
 # services still there. It cannot be bumped in place: 29.x and 12.4.0 both require
 # oslo.policy>=4.5.0, which os-caracal-pip-upper-constraints.txt holds at 4.3.0 for
 # octavia, manila and the other 2024.1 services. So the pair moves alone into
-# $(NEXT_OPENSTACK_HOME_DIR), the same shape as its caracal hop (#637), one release on,
+# $(OPENSTACK_HOME_DIR), the same shape as its caracal hop (#637), one release on,
 # after keystone, glance, cinder, nova/placement, neutron, barbican, cyborg, designate
 # and heat.
 #
@@ -106,8 +106,8 @@ ROOTFS_DNF_NOARCH += syslinux-tftpboot
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
+		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		ironic==$(IRONIC_VER) \
 		ironic-inspector==$(IRONIC_INSP_VER) \
 		PyMySQL \
@@ -123,26 +123,26 @@ rootfs_install::
 	$(Q)# ironic-novncproxy (2025.1), the graphical console proxy, which needs a [vnc]
 	$(Q)# section config_ironic.cpp does not write. The share/ironic/vnc-container
 	$(Q)# data_files that goes with it stays under the venv prefix, unused.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic /usr/bin/ironic
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-api /usr/bin/ironic-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-api-wsgi /usr/bin/ironic-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-conductor /usr/bin/ironic-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-dbsync /usr/bin/ironic-dbsync
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-rootwrap /usr/bin/ironic-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-status /usr/bin/ironic-status
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector /usr/bin/ironic-inspector
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-api-wsgi /usr/bin/ironic-inspector-api-wsgi
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-conductor /usr/bin/ironic-inspector-conductor
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-dbsync /usr/bin/ironic-inspector-dbsync
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-migrate-data /usr/bin/ironic-inspector-migrate-data
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-rootwrap /usr/bin/ironic-inspector-rootwrap
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic /usr/bin/ironic
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-api /usr/bin/ironic-api
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-api-wsgi /usr/bin/ironic-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-conductor /usr/bin/ironic-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-dbsync /usr/bin/ironic-dbsync
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-rootwrap /usr/bin/ironic-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-status /usr/bin/ironic-status
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector /usr/bin/ironic-inspector
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-api-wsgi /usr/bin/ironic-inspector-api-wsgi
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-conductor /usr/bin/ironic-inspector-conductor
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-dbsync /usr/bin/ironic-inspector-dbsync
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-migrate-data /usr/bin/ironic-inspector-migrate-data
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-rootwrap /usr/bin/ironic-inspector-rootwrap
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-inspector-status /usr/bin/ironic-inspector-status
 	$(Q)# provided by networking-baremetal, installed with neutron -- so it follows
 	$(Q)# neutron's venv, not ironic's. neutron moved to the epoxy one first (#654)
 	$(Q)# and reopened the split #1194 had to reason about; with ironic in the epoxy
 	$(Q)# venv too, the agent and the service it reports for share an interpreter
 	$(Q)# again, as they did after #637.
-	$(Q)chroot $(ROOTDIR) ln -sf $(NEXT_OPENSTACK_HOME_DIR)/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
+	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/ironic-neutron-agent /usr/bin/ironic-neutron-agent
 
 # install the osc plugin and the ironic web ui plugin
 #
@@ -158,14 +158,14 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-ironicclient
 	$(Q)# --no-build-isolation: ironic-ui pulls horizon, whose sdist-only XStatic
 	$(Q)# dependencies cannot be built against a current setuptools. See the note by
 	$(Q)# the venv bootstrap in core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install \
-		-c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		ironic-ui==$(IRONIC_UI_VER)
 	$(Q)# clean up dns configurations after downloading packages
@@ -213,7 +213,7 @@ rootfs_install::
 	$(Q)# notice arrived without a repo edit. 29.1.0's copy is byte-identical.
 	$(Q)# ironic-inspector carries no data_files at all, so its two rootwrap files
 	$(Q)# stay checked in.
-	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(NEXT_OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.conf $(IRONIC_CONF_DIR)/rootwrap.conf
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/ironic/rootwrap.conf $(IRONIC_CONF_DIR)/rootwrap.conf
 	$(Q)# rootwrap.d/ironic-utils.filters is the other data_file, and it is
 	$(Q)# deliberately NOT installed. 24.1.5 emptied it -- ironic's last two
 	$(Q)# run_as_root=True call sites (mount/umount in ironic/common/utils.py) are
