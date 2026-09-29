@@ -1155,18 +1155,20 @@ os_keystone_idp_config()
 # The links are the part that goes missing. Caracal marks the default roles immutable, so
 # on a caracal cluster the roles themselves cannot be deleted -- the loop below is for a
 # cluster arriving from a release that had no `manager` at all, or that deleted `member`
-# and took the implications hanging off it with it.
+# and took the implications hanging off it with it. It creates them --immutable, as
+# bootstrap does: `keystone-status upgrade check` fails any of admin/member/reader that is
+# not, and an immutable role still takes implications.
 #
 # This restores the chain and adds _member_ -> member, so every existing _member_
 # assignment grants member and reader at token issue with no assignment changes.
-# Idempotent -- safe on every commit and on clusters upgraded from older releases.
+# Idempotent -- migrate_keystone_member_role runs it once per rootfs, fresh or upgraded.
 os_keystone_legacy_member_role_setup()
 {
     local prior implied role
 
     for role in manager member reader ; do
         if ! $OPENSTACK role show $role >/dev/null 2>&1 ; then
-            Quiet -n $OPENSTACK role create $role
+            Quiet -n $OPENSTACK role create --immutable $role
         fi
     done
 

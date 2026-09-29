@@ -120,6 +120,38 @@ migrate_keystone_service_role()
     touch $STATE_DIR/keystone_service_role_migrated
 }
 
+# The implied-role chain and the _member_ bridge (cubecos#216) on every cluster, not just a
+# fresh one. os_keystone_legacy_member_role_setup was written to repair upgraded clusters,
+# but its only caller was SetupPublicAdminUser, which runs only when the keystone database
+# does not exist yet. cube36 came through the 3.1.10 -> 3.1.20 roll with no member, no
+# manager and an empty implied_role table: admin's token carried only `admin`, so every
+# caracal default keyed on role:member / role:reader denied it (heat stacks:index,
+# #631/#632/#635/#645), and api_s3_user_setup left cube-cos-api with no role at all.
+#
+# Own marker, because a pass that changes nothing is five CLI round trips (~12s on cube36)
+# and keystone commits often. The marker ships empty with each rootfs, so every firmware
+# upgrade checks the chain once more. It is written only when the chain reads back complete,
+# so a pass that could not reach keystone retries on the next commit.
+migrate_keystone_member_role()
+{
+    if [ -f $STATE_DIR/keystone_member_role_migrated ] ; then
+        return 0
+    fi
+
+    is_control_node || return 0
+
+    local edge chain=$($HEX_SDK os_keystone_legacy_member_role_setup)
+    for edge in "admin implies manager" "manager implies member" "member implies reader" \
+                "_member_ implies member" ; do
+        if ! echo "$chain" | grep -qx "$edge" ; then
+            log_error "migrate_keystone_member_role: \"$edge\" missing, retrying on next commit"
+            return 1
+        fi
+    done
+
+    touch $STATE_DIR/keystone_member_role_migrated
+}
+
 # Retiring an OpenStack service leaves state behind that the A/B partition swap does not
 # take: its keystone catalogue entries, its MySQL database and the MySQL users that own it.
 # Everything under /etc, in a venv or in a unit file lives only in the rootfs and goes with
