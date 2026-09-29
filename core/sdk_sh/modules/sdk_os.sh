@@ -2880,7 +2880,12 @@ os_purge_project()
         exit 1
     fi
 
-    $OPENSTACK -v project purge --project=$project
+    # ospurge and the loops above have emptied the project, so only the project itself
+    # is left. Not `project purge`: python-openstackclient has no such command any more
+    # (neither caracal's 6.6.1 nor epoxy's 7.5.1). Not `project cleanup` either: its
+    # heat step deletes every stack heat lists, and heat lists every project's stacks
+    # to the admin role this runs with.
+    $OPENSTACK -v project delete $project
 }
 
 # params:
