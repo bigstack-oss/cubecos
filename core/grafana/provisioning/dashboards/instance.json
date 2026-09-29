@@ -1084,7 +1084,7 @@
             "y": 9
           },
           "hiddenSeries": false,
-          "description": "vGPU compute workload % of this VM, as reported by the host. Sampled every 5 minutes: a workload shorter than that may not appear. MIG-backed vGPUs report no utilization; pGPU (passthrough) VMs have no GPU data.",
+          "description": "vGPU compute workload % of this VM, as reported by the host. Peak and average of 1-second samples over each 5-minute window: a workload shorter than about 15 seconds at the end of a window may not appear. MIG-backed vGPUs report no utilization; pGPU (passthrough) VMs have no GPU data.",
           "id": 36,
           "legend": {
             "avg": false,
@@ -1112,7 +1112,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "alias": "[[tag_name]]",
+              "alias": "[[tag_name]] peak",
               "groupBy": [
                 {
                   "params": [
@@ -1143,7 +1143,57 @@
                 [
                   {
                     "params": [
-                      "util_gpu"
+                      "util_gpu_max"
+                    ],
+                    "type": "field"
+                  },
+                  {
+                    "params": [],
+                    "type": "max"
+                  }
+                ]
+              ],
+              "tags": [
+                {
+                  "key": "vm_uuid",
+                  "operator": "=~",
+                  "value": "/^$UUID$/"
+                }
+              ]
+            },
+            {
+              "alias": "[[tag_name]] avg",
+              "groupBy": [
+                {
+                  "params": [
+                    "$__interval"
+                  ],
+                  "type": "time"
+                },
+                {
+                  "params": [
+                    "name"
+                  ],
+                  "type": "tag"
+                },
+                {
+                  "params": [
+                    "linear"
+                  ],
+                  "type": "fill"
+                }
+              ],
+              "measurement": "gpu.vm",
+              "orderByTime": "ASC",
+              "policy": "default",
+              "queryType": "randomWalk",
+              "refId": "B",
+              "resultFormat": "time_series",
+              "select": [
+                [
+                  {
+                    "params": [
+                      "util_gpu_mean"
                     ],
                     "type": "field"
                   },
