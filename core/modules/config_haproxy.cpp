@@ -310,7 +310,7 @@ WriteSecHeaders(FILE *fout)
 
 static bool
 WriteConfig(bool ha, const std::string& ctrlVip,
-            const std::string& ctrlHosts, const std::string& ctrlAddrs, const std::string& strfAddrs)
+            const std::string& ctrlHosts, const std::string& ctrlAddrs)
 {
     FILE *fout = fopen(CONF_HA, "w");
     if (!fout) {
@@ -368,7 +368,6 @@ WriteConfig(bool ha, const std::string& ctrlVip,
 
     auto hosts = hex_string_util::split(ctrlHosts, ',');
     auto addrs = hex_string_util::split(ctrlAddrs, ',');
-    auto strfs = hex_string_util::split(strfAddrs, ',');
 
     enum {
         SRV_NAME,
@@ -419,7 +418,13 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         { "cube_cos_api", "8082", "httpchk", "  option  httpchk GET /live" },
         { "cube_cos_ui", "8083", "http", "" },
         { "ceph_restful_api", "8005,8003", "tcp", "" },
-        { "ceph_prometheus_ep", "9285,9283", "httpchk,strf", "  option  httpchk GET /metrics\n  http-check expect rstring .*ceph.*" },
+        // Each mgr is reached on its management address, because that is where
+        // EnableMgrPrometheus (config_ceph.cpp) binds it: mgr/prometheus/server_addr is set
+        // per daemon to MGMT_ADDR. This listener used to take the storage-frontend
+        // addresses, which only worked while every mgr bound the wildcard. On a cluster
+        // whose storage network is separate, every backend has been DOWN since that bind
+        // was narrowed -- cube36's 172.16.36.x, #672.
+        { "ceph_prometheus_ep", "9285,9283", "httpchk", "  option  httpchk GET /metrics\n  http-check expect rstring .*ceph.*" },
         { "ceph_dashboard", "7443,7442", "httpschk", "  option  httpchk GET /ceph/\n  http-check expect status 200" },
         { "ceph_nfs_ganesha", "2049,2049", "tcp", "" }
     };
@@ -490,26 +495,14 @@ WriteConfig(bool ha, const std::string& ctrlVip,
             if (srvlist[i][SRV_CONN] == "httpschk")
                 sslVerify = " check-ssl verify none";
 
-            if (srvlist[i][SRV_CONN].find("strf") != std::string::npos && strfs.size() == (unsigned long)size) {
-                if (srvlist[i][SRV_OPTS].find("ap") != std::string::npos)
-                    fprintf(fout, "  server %s %s:%s %scheck inter 2000 rise 2 fall 5%s\n",
-                                  hosts[n].c_str(), strfs[n].c_str(), bport.c_str(),
-                                  n ? "backup " : "on-marked-down shutdown-sessions on-marked-up shutdown-backup-sessions ",
-                                  sslVerify.c_str());
-                else
-                    fprintf(fout, "  server %s %s:%s check inter 2000 rise 2 fall 5%s\n",
-                                  hosts[n].c_str(), strfs[n].c_str(), bport.c_str(), sslVerify.c_str());
-            }
-            else {
-                if (srvlist[i][SRV_OPTS].find("ap") != std::string::npos)
-                    fprintf(fout, "  server %s %s:%s %scheck inter 2000 rise 2 fall 5%s\n",
-                                  hosts[n].c_str(), addrs[n].c_str(), bport.c_str(),
-                                  n ? "backup " : "on-marked-down shutdown-sessions on-marked-up shutdown-backup-sessions ",
-                                  sslVerify.c_str());
-                else
-                    fprintf(fout, "  server %s %s:%s check inter 2000 rise 2 fall 5%s\n",
-                                  hosts[n].c_str(), addrs[n].c_str(), bport.c_str(), sslVerify.c_str());
-            }
+            if (srvlist[i][SRV_OPTS].find("ap") != std::string::npos)
+                fprintf(fout, "  server %s %s:%s %scheck inter 2000 rise 2 fall 5%s\n",
+                              hosts[n].c_str(), addrs[n].c_str(), bport.c_str(),
+                              n ? "backup " : "on-marked-down shutdown-sessions on-marked-up shutdown-backup-sessions ",
+                              sslVerify.c_str());
+            else
+                fprintf(fout, "  server %s %s:%s check inter 2000 rise 2 fall 5%s\n",
+                              hosts[n].c_str(), addrs[n].c_str(), bport.c_str(), sslVerify.c_str());
         }
         fprintf(fout, "\n");
     }
@@ -628,10 +621,9 @@ Commit(bool modified, int dryLevel)
     bool enabled = IsControl(s_eCubeRole) && s_enabled;
     std::string myip = G(MGMT_ADDR);
     std::string sharedId = G(SHARED_ID);
-    std::string strfAddrs = HexUtilPOpen(HEX_SDK " cube_control_strf_addrs");
 
     WriteLocalConfig(s_ha, myip, sharedId, s_ctrlAddrs.newValue());
-    WriteConfig(s_ha, s_ctrlVip.newValue(), s_ctrlHosts.newValue(), s_ctrlAddrs.newValue(), strfAddrs);
+    WriteConfig(s_ha, s_ctrlVip.newValue(), s_ctrlHosts.newValue(), s_ctrlAddrs.newValue());
     SystemdCommitService(enabled, NAME);
     SystemdCommitService(enabled, NAME_HA);
 
@@ -646,10 +638,9 @@ ClusterStartMain(int argc, char **argv)
     }
 
     bool enabled = IsControl(s_eCubeRole) && s_enabled;
-    std::string strfAddrs = HexUtilPOpen(HEX_SDK " cube_control_strf_addrs");
 
     // restore original haproxy-ha config in the case of upgrade
-    WriteConfig(s_ha, s_ctrlVip.newValue(), s_ctrlHosts.newValue(), s_ctrlAddrs.newValue(), strfAddrs);
+    WriteConfig(s_ha, s_ctrlVip.newValue(), s_ctrlHosts.newValue(), s_ctrlAddrs.newValue());
     SystemdCommitService(enabled, NAME_HA);
 
     return EXIT_SUCCESS;
