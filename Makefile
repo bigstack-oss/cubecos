@@ -101,6 +101,13 @@ sbom:
 	$(Q)$(MAKE) -C core/main sbom
 
 help::
+	$(Q)echo "sign         Re-sign every deliverable in the ship directory (cosign)"
+
+.PHONY: sign
+sign:
+	$(Q)$(MAKE) -C core/main sign
+
+help::
 	$(Q)echo "masqon       turn on iptables masquerade, allowing VMs to Internet"
 
 .PHONY: masqon
