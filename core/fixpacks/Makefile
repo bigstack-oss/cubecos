@@ -3,8 +3,8 @@
 include ../../build.mk
 
 FIRST_RELEASE_VERSION := v3.0.0-rc1
-SUPPORTED_FIRMWARES   ?= 3.1.0
-FIXPACK_ID            ?= v3.1.0-002
+SUPPORTED_FIRMWARES   ?= 3.2.0
+FIXPACK_ID            ?= v3.2.0-001
 
 ifeq ($(COMMITSINCE),)
 COMMITSINCE           := $(FIRST_RELEASE_VERSION)

@@ -1366,15 +1366,9 @@ node_bootstrap_status()
 
 fixpack_sync()
 {
-    local action=$1
-
-    if [ "x$action" = "xinstall" ] ; then
-        hex_sdk git_push "$FIXPACK_ID $FIXPACK_NAME ROLLBACK=$ROLLBACK $FIXPACK_DESCRIPTION Installed"
-    else
-        hex_sdk git_push "$FIXPACK_ID $FIXPACK_NAME ROLLBACK=$ROLLBACK $FIXPACK_DESCRIPTION Uninstalled"
-    fi
-    hex_sdk cmd "chmod 4755 /usr/sbin/hex_{config,cli,firsttime}"
-    hex_sdk cmd "[ $HOSTNAME = \$HOSTNAME ] || rm -rf $ROLLBACK_DIR"
-    cubectl node rsync $ROLLBACK_DIR >/dev/null 2>&1
-    cubectl node rsync /var/appliance-db/fixpack.history >/dev/null 2>&1
+    # Per-node: record on this node only; peers install the fixpack themselves.
+    local action=Installed
+    [ "x$1" != "xuninstall" ] || action=Uninstalled
+    hex_sdk git_push "$FIXPACK_ID $FIXPACK_NAME ROLLBACK=$ROLLBACK $FIXPACK_DESCRIPTION $action"
+    chmod 4755 /usr/sbin/hex_{config,cli,firsttime}
 }

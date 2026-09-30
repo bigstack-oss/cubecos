@@ -8,9 +8,6 @@ fi
 
 # Paths named, not inlined: the tests point them somewhere writable.
 CUBE_GITIGNORE=${CUBE_GITIGNORE:-/.gitignore}
-# Hidden opt-out, like cube_repair_optout: keep this node's uncommitted changes
-# instead of stashing them away, and never publish them to the shared repo.
-CUBE_GIT_OPTOUT=${CUBE_GIT_OPTOUT:-/etc/appliance/state/cube_git_optout}
 
 git_ignore_file()
 {
@@ -92,22 +89,6 @@ git_server_init()
     remote_run $master_control "$HEX_SDK _git_server_init"
 }
 
-GIT_SUID_MODES=/run/git_suid_modes
-
-_git_suid_save()
-{
-    # git tracks only the exec bit; snapshot setuid/setgid modes before any checkout
-    find / -xdev \( -perm -4000 -o -perm -2000 \) -type f -printf '%m %p\n' 2>/dev/null > $GIT_SUID_MODES
-}
-
-_git_suid_restore()
-{
-    local m p
-    while read m p ; do
-        [ -f "$p" ] && cmd chmod $m "$p"
-    done < $GIT_SUID_MODES
-}
-
 _git_client_init()
 {
     $HEX_SDK cube_node_ready || return 0
@@ -128,18 +109,9 @@ _git_client_init()
     Quiet -n $GIT remote add $project ${cube_git_dir}
     if [ -e "$CUBE_GITIGNORE" ] ; then
         if $GIT fetch ; then
-            _git_suid_save
             Quiet -n $GIT branch --track $branch $project/$branch
-            # --track already lands HEAD on the fetched tip, so the opt-out path
-            # needs no pull to stay current; local edits just read as modified.
-            if [ -f $CUBE_GIT_OPTOUT ] ; then
-                log_warning "git opt-out: keeping uncommitted changes on $HOSTNAME; / stays modified vs $project/$branch"
-            else
-                Quiet -n $GIT add -A
-                Quiet -n $GIT stash
-                Quiet -n $GIT pull $project $branch --rebase
-            fi
-            _git_suid_restore
+            # mixed reset: index follows HEAD, no file is written
+            Quiet -n $GIT reset -q
         else
             Error "git server (on VIP node) is not ready"
         fi
@@ -183,21 +155,17 @@ git_node_init()
 git_push()
 {
     local msg="${@:-n/a}"
+    local project=cube
 
-    # Opted out, this tree is the operator's in both directions: don't harvest
-    # its local edits into the shared repo.
-    if [ -f $CUBE_GIT_OPTOUT ] ; then
-        log_warning "git opt-out: not pushing $HOSTNAME's local changes"
-        return 0
+    $HEX_SDK _git_client_init
+    Quiet -n pushd /
+    # Commit tracked changes to this node's own branch; peers untouched.
+    $GIT add -u
+    if $GIT diff --cached --quiet ; then
+        log_info "git: nothing to record on $HOSTNAME"
+    elif ! ( $GIT commit -q -m "$msg" && $GIT push -q $project +HEAD:refs/heads/nodes/$HOSTNAME ) ; then
+        Error "failed to push $HOSTNAME's changes to $project nodes/$HOSTNAME"
     fi
-    if git -P status | grep -q modified ; then
-        cmd $HEX_SDK git_client_init
-        _git_suid_save
-        # per-node check: a peer that opted out keeps its own changes
-        ( $GIT commit -m "$msg" -a && $GIT push -q && cmd "[ -f $CUBE_GIT_OPTOUT ] || { $GIT stash ; $GIT pull ; }" ) >/dev/null
-        _git_suid_restore
-        Quiet -n $GIT -P log -3
-    else
-        Error "nothing is pushed"
-    fi
+    Quiet -n popd
+    Quiet -n $GIT -P log -3
 }

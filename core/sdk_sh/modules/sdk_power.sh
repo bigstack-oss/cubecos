@@ -85,6 +85,15 @@ _power_roll_set_node_status()
     /usr/sbin/hex_log_event -e CLU00009I "interface=system,host=$1,category=cluster,sub=rolling_$(_power_roll_kind),action=phase,phase=$2"
 }
 
+# True once <ip> answers from a kernel booted after <since> (ping can't tell).
+_power_roll_booted_since()
+{
+    local ip=$1 since=$2 bt
+    [ -n "$ip" ] && [ "${since:-0}" -gt 0 ] 2>/dev/null || return 1
+    bt=$(timeout 5 ssh -o ConnectTimeout=2 -o BatchMode=yes -o LogLevel=quiet root@$ip "awk '/^btime/{print \$2}' /proc/stat" 2>/dev/null </dev/null)
+    [ -n "$bt" ] && [ "$bt" -gt "$since" ] 2>/dev/null
+}
+
 # The raw phase_ts write. Also the entry point a peer or a spool-replay uses:
 # `hex_sdk _power_roll_write_phase_ts <host> <phase> <epoch>`.
 _power_roll_write_phase_ts()
@@ -283,8 +292,7 @@ _power_roll_kick()
     # restore + relay advance, instead of checking once early and skipping.
     ssh root@$ip "touch $ROLLING_RECOVER_MARKER ; echo YES | hex_cli -c reboot" >/dev/null 2>&1
     # Bounded wait for the node to drop off the network. Status is already
-    # "rebooting"; this only paces the relay so the reachability-based
-    # "bootstrapping" inference can't misfire while the node is still answering.
+    # "rebooting"; this only paces the relay.
     local _i
     for _i in $(seq 1 120) ; do
         ping -c1 -W2 "$ip" >/dev/null 2>&1 || break
@@ -807,10 +815,10 @@ power_roll_status()
     local now=$(date +%s)
     local window=${ROLLING_NODE_TIMEOUT:-2700}
     printf " %-20s %-18s %-9s %-10s %s\n" "node" "role" "status" "vms(m+p/tot)" "elapsed"
-    jq -r '.nodes[]|"\(.hostname)\t\(.role)\t\(.status)\t\(.started // 0)\t\(.finished // 0)\t\(.vms_total // 0)\t\(.vms_done // 0)\t\(.vms_paused // 0)\t\(.ip // "")"' $ROLLING_JOB | \
-        while IFS=$'\t' read -r h r s st fin vt vd vp ip ; do
-            # a "rebooting" node that is back on the network is bootstrapping
-            [ "$s" = "rebooting" ] && [ -n "$ip" ] && ping -c1 -W1 "$ip" >/dev/null 2>&1 && s="bootstrapping"
+    jq -r '.nodes[]|"\(.hostname)\t\(.role)\t\(.status)\t\(.started // 0)\t\(.finished // 0)\t\(.vms_total // 0)\t\(.vms_done // 0)\t\(.vms_paused // 0)\t\(.ip // "")\t\(.phase_ts.rebooting // 0)"' $ROLLING_JOB | \
+        while IFS=$'\t' read -r h r s st fin vt vd vp ip rb ; do
+            # a "rebooting" node back up on a new kernel is bootstrapping
+            [ "$s" = "rebooting" ] && _power_roll_booted_since "$ip" "$rb" && s="bootstrapping"
             el="-"
             if [ "$st" -gt 0 ] ; then
                 end=$fin
@@ -860,12 +868,13 @@ power_roll_status_json()
     fi
 
     # "bootstrapping" is inferred, not stored: the inflight node is bootstrapping
-    # once it's back on the network, before it writes "finalizing".
-    local _inf _infip _boot=0
+    # once it's up on a new kernel, before it writes "finalizing".
+    local _inf _infip _infrb _boot=0
     _inf=$(jq -r '.inflight // ""' "$ROLLING_JOB")
     if [ -n "$_inf" ] ; then
         _infip=$(jq -r --arg h "$_inf" '.nodes[]|select(.hostname==$h)|.ip // ""' "$ROLLING_JOB")
-        [ -n "$_infip" ] && ping -c1 -W1 "$_infip" >/dev/null 2>&1 && _boot=1
+        _infrb=$(jq -r --arg h "$_inf" '.nodes[]|select(.hostname==$h)|.phase_ts.rebooting // 0' "$ROLLING_JOB")
+        _power_roll_booted_since "$_infip" "$_infrb" && _boot=1
     fi
 
     jq --arg boot "$_boot" '
