@@ -152,6 +152,18 @@ rootfs_install::
 # direction -- -22 -> -23, -23 -> -22, and a guest first booted under -23 migrated to
 # a -22 node and back -- all completed with no error in any nova-compute log.
 #
+# Both hold again for -23 -> -24, the Epoxy hop's move. Its delta is RHEL-216952
+# alone, qemu's stable-branch block and storage fixes (curl, nvme, qcow2 discard and
+# zero-write corruption, mirror, commit drain, throttle groups, virtio-scsi,
+# virtio-blk, ide), whose one migration-side change is qed no longer flushing during
+# incoming migration. q35 still aliases pc-q35-rhel9.8.0, and pc-q35-rhel9.6.0 still
+# ships. Verified on accept-3cc as a roll -- each node drained by live migration and
+# its nova-compute disabled, qemu bumped, virtqemud and nova-compute restarted, the
+# node re-enabled and its guests migrated back -- in both directions, including a
+# guest first booted under -24 and one dirtying RAM fast enough to force post-copy;
+# and on jim-1cc, where a running guest kept its -23 process through the bump and came
+# back on -24 from a hard reboot.
+#
 # There is no qemu-kvm 11.x to move to: the CentOS Stream koji carries 10.0.0 and
 # 10.1.0 and nothing above, for el9 and el10 alike, all at epoch 17.
 #
@@ -169,11 +181,11 @@ rootfs_install::
 # Dropping the epoch changes no resolution -- every candidate in c9s is epoch 17, and
 # dnf takes the NVR without it -- and it puts qemu on the same form as libvirt in
 # core/nova/nova.mk and pacemaker, whose locks hold for exactly that reason.
-QEMU_VER := -10.1.0-23.el9
+QEMU_VER := -10.1.0-24.el9
 # Filename NVR (no epoch); kojihub keeps builds the c9s mirror rotates away, so an
 # air-gapped rebuild resolves the exact NVR (same pattern as mysql.mk).
-QEMU_NVR := 10.1.0-23.el9
-QEMU_URL := $(KOJIHUB_DL_HOST)/kojifiles/packages/qemu-kvm/10.1.0/23.el9/x86_64
+QEMU_NVR := 10.1.0-24.el9
+QEMU_URL := $(KOJIHUB_DL_HOST)/kojifiles/packages/qemu-kvm/10.1.0/24.el9/x86_64
 QEMU_PKGS := qemu-kvm qemu-kvm-device-display-virtio-gpu-pci qemu-kvm-device-display-virtio-gpu
 QEMU_PKGS += qemu-kvm-device-display-virtio-vga qemu-kvm-device-usb-redirect qemu-kvm-device-usb-host
 QEMU_PKGS += qemu-guest-agent qemu-kvm-block-rbd qemu-kvm-block-blkio qemu-kvm-common qemu-kvm-core
