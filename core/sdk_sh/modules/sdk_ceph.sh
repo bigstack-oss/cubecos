@@ -594,6 +594,16 @@ ceph_tier_releases()
         | sort -u
 }
 
+# 0 while the MDS tier runs more than one release. This node's own ceph-mds binary
+# is counted too: ceph_fs_mds_init asks straight after starting the local MDS, which
+# has usually not registered with the mon yet, and on the first node into a new
+# release that daemon is the only thing making the tier mixed.
+ceph_mds_tier_mixed()
+{
+    local mine=$(ceph-mds --version 2>/dev/null | sed -nE 's/.*\)[[:space:]]+([a-z]+)[[:space:]]+\(stable\).*/\1/p')
+    [ "$( { ceph_tier_releases mds ; echo "$mine" ; } | sed '/^$/d' | sort -u | wc -l)" -gt 1 ]
+}
+
 # 0 once the monmap itself has been pinned to the target release. This is the
 # check the upgrade docs name (`ceph mon dump | grep min_mon_release`), and it is
 # strictly stronger than asking whether the mons are running the new binaries:
@@ -3723,7 +3733,25 @@ ceph_fs_mds_init()
     $CEPH -s >/dev/null || Error "ceph quorum is not ready"
     Quiet -n ceph_mgr_module_enable stats
     if [ $(cubectl node list -r control | wc -l) -ge 3 ] ; then
-        Quiet -n $CEPH fs set cephfs allow_standby_replay true
+        # Standby-replay stays off while the MDS tier is mixed-version, and this is
+        # what keeps CephFS up through a major upgrade. A newer MDS advertises
+        # incompat features the filesystem does not carry yet -- squid added 11
+        # "minor log segments" and 12 "quiesce subvolumes" -- and the mon only lets
+        # such a standby take a rank while the filesystem is upgradeable, which
+        # FSMap::is_upgradeable() defines as allow_standby_replay off. With it on,
+        # the moment the last old-release MDS gives up rank 0 no standby is allowed
+        # to take it, and the filesystem stays offline -- /mnt/cephfs, and the
+        # roll's own state under it, with it. Seen rolling accept-3cc from reef to
+        # squid: "cephfs:0/1 3 up:standby, 1 failed", HEALTH_ERR MDS_ALL_DOWN, until
+        # standby-replay was turned off by hand and a squid MDS took the rank within
+        # seconds. Ceph's own upgrade procedure turns it off for the same reason.
+        # Every commit re-evaluates this, so the last node into the new release
+        # turns standby-replay back on.
+        if ceph_mds_tier_mixed ; then
+            Quiet -n $CEPH fs set cephfs allow_standby_replay false
+        else
+            Quiet -n $CEPH fs set cephfs allow_standby_replay true
+        fi
         Quiet -n $CEPH fs set cephfs session_timeout 30
         Quiet -n $CEPH fs set cephfs session_autoclose 30
         # Every probe in the reorder goes through the mgr, which on a cold boot
