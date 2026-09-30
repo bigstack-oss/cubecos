@@ -100,14 +100,36 @@ _instance_metrics_dump()
 #
 # A failure here is not a failure of the collection: the textfile is already on disk and
 # Prometheus will scrape it regardless, so this returns non-zero and the caller carries on.
+#
+# But it must not be invisible. This half failed on every run for five days on cube36 and
+# nothing said so, because Watcher and the Grafana instance dashboards read the textfile
+# half and looked fine (#1596). So the first failure is logged, once, and so is the
+# recovery; the runs in between only count, since the cron fires every minute.
 _instance_metrics_ship()
 {
     local lp=$1
+    local target="http://$(shared_id):9092"
+    local failed=/run/cube_instance_metrics.ship_failures
+    local rc n
 
     [ -s "$lp" ] || return 0
 
     $CURL -sf -X POST --data-binary @"$lp" \
-        "http://$(shared_id):9092/write?db=telegraf&rp=def&precision=s" >/dev/null 2>&1
+        "$target/write?db=telegraf&rp=def&precision=s" >/dev/null 2>&1
+    rc=$?
+
+    if [ $rc -eq 0 ] ; then
+        if [ -e $failed ] ; then
+            log_info "instance_metrics_collect: shipping to $target recovered after $(cat $failed) failed runs"
+            rm -f $failed
+        fi
+        return 0
+    fi
+
+    n=$(( $(cat $failed 2>/dev/null || echo 0) + 1 ))
+    echo $n > $failed
+    [ $n -eq 1 ] && log_error "instance_metrics_collect: cannot ship to $target (curl rc $rc); the textfile half is unaffected, logging again only on recovery"
+    return $rc
 }
 
 # Usage: $PROG instance_metrics_collect [textfile_dir]
