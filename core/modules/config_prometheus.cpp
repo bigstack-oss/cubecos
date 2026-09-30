@@ -510,7 +510,16 @@ WriteThanosConf(const std::string& ctrlAddrs, const std::string& sharedId, int t
     // absent and thanos would come up with no objstore config at all. <shared_id>:8888 is
     // the same internal endpoint config_swift registers, and it only needs rgw (ceph, L11)
     // and haproxy's radosgw_proxy (L10), both of which this module already sorts after.
-    HexUtilSystemF(0, 120, HEX_SDK " thanos_objstore_setup %s:%s %s",
+    //
+    // Bounded by timeout(1), not by HexUtilSystemF's own timeout. That one is an alarm
+    // on the bash -c it spawns, so it kills only that shell: a radosgw-admin blocked on a
+    // cluster with no active PGs is orphaned, and it and the logger it writes to keep
+    // hex_config's stdout open. The bootstrap reads that stdout through a pipe and waits
+    // for EOF, so on a power cycle every control sat between "Bootstrap succeeded" and
+    // cluster_start until ceph recovered -- 1h53m on cube36. timeout(1) signals the whole
+    // process group, and -k because hex_sdk's RemoveTempFiles trap swallows the TERM and
+    // would run on to the next radosgw-admin call.
+    HexUtilSystemF(0, 0, "timeout -k 10 120 " HEX_SDK " thanos_objstore_setup %s:%s %s",
                    sharedId.c_str(), RGW_PORT, THANOS_BUCKET);
 
     // Every sidecar, plus this node's store gateway. Without the store gateway entry the
