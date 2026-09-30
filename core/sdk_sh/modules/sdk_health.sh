@@ -2660,8 +2660,16 @@ _health_neutron_auto_repair()
         if [ $ERR_CODE -eq 1 ] ; then
             # $OPENSTACK network agent list -f json -c ID -c Alive | jq -r ".[] | select(.Alive == false).ID" | xargs -i $OPENSTACK network agent delete {}
             cmd -c systemctl restart neutron-server
-            cmd -p "systemctl restart neutron-ovn-metadata-agent"
-            cmd -p "systemctl restart neutron-ovn-vpn-agent"
+            # Only on computes that have finished their own bring-up. health_vip_check calls
+            # this with no readiness gate (the instance-HA case), so on a cluster power cycle
+            # it fires while computes still wait for the controls to bootstrap. There the
+            # agent's Requires=openvswitch starts OVS, which takes eth0 into the provider
+            # bridge while the management address still sits on eth0: the compute drops off
+            # the network, never sees the controls' bootstrap markers, and its OSDs never
+            # start. Measured on cube36: both computes cut off from 14:42:56 until a manual
+            # re-plumb at 16:22. Their own bootstrap starts the agents anyway.
+            cmd -p "$HEX_SDK cube_node_ready && systemctl restart neutron-ovn-metadata-agent"
+            cmd -p "$HEX_SDK cube_node_ready && systemctl restart neutron-ovn-vpn-agent"
 
             # Fail over Ceph dashboard which doesn't work automatically with new active ceph-mgr
             # SDK auto repair cannot help because when inst-ha takes place, not all nodes complete bootstrap
