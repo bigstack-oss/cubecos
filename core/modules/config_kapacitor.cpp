@@ -257,10 +257,7 @@ EscapeDoubleQuote(const std::string& str)
     return out.str();
 }
 
-// SMTP delivery failure/recovery events, raised by hex_sdk alert_smtp_delivery_check
-// from kapacitor's own smtp errors. Mailing them goes through the relay that just
-// failed, and each failed attempt logs another smtp error, so every email handler
-// excludes them; the event table, slack and exec handlers still get them.
+// smtp delivery events must not be mailed through the relay that just failed
 static const char SMTP_DELIVERY_EVENTS_EXCLUDED[] = "\"key\" != 'SRV00004E' AND \"key\" != 'SRV00005I'";
 
 static bool

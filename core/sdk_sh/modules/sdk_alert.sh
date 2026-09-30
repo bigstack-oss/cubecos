@@ -765,22 +765,8 @@ ALERT_SMTP_STATE=/var/lib/cube/alert_smtp_delivery
 ALERT_SMTP_QUIET=1800
 ALERT_SMTP_HEX_LOG_EVENT=/usr/sbin/hex_log_event
 
-# cron entry point (/etc/cron.d/alert_smtp_check).
-#
-# kapacitor's smtp service is fire-and-forget: SendMail() only queues the mail, so
-# neither an alert handler nor `kapacitor service-tests smtp` ever sees a dial or
-# auth failure. The only trace is an error line in kapacitor.log on the node that
-# tried to send, which nothing ships off-node. This turns those lines into an event.
-#
-# Fires SRV00004E once on the first smtp error, stays silent while errors keep
-# coming, and fires SRV00005I after ALERT_SMTP_QUIET seconds with no new error.
-# Quiet only means no mail failed; with no alert raised in that window, no mail
-# was tried either. Both keys are kept off email handlers by config_kapacitor.
-# category=service matches the built-in SRV00001I/SRV00002W; the API reads the
-# event category from metadata, and the mapper keeps it there while dropping the
-# duplicate influx tag (d1634d3e), so without it the event shows no category.
-#
-# Only nodes running kapacitor have the log; everywhere else this is a no-op.
+# cron entry point: kapacitor only logs smtp failures, so raise SRV00004E on the
+# first error and SRV00005I after ALERT_SMTP_QUIET seconds without one
 alert_smtp_delivery_check()
 {
     local log=$ALERT_SMTP_LOG state=$ALERT_SMTP_STATE
@@ -792,7 +778,7 @@ alert_smtp_delivery_check()
     now=$(date +%s)
 
     if [ ! -f "$state" ] ; then
-        # first run: start from the end, a stale error from before install is not news
+        # first run: start from the end of the log
         mkdir -p $(dirname $state) 2>/dev/null
         printf "inode=%s\noffset=%s\nstate=ok\nlast=0\n" "$inode" "$size" > $state
         return 0
@@ -804,8 +790,7 @@ alert_smtp_delivery_check()
     [ "$offset" -ge 0 ] 2>/dev/null || offset=0
     [ "$last" -ge 0 ] 2>/dev/null || last=0
 
-    # logrotate copytruncate keeps the inode but shrinks the file; a moved or
-    # recreated log has a new inode. Either way, read the current file from the top.
+    # rotated (new inode) or truncated: read from the top
     if [ "$inode" != "$(awk -F= '$1=="inode"{print $2}' $state)" ] || [ "$size" -lt "$offset" ] ; then
         offset=0
     fi
@@ -819,9 +804,7 @@ alert_smtp_delivery_check()
     if [ "$count" -gt 0 ] ; then
         last=$now
         if [ "$prev" != "failing" ] ; then
-            # kapacitor logs a dial or auth failure as "error closing connection to
-            # SMTP server"; the reason is in err=. It becomes an influx tag, so keep
-            # only tag-safe characters.
+            # err= becomes an influx tag: keep tag-safe characters only
             err=$(echo "$lines" | tail -n 1 | sed -n 's/.* err="\([^"]*\)".*/\1/p')
             [ -n "$err" ] || err=$(echo "$lines" | tail -n 1 | sed -n 's/.* msg="\([^"]*\)".*/\1/p')
             err=$(echo -n "${err:-unknown}" | tr -c 'A-Za-z0-9._:@/-' '_' | tr -s '_' | cut -c 1-120)
