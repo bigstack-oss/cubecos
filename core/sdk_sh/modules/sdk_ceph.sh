@@ -549,7 +549,7 @@ ceph_leave_rolling()
     Quiet $CEPH config rm global mon_osd_down_out_interval
     # No release finalization here. It belongs to config_ceph.cpp's Commit(), which is
     # the only caller that runs on *every* node -- and on a web-scale cluster the node
-    # holding the last quincy OSDs is a storage node, which never drives a roll.
+    # holding the last old-release OSDs is a storage node, which never drives a roll.
 }
 
 # ---------------------------------------------------------------------------
@@ -580,7 +580,7 @@ ceph_leave_rolling()
 # a tier across all hosts in minutes; an A/B roll takes a node out for the length
 # of a reboot and a firmware switch. Local OSDs come straight back up, mixed
 # version, exactly as ceph intends during an upgrade.
-CEPH_TARGET_RELEASE=reef
+CEPH_TARGET_RELEASE=squid
 
 
 # Release names currently running in one daemon tier (mon|mgr|osd|mds|rgw).

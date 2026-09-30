@@ -1,16 +1,26 @@
 # Cube SDK
 # ceph packages
 
-# Reef 18.2.8 is the last release in the reef series (2026-03-20); reef and quincy
-# are both archived upstream, so this is a hop, not a destination -- squid (19.2.z)
-# is the next one and is reachable directly from here. Ceph only supports upgrading
-# across two majors, so quincy -> reef -> squid is the supported path and
-# quincy -> tentacle is not.
-CEPH_VERSION:=-18.2.8-1.el9s
-# nfs-ganesha stays on 5.9: its ceph FSAL links libcephfs.so.2, the same soname reef
-# provides, so the ganesha packages are unaffected by the major bump. Verified
-# against nfs-ganesha-ceph-5.9-2.el9s and -6.5-1.el9s -- both carry the same soname
-# dependency, so moving to 6.x buys nothing here and is left for the squid hop.
+# Squid, from reef 18.2.8 -- the last reef release, and archived upstream like quincy
+# before it. Ceph only supports upgrading across two majors: squid's notes cover
+# "Upgrading from Quincy or Reef", and tentacle's require reef or squid first, so
+# quincy -> reef -> squid -> tentacle is the path and every hop keeps the next door
+# open.
+#
+# 19.2.5 is the newest squid the Storage SIG has released. 19.2.6 (2026-08-19) is
+# the CVE release -- CephX auth bypass CVE-2025-30156, mon config-key read
+# CVE-2026-50152, RGW SigV4 CVE-2026-54330 and RGW STS CVE-2026-39944 -- and is only
+# in the SIG's testing repo. It is not a drop-in bump either: its CephX fix adds the
+# aes256k key type, an upgraded cluster reports HEALTH_ERR
+# (AUTH_INSECURE_SERVICE_TICKETS, AUTH_INSECURE_SERVICE_KEY_TYPE) until every key
+# is rotated onto it, and the 6.12 kernel's libceph cannot use aes256k, so the
+# kernel clients -- the /mnt/cephfs mount and ceph-csi's krbd/cephfs mounts --
+# could never follow. Tracked on #677.
+CEPH_VERSION:=-19.2.5-1.el9s
+# nfs-ganesha stays on 5.9: its ceph FSAL links libcephfs.so.2 and librados.so.2,
+# and squid's libcephfs2/librados2 still provide exactly those sonames, so the
+# ganesha packages are untouched by the major bump -- a dnf solve of the squid set
+# on a reef node upgrades 28 ceph packages and leaves both ganesha rpms alone.
 GANESHA_VERSION:=-5.9-1.el9s
 ROOTFS_DNF_NOARCH_P1 += python3-rados$(CEPH_VERSION) python3-rbd$(CEPH_VERSION)
 ROOTFS_DNF += ceph$(CEPH_VERSION) ceph-mds$(CEPH_VERSION) ceph-radosgw$(CEPH_VERSION) rbd-mirror$(CEPH_VERSION) bc liburing
@@ -23,7 +33,7 @@ ROOTFS_DNF_NOARCH += s3cmd ceph-mgr-dashboard$(CEPH_VERSION) python3-rtslib targ
 # These three stay on the *system* python 3.9 and cannot move into the ceph venv
 # below, however much we would like them isolated.
 #
-# ceph-mgr is a C++ binary with an embedded interpreter: the reef rpm carries a hard
+# ceph-mgr is a C++ binary with an embedded interpreter: the squid rpm carries a hard
 # `libpython3.9.so.1.0()(64bit)` dependency, so every mgr module -- dashboard,
 # prometheus, restful -- is imported by that 3.9 interpreter and can only ever see
 # /usr/lib64/python3.9/site-packages. python3-saml and xmlsec back the dashboard's
@@ -32,14 +42,15 @@ ROOTFS_DNF_NOARCH += s3cmd ceph-mgr-dashboard$(CEPH_VERSION) python3-rtslib targ
 # ceph_dashboard_idp module configures, so pointing them anywhere else silently
 # turns dashboard SSO into "Required library not found: python3-saml".
 #
-# mon, osd, mds and radosgw are unaffected either way -- their reef rpms declare no
+# mon, osd, mds and radosgw are unaffected either way -- their squid rpms declare no
 # python dependency at all, they are pure C++.
 ROOTFS_PIP += python-magic python3-saml xmlsec
 
 # ceph mgr module enable dashboard/prometheus failed with unknown version when
-# python3-jaraco-text is 4.0.0-2.el9. Kept across the reef bump: reef's mgr still
-# resolves module versions through pkg_resources on the same system python 3.9, so
-# nothing about the bump retires this. Re-verify with
+# python3-jaraco-text is 4.0.0-2.el9. Kept across the reef and squid bumps: the mgr
+# still resolves module versions through pkg_resources on the same system python
+# 3.9, and the squid SIG repo ships no jaraco-text of its own, so nothing about
+# either bump retires this. Re-verify with
 # `ceph mgr module ls` + `ceph mgr module enable dashboard` before dropping it.
 ROOTFS_DNF_NOARCH += python3-jaraco-text-3.2.0-6.el9s
 LOCKED_DNF += python3-jaraco-text-3.2.0-6.el9s
@@ -93,8 +104,9 @@ CEPH_HOME_DIR := /opt/ceph
 # 82, which deleted pkg_resources.
 CEPH_VENV_SETUPTOOLS := 75.6.0
 
-# Cython<3 because that is what reef itself builds against: ceph.spec.in's
-# BuildRequires is the el9s python3-Cython (0.29.x). Reef's rbd/setup.py does carry a
+# Cython<3 because that is what squid itself builds against: ceph.spec.in's
+# BuildRequires is still the unversioned el9s python3-Cython (0.29.x), as it was
+# for reef. rbd/setup.py does carry a
 # Cython 3 branch (it sets legacy_implicit_noexcept when it sees one), so 3.x would
 # also compile, but 0.29.x is the combination upstream ships and tests.
 #
@@ -103,10 +115,11 @@ CEPH_VENV_SETUPTOOLS := 75.6.0
 # quincy's did not have, and with --no-build-isolation that import is resolved
 # against this venv rather than a throwaway overlay. Without it the rbd build dies at
 # setup.py import time, before a single line is compiled. rados/setup.py is byte
-# for byte identical between 17.2.6 and 18.2.8 and needs nothing new.
+# for byte identical between 17.2.6 and 18.2.8 and needs nothing new. Squid changed
+# neither: both setup.py files are byte for byte identical between 18.2.8 and 19.2.5.
 CEPH_VENV_BUILD_REQS := "Cython<3" packaging wheel
 
-CEPH_PYBIND_VERSION := 18.2.8
+CEPH_PYBIND_VERSION := 19.2.5
 CEPH_PYBIND_SRCDIR := /usr/src/ceph/ceph-$(CEPH_PYBIND_VERSION)
 CEPH_PYBIND_CFLAGS := -I$(CEPH_PYBIND_SRCDIR)/src/include
 CEPH_WHEEL_DIR := /usr/src/ceph/wheels
