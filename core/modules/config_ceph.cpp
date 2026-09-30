@@ -764,10 +764,8 @@ UpdateConfig(
     fprintf(fout, "auth client required = none\n");
     fprintf(fout, "auth allow insecure global id reclaim = false\n");
     fprintf(fout, "mon max pg per osd = 4096\n");
-    fprintf(fout, "mon osd max split count = 4096\n");
     fprintf(fout, "mon clock drift allowed = 60\n");
     fprintf(fout, "mon data avail warn = 15\n");
-    fprintf(fout, "mon health preluminous compat warning = false\n");
     fprintf(fout, "mon allow pool delete = true\n");
     fprintf(fout, "mon warn on pool no redundancy = false\n");
     fprintf(fout, "mon client ping timeout = 10\n");
@@ -794,7 +792,6 @@ UpdateConfig(
         fprintf(fout, "debug bluefs = 0/0\n");
         fprintf(fout, "debug bluestore = 0/0\n");
         fprintf(fout, "debug buffer = 0/0\n");
-        fprintf(fout, "debug civetweb = 0/0\n");
         fprintf(fout, "debug client = 0/0\n");
         fprintf(fout, "debug compressor = 0/0\n");
         fprintf(fout, "debug context = 0/0\n");
@@ -810,9 +807,7 @@ UpdateConfig(
         fprintf(fout, "debug javaclient = 0/0\n");
         fprintf(fout, "debug journal = 0/0\n");
         fprintf(fout, "debug journaler = 0/0\n");
-        fprintf(fout, "debug kinetic = 0/0\n");
         fprintf(fout, "debug kstore = 0/0\n");
-        fprintf(fout, "debug leveldb = 0/0\n");
         fprintf(fout, "debug lockdep = 0/0\n");
         fprintf(fout, "debug mds = 0/0\n");
         fprintf(fout, "debug mds balancer = 0/0\n");
@@ -820,7 +815,6 @@ UpdateConfig(
         fprintf(fout, "debug mds log = 0/0\n");
         fprintf(fout, "debug mds log expire = 0/0\n");
         fprintf(fout, "debug mds migrator = 0/0\n");
-        fprintf(fout, "debug memdb = 0/0\n");
         fprintf(fout, "debug mgr = 0/0\n");
         fprintf(fout, "debug mgrc = 0/0\n");
         fprintf(fout, "debug mon = 0/0\n");
@@ -846,7 +840,6 @@ UpdateConfig(
         fprintf(fout, "debug throttle = 0/0\n");
         fprintf(fout, "debug timer = 0/0\n");
         fprintf(fout, "debug tp = 0/0\n");
-        fprintf(fout, "debug xio = 0/0\n");
     }
 
     if (IsControl(s_eCubeRole)) {
@@ -871,7 +864,6 @@ UpdateConfig(
         // only control node runs rgw
         fprintf(fout, "[client.rgw.%s]\n", hostname.c_str());
         fprintf(fout, "host = %s\n", hostname.c_str());
-        fprintf(fout, "rgw socket path = /tmp/radosgw-%s.sock\n", hostname.c_str());
         fprintf(fout, "log file = /var/log/ceph/ceph-rgw-%s.log\n", hostname.c_str());
         fprintf(fout, "rgw data = /var/lib/ceph/radosgw/ceph-rgw.%s\n", hostname.c_str());
         fprintf(fout, "rgw frontends = beast endpoint=%s:8888\n", myip.c_str());
@@ -887,9 +879,7 @@ UpdateConfig(
         // clusters still carry _member_ assignments (see cubecos#216)
         fprintf(fout, "rgw keystone accepted roles = _member_, member, admin\n");
         fprintf(fout, "rgw keystone token cache size = 0\n");
-        fprintf(fout, "rgw keystone revocation interval = 0\n");
         fprintf(fout, "rgw keystone implicit tenants = false\n");
-        fprintf(fout, "rgw keystone make new tenants = true\n");
         fprintf(fout, "rgw s3 auth use keystone = true\n");
         fprintf(fout, "rgw keystone verify ssl = false\n");
         fprintf(fout, "rgw swift account in url = true\n");
@@ -913,9 +903,6 @@ UpdateConfig(
 
     if (IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
         fprintf(fout, "[client]\n");
-        if (IsControl(s_eCubeRole)) {
-            fprintf(fout, "rbd mirror journal max fetch bytes = 33554432\n");
-        }
         if (IsCompute(s_eCubeRole)) {
             fprintf(fout, "rbd cache = true\n");
             fprintf(fout, "rbd cache writethrough until flush = true\n");
