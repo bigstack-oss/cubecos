@@ -323,7 +323,8 @@ static bool
 UpdateConfig(std::string sharedId)
 {
     if(IsControl(s_eCubeRole)) {
-        cfg["cache"]["memcache_servers"] = sharedId + ":11211";
+        // list every memcached so each key lives on one node; the VIP pins by source IP instead
+        cfg["cache"]["memcache_servers"] = MemcachedServers(s_ha, G(CTRL_IP), s_ctrlAddrs.newValue());
         cfg["cache"]["enabled"] = "true";
         cfg["cache"]["backend"] = "dogpile.cache.memcached";
 
@@ -437,7 +438,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR);
+    s_bConfigChanged = modified | s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP);
 
     s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
 
