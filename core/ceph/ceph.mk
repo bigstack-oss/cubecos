@@ -23,7 +23,15 @@ CEPH_VERSION:=-19.2.5-1.el9s
 # on a reef node upgrades 28 ceph packages and leaves both ganesha rpms alone.
 GANESHA_VERSION:=-5.9-1.el9s
 ROOTFS_DNF_NOARCH_P1 += python3-rados$(CEPH_VERSION) python3-rbd$(CEPH_VERSION)
-ROOTFS_DNF += ceph$(CEPH_VERSION) ceph-mds$(CEPH_VERSION) ceph-radosgw$(CEPH_VERSION) rbd-mirror$(CEPH_VERSION) bc liburing
+# The daemons are named rather than taken through the `ceph` metapackage. From squid
+# on it also requires luarocks (for RGW Lua packages, unused here) and rocksdb, and
+# luarocks requires gcc. core/main/cube-post.mk autoremoves every *-devel package at
+# the end of the build, and erasing glibc-devel takes gcc with it -- and, with gcc,
+# luarocks and the metapackage. The metapackage owns no files, so nothing is lost by
+# not installing it; installing it would only add the toolchain to the image for
+# the cleanup to tear out again. Nothing in this tree queries the `ceph` package.
+ROOTFS_DNF += ceph-mon$(CEPH_VERSION) ceph-mgr$(CEPH_VERSION) ceph-osd$(CEPH_VERSION)
+ROOTFS_DNF += ceph-mds$(CEPH_VERSION) ceph-radosgw$(CEPH_VERSION) rbd-mirror$(CEPH_VERSION) bc liburing
 # FIXME: tcmu-runner for el9/python3.9 is not yet available
 ROOTFS_DNF += nfs-ganesha-ceph$(GANESHA_VERSION) nfs-ganesha-rados-grace$(GANESHA_VERSION)
 ROOTFS_DNF_NOARCH += s3cmd ceph-mgr-dashboard$(CEPH_VERSION) python3-rtslib targetcli ceph-volume$(CEPH_VERSION)
