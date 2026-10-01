@@ -185,7 +185,7 @@ WriteDeviceConfig()
         }
 
         fprintf(fout, "[[inputs.exec]]\n");
-        fprintf(fout, "commands = [ \"sudo /usr/sbin/hex_sdk network_device_ping\" ]\n");
+        fprintf(fout, "commands = [ [\"sudo\", \"/usr/sbin/hex_sdk\", \"network_device_ping\"] ]\n");
         fprintf(fout, "interval = \"5m\"\n");
         fprintf(fout, "timeout = \"1m\"\n");
         fprintf(fout, "data_format = \"influx\"\n");

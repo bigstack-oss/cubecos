@@ -1067,7 +1067,7 @@ WriteStorageUsageInput(void)
     // The timeout must outlast a full pass -- an exact scan of a large pool is
     // minutes, and a killed run writes a partial sample.
     fprintf(fout, "[[inputs.exec]]\n");
-    fprintf(fout, "  commands = [ \"sudo " HEX_SDK " -f line storage_usage_collect\" ]\n");
+    fprintf(fout, "  commands = [ [\"sudo\", \"" HEX_SDK "\", \"-f\", \"line\", \"storage_usage_collect\"] ]\n");
     fprintf(fout, "  interval = \"%um\"\n", s_usageInterval.newValue());
     fprintf(fout, "  timeout = \"%um\"\n", s_usageInterval.newValue());
     fprintf(fout, "  data_format = \"influx\"\n");
