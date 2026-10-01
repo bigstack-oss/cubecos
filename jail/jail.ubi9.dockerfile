@@ -205,6 +205,17 @@ ARG JAIL_VNC="openbox supervisor x11vnc xterm xorg-x11-server-Xvfb firefox which
 ARG JAIL_VNC_FEH="libX11-devel libXinerama-devel imlib2-devel libcurl-devel libXt-devel"
 RUN dnf -y install $JAIL_SSH $JAIL_VNC $JAIL_VNC_FEH
 
+# sigstore-python, for the publish job's keyless release signing (triangle/jenkins/cube_publish.groovy):
+# its `get-identity-token --oauth-force-oob` runs Sigstore's login in the jail and turns the code
+# the release manager pastes into Jenkins into the 60-second OIDC token cosign signs with. It needs
+# Python >= 3.10 and the jail's python3 is 3.9 (where pip resolves an older sigstore), so it gets a
+# 3.12 venv of its own. Pinned like the build's other supply-chain tools: it handles the credential.
+ARG SIGSTORE_PY_VER=4.5.0
+RUN dnf -y install python3.12 && \
+    python3.12 -m venv /opt/sigstore && \
+    /opt/sigstore/bin/pip install --no-cache-dir sigstore==${SIGSTORE_PY_VER} && \
+    /opt/sigstore/bin/sigstore --version
+
 # jail ssh access
 # Set password for the jenkins user (you may want to alter this).
 RUN adduser jenkins && \
