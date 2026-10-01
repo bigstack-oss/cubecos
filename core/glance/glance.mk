@@ -43,6 +43,10 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-scrubber /usr/bin/glance-scrubber
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-status /usr/bin/glance-status
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/glance-wsgi-api /usr/bin/glance-wsgi-api
+	$(Q)# Tab completion for the glance cli: tools/glance.bash_completion from
+	$(Q)# python-glanceclient 4.5.0, unchanged. The python3-glanceclient rpm installed it;
+	$(Q)# the wheel does not carry it (#1611).
+	$(Q)cp -f $(COREDIR)/glance/glance.bash_completion $(ROOTDIR)/usr/share/bash-completion/completions/glance
 
 # prepare the build directory
 rootfs_install::

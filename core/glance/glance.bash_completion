@@ -1,0 +1,25 @@
+_glance_opts="" # lazy init
+_glance_flags="" # lazy init
+_glance_opts_exp="" # lazy init
+_glance()
+{
+    local cur prev nbc cflags
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    if [ "x$_glance_opts" == "x" ] ; then
+        nbc="`glance bash-completion | sed -e "s/  *-h  */ /" -e "s/  *-i  */ /"`"
+        _glance_opts="`echo "$nbc" | sed -e "s/--[a-z0-9_-]*//g" -e "s/  */ /g"`"
+        _glance_flags="`echo " $nbc" | sed -e "s/ [^-][^-][a-z0-9_-]*//g" -e "s/  */ /g"`"
+        _glance_opts_exp="`echo "$_glance_opts" | sed 's/^ *//' | tr ' ' '|'`"
+    fi
+
+    if [[ " ${COMP_WORDS[@]} " =~ " "($_glance_opts_exp)" " && "$prev" != "help" ]] ; then
+        COMPREPLY=($(compgen -W "${_glance_flags}" -- ${cur}))
+    else
+        COMPREPLY=($(compgen -W "${_glance_opts}" -- ${cur}))
+    fi
+    return 0
+}
+complete -F _glance glance
