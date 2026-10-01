@@ -101,6 +101,16 @@ sbom:
 	$(Q)$(MAKE) -C core/main sbom
 
 help::
+	$(Q)echo "sums         Write the SHA256SUMS manifest of core/main's ship directory"
+	$(Q)echo "sign         Sign the SHA256SUMS manifest (cosign)"
+	$(Q)echo "attest       Attest the SBOM to every image that contains the rootfs (cosign)"
+	$(Q)echo "verify       Check the manifest signature, the attestations and every file's digest"
+
+.PHONY: sums sign attest verify
+sums sign attest verify:
+	$(Q)$(MAKE) -C core/main $@
+
+help::
 	$(Q)echo "masqon       turn on iptables masquerade, allowing VMs to Internet"
 
 .PHONY: masqon
