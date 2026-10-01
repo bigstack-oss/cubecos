@@ -84,7 +84,6 @@ endif
 endif
 
 # cubecos shared build envs
-GOLANG_VERSION := 1.24.2
 PROJ_NFS_SERVER := 10.32.0.200
 PROJ_NFS_CUBECOS_PATH := /volume1/bigstack/cube-images
 PROJ_NFS_OPENSTACK_PATH := /volume1/docker/minio/downloads
