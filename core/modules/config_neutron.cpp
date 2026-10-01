@@ -40,7 +40,6 @@ static const char OVN_RUNDIR[] = "/var/run/ovn";
 #define VPN_AGT_CONF    "/etc/neutron/vpn_agent.ini"
 
 #define OVN_NORTHD_CONF     "/etc/sysconfig/ovn-northd"
-#define SFLOW_ENABLED       "/etc/appliance/state/sflow_enabled"
 
 static const char SRV_NAME[] = "neutron-server";
 static const char MD_NAME[] = "networking-ovn-metadata-agent";
@@ -136,7 +135,6 @@ static MtuMap s_Mtu;
 
 // external global variables
 CONFIG_GLOBAL_BOOL_REF(IS_MASTER);
-CONFIG_GLOBAL_STR_REF(MGMT_IF);
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_GLOBAL_STR_REF(EXTERNAL);
@@ -961,11 +959,17 @@ CommitLast(bool modified, int dryLevel)
     // inside the roll's per-node deadline.
     HexUtilSystemF(0, 900, HEX_SDK " migrate_neutron_ovn_sync");
 
-    if (access(SFLOW_ENABLED, F_OK) == 0) {
-        std::string mgmtIf = G(MGMT_IF);
-        std::string sharedId = G(SHARED_ID);
-        HexUtilSystemF(0, 0, HEX_SDK " ovn_bridge_sflow_enable %s %s", mgmtIf.c_str(), sharedId.c_str());
-    }
+    // `iaas > flowdata` is gone, but a node that ever had it on still carries
+    // its sFlow exporters on br-int and provider. They live in the OVS database,
+    // which CONFIG_MIGRATE(neutron, "/etc/openvswitch/") carries across an
+    // upgrade (the sflow_enabled marker is not carried), and they keep sampling
+    // every 512th packet to <shared_id>:6343, where nothing listens any more.
+    // Clearing the column is idempotent and takes the rows with it, sFlow not
+    // being a root table. Bounded like the sync above: ovs-vsctl blocks while
+    // ovsdb-server is down. The marker goes too, for a node patched in place.
+    HexUtilSystemF(0, 30, "ovs-vsctl --timeout=10 --if-exists clear bridge br-int sflow"
+                          " -- --if-exists clear bridge provider sflow");
+    unlink("/etc/appliance/state/sflow_enabled");
 
     return true;
 }
@@ -993,47 +997,6 @@ RestartMain(int argc, char* argv[])
     SetupOvn(s_hostname, overlayAddr, sharedId, provider, s_providerExtra);
 
     NeutronService(s_enabled);
-
-    return EXIT_SUCCESS;
-}
-
-static void
-EnableSflowUsage(void)
-{
-    fprintf(stderr, "Usage: %s enable_sflow\n", HexLogProgramName());
-}
-
-static int
-EnableSflowMain(int argc, char* argv[])
-{
-    if (argc != 1) {
-        EnableSflowUsage();
-        return EXIT_FAILURE;
-    }
-
-    std::string mgmtIf = G(MGMT_IF);
-    std::string sharedId = G(SHARED_ID);
-
-    HexUtilSystemF(0, 0, HEX_SDK " ovn_bridge_sflow_enable %s %s", mgmtIf.c_str(), sharedId.c_str());
-
-    return EXIT_SUCCESS;
-}
-
-static void
-DisableSflowUsage(void)
-{
-    fprintf(stderr, "Usage: %s disable_sflow\n", HexLogProgramName());
-}
-
-static int
-DisableSflowMain(int argc, char* argv[])
-{
-    if (argc != 1) {
-        DisableSflowUsage();
-        return EXIT_FAILURE;
-    }
-
-    HexUtilSystemF(0, 0, HEX_SDK " ovn_bridge_sflow_disable");
 
     return EXIT_SUCCESS;
 }
@@ -1095,8 +1058,6 @@ MigrateOvnCentral(const char *prevVersion, const char *prevRootDir)
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_neutron, RestartMain, RestartUsage);
-CONFIG_COMMAND_WITH_SETTINGS(enable_sflow, EnableSflowMain, EnableSflowUsage);
-CONFIG_COMMAND_WITH_SETTINGS(disable_sflow, DisableSflowMain, DisableSflowUsage);
 
 CONFIG_MODULE(neutron, Init, Parse, 0, 0, Commit);
 CONFIG_MODULE(neutron_last, 0, 0, 0, 0, CommitLast);

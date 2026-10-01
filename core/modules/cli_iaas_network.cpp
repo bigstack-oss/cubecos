@@ -311,39 +311,6 @@ NetShowMain(int argc, const char** argv)
 }
 
 static int
-FlowSwitchMain(int argc, const char** argv)
-{
-    if (argc > 2 /* [0]="set_flowdata" [1]="[on|off]" */)
-        return CLI_INVALID_ARGS;
-
-    int index;
-    std::string value, msg;
-
-    if (HexSpawn(0, HEX_SDK, "ovn_sflow_status", NULL) == 0)
-        msg = "Status: on";
-    else
-        msg = "Status: off";
-
-    msg += "\nSet flow data:";
-
-    if (CliMatchCmdHelper(argc, argv, 1, "echo 'on\noff'", &index, &value, msg.c_str()) != CLI_SUCCESS) {
-        CliPrintf("Unknown action");
-        return CLI_INVALID_ARGS;
-    }
-
-    switch (index) {
-    case 0:
-        HexSpawn(0, HEX_SDK, "cmd", "-p", HEX_CFG, "enable_sflow", ZEROCHAR_PTR);
-        break;
-    case 1:
-        HexSpawn(0, HEX_SDK, "cmd", "-p", HEX_CFG, "disable_sflow", ZEROCHAR_PTR);
-        break;
-    }
-
-    return CLI_SUCCESS;
-}
-
-static int
 LoadBalancerFixMain(int argc, const char** argv)
 {
     if (argc > 4 /* [0]="fix" [1]="domain" [2]="tenant" [3]="lb_id" */)
@@ -419,14 +386,6 @@ CLI_MODE_COMMAND("network", "network_set", NetSetMain, NULL,
 CLI_MODE_COMMAND("network", "network_show", NetShowMain, NULL,
     "Show a tenant network.",
     "network_show [<domain>] [<tenant>] [<network>]");
-
-CLI_MODE(CLI_TOP_COMMAND_IAAS, "flowdata",
-    "Work with the network flow data.",
-    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
-
-CLI_MODE_COMMAND("flowdata", "set_flowdata", FlowSwitchMain, NULL,
-    "Set on to enable collecting flow data on this node and set off to disable.",
-    "set_flowdata [on|off]");
 
 CLI_MODE(CLI_TOP_COMMAND_IAAS, "lb",
     "Work with the IaaS load balancers.",

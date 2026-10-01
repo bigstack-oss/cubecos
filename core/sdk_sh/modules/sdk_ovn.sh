@@ -218,49 +218,6 @@ ovn_bridge_phy_port_remove_v4()
     $VSCTL --if-exists del-br $bridge
 }
 
-ovn_sflow_status()
-{
-    local brIntId=$(ovs-vsctl list sflow | grep "header.*192" -B 4 | grep "_uuid.*:" | awk '{print $NF}' | tr -d '\n')
-    [ -n "$brIntId" ]
-}
-
-ovn_sflow_list()
-{
-    ovs-vsctl list sflow
-}
-
-ovn_bridge_sflow_enable()
-{
-    local mgmtIf=$1
-    local sharedId=$2
-    if [ -n "$mgmtIf" -a -n "$sharedId" ] ; then
-        local brIntId=$(ovs-vsctl list sflow | grep "header.*192" -B 4 | grep "_uuid.*:" | awk '{print $NF}' | tr -d '\n')
-        if [ -z "$brIntId" ] ; then
-            ovs-vsctl -- --id=@sflow create sflow agent=$mgmtIf target=\"$sharedId:6343\" header=192 sampling=512 polling=10 -- set bridge br-int sflow=@sflow >/dev/null
-        fi
-        local provId=$(ovs-vsctl list sflow | grep "header.*128" -B 4 | grep "_uuid.*:" | awk '{print $NF}' | tr -d '\n')
-        if [ -z "$provId" ] ; then
-            ovs-vsctl -- --id=@sflow create sflow agent=$mgmtIf target=\"$sharedId:6343\" header=128 sampling=512 polling=10 -- set bridge provider sflow=@sflow >/dev/null
-        fi
-
-        touch /etc/appliance/state/sflow_enabled
-    fi
-}
-
-ovn_bridge_sflow_disable()
-{
-    local brIntId=$(ovs-vsctl list sflow | grep "header.*192" -B 4 | grep "_uuid.*:" | awk '{print $NF}' | tr -d '\n')
-    if [ -n "$brIntId" ] ; then
-        ovs-vsctl remove bridge br-int sflow $brIntId
-    fi
-    local provId=$(ovs-vsctl list sflow | grep "header.*128" -B 4 | grep "_uuid.*:" | awk '{print $NF}' | tr -d '\n')
-    if [ -n "$provId" ] ; then
-        ovs-vsctl remove bridge provider sflow $provId
-    fi
-
-    rm -f /etc/appliance/state/sflow_enabled
-}
-
 # --- OVN metadata liveness (nb_cfg progress) --------------------------------
 # Alive=False just means the agent's sb-cfg lags nb_cfg (normal while it re-syncs after a
 # reconnect). Track progress toward nb_cfg: catching-up self-heals, only a stuck (frozen)
