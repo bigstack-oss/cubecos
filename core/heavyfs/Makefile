@@ -464,6 +464,20 @@ $(HEAVYFS): $(HEX_FULL_ROOTFS) $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_CO
 	$(Q)touch $@
 endif
 
+# Tab completion for the openstack cli. The python3-openstackclient rpm wrote
+# /etc/bash_completion.d/osc.bash_completion from its %post, so the file was never
+# packaged and the pip install that replaced the rpm writes nothing (#1611). This
+# generates it the way the rpm did, sed included -- it drops anything printed ahead
+# of the function -- and has to sit below the component include: `openstack
+# complete` lists only the commands of the plugins it can see, and heat, octavia,
+# manila, designate and the rest install theirs there. It goes in bash-completion's
+# own directory, named for the command, so it loads on the first TAB rather than
+# being sourced into every interactive shell (2272 lines). pipefail makes a cli that
+# cannot start fail the build instead of leaving an empty file.
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) bash -c "set -o pipefail && /usr/bin/openstack complete | \
+		sed -n '/_openstack/,\$$p' > /usr/share/bash-completion/completions/openstack"
+
 # /var/update should work irrespective of a functioning cephfs mount
 rootfs_install::
 	$(Q)umount $(ROOTDIR)/proc || /bin/true
