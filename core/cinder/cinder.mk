@@ -76,6 +76,10 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-volume /usr/bin/cinder-volume
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-volume-usage-audit /usr/bin/cinder-volume-usage-audit
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/cinder-wsgi /usr/bin/cinder-wsgi
+	$(Q)# Tab completion for the cinder cli: tools/cinder.bash_completion from
+	$(Q)# python-cinderclient 9.5.0, unchanged. The python3-cinderclient rpm installed it;
+	$(Q)# the wheel does not carry it (#1611).
+	$(Q)cp -f $(COREDIR)/cinder/cinder.bash_completion $(ROOTDIR)/usr/share/bash-completion/completions/cinder
 
 # prepare the build directory
 rootfs_install::

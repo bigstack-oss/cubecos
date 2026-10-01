@@ -1,0 +1,27 @@
+# bash completion for openstack heat
+
+_heat_opts="" # lazy init
+_heat_flags="" # lazy init
+_heat_opts_exp="" # lazy init
+_heat()
+{
+    local cur prev kbc
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    if [ "x$_heat_opts" == "x" ] ; then
+        kbc="`heat bash-completion | sed -e "s/ -h / /"`"
+        _heat_opts="`echo "$kbc" | sed -e "s/--[a-z0-9_-]*//g" -e "s/[ ][ ]*/ /g"`"
+        _heat_flags="`echo " $kbc" | sed -e "s/ [^-][^-][a-z0-9_-]*//g" -e "s/[ ][ ]*/ /g"`"
+        _heat_opts_exp="`echo $_heat_opts | sed -e "s/[ ]/|/g"`"
+    fi
+
+    if [[ " ${COMP_WORDS[@]} " =~ " "($_heat_opts_exp)" " && "$prev" != "help" ]] ; then
+        COMPREPLY=($(compgen -W "${_heat_flags}" -- ${cur}))
+    else
+        COMPREPLY=($(compgen -W "${_heat_opts}" -- ${cur}))
+    fi
+    return 0
+}
+complete -o default -F _heat heat

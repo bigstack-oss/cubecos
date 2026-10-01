@@ -117,6 +117,11 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-serialproxy /usr/bin/nova-serialproxy
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-spicehtml5proxy /usr/bin/nova-spicehtml5proxy
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-status /usr/bin/nova-status
+	$(Q)# Tab completion for the nova cli. The python3-novaclient rpm installed
+	$(Q)# tools/nova.bash_completion, which the wheel does not carry (#1611). This is
+	$(Q)# 18.6.0's copy with one change, the 2>/dev/null cinder's copy already has, so
+	$(Q)# the first TAB does not print the client's deprecation warning into the line.
+	$(Q)cp -f $(COREDIR)/nova/nova.bash_completion $(ROOTDIR)/usr/share/bash-completion/completions/nova
 	$(Q)# Link Placement binaries (since they were removed from RPMs)
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/placement-api /usr/bin/placement-api
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/placement-manage /usr/bin/placement-manage
