@@ -245,8 +245,17 @@ SetupCluster(bool enabled, bool isMaster, bool force, const std::string& ctrlAdd
             HexUtilSystemF(0, 0, "hex_sdk cmd -n %s systemctl stop %s", ctrlAddrs.c_str(), NAME);
             HexSystemF(0, "sed -i 's/^\\(safe_to_bootstrap\\s*:\\s*\\).*$/\\11/' /var/lib/mysql/grastate.dat");
         }
-        else
-            HexSystemF(0, "rm -f /var/lib/mysql/grastate.dat /var/lib/mysql/ib_log*");
+        else {
+            // Removing grastate.dat is what sends the joiner to the new primary for a full
+            // state transfer. Never remove the redo log too: MariaDB 10.6 recreated a missing
+            // ib_logfile0 after a clean shutdown, but from 10.8 (MDEV-27199) InnoDB refuses
+            // to start without it. galera_recovery, mariadb.service's ExecStartPre, has to
+            // start InnoDB before any SST could bring a new log, so the node never starts
+            // again and health_mysql_repair cannot help it. cube_cluster_stop arms this path
+            // on every control, so on 3.1.20 (10.11) every cluster stop, poweroff and
+            // powercycle left each non-master control without a database (QA 10.32.36.10).
+            HexSystemF(0, "rm -f /var/lib/mysql/grastate.dat");
+        }
         unlink(FORCE_NEW_MARK);
     }
 
