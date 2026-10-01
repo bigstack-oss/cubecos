@@ -492,6 +492,33 @@ migrate_neutron_ovn_sync()
     touch $STATE_DIR/neutron_ovn_migrated
 }
 
+# sFlow, removed in 3.2.0 when telegraf 1.40 dropped inputs.sflow (cubecos#801). `iaas >
+# flowdata` used to point OVS sFlow exporters on br-int and provider at <shared_id>:6343,
+# sampling every 512th packet for telegraf's sflow input. They live in the OVS database,
+# which CONFIG_MIGRATE(neutron, "/etc/openvswitch/") carries across an upgrade, so a node
+# that ever had flowdata on keeps exporting into a port nothing listens on any more. The
+# sflow_enabled marker that tracked them is not carried, so they are cleared whether or not
+# it is there: clearing the column is idempotent and takes the rows with it, sFlow not
+# being a root table. Every role, since `cmd -p` turned flowdata on for every node.
+#
+# config_neutron calls this from Commit(), after SetupOvn has ovsdb-server up. Bounded,
+# since ovs-vsctl blocks while ovsdb-server is down, and the marker is touched only on
+# success so a failed attempt is retried by the next commit.
+migrate_neutron_sflow_retire()
+{
+    if [ -f $STATE_DIR/neutron_sflow_retired ] ; then
+        return 0
+    fi
+
+    if ! ovs-vsctl --timeout=10 --if-exists clear bridge br-int sflow -- --if-exists clear bridge provider sflow ; then
+        log_warning "migrate_neutron_sflow_retire: ovs-vsctl failed; leaving it for the next commit"
+        return 0
+    fi
+    rm -f $STATE_DIR/sflow_enabled
+
+    touch $STATE_DIR/neutron_sflow_retired
+}
+
 migrate_nova_db()
 {
     if [ -f $STATE_DIR/nova_db_migrated ] ; then

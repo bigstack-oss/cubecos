@@ -910,6 +910,10 @@ Commit(bool modified, int dryLevel)
     OvnService(s_enabled, isMaster, forceRun, s_ha);
     SetupOvn(s_hostname, overlayAddr, ovnSbRemote, provider, s_providerExtra);
 
+    // Clear the OVS sFlow exporters `iaas > flowdata` left behind (sdk_migrate.sh has
+    // the why). After SetupOvn, so ovsdb-server is up.
+    HexUtilSystemF(0, 30, HEX_SDK " migrate_neutron_sflow_retire");
+
     // The OVN northbound sync used to run here. It cannot: this module commits
     // well before pacemaker_last promotes ovndb_servers, so the northbound DB is
     // not listening yet and the sync silently does nothing. It now runs from
@@ -958,18 +962,6 @@ CommitLast(bool modified, int dryLevel)
     // at all. 900s is far above the seconds a real sync takes and still well
     // inside the roll's per-node deadline.
     HexUtilSystemF(0, 900, HEX_SDK " migrate_neutron_ovn_sync");
-
-    // `iaas > flowdata` is gone, but a node that ever had it on still carries
-    // its sFlow exporters on br-int and provider. They live in the OVS database,
-    // which CONFIG_MIGRATE(neutron, "/etc/openvswitch/") carries across an
-    // upgrade (the sflow_enabled marker is not carried), and they keep sampling
-    // every 512th packet to <shared_id>:6343, where nothing listens any more.
-    // Clearing the column is idempotent and takes the rows with it, sFlow not
-    // being a root table. Bounded like the sync above: ovs-vsctl blocks while
-    // ovsdb-server is down. The marker goes too, for a node patched in place.
-    HexUtilSystemF(0, 30, "ovs-vsctl --timeout=10 --if-exists clear bridge br-int sflow"
-                          " -- --if-exists clear bridge provider sflow");
-    unlink("/etc/appliance/state/sflow_enabled");
 
     return true;
 }
