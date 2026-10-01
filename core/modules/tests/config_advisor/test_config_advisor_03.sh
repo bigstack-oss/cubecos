@@ -39,12 +39,16 @@ trap 'rm -rf "$WORK"' EXIT
 # binary under test always runs from this scratch directory.
 cd "$WORK" || fail "cannot cd to scratch directory"
 
-# config_advisor.cpp embeds a release key; this test never verifies anything,
-# so any well-formed key will do.
-openssl ecparam -name prime256v1 -genkey -noout -out "$WORK/release.key" 2>/dev/null
-openssl ec -in "$WORK/release.key" -pubout -out "$WORK/release.pub" 2>/dev/null
+# config_advisor.cpp embeds the release keys; this test never verifies
+# anything, so any well-formed keys will do.
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-384 -out "$WORK/release.key" 2>/dev/null
+openssl pkey -in "$WORK/release.key" -pubout -out "$WORK/release.pub" 2>/dev/null
+openssl genpkey -algorithm ML-DSA-87 -out "$WORK/release-mldsa.key" 2>/dev/null
+openssl pkey -in "$WORK/release-mldsa.key" -pubout -out "$WORK/release-mldsa.pub" 2>/dev/null
 { printf '#define ADVISOR_RELEASE_PUBLIC_KEY "'
   awk '{printf "%s\\n", $0}' "$WORK/release.pub"
+  printf '"\n#define ADVISOR_RELEASE_MLDSA_PUBLIC_KEY "'
+  awk '{printf "%s\\n", $0}' "$WORK/release-mldsa.pub"
   printf '"\n'
 } > "$WORK/advisor_key.h"
 

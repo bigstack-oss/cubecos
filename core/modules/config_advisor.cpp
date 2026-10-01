@@ -35,11 +35,12 @@
 // a file, the way hex holds the licence key -- a key file is replaceable by any
 // root process and the failure would be silent.
 //
-// advisor_pubkey prints the key on purpose: the manifest is in sha256sum's own
+// advisor_pubkey prints the keys on purpose: the manifest is in sha256sum's own
 // format, so a customer can repeat the check with openssl and sha256sum.
 
 static const char MANIFEST_NAME[]  = "manifest.txt";
 static const char SIGNATURE_NAME[] = "manifest.txt.sig";
+static const char MLDSA_SIGNATURE_NAME[] = "manifest.txt.mldsa87.sig";
 
 // Bounds, so a hostile file cannot be read into memory unbounded. Both are far
 // above any real release: a manifest is a few lines per architecture.
@@ -98,34 +99,49 @@ ReadFileAt(int dirFd, const std::string& name, size_t maxSize, std::string *out)
     return ok;
 }
 
-// Verifies sig over data using the compiled-in release public key.
+// Verifies sig over data with one embedded key: ECDSA P-384 (SHA-384) or ML-DSA-87.
 //
 // The key is parsed from the embedded PEM on every call rather than cached: it
 // is a handful of microseconds, and a cached EVP_PKEY is one more piece of
 // mutable process state for something whose whole job is to be immutable.
 static bool
-VerifySignature(const std::string& data, const std::string& sig)
+VerifySignature(const char *pem, bool mldsa, const std::string& data, const std::string& sig)
 {
-    BIO *bio = BIO_new_mem_buf((void *)ADVISOR_RELEASE_PUBLIC_KEY, -1);
+    BIO *bio = BIO_new_mem_buf((void *)pem, -1);
     if (!bio) {
         HexLogError("advisor: cannot allocate key BIO");
         return false;
     }
     EVP_PKEY *pkey = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
     BIO_free(bio);
-    if (!pkey) {
-        // A build problem, not an input problem: the embedded key is a constant.
-        HexLogError("advisor: embedded release public key is unusable");
-        fprintf(stderr, "Error: embedded release public key is unusable\n");
+
+    // A wrong key kind is a build error; keeps the two slots distinct.
+    bool kindOk = false;
+    if (pkey) {
+        if (mldsa) {
+            kindOk = EVP_PKEY_is_a(pkey, "ML-DSA-87");
+        } else {
+            char group[64] = "";
+            kindOk = EVP_PKEY_is_a(pkey, "EC") &&
+                     EVP_PKEY_get_group_name(pkey, group, sizeof(group), NULL) == 1 &&
+                     strcmp(group, "secp384r1") == 0;
+        }
+    }
+    if (!kindOk) {
+        const char *want = mldsa ? "ML-DSA-87" : "ECDSA P-384";
+        HexLogError("advisor: embedded %s release public key is unusable", want);
+        fprintf(stderr, "Error: embedded %s release public key is unusable\n", want);
+        EVP_PKEY_free(pkey);
         return false;
     }
 
     bool ok = false;
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
     if (ctx) {
-        if (EVP_DigestVerifyInit(ctx, NULL, EVP_sha256(), NULL, pkey) == 1 &&
-            EVP_DigestVerifyUpdate(ctx, data.data(), data.size()) == 1 &&
-            EVP_DigestVerifyFinal(ctx, (const unsigned char *)sig.data(), sig.size()) == 1) {
+        // ML-DSA: pure mode, empty context, no digest.
+        if (EVP_DigestVerifyInit(ctx, NULL, mldsa ? NULL : EVP_sha384(), NULL, pkey) == 1 &&
+            EVP_DigestVerify(ctx, (const unsigned char *)sig.data(), sig.size(),
+                             (const unsigned char *)data.data(), data.size()) == 1) {
             ok = true;
         }
         EVP_MD_CTX_free(ctx);
@@ -286,17 +302,25 @@ VerifyRelease(const std::string& dir, const std::string& requiredArtifact)
         return false;
     }
 
-    std::string manifest, signature;
+    std::string manifest, signature, mldsaSignature;
     if (!ReadFileAt(dirFd, MANIFEST_NAME, MAX_MANIFEST_SIZE, &manifest) ||
-        !ReadFileAt(dirFd, SIGNATURE_NAME, MAX_SIGNATURE_SIZE, &signature)) {
+        !ReadFileAt(dirFd, SIGNATURE_NAME, MAX_SIGNATURE_SIZE, &signature) ||
+        !ReadFileAt(dirFd, MLDSA_SIGNATURE_NAME, MAX_SIGNATURE_SIZE, &mldsaSignature)) {
         close(dirFd);
         return false;
     }
 
-    // 1. Is this manifest Bigstack's?
-    if (!VerifySignature(manifest, signature)) {
-        HexLogError("advisor: release manifest signature does not verify in %s", dir.c_str());
-        fprintf(stderr, "Error: release manifest signature does not verify against the "
+    // 1. Is this manifest Bigstack's? Both signatures must verify.
+    if (!VerifySignature(ADVISOR_RELEASE_PUBLIC_KEY, false, manifest, signature)) {
+        HexLogError("advisor: release manifest ECDSA signature does not verify in %s", dir.c_str());
+        fprintf(stderr, "Error: release manifest ECDSA signature does not verify against the "
+                        "release key in this image\n");
+        close(dirFd);
+        return false;
+    }
+    if (!VerifySignature(ADVISOR_RELEASE_MLDSA_PUBLIC_KEY, true, manifest, mldsaSignature)) {
+        HexLogError("advisor: release manifest ML-DSA-87 signature does not verify in %s", dir.c_str());
+        fprintf(stderr, "Error: release manifest ML-DSA-87 signature does not verify against the "
                         "release key in this image\n");
         close(dirFd);
         return false;
@@ -359,19 +383,28 @@ VerifyRelease(const std::string& dir, const std::string& requiredArtifact)
 static void
 PubkeyUsage(void)
 {
-    fprintf(stderr, "Usage: %s advisor_pubkey\n", HexLogProgramName());
+    fprintf(stderr, "Usage: %s advisor_pubkey [ecdsa|mldsa87]\n", HexLogProgramName());
 }
 
 static int
 PubkeyMain(int argc, char **argv)
 {
-    if (argc != 1) {
+    if (argc > 2) {
         PubkeyUsage();
         return EXIT_FAILURE;
     }
 
     // stdout, so a caller can consume it through a pipe; nothing here writes a file.
-    fputs(ADVISOR_RELEASE_PUBLIC_KEY, stdout);
+    // No argument prints both, ECDSA first.
+    const std::string which = (argc == 2) ? argv[1] : "";
+    if (which.empty() || which == "ecdsa")
+        fputs(ADVISOR_RELEASE_PUBLIC_KEY, stdout);
+    if (which.empty() || which == "mldsa87")
+        fputs(ADVISOR_RELEASE_MLDSA_PUBLIC_KEY, stdout);
+    if (!which.empty() && which != "ecdsa" && which != "mldsa87") {
+        PubkeyUsage();
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }
 
