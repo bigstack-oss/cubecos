@@ -1,0 +1,8 @@
+# [os_brick] lock_path shared by cinder and glance (/var/lock/os_brick).
+# /var/lock points to /run/lock, which is tmpfs, so a directory created in the
+# rootfs at build time is gone after boot; recreate it here instead.
+# Give both service users rwx, and the same as default ACLs so the lock files
+# created inside inherit them. d:g::r-x keeps the default group entry what
+# setfacl -d would derive; without it systemd-tmpfiles sets it to rwx.
+d  /run/lock/os_brick 0755 root root -
+a+ /run/lock/os_brick -    -    -    - u:cinder:rwx,u:glance:rwx,d:u:cinder:rwx,d:u:glance:rwx,d:g::r-x
