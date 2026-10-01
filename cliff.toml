@@ -1,0 +1,84 @@
+# git-cliff ~ configuration file
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+# No header: each changelog/CHANGELOG-X.Y.Z.md starts at its release heading.
+header = ""
+# A Tera template to be rendered for each release in the changelog.
+# See https://keats.github.io/tera/#getting-started
+body = """
+{% macro host_url() -%}
+  https://github.com
+{%- endmacro %}\
+{% macro remote_url() -%}
+  {{ self::host_url() }}/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro %}\
+{% macro entry(commit) -%}
+  {{ commit.message | upper_first }} ({% set pr = commit.remote.pr_number | default(value=0) %}{% if pr %}[#{{ pr }}]({{ self::remote_url() }}/pull/{{ pr }}){% else %}[{{ commit.id | truncate(length=7, end="") }}]({{ self::remote_url() }}/commit/{{ commit.id }}){% endif %}{% for link in commit.links %}, [{{ link.text }}]({{ link.href }}){% endfor %}){% if commit.remote.username %} by [@{{ commit.remote.username }}]({{ self::host_url() }}/{{ commit.remote.username }}){% endif %}
+{%- endmacro %}\
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="v") }}]({{ self::remote_url() }}/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## Unreleased
+{% endif %}\
+{% set breaking = commits | filter(attribute="breaking", value=true) %}\
+{% if breaking | length > 0 %}
+    ### :warning: BREAKING CHANGES
+    {% for commit in breaking %}
+        - {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ self::entry(commit=commit) }}\
+    {% endfor %}
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | upper_first }}
+    {% for group, commits in commits | group_by(attribute="scope") %}
+        #### {{ group | upper_first }}
+        {% for commit in commits %}
+            - {{ self::entry(commit=commit) }}\
+        {% endfor %}
+    {% endfor %}\
+{% endfor %}\n
+"""
+# Remove leading and trailing whitespaces from the changelog's body.
+trim = true
+
+[remote.github]
+owner = "bigstack-oss"
+repo = "cubecos"
+
+[git]
+# Parse commits according to the conventional commits specification.
+# See https://www.conventionalcommits.org
+conventional_commits = true
+# Exclude commits that do not match the conventional commits specification.
+filter_unconventional = false
+# Split commits on newlines, treating each line as an individual commit.
+split_commits = false
+# Issues a commit mentions. The link text carries the keyword, which the template prints as is.
+#   Fixes/Closes/Resolves #N -> "closes #N"
+#   Refs/References/Related to #N -> "refs #N"
+link_parsers = [
+    { pattern = "(?i)(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)[: ]+#(\\d+)", href = "https://github.com/bigstack-oss/cubecos/issues/$1", text = "closes #$1" },
+    { pattern = "(?i)(?:refs?|references|related to)[: ]+#(\\d+)", href = "https://github.com/bigstack-oss/cubecos/issues/$1", text = "refs #$1" },
+]
+tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+# An array of regex based parsers for extracting data from the commit message.
+# Assigns commits to groups.
+# Optionally sets the commit's scope and can decide to exclude commits from further processing.
+commit_parsers = [
+    { message = "^feat", group = "<!-- 0 -->:rocket: New Features", default_scope = "miscellaneous" },
+    { message = "^fix", group = "<!-- 1 -->:bug: Bug fixes", default_scope = "miscellaneous" },
+    { message = "^perf", group = "<!-- 2 -->:zap: Performance", default_scope = "miscellaneous" },
+    { message = "^refactor", group = "<!-- 3 -->:boom: Refactor", default_scope = "miscellaneous" },
+    { message = "^doc", group = "<!-- 4 -->:memo: Documentation", default_scope = "miscellaneous" },
+    { message = "^chore\\(release\\): prepare for", skip = true },
+    { message = "^(chore|ci)", group = "Miscellaneous Tasks", default_scope = "miscellaneous" },
+    { body = ".*security", group = "Security", default_scope = "miscellaneous" },
+]
+# Exclude commits that are not matched by any commit parser.
+filter_commits = false
+# Order releases topologically instead of chronologically.
+topo_order = false
+# Order of commits in each group/release within the changelog.
+# Allowed values: newest, oldest
+sort_commits = "oldest"
+protect_breaking_commits = true
