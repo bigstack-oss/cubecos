@@ -99,7 +99,7 @@ data_format = "influx"
 max_retry = 3
 required_acks = -1
 topic = "telegraf-hc-metrics"
-namepass = [ "vrouter.top", "sflow" ]
+namepass = [ "vrouter.top" ]
 
 [[outputs.kafka]]
 brokers = [ @KAFKA_HOSTS@ ]
@@ -117,4 +117,4 @@ data_format = "influx"
 max_retry = 3
 required_acks = -1
 topic = "telegraf-metrics"
-namedrop = [ "vrouter.top", "sflow", "instance" ]
+namedrop = [ "vrouter.top", "instance" ]

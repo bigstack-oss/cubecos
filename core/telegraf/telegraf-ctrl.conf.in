@@ -43,6 +43,3 @@ ceph_user = "client.admin"
 ceph_config = "/etc/ceph/ceph.conf"
 gather_admin_socket_stats = false
 gather_cluster_stats = true
-
-[[inputs.sflow]]
-service_address = "udp://:6343"

@@ -23,7 +23,7 @@ static const char CURATOR[] = "/etc/cron.d/influx-curator";
 #define DEF_EXT ".def"
 #define CONF    "/etc/influxdb/influxdb.conf"
 #define TSDB_RP "def"        // default rp, low-cardinality metrics
-#define HC_TSDB_RP "hc"      // high cardinality rp -- sflow and vrouter.top
+#define HC_TSDB_RP "hc"      // high cardinality rp -- vrouter.top
 
 static CubeRole_e s_eCubeRole;
 
@@ -38,8 +38,8 @@ static LogRotateConf log_conf("influxdb", "/var/log/influxdb/*.log", DAILY, 128,
 CONFIG_TUNING_INT(INFLUXDB_CURATOR_RP, "influxdb.curator.rp", TUNING_PUB, "influxdb curator retention policy in days.", 7, 0, 365);
 // Retention is two policies per database, split by cardinality: 'def' carries the
 // low-cardinality series whose count scales with node count (host cpu/mem/disk,
-// ceph_*), 'hc' carries sflow and vrouter.top, whose series count scales with
-// traffic -- one per flow tuple -- and would otherwise dominate the TSDB index.
+// ceph_*), 'hc' carries vrouter.top, whose series count scales with traffic -- one
+// per flow tuple -- and would otherwise dominate the TSDB index.
 //
 // Duration and shard duration are tuned together on purpose. InfluxDB never deletes
 // individual points; it drops whole shard groups, and only once the entire group is

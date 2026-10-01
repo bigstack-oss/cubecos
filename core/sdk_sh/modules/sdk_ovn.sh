@@ -218,11 +218,6 @@ ovn_bridge_phy_port_remove_v4()
     $VSCTL --if-exists del-br $bridge
 }
 
-ovn_sflow_cardinality_show()
-{
-    influx -host $(shared_id) -format json -database "telegraf" -execute "show series cardinality on telegraf from telegraf.hc.sflow" | jq -c .results[0].series[0].values[][]
-}
-
 ovn_sflow_status()
 {
     local brIntId=$(ovs-vsctl list sflow | grep "header.*192" -B 4 | grep "_uuid.*:" | awk '{print $NF}' | tr -d '\n')

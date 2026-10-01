@@ -50,19 +50,6 @@ stats_inactive_vm_drop()
             influx -host $(shared_id) -format json -database $TELEGRAF_DB -execute "drop series where resource_id = '$rid'" >/dev/null
         fi
     done
-
-    active=$(influx -host $(shared_id) -format json -database $TELEGRAF_DB -execute "select instance_id,last(bytes) from \"hc\".\"sflow\" where time >= now() - $time group by instance_id" | jq -r .results[].series[].tags.instance_id 2>/dev/null | tr '\n' ',')
-
-    readarray rid_array <<< "$(influx -host $(shared_id) -format json -database $TELEGRAF_DB -execute "select instance_id,last(bytes) from \"hc\".\"sflow\" group by instance_id" | jq -r .results[].series[].tags.instance_id 2>/dev/null)"
-    declare -p rid_array > /dev/null
-    for rid_entry in "${rid_array[@]}" ; do
-        local rid=$(echo $rid_entry | tr -d '\n')
-        [ ! -n "$rid" ] && continue
-        if ! echo ",$active" | grep -q ",$rid," ; then
-            echo "drop sflow stats of vm resource $rid"
-            influx -host $(shared_id) -format json -database $TELEGRAF_DB -execute "drop series where instance_id = '$rid'" >/dev/null
-        fi
-    done
 }
 
 stats_inactive_router_drop()
