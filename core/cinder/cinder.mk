@@ -1,7 +1,7 @@
 # Cube SDK
 # cinder installation
 
-ROOTFS_DNF += qemu-img cryptsetup lvm2 iscsi-initiator-utils device-mapper-multipath sudo sshpass
+ROOTFS_DNF += qemu-img cryptsetup lvm2 iscsi-initiator-utils device-mapper-multipath sudo sshpass nvme-cli
 ROOTFS_DNF_NOARCH += nvmetcli targetcli
 
 CINDER_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/cinder
