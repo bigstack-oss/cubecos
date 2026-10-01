@@ -168,13 +168,8 @@ rootfs_install::
 	$(Q)[ -d $(CINDER_PATCHDIR) ] && cp -rf $(CINDER_PATCHDIR)/* $(CINDER_SRCDIR)/ || /bin/true
 
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) mkdir -p /var/lock/os_brick
-	$(Q)# give full read-write-execute permissions to both service users
-	$(Q)chroot $(ROOTDIR) setfacl -m u:cinder:rwx /var/lock/os_brick
-	$(Q)chroot $(ROOTDIR) setfacl -m u:glance:rwx /var/lock/os_brick
-	$(Q)# ensure any future lock files created inside automatically inherit these permissions
-	$(Q)chroot $(ROOTDIR) setfacl -d -m u:cinder:rwx /var/lock/os_brick
-	$(Q)chroot $(ROOTDIR) setfacl -d -m u:glance:rwx /var/lock/os_brick
+	$(Q)# /var/lock is on tmpfs, so the shared os-brick lock dir is recreated at every boot
+	$(Q)$(INSTALL_DATA) -f $(ROOTDIR) $(COREDIR)/cinder/os-brick.tmpfiles ./usr/lib/tmpfiles.d/os-brick.conf
 	$(Q)cp -f $(CINDER_CONFDIR)/cinder.conf $(CINDER_CONFDIR)/cinder.conf.org
 	$(Q)touch $(CINDER_CONFDIR)/cinder.conf.def
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/cinder/cinder.d
