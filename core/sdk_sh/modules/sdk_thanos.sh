@@ -21,7 +21,8 @@
 # the same internal endpoint config_swift publishes -- and this stays a single source
 # of truth instead of re-deriving it from a tuning.
 #
-# Idempotent: safe to run on every commit.
+# Idempotent: safe to run on every commit. A node whose file is already exactly what
+# this would write returns without touching RGW; see the fast path below.
 thanos_objstore_setup()
 {
     local ep=$1
@@ -33,6 +34,24 @@ thanos_objstore_setup()
     if [ "x$ep" = "x" ] ; then
         log_error "thanos_objstore_setup: usage: thanos_objstore_setup <host:port> [bucket]"
         return 1
+    fi
+
+    # Fast path: the file is already what this would write. Everything below needs RGW --
+    # the user and the bucket live there, not on this node -- and on a cold power cycle of
+    # a cluster whose OSDs sit on the compute nodes RGW cannot answer yet: those OSDs start
+    # only in the computes' own bootstrap, which waits for this commit. So every such power
+    # cycle spent the caller's whole timeout here re-deriving a file the node already had,
+    # 120s on each control of QA 10.32.36.10. A missing or different file -- a first
+    # bootstrap, a joining control, a new VIP -- still goes to RGW.
+    if [ -s $conf ] ; then
+        ak=$(awk '$1 == "access_key:" {print $2}' $conf)
+        sk=$(awk '$1 == "secret_key:" {print $2}' $conf)
+        if [ -n "$ak" -a "x$ak" != "xnull" -a -n "$sk" -a "x$sk" != "xnull" ] && \
+           [ "$(_thanos_objstore_conf $bucket $ep $ak $sk)" = "$(cat $conf)" ] ; then
+            chown prometheus:prometheus $conf
+            chmod 0640 $conf
+            return 0
+        fi
     fi
 
     if ! radosgw-admin user info --uid=$uid >/dev/null 2>&1 ; then
@@ -57,7 +76,19 @@ thanos_objstore_setup()
 
     mkdir -p /etc/thanos
     # written whole then moved, so a reader never sees a half-written credential file
-    cat > $conf.tmp <<EOF
+    _thanos_objstore_conf $bucket $ep $ak $sk > $conf.tmp
+    chown prometheus:prometheus $conf.tmp
+    chmod 0640 $conf.tmp
+    mv -f $conf.tmp $conf
+    return 0
+}
+
+# The objstore config thanos reads. One writer for the file and for the fast path's
+# check that it is already current, so the two cannot drift apart.
+_thanos_objstore_conf()
+{
+    local bucket=$1 ep=$2 ak=$3 sk=$4
+    cat <<EOF
 type: S3
 config:
   bucket: $bucket
@@ -67,8 +98,4 @@ config:
   insecure: true
   signature_version2: false
 EOF
-    chown prometheus:prometheus $conf.tmp
-    chmod 0640 $conf.tmp
-    mv -f $conf.tmp $conf
-    return 0
 }

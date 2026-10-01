@@ -519,6 +519,10 @@ WriteThanosConf(const std::string& ctrlAddrs, const std::string& sharedId, int t
     // cluster_start until ceph recovered -- 1h53m on cube36. timeout(1) signals the whole
     // process group, and -k because hex_sdk's RemoveTempFiles trap swallows the TERM and
     // would run on to the next radosgw-admin call.
+    //
+    // A power cycle does not reach the timeout: a node that already holds the file it
+    // would write returns before touching RGW. It bounds only the runs that need RGW --
+    // a first bootstrap, a joining control, a new VIP -- when ceph cannot serve them.
     HexUtilSystemF(0, 0, "timeout -k 10 120 " HEX_SDK " thanos_objstore_setup %s:%s %s",
                    sharedId.c_str(), RGW_PORT, THANOS_BUCKET);
 
