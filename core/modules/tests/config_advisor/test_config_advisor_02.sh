@@ -29,17 +29,28 @@ SRC="$DIR/../../config_advisor.cpp"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-# A throwaway release keypair, generated per run so no key is committed, and a
-# second one standing in for an attacker.
-openssl ecparam -name prime256v1 -genkey -noout -out "$WORK/release.key" 2>/dev/null
-openssl ec -in "$WORK/release.key" -pubout -out "$WORK/release.pub" 2>/dev/null
-openssl ecparam -name prime256v1 -genkey -noout -out "$WORK/attacker.key" 2>/dev/null
+# Throwaway hybrid release keypairs (ECDSA P-384 + ML-DSA-87), generated per
+# run so no key is committed, and a second set standing in for an attacker.
+genkeys() {
+    openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-384 -out "$WORK/$1.key" 2>/dev/null
+    openssl pkey -in "$WORK/$1.key" -pubout -out "$WORK/$1.pub" 2>/dev/null
+    openssl genpkey -algorithm ML-DSA-87 -out "$WORK/$1-mldsa.key" 2>/dev/null
+    openssl pkey -in "$WORK/$1-mldsa.key" -pubout -out "$WORK/$1-mldsa.pub" 2>/dev/null
+}
+genkeys release
+genkeys attacker
 
-# Embed it exactly the way core/modules/Makefile embeds the real one.
-{ printf '#define ADVISOR_RELEASE_PUBLIC_KEY "'
-  awk '{printf "%s\\n", $0}' "$WORK/release.pub"
-  printf '"\n'
-} > "$WORK/advisor_key.h"
+# Embed them exactly the way core/modules/Makefile embeds the real ones.
+# keyheader <out> <ecdsa pub> <mldsa pub>
+keyheader() {
+    { printf '#define ADVISOR_RELEASE_PUBLIC_KEY "'
+      awk '{printf "%s\\n", $0}' "$2"
+      printf '"\n#define ADVISOR_RELEASE_MLDSA_PUBLIC_KEY "'
+      awk '{printf "%s\\n", $0}' "$3"
+      printf '"\n'
+    } > "$1"
+}
+keyheader "$WORK/advisor_key.h" "$WORK/release.pub" "$WORK/release-mldsa.pub"
 
 g++ -Wall -Werror -Wno-unused-result -I"$WORK" -I"$DIR/stub" \
     -o "$WORK/advisorctl" "$SRC" "$DIR/stub/driver.cpp" -lcrypto \
@@ -47,9 +58,15 @@ g++ -Wall -Werror -Wno-unused-result -I"$WORK" -I"$DIR/stub" \
 
 V="$WORK/advisorctl"
 
-# make_release <dir> [signing key]
+# sign_ecdsa / sign_mldsa <dir> <key> -- the two halves of a release signature.
+sign_ecdsa() { openssl dgst -sha384 -sign "$2" -out "$1/manifest.txt.sig" "$1/manifest.txt"; }
+sign_mldsa() {
+    openssl pkeyutl -sign -rawin -inkey "$2" -in "$1/manifest.txt" -out "$1/manifest.txt.mldsa87.sig"
+}
+
+# make_release <dir> [key prefix] -- signed with both <prefix>.key and <prefix>-mldsa.key.
 make_release() {
-    local dir=$1 key=${2:-$WORK/release.key}
+    local dir=$1 key=${2:-$WORK/release}
     rm -rf "$dir" ; mkdir -p "$dir"
     printf 'amd64 agent\n' > "$dir/cube-advisor-agent_linux_amd64"
     printf 'arm64 agent\n' > "$dir/cube-advisor-agent_linux_arm64"
@@ -60,14 +77,16 @@ make_release() {
         echo "# protocol: 1"
         ( cd "$dir" && sha256sum cube-advisor-agent_linux_amd64 cube-advisor-agent_linux_arm64 )
     } > "$dir/manifest.txt"
-    openssl dgst -sha256 -sign "$key" -out "$dir/manifest.txt.sig" "$dir/manifest.txt"
+    sign_ecdsa "$dir" "$key.key"
+    sign_mldsa "$dir" "$key-mldsa.key"
 }
 
 # resign <dir> -- re-sign whatever the manifest now says, with the real release
 # key. Used to test the parser on input that has already passed the signature
 # check, which is the only way those paths are reachable.
 resign() {
-    openssl dgst -sha256 -sign "$WORK/release.key" -out "$1/manifest.txt.sig" "$1/manifest.txt"
+    sign_ecdsa "$1" "$WORK/release.key"
+    sign_mldsa "$1" "$WORK/release-mldsa.key"
 }
 
 REL="$WORK/rel"
@@ -81,11 +100,19 @@ $V advisor_verify_release "$REL" cube-advisor-agent_linux_amd64 >/dev/null 2>&1 
 
 # The published two-command check has to agree with us, or the format's promise
 # that a customer can verify our releases without our binary is not true.
-$V advisor_pubkey > "$WORK/extracted.pub" 2>/dev/null \
-    || fail "advisor_pubkey exited non-zero"
-openssl dgst -sha256 -verify "$WORK/extracted.pub" \
+$V advisor_pubkey ecdsa > "$WORK/extracted.pub" 2>/dev/null \
+    || fail "advisor_pubkey ecdsa exited non-zero"
+$V advisor_pubkey mldsa87 > "$WORK/extracted-mldsa.pub" 2>/dev/null \
+    || fail "advisor_pubkey mldsa87 exited non-zero"
+openssl dgst -sha384 -verify "$WORK/extracted.pub" \
     -signature "$REL/manifest.txt.sig" "$REL/manifest.txt" >/dev/null 2>&1 \
-    || fail "openssl rejects a manifest this verifier accepts"
+    || fail "openssl rejects an ECDSA signature this verifier accepts"
+openssl pkeyutl -verify -rawin -pubin -inkey "$WORK/extracted-mldsa.pub" \
+    -in "$REL/manifest.txt" -sigfile "$REL/manifest.txt.mldsa87.sig" >/dev/null 2>&1 \
+    || fail "openssl rejects an ML-DSA-87 signature this verifier accepts"
+[ "$($V advisor_pubkey)" = "$(cat "$WORK/extracted.pub" "$WORK/extracted-mldsa.pub")" ] \
+    || fail "advisor_pubkey with no argument does not print both keys, ECDSA first"
+$V advisor_pubkey rsa >/dev/null 2>&1 && fail "advisor_pubkey accepted an unknown key name"
 ( cd "$REL" && sha256sum -c manifest.txt >/dev/null 2>&1 ) \
     || fail "sha256sum -c rejects a manifest this verifier accepts"
 
@@ -113,21 +140,62 @@ make_release "$REL" ; printf 'evil\n' > "$REL/cube-advisor-agent_linux_amd64"
 $V advisor_verify_release "$REL" >/dev/null 2>&1 \
     && fail "accepted an attacker-authored manifest carrying a stale signature"
 
-make_release "$REL" "$WORK/attacker.key"
+make_release "$REL" "$WORK/attacker"
 $V advisor_verify_release "$REL" >/dev/null 2>&1 \
-    && fail "accepted a manifest signed by another key"
+    && fail "accepted a manifest signed by other keys"
 
-make_release "$REL" ; head -c 100 /dev/urandom > "$REL/manifest.txt.sig"
+# ---- refuse: hybrid -- one genuine half is not enough ----
+make_release "$REL" ; sign_mldsa "$REL" "$WORK/attacker-mldsa.key"
 $V advisor_verify_release "$REL" >/dev/null 2>&1 \
-    && fail "accepted a random signature"
+    && fail "accepted a genuine ECDSA signature with a foreign ML-DSA one"
 
-make_release "$REL" ; : > "$REL/manifest.txt.sig"
+make_release "$REL" ; sign_ecdsa "$REL" "$WORK/attacker.key"
 $V advisor_verify_release "$REL" >/dev/null 2>&1 \
-    && fail "accepted an empty signature"
+    && fail "accepted a genuine ML-DSA signature with a foreign ECDSA one"
+
+make_release "$REL" ; rm -f "$REL/manifest.txt.mldsa87.sig"
+$V advisor_verify_release "$REL" >/dev/null 2>&1 && fail "accepted a missing ML-DSA signature"
+
+make_release "$REL" ; : > "$REL/manifest.txt.mldsa87.sig"
+$V advisor_verify_release "$REL" >/dev/null 2>&1 && fail "accepted an empty ML-DSA signature"
+
+# ECDSA must be over SHA-384, not whatever digest the signer picked.
+make_release "$REL"
+openssl dgst -sha256 -sign "$WORK/release.key" -out "$REL/manifest.txt.sig" "$REL/manifest.txt"
+$V advisor_verify_release "$REL" >/dev/null 2>&1 && fail "accepted an ECDSA signature over SHA-256"
+
+# ---- refuse: a misprovisioned anchor ----
+# Each slot accepts only its own key kind.
+# Assert the reason: a wrong-kind key would also fail on the signature.
+# wrongkind <ecdsa pub> <mldsa pub> [ecdsa signing key]
+wrongkind() {
+    keyheader "$WORK/wrong/advisor_key.h" "$1" "$2"
+    g++ -Wall -Werror -Wno-unused-result -I"$WORK/wrong" -I"$DIR/stub" \
+        -o "$WORK/wrong/advisorctl" "$SRC" "$DIR/stub/driver.cpp" -lcrypto \
+        || fail "config_advisor.cpp did not compile against a test key"
+    make_release "$REL"
+    [ -z "$3" ] || sign_ecdsa "$REL" "$3"
+    "$WORK/wrong/advisorctl" advisor_verify_release "$REL" 2>&1 >/dev/null
+}
+mkdir -p "$WORK/wrong"
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$WORK/p256.key" 2>/dev/null
+openssl pkey -in "$WORK/p256.key" -pubout -out "$WORK/p256.pub" 2>/dev/null
+case $(wrongkind "$WORK/release.pub" "$WORK/release.pub") in
+    *"ML-DSA-87 release public key is unusable"*) ;;
+    *) fail "accepted an EC key in the ML-DSA slot" ;;
+esac
+case $(wrongkind "$WORK/release-mldsa.pub" "$WORK/release-mldsa.pub") in
+    *"ECDSA P-384 release public key is unusable"*) ;;
+    *) fail "accepted an ML-DSA key in the ECDSA slot" ;;
+esac
+case $(wrongkind "$WORK/p256.pub" "$WORK/release-mldsa.pub" "$WORK/p256.key") in
+    *"ECDSA P-384 release public key is unusable"*) ;;
+    *) fail "accepted a P-256 key in the P-384 slot" ;;
+esac
 
 # ---- refuse: missing ----
 make_release "$REL" ; rm -f "$REL/manifest.txt.sig"
-$V advisor_verify_release "$REL" >/dev/null 2>&1 && fail "accepted a missing signature"
+$V advisor_verify_release "$REL" >/dev/null 2>&1 && fail "accepted a missing ECDSA signature"
 make_release "$REL" ; rm -f "$REL/manifest.txt"
 $V advisor_verify_release "$REL" >/dev/null 2>&1 && fail "accepted a missing manifest"
 make_release "$REL" ; rm -f "$REL/cube-advisor-agent_linux_arm64"
@@ -135,7 +203,7 @@ $V advisor_verify_release "$REL" >/dev/null 2>&1 \
     && fail "accepted a manifest listing an artifact that is not there"
 
 # ---- targeted install: only the artifact being installed need be present ----
-# advisor_enroll fetches the manifest, the signature and ONLY this node's arch,
+# advisor_enroll fetches the manifest, the signatures and ONLY this node's arch,
 # so a release signed for several architectures leaves the others absent.
 # Naming an artifact asks "is this one genuine"; naming none asks "is this whole
 # release intact", which stays strict -- the case just above.

@@ -28,6 +28,7 @@ done
 
 ADVISOR_MANIFEST_NAME=manifest.txt
 ADVISOR_SIGNATURE_NAME=manifest.txt.sig
+ADVISOR_MLDSA_SIGNATURE_NAME=manifest.txt.mldsa87.sig
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -65,6 +66,7 @@ printf 'amd64 agent\n' > "$REL/cube-advisor-agent_linux_amd64"
     ( cd "$REL" && sha256sum cube-advisor-agent_linux_amd64 )
 } > "$REL/$ADVISOR_MANIFEST_NAME"
 : > "$REL/$ADVISOR_SIGNATURE_NAME"
+: > "$REL/$ADVISOR_MLDSA_SIGNATURE_NAME"
 
 # --- what reaches hex_config -----------------------------------------------
 reset
