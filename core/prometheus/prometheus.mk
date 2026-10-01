@@ -6,11 +6,15 @@
 # an LTS at all. 3.13 is the current LTS, supported to 2027-07-31.
 #
 # This also retires the source build that used to live in core/prometheus/Makefile. Its one
-# real benefit was building against the jail's Go rather than a stale release toolchain --
-# and EPEL builds 3.13.1 with go1.26.4, ahead of the jail's go1.25.12, so that reason is
-# gone. Using the rpm also keeps the package identity honest: syft catalogues an rpm-owned
-# binary at the rpm's version (exclude-binary-overlap-by-ownership), so a source-built 3.x
-# dropped on top of a 2.55.1 rpm would have been reported as 2.55.1 in the SBOM forever.
+# real benefit was building against the jail's Go rather than a stale release toolchain, and
+# when this moved to the rpm EPEL built 3.13.1 with go1.26.4, ahead of the jail's go1.25.12.
+# That stopped holding when the jail moved to go1.27.1 (cubecos#801): govulncheck finds 22
+# advisories in EPEL's 3.13.1 binary, 10 of them standard library and all fixed by go1.26.6,
+# which a rebuild with the jail's Go would shed. Whether that outweighs the package identity
+# below is a separate decision. Using the rpm keeps that identity honest: syft catalogues an
+# rpm-owned binary at the rpm's version (exclude-binary-overlap-by-ownership), so a
+# source-built 3.x dropped on top of a 2.55.1 rpm would have been reported as 2.55.1 in the
+# SBOM forever.
 ROOTFS_DNF += prometheus
 
 # This also drops packagecloud's prometheus.repo, which prometheus2 was its only consumer of.
