@@ -60,7 +60,7 @@ ROOTFS_PIP += python-magic python3-saml xmlsec
 # 3.9, and the squid SIG repo ships no jaraco-text of its own, so nothing about
 # either bump retires this. Re-verify with
 # `ceph mgr module ls` + `ceph mgr module enable dashboard` before dropping it.
-ROOTFS_DNF_NOARCH += python3-jaraco-text-3.2.0-6.el9s
+ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/python-jaraco-text/3.2.0/6.el9s/noarch/python3-jaraco-text-3.2.0-6.el9s.noarch.rpm
 LOCKED_DNF += python3-jaraco-text-3.2.0-6.el9s
 
 # headers for the rados/rbd python bindings built below
