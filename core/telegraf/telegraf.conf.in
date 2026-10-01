@@ -1,5 +1,8 @@
 [agent]
 interval = "60s"
+# No processors or aggregators are configured, so this changes nothing. It is set only
+# because telegraf warns on every start until it is, and true is upstream's future default.
+skip_processors_after_aggregators = true
 
 [[inputs.cpu]]
 percpu = false

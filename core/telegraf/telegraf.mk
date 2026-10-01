@@ -1,11 +1,24 @@
 # Cube SDK
 # Telegraf installation
 
-TELEGRAF_PKG := telegraf-1.30.3-1.x86_64.rpm
+TELEGRAF_PKG := telegraf-1.40.1-1.x86_64.rpm
 
 ROOTFS_DNF_DL_FROM += https://dl.influxdata.com/telegraf/releases/$(TELEGRAF_PKG)
 
-BIN := $(TOP_BLDDIR)/core/telegraf/telegraf/telegraf
+# The rpm's own /usr/bin/telegraf is what ships. Through 1.30.3 core/telegraf/Makefile
+# rebuilt the tag and copied that binary over it, because upstream builds each release with
+# the Go of its day and never rebuilds it: the 1.30.3 rpm was go1.22.3 and carried 127
+# advisories, the rebuild 66 (cubecos#647). 1.40.1 is built with go1.27.1, the current
+# toolchain, and govulncheck reports the identical two advisories for the rpm's binary and
+# for a go1.27.1 rebuild of the same tag (cubecos#801), so the rebuild buys nothing -- and it
+# would need a toolchain the jail does not have: the tag requires go 1.27, the jail is on
+# 1.25. The packaged binary also keeps `rpm -V telegraf` clean and the SBOM honest, and it
+# is stripped: 328 MB, against 456 MB for our build.
+#
+# The trade is that the toolchain now moves only when telegraf does. Upstream releases every
+# few weeks with the Go of the day, so a current telegraf is a current toolchain and an old
+# one ages. Judge a bump, or answer an audit, by scanning the rpm payload rather than by the
+# version number: `rpm2cpio <rpm> | cpio -idm && govulncheck -mode binary ./usr/bin/telegraf`.
 
 # The rpm carries its unit as a payload file, /usr/lib/telegraf/scripts/telegraf.service,
 # and only copies it to /usr/lib/systemd/system from the postinstall scriptlet -- which is
@@ -32,7 +45,6 @@ rootfs_install::
 	$(Q)sed -i '/^ImportCredential=/d' $(ROOTDIR)/usr/lib/systemd/system/telegraf.service
 	$(Q)chroot $(ROOTDIR) systemctl disable telegraf
 	$(Q)mv -f $(ROOTDIR)/etc/telegraf/telegraf.conf $(ROOTDIR)/etc/telegraf/telegraf.conf.org
-	$(Q)cp -f $(BIN) $(ROOTDIR)/usr/bin/
 	$(Q)cp -f $(COREDIR)/telegraf/telegraf.conf.in $(ROOTDIR)/etc/telegraf/telegraf.conf.in
 	$(Q)cp -f $(COREDIR)/telegraf/telegraf-ctrl.conf.in $(ROOTDIR)/etc/telegraf/telegraf-ctrl.conf.in
 	$(Q)cp -f $(COREDIR)/telegraf/telegraf-device-linux.conf.in $(ROOTDIR)/etc/telegraf/telegraf-device-linux.conf.in

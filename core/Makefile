@@ -11,7 +11,6 @@ SUBDIRS += cubectl
 SUBDIRS += phone-home-agent
 SUBDIRS += appctl
 SUBDIRS += lachesis
-SUBDIRS += telegraf
 SUBDIRS += exporters
 SUBDIRS += yq
 SUBDIRS += etcd
