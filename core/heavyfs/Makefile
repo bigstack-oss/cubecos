@@ -216,7 +216,14 @@ LOCKED_DNF += $(OPENSSL)
 # PYTHON3-NUMPY-F2PY := python3-numpy-f2py-1:1.20.1-5.el9
 # LOCKED_DNF += $(PYTHON3-NUMPY-F2PY)
 
-$(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) perf arp-scan")
+# bash-completion is the loader: the /etc/profile.d hook and the script that reads
+# /etc/bash_completion.d and /usr/share/bash-completion/completions. It was never
+# named here before -- it arrived as a Recommends of the python3-openstackclient
+# rpm, which dnf honours by default, and it left with that rpm when #609 moved the
+# cli into a venv. From 3.1.10 on nothing read those directories, so the ceph, rbd,
+# ovs-vsctl, systemctl and git completions still on disk went dead along with
+# openstack's (#1611). Naming it is what keeps it from leaving with a package again.
+$(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) perf arp-scan bash-completion")
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) python3 -m pip install -U pip
