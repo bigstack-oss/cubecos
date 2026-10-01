@@ -40,6 +40,7 @@ ADVISOR_SSHD_DROPIN=/etc/ssh/sshd_config.d/60-cube-advisor-console.conf
 ADVISOR_CONSOLE_ACCOUNT=advisor
 ADVISOR_MANIFEST_NAME=manifest.txt
 ADVISOR_SIGNATURE_NAME=manifest.txt.sig
+ADVISOR_MLDSA_SIGNATURE_NAME=manifest.txt.mldsa87.sig
 
 # The agent's own unit, shipped by cube-advisor-agent and installed with the
 # image. Never enabled: hex_config decides when it runs (the advisor module's
@@ -1332,7 +1333,7 @@ advisor_upgrade_node()
     trap 'rm -rf "$tmp"' RETURN
 
     local f
-    for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$artifact" ; do
+    for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$ADVISOR_MLDSA_SIGNATURE_NAME" "$artifact" ; do
         curl -fsS --max-time 120 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
              -o "$tmp/$f" "$base/api/v1/releases/$current/$f" || {
             echo "Error: cannot fetch $f for $current from $base" >&2
@@ -1523,7 +1524,7 @@ advisor_enroll()
 
     local url="$server/api/v1/releases/$version"
     local f
-    for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$artifact" ; do
+    for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$ADVISOR_MLDSA_SIGNATURE_NAME" "$artifact" ; do
         if ! curl -fsS --max-time 120 \
                 -H "Authorization: Bearer $(cat "$token_file")" \
                 -o "$tmp/$f" "$url/$f" ; then
