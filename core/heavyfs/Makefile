@@ -472,8 +472,8 @@ endif
 # complete` lists only the commands of the plugins it can see, and heat, octavia,
 # manila, designate and the rest install theirs there. It goes in bash-completion's
 # own directory, named for the command, so it loads on the first TAB rather than
-# being sourced into every interactive shell (2272 lines). pipefail makes a cli that
-# cannot start fail the build instead of leaving an empty file.
+# being sourced into every interactive shell. pipefail makes a cli that cannot
+# start fail the build instead of leaving an empty file.
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) bash -c "set -o pipefail && /usr/bin/openstack complete | \
 		sed -n '/_openstack/,\$$p' > /usr/share/bash-completion/completions/openstack"

@@ -128,7 +128,7 @@ rootfs_install::
 	$(Q)# the heatclient CLI, which is python-heatclient's console script.
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/heat /usr/bin/heat
 	$(Q)# Tab completion for the heat cli: tools/heat.bash_completion from
-	$(Q)# python-heatclient 3.5.0, unchanged. The python3-heatclient rpm installed it;
+	$(Q)# python-heatclient 4.1.0, unchanged. The python3-heatclient rpm installed it;
 	$(Q)# the wheel does not carry it (#1611).
 	$(Q)cp -f $(COREDIR)/heat/heat.bash_completion $(ROOTDIR)/usr/share/bash-completion/completions/heat
 

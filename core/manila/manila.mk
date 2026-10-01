@@ -121,10 +121,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-share /usr/bin/manila-share
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-status /usr/bin/manila-status
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila-wsgi /usr/bin/manila-wsgi
-	$(Q)# Tab completion for the manila cli: tools/manila.bash_completion from
-	$(Q)# python-manilaclient 4.8.1, unchanged. The python3-manilaclient rpm installed it;
-	$(Q)# the wheel does not carry it (#1611).
-	$(Q)cp -f $(COREDIR)/manila/manila.bash_completion $(ROOTDIR)/usr/share/bash-completion/completions/manila
 
 # the client, its osc plugin and its cli
 #
@@ -145,6 +141,10 @@ rootfs_install::
 	$(Q)# python3-manilaclient used to own. The rpm also shipped /usr/bin/manila-3,
 	$(Q)# the Fedora python3 alias, which nothing calls and which is not recreated.
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/manila /usr/bin/manila
+	$(Q)# Tab completion for the manila cli: tools/manila.bash_completion from
+	$(Q)# python-manilaclient 5.4.1, unchanged. The python3-manilaclient rpm installed it;
+	$(Q)# the wheel does not carry it (#1611).
+	$(Q)cp -f $(COREDIR)/manila/manila.bash_completion $(ROOTDIR)/usr/share/bash-completion/completions/manila
 
 # install the manila web ui plugin, the openstack-manila-ui rpm's replacement.
 # Registering its panels and policy files is core/horizon's job, where every
