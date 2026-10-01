@@ -26,12 +26,6 @@ interval = "1m"
 timeout = "1m"
 data_format = "influx"
 
-[[inputs.exec]]
-commands = [ "sudo /usr/sbin/hex_sdk security_flow_abnormal_detection @BASE@ @UNIT@ @THRESHOLD@" ]
-interval = "@UNIT@"
-timeout = "@UNIT@"
-data_format = "influx"
-
 [[inputs.ceph]]
 interval = '1m'
 ceph_binary = "/usr/bin/ceph"

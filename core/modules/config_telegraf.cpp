@@ -37,7 +37,6 @@
 const static char NAME[] = "telegraf";
 
 static bool s_bCubeModified = false;
-static bool s_bKapacitorModified = false;
 
 static bool s_bConfigChanged = false;
 
@@ -50,15 +49,9 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
-CONFIG_TUNING_SPEC_STR(KAPACITOR_ALERT_FLOW_BASE);
-CONFIG_TUNING_SPEC_STR(KAPACITOR_ALERT_FLOW_UNIT);
-CONFIG_TUNING_SPEC_INT(KAPACITOR_ALERT_FLOW_THRESHOLD);
 
 // parse tunings
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
-PARSE_TUNING_X_STR(s_alertFlowBase, KAPACITOR_ALERT_FLOW_BASE, 2);
-PARSE_TUNING_X_STR(s_alertFlowUnit, KAPACITOR_ALERT_FLOW_UNIT, 2);
-PARSE_TUNING_X_INT(s_alertFlowThreshold, KAPACITOR_ALERT_FLOW_THRESHOLD, 2);
 
 struct DeviceInfo {
     std::string hostname;
@@ -221,19 +214,6 @@ NotifyCube(bool modified)
 }
 
 static bool
-ParseKapacitor(const char *name, const char *value, bool isNew)
-{
-    ParseTune(name, value, isNew, 2);
-    return true;
-}
-
-static void
-NotifyKapacitor(bool modified)
-{
-    s_bKapacitorModified = IsModifiedTune(2);
-}
-
-static bool
 CommitCheck(bool modified, int dryLevel)
 {
     if (IsBootstrap()) {
@@ -241,8 +221,7 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    s_bConfigChanged = modified | s_bCubeModified | s_bKapacitorModified |
-                       G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
+    s_bConfigChanged = modified | s_bCubeModified | G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
 
     return s_bConfigChanged;
 }
@@ -293,15 +272,8 @@ Commit(bool modified, int dryLevel)
 
         WriteDeviceConfig();
 
-        if (IsControl(s_eCubeRole)) {
-            if (HexSystemF(0, "sed -e 's/@BASE@/%s/' -e 's/@UNIT@/%s/' -e 's/@THRESHOLD@/%d/' %s > %s",
-                           s_alertFlowBase.c_str(), s_alertFlowUnit.c_str(), s_alertFlowThreshold.newValue(),
-                           CTRL_CONF IN_EXT, CTRL_CONF) != 0) {
-                HexLogError("failed to update %s", CTRL_CONF);
-                return false;
-            }
-            HexSystemF(0, "cat %s >> %s", CTRL_CONF, CONF);
-        }
+        if (IsControl(s_eCubeRole))
+            HexSystemF(0, "cat %s >> %s", CTRL_CONF IN_EXT, CONF);
     }
 
     SystemdCommitService(true, NAME);
@@ -371,7 +343,6 @@ CONFIG_REQUIRES(telegraf, kafka);
 
 // extra tunings
 CONFIG_OBSERVES(telegraf, cubesys, ParseCube, NotifyCube);
-CONFIG_OBSERVES(telegraf, kapacitor, ParseKapacitor, NotifyKapacitor);
 
 CONFIG_TRIGGER_WITH_SETTINGS(telegraf, "node_start", ClusterStartMain);
 

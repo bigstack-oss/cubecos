@@ -72,9 +72,6 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_TUNING_BOOL(KAPACITOR_ALERT_CHK_ENABLED, "kapacitor.alert.check.enabled", TUNING_PUB, "Set true to enable kapacitor alert check.", false);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_CHK_EID, "kapacitor.alert.check.eventid", TUNING_PUB, "Set kapacitor alert check eventid.", "SYS00002W", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_CHK_INTERVAL, "kapacitor.alert.check.interval", TUNING_PUB, "Set kapacitor alert check interval (default to 60m).", "60m", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_FLOW_BASE, "kapacitor.alert.flow.base", TUNING_PUB, "Set kapacitor alert base for abnormal flow.", "7d", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_STR(KAPACITOR_ALERT_FLOW_UNIT, "kapacitor.alert.flow.unit", TUNING_PUB, "Set kapacitor alert unit for abnormal flow.", "5m", ValidateRegex, DFT_REGEX_STR);
-CONFIG_TUNING_INT(KAPACITOR_ALERT_FLOW_THRESHOLD, "kapacitor.alert.flow.threshold", TUNING_PUB, "Set kapacitor alert threshold for abnormal flow.", 30, 0, 65535);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_EXTRA_PREFIX, "kapacitor.alert.extra.prefix", TUNING_PUB, "Set kapacitor alert message prefix.", "Cube", ValidateRegex, DFT_REGEX_STR);
 
 // private tunigns

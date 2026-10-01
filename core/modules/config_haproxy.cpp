@@ -511,10 +511,11 @@ WriteConfig(bool ha, const std::string& ctrlVip,
     //
     // Reads are safe from any backend because every control node holds a full replica --
     // kapacitor relays what it proxies on :9092 out to its peers, and the event inserts fan
-    // out to every control host -- so the 42 `influx -host $(shared_id)` call sites in
-    // sdk_stats, sdk_health, sdk_logs, sdk_security and sdk_ovn keep working and keep their
-    // failover. Pointing them at the local instance instead would make one node's dead
-    // influxdb look like a cluster-wide fault in whatever each of them reports on.
+    // out to every control host -- so the 26 `influx -host $(shared_id)` call sites in
+    // sdk_stats, sdk_logs and the $INFLUX wrapper sdk_health reads through keep working
+    // and keep their failover. Pointing them at the local instance instead would make
+    // one node's dead influxdb look like a cluster-wide fault in whatever each of them
+    // reports on.
     //
     // A write through here would land on exactly one backend and never be replicated,
     // because the replication lives in kapacitor on :9092, not in influxdb. That is what

@@ -76,8 +76,6 @@ OPS_MIGRATED=$STATE_DIR/ops_migrated
 
 DEV_LIST=/var/appliance-db/device.lst
 
-DB="\"hc\".\"sflow\""
-
 NFS_DIR="/mnt/nfs"
 POLICY_DIR="/etc/policies"
 EVENTS_DB="events"
