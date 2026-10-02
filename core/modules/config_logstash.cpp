@@ -1,5 +1,8 @@
 // CUBE SDK
 
+#include <algorithm>
+#include <thread>
+
 #include <hex/log.h>
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
@@ -33,6 +36,13 @@ const static char AB_NAME[] = "auditbeat";
 const static char LG_CONF[] = "/etc/logstash/logstash.yml";
 const static char FB_CONF[] = "/etc/filebeat/filebeat.yml";
 const static char AB_CONF[] = "/etc/auditbeat/auditbeat.yml";
+
+// Left unset, pipeline.workers is the core count, for each of the nine pipelines, and every
+// worker compiles its own copy of its pipeline before the first event flows. All of them share
+// the 1 GB heap jvm.options sets, so a 384-core node ran out of heap creating its 3456 workers
+// and restarted into the same OutOfMemoryError until someone noticed. The pipelines need well
+// under one busy worker each, so the count is capped instead of following the cores.
+const static unsigned int LG_MAX_WORKERS = 8;
 
 static ConfigString s_hostname;
 
@@ -72,6 +82,8 @@ WriteConfigs(const std::string &kafkaHosts)
     fprintf(fout, "path.logs: /var/log/logstash\n");
     fprintf(fout, "queue.type: persisted\n");
     fprintf(fout, "queue.max_bytes: 128mb\n");
+    fprintf(fout, "pipeline.workers: %u\n",
+            std::clamp(std::thread::hardware_concurrency(), 1u, LG_MAX_WORKERS));
     fclose(fout);
 
     fout = fopen(FB_CONF, "w");
