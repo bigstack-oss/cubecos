@@ -116,12 +116,18 @@ rootfs_install::
 #   upstream still does not provide; and the nfs.py half of upstream 0480073b9 (bug
 #   1989514, below): an extend resizes the active file, which a snapshot made a qcow2
 #   overlay, instead of the base file
-# volume/drivers/remotefs.py.patch: upstream 0480073b9 (bug 1989514; 23.4.0 and
-#   24.3.0, never backported to 2023.1). An online snapshot of an attached volume made a
-#   qcow2 overlay the active file but left the volume's format admin metadata, and the
-#   attachment's connection_info, at raw, so the instance could not boot after a
-#   stop/start. The patch records qcow2 in both. Bug 2073146's fix reads the format
-#   from that metadata, so it stands on this one
+# volume/drivers/remotefs.py.patch, image/image_utils.py.patch: two upstream fixes
+#   that bug 2073146's fix stands on, since it reads the format from the volume's admin
+#   metadata. 0480073b9 (bug 1989514; 23.4.0 and 24.3.0, never backported to 2023.1):
+#   an online snapshot of an attached volume made a qcow2 overlay the active file but
+#   left the format, and the attachment's connection_info, at raw, so the instance could
+#   not boot after a stop/start; the patch records qcow2 in both. 8c03308ed (28.0.0):
+#   an offline snapshot left the format at raw the same way, so an extend ran qemu-img
+#   resize -f raw on the overlay; the patch keeps format (and the new base_format) in
+#   step with the active file on every snapshot create and delete. One context line,
+#   which 22.3.0 spells del(snap_info[...]), was resolved by hand; nothing else differs
+#   from upstream. 8c03308ed's quobyte.py half is not carried: CubeCOS does not use the
+#   Quobyte driver
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
