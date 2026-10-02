@@ -244,6 +244,7 @@ eval "ERR_DESC_$SRV[10]='lb-mgmt ids unset'"
 eval "ERR_DESC_$SRV[11]='octavia-hm0 port not bound in ovn'"
 eval "ERR_DESC_$SRV[12]='load balancer in ERROR'"
 eval "ERR_DESC_$SRV[13]='planned-maintenance marker stuck, health-manager gated off'"
+eval "ERR_DESC_$SRV[14]='amphora image release differs from controller'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="designate"
