@@ -51,7 +51,7 @@ api_get_images_materials()
 # whichever side runs next silently adopts or destroys the other's key. Issue #703.
 #
 # Access to the shared "log" bucket survives the split because rgw runs with
-# `rgw keystone implicit tenants = swift` (S3 untenanted): the S3 owner is the keystone PROJECT, not the
+# `rgw keystone implicit tenants = false`: the S3 owner is the keystone PROJECT, not the
 # user, and "log" is owned by the admin project. Any user holding an rgw-accepted role
 # on that project therefore authenticates as that same S3 owner, so no bucket policy or
 # ACL is needed -- verified by `radosgw-admin bucket stats --bucket=log`, whose owner is

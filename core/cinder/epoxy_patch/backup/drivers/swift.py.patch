@@ -1,0 +1,20 @@
+--- swift.py
++++ swift.py
+@@ -435,7 +435,16 @@
+         return prefix
+ 
+     def update_container_name(self, backup, container):
+-        """Use the container name as provided - don't update."""
++        """Default to a container of the backup's own project.
++
++        Keep a container given with the request; otherwise suffix
++        backup_swift_container with the project id. rgw runs with keystone
++        implicit tenants off, so all projects share one bucket namespace and
++        the first to back up would own the plain name, leaving every other
++        project's backups to fail with 403.
++        """
++        if container is None:
++            return '%s-%s' % (CONF.backup_swift_container, backup.project_id)
+         return container
+ 
+     def get_extra_metadata(self, backup, volume):

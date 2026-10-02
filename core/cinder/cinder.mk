@@ -154,6 +154,14 @@ rootfs_install::
 # Each carried file sits beside the upstream 26.3.0 file it was made from (*.orig), so
 # `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
 # to the installed file instead; a whole file is copied over it:
+# backup/drivers/swift.py.patch: SwiftBackupDriver.update_container_name defaults the
+#   container to <backup_swift_container>-<project_id> when the request names none.
+#   rgw keeps one bucket namespace for every project (rgw keystone implicit tenants =
+#   false), so with upstream's shared default the first project to back up owns
+#   "volume-backups" and every other project's backup fails with 403. Old backups keep
+#   the container recorded on them. Flipping implicit tenants instead hides every
+#   existing Swift object from its project, and flipping it back does not undo that.
+#   cubecos#1285.
 # volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
 #   upstream still does not provide (manage_existing renames the file through _execute,
 #   mv as root, since the file and the share root are usually root-owned and an
