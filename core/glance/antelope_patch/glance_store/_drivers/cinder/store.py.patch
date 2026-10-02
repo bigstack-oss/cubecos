@@ -1,0 +1,23 @@
+--- _drivers/cinder/store.py
++++ _drivers/cinder/store.py
+@@ -756,8 +756,19 @@
+                not conn.conn.do_local_attach):
+                 yield device['path']
+             else:
++                # An NFS volume is a regular file on the share, and 'wb'
++                # truncates it. Each reopen of the offline-extend loop (an
++                # upload of unknown size) then wiped what the previous pass
++                # wrote, and even a single pass shrank the file below its
++                # cinder size, so cinder refused to attach it for reading.
++                # Write it in place instead; mode still asks for an rw
++                # attachment above.
++                file_mode = mode
++                if (mode == 'wb' and
++                        connection_info['driver_volume_type'] == 'nfs'):
++                    file_mode = 'r+b'
+                 with self.temporary_chown(
+-                        device['path']), open(device['path'], mode) as f:
++                        device['path']), open(device['path'], file_mode) as f:
+                     yield conn.yield_path(volume, f)
+         except Exception:
+             LOG.exception(_LE('Exception while accessing to cinder volume '
