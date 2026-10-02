@@ -271,6 +271,9 @@ UpdateCfg(std::string domain, std::string userPass, std::string cryptoPass)
         cfg["keystone_authtoken"]["password"] = userPass.c_str();
 
         cfg["oslo_messaging_notifications"]["driver"] = "messagingv2";
+
+        // members create secrets without the legacy "creator" role
+        cfg["oslo_policy"]["enforce_new_defaults"] = "True";
     }
 
     return true;
