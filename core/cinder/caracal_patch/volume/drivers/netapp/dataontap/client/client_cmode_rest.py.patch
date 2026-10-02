@@ -1,0 +1,22 @@
+--- volume/drivers/netapp/dataontap/client/client_cmode_rest.py
++++ volume/drivers/netapp/dataontap/client/client_cmode_rest.py
+@@ -73,14 +73,17 @@
+         username = kwargs['username']
+         password = kwargs['password']
+         api_trace_pattern = kwargs['api_trace_pattern']
++        # NOTE: read, not popped -- the ZAPI fallback client below is built
++        # from the same kwargs and has to trust the same certificate.
+         self.connection = netapp_api.RestNaServer(
+             host=host,
+             transport_type=kwargs['transport_type'],
+-            ssl_cert_path=kwargs.pop('ssl_cert_path'),
++            ssl_cert_path=kwargs.get('ssl_cert_path'),
+             port=kwargs['port'],
+             username=username,
+             password=password,
+-            api_trace_pattern=api_trace_pattern)
++            api_trace_pattern=api_trace_pattern,
++            ssl_cert_verify=kwargs.get('ssl_cert_verify', True))
+ 
+         self.async_rest_timeout = kwargs.get('async_rest_timeout', 60)
+ 

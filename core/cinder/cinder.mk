@@ -154,6 +154,19 @@ rootfs_install::
 #   RemoteFSSnapDriver.create_cloned_volume reads src_vref.obj_context, so on NFS the
 #   AttributeError -- which is not a CinderException, so there is no fallback to a
 #   download -- failed every such volume (#1217)
+# volume/drivers/netapp/options.py.patch, dataontap/utils/utils.py.patch,
+#   dataontap/client/{client_base,client_cmode_rest,api}.py.patch: upstream e07c074df
+#   (netapp_ssl_cert_verify, 29.0.0, not backported), adapted to 24.5.0, which has no
+#   certificate authentication. Without it an ONTAP serving its default self-signed
+#   certificate cannot be reached over HTTPS at all (#1248): the ZAPI client, the default,
+#   verifies against the system CA store and reads neither netapp_ssl_cert_path nor any
+#   switch to skip the check, and the REST client, which does read netapp_ssl_cert_path,
+#   pops it before it builds its ZAPI fallback client, whose own init call then fails the
+#   same way. netapp_ssl_cert_path now applies to both clients, and
+#   netapp_ssl_cert_verify = False turns verification off for that backend only. The
+#   default still verifies -- unlike 27.0.0's d3d91d9a1, which skipped verification
+#   whenever no cert path was set and was reversed by e07c074df -- and the http transport
+#   default is unchanged
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
