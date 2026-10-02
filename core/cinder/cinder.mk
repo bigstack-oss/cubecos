@@ -113,9 +113,15 @@ rootfs_install::
 # `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
 # to the installed file instead; a whole file is copied over it:
 # volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
-#   upstream still does not provide; and the nfs.py half of upstream 0480073b9 (bug
+#   upstream still does not provide; the nfs.py half of upstream 0480073b9 (bug
 #   1989514, below): an extend resizes the active file, which a snapshot made a qcow2
-#   overlay, instead of the base file
+#   overlay, instead of the base file; and upstream d961d3c88 + c68475a3d (bug 2073146,
+#   28.0.0, not backported to 2023.1; their remotefs.py and image_utils.py halves are
+#   in those .patch files): initialize_connection reads the volume's format from its
+#   admin metadata instead of guessing it from the file, and refuses only a virtual size
+#   larger than the cinder size. A Glance image stored on NFS is a raw volume holding
+#   the image's own bytes, so a qcow2 image was taken for a qcow2 volume of the image's
+#   virtual size and every read-attach was refused (#1217)
 # volume/drivers/remotefs.py.patch, image/image_utils.py.patch: two upstream fixes
 #   that bug 2073146's fix stands on, since it reads the format from the volume's admin
 #   metadata. 0480073b9 (bug 1989514; 23.4.0 and 24.3.0, never backported to 2023.1):
@@ -125,8 +131,9 @@ rootfs_install::
 #   an offline snapshot left the format at raw the same way, so an extend ran qemu-img
 #   resize -f raw on the overlay; the patch keeps format (and the new base_format) in
 #   step with the active file on every snapshot create and delete. One context line,
-#   which 22.3.0 spells del(snap_info[...]), was resolved by hand; nothing else differs
-#   from upstream. 8c03308ed's quobyte.py half is not carried: CubeCOS does not use the
+#   which 22.3.0 spells del(snap_info[...]), was resolved by hand, and d961d3c88's
+#   image_utils.py keeps 22.3.0's noqa on its typing import; nothing else differs from
+#   upstream. 8c03308ed's quobyte.py half is not carried: CubeCOS does not use the
 #   Quobyte driver
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
