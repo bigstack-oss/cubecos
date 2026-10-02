@@ -2776,29 +2776,45 @@ os_mgr_port_create()
     fi
 }
 
+# Echo a reachable compute host if this node is the active controller (HA) or a
+# non-HA control node; fail otherwise.
+_os_mgr_ping_host()
+{
+    is_control_node || return 1
+    local active_host=$(pcs status 2>/dev/null | awk '/IPaddr2/{print $5}')
+    [ -z "$active_host" -o "$active_host" = "$(hostname)" ] || return 1
+
+    local cmp r=
+    for cmp in $(cubectl node -r compute list -j | jq -r .[].hostname) ; do
+        r=$(echo $cmp | tr -d '\n')
+        ping -c 1 -w 1 $r >/dev/null 2>&1 && break
+    done
+    echo $r
+}
+
+# Remove cube:mgr ports (OVS iface and netns too) on networks with no VMs left:
+# a leftover mgr port blocks the tenant's subnet delete. Telegraf runs it every
+# minute so a subnet frees up soon after its last VM is deleted.
+os_mgr_port_reap()
+{
+    local r=$1
+    [ -n "$r" ] || r=$(_os_mgr_ping_host) || return 0
+    [ -n "$r" ] || return 0
+    local vm_nets=$(mariadb -B -N -u root -D neutron -e "SELECT DISTINCT network_id FROM ports WHERE device_owner='compute:nova'")
+    mariadb -B -N -u root -D neutron -e "SELECT p.id,p.network_id,b.host,p.name FROM ports p JOIN ml2_port_bindings b ON p.id=b.port_id WHERE p.device_owner='cube:mgr' AND b.status='ACTIVE'" | while read pid n h name ; do
+        # keep ports of networks with VMs, unless named the old truncated way
+        echo "$vm_nets" | grep -qx "$n" && [ "${name%-$n}" != "$name" ] && continue
+        ssh -n ${h:-$r} $HEX_SDK os_mgr_port_purge $n $pid 2>/dev/null
+        $OPENSTACK port delete $pid 2>/dev/null
+    done
+    ssh $r $HEX_SDK os_mgr_netns_sweep $(mariadb -B -N -u root -D neutron -e "SELECT DISTINCT network_id FROM ports WHERE device_owner='cube:mgr'") 2>/dev/null
+}
+
 os_nova_instance_ping()
 {
-    if ! is_control_node ; then
-        return 0;
-    fi
-
-    local active_host=$(pcs status 2>/dev/null | awk '/IPaddr2/{print $5}')
-    if [ -n "$active_host" ] ; then
-        # HA
-        if [ "$active_host" != "$(hostname)" ] ; then
-            return 0;
-        fi
-    else
-        # non-HA
-        active_host=$(hostname)
-    fi
-
-    for cmp in $(cubectl node -r compute list -j | jq -r .[].hostname) ; do
-        local r=$(echo $cmp | tr -d '\n')
-        if ping -c 1 -w 1 $r >/dev/null 2>&1 ; then
-            break
-        fi
-    done
+    local r
+    r=$(_os_mgr_ping_host) || return 0
+    local active_host=$(hostname)
 
     # mysql cols
     #   1: port
@@ -2811,15 +2827,7 @@ os_nova_instance_ping()
     local joined_tables="ports INNER JOIN ipallocations ON ports.id = ipallocations.port_id"
     local stats=$(mariadb -B -u root -D neutron -e "SELECT $cols FROM $joined_tables WHERE device_owner ='compute:nova'" | tail -n +2)
 
-    # A mgr port left on a network without VMs blocks the tenant's subnet delete
-    local vm_nets=$(echo "$stats" | awk '{print $2}' | sort -u)
-    mariadb -B -N -u root -D neutron -e "SELECT p.id,p.network_id,b.host,p.name FROM ports p JOIN ml2_port_bindings b ON p.id=b.port_id WHERE p.device_owner='cube:mgr' AND b.status='ACTIVE'" | while read pid n h name ; do
-        # keep ports of networks with VMs, unless named the old truncated way
-        echo "$vm_nets" | grep -qx "$n" && [ "${name%-$n}" != "$name" ] && continue
-        ssh -n ${h:-$r} $HEX_SDK os_mgr_port_purge $n $pid 2>/dev/null
-        $OPENSTACK port delete $pid 2>/dev/null
-    done
-    ssh $r $HEX_SDK os_mgr_netns_sweep $(mariadb -B -N -u root -D neutron -e "SELECT DISTINCT network_id FROM ports WHERE device_owner='cube:mgr'") 2>/dev/null
+    os_mgr_port_reap $r
 
     for n in $(echo "$stats" | awk '{print $2}' | sort | uniq) ; do
         local n_name=$(mariadb -B -u root -D neutron -e "SELECT name FROM networks WHERE id ='$n'" | tail -n +2)
