@@ -637,8 +637,9 @@ updateKeycloak()
     }
 
     /**
-     * chart-values.yaml needs the address Keycloak is reached on so it can pin the admin
-     * console URL, which Keycloak resolves separately from the frontend one.
+     * chart-values.yaml needs the address Keycloak is reached on so it can pin the URL
+     * Keycloak advertises -- the SAML entityID, the OIDC issuer and the admin console all
+     * derive from it -- since resolving it from the request loses the ingress port.
      */
     const std::string sharedId = G(SHARED_ID);
 

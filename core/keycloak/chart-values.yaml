@@ -5,16 +5,19 @@ image:
 replicas: 1
 
 # The Keycloak container entrypoint is kc.sh with no default command, so the start
-# command has to be spelled out. TLS is terminated by the k3s ingress, and the
-# controller is reached by VIP rather than by a registered hostname, so the strict
-# hostname checks Quarkus enables by default have to be turned off.
+# command has to be spelled out. TLS is terminated by the k3s ingress.
+#
+# hostname-strict=false only matters while cubeController is unset: KC_HOSTNAME below is
+# emitted only when config_keycloak.cpp passes the controller address, and a strict server
+# with no hostname refuses to start. Once a hostname is set Keycloak ignores the flag.
+# hostname-strict-https went with the rest of hostname v1 in 26, which only warns about
+# a v1 option it finds and then ignores it.
 command:
   - /opt/keycloak/bin/kc.sh
   - start
   - --http-enabled=true
   - --http-port=8080
   - --hostname-strict=false
-  - --hostname-strict-https=false
 
 # Keycloak 18 drops the /auth context that the WildFly distribution served everything
 # under, but keystone's cube_idp remote-id, the ceph dashboard, rancher and the SAML
@@ -39,40 +42,32 @@ database:
   hostname: cube-controller.default
   port: 3306
 
+# Emits KC_PROXY_HEADERS. ingress-nginx sends X-Forwarded-*, not the RFC 7239 Forwarded
+# header the chart defaults to, so name it -- with the wrong one Keycloak sees plain http
+# from the ingress pod. The proxy option this used to set (mode: edge) went with hostname
+# v1 in 26.
 proxy:
   enabled: true
-  mode: edge
+  mode: xforwarded
 
-# Emits KC_CACHE=ispn and KC_CACHE_STACK=kubernetes. That stack discovers peers with
-# JGroups DNS_PING, which has no default for jgroups.dns.query -- it is supplied via
-# JAVA_OPTS_APPEND below and must point at the chart's headless service.
+# Emits KC_CACHE=ispn and KC_CACHE_STACK=jdbc-ping. 26 deprecates the kubernetes stack
+# (JGroups DNS_PING against the headless service) for jdbc-ping, which finds peers through
+# a table in the keycloak database, so nothing has to supply jgroups.dns.query any more.
 cache:
   stack: default
 
-# The chart's stock probes GET the relative path root, which is the welcome page. Only a
-# login theme is shipped for cos-ui, so every one of those requests logs a "Failed to find
-# WELCOME theme" error -- once per liveness probe, forever. Point the probes at the health
-# endpoints the image is built with instead; they are cheaper and they say more.
-livenessProbe: |
-  httpGet:
-    path: '{{ tpl .Values.http.relativePath $ | trimSuffix "/" }}/health/live'
-    port: http
-  initialDelaySeconds: 0
-  timeoutSeconds: 5
-
-readinessProbe: |
-  httpGet:
-    path: '{{ tpl .Values.http.relativePath $ | trimSuffix "/" }}/health/ready'
-    port: http
-  initialDelaySeconds: 10
-  timeoutSeconds: 1
-
-# The 17 -> 18 Liquibase migration runs on the first pod to come up, so give the
-# startup probe room to wait it out (120 * 5s = 10m) instead of restarting mid-migration.
+# The chart's liveness and readiness probes already GET /auth/health/live and
+# /auth/health/ready, on the management port that 26 serves health from. Only the startup
+# probe is overridden. 26 opens its endpoints while it bootstraps, schema migration
+# included, and only readiness waits for that to finish ("Keycloak Initialized"). The
+# chart's startup probe GETs the aggregate /health, so a migration that outlasted its five
+# minutes would get the pod killed part way through. Liveness stays up while the migration
+# runs, so probe that instead, and keep the old 10 minute allowance for a slow node.
 startupProbe: |
   httpGet:
     path: '{{ tpl .Values.http.relativePath $ | trimSuffix "/" }}/health/live'
-    port: http
+    port: '{{ .Values.http.internalPort }}'
+    scheme: '{{ .Values.http.internalScheme }}'
   initialDelaySeconds: 15
   timeoutSeconds: 1
   failureThreshold: 120
@@ -95,27 +90,23 @@ extraEnv: |
   # Asserting it here makes current == baked, so no pod re-augments and the value holds.
   # Observed on cube4510 after the 3.1.10 -> 3.1.20 upgrade: keycloak's admin API rejected
   # every call, cube-cos-api could not init OIDC, and cluster check reported ApiService NG.
+  # 26 flipped the default to false, so baked, default and this now all agree; it stays so
+  # that the value never again rests on a default.
   - name: KC_TRANSACTION_XA_ENABLED
     value: "false"
-  # Keycloak is reached on K3S_INGRESS_HTTPS_PORT (10443), but the proxies in front of it
-  # terminate TLS on the default HTTPS port, so with proxy=edge Keycloak resolves the
-  # frontend port to 443 and leaves it out of the URLs it advertises -- setting a Host
-  # header carrying the port does not bring it back. The WildFly distribution derived the
-  # port from that header and kept it. Without this, the SAML entityID and the OIDC issuer
-  # become https://<vip>/auth/realms/master, which matches neither keystone's cube_idp
-  # remote-id nor any redirect URI already registered against the SAML clients.
-  - name: KC_HOSTNAME_PORT
-    value: "10443"
   {{- if .Values.cubeController }}
-  # hostname-port only covers the frontend URL. Keycloak resolves the admin console URL
-  # separately, and with hostname-strict=false it takes that one from the request, so it
-  # comes back as https://<vip>/auth -- port 443, which is the CubeCOS web UI rather than
-  # Keycloak, and every visit to /auth/admin is redirected onto the wrong service.
-  # hostname-admin is the only lever for it in Keycloak 18 (hostname-admin-url arrived
-  # later) and it does accept host:port. cubeController is passed in by
-  # config_keycloak.cpp with --set, the same way replicas is.
-  - name: KC_HOSTNAME_ADMIN
-    value: {{ .Values.cubeController }}:10443
+  # Keycloak is reached on K3S_INGRESS_HTTPS_PORT (10443), but ingress-nginx terminates TLS
+  # on 443 inside its pod and says so in X-Forwarded-Port, so a Keycloak that resolves its
+  # URLs from the request leaves the port out of everything it advertises. The SAML
+  # entityID and the OIDC issuer then become https://<vip>/auth/realms/master, which matches
+  # neither keystone's cube_idp remote-id nor any redirect URI already registered against
+  # the SAML clients. 18 and 22 pinned the port alone with hostname-port, plus the admin
+  # console URL -- which Keycloak resolves separately -- with hostname-admin. Hostname v2
+  # in 26 dropped hostname-port and only warns when it is still set, so the frontend URL is
+  # pinned whole instead, and the admin console follows it while hostname-admin is unset.
+  # cubeController is passed in by config_keycloak.cpp with --set, the same way replicas is.
+  - name: KC_HOSTNAME
+    value: https://{{ .Values.cubeController }}:10443/auth
   {{- end }}
   - name: KC_DB_URL_DATABASE
     valueFrom:
@@ -132,18 +123,20 @@ extraEnv: |
       secretKeyRef:
         name: keycloak-db-secret
         key: db-password
-  - name: KEYCLOAK_ADMIN
+  # The admin account a new master realm is created with. 26 renamed these from
+  # KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD, and still reads the old names but logs each
+  # use as deprecated. Either pair acts only when the master realm is first created, so an
+  # upgraded realm keeps the admin it already has.
+  - name: KC_BOOTSTRAP_ADMIN_USERNAME
     valueFrom:
       secretKeyRef:
         name: keycloak-db-secret
         key: keycloak-user
-  - name: KEYCLOAK_ADMIN_PASSWORD
+  - name: KC_BOOTSTRAP_ADMIN_PASSWORD
     valueFrom:
       secretKeyRef:
         name: keycloak-db-secret
         key: keycloak-password
-  - name: JAVA_OPTS_APPEND
-    value: -Djgroups.dns.query=keycloak-keycloakx-headless.keycloak.svc.cluster.local
   - name: LOGIN_GREETING
     value:
 
