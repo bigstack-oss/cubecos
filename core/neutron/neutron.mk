@@ -364,7 +364,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) ln -sf /usr/sbin/cube-ovndb-servers /usr/lib/ocf/resource.d/ovn/ovndb-servers
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/neutron/ovn-northd-compat.conf ./etc/systemd/system/ovn-northd.service.d/
 
-# The carried files are whole modules, each beside the upstream .orig it was made from:
+# Carried changes sit beside the pristine upstream .orig they were made from, either as a
+# whole module or as a reviewable <rel>.py.patch:
 # - plugins/ml2/drivers/ovn/agent/neutron_agent.py: an agent whose chassis record has no
 #   hostname reports '-' as its host instead of raising AttributeError.
 # - plugins/ml2/drivers/ovn/mech_driver/ovsdb/impl_idl_ovn.py: 26.0.4's, i.e. 26.0.6's
@@ -375,8 +376,19 @@ rootfs_install::
 #   stays PENDING_CREATE. Drop it once upstream stops depending on the event there.
 # - neutron-vpnaas' libreswan_ipsec.py: libreswan 4.x renamed pluto's detailed-logging
 #   option, and config_neutron.cpp turns detailed logging on.
+# - *.py.patch for common/ovn/constants.py, plugins/ml2/plugin.py and the ovn mech_driver,
+#   maintenance, ovn_client and ovsdb_monitor modules: upstream c65c18a6d2 (bug 2144312),
+#   keeps OVN virtual ports (Octavia VIPs) unbound so failover re-parents them.
 rootfs_install::
-	$(Q)[ -d $(NEUTRON_PATCHDIR) ] && cp -rf $(NEUTRON_PATCHDIR)/* $(NEUTRON_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(NEUTRON_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(NEUTRON_PATCHDIR)/}; tgt=$(NEUTRON_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "neutron: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)[ ! -d $(NEUTRON_PATCHDIR) ] || { cd $(NEUTRON_PATCHDIR) && find . -type f ! -name '*.patch' ! -name '*.orig' \
+		! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(NEUTRON_SRCDIR)/"$$f"; done; }
 	$(Q)[ -d $(NEUTRON_VPNAAS_PATCHDIR) ] && cp -rf $(NEUTRON_VPNAAS_PATCHDIR)/* $(NEUTRON_VPNAAS_SRCDIR)/ || /bin/true
 
 rootfs_install::
