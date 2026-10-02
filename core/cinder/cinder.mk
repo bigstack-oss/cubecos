@@ -152,9 +152,66 @@ rootfs_install::
 # install custom files
 #
 # Each carried file sits beside the upstream 26.3.0 file it was made from (*.orig), so
-# `diff x.orig x` is the whole local change:
+# `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
+# to the installed file instead; a whole file is copied over it:
 # volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
-#   upstream still does not provide
+#   upstream still does not provide (manage_existing renames the file through _execute,
+#   mv as root, since the file and the share root are usually root-owned and an
+#   in-process os.rename as the cinder user fails); and upstream 53245bce3 (bug 2103742, 27.0.0), which
+#   lets _is_file_size_equal read a qcow2 snapshot overlay after an extend; and
+#   _copy_volume_from_snapshot growing the new file to the requested size. Without it a
+#   volume created from a snapshot -- or a clone, which NFS always takes through a
+#   temporary snapshot -- larger than its source kept the source's size on the share,
+#   read as available at the new size, and could not be attached. Still missing upstream
+#   (master); vzstorage's copy extends the same way. And update_migrated_volume renaming
+#   the migrated file back to the volume's own name through _execute (mv as root) instead
+#   of an in-process os.rename: cinder-volume runs as cinder and a share root is usually
+#   root-owned, so every migration onto NFS logged a PermissionError and left the file
+#   under the temporary volume's id (_name_id). Still missing upstream (master). And
+#   upstream d961d3c88 + c68475a3d (bug 2073146, 28.0.0; their remotefs.py and
+#   image_utils.py halves are in those .patch files): initialize_connection reads the
+#   volume's format from its admin metadata instead of guessing it from the file, and
+#   refuses only a virtual size larger than the cinder size. A Glance image stored on
+#   NFS is a raw volume holding the image's own bytes, so a qcow2 image was taken for a
+#   qcow2 volume of the image's virtual size and every read-attach was refused
+# volume/drivers/remotefs.py.patch, image/image_utils.py.patch: upstream 8c03308ed
+#   (28.0.0, not backported to 2025.1). An offline snapshot left the volume's format
+#   admin metadata at raw while its active file became a qcow2 overlay, so an extend ran
+#   qemu-img resize -f raw on the overlay: the file grew, its virtual size did not, the
+#   volume read as extended, and the size gate in initialize_connection then refused to
+#   attach it. The patch keeps format (and the new base_format) in step with the active
+#   file on every snapshot create and delete. remotefs.py.patch also passes the image
+#   info _qemu_img_info has already screened to convert_image in _copy_volume_to_image
+#   (the way upstream fixed copy-from-snapshot for bug 2074377). Without it convert_image
+#   inspected the active file again, refused the qcow2 overlay a snapshot leaves behind,
+#   and a volume with snapshots could not be uploaded to an image at all. Still missing
+#   upstream (master). And _create_snapshot_online removes the overlay it created when
+#   Nova reports the snapshot as error -- Nova does so only when libvirt's snapshot, its
+#   last step, failed, so the guest never used the file. Deleting the errored snapshot
+#   drops only its DB record, so each failed online snapshot (any VM imported with
+#   os_require_quiesce=yes and no guest agent) otherwise left a file on the share for
+#   good. A timeout or a concurrent delete keeps the file, since Nova may still switch
+#   to it. Still missing upstream (master)
+# volume/flows/manager/create_volume.py.patch: upstream e564049d8 (27.0.0, not
+#   backported to 2025.1). With allowed_direct_url_schemes = cinder, a volume created
+#   from an image held in a cinder Glance store is cloned from the image-volume, and the
+#   flow handed the driver the SQLAlchemy row instead of the Volume object.
+#   RemoteFSSnapDriver.create_cloned_volume reads src_vref.obj_context, so on NFS the
+#   AttributeError -- which is not a CinderException, so there is no fallback to a
+#   download -- failed every such volume
+# volume/drivers/netapp/options.py.patch, dataontap/utils/utils.py.patch,
+#   dataontap/client/{client_base,client_cmode_rest,api}.py.patch: upstream e07c074df
+#   (netapp_ssl_cert_verify, 29.0.0, not backported), adapted to 26.3.0's urllib ZAPI
+#   client. Without it an ONTAP serving its default self-signed certificate cannot be
+#   reached over HTTPS at all (#1248): the ZAPI client, the default, verifies against the
+#   system CA store and reads neither netapp_ssl_cert_path nor any switch to skip the
+#   check, and the REST client, which does read netapp_ssl_cert_path, pops it before it
+#   builds its ZAPI fallback client, whose own init call then fails the same way.
+#   netapp_ssl_cert_path now applies to both clients, and netapp_ssl_cert_verify = False
+#   turns verification off for that backend only. The default still verifies -- unlike
+#   27.0.0's d3d91d9a1, which skipped verification whenever no cert path was set and was
+#   reversed by e07c074df -- and the http transport default is unchanged. Drop the
+#   patches at a release carrying e07c074df (29.0.0)
 # volume/drivers/rbd.py: upstream's proposed fix for bug 2153099,
 #   https://review.opendev.org/c/openstack/cinder/+/989051 (patch set 5), not merged at
 #   26.3.0. _delete_volume returns on a successful rbd remove before it walks up to the
@@ -165,7 +222,15 @@ rootfs_install::
 #   .deleted image is not in the trash its purge task empties. Drop the file once a
 #   release carries the fix.
 rootfs_install::
-	$(Q)[ -d $(CINDER_PATCHDIR) ] && cp -rf $(CINDER_PATCHDIR)/* $(CINDER_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "cinder: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)[ ! -d $(CINDER_PATCHDIR) ] || { cd $(CINDER_PATCHDIR) && find . -type f ! -name '*.patch' ! -name '*.orig' \
+		! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(CINDER_SRCDIR)/"$$f"; done; }
 
 rootfs_install::
 	$(Q)# /var/lock is on tmpfs, so the shared os-brick lock dir is recreated at every boot

@@ -2345,6 +2345,7 @@ cinder_put_storage()
         file_content_base64="$(json_get_value "$extra_config" ".content")"
 
         _hex_function_ret cinder_write_storage_extra_config_file "$file_name" "$file_content_base64"
+        ret="$?"
         if [[ "$ret" != "0" ]] ; then
             jq -c -n \
                 '{message: "failed to write the storage extra config files"}' \

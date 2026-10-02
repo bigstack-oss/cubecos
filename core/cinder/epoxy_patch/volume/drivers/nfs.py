@@ -16,6 +16,7 @@
 
 import binascii
 import errno
+import math
 import os
 import tempfile
 import time
@@ -142,8 +143,19 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         active_vol = self.get_active_image_from_info(volume)
         volume_dir = self._local_volume_dir(volume)
         path_to_vol = os.path.join(volume_dir, active_vol)
+
+        vol_format = None
+        admin_metadata = None
+        # admin context is required for admin_metadata
+        with volume.obj_as_admin():
+            admin_metadata = volume.admin_metadata
+
+        if admin_metadata and 'format' in admin_metadata:
+            vol_format = admin_metadata['format']
+
         info = self._qemu_img_info(path_to_vol,
-                                   volume['name'])
+                                   volume['name'],
+                                   img_format=vol_format)
 
         data = {'export': volume.provider_location,
                 'name': active_vol}
@@ -160,13 +172,16 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         if info.file_format not in ['raw', 'qcow2']:
             msg = _('nfs volume must be a valid raw or qcow2 image.')
             raise exception.InvalidVolume(reason=msg)
-
-        # Test if the size is accurate or if something tried to modify it
-        if info.virtual_size != volume.size * units.Gi:
+        virtual_size_gb = int(math.ceil(float(info.virtual_size) / units.Gi))
+        # Checks if the virtual size has been modified by any source other
+        # than the Cinder service. This prevents users from attaching a volume
+        # which virtual size has been extended from inside a virtual machine,
+        # by writing a modified qcow2 image to its block device.
+        if virtual_size_gb > volume.size:
             LOG.error('The volume virtual_size does not match the size in '
                       'cinder, aborting as we suspect an exploit. '
                       'Virtual Size is %(vsize)s and real size is %(size)s',
-                      {'vsize': info.virtual_size, 'size': volume.size})
+                      {'vsize': virtual_size_gb, 'size': volume.size})
             msg = _('The volume virtual_size does not match the size in '
                     'cinder, aborting as we suspect an exploit.')
             raise exception.InvalidVolume(reason=msg)
@@ -409,14 +424,13 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
                                  run_as_root=self._execute_as_root,
                                  file_format=file_format)
         if file_format == 'qcow2' and not self._is_file_size_equal(
-                active_file_path, new_size):
+                active_file_path, volume.name, new_size):
             raise exception.ExtendVolumeError(
                 reason='Resizing image file failed.')
 
-    def _is_file_size_equal(self, path, size):
+    def _is_file_size_equal(self, path, volume_name, size):
         """Checks if file size at path is equal to size."""
-        data = image_utils.qemu_img_info(path,
-                                         run_as_root=self._execute_as_root)
+        data = self._qemu_img_info(path, volume_name)
         virt_size = int(data.virtual_size / units.Gi)
         return virt_size == size
 
@@ -513,8 +527,13 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             original_path = current_path.replace(current_name,
                                                  original_volume_name)
             try:
-                os.rename(current_path, original_path)
-            except OSError:
+                # The share root is usually root-owned, and cinder-volume runs
+                # as cinder, so an in-process os.rename fails with EACCES the
+                # way every other file operation here would without
+                # _execute's root helper.
+                self._execute('mv', current_path, original_path,
+                              run_as_root=self._execute_as_root)
+            except (OSError, putils.ProcessExecutionError):
                 LOG.exception('Unable to rename the logical volume '
                               'for volume: %s', volume.id)
                 # If the rename fails, _name_id should be set to the new
@@ -581,13 +600,14 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
 
         self._delete(base_volume_path)
 
-    def _qemu_img_info(self, path, volume_name):
+    def _qemu_img_info(self, path, volume_name, img_format=None):
         return super(NfsDriver, self)._qemu_img_info_base(
             path,
             volume_name,
             self.configuration.nfs_mount_point_base,
             force_share=True,
-            run_as_root=True)
+            run_as_root=True,
+            img_format=img_format)
 
     def _check_snapshot_support(self, setup_checking=False):
         """Ensure snapshot support is enabled in config."""
@@ -699,6 +719,15 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
                                       out_format,
                                       run_as_root=self._execute_as_root,
                                       data=snap_backing_file_img_info)
+            # convert_image copies the snapshot at the snapshot's own virtual
+            # size. A larger volume requested from it (or a larger clone, which
+            # goes through a temporary snapshot into here) must be grown to
+            # the requested size, or its file stays smaller than its cinder
+            # size and initialize_connection refuses to attach it.
+            if volume_size > snapshot.volume_size:
+                image_utils.resize_image(path_to_new_vol, volume_size,
+                                         run_as_root=self._execute_as_root,
+                                         file_format=out_format)
 
         self._set_rw_permissions_for_all(path_to_new_vol)
 
@@ -795,7 +824,11 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             LOG.debug('Managing existing volume: renaming %(src)s to %(dst)s',
                      {'src': volume_path, 'dst': new_volume_path})
 
-            os.rename(volume_path, new_volume_path)
+            # through _execute's root helper, like update_migrated_volume: the
+            # file and the share root are usually root-owned, and an
+            # in-process os.rename as the cinder user fails with EACCES
+            self._execute('mv', volume_path, new_volume_path,
+                          run_as_root=self._execute_as_root)
 
             # Set proper permissions
             self._set_rw_permissions(new_volume_path)
@@ -803,7 +836,7 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             LOG.info('Successfully managed existing volume: %(src)s -> %(dst)s',
                     {'src': volume_path, 'dst': new_volume_path})
 
-        except (OSError, IOError) as e:
+        except (OSError, IOError, putils.ProcessExecutionError) as e:
             reason = _('Failed to manage existing volume %(source)s: %(error)s') % {
                 'source': source_name,
                 'error': str(e)
