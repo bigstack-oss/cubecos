@@ -777,4 +777,9 @@ CONFIG_OBSERVES(prometheus, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(prometheus, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(prometheus, "/var/lib/prometheus");
+// The credentials file thanos_objstore_setup wrote. Without it every upgrade boot lands on
+// a partition with no objstore.yml, so the setup's fast path misses and it has to go to
+// RGW to read back keys that have not changed. The rgw user and the bucket live in ceph
+// and survive the switch, so the old file is still the right one.
+CONFIG_MIGRATE(prometheus, THANOS_OBJSTORE);
 
