@@ -2634,14 +2634,18 @@ os_instance_export_save()
 # address from the tenant subnet. Without verification the client still uses TLS
 # where the server offers it, and falls back to plaintext where it does not -- which
 # is all a 10.11 client ever did. The flag is accepted by the 10.11 client too.
+# Neutron port name: host + full network id (no length limit)
 os_mgr_port_name()
 {
     local net_id=$1
-    local proj_id=$2
-    local suffix=$(echo $net_id | cut -c 1-8)
-    local pname="$HOSTNAME-$suffix"
-    pname=$(echo $pname | cut -c 1-15)
-    echo -n $pname
+    echo -n "$HOSTNAME-$net_id"
+}
+
+# OVS/kernel interface name, 15 chars max (IFNAMSIZ): unique per network on this host
+os_mgr_iface_name()
+{
+    local net_id=$1
+    echo -n "mgr$(echo $net_id | tr -d '-' | cut -c 1-12)"
 }
 
 os_mgr_port_remove()
@@ -2650,15 +2654,16 @@ os_mgr_port_remove()
     local proj_id=$2
     local host=$3
     local dbpass=$4
-    local pname=$(os_mgr_port_name $net_id $proj_id)
+    local pname=$(os_mgr_port_name $net_id)
+    local iface=$(os_mgr_iface_name $net_id)
     local suffix=$(echo $net_id | cut -c 1-8)
     local netns="mgr-$suffix"
 
     local ip_netns_exec="/sbin/ip netns exec $netns"
 
-    $ip_netns_exec ip link set $pname down 2>/dev/null
+    $ip_netns_exec ip link set $iface down 2>/dev/null
     /sbin/ip netns del $netns 2>/dev/null
-    /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
+    /usr/bin/ovs-vsctl del-port br-int $iface 2>/dev/null
     local port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -n +2)
     if [ -n "$port_id" ] ; then
         $OPENSTACK port delete $port_id
@@ -2711,7 +2716,8 @@ os_mgr_port_create()
     local cidr=$3
     local host=$4
     local dbpass=$5
-    local pname=$(os_mgr_port_name $net_id $proj_id)
+    local pname=$(os_mgr_port_name $net_id)
+    local iface=$(os_mgr_iface_name $net_id)
     local suffix=$(echo $net_id | cut -c 1-8)
     local netns="mgr-$suffix"
 
@@ -2719,13 +2725,13 @@ os_mgr_port_create()
     local status=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT status FROM ports WHERE name = '$pname'" | tail -1)
     if [ -n "$port_id" -a "$status" != "ACTIVE" ] ; then
         $OPENSTACK port delete $port_id
-        /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
+        /usr/bin/ovs-vsctl del-port br-int $iface 2>/dev/null
     fi
 
     port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
     if [ -z "$port_id" ] ; then
         port_id=$($OPENSTACK port create --project $proj_id --device-owner cube:mgr --host=$(hostname) -c id -f value --network $net_id $pname 2>/dev/null)
-        /usr/bin/ovs-vsctl del-port br-int $pname 2>/dev/null
+        /usr/bin/ovs-vsctl del-port br-int $iface 2>/dev/null
     fi
 
     if [ -z "$port_id" ] ; then
@@ -2738,13 +2744,13 @@ os_mgr_port_create()
     local pmac=$(echo $stats | awk '{print $1}')
     local pip=$(echo $stats | awk '{print $2}')
 
-    if ! /usr/bin/ovs-vsctl port-to-br $pname >/dev/null 2>&1 ; then
-        /usr/bin/ovs-vsctl -- --may-exist add-port br-int $pname \
-                           -- set Interface $pname type=internal \
-                           -- set Interface $pname external-ids:iface-status=active \
-                           -- set Interface $pname external-ids:attached-mac=$pmac \
-                           -- set Interface $pname external-ids:iface-id=$port_id \
-                           -- set Interface $pname external-ids:skip_cleanup=true 2>/dev/null
+    if ! /usr/bin/ovs-vsctl port-to-br $iface >/dev/null 2>&1 ; then
+        /usr/bin/ovs-vsctl -- --may-exist add-port br-int $iface \
+                           -- set Interface $iface type=internal \
+                           -- set Interface $iface external-ids:iface-status=active \
+                           -- set Interface $iface external-ids:attached-mac=$pmac \
+                           -- set Interface $iface external-ids:iface-id=$port_id \
+                           -- set Interface $iface external-ids:skip_cleanup=true 2>/dev/null
     fi
     if ! /sbin/ip netns list | grep -q "^$netns " ; then
         /sbin/ip netns add $netns 2>/dev/null
@@ -2752,21 +2758,21 @@ os_mgr_port_create()
 
     local ip_netns_exec="/sbin/ip netns exec $netns"
 
-    if ! $ip_netns_exec ip link list | grep -q $pname ; then
-        ip link set $pname netns $netns 2>/dev/null
+    if ! $ip_netns_exec ip link list | grep -q $iface ; then
+        ip link set $iface netns $netns 2>/dev/null
     fi
-    if ! $ip_netns_exec ip link show $pname | grep -q $pmac ; then
-        $ip_netns_exec ip link set $pname address $pmac 2>/dev/null
+    if ! $ip_netns_exec ip link show $iface | grep -q $pmac ; then
+        $ip_netns_exec ip link set $iface address $pmac 2>/dev/null
     fi
-    if $ip_netns_exec ip link show $pname | grep -q DOWN ; then
-        $ip_netns_exec ip link set $pname up 2>/dev/null
+    if $ip_netns_exec ip link show $iface | grep -q DOWN ; then
+        $ip_netns_exec ip link set $iface up 2>/dev/null
     fi
-    if ! $ip_netns_exec ip addr show $pname | grep -q $pip ; then
-        $ip_netns_exec ip addr add $pip dev $pname 2>/dev/null
+    if ! $ip_netns_exec ip addr show $iface | grep -q $pip ; then
+        $ip_netns_exec ip addr add $pip dev $iface 2>/dev/null
     fi
-    if ! $ip_netns_exec route -n | grep -q $pname ; then
-        $ip_netns_exec ip route del $cidr dev $pname 2>/dev/null
-        $ip_netns_exec ip route add $cidr dev $pname 2>/dev/null
+    if ! $ip_netns_exec route -n | grep -q $iface ; then
+        $ip_netns_exec ip route del $cidr dev $iface 2>/dev/null
+        $ip_netns_exec ip route add $cidr dev $iface 2>/dev/null
     fi
 }
 
@@ -2807,8 +2813,9 @@ os_nova_instance_ping()
 
     # A mgr port left on a network without VMs blocks the tenant's subnet delete
     local vm_nets=$(echo "$stats" | awk '{print $2}' | sort -u)
-    mariadb -B -N -u root -D neutron -e "SELECT p.id,p.network_id,b.host FROM ports p JOIN ml2_port_bindings b ON p.id=b.port_id WHERE p.device_owner='cube:mgr' AND b.status='ACTIVE'" | while read pid n h ; do
-        echo "$vm_nets" | grep -qx "$n" && continue
+    mariadb -B -N -u root -D neutron -e "SELECT p.id,p.network_id,b.host,p.name FROM ports p JOIN ml2_port_bindings b ON p.id=b.port_id WHERE p.device_owner='cube:mgr' AND b.status='ACTIVE'" | while read pid n h name ; do
+        # keep ports of networks with VMs, unless named the old truncated way
+        echo "$vm_nets" | grep -qx "$n" && [ "${name%-$n}" != "$name" ] && continue
         ssh -n ${h:-$r} $HEX_SDK os_mgr_port_purge $n $pid 2>/dev/null
         $OPENSTACK port delete $pid 2>/dev/null
     done
