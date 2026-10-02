@@ -1,0 +1,13 @@
+--- volume/drivers/netapp/dataontap/client/client_base.py
++++ volume/drivers/netapp/dataontap/client/client_base.py
+@@ -48,7 +48,9 @@
+             port=kwargs['port'],
+             username=username,
+             password=password,
+-            api_trace_pattern=api_trace_pattern)
++            api_trace_pattern=api_trace_pattern,
++            ssl_cert_path=kwargs.get('ssl_cert_path'),
++            ssl_cert_verify=kwargs.get('ssl_cert_verify', True))
+ 
+         self.ssh_client = self._init_ssh_client(host, username, password)
+ 

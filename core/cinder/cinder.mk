@@ -126,8 +126,57 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/cinder
 
 # install custom files
+#
+# Each carried file sits beside the upstream 24.5.0 file it was made from (*.orig), so
+# `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
+# to the installed file instead; a whole file is copied over it:
+# volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
+#   upstream still does not provide; and upstream d961d3c88 + c68475a3d (bug 2073146,
+#   28.0.0, not backported to 2024.1; their remotefs.py and image_utils.py halves are in
+#   those .patch files): initialize_connection reads the volume's format from its admin
+#   metadata instead of guessing it from the file, and refuses only a virtual size larger
+#   than the cinder size. A Glance image stored on NFS is a raw volume holding the image's
+#   own bytes, so a qcow2 image was taken for a qcow2 volume of the image's virtual size
+#   and every read-attach was refused (#1217)
+# volume/drivers/remotefs.py.patch, image/image_utils.py.patch: upstream 8c03308ed
+#   (28.0.0, not backported to 2024.1). An offline snapshot left the volume's format
+#   admin metadata at raw while its active file became a qcow2 overlay, so an extend ran
+#   qemu-img resize -f raw on the overlay, and bug 2073146's fix, which reads the format
+#   from that metadata, would attach the overlay as raw. The patch keeps format (and the
+#   new base_format) in step with the active file on every snapshot create and delete.
+#   One context line, which 24.5.0 spells del(snap_info[...]), was resolved by hand;
+#   nothing else differs from upstream. Its quobyte.py half is not carried: CubeCOS
+#   does not use the Quobyte driver
+# volume/flows/manager/create_volume.py.patch: upstream e564049d8 (27.0.0, not
+#   backported to 2024.1). With allowed_direct_url_schemes = cinder, a volume created
+#   from an image held in a cinder Glance store is cloned from the image-volume, and the
+#   flow handed the driver the SQLAlchemy row instead of the Volume object.
+#   RemoteFSSnapDriver.create_cloned_volume reads src_vref.obj_context, so on NFS the
+#   AttributeError -- which is not a CinderException, so there is no fallback to a
+#   download -- failed every such volume (#1217)
+# volume/drivers/netapp/options.py.patch, dataontap/utils/utils.py.patch,
+#   dataontap/client/{client_base,client_cmode_rest,api}.py.patch: upstream e07c074df
+#   (netapp_ssl_cert_verify, 29.0.0, not backported), adapted to 24.5.0, which has no
+#   certificate authentication. Without it an ONTAP serving its default self-signed
+#   certificate cannot be reached over HTTPS at all (#1248): the ZAPI client, the default,
+#   verifies against the system CA store and reads neither netapp_ssl_cert_path nor any
+#   switch to skip the check, and the REST client, which does read netapp_ssl_cert_path,
+#   pops it before it builds its ZAPI fallback client, whose own init call then fails the
+#   same way. netapp_ssl_cert_path now applies to both clients, and
+#   netapp_ssl_cert_verify = False turns verification off for that backend only. The
+#   default still verifies -- unlike 27.0.0's d3d91d9a1, which skipped verification
+#   whenever no cert path was set and was reversed by e07c074df -- and the http transport
+#   default is unchanged
 rootfs_install::
-	$(Q)[ -d $(CINDER_PATCHDIR) ] && cp -rf $(CINDER_PATCHDIR)/* $(CINDER_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "cinder: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)[ ! -d $(CINDER_PATCHDIR) ] || { cd $(CINDER_PATCHDIR) && find . -type f ! -name '*.patch' ! -name '*.orig' \
+		! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(CINDER_SRCDIR)/"$$f"; done; }
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /var/lock/os_brick

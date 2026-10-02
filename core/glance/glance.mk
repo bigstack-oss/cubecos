@@ -48,6 +48,28 @@ rootfs_install::
 	$(Q)# the wheel does not carry it (#1611).
 	$(Q)cp -f $(COREDIR)/glance/glance.bash_completion $(ROOTDIR)/usr/share/bash-completion/completions/glance
 
+# Carried glance_store fixes, as reviewable unified diffs (<rel>.py.patch beside the
+# pristine 4.7.1 <rel>.py.orig, nova.mk's convention). A failed hunk -- a constraint
+# that moves glance-store off 4.7.1 -- aborts the build instead of shipping drift.
+# _drivers/cinder/store.py: _open_cinder_volume opens an NFS volume's file with r+b
+#   instead of the caller's wb (#1260). For NFS the attached "device" is the volume's
+#   regular file on the share, and wb truncates it: an upload whose size reaches the
+#   store as 0 -- the stock glance CLI's does -- extends the volume one GiB at a
+#   time and reopens the file per pass, so every pass zeroed what the previous one had
+#   written and only the last GiB survived, with the checksum (computed from the
+#   stream) still matching. Even one pass left the file shorter than its cinder size,
+#   so cinder then refused to attach it for reading. wb still selects the rw
+#   attachment. Not fixed upstream (master still opens with the caller's mode)
+GLANCE_STORE_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/glance_store
+GLANCE_STORE_PATCHDIR := $(COREDIR)/glance/$(OPENSTACK_RELEASE)_patch/glance_store
+rootfs_install::
+	$(Q)set -e; for p in $$(find $(GLANCE_STORE_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(GLANCE_STORE_PATCHDIR)/}; tgt=$(GLANCE_STORE_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH glance_store/$${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "glance: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+
 # prepare the build directory
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/glance
