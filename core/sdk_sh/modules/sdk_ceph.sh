@@ -1512,7 +1512,13 @@ ceph_osd_activate_lvms()
     _hex_function_ret /usr/sbin/pvscan
     _hex_function_ret /usr/sbin/vgscan
     _hex_function_ret /usr/sbin/vgchange -ay
-    _hex_function_ret /usr/sbin/ceph-volume lvm activate --all
+    _hex_function_ret /usr/sbin/ceph-volume lvm activate --all "$@"
+}
+
+# ids of this node's LVM OSDs, encrypted ones included, space separated
+ceph_osd_list_lvm_ids()
+{
+    ceph-volume lvm list --format json 2>/dev/null | jq -r 'keys[]' | sort -n | tr '\n' ' ' | sed 's/ $//'
 }
 
 ceph_osd_get_cache_size()
@@ -2851,9 +2857,13 @@ ceph_osd_damaged_list()
     done < $CEPH_OSD_MAP
 }
 
+# params:
+# $1: --no-start to leave the remounted OSDs stopped, for the caller to start
 ceph_osd_remount()
 {
     local osdpth=/var/lib/ceph/osd
+    local start=1
+    [ "${1:-}" != "--no-start" ] || start=0
 
     for osd_dir in $(find ${osdpth}/* -type d) ; do
         osd_id=${osd_dir##*-}
@@ -2879,7 +2889,7 @@ ceph_osd_remount()
                 unlink $osdpth/ceph-$osd_id/block 2>/dev/null
                 (cd $osdpth/ceph-$osd_id && ln -sf /dev/disk/by-partuuid/$datapart_partuuid block)
             fi
-            Quiet -n systemctl start ceph-osd@$osd_id
+            [ $start -eq 0 ] || Quiet -n systemctl start ceph-osd@$osd_id
         fi
     done < $CEPH_OSD_MAP
 }
@@ -3570,20 +3580,96 @@ ceph_remove_group_ssdpool()
     Quiet -n cinder-manage service remove cinder-volume cube@$pool
 }
 
+# Restart one local OSD in the background: compact online, stop, compact offline,
+# start. Records the chain's pid in CEPH_OSD_RESTART_PIDS[id].
+# params:
+# $1: osd id
+# $2: --no-online-compact to skip the online compaction, for an OSD already stopped
+_ceph_osd_restart_chain()
+{
+    local id=$1
+    local osd_pth="/var/lib/ceph/osd/ceph-$id"
+    [ -e $osd_pth ] || return 0
+    local online=1
+    [ "${2:-}" != "--no-online-compact" ] || online=0
+    ( [ $online -eq 0 ] || $CEPH tell osd.$id compact || true ; \
+      systemctl stop ceph-osd@$id ; \
+      ceph-kvstore-tool bluestore-kv $osd_pth compact || \
+          log_warning "ceph_osd_restart: osd.$id kvstore compact failed, starting it anyway" ; \
+      systemctl start ceph-osd@$id ) >/dev/null 2>&1 &
+    CEPH_OSD_RESTART_PIDS[$id]=$!
+}
+
 ceph_osd_restart()
 {
     local osd_ids=${*:-$($CEPH osd tree-from $(hostname) -f json 2>/dev/null | jq .nodes[0].children[] | sort -n)}
     Quiet -n ceph-volume lvm activate --all
     for id in $osd_ids ; do
-        local osd_pth="/var/lib/ceph/osd/ceph-$id"
-        if [ -e $osd_pth ] ; then
-            ( $CEPH tell osd.$id compact || true ; \
-              systemctl stop ceph-osd@$id ; \
-              ceph-kvstore-tool bluestore-kv $osd_pth compact || \
-                  log_warning "ceph_osd_restart: osd.$id kvstore compact failed, starting it anyway" ; \
-              systemctl start ceph-osd@$id ) >/dev/null 2>&1 &
+        _ceph_osd_restart_chain $id
+    done
+}
+
+# Restart a batch of local OSDs together and wait until every one of them has
+# finished starting, so the caller can size and start the next batch on top of a
+# settled one. An OSD has finished when it has either
+#   - booted: its new process answers the admin socket "status", which the OSD
+#     registers only after mounting its store, loading its PGs and authenticating
+#     with the mon; or
+#   - exited: the process its restart started is gone, which ends that start
+#     attempt (systemd retries it on its own schedule).
+# There is no timer: every start attempt ends one way or the other. LVM OSDs must
+# already be activated (ceph_osd_activate_lvms --no-systemd); this does not
+# activate anything, so only the given OSDs start.
+# The chain skips its online compaction: the OSDs come here stopped by
+# ceph_osd_remount --no-start, which compacted each running one online before
+# stopping it, and the offline compaction before the start covers the rest. Asking
+# a stopped OSD to compact only waits out $CEPH's 10s timeout.
+# Returns 1 when any OSD exited instead of booting or had no data directory.
+# params:
+# $1..: osd ids
+ceph_osd_restart_wait()
+{
+    local ids="$*"
+    [ -n "$ids" ] || return 0
+
+    # _ceph_osd_restart_chain records each chain here (bash locals are visible to callees)
+    local -a CEPH_OSD_RESTART_PIDS=()
+    local -a started=()
+    local id pending= rc=0
+    for id in $ids ; do
+        _ceph_osd_restart_chain $id --no-online-compact
+        if [ -n "${CEPH_OSD_RESTART_PIDS[$id]:-}" ] ; then
+            pending+=" $id"
+        else
+            log_warning "ceph_osd_restart_wait: osd.$id has no data directory, not started"
+            rc=1
         fi
     done
+
+    while [ -n "$pending" ] ; do
+        local left=
+        for id in $pending ; do
+            # still compacting, stopping or starting
+            if kill -0 ${CEPH_OSD_RESTART_PIDS[$id]} 2>/dev/null ; then
+                left+=" $id"
+                continue
+            fi
+            # the process this restart started; 0 when systemctl start failed
+            [ -n "${started[$id]:-}" ] || started[$id]=$(systemctl show -p MainPID --value ceph-osd@$id)
+            if timeout -k 5 10 ceph daemon osd.$id status >/dev/null 2>&1 ; then
+                continue
+            fi
+            if [ "${started[$id]}" = "0" ] || [ "$(systemctl show -p MainPID --value ceph-osd@$id)" != "${started[$id]}" ] ; then
+                log_error "ceph_osd_restart_wait: osd.$id exited before it came up"
+                rc=1
+                continue
+            fi
+            left+=" $id"
+        done
+        pending=$left
+        [ -z "$pending" ] || sleep 2
+    done
+    return $rc
 }
 
 ceph_osd_compact()
