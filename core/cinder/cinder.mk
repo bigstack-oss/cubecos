@@ -108,8 +108,30 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/cinder
 
 # install custom files
+#
+# Each carried file sits beside the upstream 22.3.0 file it was made from (*.orig), so
+# `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
+# to the installed file instead; a whole file is copied over it:
+# volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
+#   upstream still does not provide; and the nfs.py half of upstream 0480073b9 (bug
+#   1989514, below): an extend resizes the active file, which a snapshot made a qcow2
+#   overlay, instead of the base file
+# volume/drivers/remotefs.py.patch: upstream 0480073b9 (bug 1989514; 23.4.0 and
+#   24.3.0, never backported to 2023.1). An online snapshot of an attached volume made a
+#   qcow2 overlay the active file but left the volume's format admin metadata, and the
+#   attachment's connection_info, at raw, so the instance could not boot after a
+#   stop/start. The patch records qcow2 in both. Bug 2073146's fix reads the format
+#   from that metadata, so it stands on this one
 rootfs_install::
-	$(Q)[ -d $(CINDER_PATCHDIR) ] && cp -rf $(CINDER_PATCHDIR)/* $(CINDER_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "cinder: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)[ ! -d $(CINDER_PATCHDIR) ] || { cd $(CINDER_PATCHDIR) && find . -type f ! -name '*.patch' ! -name '*.orig' \
+		! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(CINDER_SRCDIR)/"$$f"; done; }
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /var/lock/os_brick
