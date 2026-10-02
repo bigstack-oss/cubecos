@@ -155,7 +155,9 @@ rootfs_install::
 # `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
 # to the installed file instead; a whole file is copied over it:
 # volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
-#   upstream still does not provide; and upstream 53245bce3 (bug 2103742, 27.0.0), which
+#   upstream still does not provide (manage_existing renames the file through _execute,
+#   mv as root, since the file and the share root are usually root-owned and an
+#   in-process os.rename as the cinder user fails); and upstream 53245bce3 (bug 2103742, 27.0.0), which
 #   lets _is_file_size_equal read a qcow2 snapshot overlay after an extend; and
 #   _copy_volume_from_snapshot growing the new file to the requested size. Without it a
 #   volume created from a snapshot -- or a clone, which NFS always takes through a

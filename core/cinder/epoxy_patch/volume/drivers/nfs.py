@@ -824,7 +824,11 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             LOG.debug('Managing existing volume: renaming %(src)s to %(dst)s',
                      {'src': volume_path, 'dst': new_volume_path})
 
-            os.rename(volume_path, new_volume_path)
+            # through _execute's root helper, like update_migrated_volume: the
+            # file and the share root are usually root-owned, and an
+            # in-process os.rename as the cinder user fails with EACCES
+            self._execute('mv', volume_path, new_volume_path,
+                          run_as_root=self._execute_as_root)
 
             # Set proper permissions
             self._set_rw_permissions(new_volume_path)
@@ -832,7 +836,7 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             LOG.info('Successfully managed existing volume: %(src)s -> %(dst)s',
                     {'src': volume_path, 'dst': new_volume_path})
 
-        except (OSError, IOError) as e:
+        except (OSError, IOError, putils.ProcessExecutionError) as e:
             reason = _('Failed to manage existing volume %(source)s: %(error)s') % {
                 'source': source_name,
                 'error': str(e)
