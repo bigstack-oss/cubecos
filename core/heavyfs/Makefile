@@ -251,6 +251,22 @@ $(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
 $(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_01)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
 
 # install python 3.12 for openstack epoxy
+#
+# NOTE: why the build and the install are two separate make invocations.
+#
+# With --enable-optimizations, a one-shot `make altinstall` does not install the PGO
+# binary. CPython's altbininstall depends on $(BUILDPYTHON) directly, so it builds a
+# plain -O3 python first and installs it; libinstall then depends on `all`, which runs
+# the profile-opt cycle (instrumented build, profile run, clean, rebuild) only after
+# the binary is already in /usr/local. The PGO result stays in the build tree. Adding
+# -j to the one-shot form is worse: the profile-opt `make clean` races altbininstall's
+# link and fails with "ld: cannot find Python/thread.o".
+#
+# Running `make -j8` first finishes the whole profile-opt cycle, and the following
+# `make altinstall` finds everything up to date and installs that binary without
+# recompiling. With identical inputs, -j8 and -j1 produce byte-identical objects; the
+# PGO binary still differs from build to build because the profile run is not
+# deterministic, with or without -j.
 rootfs_install::
 	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
 	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
@@ -261,7 +277,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(PYTHON_PATCH_VER)/Python-$(PYTHON_PATCH_VER).tgz
 	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz -C /usr/src/python-$(PYTHON_VER)
 	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && ./configure --enable-optimizations"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && make altinstall"
+	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && make -j8 && make altinstall"
 	$(Q)umount -l $(ROOTDIR)/dev || true
 	$(Q)# ensure python 3.12 is successfully built
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(PYTHON_VER) ]
