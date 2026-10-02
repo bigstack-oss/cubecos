@@ -549,6 +549,60 @@ health_etcd_report()
     _health_report ${FUNCNAME[0]}
 }
 
+# etcd-watch (core/etcd/etcd-watch.service) is the only reader of etcd on a node. It
+# turns each cluster.* change into /etc/settings.cluster.json, /etc/hosts (through
+# hex_config apply) and the pacemaker remotes (through cluster_map_update), and nothing
+# polls or resyncs behind it. A node whose watcher is gone keeps its last cluster view
+# for good while etcd itself stays healthy: #1336 found a master control 6 days stale
+# that way, with every check passing.
+#
+# Appends to the caller's watch_down and behind arrays: the nodes whose watcher is not
+# active, and the nodes whose /etc/revision -- the revision their last pull saw -- is
+# older than the newest cluster.* change. That is the highest mod_revision among the
+# cluster.* keys, not etcd's store revision: terraform keeps its state in this etcd as
+# well (core/terraform/src/main.tf), so the store revision moves with no cluster.* event
+# behind it and every healthy node's /etc/revision trails it. A deleted key leaves no
+# mod_revision, so a missed removal shows as watch_down, or in health_nodelist_check,
+# not in behind.
+#
+# Only nodes that finished their commit are judged: `cubectl this-node start` runs in
+# it, so before /run/cube_commit_done a stopped watcher is a boot still in progress,
+# which health_bootstrap_check reports. A node cmd cannot reach is skipped the same way;
+# the link and bootstrap checks report it, and its next start pulls first.
+_health_etcd_watch_scan()
+{
+    local want node ret state rev
+
+    want=$($ETCDCTL get cluster. --prefix --keys-only -w json 2>/dev/null \
+               | jq -r '[.kvs[]?.mod_revision] | max // empty' 2>/dev/null)
+
+    while IFS='|' read -r node ret state ; do
+        [ "$ret" = "0" ] && [ -n "$state" ] || continue
+        read -r state rev <<< "$state"
+        [[ "$rev" =~ ^[0-9]+$ ]] || rev=0
+        if [ "$state" != "active" ] ; then
+            watch_down+=("$node")
+            ERR_MSG+="$node etcd-watch is $state\n"
+        fi
+        if [ -n "$want" ] && [ "$rev" -lt "$want" ] ; then
+            behind+=("$node")
+            ERR_MSG+="$node cluster config at revision $rev, etcd at $want\n"
+        fi
+    done < <(cmd -v '[ -e /run/cube_commit_done ] && echo $(systemctl is-active etcd-watch) $(cat /etc/revision 2>/dev/null)')
+}
+
+# Starts etcd-watch before re-syncing, so no change can fall between the two, then runs
+# `cubectl tuning apply`: its hex_config apply is what rewrites /etc/hosts (the cluster
+# module's commit), where a bare `tuning pull` would only refresh the files the check
+# reads. Events missed while the watcher was down are not replayed.
+_health_etcd_watch_repair()
+{
+    local nodes=$(printf '%s\n' "$@" | sort -u | xargs)
+
+    [ -n "$nodes" ] || return 0
+    cmd -n "$nodes" 'systemctl start etcd-watch ; cubectl tuning apply' >/dev/null 2>&1
+}
+
 health_etcd_check()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
@@ -567,7 +621,33 @@ health_etcd_check()
         ERR_LOG="$$HEX_SDK cmd ETCDCTL endpoint health --cluster"
     fi
 
+    # The store's own faults above outrank a node that stopped reading it.
+    local watch_down=() behind=()
+    _health_etcd_watch_scan
+    if [ "$ERR_CODE" = "0" ] ; then
+        if [ ${#watch_down[@]} -gt 0 ] ; then
+            ERR_CODE=3
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u etcd-watch"
+        elif [ ${#behind[@]} -gt 0 ] ; then
+            ERR_CODE=4
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u etcd-watch"
+        fi
+    fi
+
     _health_fail_log
+}
+
+# Code 3 only, and only on the nodes whose watcher is down: that is unambiguous and
+# cheap to fix. A node that is behind with its watcher running may be a burst of
+# changes still being applied, so code 4 is left to cluster check_repair. The etcd
+# reseed in health_etcd_repair is never run from here.
+_health_etcd_auto_repair()
+{
+    if [ "$ERR_CODE" == "3" ] ; then
+        local watch_down=() behind=()
+        _health_etcd_watch_scan
+        _health_etcd_watch_repair "${watch_down[@]}"
+    fi
 }
 
 health_etcd_repair()
@@ -600,6 +680,10 @@ health_etcd_repair()
             rm -f "$cntf"
         fi
     done
+
+    local watch_down=() behind=()
+    _health_etcd_watch_scan
+    _health_etcd_watch_repair "${watch_down[@]}" "${behind[@]}"
 }
 
 health_hacluster_report()
