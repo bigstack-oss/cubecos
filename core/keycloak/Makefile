@@ -8,12 +8,14 @@ include ../../build.mk
 # still ships appVersion 17.0.1-legacy -- so moving to Quarkus means changing chart, not
 # just bumping a version.
 #
-# 2.3.0 is the only keycloakx version that tracks a 22.x server: 2.2.2 before it is 21.1.1
-# and 2.4.1 after it jumps straight to 25.0.0. appVersion only supplies the default image
-# tag, which chart-values.yaml overrides with the bundled cube-cos-login image, so what it
-# actually buys is templates written against the server we ship.
+# 7.3.x is the keycloakx line that tracks the 26.7 server we ship (7.3.0 -> 26.7.2, 7.3.1
+# -> 26.7.3, 7.3.2 -> 26.7.4); 7.2.x stops at 26.6.4, and nothing tracks 26.8 yet. appVersion
+# only supplies the default image tag, which chart-values.yaml overrides with the bundled
+# cube-cos-login image, so what it actually buys is templates written against the server we
+# ship: 7.x is the line that serves health from the management port, emits proxy-headers
+# instead of the removed proxy option, and defaults the cache stack to jdbc-ping.
 CHART_NAME := keycloakx
-CHART_VERSION := 2.3.0
+CHART_VERSION := 7.3.2
 CHART := $(CHART_NAME)-$(CHART_VERSION).tgz
 
 $(CHART):
@@ -47,6 +49,12 @@ ifneq ($(RC),)
 # against. Keep the two numbers apart when bumping: the tag is the package.json version,
 # not the Keycloak version. While the pin sat at the 18 image beside a chart asking for 22,
 # RC builds failed the bundled-registry check in keycloak.mk.
+#
+# The same gap is open again for 26: chart-values.yaml asks for 26.0.0 and cube-cos-ui has
+# not cut a 26.x cube-cos-login release yet, so this pin and IMG_BUILD below stay on the
+# 22 release, RC builds fail that check, and both move together once the release exists.
+# The keycloakx 7.3.2 chart above is written for 26 in any case: it emits KC_PROXY_HEADERS
+# (added in 24) and the jdbc-ping cache stack (added in 26.1), which the 22 image predates.
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
 		wget -O login.rpm $(GITHUB_DL_URL)/releases/download/$(PKG_NAME)-v3.1.20-rc1/$(PKG_NAME)-22.0.0-1.f17df86.x86_64.rpm, \
