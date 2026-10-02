@@ -137,6 +137,14 @@ extraEnv: |
       secretKeyRef:
         name: keycloak-db-secret
         key: keycloak-password
+  # 26's kc.sh sizes the heap from the container's memory when it runs in a container:
+  # -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=50. These pods carry no memory limit,
+  # so the JVM takes that to mean the whole node -- on a 32 GB control node a 22 GB ceiling
+  # and a 16 GB initial heap, on nodes that already run near kubelet's memory-pressure line.
+  # 22 started with -Xms64m -Xmx512m, which is also what kc.sh still uses outside a
+  # container; keep that.
+  - name: JAVA_OPTS_KC_HEAP
+    value: -Xms64m -Xmx512m
   - name: LOGIN_GREETING
     value:
 
