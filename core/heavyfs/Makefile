@@ -415,7 +415,7 @@ rootfs_install::
 # did. It follows the epoxy ones like every service now (#668), and the packages it caps
 # -- fastapi, pydantic, starlette, uvicorn, loguru -- are ones nothing else in that venv
 # installs, so its place in this list no longer matters.
-HEAVY_COMPONENTS += nvidia ixgbe
+HEAVY_COMPONENTS += nvidia
 HEAVY_COMPONENTS += yq api ui skyline nginx
 HEAVY_COMPONENTS += mysql mongodb ntp rabbitmq memcache etcd ceph pacemaker haproxy grafana
 HEAVY_COMPONENTS += influxdb prometheus thanos exporters kapacitor elk telegraf kafka keystone glance nova ironic neutron cinder swift multipath
