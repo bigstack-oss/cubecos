@@ -988,25 +988,26 @@ UpdateConfig(
 
     // bluestore osd perf tuning
     if (perfTuned) {
-        fprintf(fout, "bluestore cache autotune = 0\n");    // off: autotune's PriorityCache mem_avail assert aborts OSDs during unclean-shutdown recovery
-        // These three have to sum to <= 1.0 or bluestore refuses to mount and
-        // every OSD exits (22) Invalid argument at init -- not a warning, a hard
-        // stop. Quincy only summed meta+kv, so 0.8 + 0.2 = 1.0 was exactly legal;
-        // reef added kv_onode to the same check and its 0.04 default pushed the
-        // total to 1.04. Measured on jim-1cc: with the quincy values in place,
-        // both OSDs failed every start with
-        //   _set_cache_sizes bluestore_cache_meta_ratio (0.8)
-        //   + bluestore_cache_kv_ratio (0.2) + bluestore_cache_kv_onode_ratio (0.04)
-        //   = 1.04; must be <= 1.0
-        // meta gives up the 0.04 because the intent of this block is a
-        // metadata-heavy cache and 0.76 still spends three quarters of it there;
-        // the alternative, trimming kv, is the cache rocksdb reads out of.
+        // On: the OSDs size their caches to osd memory target (below) instead of the
+        // fixed bluestore_cache_size_hdd/_ssd (1G/3G). It was pinned off for #1120,
+        // where enabling it crash-looped every OSD on FAILED ceph_assert(mem_avail >= 0)
+        // (PriorityCache.cc). That assert comes from the ratios, not from autotune:
+        // with quincy's 0.8 + 0.2 still in place, kv_onode's 0.04 default made the
+        // caches' ratios sum to 1.04 -- quincy up to 17.2.7 checked only meta + kv --
+        // and balance()'s last pass hands every cache mem_avail * ratio, 104% of what
+        // is left, driving mem_avail negative whenever the caches are not full, as on
+        // every start. Red Hat records the same crash for autotune with meta 0.8 and
+        // kv 0.2 (solution 7015105); reef and squid refuse to mount above 1.0.
+        fprintf(fout, "bluestore cache autotune = 1\n");
+        // These three have to sum to <= 1.0 or bluestore refuses to mount and every
+        // OSD exits (22) Invalid argument at init. They are ceph's own defaults, the
+        // split autotune is built and tested with, leaving 0.06 to the data cache.
         //
         // All three are written explicitly, including kv_onode at its own default.
-        // Leaving it implicit is what made this break in the first place: the sum
-        // silently depended on a value upstream was free to change, and it did.
-        fprintf(fout, "bluestore cache kv ratio = 0.2\n");
-        fprintf(fout, "bluestore cache meta ratio = 0.76\n");
+        // Leaving it implicit is what broke this before: the sum silently depended
+        // on a value upstream was free to change, and it did.
+        fprintf(fout, "bluestore cache kv ratio = 0.45\n");
+        fprintf(fout, "bluestore cache meta ratio = 0.45\n");
         fprintf(fout, "bluestore cache kv onode ratio = 0.04\n");
         fprintf(fout, "bluestore csum type = crc32c\n");     // corruption detection on for tenant data
         fprintf(fout, "bluestore extent map shard max size = 200\n");
