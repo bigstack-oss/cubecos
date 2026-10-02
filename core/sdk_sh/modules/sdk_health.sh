@@ -4114,8 +4114,38 @@ health_logstash_report()
     _health_report ${FUNCNAME[0]}
 }
 
+# Per-node probe for health_logstash_check. Prints the pipelines in pipelines.yml that
+# logstash does not report RUNNING, and fails if there are any. A logstash that dies while it
+# creates its pipelines is running to systemd for all but RestartSec of every cycle, so the
+# unit state alone stays green through the whole crash loop. A start that has not crashed yet
+# gets LOGSTASH_START_GRACE seconds to bring them up; it takes about a minute. One that wedges
+# in GC instead never exits and stops answering, hence the short curl timeout.
+LOGSTASH_PIPELINES_YML=/etc/logstash/pipelines.yml
+LOGSTASH_START_GRACE=300
+health_logstash_pipelines()
+{
+    local running id missing=
+    running=$($CURL -s -m 10 http://127.0.0.1:9600/_health_report 2>/dev/null \
+        | jq -r '.indicators.pipelines.indicators // {} | to_entries[]
+                 | select(.value.details.status.state == "RUNNING") | .key' 2>/dev/null)
+    for id in $(awk '$2 == "pipeline.id:" { print $3 }' $LOGSTASH_PIPELINES_YML) ; do
+        grep -qxF -- "$id" <<< "$running" || missing+=" $id"
+    done
+    [ -n "$missing" ] || return 0
+
+    local restarts=$(systemctl show logstash -p NRestarts --value)
+    local age=$(ps -o etimes= -p "$(systemctl show logstash -p MainPID --value)" 2>/dev/null | tr -d ' ')
+    if [ "${restarts:-0}" -eq 0 ] && [ "${age:-0}" -lt $LOGSTASH_START_GRACE ] ; then
+        return 0
+    fi
+
+    echo "${missing# } (NRestarts=${restarts:-0})"
+    return 1
+}
+
 health_logstash_check()
 {
+    local down
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if remote_run $node $HEX_SDK is_moderator_node >/dev/null 2>&1 ; then
             continue
@@ -4124,6 +4154,10 @@ health_logstash_check()
             ERR_CODE=1
             ERR_MSG+="logstash on $node is not running\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u logstash"
+        elif ! down=$(remote_run $node $HEX_SDK health_logstash_pipelines) ; then
+            ERR_CODE=2
+            ERR_MSG+="logstash on $node is not running pipelines: $down\n"
+            ERR_LOG="/var/log/logstash/logstash.log"
         fi
     done
 

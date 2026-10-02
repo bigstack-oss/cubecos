@@ -366,6 +366,7 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 
 SRV="logstash"
 eval "ERR_DESC_$SRV[1]='daemon down'"
+eval "ERR_DESC_$SRV[2]='pipelines not running'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="mongodb"
