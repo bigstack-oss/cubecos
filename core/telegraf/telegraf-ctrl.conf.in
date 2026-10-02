@@ -20,6 +20,13 @@ interval = "5m"
 timeout = "5m"
 data_format = "influx"
 
+# frees a tenant subnet soon after its last VM goes (cube:mgr port cleanup)
+[[inputs.exec]]
+commands = [ ["sudo", "/usr/sbin/hex_sdk", "os_mgr_port_reap"] ]
+interval = "1m"
+timeout = "1m"
+data_format = "influx"
+
 [[inputs.exec]]
 commands = [ ["sudo", "/usr/sbin/hex_sdk", "stats_ceph_osd_cmd"] ]
 interval = "1m"
