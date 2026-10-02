@@ -16,7 +16,7 @@
 static const char* HINT_INPUT_PUBLIC_NET = "Input public net for the framework(e.g. 'public' and so on): ";
 static const char* HINT_INPUT_MGMT_NET = "Input management net for the framework(e.g. 'public' or 'mgmt' and so on): ";
 static const char* HINT_INPUT_LB_IP = "Input load balancer ip for the framework(should be an ip address in the range of public net): ";
-static const char* HINT_INPUT_OS_IMAGE = "Input os image for the framework(default is rancher-cluster-image-rke2-v1.32.4.raw): ";
+static const char* HINT_INPUT_OS_IMAGE = "Input os image for the framework(default is rancher-cluster-image-rke2-v1.32.4): ";
 
 static int
 appRegisterMain(int argc, const char** argv)
