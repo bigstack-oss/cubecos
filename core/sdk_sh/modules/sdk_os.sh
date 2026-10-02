@@ -2680,6 +2680,30 @@ os_mgr_port_clear()
     done
 }
 
+# Remove a stale mgr port's OVS interface and netns on this node (by port id).
+os_mgr_port_purge()
+{
+    local net_id=$1
+    local port_id=$2
+
+    for i in $(/usr/bin/ovs-vsctl --bare --columns=name find interface external_ids:iface-id=$port_id 2>/dev/null) ; do
+        /usr/bin/ovs-vsctl --if-exists del-port br-int $i
+    done
+    /sbin/ip netns del mgr-$(echo $net_id | cut -c 1-8) 2>/dev/null
+}
+
+# Delete mgr-* netns whose network no longer has a mgr port. Args: networks to keep.
+os_mgr_netns_sweep()
+{
+    local keep=" $* "
+    for ns in $(/sbin/ip netns 2>/dev/null | awk '/^mgr-/{print $1}') ; do
+        case "$keep" in
+            *" ${ns#mgr-}"*) ;;
+            *) /sbin/ip netns del $ns 2>/dev/null ;;
+        esac
+    done
+}
+
 os_mgr_port_create()
 {
     local net_id=$1
@@ -2780,6 +2804,16 @@ os_nova_instance_ping()
     local cols="id,ports.network_id,device_id,ip_address,project_id"
     local joined_tables="ports INNER JOIN ipallocations ON ports.id = ipallocations.port_id"
     local stats=$(mariadb -B -u root -D neutron -e "SELECT $cols FROM $joined_tables WHERE device_owner ='compute:nova'" | tail -n +2)
+
+    # A mgr port left on a network without VMs blocks the tenant's subnet delete
+    local vm_nets=$(echo "$stats" | awk '{print $2}' | sort -u)
+    mariadb -B -N -u root -D neutron -e "SELECT p.id,p.network_id,b.host FROM ports p JOIN ml2_port_bindings b ON p.id=b.port_id WHERE p.device_owner='cube:mgr' AND b.status='ACTIVE'" | while read pid n h ; do
+        echo "$vm_nets" | grep -qx "$n" && continue
+        ssh -n ${h:-$r} $HEX_SDK os_mgr_port_purge $n $pid 2>/dev/null
+        $OPENSTACK port delete $pid 2>/dev/null
+    done
+    ssh $r $HEX_SDK os_mgr_netns_sweep $(mariadb -B -N -u root -D neutron -e "SELECT DISTINCT network_id FROM ports WHERE device_owner='cube:mgr'") 2>/dev/null
+
     for n in $(echo "$stats" | awk '{print $2}' | sort | uniq) ; do
         local n_name=$(mariadb -B -u root -D neutron -e "SELECT name FROM networks WHERE id ='$n'" | tail -n +2)
         local netns_exec=
