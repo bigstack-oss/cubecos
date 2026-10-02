@@ -152,9 +152,18 @@ rootfs_install::
 # install custom files
 #
 # Each carried file sits beside the upstream 26.3.0 file it was made from (*.orig), so
-# `diff x.orig x` is the whole local change:
+# `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
+# to the installed file instead; a whole file is copied over it:
 # volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
-#   upstream still does not provide
+#   upstream still does not provide; and upstream 53245bce3 (bug 2103742, 27.0.0), which
+#   lets _is_file_size_equal read a qcow2 snapshot overlay after an extend
+# volume/drivers/remotefs.py.patch, image/image_utils.py.patch: upstream 8c03308ed
+#   (28.0.0, not backported to 2025.1). An offline snapshot left the volume's format
+#   admin metadata at raw while its active file became a qcow2 overlay, so an extend ran
+#   qemu-img resize -f raw on the overlay: the file grew, its virtual size did not, the
+#   volume read as extended, and the size gate in initialize_connection then refused to
+#   attach it. The patch keeps format (and the new base_format) in step with the active
+#   file on every snapshot create and delete
 # volume/drivers/rbd.py: upstream's proposed fix for bug 2153099,
 #   https://review.opendev.org/c/openstack/cinder/+/989051 (patch set 5), not merged at
 #   26.3.0. _delete_volume returns on a successful rbd remove before it walks up to the
@@ -165,7 +174,15 @@ rootfs_install::
 #   .deleted image is not in the trash its purge task empties. Drop the file once a
 #   release carries the fix.
 rootfs_install::
-	$(Q)[ -d $(CINDER_PATCHDIR) ] && cp -rf $(CINDER_PATCHDIR)/* $(CINDER_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "cinder: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)[ ! -d $(CINDER_PATCHDIR) ] || { cd $(CINDER_PATCHDIR) && find . -type f ! -name '*.patch' ! -name '*.orig' \
+		! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(CINDER_SRCDIR)/"$$f"; done; }
 
 rootfs_install::
 	$(Q)# /var/lock is on tmpfs, so the shared os-brick lock dir is recreated at every boot
