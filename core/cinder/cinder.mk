@@ -161,7 +161,11 @@ rootfs_install::
 #   volume created from a snapshot -- or a clone, which NFS always takes through a
 #   temporary snapshot -- larger than its source kept the source's size on the share,
 #   read as available at the new size, and could not be attached. Still missing upstream
-#   (master); vzstorage's copy extends the same way
+#   (master); vzstorage's copy extends the same way. And update_migrated_volume renaming
+#   the migrated file back to the volume's own name through _execute (mv as root) instead
+#   of an in-process os.rename: cinder-volume runs as cinder and a share root is usually
+#   root-owned, so every migration onto NFS logged a PermissionError and left the file
+#   under the temporary volume's id (_name_id). Still missing upstream (master)
 # volume/drivers/remotefs.py.patch, image/image_utils.py.patch: upstream 8c03308ed
 #   (28.0.0, not backported to 2025.1). An offline snapshot left the volume's format
 #   admin metadata at raw while its active file became a qcow2 overlay, so an extend ran

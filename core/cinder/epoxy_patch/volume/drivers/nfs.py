@@ -512,8 +512,13 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
             original_path = current_path.replace(current_name,
                                                  original_volume_name)
             try:
-                os.rename(current_path, original_path)
-            except OSError:
+                # The share root is usually root-owned, and cinder-volume runs
+                # as cinder, so an in-process os.rename fails with EACCES the
+                # way every other file operation here would without
+                # _execute's root helper.
+                self._execute('mv', current_path, original_path,
+                              run_as_root=self._execute_as_root)
+            except (OSError, putils.ProcessExecutionError):
                 LOG.exception('Unable to rename the logical volume '
                               'for volume: %s', volume.id)
                 # If the rename fails, _name_id should be set to the new
