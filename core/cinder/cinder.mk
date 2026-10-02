@@ -173,7 +173,13 @@ rootfs_install::
 #   (the way upstream fixed copy-from-snapshot for bug 2074377). Without it convert_image
 #   inspected the active file again, refused the qcow2 overlay a snapshot leaves behind,
 #   and a volume with snapshots could not be uploaded to an image at all. Still missing
-#   upstream (master)
+#   upstream (master). And _create_snapshot_online removes the overlay it created when
+#   Nova reports the snapshot as error -- Nova does so only when libvirt's snapshot, its
+#   last step, failed, so the guest never used the file. Deleting the errored snapshot
+#   drops only its DB record, so each failed online snapshot (any VM imported with
+#   os_require_quiesce=yes and no guest agent) otherwise left a file on the share for
+#   good. A timeout or a concurrent delete keeps the file, since Nova may still switch
+#   to it. Still missing upstream (master)
 # volume/drivers/rbd.py: upstream's proposed fix for bug 2153099,
 #   https://review.opendev.org/c/openstack/cinder/+/989051 (patch set 5), not merged at
 #   26.3.0. _delete_volume returns on a successful rbd remove before it walks up to the

@@ -261,7 +261,23 @@
          snap_info['active'] = active
          snap_info[snapshot.id] = active
          self._write_info_file(info_path, snap_info)
-@@ -1824,7 +1969,6 @@
+@@ -1791,6 +1936,15 @@
+                 time.sleep(increment)
+                 seconds_elapsed += increment
+             elif s['status'] == fields.SnapshotStatus.ERROR:
++                # Nova reports error only when libvirt's snapshot (its last
++                # step) failed, so the guest never switched to the overlay
++                # created above. Remove it: deleting the errored snapshot
++                # drops only the DB record, and the file would otherwise stay
++                # on the share for good.
++                LOG.warning('Removing unused snapshot file %(path)s after '
++                            'Nova failed to create snapshot %(id)s.',
++                            {'path': new_snap_path, 'id': snapshot.id})
++                self._delete(new_snap_path)
+ 
+                 msg = _('Nova returned "error" status '
+                         'while creating snapshot.')
+@@ -1824,7 +1978,6 @@
          # active file never changes
          info_path = self._local_path_volume_info(snapshot.volume)
          snap_info = self._read_info_file(info_path)
@@ -269,7 +285,7 @@
  
          if utils.paths_normcase_equal(info['active_file'],
                                        info['snapshot_file']):
-@@ -1845,8 +1989,20 @@
+@@ -1845,8 +1998,20 @@
                             'type': 'qcow2',
                             'volume_id': snapshot.volume.id}
  
@@ -292,7 +308,7 @@
          else:
              # blockCommit snapshot into base
              # info['base'] <= snapshot_file
-@@ -1862,11 +2018,6 @@
+@@ -1862,11 +2027,6 @@
  
          self._nova_assisted_vol_snap_delete(context, snapshot, delete_info)
  
