@@ -698,6 +698,15 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
                                       out_format,
                                       run_as_root=self._execute_as_root,
                                       data=snap_backing_file_img_info)
+            # convert_image copies the snapshot at the snapshot's own virtual
+            # size. A larger volume requested from it (or a larger clone, which
+            # goes through a temporary snapshot into here) must be grown to
+            # the requested size, or its file stays smaller than its cinder
+            # size and initialize_connection refuses to attach it.
+            if volume_size > snapshot.volume_size:
+                image_utils.resize_image(path_to_new_vol, volume_size,
+                                         run_as_root=self._execute_as_root,
+                                         file_format=out_format)
 
         self._set_rw_permissions_for_all(path_to_new_vol)
 
