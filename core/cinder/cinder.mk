@@ -152,7 +152,16 @@ rootfs_install::
 # install custom files
 #
 # Each carried file sits beside the upstream 26.3.0 file it was made from (*.orig), so
-# `diff x.orig x` is the whole local change:
+# `diff x.orig x` is the whole local change; a *.py.patch is that diff itself, applied
+# to the installed file (the convention core/keystone, core/nova and core/masakari use):
+# backup/drivers/swift.py.patch: SwiftBackupDriver.update_container_name defaults the
+#   container to <backup_swift_container>-<project_id> when the request names none.
+#   rgw keeps one bucket namespace for every project (rgw keystone implicit tenants =
+#   false), so with upstream's shared default the first project to back up owns
+#   "volume-backups" and every other project's backup fails with 403. Old backups keep
+#   the container recorded on them. Flipping implicit tenants instead hides every
+#   existing Swift object from its project, and flipping it back does not undo that.
+#   cubecos#1285.
 # volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
 #   upstream still does not provide
 # volume/drivers/rbd.py: upstream's proposed fix for bug 2153099,
@@ -164,8 +173,23 @@ rootfs_install::
 #   good. enable_deferred_deletion does not help: that fast path never reads it, and a
 #   .deleted image is not in the trash its purge task empties. Drop the file once a
 #   release carries the fix.
+#
+# Patches are tested with --dry-run --reverse first, as core/keystone does: --forward
+# exits 1 when every hunk is already applied, which would abort an incremental re-run.
+# A failed hunk aborts the build instead of shipping drift silently.
 rootfs_install::
-	$(Q)[ -d $(CINDER_PATCHDIR) ] && cp -rf $(CINDER_PATCHDIR)/* $(CINDER_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
+		if patch --dry-run --reverse --force "$$tgt" < "$$p" >/dev/null 2>&1; then \
+			echo "  PATCH $${rel%.patch} (already applied)"; continue; \
+		fi; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "cinder: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)[ ! -d $(CINDER_PATCHDIR) ] || { cd $(CINDER_PATCHDIR) && find . -type f ! -name '*.patch' \
+		! -name '*.orig' ! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(CINDER_SRCDIR)/"$$f"; done; }
 
 rootfs_install::
 	$(Q)# /var/lock is on tmpfs, so the shared os-brick lock dir is recreated at every boot
