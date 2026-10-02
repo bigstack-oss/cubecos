@@ -380,6 +380,8 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
         cfg["task_flow"]["jobboard_backend_driver"] = "zookeeper_taskflow_driver";
         cfg["task_flow"]["jobboard_backend_hosts"] = jobboardHosts;
         cfg["task_flow"]["jobboard_backend_port"] = "2181";
+        // zk session timeout (kazoo default 10s); this dict is passed to kazoo as-is
+        cfg["task_flow"]["jobboard_zookeeper_ssl_options"] = "timeout:60";
 
         cfg["certificates"]["ca_certificate"] = std::string(CAFILE);
         cfg["certificates"]["ca_private_key"] = "/etc/octavia/certs/private/cakey.pem";
