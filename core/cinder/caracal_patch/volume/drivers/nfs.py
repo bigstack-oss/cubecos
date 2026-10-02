@@ -16,6 +16,7 @@
 
 import binascii
 import errno
+import math
 import os
 import tempfile
 import time
@@ -142,8 +143,19 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         active_vol = self.get_active_image_from_info(volume)
         volume_dir = self._local_volume_dir(volume)
         path_to_vol = os.path.join(volume_dir, active_vol)
+
+        vol_format = None
+        admin_metadata = None
+        # admin context is required for admin_metadata
+        with volume.obj_as_admin():
+            admin_metadata = volume.admin_metadata
+
+        if admin_metadata and 'format' in admin_metadata:
+            vol_format = admin_metadata['format']
+
         info = self._qemu_img_info(path_to_vol,
-                                   volume['name'])
+                                   volume['name'],
+                                   img_format=vol_format)
 
         data = {'export': volume.provider_location,
                 'name': active_vol}
@@ -160,13 +172,16 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
         if info.file_format not in ['raw', 'qcow2']:
             msg = _('nfs volume must be a valid raw or qcow2 image.')
             raise exception.InvalidVolume(reason=msg)
-
-        # Test if the size is accurate or if something tried to modify it
-        if info.virtual_size != volume.size * units.Gi:
+        virtual_size_gb = int(math.ceil(float(info.virtual_size) / units.Gi))
+        # Checks if the virtual size has been modified by any source other
+        # than the Cinder service. This prevents users from attaching a volume
+        # which virtual size has been extended from inside a virtual machine,
+        # by writing a modified qcow2 image to its block device.
+        if virtual_size_gb > volume.size:
             LOG.error('The volume virtual_size does not match the size in '
                       'cinder, aborting as we suspect an exploit. '
                       'Virtual Size is %(vsize)s and real size is %(size)s',
-                      {'vsize': info.virtual_size, 'size': volume.size})
+                      {'vsize': virtual_size_gb, 'size': volume.size})
             msg = _('The volume virtual_size does not match the size in '
                     'cinder, aborting as we suspect an exploit.')
             raise exception.InvalidVolume(reason=msg)
@@ -581,13 +596,14 @@ class NfsDriver(remotefs.RemoteFSSnapDriverDistributed):
 
         self._delete(base_volume_path)
 
-    def _qemu_img_info(self, path, volume_name):
+    def _qemu_img_info(self, path, volume_name, img_format=None):
         return super(NfsDriver, self)._qemu_img_info_base(
             path,
             volume_name,
             self.configuration.nfs_mount_point_base,
             force_share=True,
-            run_as_root=True)
+            run_as_root=True,
+            img_format=img_format)
 
     def _check_snapshot_support(self, setup_checking=False):
         """Ensure snapshot support is enabled in config."""

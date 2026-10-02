@@ -131,7 +131,13 @@ rootfs_install::
 # `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
 # to the installed file instead; a whole file is copied over it:
 # volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
-#   upstream still does not provide
+#   upstream still does not provide; and upstream d961d3c88 + c68475a3d (bug 2073146,
+#   28.0.0, not backported to 2024.1; their remotefs.py and image_utils.py halves are in
+#   those .patch files): initialize_connection reads the volume's format from its admin
+#   metadata instead of guessing it from the file, and refuses only a virtual size larger
+#   than the cinder size. A Glance image stored on NFS is a raw volume holding the image's
+#   own bytes, so a qcow2 image was taken for a qcow2 volume of the image's virtual size
+#   and every read-attach was refused (#1217)
 # volume/drivers/remotefs.py.patch, image/image_utils.py.patch: upstream 8c03308ed
 #   (28.0.0, not backported to 2024.1). An offline snapshot left the volume's format
 #   admin metadata at raw while its active file became a qcow2 overlay, so an extend ran

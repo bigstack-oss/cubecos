@@ -15,7 +15,27 @@
      def snapshot_revert_use_temp_snapshot(self) -> bool:
          # Considering that RemoteFS based drivers use COW images
          # for storing snapshots, having chains of such images,
-@@ -1324,30 +1332,34 @@
+@@ -850,7 +858,8 @@
+                             basedir: str,
+                             ext_bf_template=None,
+                             force_share=False,
+-                            run_as_root=False) -> imageutils.QemuImgInfo:
++                            run_as_root=False,
++                            img_format=None) -> imageutils.QemuImgInfo:
+         """Sanitize image_utils' qemu_img_info.
+ 
+         This code expects to deal only with relative filenames.
+@@ -869,7 +878,8 @@
+         info = image_utils.qemu_img_info(path,
+                                          force_share=force_share,
+                                          run_as_root=run_as_root,
+-                                         allow_qcow2_backing_file=True)
++                                         allow_qcow2_backing_file=True,
++                                         img_format=img_format)
+         if info.image:
+             info.image = os.path.basename(info.image)
+         if info.backing_file:
+@@ -1324,30 +1334,34 @@
              # info file instead of blocking
              return self._delete_stale_snapshot(snapshot)
  
@@ -64,7 +84,7 @@
              online_delete_info = {
                  'active_file': active_file,
                  'snapshot_file': snapshot_file,
-@@ -1389,6 +1401,89 @@
+@@ -1389,6 +1403,89 @@
                  self._img_commit(snapshot_path)
              # Active file has changed
              snap_info['active'] = base_file
@@ -154,7 +174,7 @@
          else:
              #      T0        |      T1         |     T2         |      T3
              #     base       |  snapshot_file  |  higher_file   | highest_file
-@@ -1587,6 +1682,30 @@
+@@ -1587,6 +1684,30 @@
                         new_snap_path]
              self._execute(*command, run_as_root=self._execute_as_root)
  
@@ -185,7 +205,7 @@
      def _create_snapshot(self, snapshot: objects.Snapshot) -> None:
          """Create a snapshot.
  
-@@ -1715,23 +1834,19 @@
+@@ -1715,23 +1836,19 @@
              snapshot.volume)
          new_snap_path = self._get_new_snap_path(snapshot)
          active = os.path.basename(new_snap_path)
@@ -214,7 +234,7 @@
              # Let OVO know it has been updated
              attachment.connection_info = attachment.connection_info
              attachment.save()
-@@ -1740,6 +1855,30 @@
+@@ -1740,6 +1857,30 @@
                                       backing_filename,
                                       new_snap_path)
  
@@ -245,7 +265,7 @@
          snap_info['active'] = active
          snap_info[snapshot.id] = active
          self._write_info_file(info_path, snap_info)
-@@ -1824,7 +1963,6 @@
+@@ -1824,7 +1965,6 @@
          # active file never changes
          info_path = self._local_path_volume_info(snapshot.volume)
          snap_info = self._read_info_file(info_path)
@@ -253,7 +273,7 @@
  
          if utils.paths_normcase_equal(info['active_file'],
                                        info['snapshot_file']):
-@@ -1846,7 +1984,19 @@
+@@ -1846,7 +1986,19 @@
                             'volume_id': snapshot.volume.id}
  
              del(snap_info[snapshot.id])
@@ -274,7 +294,7 @@
          else:
              # blockCommit snapshot into base
              # info['base'] <= snapshot_file
-@@ -1862,11 +2012,6 @@
+@@ -1862,11 +2014,6 @@
  
          self._nova_assisted_vol_snap_delete(context, snapshot, delete_info)
  
