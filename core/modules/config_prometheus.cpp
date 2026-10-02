@@ -520,11 +520,16 @@ WriteThanosConf(const std::string& ctrlAddrs, const std::string& sharedId, int t
     // process group, and -k because hex_sdk's RemoveTempFiles trap swallows the TERM and
     // would run on to the next radosgw-admin call.
     //
-    // A power cycle does not reach the timeout: a node that already holds the file it
-    // would write returns before touching RGW. It bounds only the runs that need RGW --
-    // a first bootstrap, a joining control, a new VIP -- when ceph cannot serve them.
-    HexUtilSystemF(0, 0, "timeout -k 10 120 " HEX_SDK " thanos_objstore_setup %s:%s %s",
-                   sharedId.c_str(), RGW_PORT, THANOS_BUCKET);
+    // Never from a boot commit: NodeStartMain does it there. Any wait for RGW inside this
+    // commit holds back /run/cube_commit_done, which CommitLast writes after this module.
+    // The compute nodes wait for that marker before they bootstrap, and on an HCI cluster
+    // their bootstrap is what starts the OSDs RGW is waiting for. So a boot that needed
+    // RGW here spent the whole timeout, 130s on cube36, because the wait itself kept ceph
+    // down. Outside a boot -- first-time setup, a joining control, a new VIP on a running
+    // cluster -- ceph is serving, and the units started below must get the new file.
+    if (!IsBootstrap())
+        HexUtilSystemF(0, 0, "timeout -k 10 120 " HEX_SDK " thanos_objstore_setup %s:%s %s",
+                       sharedId.c_str(), RGW_PORT, THANOS_BUCKET);
 
     // Every sidecar, plus this node's store gateway. Without the store gateway entry the
     // querier sees only what the prometheis still hold locally.
@@ -765,6 +770,29 @@ Commit(bool modified, int dryLevel)
     return true;
 }
 
+// cube_cluster_start_node fires node_start on every node right after its own commit: on
+// each boot, a rejoining node's included, and from set_ready. That is after this node's
+// /run/cube_commit_done, so waiting on RGW here holds back no other node, and on a power
+// cycle the computes bootstrap and bring their OSDs up meanwhile. The setup's fast path
+// makes this ~1s whenever the file is already current; the refresh restarts the thanos
+// units only when it rewrote the file, since the boot commit started them on the old one.
+static int
+NodeStartMain(int argc, char **argv)
+{
+    if (argc != 1)
+        return EXIT_FAILURE;
+
+    if (IsUndef(s_eCubeRole) || !IsControl(s_eCubeRole) || !s_ha)
+        return EXIT_SUCCESS;
+
+    // bounded as in WriteThanosConf: this runs under the bootstrap's output pipe too
+    std::string sharedId = G(SHARED_ID);
+    HexUtilSystemF(0, 0, "timeout -k 10 120 " HEX_SDK " thanos_objstore_refresh %s:%s %s",
+                   sharedId.c_str(), RGW_PORT, THANOS_BUCKET);
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_MODULE(prometheus, 0, 0, 0, 0, Commit);
 CONFIG_REQUIRES(prometheus, cube_scan);
 // thanos_objstore_setup needs a working RGW to create its user and bucket, and ceph is
@@ -775,6 +803,8 @@ CONFIG_REQUIRES(prometheus, ceph);
 // extra tunings
 CONFIG_OBSERVES(prometheus, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(prometheus, cubesys, ParseCube, NotifyCube);
+
+CONFIG_TRIGGER_WITH_SETTINGS(prometheus, "node_start", NodeStartMain);
 
 CONFIG_MIGRATE(prometheus, "/var/lib/prometheus");
 // The credentials file thanos_objstore_setup wrote. Without it every upgrade boot lands on

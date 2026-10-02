@@ -83,6 +83,26 @@ thanos_objstore_setup()
     return 0
 }
 
+# thanos_objstore_setup for a node whose thanos units are already running: config_prometheus
+# runs this from node_start, after the boot commit started them. Thanos reads its objstore
+# config only at start, so a file this rewrote is picked up only by a restart; one that was
+# missing needs none, as the units have been exiting and coming back every 5s (Restart=always)
+# and start properly once it exists. try-restart leaves a stopped unit stopped.
+thanos_objstore_refresh()
+{
+    local conf=/etc/thanos/objstore.yml
+    local before rc
+
+    before=$(md5sum $conf 2>/dev/null)
+    thanos_objstore_setup "$@"
+    rc=$?
+    [ $rc -eq 0 ] || return $rc
+    [ -n "$before" ] || return 0
+    [ "$(md5sum $conf 2>/dev/null)" = "$before" ] && return 0
+    log_info "thanos_objstore_refresh: $conf changed, restarting the thanos units"
+    systemctl try-restart thanos-sidecar thanos-store thanos-query
+}
+
 # The objstore config thanos reads. One writer for the file and for the fast path's
 # check that it is already current, so the two cannot drift apart.
 _thanos_objstore_conf()
