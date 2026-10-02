@@ -110,6 +110,7 @@ static ConfigString s_hostname;
 static CubeRole_e s_eCubeRole;
 static std::list<size_t> s_osdIds;
 static std::list<size_t> s_osdNewIds; // newly added osd Id
+static std::list<size_t> s_lvmOsdIds; // LVM OSDs, encrypted included, left stopped by SetupOsd(deferStart)
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
@@ -171,16 +172,20 @@ PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 // PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 2);
 static ConfigString s_adminCliPass("66K1ogIiRt5KnyHe");
 
-// Prepared disks are partitioned in batches sized from the memory available when
-// each batch starts, the way get_concurrent_links.py sizes link jobs:
-// clamp(MemAvailable * BATCH_MEM_RATIO / per-item budget, 1, items left). The step
-// may take a quarter of MemAvailable, and re-reading it per batch lets a loaded node
-// slow down instead of competing with its workloads.
+// The parallel OSD setup steps -- partitioning prepared disks and starting OSDs --
+// run in batches sized from the memory available when each batch starts, the way
+// get_concurrent_links.py sizes link jobs: clamp(MemAvailable * BATCH_MEM_RATIO /
+// per-item budget, 1, items left). A step may take a quarter of MemAvailable, and
+// re-reading it per batch lets a loaded node slow down instead of competing with
+// its workloads.
 static const double BATCH_MEM_RATIO = 0.25;
 // One ceph_osd_prepare_bluestore peaks at ~30 MB of anonymous memory (measured on
 // sky150; the rest is clean page cache from its O_SYNC dd), budgeted at 256 MB: one
 // disk per GiB available, so a freshly installed node partitions all its disks at once.
 static const unsigned long PARTITION_TASK_MEM_KB = 256 * 1024;
+// An OSD is budgeted at the memory target it runs with: one OSD per 16 GiB available.
+static const unsigned long long OSD_MEMORY_TARGET = 4294967296ULL;
+static const unsigned long OSD_START_MEM_KB = OSD_MEMORY_TARGET / 1024;
 
 /**
  * MemAvailable from /proc/meminfo in kB, or 0 when it cannot be read.
@@ -487,16 +492,17 @@ activateRawOsds(void)
 
 /**
  * Activate LVM OSDs, including encrypted DAS and mpath devices.
+ * With noSystemd the OSDs are activated but not started.
  */
 static bool
-activateLvmOsds(void)
+activateLvmOsds(bool noSystemd = false)
 {
     const ExecSyncResult alr = ExecBashSync(
         0,
         false,
         false,
         {},
-        HEX_SDK " ceph_osd_activate_lvms");
+        std::string(HEX_SDK " ceph_osd_activate_lvms") + (noSystemd ? " --no-systemd" : ""));
     return (alr.exitCode == 0);
 }
 
@@ -592,16 +598,37 @@ SetupMds(std::string hostname)
     return true;
 }
 
+/**
+ * Set up the local OSDs. With deferStart every OSD is left stopped -- the raw ones
+ * remounted without a start, the LVM ones (encrypted included) activated without
+ * systemd -- for CommitOsd to start in batches; s_lvmOsdIds then lists the LVM ones.
+ */
 static bool
-SetupOsd(std::string hostname)
+SetupOsd(std::string hostname, bool deferStart = false)
 {
     s_osdIds.clear();
     s_osdNewIds.clear();
+    s_lvmOsdIds.clear();
 
     activateRawOsds();
-    activateLvmOsds();
+    activateLvmOsds(deferStart);
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_map");
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount");
+    if (!deferStart) {
+        HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount");
+        return true;
+    }
+
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount --no-start");
+    // ceph_osd_remount unmounts every OSD directory, the LVM ones' tmpfs included,
+    // and does not remount those; activate them again, still without starting them.
+    activateLvmOsds(true);
+    std::string lvmIds = HexUtilPOpen(HEX_SDK " ceph_osd_list_lvm_ids");
+    for (const std::string& i : hex_string_util::split(lvmIds, ' ')) {
+        std::size_t osdId = 0;
+        if (i.length() > 0 && HexParseUInt(i.c_str(), 0, UINT_MAX, &osdId)) {
+            s_lvmOsdIds.push_back(osdId);
+        }
+    }
 
     return true;
 }
@@ -1004,7 +1031,7 @@ UpdateConfig(
                       "compaction_readahead_size=2MB\n");
         fprintf(fout, "osd map share max epochs = 100\n");
         fprintf(fout, "osd max backfills = 1\n");           // Ceph default; protect client IO during recovery
-        fprintf(fout, "osd memory target = 4294967296\n");  // 4G, now effective under autotune; tune to node RAM
+        fprintf(fout, "osd memory target = %llu\n", OSD_MEMORY_TARGET);  // 4G, now effective under autotune; tune to node RAM
         fprintf(fout, "osd op num shards = 8\n");
         fprintf(fout, "osd op num threads per shard = 2\n");
         fprintf(fout, "osd min pg log entries = 500\n");    // enough for log-recovery on brief blips, not full backfill
@@ -1146,17 +1173,80 @@ CommitMds(const char* name, const char* hostname)
     return true;
 }
 
-static bool
-CommitOsd(const char* name, bool restartAll = true)
+/**
+ * Start (restart) local OSDs in batches sized from MemAvailable: measure, decide the
+ * batch, start it, wait until every OSD of it has finished starting -- booted or
+ * exited, see ceph_osd_restart_wait -- and only then size the next one.
+ */
+static void
+startOsds(const std::vector<size_t>& osds)
 {
-    if (s_osdIds.size() == 0)
+    if (osds.empty()) {
+        return;
+    }
+
+    // Without mon quorum there is no start-up to pace: an OSD waits for the mon at
+    // its first step, fetching its config, before it opens its disk (measured on
+    // sky150: 28 MB RSS, data partition untouched, until the mon came back). That is
+    // the first control up after a cluster poweroff, whose peers start their mons
+    // only once its commit is done (bootstrap_cube_config), so waiting here would
+    // hold them back. Start everything as before and let the OSDs wait for quorum.
+    const ExecSyncResult mr = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "timeout -k 5 10 ceph -s");
+    if (mr.exitCode != 0) {
+        HexLogWarning("no ceph mon quorum, starting %zu osds at once", osds.size());
+        for (auto& id : osds) {
+            HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_restart %lu", id);
+        }
+        return;
+    }
+
+    std::size_t first = 0;
+    while (first < osds.size()) {
+        unsigned long availKb = 0;
+        const std::size_t batch = memoryBatchSize(OSD_START_MEM_KB, osds.size() - first, &availKb);
+        std::string batchIds;
+        for (std::size_t i = first; i < first + batch; i++) {
+            if (!batchIds.empty()) {
+                batchIds += " ";
+            }
+            batchIds += std::to_string(osds[i]);
+        }
+        HexLogInfo("starting osd %s (%zu-%zu of %zu, MemAvailable %lu MB)",
+            batchIds.c_str(), first + 1, first + batch, osds.size(), availKb / 1024);
+
+        if (HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_restart_wait %s", batchIds.c_str()) != 0) {
+            HexLogError("not every osd of %s came up, see ceph_osd_restart_wait in the log", batchIds.c_str());
+        }
+        first += batch;
+    }
+}
+
+/**
+ * Start (or, with ceph disabled, compact and stop) the local OSDs. batched follows
+ * SetupOsd(deferStart): the raw and LVM OSDs it left stopped start in batches.
+ */
+static bool
+CommitOsd(const char* name, bool restartAll = true, bool batched = false)
+{
+    if (s_osdIds.size() == 0 && (!batched || s_lvmOsdIds.size() == 0))
         return true;
 
     if (s_enabled) {
         HexLogDebug("starting %s-osd service", name);
 
-        for (auto& id : (restartAll ? s_osdIds : s_osdNewIds)) {
-            HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_restart %lu", id);
+        if (batched) {
+            std::vector<size_t> osds(s_osdIds.begin(), s_osdIds.end());
+            osds.insert(osds.end(), s_lvmOsdIds.begin(), s_lvmOsdIds.end());
+            startOsds(osds);
+        } else {
+            for (auto& id : (restartAll ? s_osdIds : s_osdNewIds)) {
+                HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_restart %lu", id);
+            }
         }
 
         HexLogInfo("%s-osd is running", name);
@@ -1864,9 +1954,9 @@ Commit(bool modified, int dryLevel)
             return false;
         CommitMgr(NAME, s_hostname.c_str());
 
-        if (!SetupOsd(s_hostname))
+        if (!SetupOsd(s_hostname, true))
             return false;
-        CommitOsd(NAME);
+        CommitOsd(NAME, true, true);
 
         // Pools and the filesystem are created once the OSDs that will carry
         // them are up. SetupFS also has to stay ahead of the mds step below: it
