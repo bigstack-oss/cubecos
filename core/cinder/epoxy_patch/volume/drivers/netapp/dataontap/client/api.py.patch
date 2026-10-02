@@ -1,0 +1,134 @@
+--- volume/drivers/netapp/dataontap/client/api.py
++++ volume/drivers/netapp/dataontap/client/api.py
+@@ -19,6 +19,7 @@
+ 
+ Contains classes required to issue API calls to Data ONTAP and OnCommand DFM.
+ """
++import os
+ import random
+ import ssl
+ import urllib
+@@ -74,7 +75,8 @@
+                  username=None,
+                  password=None, port=None, api_trace_pattern=None,
+                  private_key_file=None, certificate_file=None,
+-                 ca_certificate_file=None, certificate_host_validation=None):
++                 ca_certificate_file=None, certificate_host_validation=None,
++                 ssl_cert_path=None, ssl_cert_verify=True):
+         self._host = host
+         self.set_server_type(server_type)
+         self.set_transport_type(transport_type)
+@@ -86,6 +88,8 @@
+         self._certificate_file = certificate_file
+         self._ca_certificate_file = ca_certificate_file
+         self._certificate_host_validation = certificate_host_validation
++        self._ssl_cert_path = ssl_cert_path
++        self._ssl_cert_verify = ssl_cert_verify
+         self._refresh_conn = True
+ 
+         if api_trace_pattern is not None:
+@@ -206,7 +210,17 @@
+                 response = self._opener.open(request)
+         except urllib.error.HTTPError as e:
+             raise NaApiError(e.code, e.msg)
+-        except Exception:
++        except Exception as e:
++            # urllib wraps a failed certificate check in a URLError
++            if isinstance(getattr(e, 'reason', None),
++                          ssl.SSLCertVerificationError):
++                LOG.error("TLS verification failed for NetApp server "
++                          "%(host)s: %(err)s. Set netapp_ssl_cert_path to "
++                          "the CA bundle for this system, or "
++                          "netapp_ssl_cert_verify=False to disable "
++                          "verification (not recommended).",
++                          {'host': self._host, 'err': e.reason})
++                raise NaApiError(message='TLS verification failed')
+             LOG.exception("Error communicating with NetApp filer.")
+             raise NaApiError('Unexpected error')
+ 
+@@ -303,12 +317,28 @@
+ 
+     def _build_opener(self):
+         if self._private_key_file and self._certificate_file:
+-            auth_handler = self._create_certificate_auth_handler()
+-        else:
+-            auth_handler = self._create_basic_auth_handler()
+-        opener = urllib.request.build_opener(auth_handler)
++            # the certificate auth handler is itself the HTTPSHandler
++            opener = urllib.request.build_opener(
++                self._create_certificate_auth_handler())
++        else:
++            https_handler = urllib.request.HTTPSHandler(
++                context=self._create_ssl_context())
++            opener = urllib.request.build_opener(
++                self._create_basic_auth_handler(), https_handler)
+         self._opener = opener
+ 
++    def _create_ssl_context(self):
++        """SSL context for username and password authentication."""
++        if not self._ssl_cert_verify:
++            # encrypted, but the server certificate is not checked
++            return ssl._create_unverified_context()
++        if self._ssl_cert_path:
++            if os.path.isdir(self._ssl_cert_path):
++                return ssl.create_default_context(capath=self._ssl_cert_path)
++            return ssl.create_default_context(cafile=self._ssl_cert_path)
++        # what urllib uses when no context is given: the system CA store
++        return ssl.create_default_context()
++
+     def _create_basic_auth_handler(self):
+         password_man = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+         password_man.add_password(None, self._get_url(), self._username,
+@@ -318,7 +348,7 @@
+ 
+     def _create_certificate_auth_handler(self):
+         context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+-        if not self._certificate_host_validation:
++        if not self._certificate_host_validation or not self._ssl_cert_verify:
+             context.check_hostname = False
+             context.verify_mode = ssl.CERT_NONE
+         if self._certificate_file and self._private_key_file:
+@@ -677,7 +707,8 @@
+                  ssl_cert_path=None, username=None, password=None, port=None,
+                  api_trace_pattern=None,
+                  private_key_file=None, certificate_file=None,
+-                 ca_certificate_file=None, certificate_host_validation=None):
++                 ca_certificate_file=None, certificate_host_validation=None,
++                 ssl_cert_verify=True):
+         self._host = host
+         self.set_transport_type(transport_type)
+         self.set_port(port=port)
+@@ -691,7 +722,9 @@
+         if api_trace_pattern is not None:
+             na_utils.setup_api_trace_pattern(api_trace_pattern)
+ 
+-        if ssl_cert_path is not None:
++        if not ssl_cert_verify:
++            self._ssl_verify = False
++        elif ssl_cert_path is not None:
+             self._ssl_verify = ssl_cert_path
+         else:
+             # Note(felipe_rodrigues): it will verify with the Mozila CA roots,
+@@ -841,6 +874,8 @@
+ 
+     def _create_certificate_auth_handler(self):
+         """Creates and returns a certificate auth handler."""
++        if self._ssl_verify is False:
++            return (self._certificate_file, self._private_key_file), False
+         self._certificate_host_validation = self._session.verify
+         if self._certificate_file and self._private_key_file \
+                 and self._ca_certificate_file:
+@@ -874,6 +909,13 @@
+                 response = request_method(url, data=data)
+         except requests.HTTPError as e:
+             raise NaApiError(e.errno, e.strerror)
++        except requests.exceptions.SSLError as e:
++            LOG.error("TLS verification failed for NetApp server %(host)s: "
++                      "%(err)s. Set netapp_ssl_cert_path to the CA bundle "
++                      "for this system, or netapp_ssl_cert_verify=False to "
++                      "disable verification (not recommended).",
++                      {'host': self._host, 'err': e})
++            raise NaApiError(message='TLS verification failed')
+         except Exception as e:
+             raise NaApiError(message=e)
+ 

@@ -1,0 +1,43 @@
+--- volume/drivers/netapp/dataontap/utils/utils.py
++++ volume/drivers/netapp/dataontap/utils/utils.py
+@@ -20,6 +20,7 @@
+ import socket
+ 
+ from oslo_config import cfg
++from oslo_log import log as logging
+ 
+ from cinder import exception
+ from cinder.i18n import _
+@@ -31,6 +32,7 @@
+ from cinder.volume import volume_utils
+ 
+ CONF = cfg.CONF
++LOG = logging.getLogger(__name__)
+ 
+ 
+ def get_backend_configuration(backend_name):
+@@ -67,9 +69,16 @@
+     """Get a cDOT API client for a specific backend."""
+ 
+     config = get_backend_configuration(backend_name)
++    if not config.netapp_ssl_cert_verify:
++        LOG.warning('netapp_ssl_cert_verify is set to False for backend '
++                    '%(backend)s. SSL certificate verification is disabled '
++                    'and should only be used in trusted network '
++                    'environments.', {'backend': backend_name})
+     if config.netapp_use_legacy_client and not force_rest:
+         client = client_cmode.Client(
+             transport_type=config.netapp_transport_type,
++            ssl_cert_path=config.netapp_ssl_cert_path,
++            ssl_cert_verify=config.netapp_ssl_cert_verify,
+             username=config.netapp_login,
+             password=config.netapp_password,
+             hostname=config.netapp_server_hostname,
+@@ -86,6 +95,7 @@
+         client = client_cmode_rest.RestClient(
+             transport_type=config.netapp_transport_type,
+             ssl_cert_path=config.netapp_ssl_cert_path,
++            ssl_cert_verify=config.netapp_ssl_cert_verify,
+             username=config.netapp_login,
+             password=config.netapp_password,
+             hostname=config.netapp_server_hostname,

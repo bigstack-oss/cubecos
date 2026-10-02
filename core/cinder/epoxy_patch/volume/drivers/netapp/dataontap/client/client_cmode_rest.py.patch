@@ -1,0 +1,45 @@
+--- volume/drivers/netapp/dataontap/client/client_cmode_rest.py
++++ volume/drivers/netapp/dataontap/client/client_cmode_rest.py
+@@ -75,6 +75,10 @@
+         certificate_file = kwargs['certificate_file']
+         ca_certificate_file = kwargs['ca_certificate_file']
+         certificate_host_validation = kwargs['certificate_host_validation']
++        # NOTE: read, not popped -- the ZAPI fallback client below is built
++        # from the same kwargs and has to trust the same certificate.
++        ssl_cert_path = kwargs.get('ssl_cert_path')
++        ssl_cert_verify = kwargs.get('ssl_cert_verify', True)
+         if private_key_file and certificate_file and ca_certificate_file:
+             self.connection = netapp_api.RestNaServer(
+                 host=host,
+@@ -84,7 +88,8 @@
+                 certificate_file=certificate_file,
+                 ca_certificate_file=ca_certificate_file,
+                 certificate_host_validation=certificate_host_validation,
+-                api_trace_pattern=api_trace_pattern)
++                api_trace_pattern=api_trace_pattern,
++                ssl_cert_verify=ssl_cert_verify)
+         elif private_key_file and certificate_file:
+             self.connection = netapp_api.RestNaServer(
+                 host=host,
+@@ -93,16 +98,18 @@
+                 private_key_file=private_key_file,
+                 certificate_file=certificate_file,
+                 certificate_host_validation=certificate_host_validation,
+-                api_trace_pattern=api_trace_pattern)
++                api_trace_pattern=api_trace_pattern,
++                ssl_cert_verify=ssl_cert_verify)
+         else:
+             self.connection = netapp_api.RestNaServer(
+                 host=host,
+                 transport_type=kwargs['transport_type'],
+-                ssl_cert_path=kwargs.pop('ssl_cert_path'),
++                ssl_cert_path=ssl_cert_path,
+                 port=kwargs['port'],
+                 username=username,
+                 password=password,
+-                api_trace_pattern=api_trace_pattern)
++                api_trace_pattern=api_trace_pattern,
++                ssl_cert_verify=ssl_cert_verify)
+ 
+         self.async_rest_timeout = kwargs.get('async_rest_timeout', 60)
+ 
