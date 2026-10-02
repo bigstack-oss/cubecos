@@ -135,6 +135,13 @@ rootfs_install::
 #   image_utils.py keeps 22.3.0's noqa on its typing import; nothing else differs from
 #   upstream. 8c03308ed's quobyte.py half is not carried: CubeCOS does not use the
 #   Quobyte driver
+# volume/flows/manager/create_volume.py.patch: upstream e564049d8 (27.0.0, not
+#   backported to 2023.1). With allowed_direct_url_schemes = cinder, a volume created
+#   from an image held in a cinder Glance store is cloned from the image-volume, and the
+#   flow handed the driver the SQLAlchemy row instead of the Volume object.
+#   RemoteFSSnapDriver.create_cloned_volume reads src_vref.obj_context, so on NFS the
+#   AttributeError -- which is not a CinderException, so there is no fallback to a
+#   download -- failed every such volume (#1217)
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
