@@ -165,7 +165,13 @@ rootfs_install::
 #   the migrated file back to the volume's own name through _execute (mv as root) instead
 #   of an in-process os.rename: cinder-volume runs as cinder and a share root is usually
 #   root-owned, so every migration onto NFS logged a PermissionError and left the file
-#   under the temporary volume's id (_name_id). Still missing upstream (master)
+#   under the temporary volume's id (_name_id). Still missing upstream (master). And
+#   upstream d961d3c88 + c68475a3d (bug 2073146, 28.0.0; their remotefs.py and
+#   image_utils.py halves are in those .patch files): initialize_connection reads the
+#   volume's format from its admin metadata instead of guessing it from the file, and
+#   refuses only a virtual size larger than the cinder size. A Glance image stored on
+#   NFS is a raw volume holding the image's own bytes, so a qcow2 image was taken for a
+#   qcow2 volume of the image's virtual size and every read-attach was refused
 # volume/drivers/remotefs.py.patch, image/image_utils.py.patch: upstream 8c03308ed
 #   (28.0.0, not backported to 2025.1). An offline snapshot left the volume's format
 #   admin metadata at raw while its active file became a qcow2 overlay, so an extend ran
