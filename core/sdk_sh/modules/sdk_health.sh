@@ -3084,6 +3084,14 @@ health_octavia_check()
                 ERR_CODE=12
             fi
         fi
+
+        if [ $ERR_CODE -eq 0 ] ; then
+            local ampmsg=$($HEX_SDK os_octavia_amp_image_release_check 2>/dev/null)
+            if [ -n "$ampmsg" ] ; then
+                ERR_MSG+="$ampmsg\n"
+                ERR_CODE=14
+            fi
+        fi
     fi
 
     _health_fail_log

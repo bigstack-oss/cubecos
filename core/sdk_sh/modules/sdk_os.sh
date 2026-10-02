@@ -1880,6 +1880,22 @@ os_octavia_lb_error_list()
     $OPENSTACK loadbalancer list --provisioning-status ERROR -f value -c id 2>/dev/null
 }
 
+# Print a message when the amphora image is from another openstack release.
+os_octavia_amp_image_release_check()
+{
+    # release of the venv octavia runs from
+    local want=$(readlink -f /usr/bin/octavia-worker 2>/dev/null | sed -n 's;^/opt/openstack-\([^/]*\)/.*;\1;p')
+    [ -n "$want" ] || return 0
+    local id=$($OPENSTACK image list --tag amphora --sort created_at:desc -f value -c ID 2>/dev/null | head -1)
+    [ -n "$id" ] || return 0
+    local vers=$($OPENSTACK image show $id -f json -c properties 2>/dev/null | jq -r '.properties.os_vers // empty')
+    [ -n "$vers" ] || return 0
+    case "$vers" in
+        *$want*) ;;
+        *) echo "amphora image is $vers, controller is $want: import the extpack and fail over load balancers" ;;
+    esac
+}
+
 # octavia's own failover: it rebuilds the amphora with the injected config a
 # nova rebuild would lose.
 os_octavia_lb_failover_errored()
