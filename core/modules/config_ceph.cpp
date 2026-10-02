@@ -1,8 +1,10 @@
 // CUBE SDK
 
 #include "include/role_cubesys.h"
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cctype>
+#include <cerrno>
 #include <cluster.hpp>
 #include <cube/network.h>
 #include <cube/systemd_util.h>
@@ -169,10 +171,62 @@ PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 // PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 2);
 static ConfigString s_adminCliPass("66K1ogIiRt5KnyHe");
 
+// Prepared disks are partitioned in batches sized from the memory available when
+// each batch starts, the way get_concurrent_links.py sizes link jobs:
+// clamp(MemAvailable * BATCH_MEM_RATIO / per-item budget, 1, items left). The step
+// may take a quarter of MemAvailable, and re-reading it per batch lets a loaded node
+// slow down instead of competing with its workloads.
+static const double BATCH_MEM_RATIO = 0.25;
+// One ceph_osd_prepare_bluestore peaks at ~30 MB of anonymous memory (measured on
+// sky150; the rest is clean page cache from its O_SYNC dd), budgeted at 256 MB: one
+// disk per GiB available, so a freshly installed node partitions all its disks at once.
+static const unsigned long PARTITION_TASK_MEM_KB = 256 * 1024;
+
+/**
+ * MemAvailable from /proc/meminfo in kB, or 0 when it cannot be read.
+ */
+static unsigned long
+memAvailableKb()
+{
+    unsigned long kb = 0;
+    FILE* f = fopen("/proc/meminfo", "r");
+    if (f == NULL) {
+        HexLogWarning("failed to open /proc/meminfo");
+        return 0;
+    }
+
+    char line[128];
+    while (fgets(line, sizeof(line), f) != NULL) {
+        if (sscanf(line, "MemAvailable: %lu kB", &kb) == 1) {
+            break;
+        }
+    }
+    fclose(f);
+
+    if (kb == 0) {
+        HexLogWarning("failed to read MemAvailable from /proc/meminfo");
+    }
+    return kb;
+}
+
+/**
+ * How many of the items left to run in parallel, given each item's memory budget.
+ * The MemAvailable it was sized from is returned in availKb for logging.
+ */
+static std::size_t
+memoryBatchSize(unsigned long itemMemKb, std::size_t left, unsigned long* availKb)
+{
+    *availKb = memAvailableKb();
+    return std::clamp<std::size_t>(
+        static_cast<std::size_t>(*availKb * BATCH_MEM_RATIO / itemMemKb), 1, left);
+}
+
 /**
  * Partition all prepared OSD disks from the installation process.
  *
  * Prepared OSD disks are disks with part label "hex_prep_" prefix.
+ * Disks are partitioned in batches sized from MemAvailable: the disks of a batch
+ * run in parallel, and the next batch starts once the whole batch has finished.
  */
 static bool
 partitionPreparedDisks()
@@ -192,7 +246,7 @@ partitionPreparedDisks()
 
     std::string preparedDisks = HexUtilPOpen(HEX_SDK " ListPreparedDisks");
     std::vector<std::string> devs = hex_string_util::split(preparedDisks, ' ');
-    std::vector<pid_t> partitionTasks;
+    std::vector<std::string> disks;
     for (std::string& d : devs) {
         if (d.length() == 0) {
             continue;
@@ -225,91 +279,76 @@ partitionPreparedDisks()
             continue;
         }
 
-        int partNums = 2;
-        // sectors (512B) --> 400 MB by default
-        int partSize = 819200;
-        std::string type = "scsi";
-
-        std::size_t found = d.find("nvme");
-        if (found != std::string::npos) {
-            type = "nvme";
-            partNums = 2;
-        }
-
-        // partition the disk in parallel
-        Cmd pc;
-        pc.path = HEX_SDK;
-        pc.args = {
-            "ceph_osd_prepare_bluestore",
-            d,
-            std::to_string(partNums),
-            std::to_string(partSize),
-            type,
-        };
-
-        const Process pp = Exec(pc, false);
-        if (pp.pid == -1) {
-            HexLogError(
-                "failed to create process to run partition task for %s, error: %s",
-                d.c_str(),
-                pp.error.c_str());
-        } else {
-            partitionTasks.push_back(pp.pid);
-        }
+        disks.push_back(d);
     }
 
-    // wait for the partition tasks to end
-    int status;
-    bool tasksFinished = false;
-    std::vector<bool> partitionTaskDones;
-    for (const pid_t& pt : partitionTasks) {
-        if (pt == -1) {
-            partitionTaskDones.push_back(true);
-        } else {
-            partitionTaskDones.push_back(false);
-        }
-    }
-    while (!tasksFinished) {
-        // check processes
-        for (std::size_t i = 0; i < partitionTasks.size(); i++) {
-            if (partitionTaskDones[i]) {
-                // the process is either not started or is already ended
-                continue;
+    std::size_t first = 0;
+    while (first < disks.size()) {
+        unsigned long availKb = 0;
+        const std::size_t batch = memoryBatchSize(PARTITION_TASK_MEM_KB, disks.size() - first, &availKb);
+        const std::size_t last = first + batch;
+        HexLogInfo("partitioning prepared disks %zu-%zu of %zu (MemAvailable %lu MB)",
+            first + 1, last, disks.size(), availKb / 1024);
+
+        // partition the disks of this batch in parallel
+        std::vector<std::pair<std::string, pid_t>> partitionTasks;
+        for (std::size_t i = first; i < last; i++) {
+            const std::string& d = disks[i];
+
+            int partNums = 2;
+            // sectors (512B) --> 400 MB by default
+            int partSize = 819200;
+            std::string type = "scsi";
+
+            std::size_t found = d.find("nvme");
+            if (found != std::string::npos) {
+                type = "nvme";
+                partNums = 2;
             }
 
-            pid_t waitpidResult = waitpid(partitionTasks[i], &status, WNOHANG);
-            if (waitpidResult == partitionTasks[i]) {
-                partitionTaskDones[i] = true;
+            Cmd pc;
+            pc.path = HEX_SDK;
+            pc.args = {
+                "ceph_osd_prepare_bluestore",
+                d,
+                std::to_string(partNums),
+                std::to_string(partSize),
+                type,
+            };
+
+            const Process pp = Exec(pc, false);
+            if (pp.pid == -1) {
+                HexLogError(
+                    "failed to create process to run partition task for %s, error: %s",
+                    d.c_str(),
+                    pp.error.c_str());
+                result = false;
+            } else {
+                partitionTasks.push_back({ d, pp.pid });
             }
         }
 
-        // check if all tasks are finished
-        bool done = true;
-        for (const bool& pd : partitionTaskDones) {
-            done = done && pd;
-        }
-        if (done) {
-            tasksFinished = true;
-            continue;
-        }
+        // wait for the whole batch, collecting each task's own exit status
+        for (const auto& pt : partitionTasks) {
+            int status = 0;
+            pid_t w;
+            do {
+                w = waitpid(pt.second, &status, 0);
+            } while (w == -1 && errno == EINTR);
 
-        // wait
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-
-    // collect statuses
-    int exitCode = 0;
-    for (const auto& pt : partitionTasks) {
-        waitpid(pt, &status, 0);
-
-        if (WIFEXITED(status)) {
-            exitCode = WEXITSTATUS(status);
-        } else {
-            // abnormal termination
-            exitCode = -1;
+            if (w != pt.second) {
+                HexLogError("failed to wait for the partition task of %s", pt.first.c_str());
+                result = false;
+            } else if (!WIFEXITED(status)) {
+                HexLogError("partition task of %s terminated abnormally", pt.first.c_str());
+                result = false;
+            } else if (WEXITSTATUS(status) != 0) {
+                HexLogError("partition task of %s exited with %d", pt.first.c_str(), WEXITSTATUS(status));
+                result = false;
+            }
         }
 
-        result = result && (exitCode == 0);
+        first = last;
     }
 
     HexLogInfo("finished partitioning prepared disks");
