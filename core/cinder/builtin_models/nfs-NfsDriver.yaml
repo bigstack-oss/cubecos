@@ -17,6 +17,15 @@ storage:
         value: "true"
       - key: "nfs_sparsed_volumes"
         value: "true"
+      # Both default to auto, which picks secure mode -- and with it, a driver that
+      # refuses to start because nfs_snapshot_support is on -- whenever no cinder
+      # volume exists yet anywhere in the cluster, then writes .cinderSecureEnvIndicator
+      # to the share so it stays that way. false is what auto settles on for every
+      # cluster that already has a volume, so this only removes the first-backend case.
+      - key: "nas_secure_file_operations"
+        value: "false"
+      - key: "nas_secure_file_permissions"
+        value: "false"
     extraSettings: []
     extraConfigFiles:
       - name: "nfs_shares"
