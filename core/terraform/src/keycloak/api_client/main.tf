@@ -3,8 +3,8 @@ terraform {
 
   required_providers {
     keycloak = {
-      source  = "mrparkers/keycloak"
-      version = "= 4.4.0"
+      source  = "keycloak/keycloak"
+      version = "= 5.9.0"
     }
   }
 }
@@ -14,7 +14,7 @@ provider "keycloak" {
   username                 = "admin"
   password                 = var.keycloak_admin_password
   url                      = "https://${var.cube_controller}:10443"
-  # Keycloak still serves under /auth; provider 4.x defaults base_path to "".
+  # Keycloak still serves under /auth; the provider defaults base_path to "" since 4.0.
   base_path                = "/auth"
   tls_insecure_skip_verify = true
 }
@@ -30,6 +30,10 @@ resource "keycloak_saml_client" "api_client" {
 
   signature_algorithm    = "RSA_SHA256"
   sign_assertions        = true
+  # encryption_algorithm is left unset on purpose, so Keycloak encrypts with its default,
+  # AES-256-GCM, which cube-cos-api's crewjam/saml decrypts. Keycloak 26 pinned clients that
+  # predate it to AES-128-CBC, and provider 5.x manages the attribute, so the first apply on
+  # an upgraded cluster drops that pin and lands where a fresh install starts.
   encrypt_assertions     = true
   front_channel_logout   = true
   name_id_format         = "username"

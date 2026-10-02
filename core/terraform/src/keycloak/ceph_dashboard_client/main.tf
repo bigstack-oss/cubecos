@@ -3,8 +3,8 @@ terraform {
 
   required_providers {
     keycloak = {
-      source  = "mrparkers/keycloak"
-      version = "= 4.4.0"
+      source  = "keycloak/keycloak"
+      version = "= 5.9.0"
     }
   }
 }
@@ -14,7 +14,7 @@ provider "keycloak" {
   username                 = "admin"
   password                 = var.keycloak_admin_password
   url                      = "https://${var.cube_controller}:10443"
-  # Keycloak still serves under /auth; provider 4.x defaults base_path to "".
+  # Keycloak still serves under /auth; the provider defaults base_path to "" since 4.0.
   base_path                = "/auth"
   tls_insecure_skip_verify = true
 }
@@ -30,6 +30,9 @@ resource "keycloak_saml_client" "ceph_dashboard_client" {
 
   signature_algorithm    = "RSA_SHA256"
   sign_assertions        = true
+  # encryption_algorithm is left unset on purpose, as in api_client: Keycloak's default,
+  # AES-256-GCM, which the dashboard's python3-saml decrypts, replaces the AES-128-CBC pin
+  # Keycloak 26 put on clients that predate it.
   encrypt_assertions     = true
   front_channel_logout   = true
   name_id_format         = "persistent"
@@ -55,5 +58,7 @@ resource "keycloak_saml_client_default_scopes" "ceph_dashboard_client_default_sc
   realm_id  = data.keycloak_realm.master.id
   client_id = keycloak_saml_client.ceph_dashboard_client.id
 
+  # Empty on purpose: this also takes off the AuthnContextClassRef scope that Keycloak 26
+  # attaches to every SAML client, the way it already took off role_list.
   default_scopes = []
 }

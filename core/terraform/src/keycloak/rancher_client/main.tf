@@ -3,8 +3,8 @@ terraform {
 
   required_providers {
     keycloak = {
-      source  = "mrparkers/keycloak"
-      version = "= 4.4.0"
+      source  = "keycloak/keycloak"
+      version = "= 5.9.0"
     }
   }
 }
@@ -14,7 +14,7 @@ provider "keycloak" {
   username                 = "admin"
   password                 = var.keycloak_admin_password
   url                      = "https://${var.cube_controller}:10443"
-  # Keycloak still serves under /auth; provider 4.x defaults base_path to "".
+  # Keycloak still serves under /auth; the provider defaults base_path to "" since 4.0.
   base_path                = "/auth"
   tls_insecure_skip_verify = true
 }

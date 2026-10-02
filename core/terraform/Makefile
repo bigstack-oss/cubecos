@@ -7,21 +7,19 @@ RANCHER_PROV_REPO     := https://github.com/rancher/terraform-provider-rancher2.
 RANCHER_PROV_VER      := v7.0.0
 RANCHER_PROV_DIR      := terraform-provider-rancher2
 RANCHER_UPSTREAM_BIN  := $(RANCHER_PROV_DIR)/bin/terraform-provider-rancher2
-KEYCLOAK_PROV_REPO    := https://github.com/mrparkers/terraform-provider-keycloak.git
-# 4.x is the first line that understands the Quarkus distribution. No release of it is
-# validated against the Keycloak 22 we deploy -- 4.2.0 tested against 19, and 4.3.0
-# through 4.5.0 all stop at 21, the closest supported neighbour, while 5.x starts at 26 --
-# so take the newest 4.x neighbour instead of reaching across that gap.
+KEYCLOAK_PROV_REPO    := https://github.com/keycloak/terraform-provider-keycloak.git
+# 5.x is the line written against Keycloak 26, the server we deploy: 5.8.0 dropped support
+# for anything older and 5.9.0 is tested up to 26.7.0. The provider moved to the Keycloak
+# organization in 4.5.0 and is published as keycloak/keycloak from then on, while
+# mrparkers/keycloak ends at 4.4.0 -- so this is a namespace switch as well as a version
+# bump. The `terraform init` below resolves the source from the public registry before the
+# locally built binary is copied over it, which is why the namespace has to match there,
+# and terraform-action.sh rewrites the old address in state that older releases wrote.
 #
-# That newest one is 4.4.0, not 4.5.0. The provider moved to the Keycloak organization in
-# 4.5.0 and republished under the keycloak/keycloak registry namespace; mrparkers/keycloak
-# ends at 4.4.0. The `terraform init` in this Makefile resolves the source below from the
-# public registry before the locally built binary is copied over it, so a 4.5.0 pin under
-# the old namespace does not resolve. Nothing is lost by staying: 4.5.0 carries only the
-# org move, the Apache 2.0 relicence, dependency bumps and go 1.22 -- no resource changes.
+# 5.x still serves the SDKv2 plugin protocol 5, so terraform-core v0.14.3 below can drive it.
 #
 # Keep the required_providers pins in src/keycloak/**/main.tf in step with this.
-KEYCLOAK_PROV_VER     := v4.4.0
+KEYCLOAK_PROV_VER     := v5.9.0
 KEYCLOAK_PROV_SEMVER  := $(patsubst v%,%,$(KEYCLOAK_PROV_VER))
 KEYCLOAK_PROV_DIR     := terraform-provider-keycloak
 KEYCLOAK_UPSTREAM_BIN := $(KEYCLOAK_PROV_DIR)/terraform-provider-keycloak
@@ -40,10 +38,9 @@ $(RANCHER_UPSTREAM_BIN): $(RANCHER_PROV_DIR)
 $(KEYCLOAK_PROV_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(KEYCLOAK_PROV_VER) $(KEYCLOAK_PROV_REPO) $(KEYCLOAK_PROV_DIR),"  CLONE   keycloak-provider")
 
+# 4.4.0 needed golang.org/x/crypto lifted to v0.31.0 for its CVEs. 5.9.0 already requires
+# v0.54.0, and a `go get` of the old floor would now be a downgrade, so it is gone.
 $(KEYCLOAK_UPSTREAM_BIN): $(KEYCLOAK_PROV_DIR)
-	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && \
-		go get golang.org/x/crypto@v0.31.0 && \
-		go mod tidy, "  UPDATE  keycloak-provider")
 	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 		go build \
@@ -102,7 +99,7 @@ terraform: $(TF_CORE_BIN) $(RANCHER_UPSTREAM_BIN) $(KEYCLOAK_UPSTREAM_BIN) $(TF_
 	$(Q)cp -f $(RANCHER_UPSTREAM_BIN) \
         ./$@/.terraform/providers/registry.terraform.io/rancher/rancher2/7.0.0/linux_amd64/terraform-provider-rancher2_v7.0.0
 	$(Q)cp -f $(KEYCLOAK_UPSTREAM_BIN) \
-		./$@/.terraform/providers/registry.terraform.io/mrparkers/keycloak/$(KEYCLOAK_PROV_SEMVER)/linux_amd64/terraform-provider-keycloak_$(KEYCLOAK_PROV_VER)
+		./$@/.terraform/providers/registry.terraform.io/keycloak/keycloak/$(KEYCLOAK_PROV_SEMVER)/linux_amd64/terraform-provider-keycloak_$(KEYCLOAK_PROV_VER)
 	$(Q)make clean-etcd
 
 install: terraform
