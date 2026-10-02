@@ -879,7 +879,8 @@ UpdateConfig(
         // clusters still carry _member_ assignments (see cubecos#216)
         fprintf(fout, "rgw keystone accepted roles = _member_, member, admin\n");
         fprintf(fout, "rgw keystone token cache size = 0\n");
-        fprintf(fout, "rgw keystone implicit tenants = false\n");
+        // per-project swift namespaces; s3 stays untenanted
+        fprintf(fout, "rgw keystone implicit tenants = swift\n");
         fprintf(fout, "rgw s3 auth use keystone = true\n");
         fprintf(fout, "rgw keystone verify ssl = false\n");
         fprintf(fout, "rgw swift account in url = true\n");
