@@ -2651,6 +2651,9 @@ os_instance_export_save()
 # where the server offers it, and falls back to plaintext where it does not -- which
 # is all a 10.11 client ever did. The flag is accepted by the 10.11 client too.
 # Neutron port name: host + full network id (no length limit)
+# mgr port owner: auto-deleted by neutron with its subnet
+OS_MGR_PORT_OWNER="network:floatingip_agent_gateway"
+
 os_mgr_port_name()
 {
     local net_id=$1
@@ -2725,6 +2728,20 @@ os_mgr_netns_sweep()
     done
 }
 
+# Delete mgr* OVS interfaces whose neutron port is gone. Args: port ids to keep.
+os_mgr_iface_sweep()
+{
+    local keep=" $* "
+    local i id
+    for i in $(/usr/bin/ovs-vsctl list-ports br-int 2>/dev/null | grep '^mgr') ; do
+        id=$(/usr/bin/ovs-vsctl --if-exists get interface $i external_ids:iface-id 2>/dev/null | tr -d '"')
+        case "$keep" in
+            *" $id "*) ;;
+            *) /usr/bin/ovs-vsctl --if-exists del-port br-int $i ;;
+        esac
+    done
+}
+
 os_mgr_port_create()
 {
     local net_id=$1
@@ -2746,7 +2763,7 @@ os_mgr_port_create()
 
     port_id=$(mariadb -B --skip-ssl-verify-server-cert -h $host -u neutron -p$dbpass -D neutron -e "SELECT id FROM ports WHERE name = '$pname'" | tail -1)
     if [ -z "$port_id" ] ; then
-        port_id=$($OPENSTACK port create --project $proj_id --device-owner cube:mgr --host=$(hostname) -c id -f value --network $net_id $pname 2>/dev/null)
+        port_id=$($OPENSTACK port create --project $proj_id --device-owner $OS_MGR_PORT_OWNER --host=$(hostname) -c id -f value --network $net_id $pname 2>/dev/null)
         /usr/bin/ovs-vsctl del-port br-int $iface 2>/dev/null
     fi
 
@@ -2808,22 +2825,22 @@ _os_mgr_ping_host()
     echo $r
 }
 
-# Remove cube:mgr ports (OVS iface and netns too) on networks with no VMs left:
-# a leftover mgr port blocks the tenant's subnet delete. Telegraf runs it every
-# minute so a subnet frees up soon after its last VM is deleted.
+# Remove mgr ports on networks without VMs, and their host leftovers. Run every minute.
 os_mgr_port_reap()
 {
     local r=$1
     [ -n "$r" ] || r=$(_os_mgr_ping_host) || return 0
     [ -n "$r" ] || return 0
     local vm_nets=$(mariadb -B -N -u root -D neutron -e "SELECT DISTINCT network_id FROM ports WHERE device_owner='compute:nova'")
-    mariadb -B -N -u root -D neutron -e "SELECT p.id,p.network_id,b.host,p.name FROM ports p JOIN ml2_port_bindings b ON p.id=b.port_id WHERE p.device_owner='cube:mgr' AND b.status='ACTIVE'" | while read pid n h name ; do
-        # keep ports of networks with VMs, unless named the old truncated way
-        echo "$vm_nets" | grep -qx "$n" && [ "${name%-$n}" != "$name" ] && continue
+    local mgr="(p.device_owner='cube:mgr' OR (p.device_owner='$OS_MGR_PORT_OWNER' AND p.name LIKE CONCAT('%-', p.network_id)))"
+    mariadb -B -N -u root -D neutron -e "SELECT p.id,p.network_id,IFNULL(b.host,''),p.device_owner FROM ports p LEFT JOIN ml2_port_bindings b ON p.id=b.port_id WHERE $mgr" | while read pid n h owner ; do
+        # keep ports of networks with VMs; legacy cube:mgr ports are recreated
+        echo "$vm_nets" | grep -qx "$n" && [ "$owner" = "$OS_MGR_PORT_OWNER" ] && continue
         ssh -n ${h:-$r} $HEX_SDK os_mgr_port_purge $n $pid 2>/dev/null
         $OPENSTACK port delete $pid 2>/dev/null
     done
-    ssh $r $HEX_SDK os_mgr_netns_sweep $(mariadb -B -N -u root -D neutron -e "SELECT DISTINCT network_id FROM ports WHERE device_owner='cube:mgr'") 2>/dev/null
+    ssh $r $HEX_SDK os_mgr_netns_sweep $(mariadb -B -N -u root -D neutron -e "SELECT DISTINCT p.network_id FROM ports p WHERE $mgr") 2>/dev/null
+    ssh $r $HEX_SDK os_mgr_iface_sweep $(mariadb -B -N -u root -D neutron -e "SELECT p.id FROM ports p WHERE $mgr") 2>/dev/null
 }
 
 os_nova_instance_ping()
