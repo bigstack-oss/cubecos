@@ -190,6 +190,13 @@ rootfs_install::
 #   os_require_quiesce=yes and no guest agent) otherwise left a file on the share for
 #   good. A timeout or a concurrent delete keeps the file, since Nova may still switch
 #   to it. Still missing upstream (master)
+# volume/flows/manager/create_volume.py.patch: upstream e564049d8 (27.0.0, not
+#   backported to 2025.1). With allowed_direct_url_schemes = cinder, a volume created
+#   from an image held in a cinder Glance store is cloned from the image-volume, and the
+#   flow handed the driver the SQLAlchemy row instead of the Volume object.
+#   RemoteFSSnapDriver.create_cloned_volume reads src_vref.obj_context, so on NFS the
+#   AttributeError -- which is not a CinderException, so there is no fallback to a
+#   download -- failed every such volume
 # volume/drivers/rbd.py: upstream's proposed fix for bug 2153099,
 #   https://review.opendev.org/c/openstack/cinder/+/989051 (patch set 5), not merged at
 #   26.3.0. _delete_volume returns on a successful rbd remove before it walks up to the
