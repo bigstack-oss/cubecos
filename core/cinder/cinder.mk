@@ -168,7 +168,12 @@ rootfs_install::
 #   qemu-img resize -f raw on the overlay: the file grew, its virtual size did not, the
 #   volume read as extended, and the size gate in initialize_connection then refused to
 #   attach it. The patch keeps format (and the new base_format) in step with the active
-#   file on every snapshot create and delete
+#   file on every snapshot create and delete. remotefs.py.patch also passes the image
+#   info _qemu_img_info has already screened to convert_image in _copy_volume_to_image
+#   (the way upstream fixed copy-from-snapshot for bug 2074377). Without it convert_image
+#   inspected the active file again, refused the qcow2 overlay a snapshot leaves behind,
+#   and a volume with snapshots could not be uploaded to an image at all. Still missing
+#   upstream (master)
 # volume/drivers/rbd.py: upstream's proposed fix for bug 2153099,
 #   https://review.opendev.org/c/openstack/cinder/+/989051 (patch set 5), not merged at
 #   26.3.0. _delete_volume returns on a successful rbd remove before it walks up to the
