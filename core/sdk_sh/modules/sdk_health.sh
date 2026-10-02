@@ -665,18 +665,24 @@ health_etcd_repair()
             continue
         fi
 
+        # Nothing to restart or reseed on a node that cannot be reached, and
+        # remote_systemd_restart would Error out of the whole repair on it, taking
+        # the other members and the etcd-watch repair below with it.
+        is_sshable $node || continue
+
         # etcd is down on $node -- try a plain restart first.
         remote_systemd_restart $node etcd
 
         # escalate after repeated failures: a member outside the compacted raft
         # log can never catch up via restart -- wipe + re-add (reset && join).
-        # Only a minority member, quorum intact without it, node reachable.
+        # Only a minority member, quorum intact without it.
         local cnt=$(( $(cat "$cntf" 2>/dev/null || echo 0) + 1 ))
         echo "$cnt" > "$cntf"
-        if [ "$cnt" -ge 3 ] && [ "$total" -ge 3 ] && [ "$online" -ge $(( total / 2 + 1 )) ] \
-           && remote_run $node true >/dev/null 2>&1 ; then
+        if [ "$cnt" -ge 3 ] && [ "$total" -ge 3 ] && [ "$online" -ge $(( total / 2 + 1 )) ] ; then
             echo "health_etcd_repair: reseeding etcd member $node (restart failed x$cnt, quorum $online/$total holds)" >&2
-            Quiet -n remote_run $node "cubectl this-node reset && cubectl this-node join"
+            # cmd, not Quiet remote_run: Quiet evals its arguments, so the && split
+            # here and the join ran on this node instead of $node
+            cmd -n "$node" 'cubectl this-node reset && cubectl this-node join' >/dev/null 2>&1
             rm -f "$cntf"
         fi
     done
