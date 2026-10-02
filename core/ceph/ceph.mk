@@ -54,15 +54,6 @@ ROOTFS_DNF_NOARCH += s3cmd ceph-mgr-dashboard$(CEPH_VERSION) python3-rtslib targ
 # python dependency at all, they are pure C++.
 ROOTFS_PIP += python-magic python3-saml xmlsec
 
-# ceph mgr module enable dashboard/prometheus failed with unknown version when
-# python3-jaraco-text is 4.0.0-2.el9. Kept across the reef and squid bumps: the mgr
-# still resolves module versions through pkg_resources on the same system python
-# 3.9, and the squid SIG repo ships no jaraco-text of its own, so nothing about
-# either bump retires this. Re-verify with
-# `ceph mgr module ls` + `ceph mgr module enable dashboard` before dropping it.
-ROOTFS_DNF_NOARCH += python3-jaraco-text-3.2.0-6.el9s
-LOCKED_DNF += python3-jaraco-text-3.2.0-6.el9s
-
 # headers for the rados/rbd python bindings built below
 ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
 
