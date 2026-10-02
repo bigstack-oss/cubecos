@@ -126,8 +126,31 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) rm -rf /tmp/cinder
 
 # install custom files
+#
+# Each carried file sits beside the upstream 24.5.0 file it was made from (*.orig), so
+# `diff x.orig x` is the whole local change. A file carried as <rel>.py.patch is applied
+# to the installed file instead; a whole file is copied over it:
+# volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
+#   upstream still does not provide
+# volume/drivers/remotefs.py.patch, image/image_utils.py.patch: upstream 8c03308ed
+#   (28.0.0, not backported to 2024.1). An offline snapshot left the volume's format
+#   admin metadata at raw while its active file became a qcow2 overlay, so an extend ran
+#   qemu-img resize -f raw on the overlay, and bug 2073146's fix, which reads the format
+#   from that metadata, would attach the overlay as raw. The patch keeps format (and the
+#   new base_format) in step with the active file on every snapshot create and delete.
+#   One context line, which 24.5.0 spells del(snap_info[...]), was resolved by hand;
+#   nothing else differs from upstream. Its quobyte.py half is not carried: CubeCOS
+#   does not use the Quobyte driver
 rootfs_install::
-	$(Q)[ -d $(CINDER_PATCHDIR) ] && cp -rf $(CINDER_PATCHDIR)/* $(CINDER_SRCDIR)/ || /bin/true
+	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "cinder: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
+	$(Q)[ ! -d $(CINDER_PATCHDIR) ] || { cd $(CINDER_PATCHDIR) && find . -type f ! -name '*.patch' ! -name '*.orig' \
+		! -name '*.pyc' ! -path '*/__pycache__/*' | \
+		while read f; do install -D -m 644 "$$f" $(CINDER_SRCDIR)/"$$f"; done; }
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /var/lock/os_brick
