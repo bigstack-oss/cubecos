@@ -903,6 +903,8 @@ UpdateConfig(
 
     if (IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
         fprintf(fout, "[client]\n");
+        // v2 clones keep cloned images deletable
+        fprintf(fout, "rbd default clone format = 2\n");
         if (IsCompute(s_eCubeRole)) {
             fprintf(fout, "rbd cache = true\n");
             fprintf(fout, "rbd cache writethrough until flush = true\n");
