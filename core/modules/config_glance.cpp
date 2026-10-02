@@ -562,6 +562,8 @@ SetupService(const std::string domain, const std::string userPass)
 
     // populate the glance service database
     HexUtilSystemF(0, 0, "su -s /bin/sh -c \"glance-manage db_sync\" %s", USER);
+    // load the shipped metadata definitions; existing namespaces are skipped
+    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"glance-manage db_load_metadefs /etc/glance/metadefs\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";

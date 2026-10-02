@@ -373,6 +373,7 @@ migrate_glance_db()
 
     if is_control_node ; then
         su -s /bin/sh -c "/usr/bin/glance-manage db_sync" glance
+        su -s /bin/sh -c "/usr/bin/glance-manage db_load_metadefs /etc/glance/metadefs" glance
     fi
 
     touch $STATE_DIR/glance_db_migrated
