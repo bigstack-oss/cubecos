@@ -156,7 +156,12 @@ rootfs_install::
 # to the installed file instead; a whole file is copied over it:
 # volume/drivers/nfs.py: NfsDriver.manage_existing and manage_existing_get_size, which
 #   upstream still does not provide; and upstream 53245bce3 (bug 2103742, 27.0.0), which
-#   lets _is_file_size_equal read a qcow2 snapshot overlay after an extend
+#   lets _is_file_size_equal read a qcow2 snapshot overlay after an extend; and
+#   _copy_volume_from_snapshot growing the new file to the requested size. Without it a
+#   volume created from a snapshot -- or a clone, which NFS always takes through a
+#   temporary snapshot -- larger than its source kept the source's size on the share,
+#   read as available at the new size, and could not be attached. Still missing upstream
+#   (master); vzstorage's copy extends the same way
 # volume/drivers/remotefs.py.patch, image/image_utils.py.patch: upstream 8c03308ed
 #   (28.0.0, not backported to 2025.1). An offline snapshot left the volume's format
 #   admin metadata at raw while its active file became a qcow2 overlay, so an extend ran
