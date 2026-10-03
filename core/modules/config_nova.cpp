@@ -731,8 +731,13 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         uint64_t mem = s_resvHostMem.newValue() + ctrlMem + reservedHci;
 
         struct sysinfo info;
-        if (sysinfo(&info) == 0)
-            mem = MIN(info.totalram >> 21 /* 20 (megabyte) + 1 (half system mem) */, mem);
+        if (sysinfo(&info) == 0) {
+            uint64_t cap = info.totalram >> 21 /* 20 (megabyte) + 1 (half system mem) */;
+            if (mem > cap)
+                HexLogWarning("reserved host memory %lu MB (ceph osds %lu MB) capped at half of RAM, %lu MB",
+                              mem, reservedHci, cap);
+            mem = MIN(cap, mem);
+        }
 
         cfg["DEFAULT"]["reserved_host_memory_mb"] = std::to_string(mem);
 
