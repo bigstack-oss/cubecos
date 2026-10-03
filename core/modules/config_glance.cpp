@@ -438,6 +438,8 @@ SetAuth(
     config["keystone_authtoken"]["project_name"] = "service";
     config["keystone_authtoken"]["user_domain_name"] = domain;
     config["keystone_authtoken"]["username"] = "glance";
+    // keystone for barbican cert lookups (castellan defaults to localhost)
+    config["barbican"]["auth_endpoint"] = "http://" + sharedId + ":5000/v3";
     config["keystone_authtoken"]["password"] = glancePass;
     config["keystone_authtoken"]["service_token_roles"] = "service";
     config["keystone_authtoken"]["service_token_roles_required"] = "false";
