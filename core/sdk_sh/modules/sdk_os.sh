@@ -908,6 +908,12 @@ os_image_import()
                 else
                     properties+=" --property hw_firmware_type=bios"
                 fi
+                # RHEL's virt-v2v has no --block-driver: viostor (virtio-blk) is the
+                # only storage driver it makes boot-critical in a Windows guest, so on
+                # a virtio-scsi bus the guest cannot find its boot disk
+                if [ "x$distro" = "xwindows" ] ; then
+                    properties=${properties//--property hw_disk_bus=scsi/--property hw_disk_bus=virtio}
+                fi
                 rm -f ${img_dir}/${file%.*}*.xml
             else
                 qemu-img convert -p -O raw "$IMG" "$img_raw" 2>/dev/null

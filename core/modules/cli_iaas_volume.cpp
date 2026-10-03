@@ -1050,7 +1050,10 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
 
         // parse the metadata
         volumeMetadata["hw_machine_type"] = "q35";
-        volumeMetadata["hw_disk_bus"] = "scsi";
+        // RHEL's virt-v2v has no --block-driver: viostor (virtio-blk) is the only
+        // storage driver it makes boot-critical in a Windows guest, so on a
+        // virtio-scsi bus the guest cannot find its boot disk
+        volumeMetadata["hw_disk_bus"] = (osDistro == "windows" ? "virtio" : "scsi");
         volumeMetadata["hw_scsi_model"] = "virtio-scsi";
         volumeMetadata["hw_video_model"] = "vga";
         volumeMetadata["hw_input_bus"] = "virtio";
