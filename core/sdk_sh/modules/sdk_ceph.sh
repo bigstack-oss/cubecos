@@ -1521,6 +1521,55 @@ ceph_osd_list_lvm_ids()
     ceph-volume lvm list --format json 2>/dev/null | jq -r 'keys[]' | sort -n | tr '\n' ' ' | sed 's/ $//'
 }
 
+# osd_memory_target of each local OSD: a fifth of host RAM split across the local
+# OSDs, clamped to [2G, 4G] on rotational and [4G, 4G] on flash devices.
+# Prints "<id> <hdd|ssd> <bytes>" per OSD; nothing when no OSD is mounted.
+ceph_osd_memory_targets()
+{
+    local osdpth=${CEPH_OSD_DIR:-/var/lib/ceph/osd}
+    local gib=1073741824
+    local -a ids=() rotas=()
+    local d
+    for d in $osdpth/ceph-* ; do
+        [ -e "$d/block" ] || continue
+        ids+=("${d##*-}")
+        rotas+=("$(lsblk -dno ROTA "$(readlink -f "$d/block")" 2>/dev/null | tr -d ' ')")
+    done
+    [ ${#ids[@]} -gt 0 ] || return 0
+
+    local mem_total=$(awk '/^MemTotal:/ {print $2 * 1024; exit}' ${PROC_MEMINFO:-/proc/meminfo})
+    local share=$(( ${mem_total:-0} / 5 / ${#ids[@]} ))
+    local i cls floor target
+    for i in "${!ids[@]}" ; do
+        if [ "${rotas[$i]}" = "0" ] ; then
+            cls=ssd ; floor=$(( 4 * gib ))
+        else
+            cls=hdd ; floor=$(( 2 * gib ))
+        fi
+        target=$share
+        [ $target -ge $floor ] || target=$floor
+        [ $target -le $(( 4 * gib )) ] || target=$(( 4 * gib ))
+        echo "${ids[$i]} $cls $target"
+    done
+}
+
+# Write ceph_osd_memory_targets into the mon config db; a no-op without quorum.
+ceph_osd_memory_target_apply()
+{
+    $CEPH -s >/dev/null 2>&1 || return 0
+
+    local id cls target rc=0
+    while read -r id cls target ; do
+        [ -n "$id" ] || continue
+        [ "$($CEPH config get osd.$id osd_memory_target 2>/dev/null)" != "$target" ] || continue
+        if ! $CEPH config set osd.$id osd_memory_target $target ; then
+            log_warning "ceph_osd_memory_target_apply: failed to set osd.$id osd_memory_target to $target"
+            rc=1
+        fi
+    done <<< "$(ceph_osd_memory_targets)"
+    return $rc
+}
+
 ceph_osd_get_cache_size()
 {
     local cachepool=${1:-$BUILTIN_CACHEPOOL}

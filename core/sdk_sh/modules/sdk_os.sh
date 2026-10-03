@@ -1371,6 +1371,14 @@ os_nova_instance_hardreboot()
 
 os_nova_hci_reserved_mem_mb()
 {
+    # Reserve what the local OSDs may use under cache autotune.
+    local targets=$($HEX_SDK ceph_osd_memory_targets 2>/dev/null)
+    if [ -n "$targets" ] ; then
+        echo -n "$targets" | awk '{s += $3} END {printf "%d", s / 1048576}'
+        return 0
+    fi
+
+    # No OSD mounted yet: estimate from the raw disk size.
     # Ask lsblk for the root partition's parent disk rather than stripping trailing
     # digits off its name: '.*[^0-9]' turns nvme1n1p5 into nvme1n1p, which then matches
     # nothing, so the system disk stays in the sum. sda5 -> sda happens to work, which is
