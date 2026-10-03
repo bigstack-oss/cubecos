@@ -437,6 +437,8 @@ UpdateSharedId(std::string sharedId, std::string ovnnb, std::string ovnsb)
 
         ml2Cfg["ovn"]["ovn_nb_connection"] = ovnnb;
         ml2Cfg["ovn"]["ovn_sb_connection"] = ovnsb;
+        // vm dhcp dns: the cluster named
+        ml2Cfg["ovn"]["dns_servers"] = sharedId;
     }
 
     if (IsCompute(s_eCubeRole)) {
@@ -482,7 +484,8 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         cfg["DEFAULT"]["service_plugins"] = "neutron.services.ovn_l3.plugin.OVNL3RouterPlugin,ovn-vpnaas,neutron.services.qos.qos_plugin.QoSPlugin";
         cfg["DEFAULT"]["notify_nova_on_port_status_changes"] = "true";
         cfg["DEFAULT"]["notify_nova_on_port_data_changes"] = "true";
-        cfg["DEFAULT"]["dns_domain"] = "cube.local.";
+        // no trailing dot: copied verbatim into dhcp domain_name
+        cfg["DEFAULT"]["dns_domain"] = "cube.local";
         cfg["DEFAULT"]["external_dns_driver"] = "designate";
 
         cfg["nova"]["auth_type"] = "password";
@@ -529,9 +532,9 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         // The visible symptom was `openstack network create --dns-domain ...`
         // hanging ~165s (neutron's db retry backoff) and then failing with
         // "Failed to create a duplicate NetworkDNSDomain: for attribute(s)
-        // ['PRIMARY']". Naming only subnet_dns_publish_fixed_ip loses nothing --
-        // it inherits every port and network behaviour dns_domain_ports provides.
-        ml2Cfg["ml2"]["extension_drivers"] = "port_security,qos,subnet_dns_publish_fixed_ip";
+        // ['PRIMARY']". Name only the most derived one: dns_domain_keywords
+        // (subnet_dns_publish_fixed_ip plus <project_id>/<user_id> expansion).
+        ml2Cfg["ml2"]["extension_drivers"] = "port_security,qos,dns_domain_keywords";
         ml2Cfg["ml2"]["overlay_ip_version"] = "4";
         ml2Cfg["ml2"]["path_mtu"] = std::to_string(overlayMtu);
         ml2Cfg["ml2_type_flat"]["flat_networks"] = "provider" + ep;
