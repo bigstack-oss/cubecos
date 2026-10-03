@@ -9,6 +9,7 @@ RPMS_DIR := $(CURDIR)/RPMS
 PIPS_DIR := $(CURDIR)/PIPS
 ARCS_DIR := $(CURDIR)/ARCS
 HEAVYFS = $(CURDIR)/heavy_rootfs
+HEAVY_BASE = $(CURDIR)/heavy_base
 
 # NOTE: this used to define OSP_SRCDIR, OSP_LOCAL_SRCDIR and OSP_PATCHDIR and copy
 # $(OPENSTACK_RELEASE)_patch over both python 3.9 site-packages trees. The tree held
@@ -459,9 +460,38 @@ $(HEAVYFS): rootfs.cgz $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_COMPONENTS
 	$(Q)cp -f /etc/resolv.conf $@/etc/resolv.conf
 	$(Q)touch $@
 else
-$(HEAVYFS): $(HEX_FULL_ROOTFS) $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
+# NOTE: heavy_rootfs is built in two passes, so that most of it is built while the
+# components heavyfs comes after are still building.
+#
+# heavy_base runs every rootfs_install fragment, and none of those reads another
+# component's build output. That is what lets core/Makefile's heavy_overlap start it
+# alongside those components instead of after them. heavy_rootfs then runs the
+# heavy_components_install fragments -- the ones that do read that output (yq, api,
+# ui, etcd, exporters, terraform, docker, k3s, keycloak, rancher, appfw, appctl,
+# lachesis), in include order -- on top of heavy_base. A new fragment that reads
+# $(TOP_BLDDIR) belongs in heavy_components_install: as rootfs_install it would race
+# the component that produces the file, and fail or pick up a stale copy.
+#
+# mountrootfs moves heavy_base into heavy_rootfs rather than copying it, so after a
+# build heavy_base is gone. .SECONDARY tells make that is expected: a missing
+# heavy_base is rebuilt only when heavy_rootfs has to be, which costs the same full
+# rebuild a heavy_rootfs change always has.
+$(HEAVY_BASE): $(HEX_FULL_ROOTFS) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
 	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
 	$(Q)touch $@
+
+$(HEAVYFS): $(HEAVY_BASE) $(HEAVY_DELIVERABLES)
+	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" heavy_components_install' $< $@, "  GEN     $@")
+	$(Q)touch $@
+
+.SECONDARY: $(HEAVY_BASE)
+
+# For core/Makefile's heavy_overlap: build heavy_base early, but only when there is
+# no heavy_rootfs yet, i.e. on a clean build. Anything else is left to the rule
+# above, so a rebuild with nothing changed stays a no-op.
+.PHONY: heavy_base_early
+heavy_base_early:
+	$(Q)[ -e $(HEAVYFS) ] || $(MAKE) $(HEAVY_BASE)
 endif
 
 # openstacksdk 4.4.1, epoxy's pin and the cli's dependency, sends server create's
@@ -502,6 +532,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c "mkdir -p /mnt/cephfs/update"
 	$(Q)chroot $(ROOTDIR) sh -c "rm -rf /var/update ; ln -sf /mnt/cephfs/update /var/update"
 
-PKGCLEAN += $(HEAVYFS) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
+PKGCLEAN += $(HEAVYFS) $(HEAVY_BASE) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

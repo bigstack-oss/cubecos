@@ -10,9 +10,11 @@ LACHESIS_DASHBOARDS = $(TOP_BLDDIR)/core/lachesis/git/deploy/grafana/dashboards
 
 # the rpm owns /etc/cube/lachesis, /var/lib/lachesis and /var/log/lachesis.
 # installed disabled everywhere; config_lachesis enables per role at commit time.
-rootfs_install::
+heavy_components_install::
 	$(Q)cp -f $(LACHESIS_RPM) $(ROOTDIR)/tmp/
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/lachesis.rpm
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)rm -f $(ROOTDIR)/tmp/lachesis.rpm
 	$(Q)chroot $(ROOTDIR) systemctl disable lachesis
 	$(Q)cp -f $(COREDIR)/lachesis/lachesis.yaml.in $(ROOTDIR)/etc/cube/lachesis/

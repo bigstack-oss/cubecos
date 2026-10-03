@@ -14,9 +14,11 @@ heavyfs_install::
 # ui installation
 UI_RPM = $(TOP_BLDDIR)/core/ui/ui.rpm
 
-rootfs_install::
+heavy_components_install::
 	$(Q)cp -f $(UI_RPM) $(ROOTDIR)/tmp/
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/ui.rpm
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)rm -rf /tmp/api.rpm
 
 # for RC builds

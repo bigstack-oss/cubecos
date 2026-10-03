@@ -5,7 +5,7 @@ K3S_DIR := /opt/k3s
 INGRESS_NGINX_DIR := $(K3S_DIR)/ingress-nginx
 CEPH_CSI_DIR := $(K3S_DIR)/ceph-csi
 
-rootfs_install::
+heavy_components_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(K3S_DIR)
 	$(Q)(cd $(TOP_BLDDIR)/core/k3s/ && cp -f k3s install.sh $(ROOTDIR)/$(K3S_DIR)/)
 	$(Q)cp -f $(COREDIR)/k3s/registries.yaml $(COREDIR)/k3s/remove_node.sh $(ROOTDIR)/$(K3S_DIR)/
