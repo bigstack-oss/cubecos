@@ -183,9 +183,9 @@ static const double BATCH_MEM_RATIO = 0.25;
 // sky150; the rest is clean page cache from its O_SYNC dd), budgeted at 256 MB: one
 // disk per GiB available, so a freshly installed node partitions all its disks at once.
 static const unsigned long PARTITION_TASK_MEM_KB = 256 * 1024;
-// An OSD is budgeted at the memory target it runs with: one OSD per 16 GiB available.
-static const unsigned long long OSD_MEMORY_TARGET = 4294967296ULL;
-static const unsigned long OSD_START_MEM_KB = OSD_MEMORY_TARGET / 1024;
+// An OSD is budgeted at the memory target it runs with (ceph_osd_memory_targets);
+// ceph's 4 GiB default when that is unknown.
+static const unsigned long OSD_DEFAULT_START_MEM_KB = 4UL * 1024 * 1024;
 
 /**
  * MemAvailable from /proc/meminfo in kB, or 0 when it cannot be read.
@@ -985,25 +985,15 @@ UpdateConfig(
 
     // bluestore osd perf tuning
     if (perfTuned) {
-        fprintf(fout, "bluestore cache autotune = 0\n");    // off: autotune's PriorityCache mem_avail assert aborts OSDs during unclean-shutdown recovery
-        // These three have to sum to <= 1.0 or bluestore refuses to mount and
-        // every OSD exits (22) Invalid argument at init -- not a warning, a hard
-        // stop. Quincy only summed meta+kv, so 0.8 + 0.2 = 1.0 was exactly legal;
-        // reef added kv_onode to the same check and its 0.04 default pushed the
-        // total to 1.04. Measured on jim-1cc: with the quincy values in place,
-        // both OSDs failed every start with
-        //   _set_cache_sizes bluestore_cache_meta_ratio (0.8)
-        //   + bluestore_cache_kv_ratio (0.2) + bluestore_cache_kv_onode_ratio (0.04)
-        //   = 1.04; must be <= 1.0
-        // meta gives up the 0.04 because the intent of this block is a
-        // metadata-heavy cache and 0.76 still spends three quarters of it there;
-        // the alternative, trimming kv, is the cache rocksdb reads out of.
-        //
-        // All three are written explicitly, including kv_onode at its own default.
-        // Leaving it implicit is what made this break in the first place: the sum
-        // silently depended on a value upstream was free to change, and it did.
-        fprintf(fout, "bluestore cache kv ratio = 0.2\n");
-        fprintf(fout, "bluestore cache meta ratio = 0.76\n");
+        // On: caches follow each OSD's osd_memory_target, set per OSD in the mon
+        // config db by ceph_osd_memory_target_apply (not here: ceph.conf would
+        // override it).
+        fprintf(fout, "bluestore cache autotune = 1\n");
+        // Ceph's defaults. They must sum to <= 1.0: above it reef refuses to mount,
+        // and older releases crash autotune on ceph_assert(mem_avail >= 0).
+        // kv_onode is written explicitly so the sum never depends on an upstream default.
+        fprintf(fout, "bluestore cache kv ratio = 0.45\n");
+        fprintf(fout, "bluestore cache meta ratio = 0.45\n");
         fprintf(fout, "bluestore cache kv onode ratio = 0.04\n");
         fprintf(fout, "bluestore csum type = crc32c\n");     // corruption detection on for tenant data
         fprintf(fout, "bluestore extent map shard max size = 200\n");
@@ -1028,7 +1018,6 @@ UpdateConfig(
                       "compaction_readahead_size=2MB\n");
         fprintf(fout, "osd map share max epochs = 100\n");
         fprintf(fout, "osd max backfills = 1\n");           // Ceph default; protect client IO during recovery
-        fprintf(fout, "osd memory target = %llu\n", OSD_MEMORY_TARGET);  // 4G, now effective under autotune; tune to node RAM
         fprintf(fout, "osd op num shards = 8\n");
         fprintf(fout, "osd op num threads per shard = 2\n");
         fprintf(fout, "osd min pg log entries = 500\n");    // enough for log-recovery on brief blips, not full backfill
@@ -1171,6 +1160,25 @@ CommitMds(const char* name, const char* hostname)
 }
 
 /**
+ * The largest osd_memory_target among the local OSDs in kB, or ceph's default.
+ */
+static unsigned long
+osdStartMemKb()
+{
+    unsigned long long maxBytes = 0;
+    std::string targets = HexUtilPOpen(HEX_SDK " ceph_osd_memory_targets");
+    for (const std::string& line : hex_string_util::split(targets, '\n')) {
+        size_t id = 0;
+        char cls[8];
+        unsigned long long bytes = 0;
+        if (sscanf(line.c_str(), "%zu %7s %llu", &id, cls, &bytes) == 3) {
+            maxBytes = std::max(maxBytes, bytes);
+        }
+    }
+    return maxBytes > 0 ? static_cast<unsigned long>(maxBytes / 1024) : OSD_DEFAULT_START_MEM_KB;
+}
+
+/**
  * Start (restart) local OSDs in batches sized from MemAvailable: measure, decide the
  * batch, start it, wait until every OSD of it has finished starting -- booted or
  * exited, see ceph_osd_restart_wait -- and only then size the next one.
@@ -1202,10 +1210,11 @@ startOsds(const std::vector<size_t>& osds)
         return;
     }
 
+    const unsigned long osdMemKb = osdStartMemKb();
     std::size_t first = 0;
     while (first < osds.size()) {
         unsigned long availKb = 0;
-        const std::size_t batch = memoryBatchSize(OSD_START_MEM_KB, osds.size() - first, &availKb);
+        const std::size_t batch = memoryBatchSize(osdMemKb, osds.size() - first, &availKb);
         std::string batchIds;
         for (std::size_t i = first; i < first + batch; i++) {
             if (!batchIds.empty()) {
@@ -1235,6 +1244,9 @@ CommitOsd(const char* name, bool restartAll = true, bool batched = false)
 
     if (s_enabled) {
         HexLogDebug("starting %s-osd service", name);
+
+        // size each OSD's memory target to this node before it starts
+        HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_memory_target_apply");
 
         if (batched) {
             std::vector<size_t> osds(s_osdIds.begin(), s_osdIds.end());
