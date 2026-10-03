@@ -17,9 +17,11 @@ heavyfs_install::
 # api installation
 API_RPM = $(TOP_BLDDIR)/core/api/api.rpm
 
-rootfs_install::
+heavy_components_install::
 	$(Q)cp -f $(API_RPM) $(ROOTDIR)/tmp/
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/api.rpm
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)rm -rf /tmp/api.rpm
 	$(Q)chroot $(ROOTDIR) systemctl disable cube-cos-api
 	$(Q)cp -f $(COREDIR)/api/cube-cos-api.yaml.in $(ROOTDIR)/etc/cube/api/

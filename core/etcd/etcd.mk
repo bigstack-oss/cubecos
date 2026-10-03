@@ -3,7 +3,7 @@
 
 ETCD_CONF_DIR := /etc/etcd
 
-rootfs_install::
+heavy_components_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(ETCD_CONF_DIR)
 	$(Q)cp -f $(TOP_BLDDIR)/core/etcd/etcd* $(ROOTDIR)/usr/local/bin/
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/etcd/etcd.service ./lib/systemd/system/

@@ -15,7 +15,7 @@ heavyfs_install::
 APPCTL_RPM = $(TOP_BLDDIR)/core/appctl/appctl.rpm
 APPCTL_PLUGINS_RPM = $(TOP_BLDDIR)/core/appctl/plugins
 
-rootfs_install::
+heavy_components_install::
 	$(Q)cp -f $(APPCTL_RPM) $(ROOTDIR)/tmp/
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/appctl.rpm

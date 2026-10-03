@@ -1,6 +1,6 @@
 # CUBE SDK
 
-rootfs_install::
+heavy_components_install::
 	$(Q)cp -f $(TOP_BLDDIR)/core/terraform/terraform-core/terraform-core $(ROOTDIR)/usr/local/bin/terraform
 	$(Q)cp -f $(COREDIR)/terraform/scripts/* $(ROOTDIR)/usr/local/bin/
 	$(Q)cp -rf $(TOP_BLDDIR)/core/terraform/terraform/ $(ROOTDIR)/var/lib/

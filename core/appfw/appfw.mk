@@ -75,7 +75,7 @@ rootfs_install::
 	$(Q)patch --forward --no-backup-if-mismatch -r - $(OSPURGE_SRCDIR)/ospurge/main.py < $(OSPURGE_PATCHDIR)/ospurge/main.py.patch
 	$(Q)patch --forward --no-backup-if-mismatch -r - $(OSPURGE_SRCDIR)/ospurge/resources/heat.py < $(OSPURGE_PATCHDIR)/ospurge/resources/heat.py.patch
 
-rootfs_install::
+heavy_components_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
 	$(Q)for i in {1..5}; do ! timeout 60 chroot $(ROOTDIR) ansible-galaxy collection install 'openstack.cloud:=1.8.0' --force || break ; done
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf

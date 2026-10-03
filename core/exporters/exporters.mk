@@ -47,7 +47,7 @@ ROOTFS_DNF += node-exporter
 EXPORTER_BINS := blackbox_exporter ipmi_exporter memcached_exporter apache_exporter
 EXPORTER_BLDDIR := $(TOP_BLDDIR)/core/exporters
 
-rootfs_install:: $(foreach b,$(EXPORTER_BINS),$(EXPORTER_BLDDIR)/$(b))
+heavy_components_install:: $(foreach b,$(EXPORTER_BINS),$(EXPORTER_BLDDIR)/$(b))
 	$(Q)$(foreach b,$(EXPORTER_BINS),$(INSTALL_PROGRAM) $(ROOTDIR) $(EXPORTER_BLDDIR)/$(b) ./usr/bin ;)
 	# /etc/default holds only the directory here. The ARGS content is per-node -- it carries
 	# the management address -- so it cannot be baked into the image, and config_prometheus.cpp

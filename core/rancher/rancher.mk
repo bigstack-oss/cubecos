@@ -2,7 +2,7 @@
 # rancher installation
 RANCHER_DIR := /opt/rancher
 
-rootfs_install::
+heavy_components_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(RANCHER_DIR)
 	$(Q)cp -f $(COREDIR)/rancher/clean-k8s.sh $(ROOTDIR)/$(RANCHER_DIR)/
 	$(Q)cp -f $(COREDIR)/rancher/rancher-images.txt $(ROOTDIR)/$(RANCHER_DIR)/
