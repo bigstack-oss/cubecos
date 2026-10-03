@@ -847,7 +847,7 @@ os_image_import()
     local user=$(echo $distro_ver | cut -d ":" -f1)
     local ver=$(echo $distro_ver | cut -d ":" -f2)
     properties+=" --property os_admin_user=$distro"
-    properties+=" --property os_vers=$ver"
+    properties+=" --property os_version=$ver"
     local proj_name=$(echo $flags | grep -o "[-][-]os-project-name .*" | cut -d" " -f2)
     local visibility=$(echo $flags | grep -o "[-][-]visibility .*" | cut -d" " -f2)
     local domain=$(echo $flags | grep -o "[-][-]os-project-domain-name .*" | cut -d" " -f2)

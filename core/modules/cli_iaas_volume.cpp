@@ -1062,7 +1062,7 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         volumeMetadata["os_type"] = (osDistro == "windows" ? "windows" : "linux");
         volumeMetadata["os_distro"] = osDistro;
         volumeMetadata["os_admin_user"] = osDistro;
-        volumeMetadata["os_vers"] = osVersion;
+        volumeMetadata["os_version"] = osVersion;
         if (doesVolumeSupportUefi(workingDirectory)) {
             volumeMetadata["hw_firmware_type"] = "uefi";
             volumeMetadata["os_secure_boot"] = "optional";
