@@ -801,6 +801,25 @@ _os_image_distro_ver()
     echo "${distro}:${ver}"
 }
 
+# The RBD pool behind a Cinder backend pool (<host>@<backend>#<pool>) when that
+# backend is a pool of this cluster's Ceph -- built-in, node group or device tier,
+# all of which config_cinder.cpp puts under backend host "cube". Prints nothing for
+# an external backend. The built-in backend is called ceph but lives in
+# cinder-volumes; every other one is named after its pool.
+_os_image_import_rbd_pool()
+{
+    local backend_pool=$1
+    local backend=${backend_pool#*@}
+    backend=${backend%%#*}
+
+    [ "${backend_pool%%@*}" = "cube" ] || return 0
+    if [ "$backend" = "ceph" ] ; then
+        echo $BUILTIN_BACKPOOL
+    else
+        echo $backend
+    fi
+}
+
 os_image_import()
 {
     # params:
@@ -936,19 +955,50 @@ os_image_import()
         local vol_name=""
         local vol_id=""
         local cinder_id=""
-        if [ "x$volume_type" = "xCubeStorage" ] ; then
-            backend=$(os_cinder_get_volume_backend_pool_by_volume_type "$volume_type" | jq -r ".[0]")
+        # Go by the backend behind the volume type, not by its name. A type on any
+        # pool of this cluster's Ceph has no glance store (see config_cinder.cpp,
+        # AddCephPoolAsStorageBackend), so it is written straight into its pool;
+        # taking its backend host "cube" for a glance store left an image in
+        # glance-images under admin and made no volume at all (#1447).
+        backend=$(os_cinder_get_volume_backend_pool_by_volume_type "$volume_type" | jq -r ".[0] // empty")
+        if [ -z "$backend" ] ; then
+            [ -z "$img_raw" ] || rm -f "$img_raw"
+            cmd rm -f $mf_importing
+            Error "volume type $volume_type has no backend pool up"
+        fi
+        local rbd_pool=$(_os_image_import_rbd_pool "$backend")
+        if [ -n "$rbd_pool" ] ; then
             vol_name=$(mktemp -u volume-${name}-XXXX)
-            rbd --id cinder import "$img_name" "${BUILTIN_BACKPOOL}/$vol_name"
-            vol_id=$(cinder --os-project-domain-name ${domain:-default} --os-project-name ${proj_name:-admin} manage --bootable --name "$name" --volume-type $volume_type ${backend:-cube@ceph#ceph} "$vol_name" | grep " id" | cut -d"|" -f3)
-            $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
+            if ! rbd --id cinder import "$img_name" "$rbd_pool/$vol_name" ; then
+                [ -z "$img_raw" ] || rm -f "$img_raw"
+                cmd rm -f $mf_importing
+                Error "failed to import $name into $rbd_pool"
+            fi
+            vol_id=$(cinder --os-project-domain-name ${domain:-default} --os-project-name ${proj_name:-admin} manage --bootable --name "$name" --volume-type $volume_type $backend "$vol_name" | grep " id" | cut -d"|" -f3)
+            if [ -z "$vol_id" ] ; then
+                rbd --id cinder rm "$rbd_pool/$vol_name" >/dev/null 2>&1
+                [ -z "$img_raw" ] || rm -f "$img_raw"
+                cmd rm -f $mf_importing
+                Error "failed to manage $rbd_pool/$vol_name as volume $name of ${proj_name:-admin}"
+            fi
+            $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") $vol_id
         else
-            backend=$(os_cinder_get_volume_backend_host_by_volume_type "$volume_type" | jq -r ".[0]")
+            # an external backend: its glance store is named after it, and the image
+            # is only the carrier for a volume made in the chosen project
             img_id=$(uuidgen)
-            glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility ${visibility:-public} --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
-            cinder_id=$($OPENSTACK image show $img_id -f json | jq -r ".properties.direct_url" | sed -e "s;^cinder://${volume_type}/;;")
-            vol_id=$($OPENSTACK volume create --type $volume_type --source $cinder_id --bootable $name -f value -c id)
-            $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") ${vol_id:-NOSUCHVOLID}
+            glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility ${visibility:-public} --store ${backend%%@*} --file $img_name $properties --name $name --progress --id $img_id
+            local direct_url=$($OPENSTACK image show $img_id -f json | jq -r ".properties.direct_url")
+            if [[ "$direct_url" == cinder://* ]] ; then
+                cinder_id=${direct_url##*/}
+                vol_id=$($OPENSTACK --os-project-domain-name ${domain:-default} --os-project-name ${proj_name:-admin} volume create --type $volume_type --source $cinder_id --bootable $name -f value -c id)
+            fi
+            if [ -z "$vol_id" ] ; then
+                $OPENSTACK image delete $img_id >/dev/null 2>&1
+                [ -z "$img_raw" ] || rm -f "$img_raw"
+                cmd rm -f $mf_importing
+                Error "failed to create volume $name of ${proj_name:-admin} on $volume_type from image $img_id ($direct_url)"
+            fi
+            $OPENSTACK volume set $(echo $properties | sed "s/--property/--image-property/g") $vol_id
             [ "x$($OPENSTACK volume show $cinder_id -f value -c status)" != "xavailable" ] || $OPENSTACK image delete $img_id
         fi
     fi
