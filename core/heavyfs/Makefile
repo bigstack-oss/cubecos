@@ -464,6 +464,24 @@ $(HEAVYFS): $(HEX_FULL_ROOTFS) $(HEAVY_DELIVERABLES) $(shell for m in $(HEAVY_CO
 	$(Q)touch $@
 endif
 
+# openstacksdk 4.4.1, epoxy's pin and the cli's dependency, sends server create's
+# hypervisor_hostname under its response name, OS-EXT-SRV-ATTR:hypervisor_hostname,
+# and nova's 2.74 schema rejects that with a 400. osc 7 creates servers through the
+# sdk where 6.6.1 went through novaclient, so since the cli moved to epoxy every
+# `server create --hypervisor-hostname` has failed, hex_sdk's diagnostics server
+# launch among them (prod #757). Upstream fixed it in 7fe116e19 (4.19.0); this carries
+# that hunk as a .patch against the pristine 4.4.1 file beside it -- per file, not the
+# whole-tree copy the note at the top retired. It sits below the component include
+# because appfw and nova pip-install openstacksdk too. Once the constraints reach
+# 4.19.0 the hunk is already there, patch --forward exits 1 and the build stops: drop
+# this block and core/heavyfs/epoxy_patch/openstack then.
+OPENSTACKSDK_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
+OPENSTACKSDK_PATCHDIR := $(COREDIR)/heavyfs/$(OPENSTACK_RELEASE)_patch
+
+rootfs_install::
+	$(Q)patch --forward --no-backup-if-mismatch -r - $(OPENSTACKSDK_SRCDIR)/openstack/compute/v2/server.py \
+		< $(OPENSTACKSDK_PATCHDIR)/openstack/compute/v2/server.py.patch
+
 # Tab completion for the openstack cli. The python3-openstackclient rpm wrote
 # /etc/bash_completion.d/osc.bash_completion from its %post, so the file was never
 # packaged and the pip install that replaced the rpm writes nothing (#1611). This
