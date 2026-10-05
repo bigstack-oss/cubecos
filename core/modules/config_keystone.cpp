@@ -524,6 +524,9 @@ Commit(bool modified, int dryLevel)
 
     // check for setup migration
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone");
+    // Before the service modules commit: their endpoint refresh resolves by service type,
+    // and fails for as long as a type has a duplicate entry (cubecos#1638).
+    HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_duplicate_services");
 
     // 6. create endpoint
     if (s_bEndpointChanged) {

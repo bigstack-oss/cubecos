@@ -97,6 +97,72 @@ migrate_keystone()
     touch $STATE_DIR/keystone_migrated
 }
 
+# Collapse the duplicate keystone services that re-run SetupService calls left behind,
+# keeping the entry that carries the endpoints (cubecos#1638). os_service_create stops new
+# ones; this clears the ones a cluster already has. On cube36 every duplicated name and type
+# had exactly one entry with endpoints and the rest with none. An entry with no endpoints is
+# what makes lookups by type ambiguous, and nothing else refers to it, so it is the one to
+# delete. If no entry in a group has endpoints, the first is kept. A group where more than
+# one entry has endpoints is left for an operator, since there is no telling which one
+# clients use.
+#
+# Called from config_keystone's Commit, ahead of the service modules: their endpoint
+# refresh goes by type and fails while the type is ambiguous. The marker is written only
+# once no duplicate remains, so a pass that cannot reach keystone, or leaves a group for an
+# operator, runs again on the next commit.
+migrate_keystone_duplicate_services()
+{
+    if [ -f $STATE_DIR/keystone_duplicate_services_removed ] ; then
+        return 0
+    fi
+
+    is_control_node || return 0
+
+    local list groups group id eps with empty left=0
+
+    list=$($OPENSTACK service list -f json 2>/dev/null | jq -r '.[] | "\(.Type) \(.Name) \(.ID)"' 2>/dev/null)
+    if [ -z "$list" ] ; then
+        log_warning "migrate_keystone_duplicate_services: cannot list keystone services; leaving it for the next commit"
+        return 0
+    fi
+
+    groups=$(echo "$list" | awk '{print $1" "$2}' | sort | uniq -d)
+    while read -r group ; do
+        [ -n "$group" ] || continue
+        with=""
+        empty=""
+        for id in $(echo "$list" | awk -v g="$group" '$1" "$2 == g {print $3}') ; do
+            eps=$($OPENSTACK endpoint list --service $id -f value -c ID 2>/dev/null) || {
+                log_warning "migrate_keystone_duplicate_services: cannot list endpoints of $id; leaving it for the next commit"
+                return 0
+            }
+            if [ -n "$eps" ] ; then
+                with="$with $id"
+            else
+                empty="$empty $id"
+            fi
+        done
+        if [ $(echo $with | wc -w) -gt 1 ] ; then
+            log_error "migrate_keystone_duplicate_services: $group has services$with that all carry endpoints; leaving them for an operator"
+            left=1
+            continue
+        fi
+        # no entry has endpoints: keep the first
+        [ -z "$with" ] && empty=$(echo $empty | cut -s -d' ' -f2-)
+        for id in $empty ; do
+            if $OPENSTACK service delete $id >/dev/null 2>&1 ; then
+                log_info "migrate_keystone_duplicate_services: deleted $group service $id, which had no endpoints"
+            else
+                log_warning "migrate_keystone_duplicate_services: cannot delete $group service $id; leaving it for the next commit"
+                left=1
+            fi
+        done
+    done <<< "$groups"
+
+    [ $left -eq 0 ] && touch $STATE_DIR/keystone_duplicate_services_removed
+    return 0
+}
+
 migrate_barbican_db()
 {
     if [ -f $STATE_DIR/barbican_db_migrated ] ; then
