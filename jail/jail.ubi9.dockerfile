@@ -85,6 +85,13 @@ ARG HEX_EXTRA="sudo kpartx python3-pip python3-devel java-21-openjdk java-21-ope
 # diagnostic only.
 ARG HEX_BPF="clang llvm libbpf-devel kernel-headers bpftool"
 
+# GCC Toolset 15 compiles hex's own C/C++ (hex/make/build_definitions.mk points CC and CXX at
+# it, for -std=gnu23 and -std=gnu++23). It installs beside the system gcc 11, which stays the
+# compiler for kernel modules, rpmbuild and pip. Its binaries still link the system
+# libstdc++.so.6 (newer symbols come from a static libstdc++_nonshared.a), so nodes need no new
+# runtime. AppStream supports it to 2029-11; gcc-toolset-14 retires 2026-11.
+ARG HEX_GCC="gcc-toolset-15-gcc gcc-toolset-15-gcc-c++"
+
 # A valid machine-id (32 hex chars) is required: kernel-core's %posttrans runs
 # `kernel-install add`, which RHEL 9 patches to exit 1 on anything else, and then
 # dracut never generates /boot/initramfs-<kver>.img for hex's fakeroot initrd. The
@@ -97,12 +104,12 @@ RUN echo "_WEAK_DEP=$WEAK_DEP" >> /etc/hex.manifest
 
 ###### install packages with WEAK_DEP == 0
 FROM tier2 AS tier2_weak_dep_0
-RUN dnf install -y $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF
+RUN dnf install -y $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF $HEX_GCC
 # Jenkins is with java 21
 RUN alternatives --set java java-21-openjdk.x86_64
 ###### install packages with WEAK_DEP == 1
 FROM tier2 AS tier2_weak_dep_1
-RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF
+RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF $HEX_GCC
 
 ######## tier3
 FROM tier2_weak_dep_${WEAK_DEP} AS tier3
