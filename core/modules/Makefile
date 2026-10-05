@@ -32,6 +32,15 @@ $(ADVISOR_PUB_PEM):
 	$(Q)chmod 600 $(ADVISOR_PRIV_PEM)
 	$(Q)openssl pkey -in $(ADVISOR_PRIV_PEM) -pubout -out $@
 
+# A pre-hybrid build minted a P-256 dev pair here, which advisor_key.h refuses.
+# Its private half sits beside it and derives it, which a release anchor's
+# cannot (that half never leaves release signing), so let the rule above mint a
+# P-384 pair over it.
+ifeq ($(shell openssl pkey -pubin -in $(ADVISOR_PUB_PEM) -noout -text 2>/dev/null | grep -q 'NIST CURVE: P-384' || \
+	{ openssl pkey -in $(ADVISOR_PRIV_PEM) -pubout 2>/dev/null | cmp -s - $(ADVISOR_PUB_PEM) && echo stale; }),stale)
+.PHONY: $(ADVISOR_PUB_PEM)
+endif
+
 $(ADVISOR_MLDSA_PUB_PEM):
 	$(Q)openssl genpkey -algorithm ML-DSA-87 -out $(ADVISOR_MLDSA_PRIV_PEM)
 	$(Q)chmod 600 $(ADVISOR_MLDSA_PRIV_PEM)
