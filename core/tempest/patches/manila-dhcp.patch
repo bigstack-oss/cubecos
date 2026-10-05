@@ -1,0 +1,12 @@
+--- manila_tempest_tests/tests/api/base.py.orig	2026-10-01 18:50:56.288813511 +0800
++++ manila_tempest_tests/tests/api/base.py	2026-10-02 00:22:58.691351262 +0800
+@@ -141,7 +141,8 @@
+             # neutron network resources to be created with test credentials
+             network_resources.update({'network': True,
+                                       'subnet': True,
+-                                      'router': True})
++                                      'router': True,
++                                      'dhcp': True})
+         cls.set_network_resources(**network_resources)
+         super(BaseSharesTest, cls).setup_credentials()
+ 
