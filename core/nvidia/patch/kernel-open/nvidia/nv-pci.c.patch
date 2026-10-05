@@ -1,0 +1,11 @@
+--- kernel-open/nvidia/nv-pci.c
++++ kernel-open/nvidia/nv-pci.c
+@@ -229,7 +229,7 @@
+ 
+ resize:
+     /* Attempt to resize BAR1 to the largest supported size */
+-    r = pci_resize_resource(pci_dev, NV_GPU_BAR1, requested_size);
++    r = pci_resize_resource(pci_dev, NV_GPU_BAR1, requested_size, 0);
+ 
+     if (r) {
+         if (r == -ENOSPC)
