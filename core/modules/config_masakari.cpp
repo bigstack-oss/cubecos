@@ -162,9 +162,7 @@ SetupMasakari(std::string domain, std::string userPass)
     HexUtilSystemF(0, 0, "%s %s role add --project service --user masakari service", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name masakari "
-                         "--description \"masakari high availability\" ha",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create masakari ha \"masakari high availability\"");
 
     return true;
 }

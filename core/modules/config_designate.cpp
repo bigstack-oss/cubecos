@@ -261,9 +261,7 @@ SetupService(std::string domain, std::string userPass)
     HexUtilSystemF(0, 0, "%s %s role add --project service --user designate admin", env.c_str(), OPENSTACK_CLI);
     HexUtilSystemF(0, 0, "%s %s role add --project service --user designate service", env.c_str(), OPENSTACK_CLI);
 
-    HexUtilSystemF(0, 0, "%s %s service create --name designate "
-                         "--description \"Openstack DNS Service\" dns",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create designate dns \"Openstack DNS Service\"");
 
     return true;
 }

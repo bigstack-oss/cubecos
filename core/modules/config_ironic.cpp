@@ -255,9 +255,7 @@ SetupIronic(std::string domain, std::string ironicPass, std::string inspPass)
     HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic service", env.c_str(), OPENSTACK_CLI);
 
     // Create the ironic service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name ironic "
-                         "--description \"Ironic baremetal provisioning service\" baremetal",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create ironic baremetal \"Ironic baremetal provisioning service\"");
 
     // Create the ironic-inspector service credentials
     HexUtilSystemF(0, 0, "%s %s user create --domain %s --password %s ironic-inspector",
@@ -266,9 +264,7 @@ SetupIronic(std::string domain, std::string ironicPass, std::string inspPass)
     HexUtilSystemF(0, 0, "%s %s role add --project service --user ironic-inspector service", env.c_str(), OPENSTACK_CLI);
 
     // Create the ironic-inspector service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name ironic-inspector "
-                         "--description \"Ironic Inspector baremetal introspection service\" baremetal-introspection",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create ironic-inspector baremetal-introspection \"Ironic Inspector baremetal introspection service\"");
     return true;
 }
 
