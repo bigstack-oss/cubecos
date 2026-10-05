@@ -274,9 +274,7 @@ SetupMonasca(std::string domain, std::string userPass)
     HexUtilSystemF(0, 0, "%s %s role add --project service --user monasca admin", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name monasca-api "
-                         "--description \"monasca monitoring service\" monitoring",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create monasca-api monitoring \"monasca monitoring service\"");
 
     return true;
 }
