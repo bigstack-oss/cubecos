@@ -29,6 +29,14 @@ PROJECT       ?= centos9-jail
 
 include hex/make/devtools_definitions.mk
 
+.PHONY: help
+help::
+	$(Q)echo "PROJECT=XXXX centos9-jail     Create CentOS9 jail"
+	$(Q)echo "PROJECT=XXXX enter            Configure and enter jail"
+	$(Q)echo "clean-all-cntr                Clean all running containers"
+	$(Q)echo "[ALL=1] docker-prune          Prune docker build cache, dangling images and anonymous volumes (ALL=1: every unused image and volume)"
+	$(Q)echo "[DRY=1] jenkins-ws-prune      Remove Jenkins ws-cleanup leftovers older than WS_PRUNE_DAYS (default 1)"
+
 centos9-jail: $(TOP_JAILDIR)/jail.ubi9.dockerfile ubi9-base
 	$(Q)$(DOCKER_BIN) rm -vf $${PROJECT:-$@} $(IGNORE_ERR)
 	$(Q)sudo rm -rf $(TOP_SRCDIR)/../$${PROJECT:-$(@F)}
@@ -71,9 +79,43 @@ clean-all-cntr:
 	$(Q)docker rm -vf `docker ps -qa` $(IGNORE_ERR)
 	$(Q)docker volume prune -f
 
-.PHONY: clean-dangling-img
-clean-dangling-img:
-	$(Q)$(DOCKER_BIN) images | grep "<none>" | awk '{print $$3}' | xargs -i $(DOCKER_BIN) rmi {}
+# Reports the space it freed on the disk holding docker's data, which on a build server is not
+# necessarily the one holding TOP_DIR. Each prune runs even if the one before it fails.
+.PHONY: docker-prune
+docker-prune:
+	$(Q)R=$$($(DOCKER_BIN) info -f '{{.DockerRootDir}}') ; \
+	B=$$(df --output=avail -B1M $$R | tail -1) ; \
+	echo "== before ==" ; df -h $$R | tail -1 ; $(DOCKER_BIN) system df ; \
+	$(DOCKER_BIN) builder prune -a -f ; \
+	$(DOCKER_BIN) image prune $(if $(ALL),-a) -f ; \
+	$(DOCKER_BIN) volume prune $(if $(ALL),-a) -f ; \
+	echo "== after ==" ; df -h $$R | tail -1 ; $(DOCKER_BIN) system df ; \
+	A=$$(df --output=avail -B1M $$R | tail -1) ; \
+	awk -v a=$$A -v b=$$B -v r=$$R 'BEGIN { printf "freed on %s: %.1f GiB (%.1f GiB free -> %.1f GiB free)\n", r, (a - b) / 1024, b / 1024, a / 1024 }'
+
+# Jenkins' Workspace Cleanup plugin renames a finished workspace to <name>_ws-cleanup_<epoch ms>
+# and deletes it in the background, as the jenkins user. Builds that run as root in a container
+# leave root-owned files behind (cubecmp's node_modules, .next, charts), so that delete fails and
+# the renamed copy stays forever. Remove those copies once they are older than WS_PRUNE_DAYS --
+# nothing references them -- and never the live workspaces, which other jobs read by path.
+# DRY=1 lists them without deleting.
+JENKINS_WS    ?= /home/jenkins/workspace
+WS_PRUNE_DAYS ?= 1
+
+.PHONY: jenkins-ws-prune
+jenkins-ws-prune:
+	$(Q)W=$(JENKINS_WS) ; \
+	[ -d "$$W" ] || { echo "no Jenkins workspace at $$W: nothing to do" ; exit 0 ; } ; \
+	L=$$(find "$$W" -mindepth 1 -maxdepth 1 -type d -regextype posix-extended -regex '.*_ws-cleanup_[0-9]+' -mmin +$$(( $(WS_PRUNE_DAYS) * 1440 ))) ; \
+	echo "$$(echo "$$L" | grep -c .) ws-cleanup leftovers older than $(WS_PRUNE_DAYS) day(s) in $$W" ; \
+	[ -n "$$L" ] || exit 0 ; \
+	if [ -n "$(DRY)" ] ; then echo "$$L" ; exit 0 ; fi ; \
+	B=$$(df --output=avail -B1M "$$W" | tail -1) ; \
+	echo "== before ==" ; df -h "$$W" | tail -1 ; \
+	echo "$$L" | grep . | xargs -r -d '\n' sudo -n rm -rf -- ; \
+	echo "== after ==" ; df -h "$$W" | tail -1 ; \
+	A=$$(df --output=avail -B1M "$$W" | tail -1) ; \
+	awk -v a=$$A -v b=$$B -v r="$$W" 'BEGIN { printf "freed on %s: %.1f GiB (%.1f GiB free -> %.1f GiB free)\n", r, (a - b) / 1024, b / 1024, a / 1024 }'
 
 .PHONY: enter
 enter:

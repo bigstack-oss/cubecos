@@ -1,13 +1,6 @@
 ifneq (x$(DEVOPS_ENV),x__JAIL__)
 include jail/cntrjail.mk
 .DEFAULT_GOAL := help
-
-.PHONY: help
-help::
-	$(Q)echo "PROJECT=XXXX centos9-jail     Create CentOS9 jail"
-	$(Q)echo "PROJECT=XXXX enter            Configure and enter jail"
-	$(Q)echo "clean-all-cntr                Clean all running containers"
-	$(Q)echo "clean-dangling-img            Clean all dangling docker images"
 else
 
 # CUBE SDK
