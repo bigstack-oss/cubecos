@@ -170,9 +170,7 @@ SetupService(std::string domain, std::string userPass)
                          env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user octavia admin", env.c_str(), OPENSTACK_CLI);
 
-    HexUtilSystemF(0, 0, "%s %s service create --name octavia "
-                         "--description \"Openstack Load Balance Service\" load-balancer",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create octavia load-balancer \"Openstack Load Balance Service\"");
 
     return true;
 }

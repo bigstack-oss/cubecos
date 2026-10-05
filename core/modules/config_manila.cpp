@@ -641,18 +641,8 @@ SetupService(const std::string domain, const std::string userPass)
         USER);
 
     // create the service entity
-    HexUtilSystemF(
-        0,
-        0,
-        "%s %s service create --name manila --description \"OpenStack Shared File Systems\" share",
-        env.c_str(),
-        OPENSTACK_CLI);
-    HexUtilSystemF(
-        0,
-        0,
-        "%s %s service create --name manilav2 --description \"OpenStack Shared File Systems\" sharev2",
-        env.c_str(),
-        OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create manila share \"OpenStack Shared File Systems\"");
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create manilav2 sharev2 \"OpenStack Shared File Systems\"");
 }
 /**
  * Set service endpoints.

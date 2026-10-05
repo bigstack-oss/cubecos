@@ -141,9 +141,7 @@ SetupBarbican(std::string domain, std::string userPass)
     HexUtilSystemF(0, 0, "%s %s role add --project service --user barbican creator", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name barbican "
-                         "--description \"Key Manager\" key-manager",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create barbican key-manager \"Key Manager\"");
 
     return true;
 }

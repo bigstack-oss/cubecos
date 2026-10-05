@@ -135,9 +135,7 @@ SetupService(std::string domain, std::string userPass)
                          env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user watcher admin", env.c_str(), OPENSTACK_CLI);
 
-    HexUtilSystemF(0, 0, "%s %s service create --name watcher "
-                         "--description \"Infrastructure Optimization\" infra-optim",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create watcher infra-optim \"Infrastructure Optimization\"");
 
     return true;
 }

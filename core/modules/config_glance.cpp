@@ -559,13 +559,7 @@ SetupService(const std::string domain, const std::string userPass)
         OPENSTACK_CLI);
 
     // create the service entity
-    HexUtilSystemF(
-        0,
-        0,
-        "%s %s service create --name %s --description \"OpenStack Image\" image",
-        env.c_str(),
-        OPENSTACK_CLI,
-        USER);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create %s image \"OpenStack Image\"", USER);
 }
 
 /**

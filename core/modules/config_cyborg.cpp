@@ -137,9 +137,7 @@ SetupService(std::string domain, std::string userPass)
                          env.c_str(), OPENSTACK_CLI, domain.c_str(), userPass.c_str());
     HexUtilSystemF(0, 0, "%s %s role add --project service --user cyborg admin", env.c_str(), OPENSTACK_CLI);
 
-    HexUtilSystemF(0, 0, "%s %s service create --name cyborg "
-                         "--description \"Acceleration Service\" accelerator",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create cyborg accelerator \"Acceleration Service\"");
 
     return true;
 }
