@@ -1,0 +1,43 @@
+# COS Tempest exclude list. One regex per line; reason above each.
+# Unsupported on Ceph RGW: Swift account quotas need a reseller-admin role (no ResellerAdmin in COS).
+tempest\.api\.object_storage\.test_account_quotas
+# Unsupported on RGW: anonymous reads of a private container return 404 (Swift returns 401).
+tempest\.scenario\.test_object_storage_basic_ops\.TestObjectStorageBasicOps\.test_swift_acl_anonymous_download
+# Cirros busybox: get_nic_ip_addresses parses `mtu` as an address.
+tempest\.scenario\.test_network_basic_ops\.TestNetworkBasicOps\.test_port_security_macspoofing_port
+# COS sets service_token_roles_required: 401 instead of the expected 403; detach is still refused.
+tempest\.scenario\.test_server_volume_attachment\.TestServerVolumeAttachmentScenario\.test_server_detach_rules
+# Client/server skew + single node: watcher audit end-time format; continuous audit needs >1 compute.
+watcher_tempest_plugin\..*AuditTestsV1[12]\.test_audit_update
+watcher_tempest_plugin\..*test_continuous_audit
+# Upstream packaging: heat-tempest-plugin 2.3.0 ships without templates/lb_member.yaml.
+heat_tempest_plugin\.tests\.scenario\.test_octavia_lbaas
+# Needs an image with heat agents (os-collect-config); Cirros has none. RAW variant still runs.
+heat_tempest_plugin\.tests\.scenario\.test_server_signal\.ServerSignalIntegrationTest\.test_server_signal_userdata_format_software_config
+# Unsupported on Ceph RBD: cinder's RBD driver only supports LUKS ("Provider plain not supported").
+tempest\.scenario\.test_encrypted_cinder_volumes\.TestEncryptedCinderVolumes\.test_encrypted_cinder_volumes_cryptsetup
+# Upstream: the generic driver allocates no manila network ports, so share network gateway/mtu are never stored.
+manila_tempest_tests\.tests\.api\.test_share_networks\.ShareNetworksTest\.test_gateway_mtu_neutron_net_id_with_neutron
+# By design (cubecos#1627): implicit tenants off, so anonymous swift (public ACL, staticweb) hits the wrong tenant.
+tempest\.api\.object_storage\.test_container_acl_negative\.ObjectACLsNegativeTest\.test_(delete|write)_object_without_using_creds
+tempest\.api\.object_storage\.test_object_services\.PublicObjectTest\.test_access_public_container_object_without_using_creds
+tempest\.api\.object_storage\.test_container_staticweb\.StaticWebTest\.test_web_(index|listing_css)
+# Unsupported on RGW: no metadata limits in /info; the account always reports a container quota.
+tempest\.api\.object_storage\.test_container_services_negative\.ContainerNegativeTest\.test_create_container_metadata_
+tempest\.api\.object_storage\.test_account_services\.AccountTest\.test_list_no_account_metadata
+# Single writable glance store (http store is read-only): copy-image / per-store delete have nothing to act on.
+tempest\.api\.image\.v2\.admin\.test_images\.ImportCopyImagesTest\.test_image_copy_image_import
+tempest\.api\.image\.v2\.admin\.test_images\.MultiStoresImagesTest\.test_delete_image_from_specific_store
+# Upstream skew: glance 30 SSRF filter returns 400 for an unresolvable host; tempest 43 expects 202 (LP #2138602).
+tempest\.api\.image\.v2\.test_images_negative\.ImportImagesNegativeTest\.test_image_web_download_import_with_bad_url
+# Needs internet (download.cirros-cloud.net); offline/air-gapped clusters cannot fetch it.
+tempest\.api\.image\.v2\.test_images\.ImportImagesTest\.test_image_web_download_import
+# Devstack-only: hardcodes a vxlan provider network; COS/OVN has geneve only.
+neutron_tempest_plugin\.scenario\.test_dns_integration\.DNSIntegrationAdminTests
+# Devstack-only: hardcodes physnet 'public' VLAN + local FRR containers on br-ex.
+neutron_tempest_plugin\.scenario\.test_multiple_gws\.NetworkMultipleGWTest
+# Legacy RBAC: needs key-manager:service-admin; barbican runs enforce_new_defaults (project quotas = admin).
+barbican_tempest_plugin\.tests\.api\.test_quotas\.ProjectQuotasTest
+# No accelerator hardware (cyborg devices/deployables empty; no FPGA / CUSTOM_FAKE_DEVICE provider).
+cyborg_tempest_plugin\.tests\.api\.test_(device|deployables)
+cyborg_tempest_plugin\.tests\.scenario\.test_accelerator_basic_ops

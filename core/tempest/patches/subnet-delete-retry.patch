@@ -1,0 +1,35 @@
+--- tempest/lib/common/dynamic_creds.py
++++ tempest/lib/common/dynamic_creds.py
+@@ -13,6 +13,7 @@
+ #    under the License.
+ 
+ import ipaddress
++import time
+ 
+ import netaddr
+ from oslo_log import log as logging
+@@ -549,11 +550,19 @@
+ 
+     def _clear_isolated_subnet(self, subnet_id, subnet_name):
+         client = self.subnets_admin_client
+-        try:
+-            client.delete_subnet(subnet_id)
+-        except lib_exc.NotFound:
+-            LOG.warning('subnet with name: %s not found for delete',
+-                        subnet_name)
++        # ports (e.g. dhcp, metadata) can still be leaving the subnet
++        for attempt in range(12):
++            try:
++                client.delete_subnet(subnet_id)
++                return
++            except lib_exc.NotFound:
++                LOG.warning('subnet with name: %s not found for delete',
++                            subnet_name)
++                return
++            except lib_exc.Conflict:
++                if attempt == 11:
++                    raise
++                time.sleep(5)
+ 
+     def _clear_isolated_network(self, network_id, network_name):
+         net_client = self.networks_admin_client
