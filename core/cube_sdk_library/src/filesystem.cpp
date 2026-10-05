@@ -143,10 +143,11 @@ CreateTempFile()
     TempFile result = TempFile();
 
     std::filesystem::path tmpFilePath = std::filesystem::temp_directory_path() / "tmp.XXXXXX";
-    const char* tmpFileName = tmpFilePath.string().c_str();
-    std::size_t tmpFileNameLength = tmpFilePath.string().length() + 1;
+    // path::string() returns a copy: keep it alive, or c_str() points into a destroyed temporary
+    const std::string tmpFileName = tmpFilePath.string();
+    std::size_t tmpFileNameLength = tmpFileName.length() + 1;
     char* tmpFile = new char[tmpFileNameLength];
-    std::strcpy(tmpFile, tmpFileName);
+    std::strcpy(tmpFile, tmpFileName.c_str());
 
     int fd = mkstemp(tmpFile);
     if (fd < 0) {
