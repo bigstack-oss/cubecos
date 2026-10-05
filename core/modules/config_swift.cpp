@@ -104,9 +104,7 @@ SetupSwift(void)
     std::string env = ". " + std::string(OPENRC) + " &&";
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name swift "
-                         "--description \"Openstack Object Storage\" object-store",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create swift object-store \"Openstack Object Storage\"");
 
     HexSystemF(0, "touch %s", SETUP_MARK);
 
@@ -125,9 +123,7 @@ SetupS3(void)
     std::string env = ". " + std::string(OPENRC) + " &&";
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name s3 "
-                         "--description \"Simple Storage Service\" s3",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create s3 s3 \"Simple Storage Service\"");
 
     HexSystemF(0, "touch %s", SETUP_S3_MARK);
 

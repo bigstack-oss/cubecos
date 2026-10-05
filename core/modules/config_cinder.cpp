@@ -930,18 +930,8 @@ SetupService(const std::string domain, const std::string userPass)
     HexUtilSystemF(0, 0, "%s %s role add --project service --user cinder service", env.c_str(), OPENSTACK_CLI);
 
     // create the service entity
-    HexUtilSystemF(
-        0,
-        0,
-        "%s %s service create --name cinderv2 --description \"OpenStack Block Storage\" volumev2",
-        env.c_str(),
-        OPENSTACK_CLI);
-    HexUtilSystemF(
-        0,
-        0,
-        "%s %s service create --name cinderv3 --description \"OpenStack Block Storage\" volumev3",
-        env.c_str(),
-        OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create cinderv2 volumev2 \"OpenStack Block Storage\"");
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create cinderv3 volumev3 \"OpenStack Block Storage\"");
 }
 
 /**

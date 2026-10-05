@@ -285,14 +285,10 @@ SetupNova(std::string domain, std::string novaPass, std::string placePass)
     HexUtilSystemF(0, 0, "%s %s role add --project service --user placement service", env.c_str(), OPENSTACK_CLI);
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name nova "
-                         "--description \"OpenStack Compute\" compute",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create nova compute \"OpenStack Compute\"");
 
     // Create the service entity
-    HexUtilSystemF(0, 0, "%s %s service create --name placement "
-                         "--description \"Placement API\" placement",
-                         env.c_str(), OPENSTACK_CLI);
+    HexUtilSystemF(0, 0, HEX_SDK " os_service_create placement placement \"Placement API\"");
 
     // Create the nova ephemeral storage
     HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", VOLUME);

@@ -1273,6 +1273,30 @@ os_endpoint_url_set()
     fi
 }
 
+# keystone accepts any number of services with the same name and type, and a module's
+# SetupService runs again whenever its gate reads the database as missing: a release that
+# adds a database (octavia_persistence at 3.1.10), or a bootstrap whose mysql is down
+# (#1619). Each re-run added another entry. From the second one, every lookup by type or
+# name is ambiguous: os_endpoint_update fails with "Multiple service matches", and cinder
+# takes the first image entry in the catalog, an empty one, and rejects every
+# volume-from-image (cubecos#1638). So create a service only when none with this name and
+# type exists, and create nothing when keystone cannot be listed.
+os_service_create()
+{
+    local name=$1
+    local type=$2
+    local desc=$3
+    local list found
+
+    list=$($OPENSTACK service list -f json 2>/dev/null) || return 1
+    found=$(echo "$list" | jq -r --arg n "$name" --arg t "$type" \
+            'any(.[]; .Name == $n and .Type == $t)' 2>/dev/null)
+    [ "$found" = "true" ] && return 0
+    # only a list that parsed and lacks the service may create one
+    [ "$found" = "false" ] || return 1
+    $OPENSTACK service create --name "$name" --description "$desc" "$type"
+}
+
 os_endpoint_update()
 {
     local srv=$1
