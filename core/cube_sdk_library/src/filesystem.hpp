@@ -3,6 +3,7 @@
 #ifndef CUBE_FILESYSTEM_H
 #define CUBE_FILESYSTEM_H
 
+#include <cstring>
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
