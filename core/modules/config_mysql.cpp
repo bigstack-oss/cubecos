@@ -1,5 +1,7 @@
 // CUBE SDK
 
+#include <unistd.h>
+
 #include <hex/log.h>
 #include <hex/pidfile.h>
 #include <hex/filesystem.h>
@@ -31,6 +33,9 @@ const static char FORCE_NEW_MARK[] = "/etc/appliance/state/mysql_new_cluster";
 const static char USER[] = "mysql";
 const static char GROUP[] = "mysql";
 const static char NAME[] = "mariadb";
+
+const static int READY_TIMEOUT = 300;
+const static int READY_INTERVAL = 5;
 
 static ConfigString s_hostname;
 
@@ -286,6 +291,28 @@ SetupCluster(bool enabled, bool isMaster, bool force, const std::string& ctrlAdd
     return true;
 }
 
+// local mysql answers queries (HA: node is in the primary component)
+static bool
+WaitReady(bool ha, int timeout)
+{
+    const char* sql = ha ? "SHOW STATUS LIKE 'wsrep_ready'" : "SELECT 1";
+
+    for (int waited = 0; ; waited += READY_INTERVAL) {
+        std::string out;
+        int rc = -1;
+        if (HexRunCommand(rc, out, "/usr/bin/mysql -sNe \"%s\"", sql) && rc == 0 &&
+            (!ha || out.find("\tON") != std::string::npos)) {
+            return true;
+        }
+        if (waited >= timeout)
+            break;
+        sleep(READY_INTERVAL);
+    }
+
+    HexLogError("mysql not ready after %d secs", timeout);
+    return false;
+}
+
 static bool
 ParseNet(const char *name, const char *value, bool isNew)
 {
@@ -374,10 +401,9 @@ Commit(bool modified, int dryLevel)
     if (!UpdateCheck())
         return false;
 
-    // wait for rsync is done and service is ready for use
-    if (enabled) {
-        HexUtilSystemF(0, 0, HEX_SDK " wait_for_service %s 3306 90", myip.c_str());
-    }
+    // later modules read a down mysql as "no database" and set up again
+    if (enabled && !WaitReady(s_ha, READY_TIMEOUT))
+        return false;
 
     CuratorCronJob(s_curatorRp.newValue());
 

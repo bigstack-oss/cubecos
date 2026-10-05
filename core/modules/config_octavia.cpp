@@ -54,6 +54,7 @@ static Configs cfg;
 static Configs oldCfg;
 
 static bool s_bSetup = true;
+static bool s_bPersistenceSetup = true;
 
 static bool s_bCubeModified = false;
 static bool s_bMqModified = false;
@@ -134,7 +135,7 @@ SetupCheck()
     // taskflow's persistence store, kept out of the octavia database because the
     // two carry independent alembic chains -- see UpdateDbConn(). Checked on its
     // own so an existing cluster, whose octavia database already exists, still
-    // gets it.
+    // gets it. Only its schema is set up then, not the keystone service.
     if(!MysqlUtilIsDbExist("octavia_persistence")) {
         if (!MysqlUtilRunSQL("CREATE DATABASE octavia_persistence") ||
             !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON octavia_persistence.* TO 'octavia'@'localhost' IDENTIFIED BY 'octavia_dbpass'") ||
@@ -142,7 +143,7 @@ SetupCheck()
             return false;
         }
 
-        s_bSetup = false;
+        s_bPersistenceSetup = false;
     }
 
     return true;
@@ -609,6 +610,9 @@ Commit(bool modified, int dryLevel)
         s_bDbPassChanged = true;
         s_bEndpointChanged = true;
     }
+    // the GRANT above reset the octavia user's password
+    if (!s_bPersistenceSetup)
+        s_bDbPassChanged = true;
 
     if (s_bDbPassChanged && IsControl(s_eCubeRole))
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
@@ -629,6 +633,8 @@ Commit(bool modified, int dryLevel)
     // Service Setup (keystone service must be running)
     if (!s_bSetup)
         SetupService(s_cubeDomain, userPass);
+    else if (!s_bPersistenceSetup)
+        HexUtilSystemF(0, 0, "su -s /bin/sh -c \"octavia-db-manage upgrade_persistence\" %s", USER);
 
     // check for db migration
     HexUtilSystemF(0, 0, HEX_SDK " migrate_octavia_db");
