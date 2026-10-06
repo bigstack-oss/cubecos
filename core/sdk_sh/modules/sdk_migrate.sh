@@ -11,17 +11,6 @@ migrate_prepare()
     touch $STATE_DIR/cube_migration
 }
 
-migrate_fixpack()
-{
-    if [ -f $STATE_DIR/fixpack_migrated ] ; then
-        return 0
-    fi
-
-    # FW upgrade should've included fixpack contents of previous releases
-    rm -fr /var/support/fixpack /var/fixpack/* /var/appliance-db/fixpack.history
-    touch $STATE_DIR/fixpack_migrated
-}
-
 migrate_git()
 {
     # /.git is infra plumbing, not an operator-facing service: converge it in
