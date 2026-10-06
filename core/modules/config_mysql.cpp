@@ -300,7 +300,7 @@ WaitReady(bool ha, int timeout)
     for (int waited = 0; ; waited += READY_INTERVAL) {
         std::string out;
         int rc = -1;
-        if (HexRunCommand(rc, out, "/usr/bin/mysql -sNe \"%s\"", sql) && rc == 0 &&
+        if (HexRunCommand(rc, out, "/usr/bin/mariadb -sNe \"%s\"", sql) && rc == 0 &&
             (!ha || out.find("\tON") != std::string::npos)) {
             return true;
         }
