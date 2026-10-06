@@ -647,6 +647,10 @@ migrate_octavia_db()
 
     if is_control_node ; then
         su -s /bin/sh -c "/usr/bin/octavia-db-manage upgrade head" octavia
+        # taskflow's tables in octavia_persistence carry their own alembic chain:
+        # "upgrade head" leaves them alone and the octavia services never create
+        # them, so a cluster that gains the database on an upgrade gets them here
+        su -s /bin/sh -c "/usr/bin/octavia-db-manage upgrade_persistence" octavia
     fi
 
     touch $STATE_DIR/octavia_db_migrated
