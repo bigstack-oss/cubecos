@@ -2053,6 +2053,390 @@
           "values": true
         }
       }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 54,
+      "panels": [],
+      "title": "Traffic by Zone",
+      "type": "row"
+    },
+    {
+      "id": 55,
+      "type": "piechart",
+      "title": "Received by zone",
+      "description": "Bytes this VM received over the time range, by where the sender sits. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 41
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "(label_replace(label_replace(label_replace(label_replace(sum by (zone) (increase(lachesis_server_bytes_total{server_id=~\"$UUID\",direction=\"rx\",zone!~\"infra|miss|multicast\"}[$__range])), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by () (increase(lachesis_server_bytes_total{server_id=~\"$UUID\",direction=\"rx\",zone=~\"infra|miss|multicast\"}[$__range])), \"zone\", \"Other\", \"\", \"\"))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{zone}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 56,
+      "type": "piechart",
+      "title": "Sent by zone",
+      "description": "Bytes this VM sent over the time range, by where the receiver sits. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 41
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "(label_replace(label_replace(label_replace(label_replace(sum by (zone) (increase(lachesis_server_bytes_total{server_id=~\"$UUID\",direction=\"tx\",zone!~\"infra|miss|multicast\"}[$__range])), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by () (increase(lachesis_server_bytes_total{server_id=~\"$UUID\",direction=\"tx\",zone=~\"infra|miss|multicast\"}[$__range])), \"zone\", \"Other\", \"\", \"\"))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{zone}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 57,
+      "type": "piechart",
+      "title": "External received by network",
+      "description": "Bytes this VM received from outside the cloud, by external network. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 41
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "sum by (external_network) (increase(lachesis_server_bytes_total{server_id=~\"$UUID\",zone=\"external\",direction=\"rx\"}[$__range]))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{external_network}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 58,
+      "type": "piechart",
+      "title": "External sent by network",
+      "description": "Bytes this VM sent outside the cloud, by external network. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 41
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "sum by (external_network) (increase(lachesis_server_bytes_total{server_id=~\"$UUID\",zone=\"external\",direction=\"tx\"}[$__range]))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{external_network}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 59,
+      "type": "table",
+      "title": "Per port",
+      "description": "Bytes each of this VM's Neutron ports moved over the time range. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "sum by (port_id) (increase(lachesis_port_bytes_total{server_id=~\"$UUID\",direction=\"tx\"}[$__range]))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "sum by (port_id) (increase(lachesis_port_bytes_total{server_id=~\"$UUID\",direction=\"rx\"}[$__range]))",
+          "refId": "B",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "port_id": 0,
+              "Value #A": 1,
+              "Value #B": 2
+            },
+            "renameByName": {
+              "Value #A": "Sent",
+              "Value #B": "Received"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Sent",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 60,
+      "type": "timeseries",
+      "title": "Traffic over time",
+      "description": "Bits per second of this VM, by direction and zone. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "8 * label_replace(label_replace((label_replace(label_replace(label_replace(label_replace(sum by (zone, direction) (rate(lachesis_server_bytes_total{server_id=~\"$UUID\",zone!~\"infra|miss|multicast\"}[$__rate_interval])), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by (direction) (rate(lachesis_server_bytes_total{server_id=~\"$UUID\",zone=~\"infra|miss|multicast\"}[$__rate_interval])), \"zone\", \"Other\", \"\", \"\")), \"direction\", \"Sent\", \"direction\", \"tx\"), \"direction\", \"Received\", \"direction\", \"rx\")",
+          "refId": "A",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{direction}} · {{zone}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     }
   ],
   "refresh": "5m",
