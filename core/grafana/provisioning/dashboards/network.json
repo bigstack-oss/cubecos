@@ -1209,7 +1209,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "(label_replace(label_replace(label_replace(label_replace(sum by (zone) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone!~\"infra|miss|multicast\"}[$__range])), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by () (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone=~\"infra|miss|multicast\"}[$__range])), \"zone\", \"Other\", \"\", \"\"))",
+          "expr": "(label_replace(label_replace(label_replace(label_replace(sum by (zone) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone!~\"infra|miss|multicast\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone!~\"infra|miss|multicast\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone!~\"infra|miss|multicast\"})), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by () ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone=~\"infra|miss|multicast\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone=~\"infra|miss|multicast\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone=~\"infra|miss|multicast\"})), \"zone\", \"Other\", \"\", \"\"))",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1268,7 +1268,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "(label_replace(label_replace(label_replace(label_replace(sum by (zone) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone!~\"infra|miss|multicast\"}[$__range])), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by () (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone=~\"infra|miss|multicast\"}[$__range])), \"zone\", \"Other\", \"\", \"\"))",
+          "expr": "(label_replace(label_replace(label_replace(label_replace(sum by (zone) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone!~\"infra|miss|multicast\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone!~\"infra|miss|multicast\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone!~\"infra|miss|multicast\"})), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by () ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone=~\"infra|miss|multicast\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone=~\"infra|miss|multicast\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone=~\"infra|miss|multicast\"})), \"zone\", \"Other\", \"\", \"\"))",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1327,7 +1327,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "sum by (external_network) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"rx\"}[$__range]))",
+          "expr": "sum by (external_network) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"rx\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"rx\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"rx\"}))",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1386,7 +1386,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "sum by (external_network) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"tx\"}[$__range]))",
+          "expr": "sum by (external_network) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"tx\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"tx\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"tx\"}))",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1445,7 +1445,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "((sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"}[$__range])) and on(tenant_id) topk(10, sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) * on(tenant_id) group_left(name) max by (tenant_id, name) (lachesis_tenant_info)) or label_replace((sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"}[$__range])) and on(tenant_id) topk(10, sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) unless on(tenant_id) lachesis_tenant_info, \"name\", \"$1\", \"tenant_id\", \"(.*)\")",
+          "expr": "((sum by (tenant_id) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"})) and on(tenant_id) topk(10, sum by (tenant_id) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"})))) * on(tenant_id) group_left(name) max by (tenant_id, name) (lachesis_tenant_info)) or label_replace((sum by (tenant_id) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"})) and on(tenant_id) topk(10, sum by (tenant_id) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"})))) unless on(tenant_id) lachesis_tenant_info, \"name\", \"$1\", \"tenant_id\", \"(.*)\")",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1456,7 +1456,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "((sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"}[$__range])) and on(tenant_id) topk(10, sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) * on(tenant_id) group_left(name) max by (tenant_id, name) (lachesis_tenant_info)) or label_replace((sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"}[$__range])) and on(tenant_id) topk(10, sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) unless on(tenant_id) lachesis_tenant_info, \"name\", \"$1\", \"tenant_id\", \"(.*)\")",
+          "expr": "((sum by (tenant_id) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"})) and on(tenant_id) topk(10, sum by (tenant_id) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"})))) * on(tenant_id) group_left(name) max by (tenant_id, name) (lachesis_tenant_info)) or label_replace((sum by (tenant_id) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"})) and on(tenant_id) topk(10, sum by (tenant_id) ((clamp_min(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"} - lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"} offset $__range, 0) or lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"})))) unless on(tenant_id) lachesis_tenant_info, \"name\", \"$1\", \"tenant_id\", \"(.*)\")",
           "refId": "B",
           "instant": true,
           "range": false,
@@ -1530,7 +1530,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "((sum by (server_id, tenant_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"}[$__range])) and on(server_id) topk(10, sum by (server_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace((sum by (server_id, tenant_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"}[$__range])) and on(server_id) topk(10, sum by (server_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\")",
+          "expr": "((sum by (server_id, tenant_id) ((clamp_min(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"} - lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"} offset $__range, 0) or lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"})) and on(server_id) topk(10, sum by (server_id) ((clamp_min(lachesis_server_bytes_total{tenant_id=~\"$tenant\"} - lachesis_server_bytes_total{tenant_id=~\"$tenant\"} offset $__range, 0) or lachesis_server_bytes_total{tenant_id=~\"$tenant\"})))) * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace((sum by (server_id, tenant_id) ((clamp_min(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"} - lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"} offset $__range, 0) or lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"})) and on(server_id) topk(10, sum by (server_id) ((clamp_min(lachesis_server_bytes_total{tenant_id=~\"$tenant\"} - lachesis_server_bytes_total{tenant_id=~\"$tenant\"} offset $__range, 0) or lachesis_server_bytes_total{tenant_id=~\"$tenant\"})))) unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\")",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1541,7 +1541,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "((sum by (server_id, tenant_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"}[$__range])) and on(server_id) topk(10, sum by (server_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace((sum by (server_id, tenant_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"}[$__range])) and on(server_id) topk(10, sum by (server_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\")",
+          "expr": "((sum by (server_id, tenant_id) ((clamp_min(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"} - lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"} offset $__range, 0) or lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"})) and on(server_id) topk(10, sum by (server_id) ((clamp_min(lachesis_server_bytes_total{tenant_id=~\"$tenant\"} - lachesis_server_bytes_total{tenant_id=~\"$tenant\"} offset $__range, 0) or lachesis_server_bytes_total{tenant_id=~\"$tenant\"})))) * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace((sum by (server_id, tenant_id) ((clamp_min(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"} - lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"} offset $__range, 0) or lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"})) and on(server_id) topk(10, sum by (server_id) ((clamp_min(lachesis_server_bytes_total{tenant_id=~\"$tenant\"} - lachesis_server_bytes_total{tenant_id=~\"$tenant\"} offset $__range, 0) or lachesis_server_bytes_total{tenant_id=~\"$tenant\"})))) unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\")",
           "refId": "B",
           "instant": true,
           "range": false,
