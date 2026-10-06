@@ -1820,7 +1820,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "label_replace(label_replace(label_replace(label_replace(sum by (proto) (increase(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",proto!=\"unknown\"}[$__range])), \"proto\", \"TCP\", \"proto\", \"tcp\"), \"proto\", \"UDP\", \"proto\", \"udp\"), \"proto\", \"ICMP\", \"proto\", \"icmp\"), \"proto\", \"Other\", \"proto\", \"other\")",
+          "expr": "label_replace(label_replace(label_replace(label_replace(sum by (proto) ((clamp_min(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",proto!=\"unknown\"} - lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",proto!=\"unknown\"} offset $__range, 0) or lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",proto!=\"unknown\"})), \"proto\", \"TCP\", \"proto\", \"tcp\"), \"proto\", \"UDP\", \"proto\", \"udp\"), \"proto\", \"ICMP\", \"proto\", \"icmp\"), \"proto\", \"Other\", \"proto\", \"other\")",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1879,7 +1879,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "label_replace(label_replace(label_replace(label_replace(sum by (proto) (increase(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",proto!=\"unknown\"}[$__range])), \"proto\", \"TCP\", \"proto\", \"tcp\"), \"proto\", \"UDP\", \"proto\", \"udp\"), \"proto\", \"ICMP\", \"proto\", \"icmp\"), \"proto\", \"Other\", \"proto\", \"other\")",
+          "expr": "label_replace(label_replace(label_replace(label_replace(sum by (proto) ((clamp_min(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",proto!=\"unknown\"} - lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",proto!=\"unknown\"} offset $__range, 0) or lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",proto!=\"unknown\"})), \"proto\", \"TCP\", \"proto\", \"tcp\"), \"proto\", \"UDP\", \"proto\", \"udp\"), \"proto\", \"ICMP\", \"proto\", \"icmp\"), \"proto\", \"Other\", \"proto\", \"other\")",
           "refId": "A",
           "instant": true,
           "range": false,
