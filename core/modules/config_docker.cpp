@@ -21,4 +21,8 @@ Commit(bool modified, int dryLevel)
 CONFIG_MODULE(docker, 0, 0, 0, 0, Commit);
 CONFIG_REQUIRES(docker, cluster);
 
+// cubectl keeps an existing daemon.json, adding only its registry, so a site's
+// own settings (e.g. a bip and default-address-pools moving docker off
+// 172.17.0.0/16) last until an upgrade boots a partition with none: carry it.
+CONFIG_MIGRATE(docker, "/etc/docker/daemon.json");
 //CONFIG_MIGRATE(docker, "/var/lib/docker");
