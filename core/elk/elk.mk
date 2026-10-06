@@ -116,18 +116,52 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 
 # install logstash plugins, such as output-syslog for N-Reporter
 #
-# Pinned, because logstash-plugin resolves these from rubygems at build time: unpinned,
-# the image's plugin versions are whatever upstream published that morning, and neither
-# the change nor the day it happened appears in this repo.
+# From a pack assembled here out of pinned .gem files, not by name. By name, logstash-plugin
+# resolves against rubygems.org's whole-ecosystem index -- ~50 MB, fetched cold on every build
+# because heavy_base starts empty -- to install 163 KB of gems, over a path measured at 43 KB/s
+# from the build network: 15 minutes on a good day, and builds have sat silent in it for 44 and
+# 56 minutes without any of bundler's timeouts firing (#1730). A file:// pack is resolved locally
+# only, against Logstash's own Gemfile.lock (lib/pluginmanager/bundler/logstash_injector.rb),
+# which already carries every runtime dependency of both plugins; it writes the same lockfile the
+# online install did. If a bump ever needs a gem that lock lacks, the install stops within
+# seconds naming it -- pin that gem the same way and add it under logstash/dependencies/.
+#
+# Pinned by digest as well as by version: nothing here checks a signature on a .gem, and these
+# are the digests rubygems.org publishes for the two releases.
 LOGSTASH_PLUGIN_ENV := PATH=$(LOGSTASH_JDK)/bin:$$PATH LD_LIBRARY_PATH=$(LOGSTASH_JDK)/lib LS_JAVA_OPTS="-Xmx2048M"
 LOGSTASH_OUT_SYSLOG_VER := 3.1.0
+LOGSTASH_OUT_SYSLOG_GEM := logstash-output-syslog-$(LOGSTASH_OUT_SYSLOG_VER).gem
+LOGSTASH_OUT_SYSLOG_SHA256 := 6f8a6ab355178b43b254c2358352d83c9dc996261343725906f46d1351b9dc44
 LOGSTASH_OUT_OSEARCH_VER := 2.1.1
+LOGSTASH_OUT_OSEARCH_GEM := logstash-output-opensearch-$(LOGSTASH_OUT_OSEARCH_VER)-java.gem
+LOGSTASH_OUT_OSEARCH_SHA256 := 6e247b92ef07bb738275115f2aa28282f10a9abb9ce1f7c5f12acd54884ffa97
+LOGSTASH_PLUGIN_PACK := logstash-plugins-$(LOGSTASH_VER)-$(LOGSTASH_OUT_SYSLOG_VER)-$(LOGSTASH_OUT_OSEARCH_VER).zip
+LOGSTASH_GEM_DL_URL := $(RUBYGEMS_DL_HOST)/downloads
 
-rootfs_install::
-	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
-	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin install --version $(LOGSTASH_OUT_SYSLOG_VER) logstash-output-syslog
-	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin install --version $(LOGSTASH_OUT_OSEARCH_VER) logstash-output-opensearch
-	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
+# .part then rename, as for the tarball above, so a truncated or swapped gem is never zipped.
+$(ARCS_DIR)/$(LOGSTASH_OUT_SYSLOG_GEM):
+	$(Q)wget $(LOGSTASH_GEM_DL_URL)/$(LOGSTASH_OUT_SYSLOG_GEM) -O $@.part
+	$(Q)echo "$(LOGSTASH_OUT_SYSLOG_SHA256)  $@.part" | sha256sum -c -
+	$(Q)mv $@.part $@
+
+$(ARCS_DIR)/$(LOGSTASH_OUT_OSEARCH_GEM):
+	$(Q)wget $(LOGSTASH_GEM_DL_URL)/$(LOGSTASH_OUT_OSEARCH_GEM) -O $@.part
+	$(Q)echo "$(LOGSTASH_OUT_OSEARCH_SHA256)  $@.part" | sha256sum -c -
+	$(Q)mv $@.part $@
+
+# The layout lib/pluginmanager/pack_installer/pack.rb reads: plugins directly under logstash/.
+$(ARCS_DIR)/$(LOGSTASH_PLUGIN_PACK): $(ARCS_DIR)/$(LOGSTASH_OUT_SYSLOG_GEM) $(ARCS_DIR)/$(LOGSTASH_OUT_OSEARCH_GEM)
+	$(Q)rm -rf $@.d $@.part
+	$(Q)mkdir -p $@.d/logstash
+	$(Q)cp $^ $@.d/logstash/
+	$(Q)cd $@.d && zip -q -X -r $@.part logstash
+	$(Q)rm -rf $@.d
+	$(Q)mv $@.part $@
+
+rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_PLUGIN_PACK)
+	$(Q)cp -f $< $(ROOTDIR)/tmp/$(LOGSTASH_PLUGIN_PACK)
+	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin install file:///tmp/$(LOGSTASH_PLUGIN_PACK)
+	$(Q)rm -f $(ROOTDIR)/tmp/$(LOGSTASH_PLUGIN_PACK)
 
 #
 # Beats (filebeat, auditbeat)
