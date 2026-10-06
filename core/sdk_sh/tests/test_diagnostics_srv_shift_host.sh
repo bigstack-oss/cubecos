@@ -68,14 +68,13 @@ fake_openstack() {
             read -r st h <<<"$(state $3)"
             printf '{"id": "%s", "name": "vm-%s", "status": "%s", "OS-EXT-SRV-ATTR:host": "%s"}\n' "$3" "$3" "$st" "$h"
             ;;
+        "--os-compute-api-version 2.30 server migrate --live-migration --host "*)
+            TO[$8]=$7
+            DONE_AT[$8]=$((SECONDS + ${DUR[$8]}))
+            ;;
     esac
 }
-nova() {
-    echo "nova $*" >> "$CALLS"
-    [ "$1" = live-migration ] || return 0
-    TO[$2]=$3
-    DONE_AT[$2]=$((SECONDS + ${DUR[$2]}))
-}
+nova() { echo "nova $*" >> "$CALLS" ; }
 cubectl() { echo '[{"hostname": "cmp1"}, {"hostname": "cmp2"}]' ; }
 sleep() { SECONDS=$((SECONDS + $1)) ; }
 
@@ -97,8 +96,9 @@ SERVERS="s1 s2"
 HOME=([s1]=cmp1 [s2]=cmp2) OUTCOME=([s1]=land [s2]=land) DUR=([s1]=40 [s2]=20)
 run_shift
 check "1 [#1727] rc" "$RC" 0
-has   "1 s1 sent to the next compute" "$CALLS" "nova live-migration s1 cmp2"
-has   "1 s2 sent round to the first" "$CALLS" "nova live-migration s2 cmp1"
+has   "1 s1 sent to the next compute" "$CALLS" "openstack --os-compute-api-version 2.30 server migrate --live-migration --host cmp2 s1"
+has   "1 s2 sent round to the first" "$CALLS" "openstack --os-compute-api-version 2.30 server migrate --live-migration --host cmp1 s2"
+hasnt "1 not through the deprecated nova cli" "$CALLS" "nova "
 has   "1 [#1727] s1 reported migrated" "$OUT" "Migrated VM from cmp1 to cmp2: vm-s1 (s1)"
 has   "1 [#1727] s2 reported migrated" "$OUT" "Migrated VM from cmp2 to cmp1: vm-s2 (s2)"
 hasnt "1 [#1727] no false failure" "$OUT" "Failed to migrate"

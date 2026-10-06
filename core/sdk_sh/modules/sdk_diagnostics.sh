@@ -205,7 +205,7 @@ _diagSrvShiftHost()
         for server_id in $(echo $server_list_json | jq -r ".[] | select(.Host==\"$from_host\") | .ID") ; do
             server_name=$(echo $server_list_json | jq -r ".[] | select(.ID==\"$server_id\") | .Name")
             printf "%s: %s (%s)\n" "Migrating VM from $from_host to $to_host" $server_name $server_id
-            nova live-migration $server_id $to_host
+            $OPENSTACK --os-compute-api-version 2.30 server migrate --live-migration --host $to_host $server_id
         done
     done
     local rc=0
