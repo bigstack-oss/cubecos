@@ -371,8 +371,8 @@ diagnostics_cirros_host_exec()
 
     for server_id in $(echo $server_list_json | jq -r .[].ID) ; do
         server_show_json=$($OPENSTACK server show $server_id -f json)
-        svr_names[$index]="$(echo $server_show_json | jq -r .hostname)"
-        ins_names[$((index++))]="$(echo $server_show_json | jq -r .instance_name)"
+        svr_names[$index]="$(echo $server_show_json | jq -r '."OS-EXT-SRV-ATTR:hostname"')"
+        ins_names[$((index++))]="$(echo $server_show_json | jq -r '."OS-EXT-SRV-ATTR:instance_name"')"
     done
 
     local log="/tmp/_${FUNCNAME[0]}"
