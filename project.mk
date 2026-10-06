@@ -56,6 +56,8 @@ MARIADB_DL_HOST  ?= https://archive.mariadb.org
 ELASTIC_DL_HOST  ?= https://artifacts.elastic.co
 KOJIHUB_DL_HOST  ?= https://kojihub.stream.centos.org
 CBS_DL_HOST      ?= https://cbs.centos.org
+# Serves the pinned .gem files that core/elk/elk.mk installs the logstash plugins from.
+RUBYGEMS_DL_HOST ?= https://rubygems.org
 
 # PyPI index. Empty by default, so pip resolves against pypi.org exactly as before.
 #
