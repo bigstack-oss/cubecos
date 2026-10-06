@@ -1174,6 +1174,477 @@
       "title": "Top Unknown Receiver",
       "transform": "table",
       "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "id": 35,
+      "panels": [],
+      "title": "Tenant Traffic",
+      "type": "row"
+    },
+    {
+      "id": 36,
+      "type": "piechart",
+      "title": "Received by zone",
+      "description": "Bytes the selected tenants' VMs received over the time range, by where the sender sits. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "(label_replace(label_replace(label_replace(label_replace(sum by (zone) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone!~\"infra|miss|multicast\"}[$__range])), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by () (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",zone=~\"infra|miss|multicast\"}[$__range])), \"zone\", \"Other\", \"\", \"\"))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{zone}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 37,
+      "type": "piechart",
+      "title": "Sent by zone",
+      "description": "Bytes the selected tenants' VMs sent over the time range, by where the receiver sits. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "(label_replace(label_replace(label_replace(label_replace(sum by (zone) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone!~\"infra|miss|multicast\"}[$__range])), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by () (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",zone=~\"infra|miss|multicast\"}[$__range])), \"zone\", \"Other\", \"\", \"\"))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{zone}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 38,
+      "type": "piechart",
+      "title": "External received by network",
+      "description": "Bytes received from outside the cloud, by external network. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "sum by (external_network) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"rx\"}[$__range]))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{external_network}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 39,
+      "type": "piechart",
+      "title": "External sent by network",
+      "description": "Bytes sent outside the cloud, by external network. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "sum by (external_network) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=\"external\",direction=\"tx\"}[$__range]))",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{external_network}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 40,
+      "type": "table",
+      "title": "Top tenants",
+      "description": "The 10 selected tenants that moved the most bytes over the time range. Sent and received are counted separately: a transfer between two VMs is counted once at each end. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "((sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"}[$__range])) and on(tenant_id) topk(10, sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) * on(tenant_id) group_left(name) max by (tenant_id, name) (lachesis_tenant_info)) or label_replace((sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"}[$__range])) and on(tenant_id) topk(10, sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) unless on(tenant_id) lachesis_tenant_info, \"name\", \"$1\", \"tenant_id\", \"(.*)\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "((sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"}[$__range])) and on(tenant_id) topk(10, sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) * on(tenant_id) group_left(name) max by (tenant_id, name) (lachesis_tenant_info)) or label_replace((sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"}[$__range])) and on(tenant_id) topk(10, sum by (tenant_id) (increase(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) unless on(tenant_id) lachesis_tenant_info, \"name\", \"$1\", \"tenant_id\", \"(.*)\")",
+          "refId": "B",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "name": 0,
+              "tenant_id": 1,
+              "Value #A": 2,
+              "Value #B": 3
+            },
+            "renameByName": {
+              "Value #A": "Sent",
+              "Value #B": "Received"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Sent",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 41,
+      "type": "table",
+      "title": "Top VMs",
+      "description": "The 10 VMs of the selected tenants that moved the most bytes over the time range. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "((sum by (server_id, tenant_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"}[$__range])) and on(server_id) topk(10, sum by (server_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace((sum by (server_id, tenant_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\"}[$__range])) and on(server_id) topk(10, sum by (server_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "((sum by (server_id, tenant_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"}[$__range])) and on(server_id) topk(10, sum by (server_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace((sum by (server_id, tenant_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\"}[$__range])) and on(server_id) topk(10, sum by (server_id) (increase(lachesis_server_bytes_total{tenant_id=~\"$tenant\"}[$__range])))) unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\")",
+          "refId": "B",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "name": 0,
+              "server_id": 1,
+              "tenant_id": 2,
+              "Value #A": 3,
+              "Value #B": 4
+            },
+            "renameByName": {
+              "Value #A": "Sent",
+              "Value #B": "Received"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Sent",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Traffic over time",
+      "description": "Bits per second of the selected tenants, by direction and zone. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "8 * label_replace(label_replace((label_replace(label_replace(label_replace(label_replace(sum by (zone, direction) (rate(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone!~\"infra|miss|multicast\"}[$__rate_interval])), \"zone\", \"External\", \"zone\", \"external\"), \"zone\", \"Same tenant\", \"zone\", \"same_tenant\"), \"zone\", \"Other tenant\", \"zone\", \"other_tenant\"), \"zone\", \"Shared network\", \"zone\", \"shared\") or label_replace(sum by (direction) (rate(lachesis_tenant_bytes_total{tenant_id=~\"$tenant\",zone=~\"infra|miss|multicast\"}[$__rate_interval])), \"zone\", \"Other\", \"\", \"\")), \"direction\", \"Sent\", \"direction\", \"tx\"), \"direction\", \"Received\", \"direction\", \"rx\")",
+          "refId": "A",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{direction}} · {{zone}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     }
   ],
   "refresh": "5m",
@@ -1206,6 +1677,39 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "P43CA22E17D0F9596"
+        },
+        "definition": "query_result(max by (tenant_id, name) (lachesis_tenant_info))",
+        "description": "Tenants known to lachesis. All shows every tenant; the Top tenants table keeps the 10 largest.",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Tenant",
+        "multi": true,
+        "name": "tenant",
+        "options": [],
+        "query": {
+          "query": "query_result(max by (tenant_id, name) (lachesis_tenant_info))",
+          "refId": "tenant"
+        },
+        "refresh": 1,
+        "regex": "/name=\"(?<text>[^\"]+)\".*tenant_id=\"(?<value>[^\"]+)\"/",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
       }
     ]
   },
