@@ -645,15 +645,19 @@ migrate_octavia_db()
         return 0
     fi
 
+    # taskflow's tables in octavia_persistence carry their own alembic chain:
+    # "upgrade head" leaves them alone and the octavia services never create
+    # them, so a cluster that gains the database on an upgrade gets them here.
+    # Mark only a migration that succeeded, as masakari's does: a failed one is
+    # retried on the next Commit() rather than recorded as done until the next
+    # release.
     if is_control_node ; then
-        su -s /bin/sh -c "/usr/bin/octavia-db-manage upgrade head" octavia
-        # taskflow's tables in octavia_persistence carry their own alembic chain:
-        # "upgrade head" leaves them alone and the octavia services never create
-        # them, so a cluster that gains the database on an upgrade gets them here
-        su -s /bin/sh -c "/usr/bin/octavia-db-manage upgrade_persistence" octavia
+        ( su -s /bin/sh -c "/usr/bin/octavia-db-manage upgrade head" octavia && \
+          su -s /bin/sh -c "/usr/bin/octavia-db-manage upgrade_persistence" octavia && \
+              touch $STATE_DIR/octavia_db_migrated ) || true
+    else
+        touch $STATE_DIR/octavia_db_migrated
     fi
-
-    touch $STATE_DIR/octavia_db_migrated
 }
 
 migrate_watcher_db()
