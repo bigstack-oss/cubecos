@@ -263,6 +263,7 @@ diagnostics_network()
     local network_int_name="_internal-network"
     local subnet_int_name="_internal-subnet"
     local router_e2i_name="_router-e2i"
+    local rc=0
 
     _diagProjCreate
     _diagNetCreate
@@ -270,19 +271,20 @@ diagnostics_network()
     _diagQuotaUnlimit
 
     _diagSrvCreate Cirros $network_ext_name ephemeral-vms
-    _diagnostics_instance_dns $domain_name $name_server
+    _diagnostics_instance_dns $domain_name $name_server || rc=1
     if [ $(cubectl node list -r compute | wc -l) -gt 1 ] ; then
         _diagSrvShiftHost
-        _diagnostics_instance_dns $domain_name $name_server
+        _diagnostics_instance_dns $domain_name $name_server || rc=1
     fi
     _diagSrvDelete
 
     _diagSrvCreate Cirros $network_int_name
-    _diagnostics_instance_dns $domain_name $name_server
+    _diagnostics_instance_dns $domain_name $name_server || rc=1
     if [ $(cubectl node list -r compute | wc -l) -gt 1 ] ; then
         _diagSrvShiftHost
-        _diagnostics_instance_dns $domain_name $name_server
+        _diagnostics_instance_dns $domain_name $name_server || rc=1
     fi
+    return $rc
 }
 
 diagnostics_teardown()
@@ -368,6 +370,7 @@ diagnostics_cirros_host_exec()
     local project_name="_diagnostics"
     local server_list_json=$($OPENSTACK server list --project $project_name --host $HOSTNAME --long -f json)
     local index=0
+    local svr_names=() ins_names=() proc_ids=()
 
     for server_id in $(echo $server_list_json | jq -r .[].ID) ; do
         server_show_json=$($OPENSTACK server show $server_id -f json)
@@ -375,19 +378,32 @@ diagnostics_cirros_host_exec()
         ins_names[$((index++))]="$(echo $server_show_json | jq -r '."OS-EXT-SRV-ATTR:instance_name"')"
     done
 
-    local log="/tmp/_${FUNCNAME[0]}"
-    for ins_name in ${ins_names[@]} ; do
-        $HEX_SDK diagnostics_cirros_exec $ins_name $@ >${log}.${ins_name} 2>&1 &
-        proc_ids+="$! "
-    done
-    wait $proc_ids
+    # no instance here means nothing was checked on this host, which is not a pass
+    if [ $index -eq 0 ] ; then
+        echo "Failed to find any $project_name instance on $HOSTNAME"
+        return 1
+    fi
 
-    for ins_name in ${ins_names[@]} ; do
-        echo "---- Outputs from $svr_names (${ins_name}) on $HOSTNAME----"
-        cat ${log}.${ins_name}
-        echo
-        rm -f ${log}.${ins_name}
+    local log="/tmp/_${FUNCNAME[0]}.$$"
+    local i ret rc=0
+    for i in ${!ins_names[@]} ; do
+        $HEX_SDK diagnostics_cirros_exec ${ins_names[$i]} $@ >${log}.$i 2>&1 &
+        proc_ids[$i]=$!
     done
+
+    for i in ${!ins_names[@]} ; do
+        wait ${proc_ids[$i]}
+        ret=$?
+        echo "---- Outputs from ${svr_names[$i]} (${ins_names[$i]}) on $HOSTNAME----"
+        cat ${log}.$i
+        echo
+        rm -f ${log}.$i
+        if [ $ret -ne 0 ] ; then
+            echo "Failed to run in-guest checks in ${svr_names[$i]} (${ins_names[$i]}) on $HOSTNAME"
+            rc=1
+        fi
+    done
+    return $rc
 }
 
 diagnostics_cirros_exec()
@@ -397,7 +413,10 @@ diagnostics_cirros_exec()
     local cmd="$*"
     local user="cirros"
     local pass="gocubsgo"
-    virsh list | grep -q $ins || return 0
+    if ! virsh list | grep -qw -- "$ins" ; then
+        echo "instance $ins is not running on $HOSTNAME"
+        return 1
+    fi
 
     # A guest created moments ago may still be booting: cirros 0.4.0 reaches its login prompt
     # at ~40s of uptime when its boot-time gateway ping fails and it dumps network debug first.

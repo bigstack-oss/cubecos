@@ -50,7 +50,8 @@ static int TestgroundConstructMain(int argc, const char** argv)
         CliPrintf("using host DNS name server IP: %s", nameserverip.c_str());
     }
 
-    HexSpawn(0, HEX_SDK, "diagnostics_network", extnet.c_str(), domainname.c_str(), nameserverip.c_str(), NULL);
+    if (HexSpawn(0, HEX_SDK, "diagnostics_network", extnet.c_str(), domainname.c_str(), nameserverip.c_str(), NULL) != 0)
+        return CLI_FAILURE;
 
     return CLI_SUCCESS;
 }
@@ -273,7 +274,8 @@ static int DdMain(int argc, const char** argv)
 
     CliPrintf("Simultaneously dd %d GB file on each of the following servers", TotalData);
     HexSpawn(0, HEX_SDK, "_diagnostics_server_list", NULL);
-    HexSystemF(0, HEX_SDK " _diagnostics_instance_dd %d", TotalData);
+    if (HexSystemF(0, HEX_SDK " _diagnostics_instance_dd %d", TotalData) != 0)
+        return CLI_FAILURE;
     return CLI_SUCCESS;
 }
 
