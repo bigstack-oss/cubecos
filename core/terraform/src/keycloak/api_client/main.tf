@@ -31,9 +31,11 @@ resource "keycloak_saml_client" "api_client" {
   signature_algorithm    = "RSA_SHA256"
   sign_assertions        = true
   # encryption_algorithm is left unset on purpose, so Keycloak encrypts with its default,
-  # AES-256-GCM, which cube-cos-api's crewjam/saml decrypts. Keycloak 26 pinned clients that
-  # predate it to AES-128-CBC, and provider 5.x manages the attribute, so the first apply on
-  # an upgraded cluster drops that pin and lands where a fresh install starts.
+  # AES-256-GCM. Keycloak 26 pinned clients that predate it to AES-128-CBC, and provider 5.x
+  # manages the attribute, so the first apply on an upgraded cluster drops that pin.
+  # crewjam/saml (v0.5.1) cannot decrypt this on its own: it lacks AES-256-GCM and, for a
+  # fresh install's key transport, xmlenc11#rsa-oaep. cube-cos-api registers both itself
+  # (internal/auths/saml/xmlenc.go, #1746); without them a COS UI login gets no session.
   encrypt_assertions     = true
   front_channel_logout   = true
   name_id_format         = "username"
