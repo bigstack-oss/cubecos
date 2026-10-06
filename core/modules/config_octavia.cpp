@@ -54,7 +54,6 @@ static Configs cfg;
 static Configs oldCfg;
 
 static bool s_bSetup = true;
-static bool s_bPersistenceSetup = true;
 
 static bool s_bCubeModified = false;
 static bool s_bMqModified = false;
@@ -135,16 +134,16 @@ SetupCheck()
     // taskflow's persistence store, kept out of the octavia database because the
     // two carry independent alembic chains -- see UpdateDbConn(). Checked on its
     // own so an existing cluster, whose octavia database already exists, still
-    // gets it. Only the db password is re-applied then, not the keystone
-    // service; migrate_octavia_db brings its schema up.
+    // gets it, without re-running SetupService; migrate_octavia_db brings its
+    // schema up. The octavia accounts already exist (created above on a first
+    // install), so the GRANTs carry no IDENTIFIED BY: on an existing account it
+    // replaces the password, and octavia would lose its database login.
     if(!MysqlUtilIsDbExist("octavia_persistence")) {
         if (!MysqlUtilRunSQL("CREATE DATABASE octavia_persistence") ||
-            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON octavia_persistence.* TO 'octavia'@'localhost' IDENTIFIED BY 'octavia_dbpass'") ||
-            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON octavia_persistence.* TO 'octavia'@'%' IDENTIFIED BY 'octavia_dbpass'")) {
+            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON octavia_persistence.* TO 'octavia'@'localhost'") ||
+            !MysqlUtilRunSQL("GRANT ALL PRIVILEGES ON octavia_persistence.* TO 'octavia'@'%'")) {
             return false;
         }
-
-        s_bPersistenceSetup = false;
     }
 
     return true;
@@ -611,9 +610,6 @@ Commit(bool modified, int dryLevel)
         s_bDbPassChanged = true;
         s_bEndpointChanged = true;
     }
-    // the GRANT above reset the octavia user's password
-    if (!s_bPersistenceSetup)
-        s_bDbPassChanged = true;
 
     if (s_bDbPassChanged && IsControl(s_eCubeRole))
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
