@@ -2,6 +2,8 @@ package config
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,7 +14,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
 	"cubectl/util"
@@ -85,14 +86,47 @@ func dockerCheckImage(imgsFile string) error {
 	return nil
 }
 
-func dockerWriteConf(reg string) error {
-	os.MkdirAll(path.Dir(dockerConfigFile), 0755)
+// dockerEnsureConf lists the registry in file's insecure-registries and keeps every other key
+// as it is: a site may carry its own, such as a bip and default-address-pools moving docker off
+// 172.17.0.0/16. Without the entry, docker 29 pushes to <reg>:5080 over https and fails. It
+// reports whether it wrote the file.
+func dockerEnsureConf(file string, reg string) (bool, error) {
+	entry := fmt.Sprintf("%s:%d", reg, dockerRegistryPort)
 
-	viperJson := viper.New()
-	viperJson.SetConfigType("json")
-	viperJson.Set("insecure-registries", []string{fmt.Sprintf("%s:%d", reg, dockerRegistryPort)})
+	conf := map[string]interface{}{}
+	if data, err := os.ReadFile(file); err == nil {
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&conf); err != nil {
+			return false, errors.Wrapf(err, "failed to parse %s", file)
+		}
+		if conf == nil {
+			conf = map[string]interface{}{}
+		}
+	} else if !os.IsNotExist(err) {
+		return false, errors.WithStack(err)
+	}
 
-	return viperJson.WriteConfigAs(dockerConfigFile)
+	regs, _ := conf["insecure-registries"].([]interface{})
+	for _, r := range regs {
+		if r == entry {
+			return false, nil
+		}
+	}
+	conf["insecure-registries"] = append(regs, entry)
+
+	out, err := json.MarshalIndent(conf, "", "  ")
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	if err := os.MkdirAll(path.Dir(file), 0755); err != nil {
+		return false, errors.WithStack(err)
+	}
+	if err := os.WriteFile(file, out, 0644); err != nil {
+		return false, errors.WithStack(err)
+	}
+
+	return true, nil
 }
 
 func commitDocker() error {
@@ -100,13 +134,18 @@ func commitDocker() error {
 		return nil
 	}
 
-	// Generate docker config if not existed
-	if _, err := os.Stat(dockerConfigFile); err == nil {
+	// Generate docker config if not existed, or add the registry to a site's own
+	_, statErr := os.Stat(dockerConfigFile)
+	updated, err := dockerEnsureConf(dockerConfigFile, cubeSettings.GetController())
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	switch {
+	case !updated:
 		zap.L().Debug("Docker config existed")
-	} else {
-		if err := dockerWriteConf(cubeSettings.GetController()); err != nil {
-			return errors.WithStack(err)
-		}
+	case statErr == nil:
+		zap.L().Info("Docker config updated with the registry")
+	default:
 		zap.L().Info("Docker config generated")
 	}
 
@@ -115,6 +154,13 @@ func commitDocker() error {
 		return errors.Wrap(err, outErr)
 	}
 	zap.L().Info("Docker daemon started")
+
+	// A daemon already running keeps its old insecure-registries until it reloads them
+	if updated {
+		if _, outErr, err := util.ExecCmd("systemctl", "reload", "docker"); err != nil {
+			return errors.Wrap(err, outErr)
+		}
+	}
 
 	// Run private registry if it's control node
 	if cubeSettings.IsRole(util.ROLE_CONTROL) {
