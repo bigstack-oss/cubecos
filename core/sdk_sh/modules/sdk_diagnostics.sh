@@ -208,28 +208,30 @@ _diagSrvShiftHost()
             nova live-migration $server_id $to_host
         done
     done
+    local rc=0
     for I in $(seq 0 $((num_host - 1))) ; do
         local from_host="${host_array[$I]}"
         local to_host="${host_array[$(( (I + 1) % $num_host ))]}"
         for server_id in $(echo $server_list_json | jq -r ".[] | select(.Host==\"$from_host\") | .ID") ; do
             server_name=$(echo $server_list_json | jq -r ".[] | select(.ID==\"$server_id\") | .Name")
-            for i in {1..10} ; do
-                new_host=$($OPENSTACK server list --project $project_name --long -f json | jq -r ".[] | select(.ID==\"$server_id\") | .Host")
-                if [ "$new_host" = "$from_host" ] ; then
-                    continue
-                else
-                    break
-                fi
+            # MIGRATING lasts until nova lands the instance or rolls it back
+            local deadline=$((SECONDS + 300))
+            while : ; do
+                server_show_json=$($OPENSTACK server show $server_id -f json)
+                [ "$(echo $server_show_json | jq -r .status)" = "MIGRATING" -a $SECONDS -lt $deadline ] || break
+                sleep 5
             done
-            new_host=$($OPENSTACK server list --project $project_name --long -f json | jq -r ".[] | select(.ID==\"$server_id\") | .Host")
+            new_host=$(echo $server_show_json | jq -r '."OS-EXT-SRV-ATTR:host"')
             if [ "$new_host" = "$to_host" ] ; then
                 printf "%s: %s (%s)\n" "Migrated VM from $from_host to $to_host" $server_name $server_id
             else
-                printf "%s: %s (%s)\n" "Failed to migrate VM from $from_host to $to_host" $server_name $server_id && break
+                printf "%s: %s (%s)\n" "Failed to migrate VM from $from_host to $to_host" $server_name $server_id
+                rc=1
             fi
         done
     done
     sleep 10 # allow instances to finish booting after migration
+    return $rc
 }
 
 _diagFlvrCreate()
@@ -273,7 +275,7 @@ diagnostics_network()
     _diagSrvCreate Cirros $network_ext_name ephemeral-vms
     _diagnostics_instance_dns $domain_name $name_server || rc=1
     if [ $(cubectl node list -r compute | wc -l) -gt 1 ] ; then
-        _diagSrvShiftHost
+        _diagSrvShiftHost || rc=1
         _diagnostics_instance_dns $domain_name $name_server || rc=1
     fi
     _diagSrvDelete
@@ -281,7 +283,7 @@ diagnostics_network()
     _diagSrvCreate Cirros $network_int_name
     _diagnostics_instance_dns $domain_name $name_server || rc=1
     if [ $(cubectl node list -r compute | wc -l) -gt 1 ] ; then
-        _diagSrvShiftHost
+        _diagSrvShiftHost || rc=1
         _diagnostics_instance_dns $domain_name $name_server || rc=1
     fi
     return $rc
