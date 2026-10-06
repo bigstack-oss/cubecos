@@ -399,18 +399,21 @@ diagnostics_cirros_exec()
     local pass="gocubsgo"
     virsh list | grep -q $ins || return 0
 
+    # A guest created moments ago may still be booting: cirros 0.4.0 reaches its login prompt
+    # at ~40s of uptime when its boot-time gateway ping fails and it dumps network debug first.
+    # Wait for the prompt quietly, so the boot log stays out of the result block.
     expect -c "
 set timeout 10
 log_user 0
 spawn virsh console $ins
-expect_before timeout { exit 1 }
+expect_before timeout { puts \"failed to run cirros exec in instance $ins\" ; exit 1 }
 match_max 100000
 
 expect \"*Connected to domain\"
 send -- \"
 \"
-log_user 1
 expect {
+    -timeout 120
     -re \".*login: $\" {
         send -- \"$user\n\"
         expect {
@@ -421,8 +424,8 @@ expect {
 
     }
     \"*$ \" { send -- \"\n\" }
-    timeout { puts \"failed to run cirros exec in instance $ins\" ; exit 1 }
 }
+log_user 1
 expect \"*$ \"
 set timeout 600
 send -- \"$cmd
