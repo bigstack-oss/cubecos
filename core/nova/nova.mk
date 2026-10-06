@@ -40,6 +40,48 @@ ROOTFS_DNF += $(LIBVIRT_LOCKED_RPMS) dosfstools python3-libvirt ksmtuned virt-v2
 # handled elsewhere: iptables
 ROOTFS_DNF_NOARCH += iptables-services novnc
 
+# virtio-win is the driver set virt-v2v injects into a Windows guest. Nothing here
+# names it: it comes in as a weak dependency of virt-v2v, and appstream's only build,
+# 1.9.15-4.el9, carries viostor/netkvm for 2k8R2 to 2k19 and w7 to w10 -- no 2k22, 2k25
+# or w11. virt-v2v 2.7.1 matches drivers by the guest's osinfo id (a "2k25" path element
+# for win2k25), finds none for those guests and converts them with no virtio drivers at
+# all ("there are no virtio drivers available for this version of Windows"), so the
+# image cannot see its own disk on any virtio bus (#560).
+#
+# 0.1.302-1 from the upstream stable repo has all three. virt-v2v still pulls 1.9.15 in
+# beside it, and neither build has an epoch, so rpmdev-vercmp ranks 1.9.15 above
+# 0.1.302 and installdnf's duplicate pass would delete 0.1.302 -- LOCKED_DNF is what
+# makes it delete 1.9.15 instead (removed_rpms.txt says which one went). The fedorapeople
+# stable repo keeps every release it has published, so the URL does not move.
+#
+# It cannot ship as packaged, though. Every release with 2k25 drivers (0.1.262 on) also
+# carries an smbus.inf for 2k22/2k25/w11 whose signature Windows Server rejects ("a
+# certificate chain processed, but terminated in a root certificate which is not
+# trusted"). virt-v2v 2.7.1-19, the build shipped here, installs the drivers it copied
+# from a firstboot script that exits 249 on any failure, and firstboot reboots either
+# way, so the guest reboots forever and never gets as far as installing qemu-ga.
+# Without smbus the firstboot scripts finish; on 1cc a win2k25 installed on SATA
+# converted, booted and answered guest-ping six minutes in (#560).
+#
+# smbus is inside virtio-win.iso too, and virt-v2v reads the ISO whenever it exists, so
+# the ISO goes as well and virt-v2v falls back to /usr/share/virtio-win itself. That
+# also drops the 837 MiB ISO: the rootfs grows by ~130 MB over 1.9.15 instead of
+# ~960 MiB. /usr/share stays in rootfs_0.cgz.
+VIRTIO_WIN_NVR := virtio-win-0.1.302-1
+ROOTFS_DNF_DL_FROM += https://fedorapeople.org/groups/virt/virtio-win/repo/stable/$(VIRTIO_WIN_NVR).noarch.rpm
+LOCKED_DNF += $(VIRTIO_WIN_NVR)
+
+# Fail the build rather than ship either way back into #560: 2k25 viostor gone (a
+# release that reorganised the tree), or an smbus file or ISO still in place
+rootfs_install::
+	$(Q)rm -f $(ROOTDIR)/usr/share/virtio-win/*.iso
+	$(Q)rm -rf $(ROOTDIR)/usr/share/virtio-win/drivers/by-driver/smbus
+	$(Q)rm -f $(ROOTDIR)/usr/share/virtio-win/drivers/by-os/*/*/smbus.*
+	$(Q)[ -e $(ROOTDIR)/usr/share/virtio-win/drivers/by-driver/viostor/2k25/amd64/viostor.inf ] || \
+		{ echo "virtio-win: no 2k25 viostor in $(ROOTDIR)/usr/share/virtio-win" ; exit 1 ; }
+	$(Q)[ -z "$$(find $(ROOTDIR)/usr/share/virtio-win -iname '*smbus*' -o -iname '*.iso')" ] || \
+		{ echo "virtio-win: smbus or an ISO left in $(ROOTDIR)/usr/share/virtio-win" ; exit 1 ; }
+
 NOVA_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages/nova
 NOVA_PATCHDIR := $(COREDIR)/nova/$(OPENSTACK_RELEASE)_patch
 
