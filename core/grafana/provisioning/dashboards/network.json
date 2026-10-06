@@ -1798,6 +1798,277 @@
           "mode": "multi"
         }
       }
+    },
+    {
+      "id": 43,
+      "type": "piechart",
+      "title": "Received by protocol",
+      "description": "Bytes the selected tenants' VMs received over the time range, by L4 protocol. Needs a lachesis that reports protocol classes; older agents show No data. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 39
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "label_replace(label_replace(label_replace(label_replace(sum by (proto) (increase(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"rx\",proto!=\"unknown\"}[$__range])), \"proto\", \"TCP\", \"proto\", \"tcp\"), \"proto\", \"UDP\", \"proto\", \"udp\"), \"proto\", \"ICMP\", \"proto\", \"icmp\"), \"proto\", \"Other\", \"proto\", \"other\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{proto}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 44,
+      "type": "piechart",
+      "title": "Sent by protocol",
+      "description": "Bytes the selected tenants' VMs sent over the time range, by L4 protocol. Needs a lachesis that reports protocol classes; older agents show No data. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 39
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "label_replace(label_replace(label_replace(label_replace(sum by (proto) (increase(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",direction=\"tx\",proto!=\"unknown\"}[$__range])), \"proto\", \"TCP\", \"proto\", \"tcp\"), \"proto\", \"UDP\", \"proto\", \"udp\"), \"proto\", \"ICMP\", \"proto\", \"icmp\"), \"proto\", \"Other\", \"proto\", \"other\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{proto}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 45,
+      "type": "timeseries",
+      "title": "Layer 4 - TCP",
+      "description": "Bits per second of TCP traffic the selected tenants' VMs sent and received, per port IP. The 10 busiest ports at each point in time. Needs a lachesis that reports protocol classes; older agents show No data. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk(10, 8 * (label_replace(label_replace((label_replace(label_replace(((sum by (port_id, server_id, direction) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"tcp\"}[$__rate_interval]))) * on(port_id) group_left(ips, mac) topk by (port_id) (1, max by (port_id, ips, mac) (lachesis_port_info))) or ((sum by (port_id, server_id, direction) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"tcp\"}[$__rate_interval]))) unless on(port_id) lachesis_port_info), \"port\", \"$1\", \"port_id\", \"(.*)\"), \"port\", \"$1\", \"ips\", \"(.+)\") * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace(label_replace(label_replace(((sum by (port_id, server_id, direction) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"tcp\"}[$__rate_interval]))) * on(port_id) group_left(ips, mac) topk by (port_id) (1, max by (port_id, ips, mac) (lachesis_port_info))) or ((sum by (port_id, server_id, direction) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"tcp\"}[$__rate_interval]))) unless on(port_id) lachesis_port_info), \"port\", \"$1\", \"port_id\", \"(.*)\"), \"port\", \"$1\", \"ips\", \"(.+)\") unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\"), \"direction\", \"Sent\", \"direction\", \"tx\"), \"direction\", \"Received\", \"direction\", \"rx\")))",
+          "refId": "A",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{port}} ({{name}}) {{direction}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 46,
+      "type": "timeseries",
+      "title": "Layer 4 - UDP",
+      "description": "Bits per second of UDP traffic the selected tenants' VMs sent and received, per port IP. The 10 busiest ports at each point in time. Needs a lachesis that reports protocol classes; older agents show No data. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 47
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk(10, 8 * (label_replace(label_replace((label_replace(label_replace(((sum by (port_id, server_id, direction) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"udp\"}[$__rate_interval]))) * on(port_id) group_left(ips, mac) topk by (port_id) (1, max by (port_id, ips, mac) (lachesis_port_info))) or ((sum by (port_id, server_id, direction) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"udp\"}[$__rate_interval]))) unless on(port_id) lachesis_port_info), \"port\", \"$1\", \"port_id\", \"(.*)\"), \"port\", \"$1\", \"ips\", \"(.+)\") * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace(label_replace(label_replace(((sum by (port_id, server_id, direction) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"udp\"}[$__rate_interval]))) * on(port_id) group_left(ips, mac) topk by (port_id) (1, max by (port_id, ips, mac) (lachesis_port_info))) or ((sum by (port_id, server_id, direction) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"udp\"}[$__rate_interval]))) unless on(port_id) lachesis_port_info), \"port\", \"$1\", \"port_id\", \"(.*)\"), \"port\", \"$1\", \"ips\", \"(.+)\") unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\"), \"direction\", \"Sent\", \"direction\", \"tx\"), \"direction\", \"Received\", \"direction\", \"rx\")))",
+          "refId": "A",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{port}} ({{name}}) {{direction}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 47,
+      "type": "timeseries",
+      "title": "Layer 4 - Others",
+      "description": "Bits per second of ICMP and other traffic the selected tenants' VMs sent and received, per port IP. The 10 busiest ports at each point in time. Needs a lachesis that reports protocol classes; older agents show No data. Source: lachesis (eBPF on compute nodes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 47
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "expr": "topk(10, 8 * (label_replace(label_replace(label_replace(label_replace(label_replace(label_replace((label_replace(label_replace(((sum by (port_id, server_id, direction, proto) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"icmp|other\"}[$__rate_interval]))) * on(port_id) group_left(ips, mac) topk by (port_id) (1, max by (port_id, ips, mac) (lachesis_port_info))) or ((sum by (port_id, server_id, direction, proto) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"icmp|other\"}[$__rate_interval]))) unless on(port_id) lachesis_port_info), \"port\", \"$1\", \"port_id\", \"(.*)\"), \"port\", \"$1\", \"ips\", \"(.+)\") * on(server_id) group_left(name) max by (server_id, name) (lachesis_server_info)) or label_replace(label_replace(label_replace(((sum by (port_id, server_id, direction, proto) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"icmp|other\"}[$__rate_interval]))) * on(port_id) group_left(ips, mac) topk by (port_id) (1, max by (port_id, ips, mac) (lachesis_port_info))) or ((sum by (port_id, server_id, direction, proto) (rate(lachesis_port_proto_bytes_total{tenant_id=~\"$tenant\",proto=~\"icmp|other\"}[$__rate_interval]))) unless on(port_id) lachesis_port_info), \"port\", \"$1\", \"port_id\", \"(.*)\"), \"port\", \"$1\", \"ips\", \"(.+)\") unless on(server_id) lachesis_server_info, \"name\", \"$1\", \"server_id\", \"(.*)\"), \"direction\", \"Sent\", \"direction\", \"tx\"), \"direction\", \"Received\", \"direction\", \"rx\"), \"proto\", \"TCP\", \"proto\", \"tcp\"), \"proto\", \"UDP\", \"proto\", \"udp\"), \"proto\", \"ICMP\", \"proto\", \"icmp\"), \"proto\", \"Other\", \"proto\", \"other\")))",
+          "refId": "A",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{port}} ({{name}}) {{direction}} · {{proto}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     }
   ],
   "refresh": "5m",
