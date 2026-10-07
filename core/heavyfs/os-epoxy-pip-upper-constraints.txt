@@ -164,8 +164,8 @@ openstack-doc-tools===4.0.0
 oslo.messaging===16.1.2
 jira===3.8.0
 extras===1.0.0
-PyJWT===2.10.1
-typing_extensions===4.12.2
+PyJWT===2.15.1
+typing_extensions===4.16.0
 XStatic-lodash===4.16.4.2
 zVMCloudConnector===1.6.3
 paramiko===3.5.1
@@ -189,7 +189,7 @@ PyYAML===6.0.2
 beautifulsoup4===4.13.3
 ovs===3.5.0
 cryptography===43.0.3
-httpcore===1.0.7
+httpcore===1.0.9
 URLObject===2.4.3
 psycopg2-binary===2.9.10
 glance_store===4.9.1
@@ -214,7 +214,7 @@ exceptiongroup===1.2.2;python_version=='3.9'
 os-client-config===2.1.0
 XStatic-Angular-Gettext===2.4.1.0
 Deprecated===1.2.18
-h11===0.14.0
+h11===0.16.0
 Pygments===2.19.1
 XStatic-Hogan===2.0.0.3
 XStatic-objectpath===1.2.1.0
@@ -437,7 +437,7 @@ botocore===1.36.26
 xmltodict===0.14.2
 pyasn1===0.6.0
 oslo.rootwrap===7.5.1
-Django===4.2.19
+Django===4.2.30
 pexpect===4.9.0
 contextvars===2.4
 cmd2===2.5.11
@@ -532,7 +532,7 @@ heat-translator===3.2.0
 python-magnumclient===4.8.1
 docker===7.1.0
 storops===1.2.11
-anyio===4.8.0
+anyio===4.15.1
 aiosignal===1.3.2
 XStatic-Angular-lrdragndrop===1.0.2.6
 ovsdbapp===2.11.0
