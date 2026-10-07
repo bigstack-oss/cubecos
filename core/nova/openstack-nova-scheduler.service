@@ -8,6 +8,17 @@ NotifyAccess=all
 Restart=always
 User=nova
 ExecStart=/usr/bin/nova-scheduler --config-file /etc/nova/nova.conf --config-dir /etc/nova/nova.d
+# Signal only the master on stop, as openstack-nova-api.service does.
+#
+# With the default control-group mode systemd sends SIGTERM to every worker, the
+# worker's handler resets its handlers to SIG_DFL and starts a graceful stop, and the
+# master's own SIGTERM then kills it before that stop ends: on cn13 (2026-10-08) all 90
+# nova-scheduler workers over 30 stops were "killed by signal 15", so none finished its
+# graceful stop, and any RPC one was handling was cut off. The same double signal can
+# also strand the log lock the master shares with its workers (see
+# openstack-nova-api.service), though no stop hung here. Under mixed all 90 "exited with
+# status 0", each stop taking 0.4-4.3s.
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target
