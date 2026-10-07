@@ -26,6 +26,14 @@ TOP_WORKDIR   := $(shell if [ -e /home/jenkins/workspace ]; then echo /home ; el
 WEAK_DEP      ?= 0
 IPT_LEGACY    ?= 0
 PROJECT       ?= centos9-jail
+# Go module and build caches and pip's cache, kept on the host under JAIL_CACHE/<PROJECT> so they
+# survive a jail rebuild and stay off the disk holding docker's data. Inside the container they sat
+# in its writable layer under /var/lib/docker: 13 to 19 GiB per jail on bldsrv-200-13, fetched
+# again after every rebuild. One directory per PROJECT, so jails of different jobs never share a
+# cache. Set only on a Jenkins build host, the same test TOP_DIR uses; elsewhere the caches stay in
+# the container. The image itself puts nothing in these paths but pip's own download cache.
+JAIL_CACHE    ?= $(shell if [ -e /home/jenkins/workspace ]; then echo /home/jenkins/cache ; fi)
+JAIL_CACHE_FLG = $(if $(JAIL_CACHE),-v $(JAIL_CACHE)/$${PROJECT:-$@}/go:/root/go -v $(JAIL_CACHE)/$${PROJECT:-$@}/go-build:/root/.cache/go-build -v $(JAIL_CACHE)/$${PROJECT:-$@}/pip:/root/.cache/pip,)
 
 include hex/make/devtools_definitions.mk
 
@@ -42,7 +50,7 @@ centos9-jail: $(TOP_JAILDIR)/jail.ubi9.dockerfile ubi9-base
 	$(Q)sudo rm -rf $(TOP_SRCDIR)/../$${PROJECT:-$(@F)}
 	$(Q)cp $(TOP_SRCDIR)/core/horizon/theme/static/images/cube-icon.png $(TOP_JAILDIR)/vnc/
 	$(Q)DOCKER_BUILDKIT=1 $(DOCKER_BIN) build $(DOCKER_BLD_FLG) --progress=plain --build-arg BLDDIR=$${BLDDIR:-/root/workspace/$${PROJECT:-$(@F)}} --build-arg PASSPHRASE=$(PASSPHRASE) --build-arg PRIVATE_PEM=$(PRIVATE_PEM) --build-arg PUBLIC_PEM=$(PUBLIC_PEM) --build-arg DIST=$(subst -jail,,$@) --build-arg WEAK_DEP=$(WEAK_DEP) --build-arg IPT_LEGACY=$(IPT_LEGACY) -t $(DOCKER_REG)/$(@F) -f $< $(TOP_JAILDIR) # --target tier1
-	$(Q)$(DOCKER_BIN) run -P $(DOCKER_FLG) -h $@ --name $${PROJECT:-$@} -e PROJECT=$${PROJECT:-$@} -v $(TOP_DIR):$(TOP_WORKDIR) -v /usr/lib/modules/$$(uname -r):/usr/lib/modules/$$(uname -r) $(DOCKER_GITCFG_FLG) $(DOCKER_EXTRA) $(DOCKER_REG)/$@
+	$(Q)$(DOCKER_BIN) run -P $(DOCKER_FLG) -h $@ --name $${PROJECT:-$@} -e PROJECT=$${PROJECT:-$@} -v $(TOP_DIR):$(TOP_WORKDIR) -v /usr/lib/modules/$$(uname -r):/usr/lib/modules/$$(uname -r) $(JAIL_CACHE_FLG) $(DOCKER_GITCFG_FLG) $(DOCKER_EXTRA) $(DOCKER_REG)/$@
 	$(Q)$(DOCKER_BIN) exec $${PROJECT:-$(filter centos%-jail,$(MAKECMDGOALS))} bash -c "git config --global --add safe.directory \$${PWD%/*}/cubecos"
 	$(Q)rm -f $(TOP_JAILDIR)/vnc/cube-icon.png
 
