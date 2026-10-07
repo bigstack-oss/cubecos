@@ -3239,31 +3239,28 @@ os_device_profile_create()
             uuid=$(timeout $SRVTO openstack accelerator device list -f value -c uuid -c vendor -c std_board_info | grep $d | head -1 | awk '{print $1}')
             model=$(timeout $SRVTO openstack accelerator device show -f json $uuid | jq -r .model)
             profile_name=$(os_device_profile_name_for "$model" "$units") || continue
-            if ! timeout $SRVTO openstack accelerator device profile list -f value -c name | grep -q "$profile_name" ; then
-                echo "Creating device profile for $model (resource unit: $units)"
-                profile=$(os_device_profile_groups_for "$pid" "$units") || continue
-
-                timeout $SRVTO openstack accelerator device profile create $profile_name "$profile"
+            if timeout $SRVTO openstack accelerator device profile list -f value -c name | grep -qx "$profile_name" ; then
+                os_device_profile_current "$profile_name" "$pid" "$units"
+                [ $? -eq 1 ] || continue
+                echo "Replacing device profile $profile_name: it requires traits cyborg no longer reports"
+                os_device_profile_remove "$profile_name" || continue
             fi
+            echo "Creating device profile for $model (resource unit: $units)"
+            profile=$(os_device_profile_groups_for "$pid" "$units") || continue
+
+            timeout $SRVTO openstack accelerator device profile create $profile_name "$profile"
         fi
     done
     IFS="$OLDIFS"
 }
 
-# Names of every Cyborg device profile that currently exists, one per line.
-#
-# Fails loudly rather than reporting "none": an empty answer and an unreachable
-# Cyborg are indistinguishable to the caller otherwise, and the caller uses this
-# to decide whether a profile still needs creating (#1247 is the same mistake in
-# gpu_vgpu_profile_list).
 # The `groups` document of a pgpu device profile: <units> identical groups,
-# each asking for one PGPU carrying this card's vendor and product traits.
+# each asking for one PGPU carrying this card's trait.
 #
-# Single source of the trait names on purpose. They are wrong on Caracal --
-# cyborg there emits CUSTOM_NVIDIA_<PID> as one trait instead of the pair below
-# (#1478) -- and when that is fixed this is the only place that has to change.
-# Note os_nova_pgpu_host_list_by_instance_id parses these back out by field
-# ordinal, so changing how many traits a group has breaks it silently.
+# Single source of the trait name on purpose. cyborg's nvidia driver reports a
+# pgpu as one CUSTOM_NVIDIA_<PID> since Antelope (drivers/gpu/nvidia/sysinfo.py
+# _get_traits); Yoga's CUSTOM_GPU_NVIDIA + CUSTOM_GPU_PRODUCT_ID_<PID> pair is
+# gone, and a profile still asking for it never schedules (#1478).
 os_device_profile_groups_for()
 {
     local pid=$(echo "$1" | tr '[:lower:]' '[:upper:]')
@@ -3274,10 +3271,69 @@ os_device_profile_groups_for()
 
     for i in $(seq $units) ; do
         [ "$i" -gt "1" ] && groups="${groups},"
-        groups="${groups}{\"resources:PGPU\": 1, \"trait:CUSTOM_GPU_PRODUCT_ID_$pid\": \"required\", \"trait:CUSTOM_GPU_NVIDIA\": \"required\"}"
+        groups="${groups}{\"resources:PGPU\": 1, \"trait:CUSTOM_NVIDIA_$pid\": \"required\"}"
     done
 
     echo "${groups}]"
+}
+
+# Whether the existing device profile $1 asks for what os_device_profile_groups_for
+# builds for product id $2 and $3 units: the same keys, group for group.
+#
+# A profile is reused by name, so one created against an older cyborg keeps
+# asking for traits nothing reports any more (#1478) unless someone checks.
+# Returns 0 if current, 1 if stale, 2 if Cyborg cannot be asked or has no
+# profile of that name -- a caller must not replace a profile on a 2.
+os_device_profile_current()
+{
+    local name=$1 pid=$2 units=${3:-1}
+    local out rc have want
+
+    out=$($OPENSTACK accelerator device profile list -f json 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ] ; then
+        log_error "os_device_profile_current: openstack accelerator device profile list exited $rc: ${out//$'\n'/ }"
+        return 2
+    fi
+
+    have=$(printf '%s' "$out" | jq -c --arg n "$name" '[.[] | select(.name == $n) | .groups[] | keys]' 2>/dev/null)
+    if [ -z "$have" ] || [ "$have" = "[]" ] ; then
+        log_error "os_device_profile_current: no device profile named $name"
+        return 2
+    fi
+
+    want=$(os_device_profile_groups_for "$pid" "$units" | jq -c '[.[] | keys]') || return 2
+    [ "$have" = "$want" ]
+}
+
+# Delete the device profile named $1.
+#
+# By uuid, the only form `openstack accelerator device profile delete` takes.
+# Cyborg refuses while an ARQ still references the profile (foreign key on
+# extended_accelerator_requests), so a profile in use by an instance survives.
+os_device_profile_remove()
+{
+    local name=$1 uuid out rc
+
+    out=$($OPENSTACK accelerator device profile list -f json 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ] ; then
+        log_error "os_device_profile_remove: openstack accelerator device profile list exited $rc: ${out//$'\n'/ }"
+        return $rc
+    fi
+
+    uuid=$(printf '%s' "$out" | jq -r --arg n "$name" '.[] | select(.name == $n) | .uuid' 2>/dev/null)
+    if [ -z "$uuid" ] ; then
+        log_error "os_device_profile_remove: no device profile named $name"
+        return 1
+    fi
+
+    out=$($OPENSTACK accelerator device profile delete "$uuid" 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ] ; then
+        log_error "os_device_profile_remove: deleting device profile $name ($uuid) exited $rc: ${out//$'\n'/ }"
+        return $rc
+    fi
 }
 
 # Create one device profile from values the caller already has.
@@ -3310,6 +3366,12 @@ os_device_profile_create_with()
     echo "$name"
 }
 
+# Names of every Cyborg device profile that currently exists, one per line.
+#
+# Fails loudly rather than reporting "none": an empty answer and an unreachable
+# Cyborg are indistinguishable to the caller otherwise, and the caller uses this
+# to decide whether a profile still needs creating (#1247 is the same mistake in
+# gpu_vgpu_profile_list).
 os_device_profile_names()
 {
     local out rc
@@ -3351,25 +3413,32 @@ os_nova_pgpu_host_list_by_instance_id()
         return 0
     fi
 
-    local orig_host=$($OPENSTACK server show $instance_id -c hypervisor_hostname -f value)
+    local orig_host=$($OPENSTACK server show $instance_id -c OS-EXT-SRV-ATTR:hypervisor_hostname -f value)
     local arq_state=$(echo "$arqs_state" | head -1)
     local gcount=$(echo "$arqs_state" | wc -l)
     local arq=$(echo $arq_state | awk '{print $1}')
     local device_profile=$(echo $arq_state | awk '{print $2}')
 
-    # e.g. [{'resources:PGPU': '1', 'trait:CUSTOM_GPU_PRODUCT_ID_2531': 'required', 'trait:CUSTOM_GPU_NVIDIA': 'required'}]
-    local dp_attrs=$($OPENSTACK accelerator device profile list -f value -c name -c groups | grep $device_profile | awk '{ s = "" ; for (i = 2 ; i <= NF ; i++) s = s $i " " ; print s }')
-    # e.g. 1
-    local gnum=$(echo $dp_attrs | awk -F"'|:" '{print $6}')
-    # e.g. CUSTOM_GPU_PRODUCT_ID_2531
-    local gid=$(echo $dp_attrs | awk -F"'|:" '{print $9}')
-    # e.g. CUSTOM_GPU_NVIDIA
-    local gvendor=$(echo $dp_attrs | awk -F"'|:" '{print $15}')
+    # The traits the profile requires, e.g. CUSTOM_NVIDIA_2531. Read by key, not
+    # by position: how many there are depends on cyborg's release (#1478).
+    local traits=$($OPENSTACK accelerator device profile list -f json \
+        | jq -r --arg n "$device_profile" '.[] | select(.name == $n) | .groups[0] // {}
+            | to_entries[] | select(.value == "required" and (.key | startswith("trait:")))
+            | .key | ltrimstr("trait:")' | tr '\n' ' ')
+    if [ -z "$traits" ] ; then
+        log_error "os_nova_pgpu_host_list_by_instance_id: device profile $device_profile requires no trait"
+        return 1
+    fi
 
     declare -A hosts
     declare -A rpids
 
-    for rp in $($OPENSTACK allocation candidate list --resource PGPU=1 -f value -c "resource provider" -c traits | grep "$gvendor.*$gid" | awk '{print $1}' | sort) ; do
+    # e.g. 27497500-f2d7-3d91-be6f-49b7de5a3075 OWNER_CYBORG,CUSTOM_NVIDIA_2BB5
+    for rp in $($OPENSTACK allocation candidate list --resource PGPU=1 -f value -c "resource provider" -c traits \
+            | awk -v want="$traits" '{
+                delete have ; split($2, t, ",") ; for (i in t) have[t[i]] = 1
+                n = split(want, w, " ") ; for (i = 1 ; i <= n ; i++) if (!(w[i] in have)) next
+                print $1 }' | sort) ; do
         local host=$(/usr/bin/mariadb -u root -D placement -e "select uuid,name from resource_providers where uuid='$rp'" | grep $rp | awk '{print $2}' | awk -F"_" '{print $1}')
         (( hosts[$host]++ ))
         if [ "${hosts[${host}]}" -le "$gcount" ] ; then

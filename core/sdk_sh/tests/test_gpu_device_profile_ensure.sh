@@ -48,6 +48,13 @@ gpu_sysfs_pci_addr() { printf '%s' "no devices were found"; }
 MOCK_NAMES="" MOCK_NAMES_RC=0
 os_device_profile_names() { [ "$MOCK_NAMES_RC" = 0 ] || return "$MOCK_NAMES_RC"; printf '%s' "$MOCK_NAMES"; }
 
+# 0 current, 1 stale (asks for Yoga's traits, #1478), 2 cannot tell.
+MOCK_CURRENT_RC=0
+os_device_profile_current() { printf 'current|%s|%s\n' "$1" "$2" >> "$CREATED"; return "$MOCK_CURRENT_RC"; }
+
+MOCK_REMOVE_RC=0
+os_device_profile_remove() { printf 'remove|%s\n' "$1" >> "$CREATED"; return "$MOCK_REMOVE_RC"; }
+
 CREATED="$TMP/created"; : > "$CREATED"
 MOCK_CREATE_RC=0
 os_device_profile_create_with() {
@@ -69,10 +76,29 @@ VGPU='{"id":"GPU-c","name":"NVIDIA RTX A2000","type":"sriovVgpu","pciAddress":"0
 ck "$(gpu_device_profile_ensure GPU-a)" "rtx_a2000_1" "missing profile -> created"
 ck "$(cat "$CREATED")" "rtx_a2000_1|2531|1" "created with the sysfs product id"
 
-# --- 2. idempotent: already there -> no second create -------------------------
+# --- 2. idempotent: already there and current -> no second create ------------
 : > "$CREATED"; MOCK_NAMES="rtx_a2000_1"
 ck "$(gpu_device_profile_ensure GPU-a)" "rtx_a2000_1" "existing profile -> reported"
-ck "$(wc -l < "$CREATED" | tr -d ' ')" "0" "existing profile -> no create call"
+ck "$(cat "$CREATED")" "current|rtx_a2000_1|2531" "existing profile -> checked against the sysfs product id, nothing else"
+
+# --- 2b. already there but stale (#1478) -> replaced under the same name ------
+# A flavor names its profile, so the replacement has to keep the name.
+: > "$CREATED"; MOCK_CURRENT_RC=1
+ck "$(gpu_device_profile_ensure GPU-a)" "rtx_a2000_1" "stale profile -> reported"
+ck "$(cat "$CREATED" | tr '\n' ' ')" "current|rtx_a2000_1|2531 remove|rtx_a2000_1 rtx_a2000_1|2531|1 " \
+   "stale profile -> removed, then created again"
+
+# Cyborg refuses the delete while an instance's ARQ still uses the profile.
+: > "$CREATED"; MOCK_REMOVE_RC=1
+gpu_device_profile_ensure GPU-a >/dev/null 2>&1;   ck "$?" "1" "stale profile in use -> non-zero"
+ck "$(grep -c '|1$' "$CREATED")" "0" "stale profile in use -> no create call"
+MOCK_REMOVE_RC=0
+
+# Cannot tell whether it is stale -> leave it alone.
+: > "$CREATED"; MOCK_CURRENT_RC=2
+gpu_device_profile_ensure GPU-a >/dev/null 2>&1;   ck "$?" "1" "staleness unknown -> non-zero"
+ck "$(grep -c '^remove' "$CREATED")" "0" "staleness unknown -> no remove call"
+MOCK_CURRENT_RC=0
 
 # --- 3. a non-pgpu card is a no-op, not an error ------------------------------
 : > "$CREATED"; echo "[$VGPU]" > "$GPU_CONFIG_FILE_PATH"; MOCK_NAMES=""
@@ -104,12 +130,17 @@ gpu_device_profile_ensure GPU-a >/dev/null 2>&1;   ck "$?" "1" "create failure p
 MOCK_CREATE_RC=0
 
 # --- 5. the groups document the profile is created with -----------------------
+# The trait is what cyborg's nvidia driver puts on a pgpu's resource provider
+# since Antelope (drivers/gpu/nvidia/sysinfo.py _get_traits): one
+# CUSTOM_NVIDIA_<PID>. Yoga's CUSTOM_GPU_NVIDIA + CUSTOM_GPU_PRODUCT_ID_<PID>
+# pair is gone, and a profile asking for it never schedules (#1478).
 ck "$(os_device_profile_groups_for 2531 1)" \
-   '[{"resources:PGPU": 1, "trait:CUSTOM_GPU_PRODUCT_ID_2531": "required", "trait:CUSTOM_GPU_NVIDIA": "required"}]' \
+   '[{"resources:PGPU": 1, "trait:CUSTOM_NVIDIA_2531": "required"}]' \
    "groups: one unit"
 ck "$(os_device_profile_groups_for 2bb5 2 | jq 'length')" "2" "groups: units=2 gives two groups"
-ck "$(os_device_profile_groups_for 2bb5 1 | jq -r '.[0]["trait:CUSTOM_GPU_PRODUCT_ID_2BB5"]')" \
+ck "$(os_device_profile_groups_for 2bb5 1 | jq -r '.[0]["trait:CUSTOM_NVIDIA_2BB5"]')" \
    "required" "groups: product id is upper-cased"
+ck "$(os_device_profile_groups_for 2bb5 1 | grep -c CUSTOM_GPU_)" "0" "groups: no Yoga trait names"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]

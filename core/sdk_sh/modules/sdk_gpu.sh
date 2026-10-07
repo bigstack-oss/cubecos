@@ -1313,7 +1313,8 @@ gpu_device_profile_get()
     echo "$map" | jq -r --arg id "$gpu_id" '.[$id] // ""'
 }
 
-# Make sure a pgpu card has its Cyborg device profile, creating it if missing.
+# Make sure a pgpu card has its Cyborg device profile, creating it if missing
+# and replacing it if it requires traits cyborg no longer reports (#1478).
 # Prints the profile name. Idempotent -- safe to call on every carve.
 #
 # Deliberately asks Cyborg nothing about the card itself. gpu_resource_set calls
@@ -1360,13 +1361,6 @@ gpu_device_profile_ensure()
         return 1
     fi
 
-    local existing
-    existing=$(os_device_profile_names) || return 1
-    if printf '%s\n' "$existing" | grep -qx "$profile_name" ; then
-        echo "$profile_name"
-        return 0
-    fi
-
     # Address straight out of config.json, not gpu_sysfs_pci_addr. That helper
     # asks nvidia-smi first and only falls back to config.json when the answer
     # is empty -- but nvidia-smi prints "No devices were found" on *stdout*
@@ -1391,6 +1385,17 @@ gpu_device_profile_ensure()
     if [ -z "$pid" ] ; then
         log_error "gpu_device_profile_ensure: cannot read the product id of GPU $gpu_id at $addr"
         return 1
+    fi
+
+    local existing
+    existing=$(os_device_profile_names) || return 1
+    if printf '%s\n' "$existing" | grep -qx "$profile_name" ; then
+        os_device_profile_current "$profile_name" "$pid"
+        case $? in
+            0) echo "$profile_name" ; return 0 ;;
+            1) os_device_profile_remove "$profile_name" || return 1 ;;
+            *) return 1 ;;
+        esac
     fi
 
     os_device_profile_create_with "$profile_name" "$pid"
