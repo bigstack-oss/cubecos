@@ -220,11 +220,15 @@ RUN dnf -y install $JAIL_SSH $JAIL_VNC $JAIL_VNC_FEH
 # its `get-identity-token --oauth-force-oob` runs Sigstore's login in the jail and turns the code
 # the release manager pastes into Jenkins into the 60-second OIDC token cosign signs with. It needs
 # Python >= 3.10 and the jail's python3 is 3.9 (where pip resolves an older sigstore), so it gets a
-# 3.12 venv of its own. Pinned like the build's other supply-chain tools: it handles the credential.
-ARG SIGSTORE_PY_VER=4.5.0
+# 3.12 venv of its own. Pinned harder than the build's other supply-chain tools, since it handles
+# the credential: sigstore-requirements.txt fixes every package in the venv and the digest of each
+# distribution, and pip refuses anything else (--require-hashes; --no-deps so nothing resolves
+# beyond the file). The version is bumped there, not here.
+COPY sigstore-requirements.txt /tmp/
 RUN dnf -y install python3.12 && \
     python3.12 -m venv /opt/sigstore && \
-    /opt/sigstore/bin/pip install --no-cache-dir sigstore==${SIGSTORE_PY_VER} && \
+    /opt/sigstore/bin/pip install --no-cache-dir --require-hashes --no-deps -r /tmp/sigstore-requirements.txt && \
+    rm -f /tmp/sigstore-requirements.txt && \
     /opt/sigstore/bin/sigstore --version
 
 # jail ssh access
