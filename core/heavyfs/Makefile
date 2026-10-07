@@ -37,6 +37,13 @@ ROOTFS_PIP += waitress          # CVE-2024-49768 Upgrade to version: 3.0.1
 BLKLST_DNF += python3-numexpr   # Remove DNF managed package
 ROOTFS_PIP += numexpr           # CVE-2023-39631 Upgrade to version: 2.8.5
 BLKLST_DNF += ansible ansible-core # CVE-2025-58367 Remove DNF managed package
+# JavaScriptCore comes in only for libproxy's PAC-script plugin: glib-networking
+# recommends libproxy-webkitgtk4 (a weak dependency), and that plugin is the only
+# package requiring libjavascriptcoregtk. Nothing in the image runs JavaScript or
+# points GLib at a PAC proxy URL. dnf pulls a weak dependency back from the repo even
+# after installdnf drops its rpm, so both stay in until cube-post erases the
+# blocklist (removed_rpms.txt); nothing requires either once they are gone.
+BLKLST_DNF += libproxy-webkitgtk4 webkit2gtk3-jsc
 
 ALL = $(HEAVYFS)
 
