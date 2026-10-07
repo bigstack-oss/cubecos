@@ -43,6 +43,9 @@ ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearc
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove securityDashboards
+	$(Q)# customImportMapDashboards adds custom map layers and styles. The shipped saved
+	$(Q)# objects (export.ndjson) are an index pattern and a saved search, with no map in them.
+	$(Q)chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove customImportMapDashboards
 	$(Q)chroot $(ROOTDIR) mkdir -p $(OSEARCH_BOARDS_LOG_DIR)
 	$(Q)cp -f $(ROOTDIR)$(OSEARCH_BOARDS_CONF_DIR)/opensearch_dashboards.yml $(ROOTDIR)$(OSEARCH_BOARDS_CONF_DIR)/opensearch_dashboards.yml.orig
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch-dashboards/opensearch-dashboards.service ./etc/systemd/system
