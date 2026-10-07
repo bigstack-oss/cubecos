@@ -865,18 +865,42 @@ ceph_adjust_pool_pg()
 
     if [ "$mode" != "on" ] ; then
         local osd_num=$($CEPH osd stat | awk '{print $3}')
-        local size=$($CEPH osd pool get $pool_name size -f json | jq .size)
+        local opts=$($CEPH osd pool get $pool_name all -f json)
+        local size=$(jq -r '.size // empty' <<< "$opts")
+        # unset on most pools; cephfs metadata carries pg_num_min 16, .mgr pg_num_max 32
+        local pg_min=$(jq -r '.pg_num_min // empty' <<< "$opts")
+        local pg_max=$(jq -r '.pg_num_max // empty' <<< "$opts")
 
-        let pg=$(( ($pg_osd * $osd_num * $data_pct) / ($size * 1000) ))
+        # an empty or zero value here would end up as an empty pg_num below,
+        # which ceph rejects with EINVAL
+        if ! [[ "$osd_num" =~ ^[1-9][0-9]*$ && "$size" =~ ^[1-9][0-9]*$ ]] ; then
+            echo "Error: cannot size pool '$pool_name' (up OSDs '${osd_num:-?}', size '${size:-?}')" >&2
+            return 1
+        fi
+
+        local pg=$(( ($pg_osd * $osd_num * $data_pct) / ($size * 1000) ))
         if [ $pg -eq 0 ] ; then
             pg=$osd_num
         fi
 
-        local pg_p2=$(echo "x=l($PG)/l(2) ; scale=0 ; 2^((x+0.5)/1)" | bc -l)
+        local pg_p2=$(echo "x=l($pg)/l(2) ; scale=0 ; 2^((x+0.5)/1)" | bc -l)
+        if ! [[ "$pg_p2" =~ ^[1-9][0-9]*$ ]] ; then
+            echo "Error: cannot compute pg number for pool '$pool_name' from $pg" >&2
+            return 1
+        fi
+        # ceph rejects a pg_num outside the pool's own bounds with EINVAL
+        if [[ "$pg_min" =~ ^[1-9][0-9]*$ ]] && [ $pg_p2 -lt $pg_min ] ; then
+            pg_p2=$pg_min
+        fi
+        if [[ "$pg_max" =~ ^[1-9][0-9]*$ ]] && [ $pg_p2 -gt $pg_max ] ; then
+            pg_p2=$pg_max
+        fi
 
         echo "set pool '$pool_name' pg number to $pg_p2"
-        Quiet -n $CEPH osd pool set $pool_name pg_num $pg_p2 --yes-i-really-mean-it
-        Quiet -n $CEPH osd pool set $pool_name pgp_num $pg_p2
+        # not Quiet -n: that forces rc 0 and hides ceph's error, so a rejected
+        # pg_num (e.g. a pool flagged nopgchange) would read as success
+        Quiet $CEPH osd pool set $pool_name pg_num $pg_p2 --yes-i-really-mean-it || return 1
+        Quiet $CEPH osd pool set $pool_name pgp_num $pg_p2 || return 1
     fi
 }
 
@@ -895,6 +919,8 @@ ceph_adjust_cache_flush_bytes()
 
 ceph_adjust_pgs()
 {
+    local rc=0
+
     # reference: https://ceph.com/pgcalc/
     for p in $($CEPH osd pool ls) ; do
         case $p in
@@ -938,9 +964,12 @@ ceph_adjust_pgs()
             *)
                 ceph_adjust_pool_pg $p 1
                 ;;
-        esac
+        # case returns the status of the arm it ran: keep going on a failed
+        # pool so one rejection does not leave the rest unadjusted
+        esac || rc=1
     done
     Quiet -n ceph_adjust_cache_flush_bytes
+    return $rc
 }
 
 # params:
