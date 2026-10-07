@@ -7,12 +7,12 @@
 # `Signature : (none)`, so that path installed an unsigned 87 MB binary, while the same
 # build in the repo is signed (RSA/SHA512, key id da61c26a0585bd3b) and dnf checks it.
 #
-# Pinned in both directions. ROOTFS_DNF names the exact NVR so the build installs 1.8.6-1
+# Pinned in both directions. ROOTFS_DNF names the exact NVR so the build installs 1.8.7-1
 # rather than whatever the channel has moved to, and LOCKED_DNF stops installdnf's
 # duplicate pass from resolving it to something else -- the same pairing qemu and openssl
 # use in core/heavyfs/Makefile. No epoch: LOCKED_DNF is matched as a string against rpm
 # filenames and a filename never carries one (see the qemu note there).
-KAPACITOR_VER := 1.8.6-1
+KAPACITOR_VER := 1.8.7-1
 
 ROOTFS_DNF += kapacitor-$(KAPACITOR_VER)
 LOCKED_DNF += kapacitor-$(KAPACITOR_VER)
