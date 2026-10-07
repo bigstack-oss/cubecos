@@ -108,7 +108,7 @@ OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEA
 # more: no openstack package is installed into the system python since the antelope
 # migration, and this file has been maintained locally instead -- it carries the CVE
 # pins the ROOTFS_PIP lines exist for (pillow 11.3.0, waitress 3.0.2, numpy 1.25.2,
-# ansible-core, python-jose, numexpr, xmlsec), none of which the openstack constraint
+# ansible-core, numexpr, xmlsec), none of which the openstack constraint
 # files have. Deriving it from the release name would have quietly downgraded pillow
 # to 9.2.0 and waitress to 2.1.2 -- straight back into CVE-2023-50447 and
 # CVE-2024-49768 -- the moment OPENSTACK_RELEASE moved to antelope, and the same

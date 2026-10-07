@@ -24,7 +24,9 @@ ROOTFS_PIP += numpy
 BLKLST_DNF += iptables-legacy iptables-legacy-libs python3-django3 ceph-mgr-k8sevents
 BLKLST_DNF += python3-PyMySQL   # CVE-2024-36039 Upgrade to version: 1.1.1
 BLKLST_DNF += python3-django    # CVE-2022-28347, CVE-2023-31047, CVE-2025-64459 CVE-2023-46695, CVE-2023-43665, CVE-2022-36359 Upgrade to version: 3.2.23
-ROOTFS_PIP += python-jose       # CVE-2024-33663 Upgrade to version: 3.4.0
+# python-jose is no longer installed into the system python. The line that put it
+# there upgraded a yoga-era copy; skyline, its only user, now runs in the openstack
+# venv with its own copy, and nothing else in the image imports jose.
 # CVE-2022-2996. The rpm stays blacklisted; the ROOTFS_PIP entry that used to
 # replace it with 0.12.0 is gone. scciclient backs ironic's iRMC driver, ironic runs
 # in the openstack venv, and core/ironic deliberately does not install it there --
