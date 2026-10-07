@@ -8,6 +8,7 @@
 #include <hex/config_module.h>
 #include <hex/config_tuning.h>
 #include <hex/dryrun.h>
+#include <hex/exec.hpp>
 #include <hex/filesystem.h>
 #include <hex/log.h>
 #include <hex/logrotate.h>
@@ -37,6 +38,7 @@ static const char NAME[] = "kapacitor";
 #define HC_TSDB_RP "hc"
 #define ALERT_CHECKER "/etc/systemd/system/alert-checker.service"
 #define ALERT_TIMER "/etc/systemd/system/alert-checker.timer"
+#define CUBECTL "/usr/local/bin/cubectl"
 
 static std::vector<std::string> s_telegrafTasks = {
     "cpu",
@@ -672,6 +674,64 @@ Parse(const char* name, const char* value, bool isNew)
     return r;
 }
 
+// Moderators carry the control role bit but run no InfluxDB (config_influxdb.cpp). The roles come
+// from the cluster node list, which cubectl pulls from etcd before every apply and keeps in
+// /etc/settings.cluster.json across reboots.
+static std::set<std::string>
+GetModeratorHosts()
+{
+    std::set<std::string> hosts;
+    const ExecSyncResult r = ExecBashSync(
+        30,
+        true,
+        false,
+        {},
+        "set -o pipefail; " CUBECTL " node list -j | jq -r '.[] | select(.role == \"moderator\") | .hostname'");
+    if (r.exitCode != 0) {
+        HexLogWarning("kapacitor: cannot read the cluster node list, no peer is taken for a moderator");
+        return hosts;
+    }
+
+    std::istringstream out(r.stdoutOutput);
+    std::string host;
+    while (std::getline(out, host)) {
+        if (host.length()) {
+            hosts.insert(host);
+        }
+    }
+    return hosts;
+}
+
+// The peers this node's kapacitor lists as [[influxdb]] clusters and relays to: every other
+// control that runs InfluxDB. kapacitor 1.8 pings each listed cluster at startup and exits when
+// one never answers, so a moderator in the list keeps kapacitor down on every node.
+static void
+GetInfluxPeers(std::vector<std::string>& peerNames, std::vector<std::string>& peerAddrs)
+{
+    peerNames.clear();
+    peerAddrs.clear();
+    if (!s_ha) {
+        return;
+    }
+
+    // cubesys.control.hosts and .addrs are parallel lists
+    std::vector<std::string> hosts = hex_string_util::split(s_ctrlHosts.newValue(), ',');
+    std::vector<std::string> addrs = hex_string_util::split(s_ctrlAddrs.newValue(), ',');
+    if (hosts.size() != addrs.size()) {
+        HexLogError("kapacitor: control hosts and addresses do not pair up, no peer is listed");
+        return;
+    }
+
+    std::set<std::string> moderators = GetModeratorHosts();
+    for (std::size_t i = 0; i < hosts.size(); i++) {
+        if (hosts[i] == s_hostname.newValue() || moderators.count(hosts[i])) {
+            continue;
+        }
+        peerNames.push_back(hosts[i]);
+        peerAddrs.push_back(addrs[i]);
+    }
+}
+
 static bool
 CommitCheck(bool modified, int dryLevel)
 {
@@ -692,17 +752,15 @@ Commit(bool modified, int dryLevel)
         return true;
     }
 
-    bool enabled = IsControl(s_eCubeRole);
-    std::string myip = G(MGMT_ADDR);
+    // kapacitor runs where InfluxDB runs: its default cluster is the local InfluxDB, which a
+    // moderator does not have
+    bool enabled = IsControl(s_eCubeRole) && !IsModerator(s_eCubeRole);
     std::string sharedId = G(SHARED_ID);
 
     if (enabled) {
         std::vector<std::string> peerNames(0);
         std::vector<std::string> peerAddrs(0);
-        if (s_ha) {
-            peerNames = GetControllerPeers(s_hostname, s_ctrlHosts);
-            peerAddrs = GetControllerPeers(myip, s_ctrlAddrs);
-        }
+        GetInfluxPeers(peerNames, peerAddrs);
 
         WriteConfig(peerNames, peerAddrs);
         WriteLogRotateConf(log_conf);
