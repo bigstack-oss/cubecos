@@ -34,7 +34,7 @@ help::
 	$(Q)echo "PROJECT=XXXX centos9-jail     Create CentOS9 jail"
 	$(Q)echo "PROJECT=XXXX enter            Configure and enter jail"
 	$(Q)echo "clean-all-cntr                Clean all running containers"
-	$(Q)echo "[ALL=1] docker-prune          Prune docker build cache, dangling images and anonymous volumes (ALL=1: every unused image and volume)"
+	$(Q)echo "[ALL=1] docker-prune          Prune build cache unused for BUILD_CACHE_KEEP (default 168h), dangling images and anonymous volumes (ALL=1: all build cache, every unused image and volume)"
 	$(Q)echo "[DRY=1] jenkins-ws-prune      Remove Jenkins ws-cleanup leftovers older than WS_PRUNE_DAYS (default 1)"
 
 centos9-jail: $(TOP_JAILDIR)/jail.ubi9.dockerfile ubi9-base
@@ -81,12 +81,20 @@ clean-all-cntr:
 
 # Reports the space it freed on the disk holding docker's data, which on a build server is not
 # necessarily the one holding TOP_DIR. Each prune runs even if the one before it fails.
+#
+# Build cache used within BUILD_CACHE_KEEP survives, so the next jail build still hits it. With
+# -a and no filter every run emptied the cache, the jail rebuilt with no step cached (807 s
+# instead of ~30 s on bldsrv-200-13 #85) and pushed ~3 GB of new layers to the local registry,
+# which nothing garbage-collects. BuildKit times `until` from when an entry was last used, not
+# created. ALL=1 still empties it.
+BUILD_CACHE_KEEP ?= 168h
+
 .PHONY: docker-prune
 docker-prune:
 	$(Q)R=$$($(DOCKER_BIN) info -f '{{.DockerRootDir}}') ; \
 	B=$$(df --output=avail -B1M $$R | tail -1) ; \
 	echo "== before ==" ; df -h $$R | tail -1 ; $(DOCKER_BIN) system df ; \
-	$(DOCKER_BIN) builder prune -a -f ; \
+	$(DOCKER_BIN) builder prune -a -f $(if $(ALL),,--filter until=$(BUILD_CACHE_KEEP)) ; \
 	$(DOCKER_BIN) image prune $(if $(ALL),-a) -f ; \
 	$(DOCKER_BIN) volume prune $(if $(ALL),-a) -f ; \
 	echo "== after ==" ; df -h $$R | tail -1 ; $(DOCKER_BIN) system df ; \
