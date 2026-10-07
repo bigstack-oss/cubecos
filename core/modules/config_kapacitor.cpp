@@ -16,6 +16,7 @@
 #include <hex/process_util.h>
 #include <hex/string_util.h>
 
+#include <fstream>
 #include <functional>
 #include <regex>
 #include <set>
@@ -732,6 +733,27 @@ GetInfluxPeers(std::vector<std::string>& peerNames, std::vector<std::string>& pe
     }
 }
 
+// The peer clusters the current kapacitor.conf lists
+static std::set<std::string>
+GetConfiguredPeers()
+{
+    static const std::regex nameRe("^\\s*name\\s*=\\s*\"([^\"]*)\"\\s*$");
+
+    std::set<std::string> peers;
+    std::ifstream ifs(CONF);
+    std::string line;
+    std::smatch m;
+    bool influx = false;
+    while (std::getline(ifs, line)) {
+        if (line.compare(0, 1, "[") == 0) {
+            influx = (line.compare(0, 12, "[[influxdb]]") == 0);
+        } else if (influx && std::regex_match(line, m, nameRe) && m[1] != "localhost") {
+            peers.insert(m[1]);
+        }
+    }
+    return peers;
+}
+
 static bool
 CommitCheck(bool modified, int dryLevel)
 {
@@ -812,6 +834,57 @@ Commit(bool modified, int dryLevel)
     return true;
 }
 
+// cube_cluster_start_node fires node_start on every node after its own commit: on each boot, a
+// rejoining node's included, and from cluster set_ready once every node has joined. A control
+// commits kapacitor before its peers have joined, so two things are not settled at that commit:
+// which peers are moderators, and whether kapacitor, which does not open until every InfluxDB it
+// lists answers, opened in time for its tasks to be defined. Both are by set_ready, so commit
+// again when the peers kapacitor should list are not the ones it lists, or when it answers but has
+// no relay task. A kapacitor that does not answer yet is still waiting for its peers; restarting it
+// would only start that wait over, and a rebooted node keeps its tasks in kapacitor's own store.
+static int
+NodeStartMain(int argc, char **argv)
+{
+    if (argc != 1) {
+        return EXIT_FAILURE;
+    }
+
+    if (IsUndef(s_eCubeRole) || !IsControl(s_eCubeRole) || IsModerator(s_eCubeRole)) {
+        return EXIT_SUCCESS;
+    }
+
+    std::vector<std::string> peerNames(0);
+    std::vector<std::string> peerAddrs(0);
+    GetInfluxPeers(peerNames, peerAddrs);
+    if (std::set<std::string>(peerNames.begin(), peerNames.end()) != GetConfiguredPeers()) {
+        HexLogInfo("kapacitor peers changed, reconfiguring");
+        return Commit(true, DRYLEVEL_NONE) ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    const ExecSyncResult ping = ExecBashSync(
+        10,
+        false,
+        false,
+        {},
+        "curl -sf -m 5 -o /dev/null http://localhost:9092/kapacitor/v1/ping");
+    if (ping.exitCode != 0) {
+        return EXIT_SUCCESS;
+    }
+
+    const ExecSyncResult relay = ExecBashSync(
+        30,
+        false,
+        false,
+        {},
+        "kapacitor show relay_" TELEGRAF_DB "_" TSDB_RP);
+    if (relay.exitCode != 0) {
+        HexLogInfo("kapacitor has no relay task, reconfiguring");
+        return Commit(true, DRYLEVEL_NONE) ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_MODULE(kapacitor, Init, Parse, 0, 0, Commit);
 
 // startup sequence
@@ -821,6 +894,8 @@ CONFIG_REQUIRES(kapacitor, influxdb);
 // extra tunings
 CONFIG_OBSERVES(kapacitor, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(kapacitor, cubesys, ParseCube, NotifyCube);
+
+CONFIG_TRIGGER_WITH_SETTINGS(kapacitor, "node_start", NodeStartMain);
 
 CONFIG_MIGRATE(kapacitor, "/var/lib/kapacitor");
 CONFIG_MIGRATE(kapacitor, "/var/alert_resp");
