@@ -18,6 +18,15 @@ PROJ_MODDIR := $(TOP_BLDDIR)/core/modules
 # file here (overrides hex's default).
 HEX_AGENT_ENV_DIR := /etc/cube
 
+# The release signer every CubeCOS system checks its next firmware update against (hex's
+# projsign.mk installs cosign, Sigstore's trusted root and hex_verify_update into the rootfs, and
+# writes these to /etc/settings.sys). They must be the identity the publish job signs releases as
+# -- COSIGN_IDENTITY and COSIGN_OIDC_ISSUER in triangle/jenkins/cube_publish.groovy -- or every
+# signed update will be refused. Changing them only takes effect for updates *from* a release
+# built with the new values.
+PROJ_UPDATE_SIGNER_IDENTITY := share@bigstack.co
+PROJ_UPDATE_SIGNER_ISSUER := https://github.com/login/oauth
+
 # policy source tree
 CORE_POLICYDIR := $(COREDIR)/policies
 
