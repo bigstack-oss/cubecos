@@ -98,9 +98,10 @@ help::
 	$(Q)echo "sign         Sign the SHA256SUMS manifest (cosign)"
 	$(Q)echo "attest       Attest the SBOM to every image that contains the rootfs (cosign)"
 	$(Q)echo "verify       Check the manifest signature, the attestations and every file's digest"
+	$(Q)echo "howtoverify  Write <release>_HOW_TO_VERIFY.txt for a signed release"
 
-.PHONY: sums sign attest verify
-sums sign attest verify:
+.PHONY: sums sign attest verify howtoverify
+sums sign attest verify howtoverify:
 	$(Q)$(MAKE) -C core/main $@
 
 help::
