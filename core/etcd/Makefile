@@ -3,7 +3,7 @@
 include ../../build.mk
 
 APP := etcd etcdctl
-VERSION := v3.5.23
+VERSION := v3.5.34
 
 # $(GITHUB_DL_BASE), not a literal host: this is a GitHub release asset, the class throttled to
 # ~40 KB/s from our build network (cubecos#1350). Defaults to https://github.com in project.mk.

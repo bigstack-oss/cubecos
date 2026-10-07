@@ -116,7 +116,7 @@ install: terraform
 	$(Q)cp -f $(SRCDIR)/scripts/* /usr/local/bin/
 
 run-etcd:
-	$(Q)podman run -d -p 12379:2379 --name=etcd quay.io/coreos/etcd:v3.5.23 etcd \
+	$(Q)podman run -d -p 12379:2379 --name=etcd quay.io/coreos/etcd:v3.5.34 etcd \
 		--listen-client-urls http://0.0.0.0:2379 \
 		--advertise-client-urls=http://0.0.0.0:2379
 
