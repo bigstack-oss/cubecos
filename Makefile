@@ -93,16 +93,9 @@ help::
 sbom:
 	$(Q)$(MAKE) -C core/main sbom
 
-help::
-	$(Q)echo "sums         Write the SHA256SUMS manifest of core/main's ship directory"
-	$(Q)echo "sign         Sign the SHA256SUMS manifest (cosign)"
-	$(Q)echo "attest       Attest the SBOM to every image that contains the rootfs (cosign)"
-	$(Q)echo "verify       Check the manifest signature, the attestations and every file's digest"
-	$(Q)echo "howtoverify  Write <release>_HOW_TO_VERIFY.txt for a signed release"
-
-.PHONY: sums sign attest verify howtoverify
-sums sign attest verify howtoverify:
-	$(Q)$(MAKE) -C core/main $@
+# sums, sign, attest, verify and howtoverify (hex's projsign.mk) run in core/main, the directory
+# that builds and signs the release; hex forwards them there from here, and lists them in help.
+PROJ_SIGN_DIR := core/main
 
 help::
 	$(Q)echo "masqon       turn on iptables masquerade, allowing VMs to Internet"
