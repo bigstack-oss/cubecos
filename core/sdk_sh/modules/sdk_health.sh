@@ -3594,6 +3594,8 @@ health_kapacitor_report()
 health_kapacitor_check()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        # like influxdb, kapacitor does not run on a moderator (config_kapacitor.cpp)
+        remote_run $node $HEX_SDK is_moderator_node >/dev/null 2>&1 && continue
         if ! ssh root@$node ps ax 2>/dev/null | grep -v grep | grep -q /usr/bin/kapacitord ; then
             ERR_CODE=1
             ERR_MSG+="kapacitor on $node is not running\n"
@@ -3613,6 +3615,7 @@ health_kapacitor_check()
 health_kapacitor_repair()
 {
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        remote_run $node $HEX_SDK is_moderator_node >/dev/null 2>&1 && continue
         if ! ssh root@$node ps ax 2>/dev/null | grep -v grep | grep -q /usr/bin/kapacitord ; then
             remote_systemd_restart $node kapacitor
         fi
