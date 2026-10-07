@@ -31,8 +31,12 @@ TF_CORE_BIN           := $(TF_CORE_DIR)/terraform-core
 $(RANCHER_PROV_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(RANCHER_PROV_VER) $(RANCHER_PROV_REPO) $(RANCHER_PROV_DIR),"  CLONE   rancher-provider")
 
+# x/crypto and grpc are lifted past v7.0.0's 0.33.0 and 1.70.0 to their latest releases. Not the
+# lowest fixed ones: x/crypto 0.52.0+ pulls x/net 0.54.0+, which drops http2.TrailerPrefix, and
+# grpc's server transport still uses it in 1.79.3 through 1.82.0.
 $(RANCHER_UPSTREAM_BIN): $(RANCHER_PROV_DIR)
-	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && go get github.com/hashicorp/go-getter@v1.7.4 && go mod tidy, "  UPDATE  rancher-provider")
+	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && go get github.com/hashicorp/go-getter@v1.7.4 && \
+		go get golang.org/x/crypto@v0.57.0 google.golang.org/grpc@v1.84.0 && go mod tidy, "  UPDATE  rancher-provider")
 	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && make build, "  BUILD   rancher-provider")
 
 $(KEYCLOAK_PROV_DIR):
@@ -64,13 +68,17 @@ $(TF_CORE_BIN): $(TF_CORE_DIR)
 	@#    - gRPC: v1.29.1 (Min version with 'naming' package required by Etcd)
 	@#    - API: v0.34.0 (Goldilocks version: Has 'ImpersonateCredentials' but works with gRPC 1.29)
 	@#    - Storage: v1.10.0 (MUST MATCH API v0.34.0)
+	@#    - x/crypto: v0.57.0, the latest. It pulls x/net v0.58.0, past the v0.54.0 that drops
+	@#      http2.TrailerPrefix, and the pinned gRPC v1.29.1 still uses it, so x/net is held at
+	@#      v0.53.0, which has it.
 	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && \
 		go get github.com/hashicorp/go-getter@v1.7.4 && \
-		go get golang.org/x/crypto@v0.31.0 && \
+		go get golang.org/x/crypto@v0.57.0 && \
 		go mod edit -replace github.com/hashicorp/consul=github.com/hashicorp/consul@v1.5.0 && \
 		go mod edit -replace google.golang.org/grpc=google.golang.org/grpc@v1.29.1 && \
 		go mod edit -replace google.golang.org/api=google.golang.org/api@v0.34.0 && \
 		go mod edit -replace cloud.google.com/go/storage=cloud.google.com/go/storage@v1.10.0 && \
+		go mod edit -replace golang.org/x/net=golang.org/x/net@v0.53.0 && \
 		go mod tidy, \
 		"  UPDATE  tf-core")
 
