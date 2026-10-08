@@ -471,15 +471,18 @@ gpu_sriov_vgpu_count_limit()
 # }[]
 # Emits one TSV record per vGPU type the card's model supports:
 #   <typeId>\t<shortProfileName>\t<framebufferMiB>
-# Takes an nvidia-smi style bus id ("00000001:C8:00.0"). Silent (exit 0, no
-# output) when the table or the device is missing - callers treat that the same
-# way they treat an empty nvidia-smi probe.
+# Takes an nvidia-smi style bus id ("00000001:C8:00.0").
+#
+# Exit 0 means the table was consulted for this card: no records then means the
+# model has no vGPU types (an RTX A2000 is passthrough only, #1765). Exit 1, with
+# no output, means it could not be consulted - no bus id, no table, or no such
+# device - so the absence of records says nothing about the card.
 gpu_vgpu_types_from_xml()
 {
     local pci_bus_id="$1"
 
-    [ -n "$pci_bus_id" ] || return 0
-    [ -r "$VGPU_CONFIG_XML" ] || return 0
+    [ -n "$pci_bus_id" ] || return 1
+    [ -r "$VGPU_CONFIG_XML" ] || return 1
 
     # nvidia-smi prints an 8-digit domain in upper case; sysfs uses 4 digits in
     # lower case. Same trimming as gpu_bind_vfio_pci.
@@ -488,7 +491,7 @@ gpu_vgpu_types_from_xml()
 
     local device_id
     device_id=$(cat "/sys/bus/pci/devices/${sysfs_pci_addr}/device" 2>/dev/null)
-    [ -n "$device_id" ] || return 0
+    [ -n "$device_id" ] || return 1
 
     # sysfs prints 0x2bb5, the table spells it 0x2BB5
     device_id="0x$(echo "${device_id#0x}" | tr '[:lower:]' '[:upper:]')"
@@ -1075,10 +1078,14 @@ gpu_vgpu_profile_list()
     # Keyed on the absence of parsable records, not an empty string: nvidia-smi
     # prints "No devices were found" to stdout, so the probe output is never
     # actually empty for a card it cannot see.
+    local static_answered=0
     if ! echo "$vgpu_output" | grep -q "vGPU Type ID"; then
         local pci_address
         pci_address=$(echo "$gpu_config" | jq -r --arg id "$gpu_id" \
             'map(select(.id == $id)) | if length > 0 then (.[0].pciAddress // "") else "" end')
+
+        local xml_types
+        xml_types=$(gpu_vgpu_types_from_xml "$pci_address") && static_answered=1
 
         local xml_id xml_name xml_vram
         while IFS="$(printf '\t')" read -r xml_id xml_name xml_vram; do
@@ -1094,7 +1101,7 @@ gpu_vgpu_profile_list()
                     '. + [{ id: $id, name: $name, vramMiB: $vram_mib, vmCountLimit: null }]')
             fi
         done <<EOF
-$(gpu_vgpu_types_from_xml "$pci_address")
+$xml_types
 EOF
     fi
 
@@ -1106,10 +1113,14 @@ EOF
     # error. What must never happen is empty lists with exit 0 when no source
     # answered at all: the caller reads that as "this card has no vGPU types"
     # and offers the operator nothing to pick.
+    #
+    # Whether the table answered is its exit status, not whether it listed
+    # anything: for a passthrough-only card it is consulted and rightly lists
+    # no type, and that is a real answer (#1765).
     if [ "$vgpu_probe_rc" -ne 0 ]; then
-        if [ "$sriov_profiles" = "[]" ] && [ "$mig_profiles" = "[]" ]; then
+        if [ "$static_answered" -eq 0 ]; then
             echo "Error: gpu_vgpu_profile_list: no profile source answered for $gpu_id" >&2
-            log_error "gpu_vgpu_profile_list: nvidia-smi vgpu -s -v -i $gpu_id exited $vgpu_probe_rc: $vgpu_probe_err; $VGPU_CONFIG_XML listed no type either, refusing to report empty profile lists as a healthy answer"
+            log_error "gpu_vgpu_profile_list: nvidia-smi vgpu -s -v -i $gpu_id exited $vgpu_probe_rc: $vgpu_probe_err; $VGPU_CONFIG_XML could not be consulted for this card either, refusing to report empty profile lists as a healthy answer"
             return 1
         fi
         log_debug "gpu_vgpu_profile_list: nvidia-smi vgpu -s -v -i $gpu_id exited $vgpu_probe_rc: $vgpu_probe_err; answered from $VGPU_CONFIG_XML instead"
