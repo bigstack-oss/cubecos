@@ -1118,12 +1118,12 @@ ceph_osd_add_disk_encrypt()
         [ -n "$(readlink -e $dev)" ] || continue
         Quiet timeout $SRVTO wipefs -a $dev 2>/dev/null
         if ceph-volume inventory $dev | grep -q -i "available.*true" ; then
-            Quiet -n ceph-volume lvm create --dmcrypt --bluestore --data $dev
+            Quiet -n ceph-volume lvm prepare --dmcrypt --bluestore --data $dev
         else
             Quiet -n ceph-volume inventory $dev
         fi
     done
-    Quiet -n ceph-volume lvm activate --bluestore --all
+    Quiet -n $HEX_CFG refresh_ceph_osd
     Quiet -n ceph_adjust_cache_flush_bytes
 }
 
@@ -1436,12 +1436,23 @@ ceph_osd_host_remove()
     Quiet -n $CEPH osd crush rm $host
 }
 
+# Activate this node's LVM OSDs that are not running, encrypted ones included,
+# without starting them: hex_config starts them, so systemd never owns one and
+# none starts at boot outside Commit()'s batches. A running OSD is left alone,
+# which ceph-volume lvm activate --all --no-systemd would re-prime.
 ceph_osd_activate_lvms()
 {
     _hex_function_ret /usr/sbin/pvscan
     _hex_function_ret /usr/sbin/vgscan
     _hex_function_ret /usr/sbin/vgchange -ay
-    _hex_function_ret /usr/sbin/ceph-volume lvm activate --all "$@"
+
+    local id fsid rc=0
+    while read -r id fsid ; do
+        [ -n "$fsid" ] || continue
+        ! systemctl is-active -q ceph-osd@$id || continue
+        _hex_function_ret /usr/sbin/ceph-volume lvm activate --no-systemd $id $fsid || rc=1
+    done < <(ceph-volume lvm list --format json 2>/dev/null | jq -r 'to_entries[] | .key as $id | .value[] | select(.type == "block") | "\($id) \(.tags."ceph.osd_fsid")"')
+    return $rc
 }
 
 # ids of this node's LVM OSDs, encrypted ones included, space separated
@@ -2753,7 +2764,8 @@ ceph_osd_get_datapartuuid()
 # Remount a single down OSD whose metadata dir is missing or unmounted. Scoped
 # to one OSD: unlike refresh_ceph_osd / ceph_osd_remount it never stops or
 # unmounts any other OSD on the host. Non-destructive -- it only mounts and
-# re-links, and refuses to act if the data partition cannot be resolved.
+# re-links, and refuses to act if the data partition cannot be resolved. An LVM
+# OSD has no metadata partition; activating it mounts and primes its tmpfs.
 # params: $1 - osd id
 # returns: 0 on success, 1 if it could not be repaired safely
 ceph_osd_remount_one()
@@ -2761,6 +2773,16 @@ ceph_osd_remount_one()
     local osd_id=$1
     local osdpth=/var/lib/ceph/osd
     local osd_dir=$osdpth/ceph-$osd_id
+
+    local lvm_fsid=$(ceph-volume lvm list $osd_id --format json 2>/dev/null | jq -r '.[][] | select(.type == "block") | .tags."ceph.osd_fsid"' | head -1)
+    if [ -n "$lvm_fsid" ] ; then
+        if ! _hex_function_ret /usr/sbin/ceph-volume lvm activate --no-systemd $osd_id $lvm_fsid || [ ! -f $osd_dir/type ] ; then
+            log_error "ceph_osd_remount_one: osd.$osd_id: failed to activate the LVM OSD"
+            return 1
+        fi
+        log_warning "ceph_osd_remount_one: osd.$osd_id activated"
+        return 0
+    fi
 
     local line=$(awk -v id="$osd_id" '$2 == id { print ; exit }' $CEPH_OSD_MAP 2>/dev/null)
     if [ -z "$line" ] ; then
@@ -3581,7 +3603,7 @@ _ceph_osd_restart_chain()
 ceph_osd_restart()
 {
     local osd_ids=${*:-$($CEPH osd tree-from $(hostname) -f json 2>/dev/null | jq .nodes[0].children[] | sort -n)}
-    Quiet -n ceph-volume lvm activate --all
+    Quiet -n ceph_osd_activate_lvms
     for id in $osd_ids ; do
         _ceph_osd_restart_chain $id
     done

@@ -491,18 +491,18 @@ activateRawOsds(void)
 }
 
 /**
- * Activate LVM OSDs, i.e. encrypted DAS disks.
- * With noSystemd the OSDs are activated but not started.
+ * Activate the LVM OSDs that are not running without starting them: CommitOsd
+ * starts them, so systemd never owns an LVM OSD.
  */
 static bool
-activateLvmOsds(bool noSystemd = false)
+activateLvmOsds()
 {
     const ExecSyncResult alr = ExecBashSync(
         0,
         false,
         false,
         {},
-        std::string(HEX_SDK " ceph_osd_activate_lvms") + (noSystemd ? " --no-systemd" : ""));
+        HEX_SDK " ceph_osd_activate_lvms");
     return (alr.exitCode == 0);
 }
 
@@ -599,9 +599,9 @@ SetupMds(std::string hostname)
 }
 
 /**
- * Set up the local OSDs. With deferStart every OSD is left stopped -- the raw ones
- * remounted without a start, the LVM ones (encrypted included) activated without
- * systemd -- for CommitOsd to start in batches; s_lvmOsdIds then lists the LVM ones.
+ * Set up the local OSDs: s_osdIds then lists the raw ones and s_lvmOsdIds the LVM
+ * ones (encrypted included), which are left stopped for CommitOsd to start. With
+ * deferStart the raw ones are left stopped too, for CommitOsd to start in batches.
  */
 static bool
 SetupOsd(std::string hostname, bool deferStart = false)
@@ -611,17 +611,12 @@ SetupOsd(std::string hostname, bool deferStart = false)
     s_lvmOsdIds.clear();
 
     activateRawOsds();
-    activateLvmOsds(deferStart);
+    activateLvmOsds();
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_map");
-    if (!deferStart) {
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount");
-        return true;
-    }
-
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount --no-start");
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount%s", deferStart ? " --no-start" : "");
     // ceph_osd_remount unmounts every OSD directory, the LVM ones' tmpfs included,
     // and does not remount those; activate them again, still without starting them.
-    activateLvmOsds(true);
+    activateLvmOsds();
     std::string lvmIds = HexUtilPOpen(HEX_SDK " ceph_osd_list_lvm_ids");
     for (const std::string& i : hex_string_util::split(lvmIds, ' ')) {
         std::size_t osdId = 0;
@@ -1241,12 +1236,18 @@ startOsds(const std::vector<size_t>& osds)
 /**
  * Start (or, with ceph disabled, compact and stop) the local OSDs. batched follows
  * SetupOsd(deferStart): the raw and LVM OSDs it left stopped start in batches.
+ * Otherwise restartAll restarts every local OSD, and without it the new raw OSDs
+ * and the LVM ones start.
  */
 static bool
 CommitOsd(const char* name, bool restartAll = true, bool batched = false)
 {
-    if (s_osdIds.size() == 0 && (!batched || s_lvmOsdIds.size() == 0))
+    if (s_osdIds.empty() && s_lvmOsdIds.empty())
         return true;
+
+    std::vector<size_t> osds(restartAll ? s_osdIds.begin() : s_osdNewIds.begin(),
+        restartAll ? s_osdIds.end() : s_osdNewIds.end());
+    osds.insert(osds.end(), s_lvmOsdIds.begin(), s_lvmOsdIds.end());
 
     if (s_enabled) {
         HexLogDebug("starting %s-osd service", name);
@@ -1255,11 +1256,9 @@ CommitOsd(const char* name, bool restartAll = true, bool batched = false)
         HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_memory_target_apply");
 
         if (batched) {
-            std::vector<size_t> osds(s_osdIds.begin(), s_osdIds.end());
-            osds.insert(osds.end(), s_lvmOsdIds.begin(), s_lvmOsdIds.end());
             startOsds(osds);
         } else {
-            for (auto& id : (restartAll ? s_osdIds : s_osdNewIds)) {
+            for (auto& id : osds) {
                 HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_restart %lu", id);
             }
         }
@@ -1267,7 +1266,7 @@ CommitOsd(const char* name, bool restartAll = true, bool batched = false)
         HexLogInfo("%s-osd is running", name);
     } else {
         HexLogInfo("compact and stop %s-osd", name);
-        for (auto& id : (restartAll ? s_osdIds : s_osdNewIds)) {
+        for (auto& id : osds) {
             HexUtilSystemF(FWD, 0, "timeout 60 ceph tell osd.%lu compact ; systemctl stop ceph-osd@%lu", id, id);
         }
 
@@ -2336,6 +2335,7 @@ ClusterStartMain(int argc, char** argv)
 
     SyncConfigMain(1, NULL);
     SetupOsd(s_hostname.newValue());
+    CommitOsd(NAME, false);
 
     HexUtilSystemF(0, 0, HEX_SDK " migrate_ceph");
     if (IsControl(s_eCubeRole)) {
