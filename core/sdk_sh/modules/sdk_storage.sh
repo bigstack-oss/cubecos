@@ -216,8 +216,8 @@ storage_list_all_disks()
         local device_basename="$(/usr/bin/basename "$block_dev")"
         local device="/dev/${device_basename}"
 
-        # test if mpath devices, if so, skip it
-        if storage_is_mpath "$device" ; then
+        # only DAS could be used for Ceph, skip multipath, FC and iSCSI devices
+        if ! storage_is_das "$device" ; then
             continue
         fi
 
@@ -242,34 +242,6 @@ storage_list_all_disks()
         fi
 
         disks+="$device "
-    done
-
-    # If external storage is set for Cinder volume driver,
-    # disable mpath device support for Ceph unless we use the marker file to force it.
-    if ! storage_are_mpath_devices_allowed_for_ceph ; then
-        echo -n ${disks%% }
-        return 0
-    fi
-
-    # collect mapper devices
-    local mpath_dev=""
-    for mpath_dev in /dev/mapper/* ; do
-        # skip non-existing links
-        if [[ "$block_dev" == "/dev/mapper/*" ]] ; then
-            continue
-        fi
-
-        # a mapper device must be a symbolic link
-        if [ ! -L "$mpath_dev" ] ; then
-            continue
-        fi
-
-        # exclude partitions
-        if [[ "$(/bin/lsblk -dn -o TYPE "$mpath_dev")" != "mpath" ]] ; then
-            continue
-        fi
-
-        disks+="$mpath_dev "
     done
 
     echo -n ${disks%% }

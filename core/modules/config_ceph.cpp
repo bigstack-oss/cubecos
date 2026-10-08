@@ -491,7 +491,7 @@ activateRawOsds(void)
 }
 
 /**
- * Activate LVM OSDs, including encrypted DAS and mpath devices.
+ * Activate LVM OSDs, i.e. encrypted DAS disks.
  * With noSystemd the OSDs are activated but not started.
  */
 static bool
