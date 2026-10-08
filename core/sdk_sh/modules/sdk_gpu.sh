@@ -853,6 +853,14 @@ gpu_device_list()
     # NVIDIA vendor ID 10de) for devices actually held by vfio-pci.
     local sysfs_addr
     for sysfs_addr in $(lspci -Dnn -d 10de: 2>/dev/null | awk '{print $1}'); do
+        # Display controllers only. gpu_bind_vfio_pci takes a card's HD-audio
+        # (and USB / UCSI) functions to vfio-pci along with it, and those carry
+        # NVIDIA's vendor ID too - each would be listed as a card of its own.
+        case "$(cat "/sys/bus/pci/devices/${sysfs_addr}/class" 2>/dev/null)" in
+            0x03*) ;;
+            *) continue ;;
+        esac
+
         local driver_path="/sys/bus/pci/devices/${sysfs_addr}/driver"
         [ -e "$driver_path" ] || continue
         [ "$(basename "$(readlink -f "$driver_path")")" = "vfio-pci" ] || continue
@@ -1671,10 +1679,101 @@ gpu_unset_current_type()
     fi
 }
 
-# Binds the PCI device identified by PCI address to vfio-pci for PCI passthrough.
-# Pure sysfs operation - does not depend on nvidia-smi being able to see the
-# device, so it is safe to call during hex_config Commit() re-apply, after the
-# device is no longer enumerable by nvidia-smi.
+# Prints the PCI functions of a card that have to pass through together, in sysfs
+# form: the given function first, then every other function of the same slot
+# (bus:device) that shares its IOMMU group - the HD-audio function of an NVIDIA
+# workstation card, and on some models a USB / UCSI controller. qemu refuses a
+# <hostdev> unless every device in its IOMMU group is bound to vfio-pci ("vfio
+# 0000:86:00.0: group 26 is not viable" on an RTX A2000, #1759), so binding only
+# the display function leaves a card reported as pgpu that no VM can use.
+#
+# Members of other slots that share the group (an upstream bridge, or a
+# neighbour behind a switch without ACS) are left out on purpose: they are not
+# part of this card, and taking them away from the host is not gpu_resource_set's
+# call. gpu_bind_vfio_pci reports the ones that would still block passthrough.
+#
+# Takes a sysfs address. With the IOMMU off there is no group, and the card is
+# the given function alone.
+gpu_vfio_card_functions()
+{
+    local sysfs_pci_addr="$1"
+
+    echo "$sysfs_pci_addr"
+
+    local group_devices="/sys/bus/pci/devices/${sysfs_pci_addr}/iommu_group/devices"
+    [ -d "$group_devices" ] || return 0
+
+    local member
+    for member in "$group_devices"/*; do
+        member=${member##*/}
+        [ "$member" = "$sysfs_pci_addr" ] && continue
+        [ "${member%.*}" = "${sysfs_pci_addr%.*}" ] || continue
+        echo "$member"
+    done
+}
+
+# Binds a card to vfio-pci for PCI passthrough: the function at the given PCI
+# address and its companion functions (see gpu_vfio_card_functions). Pure sysfs
+# operation - does not depend on nvidia-smi being able to see the device, so it
+# is safe to call during hex_config Commit() re-apply, after the device is no
+# longer enumerable by nvidia-smi.
+#
+# All or nothing: if any function fails to bind, the ones this call moved are
+# handed back, since a card with only some of its functions on vfio-pci is no
+# more usable for passthrough than one with none.
+gpu_bind_vfio_pci()
+{
+    local sysfs_pci_addr
+    if ! sysfs_pci_addr=$(gpu_pci_addr_normalize "$1"); then
+        echo "Error: gpu_bind_vfio_pci: '$1' is not a PCI address" >&2
+        return 1
+    fi
+
+    local fn moved=""
+    for fn in $(gpu_vfio_card_functions "$sysfs_pci_addr"); do
+        local before
+        before=$(basename "$(readlink -f "/sys/bus/pci/devices/${fn}/driver" 2>/dev/null)" 2>/dev/null)
+
+        if ! gpu_bind_vfio_pci_function "$fn"; then
+            local m
+            for m in $moved; do
+                gpu_unbind_vfio_pci_function "$m" any
+            done
+            return 1
+        fi
+
+        # Newest first, so a rollback hands them back in reverse order.
+        [ "$before" = "vfio-pci" ] || moved="$fn $moved"
+    done
+
+    # Not fatal: the card itself is now where it should be, and whatever else
+    # shares its group is not ours to take. But it is exactly what will make
+    # qemu refuse the card, so say so now rather than at the first VM boot.
+    local group_devices="/sys/bus/pci/devices/${sysfs_pci_addr}/iommu_group/devices"
+    local member
+    for member in "$group_devices"/*; do
+        [ -e "$member" ] || continue
+        member=${member##*/}
+        [ "${member%.*}" = "${sysfs_pci_addr%.*}" ] && continue
+
+        # Bridges and ports may share the group; vfio does not require them
+        # to be on vfio-pci.
+        case "$(cat "/sys/bus/pci/devices/${member}/class" 2>/dev/null)" in
+            0x0604*) continue ;;
+        esac
+
+        local member_driver
+        member_driver=$(basename "$(readlink -f "/sys/bus/pci/devices/${member}/driver" 2>/dev/null)" 2>/dev/null)
+        case "$member_driver" in
+            ""|driver|vfio-pci|pci-stub) ;;
+            *) echo "Warning: gpu_bind_vfio_pci: $member shares the IOMMU group of $sysfs_pci_addr and is held by $member_driver; passthrough of $sysfs_pci_addr will fail with \"group is not viable\" until it is released" >&2 ;;
+        esac
+    done
+
+    return 0
+}
+
+# Binds the single PCI function at the given sysfs address to vfio-pci.
 #
 # driver_override is what makes the bind work at all: vfio-pci carries no id
 # table entry matching an NVIDIA display device, so writing the address to
@@ -1685,11 +1784,9 @@ gpu_unset_current_type()
 # Setting driver_override first tells the PCI core which driver the device must
 # use; drivers_probe then binds it. If the bind still fails, roll the device
 # back to the driver it had rather than leaving it stranded.
-gpu_bind_vfio_pci()
+gpu_bind_vfio_pci_function()
 {
-    # nvidia-smi uses 8-char domain (00000000:bb:ss.f); sysfs uses 4-char (0000:bb:ss.f)
-    local sysfs_pci_addr
-    sysfs_pci_addr=$(echo "$1" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+    local sysfs_pci_addr="$1"
 
     local device_path="/sys/bus/pci/devices/${sysfs_pci_addr}"
     if [ ! -d "$device_path" ]; then
@@ -1747,14 +1844,46 @@ gpu_bind_vfio_pci()
     return 1
 }
 
-# Releases a PCI device from vfio-pci and lets its native driver claim it again.
-# The driver_override set by gpu_bind_vfio_pci is sticky: without clearing it the
-# device re-binds to vfio-pci on every probe, so a card switched away from pgpu
-# would never come back to the nvidia driver.
+# Releases a card from vfio-pci: the function at the given PCI address, then its
+# companion functions (see gpu_vfio_card_functions), so the HD-audio function
+# goes back to snd_hda_intel along with the display function going back to
+# nvidia.
+#
+# Only the display function must come back to a native driver. A companion is
+# released as well, but one the host has no driver for (it never had one) is
+# not a failure; only a companion still held by vfio-pci is.
 gpu_unbind_vfio_pci()
 {
     local sysfs_pci_addr
-    sysfs_pci_addr=$(echo "$1" | sed 's/^[0-9a-fA-F]\{4\}//' | tr '[:upper:]' '[:lower:]')
+    if ! sysfs_pci_addr=$(gpu_pci_addr_normalize "$1"); then
+        echo "Error: gpu_unbind_vfio_pci: '$1' is not a PCI address" >&2
+        return 1
+    fi
+
+    local fn rc=0
+    for fn in $(gpu_vfio_card_functions "$sysfs_pci_addr"); do
+        if [ "$fn" = "$sysfs_pci_addr" ]; then
+            gpu_unbind_vfio_pci_function "$fn" || return 1
+        else
+            gpu_unbind_vfio_pci_function "$fn" any || rc=1
+        fi
+    done
+
+    return $rc
+}
+
+# Releases the single PCI function at the given sysfs address from vfio-pci and
+# lets its native driver claim it again. The driver_override set by
+# gpu_bind_vfio_pci_function is sticky: without clearing it the device re-binds
+# to vfio-pci on every probe, so a card switched away from pgpu would never come
+# back to the nvidia driver.
+#
+# With "any" as the second argument, ending up with no driver at all counts as
+# released; only still being held by vfio-pci is a failure.
+gpu_unbind_vfio_pci_function()
+{
+    local sysfs_pci_addr="$1"
+    local accept="${2:-native}"
 
     local device_path="/sys/bus/pci/devices/${sysfs_pci_addr}"
     if [ ! -d "$device_path" ]; then
@@ -1783,7 +1912,8 @@ gpu_unbind_vfio_pci()
 
     local bound
     bound=$(basename "$(readlink -f "$driver_path" 2>/dev/null)" 2>/dev/null)
-    if [ -z "$bound" ] || [ "$bound" = "driver" ] || [ "$bound" = "vfio-pci" ]; then
+    if [ "$bound" = "vfio-pci" ] ||
+       { [ "$accept" != "any" ] && { [ -z "$bound" ] || [ "$bound" = "driver" ]; }; }; then
         echo "Error: gpu_unbind_vfio_pci: $sysfs_pci_addr did not return to its native driver (now: ${bound:-none})" >&2
         return 1
     fi
