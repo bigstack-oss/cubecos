@@ -6,6 +6,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -1071,6 +1072,47 @@ GetGpuTotalVramMiB(const char* gpuId)
     return strtol(output.c_str(), NULL, 10);
 }
 
+// The SR-IOV vGPU count limit gpu_device_list reports as
+// sriovVgpuProfileCountLimit: the smaller of the PF's sriov_totalvfs and the
+// largest Max Instances among the card's SR-IOV time-sliced types, falling back
+// to sriov_totalvfs when the driver reports no ceiling. Mirrors sdk_gpu.sh's
+// gpu_sriov_vgpu_count_limit, including which types count as SR-IOV: those whose
+// short name matches SRIOV_PROFILE_NAME_REGEX ("DC-2B", not the MIG-backed
+// "DC-1-2B", whose Max Instances of 48 would otherwise win).
+//
+// gpu_resource_set records it because a card bound to vfio-pci is invisible to
+// nvidia-smi, so gpu_device_list can no longer compute it for a pgpu, and the
+// Web UI needs it to size the SR-IOV count on a pgpu -> sriovVgpu switch
+// (#1583). Returns -1 when sriov_totalvfs is unreadable; recorded as null.
+static long
+SriovVgpuCountLimit(const std::string& vgpuTypesOutput, const std::string& pciAddress)
+{
+    std::ifstream totalVfsStream(std::string(PCI_DEVICES_DIR) + "/" + SysfsPciAddr(pciAddress) + "/sriov_totalvfs");
+    long totalVfs = 0;
+    if (pciAddress.empty() || !(totalVfsStream >> totalVfs) || totalVfs <= 0) {
+        return -1;
+    }
+
+    static const std::regex sriovName("^[A-Za-z0-9]+-[0-9]+[A-Za-z]+$");
+    const std::map<int, std::string> names = ParseVgpuTypeNames(vgpuTypesOutput);
+    long driverMax = 0;
+
+    for (const auto& type : ParseVgpuMaxInstances(vgpuTypesOutput)) {
+        const std::map<int, std::string>::const_iterator name = names.find(type.first);
+        if (name == names.end()) {
+            continue;
+        }
+        const size_t space = name->second.find_last_of(' ');
+        const std::string shortName =
+            (space == std::string::npos) ? name->second : name->second.substr(space + 1);
+        if (std::regex_match(shortName, sriovName) && type.second > driverMax) {
+            driverMax = type.second;
+        }
+    }
+
+    return (driverMax > 0 && driverMax < totalVfs) ? driverMax : totalVfs;
+}
+
 // Validates the profiles argument for sriovVgpu/migBackedVgpu:
 // - format: a non-empty JSON array of { id, count } objects with unique
 //   non-negative-integer ids and positive-integer counts
@@ -1584,6 +1626,18 @@ ResourceSetMain(int argc, char* argv[])
     const std::string totalVramArg =
         (totalVramMiB > 0) ? std::to_string(totalVramMiB) : std::string("null");
 
+    // Same moment, same reason: the SR-IOV count limit needs `vgpu -s -v`, which
+    // the vfio-pci binding below hides. A vGPU request already read it above
+    // (after any vfio-pci release); a pgpu request did not, so read it now.
+    // Recorded for every type rather than only pgpu so the entry's shape does
+    // not depend on the type, as with totalVramMiB; only the pgpu listing reads
+    // it back - a visible card's limit is computed live.
+    const long sriovCountLimit = SriovVgpuCountLimit(
+        vgpuTypesOutput.empty() ? HexUtilPOpen("%s vgpu -s -v -i %s", NVIDIA_SMI, gpuId) : vgpuTypesOutput,
+        pciAddress);
+    const std::string sriovCountLimitArg =
+        (sriovCountLimit > 0) ? std::to_string(sriovCountLimit) : std::string("null");
+
     if (strcmp(newType, "pgpu") == 0) {
         if (HexUtilSystemF(0, 0, HEX_SDK " gpu_bind_vfio_pci %s", pciAddress.c_str()) != 0) {
             HexLogError("gpu_resource_set: failed to bind GPU %s to vfio-pci for passthrough", gpuId);
@@ -1599,8 +1653,11 @@ ResourceSetMain(int argc, char* argv[])
 
         if (HexUtilSystemF(0, 0,
                 "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson totalVramMiB %s "
-                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"pgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profiles:null}]' %s > %s",
-                gpuId, name.c_str(), pciAddress.c_str(), totalVramArg.c_str(), GPU_CONFIG_FILE, tmpFile.path()) != 0) {
+                "--argjson sriovVgpuProfileCountLimit %s "
+                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"pgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, "
+                "sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, profiles:null}]' %s > %s",
+                gpuId, name.c_str(), pciAddress.c_str(), totalVramArg.c_str(), sriovCountLimitArg.c_str(),
+                GPU_CONFIG_FILE, tmpFile.path()) != 0) {
             HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
             return EXIT_FAILURE;
         }
@@ -1722,8 +1779,10 @@ ResourceSetMain(int argc, char* argv[])
 
         if (HexUtilSystemF(0, 0,
                 "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson profiles '%s' --argjson totalVramMiB %s "
-                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"sriovVgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profiles:$profiles}]' %s > %s",
-                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(), totalVramArg.c_str(),
+                "--argjson sriovVgpuProfileCountLimit %s "
+                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"sriovVgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, "
+                "sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, profiles:$profiles}]' %s > %s",
+                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(), totalVramArg.c_str(), sriovCountLimitArg.c_str(),
                 GPU_CONFIG_FILE, tmpFile.path()) != 0) {
             HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
             return EXIT_FAILURE;
@@ -1793,8 +1852,10 @@ ResourceSetMain(int argc, char* argv[])
 
         if (HexUtilSystemF(0, 0,
                 "jq -c --arg id \"%s\" --arg name \"%s\" --arg pciAddress \"%s\" --argjson profiles '%s' --argjson totalVramMiB %s "
-                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"migBackedVgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profiles:$profiles}]' %s > %s",
-                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(), totalVramArg.c_str(),
+                "--argjson sriovVgpuProfileCountLimit %s "
+                "'map(select(.id != $id)) + [{id:$id, name:$name, type:\"migBackedVgpu\", pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, "
+                "sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, profiles:$profiles}]' %s > %s",
+                gpuId, name.c_str(), pciAddress.c_str(), profilesDump.c_str(), totalVramArg.c_str(), sriovCountLimitArg.c_str(),
                 GPU_CONFIG_FILE, tmpFile.path()) != 0) {
             HexLogError("gpu_resource_set: failed to build updated GPU config for %s", gpuId);
             return EXIT_FAILURE;

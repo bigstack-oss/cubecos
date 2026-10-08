@@ -708,6 +708,21 @@ gpu_device_list()
             support_types=$(echo "$support_types" | jq -c '. + ["migBackedVgpu"]')
         fi
 
+        # Reported for any card that can be switched to sriovVgpu, whatever it is
+        # now. The Web UI sizes its SR-IOV count control from this field, also on
+        # the preview of a switch *into* sriovVgpu, so a limit that only existed
+        # once the card was already sriovVgpu read as "no limit" on that screen.
+        # Both inputs answer regardless of the current type: a card in MIG mode
+        # still lists its SR-IOV types' Max Instances (cn13, 2026-10-08), and
+        # sriov_totalvfs is a property of the PF.
+        local sriov_vgpu_profile_count_limit="null"
+        if echo "$support_types" | jq -e 'index("sriovVgpu")' >/dev/null 2>&1; then
+            local pci_sysfs sriov_totalvfs
+            pci_sysfs=$(echo "$pci_bus_id" | tr '[:upper:]' '[:lower:]' | cut -c5-)
+            sriov_totalvfs=$(cat "/sys/bus/pci/devices/${pci_sysfs}/sriov_totalvfs" 2>/dev/null | tr -d '[:space:]')
+            sriov_vgpu_profile_count_limit=$(gpu_sriov_vgpu_count_limit "$vgpu_support_out" "$sriov_totalvfs")
+        fi
+
         local gpu_type
         gpu_type=$(echo "$gpu_config" | jq -r --arg id "$uuid" \
             'map(select(.id == $id)) | if length > 0 then .[0].type else "" end')
@@ -719,19 +734,13 @@ gpu_device_list()
                 --arg pciAddress "$pci_bus_id" \
                 --argjson supportTypes "$support_types" \
                 --argjson totalVramMiB "$total_vram_mib" \
-                '. + [{ id: $id, name: $name, type:"unset", supportTypes: $supportTypes, pciAddress: $pciAddress, totalVramMiB: $totalVramMiB, sriovVgpuProfileCountLimit: null, status: "unassigned", allocation: null }]')
+                --argjson sriovVgpuProfileCountLimit "${sriov_vgpu_profile_count_limit:-null}" \
+                '. + [{ id: $id, name: $name, type:"unset", supportTypes: $supportTypes, pciAddress: $pciAddress, totalVramMiB: $totalVramMiB, sriovVgpuProfileCountLimit: $sriovVgpuProfileCountLimit, status: "unassigned", allocation: null }]')
             continue
         fi
 
         local status="idle"
         local allocation
-        # Must match the name used below and in the jq call at the end of this
-        # loop. It was declared as profile_count_limit while the sriovVgpu
-        # branch assigned (and the jq call read) sriov_vgpu_profile_count_limit,
-        # so on any other type the latter was an unset, non-local variable:
-        # --argjson got an empty string and the whole gpu_device_list jq failed.
-        # Being non-local also let one card's limit leak into the next.
-        local sriov_vgpu_profile_count_limit="null"
 
         if [ "$gpu_type" = "pgpu" ]; then
             # A listing still has to render when libvirt cannot be asked, so a
@@ -763,14 +772,6 @@ gpu_device_list()
                 --argjson current "$current" \
                 --argjson total "$total" \
                 '{ current: $current, total: $total }')
-
-            if [ "$gpu_type" = "sriovVgpu" ]; then
-                local pci_sysfs
-                pci_sysfs=$(echo "$pci_bus_id" | tr '[:upper:]' '[:lower:]' | cut -c5-)
-                local sriov_totalvfs
-                sriov_totalvfs=$(cat "/sys/bus/pci/devices/${pci_sysfs}/sriov_totalvfs" 2>/dev/null | tr -d '[:space:]')
-                sriov_vgpu_profile_count_limit=$(gpu_sriov_vgpu_count_limit "$vgpu_support_out" "$sriov_totalvfs")
-            fi
 
         fi
 
@@ -832,6 +833,14 @@ gpu_device_list()
         recorded_vram=$(echo "$entry" | jq -c '.totalVramMiB // null' 2>/dev/null)
         [ -z "$recorded_vram" ] && recorded_vram="null"
 
+        # Same reason as the framebuffer: the SR-IOV count limit needs
+        # `nvidia-smi vgpu -s -v`, which cannot see a vfio-bound card, so report
+        # what gpu_resource_set recorded before binding it. null for a card that
+        # went pgpu before the field existed, until its next resource change.
+        local recorded_limit
+        recorded_limit=$(echo "$entry" | jq -c '.sriovVgpuProfileCountLimit // null' 2>/dev/null)
+        [ -z "$recorded_limit" ] && recorded_limit="null"
+
         output=$(echo "$output" | jq -c \
             --arg id "$uuid" \
             --arg name "$name" \
@@ -841,7 +850,8 @@ gpu_device_list()
             --argjson supportTypes "$support_types" \
             --argjson allocation "$allocation" \
             --argjson totalVramMiB "$recorded_vram" \
-            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profileCountLimit:null, status:$status, allocation:$allocation}]')
+            --argjson sriovVgpuProfileCountLimit "$recorded_limit" \
+            '. + [{id:$id, name:$name, type:$type, supportTypes:$supportTypes, pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, status:$status, allocation:$allocation}]')
     done <<< "$(echo "$pgpu_ids" | jq -c '.[]' 2>/dev/null)"
 
     # The union above only catches vfio-pci-bound GPUs that config.json
@@ -898,6 +908,10 @@ gpu_device_list()
         recorded_vram=$(echo "$entry" | jq -c '.totalVramMiB // null' 2>/dev/null)
         [ -z "$recorded_vram" ] && recorded_vram="null"
 
+        local recorded_limit
+        recorded_limit=$(echo "$entry" | jq -c '.sriovVgpuProfileCountLimit // null' 2>/dev/null)
+        [ -z "$recorded_limit" ] && recorded_limit="null"
+
         output=$(echo "$output" | jq -c \
             --arg id "$uuid" \
             --arg name "$name" \
@@ -906,7 +920,8 @@ gpu_device_list()
             --argjson supportTypes "$support_types" \
             --argjson allocation "$allocation" \
             --argjson totalVramMiB "$recorded_vram" \
-            '. + [{id:$id, name:$name, type:"pgpu", supportTypes:$supportTypes, pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, profileCountLimit:null, status:$status, allocation:$allocation}]')
+            --argjson sriovVgpuProfileCountLimit "$recorded_limit" \
+            '. + [{id:$id, name:$name, type:"pgpu", supportTypes:$supportTypes, pciAddress:$pciAddress, totalVramMiB:$totalVramMiB, sriovVgpuProfileCountLimit:$sriovVgpuProfileCountLimit, status:$status, allocation:$allocation}]')
     done
 
     # Every step above rebuilds $output through jq, so a single failed jq call
