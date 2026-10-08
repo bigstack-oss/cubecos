@@ -1060,9 +1060,10 @@ FindGpuDevice(const char* gpuId)
     return json11::Json();
 }
 
-// Total device framebuffer, for the MIG capacity check below. Returns 0 when
-// nvidia-smi reports nothing parseable; the caller treats that as a failed
-// check rather than an unlimited budget.
+// Total device framebuffer as nvidia-smi measures it, recorded in config.json
+// for the Web UI. Not a budget for vGPU profiles, whose sizes are nominal (see
+// the MIG-backed capacity rule below). Returns 0 when nvidia-smi reports
+// nothing parseable.
 static long
 GetGpuTotalVramMiB(const char* gpuId)
 {
@@ -1100,7 +1101,15 @@ GetGpuTotalVramMiB(const char* gpuId)
 //     1. each type's requested count must fit within its own vmCountLimit
 //        (Max Instances - how many of that type the whole card can host)
 //     2. the combined vramMiB*count of the request must fit within the
-//        device's total framebuffer
+//        card's nominal MIG-backed capacity: the largest vramMiB*vmCountLimit
+//        among its MIG-backed profiles (vmCountLimit taken as 1 where unknown).
+//        Not nvidia-smi's memory.total: profile sizes are nominal - DC-4-96Q is
+//        98304 MiB - while memory.total is what is usable, 97887 MiB on cn13's
+//        RTX PRO 6000 Blackwell, so comparing the two refused the card's own
+//        full-size profile at count 1 and DC-4-24Q x4, both of which the driver
+//        lists as fitting (#1794). The driver budgets in nominal sizes too (see
+//        the 1g.24gb note below); every one of the 43 types on that card gives
+//        98304 for vramMiB*vmCountLimit.
 //     3. the GPU instances the request needs must fit within the number the
 //        card can create. Rules 1 and 2 can both pass on a request the driver
 //        then refuses: one vGPU each of five different memory sizes on cn13
@@ -1280,6 +1289,7 @@ ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profile
     if (strcmp(newType, "migBackedVgpu") == 0) {
         std::map<int, double> vramMiBById;
         std::map<int, long> vmCountLimitById;
+        double nominalCapacityMiB = 0;
 
         for (const json11::Json& profile : profileList[listKey].array_items()) {
             if (!profile["id"].is_number()) {
@@ -1289,6 +1299,12 @@ ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profile
             vramMiBById[id] = profile["vramMiB"].number_value();
             vmCountLimitById[id] = profile["vmCountLimit"].is_number() ?
                 (long)profile["vmCountLimit"].number_value() : -1;
+
+            const double capacityMiB =
+                vramMiBById[id] * (vmCountLimitById[id] > 0 ? vmCountLimitById[id] : 1);
+            if (capacityMiB > nominalCapacityMiB) {
+                nominalCapacityMiB = capacityMiB;
+            }
         }
 
         double requestedVramMiB = 0;
@@ -1313,16 +1329,15 @@ ValidateVgpuProfiles(const char* gpuId, const char* newType, const char* profile
         // card before anything notices. This is the shape PR #1141 flagged as a
         // silent bypass of capacity validation on the SR-IOV check above, fixed
         // there in 79734b07 - the MIG rules follow the same contract.
-        const long totalVramMiB = GetGpuTotalVramMiB(gpuId);
-        if (totalVramMiB <= 0) {
-            HexLogError("gpu_resource_set: could not read the total framebuffer of GPU %s; "
+        if (nominalCapacityMiB <= 0) {
+            HexLogError("gpu_resource_set: could not read the MIG-backed vGPU capacity of GPU %s; "
                         "cannot verify the request fits", gpuId);
             return false;
         }
 
-        if (requestedVramMiB > totalVramMiB) {
-            HexLogError("gpu_resource_set: requested %.0f MiB of MIG-backed vGPU memory exceeds the %ld MiB "
-                        "available on GPU %s", requestedVramMiB, totalVramMiB, gpuId);
+        if (requestedVramMiB > nominalCapacityMiB) {
+            HexLogError("gpu_resource_set: requested %.0f MiB of MIG-backed vGPU memory exceeds the %.0f MiB "
+                        "of MIG-backed vGPU capacity on GPU %s", requestedVramMiB, nominalCapacityMiB, gpuId);
             return false;
         }
 
