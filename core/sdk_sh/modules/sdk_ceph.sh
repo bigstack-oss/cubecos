@@ -1046,60 +1046,6 @@ ceph_osd_list_partitions()
     echo -n $scsi_devs
 }
 
-# params:
-# $1: device name(e.g.: /dev/sdd)
-# $2: nums of meta partitions
-# $3: size of meta partition (unit: sectors)
-ceph_osd_prepare_bluestore()
-{
-    local typecode_data="4fbd7e29-9d25-41b8-afd0-062c0ceff05d"
-    local typecode_block="cafecafe-9b03-4f30-b4c6-b4b80ceff106"
-    local dev=$1
-    local part_num=$2
-    local part_size=$3
-    local type=$4
-    local part_symbol=
-    local part_dev=
-
-    # a. error handling
-    [ -n "$dev" ] || return 1
-    [[ "$part_num" =~ ^[0-9]+$ ]] || part_num=1
-    [[ "$part_size" =~ ^[0-9]+$ ]] || part_size=409600
-
-    # b. zap and partition osd data device
-    Quiet ceph_osd_zap_disk $dev
-    i=1
-    part_size=$(( $part_size / 2048))
-
-    if [ "$type" == "scsi" ] ; then
-        part_symbol=${dev/\/dev\/sd/}
-        part_dev="$dev"
-    elif [ "$type" == "nvme" ] ; then
-        part_symbol=${dev/\/dev\/nvme/}
-        part_dev="${dev}p"
-    fi
-
-    for (( ; i<=$part_num ; i++ )) ; do
-        Quiet sgdisk -n $i:0:+${part_size}M -c $i:"cube_meta_"$part_symbol"_"$i -u 1:$(uuidgen) --mbrtogpt -- $dev
-        partprobe $part_dev$i 2>/dev/null || true
-        # zero-out 100mb for each partition
-        dd if=/dev/zero of=${part_dev}${i} bs=1M count=100 oflag=sync
-        Quiet mkfs.xfs -f ${part_dev}${i}
-    done
-    # c. partition osd block device
-    free_size=$(GetFreeSectorsByDisk $dev)
-    log_sec=$(lsblk -t -J $dev | jq -r .blockdevices[].\"log-sec\")
-    multiplier=$(( $log_sec / 512 ))
-    part_size=$(( $free_size / $part_num / 2048 * ${multiplier:-1} ))
-    part_num=$(( $part_num * 2 ))
-    for (( ; i<=$part_num ; i++ )) ; do
-        Quiet sgdisk -n $i:0:+${part_size}M -c $i:"cube_data_"$part_symbol"_"$i -u 1:$(uuidgen) --mbrtogpt -- $dev
-        partprobe $part_dev$i 2>/dev/null || true
-        # zero-out 100mb for each partition
-        dd if=/dev/zero of=${part_dev}${i} bs=1M count=100 oflag=sync
-    done
-}
-
 ceph_osd_down_list()
 {
     if [ "$VERBOSE" == "1" ] ; then
@@ -1108,24 +1054,6 @@ ceph_osd_down_list()
     else
         $CEPH osd tree | awk '/ down /{print $1}'
     fi
-}
-
-# prepare free disks and make them lvm OSDs
-# !!!USE WITH CAUTIONS!!!
-ceph_osd_add_disk_lvm()
-{
-    local devs="$*"
-    for dev in $devs ; do
-        [ -n "$(readlink -e $dev)" ] || continue
-        Quiet timeout $SRVTO wipefs -a $dev 2>/dev/null
-        if ceph-volume inventory $dev | grep -q -i "available.*true" ; then
-            Quiet -n ceph-volume lvm create --bluestore --data $dev
-        else
-            Quiet -n ceph-volume inventory $dev
-        fi
-    done
-    Quiet -n ceph-volume lvm activate --bluestore --all
-    Quiet -n ceph_adjust_cache_flush_bytes
 }
 
 # prepare free disks and make them lvm LUKS encrypted OSDs
