@@ -11,6 +11,22 @@ Group=placement
 ExecStart=/usr/bin/uwsgi --ini /etc/placement/placement-uwsgi.ini
 Restart=on-failure
 RestartSec=5s
+# Signal only the uWSGI master on stop; it shuts its workers down itself.
+#
+# With the default control-group mode systemd sends SIGTERM to every process in the
+# unit, workers included, while the master - die-on-term in placement-uwsgi.ini - sends
+# each worker a signal of its own. A worker can take the second one while its handler
+# for the first is still inside free(): uWSGI's end_me calls exit() from the signal
+# handler, the second exit() runs Py_FinalizeEx, its free() waits on the malloc lock the
+# interrupted free() is holding, and the worker deadlocks until the master's 60s
+# worker-reload-mercy SIGKILLs it. Measured on cn13 (2026-10-07/08, uWSGI 2.0.31): 5 of
+# 33 stops in a day and 2 of 4 in a loop took 62s, every stuck worker on that stack.
+# hex_config restart_nova stops placement first, so gpu_resource_set ran past the 60s
+# proxy timeout in front of cube-cos-api and the Web UI showed a bare 504 (#1754).
+#
+# Under mixed, SIGKILL still reaches the whole cgroup if the stop times out; the same
+# loop ran 20 stops at 1.0-1.2s with no worker left behind.
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target

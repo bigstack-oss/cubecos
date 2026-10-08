@@ -8,6 +8,22 @@ NotifyAccess=all
 Restart=always
 User=nova
 ExecStart=/usr/bin/nova-api --config-file /etc/nova/nova.conf --config-dir /etc/nova/nova.d
+# Signal only the master on stop; oslo.service's ProcessLauncher stops its workers itself.
+#
+# The master and its workers share one log lock: oslo.log's PipeMutex is a byte in a
+# pipe the master creates before it forks, so the master and every worker read and
+# write the same pipe. With the default control-group mode systemd sends SIGTERM to
+# every process, a worker's first SIGTERM handler resets its handlers to SIG_DFL, and the
+# master's own SIGTERM to that worker then kills it outright - sometimes while it holds
+# the byte, writing its shutdown log. The master then blocks for good on its next log
+# line ("Waiting on 6 children to exit"), with its workers left as zombies, until the
+# graceful_shutdown_timeout SIGALRM ends it 60s later. Measured on cn13 (2026-10-08,
+# oslo.log 7.1.0, oslo.service 4.1.2): 5 of 39 stops took 60s; in the stuck master the
+# lock showed owner=None and an empty pipe. hex_config restart_nova stops nova-api,
+# so a GPU type switch crossed the 60s proxy timeout and the Web UI showed 504 (#1754).
+#
+# Under mixed the same loop ran 30 stops at 0.2s with no worker left behind.
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target
