@@ -2676,7 +2676,8 @@ health_cyborg_check()
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node cyborg-agent ; then
             ERR_MSG+="cyborg-agent on $node is not running\n"
-            err_code=5 && break
+            ERR_LOG="journalctl -n $ERR_LOGSIZE -u cyborg-agent"
+            ERR_CODE=5 && break
         fi
     done
 
