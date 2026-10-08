@@ -6,8 +6,6 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
-STORAGE_FORCE_TO_USE_MPATH_DEVICES="/etc/cube/cos/ceph/force_to_use_mpath_devices"
-
 storage_update_device_maps()
 {
     _hex_function_ret /usr/sbin/multipath -r
@@ -151,38 +149,6 @@ storage_update_partition_label_links()
             fi
         done
     done
-}
-
-storage_set_force_use_mpath_devices_for_ceph()
-{
-    if [ -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then
-        return 0
-    fi
-
-    touch "$STORAGE_FORCE_TO_USE_MPATH_DEVICES"
-}
-
-storage_unset_force_use_mpath_devices_for_ceph()
-{
-    if [ ! -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then
-        return 0
-    fi
-
-    rm -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES"
-}
-
-storage_are_mpath_devices_allowed_for_ceph()
-{
-    if [ -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then
-        return 0
-    fi
-
-    # check if external storages are set on controls from the control node holding the vip
-    if _hex_function_ret remote_run "$(shared_id)" "${HEX_SDK} cinder_is_storage_set" ; then
-        return 1
-    fi
-
-    return 0
 }
 
 storage_list_all_disks()
