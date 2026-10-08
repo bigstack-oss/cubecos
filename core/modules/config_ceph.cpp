@@ -600,8 +600,9 @@ SetupMds(std::string hostname)
 
 /**
  * Set up the local OSDs: s_osdIds then lists the raw ones and s_lvmOsdIds the LVM
- * ones (encrypted included), which are left stopped for CommitOsd to start. With
- * deferStart the raw ones are left stopped too, for CommitOsd to start in batches.
+ * ones (encrypted included). With deferStart (boot and FTS) every OSD is left
+ * stopped for CommitOsd to start in batches; otherwise the running OSDs are left
+ * alone and the stopped ones left stopped, for CommitOsd to start.
  */
 static bool
 SetupOsd(std::string hostname, bool deferStart = false)
@@ -613,7 +614,7 @@ SetupOsd(std::string hostname, bool deferStart = false)
     activateRawOsds();
     activateLvmOsds();
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_map");
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount%s", deferStart ? " --no-start" : "");
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount --no-start%s", deferStart ? "" : " --stopped-only");
     // ceph_osd_remount unmounts every OSD directory, the LVM ones' tmpfs included,
     // and does not remount those; activate them again, still without starting them.
     activateLvmOsds();
@@ -1236,8 +1237,8 @@ startOsds(const std::vector<size_t>& osds)
 /**
  * Start (or, with ceph disabled, compact and stop) the local OSDs. batched follows
  * SetupOsd(deferStart): the raw and LVM OSDs it left stopped start in batches.
- * Otherwise restartAll restarts every local OSD, and without it the new raw OSDs
- * and the LVM ones start.
+ * Otherwise restartAll restarts every local OSD, and without it only the stopped
+ * ones start, in batches, so adding a disk leaves the running OSDs alone.
  */
 static bool
 CommitOsd(const char* name, bool restartAll = true, bool batched = false)
@@ -1245,8 +1246,7 @@ CommitOsd(const char* name, bool restartAll = true, bool batched = false)
     if (s_osdIds.empty() && s_lvmOsdIds.empty())
         return true;
 
-    std::vector<size_t> osds(restartAll ? s_osdIds.begin() : s_osdNewIds.begin(),
-        restartAll ? s_osdIds.end() : s_osdNewIds.end());
+    std::vector<size_t> osds(s_osdIds.begin(), s_osdIds.end());
     osds.insert(osds.end(), s_lvmOsdIds.begin(), s_lvmOsdIds.end());
 
     if (s_enabled) {
@@ -1257,6 +1257,20 @@ CommitOsd(const char* name, bool restartAll = true, bool batched = false)
 
         if (batched) {
             startOsds(osds);
+        } else if (!restartAll) {
+            std::vector<size_t> stopped;
+            for (auto& id : osds) {
+                const ExecSyncResult ar = ExecBashSync(
+                    0,
+                    false,
+                    false,
+                    {},
+                    "systemctl is-active -q ceph-osd@" + std::to_string(id));
+                if (ar.exitCode != 0) {
+                    stopped.push_back(id);
+                }
+            }
+            startOsds(stopped);
         } else {
             for (auto& id : osds) {
                 HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_restart %lu", id);
@@ -1266,7 +1280,7 @@ CommitOsd(const char* name, bool restartAll = true, bool batched = false)
         HexLogInfo("%s-osd is running", name);
     } else {
         HexLogInfo("compact and stop %s-osd", name);
-        for (auto& id : osds) {
+        for (auto& id : (restartAll ? osds : std::vector<size_t>(s_osdNewIds.begin(), s_osdNewIds.end()))) {
             HexUtilSystemF(FWD, 0, "timeout 60 ceph tell osd.%lu compact ; systemctl stop ceph-osd@%lu", id, id);
         }
 
