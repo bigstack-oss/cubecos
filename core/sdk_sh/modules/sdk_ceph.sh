@@ -988,6 +988,25 @@ ceph_osd_zap_disk()
     fi
 }
 
+# Make a prepared disk one LVM OSD, prepared but not activated: Commit() activates
+# and starts it with the other LVM OSDs. A disk that fails is labeled again, so the
+# next commit retries it.
+# params:
+# $1: device name(e.g.: /dev/sdd)
+ceph_osd_prepare_lvm()
+{
+    local dev=$1
+    [ -n "$(readlink -e $dev)" ] || return 1
+
+    Quiet ceph_osd_zap_disk $dev
+    if ! Quiet ceph-volume lvm prepare --bluestore --data $dev ; then
+        log_error "failed to prepare an LVM OSD on $dev"
+        Quiet ceph_osd_zap_disk $dev
+        PrepareDataDisk $dev
+        return 1
+    fi
+}
+
 # list osd-typed disks (mounted)
 ceph_osd_list_disk()
 {
@@ -1127,7 +1146,7 @@ ceph_osd_add_disk_encrypt()
     Quiet -n ceph_adjust_cache_flush_bytes
 }
 
-# prepare free disks and make them raw OSDs
+# label free disks as prepared and make each one LVM OSD
 # !!!USE WITH CAUTIONS!!!
 ceph_osd_add_disk_raw()
 {

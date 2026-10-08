@@ -172,17 +172,12 @@ PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 // PARSE_TUNING_X_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS, 2);
 static ConfigString s_adminCliPass("66K1ogIiRt5KnyHe");
 
-// The parallel OSD setup steps -- partitioning prepared disks and starting OSDs --
-// run in batches sized from the memory available when each batch starts, the way
+// OSDs start in batches sized from the memory available when each batch starts, the way
 // get_concurrent_links.py sizes link jobs: clamp(MemAvailable * BATCH_MEM_RATIO /
-// per-item budget, 1, items left). A step may take a quarter of MemAvailable, and
+// per-item budget, 1, items left). A batch may take a quarter of MemAvailable, and
 // re-reading it per batch lets a loaded node slow down instead of competing with
 // its workloads.
 static const double BATCH_MEM_RATIO = 0.25;
-// One ceph_osd_prepare_bluestore peaks at ~30 MB of anonymous memory (measured on
-// sky150; the rest is clean page cache from its O_SYNC dd), budgeted at 256 MB: one
-// disk per GiB available, so a freshly installed node partitions all its disks at once.
-static const unsigned long PARTITION_TASK_MEM_KB = 256 * 1024;
 // An OSD is budgeted at the memory target it runs with (ceph_osd_memory_targets);
 // ceph's 4 GiB default when that is unknown.
 static const unsigned long OSD_DEFAULT_START_MEM_KB = 4UL * 1024 * 1024;
@@ -227,17 +222,17 @@ memoryBatchSize(unsigned long itemMemKb, std::size_t left, unsigned long* availK
 }
 
 /**
- * Partition all prepared OSD disks from the installation process.
+ * Make each prepared disk one LVM OSD.
  *
- * Prepared OSD disks are disks with part label "hex_prep_" prefix.
- * Disks are partitioned in batches sized from MemAvailable: the disks of a batch
- * run in parallel, and the next batch starts once the whole batch has finished.
+ * Prepared disks are disks with part label "hex_prep_" prefix, labeled by the
+ * installation process or CLI > storage > add_disk. The OSDs are only prepared
+ * here; activateLvmOsds() activates them along with the other LVM OSDs.
  */
 static bool
-partitionPreparedDisks()
+prepareLvmOsds()
 {
     bool result = true;
-    HexLogInfo("start partitioning prepared disks");
+    HexLogInfo("start preparing LVM OSDs on prepared disks");
     // force the kernel to load the current partition table
     const ExecSyncResult ur = ExecBashSync(
         0,
@@ -271,7 +266,7 @@ partitionPreparedDisks()
 
         /**
          * Ensure the device is a direct-attached storage.
-         * We would not partition non DAS disks during FTS/bootstrapping/tuning.
+         * We would not touch non DAS disks during FTS/bootstrapping/tuning.
          */
         const ExecSyncResult dr = ExecBashSync(
             0,
@@ -287,76 +282,21 @@ partitionPreparedDisks()
         disks.push_back(d);
     }
 
-    std::size_t first = 0;
-    while (first < disks.size()) {
-        unsigned long availKb = 0;
-        const std::size_t batch = memoryBatchSize(PARTITION_TASK_MEM_KB, disks.size() - first, &availKb);
-        const std::size_t last = first + batch;
-        HexLogInfo("partitioning prepared disks %zu-%zu of %zu (MemAvailable %lu MB)",
-            first + 1, last, disks.size(), availKb / 1024);
-
-        // partition the disks of this batch in parallel
-        std::vector<std::pair<std::string, pid_t>> partitionTasks;
-        for (std::size_t i = first; i < last; i++) {
-            const std::string& d = disks[i];
-
-            int partNums = 2;
-            // sectors (512B) --> 400 MB by default
-            int partSize = 819200;
-            std::string type = "scsi";
-
-            std::size_t found = d.find("nvme");
-            if (found != std::string::npos) {
-                type = "nvme";
-                partNums = 2;
-            }
-
-            Cmd pc;
-            pc.path = HEX_SDK;
-            pc.args = {
-                "ceph_osd_prepare_bluestore",
-                d,
-                std::to_string(partNums),
-                std::to_string(partSize),
-                type,
-            };
-
-            const Process pp = Exec(pc, false);
-            if (pp.pid == -1) {
-                HexLogError(
-                    "failed to create process to run partition task for %s, error: %s",
-                    d.c_str(),
-                    pp.error.c_str());
-                result = false;
-            } else {
-                partitionTasks.push_back({ d, pp.pid });
-            }
+    for (const std::string& d : disks) {
+        HexLogInfo("preparing an LVM OSD on %s", d.c_str());
+        const ExecSyncResult pr = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            HEX_SDK " ceph_osd_prepare_lvm " + d);
+        if (pr.exitCode != 0) {
+            HexLogError("failed to prepare an LVM OSD on %s", d.c_str());
+            result = false;
         }
-
-        // wait for the whole batch, collecting each task's own exit status
-        for (const auto& pt : partitionTasks) {
-            int status = 0;
-            pid_t w;
-            do {
-                w = waitpid(pt.second, &status, 0);
-            } while (w == -1 && errno == EINTR);
-
-            if (w != pt.second) {
-                HexLogError("failed to wait for the partition task of %s", pt.first.c_str());
-                result = false;
-            } else if (!WIFEXITED(status)) {
-                HexLogError("partition task of %s terminated abnormally", pt.first.c_str());
-                result = false;
-            } else if (WEXITSTATUS(status) != 0) {
-                HexLogError("partition task of %s exited with %d", pt.first.c_str(), WEXITSTATUS(status));
-                result = false;
-            }
-        }
-
-        first = last;
     }
 
-    HexLogInfo("finished partitioning prepared disks");
+    HexLogInfo("finished preparing LVM OSDs on prepared disks");
     return result;
 }
 
@@ -480,12 +420,12 @@ prepareOsdDirectories()
 }
 
 /**
- * Activate Raw OSDs backed by FileStore XFS.
+ * Activate the raw OSDs, two per disk on cube_meta/cube_data partitions, of the
+ * disks prepared before one LVM OSD per disk.
  */
 static void
 activateRawOsds(void)
 {
-    partitionPreparedDisks();
     updatePartitionLabelLinks();
     prepareOsdDirectories();
 }
@@ -611,6 +551,7 @@ SetupOsd(std::string hostname, bool deferStart = false)
     s_osdNewIds.clear();
     s_lvmOsdIds.clear();
 
+    prepareLvmOsds();
     activateRawOsds();
     activateLvmOsds();
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_map");
