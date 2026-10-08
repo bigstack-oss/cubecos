@@ -1,0 +1,17 @@
+#!/bin/sh
+#
+# Mock hex_sdk for the MIG-backed capacity rule (#1794): a migBackedVgpu card
+# with the RTX PRO 6000 Blackwell's real numbers. Every one of its MIG-backed
+# types gives vramMiB * vmCountLimit = 98304, the card's nominal size, while
+# nvidia-smi's memory.total for the same card is 97887.
+case "$1" in
+    gpu_device_list)
+        echo '[{"id":"GPU-1794-test","name":"Test Card","type":"migBackedVgpu","pciAddress":"00000000:42:00.0","supportTypes":["pgpu","migBackedVgpu"]}]'
+        ;;
+    gpu_vgpu_profile_list)
+        echo '{"sriov":[],"migBacked":[{"id":1576,"name":"Test DC-4-24Q","vramMiB":24576,"vmCountLimit":4},{"id":1585,"name":"Test DC-4-96Q","vramMiB":98304,"vmCountLimit":1},{"id":1563,"name":"Test DC-1-24C","vramMiB":24576,"vmCountLimit":4}]}'
+        ;;
+    *)
+        exit 0
+        ;;
+esac

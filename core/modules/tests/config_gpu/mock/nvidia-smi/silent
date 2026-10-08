@@ -1,0 +1,7 @@
+#!/bin/sh
+#
+# Mock nvidia-smi that reports nothing. For the MIG-backed capacity rule (#1794)
+# this proves two things at once: the rule no longer needs memory.total, and a
+# request that passes it is next refused by the GPU-instance rule, which fails
+# closed without the driver's MIG geometry - so the request never reaches sysfs.
+exit 0
