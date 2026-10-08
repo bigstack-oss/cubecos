@@ -1148,7 +1148,7 @@ ceph_osd_add_disk_encrypt()
 
 # label free disks as prepared and make each one LVM OSD
 # !!!USE WITH CAUTIONS!!!
-ceph_osd_add_disk_raw()
+ceph_osd_add_disk_plain()
 {
     local devs="$*"
     for dev in $devs ; do
@@ -1157,6 +1157,12 @@ ceph_osd_add_disk_raw()
     done
     Quiet -n $HEX_CFG refresh_ceph_osd
     Quiet -n ceph_adjust_cache_flush_bytes
+}
+
+# the name of ceph_osd_add_disk_plain before the plain mode, which cube-cos-api calls
+ceph_osd_add_disk_raw()
+{
+    ceph_osd_add_disk_plain "$@"
 }
 
 ceph_osd_purge()
