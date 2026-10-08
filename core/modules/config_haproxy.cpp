@@ -188,13 +188,15 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
     fprintf(fout, "  option http-server-close\n");
-    fprintf(fout, "  redirect scheme https if !{ ssl_fc }\n");
     // A GPU card type switch (Edit GPU Type) is answered synchronously and normally takes 35-50s,
     // because gpu_resource_set ends in restart_nova. cube-cos-api gives it 180s
     // (UpdateNodeGpuCard), so the 1m default would turn a slower switch into a bare 504 while it
     // still completes on the node. Outlast the API's own budget so its result or timeout error
     // reaches the client. Scoped to that one PUT; the rest of /api/ keeps the default.
+    // Kept above the redirect: haproxy runs http-request rules first anyway and warns at
+    // config check when one is written after a redirect.
     fprintf(fout, "  http-request set-timeout server 200s if METH_PUT { path_reg ^/api/v1/datacenters/[^/]+/nodes/[^/]+/gpuCards/[^/]+$ }\n");
+    fprintf(fout, "  redirect scheme https if !{ ssl_fc }\n");
     fprintf(fout, "  server localhost %s:8082 check\n", myip.c_str());
     fprintf(fout, "  \n");
 
