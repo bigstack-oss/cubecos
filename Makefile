@@ -80,6 +80,16 @@ ova vmware: all
 	$(Q)$(MAKE) -C core/main ova
 
 help::
+	$(Q)echo "tempest_image Build the Tempest runner image for OPENSTACK_RELEASE [PUSH=1]"
+	$(Q)echo "tempest_test  Run Tempest: TARGET=<vip> [SUITE=smoke|api|scenario|full|<plugin>] [REGEX=..] [CONCURRENCY=2] [OUT=dir]"
+	$(Q)echo "              [PREFLIGHT=0] [MIN_FIPS=n]; ROOT_PASS defaults to Cube@<last two octets of TARGET>"
+	$(Q)echo "tempest_preflight Check TARGET has what SUITE needs (cluster check, FIPs, capacity, images)"
+
+.PHONY: tempest_image tempest_test tempest_preflight
+tempest_image tempest_test tempest_preflight:
+	$(Q)$(MAKE) -C core/tempest $@
+
+help::
 	$(Q)echo "vagrant      Build vagrant box."
 
 .PHONY: vagrant

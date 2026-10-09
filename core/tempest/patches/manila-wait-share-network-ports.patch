@@ -1,0 +1,56 @@
+--- manila_tempest_tests/tests/api/base.py.orig
++++ manila_tempest_tests/tests/api/base.py
+@@ -882,6 +882,42 @@
+                 pass
+ 
+     @classmethod
++    def _sn_neutron_subnets(cls, client, sn_id):
++        """Neutron subnet ids backing a share network."""
++        try:
++            sn = client.get_share_network(sn_id)['share_network']
++        except Exception:
++            return []
++        ids = {s.get('neutron_subnet_id')
++               for s in sn.get('share_network_subnets') or []}
++        ids.add(sn.get('neutron_subnet_id'))
++        return [i for i in ids if i]
++
++    @classmethod
++    def _wait_subnets_released(cls, subnet_ids, timeout=180):
++        """Wait until async share-server teardown frees the subnets."""
++        ports = getattr(getattr(cls, '_creds_provider', None),
++                        'ports_admin_client', None)
++        if not subnet_ids or ports is None:
++            return
++        import time
++        deadline = time.time() + timeout
++        for sid in subnet_ids:
++            while time.time() < deadline:
++                left = [p for p in ports.list_ports(
++                    fixed_ips='subnet_id=%s' % sid)['ports']
++                    if p['device_owner'] not in (
++                        'network:distributed', 'network:dhcp',
++                        'network:router_interface',
++                        'network:router_interface_distributed',
++                        'network:ha_router_replicated_interface')]
++                if not left:
++                    break
++                LOG.info('Waiting for %d share-server port(s) on subnet %s',
++                         len(left), sid)
++                time.sleep(3)
++
++    @classmethod
+     def clear_resources(cls, resources=None):
+         """Deletes resources, that were created in test suites.
+ 
+@@ -917,8 +953,10 @@
+                         client.wait_for_resource_deletion(snapshot_id=res_id)
+                     elif (res["type"] == "share_network" and
+                             res_id != CONF.share.share_network_id):
++                        sn_subnets = cls._sn_neutron_subnets(client, res_id)
+                         client.delete_share_network(res_id)
+                         client.wait_for_resource_deletion(sn_id=res_id)
++                        cls._wait_subnets_released(sn_subnets)
+                     elif res["type"] == "dissociate_security_service":
+                         sn_id = res["extra_params"]["share_network_id"]
+                         client.remove_sec_service_from_share_network(

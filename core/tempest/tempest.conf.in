@@ -1,0 +1,181 @@
+# Tempest config for CubeCOS; @NAME@ values are filled by render-conf.sh.
+[DEFAULT]
+log_dir = @WORKSPACE@/logs
+log_file = tempest.log
+
+[oslo_concurrency]
+lock_path = @WORKSPACE@/tempest_lock
+
+[auth]
+use_dynamic_credentials = true
+admin_username = @ADMIN_USER@
+admin_project_name = @ADMIN_PROJECT@
+admin_domain_name = Default
+admin_password = @ADMIN_PASSWORD@
+
+[identity]
+uri_v3 = http://@VIP@:5000/v3
+auth_version = v3
+region = RegionOne
+disable_ssl_certificate_validation = true
+
+[identity-feature-enabled]
+api_v2 = false
+
+[compute]
+image_ref = @IMAGE_ID@
+image_ref_alt = @IMAGE_ID@
+flavor_ref = @FLAVOR_ID@
+flavor_ref_alt = @FLAVOR_ALT_ID@
+min_compute_nodes = 1
+region = RegionOne
+
+[compute-feature-enabled]
+live_migration = false
+cold_migration = false
+block_migration_for_live_migration = false
+
+[image]
+region = RegionOne
+container_formats = bare
+disk_formats = raw,qcow2
+
+[scenario]
+img_file = /opt/tempest/cirros.img
+img_disk_format = qcow2
+
+[network]
+public_network_id = @PUBLIC_NET_ID@
+floating_network_name = @PUBLIC_NET_NAME@
+project_networks_reachable = false
+region = RegionOne
+
+[network-feature-enabled]
+api_extensions = @NET_EXTENSIONS@
+# octavia member/webserver tests create their own SG only with both of these on
+port_security = true
+
+[neutron_plugin_options]
+available_type_drivers = flat,vlan,geneve
+dns_domain = cube.local
+
+[validation]
+run_validation = true
+image_ssh_user = cirros
+connect_method = floating
+auth_method = keypair
+ip_version_for_ssh = 4
+ping_timeout = 180
+ssh_timeout = 300
+
+[volume]
+region = RegionOne
+catalog_type = volumev3
+volume_type = CubeStorage
+storage_protocol = ceph
+vendor_name = Open Source
+
+[volume-feature-enabled]
+api_extensions = @VOL_EXTENSIONS@
+
+[object-storage]
+region = RegionOne
+
+[object-storage-feature-enabled]
+# what RGW /info advertises; no container sync
+discoverable_apis = bulk_delete,container_quotas,slo,tempurl,account_quotas,staticweb,tempauth
+container_sync = false
+object_versioning = true
+
+[service_available]
+nova = true
+neutron = true
+glance = true
+cinder = true
+swift = true
+heat = true
+heat_plugin = true
+horizon = true
+ironic = false
+octavia = true
+designate = true
+barbican = true
+manila = true
+watcher = true
+cyborg = true
+
+[dashboard]
+dashboard_url = https://@VIP@/horizon/
+disable_ssl_certificate_validation = true
+
+[dns]
+nameservers = @VIP@:53
+
+[load_balancer]
+# COS has no load-balancer_* roles; keep check_timeout at the plugin default
+RBAC_test_type = owner_or_admin
+provider = amphora
+test_with_ipv6 = false
+build_timeout = 900
+lb_build_timeout = 900
+test_server_path = /opt/tempest/test_server.bin
+admin_role = admin
+member_role = member
+observer_role = reader
+global_observer_role = reader
+enable_security_groups = true
+
+[heat_plugin]
+auth_url = http://@VIP@:5000/v3
+auth_version = 3
+region = RegionOne
+username = @ADMIN_USER@
+password = @ADMIN_PASSWORD@
+project_name = @ADMIN_PROJECT@
+admin_username = @ADMIN_USER@
+admin_password = @ADMIN_PASSWORD@
+admin_project_name = @ADMIN_PROJECT@
+user_domain_name = Default
+project_domain_name = Default
+disable_ssl_certificate_validation = true
+instance_type = @FLAVOR_NAME@
+minimal_instance_type = @FLAVOR_NAME@
+image_ref = @IMAGE_NAME@
+minimal_image_ref = @IMAGE_NAME@
+floating_network_name = @PUBLIC_NET_NAME@
+build_timeout = 1200
+# Cirros has no heat agents; no gnocchi on COS
+skip_scenario_test_list = CfnInitIntegrationTest,SoftwareConfigIntegrationTest,AodhAlarmTest
+
+[share]
+backend_names = GENERIC
+capability_storage_protocol = NFS_CIFS
+enable_protocols = nfs,cifs
+enable_ip_rules_for_protocols = nfs,cifs
+multitenancy_enabled = true
+create_networks_when_multitenancy_enabled = true
+default_share_type_name = tenant_share_type
+run_snapshot_tests = true
+capability_snapshot_support = true
+capability_create_share_from_snapshot_support = true
+run_share_group_tests = false
+run_replication_tests = false
+run_migration_tests = false
+run_manage_unmanage_tests = false
+run_mount_snapshot_tests = false
+run_revert_to_snapshot_tests = false
+suppress_errors_in_cleanup = true
+image_with_share_tools = manila-service-image
+image_username = manila
+# default flavor 100 does not exist
+client_vm_flavor_ref = @FLAVOR_ALT_ID@
+build_timeout = 900
+share_creation_retry_number = 2
+
+[image-feature-enabled]
+# the read-only http store makes tempest use the admin-only copy-image import
+import_image = false
+
+[image_signature_verification]
+# nova's verify_glance_signatures is off in COS (as upstream)
+enforced = false
