@@ -209,6 +209,19 @@ alert_extra_update()
     cmd -c kapacitor define alert_events -tick /etc/kapacitor/tasks/alert_events.tick
 }
 
+# an empty auth predates the setting: authenticate whenever a username is set
+alert_sender_email_auth()
+{
+    local auth=${1:-""}
+    local username=${2:-""}
+
+    if [[ "$auth" == "true" || ( "$auth" == "" && "$username" != "" ) ]] ; then
+        echo true
+    else
+        echo false
+    fi
+}
+
 alert_get_setting()
 {
     # output format: {
@@ -219,7 +232,9 @@ alert_get_setting()
     #       port: "",
     #       username: "",
     #       password: "",
-    #       from: ""
+    #       from: "",
+    #       auth: false,
+    #       tls: ""
     #     }
     #   },
     #   receiver: {
@@ -262,6 +277,8 @@ alert_get_setting()
     source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.username
     source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.password
     source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.from
+    source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.auth
+    source hex_tuning $SETTINGS_TXT kapacitor.alert.setting.sender.email.tls
     # receiver email
     local receiver_email_count_minus_one=$(($(grep -E "kapacitor.alert.setting.receiver.emails.[0-9]+.address" $SETTINGS_TXT | wc -l) - 1))
     for i in $(seq 0 "$receiver_email_count_minus_one") ; do
@@ -298,7 +315,9 @@ alert_get_setting()
         --arg username "$T_kapacitor_alert_setting_sender_email_username" \
         --arg password "$T_kapacitor_alert_setting_sender_email_password" \
         --arg from "$T_kapacitor_alert_setting_sender_email_from" \
-        '{host: $host, port: $port, username: $username, password: $password, from: $from}')
+        --argjson auth "$(alert_sender_email_auth "$T_kapacitor_alert_setting_sender_email_auth" "$T_kapacitor_alert_setting_sender_email_username")" \
+        --arg tls "$T_kapacitor_alert_setting_sender_email_tls" \
+        '{host: $host, port: $port, username: $username, password: $password, from: $from, auth: $auth, tls: $tls}')
     # receiver email
     local re_count=0
     local re="["
@@ -435,15 +454,33 @@ alert_set_setting_sender_email()
     #   username: "",
     #   password: "",
     #   from: "",
+    #   auth: true|false,
+    #   tls: "none"|"opportunistic"|"mandatory",
     # }
+    # a missing auth is derived from the username, and a missing tls keeps the
+    # policy's current value
 
     # process inputs
     local input=${1:-""}
-    local host=$(echo $input | jq -r '.host')
-    local port=$(echo $input | jq -r '.port')
-    local username=$(echo $input | jq -r '.username')
-    local password=$(echo $input | jq -r '.password')
-    local from=$(echo $input | jq -r '.from')
+    local host=$(echo $input | jq -r '.host // ""')
+    local port=$(echo $input | jq -r '.port // ""')
+    local username=$(echo $input | jq -r '.username // ""')
+    local password=$(echo $input | jq -r '.password // ""')
+    local from=$(echo $input | jq -r '.from // ""')
+    local auth=$(echo $input | jq -r 'if .auth == null then "" else (.auth | tostring) end')
+    local tls=$(echo $input | jq -r '.tls // ""')
+
+    if [[ "$auth" == "" ]] ; then
+        [[ "$username" != "" ]] && auth="true" || auth="false"
+    fi
+    if [[ "$auth" != "true" && "$auth" != "false" ]] ; then
+        Error "invalid email sender auth: $auth (want true or false)"
+        return 1
+    fi
+    if [[ "$tls" != "" && "$tls" != "none" && "$tls" != "opportunistic" && "$tls" != "mandatory" ]] ; then
+        Error "invalid email sender tls: $tls (want none, opportunistic or mandatory)"
+        return 1
+    fi
 
     # prepare the environment
     local input_dir=$(MakeTempDir)
@@ -457,6 +494,10 @@ alert_set_setting_sender_email()
     yq -i ".sender.email.username = \"$username\"" $policy_file
     yq -i ".sender.email.password = \"$password\"" $policy_file
     yq -i ".sender.email.from = \"$from\"" $policy_file
+    yq -i ".sender.email.auth = \"$auth\"" $policy_file
+    if [[ "$tls" != "" ]] ; then
+        yq -i ".sender.email.tls = \"$tls\"" $policy_file
+    fi
 
     # apply the changes
     $HEX_CFG apply $input_dir
@@ -641,6 +682,8 @@ alert_delete_setting_sender_email()
     yq -i '.sender.email.username = ""' $policy_file
     yq -i '.sender.email.password = ""' $policy_file
     yq -i '.sender.email.from = ""' $policy_file
+    yq -i '.sender.email.auth = ""' $policy_file
+    yq -i '.sender.email.tls = ""' $policy_file
 
     # apply the changes
     $HEX_CFG apply $input_dir
@@ -1391,7 +1434,9 @@ alert_get_full_trigger()
     #         port: "",
     #         username: "",
     #         password: "",
-    #         from: ""
+    #         from: "",
+    #         auth: false,
+    #         tls: ""
     #       }
     #     },
     #     receiver: {

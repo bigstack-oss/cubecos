@@ -21,6 +21,15 @@ struct NotifySettingSenderEmail
     std::string username;
     std::string password;
     std::string from;
+    /**
+     * "true" or "false". When "false" the sender never attempts SMTP AUTH.
+     */
+    std::string auth;
+    /**
+     * "none", "opportunistic" or "mandatory", matching
+     * bigstack-dependency-go pkg/email/v2.
+     */
+    std::string tls;
 };
 
 /**
@@ -145,7 +154,9 @@ public:
         std::string port,
         std::string username,
         std::string password,
-        std::string from
+        std::string from,
+        std::string auth,
+        std::string tls
     );
     /**
      * Add or update an email receiver's configurations.

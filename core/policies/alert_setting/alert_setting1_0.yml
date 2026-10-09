@@ -11,6 +11,8 @@ sender:
     username:
     password:
     from:
+    auth:
+    tls:
 receiver:
   emails:
   slacks:

@@ -3,6 +3,31 @@
 #include "include/policy_notify_setting.h"
 #include "include/policy_notify_trigger.h"
 
+#include <hex/log.h>
+
+static const char* SENDER_EMAIL_TLS_DEFAULT = "opportunistic";
+
+static bool
+IsValidSenderEmailTls(const std::string& tls)
+{
+    return tls == "none" || tls == "opportunistic" || tls == "mandatory";
+}
+
+/**
+ * Update the value of a key directly under path, adding the key when it is
+ * missing. Policy files written before the key existed lack it, and
+ * UpdateYmlValue fails on a missing key.
+ */
+static int
+UpsertYmlValue(GNode* root, const char* path, const char* key, const char* value)
+{
+    std::string fullPath = std::string(path).append(".").append(key);
+    if (FindYmlNode(root, fullPath.c_str()) == NULL) {
+        return AddYmlNode(root, path, key, value);
+    }
+    return UpdateYmlValue(root, fullPath.c_str(), value);
+}
+
 NotifySettingPolicy::NotifySettingPolicy()
     : isInitialized(false)
     , ymlRoot(NULL)
@@ -16,6 +41,8 @@ NotifySettingPolicy::NotifySettingPolicy()
     se.username = "";
     se.password = "";
     se.from = "";
+    se.auth = "false";
+    se.tls = SENDER_EMAIL_TLS_DEFAULT;
     NotifySettingSender s;
     s.email = se;
     this->config.sender = s;
@@ -92,6 +119,30 @@ bool NotifySettingPolicy::load(const char* policyFile)
     HexYmlParseString(this->config.sender.email.username, this->ymlRoot, "sender.email.username");
     HexYmlParseString(this->config.sender.email.password, this->ymlRoot, "sender.email.password");
     HexYmlParseString(this->config.sender.email.from, this->ymlRoot, "sender.email.from");
+    std::string auth;
+    std::string tls;
+    HexYmlParseString(auth, this->ymlRoot, "sender.email.auth");
+    HexYmlParseString(tls, this->ymlRoot, "sender.email.tls");
+
+    // a policy written before auth/tls existed lacks both keys; keep today's
+    // behaviour: authenticate whenever a username is set, and upgrade to
+    // STARTTLS when the relay advertises it
+    if (auth == "true" || auth == "false") {
+        this->config.sender.email.auth = auth;
+    } else {
+        if (auth != "") {
+            HexLogWarning("invalid sender.email.auth %s, derive it from the username", auth.c_str());
+        }
+        this->config.sender.email.auth = this->config.sender.email.username != "" ? "true" : "false";
+    }
+    if (IsValidSenderEmailTls(tls)) {
+        this->config.sender.email.tls = tls;
+    } else {
+        if (tls != "") {
+            HexLogWarning("invalid sender.email.tls %s, fall back to %s", tls.c_str(), SENDER_EMAIL_TLS_DEFAULT);
+        }
+        this->config.sender.email.tls = SENDER_EMAIL_TLS_DEFAULT;
+    }
 
     if ((this->config.sender.email.host != ""
             || this->config.sender.email.port != ""
@@ -108,6 +159,8 @@ bool NotifySettingPolicy::load(const char* policyFile)
         this->config.sender.email.username = "";
         this->config.sender.email.password = "";
         this->config.sender.email.from = "";
+        this->config.sender.email.auth = "false";
+        this->config.sender.email.tls = SENDER_EMAIL_TLS_DEFAULT;
     }
 
     // receiver email
@@ -234,6 +287,12 @@ bool NotifySettingPolicy::save(const char* policyFile)
         return false;
     }
     if (UpdateYmlValue(this->ymlRoot, "sender.email.from", this->config.sender.email.from.c_str()) != 0) {
+        return false;
+    }
+    if (UpsertYmlValue(this->ymlRoot, "sender.email", "auth", this->config.sender.email.auth.c_str()) != 0) {
+        return false;
+    }
+    if (UpsertYmlValue(this->ymlRoot, "sender.email", "tls", this->config.sender.email.tls.c_str()) != 0) {
         return false;
     }
 
@@ -437,7 +496,9 @@ void NotifySettingPolicy::updateSenderEmail(
     std::string port,
     std::string username,
     std::string password,
-    std::string from)
+    std::string from,
+    std::string auth,
+    std::string tls)
 {
     if (!this->isInitialized) {
         return;
@@ -453,6 +514,8 @@ void NotifySettingPolicy::updateSenderEmail(
     email->username = username;
     email->password = password;
     email->from = from;
+    email->auth = auth == "true" ? "true" : "false";
+    email->tls = IsValidSenderEmailTls(tls) ? tls : SENDER_EMAIL_TLS_DEFAULT;
 }
 
 void NotifySettingPolicy::addOrUpdateReceiverEmail(std::string address, std::string note)
@@ -598,6 +661,8 @@ void NotifySettingPolicy::deleteSenderEmail()
     email->username = "";
     email->password = "";
     email->from = "";
+    email->auth = "false";
+    email->tls = SENDER_EMAIL_TLS_DEFAULT;
 }
 
 bool NotifySettingPolicy::deleteReceiverEmail(std::string address)
