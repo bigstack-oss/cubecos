@@ -24,10 +24,14 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 GOOD=$T/sda3     # healthy partition: plain blkid knows it
 BAD=$T/sda4      # ambivalent partition: only the filtered probe works
 DEAD=$T/sdz9     # partition that resolves nowhere
-touch $GOOD $BAD $DEAD
+AMB=$T/sdb4      # ambivalent, but 61-cube-ceph-partuuid.rules gave udev its PARTUUID (node1, cubecos#2004)
+LIE=$T/sdy1      # udev names a PARTUUID the on-disk GPT does not carry
+touch $GOOD $BAD $DEAD $AMB $LIE
 GOOD_UUID=6dbdfce0-19af-4b1d-9837-e80c8d23824f
 BAD_UUID=46c51906-b3a5-4fe3-9003-847f8eac59cd
 LV_UUID=abcdef01-2345-6789-abcd-ef0123456789
+AMB_UUID=4d4b3b22-02a3-4bad-9229-83217f1f8b21
+LIE_UUID=11111111-2222-3333-4444-555555555555
 CALLS=$T/calls
 
 # blkid stub: models the real behaviour on the sky142 incident node; a plain
@@ -38,15 +42,19 @@ blkid() {
         "-p -n ceph_bluestore -o value -s PART_ENTRY_UUID $GOOD") echo $GOOD_UUID ;;
         "-p -n ceph_bluestore -o value -s PART_ENTRY_UUID $BAD")  echo $BAD_UUID ;;
         "-p -n ceph_bluestore -o value -s PART_ENTRY_UUID $DEAD") return 2 ;;
+        "-p -n ceph_bluestore -o value -s PART_ENTRY_UUID $AMB")  echo $AMB_UUID ;;
+        "-p -n ceph_bluestore -o value -s PART_ENTRY_UUID $LIE")  echo 99999999-0000-0000-0000-000000000000 ;;
         "-o device --match-token PARTUUID=$GOOD_UUID") echo $GOOD ;;
         "-o device --match-token PARTUUID="*)          return 2 ;;      # cache never sees the bad one
         *) echo "unexpected blkid $*" >&2; return 99 ;;
     esac
 }
-# udev view: the ambivalent partition and the dead one have no PARTUUID
+# udev view: the ambivalent partition and the dead one have no PARTUUID; the
+# rule-fixed ambivalent one and the lying one do
 lsblk() {
     echo "lsblk $*" >> $CALLS
     printf '%s part %s\n%s part \n%s part \n%s disk \n' $GOOD $GOOD_UUID $BAD $DEAD $T/sda
+    printf '%s part %s\n%s part %s\n' $LIE $LIE_UUID $AMB $AMB_UUID
 }
 lvs() {
     echo "lvs $*" >> $CALLS
@@ -76,14 +84,21 @@ assert "partuuid_of empty arg"   1 ""           ceph_osd_partuuid_of ""
 # ceph_osd_datapart_scan: probes only partitions udev has no PARTUUID for
 : > $CALLS
 assert "scan finds ambivalent"   0 "$BAD"       ceph_osd_datapart_scan $BAD_UUID
-if called "PARTUUID $GOOD"; then fail=$((fail+1)); echo "FAIL: scan must skip partitions udev already identifies"; else pass=$((pass+1)); fi
+if called "PART_ENTRY_UUID $GOOD"; then fail=$((fail+1)); echo "FAIL: scan must skip partitions udev already identifies"; else pass=$((pass+1)); fi
 assert "scan no match"           1 ""           ceph_osd_datapart_scan 00000000-0000-0000-0000-000000000000
+# ...or whose udev PARTUUID already is the one sought, confirmed on disk
+: > $CALLS
+assert "scan finds udev-named ambivalent" 0 "$AMB" ceph_osd_datapart_scan $AMB_UUID
+if called "PART_ENTRY_UUID $GOOD" || called "PART_ENTRY_UUID $LIE"; then fail=$((fail+1)); echo "FAIL: scan must skip partitions udev names with another uuid"; else pass=$((pass+1)); fi
+assert "scan rejects udev uuid not on disk" 1 "" ceph_osd_datapart_scan $LIE_UUID
 
 # ceph_osd_datapart_resolve: blkid cache, then disk scan, then LVM, then give up
 : > $CALLS
 assert "resolve healthy"         0 "$GOOD"      ceph_osd_datapart_resolve $GOOD_UUID
 if called "lsblk"; then fail=$((fail+1)); echo "FAIL: healthy uuid should resolve from the cache without a scan"; else pass=$((pass+1)); fi
 assert "resolve ambivalent"      0 "$BAD"       ceph_osd_datapart_resolve $BAD_UUID
+assert "resolve ambivalent with udev PARTUUID" 0 "$AMB" ceph_osd_datapart_resolve $AMB_UUID
+assert "resolve udev-only uuid"  1 ""           ceph_osd_datapart_resolve $LIE_UUID
 assert "resolve lvm"             0 "/dev/vg/osd-lv" ceph_osd_datapart_resolve $LV_UUID
 assert "resolve gone"            1 ""           ceph_osd_datapart_resolve 00000000-0000-0000-0000-000000000000
 assert "resolve empty"           1 ""           ceph_osd_datapart_resolve ""

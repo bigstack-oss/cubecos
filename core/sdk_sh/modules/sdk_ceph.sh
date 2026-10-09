@@ -3082,13 +3082,16 @@ ceph_osd_partuuid_of()
     echo -n "$uuid"
 }
 
-# partition carrying GPT PARTUUID $1, among those udev has no PARTUUID for
+# partition carrying GPT PARTUUID $1, among those udev has no PARTUUID for or
+# already names $1 (61-cube-ceph-partuuid.rules fills it in for an ambivalent
+# partition that blkid --match-token still misses, cubecos#2004); the on-disk
+# probe confirms each candidate
 ceph_osd_datapart_scan()
 {
     local uuid=$1
     local dev
 
-    for dev in $(lsblk -lnpo NAME,TYPE,PARTUUID 2>/dev/null | awk '$2 == "part" && $3 == "" { print $1 }') ; do
+    for dev in $(lsblk -lnpo NAME,TYPE,PARTUUID 2>/dev/null | awk -v u="$uuid" '$2 == "part" && ($3 == "" || $3 == u) { print $1 }') ; do
         if [ "$(ceph_osd_partuuid_of $dev)" = "$uuid" ] ; then
             echo -n "$dev"
             return 0
