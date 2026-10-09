@@ -659,6 +659,22 @@ WriteLachesisTargetsCronJob(void)
 }
 
 static bool
+Parse(const char *name, const char *value, bool isNew)
+{
+    bool r = true;
+
+    TuneStatus s = ParseTune(name, value, isNew);
+    if (s == TUNE_INVALID_NAME) {
+        HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
+    }
+    else if (s == TUNE_INVALID_VALUE) {
+        HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
+        r = false;
+    }
+    return r;
+}
+
+static bool
 ParseCube(const char *name, const char *value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
@@ -695,7 +711,7 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    return s_bCubeModified | s_bNetModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR);
+    return modified | s_bCubeModified | s_bNetModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR);
 }
 
 static bool
@@ -793,7 +809,7 @@ NodeStartMain(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
-CONFIG_MODULE(prometheus, 0, 0, 0, 0, Commit);
+CONFIG_MODULE(prometheus, 0, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(prometheus, cube_scan);
 // thanos_objstore_setup needs a working RGW to create its user and bucket, and ceph is
 // what brings radosgw up. Without this prometheus commits at L8, three levels ahead of
