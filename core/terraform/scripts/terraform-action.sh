@@ -25,14 +25,31 @@ if [ ! -f $KEYCLOAK_PROVIDER_MIGRATED ] ; then
         fi
     fi
 fi
+# The mysql module is gone -- the keycloak database is created with SQL now -- and so is
+# terraform-providers/mysql from the mirror. State written by an earlier release still holds
+# module.mysql, init cannot install its provider, and every command fails as above. Drop it
+# from the state before init. state rm only edits the state: the MariaDB database and users
+# stay. Same one-time marker as above.
+MYSQL_MODULE_DROPPED=/etc/appliance/state/terraform_mysql_module_dropped
+if [ ! -f $MYSQL_MODULE_DROPPED ] ; then
+    STATE=$(timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform state pull 2>/dev/null)
+    if [ $? -eq 0 ] ; then
+        if ! echo "$STATE" | grep -q '"module": "module.mysql"' ; then
+            touch $MYSQL_MODULE_DROPPED
+        elif timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform state rm module.mysql ; then
+            touch $MYSQL_MODULE_DROPPED
+        fi
+    fi
+fi
 timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform init -upgrade
 timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform "$@"
 [ $? -eq 0 ] || exit 1
 
 # A pushed state can predate the provider move -- a cluster re-IP pushes the local
-# terraform.tfstate copy back in (cubectl config_cluster.go) -- so look at it again.
+# terraform.tfstate copy back in (cubectl config_cluster.go) -- so look at it again. Likewise
+# for a pushed state that still holds module.mysql.
 if [ "$1" == "state" ] && [ "$2" == "push" ]; then
-    rm -f $KEYCLOAK_PROVIDER_MIGRATED
+    rm -f $KEYCLOAK_PROVIDER_MIGRATED $MYSQL_MODULE_DROPPED
 fi
 
 if [ "$1" == "apply" ] || [ "$1" == "destroy" ] || [ "$1" == "import" ]; then
