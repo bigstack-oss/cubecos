@@ -31,6 +31,8 @@ Translate(const char* policy, FILE* settings)
     fprintf(settings, "kapacitor.alert.setting.sender.email.username = %s\n", config.sender.email.username.c_str());
     fprintf(settings, "kapacitor.alert.setting.sender.email.password = %s\n", config.sender.email.password.c_str());
     fprintf(settings, "kapacitor.alert.setting.sender.email.from = %s\n", config.sender.email.from.c_str());
+    fprintf(settings, "kapacitor.alert.setting.sender.email.auth = %s\n", config.sender.email.auth.c_str());
+    fprintf(settings, "kapacitor.alert.setting.sender.email.tls = %s\n", config.sender.email.tls.c_str());
 
     // receiver email
     for (std::size_t i = 0; i < config.receiver.emails.size(); i++) {
@@ -80,7 +82,17 @@ Migrate(const char* prevVersion, const char* prevPolicy, const char* policy)
     // sender email
     for (std::list<NotifyResponse>::const_iterator it = oldConfig.resps.begin(); it != oldConfig.resps.end(); it++) {
         if (it->emailHost != "") {
-            nsPolicy.updateSenderEmail(it->emailHost, std::to_string(it->emailPort), it->emailUser, it->emailPass, it->emailFrom);
+            // alert_resp had no auth or tls; authenticate whenever a username
+            // is set and upgrade to STARTTLS when advertised, as kapacitor did
+            nsPolicy.updateSenderEmail(
+                it->emailHost,
+                std::to_string(it->emailPort),
+                it->emailUser,
+                it->emailPass,
+                it->emailFrom,
+                it->emailUser != "" ? "true" : "false",
+                "opportunistic"
+            );
             break;
         }
     }

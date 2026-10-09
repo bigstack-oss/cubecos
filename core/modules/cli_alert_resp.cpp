@@ -19,6 +19,8 @@
 #define LABEL_SENDER_EMAIL_USERNAME "Enter email sender username [optional]: "
 #define LABEL_SENDER_EMAIL_PASSWORD "Enter email sender password [optional]: "
 #define LABEL_SENDER_EMAIL_FROM "Enter email sender from email address: "
+#define LABEL_SENDER_EMAIL_AUTH "Select email sender authentication: "
+#define LABEL_SENDER_EMAIL_TLS "Select email sender TLS policy (alert mail always upgrades to STARTTLS when offered; mandatory also verifies the certificate): "
 
 #define LABEL_RECEIVER_EMAIL_ADDRESS "Enter email receiver to email address: "
 #define LABEL_RECEIVER_EMAIL_NOTE "Enter email receiver note [optional]: "
@@ -103,6 +105,8 @@ NotifyListMain(int argc, const char** argv)
     printf("  Username: %s\n", settingConfig.sender.email.username.c_str());
     printf("  Password: *\n");
     printf("  From address: %s\n", settingConfig.sender.email.from.c_str());
+    printf("  Authentication: %s\n", settingConfig.sender.email.auth.c_str());
+    printf("  TLS policy: %s\n", settingConfig.sender.email.tls.c_str());
 
     printf("Email receiver:\n");
     int index = 0;
@@ -194,7 +198,9 @@ bool putSettingSenderEmail(
     std::string port,
     std::string username,
     std::string password,
-    std::string from)
+    std::string from,
+    std::string auth,
+    std::string tls)
 {
     HexPolicyManager policyManager;
     NotifySettingPolicy policy;
@@ -205,7 +211,7 @@ bool putSettingSenderEmail(
     }
 
     // update policy with input values
-    policy.updateSenderEmail(host, port, username, password, from);
+    policy.updateSenderEmail(host, port, username, password, from, auth, tls);
 
     // save the updated policy into a policy file
     if (!policyManager.save(policy)) {
@@ -487,6 +493,8 @@ NotifySettingMain(int argc, const char** argv)
              * argv[6]=<username>
              * argv[7]=<password>
              * argv[8]=<from>
+             * argv[9]=<true|false> (auth)
+             * argv[10]=<none|opportunistic|mandatory> (tls)
              */
 
             CliList senderTypes;
@@ -503,6 +511,19 @@ NotifySettingMain(int argc, const char** argv)
             std::string username;
             std::string password;
             std::string from;
+            std::string auth;
+            std::string tls;
+
+            CliList authOptions;
+            authOptions.push_back("true");
+            authOptions.push_back("false");
+            int authIndex;
+
+            CliList tlsOptions;
+            tlsOptions.push_back("none");
+            tlsOptions.push_back("opportunistic");
+            tlsOptions.push_back("mandatory");
+            int tlsIndex;
 
             if (CliMatchListHelper(argc, argv, 3, senderTypes, &senderTypeIndex, &senderType) != 0) {
                 CliPrint("sender type is missing or invalid");
@@ -536,7 +557,23 @@ NotifySettingMain(int argc, const char** argv)
                 return CLI_INVALID_ARGS;
             }
 
-            if (!putSettingSenderEmail(host, port, username, password, from)) {
+            if (CliMatchListHelper(argc, argv, 9, authOptions, &authIndex, &auth, LABEL_SENDER_EMAIL_AUTH) != 0) {
+                CliPrint("email sender auth <true|false> is missing or invalid");
+                return CLI_INVALID_ARGS;
+            }
+
+            if (CliMatchListHelper(argc, argv, 10, tlsOptions, &tlsIndex, &tls, LABEL_SENDER_EMAIL_TLS) != 0) {
+                CliPrint("email sender tls <none|opportunistic|mandatory> is missing or invalid");
+                return CLI_INVALID_ARGS;
+            }
+
+            if (auth == "false") {
+                // credentials are never sent without auth; do not keep them
+                username = "";
+                password = "";
+            }
+
+            if (!putSettingSenderEmail(host, port, username, password, from, auth, tls)) {
                 return CLI_UNEXPECTED_ERROR;
             }
         } else {
@@ -1057,7 +1094,10 @@ CLI_MODE_COMMAND("notifications", "configure", NotifySettingMain, NULL,
     "Configure notifications settings.",
     "configure <add|update|delete>\n"
     "    <add|update>: <sender|receiver>\n"
-    "        sender: email <host> <port> <username> <password> <from>\n"
+    "        sender: email <host> <port> <username> <password> <from> <true|false> <none|opportunistic|mandatory>\n"
+    "            The last two are authentication and the TLS policy. Alert mail always\n"
+    "            upgrades to STARTTLS when the relay offers it; mandatory also verifies\n"
+    "            the relay's certificate.\n"
     "        receiver: <email|slack|exec>\n"
     "            email: <address> [<note>]\n"
     "            slack: <url> <username> [<description>] [<workspace>] [<channel>]\n"
