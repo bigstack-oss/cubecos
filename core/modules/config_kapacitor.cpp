@@ -87,6 +87,8 @@ CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_PORT, "kapacitor.alert.se
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_USERNAME, "kapacitor.alert.setting.sender.email.username", TUNING_UNPUB, "Set kapacitor alert setting email sender username.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_PASSWORD, "kapacitor.alert.setting.sender.email.password", TUNING_UNPUB, "Set kapacitor alert setting email sender password.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_FROM, "kapacitor.alert.setting.sender.email.from", TUNING_UNPUB, "Set kapacitor alert setting email sender from address.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_AUTH, "kapacitor.alert.setting.sender.email.auth", TUNING_UNPUB, "Set kapacitor alert setting email sender authentication <true|false>.", "", ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_SENDER_EMAIL_TLS, "kapacitor.alert.setting.sender.email.tls", TUNING_UNPUB, "Set kapacitor alert setting email sender TLS policy <none|opportunistic|mandatory>.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_URL, "kapacitor.alert.setting.receiver.slacks.%d.url", TUNING_UNPUB, "Set kapacitor alert setting slack receiver url.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_USERNAME, "kapacitor.alert.setting.receiver.slacks.%d.username", TUNING_UNPUB, "Set kapacitor alert setting slack receiver username.", "", ValidateRegex, DFT_REGEX_STR);
 CONFIG_TUNING_STR(KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_WORKSPACE, "kapacitor.alert.setting.receiver.slacks.%d.workspace", TUNING_UNPUB, "Set kapacitor alert setting slack receiver workspace.", "", ValidateRegex, DFT_REGEX_STR);
@@ -121,6 +123,8 @@ PARSE_TUNING_STR(s_alertSettingSenderEmailPort, KAPACITOR_ALERT_SETTING_SENDER_E
 PARSE_TUNING_STR(s_alertSettingSenderEmailUsername, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_USERNAME);
 PARSE_TUNING_STR(s_alertSettingSenderEmailPassword, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_PASSWORD);
 PARSE_TUNING_STR(s_alertSettingSenderEmailFrom, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_FROM);
+PARSE_TUNING_STR(s_alertSettingSenderEmailAuth, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_AUTH);
+PARSE_TUNING_STR(s_alertSettingSenderEmailTls, KAPACITOR_ALERT_SETTING_SENDER_EMAIL_TLS);
 PARSE_TUNING_STR_ARRAY(s_alertSettingReceiverSlackUrlArray, KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_URL);
 PARSE_TUNING_STR_ARRAY(s_alertSettingReceiverSlackUsernameArray, KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_USERNAME);
 PARSE_TUNING_STR_ARRAY(s_alertSettingReceiverSlackWorkspaceArray, KAPACITOR_ALERT_SETTING_RECEIVER_SLACK_WORKSPACE);
@@ -507,17 +511,30 @@ WriteConfig(
     const std::string emailSenderUsername = s_alertSettingSenderEmailUsername.newValue();
     const std::string emailSenderPassword = s_alertSettingSenderEmailPassword.newValue();
     const std::string emailSenderFrom = s_alertSettingSenderEmailFrom.newValue();
+    const std::string emailSenderAuth = s_alertSettingSenderEmailAuth.newValue();
+    const std::string emailSenderTls = s_alertSettingSenderEmailTls.newValue();
     if (emailSenderHost.length() > 0 && emailSenderPort.length() > 0 && emailSenderFrom.length() > 0) {
+        // kapacitor 1.5.7 has no TLS option: gomail upgrades to STARTTLS
+        // whenever the relay advertises it and fails if the upgrade fails, so
+        // the alert path is always opportunistic. The one lever is no-verify:
+        // a mandatory policy verifies the relay's certificate, the others
+        // accept any certificate as before.
+        // An empty username makes kapacitor skip SMTP AUTH, so leaving the
+        // credentials out is what turns authentication off.
         ofsConf << std::endl;
         ofsConf << "[smtp]" << std::endl;
         ofsConf << "  enabled = true" << std::endl;
         ofsConf << "  host = \"" << emailSenderHost << "\"" << std::endl;
         ofsConf << "  port = " << emailSenderPort << std::endl;
-        ofsConf << "  username = \"" << emailSenderUsername << "\"" << std::endl;
-        ofsConf << "  password = \"" << emailSenderPassword << "\"" << std::endl;
+        // an empty auth tuning predates the setting: authenticate whenever a
+        // username is set, as before
+        if (emailSenderAuth == "true" || (emailSenderAuth == "" && emailSenderUsername.length() > 0)) {
+            ofsConf << "  username = \"" << emailSenderUsername << "\"" << std::endl;
+            ofsConf << "  password = \"" << emailSenderPassword << "\"" << std::endl;
+        }
         ofsConf << "  from = \"" << emailSenderFrom << "\"" << std::endl;
         ofsConf << "  to = [ " << AddQuote(defaultEmailAddressList) << " ]" << std::endl;
-        ofsConf << "  no-verify = true" << std::endl;
+        ofsConf << "  no-verify = " << (emailSenderTls == "mandatory" ? "false" : "true") << std::endl;
         ofsConf << "  idle-timeout = \"180s\"" << std::endl;
         ofsConf << "  global = false" << std::endl;
         ofsConf << "  state-changes-only = false" << std::endl;
