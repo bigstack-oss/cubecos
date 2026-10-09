@@ -514,7 +514,7 @@ WriteConfig(
     const std::string emailSenderAuth = s_alertSettingSenderEmailAuth.newValue();
     const std::string emailSenderTls = s_alertSettingSenderEmailTls.newValue();
     if (emailSenderHost.length() > 0 && emailSenderPort.length() > 0 && emailSenderFrom.length() > 0) {
-        // kapacitor 1.5.7 has no TLS option: gomail upgrades to STARTTLS
+        // kapacitor's [smtp] has no TLS option (checked on 1.5.7 and 1.8.6): gomail upgrades to STARTTLS
         // whenever the relay advertises it and fails if the upgrade fails, so
         // the alert path is always opportunistic. The one lever is no-verify:
         // a mandatory policy verifies the relay's certificate, the others
