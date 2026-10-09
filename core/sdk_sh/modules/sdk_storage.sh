@@ -6,8 +6,6 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
-STORAGE_FORCE_TO_USE_MPATH_DEVICES="/etc/cube/cos/ceph/force_to_use_mpath_devices"
-
 storage_update_device_maps()
 {
     _hex_function_ret /usr/sbin/multipath -r
@@ -153,38 +151,6 @@ storage_update_partition_label_links()
     done
 }
 
-storage_set_force_use_mpath_devices_for_ceph()
-{
-    if [ -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then
-        return 0
-    fi
-
-    touch "$STORAGE_FORCE_TO_USE_MPATH_DEVICES"
-}
-
-storage_unset_force_use_mpath_devices_for_ceph()
-{
-    if [ ! -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then
-        return 0
-    fi
-
-    rm -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES"
-}
-
-storage_are_mpath_devices_allowed_for_ceph()
-{
-    if [ -f "$STORAGE_FORCE_TO_USE_MPATH_DEVICES" ] ; then
-        return 0
-    fi
-
-    # check if external storages are set on controls from the control node holding the vip
-    if _hex_function_ret remote_run "$(shared_id)" "${HEX_SDK} cinder_is_storage_set" ; then
-        return 1
-    fi
-
-    return 0
-}
-
 storage_list_all_disks()
 {
     # list all nvme* and sd* on the system
@@ -216,8 +182,8 @@ storage_list_all_disks()
         local device_basename="$(/usr/bin/basename "$block_dev")"
         local device="/dev/${device_basename}"
 
-        # test if mpath devices, if so, skip it
-        if storage_is_mpath "$device" ; then
+        # only DAS could be used for Ceph, skip multipath, FC and iSCSI devices
+        if ! storage_is_das "$device" ; then
             continue
         fi
 
@@ -242,34 +208,6 @@ storage_list_all_disks()
         fi
 
         disks+="$device "
-    done
-
-    # If external storage is set for Cinder volume driver,
-    # disable mpath device support for Ceph unless we use the marker file to force it.
-    if ! storage_are_mpath_devices_allowed_for_ceph ; then
-        echo -n ${disks%% }
-        return 0
-    fi
-
-    # collect mapper devices
-    local mpath_dev=""
-    for mpath_dev in /dev/mapper/* ; do
-        # skip non-existing links
-        if [[ "$block_dev" == "/dev/mapper/*" ]] ; then
-            continue
-        fi
-
-        # a mapper device must be a symbolic link
-        if [ ! -L "$mpath_dev" ] ; then
-            continue
-        fi
-
-        # exclude partitions
-        if [[ "$(/bin/lsblk -dn -o TYPE "$mpath_dev")" != "mpath" ]] ; then
-            continue
-        fi
-
-        disks+="$mpath_dev "
     done
 
     echo -n ${disks%% }

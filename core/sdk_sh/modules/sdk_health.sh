@@ -2037,7 +2037,7 @@ health_ceph_osd_repair()
     declare -p osd_array > /dev/null
     for osd_entry in "${osd_array[@]}" ; do
         local osd=$(echo $osd_entry | head -c -1)
-        local host=$(ceph_get_host_by_id $osd)
+        local host=$($HEX_SDK ceph_get_host_by_id $osd)
 
         # A down OSD whose metadata dir isn't mounted will fail the same way on
         # every restart ("missing 'type' file"), so restarting it is not a

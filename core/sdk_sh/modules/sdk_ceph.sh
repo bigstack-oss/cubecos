@@ -988,6 +988,25 @@ ceph_osd_zap_disk()
     fi
 }
 
+# Make a prepared disk one LVM OSD, prepared but not activated: Commit() activates
+# and starts it with the other LVM OSDs. A disk that fails is labeled again, so the
+# next commit retries it.
+# params:
+# $1: device name(e.g.: /dev/sdd)
+ceph_osd_prepare_lvm()
+{
+    local dev=$1
+    [ -n "$(readlink -e $dev)" ] || return 1
+
+    Quiet ceph_osd_zap_disk $dev
+    if ! Quiet ceph-volume lvm prepare --bluestore --data $dev ; then
+        log_error "failed to prepare an LVM OSD on $dev"
+        Quiet ceph_osd_zap_disk $dev
+        PrepareDataDisk $dev
+        return 1
+    fi
+}
+
 # list osd-typed disks (mounted)
 ceph_osd_list_disk()
 {
@@ -1027,60 +1046,6 @@ ceph_osd_list_partitions()
     echo -n $scsi_devs
 }
 
-# params:
-# $1: device name(e.g.: /dev/sdd)
-# $2: nums of meta partitions
-# $3: size of meta partition (unit: sectors)
-ceph_osd_prepare_bluestore()
-{
-    local typecode_data="4fbd7e29-9d25-41b8-afd0-062c0ceff05d"
-    local typecode_block="cafecafe-9b03-4f30-b4c6-b4b80ceff106"
-    local dev=$1
-    local part_num=$2
-    local part_size=$3
-    local type=$4
-    local part_symbol=
-    local part_dev=
-
-    # a. error handling
-    [ -n "$dev" ] || return 1
-    [[ "$part_num" =~ ^[0-9]+$ ]] || part_num=1
-    [[ "$part_size" =~ ^[0-9]+$ ]] || part_size=409600
-
-    # b. zap and partition osd data device
-    Quiet ceph_osd_zap_disk $dev
-    i=1
-    part_size=$(( $part_size / 2048))
-
-    if [ "$type" == "scsi" ] ; then
-        part_symbol=${dev/\/dev\/sd/}
-        part_dev="$dev"
-    elif [ "$type" == "nvme" ] ; then
-        part_symbol=${dev/\/dev\/nvme/}
-        part_dev="${dev}p"
-    fi
-
-    for (( ; i<=$part_num ; i++ )) ; do
-        Quiet sgdisk -n $i:0:+${part_size}M -c $i:"cube_meta_"$part_symbol"_"$i -u 1:$(uuidgen) --mbrtogpt -- $dev
-        partprobe $part_dev$i 2>/dev/null || true
-        # zero-out 100mb for each partition
-        dd if=/dev/zero of=${part_dev}${i} bs=1M count=100 oflag=sync
-        Quiet mkfs.xfs -f ${part_dev}${i}
-    done
-    # c. partition osd block device
-    free_size=$(GetFreeSectorsByDisk $dev)
-    log_sec=$(lsblk -t -J $dev | jq -r .blockdevices[].\"log-sec\")
-    multiplier=$(( $log_sec / 512 ))
-    part_size=$(( $free_size / $part_num / 2048 * ${multiplier:-1} ))
-    part_num=$(( $part_num * 2 ))
-    for (( ; i<=$part_num ; i++ )) ; do
-        Quiet sgdisk -n $i:0:+${part_size}M -c $i:"cube_data_"$part_symbol"_"$i -u 1:$(uuidgen) --mbrtogpt -- $dev
-        partprobe $part_dev$i 2>/dev/null || true
-        # zero-out 100mb for each partition
-        dd if=/dev/zero of=${part_dev}${i} bs=1M count=100 oflag=sync
-    done
-}
-
 ceph_osd_down_list()
 {
     if [ "$VERBOSE" == "1" ] ; then
@@ -1089,24 +1054,6 @@ ceph_osd_down_list()
     else
         $CEPH osd tree | awk '/ down /{print $1}'
     fi
-}
-
-# prepare free disks and make them lvm OSDs
-# !!!USE WITH CAUTIONS!!!
-ceph_osd_add_disk_lvm()
-{
-    local devs="$*"
-    for dev in $devs ; do
-        [ -n "$(readlink -e $dev)" ] || continue
-        Quiet timeout $SRVTO wipefs -a $dev 2>/dev/null
-        if ceph-volume inventory $dev | grep -q -i "available.*true" ; then
-            Quiet -n ceph-volume lvm create --bluestore --data $dev
-        else
-            Quiet -n ceph-volume inventory $dev
-        fi
-    done
-    Quiet -n ceph-volume lvm activate --bluestore --all
-    Quiet -n ceph_adjust_cache_flush_bytes
 }
 
 # prepare free disks and make them lvm LUKS encrypted OSDs
@@ -1118,18 +1065,18 @@ ceph_osd_add_disk_encrypt()
         [ -n "$(readlink -e $dev)" ] || continue
         Quiet timeout $SRVTO wipefs -a $dev 2>/dev/null
         if ceph-volume inventory $dev | grep -q -i "available.*true" ; then
-            Quiet -n ceph-volume lvm create --dmcrypt --bluestore --data $dev
+            Quiet -n ceph-volume lvm prepare --dmcrypt --bluestore --data $dev
         else
             Quiet -n ceph-volume inventory $dev
         fi
     done
-    Quiet -n ceph-volume lvm activate --bluestore --all
+    Quiet -n $HEX_CFG refresh_ceph_osd
     Quiet -n ceph_adjust_cache_flush_bytes
 }
 
-# prepare free disks and make them raw OSDs
+# label free disks as prepared and make each one LVM OSD
 # !!!USE WITH CAUTIONS!!!
-ceph_osd_add_disk_raw()
+ceph_osd_add_disk_plain()
 {
     local devs="$*"
     for dev in $devs ; do
@@ -1140,104 +1087,10 @@ ceph_osd_add_disk_raw()
     Quiet -n ceph_adjust_cache_flush_bytes
 }
 
-ceph_osd_prepare_mpath_lvm()
+# the name of ceph_osd_add_disk_plain before the plain mode, which cube-cos-api calls
+ceph_osd_add_disk_raw()
 {
-    local device="$1"
-    if [ -z "$(readlink -e "$device")" ] ; then
-        return 1
-    fi
-
-    local exec_output=""
-    local exec_error=""
-
-    if ! $HEX_SDK storage_is_mpath "$device" ; then
-        log_error "device ${device} is not a mpath device, hence adding this device as an OSD is not supported"
-        return 1
-    fi
-
-    local wwid="$(/usr/bin/basename "$device")"
-    if [ -z "$wwid" ] ; then
-        log_error "WWID of device ${device} not found"
-        return 1
-    fi
-
-    # delete the partition mapping
-    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/kpartx -d "$device" ; then
-        log_error "failed to delete the partition mapping"
-        return 1
-    fi
-    # wipe the device
-    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/wipefs -a "$device" ; then
-        log_error "failed to wipe the file system"
-        return 1
-    fi
-    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/sgdisk -Z "$device" ; then
-        log_error "failed to zap the partition table"
-        return 1
-    fi
-
-    # reload the partitions
-    if ! $HEX_SDK storage_update_device_maps ; then
-        log_error "failed to reload the device maps"
-        return 1
-    fi
-
-    # create PV
-    if ! _hex_function_ret /usr/sbin/pvcreate "$device" ; then
-        log_error "failed to create PV from ${device}"
-        return 1
-    fi
-    # create VG
-    if ! _hex_function_ret /usr/sbin/vgcreate "$wwid" "$device" ; then
-        log_error "failed to create VG ${wwid} with PV ${device}"
-        return 1
-    fi
-    # create LV
-    if ! _hex_function_ret /usr/sbin/lvcreate -y -l 100%FREE -n "$wwid" "$wwid" ; then
-        log_error "failed to create LV ${wwid} from VG ${wwid}"
-        return 1
-    fi
-
-    return 0
-}
-
-ceph_osd_add_mpath_lvm()
-{
-    # prepare free mpath devices and make them lvm OSDs
-    # !!!USE WITH CAUTIONS!!!
-
-    local devs="$*"
-
-    local exec_output=""
-    local exec_error=""
-
-    local wwid=""
-    for dev in $devs ; do
-        wwid="$(/usr/bin/basename "$dev")"
-        if [ -z "$wwid" ] ; then
-            log_error "WWID of device ${dev} not found"
-            continue
-        fi
-
-        if ! ceph_osd_prepare_mpath_lvm "$dev" ; then
-            log_error "failed to prepare ${dev}"
-            continue
-        fi
-
-        # create the OSD
-        if ! _hex_function exec_output exec_error \
-            /usr/sbin/ceph-volume lvm create --bluestore --data "${wwid}/${wwid}" ; then
-            log_error "failed to create OSD on LV ${wwid} from VG ${wwid}, error: ${exec_error}"
-            continue
-        fi
-    done
-
-    # bring up OSDs
-    _hex_function_ret ceph-volume lvm activate --bluestore --all
-    _hex_function_ret ceph_adjust_cache_flush_bytes
-
-    # backup
-    _hex_function_ret /usr/sbin/vgcfgbackup -f /etc/cube/cos/ceph/lvm.vg
+    ceph_osd_add_disk_plain "$@"
 }
 
 ceph_osd_purge()
@@ -1536,12 +1389,23 @@ ceph_osd_host_remove()
     Quiet -n $CEPH osd crush rm $host
 }
 
+# Activate this node's LVM OSDs that are not running, encrypted ones included,
+# without starting them: hex_config starts them, so systemd never owns one and
+# none starts at boot outside Commit()'s batches. A running OSD is left alone,
+# which ceph-volume lvm activate --all --no-systemd would re-prime.
 ceph_osd_activate_lvms()
 {
     _hex_function_ret /usr/sbin/pvscan
     _hex_function_ret /usr/sbin/vgscan
     _hex_function_ret /usr/sbin/vgchange -ay
-    _hex_function_ret /usr/sbin/ceph-volume lvm activate --all "$@"
+
+    local id fsid rc=0
+    while read -r id fsid ; do
+        [ -n "$fsid" ] || continue
+        ! systemctl is-active -q ceph-osd@$id || continue
+        _hex_function_ret /usr/sbin/ceph-volume lvm activate --no-systemd $id $fsid || rc=1
+    done < <(ceph-volume lvm list --format json 2>/dev/null | jq -r 'to_entries[] | .key as $id | .value[] | select(.type == "block") | "\($id) \(.tags."ceph.osd_fsid")"')
+    return $rc
 }
 
 # ids of this node's LVM OSDs, encrypted ones included, space separated
@@ -2851,9 +2715,10 @@ ceph_osd_get_datapartuuid()
 }
 
 # Remount a single down OSD whose metadata dir is missing or unmounted. Scoped
-# to one OSD: unlike refresh_ceph_osd / ceph_osd_remount it never stops or
+# to one OSD: unlike ceph_osd_remount it never stops or
 # unmounts any other OSD on the host. Non-destructive -- it only mounts and
-# re-links, and refuses to act if the data partition cannot be resolved.
+# re-links, and refuses to act if the data partition cannot be resolved. An LVM
+# OSD has no metadata partition; activating it mounts and primes its tmpfs.
 # params: $1 - osd id
 # returns: 0 on success, 1 if it could not be repaired safely
 ceph_osd_remount_one()
@@ -2861,6 +2726,16 @@ ceph_osd_remount_one()
     local osd_id=$1
     local osdpth=/var/lib/ceph/osd
     local osd_dir=$osdpth/ceph-$osd_id
+
+    local lvm_fsid=$(ceph-volume lvm list $osd_id --format json 2>/dev/null | jq -r '.[][] | select(.type == "block") | .tags."ceph.osd_fsid"' | head -1)
+    if [ -n "$lvm_fsid" ] ; then
+        if ! _hex_function_ret /usr/sbin/ceph-volume lvm activate --no-systemd $osd_id $lvm_fsid || [ ! -f $osd_dir/type ] ; then
+            log_error "ceph_osd_remount_one: osd.$osd_id: failed to activate the LVM OSD"
+            return 1
+        fi
+        log_warning "ceph_osd_remount_one: osd.$osd_id activated"
+        return 0
+    fi
 
     local line=$(awk -v id="$osd_id" '$2 == id { print ; exit }' $CEPH_OSD_MAP 2>/dev/null)
     if [ -z "$line" ] ; then
@@ -2936,16 +2811,25 @@ ceph_osd_damaged_list()
 }
 
 # params:
-# $1: --no-start to leave the remounted OSDs stopped, for the caller to start
+# --no-start to leave the remounted OSDs stopped, for the caller to start
+# --stopped-only to leave the running OSDs alone, mounted and running
 ceph_osd_remount()
 {
     local osdpth=/var/lib/ceph/osd
     local start=1
-    [ "${1:-}" != "--no-start" ] || start=0
+    local stopped_only=0
+    local arg
+    for arg in "$@" ; do
+        case "$arg" in
+            --no-start) start=0 ;;
+            --stopped-only) stopped_only=1 ;;
+        esac
+    done
 
     for osd_dir in $(find ${osdpth}/* -type d) ; do
         osd_id=${osd_dir##*-}
         if systemctl is-active ceph-osd@$osd_id -q ; then
+            [ $stopped_only -eq 0 ] || continue
             $CEPH tell osd.$osd_id compact >/dev/null 2>&1 || true
             systemctl stop ceph-osd@$osd_id || true
         fi
@@ -2956,6 +2840,9 @@ ceph_osd_remount()
         dev=$(echo $LINE | cut -d" " -f1)
         osd_id=$(echo $LINE | cut -d" " -f2)
         datapart_partuuid=$(echo $LINE | cut -d" " -f4)
+        if [ $stopped_only -eq 1 ] && systemctl is-active ceph-osd@$osd_id -q ; then
+            continue
+        fi
         lvm_json=$(ceph-volume lvm list $osd_id --format json)
         if echo $lvm_json | jq -r .[][].lv_uuid | grep -q "$datapart_partuuid" ; then
             :
@@ -3052,7 +2939,7 @@ ceph_osd_datapart_has_osd()
 }
 
 # resolve a dev_osd.map data uuid to its device without going through
-# /dev/disk: a GPT PARTUUID for raw OSDs, an LVM lv_uuid for encrypted/mpath
+# /dev/disk: a GPT PARTUUID for raw OSDs, an LVM lv_uuid for encrypted
 # ones. Fails only when the device is genuinely absent, so callers can treat
 # failure as proof the OSD is gone.
 ceph_osd_datapart_resolve()
@@ -3681,7 +3568,7 @@ _ceph_osd_restart_chain()
 ceph_osd_restart()
 {
     local osd_ids=${*:-$($CEPH osd tree-from $(hostname) -f json 2>/dev/null | jq .nodes[0].children[] | sort -n)}
-    Quiet -n ceph-volume lvm activate --all
+    Quiet -n ceph_osd_activate_lvms
     for id in $osd_ids ; do
         _ceph_osd_restart_chain $id
     done

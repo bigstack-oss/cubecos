@@ -409,56 +409,6 @@ CephAutoScaleMain(int argc, const char** argv)
 }
 
 static int
-CephSetForceUseMpathDevicesMain(int argc, const char** argv)
-{
-    if (argc > 2) {
-        return CLI_INVALID_ARGS;
-    }
-
-    int index;
-    std::string value;
-
-    if (CliMatchCmdHelper(
-            argc,
-            argv,
-            1,
-            "echo 'true\nfalse'",
-            &index,
-            &value,
-            "Set to force to use multipath devices for Ceph: ")
-        != CLI_SUCCESS) {
-        CliPrintf("Unknown option");
-        return CLI_INVALID_ARGS;
-    }
-
-    if (value == "true") {
-        const ExecSyncResult sr = ExecBashSync(
-            0,
-            false,
-            false,
-            {},
-            HEX_SDK " storage_set_force_use_mpath_devices_for_ceph"
-        );
-        if (sr.exitCode != 0) {
-            return CLI_FAILURE;
-        }
-    } else {
-        const ExecSyncResult ur = ExecBashSync(
-            0,
-            false,
-            false,
-            {},
-            HEX_SDK " storage_unset_force_use_mpath_devices_for_ceph"
-        );
-        if (ur.exitCode != 0) {
-            return CLI_FAILURE;
-        }
-    }
-
-    return CLI_SUCCESS;
-}
-
-static int
 CephListAvailDisksMain(int argc, const char** argv)
 {
     if (argc > 1) {
@@ -500,13 +450,14 @@ static int
 CephAddAvailDisksMain(int argc, const char** argv)
 {
     std::string mode;
-    if (argc > 2 /* [0]="add_avail" [1]="<[raw|encrypt]>" */) {
+    if (argc > 2 /* [0]="add_avail" [1]="<[plain|encrypt]>" */) {
         return CLI_INVALID_ARGS;
     } else if (argc == 2) {
-        // any user input mode which is not "force" falls back to "safe" mode
+        // any user input mode which is not "encrypt" falls back to "plain" mode,
+        // which keeps the former "raw" working
         mode = argv[1];
         if (mode != "encrypt") {
-            mode = "raw";
+            mode = "plain";
         }
     }
 
@@ -540,13 +491,13 @@ CephAddAvailDisksMain(int argc, const char** argv)
     // 2. confirm
     if (mode.empty()) {
         int index;
-        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'raw\nencrypt'", &index, &mode, "Disk protection mode:") != CLI_SUCCESS) {
+        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'plain\nencrypt'", &index, &mode, "Disk protection mode:") != CLI_SUCCESS) {
             return CLI_INVALID_ARGS;
         }
 
         if (mode == "encrypt") {
             CliPrintf("Encrypt disk(s) to protect physical disk loss (beware of performance impacts).");
-        } else if (mode == "raw") {
+        } else if (mode == "plain") {
             CliPrintf("No disk encryption (default mode).");
         } else {
             return CLI_SUCCESS;
@@ -576,8 +527,6 @@ CephAddAvailDisksMain(int argc, const char** argv)
             }
         }
 
-        // do not automatically handle mpath devices
-
         cnt++;
     }
     printf(DISK_F_FMT);
@@ -589,16 +538,17 @@ CephAddAvailDisksMain(int argc, const char** argv)
 static int
 CephAddDiskMain(int argc, const char** argv)
 {
-    std::string mode = "raw";
+    std::string mode = "plain";
     std::string device;
-    if (argc > 3 /* [0]="add_disk" [1]="<[/dev/sdx]>" [2]="<[raw|encrypt]>" */) {
+    if (argc > 3 /* [0]="add_disk" [1]="<[/dev/sdx]>" [2]="<[plain|encrypt]>" */) {
         return CLI_INVALID_ARGS;
     } else if (argc == 3) {
         device = argv[1];
-        // any user input mode which is not "encrypt" falls back to "raw" mode
+        // any user input mode which is not "encrypt" falls back to "plain" mode,
+        // which keeps the former "raw" working
         mode = argv[2];
         if (mode != "encrypt") {
-            mode = "raw";
+            mode = "plain";
         }
     } else if (argc == 2) {
         device = argv[1];
@@ -655,7 +605,7 @@ CephAddDiskMain(int argc, const char** argv)
                 argc,
                 argv,
                 2,
-                "echo -e 'raw\nencrypt'",
+                "echo -e 'plain\nencrypt'",
                 &idx,
                 &mode,
                 "Disk protection mode:")
@@ -665,7 +615,7 @@ CephAddDiskMain(int argc, const char** argv)
 
         if (mode == "encrypt") {
             CliPrintf("Encrypt disk(s) to protect physical disk loss (beware of performance impacts).");
-        } else if (mode == "raw") {
+        } else if (mode == "plain") {
             CliPrintf("No disk encryption (default mode).");
         } else {
             CliPrintf("Invalid mode, cancelled.");
@@ -692,17 +642,7 @@ CephAddDiskMain(int argc, const char** argv)
             CliPrintf("Added disk(%s) %s.", mode.c_str(), device.c_str());
         }
     } else {
-        // handle mpath devices
-        if (mode == "encrypt") {
-            CliPrint("Encrypted mode on adding multipath devices is not yet supported.");
-            return CLI_SUCCESS;
-        }
-
-        if (HexSystemF(0, HEX_SDK " ceph_osd_add_mpath_lvm %s", device.c_str()) != 0) {
-            CliPrintf("Failed to add disk %s.", device.c_str());
-        } else {
-            CliPrintf("Added disk %s.", device.c_str());
-        }
+        CliPrintf("Disk %s is not a direct-attached disk, cancelled.", device.c_str());
     }
     return CLI_SUCCESS;
 }
@@ -2283,25 +2223,17 @@ CLI_MODE_COMMAND("storage", "set_autoscale", CephAutoScaleMain, NULL,
     "Turn on/off pool autoscaling.",
     "set_pool_autoscale [on|off]");
 
-CLI_MODE_COMMAND(
-    "storage",
-    "set_force_use_mpath_devices",
-    CephSetForceUseMpathDevicesMain,
-    NULL,
-    "Set to allow multipath devices be added to Ceph even if external storage is set under iaas > volume_backend.",
-    "set_force_use_mpath_devices [true|false]");
-
 CLI_MODE_COMMAND("storage", "list_avail", CephListAvailDisksMain, NULL,
     "List all available disks recognized by this node.",
     "list_avail");
 
 CLI_MODE_COMMAND("storage", "add_avail", CephAddAvailDisksMain, NULL,
     "Add all available disks recognized by this node.",
-    "add_avail <[raw|encrypt]>");
+    "add_avail <[plain|encrypt]>");
 
 CLI_MODE_COMMAND("storage", "add_disk", CephAddDiskMain, NULL,
     "Add a disk recognized by this node.",
-    "add_disk <[/dev/sdx]> <[raw|encrypt]>");
+    "add_disk <[/dev/sdx]> <[plain|encrypt]>");
 
 CLI_MODE_COMMAND("storage", "remove_disk", CephRemoveDiskMain, NULL,
     "Remove a disk with safe or force mode from this node.",
