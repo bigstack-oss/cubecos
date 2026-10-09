@@ -959,7 +959,8 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
 
-    s_bCellChanged = s_dbPass.modified() | s_mqPass.modified() | s_bCubeModified | G_MOD(SHARED_ID);
+    // cell1 transport_url is copied from nova.conf by update_cell; resync it when the MQ port (ssl) changes too
+    s_bCellChanged = s_dbPass.modified() | s_mqPass.modified() | s_mqSsl.modified() | s_bCubeModified | G_MOD(SHARED_ID);
 
     return s_bDbPassChanged | s_bConfigChanged | s_bEndpointChanged | s_bCellChanged;
 }
