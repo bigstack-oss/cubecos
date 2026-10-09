@@ -3644,8 +3644,96 @@ health_zookeeper_check()
     _health_fail_log
 }
 
+# zookeeper and kafka run on every control node, and every broker is registered in
+# zookeeper: the "brokers online" signal health_zookeeper_check uses. A peer that is not
+# sshable (bounded, cached) fails it at once rather than costing a TCP connect timeout.
+_health_datapipe_up()
+{
+    local node total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        is_local_node $node || is_sshable $node || return 1
+        is_remote_running $node zookeeper && is_remote_running $node kafka || return 1
+        [ "$(echo dump | nc -w 5 $node 2181 2>/dev/null | grep brokers | wc -l)" -eq "$total" ] || return 1
+    done
+}
+
+# Start zookeeper and kafka on the control nodes where they are stopped. A stopped
+# broker on intact data only needs starting; the deep repair, which wipes the datapipe
+# on every node, must not be the first thing it gets. Both units are Type=simple, so
+# "running" right after a start says nothing about a broker that dies seconds later:
+# wait, bounded (90 s of wall clock), for every broker to register before calling it up.
+# Returns 0 started and up, 1 nothing was stopped, 2 started but not up in time.
+_health_datapipe_start_stopped()
+{
+    local node started=0
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        if ! is_remote_running $node zookeeper ; then
+            remote_systemd_start $node zookeeper
+            started=1
+        fi
+        if ! is_remote_running $node kafka ; then
+            remote_systemd_start $node kafka
+            started=1
+        fi
+    done
+    [ $started -eq 1 ] || return 1
+
+    # a peer that cannot be reached will not register: don't wait for it
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        is_local_node $node || is_sshable $node || return 2
+    done
+    # wall-clock bound, so the round stays well inside telegraf's 10-minute timeout
+    local deadline=$((SECONDS + 90))
+    while [ $SECONDS -lt $deadline ] ; do
+        sleep 10
+        _health_datapipe_up && return 0
+    done
+    return 2
+}
+
+# The manual repairs' front half: start what is stopped and decide whether the deep
+# repair may run. Returns 1 (deep repair allowed) only when this call started nothing,
+# the datapipe is still not healthy ("$@", if given, is an extra health test run once
+# the brokers are up), and no start failed to hold within the last 900 s. A check_repair
+# runs the zookeeper repair and then the kafka repair, so a start made by the first
+# must not be wiped by the second. A start that never holds (a broker that dies after
+# starting) is retried for 900 s after it first failed; after that it is not started
+# again and the deep repair (itself behind its own cooldown) gets it.
+_health_datapipe_try_start()
+{
+    local mark=${_DP_START_MARK:-/run/cube_datapipe_start_failed}
+    local now=$(date +%s) since recent=0 rc=1
+    if [ -f $mark ] ; then
+        since=$(cat $mark 2>/dev/null) ; [ -n "$since" ] || since=$now
+        [ $((now - since)) -lt 900 ] && recent=1
+    fi
+
+    # past the 900 s, starting it again is what has already not worked
+    if [ ! -f $mark ] || [ $recent -eq 1 ] ; then
+        _health_datapipe_start_stopped
+        rc=$?
+    fi
+    if [ $rc -eq 0 ] ; then
+        rm -f $mark
+        return 0
+    elif [ $rc -eq 2 ] ; then
+        [ -f $mark ] || echo $now > $mark
+        return 0
+    fi
+
+    if _health_datapipe_up && "${@:-true}" ; then
+        rm -f $mark
+        return 0
+    fi
+    [ $recent -eq 1 ] && return 0
+    rm -f $mark
+    return 1
+}
+
 health_zookeeper_repair()
 {
+    # "brokers online" (code 2) is what a stopped kafka looks like from zookeeper
+    _health_datapipe_try_start && return 0
     Quiet -n $HEX_SDK _health_datapipe_deep_repair
 }
 
@@ -3663,6 +3751,17 @@ health_kafka_check()
             ERR_MSG+="kafka on $node is not running\n"
         fi
     done
+
+    # A dead broker answers nothing: the checks below would overwrite code 1 (kafka_stats
+    # finds no queues -> 6), and the code-6 repair then hangs against the dead broker.
+    if [ "$ERR_CODE" == "1" ] ; then
+        _OVERRIDE_MAX_ERR=18 _health_fail_log
+        return $?
+    fi
+
+    # brokers up and registered retire any earlier failed start, whatever the queue
+    # checks below find (see _health_datapipe_try_start)
+    _health_datapipe_up && rm -f ${_DP_START_MARK:-/run/cube_datapipe_start_failed}
 
     # check the last line of telegraf log
     if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf.*metrics" ; then
@@ -3695,7 +3794,9 @@ health_kafka_check()
 
 _health_kafka_auto_repair()
 {
-    if [ "$ERR_CODE" == "2" ] ; then
+    if [ "$ERR_CODE" == "1" ] ; then
+        _health_datapipe_start_stopped
+    elif [ "$ERR_CODE" == "2" ] ; then
         if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-metrics"
         fi
@@ -3714,9 +3815,14 @@ _health_kafka_auto_repair()
     fi
 }
 
+_health_kafka_queues_ok()
+{
+    [ $($HEX_SDK kafka_stats | grep "PartitionCount: 6" | wc -l) -ge 6 ]
+}
+
 health_kafka_repair()
 {
-    Quiet -n _health_datapipe_deep_repair
+    _health_datapipe_try_start _health_kafka_queues_ok || Quiet -n _health_datapipe_deep_repair
     # reset error count to bring back auto_repair()
     rm -f /tmp/health_kafka_error.count
 }
