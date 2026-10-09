@@ -73,6 +73,10 @@ CONFIG_TUNING_STR(KEYSTONE_ADMIN_PASS, "keystone.admin.password", TUNING_UNPUB, 
 
 // public tunigns
 CONFIG_TUNING_BOOL(KEYSTONE_DEBUG, "keystone.debug.enabled", TUNING_PUB, "Set to true to enable keystone verbose log.", false);
+// keystone's default of 0 expires a federated user's mapped group memberships at once, so
+// trusts (heat stack create) find no trustor roles. 1440 = 24h; re-checked on each use.
+CONFIG_TUNING_UINT(KEYSTONE_FED_AUTH_TTL, "keystone.federation.authorization_ttl", TUNING_PUB,
+                   "Minutes a federated user's mapped group memberships stay valid after an SSO login.", 1440, 1, 43200);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
@@ -86,6 +90,7 @@ CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_ADDRS);
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, KEYSTONE_ENABLED);
 PARSE_TUNING_BOOL(s_debug, KEYSTONE_DEBUG);
+PARSE_TUNING_UINT(s_fedAuthTtl, KEYSTONE_FED_AUTH_TTL);
 PARSE_TUNING_STR(s_dbPass, KEYSTONE_DBPASS);
 PARSE_TUNING_STR(s_adminPass, KEYSTONE_ADMIN_PASS);
 PARSE_TUNING_STR(s_adminCliPass, KEYSTONE_ADMIN_CLI_PASS);
@@ -339,6 +344,8 @@ UpdateConfig(std::string sharedId)
             "https://" + sharedId + "/horizon/auth/websso/\ntrusted_dashboard = https://" + sharedId + ":9999/api/openstack/skyline/api/v1/websso";
         cfg["federation"]["sso_callback_template"] = "/etc/keystone/sso_callback_template.html";
         cfg["federation"]["remote_id_attribute"] = "MELLON_IDP";
+        // applies to every IdP whose own authorization_ttl is unset (cube_idp is created without one)
+        cfg["federation"]["default_authorization_ttl"] = std::to_string(s_fedAuthTtl.newValue());
 
         cfg["oslo_messaging_notifications"]["driver"] = "messagingv2";
         cfg["oslo_messaging_notifications"]["transport_url"] = "kafka://" + sharedId + ":9095";
