@@ -1,0 +1,11 @@
+--- skyline_apiserver/policy/manager/heat.py
++++ skyline_apiserver/policy/manager/heat.py
+@@ -220,7 +220,7 @@
+     ),
+     base.Rule(
+         name="service:index",
+-        check_str=("role:reader and system_scope:all"),
++        check_str=("role:admin and project_id:%(project_id)s"),
+         description="No description",
+     ),
+     base.APIRule(

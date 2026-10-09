@@ -1,0 +1,20 @@
+--- skyline_apiserver/policy/manager/octavia.py
++++ skyline_apiserver/policy/manager/octavia.py
+@@ -50,7 +50,7 @@
+     ),
+     base.Rule(
+         name="load-balancer:observer_and_owner",
+-        check_str=("role:load-balancer_observer and rule:project-reader"),
++        check_str=("rule:project-reader"),
+         description="No description",
+     ),
+     base.Rule(
+@@ -60,7 +60,7 @@
+     ),
+     base.Rule(
+         name="load-balancer:member_and_owner",
+-        check_str=("role:load-balancer_member and rule:project-member"),
++        check_str=("role:member and project_id:%(project_id)s"),
+         description="No description",
+     ),
+     base.Rule(
