@@ -3093,8 +3093,20 @@ health_heat_check()
     local engine_up=$(echo "$service_stats" | grep -i up | wc -l )
     local engine_down=$(echo "$service_stats" | grep -i down | wc -l )
 
+    # heat-api builds that list by asking the engines over RPC, so with every engine
+    # stopped it comes back empty and reads as heat-api not answering (code 2), and the
+    # repair below finds no "down" line to act on. Ask systemd on each node instead.
+    local node engine_stopped=""
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        is_remote_running $node openstack-heat-engine || engine_stopped+="$node heat-engine down\n"
+    done
+
     if ! _health_api_reachable heat ; then
         ERR_CODE=1
+    elif [ -n "$engine_stopped" ] ; then
+        ERR_CODE=3
+        ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-heat-engine"
+        ERR_MSG+="$engine_stopped"
     elif [ -z "$service_stats" ] ; then
         ERR_CODE=2
         ERR_LOG="journalctl -n $ERR_LOGSIZE -u openstack-heat-api"
@@ -3118,7 +3130,7 @@ _health_heat_auto_repair()
         fi
     done
 
-    readarray entry_array <<<"$(echo "$ERR_MSG" | awk '/down/{print $1" "$2}' | sort)"
+    readarray entry_array <<<"$(echo -e "$ERR_MSG" | awk '/down/{print $1" "$2}' | sort -u)"
     declare -p entry_array > /dev/null
     for entry in "${entry_array[@]}" ; do
         local srv=$(echo $entry | awk '{print $2}')
