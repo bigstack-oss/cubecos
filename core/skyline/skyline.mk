@@ -30,6 +30,17 @@ SKYLINE_PIP_C := -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT)
 #   - e1d0945 lifted python-jose past 3.3.0 (CVE-2024-33663, CVE-2024-33664). Upstream
 #     still caps it at <=3.3.0 on every branch, and a constraint can only narrow a
 #     requirement, never lift its ceiling, so that one line is carried as a patch.
+#
+# skyline decides what the console shows from its own copy of each service's policy
+# (skyline_apiserver/policy/manager/<service>.py). /etc/skyline/policy/<svc>_policy.yaml
+# cannot correct a base rule: it only replaces the rule evaluated top-level, and every
+# rule:<name> inside it still resolves from the embedded copy. So the copies that
+# disagree with the epoxy services are carried as patches too (#1788):
+#   - octavia.py: load-balancer:member_and_owner and observer_and_owner take octavia
+#     16.1.0's keystone-default-role checks, so a project member reads and writes its
+#     own load balancers and a reader reads them, as octavia itself allows.
+#   - heat.py: service:index takes heat 24.1.1's role:admin on the own project, so a
+#     project-scoped admin sees System Info > Orchestration Services.
 SKYLINE_APISERVER_VER := 6.0.1
 
 # Reviewable unified diffs against the sdist, <rel>.patch beside a pristine <rel>.orig.
