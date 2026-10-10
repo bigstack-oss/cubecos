@@ -33,8 +33,11 @@ BLKLST_DNF += python3-django    # CVE-2022-28347, CVE-2023-31047, CVE-2025-64459
 # so the system python 3.9 copy had no importer left. Nothing in the image carries
 # scciclient at all now, which is the stronger answer to the CVE.
 BLKLST_DNF += python3-scciclient
+# pillow is no longer installed into the system python either. The line that put it
+# there replaced the blacklisted python3-pillow, but nothing in the image imports PIL:
+# no installed package or rpm requires it, and neither the tree nor ceph-mgr's modules
+# use it. The rpm stays blacklisted.
 BLKLST_DNF += python3-pillow    # CVE-2023-50447
-ROOTFS_PIP += pillow            # CVE-2023-50447 Upgrade to version: 10.2.0
 ROOTFS_PIP += waitress          # CVE-2024-49768 Upgrade to version: 3.0.1
 BLKLST_DNF += python3-numexpr   # Remove DNF managed package
 ROOTFS_PIP += numexpr           # CVE-2023-39631 Upgrade to version: 2.8.5

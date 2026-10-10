@@ -570,4 +570,3 @@ numexpr===2.10.2
 ansible===8.7.0
 ansible-core===2.15.13
 numpy===1.25.2
-pillow===11.3.0
