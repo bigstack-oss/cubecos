@@ -31,6 +31,25 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/roles.yml .$(OSEARCH_CONF_SECURITY_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/roles_mapping.yml .$(OSEARCH_CONF_SECURITY_DIR)
 
+# Bundled plugins that carry vulnerable jars and that nothing here uses. No code in this tree,
+# cube-cos-api, cube-cos-ui or lachesis calls a _plugins API, and on live nodes their system
+# indices hold only what the plugins write for themselves at startup -- no monitor, detector,
+# model, notebook, report or channel. security goes with them: config_opensearch has always
+# run it disabled. opensearch-plugin removes one plugin per call and refuses one that another
+# still extends, so dependents come first: skills extends ml, security-analytics extends
+# alerting, notifications extends notifications-core. ingest-geoip is a module, which
+# opensearch-plugin will not remove, and no ingest pipeline exists to use it.
+OSEARCH_UNUSED_PLUGINS := opensearch-skills opensearch-ml opensearch-security-analytics \
+	opensearch-alerting opensearch-notifications opensearch-notifications-core \
+	opensearch-anomaly-detection opensearch-flow-framework opensearch-neural-search \
+	opensearch-observability opensearch-performance-analyzer opensearch-reports-scheduler \
+	opensearch-search-relevance opensearch-sql opensearch-ubi opensearch-security
+OSEARCH_PLUGIN_CLI = chroot $(ROOTDIR) env OPENSEARCH_JAVA_HOME=/usr/share/$(OSEARCH)/jdk /usr/share/$(OSEARCH)/bin/opensearch-plugin
+
+rootfs_install::
+	$(Q)$(foreach p,$(OSEARCH_UNUSED_PLUGINS),$(OSEARCH_PLUGIN_CLI) remove $(p) && ) true
+	$(Q)rm -rf $(ROOTDIR)/usr/share/$(OSEARCH)/modules/ingest-geoip
+
 #
 # OpenSearch-Dashboards
 #

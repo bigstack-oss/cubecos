@@ -125,7 +125,6 @@ WriteConfig(const bool ha, const std::string& clusterid, const std::string& ctrl
     fprintf(fout, "path.logs: /var/log/opensearch\n");
     fprintf(fout, "path.data: /var/lib/opensearch\n");
     fprintf(fout, "# node.max_local_storage_nodes: 3\n");
-    fprintf(fout, "plugins.security.disabled: true\n");
 
     if (!ha) {
         fprintf(fout, "cluster.initial_master_nodes: %s\n", ctrlIp.c_str());
