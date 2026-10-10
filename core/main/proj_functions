@@ -113,7 +113,9 @@ _hex_exec()
                 local log_pth="log/$log"
                 local log_url=
                 rm -f /tmp/$log
-                if [ "x$MANNER" != "xforce" -a "x$checking_detected" != "x" ] ; then
+                # another node's run only stands in for ours if our cached result is recent
+                local cache_age=$(( $(date +%s) - $(stat -c %Y $runtime 2>/dev/null || echo 0) ))
+                if [ "x$MANNER" != "xforce" -a "x$checking_detected" != "x" -a $cache_age -lt 300 ] ; then
                     local node=$(echo $checking_detected | cut -d"|" -f1 | xargs)
                     local cmd=$(echo $checking_detected | cut -d"|" -f3 | cut -d"," -f1 | xargs)
                     local pid=$(echo $checking_detected | cut -d"|" -f3 | cut -d"," -f2)

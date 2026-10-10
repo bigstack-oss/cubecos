@@ -1005,6 +1005,9 @@ Commit(bool modified, int dryLevel)
 
     // check if K3S is running, if not, the actions below are not executable
     if (!IsK3sReady()) {
+        // the metadata only needs keycloak behind the VIP; httpd's mellon conf needs it
+        if (!hasKeycloakSamlMetadataFile() && downloadKeycloakSamlMetadata(G(SHARED_ID)))
+            HexSystemF(0, "systemctl is-failed --quiet httpd && systemctl restart httpd");
         // let other modules to commit
         return true;
     }
@@ -1055,8 +1058,11 @@ Commit(bool modified, int dryLevel)
     std::string sharedId = G(SHARED_ID);
     time_t lastNotify = time(NULL);
     while (!hasKeycloakSamlMetadataFile()) {
-        if (downloadKeycloakSamlMetadata(sharedId))
+        if (downloadKeycloakSamlMetadata(sharedId)) {
+            // httpd fails to start on the mellon conf while the metadata is missing
+            HexSystemF(0, "systemctl is-failed --quiet httpd && systemctl restart httpd");
             break;
+        }
         HexLogError("failed to download the saml metadata from keycloak");
 
         if (access(SAML_METADATA_GATE_RELEASE, F_OK) == 0) {
