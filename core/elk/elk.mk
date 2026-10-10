@@ -77,6 +77,25 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch-dashboards/export.ndjson .$(OSEARCH_BOARDS_CONF_DIR)
 	$(Q)chroot $(ROOTDIR) chown opensearch-dashboards:opensearch-dashboards $(OSEARCH_BOARDS_LOG_DIR)
 
+# Dashboards runs on the Node it bundles under node/, and 3.9.0 bundles 22.23.0, whose known
+# vulnerabilities are fixed in 22.23.2. That directory is the official linux-x64 build's layout,
+# so it is replaced with the newest release of the same 22 line from nodejs.org, pinned by sha256
+# as nodejs.org's SHASUMS256.txt lists it. --no-same-owner keeps the tarball's build uid out of
+# the image. Drop this once a Dashboards release bundles a Node at least this new.
+OSEARCH_BOARDS_NODE_VER := 22.23.3
+OSEARCH_BOARDS_NODE_TXZ := node-v$(OSEARCH_BOARDS_NODE_VER)-linux-x64.tar.xz
+OSEARCH_BOARDS_NODE_SHA256 := df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de
+
+$(ARCS_DIR)/$(OSEARCH_BOARDS_NODE_TXZ):
+	$(Q)wget $(NODEJS_DL_HOST)/dist/v$(OSEARCH_BOARDS_NODE_VER)/$(OSEARCH_BOARDS_NODE_TXZ) -O $@.part
+	$(Q)echo "$(OSEARCH_BOARDS_NODE_SHA256)  $@.part" | sha256sum -c -
+	$(Q)mv $@.part $@
+
+rootfs_install:: $(ARCS_DIR)/$(OSEARCH_BOARDS_NODE_TXZ)
+	$(Q)rm -rf $(ROOTDIR)$(OSEARCH_BOARDS_HOME)/node
+	$(Q)mkdir -p $(ROOTDIR)$(OSEARCH_BOARDS_HOME)/node
+	$(Q)tar -xJf $< -C $(ROOTDIR)$(OSEARCH_BOARDS_HOME)/node --strip-components 1 --no-same-owner
+
 #
 # Logstash
 #

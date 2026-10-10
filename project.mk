@@ -57,6 +57,8 @@ ELASTIC_DL_HOST  ?= https://artifacts.elastic.co
 KOJIHUB_DL_HOST  ?= https://kojihub.stream.centos.org
 # Rocky Linux, for the RHEL errata rebuilds Stream has not shipped yet (core/heavyfs/Makefile).
 ROCKY_DL_HOST    ?= https://dl.rockylinux.org
+# Node.js release builds, for the Node core/elk/elk.mk puts under OpenSearch Dashboards.
+NODEJS_DL_HOST   ?= https://nodejs.org
 CBS_DL_HOST      ?= https://cbs.centos.org
 # Serves the pinned .gem files that core/elk/elk.mk installs the logstash plugins from.
 RUBYGEMS_DL_HOST ?= https://rubygems.org
