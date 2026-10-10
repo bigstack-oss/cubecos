@@ -252,7 +252,7 @@ SetupService(std::string domain, std::string userPass)
 
     HexLogInfo("Setting up designate");
 
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/designate-manage database sync\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"/usr/bin/designate-manage database sync\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";

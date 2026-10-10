@@ -563,7 +563,7 @@ SetupService(const std::string domain, const std::string userPass)
     HexLogInfo("Setting up glance");
 
     // populate the glance service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"glance-manage db_sync\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"glance-manage db_sync\" %s", USER);
     // load the shipped metadata definitions; existing namespaces are skipped
     HexUtilSystemF(0, 0, "su -s /bin/sh -c \"glance-manage db_load_metadefs /etc/glance/metadefs\" %s", USER);
 

@@ -158,12 +158,12 @@ SetupService(std::string domain, std::string userPass)
 
     HexLogInfo("Setting up octavia");
 
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"octavia-db-manage upgrade head\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"octavia-db-manage upgrade head\" %s", USER);
     // taskflow keeps its own tables, in the same database but on its own
     // migration chain; "upgrade head" does not create them. Without this the
     // jobboard-backed persistence configured in UpdateDbConn() has nowhere to
     // write and every amphorav2 flow fails at startup.
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"octavia-db-manage upgrade_persistence\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"octavia-db-manage upgrade_persistence\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";

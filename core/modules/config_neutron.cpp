@@ -332,11 +332,11 @@ SetupNeutron(std::string domain, std::string password)
     HexLogInfo("Setting up neutron");
 
     // Populate the neutron service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"neutron-db-manage --config-file %s --config-file %s upgrade head\" %s",
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"neutron-db-manage --config-file %s --config-file %s upgrade head\" %s",
                          CONF, ML2_CONF, USER);
 
     // Populate the neutron vpnaas service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"neutron-db-manage --subproject neutron-vpnaas upgrade head\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"neutron-db-manage --subproject neutron-vpnaas upgrade head\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";

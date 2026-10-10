@@ -126,7 +126,7 @@ SetupBarbican(std::string domain, std::string userPass)
     HexLogInfo("Setting up barbican");
 
     // Populate the barbican service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"barbican-manage db upgrade\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"barbican-manage db upgrade\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";

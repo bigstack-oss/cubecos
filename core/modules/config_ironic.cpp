@@ -258,8 +258,8 @@ SetupIronic(std::string domain, std::string ironicPass, std::string inspPass)
     HexLogInfo("Setting up ironic");
 
     // Populate the ironic services database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/ironic-dbsync --config-file " CONF " create_schema\" %s", USER);
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/ironic-inspector-dbsync --config-file " INSP_CONF " upgrade\" %s", INSP_USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"/usr/bin/ironic-dbsync --config-file " CONF " create_schema\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"/usr/bin/ironic-inspector-dbsync --config-file " INSP_CONF " upgrade\" %s", INSP_USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";

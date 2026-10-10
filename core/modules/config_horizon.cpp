@@ -99,7 +99,7 @@ SetupService()
 
     // horizon lives in the python 3.12 venv now; /usr/bin/python3 (3.9) can no
     // longer import openstack_dashboard or any of its plugins.
-    HexUtilSystemF(0, 0, "/opt/openstack-epoxy/bin/python /usr/share/openstack-dashboard/manage.py migrate --noinput 2>/dev/null");
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "/opt/openstack-epoxy/bin/python /usr/share/openstack-dashboard/manage.py migrate --noinput 2>/dev/null");
 
     return true;
 }
