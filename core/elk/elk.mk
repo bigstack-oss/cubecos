@@ -73,6 +73,9 @@ rootfs_install::
 	$(Q)# objects (export.ndjson) are an index pattern and a saved search, with no map in them.
 	$(Q)chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove customImportMapDashboards
 	$(Q)$(foreach a,$(OSEARCH_BOARDS_UNUSED_APPS),chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove $(a) && ) true
+	$(Q)# @elastic/eui ships its own repository's GitHub Actions workflows inside the npm package,
+	$(Q)# and the scanner flags an action one of them uses. Nothing in the image can run a workflow.
+	$(Q)rm -r $(ROOTDIR)$(OSEARCH_BOARDS_HOME)/node_modules/@elastic/eui/.github
 	$(Q)chroot $(ROOTDIR) mkdir -p $(OSEARCH_BOARDS_LOG_DIR)
 	$(Q)cp -f $(ROOTDIR)$(OSEARCH_BOARDS_CONF_DIR)/opensearch_dashboards.yml $(ROOTDIR)$(OSEARCH_BOARDS_CONF_DIR)/opensearch_dashboards.yml.orig
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch-dashboards/opensearch-dashboards.service ./etc/systemd/system
