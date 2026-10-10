@@ -219,3 +219,10 @@ rootfs_install::
 # remove unused k8sevents which anyway errors when ceph-mgr starts
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf remove -y ceph-mgr-k8sevents ceph-mgr-rook ceph-mgr-cephadm ceph-mgr-diskprediction-local
+
+# Those modules leave their python dependencies behind -- installdnf installs every rpm by name,
+# so dnf never sees them as unneeded -- and nothing else requires or imports them: asyncssh
+# (cephadm's) and kubernetes (k8sevents' and rook's), the only requirer of python3-certifi.
+# asyncssh and certifi carry known vulnerabilities, so they go through the blocklist, and
+# kubernetes with them so that no installed rpm is left with an unmet requirement.
+BLKLST_DNF += python3-asyncssh python3-kubernetes python3-certifi
