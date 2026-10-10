@@ -264,10 +264,10 @@ SetupNova(std::string domain, std::string novaPass, std::string placePass)
     HexLogInfo("Setting up nova");
 
     // Populate the nova service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"nova-manage api_db sync\" %s", USER);
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"nova-manage cell_v2 map_cell0\" %s", USER);
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"nova-manage cell_v2 create_cell --name=cell1 --verbose\" %s", USER);
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"nova-manage db sync\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"nova-manage api_db sync\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"nova-manage cell_v2 map_cell0\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"nova-manage cell_v2 create_cell --name=cell1 --verbose\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"nova-manage db sync\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
@@ -309,7 +309,7 @@ SetupPlacement()
     HexLogInfo("Setting up placement");
 
     // Populate the nova service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"placement-manage db sync\" %s", PLA_USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"placement-manage db sync\" %s", PLA_USER);
 
     return true;
 }

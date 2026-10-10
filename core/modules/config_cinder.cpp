@@ -912,7 +912,7 @@ SetupService(const std::string domain, const std::string userPass)
     HexLogInfo("Setting up cinder");
 
     // populate the cinder service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"cinder-manage db sync\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"cinder-manage db sync\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";

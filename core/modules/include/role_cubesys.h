@@ -10,6 +10,9 @@
 #define CUBE_MIGRATE "/etc/appliance/state/cube_migration"
 #define CONTROL_REJOIN "/run/control_rejoin"
 
+// one schema migration at a time: concurrent DDL queues in galera and stalls keystone
+#define DB_MIGRATE_LOCK "flock /run/cube_db_migrate.lock "
+
 #define DOMAIN_DEF "default"
 #define REGION_DEF "RegionOne"
 #define MGMT_CIDR_DEF "10.254.0.0/16"

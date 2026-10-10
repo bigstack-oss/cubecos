@@ -142,7 +142,7 @@ SetupKeystone(std::string password, std::string sharedId, std::string external, 
     HexLogInfo("Init keystone");
 
     // Populate the Identity service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"/usr/bin/keystone-manage db_sync\" keystone");
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"/usr/bin/keystone-manage db_sync\" keystone");
 
     // Initialize Fernet key repositories
     HexUtilSystemF(0, 0, "/usr/bin/keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone");
