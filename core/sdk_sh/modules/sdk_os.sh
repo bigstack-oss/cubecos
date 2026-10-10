@@ -1836,12 +1836,61 @@ os_octavia_init()
 # non-master reinit skips the master-only network setup). Idempotent.
 os_octavia_init_peers()
 {
+    # Restart roll: peers kept their port, ids and services; only o-hm0's
+    # ip/route is lost on reboot. Bring it up in parallel, reinit on failure.
+    local fast=0
+    is_rolling_restart_boot && fast=1
+
+    local node pids=()
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         [ "$node" = "$(hostname)" ] && continue
         if remote_run $node hex_sdk is_first_three_compute_node ; then
-            Quiet -n remote_run $node hex_config reinit_octavia
+            if [ $fast -eq 1 ] ; then
+                ( remote_run $node hex_sdk os_octavia_node_fast_up || Quiet -n remote_run $node hex_config reinit_octavia ) </dev/null &
+                pids+=($!)
+            else
+                Quiet -n remote_run $node hex_config reinit_octavia
+            fi
         fi
     done
+    [ ${#pids[@]} -eq 0 ] || wait "${pids[@]}"
+    return 0
+}
+
+# Restart-roll fast path for a peer (see os_octavia_init_peers): no port
+# recreate, no reconfig. Non-zero -> caller falls back to reinit_octavia.
+os_octavia_node_fast_up()
+{
+    [ -f /run/cube_commit_done ] || return 1
+    os_octavia_cfg_ids_ok || return 1
+    os_octavia_hm0_up || return 1
+    /sbin/ip -4 addr show octavia-hm0 2>/dev/null | grep -q inet || return 1
+    /usr/sbin/route -n | grep -q octavia-hm0 || return 1
+    systemctl is-active -q octavia-worker || systemctl start octavia-worker
+    systemctl is-active -q octavia-health-manager || systemctl start octavia-health-manager
+    systemctl is-active -q octavia-worker && systemctl is-active -q octavia-health-manager
+}
+
+# Restart roll: bring up this node's own o-hm0 in its own roll step.
+os_octavia_roll_node_up()
+{
+    is_rolling_restart_boot || return 0
+    is_first_three_compute_node || return 0
+    os_octavia_node_fast_up && return 0
+    Quiet -n $HEX_CFG reinit_octavia
+}
+
+# True if a health-manager node other than $1 has o-hm0 IPv4 + health-manager
+# active, or if there is no other health-manager node to ask.
+os_octavia_hm_peer_ready()
+{
+    local skip=$1 node others=0
+    for node in $(cubectl node list -r compute -j | jq -r '.[].hostname' | head -3) ; do
+        [ "$node" = "$skip" ] && continue
+        others=1
+        remote_run $node "ip -4 addr show octavia-hm0 2>/dev/null | grep -q inet && systemctl is-active -q octavia-health-manager" </dev/null >/dev/null 2>&1 && return 0
+    done
+    [ $others -eq 0 ]
 }
 
 os_octavia_node_init()

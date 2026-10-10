@@ -23,6 +23,7 @@
 #include <list>
 #include <netinet/in.h>
 #include <sys/stat.h>
+#include <upgrade.hpp>
 
 #define MONDIR_FMT "/var/lib/ceph/mon/ceph-%s"
 #define MGRDIR_FMT "/var/lib/ceph/mgr/ceph-%s"
@@ -2337,7 +2338,12 @@ ClusterStartMain(int argc, char** argv)
     std::string port = DASHBOARD_PORT;
 
     SyncConfigMain(1, NULL);
-    SetupOsd(s_hostname.newValue());
+    // A restart roll's boot commit just set up and started this node's OSDs;
+    // redoing it here only stops and restarts them.
+    if (IsRollingRestartBoot())
+        HexLogInfo("skipped osd setup, reason: rolling restart");
+    else
+        SetupOsd(s_hostname.newValue());
 
     HexUtilSystemF(0, 0, HEX_SDK " migrate_ceph");
     if (IsControl(s_eCubeRole)) {
