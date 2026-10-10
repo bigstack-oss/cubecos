@@ -236,7 +236,11 @@ LOCKED_DNF += $(OPENSSL)
 # cli into a venv. From 3.1.10 on nothing read those directories, so the ceph, rbd,
 # ovs-vsctl, systemctl and git completions still on disk went dead along with
 # openstack's (#1611). Naming it is what keeps it from leaving with a package again.
-$(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) arp-scan bash-completion")
+#
+# The system JDK runs Kafka and the ZooKeeper bundled with it, and nothing else: OpenSearch and
+# Logstash carry their own. It is the newest LTS, 25, because Stream 9 stopped updating
+# java-11-openjdk at 11.0.20.1, which carries known vulnerabilities.
+$(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-25-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) arp-scan bash-completion")
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) python3 -m pip install -U pip
