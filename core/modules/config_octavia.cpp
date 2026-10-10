@@ -830,8 +830,15 @@ ReinitMain(int argc, char* argv[])
         // maps the 4th octet ranges from 1~9 to 11~19 for avoiding conflict with dhcp port
         if (octet4.length() == 1)
             octet4 = "1" + octet4;
-        std::string cidr = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr 2>/dev/null", sharedId.c_str());
-        std::string cidrIp = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr_ip %s 2>/dev/null", sharedId.c_str(), octet4.c_str());
+        std::string cidr, cidrIp;
+        // control nodes hold cubesys.mgmt.cidr; each remote lookup costs a full settings load
+        if (IsControl(s_eCubeRole)) {
+            cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
+            cidrIp = GetMgmtCidrIp(s_mgmtCidr.newValue(), 0, octet4);
+        } else {
+            cidr = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr 2>/dev/null", sharedId.c_str());
+            cidrIp = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr_ip %s 2>/dev/null", sharedId.c_str(), octet4.c_str());
+        }
         HexUtilSystemF(0, 0, HEX_SDK " os_octavia_node_init %s %s", cidrIp.c_str(), cidr.c_str());
     }
 
