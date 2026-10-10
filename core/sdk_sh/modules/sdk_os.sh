@@ -1726,6 +1726,13 @@ os_octavia_init()
         return 0
     fi
 
+    # amphorae, VIP ports and LB security groups live in the service_auth project (admin);
+    # lifted once so a quota the operator sets later is kept
+    if [ ! -f "/etc/appliance/state/octavia_quota_done" ] ; then
+        $OPENSTACK quota set --force --secgroups -1 --secgroup-rules -1 --ports -1 \
+            --instances -1 --cores -1 --ram -1 admin && touch /etc/appliance/state/octavia_quota_done
+    fi
+
     if [ -f "/etc/appliance/state/octavia_init_done" ] ; then
         return 0
     else

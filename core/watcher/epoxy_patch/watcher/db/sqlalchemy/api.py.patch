@@ -1,0 +1,20 @@
+--- watcher/db/sqlalchemy/api.py
++++ watcher/db/sqlalchemy/api.py
+@@ -1063,6 +1063,17 @@
+                              fieldname=fieldname, value=value, eager=eager)
+         except exception.ResourceNotFound:
+             raise exception.ServiceNotFound(service=value)
++        except exc.MultipleResultsFound:
++            # HA: one row per host shares the name; return the latest seen
++            with _session_for_read() as session:
++                query = session.query(models.Service)
++                if eager:
++                    query = self._set_eager_options(models.Service, query)
++                query = query.filter(getattr(models.Service, fieldname) == value)
++                if not context.show_deleted:
++                    query = query.filter(models.Service.deleted_at.is_(None))
++                return query.order_by(models.Service.last_seen_up.desc(),
++                                      models.Service.id.desc()).first()
+ 
+     def get_service_by_id(self, context, service_id, eager=False):
+         return self._get_service(
