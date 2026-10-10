@@ -33,6 +33,7 @@ const static char FORCE_NEW_MARK[] = "/etc/appliance/state/mysql_new_cluster";
 const static char USER[] = "mysql";
 const static char GROUP[] = "mysql";
 const static char NAME[] = "mariadb";
+const static char CHECK_SOCKET[] = "galera-check.socket";
 
 const static int READY_TIMEOUT = 300;
 const static int READY_INTERVAL = 5;
@@ -407,6 +408,12 @@ Commit(bool modified, int dryLevel)
         return false;
 
     CuratorCronJob(s_curatorRp.newValue());
+
+    // haproxy's galera check: no-privilege account, unix_socket auth (no password)
+    if (enabled && s_ha &&
+        !MysqlUtilRunSQL("CREATE USER IF NOT EXISTS 'haproxy'@'localhost' IDENTIFIED VIA unix_socket"))
+        HexLogError("failed to create the galera check account");
+    SystemdCommitService(enabled && s_ha, CHECK_SOCKET);
 
     return true;
 }

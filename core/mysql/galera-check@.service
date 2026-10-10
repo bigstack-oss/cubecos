@@ -1,0 +1,17 @@
+[Unit]
+Description=Galera sync health check
+
+[Service]
+ExecStart=/usr/sbin/galera-check
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+User=haproxy
+Group=haproxy
+RuntimeMaxSec=8
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+# keep per-check start/stop lines out of the journal
+LogLevelMax=notice

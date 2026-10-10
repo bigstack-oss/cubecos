@@ -805,6 +805,10 @@ power_roll_advance()
         # nothing commits mysql on it again before its next boot. See upgrade_mysql in
         # config_mysql.cpp; a node with nothing pending returns at once.
         Quiet -n cmd -c $HEX_CFG upgrade_mysql
+        # Same for the broker tick: an upgraded node kept the old 60 s so it agreed with
+        # the brokers not yet rolled; move them all to 15 s together. See
+        # rabbitmq_ticktime in config_rabbitmq.cpp.
+        Quiet -n cmd -c $HEX_CFG rabbitmq_ticktime
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling

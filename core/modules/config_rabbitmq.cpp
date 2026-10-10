@@ -29,6 +29,8 @@ const static char GUEST_PASS[] = "gr4mPFndR82Ln4gk";
 const static char OPENSTACK_PASS[] = "39H4Heu1pEh1amat";
 const static char ERLANG_COOKIE[] = "ULFLGIAUDLQJKAWMVPMA";
 const static char SETUP_MARK[] = "/etc/appliance/state/rabbitmq_cluster_done";
+// upgraded broker keeps the old 60 s tick until rabbitmq_ticktime runs at the end of the roll
+const static char TICKTIME_MARK[] = "/etc/appliance/state/rabbitmq_ticktime_compat";
 
 static ConfigString s_hostname;
 
@@ -96,6 +98,11 @@ WriteConfig(const std::string& myip)
     }
 
     fprintf(fout, "cluster_partition_handling = pause_minority\n");
+    // detect a dead peer in ~15 s instead of 60 s; connected brokers must agree on it,
+    // so an upgrade keeps 60 s while older brokers are still in the cluster
+    if (s_ha && access(CUBE_MIGRATE, F_OK) == 0)
+        HexSystemF(0, "touch %s", TICKTIME_MARK);
+    fprintf(fout, "net_ticktime = %d\n", access(TICKTIME_MARK, F_OK) == 0 ? 60 : 15);
 
     // The two listener tunings are independent so a cluster can move in stages: bring
     // the ssl listener up while the plaintext one is still serving, repoint the clients
@@ -245,7 +252,8 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
             bool isMaster = G(IS_MASTER);
             if (isMaster && access(CONTROL_REJOIN, F_OK) != 0) {
                 // Each exchange or queue will have at most one policy matching
-                HexUtilSystemF(0, 0, CONTROL_FMT "set_policy ha-all \".*\" '{\"expires\": 86400, \"ha-mode\": \"all\", \"ha-sync-mode\": \"automatic\"}' --apply-to all --priority 0", hostname.c_str());
+                // skip amq.*, reply_ and fanout queues: transient, mirroring only slows failover
+                HexUtilSystemF(0, 0, CONTROL_FMT "set_policy ha-all '^(?!(amq\\.)|(.*_fanout_)|(reply_)).*' '{\"expires\": 86400, \"ha-mode\": \"all\", \"ha-sync-mode\": \"automatic\"}' --apply-to all --priority 0", hostname.c_str());
 
                 std::vector<std::string> peers = GetControllerPeers(hostname, ctrlHosts);
                 for (auto & p : peers) {
@@ -515,7 +523,41 @@ ClusterReadyMain(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
+static void
+TicktimeUsage(void)
+{
+    fprintf(stderr, "Usage: %s rabbitmq_ticktime\n", HexLogProgramName());
+}
+
+// Move an upgraded broker from 60 s to 15 s. power_roll_advance calls this on every
+// control node once the roll is complete; a node without the marker returns at once.
+static int
+TicktimeMain(int argc, char* argv[])
+{
+    if (argc != 1) {
+        TicktimeUsage();
+        return EXIT_FAILURE;
+    }
+
+    if (!IsControl(s_eCubeRole) || !s_enabled.newValue() || access(TICKTIME_MARK, F_OK) != 0)
+        return EXIT_SUCCESS;
+
+    if (HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") != 0) {
+        HexLogInfo("%s: control nodes not on one version, keeping net_ticktime 60", NAME);
+        return EXIT_FAILURE;
+    }
+
+    HexSystemF(0, "sed -i 's/^net_ticktime = .*/net_ticktime = 15/' %s", CONF);
+    // the 60 s transition lets every broker switch without dropping its peers
+    HexUtilSystemF(0, 0, CONTROL_FMT "eval 'net_kernel:set_net_ticktime(15, 60).'",
+                   s_hostname.newValue().c_str());
+    unlink(TICKTIME_MARK);
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_COMMAND_WITH_SETTINGS(rabbitmq_guest_password, GPassMain, GPassUsage);
+CONFIG_COMMAND_WITH_SETTINGS(rabbitmq_ticktime, TicktimeMain, TicktimeUsage);
 CONFIG_COMMAND(status_rabbitmq, StatusMain, StatusUsage);
 CONFIG_COMMAND_WITH_SETTINGS(restart_rabbitmq, RestartMain, RestartUsage);
 

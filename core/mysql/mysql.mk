@@ -115,6 +115,11 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/mariadb.service.d
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/mysql/mariadb-stop.conf ./etc/systemd/system/mariadb.service.d/
 
+# haproxy's sync-aware galera check, started by config_mysql.cpp on HA controls
+rootfs_install::
+	$(Q)$(INSTALL_SCRIPT) $(ROOTDIR) $(COREDIR)/mysql/galera-check ./usr/sbin/
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/mysql/galera-check.socket $(COREDIR)/mysql/galera-check@.service ./lib/systemd/system
+
 rootfs_install::
 	$(Q)# /etc/my.cnf.d/galera.cnf came from centos stream 9 appstream repo, mariadb repo mariadb does not have this default config
 	$(Q)# mv $(ROOTDIR)/etc/my.cnf.d/galera.cnf $(ROOTDIR)/etc/my.cnf.d/galera.cnf.orig
