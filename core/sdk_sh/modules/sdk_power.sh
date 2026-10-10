@@ -528,6 +528,56 @@ power_bootup_status()
     done
 }
 
+# ===================== master override =====================
+# One-time master control for this boot, for when the first control host is
+# dead at boot. The marker lives in /run on each control, so a reboot drops it.
+
+# Name <host> master: write the override on <host>, here and on every other
+# reachable control. Refused unless <host> is a control, this node has not
+# committed and the current master answers neither ping nor ssh.
+power_master_override()
+{
+    local host=$1 master n
+    source $HEX_TUN $SETTINGS_TXT
+    [ -n "$host" ] || Error "usage: power_master_override <host>"
+    echo ",$T_cubesys_control_hosts," | grep -q ",$host," || Error "$host is not a control node"
+    [ ! -e $CUBE_DONE ] || Error "$HOSTNAME has already committed"
+    master=$(cube_master_control)
+    [ "x$master" != "x$host" ] || Error "$host is already the master control"
+    if ping -c1 -W2 $master >/dev/null 2>&1 || is_sshable $master ; then
+        Error "master control $master is reachable"
+    fi
+    if [ "x$host" != "x$HOSTNAME" ] ; then
+        ( is_sshable $host && ssh root@$host "echo $host > $CUBE_MASTER_OVERRIDE" ) </dev/null >/dev/null 2>&1 || Error "$host is not sshable"
+    fi
+    echo $host > $CUBE_MASTER_OVERRIDE
+    for n in $(echo $T_cubesys_control_hosts | tr ',' ' ') ; do
+        [ "x$n" = "x$host" -o "x$n" = "x$HOSTNAME" -o "x$n" = "x$master" ] && continue
+        # subshell: an unreachable control must not stop the rest
+        ( is_sshable $n && ssh root@$n "echo $host > $CUBE_MASTER_OVERRIDE" ) </dev/null >/dev/null 2>&1 || log_warning "master override: $n not reachable, it adopts the override when it boots"
+    done
+    log_info "master override: $host is master control for this boot (was $master)"
+    echo "$host is master control for this boot"
+}
+
+# Copy the override from a reachable control when this node has none.
+power_master_override_adopt()
+{
+    [ -s $CUBE_MASTER_OVERRIDE ] && return 0
+    source $HEX_TUN $SETTINGS_TXT
+    local n o
+    for n in $(echo $T_cubesys_control_hosts | tr ',' ' ') ; do
+        [ "x$n" = "x$HOSTNAME" ] && continue
+        o=$( ( is_sshable $n && timeout 10 ssh root@$n "cat $CUBE_MASTER_OVERRIDE 2>/dev/null" ) </dev/null 2>/dev/null | head -1 | tr -d '[:space:]')
+        if [ -n "$o" ] ; then
+            echo $o > $CUBE_MASTER_OVERRIDE
+            log_info "master override: adopted $o from $n"
+            return 0
+        fi
+    done
+    return 0
+}
+
 power_roll_active()
 {
     # A node mid-roll-recovery hasn't mounted cephfs yet, so the shared job.json

@@ -1563,8 +1563,16 @@ EOF
 
 os_post_failure_host_evacuation()
 {
-    local host=$1
-    nova host-evacuate $host
+    local host=$1 id
+    # skip HA_Enabled=False (amphorae): octavia rebuilds those itself
+    for id in $($OPENSTACK server list --all-projects --host $host -f value -c ID) ; do
+        if $OPENSTACK server show $id -f json -c properties 2>/dev/null | jq -e '.properties.HA_Enabled == "False"' >/dev/null ; then
+            echo "skip $id (HA_Enabled=False)"
+            continue
+        fi
+        # 2.94: keep the power state (2.95+ leaves evacuated instances stopped)
+        nova --os-compute-api-version 2.94 evacuate $id
+    done
 }
 
 os_evac_upgrade_prepare()
@@ -1877,7 +1885,7 @@ os_octavia_node_fast_up()
 # True while cube-planned-maintenance.conf refuses octavia-health-manager.
 os_octavia_hm_gated()
 {
-    [ -e $PLANNED_MAINT_MARKER ] || ! grep -q "^done " /run/cube_bootup_status 2>/dev/null
+    [ -e $PLANNED_MAINT_MARKER ] || ! cube_failover_gate_open
 }
 
 # Restart roll: bring up this node's own o-hm0 in its own roll step.

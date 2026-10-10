@@ -12,6 +12,9 @@ done | sed -e "s|^os_octavia_node_fast_up()|real_fast_up()|" -e "s|/run/|$T/run/
 for f in _power_roll_octavia_ready _power_roll_octavia_hm_host ; do
     sed -n "/^$f()/,/^}/p" $D/modules/sdk_power.sh >> $T/fn.sh
 done
+# the real gate, with this node as master (no peer to ask), /run paths moved
+sed -n "/^cube_failover_gate_open()/,/^}/p" $D/../main/proj_functions | sed "s|/run/|$T/run/|g" >> $T/fn.sh
+cube_master_control(){ hostname; }
 source $T/fn.sh
 fail=0
 chk(){ printf '%-48s -> %-12s (want %s)\n' "$1" "$2" "$3"; [ "$2" = "$3" ] || fail=1; }
