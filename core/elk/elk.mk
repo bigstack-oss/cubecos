@@ -16,7 +16,7 @@ endif
 # OpenSearch
 #
 
-OSEARCH_VER := 3.8.0
+OSEARCH_VER := 3.9.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
 OSEARCH_CONF_SECURITY_DIR := $(OSEARCH_CONF_DIR)/opensearch-security
 
