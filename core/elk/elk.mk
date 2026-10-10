@@ -166,6 +166,16 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_PLUGIN_PACK)
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin install file:///tmp/$(LOGSTASH_PLUGIN_PACK)
 	$(Q)rm -f $(ROOTDIR)/tmp/$(LOGSTASH_PLUGIN_PACK)
 
+# Bundled plugins no pipeline in conf.d uses, removed because they carry vulnerable jars:
+# elastic_integration vendors jackson 2.18 and 3.1, azure_event_hubs jackson 2.21.6. The
+# removal is local -- logstash-plugin rewrites Gemfile and Gemfile.lock and deletes the gems
+# without resolving anything against rubygems.org -- so it costs seconds and no network. A
+# Logstash bump that stops bundling one fails here, which is the cue to drop it from the list.
+LOGSTASH_UNUSED_PLUGINS := logstash-filter-elastic_integration logstash-input-azure_event_hubs
+
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin remove $(LOGSTASH_UNUSED_PLUGINS)
+
 #
 # Beats (filebeat, auditbeat)
 #
