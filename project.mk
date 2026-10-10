@@ -58,6 +58,9 @@ KOJIHUB_DL_HOST  ?= https://kojihub.stream.centos.org
 CBS_DL_HOST      ?= https://cbs.centos.org
 # Serves the pinned .gem files that core/elk/elk.mk installs the logstash plugins from.
 RUBYGEMS_DL_HOST ?= https://rubygems.org
+# Maven Central, for the jars core/kafka/kafka.mk swaps into Kafka's libs/. Unlike the hosts
+# above this one carries the repository path too, since that is where every artifact lives.
+MAVEN_DL_HOST    ?= https://repo1.maven.org/maven2
 
 # PyPI index. Empty by default, so pip resolves against pypi.org exactly as before.
 #
