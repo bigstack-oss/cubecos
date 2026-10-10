@@ -78,6 +78,10 @@ std::size_t GetClusterSize(
     bool ha,
     const std::string& clusterGroup);
 
+// one-time master control for this boot (boot_mode master_override)
+#define MASTER_OVERRIDE "/run/cube_master_override"
+
+// master: the override's entry in the group if any, else the first entry
 bool IsMaster(
     bool isCtrl,
     const std::string& hostname,

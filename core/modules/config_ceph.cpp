@@ -1912,6 +1912,20 @@ Commit(bool modified, int dryLevel)
             return false;
         }
 
+        // list every mon, not just the master's, so clients survive a dead master
+        if (!isMaster) {
+            for (int i = 0 ; i < 3 ; i++) {
+                std::string monIps = HexUtilPOpen("ssh root@%s %s ceph_mon_local_iplist 2>/dev/null", peer.c_str(), HEX_SDK);
+                auto ips = hex_string_util::split(monIps, ',');
+                if (std::find(ips.begin(), ips.end(), masterIp) != ips.end()) {
+                    masterIp = monIps;
+                    break;
+                }
+                sleep(2);
+            }
+            HexLogInfo("ceph mon host %s", masterIp.c_str());
+        }
+
         if (access(CONTROL_REJOIN, F_OK) == 0) {
             peer = GetControllerPeers(s_hostname, s_ctrlHosts)[0];
             master = HexUtilPOpen("ssh root@%s %s ceph_mon_map_hosts %s 2>/dev/null", peer.c_str(), HEX_SDK, CONF);

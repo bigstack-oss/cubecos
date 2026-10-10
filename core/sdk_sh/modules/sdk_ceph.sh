@@ -287,6 +287,12 @@ ceph_bootstrap_mon_ip()
     echo -n $ip
 }
 
+# mon IPs from this node's running mon (admin socket: no quorum needed)
+ceph_mon_local_iplist()
+{
+    $CEPH daemon mon.$HOSTNAME mon_status 2>/dev/null | jq -r '.monmap.mons[].public_addr // empty' | cut -d: -f1 | paste -sd, - | tr -d '\n'
+}
+
 ceph_mon_map_iplist()
 {
     ceph_mon_map_create $1

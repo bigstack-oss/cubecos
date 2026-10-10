@@ -89,6 +89,29 @@ BootLinkCheckMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+static int
+BootMasterOverrideMain(int argc, const char** argv)
+{
+    if (argc > 2 /* [0]="master_override", [1]=<host> */)
+        return CLI_INVALID_ARGS;
+
+    int index;
+    std::string host;
+
+    if (CliMatchCmdHelper(argc, argv, 1, "source /usr/sbin/hex_tuning /etc/settings.txt ; echo $T_cubesys_control_hosts | tr ',' '\\n'", &index, &host, "Select the control node to be master for this boot:") != CLI_SUCCESS) {
+        CliPrintf("Unknown control node");
+        return CLI_INVALID_ARGS;
+    }
+
+    CliPrintf("Only when the master control is down: %s bootstraps as master until the next reboot.", host.c_str());
+    if (CliReadConfirmation()) {
+        if (HexSpawn(0, HEX_SDK, "power_master_override", host.c_str(), NULL) != 0)
+            return CLI_FAILURE;
+    }
+
+    return CLI_SUCCESS;
+}
+
 bool
 BootstrapCubeManual()
 {
@@ -109,3 +132,7 @@ CLI_MODE_COMMAND("boot_mode", "manual", BootManualMain, NULL,
 CLI_MODE_COMMAND("boot_mode", "link_check", BootLinkCheckMain, NULL,
     "check connectivity with other nodes.",
     "link_check");
+
+CLI_MODE_COMMAND("boot_mode", "master_override", BootMasterOverrideMain, NULL,
+    "make a control node master for this boot when the master control is down.",
+    "master_override <hostname>");
