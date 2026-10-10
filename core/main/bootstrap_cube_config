@@ -138,7 +138,6 @@ PostBootRecovery()
 }
 
 [ -e $BOOTSTRAP_CUBE_MODE ] || touch $BOOTSTRAP_CUBE_MODE
-export CLUSTER_SIZE=$(cubectl node list | wc -l)
 
 if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; then
     bootstrap_console_write "$space_filler"$'\r'
@@ -152,9 +151,6 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
         # own statements (never chained onto the bring-up), so a bring-up that exits
         # -- e.g. an unsshable peer on the master -- can't skip them.
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
-            if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
-                echo "YES" | hex_cli -c cluster stop
-            fi
             BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
             PostBootRecovery
             # Advance the roll relay + mark bootup 'done' here per node, not in
@@ -176,9 +172,6 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                 hex_log_event -e BSP00008W "interface=system,host=$HOSTNAME,service=bootstrap"
             fi
         elif [ "x$T_cubesys_role" = "xcontrol" -o "x$T_cubesys_role" = "xcontrol-converged" -o "x$T_cubesys_role" = "xedge-core" -o "x$T_cubesys_role" = "xmoderator" ] ; then
-            if [ $(hex_sdk -v -f none health_bootstrap_report | grep ready | wc -l) -eq 0 -o $CLUSTER_SIZE -eq 0 ] ; then
-                echo "YES" | hex_cli -c cluster stop
-            fi
             (
                 cnt=0
                 while ! hex_sdk remote_run ${MASTER_CONTROL:-NOMASTER} stat $BOOTSTRAP_CUBE_MARKER >/dev/null 2>&1 ; do
