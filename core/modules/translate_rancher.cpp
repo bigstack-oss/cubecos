@@ -16,7 +16,7 @@ Translate(const char *policy, FILE *settings)
     HexLogDebug("translate_rancher policy: %s", policy);
 
     GNode *yml = InitYml("rancher");
-    bool enabled;
+    bool enabled = true; // matches the rancher.enabled tuning when the key is missing
 
     if (ReadYml(policy, yml) < 0) {
         FiniYml(yml);
