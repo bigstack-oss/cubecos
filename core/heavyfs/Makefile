@@ -208,6 +208,17 @@ QEMU_LOCKED_RPMS := $(foreach p,$(QEMU_PKGS),$(p)$(QEMU_VER))
 LOCKED_DNF += $(QEMU_LOCKED_RPMS)
 $(foreach p,$(QEMU_PKGS),$(eval ROOTFS_DNF_DL_FROM += $(QEMU_URL)/$(p)-$(QEMU_NVR).x86_64.rpm))
 
+# rsync is Rocky 9's build, not Stream's. RHEL 9.8 fixed sixteen Important CVEs by rebasing to
+# 3.2.7 (rsync-3.2.7-1.el9_8); Stream 9 has not shipped that rebase -- its newest build is
+# 3.2.5-9, and the 3.2.5-10 draft fixes a different one. Rocky rebuilds the errata from the same
+# source rpm. Fetched here, it sits beside the 3.2.5-9 that the plain "rsync" in ROOTFS_DNF pulls,
+# and installdnf's duplicate pass keeps the higher version, so Stream's own build takes over the
+# day one sorts above it. No Rocky key goes into the image: nothing verifies signatures on these
+# downloads, and a node has no other reason to trust Rocky's key. The path moves to
+# vault/rocky/9.8 once Rocky 9.9 ships, which fails this download loudly rather than quietly.
+RSYNC_NVR := 3.2.7-1.el9_8
+ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/pub/rocky/9.8/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
+
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
 rootfs_install::
