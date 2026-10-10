@@ -58,12 +58,14 @@ ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearc
 
 # Apps that only drive the OpenSearch plugins OSEARCH_UNUSED_PLUGINS removes, so left in
 # place they would be pages that fail on every request. investigationDashboards has no
-# plugin of its own but calls ml, ppl/sql and observability's notebooks. The two apps whose
-# plugins stay -- indexManagementDashboards and queryInsightsDashboards -- stay with them.
+# plugin of its own but calls ml, ppl/sql and observability's notebooks. indexManagementDashboards
+# and queryInsightsDashboards go too, though their plugins stay: the scanner finds vulnerable
+# packages in each one's yarn.lock, and nothing uses either -- no ISM policy exists, and no code
+# here calls them.
 OSEARCH_BOARDS_UNUSED_APPS := alertingDashboards anomalyDetectionDashboards assistantDashboards \
 	flowFrameworkDashboards investigationDashboards mlCommonsDashboards notificationsDashboards \
 	observabilityDashboards queryWorkbenchDashboards reportsDashboards searchRelevanceDashboards \
-	securityAnalyticsDashboards
+	securityAnalyticsDashboards indexManagementDashboards queryInsightsDashboards
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove securityDashboards
