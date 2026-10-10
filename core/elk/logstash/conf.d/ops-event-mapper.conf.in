@@ -112,9 +112,15 @@ filter {
         }
       }
     }
-    mutate {
-      add_field => {
-        "eventlog" => 'system,%{[event][shared_tags]},%{[event][tags]} %{[event][fields]},%{[event][metadata]} %{[event][timestamp]}'
+    # Only a category branch above sets the tags, and the SDN one skips admin_cli and the
+    # admin project on purpose. An event it skipped has nothing to record, so it gets no
+    # eventlog line rather than one whose %{...} references never expand, which InfluxDB
+    # refuses with a 400 for every such port.
+    if [event][tags] {
+      mutate {
+        add_field => {
+          "eventlog" => 'system,%{[event][shared_tags]},%{[event][tags]} %{[event][fields]},%{[event][metadata]} %{[event][timestamp]}'
+        }
       }
     }
   }
@@ -131,7 +137,7 @@ output {
     # hex_config installs this template; see InstallTemplates() in config_logstash.cpp
     manage_template => false
   }
-  if [event][key] {
+  if [eventlog] {
     http {
       url => "http://@CUBE_SHARED_ID@:9092/write?db=events&precision=ms&rp=def"
       format => "message"

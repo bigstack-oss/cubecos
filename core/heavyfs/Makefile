@@ -33,8 +33,11 @@ BLKLST_DNF += python3-django    # CVE-2022-28347, CVE-2023-31047, CVE-2025-64459
 # so the system python 3.9 copy had no importer left. Nothing in the image carries
 # scciclient at all now, which is the stronger answer to the CVE.
 BLKLST_DNF += python3-scciclient
+# pillow is no longer installed into the system python either. The line that put it
+# there replaced the blacklisted python3-pillow, but nothing in the image imports PIL:
+# no installed package or rpm requires it, and neither the tree nor ceph-mgr's modules
+# use it. The rpm stays blacklisted.
 BLKLST_DNF += python3-pillow    # CVE-2023-50447
-ROOTFS_PIP += pillow            # CVE-2023-50447 Upgrade to version: 10.2.0
 ROOTFS_PIP += waitress          # CVE-2024-49768 Upgrade to version: 3.0.1
 BLKLST_DNF += python3-numexpr   # Remove DNF managed package
 ROOTFS_PIP += numexpr           # CVE-2023-39631 Upgrade to version: 2.8.5
@@ -205,6 +208,17 @@ QEMU_LOCKED_RPMS := $(foreach p,$(QEMU_PKGS),$(p)$(QEMU_VER))
 LOCKED_DNF += $(QEMU_LOCKED_RPMS)
 $(foreach p,$(QEMU_PKGS),$(eval ROOTFS_DNF_DL_FROM += $(QEMU_URL)/$(p)-$(QEMU_NVR).x86_64.rpm))
 
+# rsync is Rocky 9's build, not Stream's. RHEL 9.8 fixed sixteen Important CVEs by rebasing to
+# 3.2.7 (rsync-3.2.7-1.el9_8); Stream 9 has not shipped that rebase -- its newest build is
+# 3.2.5-9, and the 3.2.5-10 draft fixes a different one. Rocky rebuilds the errata from the same
+# source rpm. Fetched here, it sits beside the 3.2.5-9 that the plain "rsync" in ROOTFS_DNF pulls,
+# and installdnf's duplicate pass keeps the higher version, so Stream's own build takes over the
+# day one sorts above it. No Rocky key goes into the image: nothing verifies signatures on these
+# downloads, and a node has no other reason to trust Rocky's key. The path moves to
+# vault/rocky/9.8 once Rocky 9.9 ships, which fails this download loudly rather than quietly.
+RSYNC_NVR := 3.2.7-1.el9_8
+ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/pub/rocky/9.8/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
+
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
 rootfs_install::
@@ -214,7 +228,7 @@ rootfs_install::
 PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel python-xmlsec
 
 # ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm
-RUBY := ruby-3.0.7-166.el9
+RUBY := ruby-3.0.7-168.el9
 LOCKED_DNF += $(RUBY)
 
 OPENSSL_VER := 3.5.1-6.el9
@@ -233,7 +247,11 @@ LOCKED_DNF += $(OPENSSL)
 # cli into a venv. From 3.1.10 on nothing read those directories, so the ceph, rbd,
 # ovs-vsctl, systemctl and git completions still on disk went dead along with
 # openstack's (#1611). Naming it is what keeps it from leaving with a package again.
-$(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-11-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) perf arp-scan bash-completion")
+#
+# The system JDK runs Kafka and the ZooKeeper bundled with it, and nothing else: OpenSearch and
+# Logstash carry their own. It is the newest LTS, 25, because Stream 9 stopped updating
+# java-11-openjdk at 11.0.20.1, which carries known vulnerabilities.
+$(call PROJ_INSTALL_DNF_NOARCH,-w ,"curl wget jq tcpdump util-linux uuid git python3-devel gcc java-25-openjdk-headless $(RUBY) $(ROOTFS_DNF_NOARCH_P1) edk2-ovmf python3-pip python3-six python3-lasso sos emacs-nox expect tcl $(PYTHON3_SAML_REQUIRE) arp-scan bash-completion")
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) python3 -m pip install -U pip
@@ -322,34 +340,36 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-epoxy-pip-upper-constraints.txt is upstream's stable/2025.1
-# upper-constraints.txt copied down verbatim, save for two local deltas: libvirt-python,
-# raised to 11.10.0 to match the libvirt-devel headers core/nova/nova.mk holds, and
-# setuptools, which upstream does not pin. setuptools is pinned at venv creation above
-# for the reason the NOTE before the venv block gives.
+# upper-constraints.txt copied down, save for local deltas: libvirt-python, raised to
+# 11.10.0 to match the libvirt-devel headers core/nova/nova.mk holds; setuptools, which
+# upstream does not pin; and the packages raised past upstream's pin to clear a
+# vulnerability, each with its reasons in the commit that raised it. setuptools is
+# pinned at venv creation above for the reason the NOTE before the venv block gives.
 #
-# The pin has two ceilings:
-#   - below 82 (2026-02-08), which deleted pkg_resources. On caracal that was a runtime
-#     requirement as well as a build one: keystonemiddleware 10.6.0 did `import
-#     pkg_resources`, so every keystone gunicorn worker died at import (#631). The
-#     runtime half has gone -- keystonemiddleware 10.9.1 no longer imports it, and
-#     pbr 7.0.0 reaches for it only when importlib.metadata is missing, which it never
-#     is on 3.12, so keystone's whole import chain loads with pkg_resources blocked.
-#     The build half has not: every --no-build-isolation install in this venv builds
-#     against this setuptools, and four of the sdists horizon 25.3.2 pulls in are
-#     XStatic packages whose setup.py imports a pkg_resources-declared namespace.
-#     Built without pip's wheel cache, all four fail under setuptools 82.0.0 with "No
-#     module named 'pkg_resources'" and build under 79.0.1.
-#   - below 80 (2025-04-27), which removed `setup.py install`. Nothing anywhere in the
-#     tree invokes that command any more: ceph's bindings moved to `pip install` (see
-#     core/ceph/ceph.mk), skyline's did too, and #636 converted the last four -- the
-#     designate, masakari, watcher and neutron-vpnaas dashboards -- from a git clone to
-#     a pinned pip install. The ceiling is kept anyway: it costs nothing, and it is
-#     what makes a future `setup.py` install fail on review rather than on build day.
+# The pin has one ceiling: below 82 (2026-02-08), which deleted pkg_resources. On
+# caracal that was a runtime requirement as well as a build one: keystonemiddleware
+# 10.6.0 did `import pkg_resources`, so every keystone gunicorn worker died at import
+# (#631). The runtime half has gone -- keystonemiddleware 10.9.1 no longer imports it,
+# and pbr 7.0.0 reaches for it only when importlib.metadata is missing, which it never
+# is on 3.12, so keystone's whole import chain loads with pkg_resources blocked. The
+# build half has not: every --no-build-isolation install in this venv builds against
+# this setuptools, and four of the sdists horizon 25.3.2 pulls in are XStatic packages
+# whose setup.py imports a pkg_resources-declared namespace. Built without pip's wheel
+# cache, all four fail under setuptools 82.0.0 with "No module named 'pkg_resources'"
+# and build under 81.0.0.
 #
-# The number is the newest release that clears both: 79.0.1 (2025-04-23), the last
-# before 80.0.0, and three weeks after epoxy shipped. Python 3.12 sets a floor rather
+# Below 80 was a second ceiling until 81.0.0 was needed: the jaraco.context and wheel
+# that setuptools vendors carried known vulnerabilities up to 80.x, and 81.0.0 is the
+# first to vendor fixed releases. What 80 and 81 removed is the easy_install command and
+# module, package_index, the sandbox and setup.py's --dry-run; `setup.py install` itself
+# is only deprecated. Nothing uses any of them: ceph's bindings build in their own venv
+# with `pip wheel` (see core/ceph/ceph.mk), skyline moved to `pip install` too, #636
+# turned the last four dashboards from a git clone into a pinned pip install, and no
+# package in this venv imports the removed modules.
+#
+# The number is the newest release below 82: 81.0.0. Python 3.12 sets a floor rather
 # than a ceiling -- it removed pkgutil.ImpImporter, which pkg_resources references
-# unconditionally before setuptools 66.1 -- and 79.0.1 clears it.
+# unconditionally before setuptools 66.1 -- and 81.0.0 clears it.
 
 # install the openstack cli inside the python 3.12 virtual environment
 #

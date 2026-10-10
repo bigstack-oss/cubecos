@@ -3047,7 +3047,7 @@ os_create_project()
     export RANCHER_TOKEN=$($TERRAFORM_CUBE state pull | jq -r '.resources[] | select(.type == "rancher2_bootstrap").instances[0].attributes.token')
     local appfw_pth=/opt/appfw
 
-    ansible-playbook $appfw_pth/ansible/openstack.yaml -e project=$PROJECT_NAME -e password=$PROJECT_PASSWORD -e mgmt_net=$MGMT_NETWORK -e pub_net=$PUB_NETWORK
+    ANSIBLE_COLLECTIONS_PATH=/opt/ansible/collections /opt/ansible/bin/ansible-playbook $appfw_pth/ansible/openstack.yaml -e project=$PROJECT_NAME -e password=$PROJECT_PASSWORD -e mgmt_net=$MGMT_NETWORK -e pub_net=$PUB_NETWORK
 }
 
 os_light_osc()

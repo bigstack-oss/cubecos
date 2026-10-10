@@ -21,11 +21,11 @@
     register: result
   - name: Gather information about management subnet
     openstack.cloud.subnets_info:
-      name: "{{ result.openstack_networks[0].subnets[0] }}"
+      name: "{{ result.networks[0].subnet_ids[0] }}"
     register: result
   - name: Show management subnet CIDR
     debug:
-      msg: "{{ result.openstack_subnets[0].cidr }}"
+      msg: "{{ result.subnets[0].cidr }}"
 
   - openstack.cloud.project:
       name: "{{ project }}"
@@ -91,13 +91,13 @@
       allocation_pool_end: 192.168.1.253
       # dns_nameservers:
       host_routes:
-        - destination: "{{ result.openstack_subnets[0].cidr }}"
+        - destination: "{{ result.subnets[0].cidr }}"
           nexthop: 192.168.1.254
     when: pub_net != mgmt_net
       # host_routes: >- 
       #   {{ 
       #     [{
-      #       - destination: "{{ result.openstack_subnets[0].cidr }}"
+      #       - destination: "{{ result.subnets[0].cidr }}"
       #         nexthop: 192.168.1.254
       #     }]
       #     if pub_net != mgmt_net 
@@ -133,7 +133,7 @@
       security_group: default-k8s
       ethertype: IPv4
       protocol: any
-      remote_ip_prefix: "{{ result.openstack_subnets[0].cidr }}"
+      remote_ip_prefix: "{{ result.subnets[0].cidr }}"
 
   # Rules for rancher server and service expose
   - openstack.cloud.security_group_rule:

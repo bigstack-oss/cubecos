@@ -695,6 +695,26 @@ migrate_cyborg_db()
     fi
 }
 
+migrate_skyline_db()
+{
+    if [ -f $STATE_DIR/skyline_db_migrated ] ; then
+        return 0
+    fi
+
+    # config_skyline.cpp runs this upgrade only when it creates the database, so a cluster
+    # that had skyline before a firmware upgrade would never run the new release's
+    # migrations. Root runs it there and runs skyline, so root runs it here. Mark only an
+    # upgrade that succeeded, so a failed one is retried on the next Commit().
+    if is_control_node ; then
+        ( /opt/openstack-epoxy/bin/alembic \
+              -c /opt/openstack-epoxy/lib/python3.12/site-packages/skyline_apiserver/db/alembic/alembic.ini \
+              upgrade head && \
+              touch $STATE_DIR/skyline_db_migrated ) || true
+    else
+        touch $STATE_DIR/skyline_db_migrated
+    fi
+}
+
 migrate_ceph()
 {
     if [ -f $STATE_DIR/ceph_cluster_migrated ] ; then

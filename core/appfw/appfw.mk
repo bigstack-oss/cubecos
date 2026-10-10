@@ -1,8 +1,33 @@
 # Cube SDK
 # appfw packages
 
-ROOTFS_PIP += ansible-core
 ROOTFS_PIP += git+https://github.com/rancher/client-python.git@master
+
+# appfw runs its playbooks (os_create_project in sdk_os.sh) from a venv of its own on
+# the openstack python, not from the system python 3.9. Their openstack.cloud modules
+# need openstacksdk, which left the system python with the antelope migration, so the
+# playbook could not run there; the ansible-core installed there, 2.15, has known
+# vulnerabilities whose fixes start in 2.16, which needs python 3.10; and it pulled its
+# own cryptography 36.0.1 wheel into /usr/local, ahead of the rpm on ceph-mgr's path.
+#
+# The venv takes openstacksdk and everything ansible-core shares with it at the epoxy
+# pins, so the modules run on the same sdk as the openstack cli. openstack.cloud 2.x,
+# which that sdk needs (1.x stops below openstacksdk 0.99), goes into the venv's own
+# collections path, and the caller points ANSIBLE_COLLECTIONS_PATH at it: ansible
+# looks in ~/.ansible/collections before anything on sys.path, so a collection left
+# there would otherwise shadow it.
+APPFW_ANSIBLE_HOME := /opt/ansible
+APPFW_ANSIBLE_CORE_VER := 2.21.5
+APPFW_OPENSTACK_CLOUD_VER := 2.6.0
+
+rootfs_install::
+	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
+	$(Q)chroot $(ROOTDIR) python$(PYTHON_VER) -m venv $(APPFW_ANSIBLE_HOME)
+	$(Q)chroot $(ROOTDIR) $(APPFW_ANSIBLE_HOME)/bin/pip install --upgrade pip
+	$(Q)chroot $(ROOTDIR) $(APPFW_ANSIBLE_HOME)/bin/pip install \
+		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		ansible-core==$(APPFW_ANSIBLE_CORE_VER) openstacksdk
+	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 # ospurge, driven by hex_sdk's os_purge_project(), was the last openstack consumer
 # left in the system python 3.9, then the last one left in the antelope venv (#625),
@@ -77,7 +102,8 @@ rootfs_install::
 
 heavy_components_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
-	$(Q)for i in {1..5}; do ! timeout 60 chroot $(ROOTDIR) ansible-galaxy collection install 'openstack.cloud:=1.8.0' --force || break ; done
+	$(Q)for i in {1..5}; do ! timeout 60 chroot $(ROOTDIR) $(APPFW_ANSIBLE_HOME)/bin/ansible-galaxy collection install \
+		-p $(APPFW_ANSIBLE_HOME)/collections 'openstack.cloud:==$(APPFW_OPENSTACK_CLOUD_VER)' --force || break ; done
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)mkdir -p $(ROOTDIR)/opt/appfw
 	$(Q)cp -r $(COREDIR)/appfw/{ansible,bin} $(ROOTDIR)/opt/appfw/

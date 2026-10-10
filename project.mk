@@ -55,9 +55,16 @@ APACHE_DL_HOST   ?= https://archive.apache.org
 MARIADB_DL_HOST  ?= https://archive.mariadb.org
 ELASTIC_DL_HOST  ?= https://artifacts.elastic.co
 KOJIHUB_DL_HOST  ?= https://kojihub.stream.centos.org
+# Rocky Linux, for the RHEL errata rebuilds Stream has not shipped yet (core/heavyfs/Makefile).
+ROCKY_DL_HOST    ?= https://dl.rockylinux.org
+# Node.js release builds, for the Node core/elk/elk.mk puts under OpenSearch Dashboards.
+NODEJS_DL_HOST   ?= https://nodejs.org
 CBS_DL_HOST      ?= https://cbs.centos.org
 # Serves the pinned .gem files that core/elk/elk.mk installs the logstash plugins from.
 RUBYGEMS_DL_HOST ?= https://rubygems.org
+# Maven Central, for the jars core/kafka/kafka.mk swaps into Kafka's libs/. Unlike the hosts
+# above this one carries the repository path too, since that is where every artifact lives.
+MAVEN_DL_HOST    ?= https://repo1.maven.org/maven2
 
 # PyPI index. Empty by default, so pip resolves against pypi.org exactly as before.
 #
@@ -107,12 +114,11 @@ OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEA
 # and friends. Deliberately NOT os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt any
 # more: no openstack package is installed into the system python since the antelope
 # migration, and this file has been maintained locally instead -- it carries the CVE
-# pins the ROOTFS_PIP lines exist for (pillow 11.3.0, waitress 3.0.2, numpy 1.25.2,
-# ansible-core, numexpr, xmlsec), none of which the openstack constraint
-# files have. Deriving it from the release name would have quietly downgraded pillow
-# to 9.2.0 and waitress to 2.1.2 -- straight back into CVE-2023-50447 and
-# CVE-2024-49768 -- the moment OPENSTACK_RELEASE moved to antelope, and the same
-# holds for every hop after it. This pin does not follow the release name, ever.
+# pins the ROOTFS_PIP lines exist for (waitress 3.0.2, numpy 1.25.2, numexpr, xmlsec),
+# none of which the openstack constraint files have. Deriving it from the release name
+# would have quietly downgraded waitress to 2.1.2 -- straight back into CVE-2024-49768
+# -- the moment OPENSTACK_RELEASE moved to antelope, and the same holds for every hop
+# after it. This pin does not follow the release name, ever.
 PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 
 # openstack next version -- left blank until the next hop, then filled in the way

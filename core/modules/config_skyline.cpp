@@ -217,6 +217,9 @@ Commit(bool modified, int dryLevel)
     if (!s_bSetup)
         SetupService(s_cubeDomain, userPass);
 
+    // check for db migration
+    HexUtilSystemF(0, 0, HEX_SDK " migrate_skyline_db");
+
     CommitService(enabled);
 
     WriteLogRotateConf(log_conf);

@@ -30,6 +30,17 @@ SKYLINE_PIP_C := -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT)
 #   - e1d0945 lifted python-jose past 3.3.0 (CVE-2024-33663, CVE-2024-33664). Upstream
 #     still caps it at <=3.3.0 on every branch, and a constraint can only narrow a
 #     requirement, never lift its ceiling, so that one line is carried as a patch.
+#
+# Two more are carried for the API stack. 6.0.1 caps fastapi at <=0.58.1, which pins
+# starlette 0.13.4, and both have known vulnerabilities. Every 2025.1 release keeps that
+# cap: upstream lifted it only by rewriting the apiserver for pydantic 2 in 2025.2. The
+# newest FastAPI that still runs on pydantic 1, which 6.0.1 is written against, is
+# 0.125.0, and it takes starlette up to 0.50, so the requirements patch lifts the cap to
+# <0.126.0. That FastAPI also checks a header's default against the header's pattern, so
+# 6.0.1's X-Openstack-Request-Id pattern refuses every request that does not send one --
+# login included, with a 422. Upstream's fix for it (81c1c5cb on master, 7cca6ea9 on
+# stable/2025.2) lets the pattern match an empty value, and is carried as
+# skyline_apiserver/types/constants.py.patch.
 SKYLINE_APISERVER_VER := 6.0.1
 
 # Reviewable unified diffs against the sdist, <rel>.patch beside a pristine <rel>.orig.
@@ -45,8 +56,8 @@ rootfs_install::
 heavyfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(SKYLINE_CONF_DIR) $(SKYLINE_POLICY_DIR) $(SKYLINE_APP_DIR) $(SKYLINE_LOG_DIR)
 
-# note: `pip install .` replaces `python3 setup.py install` -- setuptools dropped the
-# install command, and the venv is on a setuptools new enough to have removed it.
+# note: `pip install .` replaces `python3 setup.py install`, which setuptools has
+# deprecated in favour of installing through pip.
 # skyline-apiserver installation
 #
 # From the sdist, not the wheel: pbr writes the installed metadata from requirements.txt

@@ -1,8 +1,13 @@
 # Cube SDK
 # Influxdb installation
 
-# Install InfluxDBClieSnt python module for ceph influx plugin
-ROOTFS_PIP += influxdb toml
+# The influxdb python client was installed here for ceph's influx mgr module, which
+# config_ceph.cpp now retires (RetireMgrInflux), and nothing else imports it. It goes from pip
+# and, as the rpm ceph-mgr only recommends, through the blocklist -- with msgpack in both
+# places, which only the client requires and which carries known vulnerabilities in both.
+# toml, installed alongside it, stays.
+ROOTFS_PIP += toml
+BLKLST_DNF += python3-influxdb python3-msgpack
 
 ROOTFS_DNF += influxdb
 

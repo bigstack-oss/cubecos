@@ -53,6 +53,13 @@ ROOTFS_DNF_NOARCH += s3cmd ceph-mgr-dashboard$(CEPH_VERSION) python3-rtslib targ
 # mon, osd, mds and radosgw are unaffected either way -- their squid rpms declare no
 # python dependency at all, they are pure C++.
 ROOTFS_PIP += python-magic python3-saml xmlsec
+#
+# xmlsec and lxml move together. From 1.3.14 xmlsec refuses to import unless lxml runs
+# on the libxml2 it was built with, and the PyPI wheels of lxml 6.1.3 and xmlsec 1.3.17
+# both carry libxml2 2.14.6; rootfs-pip-constraints.txt pins that pair. Before it,
+# xmlsec 1.3.13 -- the last without the check -- was built from source against the
+# system libxml2 while lxml 4.8.0 brought its own, so raising either alone would fail
+# that check or hand documents between two libxml2 builds.
 
 # headers for the rados/rbd python bindings built below
 ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
@@ -99,8 +106,8 @@ CEPH_HOME_DIR := /opt/ceph
 # the index serves on the day of the build, which is how the antelope venv acquired a
 # setuptools with no pkg_resources and started failing on a date rather than on a
 # commit (see the NOTE in core/heavyfs/Makefile). 75.6.0 is the same value the
-# caracal venv settled on -- below 80, which removed `setup.py install`, and below
-# 82, which deleted pkg_resources.
+# caracal venv settled on -- below 80, which removed the easy_install command, and
+# below 82, which deleted pkg_resources.
 CEPH_VENV_SETUPTOOLS := 75.6.0
 
 # Cython<3 because that is what squid itself builds against: ceph.spec.in's
@@ -212,3 +219,10 @@ rootfs_install::
 # remove unused k8sevents which anyway errors when ceph-mgr starts
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf remove -y ceph-mgr-k8sevents ceph-mgr-rook ceph-mgr-cephadm ceph-mgr-diskprediction-local
+
+# Those modules leave their python dependencies behind -- installdnf installs every rpm by name,
+# so dnf never sees them as unneeded -- and nothing else requires or imports them: asyncssh
+# (cephadm's) and kubernetes (k8sevents' and rook's), the only requirer of python3-certifi.
+# asyncssh and certifi carry known vulnerabilities, so they go through the blocklist, and
+# kubernetes with them so that no installed rpm is left with an unmet requirement.
+BLKLST_DNF += python3-asyncssh python3-kubernetes python3-certifi

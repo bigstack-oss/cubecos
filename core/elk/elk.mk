@@ -16,9 +16,8 @@ endif
 # OpenSearch
 #
 
-OSEARCH_VER := 3.8.0
+OSEARCH_VER := 3.9.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
-OSEARCH_CONF_SECURITY_DIR := $(OSEARCH_CONF_DIR)/opensearch-security
 
 ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch/$(OSEARCH_VER)/opensearch-$(OSEARCH_VER)-linux-x64.rpm
 ROOTFS_PIP_NC += curator-$(OSEARCH)
@@ -27,9 +26,25 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c 'sed "s/\/var\/run\//\/run\//g" /usr/lib/tmpfiles.d/$(OSEARCH).conf > /etc/tmpfiles.d/$(OSEARCH).conf'
 	$(Q)chroot $(ROOTDIR) systemctl disable $(OSEARCH)
 	$(Q)cp -f $(ROOTDIR)$(OSEARCH_CONF_DIR)/$(OSEARCH).yml $(ROOTDIR)$(OSEARCH_CONF_DIR)/$(OSEARCH).yml.orig
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/config.yml .$(OSEARCH_CONF_SECURITY_DIR)
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/roles.yml .$(OSEARCH_CONF_SECURITY_DIR)
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/roles_mapping.yml .$(OSEARCH_CONF_SECURITY_DIR)
+
+# Bundled plugins that carry vulnerable jars and that nothing here uses. No code in this tree,
+# cube-cos-api, cube-cos-ui or lachesis calls a _plugins API, and on live nodes their system
+# indices hold only what the plugins write for themselves at startup -- no monitor, detector,
+# model, notebook, report or channel. security goes with them: config_opensearch has always
+# run it disabled. opensearch-plugin removes one plugin per call and refuses one that another
+# still extends, so dependents come first: skills extends ml, security-analytics extends
+# alerting, notifications extends notifications-core. ingest-geoip is a module, which
+# opensearch-plugin will not remove, and no ingest pipeline exists to use it.
+OSEARCH_UNUSED_PLUGINS := opensearch-skills opensearch-ml opensearch-security-analytics \
+	opensearch-alerting opensearch-notifications opensearch-notifications-core \
+	opensearch-anomaly-detection opensearch-flow-framework opensearch-neural-search \
+	opensearch-observability opensearch-performance-analyzer opensearch-reports-scheduler \
+	opensearch-search-relevance opensearch-sql opensearch-ubi opensearch-security
+OSEARCH_PLUGIN_CLI = chroot $(ROOTDIR) env OPENSEARCH_JAVA_HOME=/usr/share/$(OSEARCH)/jdk /usr/share/$(OSEARCH)/bin/opensearch-plugin
+
+rootfs_install::
+	$(Q)$(foreach p,$(OSEARCH_UNUSED_PLUGINS),$(OSEARCH_PLUGIN_CLI) remove $(p) && ) true
+	$(Q)rm -rf $(ROOTDIR)/usr/share/$(OSEARCH)/modules/ingest-geoip
 
 #
 # OpenSearch-Dashboards
@@ -41,22 +56,56 @@ OSEARCH_BOARDS_HOME := /usr/share/$(OSEARCH)-dashboards
 
 ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/$(OSEARCH_VER)/opensearch-dashboards-$(OSEARCH_VER)-linux-x64.rpm
 
+# Apps that only drive the OpenSearch plugins OSEARCH_UNUSED_PLUGINS removes, so left in
+# place they would be pages that fail on every request. investigationDashboards has no
+# plugin of its own but calls ml, ppl/sql and observability's notebooks. indexManagementDashboards
+# and queryInsightsDashboards go too, though their plugins stay: the scanner finds vulnerable
+# packages in each one's yarn.lock, and nothing uses either -- no ISM policy exists, and no code
+# here calls them.
+OSEARCH_BOARDS_UNUSED_APPS := alertingDashboards anomalyDetectionDashboards assistantDashboards \
+	flowFrameworkDashboards investigationDashboards mlCommonsDashboards notificationsDashboards \
+	observabilityDashboards queryWorkbenchDashboards reportsDashboards searchRelevanceDashboards \
+	securityAnalyticsDashboards indexManagementDashboards queryInsightsDashboards
+
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove securityDashboards
 	$(Q)# customImportMapDashboards adds custom map layers and styles. The shipped saved
 	$(Q)# objects (export.ndjson) are an index pattern and a saved search, with no map in them.
 	$(Q)chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove customImportMapDashboards
+	$(Q)$(foreach a,$(OSEARCH_BOARDS_UNUSED_APPS),chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove $(a) && ) true
+	$(Q)# @elastic/eui ships its own repository's GitHub Actions workflows inside the npm package,
+	$(Q)# and the scanner flags an action one of them uses. Nothing in the image can run a workflow.
+	$(Q)rm -r $(ROOTDIR)$(OSEARCH_BOARDS_HOME)/node_modules/@elastic/eui/.github
 	$(Q)chroot $(ROOTDIR) mkdir -p $(OSEARCH_BOARDS_LOG_DIR)
 	$(Q)cp -f $(ROOTDIR)$(OSEARCH_BOARDS_CONF_DIR)/opensearch_dashboards.yml $(ROOTDIR)$(OSEARCH_BOARDS_CONF_DIR)/opensearch_dashboards.yml.orig
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch-dashboards/opensearch-dashboards.service ./etc/systemd/system
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch-dashboards/export.ndjson .$(OSEARCH_BOARDS_CONF_DIR)
 	$(Q)chroot $(ROOTDIR) chown opensearch-dashboards:opensearch-dashboards $(OSEARCH_BOARDS_LOG_DIR)
 
+# Dashboards runs on the Node it bundles under node/, and 3.9.0 bundles 22.23.0, whose known
+# vulnerabilities are fixed in 22.23.2. That directory is the official linux-x64 build's layout,
+# so it is replaced with the newest release of the same 22 line from nodejs.org, pinned by sha256
+# as nodejs.org's SHASUMS256.txt lists it. --no-same-owner keeps the tarball's build uid out of
+# the image. Drop this once a Dashboards release bundles a Node at least this new.
+OSEARCH_BOARDS_NODE_VER := 22.23.3
+OSEARCH_BOARDS_NODE_TXZ := node-v$(OSEARCH_BOARDS_NODE_VER)-linux-x64.tar.xz
+OSEARCH_BOARDS_NODE_SHA256 := df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de
+
+$(ARCS_DIR)/$(OSEARCH_BOARDS_NODE_TXZ):
+	$(Q)wget $(NODEJS_DL_HOST)/dist/v$(OSEARCH_BOARDS_NODE_VER)/$(OSEARCH_BOARDS_NODE_TXZ) -O $@.part
+	$(Q)echo "$(OSEARCH_BOARDS_NODE_SHA256)  $@.part" | sha256sum -c -
+	$(Q)mv $@.part $@
+
+rootfs_install:: $(ARCS_DIR)/$(OSEARCH_BOARDS_NODE_TXZ)
+	$(Q)rm -rf $(ROOTDIR)$(OSEARCH_BOARDS_HOME)/node
+	$(Q)mkdir -p $(ROOTDIR)$(OSEARCH_BOARDS_HOME)/node
+	$(Q)tar -xJf $< -C $(ROOTDIR)$(OSEARCH_BOARDS_HOME)/node --strip-components 1 --no-same-owner
+
 #
 # Logstash
 #
 
-LOGSTASH_VER := 9.5.2
+LOGSTASH_VER := 9.5.5
 LOGSTASH_CONF_DIR := /etc/logstash
 LOGSTASH_CONF_D_DIR := $(LOGSTASH_CONF_DIR)/conf.d
 LOGSTASH_CONF_EVENTDB_DIR := $(LOGSTASH_CONF_DIR)/eventdb
@@ -165,6 +214,16 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_PLUGIN_PACK)
 	$(Q)cp -f $< $(ROOTDIR)/tmp/$(LOGSTASH_PLUGIN_PACK)
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin install file:///tmp/$(LOGSTASH_PLUGIN_PACK)
 	$(Q)rm -f $(ROOTDIR)/tmp/$(LOGSTASH_PLUGIN_PACK)
+
+# Bundled plugins no pipeline in conf.d uses, removed because they carry vulnerable jars:
+# elastic_integration vendors jackson 2.18 and 3.1, azure_event_hubs jackson 2.21.6. The
+# removal is local -- logstash-plugin rewrites Gemfile and Gemfile.lock and deletes the gems
+# without resolving anything against rubygems.org -- so it costs seconds and no network. A
+# Logstash bump that stops bundling one fails here, which is the cue to drop it from the list.
+LOGSTASH_UNUSED_PLUGINS := logstash-filter-elastic_integration logstash-input-azure_event_hubs
+
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin remove $(LOGSTASH_UNUSED_PLUGINS)
 
 #
 # Beats (filebeat, auditbeat)
