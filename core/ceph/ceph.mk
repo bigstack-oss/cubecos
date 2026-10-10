@@ -53,6 +53,13 @@ ROOTFS_DNF_NOARCH += s3cmd ceph-mgr-dashboard$(CEPH_VERSION) python3-rtslib targ
 # mon, osd, mds and radosgw are unaffected either way -- their squid rpms declare no
 # python dependency at all, they are pure C++.
 ROOTFS_PIP += python-magic python3-saml xmlsec
+#
+# xmlsec and lxml move together. From 1.3.14 xmlsec refuses to import unless lxml runs
+# on the libxml2 it was built with, and the PyPI wheels of lxml 6.1.3 and xmlsec 1.3.17
+# both carry libxml2 2.14.6; rootfs-pip-constraints.txt pins that pair. Before it,
+# xmlsec 1.3.13 -- the last without the check -- was built from source against the
+# system libxml2 while lxml 4.8.0 brought its own, so raising either alone would fail
+# that check or hand documents between two libxml2 builds.
 
 # headers for the rados/rbd python bindings built below
 ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
