@@ -167,7 +167,7 @@ rootfs_install::
 # shows what we changed, and --forward keeps re-runs idempotent while a failed
 # hunk aborts the build, so upstream drift is caught here rather than shipped.
 #
-# Two are carried:
+# Four are carried:
 #
 #   compute/drivers/nova_driver.py  meta={'HA_Enabled': 'False'} on the amphora
 #                                   boot, so masakari does not evacuate amphorae
@@ -181,8 +181,18 @@ rootfs_install::
 #                                   list is unchanged since 12.0.1, and master's
 #                                   is too. #1206 carried this as a whole-file
 #                                   copy; a diff is what catches the next drift.
+#   controller/worker/v2/
+#     taskflow_jobboard_driver.py   taskflow's connect() re-start()s the shared
+#                                   kazoo client; on a reconnecting client kazoo
+#                                   joins its connection thread forever, hanging
+#                                   the failover and the HM loop with it. Wait
+#                                   up to 60 s for the reconnect instead, then
+#                                   raise JobboardUnavailable.
+#     controller_worker.py          on JobboardUnavailable nothing ran, so clear
+#                                   amphora_health.busy (LB -> ERROR, amphora
+#                                   untouched) and let the next HM cycle retry.
 #
-# Both apply to 16.1.0 unchanged. status.py is byte-identical to 14.0.2's, and
+# The first two apply to 16.1.0 unchanged. status.py is byte-identical to 14.0.2's, and
 # nova_driver.py moved by one f-string conversion outside the hunk, so its .orig is
 # refreshed and the .patch is a pure rename.
 #
@@ -192,7 +202,8 @@ rootfs_install::
 # session churn in ZookeeperTaskFlowDriver"), released in 16.1.0, and its
 # ZookeeperTaskFlowDriver is line for line the class the patch produced. It also has
 # the controller worker and the consumer call the driver's new shutdown(), which the
-# patch never did.
+# patch never did. The taskflow_jobboard_driver.py patch above fixes a hang that
+# shared client introduced (cube4510 ZooKeeper leader loss, 2026-10).
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(OCTAVIA_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(OCTAVIA_PATCHDIR)/}; tgt=$(OCTAVIA_SRCDIR)/$${rel%.patch}; \

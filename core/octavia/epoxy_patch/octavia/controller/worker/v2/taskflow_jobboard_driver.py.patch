@@ -1,0 +1,73 @@
+--- taskflow_jobboard_driver.py
++++ taskflow_jobboard_driver.py
+@@ -12,6 +12,7 @@
+ 
+ import abc
+ import contextlib
++import functools
+ import threading
+ 
+ from oslo_config import cfg
+@@ -24,6 +25,13 @@
+ LOG = log.getLogger(__name__)
+ CONF = cfg.CONF
+ 
++# How long a jobboard connect waits for the shared client to reconnect.
++SHARED_CLIENT_WAIT = 60
++
++
++class JobboardUnavailable(Exception):
++    """The jobboard backend is unreachable; no job was posted."""
++
+ 
+ class JobboardTaskFlowDriver(metaclass=abc.ABCMeta):
+ 
+@@ -86,21 +94,48 @@
+         self._client = None
+         self._client_lock = threading.Lock()
+ 
++    @staticmethod
++    def _wait_connected(client, timeout=None):
++        # Stands in for client.start() on the shared client: taskflow's
++        # connect() calls it, and kazoo's start() on a reconnecting client
++        # joins its connection thread forever.
++        wait = max(timeout or 0, SHARED_CLIENT_WAIT)
++        if not client._live.wait(wait):
++            raise JobboardUnavailable(
++                f'ZooKeeper not connected after {wait}s')
++
++    @staticmethod
++    def _client_stopped(client):
++        return (client._stopped.is_set() or
++                client._connection.connection_stopped.is_set())
++
+     def _ensure_client(self):
+         # NOTE: The lock is intentionally held for the duration of
+         # client.start() so that concurrent job_board() callers block
+         # rather than racing to create multiple clients. The connection
+         # delay (~seconds) is acceptable at first use.
+         with self._client_lock:
++            if (self._client is not None and
++                    self._client_stopped(self._client)):
++                LOG.warning("Shared KazooClient stopped, recreating it")
++                try:
++                    self._kazoo_utils.finalize_client(self._client)
++                except Exception:
++                    LOG.exception("Failed to finalize stopped KazooClient")
++                self._client = None
+             if self._client is None:
+                 conf = {'hosts': self._hosts_str}
+                 conf.update(CONF.task_flow.jobboard_zookeeper_ssl_options)
+                 client = self._kazoo_utils.make_client(conf)
+                 try:
+                     client.start()
++                except client.handler.timeout_exception as e:
++                    self._kazoo_utils.finalize_client(client)
++                    raise JobboardUnavailable(str(e)) from e
+                 except Exception:
+                     self._kazoo_utils.finalize_client(client)
+                     raise
++                client.start = functools.partial(self._wait_connected, client)
+                 self._client = client
+             return self._client
+ 
