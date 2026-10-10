@@ -96,6 +96,8 @@ WriteConfig(const std::string& myip)
     }
 
     fprintf(fout, "cluster_partition_handling = pause_minority\n");
+    // detect a dead peer in ~15 s instead of 60 s
+    fprintf(fout, "net_ticktime = 15\n");
 
     // The two listener tunings are independent so a cluster can move in stages: bring
     // the ssl listener up while the plaintext one is still serving, repoint the clients
@@ -245,7 +247,8 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
             bool isMaster = G(IS_MASTER);
             if (isMaster && access(CONTROL_REJOIN, F_OK) != 0) {
                 // Each exchange or queue will have at most one policy matching
-                HexUtilSystemF(0, 0, CONTROL_FMT "set_policy ha-all \".*\" '{\"expires\": 86400, \"ha-mode\": \"all\", \"ha-sync-mode\": \"automatic\"}' --apply-to all --priority 0", hostname.c_str());
+                // skip amq.*, reply_ and fanout queues: transient, mirroring only slows failover
+                HexUtilSystemF(0, 0, CONTROL_FMT "set_policy ha-all '^(?!(amq\\.)|(.*_fanout_)|(reply_)).*' '{\"expires\": 86400, \"ha-mode\": \"all\", \"ha-sync-mode\": \"automatic\"}' --apply-to all --priority 0", hostname.c_str());
 
                 std::vector<std::string> peers = GetControllerPeers(hostname, ctrlHosts);
                 for (auto & p : peers) {

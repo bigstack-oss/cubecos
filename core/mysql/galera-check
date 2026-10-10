@@ -1,0 +1,59 @@
+#!/bin/bash
+# HTTP galera health for haproxy: 200 only when this node is Synced and ready.
+# Runs per connection from galera-check.socket as user haproxy (DB user via unix_socket).
+# "GET /local" reports this node only; peers use it so checks never recurse.
+
+PORT=13306
+
+# read the request line, then drain the headers so closing does not reset the connection
+req=""
+while IFS= read -r -t 1 line; do
+    line=${line%$'\r'}
+    [ -z "$req" ] && req=$line
+    [ -z "$line" ] && break
+done
+path=$(echo "$req" | awk '{print $2}')
+
+reply()
+{
+    printf 'HTTP/1.1 %s\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s' \
+           "$1" "$((${#2} + 1))" "$2"
+    echo
+}
+
+out=$(timeout 3 /usr/bin/mariadb --connect-timeout=2 -sN -e \
+      "SELECT @@wsrep_on; SHOW GLOBAL STATUS WHERE Variable_name IN ('wsrep_local_state','wsrep_ready','wsrep_incoming_addresses')" 2>/dev/null)
+if [ $? -ne 0 ]; then
+    reply "503 Service Unavailable" "mysql unreachable"
+    exit 0
+fi
+
+wsrep_on=$(echo "$out" | head -1)
+state=$(echo "$out" | awk '$1=="wsrep_local_state"{print $2}')
+ready=$(echo "$out" | awk '$1=="wsrep_ready"{print $2}')
+peers=$(echo "$out" | awk '$1=="wsrep_incoming_addresses"{print $2}')
+
+# true if another member reports Synced
+peer_synced()
+{
+    local me addr ip
+    me=$(hostname -I 2>/dev/null)
+    for addr in ${peers//,/ }; do
+        ip=${addr%:*}
+        echo " $me " | grep -q " $ip " && continue
+        printf 'GET /local HTTP/1.0\r\n\r\n' | timeout 2 /usr/bin/nc "$ip" $PORT 2>/dev/null | head -1 | grep -q " 200 " && return 0
+    done
+    return 1
+}
+
+if [ "$wsrep_on" != "1" ]; then
+    reply "200 OK" "mysql standalone"
+elif [ "$state" = "4" ] && [ "$ready" = "ON" ]; then
+    reply "200 OK" "galera synced"
+elif [ "$state" = "2" ] && [ "$ready" = "ON" ] && [ "$path" != "/local" ] && ! peer_synced; then
+    # donor is the only node that can serve: better than no backend at all
+    reply "200 OK" "galera donor, no synced peer"
+else
+    reply "503 Service Unavailable" "galera not synced: state=${state:-?} ready=${ready:-?}"
+fi
+exit 0

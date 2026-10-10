@@ -852,7 +852,8 @@ health_hacluster_repair()
                 cmd -co "pcs resource remove vaw" # v3.0.0 or older doesn't have vaw, hindering VIP to start
             fi
         done
-        hex_sdk cmd -c "systemctl restart haproxy haproxy-ha"
+        # haproxy-ha belongs to pacemaker: only restart it where it already runs
+        hex_sdk cmd -c "systemctl restart haproxy ; systemctl try-restart haproxy-ha"
     elif [ ! -e /etc/appliance/state/configured ] || [ -e /etc/appliance/state/cube_migration ] ; then
         for i in 1 2 3 ; do
             for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do

@@ -398,6 +398,9 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
         cfg["haproxy_amphora"]["rest_request_read_timeout"] = "120";
 
         cfg["controller_worker"]["workers"] = "2";
+        // wait up to 10 min for an amphora VM to go ACTIVE while nova recovers
+        cfg["controller_worker"]["amp_active_retries"] = "60";
+        cfg["controller_worker"]["amp_active_wait_sec"] = "10";
         cfg["controller_worker"]["amp_image_tag"] = "amphora";
         cfg["controller_worker"]["amp_flavor_id"] = "16443";
         cfg["controller_worker"]["amp_ssh_key_name"] = "octavia_ssh_key";
