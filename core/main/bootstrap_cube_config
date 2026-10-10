@@ -94,6 +94,10 @@ PostBootRecovery()
         for _i in $(seq 1 90) ; do hex_sdk cube_cluster_ready && break ; sleep 20 ; done
     fi
 
+    # o-hm0 lost its ip on reboot; needs only this node's commit, not a ready
+    # cluster (on a cold boot no node sees a ready cluster here)
+    hex_sdk os_octavia_boot_node_up
+
     if hex_sdk cube_cluster_ready ; then
         bootstrap_status "Cluster checking and repairing"
         hex_log_event -e BSP00005I "interface=system,host=$HOSTNAME,service=bootstrap"
@@ -170,7 +174,16 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
             # ready AND no roll is running (power_roll_advance runs it at roll
             # completion); otherwise skip and tell the operator
             if hex_sdk cube_cluster_ready && [ -z "$(hex_sdk power_roll_kind_active 2>/dev/null)" ] ; then
+                # finish start steps that failed while the master committed alone;
+                # a boot step, so it runs even with the repair opt-out
+                # peers are up now: finish cold-boot deferred cephfs mounts before
+                # the restore reads its record off cephfs
+                bootstrap_run_logged timeout 600 hex_sdk cube_cephfs_deferred_bringup_all
+                # async first: it restores the recorded VMs and clears the
+                # planned-maintenance marker, which must not wait on the sweep
                 hex_sdk cluster_check_repair_async
+                bootstrap_status "Starting services left down by the cold boot"
+                bootstrap_run_logged timeout 900 hex_sdk health_late_start_sweep 600
             else
                 bootstrap_status "Cluster not ready: automatic check_repair skipped. Run \"cluster check_repair\" yourself once the cluster is ready."
                 hex_log_event -e BSP00008W "interface=system,host=$HOSTNAME,service=bootstrap"

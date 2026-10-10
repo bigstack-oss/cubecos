@@ -26,6 +26,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c 'sed "s/\/var\/run\//\/run\//g" /usr/lib/tmpfiles.d/$(OSEARCH).conf > /etc/tmpfiles.d/$(OSEARCH).conf'
 	$(Q)chroot $(ROOTDIR) systemctl disable $(OSEARCH)
 	$(Q)cp -f $(ROOTDIR)$(OSEARCH_CONF_DIR)/$(OSEARCH).yml $(ROOTDIR)$(OSEARCH_CONF_DIR)/$(OSEARCH).yml.orig
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/$(OSEARCH).service.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/opensearch-start-timeout.conf ./etc/systemd/system/$(OSEARCH).service.d/
 
 # Bundled plugins that carry vulnerable jars and that nothing here uses. No code in this tree,
 # cube-cos-api, cube-cos-ui or lachesis calls a _plugins API, and on live nodes their system

@@ -4,43 +4,94 @@ import (
 	"cubectl/util"
 	"cubectl/util/helm"
 	"cubectl/util/kube"
+	"encoding/json"
 	"fmt"
+	"os/exec"
+	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/cli/values"
 )
 
-// Bound each ceph call; retry to ride out mon/mgr still recovering on cold boot.
+// Bound each ceph call; --connect-timeout does not bound a hung mgr command.
 const (
 	cephConnectTimeout  = "10"
+	cephCmdTimeout      = "20s"
+	cephKillAfter       = "5s"
 	cephReadyAttempts   = 30
 	subVolGroupAttempts = 5
 )
 
-// InitDefaultSubVolumeGroup creates the CSI cephfs subvolume group, waiting for
-// ceph to be reachable then retrying the idempotent create -- the mon/mgr may
-// still be recovering on a cold boot.
+var errCephCmdTimeout = errors.New("ceph command timed out")
+
+// cephCmd runs a ceph CLI call under a hard timeout.
+func cephCmd(args ...string) (string, error) {
+	full := append([]string{"-k", cephKillAfter, cephCmdTimeout, "ceph", "--connect-timeout", cephConnectTimeout}, args...)
+	stdout, stderr, err := util.ExecCmd("timeout", full...)
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && (exitErr.ExitCode() == 124 || exitErr.ExitCode() == 137) {
+			return stdout, errors.Wrapf(errCephCmdTimeout, "ceph %v", args)
+		}
+		return stdout, errors.Wrapf(err, "ceph %v: %s", args, stderr)
+	}
+	return stdout, nil
+}
+
+// subVolGroupExists reports whether the CSI subvolume group is already on cephfs.
+func subVolGroupExists() (bool, error) {
+	out, err := cephCmd("fs", "subvolumegroup", "ls", "cephfs", "--format", "json")
+	if err != nil {
+		return false, err
+	}
+	var groups []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal([]byte(out), &groups); err != nil {
+		return false, errors.Wrapf(err, "parse subvolumegroup ls: %q", out)
+	}
+	for _, g := range groups {
+		if g.Name == DefaultFsSubVolumeGroup {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// InitDefaultSubVolumeGroup ensures the CSI cephfs subvolume group exists.
+// A timed-out call (e.g. inactive PGs on cold boot) aborts without retrying.
 func InitDefaultSubVolumeGroup() error {
 	// Wait until a mon answers.
 	if err := util.Retry(func() error {
-		_, stderr, err := util.ExecCmd("ceph", "--connect-timeout", cephConnectTimeout, "-s")
-		if err != nil {
-			return errors.Wrapf(err, "ceph not reachable yet: %s", stderr)
-		}
-		return nil
+		_, err := cephCmd("-s")
+		return errors.Wrap(err, "ceph not reachable yet")
 	}, cephReadyAttempts); err != nil {
 		return errors.Wrap(err, "ceph did not become reachable for subvolumegroup create")
 	}
 
-	// Create the subvolume group (idempotent); retry while the mgr volumes module comes up.
-	return util.Retry(func() error {
-		_, stderr, err := util.ExecCmd("ceph", "--connect-timeout", cephConnectTimeout,
-			"fs", "subvolumegroup", "create", "cephfs", DefaultFsSubVolumeGroup)
-		if err != nil {
-			return errors.Wrapf(err, "Failed to init default sub volume group(%s): %s", DefaultFsSubVolumeGroup, stderr)
+	// Check then create; retry while the mgr volumes module comes up.
+	return retry.Do(func() error {
+		exists, err := subVolGroupExists()
+		if err == nil && exists {
+			return nil
 		}
-		return nil
-	}, subVolGroupAttempts)
+		if err == nil {
+			_, err = cephCmd("fs", "subvolumegroup", "create", "cephfs", DefaultFsSubVolumeGroup)
+		}
+		if err != nil {
+			err = errors.Wrapf(err, "Failed to init default sub volume group(%s)", DefaultFsSubVolumeGroup)
+			if errors.Is(err, errCephCmdTimeout) {
+				return retry.Unrecoverable(err)
+			}
+		}
+		return err
+	},
+		retry.Attempts(subVolGroupAttempts),
+		retry.Delay(1*time.Second),
+		retry.MaxDelay(15*time.Second),
+		retry.LastErrorOnly(true),
+	)
 }
 
 func customizeCsiFsValues() (*values.Options, error) {

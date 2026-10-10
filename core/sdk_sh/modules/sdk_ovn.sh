@@ -128,8 +128,8 @@ ovn_bridge_phy_port_add_v4()
     local defgw=$(ip -4 route | grep "^default.*$port" | awk '{print $3}')
 
     # allow time for interfaces to appear
-    for i in {1..10} ; do sleep 1 ; ip link show $bridge >/dev/null 2>&1 && break ; done
-    for i in {1..10} ; do sleep 1 ; ip link show $port >/dev/null 2>&1 && break ; done
+    for i in {1..10} ; do ip link show $bridge >/dev/null 2>&1 && break ; sleep 1 ; done
+    for i in {1..10} ; do ip link show $port >/dev/null 2>&1 && break ; sleep 1 ; done
 
     # clean up tasks
     local obrig=$(GetParentIfname $port)

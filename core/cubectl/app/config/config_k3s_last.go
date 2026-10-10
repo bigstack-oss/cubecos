@@ -324,6 +324,11 @@ func syncCephImagesToCubeRegistry() error {
 		return nil
 	}
 
+	// Fail before the costly untar if the push cannot land.
+	if err := docker.CubeRegistryReachable(); err != nil {
+		return err
+	}
+
 	err := untarLoalCephImageSet()
 	if err != nil {
 		return err
@@ -339,12 +344,12 @@ func syncCephImagesToCubeRegistry() error {
 }
 
 func applyCephCsiDrivers() error {
-	err := ceph.InitDefaultSubVolumeGroup()
-	if err != nil {
-		return errors.Wrapf(err, "Failed to init ceph default sub volume group")
+	// Non-fatal: only cephfs PVC provisioning needs the group; the next k3s_last trigger retries.
+	if err := ceph.InitDefaultSubVolumeGroup(); err != nil {
+		zap.S().Warnf("ceph default sub volume group not ensured, will retry on next trigger: %+v", err)
 	}
 
-	err = syncCephImagesToCubeRegistry()
+	err := syncCephImagesToCubeRegistry()
 	if err != nil {
 		return errors.Wrapf(err, "Failed to sync ceph csi images to local registry")
 	}

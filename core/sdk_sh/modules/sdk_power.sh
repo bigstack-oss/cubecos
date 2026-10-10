@@ -1237,6 +1237,14 @@ power_record_running_vms()
 power_restore_recorded_vms()
 {
     is_control_node || return 0
+    # the record is on cephfs: an unmounted (e.g. cold-boot deferred) mount reads as "no VMs"
+    local _w
+    for _w in $(seq 1 30) ; do
+        mountpoint -q /mnt/cephfs && break
+        [ $_w -eq 1 ] && $HEX_SDK ceph_cephfs_deferred_bringup
+        sleep 10
+    done
+    mountpoint -q /mnt/cephfs || { log_error "cluster bootup: /mnt/cephfs not mounted, cannot read $CLUSTER_ACTIVE_RUNNING" ; return 1 ; }
     [ -s "$CLUSTER_ACTIVE_RUNNING" ] || return 0
     local i disp st _pending=0 _total=0 _restarted=0
     while read -r i disp _ ; do
@@ -1255,6 +1263,7 @@ power_restore_recorded_vms()
         /usr/sbin/hex_log_event -e CLU00010I "interface=system,host=$HOSTNAME,category=cluster,sub=cluster_bootup,action=vm_restore,recorded=$_total,restarted=$_restarted,already_active=$((_total-_restarted))"
     }
     [ $_pending -eq 0 ] && rm -f "$CLUSTER_ACTIVE_RUNNING"
+    return 0
 }
 
 power_drain_host()
