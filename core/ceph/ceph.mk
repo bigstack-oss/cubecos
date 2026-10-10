@@ -99,8 +99,8 @@ CEPH_HOME_DIR := /opt/ceph
 # the index serves on the day of the build, which is how the antelope venv acquired a
 # setuptools with no pkg_resources and started failing on a date rather than on a
 # commit (see the NOTE in core/heavyfs/Makefile). 75.6.0 is the same value the
-# caracal venv settled on -- below 80, which removed `setup.py install`, and below
-# 82, which deleted pkg_resources.
+# caracal venv settled on -- below 80, which removed the easy_install command, and
+# below 82, which deleted pkg_resources.
 CEPH_VENV_SETUPTOOLS := 75.6.0
 
 # Cython<3 because that is what squid itself builds against: ceph.spec.in's

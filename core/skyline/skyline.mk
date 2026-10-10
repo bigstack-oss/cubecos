@@ -45,8 +45,8 @@ rootfs_install::
 heavyfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(SKYLINE_CONF_DIR) $(SKYLINE_POLICY_DIR) $(SKYLINE_APP_DIR) $(SKYLINE_LOG_DIR)
 
-# note: `pip install .` replaces `python3 setup.py install` -- setuptools dropped the
-# install command, and the venv is on a setuptools new enough to have removed it.
+# note: `pip install .` replaces `python3 setup.py install`, which setuptools has
+# deprecated in favour of installing through pip.
 # skyline-apiserver installation
 #
 # From the sdist, not the wheel: pbr writes the installed metadata from requirements.txt
