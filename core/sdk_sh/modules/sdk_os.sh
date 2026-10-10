@@ -1038,8 +1038,8 @@ os_extpack_image_import()
     declare -A PIDS
 
     pushd $dir/$ext_folder >/dev/null
-    for PREFIX in ipa-kernel- ipa-initramfs- amphora- manila- k8s- appfw- rancher-cluster- ; do
-        local img=$(ls -1 ${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz} 2>/dev/null | head -1)
+    for PREFIX in ipa-kernel- ipa-initramfs- amphora- manila- k8s- appfw- rancher-cluster- registry- ; do
+        local img=$(ls -1 ${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz,tar} 2>/dev/null | head -1)
         [ -n "$img" ] || continue
         case $PREFIX in
             amphora-)
@@ -1065,6 +1065,12 @@ os_extpack_image_import()
                 local appfw_dir=/opt/appfw/images/
                 cmd -c "mkdir -p $appfw_dir"
                 ( tar xf $dir/$ext_folder/$img -C $appfw_dir ; cubectl node rsync -r control $appfw_dir )
+                ;;
+            registry-)
+                # registry volume fragment (e.g. the rancher agent): merge into every control node's registry
+                tar xf $dir/$ext_folder/$img -C /opt/docker && \
+                    cubectl node rsync -r control /opt/docker/registry && \
+                    cubectl node exec -r control -p docker restart registry >/dev/null
                 ;;
             *) echo "Unknown builtin image prefix: $PREFIX" ;;
         esac
@@ -1093,7 +1099,7 @@ os_image_import_extpack_list()
         local ext_dir=${ext%.ext}
         echo -n "${ext_dir##*/}: "
         pushd $ext_dir >/dev/null
-        ls *.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz} 2>/dev/null | xargs
+        ls *.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz,tar} 2>/dev/null | xargs
         popd >/dev/null
     done
 }

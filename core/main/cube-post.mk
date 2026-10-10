@@ -22,6 +22,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) bash -c "dnf list installed | egrep \"devel|headers\" | grep -v python3-devel | awk '{print \$$1}'| xargs -i dnf autoremove -y {}"
 	$(Q)chroot $(ROOTDIR) bash -c "dnf autoremove -y systemtap-runtime"
 	$(Q)sed -i -e "/stapunpriv/d" -e "/stapusr/d" -e "/stapsys/d" -e "/stapdev/d" $(ROOTDIR)/etc/passwd $(ROOTDIR)/etc/shadow $(ROOTDIR)/etc/group $(ROOTDIR)/etc/gshadow
+	# pip/gem download caches left by the build-time installs
+	$(Q)rm -rf $(ROOTDIR)/root/.cache
 
 rootfs_install::
 	$(Q)diff $(ROOTDIR)/etc/passwd $(BLDDIR)/passwd.before
