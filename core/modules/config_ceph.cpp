@@ -2001,6 +2001,9 @@ Commit(bool modified, int dryLevel)
         // pg_autoscaler is always on module since pacific
         // EnablePgAutoScale();
         InitCephClient(master, peer);
+        // master's boot commit: peers' OSDs may still be down
+        if (IsBootstrap() && isMaster)
+            HexUtilSystemF(0, 0, HEX_SDK " ceph_hold_if_degraded");
         MountCephfsStore(IsBootstrap());
 
     }
