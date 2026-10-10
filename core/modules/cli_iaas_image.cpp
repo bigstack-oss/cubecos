@@ -1,5 +1,6 @@
 // CUBE SDK
 
+#include <sys/stat.h>
 #include "cli_iaas_image.hpp"
 
 static const char* LABEL_IMAGE_NAME = "Specify image name: ";
@@ -72,7 +73,21 @@ ImageImportMain(int argc, const char** argv)
     else if (isExtPack)
         cmd = HEX_SDK " os_image_import_extpack_list " + dir;
 
-    if (CliMatchCmdHelper(argc, argv, 2, cmd, &index, &file) != CLI_SUCCESS) {
+    if (isExtPack && argc > 2) {
+        // the list line is "<name>: <contents>", so take the extpack by file name instead
+        file = argv[2];
+        size_t slash = file.rfind('/');
+        if (slash != std::string::npos)
+            file = file.substr(slash + 1);
+        if (file.size() > 4 && file.compare(file.size() - 4, 4, ".ext") == 0)
+            file.resize(file.size() - 4);
+        struct stat st;
+        if (file.empty() || stat((dir + "/" + file + ".ext").c_str(), &st) != 0) {
+            CliPrintf("no %s.ext under %s", file.c_str(), dir.c_str());
+            return CLI_INVALID_ARGS;
+        }
+    }
+    else if (CliMatchCmdHelper(argc, argv, 2, cmd, &index, &file) != CLI_SUCCESS) {
         CliPrintf("no matched file under %s", dir.c_str());
         return CLI_INVALID_ARGS;
     }
