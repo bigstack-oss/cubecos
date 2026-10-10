@@ -954,6 +954,7 @@ UpdateConfig(
         fprintf(fout, "rgw s3 auth use keystone = true\n");
         fprintf(fout, "rgw keystone verify ssl = false\n");
         fprintf(fout, "rgw swift account in url = true\n");
+        fprintf(fout, "rgw swift versioning enabled = true\n");
         fprintf(fout, "# nss db path = %s\n", nssdir);
 
         // telemetry integration
