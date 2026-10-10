@@ -3,12 +3,15 @@ package config
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	"cubectl/util"
+	cubeSettings "cubectl/util/settings"
 	cubeTesting "cubectl/util/testing"
 )
 
@@ -281,4 +284,173 @@ func TestConfigClusterSingleController(t *testing.T) {
 		assert.Equal(t, compute1Ip, viper.GetString(compute1Name+".ip.management"))
 		assert.Equal(t, storage1Ip, viper.GetString(storage1Name+".ip.management"))
 	}
+}
+
+// The Keycloak SAML clients pin the cluster certificate, so gencerts has to re-apply
+// them with the same controller value the shell paths use, and the ceph dashboard SP
+// has to get the new pair before its Keycloak client does (#1954).
+func TestReapplySamlClients(t *testing.T) {
+	nonHA := map[string]string{
+		"cubesys.role":       "control-converged",
+		"cubesys.ha":         "false",
+		"cubesys.management": "eth0",
+		"net.if.addr.eth0":   "192.0.2.10",
+	}
+	apply := func(mod, ip string) string {
+		return "apply " + mod + " cube_controller=" + ip + " " + terraformVarFileKeycloakAdminPassword
+	}
+
+	tests := []struct {
+		name       string
+		settings   map[string]string
+		ssoEnabled bool
+		ssoErr     string // "status" or "setup"
+		failMod    string
+		expect     []string
+		errHas     []string
+		errHasNot  []string
+	}{
+		{
+			name:       "non-HA updates the dashboard SP before its client",
+			settings:   nonHA,
+			ssoEnabled: true,
+			expect: []string{
+				apply("keycloak_api", "192.0.2.10"),
+				"status",
+				"setup 192.0.2.10",
+				apply("keycloak_ceph_dashboard", "192.0.2.10"),
+			},
+		},
+		{
+			name: "HA uses the VIP",
+			settings: map[string]string{
+				"cubesys.role":        "control",
+				"cubesys.ha":          "true",
+				"cubesys.control.vip": "192.0.2.11",
+			},
+			ssoEnabled: true,
+			expect: []string{
+				apply("keycloak_api", "192.0.2.11"),
+				"status",
+				"setup 192.0.2.11",
+				apply("keycloak_ceph_dashboard", "192.0.2.11"),
+			},
+		},
+		{
+			name:     "dashboard SSO off leaves its client alone",
+			settings: nonHA,
+			expect: []string{
+				apply("keycloak_api", "192.0.2.10"),
+				"status",
+			},
+		},
+		{
+			name:       "a failed SP update skips the dashboard client and fails the command",
+			settings:   nonHA,
+			ssoEnabled: true,
+			ssoErr:     "setup",
+			expect: []string{
+				apply("keycloak_api", "192.0.2.10"),
+				"status",
+				"setup 192.0.2.10",
+			},
+			errHas:    []string{"sso setup saml2 https://192.0.2.10:7443", "module.keycloak_ceph_dashboard"},
+			errHasNot: []string{"module.keycloak_api"},
+		},
+		{
+			name:     "an unreadable SSO status skips the dashboard client and fails the command",
+			settings: nonHA,
+			ssoErr:   "status",
+			expect: []string{
+				apply("keycloak_api", "192.0.2.10"),
+				"status",
+			},
+			errHas: []string{"sso setup saml2", "module.keycloak_ceph_dashboard"},
+		},
+		{
+			name:       "a failed api client still lets the dashboard through",
+			settings:   nonHA,
+			ssoEnabled: true,
+			failMod:    "keycloak_api",
+			expect: []string{
+				apply("keycloak_api", "192.0.2.10"),
+				"status",
+				"setup 192.0.2.10",
+				apply("keycloak_ceph_dashboard", "192.0.2.10"),
+			},
+			errHas:    []string{"module.keycloak_api -var cube_controller=192.0.2.10"},
+			errHasNot: []string{"keycloak_ceph_dashboard", "sso setup"},
+		},
+	}
+
+	// LoadMap replaces the package-global settings; put back what was there so
+	// other tests do not depend on running before or after this one.
+	prev := map[string]string{}
+	for _, k := range cubeSettings.V().AllKeys() {
+		prev[k] = cubeSettings.V().GetString(k)
+	}
+	origApply, origEnabled, origSetup := terraformApply, cephDashboardSsoEnabled, cephDashboardSsoSetup
+	t.Cleanup(func() {
+		terraformApply, cephDashboardSsoEnabled, cephDashboardSsoSetup = origApply, origEnabled, origSetup
+		cubeSettings.LoadMap(prev)
+	})
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := cubeSettings.LoadMap(test.settings); err != nil {
+				t.Fatal(err)
+			}
+
+			var calls []string
+			terraformApply = func(cmd string, mod string, vars []string, varFiles []string) error {
+				calls = append(calls, cmd+" "+mod+" "+strings.Join(vars, " ")+" "+strings.Join(varFiles, " "))
+				if mod == test.failMod {
+					return errors.New("terraform init failed")
+				}
+				return nil
+			}
+			cephDashboardSsoEnabled = func() (bool, error) {
+				calls = append(calls, "status")
+				if test.ssoErr == "status" {
+					return false, errors.New("ceph unreachable")
+				}
+				return test.ssoEnabled, nil
+			}
+			cephDashboardSsoSetup = func(ip string) error {
+				calls = append(calls, "setup "+ip)
+				if test.ssoErr == "setup" {
+					return errors.New("mgr unreachable")
+				}
+				return nil
+			}
+
+			err := reapplySamlClients()
+			assert.Equal(t, test.expect, calls)
+
+			if len(test.errHas) == 0 {
+				assert.NoError(t, err)
+				return
+			}
+			if assert.Error(t, err) {
+				for _, want := range test.errHas {
+					assert.Contains(t, err.Error(), want)
+				}
+				for _, unwanted := range test.errHasNot {
+					assert.NotContains(t, err.Error(), unwanted)
+				}
+			}
+		})
+	}
+}
+
+func TestCephDashboardSsoSetupArgs(t *testing.T) {
+	// The same arguments ceph_dashboard_idp_config (sdk_ceph.sh) sets the SP up with.
+	assert.Equal(t, []string{
+		"ceph", "dashboard", "sso", "setup", "saml2",
+		"https://192.0.2.10:7443",
+		"/etc/keycloak/saml-metadata.xml",
+		"username",
+		"https://192.0.2.10:10443/auth/realms/master",
+		"/var/www/certs/server.cert", "/var/www/certs/server.key",
+	}, cephDashboardSsoSetupArgs("192.0.2.10"))
 }

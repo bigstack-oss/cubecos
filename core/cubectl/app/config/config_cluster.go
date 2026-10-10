@@ -42,6 +42,27 @@ const (
 // updating their trust stores is a manual procedure.
 var certConsumerUnits = []string{"haproxy", "haproxy-ha", "httpd", "nginx", "cube-cos-api"}
 
+// The Keycloak SAML clients that register the cluster certificate as their signing
+// and encryption certificate. Terraform reads /var/www/certs/server.cert only at
+// apply time, so once cube-cos-api and the ceph dashboard sign with a new key,
+// Keycloak rejects every login ("Invalid requester") until these are applied again.
+const (
+	keycloakApiModule           = "keycloak_api"
+	keycloakCephDashboardModule = "keycloak_ceph_dashboard"
+
+	// What ceph_dashboard_idp_config (sdk_ceph.sh) sets the dashboard SAML SP up
+	// with; the port is DASHBOARD_PORT in config_ceph.cpp.
+	cephDashboardSsoPort    = "7443"
+	keycloakIdpMetadataFile = "/etc/keycloak/saml-metadata.xml"
+)
+
+// Seams swapped out by tests.
+var (
+	terraformApply          = terraformExec
+	cephDashboardSsoEnabled = isCephDashboardSsoEnabled
+	cephDashboardSsoSetup   = setupCephDashboardSso
+)
+
 var genCertsOpts struct {
 	force  bool
 	dryRun bool
@@ -327,6 +348,102 @@ func distributeCerts() error {
 	zap.L().Info("Rancher and k3s trust stores are not updated by this command; " +
 		"follow the certificate replacement runbook for those")
 
+	return reapplySamlClients()
+}
+
+// reapplySamlClients hands the new certificate to both ends of every SAML trust
+// that pins it. The controller value matches the shared id the shell paths
+// (api_idp_config, ceph_dashboard_idp_config) apply with, so the clients are updated
+// in place rather than created anew.
+//
+// The ceph dashboard is an SP of its own: `sso setup saml2` stored a copy of the old
+// certificate and key, and it signs its requests and decrypts assertions with them.
+// Its Keycloak client is only applied once the dashboard holds the new pair; giving
+// Keycloak the new certificate first would break a dashboard login that still works.
+//
+// Every step is tried even when another fails, and a failure fails the command: by
+// now the new certificate is live and SSO login is broken until the step goes through.
+func reapplySamlClients() error {
+	ip := cubeSettings.GetControllerIp()
+	controller := "cube_controller=" + ip
+
+	var rerun []string
+	apply := func(mod string) {
+		if err := terraformApply("apply", mod,
+			[]string{controller},
+			[]string{terraformVarFileKeycloakAdminPassword},
+		); err != nil {
+			zap.S().Error(err)
+			rerun = append(rerun, "terraform-cube.sh apply -auto-approve -target=module."+mod+
+				" -var "+controller+" -var-file="+terraformVarFileKeycloakAdminPassword)
+			return
+		}
+		zap.L().Info("Keycloak SAML client updated", zap.String("module", mod))
+	}
+
+	apply(keycloakApiModule)
+
+	enabled, err := cephDashboardSsoEnabled()
+	switch {
+	case err == nil && !enabled:
+		zap.L().Info("Ceph dashboard SSO is not enabled, its Keycloak client is left alone")
+	case err == nil:
+		err = cephDashboardSsoSetup(ip)
+	}
+	if err != nil {
+		zap.S().Error(err)
+		rerun = append(rerun,
+			strings.Join(cephDashboardSsoSetupArgs(ip), " ")+" && ceph dashboard sso enable saml2")
+		rerun = append(rerun, "terraform-cube.sh apply -auto-approve -target=module."+
+			keycloakCephDashboardModule+" -var "+controller+" -var-file="+terraformVarFileKeycloakAdminPassword)
+	} else if enabled {
+		apply(keycloakCephDashboardModule)
+	}
+
+	if len(rerun) > 0 {
+		return errors.Errorf(
+			"the certificate was replaced, but SSO login fails until the SAML clients carry it; "+
+				"once terraform-cube.sh can init and Keycloak is reachable, run in order:\n  %s",
+			strings.Join(rerun, "\n  "))
+	}
+
+	return nil
+}
+
+func isCephDashboardSsoEnabled() (bool, error) {
+	out, outErr, err := util.ExecCmd("ceph", "dashboard", "sso", "status")
+	if err != nil {
+		return false, errors.Wrap(err, outErr)
+	}
+
+	// SSO is "enabled" with "SAML2" protocol. / SSO is "disabled".
+	return strings.Contains(out, `"enabled"`), nil
+}
+
+func cephDashboardSsoSetupArgs(ip string) []string {
+	return []string{
+		"ceph", "dashboard", "sso", "setup", "saml2",
+		"https://" + ip + ":" + cephDashboardSsoPort,
+		keycloakIdpMetadataFile,
+		"username",
+		"https://" + ip + ":10443/auth/realms/master",
+		certFile, keyFile,
+	}
+}
+
+// setupCephDashboardSso gives the dashboard SP the new certificate and key, the same
+// way ceph_dashboard_idp_config first set it up.
+func setupCephDashboardSso(ip string) error {
+	for _, args := range [][]string{
+		cephDashboardSsoSetupArgs(ip),
+		{"ceph", "dashboard", "sso", "enable", "saml2"},
+	} {
+		if _, outErr, err := util.ExecCmd(args[0], args[1:]...); err != nil {
+			return errors.Wrap(err, outErr)
+		}
+	}
+	zap.L().Info("Ceph dashboard SAML SP updated")
+
 	return nil
 }
 
@@ -385,6 +502,9 @@ func regenCerts() error {
 		fmt.Println("would drop:         " + novaCertCopy + " (rebuilt on the next nova commit)")
 		fmt.Println("would restart:      " + strings.Join(certConsumerUnits, " "))
 		fmt.Println("would reconfigure:  ceph dashboard and mgr restful")
+		fmt.Println("would re-apply:     keycloak SAML client " + keycloakApiModule)
+		fmt.Println("would re-apply:     ceph dashboard SAML SP (sso setup saml2), then keycloak SAML client " +
+			keycloakCephDashboardModule + " (only if dashboard SSO is enabled)")
 		fmt.Println("left to the operator: rancher and k3s trust stores")
 
 		return nil
