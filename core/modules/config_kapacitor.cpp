@@ -447,7 +447,15 @@ WriteConfig(
         const std::string match = (i < s_respMatchArray.size() ? s_respMatchArray.newValue(i) : "");
 
         // email
-        const std::vector<std::string> toEmailAddressList = s_respEmailAddressMatrix.newValue(i);
+        // A deleted trigger shifts later triggers down one index, and the matrix keeps a cell with
+        // an empty new value for every address the old settings had at that index. Drop those
+        // blanks: an empty address in an smtp handler or in [smtp] to stops kapacitord from starting.
+        std::vector<std::string> toEmailAddressList;
+        for (const std::string& addr : s_respEmailAddressMatrix.newValue(i)) {
+            if (addr.find_first_not_of(" \t\r\n") != std::string::npos) {
+                toEmailAddressList.push_back(addr);
+            }
+        }
         WriteEmailEventHandler(name, topic, match, toEmailAddressList);
         if (topic == "events") {
             defaultEmailAddressList = toEmailAddressList;
