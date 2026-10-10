@@ -18,7 +18,6 @@ endif
 
 OSEARCH_VER := 3.9.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
-OSEARCH_CONF_SECURITY_DIR := $(OSEARCH_CONF_DIR)/opensearch-security
 
 ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch/$(OSEARCH_VER)/opensearch-$(OSEARCH_VER)-linux-x64.rpm
 ROOTFS_PIP_NC += curator-$(OSEARCH)
@@ -27,9 +26,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c 'sed "s/\/var\/run\//\/run\//g" /usr/lib/tmpfiles.d/$(OSEARCH).conf > /etc/tmpfiles.d/$(OSEARCH).conf'
 	$(Q)chroot $(ROOTDIR) systemctl disable $(OSEARCH)
 	$(Q)cp -f $(ROOTDIR)$(OSEARCH_CONF_DIR)/$(OSEARCH).yml $(ROOTDIR)$(OSEARCH_CONF_DIR)/$(OSEARCH).yml.orig
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/config.yml .$(OSEARCH_CONF_SECURITY_DIR)
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/roles.yml .$(OSEARCH_CONF_SECURITY_DIR)
-	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/roles_mapping.yml .$(OSEARCH_CONF_SECURITY_DIR)
 
 # Bundled plugins that carry vulnerable jars and that nothing here uses. No code in this tree,
 # cube-cos-api, cube-cos-ui or lachesis calls a _plugins API, and on live nodes their system
