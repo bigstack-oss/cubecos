@@ -12,7 +12,7 @@ include ../../build.mk
 # prometheus or prometheus-community org; apache_exporter is the exporter the official
 # prometheus.io catalogue lists for Apache and has no org-backed alternative. See
 # exporters.mk for the per-exporter reasoning.
-BLACKBOX_VER := 0.28.0
+BLACKBOX_VER := 0.29.0
 IPMI_VER := 1.10.1
 MEMCACHED_VER := 0.17.0
 APACHE_VER := 1.1.1
