@@ -322,34 +322,36 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
 
 # NOTE: os-epoxy-pip-upper-constraints.txt is upstream's stable/2025.1
-# upper-constraints.txt copied down verbatim, save for two local deltas: libvirt-python,
-# raised to 11.10.0 to match the libvirt-devel headers core/nova/nova.mk holds, and
-# setuptools, which upstream does not pin. setuptools is pinned at venv creation above
-# for the reason the NOTE before the venv block gives.
+# upper-constraints.txt copied down, save for local deltas: libvirt-python, raised to
+# 11.10.0 to match the libvirt-devel headers core/nova/nova.mk holds; setuptools, which
+# upstream does not pin; and the packages raised past upstream's pin to clear a
+# vulnerability, each with its reasons in the commit that raised it. setuptools is
+# pinned at venv creation above for the reason the NOTE before the venv block gives.
 #
-# The pin has two ceilings:
-#   - below 82 (2026-02-08), which deleted pkg_resources. On caracal that was a runtime
-#     requirement as well as a build one: keystonemiddleware 10.6.0 did `import
-#     pkg_resources`, so every keystone gunicorn worker died at import (#631). The
-#     runtime half has gone -- keystonemiddleware 10.9.1 no longer imports it, and
-#     pbr 7.0.0 reaches for it only when importlib.metadata is missing, which it never
-#     is on 3.12, so keystone's whole import chain loads with pkg_resources blocked.
-#     The build half has not: every --no-build-isolation install in this venv builds
-#     against this setuptools, and four of the sdists horizon 25.3.2 pulls in are
-#     XStatic packages whose setup.py imports a pkg_resources-declared namespace.
-#     Built without pip's wheel cache, all four fail under setuptools 82.0.0 with "No
-#     module named 'pkg_resources'" and build under 79.0.1.
-#   - below 80 (2025-04-27), which removed `setup.py install`. Nothing anywhere in the
-#     tree invokes that command any more: ceph's bindings moved to `pip install` (see
-#     core/ceph/ceph.mk), skyline's did too, and #636 converted the last four -- the
-#     designate, masakari, watcher and neutron-vpnaas dashboards -- from a git clone to
-#     a pinned pip install. The ceiling is kept anyway: it costs nothing, and it is
-#     what makes a future `setup.py` install fail on review rather than on build day.
+# The pin has one ceiling: below 82 (2026-02-08), which deleted pkg_resources. On
+# caracal that was a runtime requirement as well as a build one: keystonemiddleware
+# 10.6.0 did `import pkg_resources`, so every keystone gunicorn worker died at import
+# (#631). The runtime half has gone -- keystonemiddleware 10.9.1 no longer imports it,
+# and pbr 7.0.0 reaches for it only when importlib.metadata is missing, which it never
+# is on 3.12, so keystone's whole import chain loads with pkg_resources blocked. The
+# build half has not: every --no-build-isolation install in this venv builds against
+# this setuptools, and four of the sdists horizon 25.3.2 pulls in are XStatic packages
+# whose setup.py imports a pkg_resources-declared namespace. Built without pip's wheel
+# cache, all four fail under setuptools 82.0.0 with "No module named 'pkg_resources'"
+# and build under 81.0.0.
 #
-# The number is the newest release that clears both: 79.0.1 (2025-04-23), the last
-# before 80.0.0, and three weeks after epoxy shipped. Python 3.12 sets a floor rather
+# Below 80 was a second ceiling until 81.0.0 was needed: the jaraco.context and wheel
+# that setuptools vendors carried known vulnerabilities up to 80.x, and 81.0.0 is the
+# first to vendor fixed releases. What 80 and 81 removed is the easy_install command and
+# module, package_index, the sandbox and setup.py's --dry-run; `setup.py install` itself
+# is only deprecated. Nothing uses any of them: ceph's bindings build in their own venv
+# with `pip wheel` (see core/ceph/ceph.mk), skyline moved to `pip install` too, #636
+# turned the last four dashboards from a git clone into a pinned pip install, and no
+# package in this venv imports the removed modules.
+#
+# The number is the newest release below 82: 81.0.0. Python 3.12 sets a floor rather
 # than a ceiling -- it removed pkgutil.ImpImporter, which pkg_resources references
-# unconditionally before setuptools 66.1 -- and 79.0.1 clears it.
+# unconditionally before setuptools 66.1 -- and 81.0.0 clears it.
 
 # install the openstack cli inside the python 3.12 virtual environment
 #

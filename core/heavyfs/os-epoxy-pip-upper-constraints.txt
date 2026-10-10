@@ -597,4 +597,4 @@ actdiag===3.0.0
 sysv-ipc===1.1.0
 sphinxcontrib-applehelp===2.0.0
 scikit-learn===1.6.1
-setuptools===79.0.1
+setuptools===81.0.0

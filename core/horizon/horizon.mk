@@ -85,7 +85,7 @@ rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# horizon's sdist-only XStatic dependencies import a pkg_resources-declared
 	$(Q)# namespace from setup.py, so they have to be built against this venv's
-	$(Q)# setuptools 79.0.1 -- a current setuptools has no pkg_resources at all.
+	$(Q)# setuptools 81.0.0 -- a current setuptools has no pkg_resources at all.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
 		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			--no-build-isolation \
