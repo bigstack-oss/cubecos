@@ -221,8 +221,9 @@ WriteConfig(const bool ha, const std::string& ctrl, const std::string& ctrlIp, c
         // open shared object file". Only HA writes a [galera] section, so a single-node
         // install never loads a provider and cannot see this.
         fprintf(fout, "wsrep_provider = /usr/lib64/galera-4/libgalera_smm.so\n");
-        // 4G keeps a rejoin on IST across a firmware-reboot-length outage (SST breaks on 10.6->10.11)
-        fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=4G;pc.ignore_sb=TRUE\"\n");
+        // 1G keeps a rejoin on IST across a reboot-length outage (SST breaks on 10.6->10.11);
+        // gcache.recover scans the whole ring at start, so bigger costs startup time
+        fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=1G;pc.ignore_sb=TRUE\"\n");
         fprintf(fout, "wsrep_cluster_name = \"cube_galera_cluster\"\n");
         fprintf(fout, "wsrep_cluster_address = \"gcomm://%s\"\n", ctrlAddrs.c_str());
         fprintf(fout, "wsrep_sst_method = rsync\n");

@@ -213,6 +213,28 @@ _power_roll_api_ready()
     return 1
 }
 
+# True if <ip> runs an octavia health-manager and octavia is enabled and
+# initialised (checked on <master>).
+_power_roll_octavia_hm_host()
+{
+    local ip=$1 master=$2
+    source hex_tuning $SETTINGS_TXT octavia.enabled
+    [ "x$T_octavia_enabled" != "xfalse" ] || return 1
+    echo ",$($HEX_SDK os_octavia_hm_nodes)," | grep -q ",$ip," || return 1
+    ( remote_run $master "test -e /etc/appliance/state/octavia_init_done" ) </dev/null >/dev/null 2>&1
+}
+
+# Wait (bounded) for another health-manager node to have o-hm0 up before $1 goes down.
+_power_roll_octavia_ready()
+{
+    local deadline=$(( $(date +%s) + ${ROLLING_OCTAVIA_HM_TIMEOUT:-300} ))
+    while : ; do
+        $HEX_SDK os_octavia_hm_peer_ready "$1" && return 0
+        [ $(date +%s) -ge $deadline ] && return 1
+        sleep ${ROLLING_OCTAVIA_HM_POLL:-10}
+    done
+}
+
 _power_roll_kick()
 {
     # Drain (if compute-bearing) and reboot one node. Pauses the job on any
@@ -238,6 +260,11 @@ _power_roll_kick()
     local apierr=$(_power_roll_api_ready)
     if [ -n "$apierr" ] ; then
         _power_roll_pause "$apierr -- a rejoined node is still starting; wait, then run rolling_$(_power_roll_cli_verb) continue"
+        return 1
+    fi
+
+    if [ "$(_power_roll_kind)" = restart ] && _power_roll_octavia_hm_host "$ip" "$master" && ! _power_roll_octavia_ready "$host" ; then
+        _power_roll_pause "no octavia health-manager other than $host has octavia-hm0 up -- amphora heartbeats would stop with $host down; once octavia-hm0 is back on another node, run rolling_restart continue"
         return 1
     fi
 
@@ -727,6 +754,8 @@ power_roll_advance()
     local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB)
 
     if [ -n "$inflight" ] && [ "x$inflight" = "x$booted" ] ; then
+        # own o-hm0 back before the roll moves on (restart roll only)
+        [ "x$booted" = "x$HOSTNAME" ] && Quiet -n $HEX_SDK os_octavia_roll_node_up
         # Restore the VMs this node suspended/stopped for its reboot (downtime
         # acknowledged at confirm time). Dispatch to the master (holds creds).
         local arun="$CLUSTER_ACTIVE_RUNNING" vm disp

@@ -1,0 +1,67 @@
+#!/bin/bash
+# Restart roll: per-node o-hm0 bring-up + the pre-drain health-manager gate.
+T=$(mktemp -d)
+D=$(dirname $0)/..
+for f in os_octavia_roll_node_up os_octavia_hm_peer_ready ; do
+    sed -n "/^$f()/,/^}/p" $D/modules/sdk_os.sh >> $T/fn.sh
+done
+for f in _power_roll_octavia_ready _power_roll_octavia_hm_host ; do
+    sed -n "/^$f()/,/^}/p" $D/modules/sdk_power.sh >> $T/fn.sh
+done
+source $T/fn.sh
+fail=0
+chk(){ printf '%-48s -> %-12s (want %s)\n' "$1" "$2" "$3"; [ "$2" = "$3" ] || fail=1; }
+
+# --- os_octavia_roll_node_up ---
+ROLL=1 FIRST3=1 FAST=0 CALLS=$T/calls
+is_rolling_restart_boot(){ [ $ROLL = 1 ]; }
+is_first_three_compute_node(){ [ $FIRST3 = 1 ]; }
+os_octavia_node_fast_up(){ echo fast >> $CALLS; [ $FAST = 1 ]; }
+Quiet(){ shift; "$@"; }
+HEX_CFG=cfg; cfg(){ echo "cfg $*" >> $CALLS; }
+run(){ : > $CALLS; os_octavia_roll_node_up; tr '\n' ';' < $CALLS; }
+
+ROLL=0;                chk "not a restart-roll boot" "$(run)" ""
+ROLL=1 FIRST3=0;       chk "not a health-manager node" "$(run)" ""
+FIRST3=1 FAST=1;       chk "fast path ok" "$(run)" "fast;"
+FAST=0;                chk "fast path fails -> reinit" "$(run)" "fast;cfg reinit_octavia;"
+
+# --- os_octavia_hm_peer_ready ---
+NODES="n1 n2 n3 n4" UP=""
+cubectl(){ [ -n "$NODES" ] || { echo "[]"; return; }; printf '{"h":"%s"}\n' $NODES | jq -s '[.[]|{hostname:.h}]'; }
+remote_run(){ case " $UP " in *" $1 "*) return 0 ;; esac; return 1; }
+ok(){ os_octavia_hm_peer_ready "$1" && echo yes || echo no; }
+
+UP="";       chk "no hm0 anywhere" "$(ok n1)" "no"
+UP="n1";     chk "only the node to drain has hm0" "$(ok n1)" "no"
+UP="n2";     chk "another hm node has hm0" "$(ok n1)" "yes"
+UP="n4";     chk "4th compute is not a hm node" "$(ok n1)" "no"
+NODES="n1";  UP=""; chk "single hm node (nothing to ask)" "$(ok n1)" "yes"
+NODES="";    chk "no compute nodes" "$(ok n1)" "yes"
+
+# --- _power_roll_octavia_ready (bounded wait) ---
+HEX_SDK=sdk; ROLLING_OCTAVIA_HM_POLL=0
+sdk(){ shift; [ -e $T/up ]; }
+ROLLING_OCTAVIA_HM_TIMEOUT=1; rm -f $T/up
+s=$(date +%s); _power_roll_octavia_ready n1; r=$?
+chk "never up -> times out" "$r" "1"
+chk "  bounded by timeout" "$(( $(date +%s) - s <= 3 ))" "1"
+touch $T/up
+_power_roll_octavia_ready n1; chk "up -> proceeds" "$?" "0"
+
+# --- _power_roll_octavia_hm_host (gate only hm nodes of a live octavia) ---
+ENABLED="" HM="10.0.0.1,10.0.0.2,10.0.0.3" INIT=1
+mkdir -p $T/bin; echo 'T_octavia_enabled=$ENABLED' > $T/bin/hex_tuning; PATH=$T/bin:$PATH
+sdk(){ [ "$1" = os_octavia_hm_nodes ] && echo "$HM"; }
+remote_run(){ [ $INIT = 1 ]; }
+hm(){ _power_roll_octavia_hm_host "$1" master && echo yes || echo no; }
+
+chk "hm node, octavia enabled + initialised" "$(hm 10.0.0.2)" "yes"
+chk "not a hm node" "$(hm 10.0.0.4)" "no"
+chk "  partial ip does not match" "$(hm 10.0.0)" "no"
+ENABLED=false; chk "octavia disabled" "$(hm 10.0.0.2)" "no"
+ENABLED=true INIT=0; chk "octavia not initialised" "$(hm 10.0.0.2)" "no"
+INIT=1 HM=""; chk "no hm nodes" "$(hm 10.0.0.2)" "no"
+
+rm -rf $T
+exit $fail

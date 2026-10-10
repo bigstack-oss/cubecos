@@ -11,4 +11,9 @@
  */
 bool IsRollingUpgrade();
 
+/**
+ * Check if this boot is this node's own reboot in a running rolling restart.
+ */
+bool IsRollingRestartBoot();
+
 #endif /* endif CUBE_UPGRADE_H */
