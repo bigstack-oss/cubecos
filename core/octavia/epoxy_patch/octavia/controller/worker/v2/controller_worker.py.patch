@@ -1,0 +1,21 @@
+--- controller_worker.py
++++ controller_worker.py
+@@ -1082,6 +1082,18 @@
+                       "compute_id": amphora.compute_id,
+                       "role": amphora.role})
+ 
++        except tsk_driver.JobboardUnavailable as e:
++            # Nothing ran: unmark busy so the next health check retries.
++            with excutils.save_and_reraise_exception(reraise=reraise):
++                LOG.error("Amphora %s failover not posted, jobboard "
++                          "unavailable: %s", amphora_id, str(e))
++                with session.begin():
++                    self._amphora_health_repo.update(
++                        session, amphora_id=amphora_id, busy=False)
++                    if amphora and amphora.load_balancer_id:
++                        self._lb_repo.update(
++                            session, amphora.load_balancer_id,
++                            provisioning_status=constants.ERROR)
+         except Exception as e:
+             with excutils.save_and_reraise_exception(reraise=reraise):
+                 LOG.exception("Amphora %s failover exception: %s",
