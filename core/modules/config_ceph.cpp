@@ -445,7 +445,7 @@ prepareOsdDirectories()
         }
 
         // An OSD already lives here if its metadata is on the mounted metapart,
-        // or its data partition still carries a bluestore label. Deciding this
+        // or its data partition still carries this OSD's bluestore label. Deciding this
         // from the directory's existence wipes a healthy OSD whose directory was
         // removed while it was unmounted (cubecos#1284).
         struct stat ts;
@@ -457,10 +457,10 @@ prepareOsdDirectories()
                 false,
                 false,
                 {},
-                HEX_SDK " ceph_osd_datapart_has_osd " + dataPartUuid);
+                HEX_SDK " ceph_osd_datapart_has_osd " + dataPartUuid + " " + uuid);
             isOldOsd = (lr.exitCode == 0);
             if (isOldOsd)
-                HexLogWarning("osd %lu has no metadata at %s but its data partition %s carries a "
+                HexLogWarning("osd %lu has no metadata at %s but its data partition %s carries its "
                               "bluestore label; not re-creating it", osdId, osddir, dataPartUuid.c_str());
         }
 
