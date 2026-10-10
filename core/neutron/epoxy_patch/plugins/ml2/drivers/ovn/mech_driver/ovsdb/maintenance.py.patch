@@ -1,6 +1,51 @@
 --- plugins/ml2/drivers/ovn/mech_driver/ovsdb/maintenance.py
 +++ plugins/ml2/drivers/ovn/mech_driver/ovsdb/maintenance.py
-@@ -1321,6 +1321,38 @@
+@@ -14,6 +14,7 @@
+ #    under the License.
+ 
+ import abc
++import datetime
+ import functools
+ import inspect
+ import threading
+@@ -25,6 +26,8 @@
+ from neutron_lib.api.definitions import provider_net as pnet
+ from neutron_lib import constants as n_const
+ from neutron_lib import context as n_context
++from neutron_lib.db import api as db_api
++from neutron_lib.db import standard_attr
+ from neutron_lib import exceptions as n_exc
+ from neutron_lib.exceptions import address_group as ag_exc
+ from neutron_lib.exceptions import l3 as l3_exc
+@@ -39,6 +42,7 @@
+ from neutron.common.ovn import utils
+ from neutron.conf.agent import ovs_conf
+ from neutron.conf.plugins.ml2.drivers.ovn import ovn_conf
++from neutron.db import models_v2
+ from neutron.db import ovn_hash_ring_db as hash_ring_db
+ from neutron.db import ovn_revision_numbers_db as revision_numbers_db
+ from neutron.objects import network as network_obj
+@@ -57,6 +61,11 @@
+ INCONSISTENCY_TYPE_CREATE_UPDATE = 'create/update'
+ INCONSISTENCY_TYPE_DELETE = 'delete'
+ 
++# Port status reconcile: run interval, min port age, max ports per run.
++PORT_STATUS_RECONCILE_SPACING = 30
++PORT_STATUS_RECONCILE_MIN_AGE = 20
++PORT_STATUS_RECONCILE_MAX_PORTS = 50
++
+ 
+ def has_lock_periodic(*args, periodic_run_limit=0, **kwargs):
+     def wrapper(f):
+@@ -233,6 +242,7 @@
+         self._sb_idl = self._ovn_client._sb_idl
+         self._idl = self._nb_idl.idl
+         self._idl.set_lock('ovn_db_inconsistencies_periodics')
++        self._ovn_mech_driver = None
+         super().__init__(ovn_client)
+ 
+         self._resources_func_map = {
+@@ -1321,6 +1331,109 @@
  
          raise periodics.NeverAgain()
  
@@ -35,6 +80,77 @@
 +                ovn_const.OVN_HOST_ID_EXT_ID_KEY).execute(check_error=True)
 +
 +        raise periodics.NeverAgain()
++
++    def _get_ovn_mech_driver(self):
++        """Return the OVN mech driver that owns this OVN client."""
++        if self._ovn_mech_driver is None:
++            mech_manager = self._ovn_client._plugin.mechanism_manager
++            for ext in mech_manager.mech_drivers.values():
++                if (getattr(ext.obj, '_ovn_client_inst', None) is
++                        self._ovn_client):
++                    self._ovn_mech_driver = ext.obj
++                    break
++        return self._ovn_mech_driver
++
++    def _is_lsp_up_on_requested_chassis(self, port_id):
++        """True if the LSP is up, enabled and bound to its requested chassis.
++        """
++        lsp = self._nb_idl.get_lswitch_port(port_id)
++        if not lsp or not (utils.is_lsp_up(lsp) and
++                           utils.is_lsp_enabled(lsp)):
++            return False
++        requested = lsp.options.get(
++            ovn_const.LSP_OPTIONS_REQUESTED_CHASSIS_KEY)
++        if not requested:
++            return False
++        requested = set(requested.split(','))
++        for pb in self._sb_idl.db_find_rows(
++                'Port_Binding', ('logical_port', '=', port_id)).execute(
++                    check_error=True):
++            if pb.chassis and requested & {pb.chassis[0].name,
++                                           pb.chassis[0].hostname}:
++                return True
++        return False
++
++    @has_lock_periodic(spacing=PORT_STATUS_RECONCILE_SPACING)
++    def reconcile_port_status_up(self):
++        """Set compute ports up that OVN reports up but Neutron left DOWN.
++
++        Port status is only set from OVN events, which are never retried
++        if dropped (e.g. hashed to a dead hash ring node).
++        """
++        mech_driver = self._get_ovn_mech_driver()
++        if mech_driver is None:
++            return
++
++        context = n_context.get_admin_context()
++        cutoff = timeutils.utcnow() - datetime.timedelta(
++            seconds=PORT_STATUS_RECONCILE_MIN_AGE)
++        with db_api.CONTEXT_READER.using(context):
++            port_ids = [row.id for row in context.session.query(
++                models_v2.Port.id).join(
++                    standard_attr.StandardAttribute,
++                    models_v2.Port.standard_attr_id ==
++                    standard_attr.StandardAttribute.id).filter(
++                        models_v2.Port.status == n_const.PORT_STATUS_DOWN,
++                        models_v2.Port.device_owner.startswith(
++                            n_const.DEVICE_OWNER_COMPUTE_PREFIX),
++                        standard_attr.StandardAttribute.updated_at < cutoff)]
++
++        reconciled = 0
++        for port_id in port_ids:
++            if reconciled >= PORT_STATUS_RECONCILE_MAX_PORTS:
++                break
++            if not self._is_lsp_up_on_requested_chassis(port_id):
++                continue
++            reconciled += 1
++            LOG.info("Maintenance task: port %s is up in OVN but DOWN in "
++                     "Neutron, setting it up", port_id)
++            try:
++                mech_driver.set_port_status_up(port_id)
++            except Exception:
++                LOG.exception("Maintenance task: failed to set port %s up",
++                              port_id)
 +
  
  class HashRingHealthCheckPeriodics:
