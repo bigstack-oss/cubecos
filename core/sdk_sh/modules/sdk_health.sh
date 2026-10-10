@@ -414,7 +414,8 @@ health_bootstrap_report()
 health_bootstrap_check()
 {
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        if ! remote_run $node stat $CUBE_DONE >/dev/null 2>&1 ; then
+        # not remote_run: its Error exits the loop
+        if ! is_sshable $node || ! ssh root@$node stat $CUBE_DONE >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="$node services ... [n/a]\n"
             ERR_LOG="`journalctl | grep hex | grep -i -e error -e fail`\n"

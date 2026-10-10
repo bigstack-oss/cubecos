@@ -410,8 +410,9 @@ cube_cluster_stop()
     # Cleanly stop running VMs before nodes go down. The restore record is written
     # up front by power_record_running_vms (called by the poweroff/powercycle CLI);
     # this just stops whatever is still running so the reboot does not hard-kill it.
-    local _vm _i _active
-    _active=$($HEX_SDK os_nova_list id status powerstate 2>/dev/null | grep -i 'active running' | cut -d' ' -f1)
+    # boot: called from the cold-boot sweep; only this host's VMs, keep live state
+    local _mode=${1:-} _vm _i _active
+    _active=$(_cube_stop_vms "$_mode")
     if [ -n "$_active" ] ; then
         for _vm in $_active ; do
             [ "$($OPENSTACK server show "$_vm" -f value -c status 2>/dev/null)" = ERROR ] && os_nova_instance_reset "$_vm"
@@ -419,14 +420,61 @@ cube_cluster_stop()
         done
         # bounded wait for guests to reach SHUTOFF so the reboot does not hard-kill them
         for _i in $(seq 1 20) ; do
-            [ -z "$($HEX_SDK os_nova_list id status powerstate 2>/dev/null | grep -i 'active running')" ] && break
+            [ -z "$(_cube_stop_vms "$_mode")" ] && break
             sleep 3
         done
     fi
-    rm -f /var/lib/corosync/*
-    rm -rf /var/lib/rabbitmq/mnesia/*
-    rm -f /etc/appliance/state/rabbitmq_cluster_done
-    touch /etc/appliance/state/mysql_new_cluster
+    if _cube_stop_keep "$_mode" corosync ; then
+        rm -f /var/lib/corosync/*
+    fi
+    if _cube_stop_keep "$_mode" rabbitmq-server ; then
+        rm -rf /var/lib/rabbitmq/mnesia/*
+        rm -f /etc/appliance/state/rabbitmq_cluster_done
+    fi
+    if _cube_stop_keep "$_mode" mariadb ; then
+        touch /etc/appliance/state/mysql_new_cluster
+    fi
+}
+
+# Running VM ids: cluster-wide, or this host's only in boot mode.
+_cube_stop_vms()
+{
+    if [ "$1" = "boot" ] ; then
+        $OPENSTACK server list --all-projects --host $HOSTNAME --status ACTIVE -f value -c ID 2>/dev/null
+    else
+        $HEX_SDK os_nova_list id status powerstate 2>/dev/null | grep -i 'active running' | cut -d' ' -f1
+    fi
+}
+
+# False (keep state) when booting and $2 is still running here.
+_cube_stop_keep()
+{
+    [ "$1" = "boot" ] || return 0
+    systemctl is-active -q $2 || return 0
+    logger -t cube_cluster_stop "$2 active on $HOSTNAME, its cluster state is kept"
+    return 1
+}
+
+# True when a control peer is up: galera/rabbitmq listening or a peer holding the VIP.
+cube_cluster_peer_up()
+{
+    local _ip _p _self=" $(hostname -I 2>/dev/null) "
+    source hex_tuning /etc/settings.txt cubesys.control
+    for _ip in $(cubectl node list -r control -j 2>/dev/null | jq -r .[].ip.management) ${T_cubesys_control_addrs//,/ } ; do
+        [ "$_ip" = "$HOSTNAME" -o -z "${_self##* $_ip *}" ] && continue
+        for _p in 4567 5672 ; do
+            if timeout 2 bash -c ": </dev/tcp/$_ip/$_p" 2>/dev/null ; then
+                echo "peer $_ip up (port $_p)"
+                return 0
+            fi
+        done
+    done
+    local _vip=$T_cubesys_control_vip
+    if [ -n "$_vip" -a -n "${_self##* $_vip *}" ] && ping -c 1 -W 1 $_vip >/dev/null 2>&1 ; then
+        echo "peer holds VIP $_vip"
+        return 0
+    fi
+    return 1
 }
 
 # Cold-boot sweep for bootstrap_cube_config: per-node stop on every control
@@ -436,7 +484,9 @@ cube_cluster_boot_stop()
 {
     local ip
     for ip in $(cubectl node list -r control -j 2>/dev/null | jq -r .[].ip.management | tac) ; do
-        remote_run $ip "$HEX_SDK cube_cluster_stop" >/dev/null 2>&1 || true
+        # not remote_run: its Error exits the loop
+        is_sshable $ip || continue
+        ssh root@$ip "$HEX_SDK cube_cluster_stop boot" >/dev/null 2>&1 || true
     done
     $HEX_SDK ceph_hold_data_movement
 }
