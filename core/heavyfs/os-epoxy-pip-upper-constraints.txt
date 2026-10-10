@@ -174,7 +174,7 @@ reno===4.1.0
 ncclient===0.6.16
 imagesize===1.4.1
 pydot===3.0.4
-urllib3===1.26.20
+urllib3===2.8.0
 graphviz===0.20.3
 portend===3.2.0
 PyKMIP===0.10.0
