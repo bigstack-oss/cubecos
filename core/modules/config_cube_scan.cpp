@@ -1,6 +1,7 @@
 // CUBE SDK
 
 #include <unistd.h>
+#include <arpa/inet.h>
 
 #include <hex/log.h>
 #include <hex/tuning.h>
@@ -77,6 +78,7 @@ CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_SALTKEY);
 CONFIG_TUNING_SPEC_INT(CUBESYS_LOG_DEFAULT_RP);
 CONFIG_TUNING_SPEC_INT(CUBESYS_CONNTABLE_MAX);
+CONFIG_TUNING_SPEC_STR(CUBESYS_MGMT_CIDR);
 
 // parse tunings
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
@@ -99,6 +101,48 @@ PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
 PARSE_TUNING_X_BOOL(s_saltKey, CUBESYS_SALTKEY, 1);
 PARSE_TUNING_X_INT(s_logDefRp, CUBESYS_LOG_DEFAULT_RP, 1);
 PARSE_TUNING_X_INT(s_connMax, CUBESYS_CONNTABLE_MAX, 1);
+PARSE_TUNING_X_STR(s_svcMgmtCidr, CUBESYS_MGMT_CIDR, 1);
+
+static bool
+ParseCidrV4(const std::string& cidr, uint32_t& net, uint32_t& mask)
+{
+    auto comps = hex_string_util::split(cidr, '/');
+    struct in_addr a;
+    if (comps.size() != 2 || inet_pton(AF_INET, comps[0].c_str(), &a) != 1)
+        return false;
+    int len = atoi(comps[1].c_str());
+    if (len < 0 || len > 32)
+        return false;
+    mask = len ? ~0u << (32 - len) : 0;
+    net = ntohl(a.s_addr) & mask;
+    return true;
+}
+
+// cubesys.mgmt.cidr is carved into internal service networks (octavia lb-mgmt,
+// manila); overlapping a real subnet reroutes the node's own traffic onto them
+static bool
+CheckMgmtCidrOverlap(const std::vector<std::pair<std::string, std::string>>& nets)
+{
+    if (!IsBootstrap() && !s_svcMgmtCidr.modified())
+        return true;
+
+    uint32_t svc, svcMask;
+    if (!ParseCidrV4(s_svcMgmtCidr.newValue(), svc, svcMask))
+        return true; // syntax is checked by the tuning validator
+
+    for (auto& n : nets) {
+        uint32_t net, mask;
+        if (n.second.empty() || !ParseCidrV4(n.second, net, mask))
+            continue;
+        uint32_t m = svcMask & mask;
+        if ((svc & m) == (net & m)) {
+            HexLogError("cubesys.mgmt.cidr %s overlaps %s subnet %s; set it to a range no real network uses (default %s)",
+                        s_svcMgmtCidr.newValue().c_str(), n.first.c_str(), n.second.c_str(), MGMT_CIDR_DEF);
+            return false;
+        }
+    }
+    return true;
+}
 
 static std::string
 GetIfAddrRetry(const std::string& ifname)
@@ -309,6 +353,12 @@ ParseNew(void)
         if (storageBCidr == "0.0.0.0/0")
             return false;
     }
+
+    // cubesys.mgmt.cidr is only set on control nodes
+    if (IsControl(r) &&
+        !CheckMgmtCidrOverlap({{"mgmt", mgmtCidr}, {"overlay", overlayCidr},
+                               {"storage", storageFCidr}, {"storage cluster", storageBCidr}}))
+        return false;
 
     // ParseOld() already derives this from the tuning; keep the two symmetric so the
     // shared id does not silently change shape depending on whether NotifyCube() ran
