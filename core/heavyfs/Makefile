@@ -228,7 +228,7 @@ rootfs_install::
 PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel python-xmlsec
 
 # ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm
-RUBY := ruby-3.0.7-166.el9
+RUBY := ruby-3.0.7-168.el9
 LOCKED_DNF += $(RUBY)
 
 OPENSSL_VER := 3.5.1-6.el9
