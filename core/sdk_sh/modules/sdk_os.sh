@@ -3169,13 +3169,42 @@ os_galera_live_primary()
     local me=$(hostname) node st
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         [ "x$node" = "x$me" ] && continue
-        st=$(remote_run $node "mariadb -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'")
+        # subshell: remote_run exits on an unsshable node
+        st=$( (remote_run $node "mariadb -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'") )
         if [ "x$st" = "xPrimary" ] ; then
             echo "$node"
             return 0
         fi
     done
     return 1
+}
+
+# Print a peer control whose rabbitmq-server is active; rc 1 if none.
+os_rabbitmq_peer_running()
+{
+    local me=$(hostname) node
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        [ "x$node" = "x$me" ] && continue
+        # subshell: remote_run exits on an unsshable node
+        if ( remote_run $node "systemctl is-active -q rabbitmq-server" ) ; then
+            echo "$node"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Cold start: wipe rabbit state on each reachable peer whose broker is not
+# running, so it joins the master's fresh cluster instead of the old one.
+os_rabbitmq_cold_reset_peers()
+{
+    local me=$(hostname) node
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        [ "x$node" = "x$me" ] && continue
+        is_sshable $node || continue
+        ssh root@$node "systemctl is-active -q rabbitmq-server || { rm -rf /var/lib/rabbitmq/mnesia/* ; rm -f /etc/appliance/state/rabbitmq_cluster_done ; }" </dev/null
+    done
+    return 0
 }
 
 # Hosts flagged on_maintenance in ANY segment -- instance-HA is OFF for these.

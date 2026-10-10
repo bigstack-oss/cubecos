@@ -229,9 +229,22 @@ IsReady(int timeout, const std::string& hostname)
 static bool
 CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, const std::string& ctrlHosts)
 {
+    // master's boot commit with no peer broker up is a cold start: a power loss
+    // leaves queues homed on dead brokers unusable, so form a fresh cluster.
+    // Peers (still waiting on this commit) are wiped too and join it.
+    if (enabled && ha && IsBootstrap() && G(IS_MASTER) && !IsRunning(hostname) &&
+        HexSystemF(0, HEX_SDK " os_rabbitmq_peer_running >/dev/null 2>&1") != 0) {
+        HexLogInfo("%s: no peer broker running, cold start: wiping mnesia on the controls", NAME);
+        HexSystemF(0, "rm -rf /var/lib/rabbitmq/mnesia/*");
+        unlink(SETUP_MARK);
+        HexUtilSystemF(0, 0, HEX_SDK " os_rabbitmq_cold_reset_peers");
+    }
+
     if (!SystemdCommitService(enabled, NAME, true)) {
         HexLogInfo("force %s bootstrap - removing data (CAUTION)", NAME);
         HexSystemF(0, "rm -rf /var/lib/rabbitmq/mnesia/*");
+        // wiped mnesia has no cluster membership: redo the HA setup below
+        unlink(SETUP_MARK);
         SystemdCommitService(enabled, NAME, true);
     }
 

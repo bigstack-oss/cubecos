@@ -425,6 +425,16 @@ ceph_hold_data_movement()
     Quiet $CEPH osd set nobackfill
 }
 
+# Master boot commit: hold data movement while storage is degraded (peers'
+# OSDs not back yet). cube_cluster_start_node's ceph_leave_maintenance lifts
+# it once all OSDs are up. No-op without a mon quorum.
+ceph_hold_if_degraded()
+{
+    ceph_storage_degraded || return 0
+    log_info "ceph: storage degraded at boot, holding data movement"
+    ceph_hold_data_movement
+}
+
 ceph_enter_maintenance()
 {
     Quiet $CEPH osd set noout
