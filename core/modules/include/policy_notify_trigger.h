@@ -69,7 +69,7 @@ struct NotifyTriggerResponse
 struct NotifyTrigger
 {
     std::string name;
-    bool enabled;
+    bool enabled = false; // matches the kapacitor.alert.resp.%d.enabled tuning
     std::string topic;
     std::string match;
     std::string description;
