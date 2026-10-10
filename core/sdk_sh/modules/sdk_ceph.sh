@@ -86,7 +86,7 @@ ceph_get_ids_by_dev()
     local dev=$1
     # ceph device ls doesn't always show correct osds associated with devices
     # local ids=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.location[].dev == \"${dev#/dev/}\").daemons[]" | sed "s/osd.//g" | sort -u)
-    local ids=$(for osdid in $(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id" | sort) ; do ceph osd ls | grep "^${osdid}$" ; done)
+    local ids=$(for osdid in $(ceph_volume_raw_list_das | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id" | sort) ; do ceph osd ls | grep "^${osdid}$" ; done)
     ids+=$(ceph-volume lvm list --format json | jq -r ".[][] | select(.devices[] == \"$dev\").tags.\"ceph.osd_id\"")
 
     echo -n $ids
@@ -95,7 +95,7 @@ ceph_get_ids_by_dev()
 ceph_get_dev_by_id()
 {
     local osd_id=${1#.osd}
-    local dev=$(ceph-volume raw list --format json | jq -r ".[] | select(.osd_id == $osd_id).device")
+    local dev=$(ceph_volume_raw_list_das | jq -r ".[] | select(.osd_id == $osd_id).device")
     if echo $dev | grep -q '/dev/mapper' ; then
         dev=$(ceph-volume lvm list --format json | jq -r ".[][] | select(.tags.\"ceph.osd_id\" == \"$osd_id\").devices[]")
     fi
@@ -960,11 +960,39 @@ ceph_osd_zap_disk()
 }
 
 # list osd-typed disks (mounted)
+# ceph-volume raw list, constrained to DAS (+ allowed mpath) disks.
+#
+# ceph-volume raw list limited to DAS (+ allowed mpath) disks: an unfiltered scan
+# probes every block device and hangs on stray FC/iSCSI SAN LUNs.
+ceph_volume_raw_list_das()
+{
+    local devs="" d t
+    while read -r d t ; do
+        [ -n "$d" ] || continue
+        case "$t" in
+            disk)
+                $HEX_SDK storage_is_das "$d" && devs+=" $d" ;;
+            mpath)
+                $HEX_SDK storage_is_mpath "$d" && $HEX_SDK storage_are_mpath_devices_allowed_for_ceph && devs+=" $d" ;;
+        esac
+    done < <(lsblk -dpno NAME,TYPE 2>/dev/null)
+    local acc=$(mktemp)
+    # OSD data lives on a partition and raw list of the whole disk returns {}, so
+    # scan each disk's partitions too
+    for d in $devs ; do
+        for dev in "$d" $(lsblk -pnlo NAME "$d" 2>/dev/null | tail -n +2) ; do
+            ceph-volume raw list "$dev" --format json 2>/dev/null >> "$acc"
+        done
+    done
+    jq -s "add // {}" "$acc" 2>/dev/null || echo "{}"
+    rm -f "$acc"
+}
+
 ceph_osd_list_disk()
 {
     local all_devs=
     local blkdevs=$(lsblk -J | jq -r .blockdevices[])
-    local raw_devs=$(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"/dev/\")).device" | grep -v "/dev/mapper" | sort -u)
+    local raw_devs=$(ceph_volume_raw_list_das | jq -r ".[] | select(.device | startswith(\"/dev/\")).device" | grep -v "/dev/mapper" | sort -u)
     for DEV in $raw_devs ; do
         parent_dev=/dev/$(echo $blkdevs | jq -r ". | select(.children[].name == \"${DEV#/dev/}\").name" 2>/dev/null)
         all_devs+="\n${parent_dev}"
@@ -2950,7 +2978,7 @@ ceph_osd_create_map()
     # e.g., /dev/sdb1 0 xxxx-xxxx xxxx-xxxx
     local osdpth=/var/lib/ceph/osd
     local osdmap_new=$(mktemp -u /tmp/dev_osd.mapXXXX)
-    local osdmap_json=$(ceph-volume raw list --format json)
+    local osdmap_json=$(ceph_volume_raw_list_das)
 
     if [ $(echo $osdmap_json | jq -r "keys[]" | wc -l) -gt 0 ] ; then
         for metapart_uuid in $(echo $osdmap_json | jq -r "keys[]") ; do
