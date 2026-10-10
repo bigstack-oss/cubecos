@@ -28,7 +28,7 @@
             project_name: app-framework
           name:  private-k8s
           filters:
-            tenant_id: "{{ projects.openstack_projects[0].id }}"
+            tenant_id: "{{ projects.projects[0].id }}"
         register: result
       - name: Create the server
         openstack.cloud.server:
@@ -41,7 +41,7 @@
           flavor: t2.small
           # nics:
           #   - net-name: private-k8s
-          network: "{{ result.openstack_networks[0].id }}"
+          network: "{{ result.networks[0].id }}"
           floating_ip_pools:
             - public
           security_groups:
@@ -66,4 +66,4 @@
       #   register: result
       # - name: Output the ip address
       #   debug:
-      #     msg: "{{ result.openstack_servers[0].public_v4 }}"
+      #     msg: "{{ result.servers[0].public_v4 }}"
