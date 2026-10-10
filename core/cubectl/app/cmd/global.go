@@ -20,13 +20,15 @@ import (
 )
 
 const (
-	etcdTimeout    = 5 * time.Second
-	etcdRetries    = 10
-	etcdConfigDir  = "/etc/etcd"
-	etcdConfigFile = etcdConfigDir + "/etcd.conf.yml"
-	etcdDataDir    = "/var/lib/etcd.cube"
-	etcdClientPort = 12379
-	etcdPeerPort   = 12380
+	etcdTimeout = 5 * time.Second
+	etcdRetries = 10
+	// etcd admits one learner at a time; a parallel joiner waits for it to be promoted
+	etcdLearnerWait = 3 * time.Minute
+	etcdConfigDir   = "/etc/etcd"
+	etcdConfigFile  = etcdConfigDir + "/etcd.conf.yml"
+	etcdDataDir     = "/var/lib/etcd.cube"
+	etcdClientPort  = 12379
+	etcdPeerPort    = 12380
 )
 
 func getEtcdClient(addrs ...string) (*clientv3.Client, error) {
@@ -92,11 +94,20 @@ func etcdMemberAdd(ctrlIPs []string, name string, myIp string) (uint64, error) {
 		resp *clientv3.MemberAddResponse
 		//err  error
 	)
+	learnerDeadline := time.Now().Add(etcdLearnerWait)
 	for i := 0; ; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
 		resp, err = cli.MemberAddAsLearner(ctx, peerUrls)
 		cancel()
 		if err != nil {
+			if strings.Contains(err.Error(), "too many learner members") && time.Now().Before(learnerDeadline) {
+				zap.L().Info("Another node is joining as learner; waiting for its promotion",
+					zap.Error(err),
+				)
+				i--
+				time.Sleep(1 * time.Second)
+				continue
+			}
 			if i < etcdRetries {
 				zap.L().Warn("Failed to add member",
 					zap.Error(err),
