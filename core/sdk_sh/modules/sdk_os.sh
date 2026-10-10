@@ -1189,7 +1189,10 @@ os_keystone_idp_config()
     # so the mellon config above is only on disk -- reload to put it in the running server.
     # Without this, /v3/auth/OS-FEDERATION/websso/mapped bypasses mellon and keystone
     # answers 401 until the next unrelated httpd restart.
-    if systemctl is-active --quiet httpd ; then
+    # the mellon conf references the keycloak metadata; reloading without it kills httpd
+    if [ ! -s /etc/keycloak/saml-metadata.xml ] ; then
+        log_warning "os_keystone_idp_config: keycloak saml metadata missing, httpd reload deferred to keycloak"
+    elif systemctl is-active --quiet httpd ; then
         systemctl reload httpd
     fi
 

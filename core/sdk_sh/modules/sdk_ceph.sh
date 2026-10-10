@@ -3269,14 +3269,18 @@ ceph_mon_msgr2_enable()
 {
     local timeout=${1:-60}
 
-    Quiet -n $CEPH mon enable-msgr2
+    # a joining mon enters the monmap v1-only; wait for it to reach quorum
     local i=0
     while [ $i -lt $timeout ] ; do
-        if $CEPH -s | grep -q "not enabled msgr2" ; then
-            Quiet -n $CEPH mon enable-msgr2
-        else
-            break
-        fi
+        timeout 10 $CEPH quorum_status -f json 2>/dev/null | jq -e --arg h "$HOSTNAME" '.quorum_names | index($h)' >/dev/null && break
+        sleep 10
+        i=$(expr $i + 1)
+    done
+
+    i=0
+    while [ $i -lt $timeout ] ; do
+        Quiet -n $CEPH mon enable-msgr2
+        timeout 10 $CEPH mon dump 2>/dev/null | grep -E "^[0-9]+: " | grep -qv "v2:" || break
         sleep 10
         i=$(expr $i + 1)
     done

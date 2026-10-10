@@ -291,20 +291,14 @@ health_dns_check()
 {
     local node res rc ms ns
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
-        # arp -a resolves every neighbour's address back to a name, so it takes as long as
-        # the node's reverse DNS does: 78 entries with a 15 s PTR timeout ran ~18 min on
-        # QA 10.32.36.10 (cubecos#1595). The bound has to be on the remote side. A client
-        # reusing a mux master hands its stdio to that master, so killing the local ssh
-        # leaves the remote arp running, and the master keeps the caller's stdin and stderr
-        # open until it ends: `ssh <node> hex_cli -c cluster check` printed its result and
-        # then did not return. -n and 2>/dev/null keep them off the master, and the remote
-        # timeout closes the channel. The status comes back on stdout, because the
-        # `$(... | grep real | awk ...) || ERR_CODE=1` this replaces took awk's status and
-        # never failed. A timeout nearly always means the upstream nameserver is down or
-        # unreachable, which is outside the cluster and nothing here can repair (dns is
-        # NO_REPAIR), so the message names the node's nameservers.
+        # one reverse lookup per nameserver via dig (getent falls back to nss myhostname):
+        # 1s per try, 4 rounds, a new name each try; NG only if no nameserver answers
         res=$(timeout $((SRVSTO + 5)) ssh -n root@$node \
-              "s=\$(date +%s%N); timeout $SRVSTO arp -a >/dev/null 2>&1; echo \$? \$(( (\$(date +%s%N) - s) / 1000000 )) \$(awk '/^nameserver/{print \$2}' /etc/resolv.conf | paste -sd, -)" 2>/dev/null)
+              "ns=\$(awk '/^nameserver/{print \$2}' /etc/resolv.conf | paste -sd' ' -); rc=0; s=\$(date +%s%N); \
+               if [ -n \"\$ns\" ] ; then rc=124; s=\$(date +%s%N); for i in 1 2 3 4 ; do for n in \$ns ; do \
+                 dig +time=1 +tries=1 +noall +comments -x 10.\$((RANDOM % 256)).\$((RANDOM % 256)).\$((RANDOM % 254 + 1)) @\$n 2>/dev/null | grep -q 'status:' && { rc=0; break 2; }; \
+               done; done; fi; \
+               echo \$rc \$(( (\$(date +%s%N) - s) / 1000000 )) \${ns// /,}" 2>/dev/null)
         rc= ms= ns=
         read -r rc ms ns <<< "$res"
         if [ -z "$rc" ] || [ -z "$ms" ] ; then
@@ -312,10 +306,10 @@ health_dns_check()
             ERR_MSG+="$node dns lookup could not be run\n"
         elif [ "$rc" = "124" ] ; then
             ERR_CODE=1
-            ERR_MSG+="$node dns lookup timed out after ${SRVSTO}s (nameservers: ${ns:-none})\n"
+            ERR_MSG+="$node no nameserver answered (nameservers: ${ns:-none})\n"
         elif [ "$rc" != "0" ] ; then
             ERR_CODE=1
-            ERR_MSG+="$node dns lookup failed (arp -a rc $rc)\n"
+            ERR_MSG+="$node dns lookup failed (rc $rc)\n"
         else
             ERR_MSG+="$node DNS lookup took $(printf '%d.%03d' $((ms / 1000)) $((ms % 1000))) sec\n"
         fi
@@ -1275,7 +1269,7 @@ health_vip_check()
             if [ "$node" == "$active_host" ] ; then
                 DESCRIPTION="$ipcidr@$active_host"
                 ERR_MSG=$DESCRIPTION
-                old_vip=$(FORMAT=json VERBOSE=1 influx_event_health vip | jq -r .results[].series[].values[][4] | grep "[0-9].*@" | head -1)
+                old_vip=$(FORMAT=json VERBOSE=1 influx_event_health vip | jq -r .results[].series[].values[][4] | grep -E "^[0-9.]+/[0-9]+@[A-Za-z0-9._-]+$" | head -1)
                 if [  "x$ipcidr" != "x" -a "x$old_vip" != "x" -a "$old_vip" != "$DESCRIPTION" -a "$HOSTNAME" == "$active_host" ] ; then
                     # in case of instanceha, repair has to happen while not all nodes are bootstrapped
                     rm -f /tmp/health_neutron_error.count
@@ -2766,6 +2760,7 @@ health_neutron_check()
 
 _health_neutron_auto_repair()
 {
+    [ -f /etc/appliance/state/cube_repair_optout ] && return 0
     if [ $ERR_CODE -ne 0 ] ; then
         $OPENSTACK port list -f value -c ID -c Name | grep "diag[-]" | cut -d " " -f1 | xargs -i $OPENSTACK port delete {}
         if [ $ERR_CODE -eq 1 ] ; then
