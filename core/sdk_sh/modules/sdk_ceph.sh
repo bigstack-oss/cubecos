@@ -1077,6 +1077,19 @@ ceph_osd_prepare_bluestore()
         partprobe $part_dev$i 2>/dev/null || true
         # zero-out 100mb for each partition
         dd if=/dev/zero of=${part_dev}${i} bs=1M count=100 oflag=sync
+        ceph_bluestore_label_zero ${part_dev}${i}
+    done
+}
+
+# zero the bluestore label copies Squid keeps at 1/10/100/1000 GiB
+ceph_bluestore_label_zero()
+{
+    local dev=$1
+    local size=$(blockdev --getsize64 $dev 2>/dev/null || echo 0)
+    local gib
+    for gib in 1 10 100 1000 ; do
+        [ $(( gib * 1024 * 1024 * 1024 )) -lt $size ] || continue
+        dd if=/dev/zero of=$dev bs=1M count=1 seek=$(( gib * 1024 )) oflag=direct conv=notrunc 2>/dev/null
     done
 }
 
@@ -2966,6 +2979,9 @@ ceph_osd_remount()
                 unlink $osdpth/ceph-$osd_id/block 2>/dev/null
                 (cd $osdpth/ceph-$osd_id && ln -sf /dev/disk/by-partuuid/$datapart_partuuid block)
             fi
+            # stopping the OSD re-reads the partition table and udev recreates the node
+            udevadm settle --timeout=30 2>/dev/null || true
+            chown ceph:ceph $(readlink -f /dev/disk/by-partuuid/$datapart_partuuid) 2>/dev/null || true
             [ $start -eq 0 ] || Quiet -n systemctl start ceph-osd@$osd_id
         fi
     done < $CEPH_OSD_MAP
@@ -3040,14 +3056,17 @@ ceph_osd_create_map()
     done
 }
 
-# true if data uuid $1 resolves to a device that already carries a bluestore
-# label, i.e. an OSD lives there and must not be re-created
+# true if data uuid $1 carries a bluestore label (belonging to osd uuid $2 if given)
 ceph_osd_datapart_has_osd()
 {
+    local osd_uuid=$2
     local dev=$(ceph_osd_datapart_resolve "$1") || return 1
     [ -n "$dev" ] || return 1
 
-    ceph-bluestore-tool show-label --dev "$dev" >/dev/null 2>&1
+    local label
+    label=$(ceph-bluestore-tool show-label --dev "$dev" 2>/dev/null) || return 1
+    [ -n "$osd_uuid" ] || return 0
+    echo "$label" | jq -r '.[].osd_uuid' 2>/dev/null | grep -qx "$osd_uuid"
 }
 
 # resolve a dev_osd.map data uuid to its device without going through

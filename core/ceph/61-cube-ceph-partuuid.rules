@@ -10,3 +10,7 @@ ENV{ID_PART_ENTRY_UUID}=="?*", SYMLINK+="disk/by-partuuid/$env{ID_PART_ENTRY_UUI
 ENV{ID_PART_ENTRY_SCHEME}=="gpt", ENV{ID_PART_ENTRY_NAME}=="?*", SYMLINK+="disk/by-partlabel/$env{ID_PART_ENTRY_NAME}"
 
 LABEL="cube_ceph_partuuid_end"
+
+# Keep raw BlueStore data partitions ceph-owned across every partition-table
+# re-read (OSD stop, rescan, reboot); the stock ceph rule only matches ceph GUIDs
+ACTION!="remove", SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", ENV{ID_FS_TYPE}=="ceph_bluestore", OWNER="ceph", GROUP="ceph", MODE="0660"
