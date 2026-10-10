@@ -56,8 +56,8 @@ build-image: $(CHART)
 		podman image inspect localhost/bigstack/rancher:v$(APP_VERSION) >/dev/null || SRCDIR=$(SRCDIR) sh -x $(SRCDIR)/build/buildah-image.sh v$(APP_VERSION) \
 		,"  BUILD   rancher image")
 
-# images.txt lists the server and agent images build-image produces, and the registry
-# stage runs this before the rancher subdir builds, so it must build them itself (as
+# images.txt lists the server image build-image produces, and the registry
+# stage runs this before the rancher subdir builds, so it must build it itself (as
 # k3s's copy-image does). RUN_CMD_TIMED runs the body as an if-condition, where set -e
 # is off, so each failure has to be carried to the exit status explicitly.
 .PHONY: copy-image
@@ -66,6 +66,27 @@ copy-image: build-image
 		sh -x $(COREDIR)/docker/copy-images.sh $(IMG_LIST) && \
 		for dir in $(SUBDIRS); do make copy-image -C $$dir/ || exit 1; done \
 		,"  COPY    rancher image")
+
+# The agent ships in the extpack, not the OS image: a registry volume fragment that
+# os_extpack_image_import merges into every control node's /opt/docker/registry.
+AGENT_TAR := registry-rancher-agent_v$(APP_VERSION).tar
+AGENT_REG := agent-registry
+AGENT_PORT := 5081
+
+$(AGENT_TAR): build-image
+	$(Q)rm -rf $(AGENT_REG) && mkdir -p $(AGENT_REG)/registry
+	$(Q)podman rm -ivf $(AGENT_REG) >/dev/null || true
+	$(Q)podman load -q -i $(TOP_BLDDIR)/core/docker/registry@2.tar >/dev/null
+	$(Q)podman run -q -d --name=$(AGENT_REG) -v ./$(AGENT_REG)/registry/:/var/lib/registry/ \
+		-p $(AGENT_PORT):5000 docker.io/library/registry:2 >/dev/null
+	$(Q)for i in $$(seq 30) ; do curl -sf http://localhost:$(AGENT_PORT)/v2/ >/dev/null && break ; sleep 1 ; done
+	$(call RUN_CMD_TIMED, \
+		skopeo copy --dest-tls-verify=false --retry-times 3 \
+			containers-storage:localhost/rancher/rancher-agent:v$(APP_VERSION) \
+			docker://localhost:$(AGENT_PORT)/rancher/rancher-agent:v$(APP_VERSION) ; \
+		rc=$$? ; podman rm -f $(AGENT_REG) >/dev/null ; [ $$rc -eq 0 ] \
+		,"  COPY    rancher agent image")
+	$(Q)tar -C $(AGENT_REG) -cf $@ registry
 
 install: $(CLI_BIN) $(CHART)
 	$(Q)cp -f $(CLI_BIN) /usr/local/bin/
@@ -93,7 +114,7 @@ clean:: testclean
 	$(Q)podman image rm -f localhost/bigstack/rancher-upstream:v$(APP_VERSION) 2>/dev/null || true
 
 BUILD += $(CLI_BIN) $(CHART)
-BUILDCLEAN += $(CLI_BIN) $(CLI_SRC_DIR) $(CHART) $(RANCHER_DIR)
+BUILDCLEAN += $(CLI_BIN) $(CLI_SRC_DIR) $(CHART) $(RANCHER_DIR) $(AGENT_TAR) $(AGENT_REG)
 
 SUBDIRS += cpo
 

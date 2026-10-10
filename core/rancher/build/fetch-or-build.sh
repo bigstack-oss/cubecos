@@ -46,6 +46,16 @@ if ! skopeo inspect --retry-times 2 "docker://$CACHE/bigstack/rancher-upstream:$
     build_from_source
 fi
 
+# Images cached before build-from-source.sh stubbed out partner-charts still carry it.
+for img in bigstack/rancher-upstream rancher/rancher-agent; do
+    stub=$(skopeo inspect --retry-times 2 --format '{{index .Labels "io.bigstack.rancher.partner-charts"}}' \
+               "docker://$CACHE/$img:$TAG" 2>/dev/null)
+    if [ "$stub" != "stub" ]; then
+        echo "    cache stale ($img still bundles partner-charts) -- building from source"
+        build_from_source
+    fi
+done
+
 echo "==> pulling server image from cache"
 if ! skopeo copy --retry-times 3 --preserve-digests \
         "docker://$CACHE/bigstack/rancher-upstream:$TAG" \

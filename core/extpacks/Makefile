@@ -15,9 +15,13 @@ NAS := $(TOP_BLDDIR)/nas
 
 AMPHORA := $(TOP_BLDDIR)/../amphora-x64-haproxy_epoxy.qcow2
 MANILA  := $(TOP_BLDDIR)/../manila-service-image_epoxy.qcow2
-RANCHER := $(TOP_BLDDIR)/../rancher-cluster-image-rke2-v1.32.4.raw
-EXTPACK := $(AMPHORA) $(MANILA) $(RANCHER)
-EXTPACK_MD5 := $(shell for E in $(EXTPACK); do echo $${E}.md5 ; done)
+RANCHER_SRC := app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw
+# The "_<ver>" suffix is what os_extpack_image_import strips to name the glance image.
+RANCHER := $(TOP_BLDDIR)/../rancher-cluster-image-rke2-v1.32.4_v1.32.4-rke2r1.qcow2
+RANCHER_VERSION := $(shell sed -n 's/^APP_VERSION := //p' $(COREDIR)/rancher/Makefile)
+RANCHER_AGENT := $(TOP_BLDDIR)/core/rancher/registry-rancher-agent_v$(RANCHER_VERSION).tar
+EXTPACK_MD5 := $(AMPHORA).md5 $(MANILA).md5 $(RANCHER).md5
+EXTPACK := $(AMPHORA) $(MANILA) $(RANCHER) $(RANCHER_AGENT)
 
 PROJ_PORTAL_EXT := $(MAIN_DIR)/proj.portal.ext
 PKGCLEAN += $(PROJ_PORTAL_EXT)
@@ -63,12 +67,18 @@ $(MANILA): $(NAS)
 $(MANILA).md5: $(MANILA)
 	$(Q)diff $@ $(NAS)/app-image/epoxy/manila-service-image_epoxy.qcow2.md5 2>/dev/null || ( cp -f $(NAS)/app-image/epoxy/manila-service-image_epoxy.qcow2 $< && md5sum $< | awk '{print $$1}' > $@ )
 
-$(RANCHER): $(NAS)
-	$(Q)cp $</app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw $@
-
+# The NAS raw is a fully allocated 40 GiB disk; ship it as compressed qcow2 (~4.3 GiB),
+# which the import converts back to raw. Here the .md5 holds the NAS raw's hash, so the
+# conversion reruns only when the source changes.
 .PHONY: $(RANCHER).md5
-$(RANCHER).md5: $(RANCHER)
-	$(Q)diff $@ $(NAS)/app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw.md5 2>/dev/null || ( cp -f $(NAS)/app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw $< && md5sum $< | awk '{print $$1}' > $@ )
+$(RANCHER).md5: $(NAS)
+	$(Q)( [ -s $(RANCHER) ] && diff -q $@ $(NAS)/$(RANCHER_SRC).md5 >/dev/null 2>&1 ) || \
+		( qemu-img convert -c -O qcow2 $(NAS)/$(RANCHER_SRC) $(RANCHER).tmp && \
+		  mv -f $(RANCHER).tmp $(RANCHER) && cp -f $(NAS)/$(RANCHER_SRC).md5 $@ )
+
+.PHONY: $(RANCHER_AGENT)
+$(RANCHER_AGENT):
+	$(Q)make -C ../rancher $(notdir $@)
 
 .PHONY: ext
 ext: $(PROJ_EXT) $(PROJ_PORTAL_EXT)
@@ -79,7 +89,7 @@ $(PROJ_EXT):
 	$(Q)$(MAKECMD) PROJ_EXT_LONGNAME=$(shell if readlink $(MAIN_DIR)/proj.release >/dev/null; then readlink -n $(MAIN_DIR)/proj.release ; else date '+%Y%m%d' ; fi).ext ext_build
 
 .PHONY: ext_build
-ext_build: $(EXTPACK_MD5)
+ext_build: $(EXTPACK_MD5) $(RANCHER_AGENT)
 	$(Q)mkdir -p $(SHIP_DIR)
 	$(call RUN_CMD_TIMED,$(SHELL) $(HEX_SCRIPTSDIR)/makeextpack $(SHIP_DIR)/$(PROJ_EXT_LONGNAME) $(EXTPACK),"  GEN     $(PROJ_EXT_LONGNAME)")
 	$(Q)ln -sf $(SHIP_DIR)/$(PROJ_EXT_LONGNAME) $(PROJ_EXT)

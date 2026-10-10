@@ -94,6 +94,27 @@ step "Fetch kontainer-driver-metadata ($CATTLE_KDM_BRANCH)"
 curl -sSLf "https://releases.rancher.com/kontainer-driver-metadata/${CATTLE_KDM_BRANCH}/data.json" -o ./data.json
 echo "  data.json: $(wc -c < ./data.json) bytes"
 
+# Replace the bundled partner-charts catalog with an empty repo: its charts need
+# internet images, and an empty valid repo keeps Rancher from cloning it.
+step "Stub out the bundled partner-charts catalog"
+awk '
+    /^FROM .* AS partner-charts$/ { in_stage = 1 }
+    in_stage && /git clone .*rancher-partner-charts\// { dir = $NF }
+    in_stage && /^FROM .* AS rke2-charts$/ {
+        if (dir == "") { print "ERROR: partner-charts clone not found" > "/dev/stderr"; exit 1 }
+        print "RUN rm -rf " dir " && mkdir -p " dir " && cd " dir " && \\"
+        print "    printf \"apiVersion: v1\\nentries: {}\\n\" > index.yaml && git init -q && git add index.yaml && \\"
+        print "    git -c user.name=cube -c user.email=cube@localhost commit -q -m \"empty partner-charts\""
+        print ""
+        in_stage = 0; done = 1
+    }
+    { print }
+    END { if (!done) { print "ERROR: partner-charts stage not found" > "/dev/stderr"; exit 1 } }
+' package/Dockerfile > package/Dockerfile.cube
+mv package/Dockerfile.cube package/Dockerfile
+# fetch-or-build.sh rejects cached images without this label.
+STUB_LABEL=io.bigstack.rancher.partner-charts=stub
+
 # `COPY --from=<image>` on an image that is not a build stage: buildkit pulls it
 # implicitly, buildah does not, and podman here runs short-name-mode=enforcing,
 # so an unqualified ref fails outright ("no stage or image found with that
@@ -132,13 +153,14 @@ podman build \
   --build-arg "CATTLE_RANCHER_PROVISIONING_CAPI_VERSION=$CATTLE_RANCHER_PROVISIONING_CAPI_VERSION" \
   --build-arg "CATTLE_CSP_ADAPTER_MIN_VERSION=$CATTLE_CSP_ADAPTER_MIN_VERSION" \
   --build-arg "CATTLE_FLEET_VERSION=$CATTLE_FLEET_VERSION" \
+  --label "$STUB_LABEL" \
   -t "$IMAGE" \
   .
 
 # Downstream cluster agents pull the tag Rancher advertises, and with
 # IMAGE_REPO=rancher that is `rancher/rancher-agent:$TAG` -- absent from Docker
-# Hub past 2.11.3.  Build it here and let copy-images.sh seed it into the
-# on-cluster registry, which containerd mirrors docker.io to.
+# Hub past 2.11.3.  Build it here; core/extpacks ships it for the on-cluster
+# registry, which containerd mirrors docker.io to.
 step "Build $AGENT_IMAGE (target: agent)"
 podman build \
   --target agent \
@@ -150,6 +172,7 @@ podman build \
   --build-arg "RANCHER_REPO=$REPO" \
   --build-arg "CATTLE_RANCHER_WEBHOOK_VERSION=$CATTLE_RANCHER_WEBHOOK_VERSION" \
   --build-arg "CATTLE_RANCHER_PROVISIONING_CAPI_VERSION=$CATTLE_RANCHER_PROVISIONING_CAPI_VERSION" \
+  --label "$STUB_LABEL" \
   -t "$AGENT_IMAGE" \
   .
 
