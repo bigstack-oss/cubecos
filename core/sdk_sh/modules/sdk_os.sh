@@ -1836,10 +1836,11 @@ os_octavia_init()
 # non-master reinit skips the master-only network setup). Idempotent.
 os_octavia_init_peers()
 {
-    # Restart roll: peers kept their port, ids and services; only o-hm0's
-    # ip/route is lost on reboot. Bring it up in parallel, reinit on failure.
-    local fast=0
-    is_rolling_restart_boot && fast=1
+    # Peers keep their port, ids and services across a reboot and restore
+    # o-hm0 themselves (PostBootRecovery); check/bring it up in parallel and
+    # reinit only on failure. An upgrade roll still reinits (config changes).
+    local fast=1
+    [ "$($HEX_SDK power_roll_kind_active 2>/dev/null)" = "upgrade" ] && fast=0
 
     local node pids=()
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
@@ -1868,13 +1869,27 @@ os_octavia_node_fast_up()
     /usr/sbin/route -n | grep -q octavia-hm0 || return 1
     systemctl is-active -q octavia-worker || systemctl start octavia-worker
     systemctl is-active -q octavia-health-manager || systemctl start octavia-health-manager
-    systemctl is-active -q octavia-worker && systemctl is-active -q octavia-health-manager
+    systemctl is-active -q octavia-worker || return 1
+    # held by its boot gate, it retries until the gate opens
+    os_octavia_hm_gated || systemctl is-active -q octavia-health-manager
+}
+
+# True while cube-planned-maintenance.conf refuses octavia-health-manager.
+os_octavia_hm_gated()
+{
+    [ -e $PLANNED_MAINT_MARKER ] || ! grep -q "^done " /run/cube_bootup_status 2>/dev/null
 }
 
 # Restart roll: bring up this node's own o-hm0 in its own roll step.
 os_octavia_roll_node_up()
 {
     is_rolling_restart_boot || return 0
+    os_octavia_boot_node_up
+}
+
+# Any boot: o-hm0 loses its ip/route on reboot; bring it up on this node.
+os_octavia_boot_node_up()
+{
     is_first_three_compute_node || return 0
     os_octavia_node_fast_up && return 0
     Quiet -n $HEX_CFG reinit_octavia

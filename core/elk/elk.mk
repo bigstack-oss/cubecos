@@ -30,6 +30,8 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/config.yml .$(OSEARCH_CONF_SECURITY_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/roles.yml .$(OSEARCH_CONF_SECURITY_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/roles_mapping.yml .$(OSEARCH_CONF_SECURITY_DIR)
+	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/$(OSEARCH).service.d
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/opensearch-start-timeout.conf ./etc/systemd/system/$(OSEARCH).service.d/
 
 #
 # OpenSearch-Dashboards

@@ -2,9 +2,13 @@
 # Restart roll: per-node o-hm0 bring-up + the pre-drain health-manager gate.
 T=$(mktemp -d)
 D=$(dirname $0)/..
-for f in os_octavia_roll_node_up os_octavia_hm_peer_ready ; do
+for f in os_octavia_roll_node_up os_octavia_boot_node_up os_octavia_hm_peer_ready ; do
     sed -n "/^$f()/,/^}/p" $D/modules/sdk_os.sh >> $T/fn.sh
 done
+# the real fast path, renamed (the roll_node_up cases stub it), /run paths moved
+for f in os_octavia_node_fast_up os_octavia_hm_gated ; do
+    sed -n "/^$f()/,/^}/p" $D/modules/sdk_os.sh
+done | sed -e "s|^os_octavia_node_fast_up()|real_fast_up()|" -e "s|/run/|$T/run/|g" >> $T/fn.sh
 for f in _power_roll_octavia_ready _power_roll_octavia_hm_host ; do
     sed -n "/^$f()/,/^}/p" $D/modules/sdk_power.sh >> $T/fn.sh
 done
@@ -25,6 +29,35 @@ ROLL=0;                chk "not a restart-roll boot" "$(run)" ""
 ROLL=1 FIRST3=0;       chk "not a health-manager node" "$(run)" ""
 FIRST3=1 FAST=1;       chk "fast path ok" "$(run)" "fast;"
 FAST=0;                chk "fast path fails -> reinit" "$(run)" "fast;cfg reinit_octavia;"
+
+# --- os_octavia_node_fast_up: a gate-held health-manager is not a failure ---
+mkdir -p $T/run; touch $T/run/cube_commit_done
+PLANNED_MAINT_MARKER=$T/maint HM_ACTIVE=0
+os_octavia_cfg_ids_ok(){ :; }
+os_octavia_hm0_up(){ :; }
+/sbin/ip(){ echo "inet 172.16.0.11/16"; }
+/usr/sbin/route(){ echo "172.16.0.0 0.0.0.0 255.255.0.0 U 0 0 0 octavia-hm0"; }
+systemctl(){
+    case "$2 $3" in
+        "-q octavia-worker") return 0 ;;
+        "-q octavia-health-manager") [ $HM_ACTIVE = 1 ] ;;
+        *) echo "$*" >> $CALLS; [ $HM_ACTIVE = 1 ] ;;
+    esac
+}
+fast(){ : > $CALLS; real_fast_up && echo ok || echo fail; }
+
+rm -f $T/maint $T/run/cube_bootup_status
+chk "boot not done: gate holds hm -> ok" "$(fast)" "ok"
+chk "  start still requested" "$(tr '\n' ';' < $CALLS)" "start octavia-health-manager;"
+echo "done 1" > $T/run/cube_bootup_status
+chk "boot done, hm fails to start -> fail" "$(fast)" "fail"
+touch $T/maint
+chk "planned maintenance holds hm -> ok" "$(fast)" "ok"
+rm -f $T/maint; HM_ACTIVE=1
+chk "boot done, hm active -> ok" "$(fast)" "ok"
+rm -f $T/run/cube_commit_done
+chk "not committed -> fail" "$(fast)" "fail"
+unset -f systemctl /sbin/ip /usr/sbin/route
 
 # --- os_octavia_hm_peer_ready ---
 NODES="n1 n2 n3 n4" UP=""

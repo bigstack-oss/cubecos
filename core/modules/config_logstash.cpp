@@ -294,15 +294,16 @@ WriteTemplateConfigs(bool ha, const std::string &hostname,
 // installs these any more. That is deliberate: logstash-output-opensearch reaches them
 // through a File.exists? that Ruby 3.4 removed, which capped LOGSTASH_VER at the 9.3.x
 // line. Installing them here is what lets that pin move -- and unlike the plugin, which
-// only writes a template that is absent, this re-applies a changed one on every commit.
+// only writes a template that is absent, this re-applies a changed one (md5 fast path in
+// the sdk helper). Without a cluster manager the helper defers; cluster_start retries.
 static bool
-InstallTemplates(void)
+InstallTemplates(int waitSecs)
 {
     // Non-fatal: the pipelines still index without them, only with opensearch's dynamic
-    // mappings instead of ours, and the next commit installs them. The sdk helper retries
-    // on its own, so there is no wait_for_service here.
-    HexUtilSystemF(0, 0, HEX_SDK " opensearch_template_install logs %s", LOG_TPL);
-    HexUtilSystemF(0, 0, HEX_SDK " opensearch_template_install default %s", DEF_TPL);
+    // mappings until the next commit or cluster_start installs them.
+    if (HexUtilSystemF(0, 0, HEX_SDK " opensearch_template_install logs %s %d", LOG_TPL, waitSecs) != 0)
+        waitSecs = 0;
+    HexUtilSystemF(0, 0, HEX_SDK " opensearch_template_install default %s %d", DEF_TPL, waitSecs);
 
     return true;
 }
@@ -381,7 +382,7 @@ Commit(bool modified, int dryLevel)
     WriteConfigs(qkafkaHosts);
 
     if (IsControl(s_eCubeRole) && !IsModerator(s_eCubeRole))
-        InstallTemplates();
+        InstallTemplates(60);
 
     CommitService(true);
 
@@ -391,6 +392,22 @@ Commit(bool modified, int dryLevel)
     WriteLogRotateConf(ab_log_conf);
 
     return true;
+}
+
+// Runs on the master once every node is up (boot, cluster start, set_ready): installs
+// what the commit deferred on a cold boot, when the master's opensearch was alone.
+static int
+ClusterStartMain(int argc, char **argv)
+{
+    if (argc != 1)
+        return EXIT_FAILURE;
+
+    if (IsUndef(s_eCubeRole) || !IsControl(s_eCubeRole) || IsModerator(s_eCubeRole))
+        return EXIT_SUCCESS;
+
+    InstallTemplates(120);
+
+    return EXIT_SUCCESS;
 }
 
 CONFIG_MODULE(logstash, 0, 0, 0, 0, Commit);
@@ -404,4 +421,6 @@ CONFIG_REQUIRES(logstash, kapacitor);
 // extra tunings
 CONFIG_OBSERVES(logstash, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(logstash, cubesys, ParseCube, NotifyCube);
+
+CONFIG_TRIGGER_WITH_SETTINGS(logstash, "cluster_start", ClusterStartMain);
 

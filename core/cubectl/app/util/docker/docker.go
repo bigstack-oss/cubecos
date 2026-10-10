@@ -6,14 +6,15 @@ import (
 	"net/http"
 	"time"
 
-	"cubectl/util/settings"
-
 	"github.com/pkg/errors"
 )
 
 var (
 	Binary            = "/usr/bin/docker"
 	LocalRegistryPort = "5080"
+	// localhost is plain http to docker (127.0.0.0/8 is insecure by default)
+	// and is the endpoint k3s pulls from (registries.yaml).
+	LocalRegistry = "localhost:" + LocalRegistryPort
 )
 
 type Image struct {
@@ -39,8 +40,8 @@ var manifestTypes = "application/vnd.docker.distribution.manifest.v2+json," +
 // ExistsInCubeRegistry reports whether the node's registry already serves this
 // image:tag, so callers can skip an expensive load+push of what is there.
 func ExistsInCubeRegistry(image Image) bool {
-	url := fmt.Sprintf("http://%s:%s/v2/%s/manifests/%s",
-		settings.GetHostname(), LocalRegistryPort, image.Name, image.Tag)
+	url := fmt.Sprintf("http://%s/v2/%s/manifests/%s",
+		LocalRegistry, image.Name, image.Tag)
 	req, err := http.NewRequest(http.MethodHead, url, nil)
 	if err != nil {
 		return false
@@ -57,6 +58,21 @@ func ExistsInCubeRegistry(image Image) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// CubeRegistryReachable reports whether the node's registry answers at all.
+func CubeRegistryReachable() error {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://%s/v2/", LocalRegistry))
+	if err != nil {
+		return errors.Wrap(err, "local registry unreachable")
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("local registry returned %s", resp.Status)
+	}
+
+	return nil
+}
+
 func PushImageToCubeRegistry(image Image) error {
 	_, outErr, err := util.ExecCmd(Binary, "load", "-i", image.LocalTar)
 	if err != nil {
@@ -64,7 +80,7 @@ func PushImageToCubeRegistry(image Image) error {
 	}
 
 	officialImage := fmt.Sprintf("%s/%s:%s", image.Registry, image.Name, image.Tag)
-	localImage := fmt.Sprintf("%s:%s/%s:%s", settings.GetHostname(), LocalRegistryPort, image.Name, image.Tag)
+	localImage := fmt.Sprintf("%s/%s:%s", LocalRegistry, image.Name, image.Tag)
 	_, outErr, err = util.ExecCmd(Binary, "tag", officialImage, localImage)
 	if err != nil {
 		return errors.Wrap(err, outErr)

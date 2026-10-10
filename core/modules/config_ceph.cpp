@@ -1540,8 +1540,10 @@ InitCephClient(const std::string& master, const std::string& peer)
     return true;
 }
 
+// defer: on a boot pass, let ceph_mount_cephfs give up early while peer OSDs
+// are down; cube_cluster_start_cluster finishes it via ceph_cephfs_deferred_bringup
 static bool
-MountCephfsStore()
+MountCephfsStore(bool defer)
 {
     // Create mount point CEPHFS_STORE_DIR if not already
     if (HexMakeDir(CEPHFS_STORE_DIR, "root", "root", 0755) != 0) {
@@ -1550,7 +1552,7 @@ MountCephfsStore()
     }
 
     // Mount CEPHFS_STORE_DIR on local node
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_mount_cephfs");
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_mount_cephfs%s", defer ? " --defer" : "");
 
     if (HexSystemF(0, "mountpoint -q %s", CEPHFS_STORE_DIR) == 0) {
         HexSystemF(0, "mkdir -p %s/backup", CEPHFS_STORE_DIR);
@@ -1999,7 +2001,7 @@ Commit(bool modified, int dryLevel)
         // pg_autoscaler is always on module since pacific
         // EnablePgAutoScale();
         InitCephClient(master, peer);
-        MountCephfsStore();
+        MountCephfsStore(IsBootstrap());
 
     }
 

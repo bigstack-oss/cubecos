@@ -3390,8 +3390,24 @@ ceph_dashboard_idp_config()
     done
 }
 
+CEPHFS_DEFERRED_MARKER=${CEPHFS_DEFERRED_MARKER:-/run/cube_cephfs_deferred}
+CEPHFS_DEFER_GRACE=${CEPHFS_DEFER_GRACE:-60}
+
+# 0 when OSDs are down (up < in) or PGs are inactive; 1 when healthy or unknown
+ceph_storage_degraded()
+{
+    local s
+    s=$($CEPH status -f json 2>/dev/null) || return 1
+    echo "$s" | jq -e '(.osdmap.num_up_osds < .osdmap.num_in_osds) or
+        ([.pgmap.pgs_by_state[]? | select(.state_name | test("(^|\\+)active(\\+|$)") | not) | .count] | add // 0) > 0' >/dev/null 2>&1
+}
+
+# --defer: give up early (rc 2, marker set) when storage stays degraded, for
+# ceph_cephfs_deferred_bringup to finish once the peers' OSDs are up
 ceph_mount_cephfs()
 {
+    local defer=0
+    [ "${1:-}" = "--defer" ] && defer=1
     # derive the cephfs secretfile from the migrated admin keyring when PPU
     # migration made config skip client setup (else the mount fails)
     if [ ! -s /etc/ceph/admin.key ] && [ -s /etc/ceph/ceph.client.admin.keyring ] ; then
@@ -3400,9 +3416,14 @@ ceph_mount_cephfs()
     mountpoint -q $CEPHFS_STORE_DIR && return 0
     # A cold PPU boot races ahead of the cluster reforming; wait (bounded) for
     # ceph + a serviceable MDS before mounting, then retry and verify.
-    local _deadline=$((SECONDS + 300)) i
+    local _start=$SECONDS _deadline=$((SECONDS + 300)) i
     while [ $SECONDS -lt $_deadline ] ; do
         $CEPH -s >/dev/null 2>&1 && $CEPH mds stat 2>/dev/null | grep -q up:active && break
+        if [ $defer -eq 1 ] && [ $((SECONDS - _start)) -ge $CEPHFS_DEFER_GRACE ] && ceph_storage_degraded ; then
+            log_warning "ceph_mount_cephfs: storage degraded (OSDs down/PGs inactive), deferring cephfs mount on $(hostname)"
+            touch $CEPHFS_DEFERRED_MARKER
+            return 2
+        fi
         sleep 5
     done
     for i in {1..6} ; do
@@ -3414,7 +3435,23 @@ ceph_mount_cephfs()
         sleep 10
     done
     log_error "ceph_mount_cephfs: cephfs not mounted after retries on $(hostname)"
+    # no mon quorum skips the degraded test above; leave the retry to the deferred bring-up
+    [ $defer -eq 1 ] && { touch $CEPHFS_DEFERRED_MARKER ; return 2 ; }
     return 1
+}
+
+# Finish a mount ceph_mount_cephfs --defer gave up on: mount, then start what
+# MountCephfsStore starts after it. No-op unless this node deferred.
+ceph_cephfs_deferred_bringup()
+{
+    [ -e $CEPHFS_DEFERRED_MARKER ] || return 0
+    ceph_mount_cephfs || return 1
+    rm -f $CEPHFS_DEFERRED_MARKER
+    log_info "ceph_cephfs_deferred_bringup: cephfs mounted on $(hostname), starting dependents"
+    Quiet -n systemctl start ceph-umountfs
+    ceph_ganesha_grace_join || log_error "ceph_cephfs_deferred_bringup: $(hostname) not in the ganesha grace DB"
+    Quiet -n systemctl start nfs-ganesha
+    return 0
 }
 
 ceph_node_group_list()

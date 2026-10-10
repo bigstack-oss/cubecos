@@ -329,10 +329,26 @@ cube_cluster_start_node()
 
 # Cluster-wide half: runs ONCE from the master when all nodes are up (master
 # rolled last => end of roll; or after a full bring-up). All ops idempotent.
+# Finish cephfs mounts a cold boot deferred (ceph_mount_cephfs --defer) on every
+# node. Needs peer OSDs up: run at cluster start and again at the end of the master bring-up.
+cube_cephfs_deferred_bringup_all()
+{
+    local _n _pids=()
+    for _n in $(cubectl node list -j 2>/dev/null | jq -r '.[].hostname') ; do
+        # subshell: remote_run exits on an unsshable node; parallel: a slow node
+        # doesn't hold the rest
+        ( remote_run "$_n" "$HEX_SDK ceph_cephfs_deferred_bringup" ) </dev/null >/dev/null 2>&1 &
+        _pids+=($!)
+    done
+    [ ${#_pids[@]} -eq 0 ] || wait "${_pids[@]}"
+    return 0
+}
+
 cube_cluster_start_cluster()
 {
     _cube_cluster_start_env
     touch /run/cube_cluster_wide.ran # marker: this node ran the cluster-wide half (expect: master only)
+    cube_cephfs_deferred_bringup_all
     if [ "$VERBOSE" == "1" ] ; then
         /usr/sbin/hex_config -p trigger cluster_start
     else
@@ -1332,7 +1348,12 @@ cube_cluster_resume_after_stop()
         sleep 10
     done
 
-    $HEX_SDK power_restore_recorded_vms
+    # keep the marker (services stay gated, cluster check flags it) if the
+    # recorded VMs could not be read, rather than dropping them silently
+    if ! $HEX_SDK power_restore_recorded_vms ; then
+        log_error "cluster bootup: VM restore could not read the recorded VM list; planned-maintenance marker kept"
+        return 1
+    fi
     $HEX_SDK os_planned_maintenance_clear
 }
 

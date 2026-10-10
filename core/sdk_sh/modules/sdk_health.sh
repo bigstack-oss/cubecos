@@ -4493,3 +4493,94 @@ _health_log_purge()
         fi
     done
 }
+
+# Boot-end catch-up, run once by the master after every node is ready. On a cold
+# boot the master commits alone (peers wait for its bootstrap marker), so start
+# steps needing peers fail there and nothing retries them. Finishes those steps
+# with the actions the health repairs use; runs regardless of cube_repair_optout.
+# Bounded by $1 seconds (default 600), idempotent, logs every action.
+_health_late_log()
+{
+    echo "late-start: $*"
+    logger -t late-start "$*" 2>/dev/null
+    return 0
+}
+
+# hosts whose cinder-backup is enabled but reported down
+_health_late_backup_down()
+{
+    $OPENSTACK volume service list -f json 2>/dev/null \
+        | jq -r '.[] | select(.Binary == "cinder-backup" and .Status == "enabled" and .State == "down") | .Host' 2>/dev/null \
+        | sed 's/@.*//' | sort -u
+}
+
+health_late_start_sweep()
+{
+    local deadline=$((SECONDS + ${1:-600}))
+    local ERR_MSG= node
+
+    # sampled now, acted on later: a backup down in both samples is not just starting
+    local backup_down=$(_health_late_backup_down) backup_t0=$SECONDS
+
+    # etcd-watch (health etcd code 3/4), only once etcd has full quorum
+    local total=$($ETCDCTL member list 2>/dev/null | wc -l)
+    local online=$($ETCDCTL endpoint health --cluster 2>/dev/null | grep -c "is healthy")
+    if [ "$total" -gt 0 ] && [ "$online" = "$total" ] ; then
+        local watch_down=() behind=()
+        _health_etcd_watch_scan
+        if [ ${#watch_down[@]} -gt 0 -o ${#behind[@]} -gt 0 ] ; then
+            _health_late_log "etcd-watch down on [${watch_down[*]}], behind on [${behind[*]}]: start + tuning apply"
+            _health_etcd_watch_repair "${watch_down[@]}" "${behind[@]}"
+        else
+            _health_late_log "etcd-watch ok"
+        fi
+    else
+        _health_late_log "etcd $online/$total healthy: etcd-watch left to retry on its own"
+    fi
+
+    # ceph mgr dashboard (health ceph_mgr code 5)
+    local active=$($CEPH mgr stat -f json 2>/dev/null | jq -r '.active_name // empty')
+    local port=7442
+    grep -q "ha = false" $SETTINGS_TXT 2>/dev/null && port=7443
+    if [ -z "$active" ] ; then
+        _health_late_log "no active ceph-mgr: dashboard skipped"
+    elif timeout 5 curl -sIk https://${active}:${port}/ceph/ 2>/dev/null | grep -q "200 OK" ; then
+        _health_late_log "ceph dashboard ok on $active"
+    else
+        _health_late_log "ceph dashboard not serving on $active: bouncing module"
+        $HEX_SDK ceph_mgr_dashboard_ensure && _health_late_log "ceph dashboard serving" \
+            || _health_late_log "ceph dashboard still not serving"
+    fi
+
+    # nfs-ganesha is brought up by the cephfs deferred bring-up; report only
+    local ganesha_down=$(cmd -cv "systemctl show -p SubState nfs-ganesha" 2>/dev/null | grep -v "SubState=running" | cut -d"|" -f1 | xargs)
+    [ -z "$ganesha_down" ] || _health_late_log "nfs-ganesha not running on [$ganesha_down] (not handled here)"
+
+    # cinder-backup (health cinder code 5): its swift backend gives up for good on
+    # a 503, so restart only once swift answers through the VIP
+    if [ -z "$backup_down" ] ; then
+        _health_late_log "cinder-backup ok"
+        return 0
+    fi
+    local swift="http://$(shared_id):8890/info"
+    until [ "$(timeout 10 curl -s -o /dev/null -w '%{http_code}' $swift 2>/dev/null)" = "200" ] ; do
+        if [ $SECONDS -ge $deadline ] ; then
+            _health_late_log "swift $swift not answering: cinder-backup left down on [$(echo $backup_down)]"
+            return 1
+        fi
+        sleep 10
+    done
+    local wait=$((backup_t0 + 60 - SECONDS))
+    [ $wait -le 0 ] || sleep $wait
+    local still=$(comm -12 <(echo "$backup_down") <(_health_late_backup_down))
+    for node in $still ; do
+        if is_sshable $node ; then
+            _health_late_log "cinder-backup down on $node: restarting"
+            remote_systemd_restart $node openstack-cinder-backup
+        else
+            _health_late_log "cinder-backup down on $node: not sshable, skipped"
+        fi
+    done
+    [ -n "$still" ] || _health_late_log "cinder-backup recovered on its own"
+    return 0
+}

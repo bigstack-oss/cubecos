@@ -24,11 +24,13 @@ func runThisnodeStart(cmd *cobra.Command, args []string) error {
 			return errors.WithStack(err)
 		}
 		if err := waitEtcdHealthy(60 * time.Second); err != nil {
+			startEtcdWatch()
 			return errors.WithStack(err)
 		}
 	}
 
 	if err := runTuningPull(nil, []string{}); err != nil {
+		startEtcdWatch()
 		return errors.WithStack(err)
 	}
 
@@ -49,6 +51,14 @@ func runThisnodeStart(cmd *cobra.Command, args []string) error {
 	//}
 
 	return nil
+}
+
+// startEtcdWatch starts the watcher even when etcd has no quorum yet (cold
+// boot): it retries until etcd serves instead of staying stopped for good.
+func startEtcdWatch() {
+	if _, _, err := util.ExecCmd("systemctl", "start", "etcd-watch"); err != nil {
+		zap.S().Warnf("Failed to start etcd-watch: %v", err)
+	}
 }
 
 func runThisnodeNew(cmd *cobra.Command, args []string) error {
