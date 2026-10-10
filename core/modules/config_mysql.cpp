@@ -224,7 +224,9 @@ WriteConfig(const bool ha, const std::string& ctrl, const std::string& ctrlIp, c
         fprintf(fout, "wsrep_provider = /usr/lib64/galera-4/libgalera_smm.so\n");
         // 1G keeps a rejoin on IST across a reboot-length outage (SST breaks on 10.6->10.11);
         // gcache.recover scans the whole ring at start, so bigger costs startup time
-        fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=1G;pc.ignore_sb=TRUE\"\n");
+        // no pc.ignore_sb: with two members left, a link blip would leave both
+        // sides primary (split brain); losing quorum until it heals is recoverable
+        fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=1G\"\n");
         fprintf(fout, "wsrep_cluster_name = \"cube_galera_cluster\"\n");
         fprintf(fout, "wsrep_cluster_address = \"gcomm://%s\"\n", ctrlAddrs.c_str());
         fprintf(fout, "wsrep_sst_method = rsync\n");
