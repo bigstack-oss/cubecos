@@ -60,11 +60,21 @@ OSEARCH_BOARDS_HOME := /usr/share/$(OSEARCH)-dashboards
 
 ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/$(OSEARCH_VER)/opensearch-dashboards-$(OSEARCH_VER)-linux-x64.rpm
 
+# Apps that only drive the OpenSearch plugins OSEARCH_UNUSED_PLUGINS removes, so left in
+# place they would be pages that fail on every request. investigationDashboards has no
+# plugin of its own but calls ml, ppl/sql and observability's notebooks. The two apps whose
+# plugins stay -- indexManagementDashboards and queryInsightsDashboards -- stay with them.
+OSEARCH_BOARDS_UNUSED_APPS := alertingDashboards anomalyDetectionDashboards assistantDashboards \
+	flowFrameworkDashboards investigationDashboards mlCommonsDashboards notificationsDashboards \
+	observabilityDashboards queryWorkbenchDashboards reportsDashboards searchRelevanceDashboards \
+	securityAnalyticsDashboards
+
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove securityDashboards
 	$(Q)# customImportMapDashboards adds custom map layers and styles. The shipped saved
 	$(Q)# objects (export.ndjson) are an index pattern and a saved search, with no map in them.
 	$(Q)chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove customImportMapDashboards
+	$(Q)$(foreach a,$(OSEARCH_BOARDS_UNUSED_APPS),chroot $(ROOTDIR) $(OSEARCH_BOARDS_HOME)/bin/opensearch-dashboards-plugin --allow-root remove $(a) && ) true
 	$(Q)chroot $(ROOTDIR) mkdir -p $(OSEARCH_BOARDS_LOG_DIR)
 	$(Q)cp -f $(ROOTDIR)$(OSEARCH_BOARDS_CONF_DIR)/opensearch_dashboards.yml $(ROOTDIR)$(OSEARCH_BOARDS_CONF_DIR)/opensearch_dashboards.yml.orig
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch-dashboards/opensearch-dashboards.service ./etc/systemd/system
