@@ -7,4 +7,6 @@ docker.io/rancher/system-upgrade-controller:v0.15.2
 docker.io/rancher/kubectl:v1.32.2
 docker.io/rancher/k3s-upgrade:v1.26.6-k3s1
 docker.io/rancher/mirrored-cluster-api-controller:v1.9.5
-docker.io/rancher/machine:v0.15.0-rancher127
+docker.io/rancher/machine:v0.15.0-rancher127.2
+docker.io/rancher/system-agent-installer-rke2:v1.32.4-rke2r1
+docker.io/rancher/system-agent:v0.3.12-suc

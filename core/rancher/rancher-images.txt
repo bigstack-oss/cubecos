@@ -81,7 +81,7 @@ rancher/kuberlr-kubectl:v4.0.1
 rancher/kuberlr-kubectl:v4.0.2
 rancher/local-path-provisioner:v0.0.30
 rancher/local-path-provisioner:v0.0.31
-rancher/machine:v0.15.0-rancher127
+rancher/machine:v0.15.0-rancher127.2
 rancher/mirrored-bci-busybox:15.6.24.2
 rancher/mirrored-bci-micro:15.6.24.2
 rancher/mirrored-brancz-kube-rbac-proxy:v0.18.2
