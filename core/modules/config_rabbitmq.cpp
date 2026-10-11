@@ -96,6 +96,8 @@ WriteConfig(const std::string& myip)
     }
 
     fprintf(fout, "cluster_partition_handling = pause_minority\n");
+    // detect a dead peer in ~15 s instead of 60 s
+    fprintf(fout, "net_ticktime = 15\n");
 
     // The two listener tunings are independent so a cluster can move in stages: bring
     // the ssl listener up while the plaintext one is still serving, repoint the clients
@@ -227,9 +229,22 @@ IsReady(int timeout, const std::string& hostname)
 static bool
 CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, const std::string& ctrlHosts)
 {
+    // master's boot commit with no peer broker up is a cold start: a power loss
+    // leaves queues homed on dead brokers unusable, so form a fresh cluster.
+    // Peers (still waiting on this commit) are wiped too and join it.
+    if (enabled && ha && IsBootstrap() && G(IS_MASTER) && !IsRunning(hostname) &&
+        HexSystemF(0, HEX_SDK " os_rabbitmq_peer_running >/dev/null 2>&1") != 0) {
+        HexLogInfo("%s: no peer broker running, cold start: wiping mnesia on the controls", NAME);
+        HexSystemF(0, "rm -rf /var/lib/rabbitmq/mnesia/*");
+        unlink(SETUP_MARK);
+        HexUtilSystemF(0, 0, HEX_SDK " os_rabbitmq_cold_reset_peers");
+    }
+
     if (!SystemdCommitService(enabled, NAME, true)) {
         HexLogInfo("force %s bootstrap - removing data (CAUTION)", NAME);
         HexSystemF(0, "rm -rf /var/lib/rabbitmq/mnesia/*");
+        // wiped mnesia has no cluster membership: redo the HA setup below
+        unlink(SETUP_MARK);
         SystemdCommitService(enabled, NAME, true);
     }
 
@@ -245,7 +260,8 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
             bool isMaster = G(IS_MASTER);
             if (isMaster && access(CONTROL_REJOIN, F_OK) != 0) {
                 // Each exchange or queue will have at most one policy matching
-                HexUtilSystemF(0, 0, CONTROL_FMT "set_policy ha-all \".*\" '{\"expires\": 86400, \"ha-mode\": \"all\", \"ha-sync-mode\": \"automatic\"}' --apply-to all --priority 0", hostname.c_str());
+                // skip amq.*, reply_ and fanout queues: transient, mirroring only slows failover
+                HexUtilSystemF(0, 0, CONTROL_FMT "set_policy ha-all '^(?!(amq\\.)|(.*_fanout_)|(reply_)).*' '{\"expires\": 86400, \"ha-mode\": \"all\", \"ha-sync-mode\": \"automatic\"}' --apply-to all --priority 0", hostname.c_str());
 
                 std::vector<std::string> peers = GetControllerPeers(hostname, ctrlHosts);
                 for (auto & p : peers) {

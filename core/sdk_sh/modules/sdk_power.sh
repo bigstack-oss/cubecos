@@ -213,6 +213,28 @@ _power_roll_api_ready()
     return 1
 }
 
+# True if <ip> runs an octavia health-manager and octavia is enabled and
+# initialised (checked on <master>).
+_power_roll_octavia_hm_host()
+{
+    local ip=$1 master=$2
+    source hex_tuning $SETTINGS_TXT octavia.enabled
+    [ "x$T_octavia_enabled" != "xfalse" ] || return 1
+    echo ",$($HEX_SDK os_octavia_hm_nodes)," | grep -q ",$ip," || return 1
+    ( remote_run $master "test -e /etc/appliance/state/octavia_init_done" ) </dev/null >/dev/null 2>&1
+}
+
+# Wait (bounded) for another health-manager node to have o-hm0 up before $1 goes down.
+_power_roll_octavia_ready()
+{
+    local deadline=$(( $(date +%s) + ${ROLLING_OCTAVIA_HM_TIMEOUT:-300} ))
+    while : ; do
+        $HEX_SDK os_octavia_hm_peer_ready "$1" && return 0
+        [ $(date +%s) -ge $deadline ] && return 1
+        sleep ${ROLLING_OCTAVIA_HM_POLL:-10}
+    done
+}
+
 _power_roll_kick()
 {
     # Drain (if compute-bearing) and reboot one node. Pauses the job on any
@@ -238,6 +260,11 @@ _power_roll_kick()
     local apierr=$(_power_roll_api_ready)
     if [ -n "$apierr" ] ; then
         _power_roll_pause "$apierr -- a rejoined node is still starting; wait, then run rolling_$(_power_roll_cli_verb) continue"
+        return 1
+    fi
+
+    if [ "$(_power_roll_kind)" = restart ] && _power_roll_octavia_hm_host "$ip" "$master" && ! _power_roll_octavia_ready "$host" ; then
+        _power_roll_pause "no octavia health-manager other than $host has octavia-hm0 up -- amphora heartbeats would stop with $host down; once octavia-hm0 is back on another node, run rolling_restart continue"
         return 1
     fi
 
@@ -501,6 +528,56 @@ power_bootup_status()
     done
 }
 
+# ===================== master override =====================
+# One-time master control for this boot, for when the first control host is
+# dead at boot. The marker lives in /run on each control, so a reboot drops it.
+
+# Name <host> master: write the override on <host>, here and on every other
+# reachable control. Refused unless <host> is a control, this node has not
+# committed and the current master answers neither ping nor ssh.
+power_master_override()
+{
+    local host=$1 master n
+    source $HEX_TUN $SETTINGS_TXT
+    [ -n "$host" ] || Error "usage: power_master_override <host>"
+    echo ",$T_cubesys_control_hosts," | grep -q ",$host," || Error "$host is not a control node"
+    [ ! -e $CUBE_DONE ] || Error "$HOSTNAME has already committed"
+    master=$(cube_master_control)
+    [ "x$master" != "x$host" ] || Error "$host is already the master control"
+    if ping -c1 -W2 $master >/dev/null 2>&1 || is_sshable $master ; then
+        Error "master control $master is reachable"
+    fi
+    if [ "x$host" != "x$HOSTNAME" ] ; then
+        ( is_sshable $host && ssh root@$host "echo $host > $CUBE_MASTER_OVERRIDE" ) </dev/null >/dev/null 2>&1 || Error "$host is not sshable"
+    fi
+    echo $host > $CUBE_MASTER_OVERRIDE
+    for n in $(echo $T_cubesys_control_hosts | tr ',' ' ') ; do
+        [ "x$n" = "x$host" -o "x$n" = "x$HOSTNAME" -o "x$n" = "x$master" ] && continue
+        # subshell: an unreachable control must not stop the rest
+        ( is_sshable $n && ssh root@$n "echo $host > $CUBE_MASTER_OVERRIDE" ) </dev/null >/dev/null 2>&1 || log_warning "master override: $n not reachable, it adopts the override when it boots"
+    done
+    log_info "master override: $host is master control for this boot (was $master)"
+    echo "$host is master control for this boot"
+}
+
+# Copy the override from a reachable control when this node has none.
+power_master_override_adopt()
+{
+    [ -s $CUBE_MASTER_OVERRIDE ] && return 0
+    source $HEX_TUN $SETTINGS_TXT
+    local n o
+    for n in $(echo $T_cubesys_control_hosts | tr ',' ' ') ; do
+        [ "x$n" = "x$HOSTNAME" ] && continue
+        o=$( ( is_sshable $n && timeout 10 ssh root@$n "cat $CUBE_MASTER_OVERRIDE 2>/dev/null" ) </dev/null 2>/dev/null | head -1 | tr -d '[:space:]')
+        if [ -n "$o" ] ; then
+            echo $o > $CUBE_MASTER_OVERRIDE
+            log_info "master override: adopted $o from $n"
+            return 0
+        fi
+    done
+    return 0
+}
+
 power_roll_active()
 {
     # A node mid-roll-recovery hasn't mounted cephfs yet, so the shared job.json
@@ -727,6 +804,8 @@ power_roll_advance()
     local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB)
 
     if [ -n "$inflight" ] && [ "x$inflight" = "x$booted" ] ; then
+        # own o-hm0 back before the roll moves on (restart roll only)
+        [ "x$booted" = "x$HOSTNAME" ] && Quiet -n $HEX_SDK os_octavia_roll_node_up
         # Restore the VMs this node suspended/stopped for its reboot (downtime
         # acknowledged at confirm time). Dispatch to the master (holds creds).
         local arun="$CLUSTER_ACTIVE_RUNNING" vm disp
@@ -1208,6 +1287,14 @@ power_record_running_vms()
 power_restore_recorded_vms()
 {
     is_control_node || return 0
+    # the record is on cephfs: an unmounted (e.g. cold-boot deferred) mount reads as "no VMs"
+    local _w
+    for _w in $(seq 1 30) ; do
+        mountpoint -q /mnt/cephfs && break
+        [ $_w -eq 1 ] && $HEX_SDK ceph_cephfs_deferred_bringup
+        sleep 10
+    done
+    mountpoint -q /mnt/cephfs || { log_error "cluster bootup: /mnt/cephfs not mounted, cannot read $CLUSTER_ACTIVE_RUNNING" ; return 1 ; }
     [ -s "$CLUSTER_ACTIVE_RUNNING" ] || return 0
     local i disp st _pending=0 _total=0 _restarted=0
     while read -r i disp _ ; do
@@ -1226,6 +1313,7 @@ power_restore_recorded_vms()
         /usr/sbin/hex_log_event -e CLU00010I "interface=system,host=$HOSTNAME,category=cluster,sub=cluster_bootup,action=vm_restore,recorded=$_total,restarted=$_restarted,already_active=$((_total-_restarted))"
     }
     [ $_pending -eq 0 ] && rm -f "$CLUSTER_ACTIVE_RUNNING"
+    return 0
 }
 
 power_drain_host()

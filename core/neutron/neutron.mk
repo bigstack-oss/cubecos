@@ -379,6 +379,8 @@ rootfs_install::
 # - *.py.patch for common/ovn/constants.py, plugins/ml2/plugin.py and the ovn mech_driver,
 #   maintenance, ovn_client and ovsdb_monitor modules: upstream c65c18a6d2 (bug 2144312),
 #   keeps OVN virtual ports (Octavia VIPs) unbound so failover re-parents them.
+# - maintenance.py.patch also adds reconcile_port_status_up: sets compute ports up
+#   that OVN reports up but neutron left DOWN (dropped LSP-up events).
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(NEUTRON_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(NEUTRON_PATCHDIR)/}; tgt=$(NEUTRON_SRCDIR)/$${rel%.patch}; \

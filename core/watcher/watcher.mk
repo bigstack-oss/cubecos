@@ -56,6 +56,9 @@ WATCHER_RUN_DIR := /var/run/watcher
 #       the CubeCOS strategy, installed verbatim and byte-identical to caracal's. It
 #       has no upstream counterpart; strategies/base.py is unchanged between 12.1.0
 #       and 14.1.2 and the model methods it calls kept their signatures.
+#   db/sqlalchemy/api.py
+#       a service looked up by name returns the latest-seen row instead of a 500 when
+#       an HA cluster has one row per host under that name.
 WATCHER_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
 WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch
 

@@ -270,12 +270,31 @@ RestartMain(int argc, char* argv[])
 
 CONFIG_COMMAND_WITH_SETTINGS(restart_es, RestartMain, RestartUsage);
 
+// The boot commit skips max_shards_per_node when the cluster has no manager yet (cold
+// boot: the master's node is alone); the master re-applies it once every node is up.
+static int
+ClusterStartMain(int argc, char **argv)
+{
+    if (argc != 1)
+        return EXIT_FAILURE;
+
+    if (IsUndef(s_eCubeRole) || IsEdge(s_eCubeRole) || !IsControl(s_eCubeRole) || !s_enabled)
+        return EXIT_SUCCESS;
+
+    HexUtilSystemF(0, 0, HEX_SDK " opensearch_wait_manager 120");
+    SetShardPerNode(s_ha, s_curatorRp);
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_MODULE(opensearch, Init, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(opensearch, cube_scan);
 
 // extra tunings
 CONFIG_OBSERVES(opensearch, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(opensearch, cubesys, ParseCube, NotifyCube);
+
+CONFIG_TRIGGER_WITH_SETTINGS(opensearch, "cluster_start", ClusterStartMain);
 
 CONFIG_MIGRATE(opensearch, "/var/lib/opensearch");
 

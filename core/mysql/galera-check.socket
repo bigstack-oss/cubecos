@@ -1,0 +1,11 @@
+[Unit]
+Description=Galera sync health check socket for haproxy
+
+[Socket]
+ListenStream=13306
+Accept=yes
+MaxConnections=16
+MaxConnectionsPerSource=4
+
+[Install]
+WantedBy=sockets.target

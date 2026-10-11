@@ -8,7 +8,19 @@
  import nova.conf
  import nova.context
  from nova import crypto
-@@ -1313,6 +1314,17 @@
+@@ -844,6 +845,11 @@
+             self.driver.destroy(context, instance,
+                                 network_info,
+                                 bdi, destroy_disks)
++            # cube: rbd disks are shared but the instance dir is host-local;
++            # drop it so a later live migration back here doesn't hit
++            # DestinationDiskExists.
++            if not destroy_disks and CONF.libvirt.images_type == 'rbd':
++                self.driver.delete_instance_files(instance)
+ 
+         hostname_to_cn_uuid = {
+             cn.hypervisor_hostname: cn.uuid
+@@ -1313,6 +1319,17 @@
              # host. Abort ongoing migration if still running and reset state.
              self._reset_live_migration(context, instance)
  
@@ -26,7 +38,7 @@
          db_state = instance.power_state
          drv_state = self._get_power_state(instance)
          expect_running = (db_state == power_state.RUNNING and
-@@ -1336,8 +1348,16 @@
+@@ -1336,8 +1353,16 @@
          self._mount_all_shares(context, instance, share_info)
  
          try:
@@ -44,7 +56,7 @@
          except NotImplementedError:
              LOG.warning('Hypervisor driver does not support '
                          'resume guests', instance=instance)
-@@ -9649,6 +9669,77 @@
+@@ -9649,6 +9674,77 @@
                  self._set_instance_obj_error_state(instance,
                                                     clean_task_state=True)
  

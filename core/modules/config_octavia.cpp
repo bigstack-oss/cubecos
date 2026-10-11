@@ -158,12 +158,12 @@ SetupService(std::string domain, std::string userPass)
 
     HexLogInfo("Setting up octavia");
 
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"octavia-db-manage upgrade head\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"octavia-db-manage upgrade head\" %s", USER);
     // taskflow keeps its own tables, in the same database but on its own
     // migration chain; "upgrade head" does not create them. Without this the
     // jobboard-backed persistence configured in UpdateDbConn() has nowhere to
     // write and every amphorav2 flow fails at startup.
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"octavia-db-manage upgrade_persistence\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"octavia-db-manage upgrade_persistence\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
@@ -398,6 +398,9 @@ UpdateCfg(bool ha, const std::string& domain, const std::string& userPass, const
         cfg["haproxy_amphora"]["rest_request_read_timeout"] = "120";
 
         cfg["controller_worker"]["workers"] = "2";
+        // wait up to 10 min for an amphora VM to go ACTIVE while nova recovers
+        cfg["controller_worker"]["amp_active_retries"] = "60";
+        cfg["controller_worker"]["amp_active_wait_sec"] = "10";
         cfg["controller_worker"]["amp_image_tag"] = "amphora";
         cfg["controller_worker"]["amp_flavor_id"] = "16443";
         cfg["controller_worker"]["amp_ssh_key_name"] = "octavia_ssh_key";
@@ -830,8 +833,15 @@ ReinitMain(int argc, char* argv[])
         // maps the 4th octet ranges from 1~9 to 11~19 for avoiding conflict with dhcp port
         if (octet4.length() == 1)
             octet4 = "1" + octet4;
-        std::string cidr = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr 2>/dev/null", sharedId.c_str());
-        std::string cidrIp = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr_ip %s 2>/dev/null", sharedId.c_str(), octet4.c_str());
+        std::string cidr, cidrIp;
+        // control nodes hold cubesys.mgmt.cidr; each remote lookup costs a full settings load
+        if (IsControl(s_eCubeRole)) {
+            cidr = GetMgmtCidr(s_mgmtCidr.newValue(), 0);
+            cidrIp = GetMgmtCidrIp(s_mgmtCidr.newValue(), 0, octet4);
+        } else {
+            cidr = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr 2>/dev/null", sharedId.c_str());
+            cidrIp = HexUtilPOpen("ssh root@%s " HEX_CFG " get_octavia_cidr_ip %s 2>/dev/null", sharedId.c_str(), octet4.c_str());
+        }
         HexUtilSystemF(0, 0, HEX_SDK " os_octavia_node_init %s %s", cidrIp.c_str(), cidr.c_str());
     }
 

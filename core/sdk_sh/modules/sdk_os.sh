@@ -1038,8 +1038,8 @@ os_extpack_image_import()
     declare -A PIDS
 
     pushd $dir/$ext_folder >/dev/null
-    for PREFIX in ipa-kernel- ipa-initramfs- amphora- manila- k8s- appfw- rancher-cluster- ; do
-        local img=$(ls -1 ${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz} 2>/dev/null | head -1)
+    for PREFIX in ipa-kernel- ipa-initramfs- amphora- manila- k8s- appfw- rancher-cluster- registry- ; do
+        local img=$(ls -1 ${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz,tar} 2>/dev/null | head -1)
         [ -n "$img" ] || continue
         case $PREFIX in
             amphora-)
@@ -1065,6 +1065,12 @@ os_extpack_image_import()
                 local appfw_dir=/opt/appfw/images/
                 cmd -c "mkdir -p $appfw_dir"
                 ( tar xf $dir/$ext_folder/$img -C $appfw_dir ; cubectl node rsync -r control $appfw_dir )
+                ;;
+            registry-)
+                # registry volume fragment (e.g. the rancher agent): merge into every control node's registry
+                tar xf $dir/$ext_folder/$img -C /opt/docker && \
+                    cubectl node rsync -r control /opt/docker/registry && \
+                    cubectl node exec -r control -p docker restart registry >/dev/null
                 ;;
             *) echo "Unknown builtin image prefix: $PREFIX" ;;
         esac
@@ -1093,7 +1099,7 @@ os_image_import_extpack_list()
         local ext_dir=${ext%.ext}
         echo -n "${ext_dir##*/}: "
         pushd $ext_dir >/dev/null
-        ls *.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz} 2>/dev/null | xargs
+        ls *.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz,tar} 2>/dev/null | xargs
         popd >/dev/null
     done
 }
@@ -1183,7 +1189,10 @@ os_keystone_idp_config()
     # so the mellon config above is only on disk -- reload to put it in the running server.
     # Without this, /v3/auth/OS-FEDERATION/websso/mapped bypasses mellon and keystone
     # answers 401 until the next unrelated httpd restart.
-    if systemctl is-active --quiet httpd ; then
+    # the mellon conf references the keycloak metadata; reloading without it kills httpd
+    if [ ! -s /etc/keycloak/saml-metadata.xml ] ; then
+        log_warning "os_keystone_idp_config: keycloak saml metadata missing, httpd reload deferred to keycloak"
+    elif systemctl is-active --quiet httpd ; then
         systemctl reload httpd
     fi
 
@@ -1554,8 +1563,16 @@ EOF
 
 os_post_failure_host_evacuation()
 {
-    local host=$1
-    nova host-evacuate $host
+    local host=$1 id
+    # skip HA_Enabled=False (amphorae): octavia rebuilds those itself
+    for id in $($OPENSTACK server list --all-projects --host $host -f value -c ID) ; do
+        if $OPENSTACK server show $id -f json -c properties 2>/dev/null | jq -e '.properties.HA_Enabled == "False"' >/dev/null ; then
+            echo "skip $id (HA_Enabled=False)"
+            continue
+        fi
+        # 2.94: keep the power state (2.95+ leaves evacuated instances stopped)
+        nova --os-compute-api-version 2.94 evacuate $id
+    done
 }
 
 os_evac_upgrade_prepare()
@@ -1717,6 +1734,10 @@ os_octavia_init()
         return 0
     fi
 
+    # amphorae, VIP ports and LB security groups live in the service_auth project (admin)
+    $OPENSTACK quota set --force --secgroups -1 --secgroup-rules -1 --ports -1 \
+        --instances -1 --cores -1 --ram -1 admin || true
+
     if [ -f "/etc/appliance/state/octavia_init_done" ] ; then
         return 0
     else
@@ -1733,13 +1754,15 @@ os_octavia_init()
     local net_id=$($OPENSTACK network list | awk '/ lb-mgmt-net / {print $2}')
     local sub_id=$($OPENSTACK subnet list | awk ' / lb-mgmt-subnet / {print $2}')
     local key=$($OPENSTACK keypair list -f value -c Name | grep octavia_ssh_key)
-    local flavor_id_o=$($OPENSTACK flavor list --all -f value -c ID | grep 16443)
-    local flavor_id_d=$($OPENSTACK flavor list --all -f value -c ID | grep 16444)
-    local flavor_id_s=$($OPENSTACK flavor list --all -f value -c ID | grep 16445)
-    local flavor_id_m=$($OPENSTACK flavor list --all -f value -c ID | grep 16446)
-    local flavor_id_l=$($OPENSTACK flavor list --all -f value -c ID | grep 16447)
-    local secgrp_id=$($OPENSTACK security group list | awk ' / lb-mgmt-sec-grp / {print $2}')
-    local hmgr_secgrp_id=$($OPENSTACK security group list | awk ' / lb-hmgr-sec-grp / {print $2}')
+    local flavors=$($OPENSTACK flavor list --all -f value -c ID)
+    local flavor_id_o=$(echo "$flavors" | grep 16443)
+    local flavor_id_d=$(echo "$flavors" | grep 16444)
+    local flavor_id_s=$(echo "$flavors" | grep 16445)
+    local flavor_id_m=$(echo "$flavors" | grep 16446)
+    local flavor_id_l=$(echo "$flavors" | grep 16447)
+    local secgrps=$($OPENSTACK security group list)
+    local secgrp_id=$(echo "$secgrps" | awk ' / lb-mgmt-sec-grp / {print $2}')
+    local hmgr_secgrp_id=$(echo "$secgrps" | awk ' / lb-hmgr-sec-grp / {print $2}')
 
     # how many tasks has been done
     init_done=0
@@ -1821,12 +1844,76 @@ os_octavia_init()
 # non-master reinit skips the master-only network setup). Idempotent.
 os_octavia_init_peers()
 {
+    # Peers keep their port, ids and services across a reboot and restore
+    # o-hm0 themselves (PostBootRecovery); check/bring it up in parallel and
+    # reinit only on failure. An upgrade roll still reinits (config changes).
+    local fast=1
+    [ "$($HEX_SDK power_roll_kind_active 2>/dev/null)" = "upgrade" ] && fast=0
+
+    local node pids=()
     for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
         [ "$node" = "$(hostname)" ] && continue
         if remote_run $node hex_sdk is_first_three_compute_node ; then
-            Quiet -n remote_run $node hex_config reinit_octavia
+            if [ $fast -eq 1 ] ; then
+                ( remote_run $node hex_sdk os_octavia_node_fast_up || Quiet -n remote_run $node hex_config reinit_octavia ) </dev/null &
+                pids+=($!)
+            else
+                Quiet -n remote_run $node hex_config reinit_octavia
+            fi
         fi
     done
+    [ ${#pids[@]} -eq 0 ] || wait "${pids[@]}"
+    return 0
+}
+
+# Restart-roll fast path for a peer (see os_octavia_init_peers): no port
+# recreate, no reconfig. Non-zero -> caller falls back to reinit_octavia.
+os_octavia_node_fast_up()
+{
+    [ -f /run/cube_commit_done ] || return 1
+    os_octavia_cfg_ids_ok || return 1
+    os_octavia_hm0_up || return 1
+    /sbin/ip -4 addr show octavia-hm0 2>/dev/null | grep -q inet || return 1
+    /usr/sbin/route -n | grep -q octavia-hm0 || return 1
+    systemctl is-active -q octavia-worker || systemctl start octavia-worker
+    systemctl is-active -q octavia-health-manager || systemctl start octavia-health-manager
+    systemctl is-active -q octavia-worker || return 1
+    # held by its boot gate, it retries until the gate opens
+    os_octavia_hm_gated || systemctl is-active -q octavia-health-manager
+}
+
+# True while cube-planned-maintenance.conf refuses octavia-health-manager.
+os_octavia_hm_gated()
+{
+    [ -e $PLANNED_MAINT_MARKER ] || ! cube_failover_gate_open
+}
+
+# Restart roll: bring up this node's own o-hm0 in its own roll step.
+os_octavia_roll_node_up()
+{
+    is_rolling_restart_boot || return 0
+    os_octavia_boot_node_up
+}
+
+# Any boot: o-hm0 loses its ip/route on reboot; bring it up on this node.
+os_octavia_boot_node_up()
+{
+    is_first_three_compute_node || return 0
+    os_octavia_node_fast_up && return 0
+    Quiet -n $HEX_CFG reinit_octavia
+}
+
+# True if a health-manager node other than $1 has o-hm0 IPv4 + health-manager
+# active, or if there is no other health-manager node to ask.
+os_octavia_hm_peer_ready()
+{
+    local skip=$1 node others=0
+    for node in $(cubectl node list -r compute -j | jq -r '.[].hostname' | head -3) ; do
+        [ "$node" = "$skip" ] && continue
+        others=1
+        remote_run $node "ip -4 addr show octavia-hm0 2>/dev/null | grep -q inet && systemctl is-active -q octavia-health-manager" </dev/null >/dev/null 2>&1 && return 0
+    done
+    [ $others -eq 0 ]
 }
 
 os_octavia_node_init()
@@ -3090,13 +3177,42 @@ os_galera_live_primary()
     local me=$(hostname) node st
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         [ "x$node" = "x$me" ] && continue
-        st=$(remote_run $node "mariadb -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'")
+        # subshell: remote_run exits on an unsshable node
+        st=$( (remote_run $node "mariadb -u root -N -e \"show status like 'wsrep_cluster_status'\" 2>/dev/null | awk '{print \$2}'") )
         if [ "x$st" = "xPrimary" ] ; then
             echo "$node"
             return 0
         fi
     done
     return 1
+}
+
+# Print a peer control whose rabbitmq-server is active; rc 1 if none.
+os_rabbitmq_peer_running()
+{
+    local me=$(hostname) node
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        [ "x$node" = "x$me" ] && continue
+        # subshell: remote_run exits on an unsshable node
+        if ( remote_run $node "systemctl is-active -q rabbitmq-server" ) ; then
+            echo "$node"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Cold start: wipe rabbit state on each reachable peer whose broker is not
+# running, so it joins the master's fresh cluster instead of the old one.
+os_rabbitmq_cold_reset_peers()
+{
+    local me=$(hostname) node
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        [ "x$node" = "x$me" ] && continue
+        is_sshable $node || continue
+        ssh root@$node "systemctl is-active -q rabbitmq-server || { rm -rf /var/lib/rabbitmq/mnesia/* ; rm -f /etc/appliance/state/rabbitmq_cluster_done ; }" </dev/null
+    done
+    return 0
 }
 
 # Hosts flagged on_maintenance in ANY segment -- instance-HA is OFF for these.

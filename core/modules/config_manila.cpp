@@ -612,7 +612,7 @@ SetupService(const std::string domain, const std::string userPass)
     HexUtilSystemF(
         0,
         0,
-        "su -s /bin/sh -c \"/usr/bin/manila-manage db sync\" %s",
+        DB_MIGRATE_LOCK "su -s /bin/sh -c \"/usr/bin/manila-manage db sync\" %s",
         USER);
 
     // prepare env settings

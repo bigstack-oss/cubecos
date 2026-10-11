@@ -79,13 +79,7 @@ _git_server_init()
 
 git_server_init()
 {
-    source $HEX_TUN $SETTINGS_TXT
-    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
-        export master_control=$T_cubesys_controller
-        [ -n "$master_control" ] || master_control=$T_net_hostname
-    else
-        export master_control=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
-    fi
+    export master_control=$(cube_master_control)
     remote_run $master_control "$HEX_SDK _git_server_init"
 }
 
@@ -138,13 +132,7 @@ git_node_init()
     # Init only THIS node: the master creates the bare repo (and its own /
     # clone); peers clone from cephfs, failing harmlessly until it exists.
     source $HEX_TUN $SETTINGS_TXT
-    local master
-    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
-        master=$T_cubesys_controller
-        [ -n "$master" ] || master=$T_net_hostname
-    else
-        master=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
-    fi
+    local master=$(cube_master_control)
     if [ "x$T_net_hostname" = "x$master" ] ; then
         $HEX_SDK _git_server_init
     else

@@ -444,6 +444,8 @@ $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
 # forces a rootfs rebuild (with touch $@ below). Scoped to HEAVY_COMPONENTS, not
 # core/main (circular). Not covered: remote dnf/pip + bare-binary/dir deliverables.
 HEAVY_DELIVERABLES := $(wildcard $(foreach m,$(HEAVY_COMPONENTS),$(TOP_BLDDIR)/core/$(m)/*.rpm $(TOP_BLDDIR)/core/$(m)/*.tgz))
+# the offline registry is a directory; its stamp is rewritten after every successful copy
+HEAVY_DELIVERABLES += $(wildcard $(TOP_BLDDIR)/core/docker/.registry-copied)
 
 ifneq ($(RC),)
 heavyfs_install::
@@ -489,7 +491,10 @@ $(HEAVY_BASE): $(HEX_FULL_ROOTFS) $(shell for m in $(HEAVY_COMPONENTS); do find 
 	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
 	$(Q)touch $@
 
+# A rebuild after a build finds heavy_base gone (moved into heavy_rootfs); rebuild it
+# first, or the components would be layered onto nothing.
 $(HEAVYFS): $(HEAVY_BASE) $(HEAVY_DELIVERABLES)
+	$(Q)[ -d $(HEAVY_BASE) ] || { rm -rf $@ && $(MAKE) $(HEAVY_BASE); }
 	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" heavy_components_install' $< $@, "  GEN     $@")
 	$(Q)touch $@
 

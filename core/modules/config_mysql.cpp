@@ -33,6 +33,7 @@ const static char FORCE_NEW_MARK[] = "/etc/appliance/state/mysql_new_cluster";
 const static char USER[] = "mysql";
 const static char GROUP[] = "mysql";
 const static char NAME[] = "mariadb";
+const static char CHECK_SOCKET[] = "galera-check.socket";
 
 const static int READY_TIMEOUT = 300;
 const static int READY_INTERVAL = 5;
@@ -221,8 +222,11 @@ WriteConfig(const bool ha, const std::string& ctrl, const std::string& ctrlIp, c
         // open shared object file". Only HA writes a [galera] section, so a single-node
         // install never loads a provider and cannot see this.
         fprintf(fout, "wsrep_provider = /usr/lib64/galera-4/libgalera_smm.so\n");
-        // 4G keeps a rejoin on IST across a firmware-reboot-length outage (SST breaks on 10.6->10.11)
-        fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=4G;pc.ignore_sb=TRUE\"\n");
+        // 1G keeps a rejoin on IST across a reboot-length outage (SST breaks on 10.6->10.11);
+        // gcache.recover scans the whole ring at start, so bigger costs startup time
+        // no pc.ignore_sb: with two members left, a link blip would leave both
+        // sides primary (split brain); losing quorum until it heals is recoverable
+        fprintf(fout, "wsrep_provider_options = \"pc.recovery=TRUE;gcache.size=1G\"\n");
         fprintf(fout, "wsrep_cluster_name = \"cube_galera_cluster\"\n");
         fprintf(fout, "wsrep_cluster_address = \"gcomm://%s\"\n", ctrlAddrs.c_str());
         fprintf(fout, "wsrep_sst_method = rsync\n");
@@ -237,6 +241,40 @@ WriteConfig(const bool ha, const std::string& ctrl, const std::string& ctrlIp, c
     return true;
 }
 
+// Master: join a peer's live primary, else form a new one if allowed.
+// Never bootstrap over a live cluster: a second primary meets the first and
+// galera aborts a node FATAL with "conflicting prims".
+static bool
+MasterJoinOrBootstrap(bool enabled, bool allowBootstrap)
+{
+    if (HexSystemF(0, HEX_SDK " os_galera_live_primary >/dev/null 2>&1") == 0) {
+        HexLogInfo("galera: a peer already holds a primary, joining it");
+        HexSystemF(0, "sed -i 's/^\\(safe_to_bootstrap\\s*:\\s*\\).*$/\\10/' /var/lib/mysql/grastate.dat");
+        return SystemdCommitService(enabled, NAME, true);
+    }
+
+    if (!allowBootstrap) {
+        HexLogError("galera: no live primary, not re-forming the cluster outside a boot commit");
+        return false;
+    }
+
+    HexLogInfo("galera: no live primary, bootstrapping a new cluster");
+    // a non-primary mariadb left running would make galera_new_cluster a no-op
+    HexUtilSystemF(0, 0, "systemctl stop %s", NAME);
+    HexSystemF(0, "sed -i 's/^\\(safe_to_bootstrap\\s*:\\s*\\).*$/\\11/' /var/lib/mysql/grastate.dat");
+    return HexUtilSystemF(0, 0, "galera_new_cluster") == 0;
+}
+
+// local node is running and synced with a primary component
+static bool
+LocalSynced()
+{
+    std::string out;
+    int rc = -1;
+    return HexRunCommand(rc, out, "/usr/bin/mariadb -sNe \"SHOW STATUS LIKE 'wsrep_local_state_comment'\"") &&
+           rc == 0 && out.find("Synced") != std::string::npos;
+}
+
 static bool
 SetupCluster(bool enabled, bool isMaster, bool force, const std::string& ctrlAddrs)
 {
@@ -248,7 +286,6 @@ SetupCluster(bool enabled, bool isMaster, bool force, const std::string& ctrlAdd
         if (isMaster) {
             HexLogInfo("stop all mysql processes of the cluster");
             HexUtilSystemF(0, 0, "hex_sdk cmd -n %s systemctl stop %s", ctrlAddrs.c_str(), NAME);
-            HexSystemF(0, "sed -i 's/^\\(safe_to_bootstrap\\s*:\\s*\\).*$/\\11/' /var/lib/mysql/grastate.dat");
         }
         else {
             // Removing grastate.dat is what sends the joiner to the new primary for a full
@@ -264,22 +301,8 @@ SetupCluster(bool enabled, bool isMaster, bool force, const std::string& ctrlAdd
         unlink(FORCE_NEW_MARK);
     }
 
-    if (isMaster) {
-        // Never bootstrap over a live cluster: a second primary meets the first
-        // and galera aborts a node FATAL with "conflicting prims". Join instead.
-        // _health_mysql's repair path has always had this guard; boot did not.
-        if (HexSystemF(0, HEX_SDK " os_galera_live_primary >/dev/null 2>&1") == 0) {
-            HexLogInfo("galera: a peer already holds a primary, joining instead of bootstrapping");
-            // the force path above armed safe_to_bootstrap; disarm it so this node
-            // joins the running component instead of forming another one
-            HexSystemF(0, "sed -i 's/^\\(safe_to_bootstrap\\s*:\\s*\\).*$/\\10/' /var/lib/mysql/grastate.dat");
-            // galera_new_cluster would have started mariadb; joining must too
-            SystemdCommitService(enabled, NAME, true);
-        }
-        else {
-            HexUtilSystemF(0, 0, "galera_new_cluster");
-        }
-    }
+    if (isMaster)
+        MasterJoinOrBootstrap(enabled, true);
 
     HexSystemF(0, "touch %s", SETUP_MARK);
     s_bSetup = true;
@@ -386,14 +409,26 @@ Commit(bool modified, int dryLevel)
     WriteConfig(s_ha, s_hostname, myip, s_ctrlAddrs);
 
     SetupCheck();
+    // a boot-time joiner must not restore its pre-crash primary view
+    // (pc.recovery): it meets the live primary as "conflicting prims" and
+    // splits the cluster
+    if (s_ha && enabled && IsBootstrap() && !LocalSynced() &&
+        HexSystemF(0, HEX_SDK " os_galera_live_primary >/dev/null 2>&1") == 0) {
+        HexLogInfo("galera: live primary found, dropping the saved primary view");
+        unlink("/var/lib/mysql/gvwstate.dat");
+    }
     if (s_ha && (!s_bSetup || s_bForceNew))
         SetupCluster(enabled, isMaster, s_bForceNew, s_ctrlAddrs);
-    else {
-        if (!SystemdCommitService(enabled, NAME, true)) {
-            if (s_ha) {
-                SetupCluster(enabled, isMaster, true, s_ctrlAddrs);
-            }
-        }
+    else if (s_ha && enabled && isMaster && IsBootstrap() && !LocalSynced()) {
+        // master's boot commit: peers wait for it, so no live primary = cold start
+        MasterJoinOrBootstrap(enabled, true);
+    }
+    else if (!SystemdCommitService(enabled, NAME, true) && s_ha) {
+        // only a boot commit may re-form galera; others join or fail
+        if (isMaster)
+            MasterJoinOrBootstrap(enabled, IsBootstrap());
+        else
+            SetupCluster(enabled, false, true, s_ctrlAddrs);
     }
 
     WriteLogRotateConf(log_conf);
@@ -406,6 +441,12 @@ Commit(bool modified, int dryLevel)
         return false;
 
     CuratorCronJob(s_curatorRp.newValue());
+
+    // haproxy's galera check: no-privilege account, unix_socket auth (no password)
+    if (enabled && s_ha &&
+        !MysqlUtilRunSQL("CREATE USER IF NOT EXISTS 'haproxy'@'localhost' IDENTIFIED VIA unix_socket"))
+        HexLogError("failed to create the galera check account");
+    SystemdCommitService(enabled && s_ha, CHECK_SOCKET);
 
     return true;
 }

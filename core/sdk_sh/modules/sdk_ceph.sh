@@ -86,7 +86,7 @@ ceph_get_ids_by_dev()
     local dev=$1
     # ceph device ls doesn't always show correct osds associated with devices
     # local ids=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.location[].dev == \"${dev#/dev/}\").daemons[]" | sed "s/osd.//g" | sort -u)
-    local ids=$(for osdid in $(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id" | sort) ; do ceph osd ls | grep "^${osdid}$" ; done)
+    local ids=$(for osdid in $(ceph_volume_raw_list_das | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id" | sort) ; do ceph osd ls | grep "^${osdid}$" ; done)
     ids+=$(ceph-volume lvm list --format json | jq -r ".[][] | select(.devices[] == \"$dev\").tags.\"ceph.osd_id\"")
 
     echo -n $ids
@@ -95,7 +95,7 @@ ceph_get_ids_by_dev()
 ceph_get_dev_by_id()
 {
     local osd_id=${1#.osd}
-    local dev=$(ceph-volume raw list --format json | jq -r ".[] | select(.osd_id == $osd_id).device")
+    local dev=$(ceph_volume_raw_list_das | jq -r ".[] | select(.osd_id == $osd_id).device")
     if echo $dev | grep -q '/dev/mapper' ; then
         dev=$(ceph-volume lvm list --format json | jq -r ".[][] | select(.tags.\"ceph.osd_id\" == \"$osd_id\").devices[]")
     fi
@@ -287,6 +287,12 @@ ceph_bootstrap_mon_ip()
     echo -n $ip
 }
 
+# mon IPs from this node's running mon (admin socket: no quorum needed)
+ceph_mon_local_iplist()
+{
+    $CEPH daemon mon.$HOSTNAME mon_status 2>/dev/null | jq -r '.monmap.mons[].public_addr // empty' | cut -d: -f1 | paste -sd, - | tr -d '\n'
+}
+
 ceph_mon_map_iplist()
 {
     ceph_mon_map_create $1
@@ -423,6 +429,16 @@ ceph_hold_data_movement()
     Quiet $CEPH osd set norecover
     Quiet $CEPH osd set norebalance
     Quiet $CEPH osd set nobackfill
+}
+
+# Master boot commit: hold data movement while storage is degraded (peers'
+# OSDs not back yet). cube_cluster_start_node's ceph_leave_maintenance lifts
+# it once all OSDs are up. No-op without a mon quorum.
+ceph_hold_if_degraded()
+{
+    ceph_storage_degraded || return 0
+    log_info "ceph: storage degraded at boot, holding data movement"
+    ceph_hold_data_movement
 }
 
 ceph_enter_maintenance()
@@ -989,11 +1005,39 @@ ceph_osd_zap_disk()
 }
 
 # list osd-typed disks (mounted)
+# ceph-volume raw list, constrained to DAS (+ allowed mpath) disks.
+#
+# ceph-volume raw list limited to DAS (+ allowed mpath) disks: an unfiltered scan
+# probes every block device and hangs on stray FC/iSCSI SAN LUNs.
+ceph_volume_raw_list_das()
+{
+    local devs="" d t
+    while read -r d t ; do
+        [ -n "$d" ] || continue
+        case "$t" in
+            disk)
+                $HEX_SDK storage_is_das "$d" && devs+=" $d" ;;
+            mpath)
+                $HEX_SDK storage_is_mpath "$d" && $HEX_SDK storage_are_mpath_devices_allowed_for_ceph && devs+=" $d" ;;
+        esac
+    done < <(lsblk -dpno NAME,TYPE 2>/dev/null)
+    local acc=$(mktemp)
+    # OSD data lives on a partition and raw list of the whole disk returns {}, so
+    # scan each disk's partitions too
+    for d in $devs ; do
+        for dev in "$d" $(lsblk -pnlo NAME "$d" 2>/dev/null | tail -n +2) ; do
+            ceph-volume raw list "$dev" --format json 2>/dev/null >> "$acc"
+        done
+    done
+    jq -s "add // {}" "$acc" 2>/dev/null || echo "{}"
+    rm -f "$acc"
+}
+
 ceph_osd_list_disk()
 {
     local all_devs=
     local blkdevs=$(lsblk -J | jq -r .blockdevices[])
-    local raw_devs=$(ceph-volume raw list --format json | jq -r ".[] | select(.device | startswith(\"/dev/\")).device" | grep -v "/dev/mapper" | sort -u)
+    local raw_devs=$(ceph_volume_raw_list_das | jq -r ".[] | select(.device | startswith(\"/dev/\")).device" | grep -v "/dev/mapper" | sort -u)
     for DEV in $raw_devs ; do
         parent_dev=/dev/$(echo $blkdevs | jq -r ". | select(.children[].name == \"${DEV#/dev/}\").name" 2>/dev/null)
         all_devs+="\n${parent_dev}"
@@ -1078,6 +1122,19 @@ ceph_osd_prepare_bluestore()
         partprobe $part_dev$i 2>/dev/null || true
         # zero-out 100mb for each partition
         dd if=/dev/zero of=${part_dev}${i} bs=1M count=100 oflag=sync
+        ceph_bluestore_label_zero ${part_dev}${i}
+    done
+}
+
+# zero the bluestore label copies Squid keeps at 1/10/100/1000 GiB
+ceph_bluestore_label_zero()
+{
+    local dev=$1
+    local size=$(blockdev --getsize64 $dev 2>/dev/null || echo 0)
+    local gib
+    for gib in 1 10 100 1000 ; do
+        [ $(( gib * 1024 * 1024 * 1024 )) -lt $size ] || continue
+        dd if=/dev/zero of=$dev bs=1M count=1 seek=$(( gib * 1024 )) oflag=direct conv=notrunc 2>/dev/null
     done
 }
 
@@ -2967,6 +3024,9 @@ ceph_osd_remount()
                 unlink $osdpth/ceph-$osd_id/block 2>/dev/null
                 (cd $osdpth/ceph-$osd_id && ln -sf /dev/disk/by-partuuid/$datapart_partuuid block)
             fi
+            # stopping the OSD re-reads the partition table and udev recreates the node
+            udevadm settle --timeout=30 2>/dev/null || true
+            chown ceph:ceph $(readlink -f /dev/disk/by-partuuid/$datapart_partuuid) 2>/dev/null || true
             [ $start -eq 0 ] || Quiet -n systemctl start ceph-osd@$osd_id
         fi
     done < $CEPH_OSD_MAP
@@ -2979,7 +3039,7 @@ ceph_osd_create_map()
     # e.g., /dev/sdb1 0 xxxx-xxxx xxxx-xxxx
     local osdpth=/var/lib/ceph/osd
     local osdmap_new=$(mktemp -u /tmp/dev_osd.mapXXXX)
-    local osdmap_json=$(ceph-volume raw list --format json)
+    local osdmap_json=$(ceph_volume_raw_list_das)
 
     if [ $(echo $osdmap_json | jq -r "keys[]" | wc -l) -gt 0 ] ; then
         for metapart_uuid in $(echo $osdmap_json | jq -r "keys[]") ; do
@@ -3041,14 +3101,17 @@ ceph_osd_create_map()
     done
 }
 
-# true if data uuid $1 resolves to a device that already carries a bluestore
-# label, i.e. an OSD lives there and must not be re-created
+# true if data uuid $1 carries a bluestore label (belonging to osd uuid $2 if given)
 ceph_osd_datapart_has_osd()
 {
+    local osd_uuid=$2
     local dev=$(ceph_osd_datapart_resolve "$1") || return 1
     [ -n "$dev" ] || return 1
 
-    ceph-bluestore-tool show-label --dev "$dev" >/dev/null 2>&1
+    local label
+    label=$(ceph-bluestore-tool show-label --dev "$dev" 2>/dev/null) || return 1
+    [ -n "$osd_uuid" ] || return 0
+    echo "$label" | jq -r '.[].osd_uuid' 2>/dev/null | grep -qx "$osd_uuid"
 }
 
 # resolve a dev_osd.map data uuid to its device without going through
@@ -3251,14 +3314,18 @@ ceph_mon_msgr2_enable()
 {
     local timeout=${1:-60}
 
-    Quiet -n $CEPH mon enable-msgr2
+    # a joining mon enters the monmap v1-only; wait for it to reach quorum
     local i=0
     while [ $i -lt $timeout ] ; do
-        if $CEPH -s | grep -q "not enabled msgr2" ; then
-            Quiet -n $CEPH mon enable-msgr2
-        else
-            break
-        fi
+        timeout 10 $CEPH quorum_status -f json 2>/dev/null | jq -e --arg h "$HOSTNAME" '.quorum_names | index($h)' >/dev/null && break
+        sleep 10
+        i=$(expr $i + 1)
+    done
+
+    i=0
+    while [ $i -lt $timeout ] ; do
+        Quiet -n $CEPH mon enable-msgr2
+        timeout 10 $CEPH mon dump 2>/dev/null | grep -E "^[0-9]+: " | grep -qv "v2:" || break
         sleep 10
         i=$(expr $i + 1)
     done
@@ -3368,8 +3435,24 @@ ceph_dashboard_idp_config()
     done
 }
 
+CEPHFS_DEFERRED_MARKER=${CEPHFS_DEFERRED_MARKER:-/run/cube_cephfs_deferred}
+CEPHFS_DEFER_GRACE=${CEPHFS_DEFER_GRACE:-60}
+
+# 0 when OSDs are down (up < in) or PGs are inactive; 1 when healthy or unknown
+ceph_storage_degraded()
+{
+    local s
+    s=$($CEPH status -f json 2>/dev/null) || return 1
+    echo "$s" | jq -e '(.osdmap.num_up_osds < .osdmap.num_in_osds) or
+        ([.pgmap.pgs_by_state[]? | select(.state_name | test("(^|\\+)active(\\+|$)") | not) | .count] | add // 0) > 0' >/dev/null 2>&1
+}
+
+# --defer: give up early (rc 2, marker set) when storage stays degraded, for
+# ceph_cephfs_deferred_bringup to finish once the peers' OSDs are up
 ceph_mount_cephfs()
 {
+    local defer=0
+    [ "${1:-}" = "--defer" ] && defer=1
     # derive the cephfs secretfile from the migrated admin keyring when PPU
     # migration made config skip client setup (else the mount fails)
     if [ ! -s /etc/ceph/admin.key ] && [ -s /etc/ceph/ceph.client.admin.keyring ] ; then
@@ -3378,9 +3461,14 @@ ceph_mount_cephfs()
     mountpoint -q $CEPHFS_STORE_DIR && return 0
     # A cold PPU boot races ahead of the cluster reforming; wait (bounded) for
     # ceph + a serviceable MDS before mounting, then retry and verify.
-    local _deadline=$((SECONDS + 300)) i
+    local _start=$SECONDS _deadline=$((SECONDS + 300)) i
     while [ $SECONDS -lt $_deadline ] ; do
         $CEPH -s >/dev/null 2>&1 && $CEPH mds stat 2>/dev/null | grep -q up:active && break
+        if [ $defer -eq 1 ] && [ $((SECONDS - _start)) -ge $CEPHFS_DEFER_GRACE ] && ceph_storage_degraded ; then
+            log_warning "ceph_mount_cephfs: storage degraded (OSDs down/PGs inactive), deferring cephfs mount on $(hostname)"
+            touch $CEPHFS_DEFERRED_MARKER
+            return 2
+        fi
         sleep 5
     done
     for i in {1..6} ; do
@@ -3392,7 +3480,23 @@ ceph_mount_cephfs()
         sleep 10
     done
     log_error "ceph_mount_cephfs: cephfs not mounted after retries on $(hostname)"
+    # no mon quorum skips the degraded test above; leave the retry to the deferred bring-up
+    [ $defer -eq 1 ] && { touch $CEPHFS_DEFERRED_MARKER ; return 2 ; }
     return 1
+}
+
+# Finish a mount ceph_mount_cephfs --defer gave up on: mount, then start what
+# MountCephfsStore starts after it. No-op unless this node deferred.
+ceph_cephfs_deferred_bringup()
+{
+    [ -e $CEPHFS_DEFERRED_MARKER ] || return 0
+    ceph_mount_cephfs || return 1
+    rm -f $CEPHFS_DEFERRED_MARKER
+    log_info "ceph_cephfs_deferred_bringup: cephfs mounted on $(hostname), starting dependents"
+    Quiet -n systemctl start ceph-umountfs
+    ceph_ganesha_grace_join || log_error "ceph_cephfs_deferred_bringup: $(hostname) not in the ganesha grace DB"
+    Quiet -n systemctl start nfs-ganesha
+    return 0
 }
 
 ceph_node_group_list()

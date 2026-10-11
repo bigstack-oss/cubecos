@@ -332,11 +332,11 @@ SetupNeutron(std::string domain, std::string password)
     HexLogInfo("Setting up neutron");
 
     // Populate the neutron service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"neutron-db-manage --config-file %s --config-file %s upgrade head\" %s",
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"neutron-db-manage --config-file %s --config-file %s upgrade head\" %s",
                          CONF, ML2_CONF, USER);
 
     // Populate the neutron vpnaas service database
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"neutron-db-manage --subproject neutron-vpnaas upgrade head\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"neutron-db-manage --subproject neutron-vpnaas upgrade head\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";
@@ -612,6 +612,10 @@ OvnService(bool enabled, bool isMaster, bool forceRun, bool ha)
     if (IsControl(s_eCubeRole) || IsCompute(s_eCubeRole)) {
         HexUtilSystemF(0, 0, "systemctl unmask %s", OVS_NAME);
         SystemdCommitService(enabled , OVS_NAME, true);     // openvswitch
+        // vswitchd re-attaches the provider port at start: move its IP onto the
+        // bridge now, not after the OVN services, so the node stays reachable
+        if (IsCompute(s_eCubeRole) && IsBootstrap())
+            HexUtilSystemF(0, 0, HEX_SDK " ovn_bridge_phy_port_add_v4 provider %s", G(PROVIDER_IF).c_str());
     }
 
     if (isMaster) {

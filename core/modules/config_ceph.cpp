@@ -23,6 +23,7 @@
 #include <list>
 #include <netinet/in.h>
 #include <sys/stat.h>
+#include <upgrade.hpp>
 
 #define MONDIR_FMT "/var/lib/ceph/mon/ceph-%s"
 #define MGRDIR_FMT "/var/lib/ceph/mgr/ceph-%s"
@@ -445,7 +446,7 @@ prepareOsdDirectories()
         }
 
         // An OSD already lives here if its metadata is on the mounted metapart,
-        // or its data partition still carries a bluestore label. Deciding this
+        // or its data partition still carries this OSD's bluestore label. Deciding this
         // from the directory's existence wipes a healthy OSD whose directory was
         // removed while it was unmounted (cubecos#1284).
         struct stat ts;
@@ -457,10 +458,10 @@ prepareOsdDirectories()
                 false,
                 false,
                 {},
-                HEX_SDK " ceph_osd_datapart_has_osd " + dataPartUuid);
+                HEX_SDK " ceph_osd_datapart_has_osd " + dataPartUuid + " " + uuid);
             isOldOsd = (lr.exitCode == 0);
             if (isOldOsd)
-                HexLogWarning("osd %lu has no metadata at %s but its data partition %s carries a "
+                HexLogWarning("osd %lu has no metadata at %s but its data partition %s carries its "
                               "bluestore label; not re-creating it", osdId, osddir, dataPartUuid.c_str());
         }
 
@@ -722,12 +723,13 @@ static bool SetupPools()
     pools.push_back("default.rgw.buckets.data");
 
     HexSystemF(0, "for i in 1 2 3 4 5 ; do ! timeout 60 ceph -s > /dev/null || break ; done");
-    for (auto& p : pools) {
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rgw", p.c_str());
-    }
-
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", CEPH_CACHE_POOL);
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_create_pool %s rbd", K8S_VOLUME);
+    // independent pools: create them concurrently (17 pools ~13s vs ~95s one by one)
+    std::string cmd;
+    for (auto& p : pools)
+        cmd += std::string(HEX_SDK " ceph_create_pool ") + p + " rgw & ";
+    cmd += std::string(HEX_SDK " ceph_create_pool ") + CEPH_CACHE_POOL + " rbd & ";
+    cmd += std::string(HEX_SDK " ceph_create_pool ") + K8S_VOLUME + " rbd & wait";
+    HexSystemF(0, "%s", cmd.c_str());
 
     HexSystemF(0, "touch " MAKRER_POOL);
 
@@ -953,6 +955,7 @@ UpdateConfig(
         fprintf(fout, "rgw s3 auth use keystone = true\n");
         fprintf(fout, "rgw keystone verify ssl = false\n");
         fprintf(fout, "rgw swift account in url = true\n");
+        fprintf(fout, "rgw swift versioning enabled = true\n");
         fprintf(fout, "# nss db path = %s\n", nssdir);
 
         // telemetry integration
@@ -1537,8 +1540,10 @@ InitCephClient(const std::string& master, const std::string& peer)
     return true;
 }
 
+// defer: on a boot pass, let ceph_mount_cephfs give up early while peer OSDs
+// are down; cube_cluster_start_cluster finishes it via ceph_cephfs_deferred_bringup
 static bool
-MountCephfsStore()
+MountCephfsStore(bool defer)
 {
     // Create mount point CEPHFS_STORE_DIR if not already
     if (HexMakeDir(CEPHFS_STORE_DIR, "root", "root", 0755) != 0) {
@@ -1547,7 +1552,7 @@ MountCephfsStore()
     }
 
     // Mount CEPHFS_STORE_DIR on local node
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_mount_cephfs");
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_mount_cephfs%s", defer ? " --defer" : "");
 
     if (HexSystemF(0, "mountpoint -q %s", CEPHFS_STORE_DIR) == 0) {
         HexSystemF(0, "mkdir -p %s/backup", CEPHFS_STORE_DIR);
@@ -1907,6 +1912,20 @@ Commit(bool modified, int dryLevel)
             return false;
         }
 
+        // list every mon, not just the master's, so clients survive a dead master
+        if (!isMaster) {
+            for (int i = 0 ; i < 3 ; i++) {
+                std::string monIps = HexUtilPOpen("ssh root@%s %s ceph_mon_local_iplist 2>/dev/null", peer.c_str(), HEX_SDK);
+                auto ips = hex_string_util::split(monIps, ',');
+                if (std::find(ips.begin(), ips.end(), masterIp) != ips.end()) {
+                    masterIp = monIps;
+                    break;
+                }
+                sleep(2);
+            }
+            HexLogInfo("ceph mon host %s", masterIp.c_str());
+        }
+
         if (access(CONTROL_REJOIN, F_OK) == 0) {
             peer = GetControllerPeers(s_hostname, s_ctrlHosts)[0];
             master = HexUtilPOpen("ssh root@%s %s ceph_mon_map_hosts %s 2>/dev/null", peer.c_str(), HEX_SDK, CONF);
@@ -1996,7 +2015,10 @@ Commit(bool modified, int dryLevel)
         // pg_autoscaler is always on module since pacific
         // EnablePgAutoScale();
         InitCephClient(master, peer);
-        MountCephfsStore();
+        // master's boot commit: peers' OSDs may still be down
+        if (IsBootstrap() && isMaster)
+            HexUtilSystemF(0, 0, HEX_SDK " ceph_hold_if_degraded");
+        MountCephfsStore(IsBootstrap());
 
     }
 
@@ -2335,7 +2357,12 @@ ClusterStartMain(int argc, char** argv)
     std::string port = DASHBOARD_PORT;
 
     SyncConfigMain(1, NULL);
-    SetupOsd(s_hostname.newValue());
+    // A restart roll's boot commit just set up and started this node's OSDs;
+    // redoing it here only stops and restarts them.
+    if (IsRollingRestartBoot())
+        HexLogInfo("skipped osd setup, reason: rolling restart");
+    else
+        SetupOsd(s_hostname.newValue());
 
     HexUtilSystemF(0, 0, HEX_SDK " migrate_ceph");
     if (IsControl(s_eCubeRole)) {

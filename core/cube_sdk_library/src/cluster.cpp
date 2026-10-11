@@ -2,6 +2,9 @@
 
 #include "cluster.hpp"
 
+#include <fstream>
+#include <sstream>
+
 std::string ClusterCaCertFile()
 {
     return access(CLUSTER_CA_CRT, F_OK) == 0 ? CLUSTER_CA_CRT : CLUSTER_SRV_CRT;
@@ -105,6 +108,44 @@ GetClusterSize(bool ha, const std::string& clusterGroup)
     return hex_string_util::split(clusterGroup.c_str(), ',').size();
 }
 
+// hostname in MASTER_OVERRIDE, "" if none
+static std::string
+GetMasterOverride()
+{
+    std::ifstream f(MASTER_OVERRIDE);
+    std::string host;
+    f >> host;
+    return host;
+}
+
+// the override's entry in a hostname or address group, "" if none
+static std::string
+MasterOverrideIn(const std::vector<std::string>& group)
+{
+    std::string host = GetMasterOverride();
+    if (host.empty())
+        return "";
+
+    if (std::find(group.begin(), group.end(), host) != group.end())
+        return host;
+
+    // address group: map the hostname through /etc/hosts
+    std::ifstream f("/etc/hosts");
+    std::string line;
+    while (std::getline(f, line)) {
+        std::istringstream ss(line);
+        std::string addr, name;
+        if (!(ss >> addr) || addr[0] == '#')
+            continue;
+        while (ss >> name) {
+            if (name == host && std::find(group.begin(), group.end(), addr) != group.end())
+                return addr;
+        }
+    }
+
+    return "";
+}
+
 bool IsMaster(bool isCtrl, const std::string& hostname, const std::string& clusterHosts)
 {
     if (!isCtrl)
@@ -115,7 +156,7 @@ bool IsMaster(bool isCtrl, const std::string& hostname, const std::string& clust
     if (hosts.size() == 0)
         return true;
 
-    return (hosts[0].compare(hostname) == 0);
+    return (GetMaster(clusterHosts).compare(hostname) == 0);
 }
 
 std::string
@@ -126,7 +167,8 @@ GetMaster(const std::string& clusterGroup)
     if (groups.size() == 0)
         return "";
 
-    return groups[0];
+    std::string master = MasterOverrideIn(groups);
+    return master.empty() ? groups[0] : master;
 }
 
 std::string

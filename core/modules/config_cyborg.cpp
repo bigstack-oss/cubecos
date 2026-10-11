@@ -129,7 +129,7 @@ SetupService(std::string domain, std::string userPass)
 
     HexLogInfo("Setting up cyborg");
 
-    HexUtilSystemF(0, 0, "su -s /bin/sh -c \"cyborg-dbsync --config-file /etc/cyborg/cyborg.conf upgrade\" %s", USER);
+    HexUtilSystemF(0, 0, DB_MIGRATE_LOCK "su -s /bin/sh -c \"cyborg-dbsync --config-file /etc/cyborg/cyborg.conf upgrade\" %s", USER);
 
     // prepare env settings
     std::string env = ". " + std::string(OPENRC) + " &&";

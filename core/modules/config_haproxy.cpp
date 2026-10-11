@@ -31,6 +31,9 @@ const static char RUNDIR[] = "/run/haproxy";
 
 const static char KEYFILE[] = "/var/www/certs/server.pem";
 
+// galera-check.socket (core/mysql): 200 only while the node is Synced
+const static char GALERA_CHECK_PORT[] = "13306";
+
 static bool s_bCubeModified = false;
 static CubeRole_e s_eCubeRole;
 
@@ -429,6 +432,9 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         { "ceph_nfs_ganesha", "2049,2049", "tcp", "" }
     };
 
+    // upgrade pins to the master, which may still lack galera-check
+    bool migrating = access(CUBE_MIGRATE, F_OK) == 0;
+
     for (size_t i = 0 ; i < sizeof(srvlist)/sizeof(srvlist[0]) ; i++) {
         if (srvlist[i][SRV_OPTS].find("quorum") != std::string::npos && hosts.size() < 3)
             continue;
@@ -472,7 +478,14 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         else if (srvlist[i][SRV_CONN] == "mysql") {
             fprintf(fout, "  timeout client  10h\n");
             fprintf(fout, "  timeout server  10h\n");
-            fprintf(fout, "  option  mysql-check\n");
+            // mysql-check passes a joiner that still answers 1047
+            if (migrating) {
+                fprintf(fout, "  option  mysql-check\n");
+            }
+            else {
+                fprintf(fout, "  option  httpchk GET /\n");
+                fprintf(fout, "  http-check expect status 200\n");
+            }
         }
 
         if (srvlist[i][SRV_OPTS].find("notcpka") == std::string::npos)
@@ -487,22 +500,25 @@ WriteConfig(bool ha, const std::string& ctrlVip,
 
         // we only talk to master node in upgrade
         int size = hosts.size();
-        if (access(CUBE_MIGRATE, F_OK) == 0)
+        if (migrating)
             size = 1;
 
         for (int n = 0 ; n < size ; n++) {
-            std::string sslVerify = "";
+            std::string chkOpts = "";
             if (srvlist[i][SRV_CONN] == "httpschk")
-                sslVerify = " check-ssl verify none";
+                chkOpts = " check-ssl verify none";
+            else if (srvlist[i][SRV_CONN] == "mysql" && !migrating)
+                chkOpts = std::string(" port ") + GALERA_CHECK_PORT;
 
             if (srvlist[i][SRV_OPTS].find("ap") != std::string::npos)
                 fprintf(fout, "  server %s %s:%s %scheck inter 2000 rise 2 fall 5%s\n",
                               hosts[n].c_str(), addrs[n].c_str(), bport.c_str(),
                               n ? "backup " : "on-marked-down shutdown-sessions on-marked-up shutdown-backup-sessions ",
-                              sslVerify.c_str());
+                              chkOpts.c_str());
             else
-                fprintf(fout, "  server %s %s:%s check inter 2000 rise 2 fall 5%s\n",
-                              hosts[n].c_str(), addrs[n].c_str(), bport.c_str(), sslVerify.c_str());
+                // drop sessions pinned to a dead backend instead of letting them hang
+                fprintf(fout, "  server %s %s:%s check inter 2000 rise 2 fall 5 on-marked-down shutdown-sessions%s\n",
+                              hosts[n].c_str(), addrs[n].c_str(), bport.c_str(), chkOpts.c_str());
         }
         fprintf(fout, "\n");
     }
@@ -552,7 +568,7 @@ WriteConfig(bool ha, const std::string& ctrlVip,
     // 1800, so that window is minutes rather than moments. Failing over to a healthy
     // replica is the behaviour we want here.
     for (size_t n = 0 ; n < hosts.size() ; n++)
-        fprintf(fout, "  server %s %s:8086 check inter 2000 rise 2 fall 5\n",
+        fprintf(fout, "  server %s %s:8086 check inter 2000 rise 2 fall 5 on-marked-down shutdown-sessions\n",
                       hosts[n].c_str(), addrs[n].c_str());
     fprintf(fout, "  \n");
 
@@ -600,6 +616,26 @@ Parse(const char *name, const char *value, bool isNew)
     return r;
 }
 
+// HA: haproxy-ha is pacemaker's resource, colocated with the vip; run it only on the VIP holder.
+static void
+CommitHaService(bool enabled, bool ha, const std::string& vip)
+{
+    if (!enabled || !ha) {
+        SystemdCommitService(enabled, NAME_HA);
+        return;
+    }
+
+    if (HexSystemF(0, "ip -o addr show | grep -qF ' %s/'", vip.c_str()) != 0) {
+        HexLogInfo("VIP %s not local, leaving %s to pacemaker", vip.c_str(), NAME_HA);
+        HexUtilSystemF(FWD, 0, "systemctl stop %s", NAME_HA);
+        return;
+    }
+
+    // reload in place so pacemaker's 1s monitor never sees it down; starts it if not running
+    if (HexUtilSystemF(FWD, 0, "systemctl reload-or-restart %s", NAME_HA) != 0)
+        HexLogError("failed to reload %s service", NAME_HA);
+}
+
 static bool
 CommitCheck(bool modified, int dryLevel)
 {
@@ -626,7 +662,7 @@ Commit(bool modified, int dryLevel)
     WriteLocalConfig(s_ha, myip, sharedId, s_ctrlAddrs.newValue());
     WriteConfig(s_ha, s_ctrlVip.newValue(), s_ctrlHosts.newValue(), s_ctrlAddrs.newValue());
     SystemdCommitService(enabled, NAME);
-    SystemdCommitService(enabled, NAME_HA);
+    CommitHaService(enabled, s_ha, s_ctrlVip.newValue());
 
     return true;
 }
@@ -642,7 +678,7 @@ ClusterStartMain(int argc, char **argv)
 
     // restore original haproxy-ha config in the case of upgrade
     WriteConfig(s_ha, s_ctrlVip.newValue(), s_ctrlHosts.newValue(), s_ctrlAddrs.newValue());
-    SystemdCommitService(enabled, NAME_HA);
+    CommitHaService(enabled, s_ha, s_ctrlVip.newValue());
 
     return EXIT_SUCCESS;
 }

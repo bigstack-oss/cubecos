@@ -1,11 +1,14 @@
 [Unit]
 Description=etcd watcher for cluster changes
 After=network.target
+# exits on etcd "no leader"; never hit the start limit, retry until quorum
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/cubectl tuning watch
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

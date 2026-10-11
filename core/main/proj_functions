@@ -10,6 +10,8 @@ HEX_DONE=/run/bootstrap_done
 CUBE_DONE=/run/cube_commit_done
 CLUSTER_SYNC=/run/cube_cluster_synced
 CLUSTER_REPAIRING=/run/cube_cluster_repairing
+# one-time master for this boot (boot_mode master_override); tmpfs, gone on reboot
+CUBE_MASTER_OVERRIDE=${CUBE_MASTER_OVERRIDE:-/run/cube_master_override}
 # Note: openstack_dashboard is a symlink into the python 3.12 venv's site-packages
 # now, so this path resolves inside the venv. Moving panels aside below therefore
 # edits the installed package rather than a private copy under /usr/share.
@@ -113,7 +115,9 @@ _hex_exec()
                 local log_pth="log/$log"
                 local log_url=
                 rm -f /tmp/$log
-                if [ "x$MANNER" != "xforce" -a "x$checking_detected" != "x" ] ; then
+                # another node's run only stands in for ours if our cached result is recent
+                local cache_age=$(( $(date +%s) - $(stat -c %Y $runtime 2>/dev/null || echo 0) ))
+                if [ "x$MANNER" != "xforce" -a "x$checking_detected" != "x" -a $cache_age -lt 300 ] ; then
                     local node=$(echo $checking_detected | cut -d"|" -f1 | xargs)
                     local cmd=$(echo $checking_detected | cut -d"|" -f3 | cut -d"," -f1 | xargs)
                     local pid=$(echo $checking_detected | cut -d"|" -f3 | cut -d"," -f2)
@@ -279,16 +283,53 @@ cube_cluster_start()
     # this tail is skipped on the master when a peer isn't sshable.
 }
 
+# Boot finished: "done" recorded, or no record yet (not rebooted since install).
+CUBE_BOOT_DONE_TEST="grep -q '^done ' /run/cube_bootup_status 2>/dev/null || { [ ! -e /run/cube_bootup_status ] && [ -e /run/cube_commit_done ] ; }"
+
+# Failover monitors may start: this node finished booting and so did the
+# master, or the master is down (its peers must take over its workloads).
+cube_failover_gate_open()
+{
+    eval "$CUBE_BOOT_DONE_TEST" || return 1
+    local m=$(cube_master_control)
+    [ "$m" = "$(hostname)" ] && return 0
+    is_sshable $m || return 0
+    timeout 10 ssh root@$m "$CUBE_BOOT_DONE_TEST"
+}
+
+# Master control for this boot: the override if it names a control host, else
+# the first control host (the controller on non-HA).
+cube_master_control()
+{
+    source /usr/sbin/hex_tuning /etc/settings.txt
+    local o=$(head -1 $CUBE_MASTER_OVERRIDE 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$o" ] && echo ",$T_cubesys_control_hosts," | grep -q ",$o," ; then
+        echo $o
+    elif [ "x$T_cubesys_control_hosts" = "x" ] ; then
+        echo ${T_cubesys_controller:-$T_net_hostname}
+    else
+        echo $T_cubesys_control_hosts | cut -d"," -f1
+    fi
+}
+
+# True when every control but $1 has committed or is not sshable.
+cube_controls_committed_or_down()
+{
+    source /usr/sbin/hex_tuning /etc/settings.txt
+    local n
+    for n in $(echo $T_cubesys_control_hosts | tr ',' ' ') ; do
+        [ "x$n" = "x$1" ] && continue
+        is_sshable $n || continue
+        timeout 10 ssh root@$n "stat $CUBE_DONE" </dev/null >/dev/null 2>&1 || return 1
+    done
+    return 0
+}
+
 # Shared env for the split cube_cluster_start halves.
 _cube_cluster_start_env()
 {
     source /usr/sbin/hex_tuning /etc/settings.txt
-    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
-        export MASTER_CONTROL=$T_cubesys_controller
-        [ -n "$MASTER_CONTROL" ] || MASTER_CONTROL=$T_net_hostname
-    else
-        export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
-    fi
+    export MASTER_CONTROL=$(cube_master_control)
 }
 
 # Per-node half: runs on EVERY node's boot/recovery to bring this node's local
@@ -298,7 +339,7 @@ cube_cluster_start_node()
     _cube_cluster_start_env
     Quiet -n ip neigh flush all
     Quiet -n $HEX_SDK ceph_leave_maintenance # ensure storage is working before other actions
-    # re-render mon host from the live monmap (boot commit writes only the master mon IP)
+    # re-render mon host from the live monmap (the master commit writes only its own mon IP)
     Quiet -n /usr/sbin/hex_config sync_ceph_config
     if [ "$VERBOSE" == "1" ] ; then
         /usr/sbin/hex_config -p trigger node_start
@@ -327,10 +368,26 @@ cube_cluster_start_node()
 
 # Cluster-wide half: runs ONCE from the master when all nodes are up (master
 # rolled last => end of roll; or after a full bring-up). All ops idempotent.
+# Finish cephfs mounts a cold boot deferred (ceph_mount_cephfs --defer) on every
+# node. Needs peer OSDs up: run at cluster start and again at the end of the master bring-up.
+cube_cephfs_deferred_bringup_all()
+{
+    local _n _pids=()
+    for _n in $(cubectl node list -j 2>/dev/null | jq -r '.[].hostname') ; do
+        # subshell: remote_run exits on an unsshable node; parallel: a slow node
+        # doesn't hold the rest
+        ( remote_run "$_n" "$HEX_SDK ceph_cephfs_deferred_bringup" ) </dev/null >/dev/null 2>&1 &
+        _pids+=($!)
+    done
+    [ ${#_pids[@]} -eq 0 ] || wait "${_pids[@]}"
+    return 0
+}
+
 cube_cluster_start_cluster()
 {
     _cube_cluster_start_env
     touch /run/cube_cluster_wide.ran # marker: this node ran the cluster-wide half (expect: master only)
+    cube_cephfs_deferred_bringup_all
     if [ "$VERBOSE" == "1" ] ; then
         /usr/sbin/hex_config -p trigger cluster_start
     else
@@ -429,18 +486,6 @@ cube_cluster_stop()
     touch /etc/appliance/state/mysql_new_cluster
 }
 
-# Cold-boot sweep for bootstrap_cube_config: per-node stop on every control
-# node (last first) + data-movement hold. Not `cluster stop`: that sets
-# pause/nodown, re-blocking I/O the master's ceph commit just unpaused.
-cube_cluster_boot_stop()
-{
-    local ip
-    for ip in $(cubectl node list -r control -j 2>/dev/null | jq -r .[].ip.management | tac) ; do
-        remote_run $ip "$HEX_SDK cube_cluster_stop" >/dev/null 2>&1 || true
-    done
-    $HEX_SDK ceph_hold_data_movement
-}
-
 cube_cluster_power()
 {
     case $1 in
@@ -456,12 +501,7 @@ cube_cluster_power()
     esac
 
     source /usr/sbin/hex_tuning /etc/settings.txt
-    if [ "x$T_cubesys_control_hosts" = "x" ] ; then
-        export MASTER_CONTROL=$T_cubesys_controller
-        [ -n "$MASTER_CONTROL" ] || MASTER_CONTROL=$T_net_hostname
-    else
-        export MASTER_CONTROL=$(echo $T_cubesys_control_hosts | cut -d"," -f1)
-    fi
+    export MASTER_CONTROL=$(cube_master_control)
 
     if [ "x${MASTER_CONTROL:-NOMASTER}" != "x$(hostname)" ] ; then
         remote_run ${MASTER_CONTROL:-NOMASTER} "$HEX_SDK cube_cluster_power $1"
@@ -1330,8 +1370,35 @@ cube_cluster_resume_after_stop()
         sleep 10
     done
 
-    $HEX_SDK power_restore_recorded_vms
+    # keep the marker (services stay gated, cluster check flags it) if the
+    # recorded VMs could not be read, rather than dropping them silently
+    if ! $HEX_SDK power_restore_recorded_vms ; then
+        log_error "cluster bootup: VM restore could not read the recorded VM list; planned-maintenance marker kept"
+        return 1
+    fi
     $HEX_SDK os_planned_maintenance_clear
+}
+
+# Boot-end steps the master skipped while a peer was missing: deferred cephfs
+# mounts, VM restore + planned-maintenance clear (async), late-start sweep.
+cube_bootup_finish()
+{
+    timeout 600 $HEX_SDK cube_cephfs_deferred_bringup_all
+    $HEX_SDK cluster_check_repair_async
+    timeout 900 $HEX_SDK health_late_start_sweep 600
+}
+
+# On a peer at boot end: if the master gave up waiting (/run marker) and the
+# cluster is ready now, run cube_bootup_finish on the master, once.
+cube_bootup_finish_late()
+{
+    local m=$(cube_master_control)
+    [ "$m" != "$(hostname)" ] || return 0
+    is_sshable $m || return 0
+    timeout 10 ssh root@$m "[ -e /run/cube_bootup_finish_pending ]" || return 0
+    cube_cluster_ready || return 0
+    log_info "cluster bootup: $(hostname) finishing the boot-end steps the master $m skipped"
+    timeout 10 ssh root@$m "rm /run/cube_bootup_finish_pending 2>/dev/null && { setsid $HEX_SDK cube_bootup_finish </dev/null >/dev/null 2>&1 & }"
 }
 
 cluster_check_repair_async()
