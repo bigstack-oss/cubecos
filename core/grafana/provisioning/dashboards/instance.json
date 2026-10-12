@@ -328,7 +328,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "clamp_max(rate(ceilometer_cpu{resource=~\"$UUID\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{resource=~\"$UUID\"}, 100)",
+          "expr": "clamp_max(rate(cube_instance_vcpu_time{resource=~\"$UUID\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{resource=~\"$UUID\"}, 100)",
           "legendFormat": "cpu",
           "refId": "A"
         },
@@ -455,7 +455,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "clamp_max(rate(ceilometer_cpu{resource=~\"$UUID\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{resource=~\"$UUID\"}, 100)",
+          "expr": "clamp_max(rate(cube_instance_vcpu_time{resource=~\"$UUID\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{resource=~\"$UUID\"}, 100)",
           "legendFormat": "cpu",
           "refId": "A"
         }

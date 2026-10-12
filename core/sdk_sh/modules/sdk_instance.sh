@@ -18,7 +18,7 @@ _instance_metrics_dump()
         [ -n "$name" ] || continue
         timeout 10 virsh dumpxml "$name" 2>/dev/null
         echo "@@STATS@@"
-        timeout 10 virsh domstats --cpu-total --balloon --block --interface "$name" 2>/dev/null
+        timeout 10 virsh domstats --cpu-total --vcpu --balloon --block --interface "$name" 2>/dev/null
         echo "@@END@@"
     done
 }
@@ -56,6 +56,11 @@ _instance_metrics_dump()
 #                             would read 1e9 times low and always clamp to nothing.
 #   ceilometer_memory_usage   gauge, MEBIBYTES, read with avg_over_time. workload_balance
 #                             divides by node.memory, which nova reports in MiB.
+#
+# ceilometer_cpu is the whole qemu process, I/O threads included (librbd on a ceph disk),
+# so under disk I/O it reads several times what the guest sees (#897). The human-facing
+# CPU figures -- dashboards, vm.cpu.utilization_norm_perc -- use cube_instance_vcpu_time,
+# the vCPU threads only. Watcher keeps the whole-process figure: that is the host load.
 #
 # There are three memory figures here and they are not interchangeable. libvirt reports
 # `available` (what the guest can see), `unused` (the guest's MemFree) and `usable` (the
@@ -217,7 +222,7 @@ function reset() {
     in_meta = 0
     delete st
 }
-function flush(   i, cnt, dev, extra, avail, unused, usable, tags, dtags, pct, r) {
+function flush(   i, cnt, dev, extra, avail, unused, usable, tags, dtags, pct, r, vt) {
     if (uuid == "") return
     # A domain libvirt is running but nova did not create. Nothing in CubeCOS makes one,
     # but the label still has to be defined rather than left holding the previous domain.
@@ -225,6 +230,14 @@ function flush(   i, cnt, dev, extra, avail, unused, usable, tags, dtags, pct, r
 
     emit("ceilometer_cpu", "", st["cpu.time"])
     emit("ceilometer_vcpus", "", vcpus)
+
+    # sum of the online vCPU times; omitted when libvirt reports none
+    vt = ""
+    cnt = st["vcpu.current"] + 0
+    for (i = 0; i < cnt; i++)
+        if (("vcpu." i ".time") in st) vt += st["vcpu." i ".time"]
+    if (vt != "") vt = sprintf("%.0f", vt)
+    emit("cube_instance_vcpu_time", "", vt)
 
     # All three come from the guest balloon driver, so a guest without virtio-balloon
     # reports none of them and every memory series is omitted for it -- the same thing
@@ -278,14 +291,14 @@ function flush(   i, cnt, dev, extra, avail, unused, usable, tags, dtags, pct, r
     tags = sprintf("resource_id=%s,tenant_id=%s,tenant_name=%s,vm_name=%s",
                    lpesc(uuid), lpesc(project), lpesc(project_name), lpesc(name))
 
-    if (st["cpu.time"] != "") {
-        r = rate("cpu:" uuid, st["cpu.time"])
+    if (vt != "") {
+        r = rate("vcpu:" uuid, vt)
         if (r != "" && vcpus + 0 > 0) {
             pct = r / 1e9 * 100 / vcpus
             if (pct > 100) pct = 100
             printf "vm.cpu.utilization_norm_perc,%s value=%.6f %s\n", tags, pct, NOW
         }
-        newst["cpu:" uuid] = st["cpu.time"]
+        newst["vcpu:" uuid] = vt
     }
     # usable / available, the figure the monasca libvirt check publishes -- see the header.
     if (avail + 0 > 0 && usable != "")
@@ -341,6 +354,8 @@ BEGIN {
     reset()
     print "# HELP ceilometer_cpu Cumulative CPU time consumed by the instance in nanoseconds." > OUT
     print "# TYPE ceilometer_cpu counter" > OUT
+    print "# HELP cube_instance_vcpu_time Cumulative CPU time of the instance vCPUs in nanoseconds, emulator and I/O threads excluded." > OUT
+    print "# TYPE cube_instance_vcpu_time counter" > OUT
     print "# HELP ceilometer_vcpus Virtual CPUs allocated to the instance." > OUT
     print "# TYPE ceilometer_vcpus gauge" > OUT
     print "# HELP ceilometer_memory_usage Guest memory in use in megabytes, libvirt available minus unused." > OUT

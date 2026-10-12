@@ -124,7 +124,7 @@
             "type": "prometheus",
             "uid": "P43CA22E17D0F9596"
           },
-          "expr": "topk($TOP, sum by (resource, name) (clamp_max(rate(ceilometer_cpu{project_name=~\"$TENANT\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{project_name=~\"$TENANT\"}, 100)))",
+          "expr": "topk($TOP, sum by (resource, name) (clamp_max(rate(cube_instance_vcpu_time{project_name=~\"$TENANT\"}[$__rate_interval]) / 1e7 / ceilometer_vcpus{project_name=~\"$TENANT\"}, 100)))",
           "refId": "A",
           "format": "table",
           "instant": true
