@@ -4180,10 +4180,16 @@ health_thanos_repair()
     # either fight pacemaker or, worse, start a second compactor against the bucket
     # while pacemaker still believes its own instance is running. Ask pacemaker to
     # replace it instead, and only from one node.
+    #
+    # refresh, not cleanup: cleanup only forgets failed operations, and the resource's
+    # failure-timeout ages those out after 60s. Once they have expired pacemaker is left
+    # holding the last successful start and stops reporting the dead unit, so it shows
+    # the compactor Started while no node runs it -- accept-3c_3p_5s sat that way for
+    # hours, and eight cleanups changed nothing. refresh re-probes every node.
     local running=$(cmd -c -v "systemctl is-active thanos-compact" 2>/dev/null | grep -c "|0|active$")
     if [ "${running:-0}" -ne 1 ] && [ "x$HOSTNAME" = "x${CUBE_NODE_CONTROL_HOSTNAMES[0]}" ] ; then
         log_error "health_thanos_repair: ${running:-0} thanos-compact instances, expected 1, asking pacemaker to replace it"
-        Quiet -n pcs resource cleanup thanos-compact
+        Quiet -n pcs resource refresh thanos-compact
     fi
 }
 
