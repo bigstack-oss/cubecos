@@ -1925,7 +1925,7 @@ ceph_osd_enable_cache()
     # associate backdev, ceph osd tier add {cold} {hot}
     if ! $CEPH osd tier add $backpool $cachepool ; then
         # failed to add tier pool, recreate it
-        Quiet -n ceph_recreate_cache_pool $backpool
+        Quiet ceph_recreate_cache_pool $backpool || return 1
         Quiet -n $CEPH osd tier add $backpool $cachepool
     fi
     Quiet -n $CEPH osd tier set-overlay $backpool $cachepool
@@ -2066,7 +2066,7 @@ ceph_osd_create_cache()
         fi
     fi
 
-    Quiet -n ceph_osd_enable_cache $backpool
+    Quiet ceph_osd_enable_cache $backpool || return 1
 
     if ! ($CEPH osd crush rule list | grep -q $rule_ssd) ; then
         # create $rule
@@ -2110,6 +2110,20 @@ ceph_osd_create_cache()
     fi
 }
 
+# $1 - pool name
+# Prints how many objects in the pool carry the dirty flag, i.e. were written
+# into it as a cache tier and never flushed to the base pool. Summed from the
+# PG stats rather than read from `ceph df detail`, which prints dirty as 0 for
+# any pool that is not a tier right now -- the very state a cache pool is in
+# once switch-off has detached it.
+_ceph_pool_dirty_objects()
+{
+    local n
+    n=$($CEPH pg ls-by-pool $1 -f json 2>/dev/null | jq -e '[.pg_stats[].stat_sum.num_objects_dirty] | add // 0' 2>/dev/null) || return 1
+    [[ "$n" =~ ^[0-9]+$ ]] || return 1
+    echo $n
+}
+
 # $1 - backpool name (e.g.: $BUILTIN_BACKPOOL)
 ceph_recreate_cache_pool()
 {
@@ -2122,7 +2136,22 @@ ceph_recreate_cache_pool()
     fi
     local size=$($CEPH osd pool get $cachepool size | awk '{print $2}' | tr -d '\n')
 
-    Quiet -n $CEPH osd pool delete $cachepool $cachepool --yes-i-really-really-mean-it
+    # A cache pool left non-empty by switch-off is the normal case: objects a
+    # client still watches flush but cannot be evicted, and those are stale
+    # copies of what the base pool holds, so deleting them is right. A dirty
+    # object is different -- it was never flushed and this pool holds the only
+    # copy (#1436). Refuse rather than delete, and fail closed if it cannot be read.
+    local dirty
+    if ! dirty=$(_ceph_pool_dirty_objects $cachepool) ; then
+        echo "Error: cannot read the dirty object count of $cachepool, not deleting it"
+        return 1
+    fi
+    if [ "$dirty" != "0" ] ; then
+        echo "Error: $cachepool holds $dirty dirty object(s) never flushed to $backpool, not deleting it"
+        return 1
+    fi
+
+    Quiet $CEPH osd pool delete $cachepool $cachepool --yes-i-really-really-mean-it || return 1
     Quiet -n ceph_create_pool $cachepool rbd
     Quiet -n ceph_adjust_pool_size "$cachepool" $size
     local pgs=$($CEPH osd pool get $backpool pg_num -f json | jq -r .pg_num)
