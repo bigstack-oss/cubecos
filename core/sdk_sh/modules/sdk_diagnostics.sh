@@ -234,10 +234,14 @@ _diagSrvShiftHost()
     return $rc
 }
 
+# Cirros needs about 128 MB. At 4 GB a guest, the four the diagnostics launch on a pair of
+# 32 GB edge-cores no longer fit on one of them once nova reserves the ceph OSDs' memory
+# targets (half of RAM there), so evacuating either node had nowhere to go. An existing
+# flavor is reused as it is; diagnostics_teardown deletes it, and the next run makes this one.
 _diagFlvrCreate()
 {
     local flavor=${1:-t2.diagnostics}
-    $OPENSTACK flavor show $flavor >/dev/null 2>&1 || $OPENSTACK flavor create --vcpus 2 --ram 4096 --disk 80 --public $flavor >/dev/null
+    $OPENSTACK flavor show $flavor >/dev/null 2>&1 || $OPENSTACK flavor create --vcpus 2 --ram 1024 --disk 80 --public $flavor >/dev/null
 }
 
 _diagFlvrDelete()
