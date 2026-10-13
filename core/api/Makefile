@@ -4,17 +4,16 @@ include ../../build.mk
 API_RPM := api.rpm
 PKG_NAME := cube-cos-api
 GITHUB_URL := https://github.com/bigstack-oss/cube-cos-api
-# Split from GITHUB_URL because the two surfaces behave differently: the clone below runs at full
-# speed, while release assets are served from the object CDN that is throttled to ~40 KB/s from
-# our build network (cubecos#1350). Only the asset URL is redirectable; GITHUB_DL_BASE defaults to
-# https://github.com in project.mk, so this is unchanged unless a mirror is configured.
 GITHUB_DL_URL := $(GITHUB_DL_BASE)/bigstack-oss/cube-cos-api
 
-ifneq ($(RC),)
+# RC: download the pinned prebuilt rpm; otherwise build from $(CUBE_COS_API_REF) (core/component-refs.mk)
+ifneq ($(and $(RC),$(CUBE_COS_API_RPM)),)
+$(if $(CUBE_COS_API_RPM_SHA256),,$(error CUBE_COS_API_RPM is set but CUBE_COS_API_RPM_SHA256 is not))
 $(API_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O api.rpm $(GITHUB_DL_URL)/releases/download/v3.1.20-rc1/cube-cos-api-v3.1.0-1.fc35.a9fdf17.x86_64.rpm, \
-		"  PULL    $(API_RPM)")
+		wget -O $@.part $(GITHUB_DL_URL)/releases/download/$(CUBE_COS_API_RPM) && \
+		echo "$(CUBE_COS_API_RPM_SHA256)  $@.part" | sha256sum -c --quiet && mv -f $@.part $@, \
+		"  PULL    $(CUBE_COS_API_RPM)")
 else
 GIT_DIR := git
 RPMBUILD_DIR := rpmbuild
@@ -22,14 +21,13 @@ RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 
-# prepare the api source code, being pulled from GitHub using the default branch
-# For RC: the rpm is pulled from the release above, not built from source
+# clone the api source at $(CUBE_COS_API_REF) (core/component-refs.mk)
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone --depth 1 -b $(CUBE_COS_API_REF) $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   $(GITHUB_URL)")
+		"  CLONE   $(GITHUB_URL)@$(CUBE_COS_API_REF)")
 
 version: $(GIT_DIR)
 	$(Q)head -n 1 $(GIT_DIR)/VERSION > version

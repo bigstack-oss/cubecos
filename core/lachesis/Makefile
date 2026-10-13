@@ -1,25 +1,33 @@
 # Cube SDK
 
 include ../../build.mk
-LACHESIS_RPM := lachesis.rpm
+LACHESIS_RPM_FILE := lachesis.rpm
 PKG_NAME := lachesis
 GITHUB_URL := https://github.com/bigstack-oss/lachesis
+GITHUB_DL_URL := $(GITHUB_DL_BASE)/bigstack-oss/lachesis
 
-# no RC prebuilt-download branch yet: lachesis has no tagged release to wget.
-# add one mirroring core/api when the first release is cut.
+# RC: download the pinned prebuilt rpm; otherwise build from $(LACHESIS_REF) (core/component-refs.mk)
+ifneq ($(and $(RC),$(LACHESIS_RPM)),)
+$(if $(LACHESIS_RPM_SHA256),,$(error LACHESIS_RPM is set but LACHESIS_RPM_SHA256 is not))
+$(LACHESIS_RPM_FILE):
+	$(call RUN_CMD_TIMED, \
+		wget -O $@.part $(GITHUB_DL_URL)/releases/download/$(LACHESIS_RPM) && \
+		echo "$(LACHESIS_RPM_SHA256)  $@.part" | sha256sum -c --quiet && mv -f $@.part $@, \
+		"  PULL    $(LACHESIS_RPM)")
+else
 GIT_DIR := git
 RPMBUILD_DIR := rpmbuild
 RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 
-# prepare the lachesis source code, being pulled from GitHub using the default branch
+# clone the lachesis source at $(LACHESIS_REF) (core/component-refs.mk)
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone --depth 1 -b $(LACHESIS_REF) $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   $(GITHUB_URL)")
+		"  CLONE   $(GITHUB_URL)@$(LACHESIS_REF)")
 
 version: $(GIT_DIR)
 	$(Q)head -n 1 $(GIT_DIR)/VERSION > version
@@ -56,10 +64,11 @@ $(RPMBUILD_RPMS): $(RPMBUILD_SOURCES) build_number
 	$(Q)touch $@
 
 # move the built rpm back to the local directory
-$(LACHESIS_RPM): $(RPMBUILD_RPMS)
+$(LACHESIS_RPM_FILE): $(RPMBUILD_RPMS)
 	$(Q)cp -f $</x86_64/$(PKG_NAME)-`cat version`-1.el9.`cat build_number`.x86_64.rpm $@
+endif
 
-BUILD += $(LACHESIS_RPM)
-BUILDCLEAN += $(LACHESIS_RPM) $(RPMBUILD_DIR) $(GIT_DIR) version build_number
+BUILD += $(LACHESIS_RPM_FILE)
+BUILDCLEAN += $(LACHESIS_RPM_FILE) $(RPMBUILD_DIR) $(GIT_DIR) version build_number
 
 include $(HEX_MAKEDIR)/hex_sdk.mk

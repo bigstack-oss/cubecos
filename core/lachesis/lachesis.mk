@@ -1,7 +1,7 @@
 # Cube SDK
 # lachesis (per-tenant network telemetry agent) installation
 
-LACHESIS_RPM = $(TOP_BLDDIR)/core/lachesis/lachesis.rpm
+LACHESIS_RPM_FILE = $(TOP_BLDDIR)/core/lachesis/lachesis.rpm
 
 # grafana dashboards come from the lachesis clone, not a vendored copy, so they
 # cannot drift from the metrics they query. grafana.mk installs provisioning/
@@ -11,7 +11,7 @@ LACHESIS_DASHBOARDS = $(TOP_BLDDIR)/core/lachesis/git/deploy/grafana/dashboards
 # the rpm owns /etc/cube/lachesis, /var/lib/lachesis and /var/log/lachesis.
 # installed disabled everywhere; config_lachesis enables per role at commit time.
 heavy_components_install::
-	$(Q)cp -f $(LACHESIS_RPM) $(ROOTDIR)/tmp/
+	$(Q)cp -f $(LACHESIS_RPM_FILE) $(ROOTDIR)/tmp/
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/resolv.conf
 	$(Q)chroot $(ROOTDIR) dnf install -y /tmp/lachesis.rpm
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -23,7 +23,7 @@ heavy_components_install::
 
 # for RC builds
 heavyfs_install::
-	$(Q)cp -f $(LACHESIS_RPM) $(ROOTDIR)/tmp/
+	$(Q)cp -f $(LACHESIS_RPM_FILE) $(ROOTDIR)/tmp/
 	$(Q)chroot $(ROOTDIR) rpm -e lachesis
 	$(Q)chroot $(ROOTDIR) rpm -i /tmp/lachesis.rpm
 	$(Q)rm -f $(ROOTDIR)/tmp/lachesis.rpm

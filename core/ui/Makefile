@@ -4,16 +4,16 @@ include ../../build.mk
 UI_RPM := ui.rpm
 PKG_NAME := cube-cos-ui
 GITHUB_URL := https://github.com/bigstack-oss/$(PKG_NAME)
-# Split from GITHUB_URL: release assets sit behind the object CDN that is throttled to ~40 KB/s
-# from our build network, while the clone below is unaffected (cubecos#1350). GITHUB_DL_BASE
-# defaults to https://github.com in project.mk.
 GITHUB_DL_URL := $(GITHUB_DL_BASE)/bigstack-oss/$(PKG_NAME)
 
-ifneq ($(RC),)
+# RC: download the pinned prebuilt rpm; otherwise build from $(CUBE_COS_UI_REF) (core/component-refs.mk)
+ifneq ($(and $(RC),$(CUBE_COS_UI_RPM)),)
+$(if $(CUBE_COS_UI_RPM_SHA256),,$(error CUBE_COS_UI_RPM is set but CUBE_COS_UI_RPM_SHA256 is not))
 $(UI_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O ui.rpm $(GITHUB_DL_URL)/releases/download/$(PKG_NAME)-v3.1.20-rc1/$(PKG_NAME)-3.1.0-1.f17df86.x86_64.rpm, \
-		"  PULL    $(UI_RPM)")
+		wget -O $@.part $(GITHUB_DL_URL)/releases/download/$(CUBE_COS_UI_RPM) && \
+		echo "$(CUBE_COS_UI_RPM_SHA256)  $@.part" | sha256sum -c --quiet && mv -f $@.part $@, \
+		"  PULL    $(CUBE_COS_UI_RPM)")
 else
 GIT_DIR := git
 RPMBUILD_DIR := rpmbuild
@@ -21,14 +21,13 @@ RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 
-# prepare the ui source code, being pulled from GitHub using the default branch
-# For RC: the rpm is pulled from the release above, not built from source
+# clone the ui source at $(CUBE_COS_UI_REF) (core/component-refs.mk)
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone --depth 1 -b $(CUBE_COS_UI_REF) $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   $(GITHUB_URL)")
+		"  CLONE   $(GITHUB_URL)@$(CUBE_COS_UI_REF)")
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $@ && nvm install $(QEND)

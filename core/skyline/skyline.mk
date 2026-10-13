@@ -119,7 +119,8 @@ heavyfs_install::
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-console
-	$(Q)for i in {1..3} ; do timeout 120 git clone --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
+	$(Q)for i in {1..3} ; do timeout 120 git clone --depth 1 -b $(SKYLINE_CONSOLE_REF) https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
+	$(Q)echo "  REF     skyline-console $(SKYLINE_CONSOLE_REF) $$(git -C $(ROOTDIR)/skyline-console rev-parse --short HEAD)"
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(ROOTDIR)/skyline-console && nvm install $(QEND)
@@ -134,7 +135,8 @@ rootfs_install::
 heavyfs_install::
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) uninstall -y skyline-console
 	$(Q)chroot $(ROOTDIR) $(SKYLINE_PIP) cache remove skyline-console
-	$(Q)for i in {1..3} ; do timeout 120 git clone -b v3.1.20-rc1 --depth 1 https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
+	$(Q)for i in {1..3} ; do timeout 120 git clone --depth 1 -b $(SKYLINE_CONSOLE_REF) https://github.com/bigstack-oss/skyline-console.git $(ROOTDIR)/skyline-console && break ; done
+	$(Q)echo "  REF     skyline-console $(SKYLINE_CONSOLE_REF) $$(git -C $(ROOTDIR)/skyline-console rev-parse --short HEAD)"
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $(ROOTDIR)/skyline-console && nvm install $(QEND)

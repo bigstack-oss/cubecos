@@ -27,38 +27,16 @@ LOGIN_RPM := login.rpm
 KEYCLOAK_DIR := /opt/keycloak
 PKG_NAME := cube-cos-login
 GITHUB_URL := https://github.com/bigstack-oss/cube-cos-ui
-# Split from GITHUB_URL: release assets sit behind the object CDN that is throttled to ~40 KB/s
-# from our build network, while the clone below is unaffected (cubecos#1350). GITHUB_DL_BASE
-# defaults to https://github.com in project.mk.
 GITHUB_DL_URL := $(GITHUB_DL_BASE)/bigstack-oss/cube-cos-ui
 
-ifneq ($(RC),)
-# NOTE: this RPM and the IMG_BUILD tag below must be bumped together. .load-img does not
-# pull the image from a registry -- it installs this rpm and loads the tar inside it --
-# and cube-cos-login.spec commits/saves that image as
-# localhost:5080/bigstack/keycloak:%{version}, where %{version} is the login package.json
-# version. So the RC IMG_BUILD literal has to be exactly this rpm's version, or .push-img
-# pushes a tag nothing loaded. It drifted before: IMG_BUILD said 17.1.0 while the pinned
-# rpm was 17.2.0.
-#
-# 3.1.20 is where this pin catches up with the chart above. cube-cos-login-v3.1.20-rc1 is
-# the 22.x release 03054e90 was waiting for: package.json is 22.0.0, so the image lands as
-# localhost:5080/bigstack/keycloak:22.0.0 -- the tag chart-values.yaml asks for -- and
-# KEYCLOAK_VERSION is 22.0.5, so the spec builds on quay.io/keycloak/keycloak:22.0.5 and
-# the server inside is the one CHART_NAME/CHART_VERSION (keycloakx 2.3.0) is written
-# against. Keep the two numbers apart when bumping: the tag is the package.json version,
-# not the Keycloak version. While the pin sat at the 18 image beside a chart asking for 22,
-# RC builds failed the bundled-registry check in keycloak.mk.
-#
-# The same gap is open again for 26: chart-values.yaml asks for 26.0.0 and cube-cos-ui has
-# not cut a 26.x cube-cos-login release yet, so this pin and IMG_BUILD below stay on the
-# 22 release, RC builds fail that check, and both move together once the release exists.
-# The keycloakx 7.3.2 chart above is written for 26 in any case: it emits KC_PROXY_HEADERS
-# (added in 24) and the jdbc-ping cache stack (added in 26.1), which the 22 image predates.
+# RC: download the pinned prebuilt rpm; otherwise build from $(CUBE_COS_LOGIN_REF) (core/component-refs.mk)
+ifneq ($(and $(RC),$(CUBE_COS_LOGIN_RPM)),)
+$(if $(CUBE_COS_LOGIN_RPM_SHA256),,$(error CUBE_COS_LOGIN_RPM is set but CUBE_COS_LOGIN_RPM_SHA256 is not))
 $(LOGIN_RPM):
 	$(call RUN_CMD_TIMED, \
-		wget -O login.rpm $(GITHUB_DL_URL)/releases/download/$(PKG_NAME)-v3.1.20-rc1/$(PKG_NAME)-22.0.0-1.f17df86.x86_64.rpm, \
-		"  PULL    $(LOGIN_RPM)")
+		wget -O $@.part $(GITHUB_DL_URL)/releases/download/$(CUBE_COS_LOGIN_RPM) && \
+		echo "$(CUBE_COS_LOGIN_RPM_SHA256)  $@.part" | sha256sum -c --quiet && mv -f $@.part $@, \
+		"  PULL    $(CUBE_COS_LOGIN_RPM)")
 else
 GIT_DIR := git
 RPMBUILD_DIR := rpmbuild
@@ -66,14 +44,13 @@ RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS = $(RPMBUILD_DIR)/RPMS
 
-# prepare the login source code, being pulled from GitHub using the default branch
-# For RC: the rpm is pulled from the release above, not built from source
+# clone the login source at $(CUBE_COS_LOGIN_REF) (core/component-refs.mk)
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && timeout 120 git clone --depth 1 -b $(CUBE_COS_LOGIN_REF) $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   $(GITHUB_URL)")
+		"  CLONE   $(GITHUB_URL)@$(CUBE_COS_LOGIN_REF)")
 	$(Q)# enable nvm
 	$(Q)sed -i 's/^#//g' $$BASH_ENV
 	$(Q)cd $@ && nvm install $(QEND)
@@ -137,11 +114,8 @@ $(LOGIN_RPM): $(RPMBUILD_RPMS)
 	$(Q)cp -f $</x86_64/$(PKG_NAME)-`cat version`-1.el9.`cat build_number`.x86_64.rpm $@
 endif
 
-ifneq ($(RC),)
-IMG_BUILD := localhost:5080/bigstack/keycloak:22.0.0
-else
-IMG_BUILD := localhost:5080/bigstack/keycloak:`cat version`
-endif
+# the rpm saves its image as keycloak:<rpm version>, built or prebuilt
+IMG_BUILD := localhost:5080/bigstack/keycloak:`rpm -qp --qf '%{VERSION}' $(LOGIN_RPM)`
 
 .load-img: $(LOGIN_RPM)
 	$(Q)dnf install -y $< $(QEND)
@@ -197,10 +171,8 @@ endif
 
 clean:: testclean
 	$(Q)podman image rm -f $(shell cat .load-img) $(QEND) || true
-ifeq ($(RC),)
 	$(Q)rm -rf $(RPMBUILD_DIR)
 	$(Q)rm -rf $(GIT_DIR)
-endif
 
 BUILD += $(CHART)
 BUILDCLEAN += $(CHART) $(GIT_DIR) version build_number keycloak_version $(RPMBUILD_DIR) $(LOGIN_RPM) .load-img .push-img $(KEYCLOAK_DIR)

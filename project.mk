@@ -21,6 +21,9 @@ HEX_AGENT_ENV_DIR := /etc/cube
 # policy source tree
 CORE_POLICYDIR := $(COREDIR)/policies
 
+# homebrew component refs
+include $(COREDIR)/component-refs.mk
+
 # Base URL for GitHub *release assets* (the `/<org>/<repo>/releases/download/...` objects we
 # wget, not the git remotes we clone).
 #

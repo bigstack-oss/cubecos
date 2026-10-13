@@ -4,40 +4,46 @@ include ../../build.mk
 APPCTL_RPM := appctl.rpm
 PKG_NAME := cube-cos-app-framework
 GITHUB_URL := https://github.com/bigstack-oss/$(PKG_NAME)
-# Split from GITHUB_URL: release assets sit behind the object CDN that is throttled to ~40 KB/s
-# from our build network, while the clone below is unaffected (cubecos#1350). GITHUB_DL_BASE
-# defaults to https://github.com in project.mk.
 GITHUB_DL_URL := $(GITHUB_DL_BASE)/bigstack-oss/$(PKG_NAME)
 
-ifneq ($(RC),)
-$(APPCTL_RPM):
-	$(call RUN_CMD_TIMED, \
-		wget -O appctl.rpm $(GITHUB_DL_URL)/releases/download/v3.1.20-rc1/$(PKG_NAME)-v3.1.0-1.fc35.a36a0cf.x86_64.rpm, \
-		"  PULL    $(APPCTL_RPM)")
-else
 GIT_DIR := git
 RPMBUILD_DIR := rpmbuild
 RPMBUILD_SPECS := $(RPMBUILD_DIR)/SPECS
 RPMBUILD_SOURCES := $(RPMBUILD_DIR)/SOURCES
 RPMBUILD_RPMS := $(RPMBUILD_DIR)/RPMS
 
-# prepare the appctl source code, being pulled from GitHub using the default branch
-# For RC: the rpm is pulled from the release above, not built from source
+# clone the appctl source: at $(CUBE_COS_APPFW_REF), or for an RC at the prebuilt rpm's
+# release tag, since that build still needs plugins/ (not in the rpm)
+ifneq ($(and $(RC),$(CUBE_COS_APPFW_RPM)),)
+APPCTL_GIT_REF := $(firstword $(subst /, ,$(CUBE_COS_APPFW_RPM)))
+else
+APPCTL_GIT_REF := $(CUBE_COS_APPFW_REF)
+endif
 # The repo's only lfs object (plugins/images/tars/postgresql-*.tar, 264MB) is left out of the
 # clone so the timeout covers the git transfer alone; it is pulled below, where a retry resumes
 # instead of re-downloading from scratch.
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
-		rm -fr $@ && GIT_LFS_SKIP_SMUDGE=1 timeout 120 git clone --depth 1 $(GITHUB_URL).git $@ && break ; \
+		rm -fr $@ && GIT_LFS_SKIP_SMUDGE=1 timeout 120 git clone --depth 1 -b $(APPCTL_GIT_REF) $(GITHUB_URL).git $@ && break ; \
 		done,\
-		"  CLONE   $(GITHUB_URL)")
+		"  CLONE   $(GITHUB_URL)@$(APPCTL_GIT_REF)")
 	$(call RUN_CMD_TIMED, \
 		for i in {1..3} ; do \
 		( cd $@ && timeout 900 git lfs pull ) && break ; \
 		done,\
 		"  LFS     $(PKG_NAME)")
 
+# RC: download the pinned prebuilt rpm; otherwise build from $(CUBE_COS_APPFW_REF) (core/component-refs.mk)
+ifneq ($(and $(RC),$(CUBE_COS_APPFW_RPM)),)
+$(if $(CUBE_COS_APPFW_RPM_SHA256),,$(error CUBE_COS_APPFW_RPM is set but CUBE_COS_APPFW_RPM_SHA256 is not))
+$(APPCTL_RPM): | $(GIT_DIR)
+	$(call RUN_CMD_TIMED, \
+		wget -O $@.part $(GITHUB_DL_URL)/releases/download/$(CUBE_COS_APPFW_RPM) && \
+		echo "$(CUBE_COS_APPFW_RPM_SHA256)  $@.part" | sha256sum -c --quiet && mv -f $@.part $@, \
+		"  PULL    $(CUBE_COS_APPFW_RPM)")
+	$(Q)cp -rf $(GIT_DIR)/plugins ./plugins
+else
 version: $(GIT_DIR)
 	$(Q)head -n 1 $(GIT_DIR)/VERSION > version
 

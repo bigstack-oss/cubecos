@@ -1,8 +1,9 @@
 # Cube SDK
-# cube-cos-driver binaries, built from bigstack-oss/cube-cos-driver (default
-# branch): phone-home-agent (installer preflight + first-boot snapshot apply)
-# and the driver server (SPA + snapshot generator + deploy orchestrator, shipped
-# in the pxeserver image). Deps resolved at build time only (Go proxy + npm).
+# cube-cos-driver binaries, built from bigstack-oss/cube-cos-driver at
+# $(CUBE_COS_DRIVER_REF) (core/component-refs.mk): phone-home-agent (installer
+# preflight + first-boot snapshot apply) and the driver server (SPA + snapshot
+# generator + deploy orchestrator, shipped in the pxeserver image). Deps resolved
+# at build time only (Go proxy + npm).
 
 include ../../build.mk
 
@@ -15,15 +16,16 @@ ifneq ($(V),)
 GOVERBOSE := -v
 endif
 
-# Clone the source (retry, shallow, default branch). Init only the first-level
+# Clone the source (retry, shallow, at $(CUBE_COS_DRIVER_REF)). Init only the first-level
 # UI-lib submodule — its own nested submodules are SSH-URL and not needed.
 $(GIT_DIR):
 	$(call RUN_CMD_TIMED, \
 		for i in 1 2 3 ; do \
-		rm -fr $@ && timeout 300 git clone --depth 1 $(GITHUB_URL).git $@ && \
+		rm -fr $@ && timeout 300 git clone --depth 1 -b $(CUBE_COS_DRIVER_REF) $(GITHUB_URL).git $@ && \
 		(cd $@ && git submodule update --init --depth 1 external/cube-cos-ui) && break ; \
 		done, \
-		"  CLONE   $(GITHUB_URL)")
+		"  CLONE   $(GITHUB_URL)@$(CUBE_COS_DRIVER_REF)")
+	$(Q)echo "  REF     $(SRV) $(CUBE_COS_DRIVER_REF) $$(git -C $@ rev-parse --short HEAD)"
 
 # Order-only on the clone: the driver build below writes into it, so a normal
 # prerequisite made the agent rebuild on every no-change run.
