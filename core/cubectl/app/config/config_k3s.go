@@ -3,9 +3,12 @@ package config
 import (
 	"bufio"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +53,13 @@ const (
 	k3sCubeManagedLabelValue       = "cube"
 	k3sCubeMangedLabelKeyValuePair = k3sCubeManagedLabelKey + "=" + k3sCubeManagedLabelValue
 	kubectlBinPath                 = "/usr/local/bin/kubectl"
+	// Releases an in-place upgrade steps through, one per minor (core/k3s/Makefile)
+	k3sLadderDir = k3sDataDir + "ladder/"
+	// The k3s version this server last ran, written once it is Ready on it. Under
+	// /var/lib/rancher/k3s, which CONFIG_MIGRATE carries to the new partition.
+	k3sVersionFile = "/var/lib/rancher/k3s/cube-k3s-version"
+	// What every release up to 3.2.0 shipped, and wrote no k3sVersionFile for
+	k3sShippedVersion = "v1.26.6+k3s1"
 
 	day = 24 * time.Hour
 )
@@ -588,9 +598,56 @@ data:
 	return nil
 }
 
+// k3sIngressShouldUpgrade decides whether to (re)install the bundled ingress-nginx chart. A
+// fresh install or --force always does. Otherwise a migration, or a deployed chart other than
+// the bundled one, does -- but only once every k3s server runs the final release: the new
+// chart may not run on the intermediate ones an upgrade passes through. Until then the
+// deployed release stays, and k3s_upgrade_ladder's closing commit upgrades it.
+func k3sIngressShouldUpgrade(nsExists, force, migration bool, deployedChart, shippedChart string, serversFinal bool) bool {
+	if !nsExists || force {
+		return true
+	}
+	if !migration && deployedChart == shippedChart {
+		return false
+	}
+	return serversFinal
+}
+
+// The bundled chart as helm names it, e.g. ingress-nginx-4.15.1
+func k3sIngressShippedChart() string {
+	m, _ := filepath.Glob(k3sDataDir + "/ingress-nginx/ingress-nginx-*.tgz")
+	if len(m) == 0 {
+		return ""
+	}
+	return strings.TrimSuffix(filepath.Base(m[0]), ".tgz")
+}
+
+func k3sIngressDeployedChart() string {
+	out, _, err := util.ExecCmd("helm", "--kubeconfig", k3sConfigFile, "list", "-n", "ingress-nginx", "-f", "^ingress-nginx$", "-o", "json")
+	if err != nil {
+		return ""
+	}
+	var rels []struct {
+		Chart string `json:"chart"`
+	}
+	if json.Unmarshal([]byte(out), &rels) != nil || len(rels) == 0 {
+		return ""
+	}
+	return rels[0].Chart
+}
+
 func k3sIngressDeploy() error {
-	if !k3sCheckNamespace("ingress-nginx") || commitOpts.force || isMigration() {
-		if err := k3sCreateNamespace("ingress-nginx"); err != nil {
+	nsExists := k3sCheckNamespace("ingress-nginx")
+	deployed, shipped := k3sIngressDeployedChart(), k3sIngressShippedChart()
+	serversFinal := k3sServersAtFinal()
+	upgrade := k3sIngressShouldUpgrade(nsExists, commitOpts.force, isMigration(), deployed, shipped, serversFinal)
+	zap.L().Info("K3s ingress-nginx", zap.Bool("upgrade", upgrade), zap.String("deployed", deployed),
+		zap.String("shipped", shipped), zap.Bool("serversFinal", serversFinal))
+	if upgrade {
+		// k3s has only just (re)started here, at boot or after the ladder, and
+		// rancher-webhook (failurePolicy=Fail) is not serving yet, so the API server
+		// answers 502. Give admission a few minutes before giving up on the chart.
+		if err := util.Retry(func() error { return k3sCreateNamespace("ingress-nginx") }, 20); err != nil {
 			return errors.WithStack(err)
 		}
 
@@ -706,6 +763,107 @@ func syncDefaultStorageClass() error {
 	return nil
 }
 
+var k3sMinorRe = regexp.MustCompile(`^v1\.(\d+)\.`)
+
+// k3sMinor returns 30 for v1.30.14+k3s2
+func k3sMinor(v string) (int, bool) {
+	m := k3sMinorRe.FindStringSubmatch(v)
+	if m == nil {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	return n, err == nil
+}
+
+// k3sPickBinary returns the k3s binary a server installs. Outside a migration it is the
+// release this image runs. At a migration it is the next minor up from <recorded>, the version
+// the server last ran, among the <ladder> releases, or the final release past the last of
+// them: k3s upgrades one minor at a time, and k3s_upgrade_ladder (sdk_k3s.sh) takes the rest
+// of the way. A record that does not parse counts as k3sShippedVersion.
+func k3sPickBinary(migration bool, recorded string, ladder []string) string {
+	final := k3sDataDir + K3sBin
+	if !migration {
+		return final
+	}
+
+	from, ok := k3sMinor(recorded)
+	if !ok {
+		from, _ = k3sMinor(k3sShippedVersion)
+	}
+
+	pick, pickMinor := final, 0
+	for _, v := range ladder {
+		if m, ok := k3sMinor(v); ok && m > from && (pickMinor == 0 || m < pickMinor) {
+			pick, pickMinor = k3sLadderDir+v+"/"+K3sBin, m
+		}
+	}
+	return pick
+}
+
+func k3sLadderVersions() []string {
+	entries, _ := os.ReadDir(k3sLadderDir)
+	vs := make([]string, 0, len(entries))
+	for _, e := range entries {
+		vs = append(vs, e.Name())
+	}
+	return vs
+}
+
+func k3sRecordedVersion() string {
+	b, err := os.ReadFile(k3sVersionFile)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func k3sBinVersion(bin string) string {
+	out, _, err := util.ExecCmd(bin, "--version")
+	if err != nil {
+		return ""
+	}
+	// k3s version v1.32.13+k3s1 (<commit>)
+	if f := strings.Fields(out); len(f) >= 3 {
+		return f[2]
+	}
+	return ""
+}
+
+func k3sRecordVersion() {
+	v := k3sBinVersion(k3sBinPath)
+	if v == "" {
+		zap.S().Warn("K3s version unknown, not recorded")
+		return
+	}
+	if err := os.WriteFile(k3sVersionFile, []byte(v+"\n"), 0644); err != nil {
+		zap.S().Warn(errors.WithStack(err))
+	}
+}
+
+// k3sServersAt reports whether every k3s server in <versions> runs <want>
+func k3sServersAt(versions []string, want string) bool {
+	if len(versions) == 0 {
+		return false
+	}
+	for _, v := range versions {
+		if v != want {
+			return false
+		}
+	}
+	return true
+}
+
+func k3sServersAtFinal() bool {
+	out, _, err := util.ExecCmd(k3sBinPath, "kubectl", "get", "nodes",
+		"-l", "node-role.kubernetes.io/control-plane",
+		"-o", "jsonpath={.items[*].status.nodeInfo.kubeletVersion}",
+	)
+	if err != nil {
+		return false
+	}
+	return k3sServersAt(strings.Fields(out), k3sBinVersion(k3sDataDir+K3sBin))
+}
+
 // True only when both the unit and the binary are present; a half-finished
 // install (binary copied, install.sh failed) must still count as not installed.
 func k3sIsInstalled() bool {
@@ -729,8 +887,13 @@ func commitK3s() error {
 
 	// absence of the unit/binary is the signal: k3sEtcdDir is CONFIG_MIGRATE'd,
 	// so it exists on an upgraded partition even without k3s installed
-	if _, err := os.Stat(k3sEtcdDir); os.IsNotExist(err) || commitOpts.force || isMigration() || !k3sIsInstalled() {
-		util.ExecCmd("cp", "-f", k3sDataDir+K3sBin, k3sBinPath)
+	_, err := os.Stat(k3sEtcdDir)
+	etcdExists := err == nil
+	migration := isMigration()
+	if !etcdExists || commitOpts.force || migration || !k3sIsInstalled() {
+		bin := k3sPickBinary(migration && etcdExists, k3sRecordedVersion(), k3sLadderVersions())
+		zap.L().Info("K3s binary", zap.String("path", bin))
+		util.ExecCmd("cp", "-f", bin, k3sBinPath)
 
 		os.MkdirAll(path.Dir(k3sRegistriesFile), 0755)
 		util.ExecCmd("cp", "-f", k3sDataDir+"/registries.yaml", k3sRegistriesFile)
@@ -785,6 +948,7 @@ func commitK3s() error {
 		); err != nil {
 			return errors.WithStack(err)
 		}
+		k3sRecordVersion()
 
 		// Move self as k3s etcd leader to avoid leader lost at first control node during upgrade
 		if cubeSettings.IsMasterControl() {
@@ -809,6 +973,15 @@ func commitK3s() error {
 		if err := k3sCreateControllerIpService(cubeSettings.GetControllerIp()); err != nil {
 			return errors.WithStack(err)
 		}
+
+		// The migration boot moved k3s one minor up. A single node has no other server to
+		// wait for, so take the rest of the way now; the ingress below then sees the final
+		// release. On HA the roll's end does it (power_roll_advance).
+		if migration && !cubeSettings.IsHA() {
+			if _, outErr, err := util.ExecCmd("hex_sdk", "k3s_upgrade_ladder", "nocommit"); err != nil {
+				return errors.Wrap(err, outErr)
+			}
+		}
 	}
 
 	// k3s.service set TimeoutStartUSec=infinity by default
@@ -817,7 +990,7 @@ func commitK3s() error {
 		return errors.Wrap(err, outErr)
 	}
 
-	err := syncDefaultStorageClass()
+	err = syncDefaultStorageClass()
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -859,6 +859,12 @@ power_roll_advance()
         # the brokers not yet rolled; move them all to 15 s together. See
         # rabbitmq_ticktime in config_rabbitmq.cpp.
         Quiet -n cmd -c $HEX_CFG rabbitmq_ticktime
+        # Step k3s up to this image's release. Each server's migration boot moved it one minor
+        # only, as far as k3s goes while other servers still run the old one; the rest waits
+        # for every server to be on the new firmware. Before the job is marked done, for the
+        # same reason as ovn_central_switch. See k3s_upgrade_ladder (sdk_k3s.sh); it logs its
+        # own outcome on the VIP holder.
+        ( remote_run $master "$HEX_SDK k3s_upgrade_ladder" ) >/dev/null 2>&1
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
