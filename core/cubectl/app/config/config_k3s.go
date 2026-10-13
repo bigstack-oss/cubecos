@@ -528,6 +528,25 @@ func k3sWaitResourceReady(resource string, name string, namespace string, timeou
 	return nil
 }
 
+// kubectl wait fails at once with NotFound on an object that does not exist yet, and
+// `systemctl restart k3s` returns before the kubelet has registered its node. On a slow
+// host every wait can land in that gap: accept-3cc's cc1 registered 0.5s after the last
+// attempt gave up, so the module never created the cube-controller service and keycloak
+// could not resolve its database.
+func k3sWaitNodeRegistered(name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		_, outErr, err := util.ExecCmd("/usr/local/bin/k3s", "kubectl", "get", "node", name)
+		if err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errors.Wrap(err, outErr)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
 func k3sCreateControllerIpService(ip string) error {
 	const contentFmt = `
 kind: Service
@@ -935,6 +954,10 @@ func commitK3s() error {
 		if err := util.Retry(
 			func() error {
 				if _, _, err := util.ExecCmd("timeout", "60s", "systemctl", "restart", "k3s"); err != nil {
+					return err
+				}
+
+				if err := k3sWaitNodeRegistered(strings.ToLower(cubeSettings.GetHostname()), 3*time.Minute); err != nil {
 					return err
 				}
 
