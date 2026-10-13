@@ -8,6 +8,7 @@ CEPH_CSI_DIR := $(K3S_DIR)/ceph-csi
 heavy_components_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p $(K3S_DIR)
 	$(Q)(cd $(TOP_BLDDIR)/core/k3s/ && cp -f k3s install.sh $(ROOTDIR)/$(K3S_DIR)/)
+	$(Q)rm -rf $(ROOTDIR)/$(K3S_DIR)/ladder && cp -r $(TOP_BLDDIR)/core/k3s/ladder $(ROOTDIR)/$(K3S_DIR)/
 	$(Q)cp -f $(COREDIR)/k3s/registries.yaml $(COREDIR)/k3s/remove_node.sh $(ROOTDIR)/$(K3S_DIR)/
 	$(Q)cp -f /usr/local/bin/helm $(ROOTDIR)/usr/local/bin/
 #	ingress-nginx

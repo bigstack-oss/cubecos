@@ -75,6 +75,25 @@ $(BIN)-from-source: $(K3S_SRC_DIR) .dapper
 		"  BUILD   k3s")
 	$(Q)cp $(K3S_SRC_DIR)/dist/artifacts/k3s $(BIN)
 
+# Releases an in-place upgrade steps through on its way from v1.26.6+k3s1, what every release so
+# far shipped, to VERSION: k3s upgrades one minor version at a time. Upstream release binaries,
+# checked against upstream's own checksum file. k3s.mk installs them as
+# $(K3S_DIR)/ladder/<version>/k3s, and that directory is the list the upgrade reads.
+# $(GITHUB_DL_BASE), as in core/etcd/Makefile: GitHub release assets are throttled from our build
+# network (cubecos#1350).
+LADDER_VERSIONS := v1.27.16+k3s1 v1.28.15+k3s1 v1.29.15+k3s1 v1.30.14+k3s2 v1.31.14+k3s1
+LADDER_DIR := ladder
+K3S_DL_URL := $(GITHUB_DL_BASE)/k3s-io/k3s/releases/download
+
+$(LADDER_DIR):
+	$(call RUN_CMD_TIMED,rm -rf $@.tmp && for v in $(LADDER_VERSIONS); do \
+		d=$@.tmp/$$v; mkdir -p $$d && \
+		wget -q --no-check-certificate -P $$d $(K3S_DL_URL)/$$v/k3s $(K3S_DL_URL)/$$v/sha256sum-amd64.txt && \
+		sum=$$(awk '$$2 == "k3s" {print $$1}' $$d/sha256sum-amd64.txt) && [ -n "$$sum" ] && \
+		echo "$$sum  $$d/k3s" | sha256sum -c - && \
+		rm $$d/sha256sum-amd64.txt && chmod +x $$d/k3s || exit 1; \
+		done && mv $@.tmp $@,"  PULL    k3s ladder")
+
 $(INSTALL_SCRIPT):
 	$(call RUN_CMD_TIMED,wget https://raw.githubusercontent.com/k3s-io/k3s/$(VERSION)/install.sh,"  PULL    $(INSTALL_SCRIPT)")
 	${Q}sed -i '/RestartSec=5s/a StandardOutput=append:/var/log/k3s.log\nStandardError=append:/var/log/k3s.log' $(INSTALL_SCRIPT)
@@ -146,9 +165,9 @@ clean:: testclean
 	$(Q)rm -rf $(K3S_DIR)
 
 
-BUILD += $(BIN) $(INSTALL_SCRIPT) build-image
+BUILD += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) build-image
 BUILDCLEAN += .dapper and $(K3S_SRC_DIR)
-DISTCLEAN += $(BIN) $(INSTALL_SCRIPT)
+DISTCLEAN += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR)
 
 SUBDIRS += ingress-nginx
 SUBDIRS += ceph-csi
