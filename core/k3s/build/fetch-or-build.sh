@@ -12,9 +12,11 @@
 # step: prod #146 failed inside it on an Alpine apk fetch (`gcc-14.2.0-r4: IO ERROR`), so not
 # running it at all is worth more than the 81 minutes. See cubecos#1350.
 #
-#   K3S_CACHE=<base-url> VERSION=v1.26.6+k3s1 OUT=/path/to/k3s ./fetch-or-build.sh
+#   K3S_CACHE=<base-url> VERSION=v1.32.13+k3s1 OUT=/path/to/k3s ./fetch-or-build.sh
 #
-# Populate it with the cube_publish_artifacts job in triangle.
+# Entries live under k3s/<key>, where the key from cache-key.sh covers the recipe and the dapper
+# image as well as VERSION -- keyed by VERSION alone, a toolchain bump restored the old binary.
+# Populate it with the cube_publish_artifacts job in triangle, which asks cache-key.sh too.
 set -uo pipefail
 
 VERSION=${VERSION:?VERSION is required}
@@ -26,8 +28,9 @@ if [ -z "$CACHE" ]; then
     exit 1
 fi
 
-BASE="$CACHE/k3s/$VERSION"
-echo "==> checking cache for k3s $VERSION"
+KEY=$(bash "$(dirname "$0")/cache-key.sh") || { echo "    no cache key -- building from source" ; exit 1 ; }
+BASE="$CACHE/k3s/$KEY"
+echo "==> checking cache for k3s $KEY"
 
 # The checksum first and separately: we built this binary ourselves, so there is no upstream
 # digest to fall back on. Without it a truncated download would be installed as a working k3s and
@@ -55,7 +58,7 @@ fi
 chmod +x "$OUT.part"
 
 # Cheap sanity check that this is the k3s we asked for, not some other build that happened to be
-# uploaded under this path. `k3s --version` prints e.g. "k3s version v1.26.6+k3s1 (...)".
+# uploaded under this path. `k3s --version` prints e.g. "k3s version v1.32.13+k3s1 (...)".
 if ! "$OUT.part" --version 2>/dev/null | grep -qF "$VERSION" ; then
     echo "ERROR: cached binary does not report version $VERSION -- building from source" >&2
     "$OUT.part" --version 2>&1 | head -2 >&2 || true
@@ -65,5 +68,5 @@ fi
 
 mv "$OUT.part" "$OUT"
 rm -f "$OUT.sha256"
-echo "==> cache hit: k3s $VERSION restored without a source build"
+echo "==> cache hit: k3s $KEY restored without a source build"
 "$OUT" --version 2>/dev/null | head -1
