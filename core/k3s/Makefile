@@ -4,7 +4,7 @@ include ../../build.mk
 
 include $(SRCDIR)/k3s.mk
 
-VERSION     := v1.26.6+k3s1
+VERSION     := v1.32.13+k3s1
 K3S_REPO    := https://github.com/k3s-io/k3s.git
 K3S_SRC_DIR := k3s-source
 
@@ -50,38 +50,33 @@ $(BIN):
 		&& echo "  K3S     $(VERSION) restored from cache" \
 		|| $(MAKE) $(BIN)-from-source
 
+# k3s refuses to start unless runtime.Version() equals the UpstreamGolang it was linked with,
+# which version.sh takes from kubernetes' build/dependencies.yaml (go1.24.13 for 1.32.13, a
+# dead Go line). We build with a newer Go, so record the Go we actually build with, as the
+# Alpine, NixOS and Yocto k3s packages do. Fail loudly if upstream moves the line.
+# TAG, not DRONE_TAG: 1.32.13 takes its version from $TAG (scripts/git_version.sh), where 1.26.6
+# read $DRONE_TAG; without it the binary calls itself v1.32.13+k3s-<commit>, not v1.32.13+k3s1.
 .PHONY: $(BIN)-from-source
 $(BIN)-from-source: $(K3S_SRC_DIR) .dapper
 	$(Q)rm -rf $(K3S_SRC_DIR)/build $(K3S_SRC_DIR)/dist $(K3S_SRC_DIR)/bin
 	$(Q)cp $(SRCDIR)/build/Dockerfile.dapper $(K3S_SRC_DIR)/Dockerfile.dapper
-	$(Q)cp $(SRCDIR)/build/log.go $(K3S_SRC_DIR)/pkg/cli/cmds/log.go
+	$(Q)grep -q '^VERSION_GOLANG=' $(K3S_SRC_DIR)/scripts/version.sh
+	$(Q)sed -i 's/^VERSION_GOLANG=.*/VERSION_GOLANG="$$(go version | cut -d" " -f3)"/' $(K3S_SRC_DIR)/scripts/version.sh
 	$(Q)chmod +x $(K3S_SRC_DIR)/scripts/ci
-# Update the golnag to 1.24 to fix stdlib security issues
-# but k3s uses klog v2 which is not compatible with go 1.24+
-# so we need to upgrade klog to v2.130.1 which is compatible
-# and also need to remove the old flage or it will cause runtime error
-# panic: flag alsologtostderr set at /go/src/github.com/k3s-io/k3s/pkg/cli/cmds/log.go:78 before being defined
-	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
-		go mod edit -dropreplace k8s.io/klog/v2 && \
-		go get k8s.io/klog/v2@v2.130.1 && \
-		go mod tidy, \
-		"  PATCH   k3s")
 	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
 		export PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
-		DRONE_TAG=$(VERSION) \
+		TAG=$(VERSION) \
 		SKIP_VALIDATE=1 \
+		SKIP_IMAGE=1 \
 		SKIP_AIRGAP=1 && \
 		mkdir -p build/data && \
 		make download && \
-		make generate && \
 		make, \
 		"  BUILD   k3s")
 	$(Q)cp $(K3S_SRC_DIR)/dist/artifacts/k3s $(BIN)
 
 $(INSTALL_SCRIPT):
-#	$(call RUN_CMD_TIMED,wget https://get.k3s.io/ -O ./$(INSTALL_SCRIPT),"  PULL    $(INSTALL_SCRIPT)")
-# 	Workaround to use previos install.sh. https://github.com/k3s-io/k3s/issues/7247
-	$(call RUN_CMD_TIMED,wget https://raw.githubusercontent.com/k3s-io/k3s/34617390d05dd8574a21412aeb223218c998f83a/install.sh,"  PULL    $(INSTALL_SCRIPT)")
+	$(call RUN_CMD_TIMED,wget https://raw.githubusercontent.com/k3s-io/k3s/$(VERSION)/install.sh,"  PULL    $(INSTALL_SCRIPT)")
 	${Q}sed -i '/RestartSec=5s/a StandardOutput=append:/var/log/k3s.log\nStandardError=append:/var/log/k3s.log' $(INSTALL_SCRIPT)
 	$(Q)chmod +x $(INSTALL_SCRIPT)
 
