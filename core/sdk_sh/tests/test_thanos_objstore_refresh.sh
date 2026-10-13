@@ -4,13 +4,14 @@
 #
 # A boot commit no longer writes objstore.yml (it must not wait on RGW before
 # /run/cube_commit_done, which the compute nodes and so their OSDs wait for), so
-# config_prometheus runs this from node_start instead, after the commit has already started
-# the thanos units. Thanos reads the file only at start: a rewritten file needs the units
-# restarted, a file that was missing does not (they have been exiting and restarting on
-# their own), and an unchanged one must not bounce them on every boot.
+# config_prometheus runs this from node_start instead, after the commit. Thanos reads the
+# file only at start: a rewritten file needs the units restarted, and an unchanged one must
+# not bounce them on every boot. A file that was missing means the commit held the units
+# back -- the sidecar and the store gateway stopped, the compactor masked -- so writing it
+# starts them and has pacemaker look at the compactor again.
 #
 # Self-contained: extracts the three functions and stubs radosgw-admin, s3cmd, chown,
-# systemctl and the log calls, with the config path moved into a temp dir.
+# systemctl, pcs and the log calls, with the config path moved into a temp dir.
 #   Run: bash test_thanos_objstore_refresh.sh   (exit 0 = pass)
 #
 set -u
@@ -37,11 +38,13 @@ radosgw-admin() { [ "$RGW_DOWN" = 1 ] && return 1 ; echo '{"keys":[{"access_key"
 s3cmd() { [ "$RGW_DOWN" = 1 ] && return 1 ; return 0 ; }
 chown() { : ; }
 systemctl() { echo "$*" >> "$RESTARTS" ; }
+Quiet() { [ "$1" = -n ] && shift ; "$@" ; return 0 ; }
+pcs() { echo "pcs $*" >> "$RESTARTS" ; }
 log_info() { : ; }
 log_error() { : ; }
 
 want() { printf 'type: S3\nconfig:\n  bucket: %s\n  endpoint: %s\n  access_key: %s\n  secret_key: %s\n  insecure: true\n  signature_version2: false\n' "$@" ; }
-restarts() { [ -s "$RESTARTS" ] && cat "$RESTARTS" || echo none ; }
+restarts() { [ -s "$RESTARTS" ] && paste -s -d';' "$RESTARTS" || echo none ; }
 run() { : > "$RESTARTS" ; thanos_objstore_refresh "$@" ; echo $? ; }
 
 # 1. every ordinary boot: the file is current -> no RGW, no restart
@@ -63,11 +66,20 @@ chk "3 rc" "$(run $EP thanos)" 0
 chk "3 file" "$(cat "$CONF")" "$(want thanos $EP AK1 SK1)"
 chk "3 restart" "$(restarts)" "try-restart thanos-sidecar thanos-store thanos-query"
 
-# 4. no file yet -> written, no restart (the units were exiting and come back by themselves)
+# 4. no file yet (a control set up before RGW could serve) -> written, the units the commit
+#    held back started, the compactor unmasked and handed back to pacemaker
 rm -f "$CONF"
 chk "4 rc" "$(run $EP thanos)" 0
 chk "4 file" "$(cat "$CONF")" "$(want thanos $EP AK1 SK1)"
-chk "4 no restart" "$(restarts)" none
+chk "4 start" "$(restarts)" "start thanos-sidecar thanos-store;unmask thanos-compact;pcs resource refresh thanos-compact"
+
+# 4b. no file yet and RGW still down -> the setup fails, nothing started, the compactor stays masked
+RGW_DOWN=1
+rm -f "$CONF"
+chk "4b rc" "$(run $EP thanos)" 1
+chk "4b no file" "$([ -e "$CONF" ] && echo present || echo absent)" absent
+chk "4b nothing started" "$(restarts)" none
+RGW_DOWN=0
 
 # 5. stale file and RGW down -> the setup fails, the old file stays, nothing restarted
 RGW_DOWN=1

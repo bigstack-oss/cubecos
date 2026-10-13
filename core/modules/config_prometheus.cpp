@@ -753,19 +753,33 @@ Commit(bool modified, int dryLevel)
     if (thanosEnabled)
         WriteThanosConf(s_ctrlAddrs.newValue(), sharedId, s_thanosRpDays.newValue());
 
+    // The sidecar, the store gateway and the compactor read objstore.yml at start and exit
+    // without it, and thanos_objstore_setup can only write it once RGW serves. On a cluster
+    // whose OSDs sit on storage nodes that join after this control, that is not during this
+    // control's first-time setup: accept-3c_3p_5s's c1 ran all three against a missing file
+    // for 25 minutes, and pacemaker lost track of the compactor on the way. So they start
+    // here only once the file exists; otherwise thanos_objstore_refresh starts them from
+    // node_start, when it writes the file. The querier reads only endpoints.yml.
+    bool objstoreReady = thanosEnabled && access(THANOS_OBJSTORE, F_OK) == 0;
+
     SystemdCommitService(enabled, NAME);
     // after prometheus: the sidecar exits if it cannot reach it, and while Restart=always
     // covers that, starting in order keeps a boot from logging the failure at all
-    SystemdCommitService(thanosEnabled, THANOS_SIDECAR);
+    SystemdCommitService(objstoreReady, THANOS_SIDECAR);
     SystemdCommitService(thanosEnabled, THANOS_QUERY);
-    SystemdCommitService(thanosEnabled, THANOS_STORE);
+    SystemdCommitService(objstoreReady, THANOS_STORE);
 
     // thanos-compact is pacemaker's to place -- two of them on one bucket corrupt it --
     // so it is never enabled here. config_pacemaker masks it before pacemaker comes up;
     // unmasking once its config exists is this module's half of that handshake, and
-    // pacemaker creates the resource later still, from CommitLast.
-    if (thanosEnabled)
+    // pacemaker creates the resource later still, from CommitLast. Without objstore.yml it
+    // stays masked -- masked here on a first-time setup, which config_pacemaker leaves
+    // alone -- so pacemaker's start fails outright rather than starting a compactor that
+    // exits at once; thanos_objstore_refresh unmasks it and has pacemaker look again.
+    if (objstoreReady)
         HexUtilSystemF(0, 0, "systemctl unmask " THANOS_COMPACT);
+    else if (thanosEnabled)
+        HexUtilSystemF(0, 0, "systemctl mask " THANOS_COMPACT);
 
     return true;
 }
@@ -775,7 +789,8 @@ Commit(bool modified, int dryLevel)
 // /run/cube_commit_done, so waiting on RGW here holds back no other node, and on a power
 // cycle the computes bootstrap and bring their OSDs up meanwhile. The setup's fast path
 // makes this ~1s whenever the file is already current; the refresh restarts the thanos
-// units only when it rewrote the file, since the boot commit started them on the old one.
+// units only when it rewrote the file, since the boot commit started them on the old one,
+// and starts them when it wrote a file that was missing, since the commit did not.
 static int
 NodeStartMain(int argc, char **argv)
 {
