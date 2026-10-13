@@ -83,11 +83,13 @@ thanos_objstore_setup()
     return 0
 }
 
-# thanos_objstore_setup for a node whose thanos units are already running: config_prometheus
-# runs this from node_start, after the boot commit started them. Thanos reads its objstore
-# config only at start, so a file this rewrote is picked up only by a restart; one that was
-# missing needs none, as the units have been exiting and coming back every 5s (Restart=always)
-# and start properly once it exists. try-restart leaves a stopped unit stopped.
+# thanos_objstore_setup from node_start, after the commit: config_prometheus runs this once
+# the node's own commit is done, when RGW can answer. Thanos reads its objstore config only at
+# start, so a file this rewrote is picked up only by a restart; try-restart leaves a stopped
+# unit stopped. A file that was missing is the first-time setup of a control that came up
+# before RGW could serve: its commit left the sidecar and the store gateway stopped and the
+# compactor masked, so they are started here, and pacemaker is told to look again -- it last
+# saw the compactor fail to start on this node and has stopped trying it here.
 thanos_objstore_refresh()
 {
     local conf=/etc/thanos/objstore.yml
@@ -97,7 +99,13 @@ thanos_objstore_refresh()
     thanos_objstore_setup "$@"
     rc=$?
     [ $rc -eq 0 ] || return $rc
-    [ -n "$before" ] || return 0
+    if [ -z "$before" ] ; then
+        log_info "thanos_objstore_refresh: $conf written, starting the thanos units"
+        systemctl start thanos-sidecar thanos-store
+        systemctl unmask thanos-compact
+        Quiet -n pcs resource refresh thanos-compact
+        return 0
+    fi
     [ "$(md5sum $conf 2>/dev/null)" = "$before" ] && return 0
     log_info "thanos_objstore_refresh: $conf changed, restarting the thanos units"
     systemctl try-restart thanos-sidecar thanos-store thanos-query
