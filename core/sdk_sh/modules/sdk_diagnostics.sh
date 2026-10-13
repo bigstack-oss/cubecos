@@ -423,18 +423,28 @@ diagnostics_cirros_exec()
     # A guest created moments ago may still be booting: cirros 0.4.0 reaches its login prompt
     # at ~40s of uptime when its boot-time gateway ping fails and it dumps network debug first.
     # Wait for the prompt quietly, so the boot log stays out of the result block.
+    #
+    # Enter is sent again every 10s until a prompt shows. virsh prints "Connected to domain"
+    # before it puts the terminal in raw mode with TCSAFLUSH, which discards any input not yet
+    # read, so an Enter sent the moment the banner appears can be thrown away. A guest that is
+    # already at its prompt then prints nothing, and the wait runs out: on a loaded host one
+    # in-guest check in each of accept #733's three 2ec_1m diagnostics runs failed that way,
+    # with no console output at all. expect_before is set only after this wait, because it
+    # would pre-empt the timeout branch that re-sends.
     expect -c "
 set timeout 10
 log_user 0
 spawn virsh console $ins
-expect_before timeout { puts \"failed to run cirros exec in instance $ins\" ; exit 1 }
 match_max 100000
 
-expect \"*Connected to domain\"
+expect {
+    \"*Connected to domain\" {}
+    timeout { puts \"failed to run cirros exec in instance $ins\" ; exit 1 }
+}
 send -- \"
 \"
+set nudges 0
 expect {
-    -timeout 120
     -re \".*login: $\" {
         send -- \"$user\n\"
         expect {
@@ -445,7 +455,12 @@ expect {
 
     }
     \"*$ \" { send -- \"\n\" }
+    timeout {
+        if {[incr nudges] < 12} { send -- \"\n\" ; exp_continue }
+        puts \"failed to run cirros exec in instance $ins\" ; exit 1
+    }
 }
+expect_before timeout { puts \"failed to run cirros exec in instance $ins\" ; exit 1 }
 log_user 1
 expect \"*$ \"
 set timeout 600
