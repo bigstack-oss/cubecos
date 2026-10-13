@@ -1,0 +1,253 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/bigstack-oss/cubecos/blob/develop/core/main/cubecos.openvex.json",
+  "author": "Bigstack",
+  "timestamp": "2026-10-14T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "GO-2026-4337",
+        "aliases": [
+          "CVE-2025-68121"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/stdlib"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-31536"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/linux-kernel"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-p77j-4mvh-x3m3",
+        "aliases": [
+          "CVE-2026-33186"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/google.golang.org/grpc"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-vgwf-h737-ff37",
+        "aliases": [
+          "CVE-2026-39830"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/crypto"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-89gr-r52h-f8rx",
+        "aliases": [
+          "CVE-2026-39831"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/crypto"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39831"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/podman"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-f5wc-c3c7-36mc",
+        "aliases": [
+          "CVE-2026-39832"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/crypto"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-jppx-rxg9-jmrx",
+        "aliases": [
+          "CVE-2026-39833"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/crypto"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39833"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/podman"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-rm3j-f69w-wqmq",
+        "aliases": [
+          "CVE-2026-39834"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/crypto"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-5cgq-3rg8-m6cv",
+        "aliases": [
+          "CVE-2026-42508"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/crypto"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-43185"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/linux-kernel"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-x527-x647-q7gg",
+        "aliases": [
+          "CVE-2026-46595"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/crypto"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5338",
+        "aliases": [
+          "CVE-2026-50195"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/github.com/containerd/containerd"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5064",
+        "aliases": [
+          "CVE-2026-53492"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/github.com/containerd/containerd"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-3qf3-8w2g-rqmx",
+        "aliases": [
+          "CVE-2026-85394"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/python-jose"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    }
+  ]
+}
