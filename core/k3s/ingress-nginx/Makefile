@@ -4,12 +4,12 @@ include ../../../build.mk
 
 INGRESS_NGINX_DIR := /opt/k3s/ingress-nginx
 
-VERSION := 4.7.1
+VERSION := 4.15.1
 CHART := ingress-nginx-$(VERSION).tgz
 
 IMG := registry.k8s.io/ingress-nginx/controller
-IMG_TAG := v1.8.1
-IMG_DIGEST := sha256:e5c4824e7375fcf2a393e1c03c293b69759af37a9ca6abdb91b13d78a93da8bd
+IMG_TAG := v1.15.1
+IMG_DIGEST := sha256:594ceea76b01c592858f803f9ff4d2cb40542cae2060410b2c95f75907d659e1
 
 $(CHART):
 	$(Q)helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx $(QEND)
