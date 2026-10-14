@@ -131,3 +131,36 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:root $(KEYSTONE_VENV_SITE_PACKAGES)/cube_mellon_wsgi.py
 	$(Q)chroot $(ROOTDIR) chmod 644 $(KEYSTONE_VENV_SITE_PACKAGES)/cube_mellon_wsgi.py
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/keystone/openstack-keystone.service ./lib/systemd/system
+
+# Named for the release keystone runs from -- the venv
+# KEYSTONE_VENV_SITE_PACKAGES points at, which is caracal (keystone 25.0.0) on
+# this branch. Not derived from a release variable: this set only applies to the
+# keystone it was diffed against, so the next hop renames the directory and
+# refreshes .orig from that release's sdist rather than silently applying these
+# hunks to a file they were never read against.
+#
+# server/flask/application.py: upstream d4695b318eb8 ("Only log a small debug
+# message for NotFound", keystone 26.0.0+). 25.0.0 logs every NotFound -- each
+# credential or project lookup that misses -- at ERROR with a full traceback
+# (#2065). Caracal never got the backport; 2024.1-eom is byte-identical to 25.0.0.
+KEYSTONE_PATCHDIR := $(COREDIR)/keystone/caracal_patch
+KEYSTONE_SRCDIR   := $(ROOTDIR)$(KEYSTONE_VENV_SITE_PACKAGES)/keystone
+
+# Apply reviewable unified diffs (<rel>.py.patch beside pristine <rel>.py.orig,
+# the convention core/cinder, core/masakari and core/glance use). A failed hunk
+# aborts the build instead of shipping drift silently.
+#
+# Tested with --dry-run --reverse first, as core/watcher does and for its
+# reason: --forward skips hunks that are already applied but still exits 1 when
+# every one of them is, so an incremental re-run against an already-patched tree
+# would abort a build that has nothing wrong with it.
+rootfs_install::
+	$(Q)set -e; for p in $$(find $(KEYSTONE_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
+		rel=$${p#$(KEYSTONE_PATCHDIR)/}; tgt=$(KEYSTONE_SRCDIR)/$${rel%.patch}; \
+		if patch --dry-run --reverse --force "$$tgt" < "$$p" >/dev/null 2>&1; then \
+			echo "  PATCH $${rel%.patch} (already applied)"; continue; \
+		fi; \
+		echo "  PATCH $${rel%.patch}"; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < "$$p" \
+			|| { echo "keystone: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
