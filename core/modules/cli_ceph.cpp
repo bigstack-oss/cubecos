@@ -1547,7 +1547,8 @@ CephDeviceTierClassesOf(const std::vector<CephOsdRow>& chosen)
 // Hand the work to hex_sdk without a shell. The name and the ids have already
 // been validated, so this is not the last line of defence -- but passing them
 // as separate arguments means a name that reaches this from somewhere else
-// still cannot become shell syntax.
+// still cannot become shell syntax. Create and delete go through cube-cos-api
+// (api_storage_tier_*), which applies the registry on every control (#2098).
 static int
 CephDeviceTierSpawn(const char* subcmd, const std::string& tier, const std::vector<std::string>& ids)
 {
@@ -1647,7 +1648,7 @@ CephDeviceTierPick(int argc, const char** argv, int argidx, std::string& tier,
     if (*state == TIER_UNMANAGED) {
         CliPrintf("'%s' is a device class with a CRUSH rule and a pool of the same name, but it is not in the storage tier registry -- so it was not created here and this CLI does not manage it. Nothing has been changed.",
             tier.c_str());
-        CliPrintf("If it was created here and only its registration is missing, register it with 'hex_sdk cinder_apply_storage_tier_creation %s'; hex_sdk's ceph_device_tier_* functions operate on it directly if that is really what you want.",
+        CliPrintf("If it was created here and only its registration is missing, register it with 'hex_sdk ceph_device_tier_register %s' on every control; hex_sdk's ceph_device_tier_* functions operate on it directly if that is really what you want.",
             tier.c_str());
         return false;
     }
@@ -1661,7 +1662,7 @@ CephDeviceTierPick(int argc, const char** argv, int argidx, std::string& tier,
     }
 
     if (!CephDeviceTierNameOk(tier)) {
-        CliPrintf("That name is in the storage tier registry but is not one this CLI can act on. It was written by something other than this command -- the policy file, or 'hex_config commit'. Remove it with 'hex_sdk cinder_apply_storage_tier_deletion' and register a valid name instead.");
+        CliPrintf("That name is in the storage tier registry but is not one this CLI can act on. It was written by something other than this command -- the policy file, or 'hex_config commit'. Remove it with 'hex_sdk ceph_device_tier_unregister <name>' on every control and register a valid name instead.");
         return false;
     }
 
@@ -1720,7 +1721,7 @@ CephDeviceTierCreate(int argc, const char** argv)
             CliPrintf("Device tier '%s' already exists. 'tier create' cannot change which OSDs it holds -- use 'tier update %s <osd id>...' for that. Completing whatever is missing instead.",
                 tier.c_str(), tier.c_str());
         }
-        if (CephDeviceTierSpawn("ceph_device_tier_create", tier, members)) {
+        if (CephDeviceTierSpawn("api_storage_tier_create", tier, members)) {
             HexLogError("Failed to complete device tier %s", tier.c_str());
             CliPrintf("\n--\nFailed to complete device tier %s.", tier.c_str());
             return CLI_FAILURE;
@@ -1766,7 +1767,7 @@ CephDeviceTierCreate(int argc, const char** argv)
         return CLI_SUCCESS;
     }
 
-    if (CephDeviceTierSpawn("ceph_device_tier_create", tier, ids)) {
+    if (CephDeviceTierSpawn("api_storage_tier_create", tier, ids)) {
         HexLogError("Failed to create device tier %s on%s", tier.c_str(), osdLine.c_str());
         CliPrintf("\n--\nFailed to create device tier %s.", tier.c_str());
         return CLI_FAILURE;
@@ -1908,7 +1909,7 @@ CephDeviceTierDelete(int argc, const char** argv)
         if (!CliReadConfirmation()) {
             return CLI_SUCCESS;
         }
-        if (CephDeviceTierSpawn("cinder_apply_storage_tier_deletion", tier, {})) {
+        if (CephDeviceTierSpawn("api_storage_tier_delete", tier, {})) {
             HexLogError("Failed to unregister device tier %s", tier.c_str());
             CliPrintf("\n--\nFailed to unregister device tier %s.", tier.c_str());
             return CLI_FAILURE;
@@ -1940,7 +1941,7 @@ CephDeviceTierDelete(int argc, const char** argv)
         return CLI_SUCCESS;
     }
 
-    if (CephDeviceTierSpawn("ceph_device_tier_delete", tier, {})) {
+    if (CephDeviceTierSpawn("api_storage_tier_delete", tier, {})) {
         HexLogError("Failed to delete device tier %s", tier.c_str());
         CliPrintf("\n--\nFailed to delete device tier %s.", tier.c_str());
         return CLI_FAILURE;
