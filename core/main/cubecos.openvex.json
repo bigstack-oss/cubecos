@@ -235,6 +235,22 @@
     },
     {
       "vulnerability": {
+        "name": "GO-2026-6604",
+        "aliases": [
+          "CVE-2026-56857"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/stdlib"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#236."
+    },
+    {
+      "vulnerability": {
         "name": "GHSA-3qf3-8w2g-rqmx",
         "aliases": [
           "CVE-2026-85394"
