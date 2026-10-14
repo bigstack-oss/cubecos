@@ -71,6 +71,11 @@ storage_is_das()
     local exec_output=""
     local exec_error=""
 
+    # virtual block devices are not disks
+    case "${device##*/}" in
+        nbd*|loop*|rbd*|zram*|ram*|sr*) return 1 ;;
+    esac
+
     # test if mpath devices, mpath devices are not DAS
     if storage_is_mpath "$device" ; then
         return 1
