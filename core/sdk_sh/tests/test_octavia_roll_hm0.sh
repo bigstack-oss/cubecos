@@ -13,8 +13,12 @@ for f in _power_roll_octavia_ready _power_roll_octavia_hm_host ; do
     sed -n "/^$f()/,/^}/p" $D/modules/sdk_power.sh >> $T/fn.sh
 done
 # the real gate, with this node as master (no peer to ask), /run paths moved
-sed -n "/^cube_failover_gate_open()/,/^}/p" $D/../main/proj_functions | sed "s|/run/|$T/run/|g" >> $T/fn.sh
+grep '^CUBE_BOOT_DONE_TEST=' $D/../main/proj_functions | sed "s|/run/|$T/run/|g" >> $T/fn.sh
+for f in cube_failover_gate_open cube_nodes_booted_or_down ; do
+    sed -n "/^$f()/,/^}/p" $D/../main/proj_functions
+done | sed "s|/run/|$T/run/|g" >> $T/fn.sh
 cube_master_control(){ hostname; }
+cubectl(){ echo '[]'; }
 source $T/fn.sh
 fail=0
 chk(){ printf '%-48s -> %-12s (want %s)\n' "$1" "$2" "$3"; [ "$2" = "$3" ] || fail=1; }
@@ -49,7 +53,7 @@ systemctl(){
 }
 fast(){ : > $CALLS; real_fast_up && echo ok || echo fail; }
 
-rm -f $T/maint $T/run/cube_bootup_status
+rm -f $T/maint; echo "boot 1" > $T/run/cube_bootup_status
 chk "boot not done: gate holds hm -> ok" "$(fast)" "ok"
 chk "  start still requested" "$(tr '\n' ';' < $CALLS)" "start octavia-health-manager;"
 echo "done 1" > $T/run/cube_bootup_status

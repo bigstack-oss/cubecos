@@ -16,7 +16,7 @@ MASAKARI_RUN_DIR := /var/run/masakari
 # masakari-monitors, and their five and three pairs, to epoxy_patch/, while
 # masakaridashboard stayed with the served caracal horizon. #662 moved horizon too,
 # so the dashboard pair rejoined the others under epoxy_patch/, caracal_patch/ is
-# gone, and one loop at the bottom applies all nine.
+# gone, and one loop at the bottom applies them all.
 #
 # The dashboard patch matters -- upstream sets default_panel = 'default', a panel whose
 # urls.py has no index, so an unpatched masakaridashboard makes the sidebar raise
