@@ -845,3 +845,53 @@ migrate_ceph_mgr_influx()
 
     return 0
 }
+
+# One time, master control only: install the VIP re-announce timer on amphorae
+# built before the amphora-vip-advertise element, over octavia's ssh key. Marked
+# done once every amphora has it; bounded by $1 s (default 1800).
+migrate_octavia_amphora_vip_advertise()
+{
+    local marker=$STATE_DIR/octavia_amphora_vip_advertise_migrated
+    local src=/usr/share/cube/octavia/amphora-vip-advertise
+    local key=/etc/octavia/octavia_ssh_key
+    [ -f $marker ] && return 0
+    if ! is_control_node || [ "$($HEX_SDK cube_master_control)" != "$HOSTNAME" ] ; then
+        touch $marker
+        return 0
+    fi
+    [ -d $src ] && [ -f $key ] || return 0
+
+    local deadline=$((SECONDS + ${1:-1800})) ips ip d
+    local o="-i $key -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+    while [ $SECONDS -lt $deadline ] ; do
+        ips=$($MYSQL -u root -N -D octavia -e \
+            "SELECT lb_network_ip FROM amphora WHERE status <> 'DELETED' AND lb_network_ip IS NOT NULL" 2>/dev/null) || ips=FAIL
+        if [ -z "$ips" ] ; then
+            touch $marker
+            return 0
+        fi
+        d=$(mktemp -d)
+        for ip in $ips ; do
+            [ "$ip" = FAIL ] && { touch $d/db ; continue ; }
+            (
+                timeout 20 ssh $o ubuntu@$ip "systemctl is-enabled -q amphora-vip-advertise.timer" </dev/null && exit 0
+                timeout 30 scp -q $o $src/amphora-vip-advertise $src/amphora-vip-advertise.service \
+                    $src/amphora-vip-advertise.timer ubuntu@$ip:/tmp/ </dev/null &&
+                timeout 30 ssh $o ubuntu@$ip "sudo install -m 755 /tmp/amphora-vip-advertise /usr/local/bin/ &&
+                    sudo install -m 644 /tmp/amphora-vip-advertise.service /tmp/amphora-vip-advertise.timer /etc/systemd/system/ &&
+                    sudo systemctl daemon-reload && sudo systemctl enable --now amphora-vip-advertise.timer &&
+                    sudo systemctl start amphora-vip-advertise.service" </dev/null >/dev/null 2>&1 || touch $d/$ip
+            ) &
+        done
+        wait
+        if [ -z "$(ls $d)" ] ; then
+            rm -rf $d
+            touch $marker
+            log_info "migrate_octavia_amphora_vip_advertise: every amphora has the VIP re-announce timer"
+            return 0
+        fi
+        rm -rf $d
+        sleep 60
+    done
+    log_warning "migrate_octavia_amphora_vip_advertise: some amphorae unreachable; retried on a later boot"
+}

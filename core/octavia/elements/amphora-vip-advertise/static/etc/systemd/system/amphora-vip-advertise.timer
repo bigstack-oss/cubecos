@@ -1,0 +1,10 @@
+[Unit]
+Description=Re-announce amphora VIP addresses every 30 s
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
