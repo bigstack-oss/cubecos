@@ -109,6 +109,91 @@ cinder_wait_for_services_up()
     [ $i -lt $timeout ]
 }
 
+# Restart the cinder-volume pacemaker singleton once, from any control, after
+# every control applied a backend change. 0 when not HA.
+cinder_restart_volume()
+{
+    if ! pcs resource config cinder-volume >/dev/null 2>&1 ; then
+        return 0
+    fi
+    pcs resource restart cinder-volume >/dev/null
+}
+
+# Drop the cinder-volume service record of a removed backend $1
+# (<host>@<backend>); left behind it stays "down" and fails BlockStor
+cinder_remove_volume_service()
+{
+    local host="${1:-""}"
+    [ -n "$host" ] || return 1
+    if ! $OPENSTACK volume service list --service cinder-volume -f value -c Host 2>/dev/null | grep -qxF -- "$host" ; then
+        return 0
+    fi
+    _hex_function_ret $OPENSTACK volume service set --disable "$host" "cinder-volume"
+    _hex_function_ret /usr/bin/cinder-manage service remove "cinder-volume" "$host"
+}
+
+# Wait up to $2 seconds of wall clock (default 60) until every cinder-volume
+# backend in $1 (comma-separated <host>@<backend>) is up and reports a pool,
+# i.e. its driver initialized. Prints the backends that are not; 0 if none.
+cinder_wait_for_backends_ready()
+{
+    local backends="${1:-""}"
+    local timeout="${2:-60}"
+    local deadline=$((SECONDS + timeout))
+    local pending="" backend="" services="" pools=""
+
+    while : ; do
+        services="$($OPENSTACK volume service list --service cinder-volume -f json 2>/dev/null)"
+        pools="$($OPENSTACK volume backend pool list -f value -c Name 2>/dev/null)"
+        pending=""
+        for backend in ${backends//,/ } ; do
+            if [ "$(echo "$services" | jq -r --arg h "$backend" \
+                    'any(.[]; .Host == $h and .State == "up")' 2>/dev/null)" == "true" ] \
+                && echo "$pools" | awk -v p="${backend}#" 'index($0, p) == 1 {f=1} END {exit !f}' ; then
+                continue
+            fi
+            pending+="${pending:+,}${backend}"
+        done
+        if [ -z "$pending" ] || [ $SECONDS -ge $deadline ] ; then
+            break
+        fi
+        sleep 2
+    done
+
+    echo -n "$pending"
+    [ -z "$pending" ]
+}
+
+# Wait up to $2 seconds of wall clock (default 60) until no backend in $1
+# (comma-separated <host>@<backend>) reports a pool, i.e. cinder-volume runs
+# without it. Prints the backends still pooled (all if pools can't be read).
+cinder_wait_for_backends_gone()
+{
+    local backends="${1:-""}"
+    local timeout="${2:-60}"
+    local deadline=$((SECONDS + timeout))
+    local pending="" backend="" pools=""
+
+    while : ; do
+        pending=""
+        if pools="$($OPENSTACK volume backend pool list -f value -c Name 2>/dev/null)" ; then
+            for backend in ${backends//,/ } ; do
+                echo "$pools" | awk -v p="${backend}#" 'index($0, p) == 1 {f=1} END {exit !f}' &&
+                    pending+="${pending:+,}${backend}"
+            done
+        else
+            pending="$backends"
+        fi
+        if [ -z "$pending" ] || [ $SECONDS -ge $deadline ] ; then
+            break
+        fi
+        sleep 3
+    done
+
+    echo -n "$pending"
+    [ -z "$pending" ]
+}
+
 cinder_get_model_file_name()
 {
     local driver="${1:-""}"

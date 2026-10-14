@@ -40,7 +40,9 @@ for f in ceph_device_tier_create ceph_device_tier_list \
          ceph_device_tier_osd_table ceph_device_tier_class_users \
          _ceph_device_tier_name_ok _ceph_device_tier_osd_ids \
          _ceph_device_tier_registry _ceph_device_tier_is_registered \
-         _ceph_device_tier_registry_add _ceph_device_tier_unwind_create \
+         _ceph_device_tier_registry_add _ceph_device_tier_registry_del \
+         ceph_device_tier_register ceph_device_tier_unregister \
+         _ceph_device_tier_unwind_create \
          _ceph_device_tier_class_of_osd _ceph_device_tier_class_hosts \
          _ceph_device_tier_health_ok \
          _ceph_device_tier_has_class _ceph_device_tier_has_rule \
@@ -219,7 +221,12 @@ fake_sdk() {
             [ "$REGISTRY_ADD_RC" = 0 ] || return "$REGISTRY_ADD_RC"
             echo "cinder.storage.tier.$(wc -l < "$SETTINGS_TXT" | tr -d ' ').name = $2" >> "$SETTINGS_TXT"
             return 0 ;;
+        cinder_apply_storage_tier_deletion)
+            echo "registry_del $2" >> "$TMP/calls"
+            return 0 ;;
     esac
+    # anything else -- a fan-out wrapper among them -- is not what these call
+    echo "unexpected $*" >> "$TMP/calls"
     return 1
 }
 HEX_SDK=fake_sdk
@@ -679,6 +686,28 @@ OUT=$(ceph_device_tier_create silver 0 1 2>&1) ; RC=$?
 ck "$RC" 1 "4m create refuses while a PG is degraded"
 ck "$(grep -c registry_add "$TMP/calls")" 0 "4m and touched nothing"
 ck "$(awk -F: '$2 == "silver"' "$TMP/classes" | wc -l | tr -d ' ')" 0 "4m no OSD changed class"
+
+# ==== register / unregister: this node only (#2098) ======================
+# cube-cos-api runs these on every control, so each edits only the registry
+# of the node it runs on -- no fan-out of its own.
+
+reset_cluster
+ceph_device_tier_register silver >/dev/null 2>&1 ; ck "$?" 0 "5a register succeeds"
+ck "$(cat "$TMP/calls")" "registry_add silver" "5a straight to this node's registry"
+
+reset_cluster
+ceph_device_tier_unregister gold >/dev/null 2>&1 ; ck "$?" 0 "5b unregister succeeds"
+ck "$(cat "$TMP/calls")" "registry_del gold" "5b straight to this node's registry"
+
+reset_cluster
+REGISTRY_ADD_RC=1
+ceph_device_tier_register silver >/dev/null 2>&1 ; ck "$?" 1 "5c a failed apply is reported"
+
+reset_cluster
+OUT=$(ceph_device_tier_register gold-ssd-1 2>&1) ; ck "$?" 1 "5d a name the registry must not hold is refused"
+ck "$(cat "$TMP/calls")" "" "5d nothing applied"
+ceph_device_tier_unregister "" >/dev/null 2>&1 ; ck "$?" 1 "5e unregister needs a name"
+ck "$(cat "$TMP/calls")" "" "5e nothing applied"
 
 echo "----"; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] && { echo "OK: device tier registry, list and CLI queries"; exit 0; } || exit 1

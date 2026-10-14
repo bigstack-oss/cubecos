@@ -4857,6 +4857,9 @@ _ceph_device_tier_health_ok()
 # functions are not defined at all -- a direct call would be a command-not-found
 # 127, which is indistinguishable from an apply that failed. Same reason
 # ceph_device_tier_delete reaches cinder_is_volume_type_in_use this way.
+#
+# The registry is per node and these edit this node's only; cube-cos-api runs
+# ceph_device_tier_register / _unregister on the other controls (#2098).
 _ceph_device_tier_registry_add()
 {
     $HEX_SDK cinder_apply_storage_tier_creation "$1"
@@ -4865,6 +4868,19 @@ _ceph_device_tier_registry_add()
 _ceph_device_tier_registry_del()
 {
     $HEX_SDK cinder_apply_storage_tier_deletion "$1"
+}
+
+# this node's registry entry for a device tier, and its Cinder apply
+ceph_device_tier_register()
+{
+    _ceph_device_tier_name_ok "$1" || return 1
+    _ceph_device_tier_registry_add "$1"
+}
+
+ceph_device_tier_unregister()
+{
+    [ -n "$1" ] || return 1
+    _ceph_device_tier_registry_del "$1"
 }
 
 # Delete takes the registry entry out first, on purpose: while a backend is
