@@ -895,6 +895,10 @@ UpdateConfig(
         fprintf(fout, "rgw keystone implicit tenants = false\n");
         fprintf(fout, "rgw keystone make new tenants = true\n");
         fprintf(fout, "rgw s3 auth use keystone = true\n");
+        // check rgw-local users (e.g. thanos, sdk_thanos.sh) before keystone. the default
+        // "sts, external, local" sends every local-user request to keystone s3tokens
+        // first, which 404s and logs a CredentialNotFound traceback (cubecos#2065)
+        fprintf(fout, "rgw s3 auth order = sts, local, external\n");
         fprintf(fout, "rgw keystone verify ssl = false\n");
         fprintf(fout, "rgw swift account in url = true\n");
         fprintf(fout, "# nss db path = %s\n", nssdir);
