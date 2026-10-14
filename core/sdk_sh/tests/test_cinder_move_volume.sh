@@ -38,6 +38,7 @@ _pf_qos_differs() { return 1; }
 _pf_domain_probe(){ return 1; }
 _pf_type_multiattach(){ return 1; }
 _pf_type_encrypted()  { return 1; }
+_pf_backend_up()       { return 0; }
 # every volume type here is named after its own cinder.conf section
 _pf_type_backend_section() { echo "$1"; }
 _pf_backend_fsid_pool() {

@@ -1352,6 +1352,30 @@ MoveVolumeToBackendMain(int argc, const char** argv)
 
     std::cout << "Output: " << std::endl
               << r.stdoutOutput << std::endl;
+
+    // report the outcome, not just the accepted request
+    const ExecSyncResult o = ExecBashSync(
+        0, true, true, ParseOpenstackCliAuth(),
+        HEX_SDK " cinder_move_outcome \"" + volumeId + "\" \"" + destinationVolumeType + "\"");
+    std::string err;
+    const json11::Json v = json11::Json::parse(o.stdoutOutput, err);
+    const std::string state = v["state"].string_value();
+    if (state == "done") {
+        CliPrintf("Moved to %s (host %s)", destinationVolumeType.c_str(), v["host"].string_value().c_str());
+    } else if (state == "in_progress") {
+        CliPrintf("Move in progress (migration status: %s); check the volume's type and host later",
+                  v["migration_status"].string_value().c_str());
+    } else if (state == "failed") {
+        CliPrintf("Move failed: the volume is still %s on %s (status %s)",
+                  v["type"].string_value().c_str(),
+                  v["host"].string_value().c_str(),
+                  v["status"].string_value().c_str());
+        HexLogError("volume move failed: %s", o.stdoutOutput.c_str());
+        return CLI_FAILURE;
+    } else {
+        CliPrintf("Move requested; its outcome could not be read");
+    }
+
     return CLI_SUCCESS;
 }
 
