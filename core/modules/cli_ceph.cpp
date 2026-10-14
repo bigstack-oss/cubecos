@@ -892,6 +892,37 @@ CephRemoveOsdMain(int argc, const char** argv)
 }
 
 static int
+CephRebuildOsdMain(int argc, const char** argv)
+{
+    if (argc > 3 /* [0]="rebuild_osd" [1]="<osd.id>" [2]="force" */) {
+        return CLI_INVALID_ARGS;
+    }
+
+    std::string oid;
+    int index;
+
+    std::string optCmd = std::string(HEX_SDK) + " ceph_osd_down_list";
+    std::string descCmd = std::string(HEX_SDK) + " -v ceph_osd_down_list";
+    if (CliMatchCmdDescHelper(argc, argv, 1, optCmd, descCmd, &index, &oid, "Enter osd id to be rebuilt: ") != CLI_SUCCESS) {
+        CliPrintf("there is no down osd or it's an invalid id");
+        return CLI_FAILURE;
+    }
+
+    bool force = (argc == 3 && strcmp(argv[2], "force") == 0);
+    CliPrintf("osd.%s will be wiped and rebuilt in place from its replicas.", oid.c_str());
+    if (!CliReadConfirmation())
+        return CLI_SUCCESS;
+
+    if (HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_rebuild %s%s", oid.c_str(), force ? " force" : "")) {
+        CliPrintf("Rebuild osd.%s failed.", oid.c_str());
+        return CLI_FAILURE;
+    }
+
+    CliPrintf("Rebuild osd.%s successfully; it backfills from replicas.", oid.c_str());
+    return CLI_SUCCESS;
+}
+
+static int
 CephRebalanceMain(int argc, const char** argv)
 {
     if (argc > 2) {
@@ -2318,6 +2349,10 @@ CLI_MODE_COMMAND("storage", "list_osd", CephListOsdMain, NULL,
 CLI_MODE_COMMAND("storage", "remove_osd", CephRemoveOsdMain, NULL,
     "Remove an osd from cluster.",
     "remove_osd [<osd.id>]");
+
+CLI_MODE_COMMAND("storage", "rebuild_osd", CephRebuildOsdMain, NULL,
+    "Rebuild a broken osd in place with the same id from its replicas.",
+    "rebuild_osd [<osd.id>] [force]");
 
 CLI_MODE_COMMAND("storage", "rebalance", CephRebalanceMain, NULL,
     "Re-balance page groups or adjust replication size.",

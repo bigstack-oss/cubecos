@@ -1138,6 +1138,99 @@ ceph_bluestore_label_zero()
     done
 }
 
+# Rebuild a down OSD in place, keeping its id, disk and CRUSH position.
+# ceph_osd_rebuild <id> [force]   (force: allow losing size-1 pool data)
+ceph_osd_rebuild()
+{
+    local id=${1#osd.} force=$2
+    [[ $id =~ ^[0-9]+$ ]] || { log_error "bad osd id $1" ; return 1 ; }
+
+    local host=$($CEPH osd find $id 2>/dev/null | jq -r .crush_location.host)
+    [ "$host" = "$HOSTNAME" ] || { log_error "osd.$id is on ${host:-no host}, not $HOSTNAME" ; return 1 ; }
+    [ "$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == $id) | .up")" = 0 ] || { log_error "osd.$id is up; only a down OSD can be rebuilt" ; return 1 ; }
+
+    # raw map columns: metapart, id, osd uuid, datapart partuuid
+    local metapart uuid datapart_uuid datapart lv encrypted
+    read -r metapart _ uuid datapart_uuid < <(awk -v id=$id '$2 == id' $CEPH_OSD_MAP 2>/dev/null)
+    if [ -n "$metapart" ] ; then
+        [ -n "$uuid" ] && [ -n "$datapart_uuid" ] || { log_error "osd.$id has an incomplete entry in $CEPH_OSD_MAP" ; return 1 ; }
+        datapart=$(ceph_osd_datapart_resolve "$datapart_uuid") && [ -n "$datapart" ] || { log_error "osd.$id data partition $datapart_uuid not found" ; return 1 ; }
+    else
+        local lvs=$(ceph-volume lvm list --format json 2>/dev/null)
+        lv=$(echo "$lvs" | jq -r --arg id $id '.[$id][]? | select(.type == "block") | .lv_path')
+        encrypted=$(echo "$lvs" | jq -r --arg id $id '.[$id][]? | select(.type == "block") | .tags["ceph.encrypted"]')
+        [ -n "$lv" ] || { log_error "osd.$id is neither a raw OSD in $CEPH_OSD_MAP nor an LVM OSD" ; return 1 ; }
+    fi
+
+    # refuse size-1 pool PGs (pgs_brief: pg ls-by-osd refuses a down OSD)
+    local pools pgs single
+    if ! pools=$($CEPH osd pool ls detail -f json 2>/dev/null) || ! pgs=$($CEPH pg dump pgs_brief -f json 2>/dev/null) ||
+       ! single=$(printf '%s\n%s\n' "$pools" "$pgs" | jq -rs --argjson id $id '
+            .[0] as $pools
+            | [(.[1] | .pg_stats? // .)[] | select(any((.up + .acting)[]; . == $id)) | .pgid | split(".")[0] | tonumber] as $p
+            | $pools[] | select(.size == 1 and ((.pool_id // .pool) as $x | any($p[]; . == $x))) | .pool_name' 2>/dev/null) ; then
+        single=
+        if [ "$force" != "force" ] ; then
+            log_error "cannot read the PG map to check osd.$id for size-1 pools; rerun with force to rebuild anyway"
+            return 1
+        fi
+    fi
+    if [ -n "$single" ] && [ "$force" != "force" ] ; then
+        log_error "osd.$id holds the only copy of PGs in size-1 pools: $(echo $single); rerun with force to rebuild anyway"
+        return 1
+    fi
+
+    Quiet $CEPH osd set noout
+    systemctl stop ceph-osd@$id 2>/dev/null
+    umount -l /var/lib/ceph/osd/ceph-$id 2>/dev/null
+    if ! $CEPH osd destroy $id --yes-i-really-mean-it ; then
+        Quiet $CEPH osd unset noout
+        return 1
+    fi
+
+    if [ -n "$metapart" ] ; then
+        # wipe the datapart; keep the metapart fs uuid so the id still resolves
+        dd if=/dev/zero of=$datapart bs=1M count=100 oflag=sync 2>/dev/null
+        ceph_bluestore_label_zero $datapart
+        # mkfs this OSD only (refresh_ceph_osd restarts every OSD on the host)
+        local osd_dir=${CEPH_OSD_DIR:-/var/lib/ceph/osd}/ceph-$id
+        if ! mkfs.xfs -f -m uuid=$uuid $metapart >/dev/null || ! $CEPH osd new $uuid $id >/dev/null ||
+           ! ceph_osd_remount_one $id || ! echo bluestore > $osd_dir/type ||
+           ! chown ceph:ceph $metapart $datapart ||
+           ! timeout -k 10 600 ceph-osd -i $id --mkfs --osd-uuid $uuid >/dev/null 2>&1 ||
+           ! chown -R ceph:ceph $osd_dir ; then
+            log_error "re-creating osd.$id on $metapart failed"
+            Quiet $CEPH osd unset noout
+            return 1
+        fi
+        systemctl reset-failed ceph-osd@$id 2>/dev/null
+        Quiet systemctl start ceph-osd@$id
+    else
+        # zap keeps the LV; prepare reuses the id on it (--dmcrypt if encrypted)
+        local crypt=
+        [ "$encrypted" = 1 ] && crypt=--dmcrypt
+        local fsid
+        if ! timeout -k 10 300 ceph-volume lvm zap --osd-id $id >/dev/null || ! timeout -k 10 600 ceph-volume lvm prepare --bluestore $crypt --osd-id $id --data $lv >/dev/null ||
+           ! fsid=$(ceph-volume lvm list --format json 2>/dev/null | jq -er --arg id $id '.[$id][]? | select(.type == "block") | .tags["ceph.osd_fsid"]') ; then
+            log_error "re-creating osd.$id on $lv failed"
+            Quiet $CEPH osd unset noout
+            return 1
+        fi
+        # activate this OSD only, not --all
+        systemctl reset-failed ceph-osd@$id 2>/dev/null
+        Quiet timeout -k 10 300 ceph-volume lvm activate --bluestore $id $fsid
+    fi
+
+    local deadline=$((SECONDS + 300))
+    while [ $SECONDS -lt $deadline ] ; do
+        [ "$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == $id) | .up")" = 1 ] && break
+        sleep 5
+    done
+    Quiet $CEPH osd unset noout
+    [ "$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == $id) | .up")" = 1 ] || { log_error "osd.$id did not come up after the rebuild" ; return 1 ; }
+    log_info "osd.$id rebuilt in place on ${metapart:-$lv}; backfilling from replicas"
+}
+
 ceph_osd_down_list()
 {
     if [ "$VERBOSE" == "1" ] ; then
