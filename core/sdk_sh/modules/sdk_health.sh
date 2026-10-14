@@ -1790,6 +1790,14 @@ health_ceph_check()
     fi
 
     ERR_MSG="`$CEPH health detail`"
+
+    # a pool below the cluster's replica count loses data with one disk
+    # (cache pools are sized below it on purpose)
+    local want=$($CEPH config get mon osd_pool_default_size 2>/dev/null) low
+    if [ "${ERR_CODE:-0}" = "0" ] && [ -n "$want" ] ; then
+        low=$($CEPH osd pool ls detail -f json 2>/dev/null | jq -r --argjson w "$want" '.[] | select(.size < $w) | .pool_name' | grep -vxE "$BUILTIN_CACHEPOOL|$BUILTIN_EPHEMERAL|.*-cache")
+        [ -n "$low" ] && ERR_CODE=3 && ERR_MSG+="pools below replica size $want: $(echo $low)\n"
+    fi
     _health_fail_log
 }
 

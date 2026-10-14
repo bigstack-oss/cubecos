@@ -847,8 +847,6 @@ UpdateConfig(
     fprintf(fout, "ms mon client mode = crc\n");
     fprintf(fout, "osd max pg per osd hard ratio = 1.2\n");
     fprintf(fout, "osd crush chooseleaf type = 1\n");
-    fprintf(fout, "osd pool default size = 1\n");
-    fprintf(fout, "osd pool default min size = 1\n");
     fprintf(fout, "osd pool default pg autoscale mode = on\n");
     fprintf(fout, "rbd concurrent management ops = 20\n");
 
@@ -2000,6 +1998,9 @@ Commit(bool modified, int dryLevel)
         // them are up. SetupFS also has to stay ahead of the mds step below: it
         // is what runs `ceph fs new`, and the mds claims rank 0 on a filesystem
         // that already exists.
+        // pool default size lives in the central config so pools created later
+        // (RGW, operators) get the cluster's replica count, not ceph.conf's
+        HexSystemF(0, HEX_SDK " ceph_pool_default_size_sync");
         if (!SetupPools() || !SetupFS() || !SetupISCSI())
             return false;
 
