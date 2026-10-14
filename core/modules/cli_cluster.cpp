@@ -854,7 +854,7 @@ ClusterReadyMain(int argc, const char** argv)
 
     if(osdCnt == "0") {
         CliPrintf("set_ready aborted due to zero running osd for cluster storage. Fix this before continuing!");
-        return CLI_SUCCESS;
+        return CLI_FAILURE;
     }
 
     if (argc > 1) {
