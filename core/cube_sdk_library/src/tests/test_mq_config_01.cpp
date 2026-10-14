@@ -75,7 +75,8 @@ int main()
         HEX_TEST(config["oslo_messaging_rabbit"]["rabbit_retry_backoff"] == "2");
         HEX_TEST(config["oslo_messaging_rabbit"]["amqp_durable_queues"] == "true");
         HEX_TEST(config["oslo_messaging_rabbit"]["rabbit_ha_queues"] == "true");
-        HEX_TEST(KeyCount(config, "oslo_messaging_rabbit") == 4);
+        HEX_TEST(config["oslo_messaging_rabbit"]["heartbeat_timeout_threshold"] == "15");
+        HEX_TEST(KeyCount(config, "oslo_messaging_rabbit") == 5);
     }
 
     // CASE3: non-HA without the rpc timeout -- neutron's VPN agent, the one
@@ -99,7 +100,7 @@ int main()
         HEX_TEST(config["DEFAULT"]["transport_url"] == RabbitMqServers(true, CTRL, PASS, GROUP, false));
         HEX_TEST(!HasKey(config, "DEFAULT", "rpc_response_timeout"));
         HEX_TEST(KeyCount(config, "DEFAULT") == 1);
-        HEX_TEST(KeyCount(config, "oslo_messaging_rabbit") == 4);
+        HEX_TEST(KeyCount(config, "oslo_messaging_rabbit") == 5);
     }
 
     // CASE5: the helper writes nothing outside the two sections it owns, so a
@@ -149,7 +150,7 @@ int main()
         HEX_TEST(!config["oslo_messaging_rabbit"]["ssl_ca_file"].empty());
     }
 
-    // CASE8: HA with TLS -- both axes on, six keys in the section.
+    // CASE8: HA with TLS -- both axes on, seven keys in the section.
     {
         Configs config;
         SetMqClientConfig(config, true, CTRL, PASS, GROUP, true);
@@ -160,7 +161,8 @@ int main()
         HEX_TEST(config["oslo_messaging_rabbit"]["rabbit_retry_backoff"] == "2");
         HEX_TEST(config["oslo_messaging_rabbit"]["amqp_durable_queues"] == "true");
         HEX_TEST(config["oslo_messaging_rabbit"]["rabbit_ha_queues"] == "true");
-        HEX_TEST(KeyCount(config, "oslo_messaging_rabbit") == 6);
+        HEX_TEST(config["oslo_messaging_rabbit"]["heartbeat_timeout_threshold"] == "15");
+        HEX_TEST(KeyCount(config, "oslo_messaging_rabbit") == 7);
     }
 
     // CASE9: ssl selects the port and nothing else. oslo.messaging registers no
@@ -184,6 +186,18 @@ int main()
         HEX_TEST(haTls.find("10.1.0.3:5671") != std::string::npos);
         HEX_TEST(haTls.find(":5672") == std::string::npos);
         HEX_TEST(haTls.compare(0, 9, "rabbit://") == 0);
+    }
+
+    // a control lists its own broker first; 127.0.0.1 is local on any host
+    {
+        const std::string local = RabbitMqServers(true, CTRL, PASS, "10.1.0.2,127.0.0.1,10.1.0.3", false);
+
+        HEX_TEST(local == "rabbit://openstack:s3cret@127.0.0.1:5672,openstack:s3cret@10.1.0.3:5672,"
+                          "openstack:s3cret@10.1.0.2:5672");
+
+        const std::string remote = RabbitMqServers(true, CTRL, PASS, GROUP, false);
+        HEX_TEST(remote.compare(0, 31, "rabbit://openstack:s3cret@10.1.") == 0);
+        HEX_TEST(remote.find("@10.1.0.1:5672") < remote.find("@10.1.0.2:5672"));
     }
 
     return HexTestResult;

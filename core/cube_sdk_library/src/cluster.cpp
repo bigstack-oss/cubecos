@@ -2,6 +2,10 @@
 
 #include "cluster.hpp"
 
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
@@ -229,6 +233,27 @@ MemcachedServers(const bool ha, const std::string& controller, const std::string
     }
 }
 
+// true if ip is assigned to an interface of this host
+static bool
+IsLocalAddress(const std::string& ip)
+{
+    struct ifaddrs* ifs = nullptr;
+    if (getifaddrs(&ifs) != 0)
+        return false;
+
+    bool found = false;
+    char buf[INET_ADDRSTRLEN];
+    for (struct ifaddrs* i = ifs; i && !found; i = i->ifa_next) {
+        if (!i->ifa_addr || i->ifa_addr->sa_family != AF_INET)
+            continue;
+        auto* sin = reinterpret_cast<struct sockaddr_in*>(i->ifa_addr);
+        if (inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf)) && ip == buf)
+            found = true;
+    }
+    freeifaddrs(ifs);
+    return found;
+}
+
 std::string
 RabbitMqServers(const bool ha, const std::string& controller,
     const std::string& pass, const std::string& clusterGroup, const bool ssl)
@@ -239,6 +264,14 @@ RabbitMqServers(const bool ha, const std::string& controller,
         return "rabbit://openstack:" + pass + "@" + controller + port;
     else {
         auto group = hex_string_util::split(clusterGroup, ',');
+        // a control lists its own broker first, so a dead peer's broker never
+        // holds this node's connections
+        for (size_t i = 0; i < group.size(); i++) {
+            if (IsLocalAddress(group[i])) {
+                std::rotate(group.begin(), group.begin() + i, group.end());
+                break;
+            }
+        }
         std::string servers = "rabbit://";
         for (size_t i = 0; i < group.size(); i++) {
             servers += "openstack:" + pass + "@" + group[i] + port;
@@ -288,6 +321,8 @@ SetMqClientConfig(Configs& config, const bool ha, const std::string& ctrlIp,
         config["oslo_messaging_rabbit"]["rabbit_retry_backoff"] = "2";
         config["oslo_messaging_rabbit"]["amqp_durable_queues"] = "true";
         config["oslo_messaging_rabbit"]["rabbit_ha_queues"] = "true";
+        // drop a dead broker in seconds, not the 60s default, so clients move to a live one
+        config["oslo_messaging_rabbit"]["heartbeat_timeout_threshold"] = "15";
     }
 }
 

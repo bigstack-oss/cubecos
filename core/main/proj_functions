@@ -287,14 +287,43 @@ cube_cluster_start()
 CUBE_BOOT_DONE_TEST="grep -q '^done ' /run/cube_bootup_status 2>/dev/null || { [ ! -e /run/cube_bootup_status ] && [ -e /run/cube_commit_done ] ; }"
 
 # Failover monitors may start: this node finished booting and so did the
-# master, or the master is down (its peers must take over its workloads).
+# master, the controls and the hosts running instances, or they are down (their
+# peers must take over). Opens anyway 15 min after this node is done.
 cube_failover_gate_open()
 {
     eval "$CUBE_BOOT_DONE_TEST" || return 1
+    local done_at=$(awk '/^done /{print $2}' /run/cube_bootup_status 2>/dev/null)
+    [ -n "$done_at" ] && [ $(( $(date +%s) - done_at )) -gt 900 ] && return 0
     local m=$(cube_master_control)
-    [ "$m" = "$(hostname)" ] && return 0
-    is_sshable $m || return 0
-    timeout 10 ssh root@$m "$CUBE_BOOT_DONE_TEST"
+    if [ "$m" != "$(hostname)" ] && is_sshable $m ; then
+        timeout 10 ssh root@$m "$CUBE_BOOT_DONE_TEST" </dev/null || return 1
+    fi
+    cube_nodes_booted_or_down
+}
+
+# True when the controls and every host running instances finished booting or
+# are down (ssh 255). Without a DB every compute node is checked.
+cube_nodes_booted_or_down()
+{
+    source /usr/sbin/hex_tuning /etc/settings.txt
+    local vmhosts
+    vmhosts=$($MYSQL -u root -N -D nova -e \
+        "SELECT DISTINCT host FROM instances WHERE deleted = 0 AND host IS NOT NULL" 2>/dev/null) ||
+        vmhosts=$(cubectl node list -r compute -j 2>/dev/null | jq -r '.[].hostname')
+    local hosts=$(printf '%s\n%s\n' "$(echo $T_cubesys_control_hosts | tr ',' '\n')" "$vmhosts" |
+        grep -vx -e '' -e "$(hostname)" | sort -u)
+    local d=$(mktemp -d) n
+    for n in $hosts ; do
+        (
+            timeout 10 ssh -o ConnectTimeout=5 -o BatchMode=yes root@$n "$CUBE_BOOT_DONE_TEST" </dev/null >/dev/null 2>&1
+            r=$?
+            [ $r -eq 0 ] || [ $r -eq 255 ] || touch $d/$n
+        ) &
+    done
+    wait
+    local busy=$(ls $d)
+    rm -rf $d
+    [ -z "$busy" ]
 }
 
 # Master control for this boot: the override if it names a control host, else

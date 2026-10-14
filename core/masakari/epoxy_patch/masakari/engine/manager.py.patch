@@ -1,0 +1,58 @@
+--- masakari/engine/manager.py
++++ masakari/engine/manager.py
+@@ -28,6 +28,7 @@
+ from oslo_service import periodic_task
+ from oslo_utils import timeutils
+ 
++from masakari.compute import nova as nova_api
+ import masakari.conf
+ from masakari.engine import driver
+ from masakari.engine import instance_events as virt_events
+@@ -127,6 +128,28 @@
+ 
+         return notification_status
+ 
++    @staticmethod
++    def _instance_off_reporting_host(context, notification):
++        """Return (reporter, nova host) if they differ, else None."""
++        try:
++            reporter = objects.Host.get_by_uuid(
++                context, notification.source_host_uuid).name
++            server = nova_api.API().get_server(
++                context, notification.payload.get('instance_uuid'))
++        except Exception:
++            # lookup failures are left to the recovery flow
++            return None
++        host = getattr(server, 'OS-EXT-SRV-ATTR:host', None)
++        if not host or not reporter:
++            return None
++
++        def short(name):
++            return name.split('.')[0].lower()
++
++        if short(host) == short(reporter):
++            return None
++        return reporter, host
++
+     def _handle_notification_type_instance(self, context, notification):
+         if not virt_events.is_valid_event(notification.payload):
+             LOG.info("Notification '%(uuid)s' received with payload "
+@@ -135,6 +158,18 @@
+                       "payload": notification.payload})
+             return fields.NotificationStatus.IGNORED
+ 
++        # ignore an event from a host the instance does not run on
++        # (e.g. the destination of a failed live migration)
++        hosts = self._instance_off_reporting_host(context, notification)
++        if hosts:
++            LOG.warning("Notification '%(uuid)s' for instance %(instance)s "
++                        "ignored: reported by host '%(reporter)s' but the "
++                        "instance is on host '%(host)s'.",
++                        {"uuid": notification.notification_uuid,
++                         "instance": notification.payload.get('instance_uuid'),
++                         "reporter": hosts[0], "host": hosts[1]})
++            return fields.NotificationStatus.IGNORED
++
+         notification_status = fields.NotificationStatus.FINISHED
+         exception_info = None
+         try:
