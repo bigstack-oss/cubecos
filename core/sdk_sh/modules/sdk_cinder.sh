@@ -3665,6 +3665,7 @@ readonly ERROR_CINDER_MOVE_DOMAIN_MISSING="the instance has no libvirt domain on
 readonly ERROR_CINDER_MOVE_DOMAIN_NOT_LIVE="the instance's domain is not running or paused"
 readonly ERROR_CINDER_MOVE_DISK_NOT_IN_DOMAIN="the attached disk is not present in the instance's domain"
 readonly ERROR_CINDER_MOVE_DISPATCH_FAILED="retype command failed"
+readonly ERROR_CINDER_MOVE_BACKEND_DOWN="the destination tier's cinder-volume service is not up"
 
 # record a blocker; all are reported, not just the first
 _pf_block() { _pf_codes+=("$1"); _pf_reasons+=("$2"); }
@@ -3698,6 +3699,15 @@ _pf_volume()      { $OPENSTACK volume show "$1" -f json 2>/dev/null; }
 _pf_snapshots()   { $OPENSTACK volume snapshot list --volume "$1" -f value -c ID 2>/dev/null; }
 _pf_type_exists() { $OPENSTACK volume type list -f value -c Name 2>/dev/null | grep -qx "$1"; }
 _pf_vm_state()    { $OPENSTACK server show "$1" -f value -c status 2>/dev/null; }
+
+# a cinder-volume service of backend section $1 is enabled and up
+_pf_backend_up()
+{
+    [ "$($OPENSTACK volume service list --service cinder-volume -f json 2>/dev/null \
+        | jq -r --arg s "$1" \
+            'any(.[]; (.Host | endswith("@" + $s)) and .Status == "enabled" and .State == "up")' \
+            2>/dev/null)" == "true" ]
+}
 
 # cinder.conf section of volume type $1, from its volume_backend_name
 _pf_type_backend_section()
@@ -3885,6 +3895,10 @@ cinder_move_preflight()
     elif [ "$src_fp" == "$dst_fp" ] ; then
         _pf_warn W_SAME_CLUSTER_SAME_POOL "$WARN_CINDER_MOVE_SAME_CLUSTER_SAME_POOL"
     fi
+    # the scheduler would fail the retype later with NoValidBackend
+    if [ -n "$dst_sec" ] && ! _pf_backend_up "$dst_sec" ; then
+        _pf_block E_BACKEND_DOWN "$ERROR_CINDER_MOVE_BACKEND_DOWN"
+    fi
 
     # check the live libvirt domain; skip if the probe cannot run
     if [ -n "$_pf_attached" ] ; then
@@ -3921,6 +3935,42 @@ cinder_volume_image_name()
 {
     local nid=$(_civ_name_id "$1")
     case "$nid" in ""|None|null) echo "volume-$1" ;; *) echo "volume-$nid" ;; esac
+}
+
+# Wait up to $3 seconds (default 60) for the retype of volume $1 to type $2 to
+# settle. Prints {state: done|in_progress|failed|unknown, ...}; 1 if failed.
+cinder_move_outcome()
+{
+    local vol_id="$1" dst_type="$2" timeout="${3:-60}"
+    local deadline=$((SECONDS + timeout)) v="" status=""
+
+    while : ; do
+        v="$($OPENSTACK volume show "$vol_id" -f json 2>/dev/null)"
+        status="$(echo "$v" | jq -r '.status // ""' 2>/dev/null)"
+        if { [ -n "$status" ] && [ "$status" != "retyping" ] ; } || [ $SECONDS -ge $deadline ] ; then
+            break
+        fi
+        sleep 3
+    done
+
+    local type="$(echo "$v" | jq -r '.type // .volume_type // ""' 2>/dev/null)"
+    local host="$(echo "$v" | jq -r '."os-vol-host-attr:host" // ""' 2>/dev/null)"
+    local mig="$(echo "$v" | jq -r '.migration_status // ""' 2>/dev/null)"
+    local state=""
+    if [ -z "$status" ] ; then
+        state=unknown
+    elif [ "$status" == "retyping" ] ; then
+        state=in_progress
+    elif [ "$type" == "$dst_type" ] ; then
+        state=done
+    else
+        state=failed
+    fi
+
+    jq -c -n --arg state "$state" --arg status "$status" --arg type "$type" \
+        --arg host "$host" --arg mig "$mig" \
+        '{state: $state, status: $status, type: $type, host: $host, migration_status: $mig}'
+    [ "$state" != "failed" ]
 }
 
 # preflight, then retype volume $1 to type $2; prints result JSON

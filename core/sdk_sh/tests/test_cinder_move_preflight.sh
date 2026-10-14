@@ -41,6 +41,7 @@ _pf_type_multiattach(){ grep -qx "$1" $T/ma_types; }
 _pf_type_encrypted(){   grep -qx "$1" $T/enc_types; }
 _pf_type_backend_section() { local v; v=$(cat $T/section_$1 2>/dev/null); [ -n "$v" ] || return 1; echo "$v"; }
 _pf_backend_fsid_pool()    { local v; v=$(cat $T/fsidpool_$1 2>/dev/null); [ -n "$v" ] || return 1; echo "$v"; }
+_pf_backend_up()            { ! grep -qx "$1" $T/down_backends; }
 
 printf 'ceph\ntier-nvme\nCubeStorage\n' > $T/types
 echo 'ACTIVE' > $T/vmstate
@@ -56,6 +57,7 @@ echo 'deadbeef:cinder-volumes' > $T/fsidpool_tier-nvme
 echo 'running|sda sdb' > $T/domain
 : > $T/ma_types      # tiers whose type is multiattach-capable
 : > $T/enc_types     # tiers whose type is encrypted
+: > $T/down_backends # sections whose cinder-volume is not up
 
 mkvol() { # status attachments multiattach replication group type
   printf '{"status":"%s","attachments":%s,"multiattach":%s,"replication_status":"%s","group_id":%s,"type":"%s","size":2}\n' \
@@ -244,6 +246,30 @@ mkvol in-use "$one" false None null ceph
 cinder_move_preflight v1 tier-nvme >$T/o 2>&1
 chk "clean volume has no blockers"      "$(codes)" ""
 
+# ---- the destination backend must be up (#2100) ----
+mkvol available '[]' false None null ceph
+echo 'tier-nvme' > $T/down_backends
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; rc=$?
+chk "backend down: refused"            "$rc" "1"
+chk "backend down: code"               "$(topcode)" "E_BACKEND_DOWN"
+chk "backend down: ok false"           "$(okflag)" "false"
+mkvol in-use "$one" false None null ceph
+echo 'SHUTOFF' > $T/vmstate
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1
+chk "backend down: reported with others" "$(codes)" "E_VM_NOT_RUNNING,E_BACKEND_DOWN"
+echo 'ACTIVE' > $T/vmstate
+echo 'ceph' > $T/down_backends
+mkvol available '[]' false None null ceph
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1; rc=$?
+chk "only the destination counts"      "$rc" "0"
+: > $T/down_backends
+rm -f $T/section_tier-nvme
+echo 'tier-nvme' > $T/down_backends
+cinder_move_preflight v1 tier-nvme >$T/o 2>&1
+chk "unresolved section: not checked"  "$(codes)" ""
+echo 'tier-nvme' > $T/section_tier-nvme
+: > $T/down_backends
+
 # --- _pf_qos_differs() direct testing ---
 # Unset the stub and test the real function with mocked openstack
 unset -f _pf_qos_differs
@@ -349,6 +375,25 @@ ceph() { return 1 ; }
 export -f ceph
 _pf_backend_fsid_pool ceph >/dev/null 2>&1
 chk "fsid/pool: silent cluster fails"  "$?" "1"
+
+# the real _pf_backend_up against a service list
+sed -n '/^_pf_backend_up()/,/^}/p' $SRC > $T/up.sh; source $T/up.sh
+OPENSTACK=fake_os
+fake_os() { cat $T/svc.json; }
+svc() { printf '{"Binary":"cinder-volume","Host":"%s","Status":"%s","State":"%s"}' "$1" "$2" "$3"; }
+echo "[$(svc cube@ceph enabled up),$(svc cube@qatier enabled up)]" > $T/svc.json
+_pf_backend_up qatier; chk "up: listed, enabled, up"      "$?" "0"
+_pf_backend_up gold;   chk "up: not listed (local-only)"  "$?" "1"
+echo "[$(svc cube@qatier enabled down)]" > $T/svc.json
+_pf_backend_up qatier; chk "up: down"                     "$?" "1"
+echo "[$(svc cube@qatier disabled up)]" > $T/svc.json
+_pf_backend_up qatier; chk "up: disabled"                 "$?" "1"
+echo "[$(svc cube@xqatier enabled up)]" > $T/svc.json
+_pf_backend_up qatier; chk "up: a longer name is not it"  "$?" "1"
+echo "[$(svc ext1@ext1 enabled up)]" > $T/svc.json
+_pf_backend_up ext1;   chk "up: external host@backend"    "$?" "0"
+fake_os() { return 1; }
+_pf_backend_up qatier; chk "up: unreadable list is not up" "$?" "1"
 
 echo "----"; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] || exit 1
