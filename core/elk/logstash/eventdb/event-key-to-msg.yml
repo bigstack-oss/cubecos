@@ -52,5 +52,6 @@ RUG00004I: rebooting node for rolling upgrade
 PLC00001I: cube node policy is successfully applied
 PLC00002I: cube cluster policy is successfully applied
 
+SRV00006W: system log messages were dropped by rate limiting, logs and events from this host are incomplete
 SRV01001I: service restart due to memory usage exceeds defined threshold
 SRV01002I: identified and fixed a stale API service

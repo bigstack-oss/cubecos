@@ -17,6 +17,21 @@ filter {
     }
   }
 
+  # rsyslog reports what its journal input dropped to the rate limit as one of its
+  # own internal messages, which that limit does not apply to. Turn the report into
+  # an event so a gap in the log and event trail is told rather than found.
+  if [program] == "rsyslogd" {
+    grok {
+      match => { "message" => "^imjournal: %{INT:lost} messages lost due to rate-limiting \(%{INT:allowed} allowed within %{INT:interval} seconds\)" }
+      tag_on_failure => []
+    }
+    if [lost] {
+      mutate {
+        replace => { "message" => "SRV00006W:: |interface=system,host=%{agent_host},service=rsyslog,lost=%{lost},allowed=%{allowed},interval=%{interval}|" }
+      }
+    }
+  }
+
   grok {
     match => { "message" => "%{NOTSPACE:eventid}:: \|%{GREEDYDATA:attrs}\|" }
   }
