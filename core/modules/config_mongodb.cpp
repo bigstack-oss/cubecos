@@ -477,9 +477,10 @@ Commit(bool modified, int dryLevel)
     std::vector<std::string> ctrlHosts = { s_hostname.c_str() };
     AppendCtrlPeerHostsIfObserved(ctrlHosts);
 
-    // set up the replica set on the master node
+    // set up the replica set on the master node; synced admin access means it
+    // already exists (e.g. a master promoted by override has no marker)
     bool isMaster = G(IS_MASTER);
-    if (isMaster && access(MARKER_MONGODB_RS_CREATED, F_OK) != 0) {
+    if (isMaster && access(MARKER_MONGODB_RS_CREATED, F_OK) != 0 && GetAdminAccess() == "") {
         // create the mongodb config without auth enabled
         if (!WriteMongodConf(false, myip.c_str())) {
             HexLogError("failed to set mongod config");
