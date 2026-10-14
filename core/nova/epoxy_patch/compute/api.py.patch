@@ -18,7 +18,7 @@
              # There are 2 possibilities here:
              #
              # 1. The target volume already exists but bdm.volume_size is not
-@@ -4192,12 +4194,60 @@
+@@ -4192,12 +4194,63 @@
  
          return node
  
@@ -41,9 +41,12 @@
 +            _bad(_("root disk size cannot shrink"))
 +        if new.ephemeral_gb != old.ephemeral_gb:
 +            _bad(_("ephemeral disk size must not change"))
-+        # ceiling the running domain was booted with (config default or
-+        # extra-spec override); the driver re-checks the real domain XML
-+        max_vcpus, max_mem = clr.headroom(old)
++        # ceiling recorded at boot, as resize-plan uses; the config estimate
++        # only if unrecorded. The driver re-checks the real domain XML
++        ceiling = clr.recorded_headroom(instance)
++        if ceiling is None:
++            ceiling = clr.headroom(old)
++        max_vcpus, max_mem = ceiling
 +        if new.vcpus > old.vcpus and new.vcpus > max_vcpus:
 +            _bad(_("target vCPUs exceed this instance's hotplug "
 +                   "ceiling (%d)") % max_vcpus)
