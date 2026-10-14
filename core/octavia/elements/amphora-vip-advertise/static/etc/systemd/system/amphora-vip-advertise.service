@@ -1,0 +1,7 @@
+[Unit]
+Description=Re-announce amphora VIP addresses
+After=amphora-netns.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/amphora-vip-advertise

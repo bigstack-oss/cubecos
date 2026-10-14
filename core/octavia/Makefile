@@ -154,7 +154,11 @@ haproxy_amphora_image: $(OCTAVIA_SRC_STAMP)
 	$(Q)# pin. Both tags are annotated, and `ls-remote <tag>^{} <tag>` prints the
 	$(Q)# peeled commit last when it is, or the commit alone when it is not, so the
 	$(Q)# last line is the commit either way.
+	$(Q)# amphora-vip-advertise (core/octavia/elements) re-announces the VIP after a
+	$(Q)# reboot; AMP_element_sequence is the base the script appends its own to.
 	$(Q)cd $(OCTAVIA_SRC_DIR)/diskimage-create && \
+		DIB_LOCAL_ELEMENTS_PATH=$(COREDIR)/octavia/elements \
+		AMP_element_sequence="base vm amphora-vip-advertise" \
 		DIB_REPOREF_amphora_agent=$$(git -C $(OCTAVIA_SRC_DIR) rev-parse HEAD) \
 		DIB_REPOREF_octavia_lib=$$(git ls-remote $(OCTAVIA_LIB_REPO) \
 			'refs/tags/$(OCTAVIA_LIB_VER)^{}' 'refs/tags/$(OCTAVIA_LIB_VER)' \

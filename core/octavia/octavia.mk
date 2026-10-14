@@ -294,6 +294,12 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/octavia/certs/octavia-certs.cnf .$(OCTAVIA_CONF_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/octavia/dhclient.conf .$(OCTAVIA_CONF_DIR)
 	$(Q)chroot $(ROOTDIR) chmod 755 /etc/octavia/create_certificates.sh
+	$(Q)# the amphora-vip-advertise element's files, for migrate_octavia_amphora_vip_advertise
+	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/cube/octavia/amphora-vip-advertise
+	$(Q)for f in usr/local/bin/amphora-vip-advertise etc/systemd/system/amphora-vip-advertise.service \
+		etc/systemd/system/amphora-vip-advertise.timer ; do \
+		$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/octavia/elements/amphora-vip-advertise/static/$$f ./usr/share/cube/octavia/amphora-vip-advertise ; \
+	done
 	$(Q)# install systemd unit files. All four are installed here now; under the
 	$(Q)# RPM layout only worker and health-manager were, because
 	$(Q)# openstack-octavia-{api,housekeeping} shipped the other two. The two

@@ -462,6 +462,9 @@ power_bootup_mark()
     echo "$phase $(date +%s)" >> "$BOOTUP_STATUS_FILE"
     log_info "cluster bootup: $HOSTNAME -> $phase"
     /usr/sbin/hex_log_event -e CLU00009I "interface=system,host=$HOSTNAME,category=cluster,sub=cluster_bootup,action=phase,phase=$phase"
+    # one time: amphorae from older images get the VIP re-announce timer
+    [ "$phase" = done ] && setsid $HEX_SDK migrate_octavia_amphora_vip_advertise >/dev/null 2>&1 </dev/null &
+    return 0
 }
 
 # Aggregate every node's local bootup record into a table. Unreachable nodes are
