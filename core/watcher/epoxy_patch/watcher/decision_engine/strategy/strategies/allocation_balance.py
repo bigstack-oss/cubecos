@@ -4,6 +4,7 @@
 from oslo_log import log
 
 from watcher._i18n import _
+from watcher.decision_engine.model import element
 from watcher.decision_engine.strategy.strategies import base
 
 LOG = log.getLogger(__name__)
@@ -84,6 +85,9 @@ class AllocationBalance(base.WorkloadStabilizationBaseStrategy):
                                key=self._size):
                 # excluded by the audit scope
                 if inst.watcher_exclude:
+                    continue
+                # only a running instance can be live migrated
+                if inst.state != element.InstanceState.ACTIVE.value:
                     continue
                 if self._size(inst) < spread and self._fits(dest, inst):
                     movable = inst

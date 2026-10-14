@@ -23,6 +23,73 @@ _instance_metrics_dump()
     done
 }
 
+# Per-instance L3 cache occupancy via Intel RDT CMT (resctrl): one mon group per running
+# qemu (mon_groups/<uuid>), synced every run. Prints "<uuid> <bytes>"; nothing without CMT.
+# Paths are overridable for the unit test.
+_INSTANCE_L3_ROOT=/sys/fs/resctrl
+_INSTANCE_L3_CPUINFO=/proc/cpuinfo
+_INSTANCE_L3_PROC=/proc
+_INSTANCE_L3_RUN=/run/libvirt/qemu
+
+_instance_l3_mount()
+{
+    grep -qw resctrl /proc/filesystems 2>/dev/null || return 1
+    mount -t resctrl resctrl $_INSTANCE_L3_ROOT 2>/dev/null
+}
+
+_instance_l3_collect()
+{
+    local root=$_INSTANCE_L3_ROOT proc=$_INSTANCE_L3_PROC
+    local re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    local pidf pid uuid g tid f v sum live=" " d
+
+    grep -qw cqm_occup_llc $_INSTANCE_L3_CPUINFO 2>/dev/null || return 0
+    if [ ! -d $root/info/L3_MON ] ; then
+        _instance_l3_mount || return 0
+        [ -d $root/info/L3_MON ] || return 0
+    fi
+    grep -qx llc_occupancy $root/info/L3_MON/mon_features 2>/dev/null || return 0
+    [ -d $root/mon_groups ] || return 0
+
+    for pidf in $_INSTANCE_L3_RUN/*.pid ; do
+        [ -f "$pidf" ] || continue
+        read -r pid < "$pidf" 2>/dev/null
+        [ -n "$pid" ] && [ -r $proc/$pid/cmdline ] || continue
+        uuid=$(tr '\0' '\n' < $proc/$pid/cmdline | grep -A1 -x -- -uuid | tail -n1)
+        [[ "$uuid" =~ $re ]] || continue
+        # Threads already in a non-default control group (libvirt cachetune) are left alone;
+        # moving them into a root mon group would drop their cache allocation.
+        if [ -r $proc/$pid/cpu_resctrl_groups ] && \
+           ! grep -qx 'res:/\?' $proc/$pid/cpu_resctrl_groups ; then
+            continue
+        fi
+        live="$live$uuid "
+        g=$root/mon_groups/$uuid
+        [ -d $g ] || mkdir $g 2>/dev/null || continue
+        # new threads inherit the group; re-adding covers a restarted domain
+        for tid in $(ls $proc/$pid/task 2>/dev/null) ; do
+            echo $tid > $g/tasks 2>/dev/null
+        done
+        sum=""
+        for f in $g/mon_data/mon_L3_*/llc_occupancy ; do
+            [ -r "$f" ] || continue
+            read -r v < "$f" 2>/dev/null
+            [[ "$v" =~ ^[0-9]+$ ]] || continue
+            sum=$(( ${sum:-0} + v ))
+        done
+        [ -n "$sum" ] && echo "$uuid $sum"
+    done
+
+    # Prune groups of instances no longer running here; only uuid-named groups are ours.
+    for d in $root/mon_groups/* ; do
+        [ -d "$d" ] || continue
+        uuid=${d##*/}
+        [[ "$uuid" =~ $re ]] || continue
+        [[ "$live" == *" $uuid "* ]] || rmdir "$d" 2>/dev/null
+    done
+    return 0
+}
+
 # Per-instance metrics, written as a node_exporter textfile.
 #
 # Nothing else in the stack produces them. node_exporter covers the host half and no
@@ -35,7 +102,8 @@ _instance_metrics_dump()
 # Three consumers, and they are why the shape is what it is:
 #
 #   Watcher    ceilometer_cpu and ceilometer_memory_usage, through its prometheus
-#              datasource, for the workload_balance strategy.
+#              datasource, for the workload_balance strategy; ceilometer_cpu_l3_cache
+#              (bytes, from _instance_l3_collect) for noisy_neighbor.
 #   Grafana    the Instance and Top Instances dashboards, both of which were monasca's.
 #   Kapacitor  the two per-project VM alert templates, which are fed the influx line
 #              protocol instance_metrics_publish derives from the same read.
@@ -144,7 +212,7 @@ instance_metrics_collect()
     local out=$dir/cube_instance_metrics.prom
     local state=/run/cube_instance_metrics.state
     local now=$(date +%s)
-    local lp
+    local lp l3
 
     # Runs wherever node_exporter does, which is every role. A node with no hypervisor has
     # no virsh and produces nothing rather than an error -- the series simply do not exist
@@ -156,7 +224,9 @@ instance_metrics_collect()
     # protocol to stdout. Splitting this into two functions would mean walking every domain
     # twice for the same numbers.
     lp=$(MakeTemp)
-    _instance_metrics_dump | awk -v OUT="$out.tmp" -v STATE="$state" -v NOW="$now" '
+    l3=$(MakeTemp)
+    _instance_l3_collect > "$l3"
+    _instance_metrics_dump | awk -v OUT="$out.tmp" -v STATE="$state" -v NOW="$now" -v L3="$l3" '
 function esc(v) {
     gsub(/\\/, "\\\\", v)
     gsub(/"/, "\\\"", v)
@@ -230,6 +300,7 @@ function flush(   i, cnt, dev, extra, avail, unused, usable, tags, dtags, pct, r
 
     emit("ceilometer_cpu", "", st["cpu.time"])
     emit("ceilometer_vcpus", "", vcpus)
+    if (uuid in l3v) emit("ceilometer_cpu_l3_cache", "", l3v[uuid])
 
     # sum of the online vCPU times; omitted when libvirt reports none
     vt = ""
@@ -350,6 +421,11 @@ BEGIN {
     }
     close(STATE)
     dt = NOW - prev_t
+    while ((getline line < L3) > 0) {
+        split(line, a, " ")
+        l3v[a[1]] = a[2]
+    }
+    close(L3)
 
     reset()
     print "# HELP ceilometer_cpu Cumulative CPU time consumed by the instance in nanoseconds." > OUT
@@ -358,6 +434,8 @@ BEGIN {
     print "# TYPE cube_instance_vcpu_time counter" > OUT
     print "# HELP ceilometer_vcpus Virtual CPUs allocated to the instance." > OUT
     print "# TYPE ceilometer_vcpus gauge" > OUT
+    print "# HELP ceilometer_cpu_l3_cache L3 cache occupied by the instance in bytes (Intel RDT CMT)." > OUT
+    print "# TYPE ceilometer_cpu_l3_cache gauge" > OUT
     print "# HELP ceilometer_memory_usage Guest memory in use in megabytes, libvirt available minus unused." > OUT
     print "# TYPE ceilometer_memory_usage gauge" > OUT
     print "# HELP cube_instance_memory_visible_mb Memory the guest OS can see in megabytes, libvirt balloon.available." > OUT

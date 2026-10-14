@@ -622,6 +622,8 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["DEFAULT"]["instance_usage_audit"] = "True";
         cfg["DEFAULT"]["instance_usage_audit_period"] = "hour";
         cfg["notifications"]["notify_on_state_change"] = "vm_and_task_state";
+        // versioned too: Watcher consumes only nova.versioned_notifications
+        cfg["notifications"]["notification_format"] = "both";
 
         ironicCfg["DEFAULT"]["host"] = hostname + "-ironic";
         ironicCfg["DEFAULT"]["compute_driver"] = "ironic.IronicDriver";

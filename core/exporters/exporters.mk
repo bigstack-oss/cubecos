@@ -47,6 +47,9 @@ EXPORTER_BLDDIR := $(TOP_BLDDIR)/core/exporters
 # node_exporter's unit keeps the name EPEL's rpm gave it, which config_prometheus.cpp enables.
 EXPORTER_UNITS := $(filter-out node_exporter,$(EXPORTER_BINS)) prometheus-node-exporter
 
+# ipmi_exporter's collectors shell out to the FreeIPMI tools; without them ipmi_up is 0.
+ROOTFS_DNF += freeipmi
+
 heavy_components_install:: $(foreach b,$(EXPORTER_BINS),$(EXPORTER_BLDDIR)/$(b))
 	$(Q)$(foreach b,$(EXPORTER_BINS),$(INSTALL_PROGRAM) $(ROOTDIR) $(EXPORTER_BLDDIR)/$(b) ./usr/bin ;)
 	# /etc/default holds only the directory here. The ARGS content is per-node -- it carries

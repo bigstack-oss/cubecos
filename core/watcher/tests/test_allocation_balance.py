@@ -42,6 +42,10 @@ def _stub_watcher():
     mod('watcher')
     mod('watcher._i18n', _=lambda s: s)
     mod('watcher.decision_engine')
+    mod('watcher.decision_engine.model')
+    mod('watcher.decision_engine.model.element',
+        InstanceState=types.SimpleNamespace(
+            ACTIVE=types.SimpleNamespace(value='active')))
     mod('watcher.decision_engine.strategy')
     mod('watcher.decision_engine.strategy.strategies', base=mod(
         'watcher.decision_engine.strategy.strategies.base',
@@ -132,6 +136,19 @@ class TestAllocationBalance(unittest.TestCase):
 
     def test_only_unexcluded_instances_move(self):
         insts = [FakeInstance('x%d' % n, exclude=True) for n in range(4)]
+        insts += [FakeInstance('i%d' % n) for n in range(2)]
+        moved = _plan(insts)
+        self.assertTrue(moved)
+        self.assertTrue(all(u.startswith('i') for u in moved), moved)
+
+    def test_stopped_instances_are_not_live_migrated(self):
+        # #2104: only ACTIVE instances can be live migrated
+        insts = [FakeInstance('i%d' % n, state='stopped') for n in range(4)]
+        self.assertEqual([], _plan(insts))
+
+    def test_only_active_instances_move(self):
+        insts = [FakeInstance('s%d' % n, state='stopped') for n in range(2)]
+        insts += [FakeInstance('e%d' % n, state='error') for n in range(2)]
         insts += [FakeInstance('i%d' % n) for n in range(2)]
         moved = _plan(insts)
         self.assertTrue(moved)
