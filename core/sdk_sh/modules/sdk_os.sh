@@ -2430,7 +2430,9 @@ os_instance_list_for_project_long_run()
     local o="{"
     for id in $(echo "$projects" | awk '{print $1}') ; do
         local name=$(echo "$projects" | grep $id | awk '{print $2}')
-        local list=$($OPENSTACK server list --long -f json --project $name)
+        # Pass the id: the client tries a name as an id first, which keystone
+        # logs as ProjectNotFound on every run.
+        local list=$($OPENSTACK server list --long -f json --project $id)
         o="$o \"$name\": $list,"
     done
     o="$o \"service\": []}"
