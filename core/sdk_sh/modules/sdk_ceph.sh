@@ -86,7 +86,13 @@ ceph_get_ids_by_dev()
     local dev=$1
     # ceph device ls doesn't always show correct osds associated with devices
     # local ids=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.location[].dev == \"${dev#/dev/}\").daemons[]" | sed "s/osd.//g" | sort -u)
-    local ids=$(for osdid in $(ceph_volume_raw_list_das | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id" | sort) ; do ceph osd ls | grep "^${osdid}$" ; done)
+    # raw-list only this device and its partitions; a full scan hangs on FC/nbd paths
+    local ids= p
+    if $HEX_SDK storage_is_das "$dev" || { $HEX_SDK storage_is_mpath "$dev" && $HEX_SDK storage_are_mpath_devices_allowed_for_ceph ; } ; then
+        ids=$(for p in "$dev" $(lsblk -pnlo NAME "$dev" 2>/dev/null | tail -n +2) ; do
+                  ceph-volume raw list "$p" --format json 2>/dev/null
+              done | jq -s -r "add // {} | .[] | .osd_id" | sort -u | while read -r osdid ; do $CEPH osd ls | grep "^${osdid}$" ; done)
+    fi
     ids+=$(ceph-volume lvm list --format json | jq -r ".[][] | select(.devices[] == \"$dev\").tags.\"ceph.osd_id\"")
 
     echo -n $ids
