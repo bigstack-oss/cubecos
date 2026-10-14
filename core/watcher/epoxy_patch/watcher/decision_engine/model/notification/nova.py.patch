@@ -1,0 +1,13 @@
+--- watcher/decision_engine/model/notification/nova.py
++++ watcher/decision_engine/model/notification/nova.py
+@@ -331,7 +331,9 @@
+         'instance.rescue.end': instance_updated,
+         'instance.update': instance_updated,
+         'instance.live_migration_force_complete.end': instance_updated,
+-        'instance.live_migration_post.end': instance_updated,
++        # the destination's event carries the new host; post.end is sent by
++        # the source with the pre-migration host and would map the VM back
++        'instance.live_migration_post_dest.end': instance_updated,
+         'instance.delete.end': instance_deleted,
+         'instance.soft_delete.end': instance_deleted,
+         'service.create': service_updated,

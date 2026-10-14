@@ -419,9 +419,9 @@ WriteExporterDefaults(bool control, const std::string& myIp)
     }
 
     // freeipmi's local path needs no host argument; without a config file the exporter uses
-    // its built-in "default" collector against the local BMC, which is what the monasca
-    // plugin did. A VM lab has no BMC and every probe fails -- the series read as down, same
-    // as they did before.
+    // its built-in "default" module against the local BMC -- the ipmi, dcmi, bmc and chassis
+    // collectors, which covers the temperature, fan and power series Watcher reads. A VM lab
+    // has no BMC and every probe fails -- the series read as down, same as they did before.
     const std::vector<std::string> ipmi = {
         "ARGS='--web.listen-address=" + myIp + ":" IPMI_EXPORTER_PORT "'\n",
     };

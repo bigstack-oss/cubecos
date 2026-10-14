@@ -1,0 +1,52 @@
+--- watcher/decision_engine/strategy/strategies/storage_capacity_balance.py
++++ watcher/decision_engine/strategy/strategies/storage_capacity_balance.py
+@@ -65,6 +65,8 @@
+         self.pool_type_cache = dict()
+         self.source_pools = []
+         self.dest_pools = []
++        # CubeCOS: the inherited planner has no volume_migrate weight
++        self._planner = 'weight'
+ 
+     @property
+     def cinder(self):
+@@ -114,10 +116,21 @@
+         """
+         ex_pools = self.config.ex_pools
+         pools = cinder.get_storage_pool_list()
++        # CubeCOS: without pool_name (Ceph RBD), use the name's #pool part
+         filtered_pools = [p for p in pools
+-                          if p.pool_name not in ex_pools]
++                          if getattr(p, 'pool_name',
++                                     p.name.rpartition('#')[2])
++                          not in ex_pools]
+         return filtered_pools
+ 
++    @staticmethod
++    def _oversub_ratio(pool):
++        # CubeCOS: cinder reports the ratio as a string; 'auto' or missing -> 1
++        try:
++            return float(getattr(pool, 'max_over_subscription_ratio', 1.0))
++        except (TypeError, ValueError):
++            return 1.0
++
+     def get_volumes(self, cinder):
+         """Get all volumes with status in available or in-use and no snapshot.
+ 
+@@ -190,7 +203,7 @@
+         for pool in reversed(self.dest_pools):
+             total_cap = float(pool.total_capacity_gb)
+             allocated = float(pool.allocated_capacity_gb)
+-            ratio = pool.max_over_subscription_ratio
++            ratio = self._oversub_ratio(pool)
+             if total_cap * ratio < allocated + float(volume.size):
+                 LOG.info("pool %s allocated over", pool.name)
+                 continue
+@@ -247,7 +260,7 @@
+                 continue
+             total_cap = float(pool.total_capacity_gb)
+             allocated = float(pool.allocated_capacity_gb)
+-            ratio = pool.max_over_subscription_ratio
++            ratio = self._oversub_ratio(pool)
+             if total_cap * ratio < allocated + float(volume.size):
+                 LOG.info("pool %s allocated over", pool.name)
+                 continue

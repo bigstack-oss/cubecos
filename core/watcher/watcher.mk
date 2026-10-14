@@ -59,6 +59,17 @@ WATCHER_RUN_DIR := /var/run/watcher
 #   db/sqlalchemy/api.py
 #       a service looked up by name returns the latest-seen row instead of a 500 when
 #       an HA cluster has one row per host under that name.
+#   decision_engine/datasources/prometheus.py
+#       host_* hardware meters mapped to ipmi_exporter sensors and instance_l3_cache_usage
+#       to ceilometer_cpu_l3_cache; range durations in whole seconds.
+#   decision_engine/strategy/strategies/noisy_neighbor.py
+#       the L3 getter's base signature, a watcher-priority sort and source pick that
+#       tolerate missing values, scope-excluded instances skipped, host names to nova.
+#   decision_engine/strategy/strategies/outlet_temp_control.py
+#       host names, not node UUIDs, as the migrate source/destination.
+#   decision_engine/strategy/strategies/storage_capacity_balance.py
+#       pools filtered without pool_name (Ceph RBD), the string oversubscription ratio
+#       coerced to float, planned with the weight planner.
 #   decision_engine/strategy/strategies/host_maintenance.py
 #       a node holding audit-scope-excluded instances fails the audit; host name as
 #       the migrate source.

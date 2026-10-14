@@ -1,0 +1,156 @@
+--- watcher/decision_engine/datasources/prometheus.py
++++ watcher/decision_engine/datasources/prometheus.py
+@@ -32,18 +32,34 @@
+     """
+ 
+     NAME = 'prometheus'
++    # CubeCOS: host_* meters are ipmi_exporter selectors joined by ' or '
++    # (first with data wins), each reduced with max(); override per vendor in
++    # metric_map_path. instance_l3_cache_usage is hex_sdk's resctrl occupancy.
+     METRIC_MAP = dict(host_cpu_usage='node_cpu_seconds_total',
+                       host_ram_usage='node_memory_MemAvailable_bytes',
+-                      host_outlet_temp=None,
+-                      host_inlet_temp=None,
+-                      host_airflow=None,
+-                      host_power=None,
++                      host_outlet_temp=(
++                          'ipmi_temperature_celsius'
++                          '{name=~"(?i).*(exhaust|outlet).*"}'),
++                      host_inlet_temp=(
++                          'ipmi_temperature_celsius'
++                          '{name=~"(?i).*(inlet|ambient).*"}'),
++                      host_airflow=(
++                          'ipmi_sensor_value{name=~"(?i).*air ?flow.*"}'),
++                      host_power=(
++                          'ipmi_dcmi_power_consumption_watts or '
++                          'ipmi_power_watts'
++                          '{name=~"(?i).*(pwr|power) ?consumption.*"}'),
+                       instance_cpu_usage='ceilometer_cpu',
+                       instance_ram_usage='ceilometer_memory_usage',
+                       instance_ram_allocated='instance.memory',
+-                      instance_l3_cache_usage=None,
++                      instance_l3_cache_usage='ceilometer_cpu_l3_cache',
+                       instance_root_disk_size='instance.disk',
+                       )
++    # CubeCOS: unit scale per host sensor meter (airflow: CFM to 0.1 CFM)
++    HOST_SENSOR_SCALE = dict(host_outlet_temp=1,
++                             host_inlet_temp=1,
++                             host_airflow=10,
++                             host_power=1)
+     AGGREGATES_MAP = dict(mean='avg', max='max', min='min', count='avg')
+ 
+     def __init__(self):
+@@ -329,6 +345,12 @@
+                 "%s_over_time(%s{%s='%s'}[%ss])" %
+                 (aggregate, meter, uuid_label_key, instance_label, period)
+             )
++        elif meter == 'ceilometer_cpu_l3_cache':
++            # CubeCOS: max() folds the old host's series after a migration
++            query_args = (
++                "max(%s_over_time(%s{%s='%s'}[%ss]))" %
++                (aggregate, meter, uuid_label_key, instance_label, period)
++            )
+         elif meter == 'ceilometer_cpu':
+             # We are converting the total cumulative cpu time (ns) to cpu usage
+             # percentage so we need to divide between the number of vcpus.
+@@ -357,6 +379,32 @@
+ 
+         return query_args
+ 
++    def _build_host_sensor_query(self, meter_name, meter, aggregate,
++                                 instance_label, period):
++        """CubeCOS: PromQL for a host_* ipmi_exporter sensor meter
++
++        Pins every selector in the ' or '-joined meter to the host's
++        fqdn_label, reduces the matched sensors with max() and applies the
++        meter's HOST_SENSOR_SCALE. None for a host Prometheus does not know.
++        """
++        if instance_label is None:
++            return None
++        pin = "%s='%s'" % (self.prometheus_fqdn_label, instance_label)
++        parts = []
++        for sel in meter.split(' or '):
++            sel = sel.strip()
++            if '{' in sel:
++                sel = sel.replace('{', '{%s,' % pin, 1)
++            else:
++                sel = '%s{%s}' % (sel, pin)
++            parts.append('max(%s_over_time(%s[%ss]))' %
++                         (aggregate, sel, period))
++        query = ' or '.join(parts)
++        scale = self.HOST_SENSOR_SCALE.get(meter_name, 1)
++        if scale != 1:
++            query = '(%s) * %s' % (query, scale)
++        return query
++
+     def check_availability(self):
+         """check if Prometheus server is available for queries
+ 
+@@ -398,6 +446,14 @@
+         query_args = ''
+         instance_label = ''
+ 
++        # CubeCOS: PromQL range durations take whole seconds ('100.0s' fails)
++        period = max(1, int(period))
++
++        # CubeCOS: host sensors are per compute node whatever resource_type
++        # the strategy passes (uniform_airflow passes 'instance' for a node)
++        if meter_name in self.HOST_SENSOR_SCALE:
++            resource_type = 'compute_node'
++
+         # For instance resource type, the datasource expects the uuid of the
+         # instance to be assigned to a label in the prometheus metrics, with a
+         # specific key value.
+@@ -421,9 +477,13 @@
+             return None
+ 
+         promql_aggregate = self._resolve_prometheus_aggregate(aggregate, meter)
+-        query_args = self._build_prometheus_query(
+-            promql_aggregate, meter, instance_label, period, resource
+-        )
++        if meter_name in self.HOST_SENSOR_SCALE:
++            query_args = self._build_host_sensor_query(
++                meter_name, meter, promql_aggregate, instance_label, period)
++        else:
++            query_args = self._build_prometheus_query(
++                promql_aggregate, meter, instance_label, period, resource
++            )
+         if not query_args:
+             LOG.error("Cannot proceed without valid prometheus query")
+             return None
+@@ -517,3 +577,35 @@
+             'instance_root_disk_size', period=period,
+             granularity=granularity, aggregate=aggregate)
+         return root_disk_size
++
++    # CubeCOS: the hardware and L3 getters, absent upstream for this datasource
++
++    def get_host_outlet_temp(self, resource, period=300,
++                             aggregate="mean", granularity=None):
++        return self.statistic_aggregation(
++            resource, 'compute_node', 'host_outlet_temp', period=period,
++            granularity=granularity, aggregate=aggregate)
++
++    def get_host_inlet_temp(self, resource, period=300,
++                            aggregate="mean", granularity=None):
++        return self.statistic_aggregation(
++            resource, 'compute_node', 'host_inlet_temp', period=period,
++            granularity=granularity, aggregate=aggregate)
++
++    def get_host_airflow(self, resource, period=300,
++                         aggregate="mean", granularity=None):
++        return self.statistic_aggregation(
++            resource, 'compute_node', 'host_airflow', period=period,
++            granularity=granularity, aggregate=aggregate)
++
++    def get_host_power(self, resource, period=300,
++                       aggregate="mean", granularity=None):
++        return self.statistic_aggregation(
++            resource, 'compute_node', 'host_power', period=period,
++            granularity=granularity, aggregate=aggregate)
++
++    def get_instance_l3_cache_usage(self, resource, period=300,
++                                    aggregate="mean", granularity=None):
++        return self.statistic_aggregation(
++            resource, 'instance', 'instance_l3_cache_usage', period=period,
++            granularity=granularity, aggregate=aggregate)

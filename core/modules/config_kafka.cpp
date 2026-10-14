@@ -130,7 +130,7 @@ UpdateTopics(bool ha, bool run, const std::string sharedId)
     // holds nothing new and expires under kafka's own retention, and deleting a topic is
     // not something a config commit should do behind an operator.
     std::string topics[] = { "telegraf-metrics", "telegraf-hc-metrics", "telegraf-events-metrics", "logs", "audit-logs",
-                             "transformed-logs", "notifications.info", "events" };
+                             "transformed-logs", "notifications.info", "versioned_notifications.info", "events" };
 
     for (const std::string &t : topics) {
         RecreateTopic(ha, true, sharedId, t.c_str());

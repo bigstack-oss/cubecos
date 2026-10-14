@@ -1,0 +1,14 @@
+--- watcher/decision_engine/strategy/strategies/outlet_temp_control.py
++++ watcher/decision_engine/strategy/strategies/outlet_temp_control.py
+@@ -264,8 +264,9 @@
+         if self.compute_model.migrate_instance(
+                 instance_src, mig_source_node, mig_destination_node):
+             parameters = {'migration_type': 'live',
+-                          'source_node': mig_source_node.uuid,
+-                          'destination_node': mig_destination_node.uuid,
++                          # CubeCOS: nova takes host names, not node UUIDs
++                          'source_node': mig_source_node.hostname,
++                          'destination_node': mig_destination_node.hostname,
+                           'resource_name': instance_src.name}
+             self.solution.add_action(action_type=self.MIGRATION,
+                                      resource_id=instance_src.uuid,
