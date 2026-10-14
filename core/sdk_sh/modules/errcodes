@@ -120,6 +120,7 @@ eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ER
 SRV="ceph"
 eval "ERR_DESC_$SRV[1]='health warning'"
 eval "ERR_DESC_$SRV[2]='health error'"
+eval "ERR_DESC_$SRV[3]='pool below replica size'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="ceph_mon"

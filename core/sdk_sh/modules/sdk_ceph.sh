@@ -840,6 +840,28 @@ ceph_pool_replicate_init()
     ceph_pool_replicate_set $size
 }
 
+# default size/min_size for pools created outside ceph_create_pool
+ceph_pool_default_size_set()
+{
+    local size=${1:-3}
+    # same rule as ceph_adjust_pool_size: min_size = size - 1, at least 1
+    local min=$((size - 1))
+    [ $min -lt 1 ] && min=1
+    Quiet $CEPH config set global osd_pool_default_size $size
+    Quiet $CEPH config set global osd_pool_default_min_size $min
+}
+
+# first bootstrap or an upgrade from ceph.conf-held defaults: seed the central
+# default from the OSD hosts (1 during master-first FTS); set_ready raises it
+ceph_pool_default_size_sync()
+{
+    $CEPH config dump -f json 2>/dev/null | jq -e '.[] | select(.name == "osd_pool_default_size")' >/dev/null && return 0
+    local hosts=$($CEPH osd tree -f json 2>/dev/null | jq '[ .nodes[] | select(.type=="host") ] | length' 2>/dev/null)
+    [ -n "$hosts" ] && [ "$hosts" -gt 0 ] || return 0
+    [ $hosts -gt 3 ] && hosts=3
+    ceph_pool_default_size_set $hosts
+}
+
 ceph_pool_replicate_set()
 {
     local size=${1:-3}
@@ -866,6 +888,7 @@ ceph_pool_replicate_set()
         esac
     done
     [ $size -gt 1 ] || $CEPH config set global mon_allow_pool_size_one false
+    ceph_pool_default_size_set $size
 }
 
 ceph_pool_autoscale_set()
