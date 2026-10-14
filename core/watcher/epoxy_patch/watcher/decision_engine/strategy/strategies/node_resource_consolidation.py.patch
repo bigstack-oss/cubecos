@@ -1,0 +1,25 @@
+--- watcher/decision_engine/strategy/strategies/node_resource_consolidation.py
++++ watcher/decision_engine/strategy/strategies/node_resource_consolidation.py
+@@ -141,6 +141,9 @@
+                 key=lambda x: x.vcpus,
+                 reverse=True)
+             for server in sorted_servers:
++                # CubeCOS: never migrate an audit-scope-excluded instance
++                if server.watcher_exclude:
++                    continue
+                 parameters = {'migration_type': 'live',
+                               'source_node': node.hostname,
+                               'resource_name': server.name}
+@@ -226,6 +229,12 @@
+             used_resource = self.compute_model.get_node_used_resources(node)
+             if used_resource['vcpu'] > 0:
+                 servers = self.compute_model.get_node_instances(node)
++                # CubeCOS: a node holding audit-scope-excluded instances
++                # cannot be emptied, so it is never a source
++                if any(s.watcher_exclude for s in servers):
++                    LOG.info("node %s holds audit-excluded instances",
++                             node.hostname)
++                    continue
+                 for dest in reversed(sorted_nodes):
+                     # skip if compute node is disabled
+                     if dest.status == element.ServiceState.DISABLED.value:

@@ -82,6 +82,9 @@ class AllocationBalance(base.WorkloadStabilizationBaseStrategy):
             movable = None
             for inst in sorted(self.compute_model.get_node_instances(src),
                                key=self._size):
+                # excluded by the audit scope
+                if inst.watcher_exclude:
+                    continue
                 if self._size(inst) < spread and self._fits(dest, inst):
                     movable = inst
                     break

@@ -1,0 +1,29 @@
+--- watcher/decision_engine/strategy/strategies/host_maintenance.py
++++ watcher/decision_engine/strategy/strategies/host_maintenance.py
+@@ -186,8 +186,9 @@
+         else:
+             migration_type = 'cold'
+ 
++        # CubeCOS: nova takes the host name, not the node uuid
+         params = {'migration_type': migration_type,
+-                  'source_node': src_node.uuid,
++                  'source_node': src_node.hostname,
+                   'resource_name': instance.name}
+         if des_node:
+             params['destination_node'] = des_node.hostname
+@@ -252,6 +253,15 @@
+ 
+         # if no VMs in the maintenance_node, just maintain the compute node
+         src_node = self.compute_model.get_node_by_name(maintenance_node)
++        # CubeCOS: a node holding audit-scope-excluded instances cannot be
++        # emptied, so fail the audit rather than disable it
++        excluded = [i for i in self.compute_model.get_node_instances(src_node)
++                    if i.watcher_exclude]
++        if excluded:
++            raise exception.WatcherException(
++                _("%(host)s has %(count)d audit-excluded instances; not "
++                  "putting it into maintenance") %
++                {'host': src_node.hostname, 'count': len(excluded)})
+         if len(self.compute_model.get_node_instances(src_node)) == 0:
+             if (src_node.disabled_reason !=
+                     self.REASON_FOR_MAINTAINING):
