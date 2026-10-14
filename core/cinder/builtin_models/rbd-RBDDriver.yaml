@@ -21,7 +21,9 @@ storage:
       - key: "rbd_store_chunk_size"
         value: "4"
     extraSettings: []
-    extraConfigFiles: []
+    extraConfigFiles:
+      - name: "ceph.conf"
+        content: ""
   volumeType:
     settings:
       - key: "multiattach"
