@@ -59,6 +59,11 @@ WATCHER_RUN_DIR := /var/run/watcher
 #   db/sqlalchemy/api.py
 #       a service looked up by name returns the latest-seen row instead of a 500 when
 #       an HA cluster has one row per host under that name.
+#   decision_engine/strategy/strategies/host_maintenance.py
+#       a node holding audit-scope-excluded instances fails the audit; host name as
+#       the migrate source.
+#   decision_engine/strategy/strategies/node_resource_consolidation.py
+#       nodes holding audit-scope-excluded instances, and those instances, are never moved.
 WATCHER_SRCDIR := $(ROOTDIR)$(OPENSTACK_HOME_DIR)/lib/python$(PYTHON_VER)/site-packages
 WATCHER_PATCHDIR := $(COREDIR)/watcher/$(OPENSTACK_RELEASE)_patch
 
