@@ -455,14 +455,23 @@ ceph_enter_maintenance()
 # reads all-up while stale, so first wait for a real down before trusting it.
 ceph_wait_all_osds_up()
 {
-    local timeout=${1:-1800} i=0 saw_down=0 stable=0 need d t u
-    while [ $i -lt $timeout ] ; do
+    # wall-clock bound; stop early once the up count has not grown for 5 min,
+    # so one OSD that never returns does not hold recovery for the whole bound
+    local deadline=$((SECONDS + ${1:-1800})) saw_down=0 stable=0 need d t u
+    local last_up=-1 last_change=$SECONDS
+    while [ $SECONDS -lt $deadline ] ; do
         d=$($CEPH status -f json 2>/dev/null)
         t=$(echo "$d" | jq -r .osdmap.num_osds 2>/dev/null)
         u=$(echo "$d" | jq -r .osdmap.num_up_osds 2>/dev/null)
         if [ -n "$t" ] && [ "$t" != "null" ] && [ -n "$u" ] ; then
             if [ "$u" -lt "$t" ] ; then
                 saw_down=1 ; stable=0            # a real down: map is now truthful
+                if [ "$u" != "$last_up" ] ; then
+                    last_up=$u ; last_change=$SECONDS
+                elif [ $((SECONDS - last_change)) -ge 300 ] ; then
+                    log_warning "ceph: $((t - u)) of $t OSDs still down after 5 min without progress, proceeding"
+                    return 0
+                fi
             else
                 stable=$((stable+1))
                 # after a real down, 20s stable is enough; else 60s to skip stale window
@@ -470,7 +479,7 @@ ceph_wait_all_osds_up()
                 [ $stable -ge $need ] && return 0
             fi
         fi
-        sleep 5 ; i=$((i+5))
+        sleep 5
     done
     return 0   # bounded: proceed even if not all up, never block boot
 }
