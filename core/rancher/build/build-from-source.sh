@@ -115,6 +115,13 @@ mv package/Dockerfile.cube package/Dockerfile
 # fetch-or-build.sh rejects cached images without this label.
 STUB_LABEL=io.bigstack.rancher.partner-charts=stub
 
+# The Dockerfile installs packages with `zypper --installroot`, and there rpm's
+# time grows with RLIMIT_NOFILE.  podman build inherits the caller's limit,
+# which is fs.nr_open (1073741816) on a host whose containerd keeps its packaged
+# LimitNOFILE=infinity: a 4-package install took 307 s there against 1 s at
+# 1048576, and the server image took hours.  Pin it so the host can't set it.
+NOFILE=nofile=1048576:1048576
+
 # `COPY --from=<image>` on an image that is not a build stage: buildkit pulls it
 # implicitly, buildah does not, and podman here runs short-name-mode=enforcing,
 # so an unqualified ref fails outright ("no stage or image found with that
@@ -139,6 +146,7 @@ fi
 step "Build $IMAGE (target: server)"
 podman build \
   --target server \
+  --ulimit "$NOFILE" \
   --file ./package/Dockerfile \
   --platform "linux/${ARCH}" \
   --build-arg "VERSION=$TAG" \
@@ -164,6 +172,7 @@ podman build \
 step "Build $AGENT_IMAGE (target: agent)"
 podman build \
   --target agent \
+  --ulimit "$NOFILE" \
   --file ./package/Dockerfile \
   --platform "linux/${ARCH}" \
   --build-arg "VERSION=$TAG" \
