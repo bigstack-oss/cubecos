@@ -2741,7 +2741,10 @@ health_neutron_check()
         net_id=$($OPENSTACK subnet list | awk '/ lb-mgmt-subnet / {print $6}')
         if [ -n "$net_id" ] ; then
             suffix=$(echo $RANDOM | md5sum | head -c 4)
-            port_id=$($OPENSTACK port create --project admin --device-owner cube:diag --host=$HOSTNAME -c id -f value --network $net_id diag-$HOSTNAME-$suffix 2>/dev/null)
+            # No --project: the admin-openrc token is already scoped to admin, and
+            # naming the project makes the client look it up as an id first, which
+            # keystone logs as ProjectNotFound on every check.
+            port_id=$($OPENSTACK port create --device-owner cube:diag --host=$HOSTNAME -c id -f value --network $net_id diag-$HOSTNAME-$suffix 2>/dev/null)
             if [ -n "$port_id" ] ; then
                 $OPENSTACK port delete $port_id
             else
