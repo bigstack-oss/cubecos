@@ -71,27 +71,27 @@ filter {
   ruby {
     code => "event.set('[event][timestamp]', event.get('@timestamp').to_i * 1000)"
   }
-  # drop redundant category= from attrs (dup of the event-key category tag;
-  # influxdb rejects duplicate tags); it stays in metadata
-  mutate {
-    gsub => [
-      "attrs", "(^|,)category=[^,]*", "",
-      "attrs", "^,", ""
-    ]
-  }
-  if [event][metadata] {
-    mutate {
-      add_field => {
-        "eventlog" => 'system,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]},%{[attrs]} message="%{[event][message]}",metadata="%{[event][metadata]}" %{[event][timestamp]}'
-      }
-    }
-  }
-  else {
-    mutate {
-      add_field => {
-        "eventlog" => 'system,category=%{[event][category]},severity=%{[event][severity]},key=%{[event][key]} message="%{[event][message]}" %{[event][timestamp]}'
-      }
-    }
+  # influx line: escape tags and string fields, skip empty tag values;
+  # category dups the event-key tag (kept in metadata)
+  ruby {
+    code => "
+      bs = 92.chr
+      tag = lambda { |s| s.to_s.gsub(/[ ,=]/) { |c| bs + c } }
+      str = lambda { |s| s.to_s.gsub(Regexp.union(34.chr, bs)) { |c| bs + c } }
+      line = 'system,category=' + tag.call(event.get('[event][category]')) +
+             ',severity=' + tag.call(event.get('[event][severity]')) +
+             ',key=' + tag.call(event.get('[event][key]'))
+      (event.get('attrs_obj') || {}).each do |k, v|
+        v = Array(v).join(' ')
+        next if k == 'category' || v.empty?
+        line += ',' + tag.call(k) + '=' + tag.call(v)
+      end
+      q = 34.chr
+      line += ' message=' + q + str.call(event.get('[event][message]')) + q
+      meta = event.get('[event][metadata]')
+      line += ',metadata=' + q + str.call(meta) + q if meta
+      event.set('eventlog', line + ' ' + event.get('[event][timestamp]').to_s)
+    "
   }
 }
 

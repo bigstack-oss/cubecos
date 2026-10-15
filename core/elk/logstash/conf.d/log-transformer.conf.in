@@ -179,6 +179,8 @@ output {
       bootstrap_servers => "@KAFKA_HOSTS@"
       topic_id => "transformed-logs"
       client_id => "log_transformer_@CUBE_HOST@"
+      # all ISRs: a broker that lost its leadership cannot ack alone
+      acks => "all"
       codec => json
     }
     opensearch {

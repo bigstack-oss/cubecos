@@ -356,3 +356,182 @@ stats_partition()
     fi
     cmd "umount $mpt"
 }
+
+# On boot, copy the events the kapacitor relay missed while this node was down
+# from the peers' InfluxDB into the local one (overwrites are idempotent).
+STATS_KAPACITOR_CONF=/etc/kapacitor/kapacitor.conf
+STATS_PROC_STAT=/proc/stat
+STATS_EVENTS_CATCHUP_LOCK=/run/lock/stats_events_catchup.lock
+# seconds per query
+STATS_EVENTS_CATCHUP_SLICE=3600
+# relay lag margin around the gap
+STATS_EVENTS_CATCHUP_MARGIN=600
+# gap end when no local point after boot: at most this long after boot
+STATS_EVENTS_CATCHUP_MAX_GAP=7200
+# wall-clock budget for the whole catch-up
+STATS_EVENTS_CATCHUP_BUDGET=900
+STATS_LOCAL_INFLUX=http://localhost:8086
+
+# Peer InfluxDB urls from kapacitor.conf, localhost excluded
+_stats_influx_peer_urls()
+{
+    awk '/^\[/{s=($0 ~ /^\[\[influxdb\]\]/)} s && /^[ \t]*urls[ \t]*=/' "$STATS_KAPACITOR_CONF" 2>/dev/null | \
+        grep -o 'http://[^"]*' | grep -v '//localhost[:/]'
+}
+
+# Query an events db, epoch=ns JSON on stdout
+_stats_influx_query()
+{
+    curl -sf -m 60 -G "$1/query" --data-urlencode db=events --data-urlencode epoch=ns --data-urlencode "q=$2"
+}
+
+# SHOW TAG KEYS JSON in $1, SHOW FIELD KEYS JSON in $2 (one measurement) -> column spec
+# [[name, "field", [types]], ..., [name, "tag", null], ...]
+_stats_influx_columns()
+{
+    python3 -c '
+import json, sys
+def vals(j):
+    return [v for s in json.loads(j or "{}").get("results", [{}])[0].get("series", []) for v in s["values"]]
+fields = {}
+for k, t in vals(sys.argv[2]):
+    fields.setdefault(k, []).append(t)
+spec = [[k, "field", t] for k, t in fields.items()] + [[v[0], "tag", None] for v in vals(sys.argv[1])]
+print(json.dumps(spec) if fields else "")
+' "$1" "$2"
+}
+
+# Column spec in $1 -> explicit "k"::field,...,"k"::tag select list
+_stats_influx_select()
+{
+    printf '%s' "$1" | jq -r 'map("\"" + (.[0] | gsub("\""; "\\\"")) + "\"::" + .[1]) | join(",")'
+}
+
+# Query JSON (explicit select in spec order, no GROUP BY) on stdin, column spec in $1 -> line protocol.
+# Columns are classified by position, so a tag and a field sharing a name stay apart.
+_stats_influx_json_to_lp()
+{
+    python3 -c '
+import json, sys
+spec = json.loads(sys.argv[1])
+def esc(s, chars):
+    for c in chars:
+        s = s.replace(c, "\\" + c)
+    return s
+def ftype(v, ts):
+    if len(ts) == 1:
+        return ts[0]
+    if isinstance(v, str):
+        return "string"
+    if isinstance(v, bool):
+        return "boolean"
+    if isinstance(v, int) and "integer" in ts:
+        return "integer"
+    return "float"
+def fval(v, t):
+    if t == "string":
+        return "\"" + str(v).replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    if t == "boolean":
+        return "true" if v else "false"
+    if t == "integer":
+        return "%di" % v
+    if t == "unsigned":
+        return "%du" % v
+    return repr(float(v))
+for r in json.load(sys.stdin).get("results", []):
+    for s in r.get("series", []):
+        m = s["name"]
+        if len(s["columns"]) != len(spec) + 1:
+            sys.exit("column mismatch in " + m)
+        for row in s["values"]:
+            tags, fs = [], []
+            for (k, kind, ts), v in zip(spec, row[1:]):
+                if v is None:
+                    continue
+                if kind == "tag":
+                    if v != "":
+                        tags.append(esc(k, ", =") + "=" + esc(str(v), ", ="))
+                else:
+                    fs.append(esc(k, ", =") + "=" + fval(v, ftype(v, ts)))
+            if fs:
+                print(esc(m, ", ") + "".join("," + t for t in sorted(tags)) + " " + ",".join(fs) + " " + str(row[0]))
+' "$1"
+}
+
+# Newest (DESC) or oldest local point time in s for a WHERE clause, empty if none
+_stats_influx_local_edge()
+{
+    _stats_influx_query "$STATS_LOCAL_INFLUX" "SELECT * FROM \"def\"./.*/ WHERE $1 ${2:+ORDER BY time $2 }LIMIT 1" | \
+        jq -r "[.results[0].series[]?.values[0][0]] | ${3:-max} // empty | . / 1e9 | floor" 2>/dev/null
+}
+
+stats_events_catchup()
+{
+    systemctl -q is-active influxdb || return 0
+    local peers=$(_stats_influx_peer_urls)
+    [ -n "$peers" ] || return 0
+    exec 9>"$STATS_EVENTS_CATCHUP_LOCK"
+    flock -n 9 || return 0
+
+    local btime=$(awk '/^btime/{print $2}' "$STATS_PROC_STAT")
+    local t0=$(date +%s)
+    local deadline=$((t0 + STATS_EVENTS_CATCHUP_BUDGET))
+    [ -n "$btime" ] || return 0
+    # gap: last local point before this boot .. first local point after it, each with margin
+    local mg=$STATS_EVENTS_CATCHUP_MARGIN start end last first
+    last=$(_stats_influx_local_edge "time < ${btime}s AND time > $((btime - 7 * 86400))s" DESC max)
+    first=$(_stats_influx_local_edge "time >= ${btime}s AND time < $((btime + STATS_EVENTS_CATCHUP_MAX_GAP))s" "" min)
+    if [ -n "$last" ] ; then
+        start=$((last - mg))
+    else
+        start=$((btime - 3600))
+    fi
+    if [ -n "$first" ] ; then
+        end=$((first + mg))
+    else
+        end=$((btime + STATS_EVENTS_CATCHUP_MAX_GAP))
+    fi
+    [ $end -le $t0 ] || end=$t0
+    [ $start -ge $((t0 - 7 * 86400)) ] || start=$((t0 - 7 * 86400))
+    [ $start -lt $end ] || return 0
+    log_info "events catch-up: copying $(date -d @$start '+%F %T') .. $(date -d @$end '+%F %T') from peers"
+
+    local url rp m t te ms tk fk spec sel res lp n=0 skip=0 stop=""
+    for url in $peers ; do
+        [ -z "$stop" ] || break
+        ms=$(_stats_influx_query "$url" "SHOW MEASUREMENTS" | jq -r '.results[0].series[0].values[]?[0]' 2>/dev/null)
+        [ -n "$ms" ] || { log_warning "events catch-up: $url unreachable" ; continue ; }
+        for m in $ms ; do
+            [ -z "$stop" ] || break
+            tk=$(_stats_influx_query "$url" "SHOW TAG KEYS FROM \"$m\"")
+            fk=$(_stats_influx_query "$url" "SHOW FIELD KEYS FROM \"$m\"")
+            spec=$(_stats_influx_columns "$tk" "$fk")
+            [ -n "$spec" ] || { log_warning "events catch-up: no field keys of $m from $url, skipped" ; skip=$((skip + 1)) ; continue ; }
+            sel=$(_stats_influx_select "$spec")
+            for rp in def hc ; do
+                for ((t = start ; t < end ; t += STATS_EVENTS_CATCHUP_SLICE)) ; do
+                    if [ $(date +%s) -ge $deadline ] ; then
+                        stop=" (stopped at the ${STATS_EVENTS_CATCHUP_BUDGET}s budget)"
+                        break 3
+                    fi
+                    te=$((t + STATS_EVENTS_CATCHUP_SLICE < end ? t + STATS_EVENTS_CATCHUP_SLICE : end))
+                    res=$(_stats_influx_query "$url" "SELECT $sel FROM \"$rp\".\"$m\" WHERE time >= ${t}s AND time < ${te}s")
+                    if [ -z "$res" ] ; then
+                        log_warning "events catch-up: $rp.$m $(date -d @$t '+%T') from $url: no answer, skipped"
+                        skip=$((skip + 1))
+                        continue
+                    fi
+                    lp=$(printf '%s' "$res" | _stats_influx_json_to_lp "$spec") || { skip=$((skip + 1)) ; continue ; }
+                    [ -n "$lp" ] || continue
+                    if printf '%s\n' "$lp" | curl -sf -m 120 -XPOST "$STATS_LOCAL_INFLUX/write?db=events&rp=$rp&precision=ns" --data-binary @- >/dev/null ; then
+                        n=$((n + $(printf '%s\n' "$lp" | wc -l)))
+                    else
+                        log_warning "events catch-up: local write of $rp.$m from $url failed"
+                        skip=$((skip + 1))
+                    fi
+                done
+            done
+        done
+    done
+    log_info "events catch-up: $n points copied, $skip slices skipped in $(( $(date +%s) - t0 ))s$stop"
+}

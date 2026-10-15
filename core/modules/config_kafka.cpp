@@ -210,8 +210,8 @@ UpdateCfg(bool ha, const std::string hostname, const std::string sharedId,
         //
         // min.insync.replicas is likewise left at 1 on purpose. This is a 5-minute, 64MB
         // transport buffer, not a store of record, so availability beats durability: at
-        // min.insync 2 a two-broker loss would fail every produce, and telegraf produces
-        // with required_acks = -1.
+        // min.insync 2 a two-broker loss would fail every produce, and telegraf, the beats
+        // and log-transformer produce with acks = all.
         int rf = TargetRF(ha);
         kafkaCfg[GLOBAL_SEC]["default.replication.factor"] = std::to_string(rf);
         kafkaCfg[GLOBAL_SEC]["offsets.topic.replication.factor"] = std::to_string(rf);

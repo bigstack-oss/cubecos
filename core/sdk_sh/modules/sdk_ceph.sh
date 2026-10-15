@@ -4455,6 +4455,33 @@ ceph_osd_list()
     rm -rf $logpth
 }
 
+# Fail the active mgr off <host> (no-op if it is not the active); waits up to
+# 60s for a new active elsewhere.
+ceph_mgr_fail_off()
+{
+    local evict=$1 active i
+    active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
+    [ "$active" = "$evict" ] || return 0
+    $CEPH mgr fail
+    for i in $(seq 30) ; do
+        sleep 2
+        active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
+        [ -n "$active" -a "$active" != "$evict" ] && return 0
+    done
+    echo "ceph-mgr did not fail over off $evict" >&2
+    return 1
+}
+
+# Fail the active mgr off <host>, then check the dashboard (it can wedge on
+# failover) in the background; a failure is logged. No-op off the active.
+ceph_mgr_handoff()
+{
+    local active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
+    [ "$active" = "$1" ] || return 0
+    ceph_mgr_fail_off "$1" || return 1
+    setsid bash -c "$HEX_SDK ceph_mgr_dashboard_ensure >/dev/null 2>&1 || logger -t hex_sdk 'warning: ceph-mgr dashboard not serving after mgr handoff'" </dev/null >/dev/null 2>&1 &
+}
+
 ceph_mgr_dashboard_ensure()
 {
     # Usage: ceph_mgr_dashboard_ensure [<evict-host>]
@@ -4466,16 +4493,8 @@ ceph_mgr_dashboard_ensure()
     local active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
     if [ -n "$evict" ] ; then
         [ "$active" = "$evict" ] || return 0
-        $CEPH mgr fail
-        for i in $(seq 30) ; do
-            sleep 2
-            active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
-            [ -n "$active" -a "$active" != "$evict" ] && break
-        done
-        if [ -z "$active" -o "$active" = "$evict" ] ; then
-            echo "ceph-mgr did not fail over off $evict" >&2
-            return 1
-        fi
+        ceph_mgr_fail_off "$evict" || return 1
+        active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
     fi
     [ -n "$active" ] || return 1
     local port=7442

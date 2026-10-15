@@ -1,7 +1,8 @@
 #!/bin/bash
 #
 # Unit test for power_bootup_mark in ../modules/sdk_power.sh: it records the phase,
-# and marking done starts the one-time amphora VIP re-announce migration.
+# and marking done starts the one-time amphora VIP re-announce migration and the
+# events catch-up.
 #   Run: bash test_power_bootup_mark.sh
 #
 D="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,6 +20,6 @@ power_bootup_mark finalizing; wait
 check "other phases start nothing" "$(cat $T/spawn 2>/dev/null)" ""
 check "phase recorded" "$(awk '{print $1}' $T/status | tail -1)" "finalizing"
 power_bootup_mark done; wait
-check "done starts the amphora migration" "$(cat $T/spawn 2>/dev/null)" "hex_sdk migrate_octavia_amphora_vip_advertise"
+check "done starts the amphora migration + events catch-up" "$(sort $T/spawn 2>/dev/null | tr '\n' ' ')" "hex_sdk migrate_octavia_amphora_vip_advertise hex_sdk stats_events_catchup "
 
 [ $FAILS -eq 0 ] && echo "PASS" || { echo "$FAILS FAILED"; exit 1; }
