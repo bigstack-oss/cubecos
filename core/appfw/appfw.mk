@@ -1,8 +1,6 @@
 # Cube SDK
 # appfw packages
 
-ROOTFS_PIP += git+https://github.com/rancher/client-python.git@master
-
 # appfw runs its playbooks (os_create_project in sdk_os.sh) from a venv of its own on
 # the openstack python, not from the system python 3.9. Their openstack.cloud modules
 # need openstacksdk, which left the system python with the antelope migration, so the
@@ -19,6 +17,9 @@ ROOTFS_PIP += git+https://github.com/rancher/client-python.git@master
 APPFW_ANSIBLE_HOME := /opt/ansible
 APPFW_ANSIBLE_CORE_VER := 2.21.5
 APPFW_OPENSTACK_CLOUD_VER := 2.6.0
+# rancher's python client, for bin/rancher_client.py, lives here too rather than in the system
+# python 3.9: there it held requests and urllib3 1.26 in /usr/local, and urllib3's fixes need 2.x.
+APPFW_RANCHER_CLIENT := git+https://github.com/rancher/client-python.git@master
 
 rootfs_install::
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
@@ -26,7 +27,7 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) $(APPFW_ANSIBLE_HOME)/bin/pip install --upgrade pip
 	$(Q)chroot $(ROOTDIR) $(APPFW_ANSIBLE_HOME)/bin/pip install \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
-		ansible-core==$(APPFW_ANSIBLE_CORE_VER) openstacksdk
+		ansible-core==$(APPFW_ANSIBLE_CORE_VER) openstacksdk $(APPFW_RANCHER_CLIENT)
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 
 # ospurge, driven by hex_sdk's os_purge_project(), was the last openstack consumer

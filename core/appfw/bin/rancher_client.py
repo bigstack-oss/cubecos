@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/ansible/bin/python3
 
 import os
 import sys
