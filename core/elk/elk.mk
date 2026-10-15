@@ -20,7 +20,6 @@ OSEARCH_VER := 3.9.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
 
 ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch/$(OSEARCH_VER)/opensearch-$(OSEARCH_VER)-linux-x64.rpm
-ROOTFS_PIP_NC += curator-$(OSEARCH)
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c 'sed "s/\/var\/run\//\/run\//g" /usr/lib/tmpfiles.d/$(OSEARCH).conf > /etc/tmpfiles.d/$(OSEARCH).conf'
