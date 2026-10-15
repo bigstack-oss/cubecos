@@ -118,8 +118,11 @@ func rancherCliLogin() error {
 		return errors.WithStack(err)
 	}
 
-	if _, outErr, err := util.ExecShf("sudo %s login https://localhost:%d --token=%s --skip-verify <<< 1",
-		rancherCliBin, k3sIngressHttpsPort, token,
+	// The CLI dropped --skip-verify at v2.11.10 (rancher/cli#527) and now only trusts a CA it
+	// is given. Rancher's ingress presents the cluster certificate, the same one its tls-ca
+	// secret holds, and every node has it.
+	if _, outErr, err := util.ExecShf("sudo %s login https://localhost:%d --token=%s --cacert %s <<< 1",
+		rancherCliBin, k3sIngressHttpsPort, token, certFile,
 	); err != nil {
 		return errors.Wrap(err, outErr)
 	}
