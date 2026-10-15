@@ -18,11 +18,30 @@ opensearch_index_list()
     printf "\n"
 }
 
+# Delete every index whose name carries a date more than $1 days before now: the filter
+# curator's delete-indices ran here (age, source name, timestring %Y%m%d, direction older),
+# without curator, whose last release pins urllib3 below 2. The date is the first eight-digit
+# run in the name, as curator's regex took it, read as midnight UTC; an index goes when that
+# is earlier than now minus $1 days. Names without a valid date are left alone, closed
+# indices are included, and "--dry-run" as $2 only lists what would go.
 opensearch_index_curator()
 {
     local rp=${1:-14}
-    local dryrun=$2
-    /usr/local/bin/curator_cli --host localhost --port 9200 $dryrun delete-indices --filter_list "[{\"filtertype\":\"age\",\"source\":\"name\",\"direction\":\"older\",\"unit\":\"days\",\"unit_count\":$rp,\"timestring\":\"%Y%m%d\"}]" || true
+    local dryrun=${2:-}
+    local cutoff=$(( $(date +%s) - rp * 86400 ))
+    local index day ts
+    for index in $($CURL -s "$OPENSEARCH_URL/_cat/indices?h=index&expand_wildcards=open,closed" 2>/dev/null) ; do
+        day=$(echo "$index" | grep -o -E '[0-9]{8}' | head -1)
+        [ -n "$day" ] || continue
+        ts=$(date -u -d "${day:0:4}-${day:4:2}-${day:6:2}" +%s 2>/dev/null) || continue
+        [ "$ts" -lt "$cutoff" ] || continue
+        if [ "$dryrun" = "--dry-run" ] ; then
+            echo "DRY-RUN: would delete $index"
+        else
+            $CURL -s -X DELETE "$OPENSEARCH_URL/$index" >/dev/null && echo "deleted $index"
+        fi
+    done
+    return 0
 }
 
 # Paths named, not inlined: the tests point them somewhere writable.
