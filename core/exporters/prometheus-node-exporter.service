@@ -1,0 +1,22 @@
+# -*- mode: conf -*-
+# node_exporter, built from source in core/exporters/Makefile (cubecos#978). The unit keeps the
+# name and environment file of EPEL's node-exporter rpm, which it replaces, so
+# config_prometheus.cpp writes and enables it as before. Like the other exporters it runs as
+# prometheus, the user EPEL's prometheus rpm creates.
+
+[Unit]
+Description=Prometheus exporter for machine metrics
+Documentation=https://github.com/prometheus/node_exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/prometheus-node-exporter
+User=prometheus
+ExecStart=/usr/bin/node_exporter $ARGS
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
