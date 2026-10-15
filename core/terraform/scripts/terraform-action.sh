@@ -20,7 +20,7 @@ if [ ! -f $KEYCLOAK_PROVIDER_MIGRATED ] ; then
         if ! echo "$STATE" | grep -q 'registry.terraform.io/mrparkers/keycloak' ; then
             touch $KEYCLOAK_PROVIDER_MIGRATED
         elif timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform state replace-provider \
-                -auto-approve registry.terraform.io/mrparkers/keycloak registry.terraform.io/keycloak/keycloak ; then
+                -auto-approve registry.terraform.io/mrparkers/keycloak registry.terraform.io/keycloak/keycloak >&2 ; then
             touch $KEYCLOAK_PROVIDER_MIGRATED
         fi
     fi
@@ -36,12 +36,15 @@ if [ ! -f $MYSQL_MODULE_DROPPED ] ; then
     if [ $? -eq 0 ] ; then
         if ! echo "$STATE" | grep -q '"module": "module.mysql"' ; then
             touch $MYSQL_MODULE_DROPPED
-        elif timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform state rm module.mysql ; then
+        elif timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform state rm module.mysql >&2 ; then
             touch $MYSQL_MODULE_DROPPED
         fi
     fi
 fi
-timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform init -upgrade
+# Only the command's own output goes to stdout. Callers parse it -- the rancher token comes from
+# `state pull | jq` in cubectl's config_rancher and in hex_sdk -- so the steps before it, init
+# above all, print to stderr.
+timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform init -upgrade >&2
 timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform "$@"
 [ $? -eq 0 ] || exit 1
 
