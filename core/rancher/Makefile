@@ -33,8 +33,12 @@ CHART   := rancher-$(APP_VERSION).tgz
 $(CLI_SRC_DIR):
 	$(call RUN_CMD_TIMED,git clone -b v$(CLI_VERSION) $(CLI_REPO) $(CLI_SRC_DIR),"  CLONE   rancher-cli")
 
+# Built from source only to clear scanner findings (cubecos#978). Raises x/net and x/text past
+# the Go 2026-10 security release's fixes; return to upstream's release tarball once one for a
+# CLI line that matches the server is built with go >= 1.27.2 and x/net >= 0.60.0 (v2.15.2 is
+# go1.26.6, x/net 0.58.0).
 $(CLI_BIN): $(CLI_SRC_DIR)
-	$(call RUN_CMD_TIMED,cd $(CLI_SRC_DIR) && go mod tidy,"  UPDATE  rancher-cli")
+	$(call RUN_CMD_TIMED,cd $(CLI_SRC_DIR) && go get golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 && go mod tidy,"  UPDATE  rancher-cli")
 	$(call RUN_CMD_TIMED,cd $(CLI_SRC_DIR) && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 		go build \
