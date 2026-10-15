@@ -444,8 +444,11 @@ WriteExporterDefaults(bool control, const std::string& myIp)
         return false;
     }
 
+    // config_memcache binds memcached to the management address alone (-l MGMT_ADDR), so
+    // that is where the exporter has to connect: on loopback it reached nothing, and
+    // memcached_up read 0 on every control.
     const std::vector<std::string> memcached = {
-        "ARGS='--memcached.address=127.0.0.1:11211"
+        "ARGS='--memcached.address=" + myIp + ":11211"
         " --web.listen-address=" + myIp + ":" MEMCACHED_EXPORTER_PORT "'\n",
     };
     if (!WriteFile(fsError, MEMCACHED_EXPORTER_DEF, memcached)) {
