@@ -1,6 +1,7 @@
 [Unit]
 Description=High-available, distributed message broker
-After=network.target
+# stop before the local zookeeper so controlled shutdown can hand off leaders
+After=network.target zookeeper.service
 
 [Service]
 User=kafka
