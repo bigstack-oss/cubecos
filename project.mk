@@ -68,6 +68,8 @@ RUBYGEMS_DL_HOST ?= https://rubygems.org
 # Maven Central, for the jars core/kafka/kafka.mk swaps into Kafka's libs/. Unlike the hosts
 # above this one carries the repository path too, since that is where every artifact lives.
 MAVEN_DL_HOST    ?= https://repo1.maven.org/maven2
+# hex.pm, for the cowboy and cowlib core/rabbitmq/rabbitmq.mk compiles into RabbitMQ's plugins.
+HEX_DL_HOST      ?= https://repo.hex.pm
 
 # PyPI index. Empty by default, so pip resolves against pypi.org exactly as before.
 #
