@@ -92,6 +92,10 @@ ARG HEX_BPF="clang llvm libbpf-devel kernel-headers bpftool"
 # runtime. AppStream supports it to 2029-11; gcc-toolset-14 retires 2026-11.
 ARG HEX_GCC="gcc-toolset-15-gcc gcc-toolset-15-gcc-c++"
 
+# C headers for Go builds that use cgo: core/docker/docker.mk builds runc with its seccomp support,
+# which links libseccomp. The image carries the library itself already.
+ARG HEX_CGO="libseccomp-devel"
+
 # A valid machine-id (32 hex chars) is required: kernel-core's %posttrans runs
 # `kernel-install add`, which RHEL 9 patches to exit 1 on anything else, and then
 # dracut never generates /boot/initramfs-<kver>.img for hex's fakeroot initrd. The
@@ -104,12 +108,12 @@ RUN echo "_WEAK_DEP=$WEAK_DEP" >> /etc/hex.manifest
 
 ###### install packages with WEAK_DEP == 0
 FROM tier2 AS tier2_weak_dep_0
-RUN dnf install -y $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF $HEX_GCC
+RUN dnf install -y $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF $HEX_GCC $HEX_CGO
 # Jenkins is with java 21
 RUN alternatives --set java java-21-openjdk.x86_64
 ###### install packages with WEAK_DEP == 1
 FROM tier2 AS tier2_weak_dep_1
-RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF $HEX_GCC
+RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST $HEX_BPF $HEX_GCC $HEX_CGO
 
 ######## tier3
 FROM tier2_weak_dep_${WEAK_DEP} AS tier3
