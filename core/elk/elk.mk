@@ -297,6 +297,38 @@ BEATS_VER := 9.5.5
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-$(BEATS_VER)-x86_64.rpm
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/auditbeat-$(BEATS_VER)-x86_64.rpm
 
-# No rootfs_install for the beats: their units come from the rpms. The copies this tree
+# filebeat and auditbeat are rebuilt from the same tag and installed over the rpms' binaries:
+# Elastic's 9.5.5 is built with go1.26.8, older than the October 2026 security release
+# (1.27.2 / 1.26.9), and links an x/net older than its fix; the jail's Go and BEATS_GO_GET cover
+# both. These are the OSS beats, not x-pack: config_logstash uses filebeat's filestream input with
+# the kafka output and auditbeat's file_integrity module, all OSS, so none of the Elastic-licensed
+# code is needed. The rpms stay for everything else and name the version in the SBOM. Return to
+# their binaries on the condition core/exporters/Makefile gives.
+BEATS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0
+BEATS_GO_DIR := $(ARCS_DIR)/beats-go
+BEATS_SRC := $(BEATS_GO_DIR)/beats-$(BEATS_VER)-src
+BEATS_VERSION_PKG := github.com/elastic/beats/v7/libbeat/version
+
+# The tag is cloned shallow, and the modules come from proxy.golang.org, checked against
+# sum.golang.org.
+$(BEATS_SRC):
+	$(call RUN_CMD_TIMED, rm -rf $@.part && \
+		git clone -q --depth 1 -b v$(BEATS_VER) https://github.com/elastic/beats.git $@.part && \
+		mv $@.part $@,"  CLONE   beats-$(BEATS_VER)")
+
+$(BEATS_GO_DIR)/beats.built: $(BEATS_SRC) $(COREDIR)/elk/elk.mk
+	$(Q)mkdir -p $(BEATS_GO_DIR)/bin
+	$(call RUN_CMD_TIMED, cd $< && go get $(BEATS_GO_GET) && go mod tidy && \
+		for c in filebeat auditbeat ; do \
+			CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X $(BEATS_VERSION_PKG).commit=$$(git rev-parse HEAD)" \
+				-o $(BEATS_GO_DIR)/bin/$$c ./$$c || exit 1 ; \
+		done,"  BUILD   beats-$(BEATS_VER)")
+	$(Q)touch $@
+
+rootfs_install:: $(BEATS_GO_DIR)/beats.built
+	$(Q)install -m 0755 $(BEATS_GO_DIR)/bin/filebeat $(ROOTDIR)/usr/share/filebeat/bin/filebeat
+	$(Q)install -m 0755 $(BEATS_GO_DIR)/bin/auditbeat $(ROOTDIR)/usr/share/auditbeat/bin/auditbeat
+
+# No rootfs_install for the beats' units: they come from the rpms. The copies this tree
 # used to install over them were upstream's own files, one word of a Description apart,
 # and a vendored unit only masks whatever upstream changes in it next.
