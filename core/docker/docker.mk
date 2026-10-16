@@ -76,23 +76,28 @@ $(DOCKER_GO_BIN)/docker-compose: $(DOCKER_GO_DIR)/compose-src $(COREDIR)/docker/
 		-o $@ ./cmd,"  BUILD   docker-compose")
 
 # docker-buildx, from docker-buildx-plugin, with the release's flags and version ldflags (its
-# Dockerfile). The tree is vendored, and already takes grpc 1.84.0.
+# Dockerfile). The tree is vendored, and already takes grpc 1.84.0; go-archive is raised to its fixed
+# release as well.
 BUILDX_PKG := github.com/docker/buildx
+BUILDX_GO_GET := github.com/moby/go-archive@v0.3.3
 $(eval $(call docker_go_clone,buildx,v$(BUILDX_VER),docker/buildx))
 $(DOCKER_GO_BIN)/docker-buildx: $(DOCKER_GO_DIR)/buildx-src $(COREDIR)/docker/docker.mk
 	$(Q)mkdir -p $(@D)
-	$(call RUN_CMD_TIMED, cd $< && $(call DOCKER_GO_RAISE,&& go mod vendor) && \
+	$(call RUN_CMD_TIMED, cd $< && go get $(BUILDX_GO_GET) && $(call DOCKER_GO_RAISE,&& go mod vendor) && \
 		CGO_ENABLED=0 go build -mod=vendor -trimpath \
 		-ldflags "-s -w -X $(BUILDX_PKG)/version.Version=v$(BUILDX_VER) -X $(BUILDX_PKG)/version.Revision=$$(git rev-parse HEAD) \
 			-X $(BUILDX_PKG)/version.Package=$(BUILDX_PKG)" \
 		-o $@ ./cmd/buildx,"  BUILD   docker-buildx")
 
 # skopeo, from the Stream rpm. Pure Go: containers_image_openpgp in place of gpgme (and of the
-# sequoia library), with btrfs and devicemapper left out, as skopeo's own static build does.
+# sequoia library), with btrfs and devicemapper left out, as skopeo's own static build does. Its
+# grpc, opentelemetry, selinux and fulcio are raised to their fixed releases as well.
+SKOPEO_GO_GET := google.golang.org/grpc@v1.84.0 go.opentelemetry.io/otel@v1.47.0 \
+	github.com/opencontainers/selinux@v1.13.1 github.com/sigstore/fulcio@v1.8.8
 $(eval $(call docker_go_clone,skopeo,v$(SKOPEO_VER),containers/skopeo))
 $(DOCKER_GO_BIN)/skopeo: $(DOCKER_GO_DIR)/skopeo-src $(COREDIR)/docker/docker.mk
 	$(Q)mkdir -p $(@D)
-	$(call RUN_CMD_TIMED, cd $< && $(call DOCKER_GO_RAISE,&& go mod vendor) && \
+	$(call RUN_CMD_TIMED, cd $< && go get $(SKOPEO_GO_GET) && $(call DOCKER_GO_RAISE,&& go mod vendor) && \
 		CGO_ENABLED=0 go build -mod=vendor -trimpath \
 		-tags "containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_devicemapper" \
 		-ldflags "-s -w" -o $@ ./cmd/skopeo,"  BUILD   skopeo")
