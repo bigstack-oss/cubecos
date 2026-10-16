@@ -259,6 +259,35 @@ LOGSTASH_UNUSED_PLUGINS := logstash-filter-elastic_integration logstash-input-az
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin remove $(LOGSTASH_UNUSED_PLUGINS)
 
+# logstash-integration-kafka, which the conf.d pipelines read Kafka with, vendors Jackson 2.21.6, and
+# jackson-core 2.21.6 has a known vulnerability fixed in 2.21.7; 12.1.10, its newest release, still
+# vendors 2.21.6. logstash-core loads 2.21.7 already, so jar-dependencies skips the gem's own
+# jackson-core and jackson-databind, but it does load the gem's jackson-dataformat-csv and
+# jackson-datatype-jdk8 2.21.6. All four move to 2.21.7 and the gem's jar list names 2.21.7, so the
+# plugin runs on the one Jackson line logstash-core loads. The last field is the version replaced.
+# Nothing here is -f: a Logstash bump that changes the gem's version, or what it vendors, fails here.
+LOGSTASH_KAFKA_GEM := $(LOGSTASH_HOME)/vendor/bundle/jruby/3.4.0/gems/logstash-integration-kafka-12.1.9-java
+LOGSTASH_KAFKA_JAR_REFRESH := \
+	com.fasterxml.jackson.core:jackson-core:2.21.7:8c5623b98f32d5f7e1287ff61ed50e08ab7b11381e991fff89327faabba42261:2.21.6 \
+	com.fasterxml.jackson.core:jackson-databind:2.21.7:1290c2795e93e8a6861a6c4d9ff0d844d32f5ea178362cb2721edf5561e828b1:2.21.6 \
+	com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.7:588050148497158cabdc05c0ae3a7e123194a486b8c62745778fc6239f9b085e:2.21.6 \
+	com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.21.7:b8f62f98363ed9aa259b3a479a64fcbe7e081158a8bec6733972e900d12f4e47:2.21.6
+LOGSTASH_KAFKA_JARS_RB = $(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/lib/logstash-integration-kafka_jars.rb
+# $(1) one LOGSTASH_KAFKA_JAR_REFRESH entry: swap the jar in the gem's vendor/jar-dependencies tree
+# and the version its jar list requires.
+logstash_kafka_jar = d=$(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/vendor/jar-dependencies/$(subst .,/,$(call elk_jar_field,1,$(1)))/$(call elk_jar_field,2,$(1)) && \
+	rm $$d/$(call elk_jar_field,5,$(1))/$(call elk_jar_field,2,$(1))-$(call elk_jar_field,5,$(1)).jar && \
+	rmdir $$d/$(call elk_jar_field,5,$(1)) && mkdir $$d/$(call elk_jar_field,3,$(1)) && \
+	cp $(call elk_jar_path,$(1)) $$d/$(call elk_jar_field,3,$(1))/ && \
+	grep -q "'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,5,$(1))'" $(LOGSTASH_KAFKA_JARS_RB) && \
+	sed -i "s/'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,5,$(1))'/'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,3,$(1))'/" $(LOGSTASH_KAFKA_JARS_RB)
+
+$(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call elk_jar_rule,$(e)))
+
+rootfs_install:: $(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call elk_jar_path,$(e)))
+	$(Q)$(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call logstash_kafka_jar,$(e)) && ) true
+	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_KAFKA_GEM)
+
 #
 # Beats (filebeat, auditbeat)
 #
