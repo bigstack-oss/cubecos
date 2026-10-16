@@ -47,6 +47,39 @@ rootfs_install::
 	$(Q)$(foreach p,$(OSEARCH_UNUSED_PLUGINS),$(OSEARCH_PLUGIN_CLI) remove $(p) && ) true
 	$(Q)rm -rf $(ROOTDIR)/usr/share/$(OSEARCH)/modules/ingest-geoip
 
+# Jars swapped for fixed releases of the same artifacts from Maven Central, pinned by sha256, the
+# way core/kafka/kafka.mk refreshes Kafka's. Each entry is <groupId>:<artifactId>:<version>:<sha256>
+# followed by what it replaces.
+ELK_JAR_DIR := $(ARCS_DIR)/elk-jars
+elk_jar_field = $(word $(1),$(subst :, ,$(2)))
+elk_jar_path = $(ELK_JAR_DIR)/$(call elk_jar_field,2,$(1))-$(call elk_jar_field,3,$(1)).jar
+
+# $(1) groupId, $(2) artifactId, $(3) version, $(4) sha256. .part then rename, as for the tarballs.
+define elk_jar
+$$(ELK_JAR_DIR)/$(2)-$(3).jar:
+	$$(Q)mkdir -p $$(@D)
+	$$(Q)wget $$(MAVEN_DL_HOST)/$(subst .,/,$(1))/$(2)/$(3)/$(2)-$(3).jar -O $$@.part
+	$$(Q)echo "$(4)  $$@.part" | sha256sum -c -
+	$$(Q)mv $$@.part $$@
+endef
+elk_jar_rule = $(eval $(call elk_jar,$(call elk_jar_field,1,$(1)),$(call elk_jar_field,2,$(1)),$(call elk_jar_field,3,$(1)),$(call elk_jar_field,4,$(1))))
+
+# OpenSearch 3.9.0, the newest release, ships Jackson 3.2.2 in lib/, and jackson-core 3.2.2 has a
+# known vulnerability fixed in 3.2.3. The four Jackson jars there move to 3.2.3 together. The last
+# field is the jar replaced. The rm is not -f: an OpenSearch bump that no longer ships one of them
+# fails here, which is the cue to revisit the list.
+OSEARCH_JAR_REFRESH := \
+	tools.jackson.core:jackson-core:3.2.3:a0c17e7e665a5e95c82f5fb45c0fec2ae3dc556c80f0016452c9c84cd23f3817:jackson-core-3.2.2.jar \
+	tools.jackson.dataformat:jackson-dataformat-cbor:3.2.3:b7e4e671e2f2ceab70b75119d59d527b89e039c1a8c21eac6267a1a8ecf637be:jackson-dataformat-cbor-3.2.2.jar \
+	tools.jackson.dataformat:jackson-dataformat-smile:3.2.3:acb78b50561181a4811da09702cf96f7f5dd0e15d06b085a547eee9ec0d6f742:jackson-dataformat-smile-3.2.2.jar \
+	tools.jackson.dataformat:jackson-dataformat-yaml:3.2.3:260dd15f1a044dc00cbefd6f01198403fe45ff4ae5fc37895a7842cab6c583d0:jackson-dataformat-yaml-3.2.2.jar
+OSEARCH_JARS := $(foreach e,$(OSEARCH_JAR_REFRESH),$(call elk_jar_path,$(e)))
+$(foreach e,$(OSEARCH_JAR_REFRESH),$(call elk_jar_rule,$(e)))
+
+rootfs_install:: $(OSEARCH_JARS)
+	$(Q)$(foreach e,$(OSEARCH_JAR_REFRESH),rm $(ROOTDIR)/usr/share/$(OSEARCH)/lib/$(call elk_jar_field,5,$(e)) && ) true
+	$(Q)cp -f $(OSEARCH_JARS) $(ROOTDIR)/usr/share/$(OSEARCH)/lib/
+
 #
 # OpenSearch-Dashboards
 #
