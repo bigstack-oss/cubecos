@@ -14,7 +14,8 @@ ROOTFS_DNF += influxdb
 # influxd, influx and influx_inspect are rebuilt from the release tag of the version InfluxData's
 # rpm installs and installed over the rpm's: its build is made with a Go older than the October
 # 2026 security release (1.27.2 / 1.26.9), and links an x/net, x/text and grpc older than their
-# fixes. The jail's Go and INFLUXDB_GO_GET cover both. Return to the rpm's binaries on the
+# fixes. The jail's Go and INFLUXDB_GO_GET cover both, with influxd's opentelemetry and go-jose
+# raised to their fixed releases as well. Return to the rpm's binaries on the
 # condition core/exporters/Makefile gives. The repo floats, so rootfs_install stops the build when
 # the rpm has moved past INFLUXDB_VER, rather than put an older binary under a newer package.
 #
@@ -25,7 +26,8 @@ ROOTFS_DNF += influxdb
 # against the image's glibc.
 INFLUXDB_VER := 1.13.1
 INFLUXDB_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
-	google.golang.org/grpc@v1.84.0
+	google.golang.org/grpc@v1.84.0 go.opentelemetry.io/otel@v1.47.0 go.opentelemetry.io/otel/sdk@v1.47.0 \
+	github.com/go-jose/go-jose/v4@v4.1.6
 INFLUXDB_GO_DIR := $(ARCS_DIR)/influxdb-go
 INFLUXDB_SRC := $(INFLUXDB_GO_DIR)/influxdb-$(INFLUXDB_VER)-src
 INFLUXDB_BINS := influxd influx influx_inspect
