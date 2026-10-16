@@ -51,6 +51,8 @@ PROJ_BUILD_EXT := 1
 else
 PROJ_BUILD_FAKE_PPU := 1
 endif
+# Triaged not_affected findings passed to grype; see VEX.md
+PROJ_VEX := $(SRCDIR)/cubecos.openvex.json
 
 PROJ_HARDWARE_DIR := $(SRCDIR)/../hardware
 PROJ_HARDWARE += vmware
