@@ -226,3 +226,10 @@ rootfs_install::
 # asyncssh and certifi carry known vulnerabilities, so they go through the blocklist, and
 # kubernetes with them so that no installed rpm is left with an unmet requirement.
 BLKLST_DNF += python3-asyncssh python3-kubernetes python3-certifi
+
+# podman comes in only as cephadm's weak dependency (Recommends), and nothing here runs it: CubeOS
+# deploys ceph from packages, not through cephadm, and no script, unit or service on a node calls
+# podman. It carries the same Go-toolchain findings as any binary its build left behind, so it
+# goes, with conmon, netavark and aardvark-dns, which only it needs. containers-common, crun and
+# the rest stay for skopeo and docker.
+BLKLST_DNF += podman conmon netavark aardvark-dns
