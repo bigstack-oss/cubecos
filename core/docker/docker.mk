@@ -8,18 +8,19 @@ ROOTFS_DNF += containerd.io docker-ce docker-ce-cli docker-ce-rootless-extras sk
 DOCKER_REPO = $(shell chroot $(ROOTDIR) dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo ; echo "docker")
 
 # The Go binaries of containerd.io (containerd, ctr, gen-manpages, the runc shim and the runc it
-# bundles), docker-compose-plugin and skopeo are rebuilt here from each vendor's release tag, at the
-# version the package installs, and installed over the package's copies. Every vendor build is still
-# made with a Go older than the October 2026 security release (1.27.2 / 1.26.9), or links an x/net
-# older than its fix; the jail's Go and DOCKER_GO_GET cover both. The packages stay for their units,
-# config and dependencies, and name the version in the SBOM. Return a binary to its vendor's on the
-# condition core/exporters/Makefile gives. The packages float, so rootfs_install stops the build
-# when one has moved past the version rebuilt here, rather than put an older binary under a newer
-# package: bump the version below to the package's.
+# bundles), docker-compose-plugin, docker-buildx-plugin and skopeo are rebuilt here from each
+# vendor's release tag, at the version the package installs, and installed over the package's
+# copies. Every vendor build is still made with a Go older than the October 2026 security release
+# (1.27.2 / 1.26.9), or links an x/net older than its fix; the jail's Go and DOCKER_GO_GET cover
+# both. The packages stay for their units, config and dependencies, and name the version in the
+# SBOM. Return a binary to its vendor's on the condition core/exporters/Makefile gives. The packages
+# float, so rootfs_install stops the build when one has moved past the version rebuilt here, rather
+# than put an older binary under a newer package: bump the version below to the package's.
 DOCKER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0
 CONTAINERD_VER := 2.4.2
 RUNC_VER := 1.5.2
 COMPOSE_VER := 5.6.0
+BUILDX_VER := 0.38.0
 SKOPEO_VER := 1.22.2
 DOCKER_GO_DIR := $(ARCS_DIR)/docker-go
 DOCKER_GO_BIN := $(DOCKER_GO_DIR)/bin
@@ -74,6 +75,18 @@ $(DOCKER_GO_BIN)/docker-compose: $(DOCKER_GO_DIR)/compose-src $(COREDIR)/docker/
 		-ldflags "-w -s -X github.com/docker/compose/v5/internal.Version=v$(COMPOSE_VER)" \
 		-o $@ ./cmd,"  BUILD   docker-compose")
 
+# docker-buildx, from docker-buildx-plugin, with the release's flags and version ldflags (its
+# Dockerfile). The tree is vendored, and already takes grpc 1.84.0.
+BUILDX_PKG := github.com/docker/buildx
+$(eval $(call docker_go_clone,buildx,v$(BUILDX_VER),docker/buildx))
+$(DOCKER_GO_BIN)/docker-buildx: $(DOCKER_GO_DIR)/buildx-src $(COREDIR)/docker/docker.mk
+	$(Q)mkdir -p $(@D)
+	$(call RUN_CMD_TIMED, cd $< && $(call DOCKER_GO_RAISE,&& go mod vendor) && \
+		CGO_ENABLED=0 go build -mod=vendor -trimpath \
+		-ldflags "-s -w -X $(BUILDX_PKG)/version.Version=v$(BUILDX_VER) -X $(BUILDX_PKG)/version.Revision=$$(git rev-parse HEAD) \
+			-X $(BUILDX_PKG)/version.Package=$(BUILDX_PKG)" \
+		-o $@ ./cmd/buildx,"  BUILD   docker-buildx")
+
 # skopeo, from the Stream rpm. Pure Go: containers_image_openpgp in place of gpgme (and of the
 # sequoia library), with btrfs and devicemapper left out, as skopeo's own static build does.
 $(eval $(call docker_go_clone,skopeo,v$(SKOPEO_VER),containers/skopeo))
@@ -88,15 +101,17 @@ $(DOCKER_GO_BIN)/skopeo: $(DOCKER_GO_DIR)/skopeo-src $(COREDIR)/docker/docker.mk
 docker_go_check = v=$$(chroot $(ROOTDIR) rpm -q --qf '%{VERSION}' $(1)) && [ "$$v" = "$(2)" ] || \
 	{ echo "docker.mk: $(1) is $$v, but its binaries are rebuilt from $(2)" ; exit 1 ; }
 
-rootfs_install:: $(DOCKER_GO_DIR)/containerd.built $(DOCKER_GO_BIN)/runc $(DOCKER_GO_BIN)/docker-compose $(DOCKER_GO_BIN)/skopeo
+rootfs_install:: $(DOCKER_GO_DIR)/containerd.built $(DOCKER_GO_BIN)/runc $(DOCKER_GO_BIN)/docker-compose \
+		$(DOCKER_GO_BIN)/docker-buildx $(DOCKER_GO_BIN)/skopeo
 	$(Q)$(call docker_go_check,containerd.io,$(CONTAINERD_VER))
 	$(Q)$(call docker_go_check,docker-compose-plugin,$(COMPOSE_VER))
+	$(Q)$(call docker_go_check,docker-buildx-plugin,$(BUILDX_VER))
 	$(Q)$(call docker_go_check,skopeo,$(SKOPEO_VER))
 	$(Q)chroot $(ROOTDIR) /usr/bin/runc --version | grep -qx 'runc version $(RUNC_VER)' || \
 		{ echo "docker.mk: containerd.io's runc is not $(RUNC_VER)" ; exit 1 ; }
 	$(Q)cd $(DOCKER_GO_BIN) && install -m 0755 containerd ctr gen-manpages containerd-shim-runc-v2 runc skopeo \
 		$(ROOTDIR)/usr/bin/
-	$(Q)install -m 0755 $(DOCKER_GO_BIN)/docker-compose $(ROOTDIR)/usr/libexec/docker/cli-plugins/docker-compose
+	$(Q)install -m 0755 $(DOCKER_GO_BIN)/docker-compose $(DOCKER_GO_BIN)/docker-buildx $(ROOTDIR)/usr/libexec/docker/cli-plugins/
 
 heavy_components_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable docker
