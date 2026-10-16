@@ -7,7 +7,7 @@
 # 2027-05-24 -- the longest window of any current release, a few days past even the newest
 # (13.2, to 2027-05-18). 12.3 went end-of-life on 2026-08-19, so 12.3.2 is both EOL and nine
 # patches behind its own dead line.
-ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-12.4.10-1.x86_64.rpm
+ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-12.4.13-1.x86_64.rpm
 
 # No grafana-cli plugin installs. Both plugins this used to fetch are gone:
 # grafana-piechart-panel is AngularJS, which Grafana 12 removed, so it could not load at all
