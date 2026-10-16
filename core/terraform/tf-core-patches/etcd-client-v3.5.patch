@@ -1,0 +1,82 @@
+diff --git a/internal/backend/remote-state/etcdv2/backend.go b/internal/backend/remote-state/etcdv2/backend.go
+index e6d3cf8..d4af5de 100644
+--- a/internal/backend/remote-state/etcdv2/backend.go
++++ b/internal/backend/remote-state/etcdv2/backend.go
+@@ -10,7 +10,7 @@ import (
+ 	"github.com/hashicorp/terraform/internal/legacy/helper/schema"
+ 	"github.com/hashicorp/terraform/internal/states/remote"
+ 	"github.com/hashicorp/terraform/internal/states/statemgr"
+-	etcdapi "go.etcd.io/etcd/client"
++	etcdapi "go.etcd.io/etcd/client/v2"
+ )
+ 
+ func New() backend.Backend {
+diff --git a/internal/backend/remote-state/etcdv2/client.go b/internal/backend/remote-state/etcdv2/client.go
+index 97e44f4..2df18bb 100644
+--- a/internal/backend/remote-state/etcdv2/client.go
++++ b/internal/backend/remote-state/etcdv2/client.go
+@@ -6,7 +6,7 @@ import (
+ 	"fmt"
+ 
+ 	"github.com/hashicorp/terraform/internal/states/remote"
+-	etcdapi "go.etcd.io/etcd/client"
++	etcdapi "go.etcd.io/etcd/client/v2"
+ )
+ 
+ // EtcdClient is a remote client that stores data in etcd.
+diff --git a/internal/backend/remote-state/etcdv3/backend.go b/internal/backend/remote-state/etcdv3/backend.go
+index 7285bda..02de9c5 100644
+--- a/internal/backend/remote-state/etcdv3/backend.go
++++ b/internal/backend/remote-state/etcdv3/backend.go
+@@ -5,8 +5,8 @@ import (
+ 
+ 	"github.com/hashicorp/terraform/internal/backend"
+ 	"github.com/hashicorp/terraform/internal/legacy/helper/schema"
+-	etcdv3 "go.etcd.io/etcd/clientv3"
+-	"go.etcd.io/etcd/pkg/transport"
++	etcdv3 "go.etcd.io/etcd/client/v3"
++	"go.etcd.io/etcd/client/pkg/v3/transport"
+ )
+ 
+ const (
+diff --git a/internal/backend/remote-state/etcdv3/backend_state.go b/internal/backend/remote-state/etcdv3/backend_state.go
+index da45986..77ca18e 100644
+--- a/internal/backend/remote-state/etcdv3/backend_state.go
++++ b/internal/backend/remote-state/etcdv3/backend_state.go
+@@ -6,7 +6,7 @@ import (
+ 	"sort"
+ 	"strings"
+ 
+-	etcdv3 "go.etcd.io/etcd/clientv3"
++	etcdv3 "go.etcd.io/etcd/client/v3"
+ 
+ 	"github.com/hashicorp/terraform/internal/backend"
+ 	"github.com/hashicorp/terraform/internal/states"
+diff --git a/internal/backend/remote-state/etcdv3/backend_test.go b/internal/backend/remote-state/etcdv3/backend_test.go
+index 8b4039c..ffb1e49 100644
+--- a/internal/backend/remote-state/etcdv3/backend_test.go
++++ b/internal/backend/remote-state/etcdv3/backend_test.go
+@@ -10,7 +10,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/hashicorp/terraform/internal/backend"
+-	etcdv3 "go.etcd.io/etcd/clientv3"
++	etcdv3 "go.etcd.io/etcd/client/v3"
+ )
+ 
+ var (
+diff --git a/internal/backend/remote-state/etcdv3/client.go b/internal/backend/remote-state/etcdv3/client.go
+index 3761f14..c485352 100644
+--- a/internal/backend/remote-state/etcdv3/client.go
++++ b/internal/backend/remote-state/etcdv3/client.go
+@@ -11,8 +11,8 @@ import (
+ 	"github.com/hashicorp/go-multierror"
+ 	"github.com/hashicorp/terraform/internal/states/remote"
+ 	"github.com/hashicorp/terraform/internal/states/statemgr"
+-	etcdv3 "go.etcd.io/etcd/clientv3"
+-	etcdv3sync "go.etcd.io/etcd/clientv3/concurrency"
++	etcdv3 "go.etcd.io/etcd/client/v3"
++	etcdv3sync "go.etcd.io/etcd/client/v3/concurrency"
+ )
+ 
+ const (
