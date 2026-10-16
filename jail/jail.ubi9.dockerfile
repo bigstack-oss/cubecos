@@ -92,9 +92,10 @@ ARG HEX_BPF="clang llvm libbpf-devel kernel-headers bpftool"
 # runtime. AppStream supports it to 2029-11; gcc-toolset-14 retires 2026-11.
 ARG HEX_GCC="gcc-toolset-15-gcc gcc-toolset-15-gcc-c++"
 
-# C headers for Go builds that use cgo: core/docker/docker.mk builds runc with its seccomp support,
-# which links libseccomp. The image carries the library itself already.
-ARG HEX_CGO="libseccomp-devel"
+# What the Go builds that use cgo link: core/docker/docker.mk builds runc with its seccomp
+# support, which links libseccomp (the image carries the library itself already), and
+# core/influxdb/influxdb.mk builds InfluxDB with Flux, whose libflux is Rust, built with cargo.
+ARG HEX_CGO="libseccomp-devel rust cargo"
 
 # A valid machine-id (32 hex chars) is required: kernel-core's %posttrans runs
 # `kernel-install add`, which RHEL 9 patches to exit 1 on anything else, and then
