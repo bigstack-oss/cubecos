@@ -316,17 +316,45 @@ $(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_01)" -d "$(ROOTFS_PIP_DL_FROM)",
 # recompiling. With identical inputs, -j8 and -j1 produce byte-identical objects; the
 # PGO binary still differs from build to build because the profile run is not
 # deterministic, with or without -j.
+#
+# With HEAVY_CACHE set (a directory on the build node), a python built from the same version,
+# recipe and libraries is unpacked from there instead of built, and a built one is saved there;
+# see heavy-cache.sh. The build dependencies are installed either way, so the rootfs gets the
+# same packages on a hit as on a build. /usr/src/python-$(PYTHON_VER) is not saved: nothing
+# reads it after this fragment, and core/main/cube-post.mk removes /usr/src.
+HEAVY_CACHE ?=
+CPYTHON_SRCDIR := /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER)
+CPYTHON_CONFIGURE := ./configure --enable-optimizations
+CPYTHON_BUILD := make -j8 && make altinstall
+CPYTHON_FETCH = chroot $(ROOTDIR) mkdir -p /usr/src/python-$(PYTHON_VER) && \
+	chroot $(ROOTDIR) wget -O /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(PYTHON_PATCH_VER)/Python-$(PYTHON_PATCH_VER).tgz && \
+	chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz -C /usr/src/python-$(PYTHON_VER) && \
+	chroot $(ROOTDIR) bash -c "cd $(CPYTHON_SRCDIR) && $(CPYTHON_CONFIGURE)" && \
+	chroot $(ROOTDIR) bash -c "cd $(CPYTHON_SRCDIR) && $(CPYTHON_BUILD)"
+CPYTHON_CACHE = bash $(COREDIR)/heavyfs/heavy-cache.sh $(1) $(ROOTDIR) $(HEAVY_CACHE) \
+	$(PYTHON_PATCH_VER) "$(CPYTHON_CONFIGURE); $(CPYTHON_BUILD)"
+
 rootfs_install::
 	$(Q)# we need to mount /dev into the chroot environment because building cpython would write to /dev/null, a character device
 	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
 	$(Q)chroot $(ROOTDIR) dnf -y install git pkg-config
 	$(Q)chroot $(ROOTDIR) dnf -y install dnf-plugins-core
 	$(Q)chroot $(ROOTDIR) dnf -y builddep python3
+ifeq ($(HEAVY_CACHE),)
 	$(Q)chroot $(ROOTDIR) mkdir -p /usr/src/python-$(PYTHON_VER)
 	$(Q)chroot $(ROOTDIR) wget -O /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz https://www.python.org/ftp/python/$(PYTHON_PATCH_VER)/Python-$(PYTHON_PATCH_VER).tgz
 	$(Q)chroot $(ROOTDIR) tar -xvzf /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER).tgz -C /usr/src/python-$(PYTHON_VER)
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && ./configure --enable-optimizations"
-	$(Q)chroot $(ROOTDIR) bash -c "cd /usr/src/python-$(PYTHON_VER)/Python-$(PYTHON_PATCH_VER) && make -j8 && make altinstall"
+	$(Q)chroot $(ROOTDIR) bash -c "cd $(CPYTHON_SRCDIR) && $(CPYTHON_CONFIGURE)"
+	$(Q)chroot $(ROOTDIR) bash -c "cd $(CPYTHON_SRCDIR) && $(CPYTHON_BUILD)"
+else
+	$(Q)$(call CPYTHON_CACHE,cpython-mark)
+	$(Q)if $(call CPYTHON_CACHE,cpython-restore); then \
+		echo "  CPYTHON $(PYTHON_PATCH_VER) restored from cache"; \
+	else \
+		$(CPYTHON_FETCH) && \
+		{ $(call CPYTHON_CACHE,cpython-store) || echo "WARNING: python $(PYTHON_PATCH_VER) not saved to $(HEAVY_CACHE)" >&2; }; \
+	fi
+endif
 	$(Q)umount -l $(ROOTDIR)/dev || true
 	$(Q)# ensure python 3.12 is successfully built
 	$(Q)chroot $(ROOTDIR) [ -f /usr/local/bin/python$(PYTHON_VER) ]
