@@ -21,7 +21,7 @@ CONTAINERD_VER := 2.4.2
 RUNC_VER := 1.5.2
 COMPOSE_VER := 5.6.0
 BUILDX_VER := 0.38.0
-SKOPEO_VER := 1.22.2
+SKOPEO_VER := 1.23.0
 DOCKER_GO_DIR := $(ARCS_DIR)/docker-go
 DOCKER_GO_BIN := $(DOCKER_GO_DIR)/bin
 # Raise the x/ modules in a clone; $(1) is extra, e.g. `go mod vendor` for a vendored tree
@@ -77,13 +77,21 @@ $(DOCKER_GO_BIN)/docker-compose: $(DOCKER_GO_DIR)/compose-src $(COREDIR)/docker/
 
 # docker-buildx, from docker-buildx-plugin, with the release's flags and version ldflags (its
 # Dockerfile). The tree is vendored, and already takes grpc 1.84.0; go-archive is raised to its fixed
-# release as well.
+# release as well. The one package buildx links from the github.com/docker/docker module,
+# pkg/namesgenerator (store's random builder names), is carried into buildx's own tree, so the
+# binary no longer links that module, whose matches have no fixed release (its fixes are only in
+# the moby/moby modules that replace it). Both are Apache-2.0.
 BUILDX_PKG := github.com/docker/buildx
 BUILDX_GO_GET := github.com/moby/go-archive@v0.3.3
+BUILDX_NAMESGEN := github.com/docker/docker/pkg/namesgenerator
 $(eval $(call docker_go_clone,buildx,v$(BUILDX_VER),docker/buildx))
 $(DOCKER_GO_BIN)/docker-buildx: $(DOCKER_GO_DIR)/buildx-src $(COREDIR)/docker/docker.mk
 	$(Q)mkdir -p $(@D)
-	$(call RUN_CMD_TIMED, cd $< && go get $(BUILDX_GO_GET) && $(call DOCKER_GO_RAISE,&& go mod vendor) && \
+	$(call RUN_CMD_TIMED, cd $< && { grep -rq '"$(BUILDX_PKG)/util/namesgenerator"' store || \
+		{ f=$$(grep -rl '"$(BUILDX_NAMESGEN)"' --include=*.go --exclude-dir=vendor .) && [ -n "$$f" ] && \
+		mkdir -p util/namesgenerator && cp vendor/$(BUILDX_NAMESGEN)/names-generator.go util/namesgenerator/ && \
+		sed -i 's#"$(BUILDX_NAMESGEN)"#"$(BUILDX_PKG)/util/namesgenerator"#' $$f ; } ; } && \
+		go get $(BUILDX_GO_GET) && $(call DOCKER_GO_RAISE,&& go mod vendor) && \
 		CGO_ENABLED=0 go build -mod=vendor -trimpath \
 		-ldflags "-s -w -X $(BUILDX_PKG)/version.Version=v$(BUILDX_VER) -X $(BUILDX_PKG)/version.Revision=$$(git rev-parse HEAD) \
 			-X $(BUILDX_PKG)/version.Package=$(BUILDX_PKG)" \
@@ -91,9 +99,10 @@ $(DOCKER_GO_BIN)/docker-buildx: $(DOCKER_GO_DIR)/buildx-src $(COREDIR)/docker/do
 
 # skopeo, from the Stream rpm. Pure Go: containers_image_openpgp in place of gpgme (and of the
 # sequoia library), with btrfs and devicemapper left out, as skopeo's own static build does. Its
-# grpc, opentelemetry, selinux and fulcio are raised to their fixed releases as well.
+# grpc, opentelemetry and fulcio are raised to their fixed releases as well; 1.23.0 already takes a
+# fixed selinux.
 SKOPEO_GO_GET := google.golang.org/grpc@v1.84.0 go.opentelemetry.io/otel@v1.47.0 \
-	github.com/opencontainers/selinux@v1.13.1 github.com/sigstore/fulcio@v1.8.8
+	github.com/sigstore/fulcio@v1.8.8
 $(eval $(call docker_go_clone,skopeo,v$(SKOPEO_VER),containers/skopeo))
 $(DOCKER_GO_BIN)/skopeo: $(DOCKER_GO_DIR)/skopeo-src $(COREDIR)/docker/docker.mk
 	$(Q)mkdir -p $(@D)
