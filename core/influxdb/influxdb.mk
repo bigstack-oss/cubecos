@@ -11,8 +11,6 @@ BLKLST_DNF += python3-influxdb python3-msgpack
 
 ROOTFS_DNF += influxdb
 
-INFLUXDB_REPO = $(shell cp $(COREDIR)/influxdb/influxdb.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "influxdb")
-
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable influxdb
 	$(Q)mv -f $(ROOTDIR)/etc/influxdb/influxdb.conf $(ROOTDIR)/etc/influxdb/influxdb.conf.org

@@ -52,6 +52,14 @@ BLKLST_DNF += libproxy-webkitgtk4 webkit2gtk3-jsc
 
 ALL = $(HEAVYFS)
 
+# NOTE: HEAVY_PART splits heavy_base's rootfs_install in two, for the cache at
+# $(HEAVY_BASE) below.
+#   - l1: from here through the pip installs -- accounts, repos and every dnf install.
+#     It reads no component, so the l1 pass does not include them: the outer make
+#     passes their locks in, and the repos they add are defined here.
+#   - rest: python 3.12 onwards, the components included.
+# Empty, the default, defines both, which is a single pass.
+ifneq ($(HEAVY_PART),rest)
 # cube user & group accounts
 rootfs_install::
 	$(Q)cat $(SRCDIR)/account/$(HEX_DIST)/passwd > $(ROOTDIR)/etc/passwd
@@ -76,6 +84,12 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube
 	$(Q)mkdir -p $(ROOTDIR)/usr/share/cube/cos
 	$(Q)cp -f $(TOP_SRCDIR)/LICENSE $(ROOTDIR)/usr/share/cube/cos/
+
+# The repos core/influxdb, core/ceph and core/docker install from. They are defined
+# here, not in those components, because the l1 pass runs this without them.
+INFLUXDB_REPO = $(shell cp $(COREDIR)/influxdb/influxdb.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "influxdb")
+CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
+DOCKER_REPO = $(shell chroot $(ROOTDIR) dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo ; echo "docker")
 
 # Preparation of repos should be done first
 rootfs_install::
@@ -298,6 +312,17 @@ $(call PROJ_INSTALL_DNF_NOARCH,-d "$(ROOTFS_DNF_DL_FROM)","$(ROOTFS_DNF)")
 # install no constraint packages first
 $(call PROJ_INSTALL_PIP_NC,,$(ROOTFS_PIP_NC))
 $(call PROJ_INSTALL_PIP,-b "$(OPS_GITHUB_BRANCH_01)" -d "$(ROOTFS_PIP_DL_FROM)",$(ROOTFS_PIP))
+endif # HEAVY_PART != rest
+
+ifneq ($(HEAVY_PART),l1)
+# The l1 part may be a copy made by an earlier build, so the two things in it that
+# fetch whatever is newest at the time are fetched again: pip, and cp437.py (-O, as a
+# second -P would save cp437.py.1).
+ifeq ($(HEAVY_PART),rest)
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) python3 -m pip install -U pip
+	$(Q)wget -O $(ROOTDIR)/usr/lib64/python3.9/encodings/cp437.py https://raw.githubusercontent.com/python/cpython/main/Lib/encodings/cp437.py
+endif
 
 # install python 3.12 for openstack epoxy
 #
@@ -519,6 +544,7 @@ rootfs_install::
 	$(Q)echo "blacklist uas" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 	$(Q)echo "blacklist usb_storage" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
 	$(Q)echo "install usb_storage /bin/true" >> $(ROOTDIR)/etc/modprobe.d/usb.conf
+endif # HEAVY_PART != l1
 
 # note: skyline went first when it did not follow the constraints the rest of the rootfs
 # did. It follows the epoxy ones like every service now (#668), and the packages it caps
@@ -535,14 +561,24 @@ HEAVY_COMPONENTS += influxdb prometheus thanos exporters kapacitor elk telegraf 
 HEAVY_COMPONENTS += heat octavia barbican manila designate masakari watcher cyborg horizon
 HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl lachesis
 
+ifneq ($(HEAVY_PART),l1)
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
+else
+LOCKED_DNF := $(HEAVY_LOCKED_DNF)
+BLKLST_DNF := $(HEAVY_BLKLST_DNF)
+endif
+# The rest pass finds both lists already written by the l1 pass.
+ifneq ($(HEAVY_PART),rest)
 $(shell for r in $(LOCKED_DNF); do echo $$r >> $(LOCKED_RPMS); done)
 $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
+endif
 
+ifneq ($(HEAVY_PART),l1)
 # Every component's rootfs_install has run by now, so the last openstack venv install
 # is behind us: drop uv and its cache before they ship.
 rootfs_install::
 	$(Q)rm -rf $(ROOTDIR)$(OPENSTACK_UV_HOME)
+endif
 
 # Component artifacts baked into the rootfs — prereqs so a component rebuild
 # forces a rootfs rebuild (with touch $@ below). Scoped to HEAVY_COMPONENTS, not
@@ -618,6 +654,7 @@ heavy_base_early:
 	$(Q)[ -e $(HEAVYFS) ] || $(MAKE) $(HEAVY_BASE)
 endif
 
+ifneq ($(HEAVY_PART),l1)
 # openstacksdk 4.4.1, epoxy's pin and the cli's dependency, sends server create's
 # hypervisor_hostname under its response name, OS-EXT-SRV-ATTR:hypervisor_hostname,
 # and nova's 2.74 schema rejects that with a 400. osc 7 creates servers through the
@@ -655,6 +692,7 @@ rootfs_install::
 	$(Q)umount $(ROOTDIR)/proc || /bin/true
 	$(Q)chroot $(ROOTDIR) sh -c "mkdir -p /mnt/cephfs/update"
 	$(Q)chroot $(ROOTDIR) sh -c "rm -rf /var/update ; ln -sf /mnt/cephfs/update /var/update"
+endif # HEAVY_PART != l1
 
 PKGCLEAN += $(HEAVYFS) $(HEAVY_BASE) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
 
