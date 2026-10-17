@@ -119,12 +119,17 @@ RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
 ######## tier3
 FROM tier2_weak_dep_${WEAK_DEP} AS tier3
 # kernel packages
-ARG KER_VER="6.12.112"
+# The Kmods SIG's 7.2 stable kernel (its kernel-latest line). 7.0 is the first with the aes256k
+# cipher in libceph, which the ceph kernel clients need once squid's CephX keys move to it; no
+# longterm release carries it yet. The packages come from CBS, the SIG's build system, which keeps
+# every build: the mirrors keep only each line's newest few, so a pinned version vanishes from
+# them within weeks (6.12.69 did).
+ARG KER_VER="7.2.11"
 ARG KER_REL="1.el9"
 ARG KER_ARC="x86_64"
 ARG HEX_KERNEL="kernel-${KER_VER}-${KER_REL} kernel-core-${KER_VER}-${KER_REL} kernel-modules-${KER_VER}-${KER_REL} kernel-devel-${KER_VER}-${KER_REL}"
 RUN mkdir kernel-${KER_VER}-${KER_REL}.${KER_ARC}
-RUN cd kernel-${KER_VER}-${KER_REL}.${KER_ARC} && for k in $HEX_KERNEL ; do wget -q http://ftp.centos.is/centos-stream/SIGs/9/kmods/x86_64/kernel-6.12/Packages/k/${k}.${KER_ARC}.rpm ; rpm -i --nodeps ${k}.${KER_ARC}.rpm ; done
+RUN cd kernel-${KER_VER}-${KER_REL}.${KER_ARC} && for k in $HEX_KERNEL ; do wget -q https://cbs.centos.org/kojifiles/packages/kernel/${KER_VER}/${KER_REL}/${KER_ARC}/${k}.${KER_ARC}.rpm ; rpm -i --nodeps ${k}.${KER_ARC}.rpm ; done
 
 # RUN [ -e /boot/hex ] || mv /boot/$(cat /etc/machine-id) /boot/hex || /bin/true
 RUN [ -e /boot/hex ] || mkdir -p /boot/hex
