@@ -1,0 +1,105 @@
+--- kernel-open/nvidia-vgpu-vfio/nvidia-vgpu-vfio.c
++++ kernel-open/nvidia-vgpu-vfio/nvidia-vgpu-vfio.c
+@@ -3302,13 +3302,15 @@
+ 
+     if (vgpu_dev->intr_info.msix[vector].trigger)
+     {
+-#if defined(NV_ENABLE_APICV_PRESENT)
+-        if (enable_apicv == NV_TRUE)
++#if defined(NV_VGPU_IRQ_BYPASS)
++        if (NV_VGPU_IRQ_BYPASS())
+             irq_bypass_unregister_producer(&vgpu_dev->intr_info.msix[vector].producer);
+ #endif
+         eventfd_ctx_put(vgpu_dev->intr_info.msix[vector].trigger);
+         vgpu_dev->intr_info.msix[vector].trigger = NULL;
++#if defined(NV_IRQ_BYPASS_PRODUCER_HAS_TOKEN)
+         vgpu_dev->intr_info.msix[vector].producer.token = NULL;
++#endif
+         free_irq(vgpu_dev->intr_info.msix[vector].allocated_irq, vgpu_dev);
+         vgpu_dev->intr_info.msix[vector].allocated_irq = INVALID_IRQ;
+     }
+@@ -3330,18 +3332,27 @@
+     vgpu_dev->intr_info.msix[vector].allocated_irq = irq;
+     vgpu_dev->intr_info.msix[vector].trigger = trigger;
+ 
++#if defined(NV_IRQ_BYPASS_PRODUCER_HAS_TOKEN)
+     vgpu_dev->intr_info.msix[vector].producer.token = trigger;
+     vgpu_dev->intr_info.msix[vector].producer.irq = irq;
++#endif
+ 
+-#if defined(NV_ENABLE_APICV_PRESENT)
+-    if (enable_apicv == NV_TRUE)
++#if defined(NV_VGPU_IRQ_BYPASS)
++    if (NV_VGPU_IRQ_BYPASS())
+     {
++#if defined(NV_IRQ_BYPASS_REGISTER_PRODUCER_HAS_EVENTFD_AND_IRQ_ARGS)
++        ret = irq_bypass_register_producer(&vgpu_dev->intr_info.msix[vector].producer,
++                                           trigger, irq);
++#else
+         ret = irq_bypass_register_producer(&vgpu_dev->intr_info.msix[vector].producer);
++#endif
+         if (ret)
+         {
+             NV_VGPU_DEV_LOG(VGPU_INFO, vgpu_dev,
+                             "Failed to register producer irq token %d\n", ret);
++#if defined(NV_IRQ_BYPASS_PRODUCER_HAS_TOKEN)
+             vgpu_dev->intr_info.msix[vector].producer.token = NULL;
++#endif
+         }
+     }
+ #endif
+@@ -3364,13 +3375,15 @@
+             if (vgpu_dev->intr_info.msix &&
+                 (vgpu_dev->intr_info.msix[i].allocated_irq != INVALID_IRQ))
+             {
+-#if defined(NV_ENABLE_APICV_PRESENT)
+-                if (enable_apicv == NV_TRUE)
++#if defined(NV_VGPU_IRQ_BYPASS)
++                if (NV_VGPU_IRQ_BYPASS())
+                     irq_bypass_unregister_producer(&vgpu_dev->intr_info.msix[i].producer);
+ #endif
+                 eventfd_ctx_put(vgpu_dev->intr_info.msix[i].trigger);
+                 vgpu_dev->intr_info.msix[i].trigger = NULL;
++#if defined(NV_IRQ_BYPASS_PRODUCER_HAS_TOKEN)
+                 vgpu_dev->intr_info.msix[i].producer.token = NULL;
++#endif
+                 free_irq(vgpu_dev->intr_info.msix[i].allocated_irq, vgpu_dev);
+                 vgpu_dev->intr_info.msix[i].allocated_irq = INVALID_IRQ;
+             }
+@@ -4391,6 +4404,36 @@
+     return ret;
+ }
+ 
++#if defined(NV_VFIO_DEVICE_OPS_HAS_GET_REGION_INFO_CAPS)
++/*
++ * VFIO_DEVICE_GET_REGION_INFO since Linux 6.19 (commit 775f726a742a): the VFIO
++ * core copies the request in and the reply and capability chain out, and asks
++ * the driver only for the region info, under the lock the ioctl path takes.
++ */
++int nv_vgpu_vfio_get_region_info_caps(vgpu_dev_t *vgpu_dev,
++                                      struct vfio_region_info *region_info,
++                                      struct vfio_info_cap *caps)
++{
++    int ret;
++
++    if (!vgpu_dev)
++    {
++        NV_VGPU_LOG(VGPU_ERR, "No vGPU device found, region info failed\n");
++        return -EINVAL;
++    }
++
++    down(&vgpu_dev->ops_lock);
++    ret = nv_vgpu_vfio_region_info(vgpu_dev, region_info, caps);
++    up(&vgpu_dev->ops_lock);
++
++    if (ret != 0)
++        NV_VGPU_DEV_LOG(VGPU_ERR, vgpu_dev,
++                        "VFIO IOCTL VFIO_DEVICE_GET_REGION_INFO failed. ret: %d\n", ret);
++
++    return ret;
++}
++#endif
++
+ static int vgpu_add_phys_mapping(vgpu_dev_t *vgpu_dev,
+                                  struct address_space *mapping,
+                                  unsigned long addr, unsigned long size)

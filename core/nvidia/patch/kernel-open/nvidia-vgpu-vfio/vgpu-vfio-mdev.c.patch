@@ -1,0 +1,29 @@
+--- kernel-open/nvidia-vgpu-vfio/vgpu-vfio-mdev.c
++++ kernel-open/nvidia-vgpu-vfio/vgpu-vfio-mdev.c
+@@ -331,6 +331,16 @@
+     return nv_vgpu_vfio_ioctl(vgpu_dev, cmd, arg);
+ }
+ 
++#if defined(NV_VFIO_DEVICE_OPS_HAS_GET_REGION_INFO_CAPS)
++static int nv_vfio_mdev_get_region_info_caps(struct vfio_device *core_vdev,
++                                         struct vfio_region_info *info,
++                                         struct vfio_info_cap *caps)
++{
++    vgpu_dev_t *vgpu_dev = nv_get_vgpu_from_vdev(core_vdev);
++    return nv_vgpu_vfio_get_region_info_caps(vgpu_dev, info, caps);
++}
++#endif
++
+ static ssize_t nv_vfio_mdev_read(struct vfio_device *core_vdev, char __user *buf,
+                   size_t count, loff_t *ppos)
+ {
+@@ -533,6 +543,9 @@
+     .release        = nv_vfio_mdev_release,
+ #endif
+     .ioctl          = nv_vfio_mdev_unlocked_ioctl,
++#if defined(NV_VFIO_DEVICE_OPS_HAS_GET_REGION_INFO_CAPS)
++    .get_region_info_caps = nv_vfio_mdev_get_region_info_caps,
++#endif
+     .read           = nv_vfio_mdev_read,
+     .write          = nv_vfio_mdev_write,
+     .mmap           = nv_vfio_mdev_mmap,
