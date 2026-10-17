@@ -108,6 +108,21 @@ $(LADDER_DIR):
 		rm $$d/sha256sum-amd64.txt && chmod +x $$d/k3s || exit 1; \
 		done && mv $@.tmp $@,"  PULL    k3s ladder")
 
+# The helm that ships in the image. The jail's own helm only runs the build: jail.ubi9.dockerfile
+# installs whatever release get-helm-3 found the day the jail image was built. The digest is from
+# helm's own helm-<ver>-linux-amd64.tar.gz.sha256sum; bump it with the version.
+HELM_VERSION := v3.22.1
+HELM_SHA256 := 896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea
+HELM_TGZ := helm-$(HELM_VERSION)-linux-amd64.tar.gz
+
+helm:
+	$(call RUN_CMD_TIMED,rm -rf $@.tmp && mkdir $@.tmp && \
+		wget -q -P $@.tmp https://get.helm.sh/$(HELM_TGZ) && \
+		echo "$(HELM_SHA256)  $@.tmp/$(HELM_TGZ)" | sha256sum -c - && \
+		tar -C $@.tmp -xzf $@.tmp/$(HELM_TGZ) linux-amd64/helm && \
+		$@.tmp/linux-amd64/helm version --template '{{.Version}}' | grep -qx $(HELM_VERSION) && \
+		mv $@.tmp/linux-amd64/helm $@ && rm -rf $@.tmp,"  PULL    helm $(HELM_VERSION)")
+
 $(INSTALL_SCRIPT):
 	$(call RUN_CMD_TIMED,wget https://raw.githubusercontent.com/k3s-io/k3s/$(VERSION)/install.sh,"  PULL    $(INSTALL_SCRIPT)")
 	${Q}sed -i '/RestartSec=5s/a StandardOutput=append:/var/log/k3s.log\nStandardError=append:/var/log/k3s.log' $(INSTALL_SCRIPT)
@@ -179,9 +194,9 @@ clean:: testclean
 	$(Q)rm -rf $(K3S_DIR)
 
 
-BUILD += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) build-image
+BUILD += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm build-image
 BUILDCLEAN += .dapper and $(K3S_SRC_DIR)
-DISTCLEAN += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR)
+DISTCLEAN += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm
 
 SUBDIRS += ingress-nginx
 SUBDIRS += ceph-csi
