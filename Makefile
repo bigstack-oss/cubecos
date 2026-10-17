@@ -28,7 +28,7 @@ ALL += critical_overlap
 .PHONY: critical_overlap
 critical_overlap:
 	$(Q)$(MAKE) -C hex TARGET=_all_r fakeroot rootfs
-	$(Q)$(MAKE) -C hex/src lib
+	$(Q)$(MAKE) -C hex/src TARGET=_all_r hex_sdk_library sdk_so
 	$(Q)$(MAKE) -C hex/src/hex_crashd _all
 	$(Q)log=$$(mktemp /tmp/critical_overlap.XXXXXX); \
 	{ $(MAKE) -C hex TARGET=_all_r src && \
