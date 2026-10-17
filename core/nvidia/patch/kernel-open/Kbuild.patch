@@ -1,0 +1,10 @@
+--- kernel-open/Kbuild
++++ kernel-open/Kbuild
+@@ -187,6 +187,7 @@
+ NV_CONFTEST_CFLAGS += $(call cc-disable-warning,pointer-sign)
+ NV_CONFTEST_CFLAGS += $(call cc-option,-fshort-wchar,)
+ NV_CONFTEST_CFLAGS += $(call cc-option,-Werror=incompatible-pointer-types,)
++NV_CONFTEST_CFLAGS += $(call cc-option,-fms-extensions,)
+ NV_CONFTEST_CFLAGS += -Wno-error
+ 
+ NV_CONFTEST_COMPILE_TEST_HEADERS := $(obj)/conftest/macros.h

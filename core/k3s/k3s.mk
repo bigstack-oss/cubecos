@@ -10,7 +10,7 @@ heavy_components_install::
 	$(Q)(cd $(TOP_BLDDIR)/core/k3s/ && cp -f k3s install.sh $(ROOTDIR)/$(K3S_DIR)/)
 	$(Q)rm -rf $(ROOTDIR)/$(K3S_DIR)/ladder && cp -r $(TOP_BLDDIR)/core/k3s/ladder $(ROOTDIR)/$(K3S_DIR)/
 	$(Q)cp -f $(COREDIR)/k3s/registries.yaml $(COREDIR)/k3s/remove_node.sh $(ROOTDIR)/$(K3S_DIR)/
-	$(Q)cp -f /usr/local/bin/helm $(ROOTDIR)/usr/local/bin/
+	$(Q)cp -f $(TOP_BLDDIR)/core/k3s/helm $(ROOTDIR)/usr/local/bin/
 #	ingress-nginx
 	$(Q)chroot $(ROOTDIR) mkdir -p $(INGRESS_NGINX_DIR)
 	$(Q)cp -f $(COREDIR)/k3s/ingress-nginx/chart-values.yaml $(ROOTDIR)/$(INGRESS_NGINX_DIR)/

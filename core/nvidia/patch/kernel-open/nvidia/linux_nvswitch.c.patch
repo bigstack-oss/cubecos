@@ -1,0 +1,27 @@
+--- kernel-open/nvidia/linux_nvswitch.c
++++ kernel-open/nvidia/linux_nvswitch.c
+@@ -2058,7 +2058,7 @@
+         return -NVL_ERR_GENERIC;
+     }
+ 
+-    strncpy(regkey_val, regkey_val_start, regkey_val_len);
++    memcpy(regkey_val, regkey_val_start, regkey_val_len);
+     regkey_val[regkey_val_len] = '\0';
+ 
+     if (nvswitch_os_strtouint(regkey_val, data) != 0)
+@@ -2413,7 +2413,14 @@
+     NvLength length
+ )
+ {
+-    return strncpy(dest, src, length);
++    NvLength i;
++
++    for (i = 0; i < length && src[i] != '\0'; i++)
++        dest[i] = src[i];
++    for (; i < length; i++)
++        dest[i] = '\0';
++
++    return dest;
+ }
+ 
+ int

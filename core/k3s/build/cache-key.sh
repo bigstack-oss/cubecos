@@ -9,9 +9,9 @@
 # Hashed, besides VERSION:
 #   - every file in this directory except this script (Dockerfile.dapper today; any patch file
 #     added here later is covered without editing this list)
-#   - the K3S_REPO line and the recipes that fetch dapper, clone the source and build it, as
-#     written in core/k3s/Makefile. Other targets in that Makefile do not touch the binary and
-#     are left out, so editing them does not force an 81-minute source build.
+#   - the K3S_REPO and K3S_GO_* lines and the recipes that fetch dapper, clone the source and
+#     build it, as written in core/k3s/Makefile. Other targets in that Makefile do not touch the
+#     binary and are left out, so editing them does not force an 81-minute source build.
 #
 # Read by core/k3s/build/fetch-or-build.sh to find the cached binary, and by triangle's
 # cube_publish_artifacts job to upload it, so both sides agree on the path.
@@ -28,7 +28,7 @@ VERSION=$(awk '/^VERSION[[:space:]]*:=/ {print $3; exit}' "$MK")
 # A rule block runs from its target line to the next blank line.
 recipes() {
     awk '
-        /^K3S_REPO[[:space:]]*:=/                          { print; next }
+        /^(K3S_REPO|K3S_GO_[A-Z]+)[[:space:]]*:=/          { print; next }
         /^(\.dapper|\$\(K3S_SRC_DIR\)|\$\(BIN\)-from-source):/ { inblk = 1 }
         inblk && /^[[:space:]]*$/                          { inblk = 0 }
         inblk                                              { print }

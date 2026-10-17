@@ -50,6 +50,14 @@ $(BIN):
 		&& echo "  K3S     $(VERSION) restored from cache" \
 		|| $(MAKE) $(BIN)-from-source
 
+# k3s 1.32.13 pins x/net, x/crypto and x/sys with replace directives, and requires an x/text, all
+# older than the releases the other Go rebuilds here take (docker.mk, influxdb.mk). Raise them in
+# the clone before the build. Upstream's maintained branches still replace the same three, at newer
+# versions, so the replaces are raised rather than dropped. cache-key.sh hashes these lines, so a
+# change here builds a new binary instead of restoring the old one from the cache.
+K3S_GO_REPLACE := golang.org/x/net=golang.org/x/net@v0.61.0 golang.org/x/crypto=golang.org/x/crypto@v0.58.0 golang.org/x/sys=golang.org/x/sys@v0.49.0
+K3S_GO_GET := golang.org/x/text@v0.43.0
+
 # k3s refuses to start unless runtime.Version() equals the UpstreamGolang it was linked with,
 # which version.sh takes from kubernetes' build/dependencies.yaml (go1.24.13 for 1.32.13, a
 # dead Go line). We build with a newer Go, so record the Go we actually build with, as the
@@ -63,6 +71,12 @@ $(BIN)-from-source: $(K3S_SRC_DIR) .dapper
 	$(Q)grep -q '^VERSION_GOLANG=' $(K3S_SRC_DIR)/scripts/version.sh
 	$(Q)sed -i 's/^VERSION_GOLANG=.*/VERSION_GOLANG="$$(go version | cut -d" " -f3)"/' $(K3S_SRC_DIR)/scripts/version.sh
 	$(Q)chmod +x $(K3S_SRC_DIR)/scripts/ci
+	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
+		export GOTOOLCHAIN=local GOFLAGS=-mod=mod && \
+		go mod edit $(addprefix -replace ,$(K3S_GO_REPLACE)) && \
+		go get $(K3S_GO_GET) && \
+		go mod tidy, \
+		"  GOMOD   k3s")
 	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
 		export PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
 		TAG=$(VERSION) \
@@ -93,6 +107,21 @@ $(LADDER_DIR):
 		echo "$$sum  $$d/k3s" | sha256sum -c - && \
 		rm $$d/sha256sum-amd64.txt && chmod +x $$d/k3s || exit 1; \
 		done && mv $@.tmp $@,"  PULL    k3s ladder")
+
+# The helm that ships in the image. The jail's own helm only runs the build: jail.ubi9.dockerfile
+# installs whatever release get-helm-3 found the day the jail image was built. The digest is from
+# helm's own helm-<ver>-linux-amd64.tar.gz.sha256sum; bump it with the version.
+HELM_VERSION := v3.22.1
+HELM_SHA256 := 896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea
+HELM_TGZ := helm-$(HELM_VERSION)-linux-amd64.tar.gz
+
+helm:
+	$(call RUN_CMD_TIMED,rm -rf $@.tmp && mkdir $@.tmp && \
+		wget -q -P $@.tmp https://get.helm.sh/$(HELM_TGZ) && \
+		echo "$(HELM_SHA256)  $@.tmp/$(HELM_TGZ)" | sha256sum -c - && \
+		tar -C $@.tmp -xzf $@.tmp/$(HELM_TGZ) linux-amd64/helm && \
+		$@.tmp/linux-amd64/helm version --template '{{.Version}}' | grep -qx $(HELM_VERSION) && \
+		mv $@.tmp/linux-amd64/helm $@ && rm -rf $@.tmp,"  PULL    helm $(HELM_VERSION)")
 
 $(INSTALL_SCRIPT):
 	$(call RUN_CMD_TIMED,wget https://raw.githubusercontent.com/k3s-io/k3s/$(VERSION)/install.sh,"  PULL    $(INSTALL_SCRIPT)")
@@ -165,9 +194,9 @@ clean:: testclean
 	$(Q)rm -rf $(K3S_DIR)
 
 
-BUILD += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) build-image
+BUILD += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm build-image
 BUILDCLEAN += .dapper and $(K3S_SRC_DIR)
-DISTCLEAN += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR)
+DISTCLEAN += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm
 
 SUBDIRS += ingress-nginx
 SUBDIRS += ceph-csi
