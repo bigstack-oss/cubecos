@@ -7,16 +7,13 @@
 # quincy -> reef -> squid -> tentacle is the path and every hop keeps the next door
 # open.
 #
-# 19.2.5 is the newest squid the Storage SIG has released. 19.2.6 (2026-08-19) is
-# the CVE release -- CephX auth bypass CVE-2025-30156, mon config-key read
-# CVE-2026-50152, RGW SigV4 CVE-2026-54330 and RGW STS CVE-2026-39944 -- and is only
-# in the SIG's testing repo. It is not a drop-in bump either: its CephX fix adds the
-# aes256k key type, an upgraded cluster reports HEALTH_ERR
-# (AUTH_INSECURE_SERVICE_TICKETS, AUTH_INSECURE_SERVICE_KEY_TYPE) until every key
-# is rotated onto it, and the 6.12 kernel's libceph cannot use aes256k, so the
-# kernel clients -- the /mnt/cephfs mount and ceph-csi's krbd/cephfs mounts --
-# could never follow. Tracked on #677.
-CEPH_VERSION:=-19.2.5-1.el9s
+# 19.2.7, from the Storage SIG. Since 19.2.6, CephX has a stronger cipher, aes256k, and an upgraded
+# cluster reports HEALTH_ERR (AUTH_INSECURE_SERVICE_TICKETS, AUTH_INSECURE_SERVICE_KEY_TYPE) until
+# its keys are rotated onto it and the monitors issue service tickets with it. The kernel clients --
+# the /mnt/cephfs mount and ceph-csi's krbd and cephfs mounts -- need a kernel whose libceph has
+# aes256k, 7.0 or later, so the keys move only once every node runs one (jail.ubi9.dockerfile's
+# kernel), after the whole cluster has been upgraded. Tracked on #677.
+CEPH_VERSION:=-19.2.7-1.el9s
 # nfs-ganesha stays on 5.9: its ceph FSAL links libcephfs.so.2 and librados.so.2,
 # and squid's libcephfs2/librados2 still provide exactly those sonames, so the
 # ganesha packages are untouched by the major bump -- a dnf solve of the squid set
@@ -122,10 +119,12 @@ CEPH_VENV_SETUPTOOLS := 75.6.0
 # against this venv rather than a throwaway overlay. Without it the rbd build dies at
 # setup.py import time, before a single line is compiled. rados/setup.py is byte
 # for byte identical between 17.2.6 and 18.2.8 and needs nothing new. Squid changed
-# neither: both setup.py files are byte for byte identical between 18.2.8 and 19.2.5.
+# neither: both setup.py files are byte for byte identical between 18.2.8 and 19.2.7.
+# The bindings follow CEPH_VERSION: 19.2.7's rbd.pyx and c_rbd.pxd differ from
+# 19.2.5's, and compile against that release's librbd headers.
 CEPH_VENV_BUILD_REQS := "Cython<3" packaging wheel
 
-CEPH_PYBIND_VERSION := 19.2.5
+CEPH_PYBIND_VERSION := 19.2.7
 CEPH_PYBIND_SRCDIR := /usr/src/ceph/ceph-$(CEPH_PYBIND_VERSION)
 CEPH_PYBIND_CFLAGS := -I$(CEPH_PYBIND_SRCDIR)/src/include
 CEPH_WHEEL_DIR := /usr/src/ceph/wheels
