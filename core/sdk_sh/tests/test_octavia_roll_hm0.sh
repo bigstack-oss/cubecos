@@ -13,14 +13,18 @@ for f in _power_roll_octavia_ready _power_roll_octavia_hm_host ; do
     sed -n "/^$f()/,/^}/p" $D/modules/sdk_power.sh >> $T/fn.sh
 done
 # the real gate, with this node as master (no peer to ask), /run paths moved
-sed -n "/^cube_failover_gate_open()/,/^}/p" $D/../main/proj_functions | sed "s|/run/|$T/run/|g" >> $T/fn.sh
+grep '^CUBE_BOOT_DONE_TEST=' $D/../main/proj_functions | sed "s|/run/|$T/run/|g" >> $T/fn.sh
+for f in cube_failover_gate_open cube_nodes_booted_or_down ; do
+    sed -n "/^$f()/,/^}/p" $D/../main/proj_functions
+done | sed "s|/run/|$T/run/|g" >> $T/fn.sh
 cube_master_control(){ hostname; }
+cubectl(){ echo '[]'; }
 source $T/fn.sh
 fail=0
 chk(){ printf '%-48s -> %-12s (want %s)\n' "$1" "$2" "$3"; [ "$2" = "$3" ] || fail=1; }
 
 # --- os_octavia_roll_node_up ---
-ROLL=1 FIRST3=1 FAST=0 CALLS=$T/calls
+ROLL=1 FIRST3=1 FAST=0 CALLS=$T/calls OCTAVIA_BOOT_UP_MARK=$T/boot_up0
 is_rolling_restart_boot(){ [ $ROLL = 1 ]; }
 is_first_three_compute_node(){ [ $FIRST3 = 1 ]; }
 os_octavia_node_fast_up(){ echo fast >> $CALLS; [ $FAST = 1 ]; }
@@ -32,6 +36,27 @@ ROLL=0;                chk "not a restart-roll boot" "$(run)" ""
 ROLL=1 FIRST3=0;       chk "not a health-manager node" "$(run)" ""
 FIRST3=1 FAST=1;       chk "fast path ok" "$(run)" "fast;"
 FAST=0;                chk "fast path fails -> reinit" "$(run)" "fast;cfg reinit_octavia;"
+
+# --- this boot already brought o-hm0 up: the roll step skips the re-run ---
+OCTAVIA_BOOT_UP_MARK=$T/boot_up HM0_IP=1 HM0_RT=1 WORKER=1
+/sbin/ip(){ [ $HM0_IP = 1 ] && echo "inet 172.16.0.11/16"; }
+/usr/sbin/route(){ [ $HM0_RT = 1 ] && echo "172.16.0.0 0.0.0.0 255.255.0.0 U 0 0 0 octavia-hm0"; }
+systemctl(){ [ $WORKER = 1 ]; }
+boot(){ : > $CALLS; os_octavia_boot_node_up; tr '\n' ';' < $CALLS; }
+rm -f $T/boot_up; FAST=1
+chk "boot fast path marks the boot" "$(boot)$([ -e $T/boot_up ] && echo marked)" "fast;marked"
+chk "roll step after it skips" "$(run)" ""
+HM0_IP=0;              chk "  hm0 lost its ip -> re-run" "$(run)" "fast;"
+HM0_IP=1 HM0_RT=0;     chk "  hm0 lost its route -> re-run" "$(run)" "fast;"
+HM0_RT=1 WORKER=0;     chk "  worker down -> re-run" "$(run)" "fast;"
+WORKER=1 ROLL=0;       chk "  not a roll boot -> nothing" "$(run)" ""
+ROLL=1; rm -f $T/boot_up
+FAST=0; boot >/dev/null
+chk "boot reinit path does not mark" "$([ -e $T/boot_up ] && echo marked)" ""
+chk "  so the roll step re-runs" "$(run)" "fast;cfg reinit_octavia;"
+OCTAVIA_BOOT_UP_MARK=""
+chk "unset marker var never skips" "$(run)" "fast;cfg reinit_octavia;"
+unset -f /sbin/ip /usr/sbin/route systemctl
 
 # --- os_octavia_node_fast_up: a gate-held health-manager is not a failure ---
 mkdir -p $T/run; touch $T/run/cube_commit_done
@@ -49,7 +74,7 @@ systemctl(){
 }
 fast(){ : > $CALLS; real_fast_up && echo ok || echo fail; }
 
-rm -f $T/maint $T/run/cube_bootup_status
+rm -f $T/maint; echo "boot 1" > $T/run/cube_bootup_status
 chk "boot not done: gate holds hm -> ok" "$(fast)" "ok"
 chk "  start still requested" "$(tr '\n' ';' < $CALLS)" "start octavia-health-manager;"
 echo "done 1" > $T/run/cube_bootup_status

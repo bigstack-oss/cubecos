@@ -20,7 +20,6 @@ OSEARCH_VER := 3.9.0
 OSEARCH_CONF_DIR := /etc/$(OSEARCH)
 
 ROOTFS_DNF_DL_FROM += https://artifacts.opensearch.org/releases/bundle/opensearch/$(OSEARCH_VER)/opensearch-$(OSEARCH_VER)-linux-x64.rpm
-ROOTFS_PIP_NC += curator-$(OSEARCH)
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) sh -c 'sed "s/\/var\/run\//\/run\//g" /usr/lib/tmpfiles.d/$(OSEARCH).conf > /etc/tmpfiles.d/$(OSEARCH).conf'
@@ -47,6 +46,39 @@ OSEARCH_PLUGIN_CLI = chroot $(ROOTDIR) env OPENSEARCH_JAVA_HOME=/usr/share/$(OSE
 rootfs_install::
 	$(Q)$(foreach p,$(OSEARCH_UNUSED_PLUGINS),$(OSEARCH_PLUGIN_CLI) remove $(p) && ) true
 	$(Q)rm -rf $(ROOTDIR)/usr/share/$(OSEARCH)/modules/ingest-geoip
+
+# Jars swapped for fixed releases of the same artifacts from Maven Central, pinned by sha256, the
+# way core/kafka/kafka.mk refreshes Kafka's. Each entry is <groupId>:<artifactId>:<version>:<sha256>
+# followed by what it replaces.
+ELK_JAR_DIR := $(ARCS_DIR)/elk-jars
+elk_jar_field = $(word $(1),$(subst :, ,$(2)))
+elk_jar_path = $(ELK_JAR_DIR)/$(call elk_jar_field,2,$(1))-$(call elk_jar_field,3,$(1)).jar
+
+# $(1) groupId, $(2) artifactId, $(3) version, $(4) sha256. .part then rename, as for the tarballs.
+define elk_jar
+$$(ELK_JAR_DIR)/$(2)-$(3).jar:
+	$$(Q)mkdir -p $$(@D)
+	$$(Q)wget $$(MAVEN_DL_HOST)/$(subst .,/,$(1))/$(2)/$(3)/$(2)-$(3).jar -O $$@.part
+	$$(Q)echo "$(4)  $$@.part" | sha256sum -c -
+	$$(Q)mv $$@.part $$@
+endef
+elk_jar_rule = $(eval $(call elk_jar,$(call elk_jar_field,1,$(1)),$(call elk_jar_field,2,$(1)),$(call elk_jar_field,3,$(1)),$(call elk_jar_field,4,$(1))))
+
+# OpenSearch 3.9.0, the newest release, ships Jackson 3.2.2 in lib/, and jackson-core 3.2.2 has a
+# known vulnerability fixed in 3.2.3. The four Jackson jars there move to 3.2.3 together. The last
+# field is the jar replaced. The rm is not -f: an OpenSearch bump that no longer ships one of them
+# fails here, which is the cue to revisit the list.
+OSEARCH_JAR_REFRESH := \
+	tools.jackson.core:jackson-core:3.2.3:a0c17e7e665a5e95c82f5fb45c0fec2ae3dc556c80f0016452c9c84cd23f3817:jackson-core-3.2.2.jar \
+	tools.jackson.dataformat:jackson-dataformat-cbor:3.2.3:b7e4e671e2f2ceab70b75119d59d527b89e039c1a8c21eac6267a1a8ecf637be:jackson-dataformat-cbor-3.2.2.jar \
+	tools.jackson.dataformat:jackson-dataformat-smile:3.2.3:acb78b50561181a4811da09702cf96f7f5dd0e15d06b085a547eee9ec0d6f742:jackson-dataformat-smile-3.2.2.jar \
+	tools.jackson.dataformat:jackson-dataformat-yaml:3.2.3:260dd15f1a044dc00cbefd6f01198403fe45ff4ae5fc37895a7842cab6c583d0:jackson-dataformat-yaml-3.2.2.jar
+OSEARCH_JARS := $(foreach e,$(OSEARCH_JAR_REFRESH),$(call elk_jar_path,$(e)))
+$(foreach e,$(OSEARCH_JAR_REFRESH),$(call elk_jar_rule,$(e)))
+
+rootfs_install:: $(OSEARCH_JARS)
+	$(Q)$(foreach e,$(OSEARCH_JAR_REFRESH),rm $(ROOTDIR)/usr/share/$(OSEARCH)/lib/$(call elk_jar_field,5,$(e)) && ) true
+	$(Q)cp -f $(OSEARCH_JARS) $(ROOTDIR)/usr/share/$(OSEARCH)/lib/
 
 #
 # OpenSearch-Dashboards
@@ -227,15 +259,79 @@ LOGSTASH_UNUSED_PLUGINS := logstash-filter-elastic_integration logstash-input-az
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin remove $(LOGSTASH_UNUSED_PLUGINS)
 
+# logstash-integration-kafka, which the conf.d pipelines read Kafka with, vendors Jackson 2.21.6, and
+# jackson-core 2.21.6 has a known vulnerability fixed in 2.21.7; 12.1.10, its newest release, still
+# vendors 2.21.6. logstash-core loads 2.21.7 already, so jar-dependencies skips the gem's own
+# jackson-core and jackson-databind, but it does load the gem's jackson-dataformat-csv and
+# jackson-datatype-jdk8 2.21.6. All four move to 2.21.7 and the gem's jar list names 2.21.7, so the
+# plugin runs on the one Jackson line logstash-core loads. The gem's lz4-java 1.10.1, which the
+# Kafka client compresses with, has a known vulnerability fixed in 1.11.4 and moves the same way.
+# The last field is the version replaced. Nothing here is -f: a Logstash bump that changes the
+# gem's version, or what it vendors, fails here.
+LOGSTASH_KAFKA_GEM := $(LOGSTASH_HOME)/vendor/bundle/jruby/3.4.0/gems/logstash-integration-kafka-12.1.9-java
+LOGSTASH_KAFKA_JAR_REFRESH := \
+	com.fasterxml.jackson.core:jackson-core:2.21.7:8c5623b98f32d5f7e1287ff61ed50e08ab7b11381e991fff89327faabba42261:2.21.6 \
+	com.fasterxml.jackson.core:jackson-databind:2.21.7:1290c2795e93e8a6861a6c4d9ff0d844d32f5ea178362cb2721edf5561e828b1:2.21.6 \
+	com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.7:588050148497158cabdc05c0ae3a7e123194a486b8c62745778fc6239f9b085e:2.21.6 \
+	com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.21.7:b8f62f98363ed9aa259b3a479a64fcbe7e081158a8bec6733972e900d12f4e47:2.21.6 \
+	at.yawk.lz4:lz4-java:1.11.4:58c8e0b813960d2a248e050c353baea73139b48a2ffc55382d42c69707e17325:1.10.1
+LOGSTASH_KAFKA_JARS_RB = $(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/lib/logstash-integration-kafka_jars.rb
+# $(1) one LOGSTASH_KAFKA_JAR_REFRESH entry: swap the jar in the gem's vendor/jar-dependencies tree
+# and the version its jar list requires.
+logstash_kafka_jar = d=$(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/vendor/jar-dependencies/$(subst .,/,$(call elk_jar_field,1,$(1)))/$(call elk_jar_field,2,$(1)) && \
+	rm $$d/$(call elk_jar_field,5,$(1))/$(call elk_jar_field,2,$(1))-$(call elk_jar_field,5,$(1)).jar && \
+	rmdir $$d/$(call elk_jar_field,5,$(1)) && mkdir $$d/$(call elk_jar_field,3,$(1)) && \
+	cp $(call elk_jar_path,$(1)) $$d/$(call elk_jar_field,3,$(1))/ && \
+	grep -q "'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,5,$(1))'" $(LOGSTASH_KAFKA_JARS_RB) && \
+	sed -i "s/'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,5,$(1))'/'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,3,$(1))'/" $(LOGSTASH_KAFKA_JARS_RB)
+
+$(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call elk_jar_rule,$(e)))
+
+rootfs_install:: $(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call elk_jar_path,$(e)))
+	$(Q)$(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call logstash_kafka_jar,$(e)) && ) true
+	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_KAFKA_GEM)
+
 #
 # Beats (filebeat, auditbeat)
 #
 
-BEATS_VER := 9.5.2
+BEATS_VER := 9.5.5
 
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-$(BEATS_VER)-x86_64.rpm
 ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/auditbeat-$(BEATS_VER)-x86_64.rpm
 
-# No rootfs_install for the beats: their units come from the rpms. The copies this tree
+# filebeat and auditbeat are rebuilt from the same tag and installed over the rpms' binaries:
+# Elastic's 9.5.5 is built with go1.26.8, older than the October 2026 security release
+# (1.27.2 / 1.26.9), and links an x/net older than its fix; the jail's Go and BEATS_GO_GET cover
+# both. These are the OSS beats, not x-pack: config_logstash uses filebeat's filestream input with
+# the kafka output and auditbeat's file_integrity module, all OSS, so none of the Elastic-licensed
+# code is needed. The rpms stay for everything else and name the version in the SBOM. Return to
+# their binaries on the condition core/exporters/Makefile gives.
+BEATS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0
+BEATS_GO_DIR := $(ARCS_DIR)/beats-go
+BEATS_SRC := $(BEATS_GO_DIR)/beats-$(BEATS_VER)-src
+BEATS_VERSION_PKG := github.com/elastic/beats/v7/libbeat/version
+
+# The tag is cloned shallow, and the modules come from proxy.golang.org, checked against
+# sum.golang.org.
+$(BEATS_SRC):
+	$(call RUN_CMD_TIMED, rm -rf $@.part && \
+		git clone -q --depth 1 -b v$(BEATS_VER) https://github.com/elastic/beats.git $@.part && \
+		mv $@.part $@,"  CLONE   beats-$(BEATS_VER)")
+
+$(BEATS_GO_DIR)/beats.built: $(BEATS_SRC) $(COREDIR)/elk/elk.mk
+	$(Q)mkdir -p $(BEATS_GO_DIR)/bin
+	$(call RUN_CMD_TIMED, cd $< && go get $(BEATS_GO_GET) && go mod tidy && \
+		for c in filebeat auditbeat ; do \
+			CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X $(BEATS_VERSION_PKG).commit=$$(git rev-parse HEAD)" \
+				-o $(BEATS_GO_DIR)/bin/$$c ./$$c || exit 1 ; \
+		done,"  BUILD   beats-$(BEATS_VER)")
+	$(Q)touch $@
+
+rootfs_install:: $(BEATS_GO_DIR)/beats.built
+	$(Q)install -m 0755 $(BEATS_GO_DIR)/bin/filebeat $(ROOTDIR)/usr/share/filebeat/bin/filebeat
+	$(Q)install -m 0755 $(BEATS_GO_DIR)/bin/auditbeat $(ROOTDIR)/usr/share/auditbeat/bin/auditbeat
+
+# No rootfs_install for the beats' units: they come from the rpms. The copies this tree
 # used to install over them were upstream's own files, one word of a Description apart,
 # and a vendored unit only masks whatever upstream changes in it next.

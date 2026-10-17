@@ -219,6 +219,31 @@ $(foreach p,$(QEMU_PKGS),$(eval ROOTFS_DNF_DL_FROM += $(QEMU_URL)/$(p)-$(QEMU_NV
 RSYNC_NVR := 3.2.7-1.el9_8
 ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/pub/rocky/9.8/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
 
+# openssl, pcre2, librabbitmq and python3-tornado come from Rocky 9 the same way. RHEL 9.8 fixed a
+# known vulnerability in each, in openssl-3.5.8-2.el9_8, pcre2-10.40-7.el9_8,
+# librabbitmq-0.11.0-7.el9_8.1 and python-tornado-6.5.10-1.el9_8.1, and Stream's newest builds
+# (3.5.8-1.el9, 10.40-7.el9, 0.11.0-7.el9.1, 6.5.8-1.el9) do not carry the fix. el9 sorts below
+# el9_8, so Stream's own build takes over only once its release passes RHEL's. Every installed arch
+# and subpackage moves together, since they require each other's exact version: the i686
+# openssl-libs and openssl-devel the 32-bit libraries pull in, and the -devel packages the build has
+# until cube-post.mk removes them. Entries are <repo>/<first letter>/<rpm>.
+ROCKY_ERRATA_RPMS := \
+	BaseOS/o/openssl-3.5.8-2.el9_8.x86_64 \
+	BaseOS/o/openssl-libs-3.5.8-2.el9_8.x86_64 \
+	BaseOS/o/openssl-libs-3.5.8-2.el9_8.i686 \
+	BaseOS/o/openssl-fips-provider-3.5.8-2.el9_8.x86_64 \
+	AppStream/o/openssl-devel-3.5.8-2.el9_8.x86_64 \
+	AppStream/o/openssl-devel-3.5.8-2.el9_8.i686 \
+	BaseOS/p/pcre2-10.40-7.el9_8.x86_64 \
+	BaseOS/p/pcre2-syntax-10.40-7.el9_8.noarch \
+	AppStream/p/pcre2-utf16-10.40-7.el9_8.x86_64 \
+	AppStream/p/pcre2-utf32-10.40-7.el9_8.x86_64 \
+	AppStream/p/pcre2-devel-10.40-7.el9_8.x86_64 \
+	AppStream/l/librabbitmq-0.11.0-7.el9_8.1.x86_64 \
+	AppStream/p/python3-tornado-6.5.10-1.el9_8.1.x86_64
+rocky_rpm_url = $(ROCKY_DL_HOST)/pub/rocky/9.8/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
+ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_ERRATA_RPMS),$(call rocky_rpm_url,$(p)))
+
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
 rootfs_install::
@@ -230,10 +255,6 @@ PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtoo
 # ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm
 RUBY := ruby-3.0.7-168.el9
 LOCKED_DNF += $(RUBY)
-
-OPENSSL_VER := 3.5.1-6.el9
-OPENSSL += openssl-$(OPENSSL_VER) openssl-devel-$(OPENSSL_VER) openssl-libs-$(OPENSSL_VER)
-LOCKED_DNF += $(OPENSSL)
 
 # python3-numpy-1:1.23.5-1.el9.x86_64 from @commandline and python3-numpy-1:1.20.1-5.el9.x86_64 from appstream
 # PYTHON3-NUMPY := python3-numpy-1:1.20.1-5.el9
@@ -330,6 +351,13 @@ rootfs_install::
 # namespace shadows the source tree and setup.py fails with "cannot import name ...
 # from 'xstatic.pkg' (unknown location)". A single pip invocation is fine -- pip
 # builds every sdist before installing any of them.
+#
+# The service installs now run through uv rather than pip (OPENSTACK_PIP_INSTALL in
+# project.mk), and all of the above was written against pip. It still holds under uv:
+# uv's build isolation does not apply -c either, and a single uv invocation also builds
+# before it installs. Shown by the first two uv builds (2026-10-17): horizon's XStatic
+# sdists built under --no-build-isolation, mysqlclient built in isolation, and the
+# venv's pip freeze matched pip-built develop's.
 
 # set up the execution context for openstack epoxy
 rootfs_install::
@@ -338,6 +366,13 @@ rootfs_install::
 	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(OPENSTACK_HOME_DIR)/
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
+
+# uv for the service installs into the venv above (see OPENSTACK_PIP_INSTALL in
+# project.mk). It lives in a venv of its own under /var/tmp, which the block below the
+# component include removes, cache and all.
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) python$(PYTHON_VER) -m venv $(OPENSTACK_UV_HOME)/venv
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_UV_HOME)/venv/bin/pip install uv==$(UV_VER)
 
 # NOTE: os-epoxy-pip-upper-constraints.txt is upstream's stable/2025.1
 # upper-constraints.txt copied down, save for local deltas: libvirt-python, raised to
@@ -401,7 +436,7 @@ rootfs_install::
 # tree calls it and no other venv console script is aliased that way, so it is not
 # recreated.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_PIP_INSTALL) \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-openstackclient
 	$(Q)# Link the cli. hex_sdk reaches it by absolute path ($$OPENSTACK in
@@ -459,6 +494,11 @@ HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl lachesis
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 $(shell for r in $(LOCKED_DNF); do echo $$r >> $(LOCKED_RPMS); done)
 $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
+
+# Every component's rootfs_install has run by now, so the last openstack venv install
+# is behind us: drop uv and its cache before they ship.
+rootfs_install::
+	$(Q)rm -rf $(ROOTDIR)$(OPENSTACK_UV_HOME)
 
 # Component artifacts baked into the rootfs — prereqs so a component rebuild
 # forces a rootfs rebuild (with touch $@ below). Scoped to HEAVY_COMPONENTS, not

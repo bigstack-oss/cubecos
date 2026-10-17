@@ -4,7 +4,7 @@ include ../../build.mk
 
 include $(SRCDIR)/k3s.mk
 
-VERSION     := v1.26.6+k3s1
+VERSION     := v1.32.13+k3s1
 K3S_REPO    := https://github.com/k3s-io/k3s.git
 K3S_SRC_DIR := k3s-source
 
@@ -50,38 +50,81 @@ $(BIN):
 		&& echo "  K3S     $(VERSION) restored from cache" \
 		|| $(MAKE) $(BIN)-from-source
 
+# k3s 1.32.13 pins x/net, x/crypto and x/sys with replace directives, and requires an x/text, all
+# older than the releases the other Go rebuilds here take (docker.mk, influxdb.mk). Raise them in
+# the clone before the build. Upstream's maintained branches still replace the same three, at newer
+# versions, so the replaces are raised rather than dropped. cache-key.sh hashes these lines, so a
+# change here builds a new binary instead of restoring the old one from the cache.
+K3S_GO_REPLACE := golang.org/x/net=golang.org/x/net@v0.61.0 golang.org/x/crypto=golang.org/x/crypto@v0.58.0 golang.org/x/sys=golang.org/x/sys@v0.49.0
+K3S_GO_GET := golang.org/x/text@v0.43.0
+
+# k3s refuses to start unless runtime.Version() equals the UpstreamGolang it was linked with,
+# which version.sh takes from kubernetes' build/dependencies.yaml (go1.24.13 for 1.32.13, a
+# dead Go line). We build with a newer Go, so record the Go we actually build with, as the
+# Alpine, NixOS and Yocto k3s packages do. Fail loudly if upstream moves the line.
+# TAG, not DRONE_TAG: 1.32.13 takes its version from $TAG (scripts/git_version.sh), where 1.26.6
+# read $DRONE_TAG; without it the binary calls itself v1.32.13+k3s-<commit>, not v1.32.13+k3s1.
 .PHONY: $(BIN)-from-source
 $(BIN)-from-source: $(K3S_SRC_DIR) .dapper
 	$(Q)rm -rf $(K3S_SRC_DIR)/build $(K3S_SRC_DIR)/dist $(K3S_SRC_DIR)/bin
 	$(Q)cp $(SRCDIR)/build/Dockerfile.dapper $(K3S_SRC_DIR)/Dockerfile.dapper
-	$(Q)cp $(SRCDIR)/build/log.go $(K3S_SRC_DIR)/pkg/cli/cmds/log.go
+	$(Q)grep -q '^VERSION_GOLANG=' $(K3S_SRC_DIR)/scripts/version.sh
+	$(Q)sed -i 's/^VERSION_GOLANG=.*/VERSION_GOLANG="$$(go version | cut -d" " -f3)"/' $(K3S_SRC_DIR)/scripts/version.sh
 	$(Q)chmod +x $(K3S_SRC_DIR)/scripts/ci
-# Update the golnag to 1.24 to fix stdlib security issues
-# but k3s uses klog v2 which is not compatible with go 1.24+
-# so we need to upgrade klog to v2.130.1 which is compatible
-# and also need to remove the old flage or it will cause runtime error
-# panic: flag alsologtostderr set at /go/src/github.com/k3s-io/k3s/pkg/cli/cmds/log.go:78 before being defined
 	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
-		go mod edit -dropreplace k8s.io/klog/v2 && \
-		go get k8s.io/klog/v2@v2.130.1 && \
+		export GOTOOLCHAIN=local GOFLAGS=-mod=mod && \
+		go mod edit $(addprefix -replace ,$(K3S_GO_REPLACE)) && \
+		go get $(K3S_GO_GET) && \
 		go mod tidy, \
-		"  PATCH   k3s")
+		"  GOMOD   k3s")
 	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
 		export PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
-		DRONE_TAG=$(VERSION) \
+		TAG=$(VERSION) \
 		SKIP_VALIDATE=1 \
+		SKIP_IMAGE=1 \
 		SKIP_AIRGAP=1 && \
 		mkdir -p build/data && \
 		make download && \
-		make generate && \
 		make, \
 		"  BUILD   k3s")
 	$(Q)cp $(K3S_SRC_DIR)/dist/artifacts/k3s $(BIN)
 
+# Releases an in-place upgrade steps through on its way from v1.26.6+k3s1, what every release so
+# far shipped, to VERSION: k3s upgrades one minor version at a time. Upstream release binaries,
+# checked against upstream's own checksum file. k3s.mk installs them as
+# $(K3S_DIR)/ladder/<version>/k3s, and that directory is the list the upgrade reads.
+# $(GITHUB_DL_BASE), as in core/etcd/Makefile: GitHub release assets are throttled from our build
+# network (cubecos#1350).
+LADDER_VERSIONS := v1.27.16+k3s1 v1.28.15+k3s1 v1.29.15+k3s1 v1.30.14+k3s2 v1.31.14+k3s1
+LADDER_DIR := ladder
+K3S_DL_URL := $(GITHUB_DL_BASE)/k3s-io/k3s/releases/download
+
+$(LADDER_DIR):
+	$(call RUN_CMD_TIMED,rm -rf $@.tmp && for v in $(LADDER_VERSIONS); do \
+		d=$@.tmp/$$v; mkdir -p $$d && \
+		wget -q --no-check-certificate -P $$d $(K3S_DL_URL)/$$v/k3s $(K3S_DL_URL)/$$v/sha256sum-amd64.txt && \
+		sum=$$(awk '$$2 == "k3s" {print $$1}' $$d/sha256sum-amd64.txt) && [ -n "$$sum" ] && \
+		echo "$$sum  $$d/k3s" | sha256sum -c - && \
+		rm $$d/sha256sum-amd64.txt && chmod +x $$d/k3s || exit 1; \
+		done && mv $@.tmp $@,"  PULL    k3s ladder")
+
+# The helm that ships in the image. The jail's own helm only runs the build: jail.ubi9.dockerfile
+# installs whatever release get-helm-3 found the day the jail image was built. The digest is from
+# helm's own helm-<ver>-linux-amd64.tar.gz.sha256sum; bump it with the version.
+HELM_VERSION := v3.22.1
+HELM_SHA256 := 896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea
+HELM_TGZ := helm-$(HELM_VERSION)-linux-amd64.tar.gz
+
+helm:
+	$(call RUN_CMD_TIMED,rm -rf $@.tmp && mkdir $@.tmp && \
+		wget -q -P $@.tmp https://get.helm.sh/$(HELM_TGZ) && \
+		echo "$(HELM_SHA256)  $@.tmp/$(HELM_TGZ)" | sha256sum -c - && \
+		tar -C $@.tmp -xzf $@.tmp/$(HELM_TGZ) linux-amd64/helm && \
+		$@.tmp/linux-amd64/helm version --template '{{.Version}}' | grep -qx $(HELM_VERSION) && \
+		mv $@.tmp/linux-amd64/helm $@ && rm -rf $@.tmp,"  PULL    helm $(HELM_VERSION)")
+
 $(INSTALL_SCRIPT):
-#	$(call RUN_CMD_TIMED,wget https://get.k3s.io/ -O ./$(INSTALL_SCRIPT),"  PULL    $(INSTALL_SCRIPT)")
-# 	Workaround to use previos install.sh. https://github.com/k3s-io/k3s/issues/7247
-	$(call RUN_CMD_TIMED,wget https://raw.githubusercontent.com/k3s-io/k3s/34617390d05dd8574a21412aeb223218c998f83a/install.sh,"  PULL    $(INSTALL_SCRIPT)")
+	$(call RUN_CMD_TIMED,wget https://raw.githubusercontent.com/k3s-io/k3s/$(VERSION)/install.sh,"  PULL    $(INSTALL_SCRIPT)")
 	${Q}sed -i '/RestartSec=5s/a StandardOutput=append:/var/log/k3s.log\nStandardError=append:/var/log/k3s.log' $(INSTALL_SCRIPT)
 	$(Q)chmod +x $(INSTALL_SCRIPT)
 
@@ -151,9 +194,9 @@ clean:: testclean
 	$(Q)rm -rf $(K3S_DIR)
 
 
-BUILD += $(BIN) $(INSTALL_SCRIPT) build-image
+BUILD += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm build-image
 BUILDCLEAN += .dapper and $(K3S_SRC_DIR)
-DISTCLEAN += $(BIN) $(INSTALL_SCRIPT)
+DISTCLEAN += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm
 
 SUBDIRS += ingress-nginx
 SUBDIRS += ceph-csi

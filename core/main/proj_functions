@@ -287,14 +287,43 @@ cube_cluster_start()
 CUBE_BOOT_DONE_TEST="grep -q '^done ' /run/cube_bootup_status 2>/dev/null || { [ ! -e /run/cube_bootup_status ] && [ -e /run/cube_commit_done ] ; }"
 
 # Failover monitors may start: this node finished booting and so did the
-# master, or the master is down (its peers must take over its workloads).
+# master, the controls and the hosts running instances, or they are down (their
+# peers must take over). Opens anyway 15 min after this node is done.
 cube_failover_gate_open()
 {
     eval "$CUBE_BOOT_DONE_TEST" || return 1
+    local done_at=$(awk '/^done /{print $2}' /run/cube_bootup_status 2>/dev/null)
+    [ -n "$done_at" ] && [ $(( $(date +%s) - done_at )) -gt 900 ] && return 0
     local m=$(cube_master_control)
-    [ "$m" = "$(hostname)" ] && return 0
-    is_sshable $m || return 0
-    timeout 10 ssh root@$m "$CUBE_BOOT_DONE_TEST"
+    if [ "$m" != "$(hostname)" ] && is_sshable $m ; then
+        timeout 10 ssh root@$m "$CUBE_BOOT_DONE_TEST" </dev/null || return 1
+    fi
+    cube_nodes_booted_or_down
+}
+
+# True when the controls and every host running instances finished booting or
+# are down (ssh 255). Without a DB every compute node is checked.
+cube_nodes_booted_or_down()
+{
+    source /usr/sbin/hex_tuning /etc/settings.txt
+    local vmhosts
+    vmhosts=$($MYSQL -u root -N -D nova -e \
+        "SELECT DISTINCT host FROM instances WHERE deleted = 0 AND host IS NOT NULL" 2>/dev/null) ||
+        vmhosts=$(cubectl node list -r compute -j 2>/dev/null | jq -r '.[].hostname')
+    local hosts=$(printf '%s\n%s\n' "$(echo $T_cubesys_control_hosts | tr ',' '\n')" "$vmhosts" |
+        grep -vx -e '' -e "$(hostname)" | sort -u)
+    local d=$(mktemp -d) n
+    for n in $hosts ; do
+        (
+            timeout 10 ssh -o ConnectTimeout=5 -o BatchMode=yes root@$n "$CUBE_BOOT_DONE_TEST" </dev/null >/dev/null 2>&1
+            r=$?
+            [ $r -eq 0 ] || [ $r -eq 255 ] || touch $d/$n
+        ) &
+    done
+    wait
+    local busy=$(ls $d)
+    rm -rf $d
+    [ -z "$busy" ]
 }
 
 # Master control for this boot: the override if it names a control host, else
@@ -1043,7 +1072,7 @@ check_service_stats()
     done
 
     # monitoring core services
-    local service_array=(zookeeper kafka telegraf influxdb kapacitor grafana filebeat auditbeat logstash)
+    local service_array=(zookeeper kafka telegraf influxdb kapacitor grafana filebeat auditbeat logstash prometheus lachesis thanos)
     for service in "${service_array[@]}" ; do
         check_service $service
     done
@@ -1224,14 +1253,34 @@ _live_migration_repair()
     esac
 }
 
+# Run "<name> <cmd...>" probes in parallel; each one's stdout goes to $d/<name>
+# and its exit code to $d/<name>.rc.
+_lmg_probe()
+{
+    local d=$1 p pids=()
+    shift
+    for p in "$@" ; do
+        ( eval "${p#* }" > "$d/${p%% *}" 2>/dev/null ; echo $? > "$d/${p%% *}.rc" ) &
+        pids+=($!)
+    done
+    wait "${pids[@]}"
+}
+
 live_migration_gate()
 {
     is_control_node || return 0
     source /etc/admin-openrc.sh 2>/dev/null
     local deadline=$((SECONDS + ${1:-300})) drain=${2:-__none__} repair=${3:-} why= repaired= _g0=$SECONDS
+    local _d=$(mktemp -d /tmp/lmg.XXXXXX)
+    # event tags: the boot-path gate has no drain host, so tag the gating node;
+    # sub comes from the active roll, if any
+    local _eh=${drain/#__none__/$HOSTNAME}
+    local _ek=$(jq -r 'select(.state == "running" or .state == "paused") | .kind // "restart"' ${ROLLING_JOB:-/mnt/cephfs/rolling/job.json} 2>/dev/null)
+    local _es=${_ek:+,sub=rolling_$_ek}
 
     while [ $SECONDS -lt $deadline ] ; do
         why=
+        rm -f "$_d"/*
         # version-SAFE cluster membership (true/false regardless of version)
         #
         # -m force, or the answer may not be this node's. _hex_exec runs a
@@ -1243,53 +1292,69 @@ live_migration_gate()
         # another node happens to be checking -- and a node that has just booted has
         # no cached result at all, so it passes with 0: exactly the node the roll is
         # asking about.
-        $HEX_SDK -m force health_mysql_check    >/dev/null 2>&1 || why=galera
-        [ -z "$why" ] && { $HEX_SDK -m force health_rabbitmq_check >/dev/null 2>&1 || why=rabbitmq ; }
+        #
+        # Probes run in parallel per tier; the verdict below keeps the old order.
+        _lmg_probe "$_d" \
+            "mysql $HEX_SDK -m force health_mysql_check" \
+            "rabbitmq $HEX_SDK -m force health_rabbitmq_check" \
+            "unsync $HEX_SDK rabbitmq_unsynced_mirror_count" \
+            "health $CEPH health" \
+            "status $CEPH status -f json"
+        [ "$(cat $_d/mysql.rc)" = 0 ] || why=galera
+        [ -z "$why" ] && { [ "$(cat $_d/rabbitmq.rc)" = 0 ] || why=rabbitmq ; }
         # rejoined is not synchronised: a returning broker's mirrors start empty,
         # and until ha-sync-mode:automatic has filled them, releasing the next
         # node leaves those queues on only the nodes that never left. Wait-only,
         # the sync is already running
         [ -z "$why" ] && {
-            local _unsync=$($HEX_SDK rabbitmq_unsynced_mirror_count 2>/dev/null)
+            local _unsync=$(cat $_d/unsync)
             [ "${_unsync:-0}" -gt 0 ] 2>/dev/null && why=rabbitmq-sync
         }
-        [ -z "$why" ] && { $CEPH health 2>/dev/null | grep -qiE 'HEALTH_ERR|inactive|incomplete|peering|stale' && why=ceph ; }
+        [ -z "$why" ] && { grep -qiE 'HEALTH_ERR|inactive|incomplete|peering|stale' $_d/health && why=ceph ; }
         # wait for the rebooted node's OSDs to rejoin (in-but-down = not back);
         # tolerates degraded/recovering, does not require active+clean
         [ -z "$why" ] && {
-            local _ndown=$($CEPH status -f json 2>/dev/null | jq -r '.osdmap | (.num_in_osds // 0) - (.num_up_osds // 0)' 2>/dev/null)
+            local _ndown=$(jq -r '.osdmap | (.num_in_osds // 0) - (.num_up_osds // 0)' $_d/status 2>/dev/null)
             [ "${_ndown:-0}" -gt 0 ] 2>/dev/null && why=ceph-osd-down
         }
 
-        # FUNCTIONAL backends a live migration touches (NOT version-strict)
-        [ -z "$why" ] && { $OPENSTACK compute service list --service nova-conductor -f value -c State 2>/dev/null | grep -qi up || why=nova-conductor ; }
-        [ -z "$why" ] && { $OPENSTACK compute service list --service nova-scheduler -f value -c State 2>/dev/null | grep -qi up || why=nova-scheduler ; }
+        # FUNCTIONAL backends a live migration touches (NOT version-strict).
+        # One compute service list ("binary host state") serves every nova check.
+        [ -z "$why" ] && _lmg_probe "$_d" \
+            "compute $OPENSTACK compute service list -f value -c Binary -c Host -c State" \
+            "cinder $OPENSTACK volume service list --service cinder-volume -f value -c State" \
+            "neutron $OPENSTACK network agent list -f value -c Alive"
+        [ -z "$why" ] && { awk '$1=="nova-conductor"{print $3}' $_d/compute | grep -qi up || why=nova-conductor ; }
+        [ -z "$why" ] && { awk '$1=="nova-scheduler"{print $3}' $_d/compute | grep -qi up || why=nova-scheduler ; }
         [ -z "$why" ] && {
             # a target needs nova-compute up AND cephfs mounted -- an upgraded
             # node can heartbeat up while its instance storage is unmounted
-            local _h tgt=0
-            for _h in $($OPENSTACK compute service list --service nova-compute -f value -c Host -c State 2>/dev/null | awk '$2=="up"{print $1}') ; do
+            local _h _tp=()
+            for _h in $(awk '$1=="nova-compute" && tolower($3)=="up"{print $2}' $_d/compute) ; do
                 [ "$_h" = "$drain" ] && continue
-                remote_run "$_h" 'mountpoint -q /mnt/cephfs' >/dev/null 2>&1 && tgt=$((tgt+1))
+                ( remote_run "$_h" 'mountpoint -q /mnt/cephfs' >/dev/null 2>&1 && touch "$_d/tgt.$_h" ) </dev/null &
+                _tp+=($!)
             done
-            [ "$tgt" -ge 1 ] || why=no-storage-ready-target
+            [ ${#_tp[@]} -eq 0 ] || wait "${_tp[@]}"
+            ls "$_d"/tgt.* >/dev/null 2>&1 || why=no-storage-ready-target
         }
         # the SOURCE host must be up in nova too (the target loop skips it);
         # wait for it, never restart it
         [ -z "$why" ] && [ "$drain" != "__none__" ] && {
-            $OPENSTACK compute service list --service nova-compute --host "$drain" -f value -c State 2>/dev/null \
+            awk -v h="$drain" '$1=="nova-compute" && $2==h{print $3}' $_d/compute \
                 | grep -qi up || why=drain-host-nova-down
         }
-        [ -z "$why" ] && { $OPENSTACK volume service list --service cinder-volume -f value -c State 2>/dev/null | grep -qi up || why=cinder-volume ; }
-        [ -z "$why" ] && { $OPENSTACK network agent list -f value -c Alive 2>/dev/null | grep -qi true || why=neutron ; }
+        [ -z "$why" ] && { grep -qi up $_d/cinder || why=cinder-volume ; }
+        [ -z "$why" ] && { grep -qi true $_d/neutron || why=neutron ; }
 
         if [ -z "$why" ] ; then
             # Only log a meaningful pass (it had to wait or repair) -- an instant
             # no-op pass is the common case and would be noise.
             if [ -n "$repaired" ] || [ $((SECONDS - _g0)) -ge 3 ] ; then
                 log_info "live_migration_gate: path ready for $drain after $((SECONDS - _g0))s${repaired:+ (repaired:$repaired)}"
-                /usr/sbin/hex_log_event -e CLU00011I "interface=system,host=$drain,category=cluster,action=gate_passed,waited=$((SECONDS - _g0)),repaired=${repaired// /+}"
+                /usr/sbin/hex_log_event -e CLU00011I "interface=system,host=$_eh,category=cluster$_es,action=gate_passed,waited=$((SECONDS - _g0)),repaired=${repaired// /+}"
             fi
+            rm -rf "$_d"
             return 0
         fi
         # repair mode: fix what the failed check names, once per cause, then
@@ -1310,8 +1375,9 @@ live_migration_gate()
         fi
         sleep 5
     done
+    rm -rf "$_d"
     log_error "live_migration_gate: path for $drain NOT ready after $((SECONDS - _g0))s, blocked on: ${why:-unknown}"
-    /usr/sbin/hex_log_event -e CLU00012W "interface=system,host=$drain,category=cluster,action=gate_timeout,blocked_on=${why:-unknown},waited=$((SECONDS - _g0))"
+    /usr/sbin/hex_log_event -e CLU00012W "interface=system,host=$_eh,category=cluster$_es,action=gate_timeout,blocked_on=${why:-unknown},waited=$((SECONDS - _g0))"
     echo "live_migration_gate: live-migration path not ready ($why)" >&2
     return 1
 }

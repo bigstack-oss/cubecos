@@ -20,6 +20,10 @@ ROLLING_JOB=$ROLLING_DIR/job.json
 # local roll marker on /store: / is the A/B slot (invisible after an upgrade
 # boots the other slot) and cephfs is not readable this early
 ROLLING_RECOVER_MARKER=${ROLLING_RECOVER_MARKER:-/store/rolling_recover}
+# markers the end-of-roll hex_config actions act on (config_mysql.cpp BACKDIR,
+# config_rabbitmq.cpp TICKTIME_MARK); without them those actions are no-ops
+ROLLING_MYSQL_UPGRADE_DIR=/var/lib/_mysql
+ROLLING_TICKTIME_MARK=/etc/appliance/state/rabbitmq_ticktime_compat
 
 # Locked read-modify-write of the shared job.json, retried across a cephfs/MDS
 # failover window. Temp name expanded once per attempt (avoids lost updates).
@@ -235,6 +239,48 @@ _power_roll_octavia_ready()
     done
 }
 
+_power_roll_aborted() { [ "$(jq -r .state $ROLLING_JOB 2>/dev/null)" = aborted ] ; }
+
+# True while <host>'s drain is running with a live orchestrator (sentinel +
+# fresh heartbeat; the drain poll stamps it every few seconds).
+_power_roll_drain_live()
+{
+    local hb=$(jq -r '.heartbeat // 0' $ROLLING_JOB 2>/dev/null)
+    [ -e "$ROLLING_DIR/.draining.$1" ] && [ $(( $(date +%s) - ${hb:-0} )) -lt ${ROLLING_DRAIN_LIVE_SECS:-120} ]
+}
+
+# Undo a node's drain-side state: restore VMs it suspended, re-enable
+# nova-compute and release the roll's masakari maintenance (on the master).
+_power_roll_node_settle()
+{
+    local host=$1 master=$2 arun="$CLUSTER_ACTIVE_RUNNING" vm disp
+    if [ -s "$arun" ] ; then
+        while read -r vm disp _ ; do
+            [ -z "$vm" ] && continue
+            Quiet -n remote_run $master "$HEX_SDK power_vm_restore $vm $disp"
+        done < "$arun"
+        : > "$arun"
+    fi
+    case "$(jq -r --arg h "$host" '.nodes[]|select(.hostname==$h)|.role' $ROLLING_JOB)" in
+        *compute*|control-converged|edge-core)
+            Quiet -n remote_run $master "$HEX_SDK power_node_resume $host" ;;
+    esac
+}
+
+# The roll was aborted while the kick held <host>: do not reboot it; undo its
+# drain and leave it pending in the aborted job.
+_power_roll_kick_stop()
+{
+    local host=$1 ip=$2 master=$3
+    log_info "rolling_$(_power_roll_kind): aborted while $host was in flight; not rebooting it"
+    _power_roll_node_settle "$host" "$master"
+    rm -f "$ROLLING_DIR/.drained.$host"
+    timeout 15 ssh -o ConnectTimeout=5 root@$ip "rm -f $ROLLING_RECOVER_MARKER" </dev/null >/dev/null 2>&1
+    _power_roll_set_node_num "$host" started 0
+    _power_roll_set_node_status "$host" pending
+    echo "rolling $(_power_roll_kind) aborted; $host was not rebooted"
+}
+
 _power_roll_kick()
 {
     # Drain (if compute-bearing) and reboot one node. Pauses the job on any
@@ -284,11 +330,20 @@ _power_roll_kick()
     esac
     _power_roll_set_raw deadline $(( $(date +%s) + _budget ))
 
+    if _power_roll_aborted ; then
+        _power_roll_kick_stop "$host" "$ip" "$master"
+        return 0
+    fi
+
     case "$role" in
         *compute*|control-converged|edge-core)
             _power_roll_set_node_status "$host" draining
             echo "evacuating workloads off $host"
             if ! remote_run $master "$HEX_SDK power_node_evacuate $host" ; then
+                if _power_roll_aborted ; then
+                    _power_roll_kick_stop "$host" "$ip" "$master"
+                    return 0
+                fi
                 local stuck=""
                 [ -s "$ROLLING_DIR/.stuck.$host" ] && stuck=": $(tr '\n' ' ' < "$ROLLING_DIR/.stuck.$host")"
                 _power_roll_pause "could not live-migrate all workloads off $host${stuck} -- migrate or stop them, then run rolling_$(_power_roll_cli_verb) continue"
@@ -300,14 +355,21 @@ _power_roll_kick()
     # Hand off the active ceph-mgr before taking its node down: the dashboard
     # wedges on mgr failover, and auto-repair stands down while rolling, so
     # the roll fails it over and verifies/bounces the dashboard itself.
-    # UI-only, so a failure is logged, not a pause.
-    echo "handing off ceph-mgr/dashboard if active on $host"
-    remote_run $master "$HEX_SDK ceph_mgr_dashboard_ensure $host" </dev/null || \
-        echo "ceph-mgr dashboard not verified healthy; continuing (cluster check will flag it)"
+    # UI-only, so a failure is logged, not a pause; the dashboard check runs in
+    # the background so it does not hold the reboot.
+    echo "handing off ceph-mgr if active on $host"
+    remote_run $master "$HEX_SDK ceph_mgr_handoff $host" </dev/null || \
+        echo "ceph-mgr did not fail over off $host; continuing (cluster check will flag it)"
 
     if ! is_sshable $ip ; then
         _power_roll_pause "$host ($ip) is unreachable"
         return 1
+    fi
+
+    # last abort check: nothing below can be undone
+    if _power_roll_aborted ; then
+        _power_roll_kick_stop "$host" "$ip" "$master"
+        return 0
     fi
 
     echo "rebooting $host"
@@ -462,6 +524,11 @@ power_bootup_mark()
     echo "$phase $(date +%s)" >> "$BOOTUP_STATUS_FILE"
     log_info "cluster bootup: $HOSTNAME -> $phase"
     /usr/sbin/hex_log_event -e CLU00009I "interface=system,host=$HOSTNAME,category=cluster,sub=cluster_bootup,action=phase,phase=$phase"
+    # one time: amphorae from older images get the VIP re-announce timer
+    [ "$phase" = done ] && setsid $HEX_SDK migrate_octavia_amphora_vip_advertise >/dev/null 2>&1 </dev/null &
+    # copy back the events the kapacitor relay dropped while this node was down
+    [ "$phase" = done ] && setsid $HEX_SDK stats_events_catchup >/dev/null 2>&1 </dev/null &
+    return 0
 }
 
 # Aggregate every node's local bootup record into a table. Unreachable nodes are
@@ -578,6 +645,21 @@ power_master_override_adopt()
     return 0
 }
 
+# Exit 1, naming the bad args and the valid nodes, if any arg is not a cluster node.
+power_roll_check_hosts()
+{
+    local nodes h bad=""
+    nodes=$(timeout 30 cubectl node list -j 2>/dev/null | jq -r '.[].hostname' 2>/dev/null)
+    [ -n "$nodes" ] || { echo "cannot list cluster nodes" >&2 ; return 1 ; }
+    for h in "$@" ; do
+        echo "$nodes" | grep -qxF -- "$h" || bad="$bad $h"
+    done
+    [ -z "$bad" ] && return 0
+    echo "unknown node(s):$bad" >&2
+    echo "cluster nodes: $(echo $nodes)" >&2
+    return 1
+}
+
 power_roll_active()
 {
     # A node mid-roll-recovery hasn't mounted cephfs yet, so the shared job.json
@@ -660,7 +742,7 @@ power_roll_start()
     esac
 
     # For an upgrade the package must resolve before anything is claimed.
-    local _version=""
+    local _version="" _scope="${*:-all}"
     if [ "$kind" = upgrade ] ; then
         _version=$(_power_roll_resolve_pkg "$1") || return 1
         set --                                   # targets are all nodes for an upgrade
@@ -731,6 +813,8 @@ power_roll_start()
             > $ROLLING_JOB.tmp && mv $ROLLING_JOB.tmp $ROLLING_JOB
     ) 200>"$ROLLING_DIR/.lock"
     [ $? -eq 0 ] || return 1
+    # started = job claimed, before staging or the first drain
+    /usr/sbin/hex_log_event -e CLU00001I "${ROLL_EVENT_ATTRS:-interface=system,host=$HOSTNAME},category=cluster,sub=rolling_$(_power_roll_cli_verb $kind),action=start,scope=$_scope"
 
     if [ "$kind" = upgrade ] ; then
         if ! _power_roll_stage_all "$_version" ; then
@@ -795,7 +879,16 @@ power_roll_advance()
     local booted=${1:-$HOSTNAME}
 
     [ -e "$ROLLING_JOB" ] || return 0
-    [ "$(jq -r .state $ROLLING_JOB 2>/dev/null)" = "running" ] || return 0
+    local _state=$(jq -r .state $ROLLING_JOB 2>/dev/null)
+    # rebooted by a kick that raced an abort: settle this node, job stays aborted
+    if [ "$_state" = aborted ] && [ "x$booted" = "x$HOSTNAME" ] && [ -e $ROLLING_RECOVER_MARKER ] ; then
+        _power_roll_node_settle "$booted" "$(_power_roll_master)"
+        _power_roll_set_node_num "$booted" finished $(date +%s)
+        _power_roll_set_node_status "$booted" done
+        rm -f $ROLLING_RECOVER_MARKER "${ROLLING_DIR:-/tmp}/.drained.${booted}"
+        return 0
+    fi
+    [ "$_state" = "running" ] || return 0
 
     # a control node booting mid-roll re-arms its own timer
     is_control_node && Quiet -n systemctl start hex-roll-watchdog.timer
@@ -806,20 +899,9 @@ power_roll_advance()
     if [ -n "$inflight" ] && [ "x$inflight" = "x$booted" ] ; then
         # own o-hm0 back before the roll moves on (restart roll only)
         [ "x$booted" = "x$HOSTNAME" ] && Quiet -n $HEX_SDK os_octavia_roll_node_up
-        # Restore the VMs this node suspended/stopped for its reboot (downtime
-        # acknowledged at confirm time). Dispatch to the master (holds creds).
-        local arun="$CLUSTER_ACTIVE_RUNNING" vm disp
-        if [ -s "$arun" ] ; then
-            while read -r vm disp _ ; do
-                [ -z "$vm" ] && continue
-                Quiet -n remote_run $master "$HEX_SDK power_vm_restore $vm $disp"
-            done < "$arun"
-            : > "$arun"
-        fi
-        case "$(jq -r --arg h "$booted" '.nodes[]|select(.hostname==$h)|.role' $ROLLING_JOB)" in
-            *compute*|control-converged|edge-core)
-                Quiet -n remote_run $master "$HEX_SDK power_node_resume $booted" ;;
-        esac
+        # Restore the VMs this node suspended (downtime acknowledged at confirm
+        # time), re-enable compute, release masakari maintenance.
+        _power_roll_node_settle "$booted" "$master"
         _power_roll_set_node_num "$booted" finished $(date +%s)
         _power_roll_set_node_status "$booted" done
         # reconcile as each node lands (a drain that lost its orchestrator never
@@ -854,11 +936,20 @@ power_roll_advance()
         # before the last one found the versions mixed at its upgrade boot and deferred;
         # nothing commits mysql on it again before its next boot. See upgrade_mysql in
         # config_mysql.cpp; a node with nothing pending returns at once.
-        Quiet -n cmd -c $HEX_CFG upgrade_mysql
+        # Only nodes holding the pending-upgrade dir pay for a hex_config start
+        # (~30s). Not via Quiet: its eval would split the || out of the remote command.
+        cmd -c "[ ! -e $ROLLING_MYSQL_UPGRADE_DIR ] || $HEX_CFG upgrade_mysql" >/dev/null 2>&1
         # Same for the broker tick: an upgraded node kept the old 60 s so it agreed with
         # the brokers not yet rolled; move them all to 15 s together. See
         # rabbitmq_ticktime in config_rabbitmq.cpp.
-        Quiet -n cmd -c $HEX_CFG rabbitmq_ticktime
+        # Same: only nodes still holding the 60 s compat marker.
+        cmd -c "[ ! -e $ROLLING_TICKTIME_MARK ] || $HEX_CFG rabbitmq_ticktime" >/dev/null 2>&1
+        # Step k3s up to this image's release. Each server's migration boot moved it one minor
+        # only, as far as k3s goes while other servers still run the old one; the rest waits
+        # for every server to be on the new firmware. Before the job is marked done, for the
+        # same reason as ovn_central_switch. See k3s_upgrade_ladder (sdk_k3s.sh); it logs its
+        # own outcome on the VIP holder.
+        ( remote_run $master "$HEX_SDK k3s_upgrade_ladder" ) >/dev/null 2>&1
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
@@ -926,10 +1017,12 @@ power_roll_status()
     _firstpos() { local x ; for x in "$@" ; do [ "${x:-0}" -gt 0 ] 2>/dev/null && { echo "$x" ; return ; } ; done ; echo 0 ; }
     echo ""
     printf " %-20s %-10s %-10s %-13s %-11s %-9s\n" "node" "draining" "rebooting" "bootstrapping" "finalizing" "total"
-    jq -r '.nodes[]|"\(.hostname)\t\(.started//0)\t\(.finished//0)\t\(.phase_ts.draining//0)\t\(.phase_ts.rebooting//0)\t\(.phase_ts.bootstrapping//0)\t\(.phase_ts.finalizing//0)\t\(.phase_ts.done//0)"' $ROLLING_JOB | \
-        while IFS=$'\t' read -r h st fin dr rb bs fn dn ; do
+    jq -r '.nodes[]|"\(.hostname)\t\(.started//0)\t\(.finished//0)\t\(.phase_ts.draining//0)\t\(.phase_ts.rebooting//0)\t\(.phase_ts.bootstrapping//0)\t\(.phase_ts.finalizing//0)\t\(.phase_ts.done//0)\t\(.phase_ts.pending//0)"' $ROLLING_JOB | \
+        while IFS=$'\t' read -r h st fin dr rb bs fn dn pd ; do
             d_ts=$dr ; [ "$d_ts" = 0 ] && d_ts=$st
             e_ts=$dn ; [ "$e_ts" = 0 ] && e_ts=$fin
+            # reset to pending after its phases began (abort): the clock stops there
+            [ "$e_ts" = 0 ] && [ "${pd:-0}" -gt 0 ] && [ "${d_ts:-0}" -gt 0 ] && [ "$pd" -ge "$d_ts" ] && e_ts=$pd
             printf " %-20s %-10s %-10s %-13s %-11s %-9s\n" "$h" \
                 "$(_rollphase "$d_ts" "$(_firstpos "$rb" "$bs" "$fn" "$e_ts")")" \
                 "$(_rollphase "$rb" "$(_firstpos "$bs" "$fn" "$e_ts")")" \
@@ -1063,12 +1156,25 @@ power_roll_decision()
             power_roll_advance
             ;;
         abort)
-            # Re-enable the in-flight node's nova-compute (the drain may have left it
-            # disabled) so scheduling resumes.
-            local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB)
-            [ -n "$inflight" ] && Quiet -n $OPENSTACK compute service set --enable "$inflight" nova-compute
-            _power_roll_set_str inflight ""
+            local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB) st="" owner=""
+            if [ -n "$inflight" ] ; then
+                st=$(jq -r --arg h "$inflight" '.nodes[]|select(.hostname==$h)|.status // ""' $ROLLING_JOB)
+                # a live drain's kick or a rebooting node's boot path undoes the node itself
+                case "$st" in
+                    draining) _power_roll_drain_live "$inflight" && owner="its drain" ;;
+                    rebooting|finalizing) owner="its boot path" ;;
+                esac
+            fi
+            # state first, so an in-flight drain stops queuing migrations
             _power_roll_set_str state aborted
+            _power_roll_set_str inflight ""
+            if [ -n "$inflight" ] && [ -n "$owner" ] ; then
+                echo "$inflight is $st; $owner restores its compute/maintenance state"
+            elif [ -n "$inflight" ] ; then
+                _power_roll_node_settle "$inflight" "$(_power_roll_master)"
+                rm -f "$ROLLING_DIR/.drained.$inflight"
+                _power_roll_set_node_status "$inflight" pending
+            fi
             # release the guards the roll took (auto-repair standdown marker,
             # mon_osd_down_out_interval) -- neither should outlive the roll
             cluster_rolling_marker_clear
@@ -1411,6 +1517,7 @@ power_drain_host()
     # scope itself to them instead of every ERROR VM in the cluster.
     [ ${#server_list_array[@]} -gt 0 ] && printf '%s\n' "${server_list_array[@]}" > "${ROLLING_DIR:-/tmp}/.drained.${from_host}"
     local _t0=$(date +%s) _nmig=$(( ${#server_list_array[@]} - ${#pending[@]} )) _migrated=0
+    _POWER_DRAIN_SKIPPED=0   # VMs left behind by an abort; read by power_node_evacuate
     log_info "rolling_$_kind drain: starting on $from_host (${#server_list_array[@]} VMs: ${#pending[@]} migratable, $_nmig suspend+restore, maxconc=$maxconc)"
     /usr/sbin/hex_log_event -e CLU00007I "interface=system,host=$from_host,category=cluster,sub=rolling_$_kind,action=drain_start,total=${#server_list_array[@]},migratable=${#pending[@]},nonmigratable=$_nmig"
 
@@ -1419,6 +1526,12 @@ power_drain_host()
     # never stops a migration itself.
     local -A started=()
     while [ ${#pending[@]} -gt 0 ] || [ ${#started[@]} -gt 0 ] ; do
+        # aborted: queue nothing new, wait out what nova already runs
+        if [ ${#pending[@]} -gt 0 ] && _power_roll_aborted ; then
+            log_info "rolling_$_kind drain: roll aborted; not migrating ${#pending[@]} more VM(s) off $from_host"
+            _POWER_DRAIN_SKIPPED=${#pending[@]}
+            pending=()
+        fi
         while [ ${#started[@]} -lt "$maxconc" ] && [ ${#pending[@]} -gt 0 ] ; do
             sid=${pending[0]} ; pending=("${pending[@]:1}")
             # Capture task_state (fast DB read, no API load) so a rejection's cause is
@@ -1457,7 +1570,8 @@ power_drain_host()
                 /usr/sbin/hex_log_event -e CLU00006W "interface=system,host=$from_host,category=cluster,sub=rolling_restart,action=migrate_rejected,vm=$sid,phase=request,task_state=${_tsb:-None},inflight=${#started[@]},reason=${_merr//[,$'\n']/ }"
             fi
         done
-        sleep 5
+        # DB-only poll: a finer interval refills a freed migration slot sooner
+        sleep ${ROLLING_DRAIN_POLL:-2}
         for sid in "${!started[@]}" ; do
             host=$($MYSQL -u root -N -D nova -e "SELECT host FROM instances WHERE uuid='$sid'" 2>/dev/null)
             st=$($MYSQL -u root -N -D nova -e "SELECT status FROM migrations WHERE instance_uuid='$sid' ORDER BY id DESC LIMIT 1" 2>/dev/null)
@@ -1485,6 +1599,11 @@ power_drain_host()
         return 1
     fi
     rm -f "${ROLLING_DIR:-/tmp}/.stuck.${from_host}"
+    if [ "$_POWER_DRAIN_SKIPPED" -gt 0 ] ; then
+        log_info "rolling_restart drain: $from_host drain aborted after $(( $(date +%s) - _t0 ))s (migrated=$_migrated, skipped=$_POWER_DRAIN_SKIPPED, suspended=$_nmig)"
+        /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_restart,action=drain_done,result=aborted,migrated=$_migrated,skipped=$_POWER_DRAIN_SKIPPED,suspended=$_nmig,elapsed=$(( $(date +%s) - _t0 ))"
+        return 0
+    fi
     log_info "rolling_restart drain: $from_host drained in $(( $(date +%s) - _t0 ))s (migrated=$_migrated, suspended=$_nmig)"
     /usr/sbin/hex_log_event -e CLU00008I "interface=system,host=$from_host,category=cluster,sub=rolling_restart,action=drain_done,result=ok,migrated=$_migrated,suspended=$_nmig,elapsed=$(( $(date +%s) - _t0 ))"
     return 0
@@ -1495,6 +1614,9 @@ power_node_evacuate()
     # Disable scheduling on a compute host and live-migrate all of its
     # workloads off before a planned reboot. Run on a control node.
     local host=$1
+
+    # planned reboot: no masakari host-failure recovery for it
+    power_node_maint_hold $host
 
     # No other compute host to receive VMs (e.g. single-node cluster): we
     # cannot live-migrate. Record the host's running VMs to active_running so
@@ -1514,8 +1636,9 @@ power_node_evacuate()
     # live-migrated, so counting them would make the denominator unreachable) plus
     # the starting on-host total (lets the poll separate migrated from paused), and
     # poll drain progress into the job state.
-    local total=$($OPENSTACK server list --host "$host" --all-projects --status ACTIVE -f value -c ID 2>/dev/null | grep -c .)
-    local allstart=$($OPENSTACK server list --host "$host" --all-projects -f value -c ID 2>/dev/null | grep -c .)
+    local _sl=$($OPENSTACK server list --host "$host" --all-projects -f value -c ID -c Status 2>/dev/null)
+    local total=$(printf '%s\n' "$_sl" | awk '$2=="ACTIVE"' | grep -c .)
+    local allstart=$(printf '%s\n' "$_sl" | grep -c .)
     _power_roll_set_node_num "$host" vms_total $total
     _power_roll_set_node_num "$host" vms_done 0
     _power_roll_set_node_num "$host" vms_paused 0
@@ -1524,16 +1647,20 @@ power_node_evacuate()
     _power_roll_drain_poll "$host" "$total" "$sentinel" "$allstart" &
     local poll_pid=$!
 
+    _POWER_DRAIN_SKIPPED=0
     power_drain_host $host
     local rc=$?
     rm -f $sentinel ; kill $poll_pid 2>/dev/null ; wait $poll_pid 2>/dev/null
 
     if [ $rc -ne 0 ] ; then
+        power_node_maint_release $host
         $OPENSTACK compute service set --enable $host nova-compute
         return 1
     fi
 
-    _power_roll_set_node_num "$host" vms_done $total
+    # an abort leaves VMs behind: report only what was handled
+    local _vd=$(( total - ${_POWER_DRAIN_SKIPPED:-0} )) ; [ $_vd -lt 0 ] && _vd=0
+    _power_roll_set_node_num "$host" vms_done $_vd
     return 0
 }
 
@@ -1543,12 +1670,40 @@ power_node_resume()
     # after a planned reboot. Run on a control node.
     local host=$1
 
-    for u in $($OPENSTACK segment list -f value -c uuid) ; do
-        for n in $($OPENSTACK segment host list $u -f value -c name) ; do
-            if [ "x$n" = "x$host" ] ; then
-                $OPENSTACK segment host update $u $host --on_maintenance False
-            fi
-        done
-    done
+    power_node_maint_release $host
     $OPENSTACK compute service set --enable $host nova-compute
+}
+
+# masakari segments <host> is in, as "<segment_uuid> <on_maintenance>" (one DB read).
+_power_masakari_host_segments()
+{
+    $MYSQL -u root -N -D masakari -e \
+        "SELECT failover_segment_id, on_maintenance FROM hosts WHERE name='$1' AND deleted=0" 2>/dev/null
+}
+
+# Put <host> on_maintenance in every segment it is in. Segments already held
+# (operator intent) are recorded so the release leaves them. No-op without masakari hosts.
+power_node_maint_hold()
+{
+    local host=$1 rec=$ROLLING_DIR/.maint.$1 rows u
+    rows=$(_power_masakari_host_segments $host)
+    [ -n "$rows" ] || return 0
+    mkdir -p $ROLLING_DIR
+    printf '%s\n' "$rows" | awk '$2 == 1 { print $1 }' > "$rec"
+    for u in $(printf '%s\n' "$rows" | awk '$2 != 1 { print $1 }') ; do
+        $OPENSTACK segment host update $u $host --on_maintenance True >/dev/null || \
+            log_warning "rolling: could not set $host on_maintenance in segment $u"
+    done
+}
+
+# Clear <host>'s on_maintenance except where the operator held it before the roll.
+power_node_maint_release()
+{
+    local host=$1 rec=$ROLLING_DIR/.maint.$1 u
+    for u in $(_power_masakari_host_segments $host | awk '$2 == 1 { print $1 }') ; do
+        [ -s "$rec" ] && grep -qx "$u" "$rec" && continue
+        $OPENSTACK segment host update $u $host --on_maintenance False >/dev/null || \
+            log_warning "rolling: could not clear $host on_maintenance in segment $u"
+    done
+    rm -f "$rec"
 }

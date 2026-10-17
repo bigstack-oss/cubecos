@@ -430,6 +430,7 @@ UpdateSharedId(std::string sharedId, std::string ovnnb, std::string ovnsb)
         cfg["keystone_authtoken"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["keystone_authtoken"]["http_connect_timeout"] = "15";
         cfg["nova"]["auth_url"] = "http://" + sharedId + ":5000";
+        cfg["placement"]["auth_url"] = "http://" + sharedId + ":5000";
         cfg["designate"]["url"] = "http://" + sharedId + ":9001/v2";
         cfg["designate"]["www_authenticate_uri"] = "http://" + sharedId + ":5000";
         cfg["designate"]["auth_url"] = "http://" + sharedId + ":5000";
@@ -496,6 +497,19 @@ UpdateCfg(std::string domain, std::string region, std::string password,
         cfg["nova"]["project_name"] = "service";
         cfg["nova"]["username"] = "nova";
         cfg["nova"]["password"] = novapass.c_str();
+
+        // neutron's own calls to placement: the segments plugin's nova notifier looks up a
+        // segment's aggregate on every network delete, and QoS minimum-bandwidth reporting
+        // writes inventories. Without credentials here keystoneauth has no auth plugin, and
+        // each network delete logs a traceback. neutron's service user holds the service role
+        // placement's policy accepts.
+        cfg["placement"]["auth_type"] = "password";
+        cfg["placement"]["project_domain_name"] = domain.c_str();
+        cfg["placement"]["user_domain_name"] = domain.c_str();
+        cfg["placement"]["region_name"] = region.c_str();
+        cfg["placement"]["project_name"] = "service";
+        cfg["placement"]["username"] = "neutron";
+        cfg["placement"]["password"] = password.c_str();
 
         cfg["designate"]["auth_type"] = "password";
         cfg["designate"]["project_domain_id"] = domain;

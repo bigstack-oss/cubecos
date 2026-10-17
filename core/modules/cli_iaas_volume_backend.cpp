@@ -758,7 +758,8 @@ CLI_MODE_COMMAND(
     "get_storage <name>");
 
 /**
- * Set a storage using a storage JSON.
+ * Set a storage using a storage JSON. cube-cos-api applies it on every
+ * control; this waits until its backend is up.
  *
  * @param output
  * @param storage
@@ -772,7 +773,7 @@ setStorage(std::string& output, const std::string& storage)
         true,
         true,
         {},
-        HEX_SDK " cinder_put_storage '" + storage + "'");
+        HEX_SDK " api_storage_put '" + storage + "'");
     if (r.exitCode != 0) {
         output = r.stderrOutput;
         return false;
@@ -899,7 +900,8 @@ CLI_MODE_COMMAND(
     "set_storage <local | console> <local_storage_file_name | storage_content>");
 
 /**
- * Delete a storage by name.
+ * Delete a storage by name. cube-cos-api deletes it on every control; this
+ * waits until no control lists it.
  *
  * @param output
  * @param name
@@ -919,7 +921,7 @@ deleteStorage(std::string& output, const std::string& name)
         true,
         true,
         {},
-        HEX_SDK " cinder_delete_storage '" + payload.dump() + "'");
+        HEX_SDK " api_storage_delete '" + payload.dump() + "'");
     if (r.exitCode != 0) {
         output = r.stderrOutput;
         return false;

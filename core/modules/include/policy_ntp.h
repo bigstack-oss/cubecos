@@ -6,10 +6,12 @@
 #include <hex/yml_util.h>
 #include <hex/cli_util.h>
 
+// defaults match NtpPolicy::clear() and the config_ntp tunings,
+// so a key missing from the policy never leaves a bool uninitialised
 struct NtpConfig
 {
-    bool enabled;
-    bool debug;
+    bool enabled = true;
+    bool debug = false;
     std::string server;
 };
 

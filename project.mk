@@ -68,15 +68,19 @@ RUBYGEMS_DL_HOST ?= https://rubygems.org
 # Maven Central, for the jars core/kafka/kafka.mk swaps into Kafka's libs/. Unlike the hosts
 # above this one carries the repository path too, since that is where every artifact lives.
 MAVEN_DL_HOST    ?= https://repo1.maven.org/maven2
+# hex.pm, for the cowboy and cowlib core/rabbitmq/rabbitmq.mk compiles into RabbitMQ's plugins.
+HEX_DL_HOST      ?= https://repo.hex.pm
 
 # PyPI index. Empty by default, so pip resolves against pypi.org exactly as before.
 #
 # Exported as an environment variable rather than written as a pip.conf into $(ROOTDIR),
 # deliberately: most pip installs in this tree run as `chroot $(ROOTDIR) ... pip install`, chroot
-# inherits the environment, and one export therefore reaches every one of them -- the ~40 openstack
-# service installs, the venv bootstraps, and the ceph binding build -- while leaving nothing inside
-# the image that would have to be scrubbed before packing. A pip.conf under $(ROOTDIR)/etc would
-# ship; cube-post.mk's guard would catch it, but not creating it is better than catching it.
+# inherits the environment, and one export therefore reaches every one of them -- the venv
+# bootstraps and the ceph binding build -- while leaving nothing inside the image that would have
+# to be scrubbed before packing. A pip.conf under $(ROOTDIR)/etc would ship; cube-post.mk's guard
+# would catch it, but not creating it is better than catching it. The ~40 openstack service
+# installs run through uv, which reads no PIP_* variable; OPENSTACK_PIP_INSTALL below hands these
+# values over under uv's names.
 #
 # It also reaches pip's PEP-517 build isolation, which resolves the build backend from the live
 # index and ignores `-c` (see the NOTE in core/heavyfs/Makefile) -- the one place a constraint file
@@ -109,9 +113,29 @@ OPENSTACK_HOME_DIR := /opt/openstack-$(OPENSTACK_RELEASE)
 OPS_GITHUB_BRANCH_01 := stable/2025.1
 OPS_GITHUB_BRANCH_02 := unmaintained/2025.1
 PYTHON_VER := 3.12
-PYTHON_PATCH_VER := 3.12.14
+PYTHON_PATCH_VER := 3.12.15
 OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
 OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
+
+# The openstack venv's service installs go through uv's pip interface rather than pip:
+# same -c constraint, same packages. On bldsrv-200-13 (2026-10-16), nova + neutron +
+# neutron-vpnaas-dashboard into a fresh venv took 258s with pip and 27s with uv, and
+# `pip freeze` came out identical. uv runs inside the chroot from a venv of its own that
+# core/heavyfs creates right after the openstack venv and removes once every component
+# has installed, so neither uv nor its cache ships. --compile-bytecode because pip writes
+# the .pyc files at install time and uv by default does not. uv does not read PIP_*, so
+# the index is handed over as UV_DEFAULT_INDEX/UV_INSECURE_HOST, and the CI's
+# PIP_DEFAULT_TIMEOUT as UV_HTTP_TIMEOUT: uv's own read timeout is about 30s, and the
+# mirror's first fetch of a large index page can take 90s. Against an index that answers
+# after 45s, uv 0.13.1 gave up after 3 retries with PIP_DEFAULT_TIMEOUT=120 set, and
+# waited it out with UV_HTTP_TIMEOUT=120.
+UV_VER := 0.13.1
+OPENSTACK_UV_HOME := /var/tmp/openstack-uv
+OPENSTACK_PIP_INSTALL = env UV_CACHE_DIR=$(OPENSTACK_UV_HOME)/cache UV_LINK_MODE=copy \
+	$(if $(PIP_INDEX_URL),UV_DEFAULT_INDEX=$(PIP_INDEX_URL)) \
+	$(if $(PIP_TRUSTED_HOST),UV_INSECURE_HOST=$(PIP_TRUSTED_HOST)) \
+	$(if $(PIP_DEFAULT_TIMEOUT),UV_HTTP_TIMEOUT=$(PIP_DEFAULT_TIMEOUT)) \
+	$(OPENSTACK_UV_HOME)/venv/bin/uv pip install --python $(OPENSTACK_HOME_DIR)/bin/python --compile-bytecode
 
 # The system python 3.9 pip constraint, for the ROOTFS_PIP installs in core/heavyfs
 # and friends. Deliberately NOT os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt any

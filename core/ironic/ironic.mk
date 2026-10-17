@@ -107,7 +107,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		$(OPENSTACK_PIP_INSTALL) -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		ironic==$(IRONIC_VER) \
 		ironic-inspector==$(IRONIC_INSP_VER) \
 		PyMySQL \
@@ -158,13 +158,13 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_PIP_INSTALL) \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-ironicclient
 	$(Q)# --no-build-isolation: ironic-ui pulls horizon, whose sdist-only XStatic
 	$(Q)# dependencies cannot be built against a current setuptools. See the note by
 	$(Q)# the venv bootstrap in core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_PIP_INSTALL) \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		ironic-ui==$(IRONIC_UI_VER)

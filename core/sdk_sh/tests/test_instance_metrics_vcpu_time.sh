@@ -29,6 +29,7 @@ date() { echo 1000 ; }
 MakeTemp() { mktemp -p "$T" ; }
 RemoveTempFiles() { :; }
 _instance_metrics_ship() { cp "$1" "$T/lp" ; }
+_instance_l3_collect() { :; }
 
 U1=11111111-1111-1111-1111-111111111111
 U2=22222222-2222-2222-2222-222222222222

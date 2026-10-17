@@ -195,3 +195,61 @@ class TestSetAllocationsDisk(unittest.TestCase):
         self.assertEqual(4, put["VCPU"])
         self.assertEqual(4096, put["MEMORY_MB"])
         self.assertEqual(20, put["DISK_GB"])
+
+
+class FakeLrFlavor(FakeFlavor):
+    def __init__(self, id, vcpus, memory_mb, **kwargs):
+        super(FakeLrFlavor, self).__init__(vcpus, memory_mb, **kwargs)
+        self.id = id
+        self.name = "f%d" % id
+        self.root_gb = 10
+        self.ephemeral_gb = 0
+
+
+class TestLrValidateCeiling(unittest.TestCase):
+    """compute API checks the recorded ceiling, as resize-plan does (#2101)."""
+
+    def setUp(self):
+        super(TestLrValidateCeiling, self).setUp()
+        from nova.compute import api as compute_api
+        from nova import exception
+        self.validate = compute_api.API._lr_validate
+        self.error = exception.LiveResizeError
+        for opt, val in (('live_resize_default_headroom', True),
+                         ('live_resize_headroom_factor', 4),
+                         ('live_resize_max_vcpus', 32),
+                         ('live_resize_max_memory_mb', 131072)):
+            CONF.set_override(opt, val, group='cube')
+            self.addCleanup(CONF.clear_override, opt, group='cube')
+
+    def _check(self, inst, old, new):
+        self.validate(None, None, inst, old, new, False)
+
+    def test_recorded_ceiling_refuses_what_the_estimate_allows(self):
+        # booted 1c1g (ceiling 4), live-resized to 2c2g: estimate is now 8
+        inst = FakeInstance()
+        clr.record_headroom(inst, 4, 4096)
+        old = FakeLrFlavor(2, 2, 2048)
+        with self.assertRaises(self.error):
+            self._check(inst, old, FakeLrFlavor(3, 5, 2048))
+
+    def test_recorded_ceiling_allows_what_the_estimate_refuses(self):
+        # booted with factor 4 (ceiling 4), factor since lowered to 2
+        CONF.set_override('live_resize_headroom_factor', 2, group='cube')
+        inst = FakeInstance()
+        clr.record_headroom(inst, 4, 4096)
+        self._check(inst, FakeLrFlavor(1, 1, 1024), FakeLrFlavor(2, 4, 4096))
+
+    def test_recorded_memory_ceiling_is_enforced(self):
+        inst = FakeInstance()
+        clr.record_headroom(inst, 4, 4096)
+        with self.assertRaises(self.error):
+            self._check(inst, FakeLrFlavor(1, 2, 2048),
+                        FakeLrFlavor(2, 2, 6144))
+
+    def test_unrecorded_instance_falls_back_to_the_estimate(self):
+        inst = FakeInstance()
+        old = FakeLrFlavor(1, 1, 1024)
+        self._check(inst, old, FakeLrFlavor(2, 4, 4096))
+        with self.assertRaises(self.error):
+            self._check(inst, old, FakeLrFlavor(3, 5, 4096))

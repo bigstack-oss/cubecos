@@ -11,6 +11,8 @@ CINDER_BUILTIN_MODEL_DIRECTORY="/usr/share/cube/cos/cinder/builtin_models"
 CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY="/etc/cinder/backends"
 CINDER_STORAGE_EXTRA_CONFIGS_OWNERSHIP_DIRECTORY="/etc/cube/cos/cinder/storage_extra_configs_ownership"
 CINDER_STORAGE_EXTRA_CONFIGS_DIRECTORY="/etc/cinder/external_storage_extra_configs"
+# $state_path/mnt in cinder.conf: where the NFS driver mounts each share
+CINDER_NFS_MOUNT_POINT_BASE="/store/cinder/mnt"
 
 ERROR_CINDER_WRITE_MODEL_FILE_FAILED="1"
 ERROR_CINDER_WRITE_MULTIPATH_CONFIG_FAILED="2"
@@ -105,6 +107,91 @@ cinder_wait_for_services_up()
         i=$(expr $i + 1)
     done
     [ $i -lt $timeout ]
+}
+
+# Restart the cinder-volume pacemaker singleton once, from any control, after
+# every control applied a backend change. 0 when not HA.
+cinder_restart_volume()
+{
+    if ! pcs resource config cinder-volume >/dev/null 2>&1 ; then
+        return 0
+    fi
+    pcs resource restart cinder-volume >/dev/null
+}
+
+# Drop the cinder-volume service record of a removed backend $1
+# (<host>@<backend>); left behind it stays "down" and fails BlockStor
+cinder_remove_volume_service()
+{
+    local host="${1:-""}"
+    [ -n "$host" ] || return 1
+    if ! $OPENSTACK volume service list --service cinder-volume -f value -c Host 2>/dev/null | grep -qxF -- "$host" ; then
+        return 0
+    fi
+    _hex_function_ret $OPENSTACK volume service set --disable "$host" "cinder-volume"
+    _hex_function_ret /usr/bin/cinder-manage service remove "cinder-volume" "$host"
+}
+
+# Wait up to $2 seconds of wall clock (default 60) until every cinder-volume
+# backend in $1 (comma-separated <host>@<backend>) is up and reports a pool,
+# i.e. its driver initialized. Prints the backends that are not; 0 if none.
+cinder_wait_for_backends_ready()
+{
+    local backends="${1:-""}"
+    local timeout="${2:-60}"
+    local deadline=$((SECONDS + timeout))
+    local pending="" backend="" services="" pools=""
+
+    while : ; do
+        services="$($OPENSTACK volume service list --service cinder-volume -f json 2>/dev/null)"
+        pools="$($OPENSTACK volume backend pool list -f value -c Name 2>/dev/null)"
+        pending=""
+        for backend in ${backends//,/ } ; do
+            if [ "$(echo "$services" | jq -r --arg h "$backend" \
+                    'any(.[]; .Host == $h and .State == "up")' 2>/dev/null)" == "true" ] \
+                && echo "$pools" | awk -v p="${backend}#" 'index($0, p) == 1 {f=1} END {exit !f}' ; then
+                continue
+            fi
+            pending+="${pending:+,}${backend}"
+        done
+        if [ -z "$pending" ] || [ $SECONDS -ge $deadline ] ; then
+            break
+        fi
+        sleep 2
+    done
+
+    echo -n "$pending"
+    [ -z "$pending" ]
+}
+
+# Wait up to $2 seconds of wall clock (default 60) until no backend in $1
+# (comma-separated <host>@<backend>) reports a pool, i.e. cinder-volume runs
+# without it. Prints the backends still pooled (all if pools can't be read).
+cinder_wait_for_backends_gone()
+{
+    local backends="${1:-""}"
+    local timeout="${2:-60}"
+    local deadline=$((SECONDS + timeout))
+    local pending="" backend="" pools=""
+
+    while : ; do
+        pending=""
+        if pools="$($OPENSTACK volume backend pool list -f value -c Name 2>/dev/null)" ; then
+            for backend in ${backends//,/ } ; do
+                echo "$pools" | awk -v p="${backend}#" 'index($0, p) == 1 {f=1} END {exit !f}' &&
+                    pending+="${pending:+,}${backend}"
+            done
+        else
+            pending="$backends"
+        fi
+        if [ -z "$pending" ] || [ $SECONDS -ge $deadline ] ; then
+            break
+        fi
+        sleep 3
+    done
+
+    echo -n "$pending"
+    [ -z "$pending" ]
 }
 
 cinder_get_model_file_name()
@@ -3013,6 +3100,90 @@ cinder_apply_storage_tier_deletion()
     return 0
 }
 
+# Print the mount directory name, under $CINDER_NFS_MOUNT_POINT_BASE, of every
+# share of the backend whose ext_storage_<name>.conf is given -- nothing for a
+# backend without nfs_shares_config. The name is the one cinder's NFS driver
+# mounts at (os-brick RemoteFsClient.get_hash_str): the md5 of the share
+# address, the first field of a non-blank, non-comment line of the shares file.
+cinder_get_storage_nfs_mount_hashes()
+{
+    local conf_file="${1:-""}"
+    local shares_file=""
+    local share=""
+    local rest=""
+
+    if [ ! -f "$conf_file" ] ; then
+        return 0
+    fi
+    shares_file="$(sed -n 's/^[[:space:]]*nfs_shares_config[[:space:]]*=[[:space:]]*//p' "$conf_file" | head -1 | sed 's/[[:space:]]*$//')"
+    if [ -z "$shares_file" ] || [ ! -f "$shares_file" ] ; then
+        return 0
+    fi
+
+    while read -r share rest ; do
+        if [ -z "$share" ] || [[ "$share" == "#"* ]] ; then
+            continue
+        fi
+        printf "%s" "$share" | md5sum | cut -d' ' -f1
+    done < "$shares_file"
+}
+
+# Read from /proc/mounts, not by mountpoint(1): that stats the directory, and a
+# stat of a hard mount whose server is gone blocks.
+cinder_is_nfs_mounted()
+{
+    awk -v d="${1:-""}" '$2 == d {f=1} END {exit !f}' /proc/mounts
+}
+
+# Unmount the NFS shares a deleted backend left under
+# $CINDER_NFS_MOUNT_POINT_BASE on this node (#2009) -- cinder's NFS driver
+# mounts a share when its backend starts and never unmounts it, so the hard
+# mount outlived the backend and hung df/node-exporter once its server went.
+# Arguments are mount directory names (md5 hashes), nothing else is accepted.
+# A mount whose server still answers is unmounted plainly; if that fails
+# because something still uses it, it is LEFT mounted -- never detached from
+# under a live user. Only a mount that no longer answers statfs (stale file
+# handle, server gone) is detached lazily: nothing can use it anyway, and a
+# plain umount of it would block. Every call is bounded. Returns 1 if any
+# mount is left behind.
+cinder_unmount_nfs_mounts()
+{
+    local hash=""
+    local mount_dir=""
+    local ret=0
+
+    for hash in "$@" ; do
+        if ! [[ "$hash" =~ ^[0-9a-f]{32}$ ]] ; then
+            continue
+        fi
+        mount_dir="${CINDER_NFS_MOUNT_POINT_BASE}/${hash}"
+
+        if cinder_is_nfs_mounted "$mount_dir" ; then
+            if ! timeout -k 5 10 stat -f "$mount_dir" >/dev/null 2>&1 ; then
+                log_warning "${mount_dir} does not answer (stale or server gone), detaching it lazily"
+                # -c: no canonicalizing, which would stat the dead path
+                timeout -k 5 30 umount -l -c "$mount_dir"
+                if cinder_is_nfs_mounted "$mount_dir" ; then
+                    log_warning "${mount_dir} could not be detached, left mounted"
+                    ret=1
+                    continue
+                fi
+            elif ! timeout -k 5 60 umount "$mount_dir" ; then
+                log_warning "${mount_dir} is busy, left mounted"
+                ret=1
+                continue
+            fi
+        fi
+
+        # only once it is no longer mounted, and only if empty
+        if [ -d "$mount_dir" ] && ! cinder_is_nfs_mounted "$mount_dir" ; then
+            rmdir "$mount_dir" 2>/dev/null
+        fi
+    done
+
+    return "$ret"
+}
+
 cinder_delete_storage()
 {
     # input format: {
@@ -3057,6 +3228,32 @@ cinder_delete_storage()
 
     # delete the volume type
     _hex_function_ret $OPENSTACK volume type delete "$name"
+
+    # the NFS shares this backend mounted (#2009), read while its conf and
+    # shares file are still there; a share another backend still lists stays
+    local nfs_mount_hashes=""
+    local storage_conf=""
+    local other_hashes=""
+    local hash=""
+    for hash in $(cinder_get_storage_nfs_mount_hashes \
+        "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf" | sort -u) ; do
+        nfs_mount_hashes+="${hash} "
+    done
+    if [ -n "$nfs_mount_hashes" ] ; then
+        for storage_conf in "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}"/ext_storage_*.conf ; do
+            if [ "$storage_conf" == "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf" ] ; then
+                continue
+            fi
+            other_hashes+=" $(cinder_get_storage_nfs_mount_hashes "$storage_conf" | xargs) "
+        done
+        local kept_hashes=""
+        for hash in $nfs_mount_hashes ; do
+            if [[ " $other_hashes " != *" $hash "* ]] ; then
+                kept_hashes+="${hash} "
+            fi
+        done
+        nfs_mount_hashes="$kept_hashes"
+    fi
 
     # delete extra configs and the ownership file
     local storage_extra_configs_ownership="$(cinder_read_storage_extra_configs_ownership "$name")"
@@ -3103,6 +3300,35 @@ cinder_delete_storage()
     if is_control_node ; then
         _hex_function_ret $OPENSTACK volume service set --disable "$name" "cinder-volume"
         _hex_function_ret /usr/bin/cinder-manage service remove "cinder-volume" "$name"
+    fi
+
+    # The backend is out of cinder now: unmount its shares on every control
+    # node, each bounded, and an unreachable one skipped rather than waited on.
+    # Best effort -- the backend is already deleted, so a mount left behind is
+    # logged, not reported as a failed delete.
+    if [ -n "$nfs_mount_hashes" ] ; then
+        local node=""
+        local nodes=("${CUBE_NODE_CONTROL_HOSTNAMES[@]}")
+        if [ "${#nodes[@]}" -eq 0 ] ; then
+            nodes=("$HOSTNAME")
+        fi
+        for node in "${nodes[@]}" ; do
+            if [ "$node" == "$HOSTNAME" ] ; then
+                if ! cinder_unmount_nfs_mounts $nfs_mount_hashes >/dev/null 2>&1 ; then
+                    log_warning "${node}: NFS unmount for storage ${name} incomplete: ${nfs_mount_hashes}"
+                fi
+            elif is_sshable "$node" ; then
+                timeout -k 5 120 ssh -o ConnectTimeout=5 -o BatchMode=yes -o LogLevel=quiet \
+                    "root@${node}" "$HEX_SDK cinder_unmount_nfs_mounts $nfs_mount_hashes" \
+                    </dev/null >/dev/null 2>&1
+                local unmount_ret="$?"
+                if [ "$unmount_ret" != "0" ] ; then
+                    log_warning "${node}: NFS unmount for storage ${name} incomplete (rc=${unmount_ret}): ${nfs_mount_hashes}"
+                fi
+            else
+                log_warning "${node} not sshable, NFS mounts of storage ${name} not unmounted there: ${nfs_mount_hashes}"
+            fi
+        done
     fi
 
     jq -c -n \
@@ -3439,6 +3665,7 @@ readonly ERROR_CINDER_MOVE_DOMAIN_MISSING="the instance has no libvirt domain on
 readonly ERROR_CINDER_MOVE_DOMAIN_NOT_LIVE="the instance's domain is not running or paused"
 readonly ERROR_CINDER_MOVE_DISK_NOT_IN_DOMAIN="the attached disk is not present in the instance's domain"
 readonly ERROR_CINDER_MOVE_DISPATCH_FAILED="retype command failed"
+readonly ERROR_CINDER_MOVE_BACKEND_DOWN="the destination tier's cinder-volume service is not up"
 
 # record a blocker; all are reported, not just the first
 _pf_block() { _pf_codes+=("$1"); _pf_reasons+=("$2"); }
@@ -3472,6 +3699,15 @@ _pf_volume()      { $OPENSTACK volume show "$1" -f json 2>/dev/null; }
 _pf_snapshots()   { $OPENSTACK volume snapshot list --volume "$1" -f value -c ID 2>/dev/null; }
 _pf_type_exists() { $OPENSTACK volume type list -f value -c Name 2>/dev/null | grep -qx "$1"; }
 _pf_vm_state()    { $OPENSTACK server show "$1" -f value -c status 2>/dev/null; }
+
+# a cinder-volume service of backend section $1 is enabled and up
+_pf_backend_up()
+{
+    [ "$($OPENSTACK volume service list --service cinder-volume -f json 2>/dev/null \
+        | jq -r --arg s "$1" \
+            'any(.[]; (.Host | endswith("@" + $s)) and .Status == "enabled" and .State == "up")' \
+            2>/dev/null)" == "true" ]
+}
 
 # cinder.conf section of volume type $1, from its volume_backend_name
 _pf_type_backend_section()
@@ -3659,6 +3895,10 @@ cinder_move_preflight()
     elif [ "$src_fp" == "$dst_fp" ] ; then
         _pf_warn W_SAME_CLUSTER_SAME_POOL "$WARN_CINDER_MOVE_SAME_CLUSTER_SAME_POOL"
     fi
+    # the scheduler would fail the retype later with NoValidBackend
+    if [ -n "$dst_sec" ] && ! _pf_backend_up "$dst_sec" ; then
+        _pf_block E_BACKEND_DOWN "$ERROR_CINDER_MOVE_BACKEND_DOWN"
+    fi
 
     # check the live libvirt domain; skip if the probe cannot run
     if [ -n "$_pf_attached" ] ; then
@@ -3695,6 +3935,42 @@ cinder_volume_image_name()
 {
     local nid=$(_civ_name_id "$1")
     case "$nid" in ""|None|null) echo "volume-$1" ;; *) echo "volume-$nid" ;; esac
+}
+
+# Wait up to $3 seconds (default 60) for the retype of volume $1 to type $2 to
+# settle. Prints {state: done|in_progress|failed|unknown, ...}; 1 if failed.
+cinder_move_outcome()
+{
+    local vol_id="$1" dst_type="$2" timeout="${3:-60}"
+    local deadline=$((SECONDS + timeout)) v="" status=""
+
+    while : ; do
+        v="$($OPENSTACK volume show "$vol_id" -f json 2>/dev/null)"
+        status="$(echo "$v" | jq -r '.status // ""' 2>/dev/null)"
+        if { [ -n "$status" ] && [ "$status" != "retyping" ] ; } || [ $SECONDS -ge $deadline ] ; then
+            break
+        fi
+        sleep 3
+    done
+
+    local type="$(echo "$v" | jq -r '.type // .volume_type // ""' 2>/dev/null)"
+    local host="$(echo "$v" | jq -r '."os-vol-host-attr:host" // ""' 2>/dev/null)"
+    local mig="$(echo "$v" | jq -r '.migration_status // ""' 2>/dev/null)"
+    local state=""
+    if [ -z "$status" ] ; then
+        state=unknown
+    elif [ "$status" == "retyping" ] ; then
+        state=in_progress
+    elif [ "$type" == "$dst_type" ] ; then
+        state=done
+    else
+        state=failed
+    fi
+
+    jq -c -n --arg state "$state" --arg status "$status" --arg type "$type" \
+        --arg host "$host" --arg mig "$mig" \
+        '{state: $state, status: $status, type: $type, host: $host, migration_status: $mig}'
+    [ "$state" != "failed" ]
 }
 
 # preflight, then retype volume $1 to type $2; prints result JSON

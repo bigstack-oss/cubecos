@@ -16,7 +16,7 @@ KEYCLOAK_PROV_REPO    := https://github.com/keycloak/terraform-provider-keycloak
 # locally built binary is copied over it, which is why the namespace has to match there,
 # and terraform-action.sh rewrites the old address in state that older releases wrote.
 #
-# 5.x still serves the SDKv2 plugin protocol 5, so terraform-core v0.14.3 below can drive it.
+# 5.x still serves the SDKv2 plugin protocol 5, so terraform-core below can drive it.
 #
 # Keep the required_providers pins in src/keycloak/**/main.tf in step with this.
 KEYCLOAK_PROV_VER     := v5.9.0
@@ -24,27 +24,42 @@ KEYCLOAK_PROV_SEMVER  := $(patsubst v%,%,$(KEYCLOAK_PROV_VER))
 KEYCLOAK_PROV_DIR     := terraform-provider-keycloak
 KEYCLOAK_UPSTREAM_BIN := $(KEYCLOAK_PROV_DIR)/terraform-provider-keycloak
 TF_CORE_REPO          := https://github.com/hashicorp/terraform.git
-TF_CORE_VER           := v0.14.3
+# 1.2.9 is as far as terraform-core can go here. The state lives in etcd through the etcdv3
+# backend (src/main.tf), and 1.3.0 removed that backend; 1.6.0 onwards is also under the BUSL
+# rather than the MPL 2.0, which this build does not take. Every 1.x up to 1.2.9 still drives
+# the providers' plugin protocol 5 and reads and writes state format 4 exactly as 0.14 did, so a
+# control node on the previous release and one on this release share the same state through a
+# rolling upgrade: neither refuses a snapshot the other wrote.
+TF_CORE_VER           := v1.2.9
 TF_CORE_DIR           := terraform-core
 TF_CORE_BIN           := $(TF_CORE_DIR)/terraform-core
+# Applied in order over the clone; see the recipe below
+TF_CORE_PATCHES       := $(SRCDIR)/tf-core-patches/etcd-client-v3.5.patch $(SRCDIR)/tf-core-patches/snapshotfs-chown.patch
+# The x/ modules at the October 2026 Go security release, as core/gorebuild, and grpc at the
+# latest release, which needs no http2.TrailerPrefix from x/net. Raised in all three binaries.
+TF_GO_GET             := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+	google.golang.org/grpc@v1.84.0
 
 $(RANCHER_PROV_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(RANCHER_PROV_VER) $(RANCHER_PROV_REPO) $(RANCHER_PROV_DIR),"  CLONE   rancher-provider")
 
-# x/crypto and grpc are lifted past v7.0.0's 0.33.0 and 1.70.0 to their latest releases. Not the
-# lowest fixed ones: x/crypto 0.52.0+ pulls x/net 0.54.0+, which drops http2.TrailerPrefix, and
-# grpc's server transport still uses it in 1.79.3 through 1.82.0.
+# x/crypto, x/net, x/text and grpc are lifted past v7.0.0's to TF_GO_GET. go-getter goes to the
+# 1.8 line: no 1.7 release carries all of its fixes. v7.0.0 replaces k8s.io/kubernetes with
+# v1.30.1; the replace stays on the 1.30 line, at its last release.
+RANCHER_PROV_K8S      := v1.30.14
 $(RANCHER_UPSTREAM_BIN): $(RANCHER_PROV_DIR)
-	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && go get github.com/hashicorp/go-getter@v1.7.4 && \
-		go get golang.org/x/crypto@v0.57.0 google.golang.org/grpc@v1.84.0 && go mod tidy, "  UPDATE  rancher-provider")
+	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && go get github.com/hashicorp/go-getter@v1.8.10 && \
+		go get $(TF_GO_GET) && \
+		go mod edit -replace k8s.io/kubernetes=k8s.io/kubernetes@$(RANCHER_PROV_K8S) && \
+		go mod tidy, "  UPDATE  rancher-provider")
 	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && make build, "  BUILD   rancher-provider")
 
 $(KEYCLOAK_PROV_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(KEYCLOAK_PROV_VER) $(KEYCLOAK_PROV_REPO) $(KEYCLOAK_PROV_DIR),"  CLONE   keycloak-provider")
 
-# 4.4.0 needed golang.org/x/crypto lifted to v0.31.0 for its CVEs. 5.9.0 already requires
-# v0.54.0, and a `go get` of the old floor would now be a downgrade, so it is gone.
+# x/net, x/text and grpc are lifted past v5.9.0's to TF_GO_GET (x/crypto is not linked).
 $(KEYCLOAK_UPSTREAM_BIN): $(KEYCLOAK_PROV_DIR)
+	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && go get $(TF_GO_GET) && go mod tidy, "  UPDATE  keycloak-provider")
 	$(call RUN_CMD_TIMED,cd $(KEYCLOAK_PROV_DIR) && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 		go build \
@@ -55,34 +70,23 @@ $(KEYCLOAK_UPSTREAM_BIN): $(KEYCLOAK_PROV_DIR)
 $(TF_CORE_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(TF_CORE_VER) $(TF_CORE_REPO) $(TF_CORE_DIR),"  CLONE   tf-core")
 
-$(TF_CORE_BIN): $(TF_CORE_DIR)
-	@# 1. DELETE TESTS
-	@#    Consul v1.5.0 removed 'testutil', so these old test files are now broken.
-	@#    We delete them because we only need the binary, not the tests.
-	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && \
-		find backend/remote-state/consul -name "*_test.go" -delete, \
-		"  CLEAN   tf-core")
-
-	@# 2. UPDATE DEPENDENCIES
-	@#    - Consul: v1.5.0 (Min version with api/go.mod "Border" to fix Ambiguous Import)
-	@#    - gRPC: v1.29.1 (Min version with 'naming' package required by Etcd)
-	@#    - API: v0.34.0 (Goldilocks version: Has 'ImpersonateCredentials' but works with gRPC 1.29)
-	@#    - Storage: v1.10.0 (MUST MATCH API v0.34.0)
-	@#    - x/crypto: v0.57.0, the latest. It pulls x/net v0.58.0, past the v0.54.0 that drops
-	@#      http2.TrailerPrefix, and the pinned gRPC v1.29.1 still uses it, so x/net is held at
-	@#      v0.53.0, which has it.
-	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && \
-		go get github.com/hashicorp/go-getter@v1.7.4 && \
-		go get golang.org/x/crypto@v0.57.0 && \
-		go mod edit -replace github.com/hashicorp/consul=github.com/hashicorp/consul@v1.5.0 && \
-		go mod edit -replace google.golang.org/grpc=google.golang.org/grpc@v1.29.1 && \
-		go mod edit -replace google.golang.org/api=google.golang.org/api@v0.34.0 && \
-		go mod edit -replace cloud.google.com/go/storage=cloud.google.com/go/storage@v1.10.0 && \
-		go mod edit -replace golang.org/x/net=golang.org/x/net@v0.53.0 && \
+# 1.2.9's etcd backends are written against etcd's pre-3.5 client, which needs grpc v1.27.1 --
+# 1.2.9 replaces grpc with it -- and that grpc holds x/net back. The first patch moves both
+# backends to the 3.5 client modules, the line of the etcd we run: only the import paths change,
+# the client API is the same. With it the grpc replace goes, and the modules can be raised. The
+# second patch gives the configuration snapshot's filesystem the Chown that afero's Fs interface
+# gained after 1.2.9's afero, since the raised modules bring a newer afero in.
+#
+# The patches are applied to a clean checkout each time, so the recipe can be rerun on a clone.
+# go-slug and golang-jwt/v4 are raised past 1.2.9's for their fixes as well.
+$(TF_CORE_BIN): $(TF_CORE_DIR) $(TF_CORE_PATCHES)
+	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && git checkout -q -- . && git apply $(TF_CORE_PATCHES) && \
+		go mod edit -dropreplace=google.golang.org/grpc@v1.36.1 && \
+		go get go.etcd.io/etcd/client/v3@v3.5.34 go.etcd.io/etcd/client/v2@v2.305.34 && \
+		go get $(TF_GO_GET) github.com/hashicorp/go-getter@v1.8.10 \
+			github.com/hashicorp/go-slug@v0.18.4 github.com/golang-jwt/jwt/v4@v4.5.2 && \
 		go mod tidy, \
 		"  UPDATE  tf-core")
-
-	@# 3. Build
 	$(call RUN_CMD_TIMED,cd $(TF_CORE_DIR) && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 		go build \

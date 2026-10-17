@@ -86,7 +86,13 @@ ceph_get_ids_by_dev()
     local dev=$1
     # ceph device ls doesn't always show correct osds associated with devices
     # local ids=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.location[].dev == \"${dev#/dev/}\").daemons[]" | sed "s/osd.//g" | sort -u)
-    local ids=$(for osdid in $(ceph_volume_raw_list_das | jq -r ".[] | select(.device | startswith(\"$dev\")).osd_id" | sort) ; do ceph osd ls | grep "^${osdid}$" ; done)
+    # raw-list only this device and its partitions; a full scan hangs on FC/nbd paths
+    local ids= p
+    if $HEX_SDK storage_is_das "$dev" || { $HEX_SDK storage_is_mpath "$dev" && $HEX_SDK storage_are_mpath_devices_allowed_for_ceph ; } ; then
+        ids=$(for p in "$dev" $(lsblk -pnlo NAME "$dev" 2>/dev/null | tail -n +2) ; do
+                  ceph-volume raw list "$p" --format json 2>/dev/null
+              done | jq -s -r "add // {} | .[] | .osd_id" | sort -u | while read -r osdid ; do $CEPH osd ls | grep "^${osdid}$" ; done)
+    fi
     ids+=$(ceph-volume lvm list --format json | jq -r ".[][] | select(.devices[] == \"$dev\").tags.\"ceph.osd_id\"")
 
     echo -n $ids
@@ -455,14 +461,23 @@ ceph_enter_maintenance()
 # reads all-up while stale, so first wait for a real down before trusting it.
 ceph_wait_all_osds_up()
 {
-    local timeout=${1:-1800} i=0 saw_down=0 stable=0 need d t u
-    while [ $i -lt $timeout ] ; do
+    # wall-clock bound; stop early once the up count has not grown for 5 min,
+    # so one OSD that never returns does not hold recovery for the whole bound
+    local deadline=$((SECONDS + ${1:-1800})) saw_down=0 stable=0 need d t u
+    local last_up=-1 last_change=$SECONDS
+    while [ $SECONDS -lt $deadline ] ; do
         d=$($CEPH status -f json 2>/dev/null)
         t=$(echo "$d" | jq -r .osdmap.num_osds 2>/dev/null)
         u=$(echo "$d" | jq -r .osdmap.num_up_osds 2>/dev/null)
         if [ -n "$t" ] && [ "$t" != "null" ] && [ -n "$u" ] ; then
             if [ "$u" -lt "$t" ] ; then
                 saw_down=1 ; stable=0            # a real down: map is now truthful
+                if [ "$u" != "$last_up" ] ; then
+                    last_up=$u ; last_change=$SECONDS
+                elif [ $((SECONDS - last_change)) -ge 300 ] ; then
+                    log_warning "ceph: $((t - u)) of $t OSDs still down after 5 min without progress, proceeding"
+                    return 0
+                fi
             else
                 stable=$((stable+1))
                 # after a real down, 20s stable is enough; else 60s to skip stale window
@@ -470,7 +485,7 @@ ceph_wait_all_osds_up()
                 [ $stable -ge $need ] && return 0
             fi
         fi
-        sleep 5 ; i=$((i+5))
+        sleep 5
     done
     return 0   # bounded: proceed even if not all up, never block boot
 }
@@ -831,6 +846,28 @@ ceph_pool_replicate_init()
     ceph_pool_replicate_set $size
 }
 
+# default size/min_size for pools created outside ceph_create_pool
+ceph_pool_default_size_set()
+{
+    local size=${1:-3}
+    # same rule as ceph_adjust_pool_size: min_size = size - 1, at least 1
+    local min=$((size - 1))
+    [ $min -lt 1 ] && min=1
+    Quiet $CEPH config set global osd_pool_default_size $size
+    Quiet $CEPH config set global osd_pool_default_min_size $min
+}
+
+# first bootstrap or an upgrade from ceph.conf-held defaults: seed the central
+# default from the OSD hosts (1 during master-first FTS); set_ready raises it
+ceph_pool_default_size_sync()
+{
+    $CEPH config dump -f json 2>/dev/null | jq -e '.[] | select(.name == "osd_pool_default_size")' >/dev/null && return 0
+    local hosts=$($CEPH osd tree -f json 2>/dev/null | jq '[ .nodes[] | select(.type=="host") ] | length' 2>/dev/null)
+    [ -n "$hosts" ] && [ "$hosts" -gt 0 ] || return 0
+    [ $hosts -gt 3 ] && hosts=3
+    ceph_pool_default_size_set $hosts
+}
+
 ceph_pool_replicate_set()
 {
     local size=${1:-3}
@@ -857,6 +894,7 @@ ceph_pool_replicate_set()
         esac
     done
     [ $size -gt 1 ] || $CEPH config set global mon_allow_pool_size_one false
+    ceph_pool_default_size_set $size
 }
 
 ceph_pool_autoscale_set()
@@ -1136,6 +1174,99 @@ ceph_bluestore_label_zero()
         [ $(( gib * 1024 * 1024 * 1024 )) -lt $size ] || continue
         dd if=/dev/zero of=$dev bs=1M count=1 seek=$(( gib * 1024 )) oflag=direct conv=notrunc 2>/dev/null
     done
+}
+
+# Rebuild a down OSD in place, keeping its id, disk and CRUSH position.
+# ceph_osd_rebuild <id> [force]   (force: allow losing size-1 pool data)
+ceph_osd_rebuild()
+{
+    local id=${1#osd.} force=$2
+    [[ $id =~ ^[0-9]+$ ]] || { log_error "bad osd id $1" ; return 1 ; }
+
+    local host=$($CEPH osd find $id 2>/dev/null | jq -r .crush_location.host)
+    [ "$host" = "$HOSTNAME" ] || { log_error "osd.$id is on ${host:-no host}, not $HOSTNAME" ; return 1 ; }
+    [ "$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == $id) | .up")" = 0 ] || { log_error "osd.$id is up; only a down OSD can be rebuilt" ; return 1 ; }
+
+    # raw map columns: metapart, id, osd uuid, datapart partuuid
+    local metapart uuid datapart_uuid datapart lv encrypted
+    read -r metapart _ uuid datapart_uuid < <(awk -v id=$id '$2 == id' $CEPH_OSD_MAP 2>/dev/null)
+    if [ -n "$metapart" ] ; then
+        [ -n "$uuid" ] && [ -n "$datapart_uuid" ] || { log_error "osd.$id has an incomplete entry in $CEPH_OSD_MAP" ; return 1 ; }
+        datapart=$(ceph_osd_datapart_resolve "$datapart_uuid") && [ -n "$datapart" ] || { log_error "osd.$id data partition $datapart_uuid not found" ; return 1 ; }
+    else
+        local lvs=$(ceph-volume lvm list --format json 2>/dev/null)
+        lv=$(echo "$lvs" | jq -r --arg id $id '.[$id][]? | select(.type == "block") | .lv_path')
+        encrypted=$(echo "$lvs" | jq -r --arg id $id '.[$id][]? | select(.type == "block") | .tags["ceph.encrypted"]')
+        [ -n "$lv" ] || { log_error "osd.$id is neither a raw OSD in $CEPH_OSD_MAP nor an LVM OSD" ; return 1 ; }
+    fi
+
+    # refuse size-1 pool PGs (pgs_brief: pg ls-by-osd refuses a down OSD)
+    local pools pgs single
+    if ! pools=$($CEPH osd pool ls detail -f json 2>/dev/null) || ! pgs=$($CEPH pg dump pgs_brief -f json 2>/dev/null) ||
+       ! single=$(printf '%s\n%s\n' "$pools" "$pgs" | jq -rs --argjson id $id '
+            .[0] as $pools
+            | [(.[1] | .pg_stats? // .)[] | select(any((.up + .acting)[]; . == $id)) | .pgid | split(".")[0] | tonumber] as $p
+            | $pools[] | select(.size == 1 and ((.pool_id // .pool) as $x | any($p[]; . == $x))) | .pool_name' 2>/dev/null) ; then
+        single=
+        if [ "$force" != "force" ] ; then
+            log_error "cannot read the PG map to check osd.$id for size-1 pools; rerun with force to rebuild anyway"
+            return 1
+        fi
+    fi
+    if [ -n "$single" ] && [ "$force" != "force" ] ; then
+        log_error "osd.$id holds the only copy of PGs in size-1 pools: $(echo $single); rerun with force to rebuild anyway"
+        return 1
+    fi
+
+    Quiet $CEPH osd set noout
+    systemctl stop ceph-osd@$id 2>/dev/null
+    umount -l /var/lib/ceph/osd/ceph-$id 2>/dev/null
+    if ! $CEPH osd destroy $id --yes-i-really-mean-it ; then
+        Quiet $CEPH osd unset noout
+        return 1
+    fi
+
+    if [ -n "$metapart" ] ; then
+        # wipe the datapart; keep the metapart fs uuid so the id still resolves
+        dd if=/dev/zero of=$datapart bs=1M count=100 oflag=sync 2>/dev/null
+        ceph_bluestore_label_zero $datapart
+        # mkfs this OSD only (refresh_ceph_osd restarts every OSD on the host)
+        local osd_dir=${CEPH_OSD_DIR:-/var/lib/ceph/osd}/ceph-$id
+        if ! mkfs.xfs -f -m uuid=$uuid $metapart >/dev/null || ! $CEPH osd new $uuid $id >/dev/null ||
+           ! ceph_osd_remount_one $id || ! echo bluestore > $osd_dir/type ||
+           ! chown ceph:ceph $metapart $datapart ||
+           ! timeout -k 10 600 ceph-osd -i $id --mkfs --osd-uuid $uuid >/dev/null 2>&1 ||
+           ! chown -R ceph:ceph $osd_dir ; then
+            log_error "re-creating osd.$id on $metapart failed"
+            Quiet $CEPH osd unset noout
+            return 1
+        fi
+        systemctl reset-failed ceph-osd@$id 2>/dev/null
+        Quiet systemctl start ceph-osd@$id
+    else
+        # zap keeps the LV; prepare reuses the id on it (--dmcrypt if encrypted)
+        local crypt=
+        [ "$encrypted" = 1 ] && crypt=--dmcrypt
+        local fsid
+        if ! timeout -k 10 300 ceph-volume lvm zap --osd-id $id >/dev/null || ! timeout -k 10 600 ceph-volume lvm prepare --bluestore $crypt --osd-id $id --data $lv >/dev/null ||
+           ! fsid=$(ceph-volume lvm list --format json 2>/dev/null | jq -er --arg id $id '.[$id][]? | select(.type == "block") | .tags["ceph.osd_fsid"]') ; then
+            log_error "re-creating osd.$id on $lv failed"
+            Quiet $CEPH osd unset noout
+            return 1
+        fi
+        # activate this OSD only, not --all
+        systemctl reset-failed ceph-osd@$id 2>/dev/null
+        Quiet timeout -k 10 300 ceph-volume lvm activate --bluestore $id $fsid
+    fi
+
+    local deadline=$((SECONDS + 300))
+    while [ $SECONDS -lt $deadline ] ; do
+        [ "$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == $id) | .up")" = 1 ] && break
+        sleep 5
+    done
+    Quiet $CEPH osd unset noout
+    [ "$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == $id) | .up")" = 1 ] || { log_error "osd.$id did not come up after the rebuild" ; return 1 ; }
+    log_info "osd.$id rebuilt in place on ${metapart:-$lv}; backfilling from replicas"
 }
 
 ceph_osd_down_list()
@@ -1925,7 +2056,7 @@ ceph_osd_enable_cache()
     # associate backdev, ceph osd tier add {cold} {hot}
     if ! $CEPH osd tier add $backpool $cachepool ; then
         # failed to add tier pool, recreate it
-        Quiet -n ceph_recreate_cache_pool $backpool
+        Quiet ceph_recreate_cache_pool $backpool || return 1
         Quiet -n $CEPH osd tier add $backpool $cachepool
     fi
     Quiet -n $CEPH osd tier set-overlay $backpool $cachepool
@@ -2066,7 +2197,7 @@ ceph_osd_create_cache()
         fi
     fi
 
-    Quiet -n ceph_osd_enable_cache $backpool
+    Quiet ceph_osd_enable_cache $backpool || return 1
 
     if ! ($CEPH osd crush rule list | grep -q $rule_ssd) ; then
         # create $rule
@@ -2110,6 +2241,20 @@ ceph_osd_create_cache()
     fi
 }
 
+# $1 - pool name
+# Prints how many objects in the pool carry the dirty flag, i.e. were written
+# into it as a cache tier and never flushed to the base pool. Summed from the
+# PG stats rather than read from `ceph df detail`, which prints dirty as 0 for
+# any pool that is not a tier right now -- the very state a cache pool is in
+# once switch-off has detached it.
+_ceph_pool_dirty_objects()
+{
+    local n
+    n=$($CEPH pg ls-by-pool $1 -f json 2>/dev/null | jq -e '[.pg_stats[].stat_sum.num_objects_dirty] | add // 0' 2>/dev/null) || return 1
+    [[ "$n" =~ ^[0-9]+$ ]] || return 1
+    echo $n
+}
+
 # $1 - backpool name (e.g.: $BUILTIN_BACKPOOL)
 ceph_recreate_cache_pool()
 {
@@ -2122,7 +2267,22 @@ ceph_recreate_cache_pool()
     fi
     local size=$($CEPH osd pool get $cachepool size | awk '{print $2}' | tr -d '\n')
 
-    Quiet -n $CEPH osd pool delete $cachepool $cachepool --yes-i-really-really-mean-it
+    # A cache pool left non-empty by switch-off is the normal case: objects a
+    # client still watches flush but cannot be evicted, and those are stale
+    # copies of what the base pool holds, so deleting them is right. A dirty
+    # object is different -- it was never flushed and this pool holds the only
+    # copy (#1436). Refuse rather than delete, and fail closed if it cannot be read.
+    local dirty
+    if ! dirty=$(_ceph_pool_dirty_objects $cachepool) ; then
+        echo "Error: cannot read the dirty object count of $cachepool, not deleting it"
+        return 1
+    fi
+    if [ "$dirty" != "0" ] ; then
+        echo "Error: $cachepool holds $dirty dirty object(s) never flushed to $backpool, not deleting it"
+        return 1
+    fi
+
+    Quiet $CEPH osd pool delete $cachepool $cachepool --yes-i-really-really-mean-it || return 1
     Quiet -n ceph_create_pool $cachepool rbd
     Quiet -n ceph_adjust_pool_size "$cachepool" $size
     local pgs=$($CEPH osd pool get $backpool pg_num -f json | jq -r .pg_num)
@@ -3145,13 +3305,16 @@ ceph_osd_partuuid_of()
     echo -n "$uuid"
 }
 
-# partition carrying GPT PARTUUID $1, among those udev has no PARTUUID for
+# partition carrying GPT PARTUUID $1, among those udev has no PARTUUID for or
+# already names $1 (61-cube-ceph-partuuid.rules fills it in for an ambivalent
+# partition that blkid --match-token still misses, cubecos#2004); the on-disk
+# probe confirms each candidate
 ceph_osd_datapart_scan()
 {
     local uuid=$1
     local dev
 
-    for dev in $(lsblk -lnpo NAME,TYPE,PARTUUID 2>/dev/null | awk '$2 == "part" && $3 == "" { print $1 }') ; do
+    for dev in $(lsblk -lnpo NAME,TYPE,PARTUUID 2>/dev/null | awk -v u="$uuid" '$2 == "part" && ($3 == "" || $3 == u) { print $1 }') ; do
         if [ "$(ceph_osd_partuuid_of $dev)" = "$uuid" ] ; then
             echo -n "$dev"
             return 0
@@ -4292,6 +4455,33 @@ ceph_osd_list()
     rm -rf $logpth
 }
 
+# Fail the active mgr off <host> (no-op if it is not the active); waits up to
+# 60s for a new active elsewhere.
+ceph_mgr_fail_off()
+{
+    local evict=$1 active i
+    active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
+    [ "$active" = "$evict" ] || return 0
+    $CEPH mgr fail
+    for i in $(seq 30) ; do
+        sleep 2
+        active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
+        [ -n "$active" -a "$active" != "$evict" ] && return 0
+    done
+    echo "ceph-mgr did not fail over off $evict" >&2
+    return 1
+}
+
+# Fail the active mgr off <host>, then check the dashboard (it can wedge on
+# failover) in the background; a failure is logged. No-op off the active.
+ceph_mgr_handoff()
+{
+    local active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
+    [ "$active" = "$1" ] || return 0
+    ceph_mgr_fail_off "$1" || return 1
+    setsid bash -c "$HEX_SDK ceph_mgr_dashboard_ensure >/dev/null 2>&1 || logger -t hex_sdk 'warning: ceph-mgr dashboard not serving after mgr handoff'" </dev/null >/dev/null 2>&1 &
+}
+
 ceph_mgr_dashboard_ensure()
 {
     # Usage: ceph_mgr_dashboard_ensure [<evict-host>]
@@ -4303,16 +4493,8 @@ ceph_mgr_dashboard_ensure()
     local active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
     if [ -n "$evict" ] ; then
         [ "$active" = "$evict" ] || return 0
-        $CEPH mgr fail
-        for i in $(seq 30) ; do
-            sleep 2
-            active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
-            [ -n "$active" -a "$active" != "$evict" ] && break
-        done
-        if [ -z "$active" -o "$active" = "$evict" ] ; then
-            echo "ceph-mgr did not fail over off $evict" >&2
-            return 1
-        fi
+        ceph_mgr_fail_off "$evict" || return 1
+        active=$($CEPH mgr stat -f json 2>/dev/null | jq -r .active_name)
     fi
     [ -n "$active" ] || return 1
     local port=7442
@@ -4694,6 +4876,9 @@ _ceph_device_tier_health_ok()
 # functions are not defined at all -- a direct call would be a command-not-found
 # 127, which is indistinguishable from an apply that failed. Same reason
 # ceph_device_tier_delete reaches cinder_is_volume_type_in_use this way.
+#
+# The registry is per node and these edit this node's only; cube-cos-api runs
+# ceph_device_tier_register / _unregister on the other controls (#2098).
 _ceph_device_tier_registry_add()
 {
     $HEX_SDK cinder_apply_storage_tier_creation "$1"
@@ -4702,6 +4887,19 @@ _ceph_device_tier_registry_add()
 _ceph_device_tier_registry_del()
 {
     $HEX_SDK cinder_apply_storage_tier_deletion "$1"
+}
+
+# this node's registry entry for a device tier, and its Cinder apply
+ceph_device_tier_register()
+{
+    _ceph_device_tier_name_ok "$1" || return 1
+    _ceph_device_tier_registry_add "$1"
+}
+
+ceph_device_tier_unregister()
+{
+    [ -n "$1" ] || return 1
+    _ceph_device_tier_registry_del "$1"
 }
 
 # Delete takes the registry entry out first, on purpose: while a backend is

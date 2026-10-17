@@ -140,7 +140,8 @@ WriteConfigs(const std::string &kafkaHosts)
     fprintf(fout, "  topic: 'logs'\n");
     fprintf(fout, "  partition.round_robin:\n");
     fprintf(fout, "    reachable_only: false\n");
-    fprintf(fout, "  required_acks: 1\n");
+    // all ISRs: a broker that lost its leadership cannot ack alone
+    fprintf(fout, "  required_acks: -1\n");
     fprintf(fout, "  max_message_bytes: 1000000\n");
     fprintf(fout, "\n");
 
@@ -181,7 +182,8 @@ WriteConfigs(const std::string &kafkaHosts)
     fprintf(fout, "  topic: 'audit-logs'\n");
     fprintf(fout, "  partition.round_robin:\n");
     fprintf(fout, "    reachable_only: false\n");
-    fprintf(fout, "  required_acks: 1\n");
+    // all ISRs: a broker that lost its leadership cannot ack alone
+    fprintf(fout, "  required_acks: -1\n");
     fprintf(fout, "  max_message_bytes: 1000000\n");
     fprintf(fout, "\n");
 

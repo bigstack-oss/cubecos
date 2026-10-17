@@ -93,10 +93,10 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
     fprintf(fout, "  retries 3\n");
     fprintf(fout, "  timeout http-request 10s\n");
     fprintf(fout, "  timeout queue 1m\n");
-    fprintf(fout, "  timeout connect 10s\n");
+    fprintf(fout, "  timeout connect 3s\n");
     fprintf(fout, "  timeout client  1m\n");
     fprintf(fout, "  timeout server  1m\n");
-    fprintf(fout, "  timeout check   10s\n");
+    fprintf(fout, "  timeout check   3s\n");
     fprintf(fout, "  \n");
 
     fprintf(fout, "listen stats\n");
@@ -349,10 +349,10 @@ WriteConfig(bool ha, const std::string& ctrlVip,
     fprintf(fout, "  retries 3\n");
     fprintf(fout, "  timeout http-request 10s\n");
     fprintf(fout, "  timeout queue 1m\n");
-    fprintf(fout, "  timeout connect 10s\n");
+    fprintf(fout, "  timeout connect 3s\n");
     fprintf(fout, "  timeout client  10m\n");
     fprintf(fout, "  timeout server  10m\n");
-    fprintf(fout, "  timeout check   10s\n");
+    fprintf(fout, "  timeout check   3s\n");
     fprintf(fout, "  \n");
 
     fprintf(fout, "listen stats\n");

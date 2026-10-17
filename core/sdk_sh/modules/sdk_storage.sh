@@ -71,6 +71,11 @@ storage_is_das()
     local exec_output=""
     local exec_error=""
 
+    # virtual block devices are not disks
+    case "${device##*/}" in
+        nbd*|loop*|rbd*|zram*|ram*|sr*) return 1 ;;
+    esac
+
     # test if mpath devices, mpath devices are not DAS
     if storage_is_mpath "$device" ; then
         return 1
@@ -412,7 +417,13 @@ _storage_usage_promql()
 
 storage_usage_ceph_pools()
 {
-    local vals meta out=""
+    local vals meta sizes out=""
+
+    # Replicated pools report their configured size; raw over stored is off on
+    # near-empty pools (BlueStore allocation overhead).
+    sizes=$($CEPH osd pool ls detail --format json 2>/dev/null | \
+        jq -c 'map(select(.type == 1) | { (.pool_name): .size }) | add // {}' 2>/dev/null)
+    [ -n "$sizes" ] || sizes='{}'
 
     # ceph-mgr already exports these as ceph_pool_*. The pool name lives in a
     # separate metadata series, joined here on pool_id.
@@ -420,7 +431,7 @@ storage_usage_ceph_pools()
     meta=$(_storage_usage_promql 'ceph_pool_metadata')
 
     if [ -n "$vals" -a -n "$meta" ] ; then
-        out=$(jq -c -n --argjson v "$vals" --argjson m "$meta" --arg pools "$STORAGE_USAGE_CEPH_POOLS" '
+        out=$(jq -c -n --argjson v "$vals" --argjson m "$meta" --argjson sz "$sizes" --arg pools "$STORAGE_USAGE_CEPH_POOLS" '
           ($m | map({ (.metric.pool_id): .metric.name }) | add // {}) as $name |
           ($v | map({ pool: ($name[.metric.pool_id] // empty),
                       k: .metric.__name__, n: (.value[1] | tonumber) })
@@ -434,8 +445,8 @@ storage_usage_ceph_pools()
             stored_bytes: ($f.ceph_pool_stored // 0 | floor),
             raw_used_bytes: ($f.ceph_pool_bytes_used // 0 | floor),
             provisioned_bytes: null,
-            replication_factor: (if ($f.ceph_pool_stored // 0) > 0
-                                 then (($f.ceph_pool_bytes_used / $f.ceph_pool_stored) | round) else null end),
+            replication_factor: ($sz[.pool] // (if ($f.ceph_pool_stored // 0) > 0
+                                 then (($f.ceph_pool_bytes_used / $f.ceph_pool_stored) | round) else null end)),
             reduction_ratio: (if ($f.ceph_pool_compress_bytes_used // 0) > 0
                               then ($f.ceph_pool_compress_under_bytes / $f.ceph_pool_compress_bytes_used) else null end),
             confidence: (if ($f.ceph_pool_compress_bytes_used // 0) > 0 then "exact" else "unavailable" end)
@@ -451,7 +462,7 @@ storage_usage_ceph_pools()
     # go quiet with it.
     Debug "storage usage: ceph_pool_* unavailable, falling back to ceph df"
     $CEPH df detail --format json 2>/dev/null | \
-        jq -c --arg pools "$STORAGE_USAGE_CEPH_POOLS" '
+        jq -c --argjson sz "$sizes" --arg pools "$STORAGE_USAGE_CEPH_POOLS" '
           (.pools // [])[] | select(.name as $n | ($pools | split(" ") | index($n))) |
           {
             scope: "pool",
@@ -462,8 +473,8 @@ storage_usage_ceph_pools()
             stored_bytes: (.stats.stored // 0),
             raw_used_bytes: (.stats.bytes_used // 0),
             provisioned_bytes: null,
-            replication_factor: (if (.stats.stored // 0) > 0
-                                 then ((.stats.bytes_used / .stats.stored) | round) else null end),
+            replication_factor: ($sz[.name] // (if (.stats.stored // 0) > 0
+                                 then ((.stats.bytes_used / .stats.stored) | round) else null end)),
             reduction_ratio: (if (.stats.compress_bytes_used // 0) > 0
                               then (.stats.compress_under_bytes / .stats.compress_bytes_used) else null end),
             confidence: (if (.stats.compress_bytes_used // 0) > 0 then "exact" else "unavailable" end)
@@ -793,7 +804,7 @@ _storage_usage_textfile()
         echo "# TYPE cube_storage_pool_capacity_bytes gauge"
         echo "# HELP cube_storage_pool_provisioned_bytes Bytes provisioned on the pool, summed from its disks."
         echo "# TYPE cube_storage_pool_provisioned_bytes gauge"
-        echo "# HELP cube_storage_pool_replication_factor Replication factor derived as raw over stored."
+        echo "# HELP cube_storage_pool_replication_factor Replication factor: pool size, else raw over stored."
         echo "# TYPE cube_storage_pool_replication_factor gauge"
         echo "# HELP cube_storage_pool_reduction_ratio Compression and dedup ratio, absent when compression never engaged."
         echo "# TYPE cube_storage_pool_reduction_ratio gauge"

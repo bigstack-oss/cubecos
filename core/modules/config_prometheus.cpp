@@ -419,9 +419,9 @@ WriteExporterDefaults(bool control, const std::string& myIp)
     }
 
     // freeipmi's local path needs no host argument; without a config file the exporter uses
-    // its built-in "default" collector against the local BMC, which is what the monasca
-    // plugin did. A VM lab has no BMC and every probe fails -- the series read as down, same
-    // as they did before.
+    // its built-in "default" module against the local BMC -- the ipmi, dcmi, bmc and chassis
+    // collectors, which covers the temperature, fan and power series Watcher reads. A VM lab
+    // has no BMC and every probe fails -- the series read as down, same as they did before.
     const std::vector<std::string> ipmi = {
         "ARGS='--web.listen-address=" + myIp + ":" IPMI_EXPORTER_PORT "'\n",
     };
@@ -444,8 +444,11 @@ WriteExporterDefaults(bool control, const std::string& myIp)
         return false;
     }
 
+    // config_memcache binds memcached to the management address alone (-l MGMT_ADDR), so
+    // that is where the exporter has to connect: on loopback it reached nothing, and
+    // memcached_up read 0 on every control.
     const std::vector<std::string> memcached = {
-        "ARGS='--memcached.address=127.0.0.1:11211"
+        "ARGS='--memcached.address=" + myIp + ":11211"
         " --web.listen-address=" + myIp + ":" MEMCACHED_EXPORTER_PORT "'\n",
     };
     if (!WriteFile(fsError, MEMCACHED_EXPORTER_DEF, memcached)) {
@@ -659,6 +662,22 @@ WriteLachesisTargetsCronJob(void)
 }
 
 static bool
+Parse(const char *name, const char *value, bool isNew)
+{
+    bool r = true;
+
+    TuneStatus s = ParseTune(name, value, isNew);
+    if (s == TUNE_INVALID_NAME) {
+        HexLogWarning("Unknown settings name \"%s\" = \"%s\" ignored", name, value);
+    }
+    else if (s == TUNE_INVALID_VALUE) {
+        HexLogError("Invalid settings value \"%s\" = \"%s\"", name, value);
+        r = false;
+    }
+    return r;
+}
+
+static bool
 ParseCube(const char *name, const char *value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
@@ -695,7 +714,7 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    return s_bCubeModified | s_bNetModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR);
+    return modified | s_bCubeModified | s_bNetModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR);
 }
 
 static bool
@@ -808,7 +827,7 @@ NodeStartMain(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
-CONFIG_MODULE(prometheus, 0, 0, 0, 0, Commit);
+CONFIG_MODULE(prometheus, 0, Parse, 0, 0, Commit);
 CONFIG_REQUIRES(prometheus, cube_scan);
 // thanos_objstore_setup needs a working RGW to create its user and bucket, and ceph is
 // what brings radosgw up. Without this prometheus commits at L8, three levels ahead of

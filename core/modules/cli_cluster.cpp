@@ -1,6 +1,7 @@
 // CUBE SDK
 
 #include <unistd.h>
+#include <limits.h>
 #include <pthread.h>
 
 #include <netinet/ip.h>
@@ -854,7 +855,7 @@ ClusterReadyMain(int argc, const char** argv)
 
     if(osdCnt == "0") {
         CliPrintf("set_ready aborted due to zero running osd for cluster storage. Fix this before continuing!");
-        return CLI_SUCCESS;
+        return CLI_FAILURE;
     }
 
     if (argc > 1) {
@@ -984,6 +985,33 @@ ClusterErrcodeDumpMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
+static const char RollRestartUsage[] =
+    "rolling_restart [<host> ...|dryrun [<host> ...]|status|status_watch|continue|abort|help]";
+static const char RollUpdateUsage[] =
+    "rolling_update [<version>|dryrun|status|status_watch|continue|abort|help]";
+
+// CliEventAttrs() fills host= with the login name; tag the real hostname
+static std::string
+RollEventAttrs()
+{
+    char host[HOST_NAME_MAX + 1] = {0};
+    char user[LOGIN_NAME_MAX + 1] = {0};
+    if (gethostname(host, sizeof(host) - 1) != 0)
+        snprintf(host, sizeof(host), "unknown");
+    CliGetUserName(user, sizeof(user));
+    return std::string("interface=cli,host=") + host + ",user=" + user;
+}
+
+// true if argv[from..] are all cluster nodes (none = whole cluster)
+static bool
+RollHostsValid(int from, int argc, const char** argv)
+{
+    std::string args;
+    for (int i = from; i < argc; i++)
+        args += " " + HexBuildShellArg(argv[i]);
+    return args.empty() || HexSystemF(0, HEX_SDK " power_roll_check_hosts%s", args.c_str()) == 0;
+}
+
 // one handler for both verbs -- same operation; an upgrade only adds staging
 // (next_entry makes the same reboot boot the new firmware)
 static int
@@ -991,6 +1019,11 @@ ClusterRollMain(const char* kind, int argc, const char** argv)
 {
     const bool upgrade = (std::string(kind) == "upgrade");
     const std::string verb = upgrade ? "rolling_update" : "rolling_restart";
+
+    if (argc >= 2 && std::string(argv[1]) == "help") {
+        CliPrintf("usage: cluster %s", upgrade ? RollUpdateUsage : RollRestartUsage);
+        return CLI_SUCCESS;
+    }
 
     /*
      * [0]=<verb>
@@ -1018,13 +1051,15 @@ ClusterRollMain(const char* kind, int argc, const char** argv)
         HexSystemF(0, HEX_SDK " power_roll_decision %s", sub.c_str());
         HexLogEvent(sub == "continue" ? "CLU00002I" : "CLU00003I",
             "%s,category=cluster,sub=%s,action=%s",
-            CliEventAttrs().c_str(), verb.c_str(), sub.c_str());
+            RollEventAttrs().c_str(), verb.c_str(), sub.c_str());
         return CLI_SUCCESS;
     }
 
     // dryrun: print the plan (node order + per-VM disposition) and change
     // nothing. Read-only, so no readiness gate / confirmation.
     if (argc >= 2 && std::string(argv[1]) == "dryrun") {
+        if (!upgrade && !RollHostsValid(2, argc, argv))
+            return CLI_INVALID_ARGS;
         std::string targets;
         for (int i = 2; i < argc && !upgrade; i++) {
             if (!targets.empty()) targets += " ";
@@ -1033,6 +1068,10 @@ ClusterRollMain(const char* kind, int argc, const char** argv)
         HexSystemF(0, HEX_SDK " power_roll_plan %s %s", kind, targets.c_str());
         return CLI_SUCCESS;
     }
+
+    // reject unknown hosts before the plan and the confirmation
+    if (!upgrade && !RollHostsValid(1, argc, argv))
+        return CLI_INVALID_ARGS;
 
     // Fail fast: reject a NEW roll if one is already running/paused, before the
     // dryrun + confirmation, so the operator isn't walked through a plan only to
@@ -1092,12 +1131,10 @@ ClusterRollMain(const char* kind, int argc, const char** argv)
     if (!CliReadConfirmation())
         return CLI_SUCCESS;
 
-    HexSystemF(0, HEX_SDK " power_roll_start %s %s", kind,
-               upgrade ? version.c_str() : hosts.c_str());
-
-    HexLogEvent("CLU00001I", "%s,category=cluster,sub=%s,action=start,scope=%s",
-        CliEventAttrs().c_str(), verb.c_str(),
-        upgrade ? version.c_str() : (hosts.empty() ? "all" : hosts.c_str()));
+    // power_roll_start logs CLU00001I with these attrs once the job exists
+    HexSystemF(0, "ROLL_EVENT_ATTRS=%s " HEX_SDK " power_roll_start %s %s",
+               HexBuildShellArg(RollEventAttrs()).c_str(), kind,
+               upgrade ? HexBuildShellArg(version).c_str() : hosts.c_str());
 
     return CLI_SUCCESS;
 }
@@ -1177,11 +1214,11 @@ CLI_MODE_COMMAND("cluster", "powercycle", ClusterPowercycleMain, NULL,
 
 CLI_MODE_COMMAND("cluster", "rolling_restart", ClusterRollingRestartMain, NULL,
     "reboot nodes one at a time, evacuating workloads first.",
-    "rolling_restart [<host> ...|dryrun [<host> ...]|status|status_watch|continue|abort]");
+    RollRestartUsage);
 
 CLI_MODE_COMMAND("cluster", "rolling_update", ClusterRollingUpdateMain, NULL,
     "Roll a firmware update through the cluster one node at a time.",
-    "rolling_update [<version>|dryrun|status|status_watch|continue|abort]");
+    RollUpdateUsage);
 
 CLI_MODE_COMMAND("cluster", "bootup", ClusterBootupMain, NULL,
     "cluster power-up / boot-recovery status (per-node phase timing).",

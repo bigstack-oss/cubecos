@@ -1891,10 +1891,18 @@ os_octavia_hm_gated()
     [ -e $PLANNED_MAINT_MARKER ] || ! cube_failover_gate_open
 }
 
-# Restart roll: bring up this node's own o-hm0 in its own roll step.
+# Set when this boot's os_octavia_boot_node_up brought o-hm0 up (/run: per boot).
+OCTAVIA_BOOT_UP_MARK=/run/cube_octavia_boot_up
+
+# Restart roll: bring up this node's own o-hm0 in its own roll step. Skipped
+# when this boot already did and o-hm0 still has its ip, route and worker.
 os_octavia_roll_node_up()
 {
     is_rolling_restart_boot || return 0
+    if [ -e "$OCTAVIA_BOOT_UP_MARK" ] && /sbin/ip -4 addr show octavia-hm0 2>/dev/null | grep -q inet && \
+       /usr/sbin/route -n | grep -q octavia-hm0 && systemctl is-active -q octavia-worker ; then
+        return 0
+    fi
     os_octavia_boot_node_up
 }
 
@@ -1902,7 +1910,7 @@ os_octavia_roll_node_up()
 os_octavia_boot_node_up()
 {
     is_first_three_compute_node || return 0
-    os_octavia_node_fast_up && return 0
+    os_octavia_node_fast_up && { touch "$OCTAVIA_BOOT_UP_MARK" ; return 0 ; }
     Quiet -n $HEX_CFG reinit_octavia
 }
 
@@ -2644,7 +2652,9 @@ os_instance_list_for_project_long_run()
     local o="{"
     for id in $(echo "$projects" | awk '{print $1}') ; do
         local name=$(echo "$projects" | grep $id | awk '{print $2}')
-        local list=$($OPENSTACK server list --long -f json --project $name)
+        # Pass the id: the client tries a name as an id first, which keystone
+        # logs as ProjectNotFound on every run.
+        local list=$($OPENSTACK server list --long -f json --project $id)
         o="$o \"$name\": $list,"
     done
     o="$o \"service\": []}"

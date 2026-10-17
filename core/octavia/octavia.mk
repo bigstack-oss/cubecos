@@ -113,7 +113,7 @@ rootfs_install::
 	$(Q)# All five happen to be in this venv already, but a dependency nothing asks
 	$(Q)# for is one that disappears silently.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		$(OPENSTACK_PIP_INSTALL) -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			octavia==$(OCTAVIA_VER) \
 			octavia-lib \
 			kazoo \
@@ -150,7 +150,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		$(OPENSTACK_PIP_INSTALL) -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			python-octaviaclient"
 	$(Q)# clean up dns configurations after downloading packages
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
@@ -221,7 +221,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)# --no-build-isolation because this pulls horizon; see core/heavyfs/Makefile.
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_PIP_INSTALL) \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		--no-build-isolation \
 		octavia-dashboard==$(OCTAVIA_DASHBOARD_VER)
@@ -294,6 +294,12 @@ rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/octavia/certs/octavia-certs.cnf .$(OCTAVIA_CONF_DIR)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/octavia/dhclient.conf .$(OCTAVIA_CONF_DIR)
 	$(Q)chroot $(ROOTDIR) chmod 755 /etc/octavia/create_certificates.sh
+	$(Q)# the amphora-vip-advertise element's files, for migrate_octavia_amphora_vip_advertise
+	$(Q)chroot $(ROOTDIR) install -d -m 755 /usr/share/cube/octavia/amphora-vip-advertise
+	$(Q)for f in usr/local/bin/amphora-vip-advertise etc/systemd/system/amphora-vip-advertise.service \
+		etc/systemd/system/amphora-vip-advertise.timer ; do \
+		$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/octavia/elements/amphora-vip-advertise/static/$$f ./usr/share/cube/octavia/amphora-vip-advertise ; \
+	done
 	$(Q)# install systemd unit files. All four are installed here now; under the
 	$(Q)# RPM layout only worker and health-manager were, because
 	$(Q)# openstack-octavia-{api,housekeeping} shipped the other two. The two

@@ -335,6 +335,18 @@ SyncHostsToReplicaSet(std::vector<std::string>& ctrlHosts, std::string myip)
             continue;
         }
 
+        // a peer whose mongod is not up yet adds itself at its own commit
+        const ExecSyncResult up = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            "mongosh mongodb://" + ctrlHost + " --quiet --eval 'db.hello().ok' | grep -qx 1");
+        if (up.exitCode != 0) {
+            HexLogInfo("%s is not up yet, it joins the replicaSet at its own commit", ctrlHost.c_str());
+            continue;
+        }
+
         const ExecSyncResult r = ExecBashSync(
             0,
             false,
@@ -342,14 +354,48 @@ SyncHostsToReplicaSet(std::vector<std::string>& ctrlHosts, std::string myip)
             {},
             "mongosh mongodb://" + myip + " --quiet --eval 'rs.add(\"" + ctrlHost + "\")'");
         if (r.exitCode != 0) {
-            HexLogError("failed to add %s in replicaSet, stop all node registration", ctrlHost.c_str());
-            return r.exitCode;
+            HexLogWarning("failed to add %s in replicaSet, it joins at its own commit", ctrlHost.c_str());
+            continue;
         }
 
         HexLogInfo("%s has joined mongodb replicaSet", ctrlHost.c_str());
     }
 
     return 0;
+}
+
+static bool
+WaitWritablePrimary(std::string myip)
+{
+    for (int i = 0; i < 60; i++) {
+        const ExecSyncResult r = ExecBashSync(
+            0,
+            false,
+            false,
+            {},
+            "mongosh mongodb://" + myip + " --quiet --eval 'db.hello().isWritablePrimary' | grep -qx true");
+        if (r.exitCode == 0) {
+            return true;
+        }
+        sleep(2);
+    }
+
+    return false;
+}
+
+// add this control to the replica set through the primary if it is not a member yet
+static bool
+JoinReplicaSet(std::string mongodbUri, const char* host)
+{
+    const ExecSyncResult r = ExecBashSync(
+        0,
+        false,
+        false,
+        {},
+        "mongosh '" + mongodbUri + "' --quiet --eval '"
+            + "if (!rs.conf().members.some(m => m.host == \"" + host + ":27017\")) rs.add(\"" + host + "\");"
+            + " print(\"MEMBER\")' | grep -qx MEMBER");
+    return (r.exitCode == 0);
 }
 
 static bool
@@ -431,9 +477,10 @@ Commit(bool modified, int dryLevel)
     std::vector<std::string> ctrlHosts = { s_hostname.c_str() };
     AppendCtrlPeerHostsIfObserved(ctrlHosts);
 
-    // set up the replica set on the master node
+    // set up the replica set on the master node; synced admin access means it
+    // already exists (e.g. a master promoted by override has no marker)
     bool isMaster = G(IS_MASTER);
-    if (isMaster && access(MARKER_MONGODB_RS_CREATED, F_OK) != 0) {
+    if (isMaster && access(MARKER_MONGODB_RS_CREATED, F_OK) != 0 && GetAdminAccess() == "") {
         // create the mongodb config without auth enabled
         if (!WriteMongodConf(false, myip.c_str())) {
             HexLogError("failed to set mongod config");
@@ -457,20 +504,21 @@ Commit(bool modified, int dryLevel)
             return true;
         }
 
-        // add self to the replica set
-        result = SyncHostsToReplicaSet(ctrlHosts, myip);
-        if (result != 0) {
-            HexLogError("failed to add hosts to replicaSet");
+        if (!WaitWritablePrimary(myip)) {
+            HexLogError("mongodb on %s did not become primary", s_hostname.c_str());
             return true;
         }
 
-        // mark that mongodb replica set has been created
-        HexSystemF(0, "touch %s", MARKER_MONGODB_RS_CREATED);
-
-        if (!InitAdminUser(myip, dbPass)) {
+        // the admin user and the marker do not wait on peers
+        if (!CheckAdminUser("mongodb://" + myip) && !InitAdminUser(myip, dbPass)) {
             HexLogError("failed to create admin user");
             return true;
         }
+
+        HexSystemF(0, "touch %s", MARKER_MONGODB_RS_CREATED);
+
+        // add the peers already up; the rest join at their own commit
+        SyncHostsToReplicaSet(ctrlHosts, myip);
     }
 
     // update the mongodb config with auth enabled
@@ -511,6 +559,10 @@ Commit(bool modified, int dryLevel)
     }
     mongodbUri << "/?replicaSet=" << MONGODB_REPLICA_SET_NAME;
     std::string mongodbUriStr = mongodbUri.str();
+
+    if (!JoinReplicaSet(mongodbUriStr, s_hostname.c_str())) {
+        HexLogWarning("%s could not join the mongodb replicaSet yet", s_hostname.c_str());
+    }
 
     // update the admin user
     if (dbPassChanged && CheckAdminUser(mongodbUriStr)) {

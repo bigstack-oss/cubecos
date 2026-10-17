@@ -1,0 +1,18 @@
+--- kernel-open/nvidia-vgpu-vfio/nvidia-vgpu-vfio.h
++++ kernel-open/nvidia-vgpu-vfio/nvidia-vgpu-vfio.h
+@@ -96,6 +96,15 @@
+ int        nv_vgpu_vfio_mmap(struct vgpu_dev_s *, struct vm_area_struct *);
+ long       nv_vgpu_vfio_ioctl(struct vgpu_dev_s *, unsigned int,
+                                      unsigned long);
++#if defined(NV_VFIO_DEVICE_OPS_HAS_GET_REGION_INFO_CAPS)
++int        nv_vgpu_vfio_get_region_info_caps(struct vgpu_dev_s *, struct vfio_region_info *,
++                                             struct vfio_info_cap *);
++#endif
++#if defined(NV_IRQ_BYPASS_REGISTER_PRODUCER_HAS_EVENTFD_AND_IRQ_ARGS)
++#define NV_VGPU_IRQ_BYPASS()    NV_TRUE
++#elif defined(NV_ENABLE_APICV_PRESENT)
++#define NV_VGPU_IRQ_BYPASS()    (enable_apicv == NV_TRUE)
++#endif
+ ssize_t    nv_vgpu_vfio_read(struct vgpu_dev_s *, char __user *, size_t,
+                                     loff_t *);
+ ssize_t    nv_vgpu_vfio_write(struct vgpu_dev_s *, const char __user *,

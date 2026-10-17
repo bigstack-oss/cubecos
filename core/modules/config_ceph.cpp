@@ -847,8 +847,6 @@ UpdateConfig(
     fprintf(fout, "ms mon client mode = crc\n");
     fprintf(fout, "osd max pg per osd hard ratio = 1.2\n");
     fprintf(fout, "osd crush chooseleaf type = 1\n");
-    fprintf(fout, "osd pool default size = 1\n");
-    fprintf(fout, "osd pool default min size = 1\n");
     fprintf(fout, "osd pool default pg autoscale mode = on\n");
     fprintf(fout, "rbd concurrent management ops = 20\n");
 
@@ -953,6 +951,10 @@ UpdateConfig(
         // per-project container instead (cinder epoxy_patch/backup/drivers/swift.py.patch).
         fprintf(fout, "rgw keystone implicit tenants = false\n");
         fprintf(fout, "rgw s3 auth use keystone = true\n");
+        // check rgw-local users (e.g. thanos, sdk_thanos.sh) before keystone. the default
+        // "sts, external, local" sends every local-user request to keystone s3tokens
+        // first, which 404s and logs a CredentialNotFound traceback (cubecos#2065)
+        fprintf(fout, "rgw s3 auth order = sts, local, external\n");
         fprintf(fout, "rgw keystone verify ssl = false\n");
         fprintf(fout, "rgw swift account in url = true\n");
         fprintf(fout, "rgw swift versioning enabled = true\n");
@@ -1996,6 +1998,9 @@ Commit(bool modified, int dryLevel)
         // them are up. SetupFS also has to stay ahead of the mds step below: it
         // is what runs `ceph fs new`, and the mds claims rank 0 on a filesystem
         // that already exists.
+        // pool default size lives in the central config so pools created later
+        // (RGW, operators) get the cluster's replica count, not ceph.conf's
+        HexSystemF(0, HEX_SDK " ceph_pool_default_size_sync");
         if (!SetupPools() || !SetupFS() || !SetupISCSI())
             return false;
 

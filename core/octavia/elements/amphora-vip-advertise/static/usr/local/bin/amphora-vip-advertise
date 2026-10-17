@@ -1,0 +1,27 @@
+#!/opt/amphora-agent-venv/bin/python3
+# Re-announce every address in the amphora-haproxy namespace (gratuitous ARP /
+# unsolicited NA), so the network learns the VIP's location again after a
+# reboot without a controller call.
+import json
+import subprocess
+
+from octavia.amphorae.backends.utils import ip_advertisement
+
+NS = 'amphora-haproxy'
+
+try:
+    out = subprocess.run(['ip', 'netns', 'exec', NS, 'ip', '-j', 'addr', 'show'],
+                         capture_output=True, text=True, check=True).stdout
+except (subprocess.CalledProcessError, FileNotFoundError):
+    raise SystemExit(0)  # no namespace yet: nothing to announce
+
+for link in json.loads(out or '[]'):
+    if link.get('ifname') == 'lo':
+        continue
+    for addr in link.get('addr_info', []):
+        if addr.get('scope') != 'global':
+            continue
+        try:
+            ip_advertisement.send_ip_advertisement(link['ifname'], addr['local'], net_ns=NS)
+        except Exception:
+            pass

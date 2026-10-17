@@ -2821,7 +2821,7 @@
           "title": "GPU Utilization",
           "type": "timeseries",
           "datasource": "influxdb-telegraf",
-          "description": "Physical GPU compute workload % per card. Grouped by PCI ID and GPU model name. Sampled every 5 minutes: a workload shorter than that may not appear.",
+          "description": "Physical GPU compute workload % per card. Grouped by PCI ID and GPU model name. Peak and average of 1-second samples over each 5-minute window: a workload shorter than about 15 seconds at the end of a window may not appear.",
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
           "fieldConfig": {
             "defaults": {
@@ -2830,21 +2830,32 @@
               "custom": { "lineWidth": 2, "fillOpacity": 10 }
             }
           },
-          "targets": [{
-            "datasource": "influxdb-telegraf",
-            "measurement": "gpu.host",
-            "policy": "def",
-            "resultFormat": "time_series",
-            "select": [[{"params":["util_gpu"],"type":"field"},{"params":[],"type":"mean"}]],
-            "tags": [{"key":"host","operator":"=~","value":"/^$GPU_HOST$/"},{"condition":"AND","key":"pciid","operator":"=~","value":"/^$GPU_PCIID$/"}],
-            "groupBy": [
-              {"params":["$__interval"],"type":"time"},
-              {"params":["pciid"],"type":"tag"},
-              {"params":["name"],"type":"tag"},
-              {"params":["linear"],"type":"fill"}
-            ],
-            "alias": "$tag_name ($tag_pciid)"
-          }]
+          "targets": [
+            {
+              "datasource": "influxdb-telegraf",
+              "measurement": "gpu.host", "policy": "def", "resultFormat": "time_series",
+              "select": [[{"params":["util_gpu_max"],"type":"field"},{"params":[],"type":"max"}]],
+              "tags": [{"key":"host","operator":"=~","value":"/^$GPU_HOST$/"},{"condition":"AND","key":"pciid","operator":"=~","value":"/^$GPU_PCIID$/"}],
+              "groupBy": [
+                {"params":["$__interval"],"type":"time"},
+                {"params":["pciid"],"type":"tag"},{"params":["name"],"type":"tag"},
+                {"params":["linear"],"type":"fill"}
+              ],
+              "alias": "Peak — $tag_name ($tag_pciid)"
+            },
+            {
+              "datasource": "influxdb-telegraf",
+              "measurement": "gpu.host", "policy": "def", "resultFormat": "time_series",
+              "select": [[{"params":["util_gpu_mean"],"type":"field"},{"params":[],"type":"mean"}]],
+              "tags": [{"key":"host","operator":"=~","value":"/^$GPU_HOST$/"},{"condition":"AND","key":"pciid","operator":"=~","value":"/^$GPU_PCIID$/"}],
+              "groupBy": [
+                {"params":["$__interval"],"type":"time"},
+                {"params":["pciid"],"type":"tag"},{"params":["name"],"type":"tag"},
+                {"params":["linear"],"type":"fill"}
+              ],
+              "alias": "Avg — $tag_name ($tag_pciid)"
+            }
+          ]
         },
         {
           "id": 51,

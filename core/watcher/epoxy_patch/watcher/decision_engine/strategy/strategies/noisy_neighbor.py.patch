@@ -1,0 +1,81 @@
+--- watcher/decision_engine/strategy/strategies/noisy_neighbor.py
++++ watcher/decision_engine/strategy/strategies/noisy_neighbor.py
+@@ -94,12 +94,12 @@
+ 
+     def get_current_and_previous_cache(self, instance):
+         try:
++            # CubeCOS: the getter takes (resource, period, aggregate)
+             curr_cache = self.datasource_backend.get_instance_l3_cache_usage(
+-                instance, self.meter_name, self.period,
+-                'mean', granularity=300)
++                instance, self.period, 'mean', granularity=300)
+             previous_cache = 2 * (
+                 self.datasource_backend.get_instance_l3_cache_usage(
+-                    instance, self.meter_name, 2 * self.period,
++                    instance, 2 * self.period,
+                     'mean', granularity=300)) - curr_cache
+ 
+         except Exception as exc:
+@@ -108,6 +108,14 @@
+ 
+         return curr_cache, previous_cache
+ 
++    def _watcher_priority(self, instance):
++        # CubeCOS: missing or non-numeric watcher-priority -> default
++        try:
++            return int((instance.get('metadata') or {}).get(
++                'watcher-priority', self.DEFAULT_WATCHER_PRIORITY))
++        except (TypeError, ValueError):
++            return self.DEFAULT_WATCHER_PRIORITY
++
+     def find_priority_instance(self, instance):
+ 
+         current_cache, previous_cache = \
+@@ -164,9 +172,8 @@
+ 
+                 # If there is no metadata regarding watcher-priority, it takes
+                 # DEFAULT_WATCHER_PRIORITY as priority.
+-                instance_priority_list.sort(key=lambda a: (
+-                    a.get('metadata').get('watcher-priority'),
+-                    self.DEFAULT_WATCHER_PRIORITY))
++                # CubeCOS: numeric priority, default when missing
++                instance_priority_list.sort(key=self._watcher_priority)
+ 
+                 instance_priority_list_reverse = list(instance_priority_list)
+                 instance_priority_list_reverse.reverse()
+@@ -185,6 +192,10 @@
+                                 loop_break_flag = True
+                                 break
+ 
++                            # CubeCOS: skip audit-scope-excluded instances
++                            if potential_noisy_instance.watcher_exclude:
++                                continue
++
+                             noisy_instance = self.find_noisy_instance(
+                                 potential_noisy_instance)
+ 
+@@ -239,8 +250,10 @@
+             LOG.debug("No hosts available to migrate")
+             return
+ 
+-        mig_source_node_name = max(hosts_need_release.keys(), key=lambda a:
+-                                   hosts_need_release[a]['priority_vm'])
++        # CubeCOS: the host whose priority VM has the lowest watcher-priority
++        mig_source_node_name = min(
++            hosts_need_release.keys(), key=lambda a: self._watcher_priority(
++                hosts_need_release[a]['priority_vm']))
+         instance_to_migrate = hosts_need_release[mig_source_node_name][
+             'noisy_vm']
+ 
+@@ -263,8 +276,9 @@
+                                                mig_source_node,
+                                                mig_destination_node):
+             parameters = {'migration_type': 'live',
+-                          'source_node': mig_source_node.uuid,
+-                          'destination_node': mig_destination_node.uuid,
++                          # CubeCOS: nova takes host names, not node UUIDs
++                          'source_node': mig_source_node.hostname,
++                          'destination_node': mig_destination_node.hostname,
+                           'resource_name': instance_to_migrate.name}
+             self.solution.add_action(action_type=self.MIGRATION,
+                                      resource_id=instance_to_migrate.uuid,

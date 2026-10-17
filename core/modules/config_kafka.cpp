@@ -43,9 +43,20 @@ static bool s_bNetModified = false;
 
 static CubeRole_e s_eCubeRole;
 
-// rotate daily and enable copytruncate
-static LogRotateConf zk_log_conf("zookeeper", "/var/log/zookeeper/*.log", DAILY, 128, 0, true);
-static LogRotateConf kafka_log_conf("kafka", "/var/log/kafka/*.log", DAILY, 128, 0, true);
+// Rotate only the systemd-captured stdout (StandardOutput=append: in kafka.service and
+// zookeeper.service), daily with copytruncate. Every other *.log in these dirs already has
+// a rotator that writes the same .N names: log4j's RollingFileAppender (server.log,
+// controller.log, state-change.log, ... up to MaxBackupIndex) and the JVM's
+// -Xlog:gc*:filecount=10 (*-gc.log.0-9). A *.log glob put two rotators on one namespace,
+// and each time the app's .1 was in the way logrotate renamed it to .1-<YYYYMMDDHH>.backup,
+// which nothing ever removes (#1767).
+static LogRotateConf zk_log_conf("zookeeper", "/var/log/zookeeper/zookeeper.log", DAILY, 128, 0, true);
+static LogRotateConf kafka_log_conf("kafka", "/var/log/kafka/kafka.log", DAILY, 128, 0, true);
+
+// The .backup files the old *.log glob left in the two log dirs. Bounded to those dirs
+// at depth 1, and a no-op once they are gone, so it is cheap on every boot.
+static const char PRUNE_ROTATE_BACKUPS[] =
+    "find /var/log/zookeeper /var/log/kafka -maxdepth 1 -type f -name '*.backup' -delete 2>/dev/null";
 
 // external global variables
 CONFIG_GLOBAL_BOOL_REF(IS_MASTER);
@@ -119,7 +130,7 @@ UpdateTopics(bool ha, bool run, const std::string sharedId)
     // holds nothing new and expires under kafka's own retention, and deleting a topic is
     // not something a config commit should do behind an operator.
     std::string topics[] = { "telegraf-metrics", "telegraf-hc-metrics", "telegraf-events-metrics", "logs", "audit-logs",
-                             "transformed-logs", "notifications.info", "events" };
+                             "transformed-logs", "notifications.info", "versioned_notifications.info", "events" };
 
     for (const std::string &t : topics) {
         RecreateTopic(ha, true, sharedId, t.c_str());
@@ -199,8 +210,8 @@ UpdateCfg(bool ha, const std::string hostname, const std::string sharedId,
         //
         // min.insync.replicas is likewise left at 1 on purpose. This is a 5-minute, 64MB
         // transport buffer, not a store of record, so availability beats durability: at
-        // min.insync 2 a two-broker loss would fail every produce, and telegraf produces
-        // with required_acks = -1.
+        // min.insync 2 a two-broker loss would fail every produce, and telegraf, the beats
+        // and log-transformer produce with acks = all.
         int rf = TargetRF(ha);
         kafkaCfg[GLOBAL_SEC]["default.replication.factor"] = std::to_string(rf);
         kafkaCfg[GLOBAL_SEC]["offsets.topic.replication.factor"] = std::to_string(rf);
@@ -323,6 +334,7 @@ Commit(bool modified, int dryLevel)
         HexUtilSystemF(0, 0, "%s wait_for_service %s 2181 60", HEX_SDK, myip.c_str());
     SystemdCommitService(enabled, KAFKA_NAME, true);
     WriteLogRotateConf(kafka_log_conf);
+    HexSystemF(30, "%s", PRUNE_ROTATE_BACKUPS);
 
     // run update topics in non-master control nodes
     // master node zk may not have quorum in upgrade and cause a long run

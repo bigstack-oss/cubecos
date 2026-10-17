@@ -14,15 +14,19 @@ NVIDIA_PATCHDIR := $(COREDIR)/nvidia/patch
 # A2000: this package's open module cannot initialize it (RmInitAdapter fails to prepare its GSP
 # scrubber ucode), so it is unsupported until both module types can be shipped.
 #
-# nv-pci.c.patch: kernel 6.12.100 added a fourth pci_resize_resource() argument, exclude_bars
-# (upstream 337b1b566db0). This driver's conftest does not detect it, so kernel-open fails to
-# compile. Passing 0 keeps the old behaviour, since the driver releases BAR1/BAR3 itself before the
-# call. The installer is extracted afresh each build, so the patch always meets the pristine file;
-# a driver that already carries the fix makes it fail, which is the cue to drop it.
+# patch/: the kernel-open changes this driver needs to build and run on the Linux 7.2 kernel, each a
+# kernel-open/<path>.patch; patch/README.md says what they carry and under which license. Every one is
+# behind a conftest probe, so the patched sources build for 6.12 as well. The installer is extracted
+# afresh each build, so a patch always meets the pristine file; a driver that already carries a
+# change makes its patch fail, which is the cue to drop it.
 rootfs_install::
 	$(Q)rm -rf $(ROOTDIR)$(NVIDIA_DRIVER_DIR)
 	$(Q)sh $(COREDIR)/nvidia/$(NVIDIA_DRIVER) -x --target $(ROOTDIR)$(NVIDIA_DRIVER_DIR)
-	$(Q)patch --forward --no-backup-if-mismatch -r - $(ROOTDIR)$(NVIDIA_DRIVER_DIR)/kernel-open/nvidia/nv-pci.c < $(NVIDIA_PATCHDIR)/kernel-open/nvidia/nv-pci.c.patch
+	$(Q)set -e; for p in $$(cd $(NVIDIA_PATCHDIR) && find kernel-open -name '*.patch' | sort); do \
+		tgt=$(ROOTDIR)$(NVIDIA_DRIVER_DIR)/$${p%.patch}; \
+		patch --forward --no-backup-if-mismatch -r - "$$tgt" < $(NVIDIA_PATCHDIR)/$$p \
+			|| { echo "nvidia: failed to apply $$p to $$tgt" >&2; exit 1; }; \
+	done
 	$(Q)mount -t sysfs sys $(ROOTDIR)/sys || true
 	$(Q)mount -o bind /dev $(ROOTDIR)/dev || true
 	$(Q)chroot $(ROOTDIR) sh -c "cd $(NVIDIA_DRIVER_DIR) && ./nvidia-installer \

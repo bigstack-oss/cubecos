@@ -1,0 +1,13 @@
+--- kernel-open/header-presence-tests.mk
++++ kernel-open/header-presence-tests.mk
+@@ -36,8 +36,10 @@
+   linux/stdarg.h \
+   linux/iosys-map.h \
+   linux/vfio_pci_core.h \
++  linux/nvgrace-egm.h \
+   linux/cc_platform.h \
+   linux/slub_def.h \
++  linux/of_gpio.h \
+   asm/mshyperv.h \
+   crypto/sig.h
+ 
