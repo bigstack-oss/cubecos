@@ -573,6 +573,13 @@ $(shell for r in $(LOCKED_DNF); do echo $$r >> $(LOCKED_RPMS); done)
 $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
 endif
 
+ifeq ($(HEAVY_PART),l1)
+# The makefiles the l1 pass reads, for heavy-cache.sh l1-key.
+.PHONY: heavy_l1_makefiles
+heavy_l1_makefiles:
+	@echo $(abspath $(MAKEFILE_LIST))
+endif
+
 ifneq ($(HEAVY_PART),l1)
 # Every component's rootfs_install has run by now, so the last openstack venv install
 # is behind us: drop uv and its cache before they ship.
@@ -633,8 +640,30 @@ else
 # recently mounted proc on the system, and that would be heavy_base's. Without /proc,
 # rpm closes fds one by one up to the container's 1G nofile limit before every
 # scriptlet (about 2 minutes each), and the scriptlets themselves run without /proc.
+#
+# With HEAVY_CACHE set, heavy_base is itself built in two passes (HEAVY_PART, at the top):
+# the l1 pass into heavy_l1, then the rest on top of it. heavy_l1 is restored from
+# HEAVY_CACHE instead of built when the l1 pass's inputs are the ones it was saved with and
+# the repos would update the same packages as then (heavy-cache.sh), and a built one is saved
+# there. Either way heavy_l1 is moved into heavy_base by the second pass, like heavy_base
+# into heavy_rootfs. A build without HEAVY_CACHE is one pass, as it always was.
+HEAVY_BASE_MAKE = $(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs"
+HEAVY_L1 = $(CURDIR)/heavy_l1
+HEAVY_L1_MAKE = $(HEAVY_BASE_MAKE) HEAVY_PART=l1 HEAVY_LOCKED_DNF="$(LOCKED_DNF)" HEAVY_BLKLST_DNF="$(BLKLST_DNF)"
+HEAVY_L1_CACHE = bash $(COREDIR)/heavyfs/heavy-cache.sh
+
 $(HEAVY_BASE): $(HEX_FULL_ROOTFS) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
-	$(call RUN_CMD_TIMED, unshare -m --propagation private $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
+ifeq ($(HEAVY_CACHE),)
+	$(call RUN_CMD_TIMED, unshare -m --propagation private $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(HEAVY_BASE_MAKE) rootfs_install' $< $@, "  GEN     $@")
+else
+	$(Q)rm -f $(HEAVY_L1).key $(HEAVY_L1).hit
+	$(Q)$(HEAVY_L1_CACHE) l1-key $(TOP_SRCDIR) '$(HEAVY_L1_MAKE)' $(HEX_SCRIPTSDIR) > $(HEAVY_L1).key || rm -f $(HEAVY_L1).key
+	$(Q)[ ! -s $(HEAVY_L1).key ] || ! $(HEAVY_L1_CACHE) l1-restore $(TOP_BLDDIR) $(HEAVY_CACHE) $$(cat $(HEAVY_L1).key) || touch $(HEAVY_L1).hit
+	$(call RUN_CMD_TIMED, [ -e $(HEAVY_L1).hit ] || { $(HEAVY_L1_CACHE) l1-clean $(TOP_BLDDIR) && $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(HEAVY_L1_MAKE) rootfs_install' $< $(HEAVY_L1); }, "  GEN     $(HEAVY_L1)")
+	$(Q)[ -e $(HEAVY_L1).hit ] || [ ! -s $(HEAVY_L1).key ] || $(HEAVY_L1_CACHE) l1-store $(TOP_BLDDIR) $(HEAVY_CACHE) $$(cat $(HEAVY_L1).key) || echo "WARNING: heavy_l1 not saved to $(HEAVY_CACHE)" >&2
+	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(HEAVY_BASE_MAKE) HEAVY_PART=rest rootfs_install' $(HEAVY_L1) $@, "  GEN     $@")
+	$(Q)rm -f $(HEAVY_L1).key $(HEAVY_L1).hit
+endif
 	$(Q)touch $@
 
 # A rebuild after a build finds heavy_base gone (moved into heavy_rootfs); rebuild it
@@ -695,5 +724,6 @@ rootfs_install::
 endif # HEAVY_PART != l1
 
 PKGCLEAN += $(HEAVYFS) $(HEAVY_BASE) $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
+PKGCLEAN += $(CURDIR)/heavy_l1 $(CURDIR)/heavy_l1.key $(CURDIR)/heavy_l1.hit $(CURDIR)/.heavy_l1.restore
 
 include $(HEX_MAKEDIR)/hex_sdk.mk
