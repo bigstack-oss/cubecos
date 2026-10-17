@@ -125,7 +125,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		$(OPENSTACK_PIP_INSTALL) -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			nova==31.3.1 \
 			openstack-placement==13.0.0 \
 			python-novaclient \
@@ -186,7 +186,7 @@ rootfs_install::
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_PIP_INSTALL) \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		osc-placement
 	$(Q)# clean up dns configurations after downloading packages

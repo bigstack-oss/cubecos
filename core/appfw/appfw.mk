@@ -59,10 +59,10 @@ OSPURGE_PATCHDIR := $(COREDIR)/appfw/$(OPENSTACK_RELEASE)_patch
 rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --no-deps \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_PIP_INSTALL) --no-deps \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		$(OSPURGE_REPO_URL)
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_PIP_INSTALL) \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		openstacksdk pbr six
 	$(Q)# clean up dns configurations after downloading packages

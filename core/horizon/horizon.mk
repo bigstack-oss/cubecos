@@ -77,7 +77,7 @@ $(PROJ_HEAVYFS): $(COREDIR)/horizon/local_settings.in $(CUBE_THEME_SRCS)
 #     that disappears silently -- as keystone.mk's caracal copy did when keystone
 #     moved here (#657).
 #
-# These are two pip invocations rather than one because the two halves want opposite
+# These are two installs rather than one because the two halves want opposite
 # build environments, and a single command can only have one. See the note by the venv
 # bootstrap in core/heavyfs/Makefile for the whole story.
 rootfs_install::
@@ -87,14 +87,14 @@ rootfs_install::
 	$(Q)# namespace from setup.py, so they have to be built against this venv's
 	$(Q)# setuptools 81.0.0 -- a current setuptools has no pkg_resources at all.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		$(OPENSTACK_PIP_INSTALL) -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			--no-build-isolation \
 			horizon==$(HORIZON_VER)"
 	$(Q)# mysqlclient is the counter-example: it is also a source build, but its
-	$(Q)# pyproject.toml wants a setuptools newer than this venv's, so it keeps pip's
+	$(Q)# pyproject.toml wants a setuptools newer than this venv's, so it keeps the
 	$(Q)# default build isolation and gets a current setuptools of its own.
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		$(OPENSTACK_PIP_INSTALL) -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			mysqlclient==$(MYSQLCLIENT_VER) \
 			pymemcache \
 			gunicorn"

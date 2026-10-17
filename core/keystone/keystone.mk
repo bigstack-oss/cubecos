@@ -27,7 +27,7 @@ rootfs_install::
 	$(Q)# enable dns in the rootfs for downloading packages
 	$(Q)cp -f /etc/resolv.conf $(ROOTDIR)/etc/
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && \
-		pip install -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
+		$(OPENSTACK_PIP_INSTALL) -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 			keystone==27.1.0 \
 			python-keystoneclient \
 			PyMySQL \
