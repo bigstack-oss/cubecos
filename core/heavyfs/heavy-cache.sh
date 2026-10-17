@@ -180,10 +180,11 @@ l1_updates() { # <rootdir>
     if [ ! -e "$root/etc/resolv.conf" ] && [ ! -L "$root/etc/resolv.conf" ]; then
         cp -f /etc/resolv.conf "$root/etc/" && dns=1
     fi
-    mount -t proc proc "$root/proc"
-    chroot "$root" dnf -y check-update --refresh > "$out" 2>&1
+    # In a mount namespace of its own, like heavy_base (heavyfs/Makefile): this can run while
+    # hex's mountrootfs runs, whose `umount proc` takes the most recently mounted proc. The
+    # proc goes away with the namespace.
+    unshare -m --propagation private sh -c 'mount -t proc proc "$1/proc"; chroot "$1" dnf -y check-update --refresh' sh "$root" > "$out" 2>&1
     rc=$?
-    umount "$root/proc"
     [ -z "$dns" ] || rm -f "${root:?}/etc/resolv.conf"
     if [ $rc -ne 0 ] && [ $rc -ne 100 ]; then
         echo "ERROR: dnf check-update exited $rc:" >&2

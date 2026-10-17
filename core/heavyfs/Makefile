@@ -659,9 +659,9 @@ else
 	$(Q)rm -f $(HEAVY_L1).key $(HEAVY_L1).hit
 	$(Q)$(HEAVY_L1_CACHE) l1-key $(TOP_SRCDIR) '$(HEAVY_L1_MAKE)' $(HEX_SCRIPTSDIR) > $(HEAVY_L1).key || rm -f $(HEAVY_L1).key
 	$(Q)[ ! -s $(HEAVY_L1).key ] || ! $(HEAVY_L1_CACHE) l1-restore $(TOP_BLDDIR) $(HEAVY_CACHE) $$(cat $(HEAVY_L1).key) || touch $(HEAVY_L1).hit
-	$(call RUN_CMD_TIMED, [ -e $(HEAVY_L1).hit ] || { $(HEAVY_L1_CACHE) l1-clean $(TOP_BLDDIR) && $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(HEAVY_L1_MAKE) rootfs_install' $< $(HEAVY_L1); }, "  GEN     $(HEAVY_L1)")
+	$(call RUN_CMD_TIMED, [ -e $(HEAVY_L1).hit ] || { $(HEAVY_L1_CACHE) l1-clean $(TOP_BLDDIR) && unshare -m --propagation private $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(HEAVY_L1_MAKE) rootfs_install' $< $(HEAVY_L1); }, "  GEN     $(HEAVY_L1)")
 	$(Q)[ -e $(HEAVY_L1).hit ] || [ ! -s $(HEAVY_L1).key ] || $(HEAVY_L1_CACHE) l1-store $(TOP_BLDDIR) $(HEAVY_CACHE) $$(cat $(HEAVY_L1).key) || echo "WARNING: heavy_l1 not saved to $(HEAVY_CACHE)" >&2
-	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(HEAVY_BASE_MAKE) HEAVY_PART=rest rootfs_install' $(HEAVY_L1) $@, "  GEN     $@")
+	$(call RUN_CMD_TIMED, unshare -m --propagation private $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(HEAVY_BASE_MAKE) HEAVY_PART=rest rootfs_install' $(HEAVY_L1) $@, "  GEN     $@")
 	$(Q)rm -f $(HEAVY_L1).key $(HEAVY_L1).hit
 endif
 	$(Q)touch $@
