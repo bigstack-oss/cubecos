@@ -264,14 +264,17 @@ rootfs_install::
 # vendors 2.21.6. logstash-core loads 2.21.7 already, so jar-dependencies skips the gem's own
 # jackson-core and jackson-databind, but it does load the gem's jackson-dataformat-csv and
 # jackson-datatype-jdk8 2.21.6. All four move to 2.21.7 and the gem's jar list names 2.21.7, so the
-# plugin runs on the one Jackson line logstash-core loads. The last field is the version replaced.
-# Nothing here is -f: a Logstash bump that changes the gem's version, or what it vendors, fails here.
+# plugin runs on the one Jackson line logstash-core loads. The gem's lz4-java 1.10.1, which the
+# Kafka client compresses with, has a known vulnerability fixed in 1.11.4 and moves the same way.
+# The last field is the version replaced. Nothing here is -f: a Logstash bump that changes the
+# gem's version, or what it vendors, fails here.
 LOGSTASH_KAFKA_GEM := $(LOGSTASH_HOME)/vendor/bundle/jruby/3.4.0/gems/logstash-integration-kafka-12.1.9-java
 LOGSTASH_KAFKA_JAR_REFRESH := \
 	com.fasterxml.jackson.core:jackson-core:2.21.7:8c5623b98f32d5f7e1287ff61ed50e08ab7b11381e991fff89327faabba42261:2.21.6 \
 	com.fasterxml.jackson.core:jackson-databind:2.21.7:1290c2795e93e8a6861a6c4d9ff0d844d32f5ea178362cb2721edf5561e828b1:2.21.6 \
 	com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.7:588050148497158cabdc05c0ae3a7e123194a486b8c62745778fc6239f9b085e:2.21.6 \
-	com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.21.7:b8f62f98363ed9aa259b3a479a64fcbe7e081158a8bec6733972e900d12f4e47:2.21.6
+	com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.21.7:b8f62f98363ed9aa259b3a479a64fcbe7e081158a8bec6733972e900d12f4e47:2.21.6 \
+	at.yawk.lz4:lz4-java:1.11.4:58c8e0b813960d2a248e050c353baea73139b48a2ffc55382d42c69707e17325:1.10.1
 LOGSTASH_KAFKA_JARS_RB = $(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/lib/logstash-integration-kafka_jars.rb
 # $(1) one LOGSTASH_KAFKA_JAR_REFRESH entry: swap the jar in the gem's vendor/jar-dependencies tree
 # and the version its jar list requires.
