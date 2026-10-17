@@ -50,6 +50,14 @@ $(BIN):
 		&& echo "  K3S     $(VERSION) restored from cache" \
 		|| $(MAKE) $(BIN)-from-source
 
+# k3s 1.32.13 pins x/net, x/crypto and x/sys with replace directives, and requires an x/text, all
+# older than the releases the other Go rebuilds here take (docker.mk, influxdb.mk). Raise them in
+# the clone before the build. Upstream's maintained branches still replace the same three, at newer
+# versions, so the replaces are raised rather than dropped. cache-key.sh hashes these lines, so a
+# change here builds a new binary instead of restoring the old one from the cache.
+K3S_GO_REPLACE := golang.org/x/net=golang.org/x/net@v0.61.0 golang.org/x/crypto=golang.org/x/crypto@v0.58.0 golang.org/x/sys=golang.org/x/sys@v0.49.0
+K3S_GO_GET := golang.org/x/text@v0.43.0
+
 # k3s refuses to start unless runtime.Version() equals the UpstreamGolang it was linked with,
 # which version.sh takes from kubernetes' build/dependencies.yaml (go1.24.13 for 1.32.13, a
 # dead Go line). We build with a newer Go, so record the Go we actually build with, as the
@@ -63,6 +71,12 @@ $(BIN)-from-source: $(K3S_SRC_DIR) .dapper
 	$(Q)grep -q '^VERSION_GOLANG=' $(K3S_SRC_DIR)/scripts/version.sh
 	$(Q)sed -i 's/^VERSION_GOLANG=.*/VERSION_GOLANG="$$(go version | cut -d" " -f3)"/' $(K3S_SRC_DIR)/scripts/version.sh
 	$(Q)chmod +x $(K3S_SRC_DIR)/scripts/ci
+	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
+		export GOTOOLCHAIN=local GOFLAGS=-mod=mod && \
+		go mod edit $(addprefix -replace ,$(K3S_GO_REPLACE)) && \
+		go get $(K3S_GO_GET) && \
+		go mod tidy, \
+		"  GOMOD   k3s")
 	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
 		export PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
 		TAG=$(VERSION) \
