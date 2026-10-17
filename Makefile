@@ -13,6 +13,32 @@ SUBDIRS += hex
 # Core SDK
 SUBDIRS += core
 
+# The SUBDIRS walk builds hex/src completely (its initramfs images take ~8 minutes)
+# before it enters core, but heavyfs' heavy_base -- the longest step of the build --
+# needs only hex's rootfs, the SDK library and hex_crashd, which heavyfs installs
+# (hex/make/hex_crashd.mk). So once those three exist, two lines run side by side:
+#   - core's heavy_overlap: heavy_base alongside the components heavyfs comes after
+#   - the rest of hex/src, then core's libraries, mysql and modules, then core/main's
+#     programs; none of these reads heavyfs, so none of them waits for heavy_base
+# The SUBDIRS walk that follows finds both lines done. The second line's output goes
+# to a file and is printed afterwards, for the reason given at heavy_overlap.
+# Not for RC builds, which take heavy_rootfs from the release instead.
+ifeq ($(RC),)
+ALL += critical_overlap
+.PHONY: critical_overlap
+critical_overlap:
+	$(Q)$(MAKE) -C hex TARGET=_all_r fakeroot rootfs
+	$(Q)$(MAKE) -C hex/src lib
+	$(Q)$(MAKE) -C hex/src/hex_crashd _all
+	$(Q)log=$$(mktemp /tmp/critical_overlap.XXXXXX); \
+	{ $(MAKE) -C hex TARGET=_all_r src && \
+	  $(MAKE) -C core TARGET=_all_r cube_sdk_library sdk_so mysql modules && \
+	  $(MAKE) -C core/main _build; } >$$log 2>&1 & rest=$$!; \
+	$(MAKE) -C core heavy_overlap; heavy=$$?; \
+	wait $$rest; rested=$$?; cat $$log; rm -f $$log; \
+	[ $$heavy -eq 0 ] && [ $$rested -eq 0 ]
+endif
+
 # Convenience targets
 help::
 	$(Q)echo "testhotfixes Build test hotfixes"
