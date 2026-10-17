@@ -563,8 +563,14 @@ else
 # build heavy_base is gone. .SECONDARY tells make that is expected: a missing
 # heavy_base is rebuilt only when heavy_rootfs has to be, which costs the same full
 # rebuild a heavy_rootfs change always has.
+#
+# heavy_base runs in a private mount namespace because it overlaps hex's initramfs
+# mountrootfs runs. Each of those starts with `umount proc`, which unmounts the most
+# recently mounted proc on the system, and that would be heavy_base's. Without /proc,
+# rpm closes fds one by one up to the container's 1G nofile limit before every
+# scriptlet (about 2 minutes each), and the scriptlets themselves run without /proc.
 $(HEAVY_BASE): $(HEX_FULL_ROOTFS) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
-	$(call RUN_CMD_TIMED, $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
+	$(call RUN_CMD_TIMED, unshare -m --propagation private $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
 	$(Q)touch $@
 
 # A rebuild after a build finds heavy_base gone (moved into heavy_rootfs); rebuild it
