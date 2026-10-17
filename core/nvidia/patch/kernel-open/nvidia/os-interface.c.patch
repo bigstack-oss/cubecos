@@ -1,0 +1,24 @@
+--- kernel-open/nvidia/os-interface.c
++++ kernel-open/nvidia/os-interface.c
+@@ -371,7 +371,7 @@
+ 
+ NvBool NV_API_CALL os_is_isr(void)
+ {
+-    return (in_irq());
++    return (nv_in_hardirq());
+ }
+ 
+ // return TRUE if the caller is the super-user
+@@ -759,8 +759,10 @@
+ void NV_API_CALL os_get_current_process_name(char *buf, NvU32 len)
+ {
+     task_lock(current);
+-    strncpy(buf, current->comm, len - 1);
+-    buf[len - 1] = '\0';
++    if (strscpy(buf, current->comm, len) < 0) {
++        // strscpy() returns -E2BIG on truncation, which is acceptable here.
++    }
++
+     task_unlock(current);
+ }
+ 
