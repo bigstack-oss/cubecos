@@ -44,10 +44,14 @@ $(RANCHER_PROV_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(RANCHER_PROV_VER) $(RANCHER_PROV_REPO) $(RANCHER_PROV_DIR),"  CLONE   rancher-provider")
 
 # x/crypto, x/net, x/text and grpc are lifted past v7.0.0's to TF_GO_GET. go-getter goes to the
-# 1.8 line: no 1.7 release carries all of its fixes.
+# 1.8 line: no 1.7 release carries all of its fixes. v7.0.0 replaces k8s.io/kubernetes with
+# v1.30.1; the replace stays on the 1.30 line, at its last release.
+RANCHER_PROV_K8S      := v1.30.14
 $(RANCHER_UPSTREAM_BIN): $(RANCHER_PROV_DIR)
 	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && go get github.com/hashicorp/go-getter@v1.8.10 && \
-		go get $(TF_GO_GET) && go mod tidy, "  UPDATE  rancher-provider")
+		go get $(TF_GO_GET) && \
+		go mod edit -replace k8s.io/kubernetes=k8s.io/kubernetes@$(RANCHER_PROV_K8S) && \
+		go mod tidy, "  UPDATE  rancher-provider")
 	$(call RUN_CMD_TIMED,cd $(RANCHER_PROV_DIR) && make build, "  BUILD   rancher-provider")
 
 $(KEYCLOAK_PROV_DIR):
