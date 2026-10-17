@@ -351,6 +351,13 @@ rootfs_install::
 # namespace shadows the source tree and setup.py fails with "cannot import name ...
 # from 'xstatic.pkg' (unknown location)". A single pip invocation is fine -- pip
 # builds every sdist before installing any of them.
+#
+# The service installs now run through uv rather than pip (OPENSTACK_PIP_INSTALL in
+# project.mk), and all of the above was written against pip. It still holds under uv:
+# uv's build isolation does not apply -c either, and a single uv invocation also builds
+# before it installs. Shown by the first two uv builds (2026-10-17): horizon's XStatic
+# sdists built under --no-build-isolation, mysqlclient built in isolation, and the
+# venv's pip freeze matched pip-built develop's.
 
 # set up the execution context for openstack epoxy
 rootfs_install::
@@ -359,6 +366,13 @@ rootfs_install::
 	$(Q)cp -f $(OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(OPENSTACK_HOME_DIR)/
 	$(Q)chroot $(ROOTDIR) bash -c "source $(OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
 	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
+
+# uv for the service installs into the venv above (see OPENSTACK_PIP_INSTALL in
+# project.mk). It lives in a venv of its own under /var/tmp, which the block below the
+# component include removes, cache and all.
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) python$(PYTHON_VER) -m venv $(OPENSTACK_UV_HOME)/venv
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_UV_HOME)/venv/bin/pip install uv==$(UV_VER)
 
 # NOTE: os-epoxy-pip-upper-constraints.txt is upstream's stable/2025.1
 # upper-constraints.txt copied down, save for local deltas: libvirt-python, raised to
@@ -422,7 +436,7 @@ rootfs_install::
 # tree calls it and no other venv console script is aliased that way, so it is not
 # recreated.
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) $(OPENSTACK_HOME_DIR)/bin/pip install \
+	$(Q)chroot $(ROOTDIR) $(OPENSTACK_PIP_INSTALL) \
 		-c $(OPENSTACK_INSTALLED_PIP_CONSTRAINT) \
 		python-openstackclient
 	$(Q)# Link the cli. hex_sdk reaches it by absolute path ($$OPENSTACK in
@@ -480,6 +494,11 @@ HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl lachesis
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 $(shell for r in $(LOCKED_DNF); do echo $$r >> $(LOCKED_RPMS); done)
 $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
+
+# Every component's rootfs_install has run by now, so the last openstack venv install
+# is behind us: drop uv and its cache before they ship.
+rootfs_install::
+	$(Q)rm -rf $(ROOTDIR)$(OPENSTACK_UV_HOME)
 
 # Component artifacts baked into the rootfs — prereqs so a component rebuild
 # forces a rootfs rebuild (with touch $@ below). Scoped to HEAVY_COMPONENTS, not
