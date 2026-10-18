@@ -929,7 +929,15 @@ func commitK3s() error {
 			}
 		}
 
-		envInstallK3sExec := "INSTALL_K3S_EXEC=--disable=traefik --disable=servicelb " + os.Getenv("INSTALL_K3S_EXEC")
+		// Joining servers reach the cluster through cube-controller (the VIP). k3s 1.28 and later
+		// refuse to add a name to the server certificate just because a client asks for it
+		// (--tls-san-security), so without these the first server's certificate does not cover
+		// cube-controller and the others cannot join until something else adds it.
+		envInstallK3sExec := "INSTALL_K3S_EXEC=--disable=traefik --disable=servicelb --tls-san=cube-controller "
+		if ip := cubeSettings.GetControllerIp(); ip != "" {
+			envInstallK3sExec += "--tls-san=" + ip + " "
+		}
+		envInstallK3sExec += os.Getenv("INSTALL_K3S_EXEC")
 
 		if !isRejoin && cubeSettings.IsMasterControl() {
 			envInstallK3sExec += " --cluster-init"
