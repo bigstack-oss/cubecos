@@ -21,7 +21,7 @@ log_info(){ :; }; log_warning(){ :; }; log_error(){ :; }; Quiet(){ :; }
 _live_migration_repair(){ echo "repair $1" >> $CALLS; }
 sleep(){ :; }
 # fixture state
-MYSQL_RC=0 RMQ_RC=0 UNSYNC=0 CEPH_HEALTH=HEALTH_OK INDOWN=0 DELAY=0
+MYSQL_RC=0 RMQ_RC=0 UNSYNC=0 CEPH_HEALTH=HEALTH_OK CEPH_CHECKS={} INDOWN=0 DELAY=0
 SERVICES="nova-conductor c1 up
 nova-scheduler c1 up
 nova-compute c1 up
@@ -39,7 +39,7 @@ CEPH=ceph_stub
 ceph_stub(){ echo "ceph $*" >> $CALLS; command sleep $DELAY
     case "$1" in
         health) echo $CEPH_HEALTH ;;
-        status) echo "{\"osdmap\":{\"num_in_osds\":9,\"num_up_osds\":$((9 - INDOWN))}}" ;;
+        status) echo "{\"health\":{\"checks\":$CEPH_CHECKS},\"osdmap\":{\"num_in_osds\":9,\"num_up_osds\":$((9 - INDOWN))}}" ;;
     esac; }
 OPENSTACK=os_stub
 os_stub(){ echo "os $*" >> $CALLS; command sleep $DELAY
@@ -69,8 +69,17 @@ chk "2 rabbitmq named (repair)"  "$(grep -m1 repair $CALLS)" "repair rabbitmq"
 RMQ_RC=0 UNSYNC=2;  gate 1 c1 repair >/dev/null; chk "2 rabbitmq-sync named" "$(grep -m1 repair $CALLS)" "repair rabbitmq-sync"
 UNSYNC=0 CEPH_HEALTH="HEALTH_WARN 3 pgs peering"; chk "2 ceph peering blocks" "$(gate 1 c1)" blocked
 CEPH_HEALTH=HEALTH_OK INDOWN=2;                    chk "2 osd in-but-down blocks" "$(gate 1 c1)" blocked
-INDOWN=0; chk "2 cinder still checked last" "$(gate 1 c1 repair >/dev/null; grep -m1 repair $CALLS)" "repair cinder-volume"
+INDOWN=0
+chk "2 cinder still checked last" "$(gate 1 c1 repair >/dev/null; grep -m1 repair $CALLS)" "repair cinder-volume"
 CINDER=up
+# 19.2.7 on a cluster upgraded from reef: an error the roll cannot clear until it is done
+CEPH_HEALTH="HEALTH_ERR 2 auth client entities with insecure key types"
+CEPH_CHECKS='{"AUTH_INSECURE_SERVICE_TICKETS":{"severity":"HEALTH_ERR"},"AUTH_INSECURE_CLIENT_KEY_TYPE":{"severity":"HEALTH_WARN"}}'
+chk "2 insecure cephx error passes" "$(gate 1 c1)" pass
+CEPH_CHECKS='{"AUTH_INSECURE_SERVICE_TICKETS":{"severity":"HEALTH_ERR"},"OSD_FULL":{"severity":"HEALTH_ERR"}}'
+chk "2 other ceph error blocks"     "$(gate 1 c1)" blocked
+gate 1 c1 repair >/dev/null;  chk "2 ceph error named" "$(grep -m1 repair $CALLS)" "repair ceph"
+CEPH_HEALTH=HEALTH_OK CEPH_CHECKS={}
 
 # 3. nova checks read the single list, in the old order
 SERVICES_OK=$SERVICES

@@ -1310,7 +1310,13 @@ live_migration_gate()
             local _unsync=$(cat $_d/unsync)
             [ "${_unsync:-0}" -gt 0 ] 2>/dev/null && why=rabbitmq-sync
         }
-        [ -z "$why" ] && { grep -qiE 'HEALTH_ERR|inactive|incomplete|peering|stale' $_d/health && why=ceph ; }
+        # any error-level check blocks but ceph 19.2.7's AUTH_INSECURE_* ones: a cluster upgraded
+        # from an earlier release raises AUTH_INSECURE_SERVICE_TICKETS until its CephX keys are
+        # rotated, which waits for every node -- kernel clients included -- to run 19.2.7, so a
+        # roll would otherwise stop at its first node
+        [ -z "$why" ] && jq -e '[.health.checks // {} | to_entries[] | select(.value.severity == "HEALTH_ERR")
+            | select(.key | startswith("AUTH_INSECURE_") | not)] | length > 0' $_d/status >/dev/null 2>&1 && why=ceph
+        [ -z "$why" ] && { grep -qiE 'inactive|incomplete|peering|stale' $_d/health && why=ceph ; }
         # wait for the rebooted node's OSDs to rejoin (in-but-down = not back);
         # tolerates degraded/recovering, does not require active+clean
         [ -z "$why" ] && {
