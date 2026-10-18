@@ -23,7 +23,7 @@
  
      client_obj = nova_client.Client(
          api_versions.APIVersion(NOVA_API_VERSION),
-@@ -167,6 +176,40 @@
+@@ -167,6 +176,64 @@
              nova.services.enable(service.id)
  
      @translate_nova_exception
@@ -56,9 +56,33 @@
 +        scheduler cannot disagree.
 +        """
 +        nova = novaclient(context)
-+        return any(s.host != failed_host and
-+                   s.state == 'up' and s.status == 'enabled'
-+                   for s in nova.services.list(binary=binary))
++        services = nova.services.list(binary=binary)
++        if any(s.host != failed_host and
++               s.state == 'up' and s.status == 'enabled'
++               for s in services):
++            return True
++        # Say what nova reported, so a wait that runs out can be read back:
++        # which host was down or disabled, why, and how old its heartbeat was.
++        # Logged when the picture changes, not on every poll.
++        seen = sorted((s.host, s.state, s.status,
++                       getattr(s, 'disabled_reason', None) or '',
++                       bool(getattr(s, 'forced_down', False)))
++                      for s in services)
++        if seen != getattr(self, '_valid_target_seen', None):
++            self._valid_target_seen = seen
++            LOG.info("No evacuation target other than '%(host)s' yet; nova "
++                     "reports: %(services)s",
++                     {'host': failed_host,
++                      'services': '; '.join(
++                          '%s %s/%s%s%s, heartbeat %s' % (
++                              s.host, s.state, s.status,
++                              ' (%s)' % s.disabled_reason
++                              if getattr(s, 'disabled_reason', None) else '',
++                              ', forced down'
++                              if getattr(s, 'forced_down', False) else '',
++                              getattr(s, 'updated_at', None))
++                          for s in services) or 'no services'})
++        return False
 +
 +    @translate_nova_exception
      def is_service_disabled(self, context, host_name, binary):
