@@ -59,8 +59,6 @@ rootfs_install:: $(INFLUXDB_GO_DIR)/influxdb.built
 		{ echo "influxdb.mk: the repo installed influxdb $$v, but its binaries are rebuilt from $(INFLUXDB_VER)" ; exit 1 ; }
 	$(Q)cd $(INFLUXDB_GO_DIR)/bin && install -m 0755 $(INFLUXDB_BINS) $(ROOTDIR)/usr/bin/
 
-INFLUXDB_REPO = $(shell cp $(COREDIR)/influxdb/influxdb.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "influxdb")
-
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable influxdb
 	$(Q)mv -f $(ROOTDIR)/etc/influxdb/influxdb.conf $(ROOTDIR)/etc/influxdb/influxdb.conf.org

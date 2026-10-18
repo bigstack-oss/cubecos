@@ -61,8 +61,6 @@ ROOTFS_PIP += python-magic python3-saml xmlsec
 # headers for the rados/rbd python bindings built below
 ROOTFS_DNF += librados-devel$(CEPH_VERSION) librbd-devel$(CEPH_VERSION)
 
-CEPH_REPO = $(shell cp $(COREDIR)/ceph/ceph.repo $(ROOTDIR)/etc/yum.repos.d/ ; echo "ceph")
-
 # ceph's python BUILD contexts, one per openstack interpreter -- removed again before
 # the image ships
 #
