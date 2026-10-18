@@ -21,7 +21,7 @@ CONTAINERD_VER := 2.4.2
 RUNC_VER := 1.5.2
 COMPOSE_VER := 5.6.0
 BUILDX_VER := 0.38.0
-SKOPEO_VER := 1.23.0
+SKOPEO_VER := 1.22.2
 DOCKER_GO_DIR := $(ARCS_DIR)/docker-go
 DOCKER_GO_BIN := $(DOCKER_GO_DIR)/bin
 # Raise the x/ modules in a clone; $(1) is extra, e.g. `go mod vendor` for a vendored tree
@@ -99,10 +99,12 @@ $(DOCKER_GO_BIN)/docker-buildx: $(DOCKER_GO_DIR)/buildx-src $(COREDIR)/docker/do
 
 # skopeo, from the Stream rpm. Pure Go: containers_image_openpgp in place of gpgme (and of the
 # sequoia library), with btrfs and devicemapper left out, as skopeo's own static build does. Its
-# grpc, opentelemetry and fulcio are raised to their fixed releases as well; 1.23.0 already takes a
-# fixed selinux.
+# grpc, opentelemetry, selinux and fulcio are raised to their fixed releases as well. Stream 9 is on
+# skopeo's 1.22 sustaining branch: its 1.22.2 builds carry Epoch 3, above the 1.23.0 build's Epoch 2,
+# so dnf installs 1.22.2 although 1.23.0 is still in the repository. Move to 1.23 only when the
+# package does.
 SKOPEO_GO_GET := google.golang.org/grpc@v1.84.0 go.opentelemetry.io/otel@v1.47.0 \
-	github.com/sigstore/fulcio@v1.8.8
+	github.com/opencontainers/selinux@v1.13.1 github.com/sigstore/fulcio@v1.8.8
 $(eval $(call docker_go_clone,skopeo,v$(SKOPEO_VER),containers/skopeo))
 $(DOCKER_GO_BIN)/skopeo: $(DOCKER_GO_DIR)/skopeo-src $(COREDIR)/docker/docker.mk
 	$(Q)mkdir -p $(@D)
