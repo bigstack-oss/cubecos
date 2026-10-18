@@ -3492,6 +3492,16 @@ ceph_mon_msgr2_enable()
         sleep 10
         i=$(expr $i + 1)
     done
+
+    # ceph 19.2.7's health monitor proposes only when its stored leader checks change, and the
+    # health it reports can hold a MON_MSGR2_NOT_ENABLED raised while a mon was still v1-only
+    # when the stored checks never did. Once every mon has a v2 address nothing rewrites that,
+    # so the warning outlives its cause. Any health proposal re-evaluates it: mute and unmute.
+    timeout 10 $CEPH mon dump 2>/dev/null | grep -E "^[0-9]+: " | grep -qv "v2:" && return 0
+    if timeout 10 $CEPH health detail -f json 2>/dev/null | jq -e '.checks.MON_MSGR2_NOT_ENABLED.muted == false' >/dev/null ; then
+        Quiet -n $CEPH health mute MON_MSGR2_NOT_ENABLED
+        Quiet -n $CEPH health unmute MON_MSGR2_NOT_ENABLED
+    fi
 }
 
 ceph_basic_config_gen()
