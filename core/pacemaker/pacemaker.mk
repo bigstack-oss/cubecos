@@ -25,9 +25,14 @@ ROOTFS_DNF += $(PACEMAKER_DNF) pcs fence-agents-all libqb
 # rdoc), leaves the build_info behind, and reports a gem it cannot find with status 0, so the
 # rule checks for 8.0.1 itself, before and after: a pcs that stops bundling it fails here, the
 # cue to revisit. `rpm -V pcs` reports 8.0.1 as missing.
+#
+# The gem commands run with make's MAKEFLAGS cleared. hex's recursion puts TARGET=<its own target>
+# on make's command line, and MAKEFLAGS carries that into the make that builds the parser, where it
+# overrides mkmf's TARGET: the parser came out as _full_r.so, not puma_http11.so, and pcsd-ruby
+# could not start. The rule loads the parser afterwards, so a misbuilt one stops the build.
 ROOTFS_DNF += ruby-devel
 PCSD_GEM_HOME := /usr/lib64/pcsd/vendor/bundle
-PCSD_GEM_ENV := env GEM_HOME=$(PCSD_GEM_HOME) GEM_PATH=$(PCSD_GEM_HOME):/usr/share/gems
+PCSD_GEM_ENV := env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL GEM_HOME=$(PCSD_GEM_HOME) GEM_PATH=$(PCSD_GEM_HOME):/usr/share/gems
 PCSD_PUMA_VER := 8.0.2
 PCSD_PUMA_OLD := 8.0.1
 PCSD_PUMA_GEM := puma-$(PCSD_PUMA_VER).gem
@@ -50,6 +55,8 @@ rootfs_install:: $(ARCS_DIR)/$(PCSD_PUMA_GEM)
 	$(Q)rmdir $(ROOTDIR)$(PCSD_GEM_HOME)/cache
 	$(Q)[ -z "$$(find $(ROOTDIR)$(PCSD_GEM_HOME) -name 'puma-$(PCSD_PUMA_OLD)*')" ] || \
 		{ echo "pacemaker.mk: puma $(PCSD_PUMA_OLD) is still in $(PCSD_GEM_HOME)" ; exit 1 ; }
+	$(Q)chroot $(ROOTDIR) $(PCSD_GEM_ENV) ruby -e 'gem "puma", "$(PCSD_PUMA_VER)" ; require "puma/puma_http11"' || \
+		{ echo "pacemaker.mk: puma $(PCSD_PUMA_VER)'s parser does not load" ; exit 1 ; }
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable rpcbind nfs-convert || true
