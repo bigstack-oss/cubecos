@@ -44,6 +44,7 @@ CEPHFS_K8S_DIR=/mnt/cephfs/k8s
 CEPHFS_UPDATE_DIR=/mnt/cephfs/update
 ADMIN_KEYRING=/etc/ceph/ceph.client.admin.keyring
 CEPHFS_CLIENT_AUTHKEY=/etc/ceph/admin.key
+K8S_KEYRING=/etc/ceph/ceph.client.k8s.keyring
 CEPH_OSD_MAP=/var/lib/ceph/osd/dev_osd.map
 # -k: SIGTERM alone does not free a ceph CLI blocked on an unserving mgr, and
 # plain `timeout` then waits forever -- the cap has to be enforced with a kill.

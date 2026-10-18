@@ -49,6 +49,9 @@
 // RetireMgrInflux() -- the state it removes lives in the mon quorum, not on the rootfs,
 // so the partition switch does not clear it for us.
 #define MAKRER_INFLUX_PENDING "/etc/appliance/state/ceph_mgr_influx_retire_pending"
+// Dropped by the same migrate hook, cleared once the cluster is on the aes256k CephX
+// cipher. See UpgradeCephxCipher() -- like the influx state, it lives in the mon quorum.
+#define MAKRER_CEPHX_PENDING "/etc/appliance/state/ceph_cephx_cipher_pending"
 #define MAKRER_DASHBOARD "/etc/appliance/state/ceph_dashboard_done"
 #define MAKRER_DASHBOARD_IDP "/etc/appliance/state/ceph_dashboard_idp_done"
 #define MAKRER_ISCSI "/etc/appliance/state/ceph_iscsi_done"
@@ -1775,7 +1778,28 @@ RetireMgrInflux()
     }
 }
 
-// Drop the markers FinalizeCephRelease() and RetireMgrInflux() key off. This runs on a
+// Move a cluster upgraded from before ceph 19.2.6 onto the aes256k CephX cipher, where a
+// fresh install starts; until then ceph reports HEALTH_ERR AUTH_INSECURE_SERVICE_TICKETS.
+// The sdk call does nothing until the release is finalized and every daemon tier runs one
+// release, so like FinalizeCephRelease it is the node that finishes the roll that does the
+// work, and on any other node the marker waits for a later commit to find it done.
+//
+// Not IsControl-gated either, for the same reasons: on a web-scale cluster the last node
+// may be a storage node, and the sdk reaches the control nodes itself for the ceph-csi
+// secrets in k3s.
+static void
+UpgradeCephxCipher()
+{
+    if (access(MAKRER_CEPHX_PENDING, F_OK) != 0)
+        return;
+
+    if (HexUtilSystemF(0, 0, HEX_SDK " migrate_ceph_cephx_cipher") == 0) {
+        HexLogInfo("ceph: on the aes256k cephx cipher, clearing the marker");
+        unlink(MAKRER_CEPHX_PENDING);
+    }
+}
+
+// Drop the markers FinalizeCephRelease(), RetireMgrInflux() and UpgradeCephxCipher() key off. This runs on a
 // firmware switch --
 // the only way the ceph packages change under a cluster -- so it is the one moment
 // worth re-checking require_osd_release. It fires on switches that do not move ceph
@@ -1785,6 +1809,7 @@ MigratePrepare(const char* prevVersion, const char* prevRootDir)
 {
     HexSystemF(0, "touch " MAKRER_RELEASE_PENDING);
     HexSystemF(0, "touch " MAKRER_INFLUX_PENDING);
+    HexSystemF(0, "touch " MAKRER_CEPHX_PENDING);
     return true;
 }
 
@@ -2056,6 +2081,7 @@ Commit(bool modified, int dryLevel)
     // under IsBootstrap().
     FinalizeCephRelease();
     RetireMgrInflux();
+    UpgradeCephxCipher();
 
     return true;
 }

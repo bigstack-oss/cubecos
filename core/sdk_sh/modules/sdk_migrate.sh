@@ -846,6 +846,134 @@ migrate_ceph_mgr_influx()
     return 0
 }
 
+# Move a cluster upgraded from before ceph 19.2.6 onto the aes256k CephX cipher, where a
+# fresh install starts. Until then the mons issue aes service tickets, which ceph reports
+# as HEALTH_ERR (AUTH_INSECURE_SERVICE_TICKETS), and client.admin and client.k8s keep aes
+# keys. CubeCOS runs with cephx off (auth * required = none in ceph.conf), so there are no
+# daemon keys to rotate on each host; what is left is the mons' cipher settings and the
+# two client keys with their copies: the admin and k8s keyrings and the cephfs mount
+# secret on every node, libvirt's secret for the admin key, and the ceph-csi secrets.
+#
+# Upstream's precondition is every service daemon on a release that knows aes256k, so
+# this waits for the end of a rolling upgrade: the release pinned by
+# ceph_finalize_release and one release in each daemon tier. Whichever node finishes
+# the roll gets past that gate. The rotating service keys are left to expire on their
+# own, as upstream advises, so AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE stays up to
+# about three hours after the switch.
+#
+# rc 0 once the mons allow only aes256k, which is set last; rc 1 to be tried again.
+migrate_ceph_cephx_cipher()
+{
+    local mon=$($CEPH mon dump -f json 2>/dev/null)
+    [ -n "$mon" ] || { log_info "migrate_ceph_cephx_cipher: no mon answers, will retry" ; return 1 ; }
+    echo "$mon" | jq -e '(.auth_allowed_ciphers // []) | map(.name) | index("aes256k")' >/dev/null || return 1
+    [ "$(_migrate_cephx_field "$mon" auth_allowed_ciphers)" = "aes256k" ] && return 0
+
+    if ! $HEX_SDK ceph_finalize_release ; then
+        log_info "migrate_ceph_cephx_cipher: release not finalized yet, will retry"
+        return 1
+    fi
+    local tier
+    for tier in mon mgr mds ; do
+        if [ "$($HEX_SDK ceph_tier_releases $tier | sed '/^$/d' | wc -l)" -gt 1 ] ; then
+            log_info "migrate_ceph_cephx_cipher: $tier daemons run mixed releases, will retry"
+            return 1
+        fi
+    done
+
+    local field
+    for field in auth_preferred_cipher auth_service_cipher ; do
+        if [ "$(_migrate_cephx_field "$mon" $field)" != "aes256k" ] ; then
+            log_info "migrate_ceph_cephx_cipher: setting $field to aes256k"
+            $CEPH mon set $field aes256k || return 1
+        fi
+    done
+
+    local insecure=$($CEPH health detail -f json 2>/dev/null | \
+        jq -r '.checks.AUTH_INSECURE_CLIENT_KEY_TYPE.detail[]?.message' | awk '{print $2}')
+    local entity
+    for entity in client.admin client.k8s ; do
+        if echo "$insecure" | grep -qx "$entity" ; then
+            log_info "migrate_ceph_cephx_cipher: rotating $entity onto aes256k"
+            $CEPH auth rotate $entity --key_type aes256k >/dev/null || return 1
+        fi
+    done
+
+    _migrate_cephx_copies || return 1
+
+    if $CEPH health detail -f json 2>/dev/null | jq -e '.checks.AUTH_INSECURE_CLIENT_KEY_TYPE' >/dev/null ; then
+        log_info "migrate_ceph_cephx_cipher: a client key is still aes, will retry"
+        return 1
+    fi
+    log_info "migrate_ceph_cephx_cipher: allowing only aes256k"
+    $CEPH mon set auth_allowed_ciphers aes256k || return 1
+}
+
+# A cipher setting from `ceph mon dump -f json`, as names: "aes256k", or "aes,aes256k".
+_migrate_cephx_field()
+{
+    echo "$1" | jq -r --arg f "$2" '.[$f] | if type == "array" then map(.name) | join(",") else .name end'
+}
+
+# Bring every copy of the two client keys in line with the mons: the keyrings and the
+# cephfs mount secret, pushed to all nodes; libvirt's secret on each node that has one;
+# the ceph-csi secrets, from a control node's k3s. Each step compares first, so a pass
+# after a partial failure redoes only what is still stale.
+_migrate_cephx_copies()
+{
+    local tmp
+    if [ "$($CEPH auth get-key client.admin 2>/dev/null)" != "$(ceph-authtool -p $ADMIN_KEYRING 2>/dev/null)" ] ; then
+        tmp=$(mktemp ${ADMIN_KEYRING%/*}/.cephx.XXXX)
+        $CEPH auth get client.admin -o $tmp >/dev/null 2>&1 && [ -s $tmp ] || { rm -f $tmp ; return 1 ; }
+        chmod 0600 $tmp && mv -f $tmp $ADMIN_KEYRING
+    fi
+    if [ "$($CEPH auth get-key client.k8s 2>/dev/null)" != "$(ceph-authtool -p -n client.k8s $K8S_KEYRING 2>/dev/null)" ] ; then
+        tmp=$(mktemp ${K8S_KEYRING%/*}/.cephx.XXXX)
+        $CEPH auth get client.k8s -o $tmp >/dev/null 2>&1 && [ -s $tmp ] || { rm -f $tmp ; return 1 ; }
+        chmod 0600 $tmp && mv -f $tmp $K8S_KEYRING
+    fi
+    tmp=$(mktemp ${CEPHFS_CLIENT_AUTHKEY%/*}/.cephx.XXXX)
+    ceph-authtool -p $ADMIN_KEYRING > $tmp 2>/dev/null && [ -s $tmp ] || { rm -f $tmp ; return 1 ; }
+    chmod 0600 $tmp && mv -f $tmp $CEPHFS_CLIENT_AUTHKEY
+
+    local f
+    for f in $ADMIN_KEYRING $K8S_KEYRING $CEPHFS_CLIENT_AUTHKEY ; do
+        cubectl node rsync $f >/dev/null 2>&1 || { log_warning "migrate_ceph_cephx_cipher: could not push $f" ; return 1 ; }
+    done
+
+    # each node reads the key from its own keyring, just pushed, so it is never on a command line
+    cubectl node exec -p -n "command -v virsh >/dev/null || exit 0 ; k=\$(ceph-authtool -p $ADMIN_KEYRING) ; \
+        for u in \$(virsh secret-list 2>/dev/null | awk '/client.admin secret/ {print \$1}') ; do \
+            [ \"\$(virsh secret-get-value \$u 2>/dev/null)\" = \"\$k\" ] || virsh secret-set-value --secret \$u --base64 \$k >/dev/null || exit 1 ; \
+        done" >/dev/null 2>&1 || { log_warning "migrate_ceph_cephx_cipher: could not update libvirt's ceph secret" ; return 1 ; }
+
+    local ctrl
+    for ctrl in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        remote_run $ctrl "$HEX_SDK migrate_ceph_cephx_csi_secrets" && return 0
+    done
+    log_warning "migrate_ceph_cephx_cipher: could not update the ceph-csi secrets"
+    return 1
+}
+
+# On a control node: set the ceph-csi secrets' keys to client.admin's, which is the user
+# both charts are given (cubectl GetAdminSecret). The charts take the key from the admin
+# keyring each time they are applied, so this only catches up the secrets already there.
+migrate_ceph_cephx_csi_secrets()
+{
+    local k=$(ceph-authtool -p $ADMIN_KEYRING 2>/dev/null) ns_name ns name patch
+    [ -n "$k" ] || return 1
+    for ns_name in ceph-csi-rbd/csi-rbd-secret ceph-csi-cephfs/csi-cephfs-secret ; do
+        ns=${ns_name%/*} ; name=${ns_name#*/}
+        $KUBECTL -n $ns get secret $name >/dev/null 2>&1 || continue
+        patch=$($KUBECTL -n $ns get secret $name -o json | jq -c --arg k "$k" \
+            '[.data // {} | to_entries[] | select(.key == "userKey" or .key == "adminKey")
+              | select((.value | @base64d) != $k) | {(.key): $k}] | add // empty') || return 1
+        [ -z "$patch" ] && continue
+        log_info "migrate_ceph_cephx_csi_secrets: updating $ns/$name"
+        $KUBECTL -n $ns patch secret $name --type merge -p "{\"stringData\":$patch}" >/dev/null || return 1
+    done
+}
+
 # One time, master control only: install the VIP re-announce timer on amphorae
 # built before the amphora-vip-advertise element, over octavia's ssh key. Marked
 # done once every amphora has it; bounded by $1 s (default 1800).
