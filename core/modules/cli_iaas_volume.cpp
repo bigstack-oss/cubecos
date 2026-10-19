@@ -1057,6 +1057,8 @@ ManageExistingVolumeFromNfsMain(int argc, const char** argv)
         volumeMetadata["hw_scsi_model"] = "virtio-scsi";
         volumeMetadata["hw_video_model"] = "vga";
         volumeMetadata["hw_input_bus"] = "virtio";
+        // one vNIC queue per vCPU (nova default is a single queue)
+        volumeMetadata["hw_vif_multiqueue_enabled"] = "true";
         volumeMetadata["hw_qemu_guest_agent"] = "yes";
         volumeMetadata["os_require_quiesce"] = "yes";
         volumeMetadata["os_type"] = (osDistro == "windows" ? "windows" : "linux");

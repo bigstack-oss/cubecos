@@ -18,7 +18,7 @@
              # There are 2 possibilities here:
              #
              # 1. The target volume already exists but bdm.volume_size is not
-@@ -4192,12 +4194,63 @@
+@@ -4192,12 +4194,66 @@
  
          return node
  
@@ -33,6 +33,9 @@
 +            if b:
 +                _bad(_("flavor %(name)s uses %(spec)s") % {
 +                    "name": f.name, "spec": b})
++        b = clr.numa_blocked(instance)
++        if b:
++            _bad(_("instance image uses %s") % b)
 +        if new.vcpus < old.vcpus or new.memory_mb < old.memory_mb:
 +            _bad(_("live resize is grow-only"))
 +        # an image-backed root can grow but not shrink; nova ignores
