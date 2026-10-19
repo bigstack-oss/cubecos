@@ -1,18 +1,20 @@
 --- masakari/compute/nova.py
 +++ masakari/compute/nova.py
-@@ -85,6 +85,11 @@
+@@ -85,6 +85,13 @@
      @param timeout: Number of seconds to wait for an answer before raising a
          Timeout exception (None to disable)
      """
 +    # deadline every nova call: a hung request on a blackholed connection
-+    # (e.g. after a VIP failover) otherwise blocks recovery flows for ~10min
++    # (e.g. after a VIP failover) otherwise blocks recovery flows for ~10min.
++    # Longer than nova's own rpc_response_timeout (60): disabling a compute that
++    # nova still counts as up waits on an RPC to it, frozen or not
 +    if timeout is None:
-+        timeout = 60
++        timeout = 90
 +
      nova_catalog_info = CONF.nova_catalog_admin_info
      service_type, service_name, endpoint_type = nova_catalog_info.split(':')
  
-@@ -118,6 +123,10 @@
+@@ -118,6 +125,10 @@
      keystone_session = session_loader.load_from_options(
          auth=auth, cacert=CONF.nova_ca_certificates_file,
          insecure=CONF.nova_api_insecure)
@@ -23,7 +25,7 @@
  
      client_obj = nova_client.Client(
          api_versions.APIVersion(NOVA_API_VERSION),
-@@ -167,6 +176,64 @@
+@@ -167,6 +178,64 @@
              nova.services.enable(service.id)
  
      @translate_nova_exception
