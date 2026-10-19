@@ -323,6 +323,19 @@ _set_ipt_service_int()
     iptables -A $chain -p tcp --dport 5671 -j DROP # drop AMQPS (rabbitmq.ssl.enabled), except for internal nodes -- same reach as 5672, the transport is encrypted but the broker is still cluster-internal
     iptables -A $chain -p tcp --dport 15672 -j DROP # drop RabbitMQ management UI/API (rabbitmq-management 15672), except for internal nodes
     iptables -A $chain -p tcp --dport 25672 -j DROP # drop RabbitMQ Erlang distribution (erlang-distribution 25672), except for internal nodes
+
+    # etcd (12379 client, 12380 peer) also accepts the management subnet: a joining
+    # node dials both before it is in `cubectl node list`, and a member rebuilds this
+    # chain only at its own cluster start
+    source hex_tuning $SETTINGS_TXT cubesys.management
+    local mgmt_if=${T_cubesys_management:-}
+    if [ -n "$mgmt_if" ] ; then
+        source hex_tuning $SETTINGS_TXT net.if.addr.$mgmt_if
+        source hex_tuning $SETTINGS_TXT net.if.mask.$mgmt_if
+        local mgmt_addr=T_net_if_addr_${mgmt_if//[.-]/_} mgmt_mask=T_net_if_mask_${mgmt_if//[.-]/_}
+        [ -z "${!mgmt_addr:-}" ] || [ -z "${!mgmt_mask:-}" ] || iptables -A $chain -p tcp --match multiport --dports 12379,12380 -s ${!mgmt_addr}/${!mgmt_mask} -j ACCEPT
+    fi
+    iptables -A $chain -p tcp --match multiport --dports 12379,12380 -j DROP # drop etcd client/peer (cube's config store), except for internal nodes and the management subnet
     iptables -A $chain -p icmp --icmp-type timestamp-request -j DROP # drop ICMP timestamp requests
 
     iptables -nv -L INPUT 2>/dev/null | grep -q $chain || iptables -A INPUT -j $chain
