@@ -1161,6 +1161,11 @@ Commit(bool modified, int dryLevel)
         SetEndpoint(mainConfig, ctrlIp);
         SetDatabaseConnection(mainConfig, sharedId, dbPass);
         SetMqClientConfig(mainConfig, s_ha, sharedId, mqPass, s_ctrlAddrs, s_mqSsl.newValue());
+        // Above the shared 60: nova's attach and detach reach the backend synchronously
+        // through cinder-volume (attachment_update / attachment_delete), and so do
+        // cinder-backup's connection calls. On RBD that is quick, but array backends
+        // (NetApp, LVM and others) can pass 60 s under load. Below haproxy's 10 min.
+        mainConfig["DEFAULT"]["rpc_response_timeout"] = "300";
         SetNotificationQueue(mainConfig, sharedId);
         SetAuth(mainConfig, sharedId, domain, cinderPass);
         SetNovaInfo(mainConfig, sharedId, s_cubeRegion, domain, novaPass);

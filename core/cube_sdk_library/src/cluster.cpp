@@ -292,8 +292,16 @@ SetMqClientConfig(Configs& config, const bool ha, const std::string& ctrlIp,
     config["DEFAULT"]["transport_url"] = RabbitMqServers(ha, ctrlIp, pass, clusterGroup, ssl);
 
     // neutron's VPN agent is the sole call site that omits this.
+    //
+    // 60 is oslo.messaging's default and every service's own. It used to be 1200, which
+    // made any RPC call whose reply was lost wait 20 minutes -- nova-compute's service
+    // heartbeat among them: when a peer node froze, the survivor's heartbeat blocked for
+    // the full 1200 s, nova reported the survivor down, and masakari had nowhere to
+    // evacuate to. nova's known long calls use long_rpc_timeout instead. The services
+    // with long synchronous calls of their own raise it after this: cinder, heat and
+    // ironic.
     if (withRpcTimeout)
-        config["DEFAULT"]["rpc_response_timeout"] = "1200";
+        config["DEFAULT"]["rpc_response_timeout"] = "60";
 
     // TLS is a property of the broker, not of the cluster shape, so this sits
     // outside the HA gate below: a single-node deployment pointed at 5671 needs

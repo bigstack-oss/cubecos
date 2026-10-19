@@ -56,7 +56,7 @@ int main()
         SetMqClientConfig(config, false, CTRL, PASS, GROUP, false);
 
         HEX_TEST(config["DEFAULT"]["transport_url"] == RabbitMqServers(false, CTRL, PASS, GROUP, false));
-        HEX_TEST(config["DEFAULT"]["rpc_response_timeout"] == "1200");
+        HEX_TEST(config["DEFAULT"]["rpc_response_timeout"] == "60");
         HEX_TEST(KeyCount(config, "DEFAULT") == 2);
         HEX_TEST(!HasSection(config, "oslo_messaging_rabbit"));
     }
@@ -68,7 +68,7 @@ int main()
         SetMqClientConfig(config, true, CTRL, PASS, GROUP, false);
 
         HEX_TEST(config["DEFAULT"]["transport_url"] == RabbitMqServers(true, CTRL, PASS, GROUP, false));
-        HEX_TEST(config["DEFAULT"]["rpc_response_timeout"] == "1200");
+        HEX_TEST(config["DEFAULT"]["rpc_response_timeout"] == "60");
         HEX_TEST(KeyCount(config, "DEFAULT") == 2);
 
         HEX_TEST(config["oslo_messaging_rabbit"]["rabbit_retry_interval"] == "1");

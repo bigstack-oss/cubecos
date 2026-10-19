@@ -385,6 +385,10 @@ UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::str
 {
     if (IsControl(s_eCubeRole)) {
         SetMqClientConfig(cfg, ha, sharedId, password, ctrlAddrs, s_mqSsl.newValue());
+        // Above the shared 60: ironic-api waits on ironic-conductor while it talks to the
+        // BMC for boot-device, NMI and validate calls, and ipmitool alone retries for up
+        // to [ipmi] command_retry_timeout (60) before it gives up on a slow BMC.
+        cfg["DEFAULT"]["rpc_response_timeout"] = "120";
         SetMqClientConfig(inspCfg, ha, sharedId, password, ctrlAddrs, s_mqSsl.newValue());
     }
 

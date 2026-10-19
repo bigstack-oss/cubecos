@@ -271,6 +271,11 @@ UpdateMqConn(const bool ha, std::string sharedId, std::string password, std::str
 {
     if (IsControl(s_eCubeRole)) {
         SetMqClientConfig(cfg, ha, sharedId, password, ctrlAddrs, s_mqSsl.newValue());
+        // Above the shared 60: heat-api waits on heat-engine while it validates a whole
+        // template, nested stacks included, and the engine creates and updates nested
+        // stacks through RPC calls of its own; a timeout there fails the parent while the
+        // child keeps building. 600 is what TripleO runs heat with. Below haproxy's 10 min.
+        cfg["DEFAULT"]["rpc_response_timeout"] = "600";
     }
 
     return true;
