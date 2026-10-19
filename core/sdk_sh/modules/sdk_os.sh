@@ -674,7 +674,8 @@ os_export_volume()
     declare -p vol_array > /dev/null
     for vol_id in ${vol_array[@]} ; do
         local vol_temp=$(MakeTemp)
-        /usr/bin/mariadb-dump --no-create-db --no-create-info --replace cinder volumes -w"id='$vol_id'" > $vol_temp
+        # one row per line for the REPLACE parsing below
+        /usr/bin/mariadb-dump --no-create-db --no-create-info --skip-extended-insert --replace cinder volumes -w"id='$vol_id'" > $vol_temp
 
         local user_id=$(cat $vol_temp | grep REPLACE | awk -F',' '{print $7}' | sed "s/'//g")
         local proj_id=$(cat $vol_temp | grep REPLACE | awk -F',' '{print $8}' | sed "s/'//g")
