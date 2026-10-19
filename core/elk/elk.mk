@@ -64,6 +64,15 @@ $$(ELK_JAR_DIR)/$(2)-$(3).jar:
 endef
 elk_jar_rule = $(eval $(call elk_jar,$(call elk_jar_field,1,$(1)),$(call elk_jar_field,2,$(1)),$(call elk_jar_field,3,$(1)),$(call elk_jar_field,4,$(1))))
 
+# Guava has a known vulnerability fixed in 33.7.2, and failureaccess 1.0.3 is what 33.7.2 requires.
+# logstash-core, logstash-integration-kafka and OpenSearch's transport-grpc module each bundle an
+# older pair, and none has a release that bundles 33.7.2 yet, so all three take this pair below.
+# Their download rules are defined here, once.
+ELK_GUAVA := com.google.guava:guava:33.7.2-jre:b530942257fb935f8b2cfaa5f8eb5bd59c555fd8e8d01b8ce98912e077ea606c
+ELK_FAILUREACCESS := com.google.guava:failureaccess:1.0.3:cbfc3906b19b8f55dd7cfd6dfe0aa4532e834250d7f080bd8d211a3e246b59cb
+ELK_GUAVA_JARS := $(call elk_jar_path,$(ELK_GUAVA)) $(call elk_jar_path,$(ELK_FAILUREACCESS))
+$(foreach e,$(ELK_GUAVA) $(ELK_FAILUREACCESS),$(call elk_jar_rule,$(e)))
+
 # OpenSearch 3.9.0, the newest release, ships Jackson 3.2.2 in lib/, and jackson-core 3.2.2 has a
 # known vulnerability fixed in 3.2.3. The four Jackson jars there move to 3.2.3 together. The last
 # field is the jar replaced. The rm is not -f: an OpenSearch bump that no longer ships one of them
@@ -79,6 +88,15 @@ $(foreach e,$(OSEARCH_JAR_REFRESH),$(call elk_jar_rule,$(e)))
 rootfs_install:: $(OSEARCH_JARS)
 	$(Q)$(foreach e,$(OSEARCH_JAR_REFRESH),rm $(ROOTDIR)/usr/share/$(OSEARCH)/lib/$(call elk_jar_field,5,$(e)) && ) true
 	$(Q)cp -f $(OSEARCH_JARS) $(ROOTDIR)/usr/share/$(OSEARCH)/lib/
+
+# The transport-grpc module, which opensearch-knn extends, bundles Guava 33.2.1 and failureaccess
+# 1.0.2 in its own directory and loads them in its own classloader; 3.9.0 is the newest release and
+# main still bundles 33.2.1. The rm is not -f, as above.
+OSEARCH_GRPC_DIR := /usr/share/$(OSEARCH)/modules/transport-grpc
+
+rootfs_install:: $(ELK_GUAVA_JARS)
+	$(Q)rm $(ROOTDIR)$(OSEARCH_GRPC_DIR)/guava-33.2.1-jre.jar $(ROOTDIR)$(OSEARCH_GRPC_DIR)/failureaccess-1.0.2.jar
+	$(Q)cp -f $(ELK_GUAVA_JARS) $(ROOTDIR)$(OSEARCH_GRPC_DIR)/
 
 #
 # OpenSearch-Dashboards
@@ -265,7 +283,9 @@ rootfs_install::
 # jackson-core and jackson-databind, but it does load the gem's jackson-dataformat-csv and
 # jackson-datatype-jdk8 2.21.6. All four move to 2.21.7 and the gem's jar list names 2.21.7, so the
 # plugin runs on the one Jackson line logstash-core loads. The gem's lz4-java 1.10.1, which the
-# Kafka client compresses with, has a known vulnerability fixed in 1.11.4 and moves the same way.
+# Kafka client compresses with, has a known vulnerability fixed in 1.11.4 and moves the same way, and
+# so do its Guava 32.0.1 and failureaccess 1.0.1, which only its Avro schema-registry client needs:
+# they take the pair defined above, whose download rules are not defined again here.
 # The last field is the version replaced. Nothing here is -f: a Logstash bump that changes the
 # gem's version, or what it vendors, fails here.
 LOGSTASH_KAFKA_GEM := $(LOGSTASH_HOME)/vendor/bundle/jruby/3.4.0/gems/logstash-integration-kafka-12.1.9-java
@@ -274,7 +294,9 @@ LOGSTASH_KAFKA_JAR_REFRESH := \
 	com.fasterxml.jackson.core:jackson-databind:2.21.7:1290c2795e93e8a6861a6c4d9ff0d844d32f5ea178362cb2721edf5561e828b1:2.21.6 \
 	com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.7:588050148497158cabdc05c0ae3a7e123194a486b8c62745778fc6239f9b085e:2.21.6 \
 	com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.21.7:b8f62f98363ed9aa259b3a479a64fcbe7e081158a8bec6733972e900d12f4e47:2.21.6 \
-	at.yawk.lz4:lz4-java:1.11.4:58c8e0b813960d2a248e050c353baea73139b48a2ffc55382d42c69707e17325:1.10.1
+	at.yawk.lz4:lz4-java:1.11.4:58c8e0b813960d2a248e050c353baea73139b48a2ffc55382d42c69707e17325:1.10.1 \
+	$(ELK_GUAVA):32.0.1-jre \
+	$(ELK_FAILUREACCESS):1.0.1
 LOGSTASH_KAFKA_JARS_RB = $(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/lib/logstash-integration-kafka_jars.rb
 # $(1) one LOGSTASH_KAFKA_JAR_REFRESH entry: swap the jar in the gem's vendor/jar-dependencies tree
 # and the version its jar list requires.
@@ -285,11 +307,21 @@ logstash_kafka_jar = d=$(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/vendor/jar-dependencies/$
 	grep -q "'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,5,$(1))'" $(LOGSTASH_KAFKA_JARS_RB) && \
 	sed -i "s/'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,5,$(1))'/'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,3,$(1))'/" $(LOGSTASH_KAFKA_JARS_RB)
 
-$(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call elk_jar_rule,$(e)))
+$(foreach e,$(filter-out $(ELK_GUAVA):% $(ELK_FAILUREACCESS):%,$(LOGSTASH_KAFKA_JAR_REFRESH)),$(call elk_jar_rule,$(e)))
 
 rootfs_install:: $(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call elk_jar_path,$(e)))
 	$(Q)$(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call logstash_kafka_jar,$(e)) && ) true
 	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_KAFKA_GEM)
+
+# logstash-core bundles Guava 33.1.0 and failureaccess 1.0.2 in lib/jars, which bin/logstash.lib.sh
+# puts on the class path by glob, so no list names them; 9.5.5 is the newest release and main still
+# pins 33.1.0. They take the pair defined above. Nothing here is -f, as above.
+LOGSTASH_CORE_JARS := $(LOGSTASH_HOME)/logstash-core/lib/jars
+
+rootfs_install:: $(ELK_GUAVA_JARS)
+	$(Q)rm $(ROOTDIR)$(LOGSTASH_CORE_JARS)/guava-33.1.0-jre.jar $(ROOTDIR)$(LOGSTASH_CORE_JARS)/failureaccess-1.0.2.jar
+	$(Q)cp -f $(ELK_GUAVA_JARS) $(ROOTDIR)$(LOGSTASH_CORE_JARS)/
+	$(Q)chroot $(ROOTDIR) chown logstash:logstash $(LOGSTASH_CORE_JARS)/guava-33.7.2-jre.jar $(LOGSTASH_CORE_JARS)/failureaccess-1.0.3.jar
 
 #
 # Beats (filebeat, auditbeat)
