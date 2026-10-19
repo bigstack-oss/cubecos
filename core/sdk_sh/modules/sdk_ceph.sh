@@ -2298,6 +2298,22 @@ ceph_recreate_cache_pool()
     Quiet -n $CEPH osd pool set $cachepool pgp_num $pgs
 }
 
+# VIP of the peer site, from /etc/ceph/<ctlr>-<vip>-site.conf (ctlr may contain '-')
+ceph_mirror_peer_vip()
+{
+    local dir=${1:-/etc/ceph}
+    find $dir/ -type f -name "*-site.conf" | sed -e "s;.*/;;" -e "s/-site[.]conf$//" | grep -oE "([0-9]{1,3}[.]){3}[0-9]{1,3}$"
+}
+
+# $1: site name
+# reset-failed so frequent restarts don't hit StartLimitBurst
+ceph_mirror_daemon_restart()
+{
+    local unit=ceph-rbd-mirror@${1}.service
+    cmd -c systemctl reset-failed $unit
+    cmd -c systemctl restart $unit
+}
+
 # $1: pool name
 # $2: peer name
 ceph_mirror_pool_peer_set()
@@ -2334,7 +2350,7 @@ ceph_mirror_image_enable()
             local img_info=$(rbd info $BUILTIN_BACKPOOL/${img_name} --format json 2>/dev/null)
             local enabled=$(echo $img_info | jq -r '.mirroring.state')
             local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
-            local peer_vip=$(find /etc/ceph/ -type f -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//" | cut -d"-" -f2)
+            local peer_vip=$(ceph_mirror_peer_vip)
 
 
             if [ "$enabled" != "enabled" ] ; then
@@ -2396,7 +2412,7 @@ ceph_mirror_image_disable()
         if rbd info $BUILTIN_BACKPOOL/$img_name >/dev/null 2>&1 ; then
             echo "$BUILTIN_BACKPOOL/${img_name}"
             Quiet -n rbd mirror image disable $BUILTIN_BACKPOOL/$img_name --force
-            local peer_vip=$(find /etc/ceph/ -type f -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//" | cut -d"-" -f2)
+            local peer_vip=$(ceph_mirror_peer_vip)
             Quiet -n $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_image_meta_remove $img_id"
         else
             printf "%60s does not exist\n" $BUILTIN_BACKPOOL/${img_name} && continue
@@ -2640,9 +2656,9 @@ ceph_mirror_promoted_instance_list()
         local server_info=$(cat $srv)
         local name=$(echo $server_info | jq -r .name)
         local project=$(echo $server_info | jq -r .project_name)
-        local flavor=$(echo $server_info | jq -r .flavor | cut -d" " -f1)
+        local flavor=$(echo $server_info | jq -r ".flavor.name? // .flavor" | cut -d" " -f1)
         local network=$(echo $server_info | jq -r | grep addresses -A1 | tail -1 | cut -d":" -f1 | xargs)
-        local volume_ids=$(echo $server_info | jq -r ".attached_volumes[].id")
+        local volume_ids=$(echo $server_info | jq -r "(.volumes_attached // .attached_volumes)[].id")
         local vols_promoted=true
 
         for vid in $volume_ids ; do
@@ -2677,9 +2693,9 @@ ceph_mirror_create_server()
         local server_info=$(cat $mirror_dir/$srv)
         local name=$(echo $server_info | jq -r .name)
         local project=$(echo $server_info | jq -r .project_name)
-        local flavor=$(echo $server_info | jq -r .flavor | cut -d" " -f1)
+        local flavor=$(echo $server_info | jq -r ".flavor.name? // .flavor" | cut -d" " -f1)
         local network=$(echo $server_info | jq -r | grep addresses -A1 | tail -1 | cut -d":" -f1 | xargs)
-        local volume_ids=$(echo $server_info | jq -r ".attached_volumes[].id")
+        local volume_ids=$(echo $server_info | jq -r "(.volumes_attached // .attached_volumes)[].id")
         local bootable_vid=
         local vol_status=
 
@@ -2704,7 +2720,7 @@ ceph_mirror_create_server()
                     echo "created server: $name ${server_id:-EMPTYSERVERID}"
                 fi
             else
-                if $OPENSTACK server show $server_id --format json | jq -r .attached_volumes[].id | grep -q "$bootable_vid" ; then
+                if $OPENSTACK server show $server_id --format json | jq -r "(.volumes_attached // .attached_volumes)[].id" | grep -q "$bootable_vid" ; then
                     echo "server existed: $name ${server_id:-EMPTYSERVERID}"
                 else
                     echo "please manually fix duplicated server name: $server" && continue
@@ -2719,6 +2735,12 @@ ceph_mirror_create_server()
         fi
 
         local server_status=$($OPENSTACK server show ${server_id:-EMPTYSERVERID} --format value -c status)
+        # server start is async
+        for i in {1..12} ; do
+            [ "$server_status" = "SHUTOFF" ] || break
+            sleep 5
+            server_status=$($OPENSTACK server show ${server_id:-EMPTYSERVERID} --format value -c status)
+        done
         if [ -z "$server_status" ] ; then
             echo "unable to create server: $name"
         elif [ "$server_status" = "SHUTOFF" ] ; then
@@ -2755,7 +2777,7 @@ ceph_mirror_promote_image()
     local img_num=$(echo $status | jq '.images | length')
     img_num=${img_num:-0}
     local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
-    local peer_vip=$(find /etc/ceph/ -type f -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//" | cut -d"-" -f2)
+    local peer_vip=$(ceph_mirror_peer_vip)
 
     if [ "$mode" = "force" ] ; then
         local rbdflg="--force"
@@ -2834,7 +2856,7 @@ ceph_mirror_demote_image()
     fi
 
     local self_site=$(find /etc/ceph/ -type l -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
-    cmd -c "systemctl restart ceph-rbd-mirror@${self_site}.service"
+    ceph_mirror_daemon_restart $self_site
 }
 
 # params:
@@ -2847,7 +2869,7 @@ ceph_mirror_promote_site()
     local img_num=$(echo $status | jq '.images | length')
     img_num=${img_num:-0}
     local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
-    local peer_vip=$(find /etc/ceph/ -type f -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//" | cut -d"-" -f2)
+    local peer_vip=$(ceph_mirror_peer_vip)
 
     if [ "$mode" = "force" ] ; then
         local rbdflg="--force"
@@ -2922,7 +2944,7 @@ ceph_mirror_demote_site()
     fi
 
     local self_site=$(find /etc/ceph/ -type l -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
-    cmd -c "systemctl restart ceph-rbd-mirror@${self_site}.service"
+    ceph_mirror_daemon_restart $self_site
 }
 
 # return crush class by SCSI disk
@@ -4112,13 +4134,15 @@ ceph_mirror_pair()
 
     local self_id_rsa_pub=$(cat /root/.ssh/id_rsa.pub)
     local auth_keys=/root/.ssh/authorized_keys
-    Quiet sshpass -p "$pass" $sshcmd root@$vip "$HEX_SDK cmd -c \"echo $self_id_rsa_pub >>$auth_keys\""
-    Quiet sshpass -p "$pass" $sshcmd root@$vip "$HEX_SDK cmd -c \"$HEX_SDK dedup_sshauthkey\""
+    # not via Quiet: its eval breaks the quoted redirect
+    sshpass -p "$pass" $sshcmd root@$vip "$HEX_SDK cmd -c \"echo $self_id_rsa_pub >>$auth_keys\"" >/dev/null 2>&1
+    sshpass -p "$pass" $sshcmd root@$vip "$HEX_SDK cmd -c \"$HEX_SDK dedup_sshauthkey\"" >/dev/null 2>&1
 
     local peer_id_rsa_pub=$($sshcmd root@$vip cat /root/.ssh/id_rsa.pub 2>/dev/null)
     cmd -c "echo $peer_id_rsa_pub >> $auth_keys"
     cmd -c "$HEX_SDK dedup_sshauthkey"
-    $sshcmd root@$vip "exit 0" || Error "ssh-key not exchanged"
+    # own connection: check the key, not a reused password session
+    $sshcmd -o ControlPath=none -o BatchMode=yes root@$vip "exit 0" || Error "ssh-key not exchanged"
 
     local self_vip=$(shared_ip)
     [ "$self_vip" != "non-HA" ] || self_vip=$(cat /etc/settings.cluster.json | jq -r ".[].ip.management")
@@ -4128,7 +4152,7 @@ ceph_mirror_pair()
     fi
     cmd -c "ln -sf /etc/ceph/ceph.conf /etc/ceph/${self_ctlr}-site.conf"
     cmd -c "systemctl enable ceph-rbd-mirror@${self_ctlr}-site.service"
-    cmd -c "systemctl restart ceph-rbd-mirror@${self_ctlr}-site.service"
+    ceph_mirror_daemon_restart ${self_ctlr}-site
 
     local peer_ctlr=$($sshcmd root@$vip "grep cubesys.controller $SETTINGS_TXT | cut -d'=' -f2 | xargs" 2>/dev/null)-$vip
     if [ -z "$(echo $peer_ctlr | cut -d"-" -f1)" ] ; then
@@ -4136,7 +4160,7 @@ ceph_mirror_pair()
     fi
     Quiet $sshcmd root@$vip $HEX_SDK cmd -c "ln -sf /etc/ceph/ceph.conf /etc/ceph/${peer_ctlr}-site.conf"
     Quiet $sshcmd root@$vip $HEX_SDK cmd -c "systemctl enable ceph-rbd-mirror@${peer_ctlr}-site.service"
-    Quiet $sshcmd root@$vip $HEX_SDK cmd -c "systemctl restart ceph-rbd-mirror@${peer_ctlr}-site.service"
+    Quiet $sshcmd root@$vip $HEX_SDK ceph_mirror_daemon_restart ${peer_ctlr}-site
 
     Quiet rbd mirror pool enable glance-images image
     Quiet rbd mirror pool enable cinder-volumes image
@@ -4158,7 +4182,7 @@ ceph_mirror_unpair()
 {
     local self_site=$(find /etc/ceph/ -type l -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
     local peer_site=$(find /etc/ceph/ -type f -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
-    local peer_vip=$(echo $peer_site | cut -d"-" -f2)
+    local peer_vip=$(ceph_mirror_peer_vip)
     local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
     ceph_mirror_disable >/dev/null 2>&1
@@ -4190,11 +4214,11 @@ ceph_mirror_restart()
 {
     local self_site=$(find /etc/ceph/ -type l -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
     local peer_site=$(find /etc/ceph/ -type f -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
-    local peer_vip=$(echo $peer_site | cut -d"-" -f2)
+    local peer_vip=$(ceph_mirror_peer_vip)
     local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
-    cmd -c systemctl restart ceph-rbd-mirror@$self_site
-    Quiet -n $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK cmd -c systemctl restart ceph-rbd-mirror@$peer_site"
+    ceph_mirror_daemon_restart $self_site
+    Quiet -n $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_daemon_restart $peer_site"
 }
 
 ceph_fs_mds_init()
@@ -4335,7 +4359,7 @@ ceph_pg_scrub()
 ceph_rbd_fsck()
 {
     local svid=${1:-SERVER_ID}  # openstack server id
-    local vlid=$($OPENSTACK server show $svid -f json | jq -r .attached_volumes[0].id)
+    local vlid=$($OPENSTACK server show $svid -f json | jq -r "(.volumes_attached // .attached_volumes)[0].id")
     [ "x$vlid" != "xnull" ] || vlid=$svid
 
     for p in $BUILTIN_BACKPOOL $BUILTIN_EPHEMERAL $(ceph osd pool ls | grep "[-]pool$") ; do
