@@ -12,8 +12,9 @@ to `ignoredMatches` in the release's `*_vuln.json`. Once a finding no longer app
   code owners review it, and it needs the verdict in the tracking issue to be approved.
 - Use `"status": "not_affected"` only, with one of the OpenVEX `justification` values.
 - Add a statement only after the finding has been re-checked in a tracking issue, and point
-  `impact_statement` at that issue. Keep the reasoning in the issue, not here: this repository
-  is public.
+  `impact_statement` at the comment there that records its verdict and reason, so the link
+  lands on that finding rather than on the whole issue. Statements on one component can share
+  a comment. Keep the reasoning in the issue, not here: this repository is public.
 - `vulnerability.name` must be the id grype reports for the match (`vulnerability.id` in
   `*_vuln.json`), e.g. the GHSA id for Go and Python packages. Put the CVE id in `aliases`.
 - `products[].@id` is the package purl from the match's `artifact.purl`, without the version,
