@@ -21,6 +21,17 @@ def blocked(flavor):
     return None
 
 
+def numa_blocked(instance):
+    """'hw_numa_nodes' when the instance has a NUMA topology, else None.
+
+    blocked() reads only the flavor; an image can ask for NUMA too, and the
+    headroom does not pin the spare vCPUs of a NUMA guest.
+    """
+    if getattr(instance, "numa_topology", None) is not None:
+        return "hw_numa_nodes"
+    return None
+
+
 def headroom(flavor):
     """The hotplug ceiling (max_vcpus, max_memory_mb) for this flavor.
 

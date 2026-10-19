@@ -1029,7 +1029,9 @@ UpdateConfig(
                       "compaction_threads=32,"
                       "max_bytes_for_level_multiplier=8,"
                       "flusher_threads=8,"
-                      "compaction_readahead_size=2MB\n");
+                      "compaction_readahead_size=2MB,"
+                      // upstream default; unset, RocksDB keeps up to ~96 GiB of WAL here
+                      "max_total_wal_size=1073741824\n");
         fprintf(fout, "osd map share max epochs = 100\n");
         fprintf(fout, "osd max backfills = 1\n");           // Ceph default; protect client IO during recovery
         fprintf(fout, "osd op num shards = 8\n");

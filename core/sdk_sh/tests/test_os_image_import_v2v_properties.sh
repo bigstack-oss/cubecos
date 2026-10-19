@@ -119,6 +119,7 @@ chk "windows + virt-v2v: no os_vers" "$(echo "$P" | grep -c 'os_vers=')" "0"
 P=$(run ubuntu_22.04.qcow2 linux cinder-volumes 1)
 chk "linux + virt-v2v: hw_disk_bus" "$(echo "$P" | bus)" "scsi"
 chk "linux + virt-v2v: os_version" "$(echo "$P" | grep -o 'os_version=[^ ]*')" "os_version=22.04"
+chk "linux + virt-v2v: vif multiqueue" "$(echo "$P" | grep -o 'hw_vif_multiqueue_enabled=[a-z]*')" "hw_vif_multiqueue_enabled=true"
 
 # ==== 3. Windows, virt-v2v refused it (qemu-img fallback, no drivers) =======
 P=$(run windows_2025.vhdx windows cinder-volumes 0)
@@ -129,6 +130,7 @@ chk "windows + qemu-img fallback: fell back" "$(tr '\n' ' ' < $CALLS)" "virt-v2v
 P=$(run windows_2025.vhdx windows glance-images 1)
 chk "windows + glance-images: hw_disk_bus" "$(echo "$P" | bus)" "scsi"
 chk "windows + glance-images: os_version" "$(echo "$P" | grep -o 'os_version=[^ ]*')" "os_version=2025"
+chk "windows + glance-images: vif multiqueue" "$(echo "$P" | grep -o 'hw_vif_multiqueue_enabled=[a-z]*')" "hw_vif_multiqueue_enabled=true"
 
 echo "----"; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] || exit 1
