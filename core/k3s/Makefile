@@ -9,6 +9,8 @@ K3S_REPO    := https://github.com/k3s-io/k3s.git
 K3S_SRC_DIR := k3s-source
 
 BIN := k3s
+# Where k3s-from-source puts the binary. The ladder rule below points it elsewhere.
+K3S_OUT := $(BIN)
 INSTALL_SCRIPT := install.sh
 
 KUBECONFIG := /etc/rancher/k3s/k3s.yaml
@@ -23,7 +25,7 @@ export IMGS
 	$(Q)mv .dapper.tmp .dapper
 
 $(K3S_SRC_DIR):
-	$(call RUN_CMD_TIMED,git clone --depth 1 -b $(VERSION) $(K3S_REPO) $(K3S_SRC_DIR),"  CLONE   k3s")
+	$(call RUN_CMD_TIMED,git clone --depth 1 -b $(VERSION) $(K3S_REPO) $(K3S_SRC_DIR),"  CLONE   k3s $(VERSION)")
 
 # Optional base URL holding a prebuilt k3s for this version, e.g.
 # https://<host>/api/v1/repositories/cubecos-build-cache-files/download. EMPTY BY DEFAULT: unset,
@@ -62,8 +64,9 @@ K3S_GO_GET := golang.org/x/text@v0.43.0
 # which version.sh takes from kubernetes' build/dependencies.yaml (go1.24.13 for 1.32.13, a
 # dead Go line). We build with a newer Go, so record the Go we actually build with, as the
 # Alpine, NixOS and Yocto k3s packages do. Fail loudly if upstream moves the line.
-# TAG, not DRONE_TAG: 1.32.13 takes its version from $TAG (scripts/git_version.sh), where 1.26.6
-# read $DRONE_TAG; without it the binary calls itself v1.32.13+k3s-<commit>, not v1.32.13+k3s1.
+# Both TAG and DRONE_TAG: 1.32 takes its version from $TAG (scripts/git_version.sh), the ladder
+# releases up to 1.31 from $DRONE_TAG (scripts/version.sh or git_version.sh). Without the one a
+# release reads, the binary calls itself e.g. v1.32.13+k3s-<commit> instead of v1.32.13+k3s1.
 .PHONY: $(BIN)-from-source
 $(BIN)-from-source: $(K3S_SRC_DIR) .dapper
 	$(Q)rm -rf $(K3S_SRC_DIR)/build $(K3S_SRC_DIR)/dist $(K3S_SRC_DIR)/bin
@@ -76,37 +79,55 @@ $(BIN)-from-source: $(K3S_SRC_DIR) .dapper
 		go mod edit $(addprefix -replace ,$(K3S_GO_REPLACE)) && \
 		go get $(K3S_GO_GET) && \
 		go mod tidy, \
-		"  GOMOD   k3s")
+		"  GOMOD   k3s $(VERSION)")
 	$(call RUN_CMD_TIMED,cd $(K3S_SRC_DIR) && \
 		export PODMAN_IGNORE_CGROUPSV1_WARNING=1 \
 		TAG=$(VERSION) \
+		DRONE_TAG=$(VERSION) \
 		SKIP_VALIDATE=1 \
 		SKIP_IMAGE=1 \
 		SKIP_AIRGAP=1 && \
 		mkdir -p build/data && \
 		make download && \
 		make, \
-		"  BUILD   k3s")
-	$(Q)cp $(K3S_SRC_DIR)/dist/artifacts/k3s $(BIN)
+		"  BUILD   k3s $(VERSION)")
+	$(Q)cp $(K3S_SRC_DIR)/dist/artifacts/k3s $(K3S_OUT)
 
 # Releases an in-place upgrade steps through on its way from v1.26.6+k3s1, what every release so
-# far shipped, to VERSION: k3s upgrades one minor version at a time. Upstream release binaries,
-# checked against upstream's own checksum file. k3s.mk installs them as
+# far shipped, to VERSION: k3s upgrades one minor version at a time. k3s.mk installs them as
 # $(K3S_DIR)/ladder/<version>/k3s, and that directory is the list the upgrade reads.
-# $(GITHUB_DL_BASE), as in core/etcd/Makefile: GitHub release assets are throttled from our build
-# network (cubecos#1350).
+#
+# Built from source with the same recipe, Go toolchain and module pins as VERSION, not taken from
+# upstream's release assets: those were built with the Go of their day, and these lines get no
+# more releases. Each version is restored from K3S_CACHE under its own key (cache-key.sh <version>)
+# when it can be, and built from source when it cannot. There is deliberately no fallback to the
+# upstream binary -- that would put back exactly what this rebuild removes -- so a failed source
+# build fails the build.
+#
+# This rule is not part of the cache key: it only says which versions to build and where to put
+# them. Everything that changes a binary is in k3s-from-source, which the key already covers.
+#
+# The source directory swaps the + for a -: dapper names its image after the basename of the
+# directory it runs in, and + is not allowed in an image name. Each binary must report exactly
+# its version: sdk_k3s.sh compares that with the directory name to pick the next step.
 LADDER_VERSIONS := v1.27.16+k3s1 v1.28.15+k3s1 v1.29.15+k3s1 v1.30.14+k3s2 v1.31.14+k3s1
 LADDER_DIR := ladder
-K3S_DL_URL := $(GITHUB_DL_BASE)/k3s-io/k3s/releases/download
 
 $(LADDER_DIR):
-	$(call RUN_CMD_TIMED,rm -rf $@.tmp && for v in $(LADDER_VERSIONS); do \
-		d=$@.tmp/$$v; mkdir -p $$d && \
-		wget -q --no-check-certificate -P $$d $(K3S_DL_URL)/$$v/k3s $(K3S_DL_URL)/$$v/sha256sum-amd64.txt && \
-		sum=$$(awk '$$2 == "k3s" {print $$1}' $$d/sha256sum-amd64.txt) && [ -n "$$sum" ] && \
-		echo "$$sum  $$d/k3s" | sha256sum -c - && \
-		rm $$d/sha256sum-amd64.txt && chmod +x $$d/k3s || exit 1; \
-		done && mv $@.tmp $@,"  PULL    k3s ladder")
+	$(Q)rm -rf $@.tmp
+	$(Q)set -e; for v in $(LADDER_VERSIONS); do \
+		mkdir -p $@.tmp/$$v; out=$(CURDIR)/$@.tmp/$$v/k3s; \
+		if K3S_CACHE="$(K3S_CACHE)" VERSION=$$v OUT=$$out \
+			sh $(SRCDIR)/build/fetch-or-build.sh $(if $(Q),>/dev/null); then \
+			echo "  K3S     $$v restored from cache"; \
+		else \
+			$(MAKE) $(BIN)-from-source VERSION=$$v K3S_OUT=$$out \
+				K3S_SRC_DIR=$(K3S_SRC_DIR)-$$(echo $$v | tr + -); \
+		fi; \
+		got=$$($$out --version | awk 'NR == 1 {print $$3}'); \
+		[ "$$got" = "$$v" ] || { echo "k3s ladder: $$out reports '$$got', not $$v" >&2; exit 1; }; \
+	done
+	$(Q)mv $@.tmp $@
 
 # The helm that ships in the image. The jail's own helm only runs the build: jail.ubi9.dockerfile
 # installs whatever release get-helm-3 found the day the jail image was built. The digest is from
@@ -195,7 +216,7 @@ clean:: testclean
 
 
 BUILD += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm build-image
-BUILDCLEAN += .dapper and $(K3S_SRC_DIR)
+BUILDCLEAN += .dapper and $(K3S_SRC_DIR) $(K3S_SRC_DIR)-*
 DISTCLEAN += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm
 
 SUBDIRS += ingress-nginx

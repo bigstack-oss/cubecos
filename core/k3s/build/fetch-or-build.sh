@@ -16,6 +16,7 @@
 #
 # Entries live under k3s/<key>, where the key from cache-key.sh covers the recipe and the dapper
 # image as well as VERSION -- keyed by VERSION alone, a toolchain bump restored the old binary.
+# VERSION is either core/k3s/Makefile's VERSION or one of its LADDER_VERSIONS.
 # Populate it with the cube_publish_artifacts job in triangle, which asks cache-key.sh too.
 set -uo pipefail
 
@@ -28,7 +29,7 @@ if [ -z "$CACHE" ]; then
     exit 1
 fi
 
-KEY=$(bash "$(dirname "$0")/cache-key.sh") || { echo "    no cache key -- building from source" ; exit 1 ; }
+KEY=$(bash "$(dirname "$0")/cache-key.sh" "$VERSION") || { echo "    no cache key -- building from source" ; exit 1 ; }
 BASE="$CACHE/k3s/$KEY"
 echo "==> checking cache for k3s $KEY"
 
