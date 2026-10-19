@@ -1,0 +1,25 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/bigstack-oss/cubecos/blob/develop/core/main/cubecos.openvex.json",
+  "author": "Bigstack",
+  "timestamp": "2026-10-19T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "GHSA-3qf3-8w2g-rqmx",
+        "aliases": [
+          "CVE-2026-85394"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/python-jose"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in bigstack-oss/cubecos-private#218."
+    }
+  ]
+}
