@@ -53,6 +53,10 @@ PROJ_BUILD_FAKE_PPU := 1
 endif
 # Triaged not_affected findings passed to grype; see VEX.md
 PROJ_VEX := $(SRCDIR)/cubecos.openvex.json
+# The container images the rootfs ships in its registry. Only the opt-in `make sbom-images` scans
+# them, into a separate SBOM and report; `sbom`, and so the scan the pipeline imports and files
+# issues from, covers the rootfs alone.
+PROJ_SBOM_REGISTRY := /opt/docker/registry
 
 PROJ_HARDWARE_DIR := $(SRCDIR)/../hardware
 PROJ_HARDWARE += vmware
