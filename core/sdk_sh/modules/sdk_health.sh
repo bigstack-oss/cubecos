@@ -364,7 +364,7 @@ health_settings_check()
         local CNT_UNIQ=$(cmd -v "source $HEX_TUN $SETTINGS_TXT ; echo \$T_${V}" | cut -d"|" -f3 | sort -u | wc -l)
         ERR_MSG+="`cmd -v \"source $HEX_TUN $SETTINGS_TXT ; echo \\$HOSTNAME ${V}=\\$T_${V}\"`\n"
         case $V in
-            cubesys_role|cubesys_mgmt_cidr|cubesys_control_vip|cubesys_overlay|cubesys_provider|cubesys_storage|cubesys_management|net_if_*|ntp_server|cubesys_probeusb)
+            cubesys_role|cubesys_cpu_profile|cubesys_mgmt_cidr|cubesys_control_vip|cubesys_overlay|cubesys_provider|cubesys_storage|cubesys_management|net_if_*|ntp_server|cubesys_probeusb)
                 if [ ${CNT_UNIQ:-0} -ne 1 ] ; then
                     ERR_MSG+="ignored\n"
                     continue

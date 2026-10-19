@@ -857,6 +857,8 @@ os_image_import()
 
     properties+=" --property hw_qemu_guest_agent=yes --property os_require_quiesce=yes"
     properties+=" --property hw_input_bus=virtio"
+    # one vNIC queue per vCPU (nova default is a single queue)
+    properties+=" --property hw_vif_multiqueue_enabled=true"
     properties+=" --property os_distro=$distro"
     if [ "x$distro" = "xwindows" ] ; then
         properties+=" --property os_type=windows"

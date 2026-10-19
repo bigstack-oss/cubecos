@@ -47,6 +47,23 @@ class TestBlocked(unittest.TestCase):
         self.assertIsNone(clr.blocked(f))
 
 
+class TestNumaBlocked(unittest.TestCase):
+    """an image can ask for NUMA (hw_numa_nodes), which blocked() cannot see"""
+
+    def test_instance_with_numa_topology_is_blocked(self):
+        inst = FakeInstance()
+        inst.numa_topology = object()
+        self.assertEqual('hw_numa_nodes', clr.numa_blocked(inst))
+
+    def test_instance_without_numa_topology_is_not_blocked(self):
+        inst = FakeInstance()
+        inst.numa_topology = None
+        self.assertIsNone(clr.numa_blocked(inst))
+
+    def test_instance_without_the_field_is_not_blocked(self):
+        self.assertIsNone(clr.numa_blocked(FakeInstance()))
+
+
 class TestHeadroom(unittest.TestCase):
     def setUp(self):
         super(TestHeadroom, self).setUp()
@@ -246,6 +263,14 @@ class TestLrValidateCeiling(unittest.TestCase):
         with self.assertRaises(self.error):
             self._check(inst, FakeLrFlavor(1, 2, 2048),
                         FakeLrFlavor(2, 2, 6144))
+
+    def test_image_numa_instance_is_refused(self):
+        inst = FakeInstance()
+        clr.record_headroom(inst, 8, 16384)
+        inst.numa_topology = object()
+        with self.assertRaises(self.error):
+            self._check(inst, FakeLrFlavor(1, 2, 4096),
+                        FakeLrFlavor(2, 4, 8192))
 
     def test_unrecorded_instance_falls_back_to_the_estimate(self):
         inst = FakeInstance()

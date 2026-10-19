@@ -32,6 +32,11 @@ class ResizePlanController(wsgi.Controller):
             max_vcpus, max_mem_mb = recorded
             exact = True
 
+        blocked = clr.blocked(flavor) or clr.numa_blocked(instance)
+        if blocked:
+            # a ceiling recorded before the block was known is not usable
+            max_vcpus, max_mem_mb = 0, 0
+
         # same helper _lr_validate uses, so the plan and the action agree
         is_bfv = compute_utils.is_volume_backed_instance(context, instance)
 
@@ -41,7 +46,7 @@ class ResizePlanController(wsgi.Controller):
                 'max_memory_mb': max_mem_mb,
                 'ceiling_is_exact': exact,
                 'boot_from_volume': is_bfv,
-                'blocked_by_spec': clr.blocked(flavor),
+                'blocked_by_spec': blocked,
                 'current': {
                     'vcpus': flavor.vcpus,
                     'memory_mb': flavor.memory_mb,

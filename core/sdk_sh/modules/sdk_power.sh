@@ -1707,3 +1707,34 @@ power_node_maint_release()
     done
     rm -f "$rec"
 }
+
+# --- CPU power profile ------------------------------------------------------
+# performance: performance governor, idle states with an exit latency over 2us off
+# balanced: schedutil governor (else powersave), idle states back to the kernel's defaults
+CPU_SYSFS=${CPU_SYSFS:-/sys/devices/system/cpu}
+
+power_cpu_profile()
+{
+    local profile=$1
+    [ "$profile" = performance -o "$profile" = balanced ] || Error "Usage: power_cpu_profile performance|balanced"
+    local c s gov
+    for c in $CPU_SYSFS/cpu[0-9]* ; do
+        gov=performance
+        if [ "$profile" = balanced ] ; then
+            # intel_pstate / amd-pstate in active mode offer only performance and powersave
+            gov=schedutil
+            grep -qw schedutil $c/cpufreq/scaling_available_governors 2>/dev/null || gov=powersave
+        fi
+        [ -w $c/cpufreq/scaling_governor ] && echo $gov > $c/cpufreq/scaling_governor 2>/dev/null
+        for s in $c/cpuidle/state* ; do
+            [ -w $s/disable ] || continue
+            if [ "$profile" = performance ] ; then
+                [ "$(cat $s/latency)" -gt 2 ] && echo 1 > $s/disable
+            elif [ "$(cat $s/default_status 2>/dev/null)" = disabled ] ; then
+                echo 1 > $s/disable
+            else
+                echo 0 > $s/disable
+            fi
+        done
+    done
+}
