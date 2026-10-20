@@ -68,15 +68,21 @@ squid:
 	$(Q)docker ps | grep -q $@ || docker rm -vf $@ $(IGNORE_ERR)
 	$(Q)docker run $(DOCKER_FLG) --name $@ -p 3128:3128 -v $(TOP_JAILDIR)/squid.conf:/etc/squid/squid.conf ubuntu/squid:latest
 
+# Scanner credentials and licence codes never live in this public repo. Export them from the
+# private config before running the target, e.g. `NESSUS_PASSWORD=... NESSUS_ACTIVATION_CODE=...
+# make nessus`. `-e NAME` without a value makes docker read it from that environment, so the
+# secret stays off the command line too.
 .PHONY: openvas
 openvas:
+	$(Q)[ -n "$$OPENVAS_PASSWORD" ] || { echo "$@: export OPENVAS_PASSWORD first" ; exit 1 ; }
 	$(Q)docker ps | grep -q $@ || docker rm -vf $@ $(IGNORE_ERR)
-	$(Q)docker run $(DOCKER_FLG) --name $@ -p 8833:443 -e OV_PASSWORD=bigstackcoltd atomicorp/openvas
+	$(Q)OV_PASSWORD="$$OPENVAS_PASSWORD" docker run $(DOCKER_FLG) --name $@ -p 8833:443 -e OV_PASSWORD atomicorp/openvas
 
 .PHONY: nessus
 nessus:
+	$(Q)[ -n "$$NESSUS_PASSWORD" -a -n "$$NESSUS_ACTIVATION_CODE" ] || { echo "$@: export NESSUS_PASSWORD and NESSUS_ACTIVATION_CODE first" ; exit 1 ; }
 	$(Q)docker ps | grep -q $@ || docker rm -vf $@ $(IGNORE_ERR)
-	$(Q)docker run $(DOCKER_FLG) --name $@ -p 8834:8834 -e PASSWORD=bigstackcoltd -e ACTIVATION_CODE=6ZHF-N26L-JWXX-S59T tenable/nessus:latest-ubuntu
+	$(Q)PASSWORD="$$NESSUS_PASSWORD" ACTIVATION_CODE="$$NESSUS_ACTIVATION_CODE" docker run $(DOCKER_FLG) --name $@ -p 8834:8834 -e PASSWORD -e ACTIVATION_CODE tenable/nessus:latest-ubuntu
 
 .PHONY: clean-jail
 clean-jail:
