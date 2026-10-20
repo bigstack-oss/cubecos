@@ -21,9 +21,9 @@ LOCKED_DNF += $(OVN_LOCKED_RPMS) $(OVS_LOCKED_RPMS)
 ROOTFS_DNF += $(OVS_LOCKED_RPMS) $(OVN_LOCKED_RPMS)
 
 RDOOVN_VERSION := -24.03-1.el9s
-ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn$(RDOOVN_VERSION).noarch.rpm
-ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
-ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn$(RDOOVN_VERSION).noarch.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
 
 # rdo-ovn requires the "openvswitch" and "network-scripts-openvswitch3.3" capabilities,
 # which only the openstack release repo supplies: rdo-openvswitch and
@@ -37,8 +37,8 @@ ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/
 # NVRs the caracal repo resolves to, so under caracal nothing changes.
 # openstack-network-scripts itself (the unversioned "network-scripts" it needs) is
 # fine from either repo.
-ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-openvswitch-3.3-1.el9s.noarch.rpm
-ROOTFS_DNF_DL_FROM += https://cbs.centos.org/kojifiles/packages/openstack-network-scripts/10.11.1/6.el9s/x86_64/openstack-network-scripts-openvswitch3.3-10.11.1-6.el9s.x86_64.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-openvswitch-3.3-1.el9s.noarch.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/openstack-network-scripts/10.11.1/6.el9s/x86_64/openstack-network-scripts-openvswitch3.3-10.11.1-6.el9s.x86_64.rpm
 
 # System requirements formerly pulled in by openstack-neutron RPMs
 # handled elsewhere: iptables
