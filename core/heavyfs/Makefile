@@ -219,21 +219,19 @@ $(foreach p,$(QEMU_PKGS),$(eval ROOTFS_DNF_DL_FROM += $(QEMU_URL)/$(p)-$(QEMU_NV
 RSYNC_NVR := 3.2.7-1.el9_8
 ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/pub/rocky/9.8/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
 
-# openssl, pcre2, librabbitmq and python3-tornado come from Rocky 9 the same way. RHEL 9.8 fixed a
-# known vulnerability in each, in openssl-3.5.8-2.el9_8, pcre2-10.40-7.el9_8,
-# librabbitmq-0.11.0-7.el9_8.1 and python-tornado-6.5.10-1.el9_8.1, and Stream's newest builds
-# (3.5.8-1.el9, 10.40-7.el9, 0.11.0-7.el9.1, 6.5.8-1.el9) do not carry the fix. el9 sorts below
-# el9_8, so Stream's own build takes over only once its release passes RHEL's. Every installed arch
-# and subpackage moves together, since they require each other's exact version: the i686
-# openssl-libs and openssl-devel the 32-bit libraries pull in, and the -devel packages the build has
-# until cube-post.mk removes them. Entries are <repo>/<first letter>/<rpm>.
+# pcre2, librabbitmq and python3-tornado come from Rocky 9 the same way. RHEL 9.8 fixed a known
+# vulnerability in each, in pcre2-10.40-7.el9_8, librabbitmq-0.11.0-7.el9_8.1 and
+# python-tornado-6.5.10-1.el9_8.1, and Stream's newest builds (10.40-7.el9, 0.11.0-7.el9.1,
+# 6.5.10-1.el9) sort below them, since el9 sorts below el9_8. Every installed subpackage moves
+# together, since they require each other's exact version, the -devel packages the build has until
+# cube-post.mk removes them included. Entries are <repo>/<first letter>/<rpm>.
+#
+# Take an entry out once Stream's build sorts above it. The duplicate pass only weighs the rpms in
+# the download directory, so Stream's build takes over only where it was downloaded beside Rocky's.
+# Where the rootfs already has Stream's build installed, Rocky's copy is a downgrade and
+# rootfs_install fails. openssl was here until Stream's 3.5.9-1.el9, a rebase onto OpenSSL 3.5.9,
+# which carries the fix RHEL had backported into 3.5.8-2.el9_8.
 ROCKY_ERRATA_RPMS := \
-	BaseOS/o/openssl-3.5.8-2.el9_8.x86_64 \
-	BaseOS/o/openssl-libs-3.5.8-2.el9_8.x86_64 \
-	BaseOS/o/openssl-libs-3.5.8-2.el9_8.i686 \
-	BaseOS/o/openssl-fips-provider-3.5.8-2.el9_8.x86_64 \
-	AppStream/o/openssl-devel-3.5.8-2.el9_8.x86_64 \
-	AppStream/o/openssl-devel-3.5.8-2.el9_8.i686 \
 	BaseOS/p/pcre2-10.40-7.el9_8.x86_64 \
 	BaseOS/p/pcre2-syntax-10.40-7.el9_8.noarch \
 	AppStream/p/pcre2-utf16-10.40-7.el9_8.x86_64 \
