@@ -32,9 +32,13 @@ RUN dnf config-manager --enable crb
 RUN dnf install -y 'dnf-command(versionlock)'
 RUN dnf install -y curl --allowerasing
 RUN dnf install -y epel-release
-RUN rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
-RUN rpm --import https://www.elrepo.org/RPM-GPG-KEY-v2-elrepo.org
-RUN dnf install -y https://www.elrepo.org/elrepo-release-9.el9.elrepo.noarch.rpm
+# An rpm fetched by URL is checked before it goes in: dnf checks no signature on one unless told
+# to, and rpm -i only warns. The keys come from rpm-gpg, imported once their fingerprints match,
+# with hex's importrpmkeys and checkrpms, which cntrjail.mk puts beside them for the build.
+COPY rpm-gpg /root/rpm-gpg
+RUN bash /root/rpm-gpg/importrpmkeys / /root/rpm-gpg/rpm_keys.txt
+ARG ELREPO_RELEASE="elrepo-release-9.5-2.el9.elrepo.noarch.rpm"
+RUN dnf install -y --setopt=localpkg_gpgcheck=1 https://elrepo.org/linux/elrepo/el9/x86_64/RPMS/${ELREPO_RELEASE}
 # setup dnf parallel downloads
 RUN echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf
 RUN echo "deltarpm=0" >> /etc/dnf/dnf.conf
@@ -123,13 +127,17 @@ FROM tier2_weak_dep_${WEAK_DEP} AS tier3
 # cipher in libceph, which the ceph kernel clients need once squid's CephX keys move to it; no
 # longterm release carries it yet. The packages come from CBS, the SIG's build system, which keeps
 # every build: the mirrors keep only each line's newest few, so a pinned version vanishes from
-# them within weeks (6.12.69 did).
+# them within weeks (6.12.69 did). CBS keeps a build's rpms unsigned at the top of its directory
+# and the copies the SIG signed under data/signed/<key ID>; the signed ones are fetched and checked
+# against the Kmods SIG's key, here and again when core/heavyfs installs them into the image.
 ARG KER_VER="7.2.11"
 ARG KER_REL="1.el9"
 ARG KER_ARC="x86_64"
+ARG KER_SIGNED="data/signed/7ae06d54"
 ARG HEX_KERNEL="kernel-${KER_VER}-${KER_REL} kernel-core-${KER_VER}-${KER_REL} kernel-modules-${KER_VER}-${KER_REL} kernel-devel-${KER_VER}-${KER_REL}"
 RUN mkdir kernel-${KER_VER}-${KER_REL}.${KER_ARC}
-RUN cd kernel-${KER_VER}-${KER_REL}.${KER_ARC} && for k in $HEX_KERNEL ; do wget -q https://cbs.centos.org/kojifiles/packages/kernel/${KER_VER}/${KER_REL}/${KER_ARC}/${k}.${KER_ARC}.rpm ; rpm -i --nodeps ${k}.${KER_ARC}.rpm ; done
+RUN cd kernel-${KER_VER}-${KER_REL}.${KER_ARC} && for k in $HEX_KERNEL ; do wget -q https://cbs.centos.org/kojifiles/packages/kernel/${KER_VER}/${KER_REL}/${KER_SIGNED}/${KER_ARC}/${k}.${KER_ARC}.rpm || exit 1 ; done && \
+    bash /root/rpm-gpg/checkrpms / . && for k in $HEX_KERNEL ; do rpm -i --nodeps ${k}.${KER_ARC}.rpm ; done
 
 # RUN [ -e /boot/hex ] || mv /boot/$(cat /etc/machine-id) /boot/hex || /bin/true
 RUN [ -e /boot/hex ] || mkdir -p /boot/hex
@@ -182,7 +190,10 @@ RUN curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 |
 # https://qiita.com/ishida0503/items/30fffa9b4a5baa37f88f
 RUN [ $IPT_LEGACY -eq 1 ] && dnf install -y yum-utils rpm-build autoconf automake bison flex libselinux-devel libpcap-devel libtool libmnl-devel libnetfilter_conntrack-devel libnfnetlink-devel libnftnl-devel || /bin/true
 RUN wget https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq
-RUN [ $IPT_LEGACY -eq 1 ] && wget https://kojihub.stream.centos.org/kojifiles/packages/iptables/1.8.8/6.el9/src/iptables-1.8.8-6.el9.src.rpm && rpm -ivh iptables-*.src.rpm || /bin/true
+# The source rpm is not signed, so it is pinned by its sha256, and a mismatch fails the build
+ARG IPT_SRPM_SHA256="84638dac8e7e97deeb5b8c3e786f62725de80f8a653a6c7b8e6d137db7d75016"
+RUN [ "${IPT_LEGACY:-0}" -ne 1 ] || { wget https://kojihub.stream.centos.org/kojifiles/packages/iptables/1.8.8/6.el9/src/iptables-1.8.8-6.el9.src.rpm && \
+    echo "${IPT_SRPM_SHA256}  iptables-1.8.8-6.el9.src.rpm" | sha256sum -c - && rpm -ivh iptables-*.src.rpm ; }
 RUN [ $IPT_LEGACY -eq 1 ] && sed -i -re 's/(Release: [0-9]+)(%\{\?dist\}.[0-9]+)/\1_inc_legacy\2/' /root/rpmbuild/SPECS/iptables.spec || /bin/true
 RUN [ $IPT_LEGACY -eq 1 ] && sed -i -e '/# drop all legacy tools/,+4d' /root/rpmbuild/SPECS/iptables.spec || /bin/true
 RUN [ $IPT_LEGACY -eq 1 ] && sed -i '/^%{_libdir}\/xtables\/libxt/a %{_sbindir}/*legacy*\n%{_bindir}/iptables-xml\n%doc %{_mandir}/man1/iptables-xml*\n%doc %{_mandir}/man8/xtables-legacy*' /root/rpmbuild/SPECS/iptables.spec || /bin/true
@@ -224,7 +235,7 @@ FROM tier3 AS tier4
 ARG JAIL_SSH="openssh-server"
 ARG JAIL_VNC="openbox supervisor x11vnc xterm xorg-x11-server-Xvfb firefox which  hostname https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm"
 ARG JAIL_VNC_FEH="libX11-devel libXinerama-devel imlib2-devel libcurl-devel libXt-devel"
-RUN dnf -y install $JAIL_SSH $JAIL_VNC $JAIL_VNC_FEH
+RUN dnf -y install --setopt=localpkg_gpgcheck=1 $JAIL_SSH $JAIL_VNC $JAIL_VNC_FEH
 
 # sigstore-python, for the publish job's keyless release signing (triangle/jenkins/cube_publish.groovy):
 # its `get-identity-token --oauth-force-oob` runs Sigstore's login in the jail and turns the code

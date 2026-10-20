@@ -153,8 +153,11 @@ rootfs_install::
 rootfs_install::
 	$(Q)[ ! -e $(ROOTDIR)/etc/yum.repos.d/elrepo.repo ] || sed -i 's/^mirrorlist=.*/#&/g' $(ROOTDIR)/etc/yum.repos.d/elrepo.repo
 
+# The jail's kernel rpms, which the Kmods SIG builds and signs (jail/jail.ubi9.dockerfile)
+GPGKEY_DNF += $(TOP_SRCDIR)/jail/rpm-gpg/RPM-GPG-KEY-CentOS-SIG-Kmods 48EF712EC5DDB68B5280BE455B8E1A767AE06D54
 KERNEL_PKGS := kernel-$(KERNEL_VERS) kernel-core-$(KERNEL_VERS) kernel-devel-$(KERNEL_VERS) kernel-modules-$(KERNEL_VERS)
 rootfs_install::
+	$(Q)$(CHECK_RPMS) $(ROOTDIR) /kernel-$(KERNEL_VERS)
 	$(Q)cp -r /kernel-$(KERNEL_VERS) $(ROOTDIR)/
 	$(Q)for k in $(KERNEL_PKGS) ; do chroot $(ROOTDIR) rpm -i --nodeps /kernel-$(KERNEL_VERS)/$$k.rpm ; done
 	$(Q)chroot $(ROOTDIR) dnf versionlock add $(KERNEL_PKGS)

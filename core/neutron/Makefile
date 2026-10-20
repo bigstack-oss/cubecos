@@ -4,7 +4,10 @@ include ../../build.mk
 
 OVN_REPO := centos-release-nfv-openvswitch
 OVN_PREFIX := ovn24.03
-OVN_SRPM := $(CBS_DL_HOST)/kojifiles/packages/ovn24.03/24.03.8/31.el9s/src/ovn24.03-24.03.8-31.el9s.src.rpm
+# The copy the NFV SIG signed, pinned by its sha256 (taken once it verified against the NFV SIG's
+# key): the jail has no reason to trust that key, and rpm -i only warns about one it lacks
+OVN_SRPM := $(CBS_DL_HOST)/kojifiles/packages/ovn24.03/24.03.8/31.el9s/data/signed/9d2a76a7/src/ovn24.03-24.03.8-31.el9s.src.rpm
+OVN_SRPM_SHA256 := 362e5b341d75f88cbcaa5685243f8965e7a76831e751d17ad1f404659ff5d552
 
 RPMBUILD_DIR := /root/rpmbuild
 OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)
@@ -14,7 +17,7 @@ OVN_PATCHDIR := $(COREDIR)/neutron/ovn_patch/$(HEX_DIST)
 ovn-northd:
 	$(call RUN_CMD_TIMED,dnf -y install $(OVN_REPO) dnf-plugins-core rpm-build,"  PREP    rpmbuild")
 #	$(call RUN_CMD_TIMED,dnf download $(OVN_PREFIX)-central --source,"  DL      $(OVN_PREFIX).src.rpm")
-	$(call RUN_CMD_TIMED,wget $(OVN_SRPM),"  PULL    $(OVN_PREFIX).src.rpm")
+	$(call RUN_CMD_TIMED,$(SHELL) $(HEX_SCRIPTSDIR)/fetchverified $(OVN_SRPM) $(OVN_SRPM_SHA256) $(notdir $(OVN_SRPM)),"  PULL    $(OVN_PREFIX).src.rpm")
 	$(Q)rm -rf $(RPMBUILD_DIR)
 	$(call RUN_CMD_TIMED,rpm -ivh *.src.rpm,"  INSTALL $(OVN_PREFIX).src.rpm")
 	$(Q)cp -f $(OVN_PATCHDIR)/0001-northd-remove-dr-snat-high-priority.patch $(RPMBUILD_DIR)/SOURCES/
