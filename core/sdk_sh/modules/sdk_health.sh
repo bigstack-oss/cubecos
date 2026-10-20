@@ -4002,7 +4002,8 @@ health_grafana_check()
             ERR_MSG+="grafana on $node is not running\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u grafana-server"
         fi
-        $CURL -sf http://$node:3000 >/dev/null
+        # grafana listens on loopback only, behind haproxy, so probe it from the node itself
+        is_sshable $node && remote_run $node "curl -sf -m 5 -o /dev/null http://127.0.0.1:3000/api/health" >/dev/null 2>&1
         if [ $? -eq 7 ] ; then
             ERR_CODE=2
             ERR_MSG+="grafana on $node doesn't respond\n"
@@ -4019,7 +4020,8 @@ health_grafana_repair()
         if ! is_remote_running $node grafana-server ; then
             remote_systemd_restart $node grafana-server
         fi
-        $CURL -sf http://$node:3000 >/dev/null
+        # grafana listens on loopback only, behind haproxy, so probe it from the node itself
+        is_sshable $node && remote_run $node "curl -sf -m 5 -o /dev/null http://127.0.0.1:3000/api/health" >/dev/null 2>&1
         if [ $? -eq 7 ] ; then
             remote_systemd_restart $node grafana-server
         fi
