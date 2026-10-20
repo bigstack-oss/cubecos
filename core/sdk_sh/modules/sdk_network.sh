@@ -315,6 +315,8 @@ _set_ipt_service_int()
     done < $ipt_rc
 
     iptables -A $chain -p tcp --match multiport --dports 5900:5999 -j DROP # drop all direct vnc access, except for internal nodes
+    iptables -A $chain -p tcp --dport 8003 -j DROP # drop ceph-mgr restful API, except for internal nodes
+    iptables -A $chain -p tcp --dport 8005 -j DROP # drop ceph-mgr restful API behind haproxy, except for internal nodes
     iptables -A $chain -p tcp --dport 3306 -j DROP # drop Database Open Access (database-open-access 3306)
     iptables -A $chain -p tcp --dport 13306 -j DROP # drop haproxy's galera check (galera-check.socket), except for internal nodes
     iptables -A $chain -p tcp --dport 5672 -j DROP # drop AMQP Cleartext Authentication (amqp-cleartext-authentication 5672), except for internal nodes
