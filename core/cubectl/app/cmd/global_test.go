@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -182,3 +183,145 @@ func TestEtcdMemberAddPromote(t *testing.T) {
 // 	}
 
 // }
+
+func TestEtcdListenClientUrls(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings map[string]string
+		want     string
+	}{
+		{
+			name: "NonHA",
+			settings: map[string]string{
+				"cubesys.management": "eth0",
+				"net.if.addr.eth0":   "10.0.0.11",
+			},
+			want: "http://127.0.0.1:12379,http://10.0.0.11:12379",
+		},
+		{
+			name: "HAWithVip",
+			settings: map[string]string{
+				"cubesys.management":  "eth0",
+				"net.if.addr.eth0":    "10.0.0.11",
+				"cubesys.ha":          "true",
+				"cubesys.control.vip": "10.0.0.10",
+			},
+			want: "http://127.0.0.1:12379,http://10.0.0.11:12379,http://10.0.0.10:12379",
+		},
+		{
+			name: "VipOnlyCountsInHA",
+			settings: map[string]string{
+				"cubesys.management":  "eth0",
+				"net.if.addr.eth0":    "10.0.0.11",
+				"cubesys.control.vip": "10.0.0.10",
+			},
+			want: "http://127.0.0.1:12379,http://10.0.0.11:12379",
+		},
+		{
+			name: "VipSameAsMgmt",
+			settings: map[string]string{
+				"cubesys.management":  "eth0",
+				"net.if.addr.eth0":    "10.0.0.11",
+				"cubesys.ha":          "true",
+				"cubesys.control.vip": "10.0.0.11",
+			},
+			want: "http://127.0.0.1:12379,http://10.0.0.11:12379",
+		},
+		{
+			name: "NoMgmtIp",
+			settings: map[string]string{
+				"cubesys.management": "eth0",
+			},
+			want: "http://0.0.0.0:12379",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := cubeSettings.LoadMap(test.settings); err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, test.want, etcdListenClientUrls())
+		})
+	}
+}
+
+func TestRefreshEtcdListenClientUrls(t *testing.T) {
+	if err := cubeSettings.LoadMap(map[string]string{
+		"cubesys.management": "eth0",
+		"net.if.addr.eth0":   "10.0.0.11",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := "http://127.0.0.1:12379,http://10.0.0.11:12379"
+
+	readConf := func(t *testing.T, file string) *viper.Viper {
+		v := viper.New()
+		v.SetConfigFile(file)
+		if err := v.ReadInConfig(); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	t.Run("RewritesOnlyListenClientUrls", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "etcd.conf.yml")
+		conf := strings.Join([]string{
+			"name: cc1",
+			"data-dir: /var/lib/etcd.cube",
+			"listen-client-urls: http://0.0.0.0:12379",
+			"listen-peer-urls: http://10.0.0.11:12380",
+			"advertise-client-urls: http://10.0.0.11:12379",
+			"initial-cluster-state: existing",
+			"initial-cluster: cc1=http://10.0.0.11:12380,cc2=http://10.0.0.12:12380",
+			"",
+		}, "\n")
+		if err := os.WriteFile(file, []byte(conf), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := refreshEtcdListenClientUrls(file); err != nil {
+			t.Fatal(err)
+		}
+
+		v := readConf(t, file)
+		assert.Equal(t, want, v.GetString("listen-client-urls"))
+		assert.Equal(t, "cc1", v.GetString("name"))
+		assert.Equal(t, "/var/lib/etcd.cube", v.GetString("data-dir"))
+		assert.Equal(t, "http://10.0.0.11:12380", v.GetString("listen-peer-urls"))
+		assert.Equal(t, "http://10.0.0.11:12379", v.GetString("advertise-client-urls"))
+		assert.Equal(t, "existing", v.GetString("initial-cluster-state"))
+		assert.Equal(t, "cc1=http://10.0.0.11:12380,cc2=http://10.0.0.12:12380", v.GetString("initial-cluster"))
+
+		entries, err := os.ReadDir(filepath.Dir(file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Len(t, entries, 1, "no temp file left behind")
+	})
+
+	t.Run("LeavesUpToDateFileAlone", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "etcd.conf.yml")
+		conf := "name: cc1\nlisten-client-urls: " + want + "\n"
+		if err := os.WriteFile(file, []byte(conf), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := refreshEtcdListenClientUrls(file); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, conf, string(got))
+	})
+
+	t.Run("MissingFile", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "etcd.conf.yml")
+		assert.Error(t, refreshEtcdListenClientUrls(file))
+		_, err := os.Stat(file)
+		assert.True(t, os.IsNotExist(err), "must not create a config")
+	})
+}

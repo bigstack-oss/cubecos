@@ -285,7 +285,7 @@ func writeEtcdConfig(state string, initCluster string) error {
 	viper.SetConfigType("yaml")
 	viper.Set("name", cubeSettings.GetHostname())
 	viper.Set("data-dir", etcdDataDir)
-	viper.Set("listen-client-urls", fmt.Sprintf("http://0.0.0.0:%d", etcdClientPort))
+	viper.Set("listen-client-urls", etcdListenClientUrls())
 	viper.Set("listen-peer-urls", fmt.Sprintf("http://%s:%d", myIp, etcdPeerPort))
 	viper.Set("advertise-client-urls", fmt.Sprintf("http://%s:%d", myIp, etcdClientPort))
 	viper.Set("initial-advertise-peer-urls", fmt.Sprintf("http://%s:%d", myIp, etcdPeerPort))
@@ -297,4 +297,52 @@ func writeEtcdConfig(state string, initCluster string) error {
 
 	_ = os.MkdirAll("/etc/etcd", 0755)
 	return viper.WriteConfigAs(etcdConfigFile)
+}
+
+// etcdListenClientUrls is where etcd serves clients: loopback (cubectl, etcdctl-cube.sh,
+// terraform), the management IP (member calls, `etcdctl --cluster`) and, in HA, the
+// control VIP, which etcd-watch and every non-control node dial via GetControllerIp().
+// A control that does not hold the VIP can still bind it: cubesys sets
+// net.ipv4.ip_nonlocal_bind=1. Without a management IP it stays on the wildcard.
+func etcdListenClientUrls() string {
+	myIp := cubeSettings.GetMgmtIfIp()
+	if myIp == "" {
+		return fmt.Sprintf("http://0.0.0.0:%d", etcdClientPort)
+	}
+
+	addrs := []string{"127.0.0.1", myIp}
+	if vip := cubeSettings.V().GetString("cubesys.control.vip"); cubeSettings.IsHA() && vip != "" && vip != myIp {
+		addrs = append(addrs, vip)
+	}
+
+	urls := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		urls = append(urls, fmt.Sprintf("http://%s:%d", addr, etcdClientPort))
+	}
+	return strings.Join(urls, ",")
+}
+
+// refreshEtcdListenClientUrls points an existing etcd config at etcdListenClientUrls().
+// The file is written only when the node creates or joins the cluster, and upgrades
+// carry it over as is, so a node would otherwise keep the listeners it was installed with.
+// Only that key changes; it is not part of the cluster membership.
+func refreshEtcdListenClientUrls(file string) error {
+	v := viper.New()
+	v.SetConfigFile(file)
+	if err := v.ReadInConfig(); err != nil {
+		return err
+	}
+
+	urls := etcdListenClientUrls()
+	if v.GetString("listen-client-urls") == urls {
+		return nil
+	}
+	v.Set("listen-client-urls", urls)
+
+	// write aside and rename, so a failed write cannot leave etcd without a config
+	tmp := strings.TrimSuffix(file, ".yml") + ".new.yml"
+	if err := v.WriteConfigAs(tmp); err != nil {
+		return err
+	}
+	return os.Rename(tmp, file)
 }
