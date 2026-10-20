@@ -124,6 +124,9 @@ rootfs_install::
 	$(Q)# rdo-openvswitch is 3.4 and Obsoletes the openvswitch3.3 core/neutron pins --
 	$(Q)# which is why core/neutron fetches the 3.3 builds from koji instead.
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-squid
+	$(Q)# The squid release rpm writes its repo with gpgcheck=0, so a node's own dnf would install
+	$(Q)# from it unchecked
+	$(Q)chroot $(ROOTDIR) dnf config-manager --save --setopt=centos-ceph-squid.gpgcheck=1
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-disabled centos-ceph-reef
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled highavailability
 
