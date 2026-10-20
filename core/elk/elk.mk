@@ -1,16 +1,15 @@
 # Cube SDK
 # elk installation (OpenSearch, OpenSearch-Dashboards, Logstash and Beats)
 
-ifneq (,$(wildcard $(ROOTDIR)))
-# Imported for its side effect: it is what lets `rpm -K` speak for the beats rpms, which
-# arrive through ROOTFS_DNF_DL_FROM and install as @commandline. No repo file is added:
-# since the initial commit the beats have always been direct rpm downloads, so nothing
-# in the image has ever resolved a package from Elastic's yum repo.
-ELK_KEY := $(shell chroot $(ROOTDIR) rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch 2>/dev/null ; echo "elastic")
-OSEARCH := $(shell chroot $(ROOTDIR) rpm --import https://artifacts.opensearch.org/publickeys/opensearch-release.pgp ; echo "opensearch")
-else
-OSEARCH := $(shell echo "opensearch")
-endif
+# The keys the beats and the OpenSearch rpms are checked against. They arrive through
+# ROOTFS_DNF_DL_FROM and install as @commandline. No repo file is added: since the initial
+# commit the beats have always been direct rpm downloads, so nothing in the image has ever
+# resolved a package from Elastic's yum repo. OpenSearch signs with a subkey that expires on
+# 2027-03-06.
+GPGKEY_DNF += $(COREDIR)/elk/RPM-GPG-KEY-elasticsearch 46095ACC8548582C1A2699A9D27D666CD88E42B4
+GPGKEY_DNF += $(COREDIR)/elk/RPM-GPG-KEY-opensearch A8B2D9E04CD51FEF6AA2DB53BA81D99981191457
+
+OSEARCH := opensearch
 
 #
 # OpenSearch

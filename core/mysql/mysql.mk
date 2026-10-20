@@ -24,6 +24,8 @@
 MARIADB_VER := 11.4.12-1.el9
 GALERA_VER := 26.4.27-1.el9
 MARIADB_URL := $(MARIADB_DL_HOST)/yum/11.4/rocky9-amd64/rpms
+# MariaDB's signing key, for the server packages and galera alike
+GPGKEY_DNF += $(COREDIR)/mysql/RPM-GPG-KEY-MariaDB 177F4010FE56CA3336300305F1656F24C74CD1D8
 
 # Official MariaDB package list
 # Note: we dropped errmsg and server-utils as they are now bundled

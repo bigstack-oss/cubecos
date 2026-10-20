@@ -8,6 +8,9 @@
 # (13.2, to 2027-05-18). 12.3 went end-of-life on 2026-08-19, so 12.3.2 is both EOL and nine
 # patches behind its own dead line.
 ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-12.4.13-1.x86_64.rpm
+# Grafana Labs' rpm signing key, which expires 2027-08-22; a release signed with its successor
+# fails installdnf's check, naming the new key ID
+GPGKEY_DNF += $(COREDIR)/grafana/RPM-GPG-KEY-grafana B53AE77BADB630A683046005963FA27710458545
 
 # No grafana-cli plugin installs. Both plugins this used to fetch are gone:
 # grafana-piechart-panel is AngularJS, which Grafana 12 removed, so it could not load at all

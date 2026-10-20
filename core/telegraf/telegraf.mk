@@ -4,7 +4,9 @@
 TELEGRAF_VER := 1.40.2
 TELEGRAF_PKG := telegraf-$(TELEGRAF_VER)-1.x86_64.rpm
 
-ROOTFS_DNF_DL_FROM += https://dl.influxdata.com/telegraf/releases/$(TELEGRAF_PKG)
+# The copy in InfluxData's repository, which is signed with its key (core/influxdb); the one on
+# dl.influxdata.com is the same build, unsigned
+ROOTFS_DNF_DL_FROM += https://repos.influxdata.com/rhel/9/x86_64/stable/$(TELEGRAF_PKG)
 
 # /usr/bin/telegraf is rebuilt here from the same tag and installed over the rpm's. Upstream builds
 # each release with the Go of its day and never rebuilds it. Through 1.30.3 core/telegraf/Makefile
