@@ -20,10 +20,17 @@ LOCKED_DNF += $(OVN_LOCKED_RPMS) $(OVS_LOCKED_RPMS)
 # Base networking RPMs
 ROOTFS_DNF += $(OVS_LOCKED_RPMS) $(OVN_LOCKED_RPMS)
 
+# The NFV SIG signs centos-nfv-openvswitch, which OVN and openvswitch come from. Koji keeps a
+# build's rpms unsigned at the top of its directory and the copies a SIG signed under
+# data/signed/<key ID>; the Cloud SIG's copies are fetched, so they verify against its key
+# (core/heavyfs/Makefile).
+GPGKEY_DNF += $(COREDIR)/neutron/RPM-GPG-KEY-CentOS-SIG-NFV 35154228174901BEFA8E69A621465E289D2A76A7
+CLOUD_SIG_SIGNED := data/signed/764429e6
+
 RDOOVN_VERSION := -24.03-1.el9s
-ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn$(RDOOVN_VERSION).noarch.rpm
-ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
-ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/$(CLOUD_SIG_SIGNED)/noarch/rdo-ovn$(RDOOVN_VERSION).noarch.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/$(CLOUD_SIG_SIGNED)/noarch/rdo-ovn-central$(RDOOVN_VERSION).noarch.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/$(CLOUD_SIG_SIGNED)/noarch/rdo-ovn-host$(RDOOVN_VERSION).noarch.rpm
 
 # rdo-ovn requires the "openvswitch" and "network-scripts-openvswitch3.3" capabilities,
 # which only the openstack release repo supplies: rdo-openvswitch and
@@ -37,8 +44,8 @@ ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el
 # NVRs the caracal repo resolves to, so under caracal nothing changes.
 # openstack-network-scripts itself (the unversioned "network-scripts" it needs) is
 # fine from either repo.
-ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/noarch/rdo-openvswitch-3.3-1.el9s.noarch.rpm
-ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/openstack-network-scripts/10.11.1/6.el9s/x86_64/openstack-network-scripts-openvswitch3.3-10.11.1-6.el9s.x86_64.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/rdo-openvswitch/3.3/1.el9s/$(CLOUD_SIG_SIGNED)/noarch/rdo-openvswitch-3.3-1.el9s.noarch.rpm
+ROOTFS_DNF_DL_FROM += $(CBS_DL_HOST)/kojifiles/packages/openstack-network-scripts/10.11.1/6.el9s/$(CLOUD_SIG_SIGNED)/x86_64/openstack-network-scripts-openvswitch3.3-10.11.1-6.el9s.x86_64.rpm
 
 # System requirements formerly pulled in by openstack-neutron RPMs
 # handled elsewhere: iptables

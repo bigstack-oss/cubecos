@@ -6,6 +6,8 @@ DOCKER_DIR := /opt/docker
 ROOTFS_DNF += containerd.io docker-ce docker-ce-cli docker-ce-rootless-extras skopeo
 
 DOCKER_REPO = $(shell chroot $(ROOTDIR) dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo ; echo "docker")
+# The key docker-ce.repo names, kept here and pinned rather than fetched from its gpgkey= URL
+GPGKEY_DNF += $(COREDIR)/docker/RPM-GPG-KEY-docker 060A61C51B558A7F742B77AAC52FEB6B621E9F35
 
 # The Go binaries of containerd.io (containerd, ctr, gen-manpages, the runc shim and the runc it
 # bundles), docker-compose-plugin, docker-buildx-plugin and skopeo are rebuilt here from each

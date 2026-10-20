@@ -18,18 +18,23 @@ LOCKED_DNF += erlang-$(ERLANG_VER)
 RABBITMQ_VER := 3.12.14-1.el8
 LOCKED_DNF += rabbitmq-server-$(RABBITMQ_VER)
 
+# RabbitMQ's release key and the keys Cloudsmith signs the erlang and rabbitmq-server repositories
+# with. Both repositories check their metadata as well as their packages, so the repo files name
+# these copies rather than the URLs they were published at: dnf would import a key from a URL
+# unchecked.
+RABBITMQ_KEYS := RPM-GPG-KEY-rabbitmq-release RPM-GPG-KEY-cloudsmith-rabbitmq-erlang RPM-GPG-KEY-cloudsmith-rabbitmq-server
+GPGKEY_DNF += $(COREDIR)/rabbitmq/RPM-GPG-KEY-rabbitmq-release 0A9AF2115F4687BD29803A206B73A36E6026DFCA
+GPGKEY_DNF += $(COREDIR)/rabbitmq/RPM-GPG-KEY-cloudsmith-rabbitmq-erlang A16A42516F6A691BC1FF5621E495BB49CC4BBE5B
+GPGKEY_DNF += $(COREDIR)/rabbitmq/RPM-GPG-KEY-cloudsmith-rabbitmq-server C072C9604725BAA218E1F2479F4587F226208342
+
 # install erlang
 rootfs_install::
-	$(Q)# primary RabbitMQ signing key
-	$(Q)chroot $(ROOTDIR) rpm --import 'https://github.com/rabbitmq/signing-keys/releases/download/3.0/rabbitmq-release-signing-key.asc'
-	$(Q)# modern Erlang repository
-	$(Q)chroot $(ROOTDIR) rpm --import 'https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key'
+	$(Q)for k in $(RABBITMQ_KEYS) ; do $(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/rabbitmq/$$k ./etc/pki/rpm-gpg ; done
 	$(Q)cp -f $(COREDIR)/rabbitmq/erlang.repo $(ROOTDIR)/etc/yum.repos.d/
 	$(Q)chroot $(ROOTDIR) dnf install -y erlang-$(ERLANG_VER).x86_64
 
 # install rabbitmq
 rootfs_install::
-	$(Q)chroot $(ROOTDIR) rpm --import 'https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-server.9F4587F226208342.key'
 	$(Q)cp -f $(COREDIR)/rabbitmq/rabbitmq.repo $(ROOTDIR)/etc/yum.repos.d/
 	$(Q)chroot $(ROOTDIR) dnf install -y rabbitmq-server-$(RABBITMQ_VER).noarch
 

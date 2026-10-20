@@ -70,6 +70,8 @@ ROOTFS_DNF_NOARCH += iptables-services novnc
 VIRTIO_WIN_NVR := virtio-win-0.1.302-1
 ROOTFS_DNF_DL_FROM += https://fedorapeople.org/groups/virt/virtio-win/repo/stable/$(VIRTIO_WIN_NVR).noarch.rpm
 LOCKED_DNF += $(VIRTIO_WIN_NVR)
+# virtio-win rpms are not signed, so the download is pinned by its sha256: bump it with the NVR
+PINNED_DNF += 2f58eea024e0221a873032761dc3ed3262409cd80860b7b27d3d5a0f206616c9 $(VIRTIO_WIN_NVR).noarch.rpm
 
 # Fail the build rather than ship either way back into #560: 2k25 viostor gone (a
 # release that reorganised the tree), or an smbus file or ISO still in place

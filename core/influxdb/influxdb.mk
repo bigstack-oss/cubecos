@@ -10,6 +10,8 @@ ROOTFS_PIP += toml
 BLKLST_DNF += python3-influxdb python3-msgpack
 
 ROOTFS_DNF += influxdb
+# InfluxData's key signs its repository, which influxdb and kapacitor come from, and telegraf
+GPGKEY_DNF += $(COREDIR)/influxdb/RPM-GPG-KEY-influxdata 24C975CBA61A024EE1B631787C3D57159FC2F927
 
 # influxd, influx and influx_inspect are rebuilt from the release tag of the version InfluxData's
 # rpm installs and installed over the rpm's: its build is made with a Go older than the October

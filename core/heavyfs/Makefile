@@ -81,9 +81,18 @@ rootfs_install::
 rootfs_install::
 	# $(Q)sed "s/\/var\/run\//\/run\//g" $(ROOTDIR)/usr/lib/tmpfiles.d/subscription-manager.conf > $(ROOTDIR)/etc/tmpfiles.d/subscription-manager.conf
 	$(Q)mount -t proc proc $(ROOTDIR)/proc || /bin/true
+	$(Q)# The keys the components pin go into the keyring before anything is installed: dnf -y
+	$(Q)# would otherwise import a repository's key from its gpgkey= unchecked
+	$(Q)$(IMPORT_RPM_KEYS) $(ROOTDIR) $(RPM_KEYS)
 	$(Q)chroot $(ROOTDIR) dnf clean all
 	$(Q)echo "Add to $(ROOTDIR) repos: $(INFLUXDB_REPO) $(CEPH_REPO) $(DOCKER_REPO)"
 	$(Q)mkdir -p $(RPMS_DIR) $(PIPS_DIR) $(ARCS_DIR)
+
+# The release rpms come from CentOS's extras-common repository, signed with the Extras SIG's key, and
+# the openstack repository they add is signed with the Cloud SIG's. The SHA512 copy of the Extras key:
+# its SHA1-signed copy carries the same key, and the build host's crypto policy cannot load it.
+GPGKEY_DNF += $(COREDIR)/heavyfs/RPM-GPG-KEY-CentOS-SIG-Extras-SHA512 363FC0972F64B699AED3968E1FF6A2171D997668
+GPGKEY_DNF += $(COREDIR)/heavyfs/RPM-GPG-KEY-CentOS-SIG-Cloud 736AF5116D9C40E2AF6B074BF9B9FEE7764429E6
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
@@ -213,11 +222,13 @@ $(foreach p,$(QEMU_PKGS),$(eval ROOTFS_DNF_DL_FROM += $(QEMU_URL)/$(p)-$(QEMU_NV
 # 3.2.5-9, and the 3.2.5-10 draft fixes a different one. Rocky rebuilds the errata from the same
 # source rpm. Fetched here, it sits beside the 3.2.5-9 that the plain "rsync" in ROOTFS_DNF pulls,
 # and installdnf's duplicate pass keeps the higher version, so Stream's own build takes over the
-# day one sorts above it. No Rocky key goes into the image: nothing verifies signatures on these
-# downloads, and a node has no other reason to trust Rocky's key. The path moves to
+# day one sorts above it. No Rocky key goes into the image, since a node has no other reason to trust
+# it: each Rocky download is pinned by its sha256 instead, taken from a copy that verified against
+# Rocky 9's release key (21CB256AE16FC54C6E652949702D426D350D275D). The path moves to
 # vault/rocky/9.8 once Rocky 9.9 ships, which fails this download loudly rather than quietly.
 RSYNC_NVR := 3.2.7-1.el9_8
 ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/pub/rocky/9.8/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
+PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 rsync-$(RSYNC_NVR).x86_64.rpm
 
 # pcre2, librabbitmq and python3-tornado come from Rocky 9 the same way. RHEL 9.8 fixed a known
 # vulnerability in each, in pcre2-10.40-7.el9_8, librabbitmq-0.11.0-7.el9_8.1 and
@@ -230,7 +241,8 @@ ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/pub/rocky/9.8/BaseOS/x86_64/os/Packages/r
 # the download directory, so Stream's build takes over only where it was downloaded beside Rocky's.
 # Where the rootfs already has Stream's build installed, Rocky's copy is a downgrade and
 # rootfs_install fails. openssl was here until Stream's 3.5.9-1.el9, a rebase onto OpenSSL 3.5.9,
-# which carries the fix RHEL had backported into 3.5.8-2.el9_8.
+# which carries the fix RHEL had backported into 3.5.8-2.el9_8. Each entry has its PINNED_DNF line
+# below, as rsync has.
 ROCKY_ERRATA_RPMS := \
 	BaseOS/p/pcre2-10.40-7.el9_8.x86_64 \
 	BaseOS/p/pcre2-syntax-10.40-7.el9_8.noarch \
@@ -241,6 +253,13 @@ ROCKY_ERRATA_RPMS := \
 	AppStream/p/python3-tornado-6.5.10-1.el9_8.1.x86_64
 rocky_rpm_url = $(ROCKY_DL_HOST)/pub/rocky/9.8/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
 ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_ERRATA_RPMS),$(call rocky_rpm_url,$(p)))
+PINNED_DNF += dc350245c7781a0ac2ffce92e088a22c3741bf967ce7c551d0420cea9ae085eb pcre2-10.40-7.el9_8.x86_64.rpm
+PINNED_DNF += aaff0127ff9456106ca5b4139f93881e75c16502499d378021fba649730ee174 pcre2-syntax-10.40-7.el9_8.noarch.rpm
+PINNED_DNF += 76ff9a22021791c37c87d32ba8037402dc7f5242560c74f479c990aae860b271 pcre2-utf16-10.40-7.el9_8.x86_64.rpm
+PINNED_DNF += dbc674d263c71d34a35fd4e87d384ff528183344901cbac977fd01118d4e5d84 pcre2-utf32-10.40-7.el9_8.x86_64.rpm
+PINNED_DNF += 892b094be072d15dab5f2f29c16586730b918b5d3bf52d94d09e7341643febd0 pcre2-devel-10.40-7.el9_8.x86_64.rpm
+PINNED_DNF += 4bfe6fa6d1834f712db7343a26abc74919fb76db5820624ab741f43bc7db9988 librabbitmq-0.11.0-7.el9_8.1.x86_64.rpm
+PINNED_DNF += 9c8562e43c43ccc35cd614ab5f63342e4cbfa97f53a1d2d824d19d7db7cf8630 python3-tornado-6.5.10-1.el9_8.1.x86_64.rpm
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
@@ -508,11 +527,27 @@ HEAVY_COMPONENTS += terraform docker k3s keycloak rancher appfw appctl lachesis
 include $(shell for m in $(HEAVY_COMPONENTS); do ls $(COREDIR)/$$m/$$m.mk; done)
 $(shell for r in $(LOCKED_DNF); do echo $$r >> $(LOCKED_RPMS); done)
 $(shell for r in $(BLKLST_DNF); do echo $$r >> $(BLKLST_RPMS); done)
+# Every rpm installdnf installs must carry a signature that verifies against a key a component
+# pins, GPGKEY_DNF's '<key file> <fingerprint>' pairs, or have the sha256 PINNED_DNF's
+# '<sha256> <rpm file name>' pairs give it (hex's scripts/importrpmkeys and scripts/checkrpms).
+# Only inside the rootfs: the parse outside it has no ROOTDIR.
+ifneq ($(ROOTDIR),)
+$(shell printf '%s %s\n' $(GPGKEY_DNF) >> $(RPM_KEYS))
+$(shell printf '%s %s\n' $(PINNED_DNF) >> $(PINNED_RPMS))
+endif
 
 # Every component's rootfs_install has run by now, so the last openstack venv install
 # is behind us: drop uv and its cache before they ship.
 rootfs_install::
 	$(Q)rm -rf $(ROOTDIR)$(OPENSTACK_UV_HOME)
+
+# And every dnf: the keyring holds only keys that hex or a component pins. Checked again after the
+# second pass (below), whose dnf installs pull their dependencies from the repositories.
+rootfs_install::
+	$(Q)$(IMPORT_RPM_KEYS) -c $(ROOTDIR) $(RPM_KEYS)
+
+heavy_components_install::
+	$(Q)$(IMPORT_RPM_KEYS) -c $(ROOTDIR) $(RPM_KEYS)
 
 # Component artifacts baked into the rootfs — prereqs so a component rebuild
 # forces a rootfs rebuild (with touch $@ below). Scoped to HEAVY_COMPONENTS, not

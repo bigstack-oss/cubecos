@@ -14,6 +14,9 @@
 # aes256k, 7.0 or later, so the keys move only once every node runs one (jail.ubi9.dockerfile's
 # kernel), after the whole cluster has been upgraded. Tracked on #677.
 CEPH_VERSION:=-19.2.7-1.el9s
+# The Storage SIG signs centos-ceph-squid and centos-nfs-ganesha-5, which ceph and nfs-ganesha come
+# from. installdnf checks every rpm against the keys the components pin (core/heavyfs/Makefile).
+GPGKEY_DNF += $(COREDIR)/ceph/RPM-GPG-KEY-CentOS-SIG-Storage 74129C0B173B071A3775951AD4A2E50BE451E5B5
 # nfs-ganesha stays on 5.9: its ceph FSAL links libcephfs.so.2 and librados.so.2,
 # and squid's libcephfs2/librados2 still provide exactly those sonames, so the
 # ganesha packages are untouched by the major bump -- a dnf solve of the squid set
