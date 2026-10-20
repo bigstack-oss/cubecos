@@ -1,0 +1,9 @@
+# The keys the jail checks the rpms it fetches by URL against, as '<key file> <fingerprint>', each
+# imported only once its fingerprint matches (hex's scripts/importrpmkeys). The Kmods SIG's signs
+# the kernel, Google's google-chrome, and elrepo.org's two elrepo-release and the repository it
+# adds. Google signs with a subkey it replaces every few years: when chrome names a key ID this
+# copy lacks, take Google's current key file again, under the same fingerprint.
+RPM-GPG-KEY-CentOS-SIG-Kmods 48EF712EC5DDB68B5280BE455B8E1A767AE06D54
+RPM-GPG-KEY-google EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796
+RPM-GPG-KEY-elrepo.org 96C0104F631547311E0BB1AE309BC305BAADAE52
+RPM-GPG-KEY-v2-elrepo.org B8A755874DA240C9DAC4E71551600989EAA31D4A

@@ -5,6 +5,9 @@
 *~
 TAGS
 jail/ubi9.tar.gz
+# hex's, copied in for the jail build by jail/cntrjail.mk
+jail/rpm-gpg/importrpmkeys
+jail/rpm-gpg/checkrpms
 triangle
 
 # Python bytecode
