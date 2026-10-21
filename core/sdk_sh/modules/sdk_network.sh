@@ -334,6 +334,7 @@ _set_ipt_service_int()
     iptables -A $chain -p tcp --match multiport --dports 2181,9095 -j DROP # drop zookeeper and kafka, except for internal nodes
     iptables -A $chain -p tcp --match multiport --dports 5601,7443 -j DROP # drop OpenSearch Dashboards and the ceph dashboard, except for internal nodes -- users reach both through haproxy's /opensearch-dashboards and /ceph/ on 80/443
     iptables -A $chain -p tcp --dport 9090 -j DROP # drop lachesis's metrics, except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 953,5354 -j DROP # drop named's rndc and designate-mdns (zone transfers of every zone), except for internal nodes -- only the controls use them
 
     # etcd (12379 client, 12380 peer) also accepts the management subnet: a joining
     # node dials both before it is in `cubectl node list`, and a member rebuilds this
