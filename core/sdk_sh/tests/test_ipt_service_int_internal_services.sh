@@ -3,7 +3,8 @@
 # Unit test for the cluster-internal service rules in _set_ipt_service_int
 # (../modules/sdk_network.sh): the OVS/OVN databases, RabbitMQ's epmd and prometheus endpoint,
 # the exporters prometheus scrapes, haproxy's stats page, pcsd, zookeeper and kafka, the
-# OpenSearch and ceph dashboards (which users reach through haproxy) and lachesis's metrics.
+# OpenSearch and ceph dashboards (which users reach through haproxy), lachesis's metrics, and
+# named's rndc and designate-mdns, which only the controls use.
 #
 # Each is used only from the cluster's own nodes, so SERVICE-INT drops it for every source but
 # the allowlist (lo, controller.ip, control.vip, the `cubectl node list` addresses) and the
@@ -65,7 +66,8 @@ RULES=('-p tcp --match multiport --dports 6640,6641,6642 -j DROP'
        '-p tcp --dport 2224 -j DROP'
        '-p tcp --match multiport --dports 2181,9095 -j DROP'
        '-p tcp --match multiport --dports 5601,7443 -j DROP'
-       '-p tcp --dport 9090 -j DROP')
+       '-p tcp --dport 9090 -j DROP'
+       '-p tcp --match multiport --dports 953,5354 -j DROP')
 
 run "${BASE[@]}" 'cubesys.management=eth0' 'net.if.addr.eth0=10.32.150.1' 'net.if.mask.eth0=255.255.0.0'
 for DROP in "${RULES[@]}" ; do
@@ -85,7 +87,7 @@ done
 
 # 4. nothing opens these ports, and k3s (6443, 10250, its etcd on 2379/2380) and DNS (53) are
 #    not dropped
-for p in 6640 6641 6642 4369 15692 9117 9150 9283 9290 9587 9100 2224 2181 9095 5601 7443 9090 ; do
+for p in 6640 6641 6642 4369 15692 9117 9150 9283 9290 9587 9100 2224 2181 9095 5601 7443 9090 953 5354 ; do
     chk "4 no accept for $p"                 "$(grep -cE -- "--dports? ([0-9]+[,:])*$p\b.*-j ACCEPT" "$T/rules")" "0"
 done
 for p in 6443 10250 2379 2380 53 ; do
