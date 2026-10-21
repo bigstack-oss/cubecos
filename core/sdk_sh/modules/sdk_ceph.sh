@@ -2103,16 +2103,22 @@ ceph_osd_disable_cache()
 
     # The sweep at the bottom of the $BUILTIN_BACKPOOL branch resets crush_rule
     # on every pool it does not recognize, and a device tier pool is named by its
-    # operator, so it matches none of the suffixes in that skip list. Read the
-    # registry here, before the first mutation: once the overlay is off there is
-    # no way to stop half way, so "cannot read it" has to fail while failing is
-    # still free. The other branches do not sweep and do not need it.
+    # operator, so it matches none of the suffixes in that skip list. Every name
+    # ceph_device_tier_names prints is left alone: the registry entries, and any
+    # pool with a device class and a CRUSH rule of its own name. The registry is
+    # each control's own settings.txt and can miss a tier another control made,
+    # so the registry alone would make the answer depend on which node ran the
+    # switch (#2080); the Ceph side is the same from everywhere. Read it here,
+    # before the first mutation: once the overlay is off there is no way to stop
+    # half way, so "cannot read it" has to fail while failing is still free. The
+    # other branches do not sweep and do not need it.
     local devtiers=
     if [ "$backpool" = "$BUILTIN_BACKPOOL" ] ; then
-        if ! devtiers=$(_ceph_device_tier_registry) ; then
-            echo "Error: cannot read the device tier registry from $SETTINGS_TXT"
+        if ! devtiers=$(ceph_device_tier_names) ; then
+            echo "Error: cannot read the device tiers (the registry in $SETTINGS_TXT, or Ceph's device classes, CRUSH rules and pools); nothing was changed"
             return 1
         fi
+        devtiers=$(printf '%s\n' "$devtiers" | cut -d'|' -f2-)
     fi
 
     # set to forward so no more dirty objects
@@ -2187,14 +2193,16 @@ ceph_osd_create_cache()
 
     # Paired with the read in ceph_osd_disable_cache -- the sweep below is the
     # other half of the same rewrite, and guarding only one of them leaves the
-    # damage one-directional instead of absent. Same reason for reading it up
-    # front: enable_cache is the first mutation and there is no way back over it.
+    # damage one-directional instead of absent. Same set of names, for the same
+    # reason (#2080), and the same reason for reading it up front: enable_cache
+    # is the first mutation and there is no way back over it.
     local devtiers=
     if [ "$backpool" = "$BUILTIN_BACKPOOL" ] ; then
-        if ! devtiers=$(_ceph_device_tier_registry) ; then
-            echo "Error: cannot read the device tier registry from $SETTINGS_TXT"
+        if ! devtiers=$(ceph_device_tier_names) ; then
+            echo "Error: cannot read the device tiers (the registry in $SETTINGS_TXT, or Ceph's device classes, CRUSH rules and pools); nothing was changed"
             return 1
         fi
+        devtiers=$(printf '%s\n' "$devtiers" | cut -d'|' -f2-)
     fi
 
     Quiet ceph_osd_enable_cache $backpool || return 1
@@ -4607,9 +4615,9 @@ ceph_mgr_dashboard_ensure()
 #
 # A non-zero return means the registry could not be read, which is a different
 # answer from "there are no device tiers". The bulk crush_rule rewrites in
-# ceph_osd_create_cache / ceph_osd_disable_cache have to tell those two apart:
-# reading "cannot tell" as "none" is what silently overwrites a device tier's
-# placement, which is the whole reason they consult this.
+# ceph_osd_create_cache / ceph_osd_disable_cache have to tell those two apart
+# (they read it through ceph_device_tier_names): reading "cannot tell" as
+# "none" is what silently overwrites a device tier's placement.
 _ceph_device_tier_registry()
 {
     [ -r "$SETTINGS_TXT" ] || return 1
@@ -4620,7 +4628,9 @@ _ceph_device_tier_registry()
          }' "$SETTINGS_TXT"
 }
 
-# $1 - a pool name, $2 - the registry as _ceph_device_tier_registry printed it.
+# $1 - a pool name, $2 - names one per line: the registry as
+# _ceph_device_tier_registry printed it, or, for the cache switch sweeps, every
+# name ceph_device_tier_names printed.
 #
 # Exact whole-line match, never a shell pattern: the names in settings.txt have
 # not been through _ceph_device_tier_name_ok -- the policy chain and
@@ -5744,6 +5754,10 @@ ceph_device_tier_names_taken()
 # and the registry -- not the shape -- is what says a tier came from here. A
 # caller that cannot tell the two apart will offer someone else's storage for
 # deletion.
+#
+# The cache switch sweeps are the one caller that drops the state on purpose:
+# what they must not do is rewrite a crush_rule, and that moves the data of a
+# lookalike as surely as a tier's, so every name here is off limits to them.
 #
 # registry-partial is separate from registry-only because the caller does
 # different things with them: registry-only licenses taking the registry entry
