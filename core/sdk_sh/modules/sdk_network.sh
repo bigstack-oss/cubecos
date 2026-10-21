@@ -326,6 +326,14 @@ _set_ipt_service_int()
     iptables -A $chain -p tcp --dport 27017 -j DROP # drop MongoDB (mongod on the management address, and haproxy's VIP listener), except for internal nodes
     iptables -A $chain -p tcp --dport 11211 -j DROP # drop memcached (no authentication), except for internal nodes
     iptables -A $chain -p tcp --dport 9101 -j DROP # drop node_exporter (metrics and /debug/pprof), except for internal nodes -- prometheus scrapes it from the controls
+    iptables -A $chain -p tcp --match multiport --dports 6640,6641,6642 -j DROP # drop the OVS and OVN NB/SB databases (no authentication), except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 4369,15692 -j DROP # drop RabbitMQ's Erlang port mapper (epmd) and its prometheus endpoint, except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 9117,9150,9283,9290,9587 -j DROP # drop the apache, memcached, ceph-mgr, ipmi and ganesha exporters, except for internal nodes -- prometheus scrapes them from the controls
+    iptables -A $chain -p tcp --dport 9100 -j DROP # drop haproxy's stats page, except for internal nodes
+    iptables -A $chain -p tcp --dport 2224 -j DROP # drop pcsd, except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 2181,9095 -j DROP # drop zookeeper and kafka, except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 5601,7443 -j DROP # drop OpenSearch Dashboards and the ceph dashboard, except for internal nodes -- users reach both through haproxy's /opensearch-dashboards and /ceph/ on 80/443
+    iptables -A $chain -p tcp --dport 9090 -j DROP # drop lachesis's metrics, except for internal nodes
 
     # etcd (12379 client, 12380 peer) also accepts the management subnet: a joining
     # node dials both before it is in `cubectl node list`, and a member rebuilds this
