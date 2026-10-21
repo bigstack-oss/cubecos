@@ -1,6 +1,7 @@
 // CUBE SDK
 
 #include <unistd.h>
+#include <algorithm>
 
 #include <hex/log.h>
 #include <hex/filesystem.h>
@@ -195,20 +196,63 @@ WritePoolConfig(const std::string &ctrlhosts, const std::string &ctrladdrs)
     return true;
 }
 
+// Who named takes rndc from: itself and every control, since each control's designate-worker
+// drives every pool target over rndc (WritePoolConfig's rndc_host)
+static std::string
+RndcAllow(const std::string& myip)
+{
+    std::vector<std::string> addrs = hex_string_util::split(s_ctrlAddrs.newValue(), ',');
+    addrs.insert(addrs.begin(), myip);
+    addrs.insert(addrs.begin(), "127.0.0.1");
+
+    std::string acl;
+    std::vector<std::string> seen;
+    for (auto addr : addrs) {
+        if (addr.empty() || std::find(seen.begin(), seen.end(), addr) != seen.end())
+            continue;
+        seen.push_back(addr);
+        acl += addr + "; ";
+    }
+
+    return acl;
+}
+
 static bool
-WriteNamedConfTemplates(const std::string& dns1, const std::string& dns2, const std::string& dns3)
+WriteNamedConfTemplates(const std::string& dns1, const std::string& dns2, const std::string& dns3,
+                        const std::string& rndcAllow)
 {
     std::string dns1cfg = dns1.length() ? dns1 + ";" : "";
     std::string dns2cfg = dns2.length() ? dns2 + ";" : "";
     std::string dns3cfg = dns3.length() ? dns3 + ";" : "";
 
-    if (HexUtilSystemF(0, 0, "sed -e \"s/@DNS1@/%s/\" -e \"s/@DNS2@/%s/\" -e \"s/@DNS3@/%s/\" %s > %s",
-                      dns1cfg.c_str(), dns2cfg.c_str(), dns3cfg.c_str(), NAMED_CONF_IN, NAMED_CONF) != 0) {
+    if (HexUtilSystemF(0, 0, "sed -e \"s/@DNS1@/%s/\" -e \"s/@DNS2@/%s/\" -e \"s/@DNS3@/%s/\" -e \"s/@RNDC_ALLOW@/%s/\" %s > %s",
+                      dns1cfg.c_str(), dns2cfg.c_str(), dns3cfg.c_str(), rndcAllow.c_str(),
+                      NAMED_CONF_IN, NAMED_CONF) != 0) {
         HexLogError("failed to update %s", NAMED_CONF);
         return false;
     }
 
     return true;
+}
+
+// A control joining or leaving changes who may drive named over rndc. Only the allow line of the
+// live named.conf is rewritten, and named reloaded only when it changed, so this does not depend on
+// the forwarders the dns module renders.
+static void
+UpdateNamedRndcAllow(bool enabled, const std::string& rndcAllow)
+{
+    std::string line = "allow { " + rndcAllow + "} keys { \"designate\"; };";
+    if (HexUtilSystemF(0, 0, "grep -qF '%s' %s", line.c_str(), NAMED_CONF) == 0)
+        return;
+
+    if (HexUtilSystemF(0, 0, "sed -i -E 's/^([[:space:]]*)allow \\{.*\\} keys \\{ \"designate\"; \\};/\\1%s/' %s",
+                       line.c_str(), NAMED_CONF) != 0) {
+        HexLogError("failed to update the rndc allow list in %s", NAMED_CONF);
+        return;
+    }
+
+    if (enabled)
+        HexUtilSystemF(0, 0, "systemctl reload %s", NAMED_NAME);
 }
 
 static bool
@@ -517,7 +561,7 @@ CommitDns(bool modified, int dryLevel)
     std::string sharedId = G(SHARED_ID);
 
     if (s_bNamedCfgChanged) {
-        WriteNamedConfTemplates(s_dns1, s_dns2, s_dns3);
+        WriteNamedConfTemplates(s_dns1, s_dns2, s_dns3, RndcAllow(myip));
         WriteDNSConf(sharedId);
     }
 
@@ -619,6 +663,7 @@ Commit(bool modified, int dryLevel)
     if (s_bPoolYamlChanged) {
         std::string hosts = s_ha ? s_ctrlHosts : s_hostname;
         std::string addrs = s_ha ? s_ctrlAddrs : myip;
+        UpdateNamedRndcAllow(enabled, RndcAllow(myip));
         WritePoolConfig(hosts, addrs);
         // waiting for the readiness of preflight designate services
         sleep(15);
