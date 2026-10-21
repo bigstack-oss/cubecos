@@ -324,6 +324,8 @@ _set_ipt_service_int()
     iptables -A $chain -p tcp --dport 15672 -j DROP # drop RabbitMQ management UI/API (rabbitmq-management 15672), except for internal nodes
     iptables -A $chain -p tcp --dport 25672 -j DROP # drop RabbitMQ Erlang distribution (erlang-distribution 25672), except for internal nodes
     iptables -A $chain -p tcp --dport 27017 -j DROP # drop MongoDB (mongod on the management address, and haproxy's VIP listener), except for internal nodes
+    iptables -A $chain -p tcp --dport 11211 -j DROP # drop memcached (no authentication), except for internal nodes
+    iptables -A $chain -p tcp --dport 9101 -j DROP # drop node_exporter (metrics and /debug/pprof), except for internal nodes -- prometheus scrapes it from the controls
 
     # etcd (12379 client, 12380 peer) also accepts the management subnet: a joining
     # node dials both before it is in `cubectl node list`, and a member rebuilds this
