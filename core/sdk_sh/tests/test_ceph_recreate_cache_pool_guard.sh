@@ -19,7 +19,8 @@ set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="${SRC:-$DIR/../modules/sdk_ceph.sh}"
 for f in _ceph_pool_dirty_objects ceph_recreate_cache_pool ceph_osd_enable_cache \
-         ceph_osd_create_cache _ceph_device_tier_registry _ceph_device_tier_is_registered ; do
+         ceph_osd_create_cache ceph_device_tier_names _ceph_device_tier_registry \
+         _ceph_device_tier_is_registered ; do
     eval "$(awk -v n="^$f\\\\(\\\\)" '$0 ~ n {f=1} f{print} f&&/^}/{exit}' "$SRC")"
     [ "$(type -t "$f")" = function ] || { echo "FAIL: $f not extracted"; exit 1; }
 done
@@ -62,7 +63,9 @@ fake_ceph() {
         'osd pool get '*' crush_rule') echo "crush_rule: replicated_rule" ;;
         'osd pool get '*' erasure_code_profile') return 1 ;;
         'osd pool ls')                printf '%s\n' cinder-volumes cachepool cephfs_metadata ;;
-        'osd crush rule list')        printf '%s\n' replicated_rule rule-ssd rule-hdd ;;
+        'osd crush rule list'|'osd crush rule ls') printf '%s\n' replicated_rule rule-ssd rule-hdd ;;
+        'osd crush class ls')         echo '["hdd","ssd"]' ;;
+        '-s')                         echo "health: HEALTH_OK" ;;
         *)
             echo "OTHER $*" >> "$TRACE" ;;
     esac
