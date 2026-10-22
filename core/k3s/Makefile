@@ -55,10 +55,12 @@ $(BIN):
 # k3s 1.32.13 pins x/net, x/crypto and x/sys with replace directives, and requires an x/text, all
 # older than the releases the other Go rebuilds here take (docker.mk, influxdb.mk). Raise them in
 # the clone before the build. Upstream's maintained branches still replace the same three, at newer
-# versions, so the replaces are raised rather than dropped. cache-key.sh hashes these lines, so a
-# change here builds a new binary instead of restoring the old one from the cache.
+# versions, so the replaces are raised rather than dropped. klauspost/compress is raised to its
+# fixed release as well: 1.32.13 and every ladder release require an older one. cache-key.sh hashes
+# these lines, so a change here builds a new binary instead of restoring the old one from the
+# cache.
 K3S_GO_REPLACE := golang.org/x/net=golang.org/x/net@v0.61.0 golang.org/x/crypto=golang.org/x/crypto@v0.58.0 golang.org/x/sys=golang.org/x/sys@v0.49.0
-K3S_GO_GET := golang.org/x/text@v0.43.0
+K3S_GO_GET := golang.org/x/text@v0.43.0 github.com/klauspost/compress@v1.18.7
 
 # k3s refuses to start unless runtime.Version() equals the UpstreamGolang it was linked with,
 # which version.sh takes from kubernetes' build/dependencies.yaml (go1.24.13 for 1.32.13, a
