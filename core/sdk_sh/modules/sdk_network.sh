@@ -323,6 +323,18 @@ _set_ipt_service_int()
     iptables -A $chain -p tcp --dport 5671 -j DROP # drop AMQPS (rabbitmq.ssl.enabled), except for internal nodes -- same reach as 5672, the transport is encrypted but the broker is still cluster-internal
     iptables -A $chain -p tcp --dport 15672 -j DROP # drop RabbitMQ management UI/API (rabbitmq-management 15672), except for internal nodes
     iptables -A $chain -p tcp --dport 25672 -j DROP # drop RabbitMQ Erlang distribution (erlang-distribution 25672), except for internal nodes
+    iptables -A $chain -p tcp --dport 27017 -j DROP # drop MongoDB (mongod on the management address, and haproxy's VIP listener), except for internal nodes
+    iptables -A $chain -p tcp --dport 11211 -j DROP # drop memcached (no authentication), except for internal nodes
+    iptables -A $chain -p tcp --dport 9101 -j DROP # drop node_exporter (metrics and /debug/pprof), except for internal nodes -- prometheus scrapes it from the controls
+    iptables -A $chain -p tcp --match multiport --dports 6640,6641,6642 -j DROP # drop the OVS and OVN NB/SB databases (no authentication), except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 4369,15692 -j DROP # drop RabbitMQ's Erlang port mapper (epmd) and its prometheus endpoint, except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 9117,9150,9283,9290,9587 -j DROP # drop the apache, memcached, ceph-mgr, ipmi and ganesha exporters, except for internal nodes -- prometheus scrapes them from the controls
+    iptables -A $chain -p tcp --dport 9100 -j DROP # drop haproxy's stats page, except for internal nodes
+    iptables -A $chain -p tcp --dport 2224 -j DROP # drop pcsd, except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 2181,9095 -j DROP # drop zookeeper and kafka, except for internal nodes
+    iptables -A $chain -p tcp --dport 5601 -j DROP # drop OpenSearch Dashboards, except for internal nodes -- users reach it through haproxy's /opensearch-dashboards on 80/443. The ceph dashboard's 7443 stays open: the UI's link to it and its SAML login both use that port
+    iptables -A $chain -p tcp --dport 9090 -j DROP # drop lachesis's metrics, except for internal nodes
+    iptables -A $chain -p tcp --match multiport --dports 953,5354 -j DROP # drop named's rndc and designate-mdns (zone transfers of every zone), except for internal nodes -- only the controls use them
 
     # etcd (12379 client, 12380 peer) also accepts the management subnet: a joining
     # node dials both before it is in `cubectl node list`, and a member rebuilds this

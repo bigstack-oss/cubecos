@@ -29,6 +29,8 @@ options {
         request-ixfr no;
         listen-on port 53 { any; };
         allow-query { any; };
+        // designate's zones reach the other controls from designate-mdns, never from here
+        allow-transfer { none; };
 
         recursion yes;
         forwarders {
@@ -41,5 +43,5 @@ options {
 
 controls {
         inet 0.0.0.0 port 953
-        allow { any; } keys { "designate"; };
+        allow { @RNDC_ALLOW@} keys { "designate"; };
 };
