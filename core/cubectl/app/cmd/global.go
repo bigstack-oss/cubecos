@@ -27,33 +27,61 @@ const (
 	etcdConfigDir   = "/etc/etcd"
 	etcdConfigFile  = etcdConfigDir + "/etcd.conf.yml"
 	etcdDataDir     = "/var/lib/etcd.cube"
-	etcdClientPort  = 12379
+	etcdClientPort  = util.EtcdClientPort
 	etcdPeerPort    = 12380
 )
 
-func getEtcdClient(addrs ...string) (*clientv3.Client, error) {
+// etcdClientConfig dials https with the client certificate once the cluster enforces TLS,
+// and plain http otherwise: in compat the members still serve http, and so do the nodes
+// a rolling upgrade has not reached yet.
+func etcdClientConfig(addrs ...string) (clientv3.Config, error) {
 	if len(addrs) == 0 {
 		addrs = []string{"localhost"}
 	}
 
-	var endpoints []string
-	for _, addr := range addrs {
-		endpoints = append(endpoints, addr+":"+strconv.Itoa(etcdClientPort))
+	mode := util.GetEtcdTLSMode()
+	scheme := ""
+	if mode == util.EtcdTLSEnforce {
+		scheme = "https://"
 	}
 
-	cli, err := clientv3.New(clientv3.Config{
+	var endpoints []string
+	for _, addr := range addrs {
+		endpoints = append(endpoints, scheme+addr+":"+strconv.Itoa(etcdClientPort))
+	}
+
+	cfg := clientv3.Config{
 		Endpoints:   endpoints,
 		DialTimeout: etcdTimeout,
 		//DialOptions:          []grpc.DialOption{grpc.WithBlock()},
 		//DialKeepAliveTime:    1 * time.Second,
 		//DialKeepAliveTimeout: 1 * time.Second,
-	})
+	}
+
+	if mode == util.EtcdTLSEnforce {
+		tlsCfg, err := util.EtcdClientTLSConfig()
+		if err != nil {
+			return cfg, fmt.Errorf("Failed to load etcd client certificate: %v", err)
+		}
+		cfg.TLS = tlsCfg
+	}
+
+	return cfg, nil
+}
+
+func getEtcdClient(addrs ...string) (*clientv3.Client, error) {
+	cfg, err := etcdClientConfig(addrs...)
+	if err != nil {
+		return nil, err
+	}
+
+	cli, err := clientv3.New(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to init etcd client: %v", err)
 	}
 
 	zap.L().Debug("Inited etcd client",
-		zap.Strings("endpoints", endpoints),
+		zap.Strings("endpoints", cfg.Endpoints),
 	)
 
 	return cli, nil
@@ -89,7 +117,7 @@ func etcdMemberAdd(ctrlIPs []string, name string, myIp string) (uint64, error) {
 	}
 	defer cli.Close()
 
-	peerUrls := []string{"http://" + myIp + ":" + strconv.Itoa(etcdPeerPort)}
+	peerUrls := []string{etcdPeerURL(util.GetEtcdTLSMode(), myIp)}
 	var (
 		resp *clientv3.MemberAddResponse
 		//err  error
@@ -139,6 +167,16 @@ func etcdMemberAdd(ctrlIPs []string, name string, myIp string) (uint64, error) {
 	}
 
 	return myID, nil
+}
+
+// etcdPeerURL is where a member is reached by its peers. Only enforce moves it to https:
+// the peer port cannot serve http and https at once, so in compat it stays on http.
+func etcdPeerURL(mode util.EtcdTLSMode, ip string) string {
+	scheme := "http"
+	if mode == util.EtcdTLSEnforce {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s:%d", scheme, ip, etcdPeerPort)
 }
 
 func etcdMemberRemove(ctrlIPs []string, id uint64) error {
