@@ -56,6 +56,10 @@ BUILTIN_BACKPOOL=cinder-volumes
 BUILTIN_CACHEPOOL=cachepool
 BUILTIN_EPHEMERAL=ephemeral-vms
 
+# cube's etcd PKI (cubectl util/etcdtls.go). The marker is up while an upgraded cluster
+# still finishes its rolling upgrade; see etcd_tls_ladder (sdk_etcd.sh).
+ETCD_PKI_DIR=/etc/etcd-pki
+ETCD_TLS_COMPAT_MARK=$HEX_STATE_DIR/etcd_tls_compat
 ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
 TERRAFORM_CUBE="/usr/local/bin/terraform-cube.sh"
 TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD="/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars"

@@ -5,6 +5,7 @@
 #include <hex/log.h>
 #include <hex/config_module.h>
 #include <hex/dryrun.h>
+#include <hex/process.h>
 #include <hex/process_util.h>
 
 
@@ -81,6 +82,14 @@ Commit(bool modified, int dryLevel)
     return true;
 }
 
+// Put the node in etcd TLS compat for the rest of a rolling upgrade from a release that
+// did not enforce it; the decision reads the previous root, so it lives in the sdk.
+static bool
+MigrateEtcdTls(const char* prevVersion, const char* prevRootDir)
+{
+    return HexUtilSystemF(0, 0, HEX_SDK " etcd_tls_migrate_prepare %s", prevRootDir) == 0;
+}
+
 CONFIG_MODULE(cluster, 0, 0, 0, 0, Commit);
 // FIXME in /etc/hosts, cluster settings could be outdated and should honor settings from cubesys
 CONFIG_REQUIRES(cluster, cube_scan);
@@ -91,6 +100,8 @@ CONFIG_MIGRATE(cluster, "/var/lib/terraform/terraform.tfstate*");
 // ETCD data
 CONFIG_MIGRATE(cluster, "/var/lib/etcd.cube");
 CONFIG_MIGRATE(cluster, "/etc/etcd/etcd.conf.yml");
+CONFIG_MIGRATE(cluster, "/etc/etcd-pki");
+CONFIG_MIGRATE(cluster, MigrateEtcdTls);
 
 // Cluster nodes
 CONFIG_MIGRATE(cluster, "/etc/settings.cluster.json");
