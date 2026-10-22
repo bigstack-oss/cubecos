@@ -10,7 +10,7 @@ ENV HEX_VER=hex2.0
 # 1.26.0, lachesis 1.25.3. Below that, GOTOOLCHAIN=auto quietly downloads exactly the go.mod
 # minimum, a .0 release, and builds with it instead: that is how the 1.25.12 jail shipped
 # both of them on go1.26.0. Bumping recompiles every Go component.
-ENV GOLANG_VER=1.27.2
+ENV GOLANG_VER=1.27.3
 ENV HEX_ARCH=x86_64
 ENV DEVOPS_ENV=__JAIL__
 ENV TZ=Asia/Taipei
