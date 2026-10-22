@@ -26,6 +26,9 @@ SUBDIRS += core
 # The SUBDIRS walk that follows finds both lines done. The second line's output goes
 # to a file and is printed afterwards, for the reason given at heavy_overlap; the
 # images' output goes to another and is printed after it.
+# A failure on either line waits for the other to finish, so docker.mk's check of the
+# floating docker packages, which a clean build would otherwise first meet in
+# heavy_base, runs before anything else and stops the build at once.
 # Not for RC builds, which take heavy_rootfs from the release instead.
 ifeq ($(RC),)
 # hex/src's SUBDIRS after the SDK library, in its order: programs and modules, then
@@ -35,6 +38,7 @@ HEX_RD_SUBDIRS := hex_install hex_pxe_rd hex_pxe_server_rd hex_pxe_server_iso_rd
 ALL += critical_overlap
 .PHONY: critical_overlap
 critical_overlap:
+	$(Q)$(MAKE) -C core/heavyfs docker_float_check
 	$(Q)$(MAKE) -C hex TARGET=_all_r fakeroot rootfs
 	$(Q)$(MAKE) -C hex/src TARGET=_all_r hex_sdk_library sdk_so
 	$(Q)$(MAKE) -C hex/src/hex_crashd _all

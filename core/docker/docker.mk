@@ -119,6 +119,23 @@ $(DOCKER_GO_BIN)/skopeo: $(DOCKER_GO_DIR)/skopeo-src $(COREDIR)/docker/docker.mk
 docker_go_check = v=$$(chroot $(ROOTDIR) rpm -q --qf '%{VERSION}' $(1)) && [ "$$v" = "$(2)" ] || \
 	{ echo "docker.mk: $(1) is $$v, but its binaries are rebuilt from $(2)" ; exit 1 ; }
 
+# The same check, made against the repositories when a build starts and before heavy_base is built
+# (core/heavyfs/Makefile), so that a package that has moved stops the build there and not in
+# rootfs_install, most of the way through heavy_base. dnf picks the version, as it does for the
+# install: skopeo's 1.22.2 builds carry Epoch 3 and win over 1.23.0's Epoch 2. The URL is
+# docker-ce.repo's stable baseurl (DOCKER_REPO) for Stream 9 x86_64. A package dnf does not find
+# comes back empty and fails the check too. runc has no package of its own, and is left to
+# rootfs_install.
+DOCKER_RPM_URL := https://download.docker.com/linux/centos/9/x86_64/stable
+DOCKER_FLOAT_CHECK = got=$$(dnf -q repoquery --refresh --repofrompath=docker-float,$(DOCKER_RPM_URL) \
+		--repo=docker-float --repo=appstream --arch=x86_64 --latest-limit=1 --qf '%{name} %{version}' \
+		containerd.io docker-compose-plugin docker-buildx-plugin skopeo) && \
+	for p in containerd.io=$(CONTAINERD_VER) docker-compose-plugin=$(COMPOSE_VER) \
+			docker-buildx-plugin=$(BUILDX_VER) skopeo=$(SKOPEO_VER) ; do \
+		v=$$(echo "$$got" | awk -v n=$${p%=*} '$$1 == n { print $$2 }') && [ "$$v" = "$${p\#*=}" ] || \
+		{ echo "docker.mk: $${p%=*} is $$v in the repositories, but its binaries are rebuilt from $${p\#*=}" ; exit 1 ; } ; \
+	done
+
 rootfs_install:: $(DOCKER_GO_DIR)/containerd.built $(DOCKER_GO_BIN)/runc $(DOCKER_GO_BIN)/docker-compose \
 		$(DOCKER_GO_BIN)/docker-buildx $(DOCKER_GO_BIN)/skopeo
 	$(Q)$(call docker_go_check,containerd.io,$(CONTAINERD_VER))
