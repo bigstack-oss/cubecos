@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
+	"cubectl/util"
 	cubeSettings "cubectl/util/settings"
 	cubeTesting "cubectl/util/testing"
 )
@@ -241,12 +242,13 @@ func TestEtcdListenClientUrls(t *testing.T) {
 			if err := cubeSettings.LoadMap(test.settings); err != nil {
 				t.Fatal(err)
 			}
-			assert.Equal(t, test.want, etcdListenClientUrls())
+			assert.Equal(t, test.want, etcdListenClientUrls(util.EtcdTLSPlain))
 		})
 	}
 }
 
-func TestRefreshEtcdListenClientUrls(t *testing.T) {
+func TestRefreshEtcdConfig(t *testing.T) {
+	setMode := useTestEtcdPKI(t)
 	if err := cubeSettings.LoadMap(map[string]string{
 		"cubesys.management": "eth0",
 		"net.if.addr.eth0":   "10.0.0.11",
@@ -263,35 +265,51 @@ func TestRefreshEtcdListenClientUrls(t *testing.T) {
 		}
 		return v
 	}
-
-	t.Run("RewritesOnlyListenClientUrls", func(t *testing.T) {
+	// a plain config as writeEtcdConfig has always written it on a joined node
+	plainConf := strings.Join([]string{
+		"advertise-client-urls: http://10.0.0.11:12379",
+		"data-dir: /var/lib/etcd.cube",
+		"initial-advertise-peer-urls: http://10.0.0.11:12380",
+		"initial-cluster: cc1=http://10.0.0.11:12380,cc2=http://10.0.0.12:12380",
+		"initial-cluster-state: existing",
+		"initial-cluster-token: seed",
+		"listen-client-urls: " + want,
+		"listen-peer-urls: http://10.0.0.11:12380",
+		"name: cc1",
+		"",
+	}, "\n")
+	writeConf := func(t *testing.T, conf string) string {
 		file := filepath.Join(t.TempDir(), "etcd.conf.yml")
-		conf := strings.Join([]string{
-			"name: cc1",
-			"data-dir: /var/lib/etcd.cube",
-			"listen-client-urls: http://0.0.0.0:12379",
-			"listen-peer-urls: http://10.0.0.11:12380",
-			"advertise-client-urls: http://10.0.0.11:12379",
-			"initial-cluster-state: existing",
-			"initial-cluster: cc1=http://10.0.0.11:12380,cc2=http://10.0.0.12:12380",
-			"",
-		}, "\n")
 		if err := os.WriteFile(file, []byte(conf), 0644); err != nil {
 			t.Fatal(err)
 		}
+		return file
+	}
+	assertMembershipKept := func(t *testing.T, v *viper.Viper) {
+		assert.Equal(t, "cc1", v.GetString("name"))
+		assert.Equal(t, "/var/lib/etcd.cube", v.GetString("data-dir"))
+		assert.Equal(t, "existing", v.GetString("initial-cluster-state"))
+		assert.Equal(t, "seed", v.GetString("initial-cluster-token"))
+		assert.Equal(t, "cc1=http://10.0.0.11:12380,cc2=http://10.0.0.12:12380", v.GetString("initial-cluster"))
+	}
 
-		if err := refreshEtcdListenClientUrls(file); err != nil {
+	t.Run("RewritesOnlyListenClientUrls", func(t *testing.T) {
+		setMode(util.EtcdTLSPlain)
+		file := writeConf(t, strings.Replace(plainConf, "listen-client-urls: "+want, "listen-client-urls: http://0.0.0.0:12379", 1))
+
+		changed, err := refreshEtcdConfig(file)
+		if err != nil {
 			t.Fatal(err)
 		}
+		assert.True(t, changed)
 
 		v := readConf(t, file)
 		assert.Equal(t, want, v.GetString("listen-client-urls"))
-		assert.Equal(t, "cc1", v.GetString("name"))
-		assert.Equal(t, "/var/lib/etcd.cube", v.GetString("data-dir"))
 		assert.Equal(t, "http://10.0.0.11:12380", v.GetString("listen-peer-urls"))
 		assert.Equal(t, "http://10.0.0.11:12379", v.GetString("advertise-client-urls"))
-		assert.Equal(t, "existing", v.GetString("initial-cluster-state"))
-		assert.Equal(t, "cc1=http://10.0.0.11:12380,cc2=http://10.0.0.12:12380", v.GetString("initial-cluster"))
+		assert.Equal(t, "http://10.0.0.11:12380", v.GetString("initial-advertise-peer-urls"))
+		assert.False(t, v.IsSet("client-transport-security"))
+		assertMembershipKept(t, v)
 
 		entries, err := os.ReadDir(filepath.Dir(file))
 		if err != nil {
@@ -301,27 +319,98 @@ func TestRefreshEtcdListenClientUrls(t *testing.T) {
 	})
 
 	t.Run("LeavesUpToDateFileAlone", func(t *testing.T) {
-		file := filepath.Join(t.TempDir(), "etcd.conf.yml")
-		conf := "name: cc1\nlisten-client-urls: " + want + "\n"
-		if err := os.WriteFile(file, []byte(conf), 0644); err != nil {
-			t.Fatal(err)
-		}
+		setMode(util.EtcdTLSPlain)
+		file := writeConf(t, plainConf)
 
-		if err := refreshEtcdListenClientUrls(file); err != nil {
+		changed, err := refreshEtcdConfig(file)
+		if err != nil {
 			t.Fatal(err)
 		}
+		assert.False(t, changed)
 
 		got, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
-		assert.Equal(t, conf, string(got))
+		assert.Equal(t, plainConf, string(got))
+	})
+
+	t.Run("PlainToCompat", func(t *testing.T) {
+		setMode(util.EtcdTLSCompat)
+		file := writeConf(t, plainConf)
+
+		changed, err := refreshEtcdConfig(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.True(t, changed)
+
+		v := readConf(t, file)
+		assert.Equal(t, "http://127.0.0.1:12379,https://127.0.0.1:12379,http://10.0.0.11:12379,https://10.0.0.11:12379",
+			v.GetString("listen-client-urls"))
+		assert.Equal(t, "http://10.0.0.11:12380", v.GetString("listen-peer-urls"))
+		assert.Equal(t, "http://10.0.0.11:12379", v.GetString("advertise-client-urls"))
+		assert.Equal(t, util.EtcdMemberCertFile(), v.GetString("client-transport-security.cert-file"))
+		assert.Equal(t, util.EtcdMemberCertFile(), v.GetString("peer-transport-security.cert-file"))
+		assert.False(t, v.GetBool("client-transport-security.client-cert-auth"))
+		assert.False(t, v.GetBool("peer-transport-security.client-cert-auth"))
+		assertMembershipKept(t, v)
+
+		changed, err = refreshEtcdConfig(file)
+		assert.NoError(t, err)
+		assert.False(t, changed, "second pass is a no-op")
+	})
+
+	t.Run("CompatToEnforce", func(t *testing.T) {
+		setMode(util.EtcdTLSCompat)
+		file := writeConf(t, plainConf)
+		if _, err := refreshEtcdConfig(file); err != nil {
+			t.Fatal(err)
+		}
+
+		setMode(util.EtcdTLSEnforce)
+		changed, err := refreshEtcdConfig(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.True(t, changed)
+
+		v := readConf(t, file)
+		assert.Equal(t, "https://127.0.0.1:12379,https://10.0.0.11:12379", v.GetString("listen-client-urls"))
+		assert.Equal(t, "https://10.0.0.11:12380", v.GetString("listen-peer-urls"))
+		assert.Equal(t, "https://10.0.0.11:12379", v.GetString("advertise-client-urls"))
+		assert.True(t, v.GetBool("client-transport-security.client-cert-auth"))
+		assert.True(t, v.GetBool("peer-transport-security.client-cert-auth"))
+		assert.Equal(t, []string{util.EtcdMemberCN}, v.GetStringSlice("peer-transport-security.allowed-cn"))
+		assertMembershipKept(t, v)
+	})
+
+	t.Run("EnforceBackToPlainDropsTLS", func(t *testing.T) {
+		setMode(util.EtcdTLSEnforce)
+		file := writeConf(t, plainConf)
+		if _, err := refreshEtcdConfig(file); err != nil {
+			t.Fatal(err)
+		}
+
+		setMode(util.EtcdTLSPlain)
+		changed, err := refreshEtcdConfig(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.True(t, changed)
+
+		v := readConf(t, file)
+		assert.False(t, v.IsSet("client-transport-security"))
+		assert.False(t, v.IsSet("peer-transport-security"))
+		assert.Equal(t, want, v.GetString("listen-client-urls"))
+		assertMembershipKept(t, v)
 	})
 
 	t.Run("MissingFile", func(t *testing.T) {
 		file := filepath.Join(t.TempDir(), "etcd.conf.yml")
-		assert.Error(t, refreshEtcdListenClientUrls(file))
-		_, err := os.Stat(file)
+		_, err := refreshEtcdConfig(file)
+		assert.Error(t, err)
+		_, err = os.Stat(file)
 		assert.True(t, os.IsNotExist(err), "must not create a config")
 	})
 }

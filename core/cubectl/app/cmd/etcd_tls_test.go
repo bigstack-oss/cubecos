@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"cubectl/util"
+	cubeSettings "cubectl/util/settings"
 )
 
 // useTestEtcdPKI points the etcd PKI and compat marker at a temp dir for one test and
@@ -112,4 +113,85 @@ func TestEtcdMemberAddPeerURLScheme(t *testing.T) {
 	assert.Equal(t, "http://10.0.0.11:12380", etcdPeerURL(util.EtcdTLSPlain, "10.0.0.11"))
 	assert.Equal(t, "http://10.0.0.11:12380", etcdPeerURL(util.EtcdTLSCompat, "10.0.0.11"))
 	assert.Equal(t, "https://10.0.0.11:12380", etcdPeerURL(util.EtcdTLSEnforce, "10.0.0.11"))
+}
+
+func TestEtcdConfig(t *testing.T) {
+	useTestEtcdPKI(t)
+	nonHA := map[string]string{
+		"net.hostname":       "cc1",
+		"cubesys.seed":       "seed",
+		"cubesys.management": "eth0",
+		"net.if.addr.eth0":   "10.0.0.11",
+	}
+	ha := map[string]string{
+		"net.hostname":        "cc1",
+		"cubesys.seed":        "seed",
+		"cubesys.management":  "eth0",
+		"net.if.addr.eth0":    "10.0.0.11",
+		"cubesys.ha":          "true",
+		"cubesys.control.vip": "10.0.0.10",
+	}
+	initCluster := "cc1=http://10.0.0.11:12380,cc2=http://10.0.0.12:12380"
+
+	t.Run("Plain", func(t *testing.T) {
+		// what writeEtcdConfig wrote before etcd had a TLS mode, key for key
+		require.NoError(t, cubeSettings.LoadMap(nonHA))
+		assert.Equal(t, map[string]interface{}{
+			"name":                        "cc1",
+			"data-dir":                    etcdDataDir,
+			"listen-client-urls":          "http://127.0.0.1:12379,http://10.0.0.11:12379",
+			"listen-peer-urls":            "http://10.0.0.11:12380",
+			"advertise-client-urls":       "http://10.0.0.11:12379",
+			"initial-advertise-peer-urls": "http://10.0.0.11:12380",
+			"initial-cluster-token":       "seed",
+			"initial-cluster-state":       "existing",
+			"initial-cluster":             initCluster,
+		}, etcdConfigValues(util.EtcdTLSPlain, "existing", initCluster))
+
+		require.NoError(t, cubeSettings.LoadMap(ha))
+		conf := etcdConfigValues(util.EtcdTLSPlain, "new", "")
+		assert.Equal(t, "http://127.0.0.1:12379,http://10.0.0.11:12379,http://10.0.0.10:12379", conf["listen-client-urls"])
+		assert.NotContains(t, conf, "initial-cluster")
+		assert.Len(t, conf, 8)
+	})
+
+	t.Run("Compat", func(t *testing.T) {
+		require.NoError(t, cubeSettings.LoadMap(ha))
+		conf := etcdConfigValues(util.EtcdTLSCompat, "existing", initCluster)
+		assert.Equal(t, "http://127.0.0.1:12379,https://127.0.0.1:12379,"+
+			"http://10.0.0.11:12379,https://10.0.0.11:12379,"+
+			"http://10.0.0.10:12379,https://10.0.0.10:12379", conf["listen-client-urls"])
+		assert.Equal(t, "http://10.0.0.11:12380", conf["listen-peer-urls"], "one peer listener: http")
+		assert.Equal(t, "http://10.0.0.11:12379", conf["advertise-client-urls"])
+		assert.Equal(t, "http://10.0.0.11:12380", conf["initial-advertise-peer-urls"])
+		tlsConf := map[string]interface{}{
+			"cert-file":       util.EtcdMemberCertFile(),
+			"key-file":        util.EtcdMemberKeyFile(),
+			"trusted-ca-file": util.EtcdCACertFile(),
+		}
+		assert.Equal(t, tlsConf, conf["client-transport-security"], "no client-cert-auth")
+		assert.Equal(t, tlsConf, conf["peer-transport-security"], "can dial https peers, does not check")
+	})
+
+	t.Run("Enforce", func(t *testing.T) {
+		require.NoError(t, cubeSettings.LoadMap(ha))
+		conf := etcdConfigValues(util.EtcdTLSEnforce, "new", "")
+		assert.Equal(t, "https://127.0.0.1:12379,https://10.0.0.11:12379,https://10.0.0.10:12379", conf["listen-client-urls"])
+		assert.Equal(t, "https://10.0.0.11:12380", conf["listen-peer-urls"])
+		assert.Equal(t, "https://10.0.0.11:12379", conf["advertise-client-urls"])
+		assert.Equal(t, "https://10.0.0.11:12380", conf["initial-advertise-peer-urls"])
+		assert.Equal(t, map[string]interface{}{
+			"cert-file":        util.EtcdMemberCertFile(),
+			"key-file":         util.EtcdMemberKeyFile(),
+			"trusted-ca-file":  util.EtcdCACertFile(),
+			"client-cert-auth": true,
+		}, conf["client-transport-security"])
+		assert.Equal(t, map[string]interface{}{
+			"cert-file":        util.EtcdMemberCertFile(),
+			"key-file":         util.EtcdMemberKeyFile(),
+			"trusted-ca-file":  util.EtcdCACertFile(),
+			"client-cert-auth": true,
+			"allowed-cn":       []string{util.EtcdMemberCN},
+		}, conf["peer-transport-security"])
+	})
 }
