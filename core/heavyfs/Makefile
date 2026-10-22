@@ -607,7 +607,12 @@ else
 # recently mounted proc on the system, and that would be heavy_base's. Without /proc,
 # rpm closes fds one by one up to the container's 1G nofile limit before every
 # scriptlet (about 2 minutes each), and the scriptlets themselves run without /proc.
+#
+# docker.mk's DOCKER_FLOAT_CHECK goes first, so that a docker package that has floated past the
+# version docker.mk rebuilds stops the build before heavy_base is spent on it. A clean build has
+# run it already, from docker_float_check below; this covers a rebuild of heavy_base alone.
 $(HEAVY_BASE): $(HEX_FULL_ROOTFS) $(shell for m in $(HEAVY_COMPONENTS); do find $(COREDIR)/$$m -type f -name '*.mk' -o -name Makefile; done)
+	$(Q)$(DOCKER_FLOAT_CHECK)
 	$(call RUN_CMD_TIMED, unshare -m --propagation private $(SHELL) $(HEX_SCRIPTSDIR)/mountrootfs -s -D '$(MAKECMD) ROOTFS_DNF_NOARCH_P1="$(ROOTFS_DNF_NOARCH_P1)" ROOTFS_DNF_DL_FROM="$(ROOTFS_DNF_DL_FROM)" ROOTFS_DNF="$(addsuffix .x86_64,$(ROOTFS_DNF)) $(ROOTFS_DNF_NOARCH)" ROOTFS_PIP="$(ROOTFS_PIP)" ROOTFS_PIP_NC="$(ROOTFS_PIP_NC)" ROOTFS_PIP_DL_FROM="$(ROOTFS_PIP_DL_FROM)" ROOTDIR=@ROOTDIR@ PROJ_BUILD_LABEL="heavyfs" rootfs_install' $< $@, "  GEN     $@")
 	$(Q)touch $@
 
@@ -626,6 +631,12 @@ $(HEAVYFS): $(HEAVY_BASE) $(HEAVY_DELIVERABLES)
 .PHONY: heavy_base_early
 heavy_base_early:
 	$(Q)[ -e $(HEAVYFS) ] || $(MAKE) $(HEAVY_BASE)
+
+# For the top Makefile's critical_overlap, which runs it before anything else, on heavy_base_early's
+# condition: a failure inside the overlap waits for both of its lines to finish.
+.PHONY: docker_float_check
+docker_float_check:
+	$(Q)[ -e $(HEAVYFS) ] || { $(DOCKER_FLOAT_CHECK) ; }
 endif
 
 # openstacksdk 4.4.1, epoxy's pin and the cli's dependency, sends server create's
