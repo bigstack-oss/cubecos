@@ -155,3 +155,94 @@ func TestGenEtcdPKIRenamesIntoPlace(t *testing.T) {
 	_, err = os.Stat(util.EtcdPKIDir + ".new")
 	assert.True(t, os.IsNotExist(err), "no staging dir left behind")
 }
+
+func TestEtcdPKICoversControl(t *testing.T) {
+	saved := util.EtcdPKIDir
+	t.Cleanup(func() { util.EtcdPKIDir = saved })
+	util.EtcdPKIDir = filepath.Join(t.TempDir(), "pki")
+
+	require.NoError(t, cubeSettings.LoadMap(etcdPKITestSettings))
+	require.NoError(t, genEtcdPKIInto(util.EtcdPKIDir))
+
+	assert.NoError(t, util.EtcdMemberCertCovers("10.32.10.142", "sky142"), "a member of the control group")
+	assert.NoError(t, util.EtcdMemberCertCovers("127.0.0.1", "localhost", "10.32.10.140"), "loopback and the VIP")
+
+	err := util.EtcdMemberCertCovers("10.32.10.144", "sky144")
+	if assert.Error(t, err, "a control node added after signing") {
+		assert.Contains(t, err.Error(), "10.32.10.144")
+		assert.Contains(t, err.Error(), "sky144")
+	}
+}
+
+func TestResignEtcdMember(t *testing.T) {
+	savedDir, savedBackup := util.EtcdPKIDir, etcdCertsBackupDir
+	t.Cleanup(func() { util.EtcdPKIDir, etcdCertsBackupDir = savedDir, savedBackup })
+	tmp := t.TempDir()
+	util.EtcdPKIDir = filepath.Join(tmp, "pki")
+	etcdCertsBackupDir = filepath.Join(tmp, "backup")
+
+	require.NoError(t, cubeSettings.LoadMap(etcdPKITestSettings))
+	require.NoError(t, genEtcdPKIInto(util.EtcdPKIDir))
+	read := func(name string) []byte {
+		b, err := os.ReadFile(filepath.Join(util.EtcdPKIDir, name))
+		require.NoError(t, err)
+		return b
+	}
+	caBefore, clientBefore, memberBefore := read("ca.crt"), read("client.crt"), read("member.crt")
+
+	// a fourth control node joins the group
+	grown := map[string]string{}
+	for k, v := range etcdPKITestSettings {
+		grown[k] = v
+	}
+	grown["cubesys.control.addrs"] += ",10.32.10.144"
+	grown["cubesys.control.hosts"] += ",sky144"
+	require.NoError(t, cubeSettings.LoadMap(grown))
+	require.Error(t, util.EtcdMemberCertCovers("10.32.10.144", "sky144"))
+
+	backup, err := resignEtcdMember()
+	require.NoError(t, err)
+
+	assert.NoError(t, util.EtcdMemberCertCovers("10.32.10.144", "sky144"))
+	assert.NoError(t, verifyCertCoversControlGroup(util.EtcdMemberCertFile()))
+	assert.Equal(t, caBefore, read("ca.crt"), "CA kept")
+	assert.Equal(t, clientBefore, read("client.crt"), "client certificate kept")
+	assert.NotEqual(t, memberBefore, read("member.crt"))
+
+	ca := readTestCert(t, util.EtcdCACertFile())
+	pool := x509.NewCertPool()
+	pool.AddCert(ca)
+	_, err = readTestCert(t, util.EtcdMemberCertFile()).Verify(x509.VerifyOptions{Roots: pool, DNSName: "10.32.10.144"})
+	assert.NoError(t, err, "signed by the same CA")
+	_, err = tls.LoadX509KeyPair(util.EtcdMemberCertFile(), util.EtcdMemberKeyFile())
+	assert.NoError(t, err, "new key matches new certificate")
+	fi, err := os.Stat(util.EtcdMemberKeyFile())
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), fi.Mode().Perm())
+
+	saved, err := os.ReadFile(filepath.Join(backup, "member.crt"))
+	require.NoError(t, err)
+	assert.Equal(t, memberBefore, saved, "previous certificate backed up")
+
+	entries, err := os.ReadDir(util.EtcdPKIDir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 7, "no temp file left behind")
+}
+
+func TestResignEtcdMemberRefusesBadCA(t *testing.T) {
+	savedDir, savedBackup := util.EtcdPKIDir, etcdCertsBackupDir
+	t.Cleanup(func() { util.EtcdPKIDir, etcdCertsBackupDir = savedDir, savedBackup })
+	tmp := t.TempDir()
+	util.EtcdPKIDir = filepath.Join(tmp, "pki")
+	etcdCertsBackupDir = filepath.Join(tmp, "backup")
+
+	require.NoError(t, cubeSettings.LoadMap(etcdPKITestSettings))
+	require.NoError(t, genEtcdPKIInto(util.EtcdPKIDir))
+	before, _ := os.ReadFile(util.EtcdMemberCertFile())
+	require.NoError(t, os.WriteFile(util.EtcdCAKeyFile(), []byte("garbage"), 0600))
+
+	_, err := resignEtcdMember()
+	assert.Error(t, err)
+	after, _ := os.ReadFile(util.EtcdMemberCertFile())
+	assert.Equal(t, before, after, "member certificate untouched")
+}

@@ -152,6 +152,15 @@ func runThisnodeJoin(cmd *cobra.Command, args []string) error {
 			ctrlIPs = cubeSettings.GetControlGroupIPs()
 		}
 
+		// The member certificate is shared and lists the control group it was signed for.
+		// A control node added since then would join, and then be unreachable for its peers.
+		if util.GetEtcdTLSMode() != util.EtcdTLSPlain {
+			if err := util.EtcdMemberCertCovers(cubeSettings.GetMgmtIfIp(), cubeSettings.GetHostname()); err != nil {
+				return errors.Wrap(err, "run `cubectl config cluster etcd-gencerts` on the master control node, "+
+					"then commit the cluster on this node again")
+			}
+		}
+
 		// Add to etcd cluster as learner
 		// Add member to ETCD cluster and write config
 		id, err := etcdMemberAdd(ctrlIPs, cubeSettings.GetHostname(), cubeSettings.GetMgmtIfIp())
