@@ -32,6 +32,7 @@ hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_banner.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_ceph.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_cinder.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_diagnostics.sh
+hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_etcd.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_firmware.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_fixpack.sh
 hex_shell_MODULES += $(PROJ_SHMODDIR)/modules/sdk_gcp.sh

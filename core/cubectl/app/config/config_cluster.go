@@ -106,6 +106,9 @@ func commitCluster() error {
 
 	if isJoined() {
 		zap.S().Infof("Already joined cube cluster")
+		if isMigration() {
+			migrateEtcdPKI()
+		}
 		if _, outErr, err := util.ExecCmd("cubectl", "this-node", "start"); err != nil {
 			return errors.Wrap(err, outErr)
 		}
@@ -219,6 +222,40 @@ func resetCluster() error {
 	}
 
 	return nil
+}
+
+// migrateEtcdPKI gives a node upgraded from a release without etcd TLS its PKI while it is
+// in compat: the master control node, which rolls first, signs it and every other node
+// pulls it from there. A node that cannot get it yet stays plain and says so; the ladder
+// at the end of the roll pushes the PKI to every node before it changes anything.
+func migrateEtcdPKI() {
+	if _, err := os.Stat(util.EtcdTLSCompatMarker); err != nil {
+		return
+	}
+	if _, err := os.Stat(util.EtcdCACertFile()); err == nil {
+		return
+	}
+
+	var err error
+	if cubeSettings.IsMasterControl() {
+		err = genEtcdPKI()
+	} else {
+		err = pullEtcdPKI(etcdPKISource())
+	}
+	if err != nil {
+		zap.S().Warnf("etcd PKI not in place, staying on plain etcd until the end of the rolling upgrade: %v", err)
+		return
+	}
+	zap.L().Info("etcd PKI in place for the rolling upgrade", zap.String("dir", util.EtcdPKIDir))
+}
+
+// etcdPKISource is the master control node, which signs the PKI. A node whose settings do
+// not list the control group falls back to the controller address.
+func etcdPKISource() string {
+	if ip := cubeSettings.GetMasterControllerIp(); ip != "" {
+		return ip
+	}
+	return cubeSettings.GetControllerIp()
 }
 
 // pullEtcdPKI copies the etcd PKI from a node that has it. It replaces whatever this node

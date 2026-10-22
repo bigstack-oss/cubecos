@@ -36,11 +36,14 @@ const (
 // and plain http otherwise: in compat the members still serve http, and so do the nodes
 // a rolling upgrade has not reached yet.
 func etcdClientConfig(addrs ...string) (clientv3.Config, error) {
+	return etcdClientConfigFor(util.GetEtcdTLSMode(), addrs...)
+}
+
+func etcdClientConfigFor(mode util.EtcdTLSMode, addrs ...string) (clientv3.Config, error) {
 	if len(addrs) == 0 {
 		addrs = []string{"localhost"}
 	}
 
-	mode := util.GetEtcdTLSMode()
 	scheme := ""
 	if mode == util.EtcdTLSEnforce {
 		scheme = "https://"
@@ -86,6 +89,71 @@ func getEtcdClient(addrs ...string) (*clientv3.Client, error) {
 	)
 
 	return cli, nil
+}
+
+// localEtcdTLSClient dials the local member over https with the client certificate,
+// whatever the node's mode: a member in compat serves https too.
+func localEtcdTLSClient() (*clientv3.Client, error) {
+	cfg, err := etcdClientConfigFor(util.EtcdTLSEnforce, "127.0.0.1")
+	if err != nil {
+		return nil, err
+	}
+	return clientv3.New(cfg)
+}
+
+// etcdServesTLS reports whether the local member answers https with the client
+// certificate, i.e. whether it runs a compat or enforce config rather than merely has
+// one on disk.
+func etcdServesTLS() bool {
+	cli, err := localEtcdTLSClient()
+	if err != nil {
+		return false
+	}
+	defer cli.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
+	defer cancel()
+	_, err = cli.Get(ctx, "health")
+	return err == nil
+}
+
+// etcdUpdateSelfPeerURL moves this member's peer URL to https ahead of its restart in
+// enforce. The peer port serves one scheme at a time, so the URL its peers dial changes
+// together with the listener, one member at a time, and never ahead of it for long.
+func etcdUpdateSelfPeerURL() error {
+	cli, err := localEtcdTLSClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
+	resp, err := cli.MemberList(ctx)
+	cancel()
+	if err != nil {
+		return errors.Wrap(err, "list etcd members")
+	}
+
+	name := cubeSettings.GetHostname()
+	want := etcdPeerURL(util.EtcdTLSEnforce, cubeSettings.GetMgmtIfIp())
+	for _, m := range resp.Members {
+		if m.Name != name {
+			continue
+		}
+		if len(m.PeerURLs) == 1 && m.PeerURLs[0] == want {
+			return nil
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
+		defer cancel()
+		if _, err := cli.MemberUpdate(ctx, m.ID, []string{want}); err != nil {
+			return errors.Wrapf(err, "update etcd member %s peer URL to %s", name, want)
+		}
+		zap.L().Info("etcd member peer URL updated", zap.String("member", name), zap.String("url", want))
+		return nil
+	}
+
+	return errors.Errorf("etcd member %s not found", name)
 }
 
 // waitEtcdHealthy polls local etcd until it serves a request or the timeout elapses.

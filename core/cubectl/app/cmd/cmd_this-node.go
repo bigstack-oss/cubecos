@@ -64,6 +64,52 @@ func startEtcdWatch() {
 	}
 }
 
+// runThisnodeEtcdRefresh brings the local etcd member in line with the node's etcd TLS
+// mode and restarts it when it runs anything else. etcd_tls_ladder calls it on one control
+// node at a time; it returns only once the member serves again, or fails.
+//
+// In enforce the member's peer URL moves to https first, while the member still answers
+// on its current config. A restart is due when the config changed or when a member that
+// should serve https does not: `this-node start` may have rewritten the config of an etcd
+// that was already running.
+func runThisnodeEtcdRefresh(cmd *cobra.Command, args []string) error {
+	if !cubeSettings.IsRole(util.ROLE_CONTROL) {
+		return fmt.Errorf("Can only be performed on control node")
+	}
+
+	mode := util.GetEtcdTLSMode()
+	if mode == util.EtcdTLSEnforce {
+		if err := etcdUpdateSelfPeerURL(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	changed, err := refreshEtcdConfig(etcdConfigFile)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if !changed && (mode == util.EtcdTLSPlain || etcdServesTLS()) {
+		fmt.Printf("etcd already runs %s\n", mode)
+		return nil
+	}
+
+	// blocks until the member reports ready (Type=notify); the bound only keeps a member
+	// that cannot reach quorum from holding the caller forever
+	if _, outErr, err := util.ExecCmd("timeout", "90", "systemctl", "restart", "etcd"); err != nil {
+		return errors.Wrap(err, outErr)
+	}
+	if err := waitEtcdHealthy(60 * time.Second); err != nil {
+		return errors.WithStack(err)
+	}
+	if mode != util.EtcdTLSPlain && !etcdServesTLS() {
+		return errors.Errorf("etcd restarted in %s but does not serve https", mode)
+	}
+
+	fmt.Printf("etcd restarted in %s\n", mode)
+	return nil
+}
+
 func runThisnodeNew(cmd *cobra.Command, args []string) error {
 	if !cubeSettings.IsRole(util.ROLE_CONTROL) {
 		return fmt.Errorf("Can only be performed on control node")
@@ -204,6 +250,13 @@ var cmdThisnodeJoin = &cobra.Command{
 	RunE:  runThisnodeJoin,
 }
 
+var cmdThisnodeEtcdRefresh = &cobra.Command{
+	Use:   "etcd-refresh",
+	Short: "Bring local etcd in line with the node's etcd TLS mode, restarting it if needed",
+	Args:  cobra.NoArgs,
+	RunE:  runThisnodeEtcdRefresh,
+}
+
 var cmdThisnodeReset = &cobra.Command{
 	Use:   "reset",
 	Short: "reset this node for cluster",
@@ -217,4 +270,5 @@ func init() {
 	cmdThisnode.AddCommand(cmdThisnodeNew)
 	cmdThisnode.AddCommand(cmdThisnodeJoin)
 	cmdThisnode.AddCommand(cmdThisnodeReset)
+	cmdThisnode.AddCommand(cmdThisnodeEtcdRefresh)
 }
