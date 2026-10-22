@@ -113,6 +113,14 @@ func commitCluster() error {
 		if _, err := os.Stat(rejoinMarker); os.IsNotExist(err) && cubeSettings.IsMasterControl() {
 			zap.S().Infof("Creating a new cluster")
 
+			// before `this-node new`, which writes the etcd config for the TLS mode the PKI puts it in
+			if _, err := os.Stat(util.EtcdCACertFile()); os.IsNotExist(err) {
+				if err := genEtcdPKI(); err != nil {
+					return errors.WithStack(err)
+				}
+				zap.L().Info("etcd PKI generated", zap.String("dir", util.EtcdPKIDir))
+			}
+
 			if _, outErr, err := util.ExecCmd("cubectl", "this-node", "new"); err != nil {
 				return errors.Wrap(err, outErr)
 			}
@@ -135,6 +143,13 @@ func commitCluster() error {
 			}
 
 		} else {
+			// Every etcd call from here on needs the client certificate, the member removal
+			// of a rejoin included, so the PKI comes first. The pull authenticates with the
+			// root ssh key and does not touch etcd.
+			if err := pullEtcdPKI(cubeSettings.GetControllerIp()); err != nil {
+				return errors.WithStack(err)
+			}
+
 			if _, err := os.Stat(rejoinMarker); err == nil {
 				if _, _, err := util.ExecCmd("cubectl", "node", "remove", cubeSettings.GetHostname()); err != nil {
 					//return errors.Wrap(err, outErr)
@@ -196,10 +211,26 @@ func resetCluster() error {
 	// }
 
 	os.RemoveAll(certsDir)
+	os.RemoveAll(util.EtcdPKIDir)
+	os.Remove(util.EtcdTLSCompatMarker)
 
 	if _, _, err := util.ExecCmd("cubectl", "this-node", "reset"); err != nil {
 		zap.S().Warn(err)
 	}
+
+	return nil
+}
+
+// pullEtcdPKI copies the etcd PKI from a node that has it. It replaces whatever this node
+// held: a node rejoining a cluster that was rebuilt meanwhile would otherwise keep
+// certificates from a CA the members no longer trust.
+func pullEtcdPKI(from string) error {
+	if _, outErr, err := util.ExecCmd("cubectl", "node", "rsync",
+		from+":"+util.EtcdPKIDir,
+	); err != nil {
+		return errors.Wrap(err, outErr)
+	}
+	zap.L().Info("etcd PKI synced", zap.String("from", from))
 
 	return nil
 }
