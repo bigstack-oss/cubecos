@@ -22,8 +22,8 @@ LOCKED_DNF += kapacitor-$(KAPACITOR_VER)
 # the October 2026 security release, links an x/net older than its fixes and a client_golang older
 # than its fix, and links the github.com/docker/docker module, whose matches have no fixed release
 # (they are fixed only in the moby/moby modules that replace it). The rebuild raises the x/
-# modules and grpc, and moves services/swarm and its test helpers from docker/docker's api/types to
-# the same types in github.com/moby/moby/api.
+# modules, grpc and klauspost/compress, and moves services/swarm and its test helpers from
+# docker/docker's api/types to the same types in github.com/moby/moby/api.
 # - Flux moves to 0.200.0, influxdb 1.13.1's: 1.8.8's 0.191.0 needs the Rust 1.72 the release was
 #   built with, and the jail's newer rustc rejects its libflux. 0.200.0 brings client_golang
 #   1.19.0, past its fix, and pgx/v5 5.8.0, raised to its fixed release.
@@ -33,7 +33,8 @@ LOCKED_DNF += kapacitor-$(KAPACITOR_VER)
 KAPACITOR_SRC_VER := $(firstword $(subst -, ,$(KAPACITOR_VER)))
 KAPACITOR_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
 	google.golang.org/grpc@v1.84.0 github.com/moby/moby/api@v1.56.1 \
-	github.com/influxdata/flux@v0.200.0 github.com/jackc/pgx/v5@v5.11.0
+	github.com/influxdata/flux@v0.200.0 github.com/jackc/pgx/v5@v5.11.0 \
+	github.com/klauspost/compress@v1.18.7
 KAPACITOR_GO_DIR := $(ARCS_DIR)/kapacitor-go
 KAPACITOR_SRC := $(KAPACITOR_GO_DIR)/kapacitor-$(KAPACITOR_SRC_VER)-src
 KAPACITOR_CMDS := cmd/kapacitord cmd/kapacitor tick/cmd/tickfmt
