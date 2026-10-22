@@ -77,6 +77,58 @@ var cmdClusterGenCerts = &cobra.Command{
 	},
 }
 
+var etcdGenCertsOpts struct {
+	dryRun bool
+}
+
+var cmdClusterEtcdGenCerts = &cobra.Command{
+	Use:   "etcd-gencerts",
+	Short: "Re-sign the etcd member certificate over the current control group",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return regenEtcdCerts()
+	},
+}
+
+// regenEtcdCerts re-signs the etcd member certificate so that it covers the current
+// control group and pushes the PKI to every node. A control node added after the PKI was
+// signed refuses to join until this has run (this-node join). No etcd restarts: members
+// load the new pair on their next TLS connection.
+func regenEtcdCerts() error {
+	if !cubeSettings.IsMasterControl() {
+		return errors.New("the etcd certificates are signed on the master control node only")
+	}
+	if _, err := os.Stat(util.EtcdCAKeyFile()); err != nil {
+		return errors.Errorf("no etcd CA at %s", util.EtcdCAKeyFile())
+	}
+
+	if etcdGenCertsOpts.dryRun {
+		fmt.Println("subject:        /CN=" + util.EtcdMemberCN)
+		fmt.Println(buildCertSANs())
+		fmt.Println("would rewrite:  " + util.EtcdMemberCertFile() + ", " + util.EtcdMemberKeyFile())
+		fmt.Println("would keep:     the etcd CA and client certificate")
+		fmt.Println("would sync to:  every node")
+		fmt.Println("would restart:  nothing")
+		return nil
+	}
+
+	backup, err := resignEtcdMember()
+	if backup != "" {
+		zap.L().Info("Previous etcd PKI backed up", zap.String("path", backup))
+	}
+	if err != nil {
+		return err
+	}
+	zap.L().Info("etcd member certificate re-signed", zap.String("sans", buildCertSANs()))
+
+	if _, outErr, err := util.ExecCmd("cubectl", "node", "rsync", util.EtcdPKIDir); err != nil {
+		return errors.Wrap(err, outErr)
+	}
+	zap.L().Info("etcd PKI synced to every node")
+
+	return nil
+}
+
 func isJoined() bool {
 	if _, err := os.Stat(revisionFile); os.IsNotExist(err) {
 		return false
@@ -639,6 +691,9 @@ func init() {
 	m.resetFunc = resetCluster
 
 	m.AddCustomCommand(cmdClusterGenCerts)
+	m.AddCustomCommand(cmdClusterEtcdGenCerts)
+	cmdClusterEtcdGenCerts.Flags().BoolVarP(&etcdGenCertsOpts.dryRun, "dry-run", "", false,
+		"Print what would be written and leave every file alone")
 	cmdClusterGenCerts.Flags().BoolVarP(&genCertsOpts.force, "force", "f", false,
 		"Replace the certificate even when it was not issued by this cluster")
 	cmdClusterGenCerts.Flags().BoolVarP(&genCertsOpts.dryRun, "dry-run", "", false,

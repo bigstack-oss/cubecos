@@ -181,3 +181,97 @@ func parseCertSANs(sans string) ([]string, []net.IP) {
 
 	return dns, ips
 }
+
+// Variable so tests can point it elsewhere. Next to the cluster certificate's backups, and
+// like them outside the directory they copy.
+var etcdCertsBackupDir = filepath.Join(certsBackupDir, "etcd")
+
+// loadEtcdCA reads the CA genEtcdPKIInto signed.
+func loadEtcdCA() (*x509.Certificate, *rsa.PrivateKey, error) {
+	crt, err := ioutil.ReadFile(util.EtcdCACertFile())
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	block, _ := pem.Decode(crt)
+	if block == nil {
+		return nil, nil, errors.Errorf("no PEM block in %s", util.EtcdCACertFile())
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+
+	k, err := ioutil.ReadFile(util.EtcdCAKeyFile())
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	block, _ = pem.Decode(k)
+	if block == nil {
+		return nil, nil, errors.Errorf("no PEM block in %s", util.EtcdCAKeyFile())
+	}
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+
+	return cert, key, nil
+}
+
+// resignEtcdMember signs a member certificate over the current control group with the
+// existing CA and puts it in place on this node, returning where the previous PKI was
+// backed up. The CA and the client certificate stay as they are, so nothing that trusts
+// or presents them changes.
+//
+// The new pair is signed into a staging directory and read back before it goes anywhere,
+// as regenCerts does. Each file is then renamed into place: etcd reads the pair on every
+// new TLS connection, so it needs no restart, and the window in which it could see a new
+// certificate with the old key is the gap between two renames.
+func resignEtcdMember() (string, error) {
+	caCert, caKey, err := loadEtcdCA()
+	if err != nil {
+		return "", err
+	}
+
+	staging, err := ioutil.TempDir("", "etcd-pki")
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+	defer os.RemoveAll(staging)
+
+	if err := signEtcdMemberInto(staging, caCert, caKey); err != nil {
+		return "", err
+	}
+	if err := verifyCertCoversControlGroup(filepath.Join(staging, "member.crt")); err != nil {
+		return "", err
+	}
+
+	backup := filepath.Join(etcdCertsBackupDir, time.Now().Format("20060102-150405"))
+	if err := os.MkdirAll(backup, 0700); err != nil {
+		return "", errors.WithStack(err)
+	}
+	if _, outErr, err := util.ExecCmd("cp", "-a", util.EtcdPKIDir+"/.", backup); err != nil {
+		return "", errors.Wrap(err, outErr)
+	}
+
+	for _, f := range []struct {
+		dst  string
+		mode os.FileMode
+	}{
+		{util.EtcdMemberKeyFile(), 0600},
+		{util.EtcdMemberCertFile(), 0644},
+	} {
+		b, err := ioutil.ReadFile(filepath.Join(staging, filepath.Base(f.dst)))
+		if err != nil {
+			return backup, errors.WithStack(err)
+		}
+		tmp := f.dst + ".new"
+		if err := ioutil.WriteFile(tmp, b, f.mode); err != nil {
+			return backup, errors.WithStack(err)
+		}
+		if err := os.Rename(tmp, f.dst); err != nil {
+			return backup, errors.WithStack(err)
+		}
+	}
+
+	return backup, nil
+}

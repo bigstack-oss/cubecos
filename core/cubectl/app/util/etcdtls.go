@@ -3,9 +3,12 @@ package util
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -97,4 +100,44 @@ func EtcdClientTLSConfig() (*tls.Config, error) {
 		RootCAs:      pool,
 		MinVersion:   tls.VersionTLS12,
 	}, nil
+}
+
+// EtcdMemberCertCovers returns an error naming every address or host name the member
+// certificate does not carry. Its peers dial a member by its management IP and clients by
+// its host name, so a control node that joins with a certificate signed before it belonged
+// to the control group cannot be reached.
+func EtcdMemberCertCovers(names ...string) error {
+	b, err := ioutil.ReadFile(EtcdMemberCertFile())
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	block, _ := pem.Decode(b)
+	if block == nil {
+		return errors.Errorf("no PEM block in %s", EtcdMemberCertFile())
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	var missing []string
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		var err error
+		if ip := net.ParseIP(name); ip != nil {
+			err = cert.VerifyHostname(ip.String())
+		} else {
+			err = cert.VerifyHostname(name)
+		}
+		if err != nil {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return errors.Errorf("the etcd member certificate does not cover %s", strings.Join(missing, ", "))
+	}
+
+	return nil
 }
