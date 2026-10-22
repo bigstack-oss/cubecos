@@ -53,7 +53,16 @@ fi
 # Only the command's own output goes to stdout. Callers parse it -- the rancher token comes from
 # `state pull | jq` in cubectl's config_rancher and in hex_sdk -- so the steps before it, init
 # above all, print to stderr.
-timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform init -upgrade >&2
+# Once cube's etcd enforces TLS (PKI, no compat marker), the backend reaches it over https with
+# the client certificate. main.tf keeps the plain endpoint: /var/lib/terraform, .terraform/
+# included, is rsynced between control nodes after every apply, and during a rolling upgrade the
+# nodes not rolled yet serve plain http only. -reconfigure, as .terraform/ otherwise goes on with
+# whatever backend settings an earlier init was given.
+BACKEND_ARGS=""
+if [ -f /etc/etcd-pki/ca.crt ] && [ ! -e /etc/appliance/state/etcd_tls_compat ] ; then
+    BACKEND_ARGS="-reconfigure -backend-config=/etc/etcd-pki/terraform-backend.hcl"
+fi
+timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform init -upgrade $BACKEND_ARGS >&2
 timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform "$@"
 [ $? -eq 0 ] || exit 1
 

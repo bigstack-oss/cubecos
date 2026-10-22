@@ -60,7 +60,13 @@ BUILTIN_EPHEMERAL=ephemeral-vms
 # still finishes its rolling upgrade; see etcd_tls_ladder (sdk_etcd.sh).
 ETCD_PKI_DIR=/etc/etcd-pki
 ETCD_TLS_COMPAT_MARK=$HEX_STATE_DIR/etcd_tls_compat
-ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
+# https with the client certificate once the node enforces etcd TLS (PKI, no marker); plain
+# http before that, which is all a member in compat or a node not rolled yet serves to it
+if [ -f $ETCD_PKI_DIR/ca.crt ] && [ ! -e $ETCD_TLS_COMPAT_MARK ] ; then
+    ETCDCTL="/usr/local/bin/etcdctl --endpoints=https://$HOSTNAME:12379 --cacert=$ETCD_PKI_DIR/ca.crt --cert=$ETCD_PKI_DIR/client.crt --key=$ETCD_PKI_DIR/client.key"
+else
+    ETCDCTL="/usr/local/bin/etcdctl --endpoints=$HOSTNAME:12379"
+fi
 TERRAFORM_CUBE="/usr/local/bin/terraform-cube.sh"
 TERRAFORM_VAR_FILE_KEYCLOAK_ADMIN_PASSWORD="/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars"
 CURL="timeout $SRVTO /usr/bin/curl"
