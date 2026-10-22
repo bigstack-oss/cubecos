@@ -243,12 +243,11 @@ PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 r
 # together, since they require each other's exact version, the -devel packages the build has until
 # cube-post.mk removes them included. Entries are <repo>/<first letter>/<rpm>.
 #
-# Take an entry out once Stream's build sorts above it. The duplicate pass only weighs the rpms in
-# the download directory, so Stream's build takes over only where it was downloaded beside Rocky's.
-# Where the rootfs already has Stream's build installed, Rocky's copy is a downgrade and
-# rootfs_install fails. openssl was here until Stream's 3.5.9-1.el9, a rebase onto OpenSSL 3.5.9,
-# which carries the fix RHEL had backported into 3.5.8-2.el9_8. Each entry has its PINNED_DNF line
-# below, as rsync has.
+# Stream's own build takes over once its release passes RHEL's: installdnf's duplicate pass keeps
+# the higher of the copies in the download directory, and drops a downloaded copy older than the
+# build the rootfs already has. An entry can come out then. openssl was here until Stream's
+# 3.5.9-1.el9, a rebase onto OpenSSL 3.5.9, which carries the fix RHEL had backported into
+# 3.5.8-2.el9_8. Each entry has its PINNED_DNF line below, as rsync has.
 ROCKY_ERRATA_RPMS := \
 	BaseOS/p/pcre2-10.40-7.el9_8.x86_64 \
 	BaseOS/p/pcre2-syntax-10.40-7.el9_8.noarch \
