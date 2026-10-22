@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 
 	"cubectl/util"
 	cubeSettings "cubectl/util/settings"
@@ -318,23 +319,87 @@ func getLocalMemberID() (string, error) {
 }
 
 func writeEtcdConfig(state string, initCluster string) error {
-	myIp := cubeSettings.GetMgmtIfIp()
-
 	viper.SetConfigType("yaml")
-	viper.Set("name", cubeSettings.GetHostname())
-	viper.Set("data-dir", etcdDataDir)
-	viper.Set("listen-client-urls", etcdListenClientUrls())
-	viper.Set("listen-peer-urls", fmt.Sprintf("http://%s:%d", myIp, etcdPeerPort))
-	viper.Set("advertise-client-urls", fmt.Sprintf("http://%s:%d", myIp, etcdClientPort))
-	viper.Set("initial-advertise-peer-urls", fmt.Sprintf("http://%s:%d", myIp, etcdPeerPort))
-	viper.Set("initial-cluster-token", cubeSettings.V().GetString("cubesys.seed"))
-	viper.Set("initial-cluster-state", state)
-	if state == "existing" {
-		viper.Set("initial-cluster", initCluster)
+	for k, v := range etcdConfigValues(util.GetEtcdTLSMode(), state, initCluster) {
+		viper.Set(k, v)
 	}
 
 	_ = os.MkdirAll("/etc/etcd", 0755)
 	return viper.WriteConfigAs(etcdConfigFile)
+}
+
+// etcdConfigValues is the whole etcd config for a node creating or joining the cluster.
+func etcdConfigValues(mode util.EtcdTLSMode, state string, initCluster string) map[string]interface{} {
+	conf := etcdModeConfig(mode)
+	conf["name"] = cubeSettings.GetHostname()
+	conf["data-dir"] = etcdDataDir
+	conf["initial-cluster-token"] = cubeSettings.V().GetString("cubesys.seed")
+	conf["initial-cluster-state"] = state
+	if state == "existing" {
+		conf["initial-cluster"] = initCluster
+	}
+
+	return conf
+}
+
+// etcdTransportKeys are what changes with the TLS mode. Nothing else in the config does,
+// and none of them is part of the cluster membership.
+var etcdTransportKeys = []string{
+	"listen-client-urls",
+	"advertise-client-urls",
+	"listen-peer-urls",
+	"initial-advertise-peer-urls",
+	"client-transport-security",
+	"peer-transport-security",
+}
+
+// etcdModeConfig sets every key in etcdTransportKeys that the mode uses.
+//
+// compat serves clients on http and https on the same port - etcd splits the two on one
+// listener - but keeps the peer port on http: two peer listeners on one port fail to
+// bind. Its peer TLS settings are there so that it can dial members that already
+// enforce. Both advertised URLs stay http, so an http client asking for the member list
+// (`etcdctl --cluster`) is not handed https endpoints it cannot use.
+//
+// enforce serves https only and checks certificates on both ports. The peer port also
+// checks the CN: clients and members share one CA, and without allowed-cn the client
+// certificate every node holds would open the peer port.
+func etcdModeConfig(mode util.EtcdTLSMode) map[string]interface{} {
+	myIp := cubeSettings.GetMgmtIfIp()
+
+	clientScheme := "http"
+	if mode == util.EtcdTLSEnforce {
+		clientScheme = "https"
+	}
+
+	conf := map[string]interface{}{
+		"listen-client-urls":          etcdListenClientUrls(mode),
+		"advertise-client-urls":       fmt.Sprintf("%s://%s:%d", clientScheme, myIp, etcdClientPort),
+		"listen-peer-urls":            etcdPeerURL(mode, myIp),
+		"initial-advertise-peer-urls": etcdPeerURL(mode, myIp),
+	}
+
+	if mode == util.EtcdTLSPlain {
+		return conf
+	}
+
+	tlsConf := func() map[string]interface{} {
+		return map[string]interface{}{
+			"cert-file":       util.EtcdMemberCertFile(),
+			"key-file":        util.EtcdMemberKeyFile(),
+			"trusted-ca-file": util.EtcdCACertFile(),
+		}
+	}
+	clientTLS, peerTLS := tlsConf(), tlsConf()
+	if mode == util.EtcdTLSEnforce {
+		clientTLS["client-cert-auth"] = true
+		peerTLS["client-cert-auth"] = true
+		peerTLS["allowed-cn"] = []string{util.EtcdMemberCN}
+	}
+	conf["client-transport-security"] = clientTLS
+	conf["peer-transport-security"] = peerTLS
+
+	return conf
 }
 
 // etcdListenClientUrls is where etcd serves clients: loopback (cubectl, etcdctl-cube.sh,
@@ -342,45 +407,73 @@ func writeEtcdConfig(state string, initCluster string) error {
 // control VIP, which etcd-watch and every non-control node dial via GetControllerIp().
 // A control that does not hold the VIP can still bind it: cubesys sets
 // net.ipv4.ip_nonlocal_bind=1. Without a management IP it stays on the wildcard.
-func etcdListenClientUrls() string {
-	myIp := cubeSettings.GetMgmtIfIp()
-	if myIp == "" {
-		return fmt.Sprintf("http://0.0.0.0:%d", etcdClientPort)
+func etcdListenClientUrls(mode util.EtcdTLSMode) string {
+	var schemes []string
+	switch mode {
+	case util.EtcdTLSCompat:
+		schemes = []string{"http", "https"}
+	case util.EtcdTLSEnforce:
+		schemes = []string{"https"}
+	default:
+		schemes = []string{"http"}
 	}
 
-	addrs := []string{"127.0.0.1", myIp}
-	if vip := cubeSettings.V().GetString("cubesys.control.vip"); cubeSettings.IsHA() && vip != "" && vip != myIp {
-		addrs = append(addrs, vip)
+	addrs := []string{"0.0.0.0"}
+	if myIp := cubeSettings.GetMgmtIfIp(); myIp != "" {
+		addrs = []string{"127.0.0.1", myIp}
+		if vip := cubeSettings.V().GetString("cubesys.control.vip"); cubeSettings.IsHA() && vip != "" && vip != myIp {
+			addrs = append(addrs, vip)
+		}
 	}
 
-	urls := make([]string, 0, len(addrs))
+	var urls []string
 	for _, addr := range addrs {
-		urls = append(urls, fmt.Sprintf("http://%s:%d", addr, etcdClientPort))
+		for _, scheme := range schemes {
+			urls = append(urls, fmt.Sprintf("%s://%s:%d", scheme, addr, etcdClientPort))
+		}
 	}
 	return strings.Join(urls, ",")
 }
 
-// refreshEtcdListenClientUrls points an existing etcd config at etcdListenClientUrls().
-// The file is written only when the node creates or joins the cluster, and upgrades
-// carry it over as is, so a node would otherwise keep the listeners it was installed with.
-// Only that key changes; it is not part of the cluster membership.
-func refreshEtcdListenClientUrls(file string) error {
-	v := viper.New()
-	v.SetConfigFile(file)
-	if err := v.ReadInConfig(); err != nil {
-		return err
+// refreshEtcdConfig brings an existing etcd config in line with the node's TLS mode and
+// reports whether it changed anything. The file is written only when the node creates or
+// joins the cluster, and upgrades carry it over as is, so a node would otherwise keep the
+// listeners and transport it was installed with. Only etcdTransportKeys change; the
+// membership keys are left alone. A file already in line is not rewritten.
+func refreshEtcdConfig(file string) (bool, error) {
+	b, err := ioutil.ReadFile(file)
+	if err != nil {
+		return false, err
 	}
 
-	urls := etcdListenClientUrls()
-	if v.GetString("listen-client-urls") == urls {
-		return nil
+	conf := map[string]interface{}{}
+	if err := yaml.Unmarshal(b, &conf); err != nil {
+		return false, errors.Wrapf(err, "parse %s", file)
 	}
-	v.Set("listen-client-urls", urls)
+	before, err := yaml.Marshal(conf)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+
+	for _, k := range etcdTransportKeys {
+		delete(conf, k)
+	}
+	for k, v := range etcdModeConfig(util.GetEtcdTLSMode()) {
+		conf[k] = v
+	}
+
+	after, err := yaml.Marshal(conf)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	if bytes.Equal(before, after) {
+		return false, nil
+	}
 
 	// write aside and rename, so a failed write cannot leave etcd without a config
 	tmp := strings.TrimSuffix(file, ".yml") + ".new.yml"
-	if err := v.WriteConfigAs(tmp); err != nil {
-		return err
+	if err := ioutil.WriteFile(tmp, after, 0644); err != nil {
+		return false, errors.WithStack(err)
 	}
-	return os.Rename(tmp, file)
+	return true, os.Rename(tmp, file)
 }

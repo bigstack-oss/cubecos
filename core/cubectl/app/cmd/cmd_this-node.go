@@ -18,8 +18,8 @@ var ()
 
 func runThisnodeStart(cmd *cobra.Command, args []string) error {
 	if cubeSettings.IsRole(util.ROLE_CONTROL) {
-		if err := refreshEtcdListenClientUrls(etcdConfigFile); err != nil {
-			zap.S().Warnf("Failed to refresh etcd listen-client-urls: %v", err)
+		if _, err := refreshEtcdConfig(etcdConfigFile); err != nil {
+			zap.S().Warnf("Failed to refresh etcd config: %v", err)
 		}
 		// Start etcd non-blocking, then wait (bounded) for it to serve, so
 		// parallel node reboots form quorum instead of each blocking serially.
