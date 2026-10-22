@@ -112,6 +112,18 @@ func commitCluster() error {
 		if _, outErr, err := util.ExecCmd("cubectl", "this-node", "start"); err != nil {
 			return errors.Wrap(err, outErr)
 		}
+
+		// A single node has no roll to wait for: take etcd the rest of the way to enforced
+		// TLS at its migration boot. On HA the roll's end does it (power_roll_advance). A
+		// failure leaves etcd in compat, which serves as before, so it does not fail the commit.
+		if isMigration() && !cubeSettings.IsHA() && cubeSettings.IsRole(util.ROLE_CONTROL) {
+			if _, err := os.Stat(util.EtcdTLSCompatMarker); err == nil {
+				if _, outErr, err := util.ExecCmd("hex_sdk", "etcd_tls_ladder"); err != nil {
+					zap.S().Warnf("etcd stays in TLS compat; run `hex_sdk etcd_tls_ladder` once the cause is fixed: %v",
+						errors.Wrap(err, outErr))
+				}
+			}
+		}
 	} else {
 		if _, err := os.Stat(rejoinMarker); os.IsNotExist(err) && cubeSettings.IsMasterControl() {
 			zap.S().Infof("Creating a new cluster")

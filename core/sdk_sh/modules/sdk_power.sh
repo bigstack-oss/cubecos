@@ -950,6 +950,12 @@ power_roll_advance()
         # same reason as ovn_central_switch. See k3s_upgrade_ladder (sdk_k3s.sh); it logs its
         # own outcome on the VIP holder.
         ( remote_run $master "$HEX_SDK k3s_upgrade_ladder" ) >/dev/null 2>&1
+        # Move cube's etcd from compat to enforced TLS. Each node's migration boot kept its
+        # clients on http and its member serving http next to https, as far as etcd goes
+        # while other nodes still speak http only. Before the job is marked done, for the same
+        # reason as ovn_central_switch. See etcd_tls_ladder (sdk_etcd.sh); it logs its own
+        # outcome on the master.
+        ( remote_run $master "$HEX_SDK etcd_tls_ladder" ) >/dev/null 2>&1
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
