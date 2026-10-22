@@ -1109,6 +1109,19 @@ ceph_osd_list_partitions()
     echo -n $scsi_devs
 }
 
+# share of a trimmed SSD left unpartitioned as spare area for the drive
+CEPH_OSD_SSD_SPARE_PCT=${CEPH_OSD_SSD_SPARE_PCT:-20}
+BLOCK_SYSFS=${BLOCK_SYSFS:-/sys/block}
+
+# trim a whole non-rotational disk; fails when it is rotational or cannot discard
+ceph_osd_trim_ssd()
+{
+    local q=$BLOCK_SYSFS/$(basename $1)/queue
+    [ "$(cat $q/rotational 2>/dev/null)" = 0 ] || return 1
+    [ "$(cat $q/discard_max_bytes 2>/dev/null || echo 0)" -gt 0 ] || return 1
+    Quiet blkdiscard -f $1
+}
+
 # params:
 # $1: device name(e.g.: /dev/sdd)
 # $2: nums of meta partitions
@@ -1131,6 +1144,8 @@ ceph_osd_prepare_bluestore()
 
     # b. zap and partition osd data device
     Quiet ceph_osd_zap_disk $dev
+    local spare_pct=0
+    ceph_osd_trim_ssd $dev && spare_pct=$CEPH_OSD_SSD_SPARE_PCT
     i=1
     part_size=$(( $part_size / 2048))
 
@@ -1150,7 +1165,7 @@ ceph_osd_prepare_bluestore()
         Quiet mkfs.xfs -f ${part_dev}${i}
     done
     # c. partition osd block device
-    free_size=$(GetFreeSectorsByDisk $dev)
+    free_size=$(( $(GetFreeSectorsByDisk $dev) * (100 - $spare_pct) / 100 ))
     log_sec=$(lsblk -t -J $dev | jq -r .blockdevices[].\"log-sec\")
     multiplier=$(( $log_sec / 512 ))
     part_size=$(( $free_size / $part_num / 2048 * ${multiplier:-1} ))
