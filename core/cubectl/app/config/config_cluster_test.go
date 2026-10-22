@@ -15,6 +15,46 @@ import (
 	cubeTesting "cubectl/util/testing"
 )
 
+// assertEtcdEnforcesTLS checks that the control nodes run etcd requiring certificates on both
+// ports with https peer URLs, that plain http gets nowhere, and that they share one etcd CA.
+func assertEtcdEnforcesTLS(t *testing.T, controls ...*cubeTesting.Container) {
+	t.Helper()
+
+	var cas []string
+	for _, c := range controls {
+		conf, outErr, err := c.Exec(nil, "cat", "/etc/etcd/etcd.conf.yml")
+		if err != nil {
+			t.Fatal(outErr, err)
+		}
+		assert.Equal(t, 2, strings.Count(conf, "client-cert-auth: true"), conf)
+		assert.Contains(t, conf, "- "+util.EtcdMemberCN)
+		assert.NotContains(t, conf, "http://")
+
+		members, outErr, err := c.Exec(nil, "etcdctl-cube.sh", "member", "list")
+		if err != nil {
+			t.Fatal(outErr, err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(members), "\n") {
+			assert.Contains(t, line, ", https://", "peer URL")
+			assert.NotContains(t, line, "http://")
+		}
+
+		_, _, err = c.Exec(nil, "/usr/local/bin/etcdctl", "--endpoints=127.0.0.1:12379",
+			"--dial-timeout=2s", "--command-timeout=3s", "get", "health")
+		assert.Error(t, err, "plain http is refused")
+
+		ca, outErr, err := c.Exec(nil, "sha256sum", util.EtcdCACertFile())
+		if err != nil {
+			t.Fatal(outErr, err)
+		}
+		cas = append(cas, strings.Fields(ca)[0])
+	}
+
+	for _, ca := range cas[1:] {
+		assert.Equal(t, cas[0], ca, "one etcd CA across the control nodes")
+	}
+}
+
 func TestConfigClusterHA(t *testing.T) {
 	ns := cubeTesting.ContainerNS(t.Name())
 	if testClean(t, func() {
@@ -71,6 +111,9 @@ func TestConfigClusterHA(t *testing.T) {
 		t.Fatal(outErr, err)
 	}
 
+	// a new cluster starts enforcing etcd TLS; the joiners pulled the PKI first
+	assertEtcdEnforcesTLS(t, control1, control2, control3)
+
 	out1, _, err := control1.Exec(nil, "cat", util.ClusterSettingsFile)
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +162,8 @@ func TestConfigClusterHA(t *testing.T) {
 	if _, outErr, err := control3.Exec(nil, "cubectl", "config", "commit", "cluster"); err != nil {
 		t.Fatal(outErr, err)
 	}
+
+	assertEtcdEnforcesTLS(t, control1, control2, control3)
 
 	// Test cluster settings
 	out1, _, err = control1.Exec(nil, "cat", util.ClusterSettingsFile)
@@ -202,6 +247,9 @@ func TestConfigClusterHA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// both rejoins pulled the PKI before removing their old member
+	assertEtcdEnforcesTLS(t, control1, control2, control3)
 
 	viperJson2 := viper.New()
 	viperJson2.SetConfigType("json")
