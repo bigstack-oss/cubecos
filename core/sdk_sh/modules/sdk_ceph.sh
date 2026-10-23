@@ -1428,6 +1428,70 @@ ceph_osd_add_mpath_lvm()
     _hex_function_ret /usr/sbin/vgcfgbackup -f /etc/cube/cos/ceph/lvm.vg
 }
 
+# print down/incomplete PGs whose peering waits on any of the given OSDs
+ceph_osd_pgs_waiting_on()
+{
+    local ids=" ${*//osd./} " st pg o
+    for st in down incomplete ; do
+        $CEPH pg ls $st -f json 2>/dev/null | jq -r '.pg_stats[]? | "\(.pgid) \((.blocked_by // []) | join(" "))"'
+    done | sort -u | while read -r pg o ; do
+        o="$o $(timeout 30 $CEPH pg $pg query -f json 2>/dev/null | jq -r '[.recovery_state[]? | (.down_osds_we_would_probe // [])[], ((.peering_blocked_by // [])[] | .osd)] | join(" ")')"
+        for o in $o ; do
+            [[ "$ids" == *" $o "* ]] && { echo $pg ; break ; }
+        done
+    done
+}
+
+# stop and purge OSDs together, unless a PG then waits on one of them for its latest copy
+ceph_osd_force_remove()
+{
+    local ids="" up="" id
+    for id in ${*//osd./} ; do
+        case "$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == ${id}) | .up")" in
+            1) ids="$ids $id" ; up="$up $id" ;;
+            0) ids="$ids $id" ;;
+        esac
+    done
+    [ -n "$ids" ] || return 0
+    if [ -n "$up" ] && ! Quiet $CEPH osd ok-to-stop $up ; then
+        log_error "Ceph OSDs${up} are not ok to stop (PGs would go inactive), not removing"
+        return 1
+    fi
+
+    Quiet $CEPH osd out $ids
+    for id in $up ; do
+        $CEPH osd down "$id"
+        Quiet -n remote_run "$(ceph_osd_host_of $id)" "systemctl stop ceph-osd@${id}"
+    done
+    # let PGs re-peer without them before deciding
+    local t=120
+    while [ $t -gt 0 ] && [ "$($CEPH pg ls peering -f json 2>/dev/null | jq '.pg_stats | length')" != "0" ] ; do
+        sleep 5 ; t=$((t - 5))
+    done
+    local pgs="$(ceph_osd_pgs_waiting_on $ids | tr '\n' ' ')"
+    if [ -n "$pgs" ] ; then
+        log_error "PGs ${pgs}wait on Ceph OSDs${ids} for their latest copy, not purging them"
+        for id in $up ; do
+            Quiet -n remote_run "$(ceph_osd_host_of $id)" "systemctl start ceph-osd@${id}"
+        done
+        Quiet $CEPH osd in $ids
+        return 1
+    fi
+
+    for id in $ids ; do
+        ceph_osd_purge "$id" || return 1
+    done
+}
+
+ceph_osd_host_of()
+{
+    local host="$(ceph_get_host_by_id $1)"
+    if [ "x$host" = "xnull" -o "x$host" = "x" ] ; then
+        host=$HOSTNAME
+    fi
+    echo $host
+}
+
 ceph_osd_purge()
 {
     # purge an OSD, immediately
@@ -1501,7 +1565,8 @@ ceph_osd_safe_remove()
         if echo "$exec_error" | grep -q "no reported stats" ; then
             local osd_up="$($CEPH osd dump -f json 2>/dev/null | jq -r ".osds[] | select(.osd == ${osd_id}) | .up")"
             local osd_pgs="$($CEPH osd df "osd.${osd_id}" -f json 2>/dev/null | jq -r ".nodes[] | select(.id == ${osd_id}) | .pgs")"
-            if [ "x$osd_up" = "x0" ] && [ "x${osd_pgs:-0}" = "x0" ] ; then
+            if [ "x$osd_up" = "x0" ] && [ "x${osd_pgs:-0}" = "x0" ] &&
+               [ -z "$(ceph_osd_pgs_waiting_on "$osd_id")" ] ; then
                 log_info "Ceph OSD ${osd_id} is down with no pgs mapped and no stats, purging it"
                 ceph_osd_purge "$osd_id"
                 return $?
@@ -1562,16 +1627,16 @@ ceph_osd_remove()
 
     $CEPH osd df "osd.${osd_id}"
     timeout 600 ceph tell "osd.${osd_id}" compact >/dev/null 2>&1 || true
+    if [ "x$mode" != "xsafe" ] ; then
+        ceph_osd_force_remove "$osd_id"
+        return $?
+    fi
+
     local crush_weight=$($CEPH osd tree -f json | jq -r ".[][] | select(.name == \"osd.${osd_id}\").crush_weight")
     Quiet $CEPH osd crush reweight "osd.${osd_id}" 0
     Quiet $CEPH osd out $osd_id
-
-    if [ "x$mode" = "xsafe" ] ; then
-        ceph_osd_safe_remove "$osd_id" "$crush_weight" "1" ""
-        return 0
-    fi
-
-    ceph_osd_purge "$osd_id"
+    ceph_osd_safe_remove "$osd_id" "$crush_weight" "1" ""
+    return 0
 }
 
 ceph_osd_is_osd_purged()
@@ -1674,6 +1739,10 @@ ceph_osd_remove_disk()
 
     local osd_ids="$(ceph_osd_get_ids "$dev")"
     local osd_id=""
+    if [[ "$mode" == "force" ]] ; then
+        ceph_osd_force_remove $osd_ids 2>/dev/null || Error "Ceph OSDs $osd_ids not removed, $dev not wiped"
+        osd_ids=""
+    fi
     for osd_id in $osd_ids ; do
         ceph_osd_remove $osd_id $mode 2>/dev/null
         # For raw osd disk, modify PARTLABEL to exclude disk in next hex_config refresh_ceph_osd
