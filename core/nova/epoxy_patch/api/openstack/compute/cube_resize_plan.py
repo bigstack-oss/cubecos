@@ -41,7 +41,8 @@ class ResizePlanController(wsgi.Controller):
                 'max_memory_mb': max_mem_mb,
                 'ceiling_is_exact': exact,
                 'boot_from_volume': is_bfv,
-                'blocked_by_spec': clr.blocked(flavor),
+                'blocked_by_spec': (clr.blocked(flavor) or
+                                    clr.numa_blocked(instance)),
                 'current': {
                     'vcpus': flavor.vcpus,
                     'memory_mb': flavor.memory_mb,

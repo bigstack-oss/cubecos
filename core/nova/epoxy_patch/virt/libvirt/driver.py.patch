@@ -36,7 +36,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7693,6 +7697,161 @@
+@@ -7693,6 +7697,177 @@
              for resource in vpmem_resources]
          return vpmems
  
@@ -44,6 +44,9 @@
 +        # cube live-resize: declare the hotplug ceiling at boot; (0, 0)
 +        # means the flavor is blocked or opted out.
 +        max_vcpus, max_mem_mb = clr.headroom(flavor)
++        # image-requested NUMA (hw_numa_nodes) gets no headroom either
++        if guest.cpu is not None and guest.cpu.numa:
++            max_vcpus, max_mem_mb = 0, 0
 +        if max_vcpus > flavor.vcpus and guest.cpu is not None:
 +            # libvirt requires sockets*cores*threads == MAX vcpus; scale
 +            # sockets, or skip cpu headroom if it does not divide evenly.
@@ -105,6 +108,18 @@
 +                raise exception.LiveResizeError(reason=_(
 +                    "image backend %(be)s cannot grow a root disk in place") %
 +                    {"be": type(image).__name__})
++
++    def _lr_online_vcpus(self, guest, instance, vcpus):
++        # ask the guest agent to online the hot-added vCPUs (best effort)
++        image_meta = objects.ImageMeta.from_instance(instance)
++        if not image_meta.properties.get('hw_qemu_guest_agent', False):
++            return
++        try:
++            guest._domain.setVcpusFlags(vcpus, libvirt.VIR_DOMAIN_VCPU_GUEST)
++        except libvirt.libvirtError as ex:
++            LOG.warning("live-resize: the guest agent did not online the new "
++                        "vCPUs (%s); they come online at the next guest "
++                        "reboot", ex, instance=instance)
 +
 +    def _live_grow_root(self, guest, instance, new_flavor):
 +        """Grow the root image, then tell the running guest.
@@ -183,6 +198,7 @@
 +                                  instance=instance)
 +                    raise exception.LiveResizePartial(reason=str(ex))
 +                raise exception.LiveResizeError(reason=str(ex))
++            self._lr_online_vcpus(guest, instance, new_flavor.vcpus)
 +        # Last: growing is irreversible while the hotplugs roll back, and the
 +        # allocation revert restores the old flavor wholesale. See PR #1429.
 +        if new_flavor.root_gb > old.root_gb and instance.image_ref:

@@ -72,6 +72,7 @@ CONFIG_TUNING_INT(CUBESYS_LOG_DEFAULT_RP, "cubesys.log.default.retention", TUNIN
 CONFIG_TUNING_INT(CUBESYS_CONNTABLE_MAX, "cubesys.conntable.max", TUNING_PUB, "Set max connection table size.", 262144, 0, INT_MAX);
 CONFIG_TUNING_INT(CUBESYS_ALERT_LEVEL, "cubesys.alert.level", TUNING_PUB, "Set health alert sensible level. (0: default, 1: highly sensitive)", 0, 0, INT_MAX);
 CONFIG_TUNING_BOOL(CUBESYS_PROBEUSB, "cubesys.probeusb", TUNING_PUB, "Set true to allow loading USB drivers.", false);
+CONFIG_TUNING_STR(CUBESYS_CPU_PROFILE, "cubesys.cpu.profile", TUNING_PUB, "Set CPU power profile: auto (balanced on edge-core and moderator, performance on other roles), performance or balanced.", "auto", ValidateRegex, "^(auto|performance|balanced)$");
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
@@ -97,6 +98,7 @@ PARSE_TUNING_STR(s_ctrlVip, CUBESYS_CONTROL_VIP);
 PARSE_TUNING_BOOL(s_ha, CUBESYS_HA);
 PARSE_TUNING_BOOL(s_saltKey, CUBESYS_SALTKEY);
 PARSE_TUNING_BOOL(s_probeUsb, CUBESYS_PROBEUSB);
+PARSE_TUNING_STR(s_cpuProfile, CUBESYS_CPU_PROFILE);
 PARSE_TUNING_INT(s_logDefRp, CUBESYS_LOG_DEFAULT_RP);
 PARSE_TUNING_INT(s_connMax, CUBESYS_CONNTABLE_MAX);
 PARSE_TUNING_INT(s_alertLvl, CUBESYS_ALERT_LEVEL);
@@ -354,6 +356,14 @@ Commit(bool modified, int dryLevel)
             alertLvl = AS_CLOUD_DEF;
     }
     HexSystemF(0, "echo %d > %s", alertLvl, ALERT_LEVEL);
+
+    // at boot or on change; auto: balanced on edge-core/moderator, performance elsewhere
+    if (IsBootstrap() || s_cpuProfile.modified()) {
+        std::string cpuProfile = s_cpuProfile.c_str();
+        if (cpuProfile == "auto")
+            cpuProfile = IsEdge(GetCubeRole(s_cubeRole)) ? "balanced" : "performance";
+        HexUtilSystemF(0, 0, HEX_SDK " power_cpu_profile %s", cpuProfile.c_str());
+    }
 
     for (auto it = s_alertLvlMap.begin(); it != s_alertLvlMap.end(); ++it) {
         if ((int)it->second > 0)
