@@ -650,13 +650,13 @@ CephRemoveDiskMain(int argc, const char** argv)
 {
     std::string mode = "safe";
     std::string device;
-    if (argc > 3 /* [0]="remove_disk" [1]="<[/dev/sdx]>" [2]="<[safe|force]>" */) {
+    if (argc > 3 /* [0]="remove_disk" [1]="<[/dev/sdx]>" [2]="<[safe|force|force_lost]>" */) {
         return CLI_INVALID_ARGS;
     } else if (argc == 3) {
         device = argv[1];
-        // any user input mode which is not "force" falls back to "safe" mode
+        // any user input mode which is not "force" or "force_lost" falls back to "safe" mode
         mode = argv[2];
-        if (mode != "force")
+        if (mode != "force" && mode != "force_lost")
             mode = "safe";
     } else if (argc == 2) {
         device = argv[1];
@@ -699,13 +699,15 @@ CephRemoveDiskMain(int argc, const char** argv)
         device = allDevs[index - 1];
 
         int idx;
-        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'safe\nforce'", &idx, &mode, "Disk removal mode:") != CLI_SUCCESS)
+        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'safe\nforce\nforce_lost'", &idx, &mode, "Disk removal mode:") != CLI_SUCCESS)
             return CLI_INVALID_ARGS;
 
         if (mode == "safe")
             CliPrintf("safe mode takes longer by attempting to migrate data on disk(s).");
         else if (mode == "force")
             CliPrintf("force mode immediately destroys disk data so USE IT AT YOUR OWN RISKS.");
+        else if (mode == "force_lost")
+            CliPrintf("force_lost mode removes the disk even when it holds the only up-to-date copy of some data, which is then LOST.");
         else
             return CLI_SUCCESS;
 
@@ -2266,8 +2268,8 @@ CLI_MODE_COMMAND("storage", "add_disk", CephAddDiskMain, NULL,
     "add_disk <[/dev/sdx]> <[raw|encrypt]>");
 
 CLI_MODE_COMMAND("storage", "remove_disk", CephRemoveDiskMain, NULL,
-    "Remove a disk with safe or force mode from this node.",
-    "remove_disk <[/dev/sdx]> <[safe|force]>");
+    "Remove a disk with safe, force or force_lost mode from this node.",
+    "remove_disk <[/dev/sdx]> <[safe|force|force_lost]>");
 
 CLI_MODE_COMMAND("storage", "remove_exist", CephRemoveExistMain, NULL,
     "Remove all existing disks from this node.",
