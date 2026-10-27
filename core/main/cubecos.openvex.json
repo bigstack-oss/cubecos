@@ -2,8 +2,8 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/bigstack-oss/cubecos/blob/develop/core/main/cubecos.openvex.json",
   "author": "Bigstack",
-  "timestamp": "2026-10-22T07:32:31Z",
-  "version": 7,
+  "timestamp": "2026-10-27T03:22:22Z",
+  "version": 8,
   "statements": [
     {
       "vulnerability": {
@@ -20,22 +20,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262987810."
-    },
-    {
-      "vulnerability": {
-        "name": "GO-2026-6604",
-        "aliases": [
-          "CVE-2026-56857"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:golang/stdlib"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in bigstack-oss/cubecos-private#236."
     },
     {
       "vulnerability": {
@@ -594,70 +578,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262985839."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-12080"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/qemu-guest-agent"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-img"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-audio-pa"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-block-blkio"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-block-rbd"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-core"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-device-display-virtio-gpu"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-device-display-virtio-gpu-pci"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-device-display-virtio-vga"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-device-usb-host"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-device-usb-redirect"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-docs"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-tools"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-ui-egl-headless"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-kvm-ui-opengl"
-        },
-        {
-          "@id": "pkg:rpm/centos/qemu-pr-helper"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262983898."
     },
     {
       "vulnerability": {
@@ -1237,34 +1157,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-46729"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/httpd"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-core"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-tools"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_lua"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_ssl"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262976969."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-47242"
       },
       "products": [
@@ -1550,34 +1442,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-56153"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/httpd"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-core"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-tools"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_lua"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_ssl"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262976969."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-56860"
       },
       "products": [
@@ -1604,90 +1468,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262982395."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-63292"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/httpd"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-core"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-tools"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_lua"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_ssl"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262976969."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-63686"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/httpd"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-core"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-tools"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_lua"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_ssl"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262976969."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-63718"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/httpd"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-core"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-tools"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_lua"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_ssl"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262976969."
     },
     {
       "vulnerability": {
@@ -1886,34 +1666,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-73636"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/httpd"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-core"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-tools"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_lua"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_ssl"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262976969."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-76641"
       },
       "products": [
@@ -2068,19 +1820,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-84782"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/shim-x64"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262985233."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-85218"
       },
       "products": [
@@ -2225,25 +1964,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262983898."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-96442"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/emacs-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/emacs-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/emacs-nox"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262991938."
     },
     {
       "vulnerability": {
@@ -3317,19 +3037,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-102276"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/pcs"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264062778."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-102278"
       },
       "products": [
@@ -3550,47 +3257,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-56154"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/httpd"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-core"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/httpd-tools"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_lua"
-        },
-        {
-          "@id": "pkg:rpm/centos/mod_ssl"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264054430."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-77214"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/expat"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264055129."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-78030"
       },
       "products": [
@@ -3627,28 +3293,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264055879."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-79824"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/python-unversioned-command"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-devel"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-libs"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264057912."
     },
     {
       "vulnerability": {
@@ -3787,6 +3431,390 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264059359."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-110353"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/haproxy"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432702423."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-94300"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/bind"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-dnssec-doc"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-dnssec-utils"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-license"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-utils"
+        },
+        {
+          "@id": "pkg:rpm/centos/dhcp-client"
+        },
+        {
+          "@id": "pkg:rpm/centos/dhcp-common"
+        },
+        {
+          "@id": "pkg:rpm/centos/python3-bind"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432702717."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-96888"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/bind"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-dnssec-doc"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-dnssec-utils"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-license"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-utils"
+        },
+        {
+          "@id": "pkg:rpm/centos/dhcp-client"
+        },
+        {
+          "@id": "pkg:rpm/centos/dhcp-common"
+        },
+        {
+          "@id": "pkg:rpm/centos/python3-bind"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432702987."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-97313"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/bind"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-dnssec-doc"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-dnssec-utils"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-license"
+        },
+        {
+          "@id": "pkg:rpm/centos/bind-utils"
+        },
+        {
+          "@id": "pkg:rpm/centos/dhcp-client"
+        },
+        {
+          "@id": "pkg:rpm/centos/dhcp-common"
+        },
+        {
+          "@id": "pkg:rpm/centos/python3-bind"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432703232."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-91415"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/java-25-openjdk-crypto-adapter"
+        },
+        {
+          "@id": "pkg:rpm/centos/java-25-openjdk-headless"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432703515."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-47766"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/crun"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432703768."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-111943"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/crun"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432704051."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-33811"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/skopeo"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432704363."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-56859"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/skopeo"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432704643."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-92709"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/rsyslog"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432704894."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-114613"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/python3-pip"
+        },
+        {
+          "@id": "pkg:rpm/centos/python3-pip-wheel"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432705131."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-91403"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/java-25-openjdk-crypto-adapter"
+        },
+        {
+          "@id": "pkg:rpm/centos/java-25-openjdk-headless"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432705421."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-7gcm-g887-7qv7",
+        "aliases": [
+          "CVE-2026-0994"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/protobuf"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432705749."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-97631"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/edk2-ovmf"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432931832."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-59885"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/python3-pyasn1"
+        },
+        {
+          "@id": "pkg:rpm/centos/python3-pyasn1-modules"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432932159."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-41316"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/rubygem-bigdecimal"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bundler"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-io-console"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-json"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-psych"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rdoc"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rexml"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygems"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432932496."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-42246"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/rubygem-bigdecimal"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bundler"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-io-console"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-json"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-psych"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rdoc"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rexml"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygems"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432932807."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-42258"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/rubygem-bigdecimal"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bundler"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-io-console"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-json"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-psych"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rdoc"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rexml"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygems"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432933127."
     }
   ]
 }
