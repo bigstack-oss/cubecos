@@ -2,15 +2,15 @@
 #
 # Unit test for the cluster-internal service rules in _set_ipt_service_int
 # (../modules/sdk_network.sh): the OVS/OVN databases, RabbitMQ's epmd and prometheus endpoint,
-# the exporters prometheus scrapes, haproxy's stats page, pcsd, zookeeper and kafka,
-# OpenSearch Dashboards (which users reach through haproxy), lachesis's metrics, and named's
-# rndc and designate-mdns, which only the controls use.
+# the exporters prometheus scrapes, haproxy's stats page, pcsd, zookeeper and kafka, lachesis's
+# metrics, and named's rndc and designate-mdns, which only the controls use.
 #
 # Each is used only from the cluster's own nodes, so SERVICE-INT drops it for every source but
 # the allowlist (lo, controller.ip, control.vip, the `cubectl node list` addresses) and the
 # operator's rules. k3s is left alone: its pods reach 6443 and 10250 from the pod network, which
-# the allowlist does not cover. DNS (53) stays open: tenant VMs use the cluster's named. The ceph
-# dashboard's 7443 stays open: the UI links to it, and its SAML login is registered on it.
+# the allowlist does not cover. DNS (53) stays open: tenant VMs use the cluster's named. The two
+# dashboards stay open: skyline's Trace link opens OpenSearch Dashboards on 5601, and the ceph
+# shortcut and its SAML login use 7443.
 #
 # Self-contained: extracts only the function, records iptables calls instead of
 # running them, and points its hex_tuning lookups at a fixture, so it needs no node.
@@ -66,7 +66,6 @@ RULES=('-p tcp --match multiport --dports 6640,6641,6642 -j DROP'
        '-p tcp --dport 9100 -j DROP'
        '-p tcp --dport 2224 -j DROP'
        '-p tcp --match multiport --dports 2181,9095 -j DROP'
-       '-p tcp --dport 5601 -j DROP'
        '-p tcp --dport 9090 -j DROP'
        '-p tcp --match multiport --dports 953,5354 -j DROP')
 
@@ -74,8 +73,7 @@ run "${BASE[@]}" 'cubesys.management=eth0' 'net.if.addr.eth0=10.32.150.1' 'net.i
 for DROP in "${RULES[@]}" ; do
     # 1. the rule is there, once
     chk "1 [$DROP]"                          "$(has "$DROP")" "1"
-    # 2. after the allowlist: loopback (haproxy reaches OpenSearch Dashboards over it), the
-    #    controller, the VIP and every cluster node
+    # 2. after the allowlist: loopback, the controller, the VIP and every cluster node
     for a in '-i lo -j ACCEPT' '-s 10.32.150.1 -j ACCEPT' '-s 10.32.150.10 -j ACCEPT' \
              '-s 10.32.150.2 -j ACCEPT' '-s 10.32.150.3 -j ACCEPT' ; do
         chk "2 [$DROP] after $a"             "$(before "$a" "$DROP")" "y"
@@ -87,11 +85,11 @@ for DROP in "${RULES[@]}" ; do
 done
 
 # 4. nothing opens these ports, and k3s (6443, 10250, its etcd on 2379/2380), DNS (53) and the
-#    ceph dashboard (7443) are not dropped
-for p in 6640 6641 6642 4369 15692 9117 9150 9283 9290 9587 9100 2224 2181 9095 5601 9090 953 5354 ; do
+#    OpenSearch and ceph dashboards (5601, 7443) are not dropped
+for p in 6640 6641 6642 4369 15692 9117 9150 9283 9290 9587 9100 2224 2181 9095 9090 953 5354 ; do
     chk "4 no accept for $p"                 "$(grep -cE -- "--dports? ([0-9]+[,:])*$p\b.*-j ACCEPT" "$T/rules")" "0"
 done
-for p in 6443 10250 2379 2380 53 7443 ; do
+for p in 6443 10250 2379 2380 53 5601 7443 ; do
     chk "4 $p not dropped"                   "$(grep -cE -- "--dports? ([0-9]+[,:])*$p\b.*-j DROP" "$T/rules")" "0"
 done
 
