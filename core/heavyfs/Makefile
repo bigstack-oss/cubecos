@@ -236,12 +236,14 @@ RSYNC_NVR := 3.2.7-1.el9_8
 ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/pub/rocky/9.8/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
 PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 rsync-$(RSYNC_NVR).x86_64.rpm
 
-# pcre2, librabbitmq and python3-tornado come from Rocky 9 the same way. RHEL 9.8 fixed a known
-# vulnerability in each, in pcre2-10.40-7.el9_8, librabbitmq-0.11.0-7.el9_8.1 and
-# python-tornado-6.5.10-1.el9_8.1, and Stream's newest builds (10.40-7.el9, 0.11.0-7.el9.1,
-# 6.5.10-1.el9) sort below them, since el9 sorts below el9_8. Every installed subpackage moves
-# together, since they require each other's exact version, the -devel packages the build has until
-# cube-post.mk removes them included. Entries are <repo>/<first letter>/<rpm>.
+# pcre2, librabbitmq, python3-tornado, sqlite, libevent, gnupg2, protobuf, python3-urllib3,
+# python3-lxml, libreswan and ruby come from Rocky 9 the same way. RHEL fixed a known vulnerability
+# in each in a z-stream build -- el9_8, or el9_7 for gnupg2 and protobuf -- and Stream's newest
+# builds carry the same version and release without that suffix (pcre2 10.40-7.el9 against
+# 10.40-7.el9_8), which sorts below it. Every installed subpackage moves together, i686 copies
+# included, since they require each other's exact version, the -devel packages the build has until
+# cube-post.mk removes them included. protobuf-compiler is in Rocky's CRB. Entries are
+# <repo>/<first letter>/<rpm>.
 #
 # Stream's own build takes over once its release passes RHEL's: installdnf's duplicate pass keeps
 # the higher of the copies in the download directory, and drops a downloaded copy older than the
@@ -255,7 +257,33 @@ ROCKY_ERRATA_RPMS := \
 	AppStream/p/pcre2-utf32-10.40-7.el9_8.x86_64 \
 	AppStream/p/pcre2-devel-10.40-7.el9_8.x86_64 \
 	AppStream/l/librabbitmq-0.11.0-7.el9_8.1.x86_64 \
-	AppStream/p/python3-tornado-6.5.10-1.el9_8.1.x86_64
+	AppStream/p/python3-tornado-6.5.10-1.el9_8.1.x86_64 \
+	AppStream/s/sqlite-3.34.1-11.el9_8.x86_64 \
+	AppStream/s/sqlite-devel-3.34.1-11.el9_8.x86_64 \
+	BaseOS/s/sqlite-libs-3.34.1-11.el9_8.x86_64 \
+	BaseOS/s/sqlite-libs-3.34.1-11.el9_8.i686 \
+	BaseOS/l/libevent-2.1.13-1.el9_8.x86_64 \
+	BaseOS/g/gnupg2-2.3.3-5.el9_7.x86_64 \
+	AppStream/p/protobuf-3.14.0-17.el9_7.x86_64 \
+	CRB/p/protobuf-compiler-3.14.0-17.el9_7.x86_64 \
+	AppStream/p/python3-protobuf-3.14.0-17.el9_7.noarch \
+	BaseOS/p/python3-urllib3-1.26.5-8.el9_8.noarch \
+	AppStream/p/python3-lxml-4.6.5-3.el9_8.1.x86_64 \
+	AppStream/l/libreswan-4.15-10.el9_8.x86_64 \
+	AppStream/r/ruby-3.0.7-168.el9_8.x86_64 \
+	AppStream/r/ruby-3.0.7-168.el9_8.i686 \
+	AppStream/r/ruby-devel-3.0.7-168.el9_8.x86_64 \
+	AppStream/r/ruby-libs-3.0.7-168.el9_8.x86_64 \
+	AppStream/r/ruby-libs-3.0.7-168.el9_8.i686 \
+	AppStream/r/ruby-default-gems-3.0.7-168.el9_8.noarch \
+	AppStream/r/rubygems-3.2.33-168.el9_8.noarch \
+	AppStream/r/rubygem-bigdecimal-3.0.0-168.el9_8.x86_64 \
+	AppStream/r/rubygem-bundler-2.2.33-168.el9_8.noarch \
+	AppStream/r/rubygem-io-console-0.5.7-168.el9_8.x86_64 \
+	AppStream/r/rubygem-json-2.5.1-168.el9_8.x86_64 \
+	AppStream/r/rubygem-psych-3.3.2-168.el9_8.x86_64 \
+	AppStream/r/rubygem-rdoc-6.3.4.1-168.el9_8.noarch \
+	AppStream/r/rubygem-rexml-3.2.5-168.el9_8.noarch
 rocky_rpm_url = $(ROCKY_DL_HOST)/pub/rocky/9.8/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
 ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_ERRATA_RPMS),$(call rocky_rpm_url,$(p)))
 PINNED_DNF += dc350245c7781a0ac2ffce92e088a22c3741bf967ce7c551d0420cea9ae085eb pcre2-10.40-7.el9_8.x86_64.rpm
@@ -265,6 +293,32 @@ PINNED_DNF += dbc674d263c71d34a35fd4e87d384ff528183344901cbac977fd01118d4e5d84 p
 PINNED_DNF += 892b094be072d15dab5f2f29c16586730b918b5d3bf52d94d09e7341643febd0 pcre2-devel-10.40-7.el9_8.x86_64.rpm
 PINNED_DNF += 4bfe6fa6d1834f712db7343a26abc74919fb76db5820624ab741f43bc7db9988 librabbitmq-0.11.0-7.el9_8.1.x86_64.rpm
 PINNED_DNF += 9c8562e43c43ccc35cd614ab5f63342e4cbfa97f53a1d2d824d19d7db7cf8630 python3-tornado-6.5.10-1.el9_8.1.x86_64.rpm
+PINNED_DNF += afaf7567658d1c4dc70c682fe95b686a0986b0a85f3e2caa7a4bbf5eeeee5300 sqlite-3.34.1-11.el9_8.x86_64.rpm
+PINNED_DNF += 8a60c4a6c3b5931fe7a4151e507d716acc5482d8182d567f67b26c89e6ab6d48 sqlite-devel-3.34.1-11.el9_8.x86_64.rpm
+PINNED_DNF += 7150f09994a94181f9c6d3fce29abf922c20ae3d90683d2f0e535fa72ec04876 sqlite-libs-3.34.1-11.el9_8.x86_64.rpm
+PINNED_DNF += 4d6ddf6805b679f75b7182d986dbb71acea7e3cd4959e5604c5fede82e1b45ab sqlite-libs-3.34.1-11.el9_8.i686.rpm
+PINNED_DNF += 3f5dec4cb901f21e0cd20bdca2a7a30cf2cc1973faa79896c19676dcb75e563b libevent-2.1.13-1.el9_8.x86_64.rpm
+PINNED_DNF += 47ecef51db73418e387d06247eb44e440f62d65e193673f3d2712d73bc569fa4 gnupg2-2.3.3-5.el9_7.x86_64.rpm
+PINNED_DNF += fa56a95f91886936b60bbf3264f2374ffe991efa16963c63eb6be949ee5c552f protobuf-3.14.0-17.el9_7.x86_64.rpm
+PINNED_DNF += d5f5a321ef0334332542a8c527eef85a7a2cbe382c8a7a4f131142e0d4cf3ff4 protobuf-compiler-3.14.0-17.el9_7.x86_64.rpm
+PINNED_DNF += 6390cb4e53898aa27737bd0bb6a100cd8d3526bc77b074a8faa9f31b9bff2477 python3-protobuf-3.14.0-17.el9_7.noarch.rpm
+PINNED_DNF += 25d9b56cfee5643e1057c014cf6e7182647b84656821af837ad99c8f87c20ae0 python3-urllib3-1.26.5-8.el9_8.noarch.rpm
+PINNED_DNF += 30dcacac3537f4f6bfb31d1986c7dbe54e15e255fadc2f08e26d0b1cfffec98c python3-lxml-4.6.5-3.el9_8.1.x86_64.rpm
+PINNED_DNF += 9782b5ad185103c56035eff353065f3e77019567f268ec15073532c874c27726 libreswan-4.15-10.el9_8.x86_64.rpm
+PINNED_DNF += 5b22820c933fddbee9d2a64fb3122c2dcd7055c5c12c9ace0a4cc1a8a3eab66a ruby-3.0.7-168.el9_8.x86_64.rpm
+PINNED_DNF += 7553b1199368a94ab48ab2dd5ce5767e71e1ce9e711035bc9379e497a7911322 ruby-3.0.7-168.el9_8.i686.rpm
+PINNED_DNF += aab2a81b617f966d53a2f5053afae97abb486c36b73e00f933b860ca4bd133dc ruby-devel-3.0.7-168.el9_8.x86_64.rpm
+PINNED_DNF += 9855eb9987baff924d46ac842791cf45c8880db2d6ae20c4a93956ed5272db53 ruby-libs-3.0.7-168.el9_8.x86_64.rpm
+PINNED_DNF += c37eb7e1734cee80ce5bc46eee43c13010b4b49b370d2dcca1527729fc569bd5 ruby-libs-3.0.7-168.el9_8.i686.rpm
+PINNED_DNF += 6b25417e9360b96812b73e8a589aba626f05961ffad2068668cbb8ad14a76293 ruby-default-gems-3.0.7-168.el9_8.noarch.rpm
+PINNED_DNF += f067f26d8a331653367d074a5bbcf876a0c4d9c4f03074c19a5afa50292025b4 rubygems-3.2.33-168.el9_8.noarch.rpm
+PINNED_DNF += e5e84c2b4df9f7ed09526e93592fcedcdb13cba4d25d653c069076e6b0b4044d rubygem-bigdecimal-3.0.0-168.el9_8.x86_64.rpm
+PINNED_DNF += 03ae44cee6ddccb18da76dccccded08c605093b18919a4fd3e4d6ea5c9d3018e rubygem-bundler-2.2.33-168.el9_8.noarch.rpm
+PINNED_DNF += 41b62e4d96053fbc396d40bbb5184a1f7b09cd3c9601e4310edd671c0687ff0a rubygem-io-console-0.5.7-168.el9_8.x86_64.rpm
+PINNED_DNF += a2aed941d6bf4f12bb2779ed779036368735ca92d6de93d8a11c119b9c6ad7ca rubygem-json-2.5.1-168.el9_8.x86_64.rpm
+PINNED_DNF += 6a79fd9ac0824f84a0c8525374688480b513d45882bb9bb611b3de8222a99f74 rubygem-psych-3.3.2-168.el9_8.x86_64.rpm
+PINNED_DNF += 6592b5fe5e5f18261213c4257c15f7f553e18a797704c126ea5c40d947006f20 rubygem-rdoc-6.3.4.1-168.el9_8.noarch.rpm
+PINNED_DNF += e21ed4007fe4f3ac53a477b23f2d77c8670faa01a5d600a9bb77389fb094b438 rubygem-rexml-3.2.5-168.el9_8.noarch.rpm
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
