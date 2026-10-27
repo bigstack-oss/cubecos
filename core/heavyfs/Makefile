@@ -328,9 +328,13 @@ rootfs_install::
 # python3-xmlsec
 PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel python-xmlsec
 
-# ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm
+# The install below names ruby by its full version so that dnf takes the base 3.0 build:
+# ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm.
+# It is not in LOCKED_DNF. Rocky's 3.0.7-168.el9_8 replaces it (ROCKY_ERRATA_RPMS), and a lock
+# makes installdnf's duplicate pass keep this copy and delete Rocky's, leaving ruby at el9 beside
+# ruby-libs and the gems at el9_8. installdnf matches a lock as a substring of the rpm's name, so
+# a lock on ruby-3.0.7-168.el9_8 would also match ruby-3.0.7-168.el9 and do the same.
 RUBY := ruby-3.0.7-168.el9
-LOCKED_DNF += $(RUBY)
 
 # python3-numpy-1:1.23.5-1.el9.x86_64 from @commandline and python3-numpy-1:1.20.1-5.el9.x86_64 from appstream
 # PYTHON3-NUMPY := python3-numpy-1:1.20.1-5.el9
