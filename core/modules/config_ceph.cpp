@@ -2445,6 +2445,9 @@ CONFIG_MIGRATE(ceph, "/var/lib/ceph");
 CONFIG_MIGRATE(ceph, MAKRER_POOL);
 CONFIG_MIGRATE(ceph, MAKRER_CEPHFS);
 CONFIG_MIGRATE(ceph, MAKRER_CLIENT);
+// else SetupISCSI runs again on the new partition and resets rbd's size to its
+// deploy-time default, overwriting what set_ready or the operator chose
+CONFIG_MIGRATE(ceph, MAKRER_ISCSI);
 CONFIG_MIGRATE(ceph, ADMIN_KEYRING);
 // MAKRER_CLIENT (migrated above) makes InitCephClient skip client setup on the
 // new partition, so the cephfs mount secretfile derived from ADMIN_KEYRING must
