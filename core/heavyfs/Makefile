@@ -230,10 +230,15 @@ $(foreach p,$(QEMU_PKGS),$(eval ROOTFS_DNF_DL_FROM += $(QEMU_URL)/$(p)-$(QEMU_NV
 # and installdnf's duplicate pass keeps the higher version, so Stream's own build takes over the
 # day one sorts above it. No Rocky key goes into the image, since a node has no other reason to trust
 # it: each Rocky download is pinned by its sha256 instead, taken from a copy that verified against
-# Rocky 9's release key (21CB256AE16FC54C6E652949702D426D350D275D). The path moves to
-# vault/rocky/9.8 once Rocky 9.9 ships, which fails this download loudly rather than quietly.
+# Rocky 9's release key (21CB256AE16FC54C6E652949702D426D350D275D).
+#
+# ROCKY_PATH is where every Rocky download in this file comes from. Rocky keeps only its current
+# minor release under pub/, so once Rocky 9.9 ships these downloads fail loudly rather than quietly.
+# 9.8's tree then moves to vault/rocky/9.8, with the same files and so the same pins: pointing
+# ROCKY_PATH there is the one-line fix, until the entries are taken from 9.9 or Stream catches up.
+ROCKY_PATH := pub/rocky/9.8
 RSYNC_NVR := 3.2.7-1.el9_8
-ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/pub/rocky/9.8/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
+ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/$(ROCKY_PATH)/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
 PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 rsync-$(RSYNC_NVR).x86_64.rpm
 
 # pcre2, librabbitmq, python3-tornado, sqlite, libevent, gnupg2, protobuf, python3-urllib3,
@@ -284,7 +289,7 @@ ROCKY_ERRATA_RPMS := \
 	AppStream/r/rubygem-psych-3.3.2-168.el9_8.x86_64 \
 	AppStream/r/rubygem-rdoc-6.3.4.1-168.el9_8.noarch \
 	AppStream/r/rubygem-rexml-3.2.5-168.el9_8.noarch
-rocky_rpm_url = $(ROCKY_DL_HOST)/pub/rocky/9.8/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
+rocky_rpm_url = $(ROCKY_DL_HOST)/$(ROCKY_PATH)/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
 ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_ERRATA_RPMS),$(call rocky_rpm_url,$(p)))
 PINNED_DNF += dc350245c7781a0ac2ffce92e088a22c3741bf967ce7c551d0420cea9ae085eb pcre2-10.40-7.el9_8.x86_64.rpm
 PINNED_DNF += aaff0127ff9456106ca5b4139f93881e75c16502499d378021fba649730ee174 pcre2-syntax-10.40-7.el9_8.noarch.rpm
