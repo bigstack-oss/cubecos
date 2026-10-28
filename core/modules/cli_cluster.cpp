@@ -1103,6 +1103,11 @@ ClusterRollMain(const char* kind, int argc, const char** argv)
         }
     }
 
+    // An upgrade's preconditions, before the plan and the confirmation, for the same reason;
+    // power_roll_start checks them again. power_roll_precheck names what failed.
+    if (upgrade && HexSystemF(0, HEX_SDK " power_roll_precheck") != 0)
+        return CLI_SUCCESS;
+
     // Always dryrun first: show the operator the real plan (which VMs migrate vs.
     // get suspended+restored, in a highlighted section) so confirming is informed
     // consent for that interruption. The roll then runs autonomously.

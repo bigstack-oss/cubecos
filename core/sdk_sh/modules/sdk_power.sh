@@ -660,6 +660,33 @@ power_roll_check_hosts()
     return 1
 }
 
+# Preconditions a rolling upgrade must meet before it touches any node: refuse, naming
+# each that fails. The CLI runs this before the plan and the confirmation, and
+# power_roll_start again before it claims the job.
+# A roll runs the installed release's sdk, so this guards only rolls that start from a
+# release carrying it. A 3.1.20 cluster rolled up from 3.1.10 can still hold disabled
+# flags; enable them by hand (rabbitmqctl enable_feature_flag all) before rolling to 3.2.0.
+power_roll_precheck()
+{
+    local h off rc=0
+    # A broker of the next RabbitMQ minor will not start while a flag the running one left
+    # disabled is required, so the roll would stop at its first node (#2164).
+    for h in $(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname') ; do
+        if ! off=$(remote_run "$h" "$HEX_SDK os_rabbitmq_flags_disabled" </dev/null) ; then
+            echo "precheck FAILED: cannot read the rabbitmq feature flags on $h" >&2
+            rc=1
+        elif [ -n "$off" ] ; then
+            echo "precheck FAILED: rabbitmq feature flags disabled on $h: $off" >&2
+            rc=1
+        fi
+    done
+    [ $rc -eq 0 ] && return 0
+    echo "Enable them with \"hex_config rabbitmq_feature_flags\" on a control node, then retry." >&2
+    echo "Upgrade aborted; no node was touched." >&2
+    log_error "rolling_upgrade: precheck failed: rabbitmq feature flags not all enabled"
+    return 1
+}
+
 power_roll_active()
 {
     # A node mid-roll-recovery hasn't mounted cephfs yet, so the shared job.json
@@ -746,6 +773,7 @@ power_roll_start()
     if [ "$kind" = upgrade ] ; then
         _version=$(_power_roll_resolve_pkg "$1") || return 1
         set --                                   # targets are all nodes for an upgrade
+        power_roll_precheck || return 1
     fi
 
     mkdir -p $ROLLING_DIR
