@@ -40,6 +40,9 @@ static bool s_bCubeModified = false;
 static bool s_bGuestPassChanged = false;
 static bool s_bOpenstackPassChanged = false;
 
+// the broker refused to start over a feature flag its data has disabled; fails the commit
+static bool s_bFlagRefused = false;
+
 static CubeRole_e s_eCubeRole;
 
 // external global variables
@@ -261,6 +264,17 @@ EnableFeatureFlags(const bool ha, const std::string& hostname)
     return true;
 }
 
+// A broker of a newer minor will not start while a flag the old one left disabled is
+// required. That is a precondition the old release had to meet, not corrupt data:
+// wiping mnesia cannot repair it, and on the master the HA setup that follows a wipe
+// forgets every peer and splits the cluster (#2164). The unit's journal says which.
+static bool
+FeatureFlagRefused(time_t since)
+{
+    return HexSystemF(0, "journalctl -u %s --since @%ld -o cat 2>/dev/null | "
+                         "grep -q disabled_required_feature_flag", NAME, (long)since) == 0;
+}
+
 static bool
 CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, const std::string& ctrlHosts)
 {
@@ -275,7 +289,16 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
         HexUtilSystemF(0, 0, HEX_SDK " os_rabbitmq_cold_reset_peers");
     }
 
+    time_t started = time(NULL);
     if (!SystemdCommitService(enabled, NAME, true)) {
+        if (FeatureFlagRefused(started)) {
+            HexLogError("%s refused to start: a feature flag it requires is disabled in its data "
+                        "(journalctl -u %s names it). Keeping mnesia; enable the flags on the "
+                        "previous release before upgrading this node", NAME, NAME);
+            s_bFlagRefused = true;
+            return false;
+        }
+
         HexLogInfo("force %s bootstrap - removing data (CAUTION)", NAME);
         HexSystemF(0, "rm -rf /var/lib/rabbitmq/mnesia/*");
         // wiped mnesia has no cluster membership: redo the HA setup below
@@ -468,6 +491,9 @@ Commit(bool modified, int dryLevel)
 
     WriteConfig(myip);
     CommitRabbitMQ(enabled, s_ha, s_hostname, s_ctrlHosts);
+    // stop the run rather than leave the AMQP clients to commit against no broker
+    if (s_bFlagRefused)
+        return false;
 
     if (s_bGuestPassChanged | s_bOpenstackPassChanged) {
         // FIXME: call change_password right after server start
@@ -503,6 +529,8 @@ RestartMain(int argc, char* argv[])
     bool enabled = IsControl(s_eCubeRole) && s_enabled.newValue();
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass.newValue(), s_seed.newValue());
     CommitRabbitMQ(enabled, s_ha, s_hostname.newValue(), s_ctrlHosts.newValue());
+    if (s_bFlagRefused)
+        return EXIT_FAILURE;
     SetupCheck(mqPass, s_hostname);
 
     return EXIT_SUCCESS;
