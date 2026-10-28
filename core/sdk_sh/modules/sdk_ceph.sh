@@ -88,7 +88,7 @@ ceph_get_ids_by_dev()
     # local ids=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.location[].dev == \"${dev#/dev/}\").daemons[]" | sed "s/osd.//g" | sort -u)
     # raw-list only this device and its partitions; a full scan hangs on FC/nbd paths
     local ids= p
-    if $HEX_SDK storage_is_das "$dev" || { $HEX_SDK storage_is_mpath "$dev" && $HEX_SDK storage_are_mpath_devices_allowed_for_ceph ; } ; then
+    if $HEX_SDK storage_is_das "$dev" ; then
         ids=$(for p in "$dev" $(lsblk -pnlo NAME "$dev" 2>/dev/null | tail -n +2) ; do
                   ceph-volume raw list "$p" --format json 2>/dev/null
               done | jq -s -r "add // {} | .[] | .osd_id" | sort -u | while read -r osdid ; do $CEPH osd ls | grep "^${osdid}$" ; done)
