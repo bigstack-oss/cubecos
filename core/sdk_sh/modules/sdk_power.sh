@@ -1346,12 +1346,18 @@ power_roll_watchdog()
     local deadline=$(jq -r '.deadline // 0' $ROLLING_JOB)
     local hb=$(jq -r '.heartbeat // 0' $ROLLING_JOB)
     local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB)
-    local phase=""
-    [ -n "$inflight" ] && phase=$(jq -r --arg h "$inflight" '.nodes[]|select(.hostname==$h)|.status // ""' $ROLLING_JOB)
+    local phase="" started=0
+    # the phase is the latest phase_ts entry: .status stays "rebooting" through
+    # the boot, whose "bootstrapping" only the node itself stamps (cubecos#2165)
+    [ -n "$inflight" ] && phase=$(jq -r --arg h "$inflight" '.nodes[]|select(.hostname==$h)|(((.phase_ts // {}) | to_entries | max_by(.value) | .key) // .status // "")' $ROLLING_JOB)
+    [ -n "$inflight" ] && started=$(jq -r --arg h "$inflight" '.nodes[]|select(.hostname==$h)|.started // 0' $ROLLING_JOB)
 
     if [ "$deadline" -gt 0 ] && [ "$now" -gt "$deadline" ] ; then
+        # the budget the kick gave it, scaled by its VMs; ROLLING_NODE_TIMEOUT is only the floor
+        local budget=${ROLLING_NODE_TIMEOUT:-2700}
+        [ "${started:-0}" -gt 0 ] && budget=$(( deadline - started ))
         log_warning "roll_watchdog: $inflight over deadline by $(( now - deadline ))s (phase: ${phase:-unknown})"
-        _power_roll_pause "watchdog: $inflight exceeded its ${ROLLING_NODE_TIMEOUT:-2700}s node deadline (phase: ${phase:-unknown})"
+        _power_roll_pause "watchdog: $inflight exceeded its ${budget}s node deadline (phase: ${phase:-unknown})"
         [ -n "$inflight" ] && Quiet -n $HEX_SDK power_vm_reconcile_error_state "$inflight"
         return 0
     fi
