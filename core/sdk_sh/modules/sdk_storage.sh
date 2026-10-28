@@ -94,6 +94,18 @@ storage_is_das()
     return 0
 }
 
+storage_list_das_disks()
+{
+    # list the DAS disks, one per line; storage_is_das runs in this process, since
+    # a hex_sdk call per disk takes seconds on a node with dozens of FC paths
+    local device=""
+    for device in $(/usr/bin/lsblk -dpno NAME,TYPE 2>/dev/null | awk '$2 == "disk" { print $1 }') ; do
+        if storage_is_das "$device" ; then
+            echo "$device"
+        fi
+    done
+}
+
 storage_update_partition_label_links()
 {
     # update partition label links based on partlabel

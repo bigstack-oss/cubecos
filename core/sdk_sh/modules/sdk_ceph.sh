@@ -1086,10 +1086,23 @@ ceph_osd_list_disk()
     echo "$all_devs" | tr "\n" " " | sed -e "s/^ //" -e "s/ $//"
 }
 
+# partitions of the DAS disks, one per line: the only place raw OSD meta and data
+# partitions are made (partitionPreparedDisks). A probe of every block device
+# opens FC/iSCSI/mpath LUNs too, and a read there can block for good (cubecos#2165).
+_ceph_das_partitions()
+{
+    local d
+    for d in $($HEX_SDK storage_list_das_disks) ; do
+        lsblk -pnlo NAME,TYPE "$d" 2>/dev/null | awk '$2 == "part" { print $1 }'
+    done
+}
+
 # list osd meta partitions (umount)
 ceph_osd_list_meta_partitions()
 {
-    local metaparts=$(blkid | grep -e 'PARTLABEL=\"cube_meta' | sort | cut -d":" -f1)
+    local parts=$(_ceph_das_partitions)
+    [ -n "$parts" ] || return 0
+    local metaparts=$(blkid $parts | grep -e 'PARTLABEL=\"cube_meta' | sort | cut -d":" -f1)
 
     echo -n $metaparts
 }
@@ -3298,9 +3311,22 @@ ceph_osd_datapart_resolve()
     local uuid=$1
     [ -n "$uuid" ] || return 1
 
-    # blkid reads the GPT off the disk, so it resolves without the udev symlink
-    local dev=$(blkid -o device --match-token PARTUUID=$uuid 2>/dev/null | head -1)
-    [ -n "$dev" ] || dev=$(ceph_osd_datapart_scan "$uuid")
+    # udev's link names the partition without probing any other device, and the
+    # GPT entry on disk confirms it
+    local dev=$(readlink -e /dev/disk/by-partuuid/$uuid 2>/dev/null)
+    if [ -n "$dev" ] && [ "$(ceph_osd_partuuid_of $dev)" = "$uuid" ] ; then
+        echo -n "$dev"
+        return 0
+    fi
+
+    # otherwise probe the DAS partitions, where raw OSD data lives, and only those
+    local parts=$(_ceph_das_partitions)
+    dev=
+    if [ -n "$parts" ] ; then
+        # blkid reads the GPT off the disk, so it resolves without the udev symlink
+        dev=$(blkid -o device --match-token PARTUUID=$uuid $parts 2>/dev/null | head -1)
+        [ -n "$dev" ] || dev=$(ceph_osd_datapart_scan "$uuid" "$parts")
+    fi
     [ -n "$dev" ] || dev=$(lvs --noheadings -o lv_path -S lv_uuid=$uuid 2>/dev/null | head -1 | tr -d ' ')
     [ -n "$dev" ] || return 1
 
@@ -3323,13 +3349,16 @@ ceph_osd_partuuid_of()
 # partition carrying GPT PARTUUID $1, among those udev has no PARTUUID for or
 # already names $1 (61-cube-ceph-partuuid.rules fills it in for an ambivalent
 # partition that blkid --match-token still misses, cubecos#2004); the on-disk
-# probe confirms each candidate
+# probe confirms each candidate. Only DAS partitions ($2 when the caller has
+# listed them) are candidates.
 ceph_osd_datapart_scan()
 {
     local uuid=$1
+    local parts=" $(echo ${2:-$(_ceph_das_partitions)}) "
     local dev
 
     for dev in $(lsblk -lnpo NAME,TYPE,PARTUUID 2>/dev/null | awk -v u="$uuid" '$2 == "part" && ($3 == "" || $3 == u) { print $1 }') ; do
+        [[ $parts == *" $dev "* ]] || continue
         if [ "$(ceph_osd_partuuid_of $dev)" = "$uuid" ] ; then
             echo -n "$dev"
             return 0
