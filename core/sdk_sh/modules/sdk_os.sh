@@ -3314,16 +3314,30 @@ os_mariadb_version_uniform()
 os_rabbitmq_version_uniform()
 {
     # fail-safe: every control node must be reachable AND matching;
-    # unreachable = unknown, any miss => not uniform
-    local hosts h v vers=
+    # unreachable = unknown, any miss => not uniform.
+    # Ask a silent node three times, 5 s apart, before calling it a miss: the commit
+    # that asks runs during the last control node's upgrade boot, when every control
+    # is busy and is_sshable gives a new ssh connection 2 s. One slow answer there
+    # left a whole roll's feature flags off (#2164).
+    local hosts h i v vers= seen=
     hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
     [ -n "$hosts" ] || return 1
     for h in $hosts ; do
-        v=$(remote_run "$h" "rabbitmqctl version 2>/dev/null" | cut -d. -f1,2)
-        [ -n "$v" ] || return 1
+        for i in 1 2 3 ; do
+            v=$(remote_run "$h" "rabbitmqctl version 2>/dev/null" | cut -d. -f1,2)
+            [ -n "$v" ] && break
+            [ $i -eq 3 ] || sleep 5
+        done
+        if [ -z "$v" ] ; then
+            log_info "rabbitmq version: $h did not answer, so not uniform"
+            return 1
+        fi
         vers="$vers $v"
+        seen="$seen $h=$v"
     done
-    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
+    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ] && return 0
+    log_info "rabbitmq version: not uniform:$seen"
+    return 1
 }
 
 # Derive the Cyborg device profile name for a GPU model string.
