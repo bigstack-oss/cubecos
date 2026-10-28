@@ -72,6 +72,7 @@ SRV="rabbitmq"
 eval "ERR_DESC_$SRV[1]='daemon down'"
 eval "ERR_DESC_$SRV[2]='not all online'"
 eval "ERR_DESC_$SRV[3]='partitions exist'"
+eval "ERR_DESC_$SRV[4]='feature flags disabled'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="mysql"
