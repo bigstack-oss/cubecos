@@ -23,6 +23,8 @@ Insert content here.
 - [ ] Requirement 3
 
 ## Notes (Optional)
+> UI change? Add a `ui:<tier>` label: critical, medium, low, or none ([UI tiers](https://github.com/bigstack-oss/cube-cos-ui/blob/develop/.github/REVIEW_LEVELS.md#2-ui-tier)).
+
 Insert content here.
 
 ## Output artifacts (Definition of Done)
