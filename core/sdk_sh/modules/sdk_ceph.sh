@@ -1094,21 +1094,6 @@ ceph_osd_list_meta_partitions()
     echo -n $metaparts
 }
 
-# list osd-typed partitions
-# (i.e.: typecode: 4fbd7e29-9d25-41b8-afd0-062c0ceff05d)
-ceph_osd_list_partitions()
-{
-    local nvme_devs=$(blkid | grep -e 'PARTLABEL=\"cube_meta' | grep -oe '^/dev/nvme[0-9]\+n[0-9]\+p[0-9]\+' | sort | uniq)
-    [ -z "$nvme_devs" ] || nvme_devs=$(readlink -e $nvme_devs)
-    echo -n $nvme_devs
-    if [ -n "$nvme_devs" ] ; then
-        echo -n " "
-    fi
-    local scsi_devs=$(blkid | grep -e 'PARTLABEL=\"cube_meta' | grep -oe '^/dev/sd[a-z]\+[0-9]\+' | sort | uniq)
-    [ -z "$scsi_devs" ] || scsi_devs=$(readlink -e $scsi_devs)
-    echo -n $scsi_devs
-}
-
 # params:
 # $1: device name(e.g.: /dev/sdd)
 # $2: nums of meta partitions
