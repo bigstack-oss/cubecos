@@ -231,6 +231,36 @@ IsReady(int timeout, const std::string& hostname)
     return true;
 }
 
+// Enabling a feature flag is irreversible: a broker that does not know a newly
+// enabled flag can no longer run in the cluster. Under ha, enable only once every
+// control node runs one RabbitMQ version; os_rabbitmq_version_uniform is fail-safe,
+// reports "not uniform" when it cannot reach a control node, and logs which. Without
+// ha there is one broker and no peer a newly-enabled flag could strand, so skip the
+// guard rather than consult it, which on a single node would leave the flags off
+// forever. True only when the broker then reports none disabled: the next minor
+// refuses to start while one is (#2164).
+static bool
+EnableFeatureFlags(const bool ha, const std::string& hostname)
+{
+    if (ha && HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") != 0) {
+        HexLogInfo("%s: control nodes not on one version, feature flags not enabled", NAME);
+        return false;
+    }
+
+    HexUtilSystemF(0, 0, CONTROL_FMT "enable_feature_flag all", hostname.c_str());
+
+    std::string off = HexUtilPOpen(HEX_SDK " os_rabbitmq_flags_disabled %s 2>/dev/null || "
+                                   "echo '(broker did not answer)'", hostname.c_str());
+    off.erase(off.find_last_not_of(" \n") + 1);
+    if (!off.empty()) {
+        HexLogError("%s: feature flags still disabled: %s", NAME, off.c_str());
+        return false;
+    }
+
+    HexLogInfo("%s: feature flags enabled", NAME);
+    return true;
+}
+
 static bool
 CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, const std::string& ctrlHosts)
 {
@@ -292,16 +322,13 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
         }
     }
 
-    // feature-flag enable is irreversible: during an UPGRADE (migration marker)
-    // enable only once version-uniform; FTS enables via the cluster_ready trigger.
-    // Without ha there is one broker and no peer a newly-enabled flag could strand,
-    // so skip the guard rather than consult it: os_rabbitmq_version_uniform is
-    // fail-safe and reports "not uniform" when it cannot reach a control node,
-    // which on a single node would leave the flags off forever. `enabled` is
-    // already IsControl(role) && rabbitmq.enabled, so compute nodes never get here.
-    if (enabled && access(CUBE_MIGRATE, F_OK) == 0 &&
-        (!ha || HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0))
-        HexUtilSystemF(0, 0, CONTROL_FMT "enable_feature_flag all", hostname.c_str());
+    // During an UPGRADE (migration marker) only the last control node to commit can
+    // find the versions uniform, and power_roll_advance runs rabbitmq_feature_flags
+    // once the roll is done in case it could not; FTS enables via the cluster_ready
+    // trigger. `enabled` is already IsControl(role) && rabbitmq.enabled, so compute
+    // nodes never get here.
+    if (enabled && access(CUBE_MIGRATE, F_OK) == 0)
+        EnableFeatureFlags(ha, hostname);
 
     return true;
 }
@@ -528,12 +555,34 @@ ClusterReadyMain(int argc, char **argv)
     // single broker has no peer to strand, so it enables unconditionally. This is
     // the path a 1-control + n-compute deployment takes, and the only one that
     // reaches the flags the management-agent plugin provides.
-    if (IsControl(s_eCubeRole) &&
-        (!s_ha || HexSystemF(0, HEX_SDK " os_rabbitmq_version_uniform") == 0))
-        HexUtilSystemF(0, 0, CONTROL_FMT "enable_feature_flag all",
-                       s_hostname.newValue().c_str());
+    if (IsControl(s_eCubeRole))
+        EnableFeatureFlags(s_ha, s_hostname.newValue());
 
     return EXIT_SUCCESS;
+}
+
+static void
+FeatureFlagsUsage(void)
+{
+    fprintf(stderr, "Usage: %s rabbitmq_feature_flags\n", HexLogProgramName());
+}
+
+// Enable every feature flag once the control nodes run one version. power_roll_advance
+// calls this on the master once the roll is complete: the commit asks the peers during
+// the last node's upgrade boot, when they can be too busy to answer, and nothing asked
+// again before the next minor refused to start (#2164). Fails while a flag stays off.
+static int
+FeatureFlagsMain(int argc, char* argv[])
+{
+    if (argc != 1) {
+        FeatureFlagsUsage();
+        return EXIT_FAILURE;
+    }
+
+    if (!IsControl(s_eCubeRole) || !s_enabled.newValue())
+        return EXIT_SUCCESS;
+
+    return EnableFeatureFlags(s_ha, s_hostname.newValue()) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static void
@@ -571,6 +620,7 @@ TicktimeMain(int argc, char* argv[])
 
 CONFIG_COMMAND_WITH_SETTINGS(rabbitmq_guest_password, GPassMain, GPassUsage);
 CONFIG_COMMAND_WITH_SETTINGS(rabbitmq_ticktime, TicktimeMain, TicktimeUsage);
+CONFIG_COMMAND_WITH_SETTINGS(rabbitmq_feature_flags, FeatureFlagsMain, FeatureFlagsUsage);
 CONFIG_COMMAND(status_rabbitmq, StatusMain, StatusUsage);
 CONFIG_COMMAND_WITH_SETTINGS(restart_rabbitmq, RestartMain, RestartUsage);
 

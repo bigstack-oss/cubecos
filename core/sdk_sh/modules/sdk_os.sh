@@ -3340,6 +3340,17 @@ os_rabbitmq_version_uniform()
     return 1
 }
 
+# Print, on one line, the feature flags the local broker reports disabled, leaving out
+# experimental ones (enable_feature_flag all leaves those alone). The next RabbitMQ minor
+# makes most of them required and will not start while one is off (#2164). Fails when
+# the broker does not answer, so an empty line never stands for "could not tell".
+# A flag some cluster node does not know reads "unavailable", so mid-roll ones are not listed.
+os_rabbitmq_flags_disabled()
+{
+    env LANG=en_US.utf8 HOSTNAME=${1:-$HOSTNAME} rabbitmqctl -q list_feature_flags name state stability --formatter json 2>/dev/null |
+        jq -er '[.[] | select(.state == "disabled" and .stability != "experimental") | .name] | join(" ")'
+}
+
 # Derive the Cyborg device profile name for a GPU model string.
 #
 # Accepts either of the two model strings the product has, because the callers
