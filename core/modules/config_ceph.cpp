@@ -2462,6 +2462,9 @@ CONFIG_OBSERVES(ceph, keystone, ParseKeystone, NotifyKeystone);
 CONFIG_MIGRATE(ceph, MigratePrepare);
 CONFIG_MIGRATE(ceph, "/etc/cube/cos/ceph");
 CONFIG_MIGRATE(ceph, "/var/lib/ceph");
+// LVM's devices file (ceph_lvm_devices_sync): without it the new partition's first
+// boot scans every FC and mpath LUN until the ceph commit writes it again
+CONFIG_MIGRATE(ceph, "/etc/lvm/devices/system.devices");
 CONFIG_MIGRATE(ceph, MAKRER_POOL);
 CONFIG_MIGRATE(ceph, MAKRER_CEPHFS);
 CONFIG_MIGRATE(ceph, MAKRER_CLIENT);

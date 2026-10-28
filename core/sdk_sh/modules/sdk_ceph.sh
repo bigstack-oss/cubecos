@@ -1634,8 +1634,33 @@ ceph_osd_host_remove()
     Quiet -n $CEPH osd crush rm $host
 }
 
+# Keep LVM to the DAS disks and their partitions, the only devices this node's
+# PVs are on. use_devicesfile is on, but without its devices file
+# (LVM_DEVICES_FILE) LVM reads every block device, so each lvs ceph-volume runs,
+# and the scans below, opened every FC and mpath LUN, where a read can block for
+# good (cubecos#2165). LVM adds the PVs it creates itself; this only ever adds,
+# since a PV missing from the file leaves its OSD down.
+ceph_lvm_devices_sync()
+{
+    local devs="" d pvs pv
+    for d in $($HEX_SDK storage_list_das_disks) ; do
+        devs+=" $(lsblk -pnlo NAME,TYPE "$d" 2>/dev/null | awk '$2 == "disk" || $2 == "part" { print $1 }')"
+    done
+    devs=$(echo $devs)
+    if [ -n "$devs" ] ; then
+        pvs=$(_ceph_probe pvs --noheadings -o pv_name --devices ${devs// /,})
+        [ $? -ne 124 ] || return 1
+        for pv in $pvs ; do
+            _ceph_probe lvmdevices -y --adddev "$pv" >/dev/null
+        done
+    fi
+    # with no PV at all, an empty file still keeps LVM off every other device
+    [ -e $LVM_DEVICES_FILE ] || : > $LVM_DEVICES_FILE
+}
+
 ceph_osd_activate_lvms()
 {
+    ceph_lvm_devices_sync
     _hex_function_ret /usr/sbin/pvscan
     _hex_function_ret /usr/sbin/vgscan
     _hex_function_ret /usr/sbin/vgchange -ay
