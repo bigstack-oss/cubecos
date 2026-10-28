@@ -1088,12 +1088,33 @@ _ceph_das_partitions()
     done
 }
 
+# run a device probe for at most $SRVTO seconds; 124 means it hung, and the
+# probe is logged so a stall names its device (cubecos#2165). A probe asleep in
+# the block layer can outlive even timeout's KILL, so it writes to a file: given
+# the caller's pipe, it would hold the pipe open and the caller would wait on it.
+_ceph_probe()
+{
+    local out=$(mktemp) rc
+    timeout -k 5 $SRVTO "$@" >"$out" 2>/dev/null
+    rc=$?
+    if [ $rc -eq 124 ] || [ $rc -eq 137 ] ; then
+        log_error "$* did not return in ${SRVTO}s"
+        rc=124
+    else
+        cat "$out"
+    fi
+    rm -f "$out"
+    return $rc
+}
+
 # list osd meta partitions (umount)
 ceph_osd_list_meta_partitions()
 {
-    local parts=$(_ceph_das_partitions)
+    local parts=$(_ceph_das_partitions) out
     [ -n "$parts" ] || return 0
-    local metaparts=$(blkid $parts | grep -e 'PARTLABEL=\"cube_meta' | sort | cut -d":" -f1)
+    out=$(_ceph_probe blkid $parts)
+    [ $? -ne 124 ] || return 1
+    local metaparts=$(echo "$out" | grep -e 'PARTLABEL=\"cube_meta' | sort | cut -d":" -f1)
 
     echo -n $metaparts
 }
@@ -3147,8 +3168,9 @@ ceph_osd_create_map()
             while read -r dev id metauuid datauuid ; do
                 [ -n "${id:-}" ] || continue
                 awk -v i="$id" '$2==i{f=1} END{exit !f}' ${osdmap_new}.sorted && continue
-                if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 ; then
-                    log_warning "ceph_osd_create_map: osd $id missing from this scan but $datauuid still resolves to a device; keeping its entry"
+                # a hung probe (2) is no proof the device is gone either (cubecos#2165)
+                if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 || [ $? -eq 2 ] ; then
+                    log_warning "ceph_osd_create_map: osd $id missing from this scan but $datauuid still resolves to a device (or its probe hung); keeping its entry"
                     echo "$dev $id $metauuid $datauuid" >> ${osdmap_new}.sorted
                 else
                     log_warning "ceph_osd_create_map: osd $id removed from $CEPH_OSD_MAP"
@@ -3171,8 +3193,8 @@ ceph_osd_create_map()
         # the link dangles; only remove it when the data device is really gone,
         # not when udev merely lost the symlink (cubecos#1284)
         datauuid=$(basename "$(readlink ${osddir}/block 2>/dev/null)")
-        if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 ; then
-            log_warning "ceph_osd_create_map: ${osddir}/block dangles but $datauuid still resolves to a device; keeping it"
+        if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 || [ $? -eq 2 ] ; then
+            log_warning "ceph_osd_create_map: ${osddir}/block dangles but $datauuid still resolves to a device (or its probe hung); keeping it"
             continue
         fi
         rm -f ${osddir}/block
@@ -3180,23 +3202,31 @@ ceph_osd_create_map()
     done
 }
 
-# true if data uuid $1 carries a bluestore label (belonging to osd uuid $2 if given)
+# true if data uuid $1 carries a bluestore label (belonging to osd uuid $2 if
+# given); 2 when a probe hung, which is not proof there is no OSD
 ceph_osd_datapart_has_osd()
 {
     local osd_uuid=$2
-    local dev=$(ceph_osd_datapart_resolve "$1") || return 1
+    local dev rc
+    dev=$(ceph_osd_datapart_resolve "$1")
+    rc=$?
+    [ $rc -eq 0 ] || return $rc
     [ -n "$dev" ] || return 1
 
     local label
-    label=$(ceph-bluestore-tool show-label --dev "$dev" 2>/dev/null) || return 1
+    label=$(_ceph_probe ceph-bluestore-tool show-label --dev "$dev")
+    rc=$?
+    [ $rc -ne 124 ] || return 2
+    [ $rc -eq 0 ] || return 1
     [ -n "$osd_uuid" ] || return 0
     echo "$label" | jq -r '.[].osd_uuid' 2>/dev/null | grep -qx "$osd_uuid"
 }
 
 # resolve a dev_osd.map data uuid to its device without going through
 # /dev/disk: a GPT PARTUUID for raw OSDs, an LVM lv_uuid for encrypted
-# ones. Fails only when the device is genuinely absent, so callers can treat
-# failure as proof the OSD is gone.
+# ones. Returns 1 only when the device is genuinely absent, so callers can treat
+# that as proof the OSD is gone; 2 when a probe hung and it cannot tell
+# (cubecos#2165).
 ceph_osd_datapart_resolve()
 {
     local uuid=$1
@@ -3204,34 +3234,50 @@ ceph_osd_datapart_resolve()
 
     # udev's link names the partition without probing any other device, and the
     # GPT entry on disk confirms it
-    local dev=$(readlink -e /dev/disk/by-partuuid/$uuid 2>/dev/null)
-    if [ -n "$dev" ] && [ "$(ceph_osd_partuuid_of $dev)" = "$uuid" ] ; then
-        echo -n "$dev"
-        return 0
+    local dev=$(readlink -e /dev/disk/by-partuuid/$uuid 2>/dev/null) found
+    if [ -n "$dev" ] ; then
+        found=$(ceph_osd_partuuid_of $dev)
+        [ $? -ne 2 ] || return 2
+        [ "$found" != "$uuid" ] || { echo -n "$dev" ; return 0 ; }
     fi
 
     # otherwise probe the DAS partitions, where raw OSD data lives, and only those
-    local parts=$(_ceph_das_partitions)
+    local parts=$(_ceph_das_partitions) hung=0
     dev=
     if [ -n "$parts" ] ; then
         # blkid reads the GPT off the disk, so it resolves without the udev symlink
-        dev=$(blkid -o device --match-token PARTUUID=$uuid $parts 2>/dev/null | head -1)
-        [ -n "$dev" ] || dev=$(ceph_osd_datapart_scan "$uuid" "$parts")
+        dev=$(_ceph_probe blkid -o device --match-token PARTUUID=$uuid $parts)
+        [ $? -ne 124 ] || hung=1
+        dev=${dev%%$'\n'*}
+        if [ -z "$dev" ] ; then
+            dev=$(ceph_osd_datapart_scan "$uuid" "$parts")
+            [ $? -ne 2 ] || hung=1
+        fi
     fi
-    [ -n "$dev" ] || dev=$(lvs --noheadings -o lv_path -S lv_uuid=$uuid 2>/dev/null | head -1 | tr -d ' ')
-    [ -n "$dev" ] || return 1
+    if [ -z "$dev" ] ; then
+        dev=$(_ceph_probe lvs --noheadings -o lv_path -S lv_uuid=$uuid)
+        [ $? -ne 124 ] || hung=1
+        dev=$(echo "$dev" | head -1 | tr -d ' ')
+    fi
+    if [ -z "$dev" ] ; then
+        [ $hung -eq 0 ] || return 2
+        return 1
+    fi
 
     echo -n "$dev"
 }
 
 # GPT PARTUUID of partition $1, probing only for ceph_bluestore so libblkid
-# cannot return "ambivalent" on raw BlueStore data (cubecos#1284)
+# cannot return "ambivalent" on raw BlueStore data (cubecos#1284); 2 when the
+# probe hung
 ceph_osd_partuuid_of()
 {
     local dev=$1
     [ -n "$dev" ] && [ -e "$dev" ] || return 1
 
-    local uuid=$(blkid -p -n ceph_bluestore -o value -s PART_ENTRY_UUID "$dev" 2>/dev/null)
+    local uuid
+    uuid=$(_ceph_probe blkid -p -n ceph_bluestore -o value -s PART_ENTRY_UUID "$dev")
+    [ $? -ne 124 ] || return 2
     [ -n "$uuid" ] || return 1
 
     echo -n "$uuid"
@@ -3241,21 +3287,24 @@ ceph_osd_partuuid_of()
 # already names $1 (61-cube-ceph-partuuid.rules fills it in for an ambivalent
 # partition that blkid --match-token still misses, cubecos#2004); the on-disk
 # probe confirms each candidate. Only DAS partitions ($2 when the caller has
-# listed them) are candidates.
+# listed them) are candidates; 2 when a probe hung and none matched.
 ceph_osd_datapart_scan()
 {
     local uuid=$1
     local parts=" $(echo ${2:-$(_ceph_das_partitions)}) "
-    local dev
+    local dev found hung=0
 
     for dev in $(lsblk -lnpo NAME,TYPE,PARTUUID 2>/dev/null | awk -v u="$uuid" '$2 == "part" && ($3 == "" || $3 == u) { print $1 }') ; do
         [[ $parts == *" $dev "* ]] || continue
-        if [ "$(ceph_osd_partuuid_of $dev)" = "$uuid" ] ; then
+        found=$(ceph_osd_partuuid_of $dev)
+        [ $? -ne 2 ] || hung=1
+        if [ "$found" = "$uuid" ] ; then
             echo -n "$dev"
             return 0
         fi
     done
 
+    [ $hung -eq 0 ] || return 2
     return 1
 }
 

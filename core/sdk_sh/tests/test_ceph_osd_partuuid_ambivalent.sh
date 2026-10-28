@@ -7,15 +7,15 @@
 # it while the GPT entry is still readable with a type-filtered probe
 # (cubecos#1284).
 #
-# Self-contained: extracts only the three functions and stubs blkid / lsblk /
-# lvs and the DAS partition list. Run:
+# Self-contained: extracts only the three functions and their bounded probe,
+# and stubs blkid / lsblk / lvs and the DAS partition list. Run:
 #   bash test_ceph_osd_partuuid_ambivalent.sh   (exit 0 = pass)
 #
 set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_ceph.sh"
 
-for f in ceph_osd_partuuid_of ceph_osd_datapart_scan ceph_osd_datapart_resolve ; do
+for f in _ceph_probe ceph_osd_partuuid_of ceph_osd_datapart_scan ceph_osd_datapart_resolve ; do
     fn="$(awk -v f="$f" '$0 == f"()"{p=1} p{print} p&&/^}/{exit}' "$SRC")"
     [ -n "$fn" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
     eval "$fn"
@@ -34,6 +34,9 @@ LV_UUID=abcdef01-2345-6789-abcd-ef0123456789
 AMB_UUID=4d4b3b22-02a3-4bad-9229-83217f1f8b21
 LIE_UUID=11111111-2222-3333-4444-555555555555
 CALLS=$T/calls
+SRVTO=60
+timeout() { [ "$1" = -k ] && shift 2; shift; "$@"; }
+log_error() { :; }
 # every partition here sits on a DAS disk
 _ceph_das_partitions() { printf '%s\n' $GOOD $BAD $DEAD $AMB $LIE; }
 
