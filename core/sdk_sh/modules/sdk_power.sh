@@ -1173,8 +1173,17 @@ power_roll_decision()
                 if _power_roll_node_on_target "$stuck" ; then
                     # already on target -- record done, don't re-drain+reboot it.
                     log_info "continue: $stuck already on target firmware -- marking done"
+                    # Its boot found the job paused, so power_roll_advance left it as it was: land
+                    # it here as that would have. Left behind, its kick marker makes the node
+                    # refuse every later roll ("already in progress") and boot as a roll node,
+                    # and its compute stays as the drain left it (#2164).
+                    _power_roll_node_settle "$stuck" "$(_power_roll_master)"
                     _power_roll_set_node_status "$stuck" done
                     _power_roll_set_node_num "$stuck" finished $(date +%s)
+                    Quiet -n $HEX_SDK power_vm_reconcile_error_state "$stuck"
+                    rm -f "${ROLLING_DIR:-/tmp}/.drained.${stuck}"
+                    local ip=$(jq -r --arg h "$stuck" '.nodes[]|select(.hostname==$h)|.ip // empty' $ROLLING_JOB)
+                    timeout 15 ssh -o ConnectTimeout=5 root@${ip:-$stuck} "rm -f $ROLLING_RECOVER_MARKER" </dev/null >/dev/null 2>&1
                 else
                     # unfinished: reset to pending so the resume re-kicks it first.
                     _power_roll_set_node_status "$stuck" pending
