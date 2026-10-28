@@ -3,7 +3,7 @@
 # Unit test for ceph_get_ids_by_dev in ../modules/sdk_ceph.sh and the virtual-
 # device rule in storage_is_das (../modules/sdk_storage.sh): ceph-volume raw
 # list runs only on the asked device and its partitions -- never every disk --
-# and never on nbd/loop devices or a non-allowed FC path. Fakes ceph-volume,
+# and never on nbd/loop devices, an FC path or an mpath device. Fakes ceph-volume,
 # lsblk and hex_sdk; needs no cluster.
 #   Run: bash test_ceph_get_ids_by_dev.sh
 #
@@ -17,7 +17,6 @@ fake_sdk() {
     case "$1" in
         storage_is_das) storage_is_das "$2" ;;
         storage_is_mpath) storage_is_mpath "$2" ;;
-        storage_are_mpath_devices_allowed_for_ceph) [ "$MPATH_OK" = 1 ] ;;
     esac
 }
 lsblk() {
@@ -48,8 +47,7 @@ check "das: only its partitions scanned" "$(grep 'raw list' $LOG | awk '{print $
 : > $LOG; out=$(ceph_get_ids_by_dev /dev/nbd1); check "nbd: no ids" "$out" ""; check "nbd: no raw list" $(raws) 0
 : > $LOG; out=$(ceph_get_ids_by_dev /dev/loop0); check "loop: no raw list" $(raws) 0
 : > $LOG; out=$(ceph_get_ids_by_dev /dev/sdbn); check "fc path: no raw list" $(raws) 0
-MPATH_OK=0; : > $LOG; ceph_get_ids_by_dev /dev/mapper/36000d31 >/dev/null; check "mpath not allowed: no raw list" $(raws) 0
-MPATH_OK=1; : > $LOG; ceph_get_ids_by_dev /dev/mapper/36000d31 >/dev/null; check "mpath allowed: scanned" $(raws) 1
+: > $LOG; out=$(ceph_get_ids_by_dev /dev/mapper/36000d31); check "mpath: no ids" "$out" ""; check "mpath: no raw list" $(raws) 0
 check "storage_is_das nbd" "$(storage_is_das /dev/nbd3 && echo das || echo not)" not
 check "storage_is_das sas disk" "$(storage_is_das /dev/sda && echo das || echo not)" das
 
