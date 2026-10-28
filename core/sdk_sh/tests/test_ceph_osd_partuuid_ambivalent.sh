@@ -8,7 +8,8 @@
 # (cubecos#1284).
 #
 # Self-contained: extracts only the three functions and stubs blkid / lsblk /
-# lvs. Run:  bash test_ceph_osd_partuuid_ambivalent.sh   (exit 0 = pass)
+# lvs and the DAS partition list. Run:
+#   bash test_ceph_osd_partuuid_ambivalent.sh   (exit 0 = pass)
 #
 set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,6 +34,8 @@ LV_UUID=abcdef01-2345-6789-abcd-ef0123456789
 AMB_UUID=4d4b3b22-02a3-4bad-9229-83217f1f8b21
 LIE_UUID=11111111-2222-3333-4444-555555555555
 CALLS=$T/calls
+# every partition here sits on a DAS disk
+_ceph_das_partitions() { printf '%s\n' $GOOD $BAD $DEAD $AMB $LIE; }
 
 # blkid stub: models the real behaviour on the sky142 incident node; a plain
 # `blkid -o value -s PARTUUID` is unexpected (it is what fails there)
@@ -44,7 +47,7 @@ blkid() {
         "-p -n ceph_bluestore -o value -s PART_ENTRY_UUID $DEAD") return 2 ;;
         "-p -n ceph_bluestore -o value -s PART_ENTRY_UUID $AMB")  echo $AMB_UUID ;;
         "-p -n ceph_bluestore -o value -s PART_ENTRY_UUID $LIE")  echo 99999999-0000-0000-0000-000000000000 ;;
-        "-o device --match-token PARTUUID=$GOOD_UUID") echo $GOOD ;;
+        "-o device --match-token PARTUUID=$GOOD_UUID "*) echo $GOOD ;;
         "-o device --match-token PARTUUID="*)          return 2 ;;      # cache never sees the bad one
         *) echo "unexpected blkid $*" >&2; return 99 ;;
     esac
