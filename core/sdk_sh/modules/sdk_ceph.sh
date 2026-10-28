@@ -1043,22 +1043,13 @@ ceph_osd_zap_disk()
 }
 
 # list osd-typed disks (mounted)
-# ceph-volume raw list, constrained to DAS (+ allowed mpath) disks.
+# ceph-volume raw list, constrained to DAS disks.
 #
-# ceph-volume raw list limited to DAS (+ allowed mpath) disks: an unfiltered scan
-# probes every block device and hangs on stray FC/iSCSI SAN LUNs.
+# ceph-volume raw list limited to DAS disks: an unfiltered scan probes every block
+# device and hangs on stray FC/iSCSI SAN LUNs. Raw OSDs are only made on DAS disks.
 ceph_volume_raw_list_das()
 {
-    local devs="" d t
-    while read -r d t ; do
-        [ -n "$d" ] || continue
-        case "$t" in
-            disk)
-                $HEX_SDK storage_is_das "$d" && devs+=" $d" ;;
-            mpath)
-                $HEX_SDK storage_is_mpath "$d" && $HEX_SDK storage_are_mpath_devices_allowed_for_ceph && devs+=" $d" ;;
-        esac
-    done < <(lsblk -dpno NAME,TYPE 2>/dev/null)
+    local devs=$($HEX_SDK storage_list_das_disks) d dev
     local acc=$(mktemp)
     # OSD data lives on a partition and raw list of the whole disk returns {}, so
     # scan each disk's partitions too
