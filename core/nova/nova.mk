@@ -355,6 +355,19 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) systemctl disable openstack-nova-serialproxy
 	$(Q)chmod 0755 $(ROOTDIR)/usr/share/polkit-1/rules.d $(ROOTDIR)/etc/polkit-1/rules.d
 
+# nova-compute makes every libvirt call over one virtqemud connection, and a roll drains
+# max_concurrent_live_migrations (3, config_nova.cpp) at a time. Each migration holds a
+# request for its whole run and polls its progress with another, so libvirt's default of
+# 5 requests per connection runs out: virtqemud stops reading the connection, its
+# keepalive times out, and every migration on it fails at once, some after the guest has
+# already moved. Raise the cap, and the workers with it so nova keeps to half of them.
+rootfs_install::
+	$(Q)sed -i -e 's/^#\?max_workers = .*/max_workers = 40/' \
+		-e 's/^#\?max_client_requests = .*/max_client_requests = 20/' $(ROOTDIR)/etc/libvirt/virtqemud.conf
+	$(Q)grep -qx 'max_workers = 40' $(ROOTDIR)/etc/libvirt/virtqemud.conf && \
+		grep -qx 'max_client_requests = 20' $(ROOTDIR)/etc/libvirt/virtqemud.conf || \
+		{ echo "nova: virtqemud.conf no longer has max_workers or max_client_requests" >&2; exit 1; }
+
 rootfs_install::
 	$(Q)for ns in $$(find $(ROOTDIR)/usr/lib/systemd/system/*nova*.service) ; do sed -i /^Timeout*/d $$ns ; done
 
