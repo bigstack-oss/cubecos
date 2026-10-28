@@ -944,6 +944,13 @@ power_roll_advance()
         # rabbitmq_ticktime in config_rabbitmq.cpp.
         # Same: only nodes still holding the 60 s compat marker.
         cmd -c "[ ! -e $ROLLING_TICKTIME_MARK ] || $HEX_CFG rabbitmq_ticktime" >/dev/null 2>&1
+        # Enable RabbitMQ's feature flags. Each control node's upgrade commit tries, but only
+        # the last one can find every broker on one version, and it asks while the others are
+        # busy; one slow answer left them off until the next minor refused to start (#2164).
+        # Flags are cluster-wide, so the master's broker does it for all. See
+        # rabbitmq_feature_flags in config_rabbitmq.cpp; it logs its own outcome there.
+        ( remote_run $master "$HEX_CFG rabbitmq_feature_flags" ) >/dev/null 2>&1 ||
+            log_error "rolling_$(_power_roll_kind): rabbitmq feature flags not all enabled, see the log on $master"
         # Step k3s up to this image's release. Each server's migration boot moved it one minor
         # only, as far as k3s goes while other servers still run the old one; the rest waits
         # for every server to be on the new firmware. Before the job is marked done, for the
