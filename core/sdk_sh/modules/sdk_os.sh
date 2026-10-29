@@ -3345,10 +3345,12 @@ os_rabbitmq_version_uniform()
 # makes most of them required and will not start while one is off (#2164). Fails when
 # the broker does not answer, so an empty line never stands for "could not tell".
 # A flag some cluster node does not know reads "unavailable", so mid-roll ones are not listed.
+# rabbitmqctl's own status decides: jq 1.6, the image's, exits 0 on empty input.
 os_rabbitmq_flags_disabled()
 {
-    env LANG=en_US.utf8 HOSTNAME=${1:-$HOSTNAME} rabbitmqctl -q list_feature_flags name state stability --formatter json 2>/dev/null |
-        jq -er '[.[] | select(.state == "disabled" and .stability != "experimental") | .name] | join(" ")'
+    local out
+    out=$(env LANG=en_US.utf8 HOSTNAME=${1:-$HOSTNAME} rabbitmqctl -q list_feature_flags name state stability --formatter json 2>/dev/null) || return 1
+    jq -er '[.[] | select(.state == "disabled" and .stability != "experimental") | .name] | join(" ")' <<< "$out"
 }
 
 # Derive the Cyborg device profile name for a GPU model string.
