@@ -40,9 +40,6 @@ static bool s_bCubeModified = false;
 static bool s_bGuestPassChanged = false;
 static bool s_bOpenstackPassChanged = false;
 
-// the broker refused to start over a feature flag its data has disabled; fails the commit
-static bool s_bFlagRefused = false;
-
 static CubeRole_e s_eCubeRole;
 
 // external global variables
@@ -265,9 +262,11 @@ EnableFeatureFlags(const bool ha, const std::string& hostname)
 }
 
 // A broker of a newer minor will not start while a flag the old one left disabled is
-// required. That is a precondition the old release had to meet, not corrupt data:
-// wiping mnesia cannot repair it, and on the master the HA setup that follows a wipe
+// required. That is a precondition the old release had to meet, not corrupt data: under
+// ha, wiping mnesia cannot repair it, and on the master the HA setup that follows a wipe
 // forgets every peer and splits the cluster (#2164). The unit's journal says which.
+// A 3.1.20 cluster rolled up from 3.1.10 can arrive here on its roll to 3.2.0: that roll
+// runs 3.1.20's sdk, so enable the flags on 3.1.20 before it.
 static bool
 FeatureFlagRefused(time_t since)
 {
@@ -291,11 +290,15 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
 
     time_t started = time(NULL);
     if (!SystemdCommitService(enabled, NAME, true)) {
-        if (FeatureFlagRefused(started)) {
+        // keep mnesia and the peers, and let the bootstrap go on; a lone broker still takes
+        // the wipe below, which lets it start with every flag
+        if (ha && FeatureFlagRefused(started)) {
             HexLogError("%s refused to start: a feature flag it requires is disabled in its data "
-                        "(journalctl -u %s names it). Keeping mnesia; enable the flags on the "
-                        "previous release before upgrading this node", NAME, NAME);
-            s_bFlagRefused = true;
+                        "(journalctl -u %s names it). Keeping mnesia. On a control node still on "
+                        "the previous release: rabbitmqctl forget_cluster_node rabbit@%s, then "
+                        "rabbitmqctl enable_feature_flag all; then start this broker empty with "
+                        "that cluster's enabled flags in RABBITMQ_FEATURE_FLAGS and join it",
+                        NAME, NAME, hostname.c_str());
             return false;
         }
 
@@ -491,9 +494,6 @@ Commit(bool modified, int dryLevel)
 
     WriteConfig(myip);
     CommitRabbitMQ(enabled, s_ha, s_hostname, s_ctrlHosts);
-    // stop the run rather than leave the AMQP clients to commit against no broker
-    if (s_bFlagRefused)
-        return false;
 
     if (s_bGuestPassChanged | s_bOpenstackPassChanged) {
         // FIXME: call change_password right after server start
@@ -529,8 +529,6 @@ RestartMain(int argc, char* argv[])
     bool enabled = IsControl(s_eCubeRole) && s_enabled.newValue();
     std::string mqPass = GetSaltKey(s_saltkey, s_mqPass.newValue(), s_seed.newValue());
     CommitRabbitMQ(enabled, s_ha, s_hostname.newValue(), s_ctrlHosts.newValue());
-    if (s_bFlagRefused)
-        return EXIT_FAILURE;
     SetupCheck(mqPass, s_hostname);
 
     return EXIT_SUCCESS;
