@@ -111,13 +111,16 @@ run
 chk "4 rc"          "$rc"        "1"
 chk "4 not marked"  "$(marked)"  "n"
 
-# 5. compute node: never touches keystone
-reset "_member_ admin reader service" ""
-ROLE=compute
+# 5. first install: /etc/policies still holds the factory default (role: undef) until the
+#    apply commits, so is_control_node says no. Whether this node is a control node is the
+#    caller's call (config_keystone.cpp), and the bridge still has to be built (#2176).
+reset "_member_ admin manager member reader service" \
+      "admin manager"$'\n'"manager member"$'\n'"member reader"
+ROLE=undef
 run
 chk "5 rc"          "$rc"        "0"
-chk "5 no setup"    "$(setups)"  "0"
-chk "5 not marked"  "$(marked)"  "n"
+chk "5 marked"      "$(marked)"  "y"
+chk "5 creates"     "$(creates)" "edge:_member_>member "
 
 rm -rf "$STATE_DIR" "$LOG"
 echo "----" ; echo "PASS=$pass FAIL=$fail"
