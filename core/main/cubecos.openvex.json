@@ -2,8 +2,8 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/bigstack-oss/cubecos/blob/develop/core/main/cubecos.openvex.json",
   "author": "Bigstack",
-  "timestamp": "2026-10-29T09:15:51Z",
-  "version": 9,
+  "timestamp": "2026-10-29T11:05:50Z",
+  "version": 10,
   "statements": [
     {
       "vulnerability": {
@@ -3381,31 +3381,10 @@
       },
       "products": [
         {
-          "@id": "pkg:rpm/centos/bind"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-doc"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-utils"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-libs"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-license"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-utils"
-        },
-        {
           "@id": "pkg:rpm/centos/dhcp-client"
         },
         {
           "@id": "pkg:rpm/centos/dhcp-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-bind"
         }
       ],
       "status": "not_affected",
@@ -3418,31 +3397,10 @@
       },
       "products": [
         {
-          "@id": "pkg:rpm/centos/bind"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-doc"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-utils"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-libs"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-license"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-utils"
-        },
-        {
           "@id": "pkg:rpm/centos/dhcp-client"
         },
         {
           "@id": "pkg:rpm/centos/dhcp-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-bind"
         }
       ],
       "status": "not_affected",
@@ -3455,31 +3413,10 @@
       },
       "products": [
         {
-          "@id": "pkg:rpm/centos/bind"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-doc"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-utils"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-libs"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-license"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-utils"
-        },
-        {
           "@id": "pkg:rpm/centos/dhcp-client"
         },
         {
           "@id": "pkg:rpm/centos/dhcp-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-bind"
         }
       ],
       "status": "not_affected",
