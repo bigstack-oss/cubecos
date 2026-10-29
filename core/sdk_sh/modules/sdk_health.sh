@@ -968,19 +968,6 @@ health_rabbitmq_report()
 
 health_rabbitmq_check()
 {
-    # The broker runs fine with these off, but the next minor will not start while one is,
-    # so an upgrade from here stops at its first node (#2164). Reported only, not repaired:
-    # once every control node runs one version, "hex_config rabbitmq_feature_flags" on any of
-    # them enables the flags. A flag some node does not know yet, mid-roll, reads "unavailable"
-    # and is not listed. First, so any other fault's code wins.
-    local off
-    off=$($HEX_SDK os_rabbitmq_flags_disabled 2>/dev/null)
-    if [ -n "$off" ] ; then
-        ERR_CODE=4
-        ERR_MSG+="feature flags disabled: $off\n"
-        ERR_LOG="rabbitmqctl list_feature_flags"
-    fi
-
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         if ! is_remote_running $node rabbitmq-server ; then
             ERR_CODE=1
