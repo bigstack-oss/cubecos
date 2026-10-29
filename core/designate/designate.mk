@@ -25,6 +25,10 @@
 # COPR deletes a project's older builds about two weeks after a newer one succeeds, so CI points
 # COPR_DL_HOST at a mirror that keeps these files. Each rpm is pinned by its sha256, taken from a
 # copy that verified against the project's key (490C4AE63D8A6B24A6412C8DED4A0B1BC35B531D).
+#
+# grype matches these rpms against nothing: it judges an rpm by the distro's advisories, and they
+# do not name ISC's build. core/main/Makefile's PROJ_SBOM_CPES has the SBOM re-check match them by
+# their upstream's CPE instead, so a source added here belongs there too.
 ISC_BIND_RPMS := \
 	isc-bind-bind-9.20.30-1.1.el9 \
 	isc-bind-bind-libs-9.20.30-1.1.el9 \
