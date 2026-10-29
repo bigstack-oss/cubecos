@@ -23,6 +23,12 @@ data "keycloak_realm" "master" {
   realm = "master"
 }
 
+# keystone_idp writes this cert after the keycloak commit, and terraform evaluates file()
+# for every module even under -target
+locals {
+  v3_cert = try(file("/etc/httpd/federation/v3.cert"), null)
+}
+
 resource "keycloak_saml_client" "keystone_client" {
   realm_id  = data.keycloak_realm.master.id
   client_id = "https://${var.cube_controller}:5443/v3/mellon/metadata"
@@ -34,12 +40,21 @@ resource "keycloak_saml_client" "keystone_client" {
   encrypt_assertions        = false
   client_signature_required = false
   name_id_format            = "transient"
-  signing_certificate       = file("/etc/httpd/federation/v3.cert")
-  encryption_certificate    = file("/etc/httpd/federation/v3.cert")
+  signing_certificate       = local.v3_cert
+  encryption_certificate    = local.v3_cert
 
   valid_redirect_uris                 = ["https://${var.cube_controller}:5443/v3/mellon/postResponse", "https://${var.cube_controller}:5443/v3/mellon/artifactResponse", "https://${var.cube_controller}:5443/v3/mellon/paosResponse"]
   assertion_consumer_post_url         = "https://${var.cube_controller}:5443/v3/mellon/postResponse"
   logout_service_redirect_binding_url = "https://${var.cube_controller}:5443/v3/mellon/logout"
+
+  # the try() is only for the other modules; this client itself is never applied
+  # without the cert. Checked at plan time for this resource alone.
+  lifecycle {
+    precondition {
+      condition     = local.v3_cert != null
+      error_message = "/etc/httpd/federation/v3.cert is missing; keystone_idp has not generated it yet."
+    }
+  }
 }
 
 resource "keycloak_saml_user_property_protocol_mapper" "keystone_username_mapper" {
