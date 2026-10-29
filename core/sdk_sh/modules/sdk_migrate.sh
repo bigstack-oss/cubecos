@@ -127,8 +127,6 @@ migrate_keystone_member_role()
         return 0
     fi
 
-    is_control_node || return 0
-
     local edge chain=$($HEX_SDK os_keystone_legacy_member_role_setup)
     for edge in "admin implies manager" "manager implies member" "member implies reader" \
                 "_member_ implies member" ; do
