@@ -551,7 +551,7 @@ alembic===1.14.1
 execnet===2.1.1
 sphinxcontrib-programoutput===0.18
 storpool.spopenstack===3.2.0
-dnspython===2.7.0
+dnspython===2.9.0
 oauthlib===3.2.2
 logutils===0.3.5
 zipp===3.21.0
