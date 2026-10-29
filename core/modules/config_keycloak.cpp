@@ -908,6 +908,32 @@ getKeycloakAdminAccessToken(
 }
 
 /**
+ * Get an admin access token with the password in the k8s secret, or the default one when
+ * the secret has not been created.
+ */
+static std::string
+getKeycloakAdminTokenWithStoredPassword(const std::string& endpointIp)
+{
+    std::string adminPass = "admin";
+    if (isKeycloakUserPasswordInK8sSecret()) {
+        const std::string adminPassInK8sSecret = getKeycloakAdminPasswordFromK8sSecret();
+        if (adminPassInK8sSecret.empty()) {
+            HexLogError("failed to get the admin password from the k8s secret");
+            return "";
+        }
+
+        adminPass = adminPassInK8sSecret;
+    }
+
+    const std::string token = getKeycloakAdminAccessToken(endpointIp, adminPass);
+    if (token.empty()) {
+        HexLogError("failed to get the keycloak admin access token");
+    }
+
+    return token;
+}
+
+/**
  * Point the master realm's login theme at the theme cube-cos-ui ships.
  *
  * The WildFly image took this from KEYCLOAK_DEFAULT_THEME, which set a server-wide default
@@ -919,20 +945,8 @@ getKeycloakAdminAccessToken(
 static bool
 setMasterRealmLoginTheme(const std::string& endpointIp)
 {
-    std::string adminPass = "admin";
-    if (isKeycloakUserPasswordInK8sSecret()) {
-        const std::string adminPassInK8sSecret = getKeycloakAdminPasswordFromK8sSecret();
-        if (adminPassInK8sSecret.empty()) {
-            HexLogError("failed to get the admin password from the k8s secret");
-            return false;
-        }
-
-        adminPass = adminPassInK8sSecret;
-    }
-
-    const std::string token = getKeycloakAdminAccessToken(endpointIp, adminPass);
+    const std::string token = getKeycloakAdminTokenWithStoredPassword(endpointIp);
     if (token.empty()) {
-        HexLogError("failed to get the keycloak admin access token");
         return false;
     }
 
@@ -974,6 +988,72 @@ setMasterRealmLoginTheme(const std::string& endpointIp)
 
     HexLogInfo("set the login theme of the master realm");
     return true;
+}
+
+/**
+ * Check that the master realm has cube-admins and cube-users, the groups module.keycloak
+ * creates that the keystone mapping and rancher's allowed principals match on.
+ *
+ * Returns 1 when both are there, 0 when one is missing, -1 when keycloak could not be asked.
+ */
+static int
+hasDefaultCubeGroups(const std::string& endpointIp)
+{
+    const std::string token = getKeycloakAdminTokenWithStoredPassword(endpointIp);
+    if (token.empty()) {
+        return -1;
+    }
+
+    std::string host = endpointIp;
+    host += (":" + std::to_string(K3S_INGRESS_HTTPS_PORT));
+
+    for (const std::string group : { "cube-admins", "cube-users" }) {
+        Url url = Url(
+            host,
+            "/auth/admin/realms/master/groups",
+            { { "search", group }, { "exact", "true" }, { "briefRepresentation", "true" } });
+        url.scheme = "https";
+
+        const HttpRequest req = {
+            .url = url,
+            .header = { { "Authorization", "Bearer " + token } },
+            .connectTimeoutSecs = 10,
+            .maxTimeSecs = 60,
+        };
+        const HttpResponse res = GetHttp(req);
+        if (!res.error.empty() || !isHttpResponseSuccessful(res)) {
+            HexLogError("failed to look up the keycloak group %s", group.c_str());
+
+            CleanupHttpResponse(res);
+            return -1;
+        }
+
+        std::string fsError;
+        const std::string responseString = ReadFile(fsError, res.outputFileName);
+        CleanupHttpResponse(res);
+
+        std::string jsonError;
+        const json11::Json groups = json11::Json::parse(responseString.c_str(), jsonError);
+        if (!fsError.empty() || !jsonError.empty() || !groups.is_array()) {
+            HexLogError("failed to read the keycloak group %s", group.c_str());
+            return -1;
+        }
+
+        // search also returns a parent whose subgroup matches; only a top-level hit counts
+        bool found = false;
+        for (const json11::Json& g : groups.array_items()) {
+            if (g["name"].string_value() == group) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            HexLogWarning("keycloak group %s is missing", group.c_str());
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
 static bool
@@ -1088,11 +1168,19 @@ Commit(bool modified, int dryLevel)
         sleep(10);
     }
 
-    // set the login theme and create default cube groups (owned by the node that
-    // scaled keycloak), gated on the endpoint being reachable. Both idempotent.
-    if (isKeycloakUpdated && checkKeycloakEndpoint(sharedId)) {
+    // Only the commit that updates keycloak applies module.keycloak, so a first bootstrap
+    // whose apply failed left the cluster without the default groups on every later commit
+    // (#2159). Apply it again when they are missing; a keycloak that cannot be asked does
+    // not count as missing.
+    const bool isGroupsMissing = !isKeycloakUpdated
+        && isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)
+        && hasDefaultCubeGroups(sharedId) == 0;
+
+    // set the login theme (owned by the node that scaled keycloak) and create the default
+    // cube groups, gated on the endpoint being reachable. Both idempotent.
+    if ((isKeycloakUpdated || isGroupsMissing) && checkKeycloakEndpoint(sharedId)) {
         // serve the cube-cos-ui login page
-        if (!setMasterRealmLoginTheme(sharedId)) {
+        if (isKeycloakUpdated && !setMasterRealmLoginTheme(sharedId)) {
             HexLogError("failed to set the login theme of the master realm");
         }
 
