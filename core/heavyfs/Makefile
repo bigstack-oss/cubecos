@@ -242,13 +242,13 @@ ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/$(ROCKY_PATH)/BaseOS/x86_64/os/Packages/r
 PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 rsync-$(RSYNC_NVR).x86_64.rpm
 
 # pcre2, librabbitmq, python3-tornado, sqlite, libevent, gnupg2, protobuf, python3-urllib3,
-# python3-lxml, libreswan and ruby come from Rocky 9 the same way. RHEL fixed a known vulnerability
-# in each in a z-stream build -- el9_8, or el9_7 for gnupg2 and protobuf -- and Stream's newest
-# builds carry the same version and release without that suffix (pcre2 10.40-7.el9 against
-# 10.40-7.el9_8), which sorts below it. Every installed subpackage moves together, i686 copies
-# included, since they require each other's exact version, the -devel packages the build has until
-# cube-post.mk removes them included. protobuf-compiler is in Rocky's CRB. Entries are
-# <repo>/<first letter>/<rpm>.
+# python3-lxml, libreswan, ruby and brotli come from Rocky 9 the same way. RHEL fixed a known
+# vulnerability in each in a z-stream build -- el9_8 (el9_8.1 for brotli), or el9_7 for gnupg2 and
+# protobuf -- and Stream's newest builds carry the same version and release without that suffix
+# (pcre2 10.40-7.el9 against 10.40-7.el9_8), which sorts below it. Every installed subpackage moves
+# together, i686 copies included, since they require each other's exact version, the -devel
+# packages the build has until cube-post.mk removes them included. protobuf-compiler is in Rocky's
+# CRB. Entries are <repo>/<first letter>/<rpm>.
 #
 # Stream's own build takes over once its release passes RHEL's: installdnf's duplicate pass keeps
 # the higher of the copies in the download directory, and drops a downloaded copy older than the
@@ -288,7 +288,10 @@ ROCKY_ERRATA_RPMS := \
 	AppStream/r/rubygem-json-2.5.1-168.el9_8.x86_64 \
 	AppStream/r/rubygem-psych-3.3.2-168.el9_8.x86_64 \
 	AppStream/r/rubygem-rdoc-6.3.4.1-168.el9_8.noarch \
-	AppStream/r/rubygem-rexml-3.2.5-168.el9_8.noarch
+	AppStream/r/rubygem-rexml-3.2.5-168.el9_8.noarch \
+	BaseOS/l/libbrotli-1.0.9-10.el9_8.1.x86_64 \
+	AppStream/b/brotli-1.0.9-10.el9_8.1.x86_64 \
+	AppStream/b/brotli-devel-1.0.9-10.el9_8.1.x86_64
 rocky_rpm_url = $(ROCKY_DL_HOST)/$(ROCKY_PATH)/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
 ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_ERRATA_RPMS),$(call rocky_rpm_url,$(p)))
 PINNED_DNF += dc350245c7781a0ac2ffce92e088a22c3741bf967ce7c551d0420cea9ae085eb pcre2-10.40-7.el9_8.x86_64.rpm
@@ -324,6 +327,9 @@ PINNED_DNF += a2aed941d6bf4f12bb2779ed779036368735ca92d6de93d8a11c119b9c6ad7ca r
 PINNED_DNF += 6a79fd9ac0824f84a0c8525374688480b513d45882bb9bb611b3de8222a99f74 rubygem-psych-3.3.2-168.el9_8.x86_64.rpm
 PINNED_DNF += 6592b5fe5e5f18261213c4257c15f7f553e18a797704c126ea5c40d947006f20 rubygem-rdoc-6.3.4.1-168.el9_8.noarch.rpm
 PINNED_DNF += e21ed4007fe4f3ac53a477b23f2d77c8670faa01a5d600a9bb77389fb094b438 rubygem-rexml-3.2.5-168.el9_8.noarch.rpm
+PINNED_DNF += ce72c3ec1513fe852bb654ab141f4014286e09a0ab09c7dd7d79805af1f42200 libbrotli-1.0.9-10.el9_8.1.x86_64.rpm
+PINNED_DNF += a8bf13944227fa8e81cbb1ce311a74414d6cdedd850090372f30189d085bb4b8 brotli-1.0.9-10.el9_8.1.x86_64.rpm
+PINNED_DNF += b51b4abfdc0086162e1c00c5dfb3165fd06687dbc03be2610325913892f4657c brotli-devel-1.0.9-10.el9_8.1.x86_64.rpm
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
