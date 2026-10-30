@@ -34,6 +34,13 @@ resource "keycloak_saml_client" "ceph_dashboard_client" {
   # AES-256-GCM, which the dashboard's python3-saml decrypts, replaces the AES-128-CBC pin
   # Keycloak 26 put on clients that predate it.
   encrypt_assertions     = true
+  # The key transport is pinned, though. Left unset, provider 5.x creates the client with
+  # xmlenc11#rsa-oaep and mgf1sha256, and the <xenc11:MGF> this puts in the response is
+  # not in the dashboard's python3-saml schema, so a fresh install's SSO fails (#2168).
+  # rsa-oaep-mgf1p carries no MGF; clients that predate Keycloak 26 already have it.
+  # The MGF is empty so a client created with mgf1sha256 can switch without failing the plan.
+  encryption_key_algorithm            = "RSA-OAEP-MGF1P"
+  encryption_mask_generation_function = ""
   front_channel_logout   = true
   name_id_format         = "persistent"
   signing_certificate    = file("/var/www/certs/server.cert")
