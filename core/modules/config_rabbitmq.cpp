@@ -265,8 +265,9 @@ EnableFeatureFlags(const bool ha, const std::string& hostname)
 // required. That is a precondition the old release had to meet, not corrupt data: under
 // ha, wiping mnesia cannot repair it, and on the master the HA setup that follows a wipe
 // forgets every peer and splits the cluster (#2164). The unit's journal says which.
-// A 3.1.20 cluster rolled up from 3.1.10 can arrive here on its roll to 3.2.0: that roll
-// runs 3.1.20's sdk, so enable the flags on 3.1.20 before it.
+// A 3.1.20 cluster rolled up from 3.1.10 can carry flags left off into its roll to 3.2.0.
+// That roll runs 3.1.20's sdk, but the package's update.sh enables them while it stages,
+// before any node reboots; a broker refuses here only when that failed.
 static bool
 FeatureFlagRefused(time_t since)
 {
