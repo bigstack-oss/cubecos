@@ -1221,7 +1221,9 @@ CONFIG_OBSERVES(keycloak, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(keycloak, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(keycloak, "/etc/keycloak");
-CONFIG_MIGRATE(keycloak, "/etc/cube/cos/terraform");
+// only the values: configs/override.tfrc lists the providers in this release's mirror,
+// and one carried from 3.1.x leaves out keycloak/*, so every terraform call fails (#2185)
+CONFIG_MIGRATE(keycloak, "/etc/cube/cos/terraform/values");
 
 static bool
 syncSamlMetadata(const std::string myip)
