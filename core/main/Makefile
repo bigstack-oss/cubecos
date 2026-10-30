@@ -53,6 +53,12 @@ PROJ_BUILD_FAKE_PPU := 1
 endif
 # Triaged not_affected findings passed to grype; see VEX.md
 PROJ_VEX := $(SRCDIR)/cubecos.openvex.json
+# rpms built outside the distro, which grype matches against nothing: ISC's BIND build and the two
+# of its bundled libraries NVD has records for (core/designate/designate.mk). The re-check matches
+# each by its upstream's CPE and applies PROJ_VEX to what it adds. jemalloc and fstrm have no NVD
+# records to match.
+PROJ_SBOM_CPES := isc-bind-bind=cpe:2.3:a:isc:bind isc-bind-libuv=cpe:2.3:a:libuv:libuv \
+	isc-bind-protobuf-c=cpe:2.3:a:protobuf-c_project:protobuf-c
 # The container images the rootfs ships in its registry. Only the opt-in `make sbom-images` scans
 # them, into a separate SBOM and report; `sbom`, and so the scan the pipeline imports and files
 # issues from, covers the rootfs alone.

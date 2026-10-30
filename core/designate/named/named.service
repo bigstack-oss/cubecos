@@ -1,0 +1,16 @@
+[Unit]
+Description=Berkeley Internet Name Domain (DNS)
+Wants=nss-lookup.target
+Before=nss-lookup.target
+After=network.target
+
+[Service]
+Type=notify
+ExecStartPre=/opt/isc/isc-bind/root/usr/bin/named-checkconf -z /etc/named.conf
+ExecStart=/opt/isc/isc-bind/root/usr/sbin/named -u named -f -c /etc/named.conf
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -TERM $MAINPID
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,56 @@
 # Cube SDK
 # designate installation
 
-ROOTFS_DNF += bind bind-utils
+# named is ISC's own build of BIND 9.20, from ISC's COPR project isc/bind, in place of the distro's
+# bind 9.16: Stream 9 ships 9.16, and some fixes land only in 9.20. ISC builds it as a software
+# collection under /opt/isc/isc-bind, so no path collides with the distro's, and its binaries find
+# their own libraries through a RUNPATH. Nothing else in the image requires any of the distro bind
+# family, so all of it is blocklisted, which also keeps a cached 9.16 rpm from installing.
+#
+# What the distro packages provided, and the install block further down replaces:
+# - named.service: ours, running ISC's named against /etc/named.conf under the unit name
+#   config_designate.cpp and the health checks use. ISC's isc-bind-named reads the collection's own
+#   config instead and is masked, so two nameds never share :53 and :953.
+# - rndc and rndc-confgen, which designate's rootwrap and config_designate.cpp run, and the
+#   bind-utils tools, dig among them for the health check's resolver probe: linked into /usr/sbin
+#   and /usr/bin.
+# - /var/named, the directory named.conf names.
+# ISC's %post also generates an rndc.key for the collection. named.conf takes designate's key, and a
+# key generated at build time would be the same on every node, so it is removed.
+#
+# The build has no LMDB, so named keeps the zones designate adds in _default.nzf rather than 9.16's
+# _default.nzd. Nothing converts one into the other because nothing carries /var/named across an
+# upgrade: the new root starts with the image's empty one either way.
+#
+# COPR deletes a project's older builds about two weeks after a newer one succeeds, so CI points
+# COPR_DL_HOST at a mirror that keeps these files. Each rpm is pinned by its sha256, taken from a
+# copy that verified against the project's key (490C4AE63D8A6B24A6412C8DED4A0B1BC35B531D).
+#
+# grype matches these rpms against nothing: it judges an rpm by the distro's advisories, and they
+# do not name ISC's build. core/main/Makefile's PROJ_SBOM_CPES has the SBOM re-check match them by
+# their upstream's CPE instead, so a source added here belongs there too.
+ISC_BIND_RPMS := \
+	isc-bind-bind-9.20.30-1.1.el9 \
+	isc-bind-bind-libs-9.20.30-1.1.el9 \
+	isc-bind-bind-utils-9.20.30-1.1.el9 \
+	isc-bind-fstrm-0.6.1-4.el9 \
+	isc-bind-fstrm-utils-0.6.1-4.el9 \
+	isc-bind-jemalloc-5.3.0-13.el9 \
+	isc-bind-libuv-1.49.2-1.el9 \
+	isc-bind-protobuf-c-1.5.1-1.el9 \
+	isc-bind-runtime-2-4.el9
+ROOTFS_DNF_DL_FROM += $(foreach p,$(ISC_BIND_RPMS),$(COPR_DL_HOST)/results/isc/bind/epel-9-x86_64/Packages/i/$(p).x86_64.rpm)
+PINNED_DNF += b4807c0c3a62ea085c31e768f65cea297db7f47271a91b047933c786511f9429 isc-bind-bind-9.20.30-1.1.el9.x86_64.rpm
+PINNED_DNF += ed049fbee0a79e0fd6486d5122530977b03d9eacf37be07418b7b0bfdd9aff35 isc-bind-bind-libs-9.20.30-1.1.el9.x86_64.rpm
+PINNED_DNF += 7f962ac4c7a189e28dab1a6d9c134ab8c57a2e234debcc288af860af0886fd04 isc-bind-bind-utils-9.20.30-1.1.el9.x86_64.rpm
+PINNED_DNF += 1551926ef4386690f2a47f520d809fe9ba81868af7b4462c99046595ef9b4245 isc-bind-fstrm-0.6.1-4.el9.x86_64.rpm
+PINNED_DNF += d7271d17c6f97f024e20fb33893607fa1b96cbfa95e968b13926473888c8a428 isc-bind-fstrm-utils-0.6.1-4.el9.x86_64.rpm
+PINNED_DNF += cf6174bab1ef530eaac0b447971fd561e77e1f5302d6b1a897629853a95660b9 isc-bind-jemalloc-5.3.0-13.el9.x86_64.rpm
+PINNED_DNF += 822a54551bbbf3edd3b424018ad7979c9667a04b0d415583f018ed3b40cbdaf3 isc-bind-libuv-1.49.2-1.el9.x86_64.rpm
+PINNED_DNF += 5a7d5d57d2d73178a06a43eebcf8dc0785c837c09e4e6224239246847c503ee1 isc-bind-protobuf-c-1.5.1-1.el9.x86_64.rpm
+PINNED_DNF += a4bf7a0024c993c8dcaf34c9ac26b70cd4597ace72df3509a15fdedd8e4ec913 isc-bind-runtime-2-4.el9.x86_64.rpm
+BLKLST_DNF += bind bind-utils bind-libs bind-license bind-dnssec-utils bind-dnssec-doc python3-bind
+ISC_BIND_ROOT := /opt/isc/isc-bind/root
 
 # python-designateclient owns the "dns" osc plugin entry point, which hex_sdk's
 # health_designate_check() drives as `openstack dns service list`, counting the
@@ -130,6 +179,14 @@ rootfs_install::
 # for designate
 rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/designate/named/named.conf.in ./etc/
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/designate/named/named.service ./lib/systemd/system
+	$(Q)chroot $(ROOTDIR) systemctl mask isc-bind-named
+	$(Q)rm -f $(ROOTDIR)/etc/opt/isc/scls/isc-bind/rndc.key
+	$(Q)chroot $(ROOTDIR) ln -sf $(ISC_BIND_ROOT)/usr/sbin/rndc /usr/sbin/rndc
+	$(Q)chroot $(ROOTDIR) ln -sf $(ISC_BIND_ROOT)/usr/sbin/rndc-confgen /usr/sbin/rndc-confgen
+	$(Q)for b in dig host nslookup nsupdate delv named-checkconf named-checkzone ; do \
+		chroot $(ROOTDIR) ln -sf $(ISC_BIND_ROOT)/usr/bin/$$b /usr/bin/$$b || exit 1 ; done
+	$(Q)chroot $(ROOTDIR) install -d -m 0770 $(NAMED_APP_DIR)
 	$(Q)chroot $(ROOTDIR) sh -c "chown named:named $(NAMED_CONF_FILES) $(NAMED_APP_DIR)"
 
 rootfs_install::

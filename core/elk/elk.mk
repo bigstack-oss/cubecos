@@ -281,8 +281,9 @@ rootfs_install::
 # vendors 2.21.6. logstash-core loads 2.21.7 already, so jar-dependencies skips the gem's own
 # jackson-core and jackson-databind, but it does load the gem's jackson-dataformat-csv and
 # jackson-datatype-jdk8 2.21.6. All four move to 2.21.7 and the gem's jar list names 2.21.7, so the
-# plugin runs on the one Jackson line logstash-core loads. The gem's lz4-java 1.10.1, which the
-# Kafka client compresses with, has a known vulnerability fixed in 1.11.4 and moves the same way, and
+# plugin runs on the one Jackson line logstash-core loads. The gem's lz4-java 1.10.1 and
+# snappy-java 1.1.10.7, which the Kafka client compresses with, have known vulnerabilities fixed in
+# 1.11.4 and 1.1.10.9 and move the same way (snappy-java to 1.1.10.12, its newest release), and
 # so do its Guava 32.0.1 and failureaccess 1.0.1, which only its Avro schema-registry client needs:
 # they take the pair defined above, whose download rules are not defined again here.
 # The last field is the version replaced. Nothing here is -f: a Logstash bump that changes the
@@ -294,6 +295,7 @@ LOGSTASH_KAFKA_JAR_REFRESH := \
 	com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.7:588050148497158cabdc05c0ae3a7e123194a486b8c62745778fc6239f9b085e:2.21.6 \
 	com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.21.7:b8f62f98363ed9aa259b3a479a64fcbe7e081158a8bec6733972e900d12f4e47:2.21.6 \
 	at.yawk.lz4:lz4-java:1.11.4:58c8e0b813960d2a248e050c353baea73139b48a2ffc55382d42c69707e17325:1.10.1 \
+	org.xerial.snappy:snappy-java:1.1.10.12:1c03ce77b3f2e926c25a952612e372404d80bc88c6c8052bede964804fabd732:1.1.10.7 \
 	$(ELK_GUAVA):32.0.1-jre \
 	$(ELK_FAILUREACCESS):1.0.1
 LOGSTASH_KAFKA_JARS_RB = $(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/lib/logstash-integration-kafka_jars.rb

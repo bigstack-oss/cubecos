@@ -44,10 +44,11 @@ rootfs_install:: $(ARCS_DIR)/$(KAFKA_TGZ)
 # Kafka 3.9 is the last line that runs on ZooKeeper and 3.9.2 is its last release; Kafka 4 needs
 # KRaft, and ZooKeeper would have to stay anyway for octavia's jobboard (config_octavia.cpp). The
 # jars 3.9.2 bundles for jackson 2.16.2, netty 4.1.125, zookeeper 3.8.4, jline 3.25.1, plexus-utils
-# 3.5.1 and lz4-java 1.10.1 all have known vulnerabilities, and the 3.9 branch has not moved any of
-# them. So each is swapped for a fixed release of the same artifact from Maven Central, within the
-# line Kafka was built against -- jackson 2.x (all ten modules together, scala included), netty
-# 4.1, zookeeper 3.8, lz4-java 1.x -- and pinned by sha256 like the logstash gems. Jetty stays at
+# 3.5.1, lz4-java 1.10.1 and snappy-java 1.1.10.5 all have known vulnerabilities, and the 3.9 branch
+# has not moved any of them. So each is swapped for a fixed release of the same artifact from Maven
+# Central, within the line Kafka was built against -- jackson 2.x (all ten modules together, scala
+# included), netty 4.1, zookeeper 3.8, lz4-java 1.x, snappy-java 1.1.10 -- and pinned by sha256 like
+# the logstash gems. Jetty stays at
 # 9.4.57: fixes after 9.4.58 are not published openly, and ZooKeeper's admin server, the one Jetty
 # user among the services that run here, is off (admin.enableServer=false in Kafka's shipped
 # zookeeper.properties).
@@ -78,7 +79,8 @@ KAFKA_JAR_REFRESH := \
 	org.apache.zookeeper:zookeeper-jute:3.8.7:a4980a3cd8fe0b4640326ccb4048556de66a34d0ed0c12a2380df7315de15b36:zookeeper-jute-3.8.4.jar \
 	org.jline:jline:3.30.17:32ca18a3b5c742bc8a7b42af61ad9b3320dab525361b793ea9e3cb361e292c1d:jline-3.25.1.jar \
 	org.codehaus.plexus:plexus-utils:3.6.1:05a63effd67e2d6b9d610cc82e2bd7473289d34802e57a529b28110f28af5679:plexus-utils-3.5.1.jar \
-	at.yawk.lz4:lz4-java:1.11.4:58c8e0b813960d2a248e050c353baea73139b48a2ffc55382d42c69707e17325:lz4-java-1.10.1.jar
+	at.yawk.lz4:lz4-java:1.11.4:58c8e0b813960d2a248e050c353baea73139b48a2ffc55382d42c69707e17325:lz4-java-1.10.1.jar \
+	org.xerial.snappy:snappy-java:1.1.10.12:1c03ce77b3f2e926c25a952612e372404d80bc88c6c8052bede964804fabd732:snappy-java-1.1.10.5.jar
 KAFKA_JAR_DIR := $(ARCS_DIR)/kafka-$(KAFKA_VER)-jars
 kafka_jar_field = $(word $(1),$(subst :, ,$(2)))
 KAFKA_JARS := $(foreach e,$(KAFKA_JAR_REFRESH),$(KAFKA_JAR_DIR)/$(call kafka_jar_field,2,$(e))-$(call kafka_jar_field,3,$(e)).jar)

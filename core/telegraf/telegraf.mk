@@ -14,13 +14,15 @@ ROOTFS_DNF_DL_FROM += https://repos.influxdata.com/rhel/9/x86_64/stable/$(TELEGR
 # 66 (cubecos#647). 1.40.1 shipped the rpm's binary, built with the toolchain of its day, go1.27.1
 # (cubecos#801). 1.40.2 is still go1.27.1, older than the October 2026 security release
 # (1.27.2 / 1.26.9), and links an x/net older than its fix; the jail's Go and TELEGRAF_GO_GET cover
-# both. The rpm stays for the unit, the config and the version the SBOM names, and `rpm -V telegraf`
-# reports the binary as modified. The build flags and version ldflags are upstream's release ones.
+# both. go-jose is raised to its fixed release the same way. The rpm stays for the unit, the config
+# and the version the SBOM names, and `rpm -V telegraf` reports the binary as modified. The build
+# flags and version ldflags are upstream's release ones.
 #
 # Return to the rpm's binary on the condition core/exporters/Makefile gives. Judge a bump, or
 # answer an audit, by the binary rather than by the version number: `go version -m` and
 # `govulncheck -mode binary` on the rpm payload's ./usr/bin/telegraf (`rpm2cpio <rpm> | cpio -idm`).
-TELEGRAF_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0
+TELEGRAF_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+	github.com/go-jose/go-jose/v4@v4.1.6
 TELEGRAF_GO_DIR := $(ARCS_DIR)/telegraf-go
 TELEGRAF_SRC := $(TELEGRAF_GO_DIR)/telegraf-$(TELEGRAF_VER)-src
 TELEGRAF_BIN := $(TELEGRAF_GO_DIR)/bin/telegraf
