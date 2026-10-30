@@ -922,7 +922,24 @@ os_image_import()
                 fi
             fi
             local img_dir=$(dirname $img_raw)
-            virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
+            # virt-v2v's firstboot reboots a Windows guest until every injected driver
+            # installs, and Windows Server rejects smbus.inf: a virtio-win with smbus or an
+            # ISO in it (e.g. an ISO mounted over /usr/share/virtio-win) loops the guest forever (#560)
+            local virtio_win=${VIRTIO_WIN:-/usr/share/virtio-win}
+            local v2v_env=() virtio_win_tmp=
+            if [ -d "$virtio_win" ] && [ -n "$(find -L "$virtio_win" -iname '*smbus*' -o -iname '*.iso' | head -1)" ] ; then
+                virtio_win_tmp=$(mktemp -d /tmp/virtio-win_XXXX)
+                if [ ! -d "$virtio_win_tmp" ] || ! cp -rs "$(readlink -f "$virtio_win")/." $virtio_win_tmp/ ; then
+                    [ -d "$virtio_win_tmp" ] && rm -rf $virtio_win_tmp
+                    cmd rm -f $mf_importing
+                    Error "Failed to prepare $virtio_win without smbus for virt-v2v"
+                fi
+                find $virtio_win_tmp \( -iname '*smbus*' -o -iname '*.iso' \) -prune -exec rm -rf {} +
+                v2v_env=("VIRTIO_WIN=$virtio_win_tmp")
+                echo "[$(date +"%T")] Leaving smbus and ISOs in $virtio_win out of the conversion"
+            fi
+            env "${v2v_env[@]}" virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
+            [ -n "$virtio_win_tmp" ] && rm -rf $virtio_win_tmp
             if [ -e ${img_dir}/${file%.*}*.xml ] ; then
                 mv -f ${img_dir}/${file%.*}*-* $img_raw
                 if grep -i "os firmware" ${img_dir}/${file%.*}*.xml 2>/dev/null | grep -q -i efi ; then
