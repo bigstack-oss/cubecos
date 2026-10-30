@@ -18,3 +18,4 @@ A clear and concise description of any alternative solutions or features you've 
 
 **Additional context**
 Add any other context or screenshots about the feature request here.
+UI change? Add a `ui:<tier>` label: critical, medium, low, or none ([UI tiers](https://github.com/bigstack-oss/cube-cos-ui/blob/develop/.github/REVIEW_LEVELS.md#2-ui-tier)), with the design or mockup link.
