@@ -16,6 +16,18 @@ if [ "$FIRST_CTRLHOST" == "$(hostname)" ]; then
     # first node too); the relay re-sets it per step and clears it on
     # completion/pause/abort.
     hex_sdk ceph_enter_rolling
+    # every broker still runs this release; the next minor refuses to start while a flag it
+    # requires is off (#2164), so enable them all before any node reboots. Never fails the
+    # staging: a broker that refuses keeps its data and the bootstrap goes on without it.
+    # logger, because the roll drops the staging output and install.log lands in the new slot
+    rmq="timeout 120 env LANG=en_US.utf8 /usr/sbin/rabbitmqctl -q"
+    $rmq enable_feature_flag all
+    if ! ff=$($rmq list_feature_flags name state stability) ; then
+        logger -t cube-update "rabbitmq: cannot read feature flags on $(hostname)"
+    else
+        off=$(echo "$ff" | awk '$2=="disabled" && $3!="experimental" {print $1}' | paste -sd' ')
+        [ -z "$off" ] || logger -t cube-update "rabbitmq: feature flags still disabled: $off"
+    fi
 fi
 
 
