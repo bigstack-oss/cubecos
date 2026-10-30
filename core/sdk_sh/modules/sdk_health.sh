@@ -1001,6 +1001,13 @@ health_rabbitmq_repair()
 {
     local total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local stats=$($HEX_CFG status_rabbitmq 2>/dev/null)
+    # a broker that does not answer says nothing about the others: one that refuses a
+    # disabled feature flag stays down (#2164), and its empty view would take the full
+    # rebuild below and wipe the peers it kept. Take a peer's view.
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        [ -z "$stats" ] || break
+        stats=$(remote_run $node "$HEX_CFG status_rabbitmq" 2>/dev/null)
+    done
     local running=$(echo "$stats" | jq -r '.running_nodes[]?' 2>/dev/null)
     local running_cnt=$(echo "$running" | grep -c .)
     local partition=$(echo "$stats" | jq -r '.partitions[]?' 2>/dev/null | grep -c .)

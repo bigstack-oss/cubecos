@@ -944,6 +944,13 @@ power_roll_advance()
         # rabbitmq_ticktime in config_rabbitmq.cpp.
         # Same: only nodes still holding the 60 s compat marker.
         cmd -c "[ ! -e $ROLLING_TICKTIME_MARK ] || $HEX_CFG rabbitmq_ticktime" >/dev/null 2>&1
+        # Enable RabbitMQ's feature flags. Each control node's upgrade commit tries, but only
+        # the last one can find every broker on one version, and it asks while the others are
+        # busy; one slow answer left them off until the next minor refused to start (#2164).
+        # Flags are cluster-wide, so the master's broker does it for all. See
+        # rabbitmq_feature_flags in config_rabbitmq.cpp; it logs its own outcome there.
+        ( remote_run $master "$HEX_CFG rabbitmq_feature_flags" ) >/dev/null 2>&1 ||
+            log_error "rolling_$(_power_roll_kind): rabbitmq feature flags not all enabled, see the log on $master"
         # Step k3s up to this image's release. Each server's migration boot moved it one minor
         # only, as far as k3s goes while other servers still run the old one; the rest waits
         # for every server to be on the new firmware. Before the job is marked done, for the
@@ -1138,8 +1145,17 @@ power_roll_decision()
                 if _power_roll_node_on_target "$stuck" ; then
                     # already on target -- record done, don't re-drain+reboot it.
                     log_info "continue: $stuck already on target firmware -- marking done"
+                    # Its boot found the job paused, so power_roll_advance left it as it was: land
+                    # it here as that would have. Left behind, its kick marker makes the node
+                    # refuse every later roll ("already in progress") and boot as a roll node,
+                    # and its compute stays as the drain left it (#2164).
+                    _power_roll_node_settle "$stuck" "$(_power_roll_master)"
                     _power_roll_set_node_status "$stuck" done
                     _power_roll_set_node_num "$stuck" finished $(date +%s)
+                    Quiet -n $HEX_SDK power_vm_reconcile_error_state "$stuck"
+                    rm -f "${ROLLING_DIR:-/tmp}/.drained.${stuck}"
+                    local ip=$(jq -r --arg h "$stuck" '.nodes[]|select(.hostname==$h)|.ip // empty' $ROLLING_JOB)
+                    timeout 15 ssh -o ConnectTimeout=5 root@${ip:-$stuck} "rm -f $ROLLING_RECOVER_MARKER" </dev/null >/dev/null 2>&1
                 else
                     # unfinished: reset to pending so the resume re-kicks it first.
                     _power_roll_set_node_status "$stuck" pending
