@@ -210,6 +210,18 @@ class TestAllocationBalance(unittest.TestCase):
                 for n in s.compute_model.nodes:
                     self.assertEqual(2, len(n.instances), (packed_on, metric))
 
+    def test_busiest_node_with_nothing_to_move_is_skipped(self):
+        # #2196: a node holding only excluded instances does not end the plan
+        held = [FakeInstance('x%d' % n, exclude=True) for n in range(6)]
+        held += [FakeInstance('s%d' % n, state='stopped') for n in range(2)]
+        s = Strategy(FakeModel(
+            FakeNode('held', held),
+            FakeNode('src', [FakeInstance('i%d' % n) for n in range(4)]),
+            FakeNode('dst', [])))
+        s.do_execute()
+        self.assertEqual(2, len(s.moved))
+        self.assertEqual(['dst', 'dst'], s.dests)
+
 
 if __name__ == '__main__':
     unittest.main()
