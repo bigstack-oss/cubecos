@@ -3755,7 +3755,13 @@ ceph_mount_cephfs()
     if [ ! -s /etc/ceph/admin.key ] && [ -s /etc/ceph/ceph.client.admin.keyring ] ; then
         ceph-authtool -p /etc/ceph/ceph.client.admin.keyring > /etc/ceph/admin.key 2>/dev/null && chmod 0600 /etc/ceph/admin.key
     fi
-    mountpoint -q $CEPHFS_STORE_DIR && return 0
+    # bounded: on a hung mount mountpoint's stat waits until killed, and a second
+    # mount on top of it cannot help
+    timeout -k 5 $SRVSTO mountpoint -q $CEPHFS_STORE_DIR
+    case $? in
+        0) return 0 ;;
+        124|137) log_error "ceph_mount_cephfs: $CEPHFS_STORE_DIR is mounted but not answering on $(hostname)" ; return 1 ;;
+    esac
     # A cold PPU boot races ahead of the cluster reforming; wait (bounded) for
     # ceph + a serviceable MDS before mounting, then retry and verify.
     local _start=$SECONDS _deadline=$((SECONDS + 300)) i
