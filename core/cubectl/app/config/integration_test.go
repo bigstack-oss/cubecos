@@ -260,7 +260,7 @@ func TestIntegrationAll(t *testing.T) {
 
 	migrateList := []string{
 		"/var/www/certs",
-		"/var/lib/terraform/terraform.tfstate",
+		"/var/lib/terraform/terraform.tfstate.etcd",
 
 		// "/etc/rancher/k3s",
 		// "/var/lib/rancher/k3s",
