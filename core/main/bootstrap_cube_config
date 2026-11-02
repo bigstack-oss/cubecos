@@ -147,10 +147,12 @@ MasterBringUp()
 {
     BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
     PostBootRecovery
-    # Advance the roll relay + mark bootup 'done' here per node, not in
+    # Mark bootup 'done' + advance the roll relay here per node, not in
     # cube_cluster_start's tail (skipped on the master). See kb note.
-    hex_sdk power_roll_advance "$HOSTNAME"
+    # 'done' first: it opens this node's failover monitor gate, and the
+    # advance drains and reboots the next node before it returns.
     hex_sdk power_bootup_mark done
+    hex_sdk power_roll_advance "$HOSTNAME"
     # Master waits (bounded, 1h) for all nodes committed+synced, then runs
     # one detached full check_repair -- the single full pass, healing what
     # the per-node auto_repair/essential passes miss. 30min was too strict:
@@ -190,7 +192,7 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
     else
         echo "Starting auto bootstrap" >> $BOOTSTRAP_CUBE_MODE
         hex_sdk power_bootup_mark powering_up   # cluster bootup status: node entered boot bring-up (stamps kernel boot time)
-        # Each node branch below marks power_roll_advance + bootup 'done' as their
+        # Each node branch below marks bootup 'done' + power_roll_advance as their
         # own statements (never chained onto the bring-up), so a bring-up that exits
         # -- e.g. an unsshable peer on the master -- can't skip them.
         if [ "x$MASTER_CONTROL" = "x$T_net_hostname" ] ; then
@@ -219,8 +221,8 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                 else
                     BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
                     PostBootRecovery
-                    hex_sdk power_roll_advance "$HOSTNAME"
                     hex_sdk power_bootup_mark done   # this node's bring-up complete
+                    hex_sdk power_roll_advance "$HOSTNAME"
                     hex_sdk cube_bootup_finish_late
                 fi
                 :> $BOOTSTRAP_CUBE_MODE
@@ -244,8 +246,8 @@ if [ -e /etc/appliance/state/configured -a "x$HOSTNAME" != "xunconfigured" ] ; t
                 hex_sdk power_master_override_adopt
                 BootstrapAndClusterstart || { AbortBootstrap ; exit 1 ; }
                 PostBootRecovery
-                hex_sdk power_roll_advance "$HOSTNAME"
                 hex_sdk power_bootup_mark done   # this node's bring-up complete
+                hex_sdk power_roll_advance "$HOSTNAME"
                 hex_sdk cube_bootup_finish_late
                 :> $BOOTSTRAP_CUBE_MODE
             )&
