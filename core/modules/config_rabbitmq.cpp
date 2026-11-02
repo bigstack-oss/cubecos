@@ -61,6 +61,7 @@ CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROL_HOSTS);
 CONFIG_TUNING_SPEC_STR(CUBESYS_SEED);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_SALTKEY);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
+CONFIG_TUNING_SPEC_INT(CUBESYS_LOG_DEFAULT_RP);
 
 // parse tunings
 PARSE_TUNING_BOOL(s_enabled, RABBITMQ_ENABLED);
@@ -74,6 +75,8 @@ PARSE_TUNING_X_STR(s_ctrlHosts, CUBESYS_CONTROL_HOSTS, 1);
 PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 1);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
+// read by every commit but never the cause of one: a commit restarts the broker
+PARSE_TUNING_X_INT(s_logRetention, CUBESYS_LOG_DEFAULT_RP, 2);
 
 static bool
 WriteConfig(const std::string& myip)
@@ -138,6 +141,18 @@ WriteConfig(const std::string& myip)
     // business reading it.
     fprintf(fout, "prometheus.tcp.ip = %s\n", myip.c_str());
     fprintf(fout, "prometheus.tcp.port = 15692\n");
+
+    // The broker rotates its own log. Its handler checks the size on every write, while
+    // logrotate reads a maxsize only when its daily timer fires: after a partition, classic
+    // mirrored queues logged a crash report per duplicate_live_master mirror, 18G in two
+    // hours, and filled / on a control node long before midnight (#2202). Daily or 128M,
+    // keeping cubesys.log.default.retention generations, is what logrotate.conf gives every
+    // other log; the archives are .0 (newest) to .<count-1>, gzipped. rabbitmq.mk drops the
+    // rpm's logrotate entry, whose .1, .2, ... would collide with them.
+    fprintf(fout, "log.file.rotation.date = $D0\n");
+    fprintf(fout, "log.file.rotation.size = %d\n", 128 * 1024 * 1024);
+    fprintf(fout, "log.file.rotation.count = %d\n", s_logRetention.newValue());
+    fprintf(fout, "log.file.rotation.compress = true\n");
 
     fclose(fout);
 
@@ -390,6 +405,7 @@ static bool
 ParseCube(const char *name, const char *value, bool isNew)
 {
     ParseTune(name, value, isNew, 1);
+    ParseTune(name, value, isNew, 2);
     return true;
 }
 

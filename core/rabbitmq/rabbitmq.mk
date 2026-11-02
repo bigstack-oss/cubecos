@@ -38,6 +38,13 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/rabbitmq/rabbitmq.repo $(ROOTDIR)/etc/yum.repos.d/
 	$(Q)chroot $(ROOTDIR) dnf install -y rabbitmq-server-$(RABBITMQ_VER).noarch
 
+# The broker rotates its own log (config_rabbitmq.cpp writes log.file.rotation.*), and
+# logrotate must not rotate the same file: the rpm's entry would rename the live log to
+# .1 and gzip it into the .1.gz the broker's own rotation renames onto, and it applies
+# no size cap of its own between daily runs (#2202).
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) rm -f /etc/logrotate.d/rabbitmq-server
+
 # cowboy and cowlib, the HTTP server behind the management, prometheus, web-stomp and web-mqtt
 # plugins, are swapped for the releases RabbitMQ 4.2 pins. 3.12.14 bundles cowboy 2.12.0 and cowlib
 # 2.13.0, which have known vulnerabilities fixed in cowboy 2.15.0 and cowlib 2.16.1, and no 3.x
