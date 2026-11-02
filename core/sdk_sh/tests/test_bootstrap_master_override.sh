@@ -4,7 +4,8 @@
 # A waiting control re-reads the override each pass: named itself -> it runs
 # the master bring-up; named a peer -> it waits on that peer's commit. With no
 # override the boot is unchanged. A compute waits on the effective master's
-# commit plus every other control committed or down.
+# commit plus every other control committed or down. Every branch marks bootup
+# 'done' before power_roll_advance (#2195).
 #
 # Runs a copy of the script with its paths moved into a temp dir and stub
 # hex_sdk/hex_config/... on PATH; sleep is stubbed to drive the wait loop.
@@ -72,6 +73,11 @@ boot(){
 }
 saw(){ grep -qe "$1" $TMP/calls && echo y || echo n ; }
 master_ran(){ saw 'hex_sdk health_late_start_sweep' ; }
+# before <a> <b>: the first call matching a came before the first matching b
+before(){
+    local a=$(grep -n -m1 -e "$1" $TMP/calls | cut -d: -f1) b=$(grep -n -m1 -e "$2" $TMP/calls | cut -d: -f1)
+    [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ] && echo y || echo n
+}
 waited_on(){ grep '^hex_sdk remote_run' $TMP/calls | awk '{print $3}' | sort -u | tr '\n' ' ' ; }
 
 # 1. no override: a peer waits on c1, then the peer bring-up
@@ -83,6 +89,7 @@ chk "1 waited on c1 only"   "$(waited_on)"                    "c1 "
 chk "1 committed"           "$(saw 'hex_config -p bootstrap')" "y"
 chk "1 peer bring-up"       "$(master_ran)"                   "n"
 chk "1 bootup done"         "$(saw 'power_bootup_mark done')" "y"
+chk "1 done before advance" "$(before 'power_bootup_mark done' 'power_roll_advance c2')" "y"
 chk "1 mode cleared"        "$(cat $TMP/boot_mode)"           ""
 
 # 1b. no override: c1 is master in the foreground
@@ -90,6 +97,7 @@ rm -f $TMP/override $TMP/committed_*
 COMMIT_AT=0 ; boot c1
 chk "1b master bring-up"    "$(master_ran)"                   "y"
 chk "1b no wait"            "$(waited_on)"                    ""
+chk "1b done before advance" "$(before 'power_bootup_mark done' 'power_roll_advance c1')" "y"
 
 # 2. override names this node while it waits: master bring-up
 rm -f $TMP/override $TMP/committed_*
@@ -98,6 +106,7 @@ chk "2 committed"           "$(saw 'hex_config -p bootstrap')" "y"
 chk "2 master bring-up"     "$(master_ran)"                   "y"
 chk "2 roll advance"        "$(saw 'power_roll_advance c2')"  "y"
 chk "2 bootup done"         "$(saw 'power_bootup_mark done')" "y"
+chk "2 done before advance" "$(before 'power_bootup_mark done' 'power_roll_advance c2')" "y"
 chk "2 mode cleared"        "$(cat $TMP/boot_mode)"           ""
 
 # 3. override names a peer: wait on that peer's commit instead
@@ -131,6 +140,7 @@ chk "6 waited on c1"        "$(waited_on)"                    "c1 "
 chk "6 waited for c1 commit" "$(cat $TMP/sleeps)"             "3"
 chk "6 committed"           "$(saw 'hex_config -p bootstrap')" "y"
 chk "6 bootup done"         "$(saw 'power_bootup_mark done')" "y"
+chk "6 done before advance" "$(before 'power_bootup_mark done' 'power_roll_advance p1')" "y"
 
 # 7. compute, master c1 dead: follows an override set while it waits
 rm -f $TMP/override $TMP/committed_* $TMP/dead_* ; touch $TMP/committed_c2 $TMP/dead_c1
