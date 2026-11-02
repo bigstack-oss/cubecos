@@ -24,7 +24,7 @@ pass=0 fail=0
 chk(){ if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $1: got [$2] want [$3]"; fi; }
 
 # --- mocks
-UP=12 IN=12 PGSTATE=active+clean MDS=up:active MOUNT_OK=1 MOUNTED=0 GRACE_OK=1
+UP=12 IN=12 PGSTATE=active+clean MDS=up:active MOUNT_OK=1 MOUNTED=0 GRACE_OK=1 HUNG=0
 _cephmock(){
     case "$1" in
         -s) return 0 ;;
@@ -35,7 +35,12 @@ _cephmock(){
 CEPH=_cephmock
 sleep(){ SECONDS=$((SECONDS + $1)); }
 mountpoint(){ [ "$MOUNTED" = 1 ]; }
-timeout(){ shift; echo "$*" >> "$LOG"; [ "$1" = mount ] && [ "$MOUNT_OK" = 1 ] && MOUNTED=1; return 0; }
+# HUNG=1: the mount is there but its stat never answers, so the bounded probe times out
+timeout(){
+    [ "$1" = -k ] && shift 2; shift
+    [ "$1" = mountpoint ] && { [ "$HUNG" = 1 ] && return 124; "$@"; return; }
+    echo "$*" >> "$LOG"; [ "$1" = mount ] && [ "$MOUNT_OK" = 1 ] && MOUNTED=1; return 0
+}
 ceph-authtool(){ :; }
 hostname(){ echo c1; }
 log_info(){ :; }
@@ -44,7 +49,7 @@ log_error(){ echo "error $*" >> "$LOG"; }
 Quiet(){ [ "$1" = -n ] && shift; echo "$*" >> "$LOG"; }
 ceph_ganesha_grace_join(){ echo "grace_join" >> "$LOG"; [ "$GRACE_OK" = 1 ]; }
 
-reset(){ : > "$LOG"; rm -f "$CEPHFS_DEFERRED_MARKER"; MOUNTED=0; SECONDS=0; }
+reset(){ : > "$LOG"; rm -f "$CEPHFS_DEFERRED_MARKER"; MOUNTED=0; HUNG=0; SECONDS=0; }
 
 # --- cold boot: peer OSDs down, mds not active -> defer after the grace
 reset; UP=4 MDS=up:replay
@@ -77,6 +82,14 @@ chk "no --defer: old failure path" "$rc" "1"
 chk "no --defer: 6 mounts" "$(grep -c '^mount' "$LOG")" "6"
 chk "no --defer: waited 300s" "$([ $SECONDS -ge 300 ] && echo y)" "y"
 chk "no --defer: no marker" "$([ -e "$CEPHFS_DEFERRED_MARKER" ] && echo y)" ""
+
+# --- a hung mount (#2204): fail at once, never stack a second mount on it
+reset; UP=12 MDS=up:active MOUNT_OK=1 HUNG=1
+ceph_mount_cephfs; rc=$?
+chk "hung mount: fails" "$rc" "1"
+chk "hung mount: no mount attempted" "$(grep -c '^mount' "$LOG")" "0"
+chk "hung mount: no wait" "$SECONDS" "0"
+chk "hung mount: says why" "$(grep -c 'not answering' "$LOG")" "1"
 
 # --- bringup without marker: no-op
 reset; UP=12 MDS=up:active MOUNT_OK=1
