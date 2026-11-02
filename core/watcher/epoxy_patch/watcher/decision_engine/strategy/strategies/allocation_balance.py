@@ -66,6 +66,21 @@ class AllocationBalance(base.WorkloadStabilizationBaseStrategy):
         free = self.compute_model.get_node_free_resources(node)
         return free['vcpu'] >= inst.vcpus and free['memory'] >= inst.memory
 
+    def _movable(self, src, dest):
+        """Smallest instance on src whose move to dest shrinks the spread."""
+        spread = self._load(src) - self._load(dest)
+        for inst in sorted(self.compute_model.get_node_instances(src),
+                           key=self._size):
+            # excluded by the audit scope
+            if inst.watcher_exclude:
+                continue
+            # only a running instance can be live migrated
+            if inst.state != element.InstanceState.ACTIVE.value:
+                continue
+            if self._size(inst) < spread and self._fits(dest, inst):
+                return inst
+        return None
+
     def pre_execute(self):
         self._pre_execute()
         self._metric = self.input_parameters.get('metric', 'instance')
@@ -77,22 +92,16 @@ class AllocationBalance(base.WorkloadStabilizationBaseStrategy):
             return
         # Greedy: move one instance at a time, most- to least-allocated node,
         # only while the move shrinks the spread (prevents ping-pong); capped.
+        # A node with nothing movable (all excluded or not running) is skipped
+        # for the next most-allocated one.
         for _step in range(1000):
             nodes.sort(key=self._load)
             dest = nodes[0]
-            src = nodes[-1]
-            spread = self._load(src) - self._load(dest)
-            movable = None
-            for inst in sorted(self.compute_model.get_node_instances(src),
-                               key=self._size):
-                # excluded by the audit scope
-                if inst.watcher_exclude:
-                    continue
-                # only a running instance can be live migrated
-                if inst.state != element.InstanceState.ACTIVE.value:
-                    continue
-                if self._size(inst) < spread and self._fits(dest, inst):
-                    movable = inst
+            src = movable = None
+            for node in reversed(nodes[1:]):
+                movable = self._movable(node, dest)
+                if movable is not None:
+                    src = node
                     break
             if movable is None:
                 break
