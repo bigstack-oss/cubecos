@@ -295,7 +295,7 @@ CONFIG_OBSERVES(opensearch, cubesys, ParseCube, NotifyCube);
 
 CONFIG_TRIGGER_WITH_SETTINGS(opensearch, "cluster_start", ClusterStartMain);
 
-CONFIG_MIGRATE(opensearch, "/var/lib/opensearch");
+CONFIG_MIGRATE_PARALLEL(opensearch, "/var/lib/opensearch");
 
 CONFIG_SUPPORT_COMMAND(HEX_SDK " opensearch_stats");
 CONFIG_SUPPORT_COMMAND(HEX_SDK " opensearch_index_list");

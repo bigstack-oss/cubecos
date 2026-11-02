@@ -530,7 +530,7 @@ CONFIG_OBSERVES(mysql, cubesys, ParseCube, NotifyCube);
 
 CONFIG_MIGRATE(mysql, MigratePrepare);
 CONFIG_MIGRATE(mysql, SETUP_MARK);
-CONFIG_MIGRATE(mysql, "/var/lib/mysql");
+CONFIG_MIGRATE_PARALLEL(mysql, "/var/lib/mysql");
 
 CONFIG_SUPPORT_COMMAND(HEX_SDK " mysql_stats");
 
