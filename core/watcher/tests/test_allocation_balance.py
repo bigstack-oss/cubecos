@@ -63,22 +63,36 @@ _spec.loader.exec_module(allocation_balance)
 
 
 class FakeInstance(object):
-    def __init__(self, uuid, state='active', exclude=False):
+    def __init__(self, uuid, state='active', exclude=False, memory=1024):
         self.uuid = uuid
         self.name = uuid
         self.vcpus = 1
-        self.memory = 1024
+        self.memory = memory
         self.state = state
         self.watcher_exclude = exclude
 
 
 class FakeNode(object):
-    def __init__(self, uuid, instances):
+    def __init__(self, uuid, instances, vcpus=64, vcpu_reserved=0,
+                 memory=65536, memory_mb_reserved=0, vcpu_ratio=1.0):
         self.uuid = uuid
         self.hostname = uuid
-        self.vcpus = 64
-        self.memory = 65536
+        self.vcpus = vcpus
+        self.vcpu_reserved = vcpu_reserved
+        self.vcpu_ratio = vcpu_ratio
+        self.memory = memory
+        self.memory_mb_reserved = memory_mb_reserved
+        self.memory_ratio = 1.0
         self.instances = list(instances)
+
+    # as watcher's ComputeNode
+    @property
+    def vcpu_capacity(self):
+        return (self.vcpus - self.vcpu_reserved) * self.vcpu_ratio
+
+    @property
+    def memory_mb_capacity(self):
+        return (self.memory - self.memory_mb_reserved) * self.memory_ratio
 
 
 class FakeModel(object):
@@ -96,9 +110,15 @@ class FakeModel(object):
     def get_node_instances(self, node):
         return list(node.instances)
 
+    # as watcher's ModelRoot: free is measured from capacity, not the total
+    def get_node_used_resources(self, node):
+        return {'vcpu': sum(i.vcpus for i in node.instances),
+                'memory': sum(i.memory for i in node.instances)}
+
     def get_node_free_resources(self, node):
-        return {'vcpu': node.vcpus - sum(i.vcpus for i in node.instances),
-                'memory': node.memory - sum(i.memory for i in node.instances)}
+        used = self.get_node_used_resources(node)
+        return {'vcpu': node.vcpu_capacity - used['vcpu'],
+                'memory': node.memory_mb_capacity - used['memory']}
 
     def migrate_instance(self, inst, src, dest):
         src.instances.remove(inst)
@@ -107,15 +127,39 @@ class FakeModel(object):
 
 
 class Strategy(allocation_balance.AllocationBalance):
-    def __init__(self, model):
+    def __init__(self, model, metric='instance'):
         # skip the base __init__: it wants config and clients
         self._compute_model = model
-        self._metric = 'instance'
+        self._metric = metric
         self.instance_migrations_count = 0
         self.moved = []
+        self.dests = []
 
     def add_action_migrate(self, instance, migration_type, src, dest):
         self.moved.append(instance.uuid)
+        self.dests.append(dest.uuid)
+
+
+def _converged(packed_on):
+    """cube45 (#2196): control nodes reserve more than computes."""
+    def control(uuid, n):
+        return FakeNode(uuid, [FakeInstance('%s-%d' % (uuid, i), exclude=True,
+                                            memory=2048) for i in range(n)],
+                        vcpus=48, vcpu_reserved=4, vcpu_ratio=16.0,
+                        memory=128784, memory_mb_reserved=32768)
+
+    def compute(uuid, memory):
+        return FakeNode(uuid, [], vcpus=32, vcpu_ratio=16.0, memory=memory,
+                        memory_mb_reserved=24576)
+
+    nodes = [control('cc1', 1), control('cc2', 1), control('cc3', 0),
+             compute('p4', 96536), compute('p5', 128792)]
+    by_name = dict((n.uuid, n) for n in nodes)
+    by_name['p5'].instances += [
+        FakeInstance('p5-%d' % i, exclude=True, memory=2048) for i in range(2)]
+    by_name[packed_on].instances += [
+        FakeInstance('t%d' % i, memory=2048) for i in range(6)]
+    return FakeModel(*nodes)
 
 
 def _plan(src_instances):
@@ -153,6 +197,18 @@ class TestAllocationBalance(unittest.TestCase):
         moved = _plan(insts)
         self.assertTrue(moved)
         self.assertTrue(all(u.startswith('i') for u in moved), moved)
+
+    def test_metrics_rank_nodes_by_what_instances_hold(self):
+        # #2196: reserved capacity and the allocation ratio are not load, so
+        # every metric levels the six VMs to two per node, empty nodes included
+        for packed_on, moves, empty in (('p4', 4, 'cc3'), ('p5', 6, 'p4')):
+            for metric in ('instance', 'vcpu', 'memory'):
+                s = Strategy(_converged(packed_on), metric)
+                s.do_execute()
+                self.assertEqual(moves, len(s.moved), (packed_on, metric))
+                self.assertEqual(2, s.dests.count(empty), (packed_on, metric))
+                for n in s.compute_model.nodes:
+                    self.assertEqual(2, len(n.instances), (packed_on, metric))
 
 
 if __name__ == '__main__':

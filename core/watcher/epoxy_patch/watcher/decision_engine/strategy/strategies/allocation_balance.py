@@ -48,10 +48,12 @@ class AllocationBalance(base.WorkloadStabilizationBaseStrategy):
         """Allocated load on a node for the selected metric."""
         if self._metric == 'instance':
             return len(self.compute_model.get_node_instances(node))
-        free = self.compute_model.get_node_free_resources(node)
+        # what the node's instances hold; total minus free would add each
+        # node's reserved capacity and allocation ratio to its load
+        used = self.compute_model.get_node_used_resources(node)
         if self._metric == 'vcpu':
-            return node.vcpus - free['vcpu']
-        return node.memory - free['memory']
+            return used['vcpu']
+        return used['memory']
 
     def _size(self, inst):
         if self._metric == 'vcpu':
