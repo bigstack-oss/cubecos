@@ -1,0 +1,16 @@
+# Module for ipmi_exporter's local scrape (/metrics, module "default").
+#
+# Only the FreeIPMI driver is set; the collectors stay the exporter's defaults (ipmi, dcmi,
+# bmc, chassis), which cover the temperature, fan and power series Watcher reads.
+modules:
+  default:
+    # OPENIPMI is the kernel driver's /dev/ipmi0. It is the first driver FreeIPMI tries on its
+    # own, and it exists wherever the kernel found a BMC: udev loads ipmi_si from the SMBIOS or
+    # ACPI record, and ipmi_msghandler's softdep brings in ipmi_devintf. So on hardware this
+    # changes nothing. Without a BMC -- any VM -- unpinned FreeIPMI falls through to a KCS guess
+    # at the default port, which holds FreeIPMI's one KCS semaphore for its 60 s driver timeout.
+    # The exporter runs each collector with no timeout and a scrape is four of them, so every
+    # scrape left a FreeIPMI process queued on that semaphore, and the queue grew until the OOM
+    # killer started on other services (cubecos#2201). Pinned, the probe fails in milliseconds
+    # with "device not found" and ipmi_up reads 0.
+    driver: OPENIPMI

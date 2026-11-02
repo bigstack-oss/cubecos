@@ -61,6 +61,7 @@ heavy_components_install:: $(foreach b,$(EXPORTER_BINS),$(EXPORTER_BLDDIR)/$(b))
 	$(Q)# config_prometheus points node_exporter at it.
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/prometheus/exporters /etc/default /var/lib/node_exporter/textfile
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/exporters/blackbox.yml ./etc/prometheus/exporters/
+	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/exporters/ipmi.yml ./etc/prometheus/exporters/
 	$(Q)$(foreach u,$(EXPORTER_UNITS),$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/exporters/$(u).service ./lib/systemd/system ;)
 	# Every exporter is installed disabled; config_prometheus.cpp enables the ones this node's
 	# role actually has something to export, the same way it does for thanos. node_exporter and

@@ -111,6 +111,7 @@ static const char NAME[] = "prometheus";
 #define IPMI_EXPORTER "ipmi_exporter"
 #define IPMI_EXPORTER_DEF "/etc/default/ipmi_exporter"
 #define IPMI_EXPORTER_PORT "9290"
+#define IPMI_EXPORTER_CONF "/etc/prometheus/exporters/ipmi.yml"
 #define MEMCACHED_EXPORTER "memcached_exporter"
 #define MEMCACHED_EXPORTER_DEF "/etc/default/memcached_exporter"
 #define MEMCACHED_EXPORTER_PORT "9150"
@@ -418,12 +419,15 @@ WriteExporterDefaults(bool control, const std::string& myIp)
         return false;
     }
 
-    // freeipmi's local path needs no host argument; without a config file the exporter uses
-    // its built-in "default" module against the local BMC -- the ipmi, dcmi, bmc and chassis
-    // collectors, which covers the temperature, fan and power series Watcher reads. A VM lab
-    // has no BMC and every probe fails -- the series read as down, same as they did before.
+    // freeipmi's local path needs no host argument; the exporter's "default" module runs the
+    // ipmi, dcmi, bmc and chassis collectors against the local BMC, which covers the
+    // temperature, fan and power series Watcher reads. The config file only pins freeipmi to
+    // the kernel's /dev/ipmi0: a VM lab has no BMC, and every probe has to fail at once there
+    // rather than spin on a KCS guess -- see ipmi.yml. The series read as down, same as they
+    // did before.
     const std::vector<std::string> ipmi = {
-        "ARGS='--web.listen-address=" + myIp + ":" IPMI_EXPORTER_PORT "'\n",
+        "ARGS='--config.file=" IPMI_EXPORTER_CONF
+        " --web.listen-address=" + myIp + ":" IPMI_EXPORTER_PORT "'\n",
     };
     if (!WriteFile(fsError, IPMI_EXPORTER_DEF, ipmi)) {
         HexLogError("%s", fsError.c_str());
