@@ -84,7 +84,8 @@ mysql_cmd=$(grep -F 'upgrade_mysql' $CALLS | sed 's/^cmd -c //')
 tick_cmd=$(grep -F 'rabbitmq_ticktime' $CALLS | sed 's/^cmd -c //')
 chk "3 mysql guarded"         "$mysql_cmd" "[ ! -e /var/lib/_mysql ] || hexcfg upgrade_mysql"
 chk "3 ticktime guarded"      "$tick_cmd" "[ ! -e /etc/appliance/state/rabbitmq_ticktime_compat ] || hexcfg rabbitmq_ticktime"
-chk "3 feature flags on master" "$(has 'rr m1 hexcfg rabbitmq_feature_flags')" y
+chk "3 feature flags on master" "$(has 'rr m1 timeout 600 hexcfg rabbitmq_feature_flags')" y
+ff_cmd=$(grep -F 'rabbitmq_feature_flags' $CALLS | sed 's/^rr m1 //')
 chk "3 flags before done"     "$([ "$(line rabbitmq_feature_flags)" -gt "$(line rabbitmq_ticktime)" ] && echo y || echo n)" y
 # the guarded strings, run as cmd runs them remotely: hex_config only with the marker
 hexcfg(){ echo "ran $*" >> $T/ran; }
@@ -92,6 +93,9 @@ run_guarded(){ : > $T/ran; eval "${1//\/var\/lib\/_mysql/$T/_mysql}" ; r=$?; eva
 chk "3 no markers: no hex_config, rc 0" "$(run_guarded "$mysql_cmd" "$tick_cmd")" "00 "
 mkdir $T/_mysql; touch $T/rabbitmq_ticktime_compat
 chk "3 markers: both run"     "$(run_guarded "$mysql_cmd" "$tick_cmd")" "00 ran upgrade_mysql;ran rabbitmq_ticktime;"
+# the flags string, run as the master runs it, against a hex_config that never returns
+mkdir $T/bin; printf '#!/bin/sh\nsleep 30\n' > $T/bin/hexcfg; chmod +x $T/bin/hexcfg
+chk "3 hung flags call ends"  "$(PATH=$T/bin:$PATH; eval "${ff_cmd/600/1}"; echo $?)" 124
 
 # 3b. flags the master could not enable: the roll still completes, and says so
 remote_run(){ echo "rr $1 $2" >> $CALLS; case "$2" in *rabbitmq_feature_flags) return 1 ;; esac; return 0; }
