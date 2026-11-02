@@ -568,7 +568,6 @@ rootfs_install::
 	$(Q)sed -i 's/#DefaultTimeoutStopSec.*/DefaultTimeoutStopSec=90s/' $(ROOTDIR)/etc/systemd/system.conf
 	$(Q)sed -i 's/#DefaultTimeoutStartSec.*/DefaultTimeoutStartSec=300s/' $(ROOTDIR)/etc/systemd/system.conf
 	# $(Q)find  $(ROOTDIR)/usr/lib/systemd/system/ -type f | grep -v crpytsetup.slice | xargs sed -i "s/^TimeoutStopSec.*//"
-	$(Q)chroot $(ROOTDIR) systemctl mask systemd-journal-flush
 
 # Bond aggregator watchdog. Installed with no extension: cron.d ignores files
 # whose names contain a dot.
