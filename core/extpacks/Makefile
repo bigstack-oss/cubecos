@@ -18,10 +18,8 @@ MANILA  := $(TOP_BLDDIR)/../manila-service-image_epoxy.qcow2
 RANCHER_SRC := app-image/yoga/rancher-cluster-image-rke2-v1.32.4.raw
 # The "_<ver>" suffix is what os_extpack_image_import strips to name the glance image.
 RANCHER := $(TOP_BLDDIR)/../rancher-cluster-image-rke2-v1.32.4_v1.32.4-rke2r1.qcow2
-RANCHER_VERSION := $(shell sed -n 's/^APP_VERSION := //p' $(COREDIR)/rancher/Makefile)
-RANCHER_AGENT := $(TOP_BLDDIR)/core/rancher/registry-rancher-agent_v$(RANCHER_VERSION).tar
 EXTPACK_MD5 := $(AMPHORA).md5 $(MANILA).md5 $(RANCHER).md5
-EXTPACK := $(AMPHORA) $(MANILA) $(RANCHER) $(RANCHER_AGENT)
+EXTPACK := $(AMPHORA) $(MANILA) $(RANCHER)
 
 PROJ_PORTAL_EXT := $(MAIN_DIR)/proj.portal.ext
 PKGCLEAN += $(PROJ_PORTAL_EXT)
@@ -76,10 +74,6 @@ $(RANCHER).md5: $(NAS)
 		( qemu-img convert -c -O qcow2 $(NAS)/$(RANCHER_SRC) $(RANCHER).tmp && \
 		  mv -f $(RANCHER).tmp $(RANCHER) && cp -f $(NAS)/$(RANCHER_SRC).md5 $@ )
 
-.PHONY: $(RANCHER_AGENT)
-$(RANCHER_AGENT):
-	$(Q)make -C ../rancher $(notdir $@)
-
 .PHONY: ext
 ext: $(PROJ_EXT) $(PROJ_PORTAL_EXT)
 	@true
@@ -89,7 +83,7 @@ $(PROJ_EXT):
 	$(Q)$(MAKECMD) PROJ_EXT_LONGNAME=$(shell if readlink $(MAIN_DIR)/proj.release >/dev/null; then readlink -n $(MAIN_DIR)/proj.release ; else date '+%Y%m%d' ; fi).ext ext_build
 
 .PHONY: ext_build
-ext_build: $(EXTPACK_MD5) $(RANCHER_AGENT)
+ext_build: $(EXTPACK_MD5)
 	$(Q)mkdir -p $(SHIP_DIR)
 	$(call RUN_CMD_TIMED,$(SHELL) $(HEX_SCRIPTSDIR)/makeextpack $(SHIP_DIR)/$(PROJ_EXT_LONGNAME) $(EXTPACK),"  GEN     $(PROJ_EXT_LONGNAME)")
 	$(Q)ln -sf $(SHIP_DIR)/$(PROJ_EXT_LONGNAME) $(PROJ_EXT)
