@@ -165,10 +165,11 @@ podman build \
   -t "$IMAGE" \
   .
 
-# Downstream cluster agents pull the tag Rancher advertises, and with
-# IMAGE_REPO=rancher that is `rancher/rancher-agent:$TAG` -- absent from Docker
-# Hub past 2.11.3.  Build it here; core/extpacks ships it for the on-cluster
-# registry, which containerd mirrors docker.io to.
+# Downstream cluster agents, and the local cluster's daily machineconfig cleanup
+# CronJob, pull the tag Rancher advertises; with IMAGE_REPO=rancher that is
+# `rancher/rancher-agent:$TAG` -- absent from Docker Hub past 2.11.3.  Build it
+# here and let copy-images.sh seed it into the on-cluster registry, which
+# containerd mirrors docker.io to.
 step "Build $AGENT_IMAGE (target: agent)"
 podman build \
   --target agent \
