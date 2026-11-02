@@ -237,15 +237,18 @@ is_cluster_rolling()
     # the cephfs roll job is the authority; ask it first (also skips the
     # ssh-fanout fallbacks below). "paused" does not count as rolling --
     # _power_roll_pause clears the marker so background repair returns.
+    # Both reads are bounded: on a hung cephfs mount any access under it waits
+    # in the kernel until killed, and every failing health check asks here.
     local _job=${ROLLING_JOB:-/mnt/cephfs/rolling/job.json}
-    if [ -r "$_job" ] ; then
-        [ "$(jq -r '.state // ""' "$_job" 2>/dev/null)" = "running" ] && return 0
+    if timeout -k 5 5 test -r "$_job" ; then
+        [ "$(timeout -k 5 5 jq -r '.state // ""' "$_job" 2>/dev/null)" = "running" ] && return 0
         return 1
     fi
 
     # Fallbacks, used only when the job is unreadable -- i.e. cephfs is not
-    # mounted yet, early in boot. They can only add false positives (suppressing
-    # repair when no roll is running), never mask a roll that is.
+    # mounted yet, early in boot, or not answering. They can only add false
+    # positives (suppressing repair when no roll is running), never mask a roll
+    # that is.
     local ret=1
     [ -e ${ROLLING_RECOVER_MARKER:-/store/rolling_recover} ] && ret=0
     if cmd -v "cat /run/cube_bootstrap.log" | grep -q -e 'Rebooting' -e 'rolling upgrade' ; then
