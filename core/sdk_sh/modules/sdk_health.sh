@@ -1953,9 +1953,11 @@ health_ceph_mds_check()
     fi
     let "online = $active + $standbys + $hotstandbys"
 
+    # mountpoint is bounded on each node: on a hung cephfs mount its stat waits
+    # until killed, and cmd's 600s ssh bound leaves the mux session running it
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
-    elif [ $(cmd -v "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
+    elif [ $(cmd -v "timeout -k 5 $SRVSTO mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
         ERR_CODE=2
     elif ! timeout $SRVSTO mount $(shared_ip):/nfs $nfs_dir 2>/dev/null ; then
         timeout $SRVSTO umount -l $nfs_dir/ 2>/dev/null || true
