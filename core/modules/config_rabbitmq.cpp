@@ -336,10 +336,6 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
         if (ha && stat(SETUP_MARK, &ms) != 0) {
             bool isMaster = G(IS_MASTER);
             if (isMaster && access(CONTROL_REJOIN, F_OK) != 0) {
-                // Each exchange or queue will have at most one policy matching
-                // skip amq.*, reply_ and fanout queues: transient, mirroring only slows failover
-                HexUtilSystemF(0, 0, CONTROL_FMT "set_policy ha-all '^(?!(amq\\.)|(.*_fanout_)|(reply_)).*' '{\"expires\": 86400, \"ha-mode\": \"all\", \"ha-sync-mode\": \"automatic\"}' --apply-to all --priority 0", hostname.c_str());
-
                 std::vector<std::string> peers = GetControllerPeers(hostname, ctrlHosts);
                 for (auto & p : peers) {
                     HexUtilSystemF(0, 0, CONTROL_FMT "forget_cluster_node rabbit@%s", hostname.c_str(), p.c_str());
@@ -361,6 +357,15 @@ CommitRabbitMQ(const bool enabled, const bool ha, const std::string& hostname, c
                 HexUtilSystemF(0, 0, CONTROL_FMT "start_app", hostname.c_str());
             }
             HexSystemF(0, "touch %s", SETUP_MARK);
+        }
+
+        // every commit, not only at cluster setup: the policy lives in mnesia, which an
+        // upgrade carries over with SETUP_MARK, so an upgraded cluster would keep the
+        // pattern it was first set up with (#2203). An unchanged policy is a no-op.
+        if (ha && G(IS_MASTER)) {
+            // Each exchange or queue will have at most one policy matching
+            // skip amq.*, reply_ and fanout queues: transient, mirroring only slows failover
+            HexUtilSystemF(0, 0, CONTROL_FMT "set_policy ha-all '^(?!(amq\\.)|(.*_fanout_)|(reply_)).*' '{\"expires\": 86400, \"ha-mode\": \"all\", \"ha-sync-mode\": \"automatic\"}' --apply-to all --priority 0", hostname.c_str());
         }
     }
 
