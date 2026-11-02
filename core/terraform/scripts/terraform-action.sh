@@ -12,6 +12,19 @@ pushd /tmp >/dev/null 2>&1
 # The image ships without one for the same reason (terraform.mk); drop it before anything runs,
 # so init records the mirror this node has.
 rm -f /var/lib/terraform/.terraform.lock.hcl
+# After every apply, the state is pulled from etcd into a local copy, which cubectl pushes back
+# into a recreated cluster (config_cluster.go). The copy is terraform.tfstate.etcd, because at
+# terraform.tfstate, terraform's local state path, init -reconfigure (below, once etcd enforces
+# TLS) takes it for local state to migrate. A copy that matched etcd was emptied, so a recreate
+# had nothing to push back. One that did not failed init on a prompt nobody answers, leaving the
+# backend settings as they were. A copy still at the old path was carried over by an upgrade, or
+# rsynced from a node not rolled yet, so move it.
+STATE_COPY=/var/lib/terraform/terraform.tfstate.etcd
+if [ -s /var/lib/terraform/terraform.tfstate ] ; then
+    mv -f /var/lib/terraform/terraform.tfstate $STATE_COPY
+else
+    rm -f /var/lib/terraform/terraform.tfstate
+fi
 # The keycloak provider moved from mrparkers/keycloak to keycloak/keycloak, and only the new
 # address is in the mirror. State written by a release on the old provider still names the
 # old one for every keycloak resource, init cannot install it, and so every command fails --
@@ -66,15 +79,15 @@ timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform init -upgra
 timeout -k 1s 60s /usr/local/bin/terraform -chdir=/var/lib/terraform "$@"
 [ $? -eq 0 ] || exit 1
 
-# A pushed state can predate the provider move -- a cluster re-IP pushes the local
-# terraform.tfstate copy back in (cubectl config_cluster.go) -- so look at it again. Likewise
-# for a pushed state that still holds module.mysql.
+# A pushed state can predate the provider move -- a cluster re-IP pushes the local state
+# copy back in (cubectl config_cluster.go) -- so look at it again. Likewise for a pushed
+# state that still holds module.mysql.
 if [ "$1" == "state" ] && [ "$2" == "push" ]; then
     rm -f $KEYCLOAK_PROVIDER_MIGRATED $MYSQL_MODULE_DROPPED
 fi
 
 if [ "$1" == "apply" ] || [ "$1" == "destroy" ] || [ "$1" == "import" ]; then
-    /usr/local/bin/terraform -chdir=/var/lib/terraform state pull > /var/lib/terraform/terraform.tfstate
+    /usr/local/bin/terraform -chdir=/var/lib/terraform state pull > $STATE_COPY
 
     if [ -f /etc/settings.cluster.json ]; then
         cubectl node rsync --role=control /var/lib/terraform/

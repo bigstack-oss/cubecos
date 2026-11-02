@@ -26,8 +26,10 @@ const (
 	certKeyFile   = certsDir + certKeyBase
 	sansConfFile  = "/tmp/openssl-sans.cnf"
 
-	terraformWorkDir   = "/var/lib/terraform/"
-	terraformStateFile = terraformWorkDir + "/terraform.tfstate"
+	terraformWorkDir = "/var/lib/terraform/"
+	// terraform-action.sh pulls it after every apply; not terraform.tfstate, which init would
+	// take for local state
+	terraformStateFile = terraformWorkDir + "terraform.tfstate.etcd"
 )
 
 func getIfaceIP(name string) (string, error) {
