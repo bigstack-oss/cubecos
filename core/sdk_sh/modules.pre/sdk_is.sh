@@ -260,12 +260,13 @@ is_cluster_rolling()
 
 # This boot is this node's own reboot in a running rolling *restart* (not an
 # upgrade): the cephfs job is running, of kind restart, with this node in flight.
-# Unreadable job (cephfs down) or a missing field -> false, i.e. the full path.
+# Unreadable job (cephfs down or hung) or a missing field -> false, i.e. the full
+# path.
 is_rolling_restart_boot()
 {
     local _job=${ROLLING_JOB:-/mnt/cephfs/rolling/job.json}
-    [ -r "$_job" ] || return 1
-    jq -e --arg h "${HOSTNAME:-$(hostname)}" \
+    timeout -k 5 5 test -r "$_job" || return 1
+    timeout -k 5 5 jq -e --arg h "${HOSTNAME:-$(hostname)}" \
         '.state == "running" and .kind == "restart" and .inflight == $h' "$_job" >/dev/null 2>&1
 }
 

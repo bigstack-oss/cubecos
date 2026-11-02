@@ -26,5 +26,23 @@ echo '{"kind":"restart","state":"done","inflight":"cube45"}' > $ROLLING_JOB
 chk "restart, done" "$(run)" "no"
 echo 'garbage' > $ROLLING_JOB
 chk "unparsable job" "$(run)" "no"
+
+# A hung cephfs mount (#2204): a stub test(1) blocks on $T/hung, and a FIFO with
+# no writer blocks jq's open. Each must answer "no" within its bound.
+mkdir -p $T/bin
+printf '#!/bin/bash\n[[ "$*" == *%s/hung/* ]] && exec sleep 600\nexec %s "$@"\n' "$T" "$(type -P test)" > $T/bin/test
+chmod +x $T/bin/test
+mkfifo $T/fifo.json
+export -f is_rolling_restart_boot
+export HOSTNAME
+hung(){
+    local s=$SECONDS r
+    r=$(ROLLING_JOB=$1 PATH=$T/bin:$PATH timeout 30 bash -c 'is_rolling_restart_boot && echo yes || echo no')
+    [ $? -eq 124 ] && r=hung
+    [ $((SECONDS - s)) -le 15 ] || r="$r($((SECONDS - s))s)"
+    echo $r
+}
+chk "cephfs hung" "$(hung $T/hung/job.json)" "no"
+chk "job read blocks" "$(hung $T/fifo.json)" "no"
 rm -rf $T
 exit $fail
