@@ -109,3 +109,21 @@ firmware_get_info()
 
     /bin/cat /boot/grub2/info$part
 }
+
+# 0 only if every control node runs the same firmware -- the precondition for work a
+# control node still on the previous release cannot follow, e.g. the keycloak handover.
+# Reads /etc/version, the slot that is running, not the grub default `firmware list` marks
+# ACTIVE: an upgraded node points there before it reboots. Same fail-safe contract as
+# os_mariadb_version_uniform(): unreachable = unknown = not uniform.
+firmware_version_uniform()
+{
+    local hosts h v vers=
+    hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
+    [ -n "$hosts" ] || return 1
+    for h in $hosts ; do
+        v=$(remote_run "$h" "cat /etc/version 2>/dev/null")
+        [ -n "$v" ] || return 1
+        vers="$vers $v"
+    done
+    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
+}

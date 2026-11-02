@@ -386,10 +386,11 @@ checkKeycloak()
     }
 
     /**
-     * A rolling upgrade only hands the helm release over to the Quarkus chart on the
-     * last control node, so a node that has already been upgraded still has the
-     * WildFly statefulset from CubeCOS v3.1.0 serving logins. That is healthy, not a
-     * failure, so do not report keycloak down for the whole length of the upgrade.
+     * A rolling upgrade only hands the helm release over to the Quarkus chart once
+     * every control node runs one firmware, so a node that has already been upgraded
+     * still has the WildFly statefulset from CubeCOS v3.1.0 serving logins. That is
+     * healthy, not a failure, so do not report keycloak down for the whole length of
+     * the upgrade.
      */
     if (checkKeycloakApp(LEGACY_APP)) {
         HexLogInfo("checked keycloak, still served by the pre-quarkus statefulset");
@@ -398,6 +399,25 @@ checkKeycloak()
 
     HexLogError("neither %s nor %s is rolled out", APP.c_str(), LEGACY_APP.c_str());
     return false;
+}
+
+/**
+ * Report whether the WildFly statefulset from CubeCOS v3.1.0 is still there.
+ * A kubectl failure (e.g. the API server not answering) counts as "not there" so a
+ * node never starts a handover it cannot see.
+ */
+static bool
+hasLegacyKeycloak()
+{
+    // capture and drop the output: this runs on every commit, and the NotFound a
+    // cluster already on the quarkus chart gets back is not worth a log line
+    const ExecSyncResult found = ExecBashSync(
+        0,
+        true,
+        true,
+        {},
+        "/usr/local/bin/k3s kubectl get " + LEGACY_APP + " -n " + APP_NAMESPACE);
+    return found.exitCode == 0;
 }
 
 /**
@@ -411,6 +431,21 @@ isUpdateKeycloakPossible(
 {
     if (!isHa) {
         // always possible to update Keycloak on non-HA nodes
+        return true;
+    }
+
+    /**
+     * Handing the WildFly statefulset over migrates the shared schema, which a control
+     * node still on CubeCOS v3.1.0 cannot follow. Wait for every control node to run one
+     * firmware instead of going by the roll's state: a paused roll does not count as
+     * rolling, yet leaves the control tier mixed. power_roll_advance runs
+     * upgrade_keycloak once the roll is complete.
+     */
+    if (hasLegacyKeycloak()) {
+        if (HexSystemF(0, HEX_SDK " firmware_version_uniform") != 0) {
+            HexLogInfo("skipped handing keycloak over, reason: control nodes on mixed firmware");
+            return false;
+        }
         return true;
     }
 
@@ -429,20 +464,16 @@ isUpdateKeycloakPossible(
  * pods cannot run against the migrated schema. Helm would delete the old statefulset on
  * its own, but only after it has already created the new one, which leaves both versions
  * pointed at the same database for a while. Take the old one down first so they never
- * overlap.
+ * overlap, and stop the upgrade if that fails.
+ *
+ * @return true when helm may proceed.
  */
-static void
+static bool
 retireLegacyKeycloak()
 {
-    const ExecSyncResult found = ExecBashSync(
-        0,
-        false,
-        false,
-        {},
-        "/usr/local/bin/k3s kubectl get " + LEGACY_APP + " -n " + APP_NAMESPACE);
-    if (found.exitCode != 0) {
+    if (!hasLegacyKeycloak()) {
         // nothing to retire, this cluster is already on the quarkus chart
-        return;
+        return true;
     }
 
     HexLogInfo("retire the pre-quarkus keycloak statefulset");
@@ -455,9 +486,10 @@ retireLegacyKeycloak()
             + " --wait=true --timeout=3m");
     if (deleted.exitCode != 0) {
         HexLogError("failed to retire the pre-quarkus keycloak statefulset");
-        return;
+        return false;
     }
     HexLogInfo("retired the pre-quarkus keycloak statefulset");
+    return true;
 }
 
 /**
@@ -616,7 +648,9 @@ updateKeycloak()
 {
     HexLogInfo("update keycloak helm chart and roll out pods");
 
-    retireLegacyKeycloak();
+    if (!retireLegacyKeycloak()) {
+        return false;
+    }
 
     if (!takeKeycloakDownForVersionChange()) {
         return false;
@@ -1111,7 +1145,8 @@ Commit(bool modified, int dryLevel)
     }
 
     bool isKeycloakUpdated = false;
-    if ((s_bApplianceModified || !checkKeycloak())
+    // a cluster still on the WildFly statefulset passes checkKeycloak() but needs the handover
+    if ((s_bApplianceModified || !checkKeycloak() || hasLegacyKeycloak())
         && isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
         // scale keycloak to one pod per control host + roll out
         HexLogInfo("update keycloak");
@@ -1450,7 +1485,8 @@ repairKeycloak()
      * Repairing redeploys the helm release, which on a cluster still running the WildFly
      * chart hands it over to Keycloak 18 and migrates the shared schema. Mid rolling
      * upgrade that would strand the control nodes still on CubeCOS v3.1.0, whose WildFly
-     * pods cannot read the migrated schema, so leave the handover to the last node.
+     * pods cannot read the migrated schema, so leave the handover until every control
+     * node runs one firmware.
      */
     if (!isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
         return true;
@@ -1488,6 +1524,51 @@ RepairKeycloakMain(int argc, char** argv)
 }
 
 CONFIG_COMMAND_WITH_SETTINGS(repair_keycloak, RepairKeycloakMain, RepairKeycloakUsage);
+
+static void
+UpgradeKeycloakUsage()
+{
+    fprintf(stderr, "Usage: %s upgrade_keycloak\n", HexLogProgramName());
+}
+
+// Hand a cluster still on the WildFly statefulset over to the quarkus chart, outside a
+// commit. A rolling upgrade's commits defer the handover while the control tier runs two
+// firmware versions, and nothing commits keycloak again once the roll ends, so
+// power_roll_advance calls this on the master when the roll is complete. A cluster with
+// nothing to hand over returns at once.
+static int
+UpgradeKeycloakMain(int argc, char** argv)
+{
+    if (argc != 1) {
+        UpgradeKeycloakUsage();
+        return EXIT_FAILURE;
+    }
+
+    if (!IsControl(s_eCubeRole) || !hasLegacyKeycloak()) {
+        return EXIT_SUCCESS;
+    }
+
+    if (!isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
+        return EXIT_FAILURE;
+    }
+
+    HexLogInfo("update keycloak");
+    if (!updateKeycloak()) {
+        HexLogError("failed to update keycloak");
+        return EXIT_FAILURE;
+    }
+    HexLogInfo("updated keycloak");
+
+    if (!K3sWatchRollOut(APP, APP_NAMESPACE, "3m")) {
+        HexLogError("failed to see all pods rolled out");
+        return EXIT_FAILURE;
+    }
+    HexLogInfo("all keycloak pods are rolled out");
+
+    return EXIT_SUCCESS;
+}
+
+CONFIG_COMMAND_WITH_SETTINGS(upgrade_keycloak, UpgradeKeycloakMain, UpgradeKeycloakUsage);
 
 static void
 RemoveKeycloakSamlMetadataUsage()
