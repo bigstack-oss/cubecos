@@ -965,6 +965,15 @@ power_roll_advance()
         # reason as ovn_central_switch. See etcd_tls_ladder (sdk_etcd.sh); it logs its own
         # outcome on the master.
         ( remote_run $master "$HEX_SDK etcd_tls_ladder" ) >/dev/null 2>&1
+        # Hand keycloak over from the WildFly statefulset. Each control node's commit defers
+        # it while the control tier runs two firmware versions, and nothing commits keycloak
+        # once the roll ends. Before the job is marked done, for the same reason as
+        # ovn_central_switch. See upgrade_keycloak (config_keycloak.cpp). Only a cluster
+        # still holding the WildFly statefulset pays for a hex_config start, as for
+        # upgrade_mysql. Capped like the feature flags; its own waits (retire, scale-down,
+        # helm retries, rollout) add up to about 13 minutes.
+        ( remote_run $master "! /usr/local/bin/k3s kubectl -n keycloak get sts keycloak >/dev/null 2>&1 || timeout 900 $HEX_CFG upgrade_keycloak" ) >/dev/null 2>&1 ||
+            log_error "rolling_$(_power_roll_kind): keycloak not handed over, see the log on $master"
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
