@@ -41,6 +41,7 @@ ADVISOR_AGENT_UNIT_NAME=cube-advisor-agent.service
 ADVISOR_HEALTH_CERT=/etc/cube/advisor-agent/agent.crt
 ADVISOR_HEALTH_BIN=/usr/local/bin/cube-advisor-agent
 HEX_SDK=hex_sdk_marker
+ERR_LOGSIZE=100
 
 # Per-node fixtures, keyed by hostname. Unset/absent means "not present".
 declare -A CERT_PRESENT BIN_PRESENT UNIT_ACTIVE
@@ -107,6 +108,8 @@ case "$ERR_MSG" in
     *c1*) bad "message named a healthy node too: $ERR_MSG" ;;
     *) ok ;;
 esac
+# the journal keeps earlier boots (#2198): the agent's log is its tail, not all of it
+[ "$ERR_LOG" = "journalctl -n 100 -u cube-advisor-agent.service" ] && ok || bad "agent down: ERR_LOG '$ERR_LOG'"
 
 # ---- one enrolled with a missing binary: code 2, naming it -----------------
 reset

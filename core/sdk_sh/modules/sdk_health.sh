@@ -412,7 +412,7 @@ health_bootstrap_check()
         if ! is_sshable $node || ! ssh root@$node stat $CUBE_DONE >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="$node services ... [n/a]\n"
-            ERR_LOG="`journalctl | grep hex | grep -i -e error -e fail`\n"
+            ERR_LOG="`journalctl -b | grep hex | grep -i -e error -e fail`\n"
         else
             ERR_MSG+="$node services ... [ready]\n"
         fi
@@ -515,7 +515,7 @@ health_advisor_check()
     elif [ "${#down[@]}" -gt 0 ] ; then
         ERR_CODE=1
         ERR_MSG="agent not running on: ${down[*]}"
-        ERR_LOG="journalctl -u $ADVISOR_AGENT_UNIT_NAME"
+        ERR_LOG="journalctl -n $ERR_LOGSIZE -u $ADVISOR_AGENT_UNIT_NAME"
     elif [ "${#unapplied[@]}" -gt 0 ] ; then
         ERR_CODE=3
         ERR_MSG="console origins reported but not applied from: ${unapplied[*]}"
@@ -3778,8 +3778,9 @@ health_kafka_check()
     # checks below find (see _health_datapipe_try_start)
     _health_datapipe_up && rm -f ${_DP_START_MARK:-/run/cube_datapipe_start_failed}
 
-    # check the last line of telegraf log
-    if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf.*metrics" ; then
+    # check the last line of telegraf log, in this boot: the journal keeps earlier boots,
+    # and their last line is no failure of telegraf now (#2198)
+    if journalctl -b -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf.*metrics" ; then
         ERR_CODE=2
         ERR_MSG+="kafka fails to get sys/host metrics\n"
     fi
@@ -3812,13 +3813,13 @@ _health_kafka_auto_repair()
     if [ "$ERR_CODE" == "1" ] ; then
         _health_datapipe_start_stopped
     elif [ "$ERR_CODE" == "2" ] ; then
-        if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-metrics" ; then
+        if journalctl -b -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-metrics"
         fi
-        if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-hc-metrics" ; then
+        if journalctl -b -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-hc-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-hc-metrics"
         fi
-        if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-events-metrics" ; then
+        if journalctl -b -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-events-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-events-metrics"
         fi
     elif [ "$ERR_CODE" == "4" ] ; then

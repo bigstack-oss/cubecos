@@ -58,8 +58,8 @@ BootstrapAndClusterstart()
         [ -e /store/rolling_recover ] && hex_sdk _power_roll_set_phase_ts "$HOSTNAME" bootstrapping   # rolling_restart phase timing
         bootstrap_run_logged hex_config -p bootstrap standalone-done
         if [ ! -e "$BOOTSTRAP_CUBE_MARKER" ] ; then
-            bootstrap_status "Bootstrap error: $(journalctl | grep hex | egrep -i 'failed to commit')"
-            hex_log_event -e BSP00003W "interface=system,host=$HOSTNAME,service=bootstrap,detail=$(journalctl | grep hex | egrep -i 'failed to commit|took' | tail -2 | tr -d ',\"=|' | tr '\n' ' ')"
+            bootstrap_status "Bootstrap error: $(journalctl -b | grep hex | egrep -i 'failed to commit')"
+            hex_log_event -e BSP00003W "interface=system,host=$HOSTNAME,service=bootstrap,detail=$(journalctl -b | grep hex | egrep -i 'failed to commit|took' | tail -2 | tr -d ',\"=|' | tr '\n' ' ')"
             return 1
         else
             bootstrap_status "Starting cluster"
