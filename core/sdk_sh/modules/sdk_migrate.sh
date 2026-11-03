@@ -923,16 +923,16 @@ _migrate_cephx_copies()
     if [ "$($CEPH auth get-key client.admin 2>/dev/null)" != "$(ceph-authtool -p $ADMIN_KEYRING 2>/dev/null)" ] ; then
         tmp=$(mktemp ${ADMIN_KEYRING%/*}/.cephx.XXXX)
         $CEPH auth get client.admin -o $tmp >/dev/null 2>&1 && [ -s $tmp ] || { rm -f $tmp ; return 1 ; }
-        chmod 0600 $tmp && mv -f $tmp $ADMIN_KEYRING
+        _migrate_cephx_replace $tmp $ADMIN_KEYRING
     fi
     if [ "$($CEPH auth get-key client.k8s 2>/dev/null)" != "$(ceph-authtool -p -n client.k8s $K8S_KEYRING 2>/dev/null)" ] ; then
         tmp=$(mktemp ${K8S_KEYRING%/*}/.cephx.XXXX)
         $CEPH auth get client.k8s -o $tmp >/dev/null 2>&1 && [ -s $tmp ] || { rm -f $tmp ; return 1 ; }
-        chmod 0600 $tmp && mv -f $tmp $K8S_KEYRING
+        _migrate_cephx_replace $tmp $K8S_KEYRING
     fi
     tmp=$(mktemp ${CEPHFS_CLIENT_AUTHKEY%/*}/.cephx.XXXX)
     ceph-authtool -p $ADMIN_KEYRING > $tmp 2>/dev/null && [ -s $tmp ] || { rm -f $tmp ; return 1 ; }
-    chmod 0600 $tmp && mv -f $tmp $CEPHFS_CLIENT_AUTHKEY
+    _migrate_cephx_replace $tmp $CEPHFS_CLIENT_AUTHKEY
 
     local f
     for f in $ADMIN_KEYRING $K8S_KEYRING $CEPHFS_CLIENT_AUTHKEY ; do
@@ -951,6 +951,16 @@ _migrate_cephx_copies()
     done
     log_warning "migrate_ceph_cephx_cipher: could not update the ceph-csi secrets"
     return 1
+}
+
+# Move a copy written through mktemp ($1: 0600, owned by whoever runs this) onto $2 with
+# $2's owner, group and mode. A fresh install leaves the keyrings 0664 root:admin, and
+# cinder reads the admin keyring through that read bit, for backups and host-assisted
+# volume moves; `cubectl node rsync --archive` then pushes the same to every node.
+_migrate_cephx_replace()
+{
+    [ -e $2 ] && chown --reference=$2 $1 && chmod --reference=$2 $1
+    mv -f $1 $2
 }
 
 # On a control node: set the ceph-csi secrets' keys to client.admin's, which is the user
