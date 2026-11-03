@@ -8,6 +8,30 @@ fi
 
 # Paths named, not inlined: the tests point them somewhere writable.
 CUBE_GITIGNORE=${CUBE_GITIGNORE:-/.gitignore}
+CUBE_GIT_WORKTREE=${CUBE_GIT_WORKTREE:-/}
+CUBE_GIT_ROOT_CONFIG=${CUBE_GIT_ROOT_CONFIG:-/root/.gitconfig}
+
+# The commit identity of this node, kept in the repository's own config (/.git/config). Run it
+# with the worktree as the current directory. It must not live only in ~/.gitconfig: hex_cli is
+# setuid root but keeps the caller's HOME, and the admin login's HOME is /tmp. A fixpack installed
+# from an admin session then never sees /root/.gitconfig, its commit fails with "unable to
+# auto-detect email address (got 'root@<host>.(none)')", and the change is left uncommitted.
+_git_identity()
+{
+    local email
+    email=$($GIT config --local user.email 2>/dev/null)
+    if [ -z "$email" ] ; then
+        email=$($GIT config --file $CUBE_GIT_ROOT_CONFIG user.email 2>/dev/null)
+        if [ -z "$email" ] ; then
+            local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
+            # never invent one: "@" or "host@" would pass git and hide the problem
+            [ -n "$HOSTNAME" ] && [ -n "$ipaddr" ] && [ "$ipaddr" != null ] || return 1
+            email="${HOSTNAME}@${ipaddr}"
+        fi
+        $GIT config --local user.email "$email" || return 1
+    fi
+    $GIT config --local user.name >/dev/null 2>&1 || $GIT config --local user.name root
+}
 
 git_ignore_file()
 {
@@ -58,6 +82,7 @@ _git_server_init()
 
         Quiet -n pushd /
         Quiet -n git init -b $branch
+        Quiet -n _git_identity
         # local cephfs path, not ssh://VIP (stalls during set_ready reconfig). #1195
         Quiet -n $GIT remote add $project ${cube_git_dir}
         if [ -e "$CUBE_GITIGNORE" ] ; then
@@ -99,6 +124,7 @@ _git_client_init()
 
     Quiet -n pushd /
     Quiet -n $GIT init -b $branch
+    Quiet -n _git_identity
     # local cephfs path, not ssh://VIP (stalls during set_ready reconfig). #1195
     Quiet -n $GIT remote add $project ${cube_git_dir}
     if [ -e "$CUBE_GITIGNORE" ] ; then
@@ -144,15 +170,32 @@ git_push()
 {
     local msg="${@:-n/a}"
     local project=cube
+    local d
 
     $HEX_SDK _git_client_init
-    Quiet -n pushd /
-    # Commit tracked changes to this node's own branch; peers untouched.
-    $GIT add -u
-    if $GIT diff --cached --quiet ; then
+    Quiet -n pushd $CUBE_GIT_WORKTREE
+    # Commit tracked changes to this node's own branch; peers untouched. Every step is checked and
+    # fails the call: a fixpack install records its change here, and a failure that went unseen
+    # left the change uncommitted, to be swept into the next fixpack's commit.
+    if [ -e .git/index.lock ] ; then
+        Error "git: .git/index.lock exists on $HOSTNAME: another git is running, or one was killed; nothing recorded"
+        return 1
+    fi
+    _git_identity || { Error "git: cannot set the commit identity on $HOSTNAME" ; return 1 ; }
+    $GIT add -u || { Error "git: add failed on $HOSTNAME" ; return 1 ; }
+    $GIT diff --cached --quiet
+    d=$?
+    if [ $d -eq 0 ] ; then
         log_info "git: nothing to record on $HOSTNAME"
-    elif ! ( $GIT commit -q -m "$msg" && $GIT push -q $project +HEAD:refs/heads/nodes/$HOSTNAME ) ; then
-        Error "failed to push $HOSTNAME's changes to $project nodes/$HOSTNAME"
+    elif [ $d -ne 1 ] ; then
+        Error "git: cannot tell what changed on $HOSTNAME (git diff exit $d)"
+        return 1
+    elif ! $GIT commit -q -m "$msg" ; then
+        Error "git: commit failed on $HOSTNAME"
+        return 1
+    elif ! $GIT push -q $project +HEAD:refs/heads/nodes/$HOSTNAME ; then
+        Error "git: $HOSTNAME's change is committed on the node but not pushed to $project nodes/$HOSTNAME"
+        return 1
     fi
     Quiet -n popd
     Quiet -n $GIT -P log -3
