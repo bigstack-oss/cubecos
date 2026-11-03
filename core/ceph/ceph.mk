@@ -228,6 +228,12 @@ rootfs_install::
 # asyncssh and certifi carry known vulnerabilities, so they go through the blocklist, and
 # kubernetes with them so that no installed rpm is left with an unmet requirement.
 BLKLST_DNF += python3-asyncssh python3-kubernetes python3-certifi
+# kubernetes leaves its own dependencies behind in turn, and nothing else requires or imports
+# them: requests-oauthlib and the oauthlib it needs, google-auth with rsa, pyasn1-modules,
+# pyasn1 and cachetools, websocket-client and durationpy. oauthlib and pyasn1 carry known
+# vulnerabilities, so the whole set goes through the blocklist after kubernetes.
+BLKLST_DNF += python3-requests-oauthlib python3-oauthlib python3-google-auth python3-rsa \
+	python3-pyasn1-modules python3-pyasn1 python3-cachetools python3-websocket-client python3-durationpy
 
 # podman comes in only as cephadm's weak dependency (Recommends), and nothing here runs it: CubeOS
 # deploys ceph from packages, not through cephadm, and no script, unit or service on a node calls
