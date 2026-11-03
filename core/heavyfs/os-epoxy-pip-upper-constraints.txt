@@ -435,7 +435,7 @@ stevedore===5.4.1
 pywinrm===0.5.0
 botocore===1.36.26
 xmltodict===0.14.2
-pyasn1===0.6.4
+pyasn1===0.6.5
 oslo.rootwrap===7.5.1
 Django===4.2.30
 pexpect===4.9.0
