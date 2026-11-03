@@ -28,14 +28,8 @@ const (
 	terraformVarFileKeycloakAdminPassword = "/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars"
 )
 
-type RancherCreateNodeTemplateOpts struct {
-	openstackConfig string
-}
-
 var (
 	rancherToken string
-
-	rancherCreateNodeTemplateOpts RancherCreateNodeTemplateOpts
 )
 
 // k3s kubectl create namespace cattle-system
@@ -780,55 +774,6 @@ func repairRancher() error {
 	return nil
 }
 
-var cmdRancherCreateNodeTemplate = &cobra.Command{
-	Use:   "create-nodetemplate",
-	Short: "Create a default node template",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if !cubeSettings.IsRole(util.ROLE_CONTROL) {
-			return fmt.Errorf("Can only be executed on control nodes")
-		}
-
-		templateName := args[0]
-
-		var openstackConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(rancherCreateNodeTemplateOpts.openstackConfig), &openstackConfig); err != nil {
-			return errors.WithStack(err)
-		}
-
-		tmplData := map[string]interface{}{
-			"name":             templateName,
-			"type":             "nodeTemplate",
-			"engineInstallURL": "https://get.docker.com",
-			"engineInsecureRegistry": []string{
-				cubeSettings.GetController() + ":" + strconv.Itoa(dockerRegistryPort),
-				cubeSettings.GetControllerIp() + ":" + strconv.Itoa(dockerRegistryPort),
-			},
-			"engineRegistryMirror": []string{
-				"http://" + cubeSettings.GetControllerIp() + ":" + strconv.Itoa(dockerRegistryPort),
-			},
-			"openstackConfig": openstackConfig,
-		}
-
-		data, err := json.Marshal(tmplData)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		//fmt.Println(string(data))
-		if _, err := rancherReq("POST",
-			"/v3/nodetemplate",
-			string(data),
-		); err != nil {
-			return errors.WithStack(err)
-		}
-
-		zap.L().Info("Node template created", zap.String("name", templateName))
-
-		return nil
-	},
-}
-
 func init() {
 	m := NewModule("rancher")
 	m.commitFunc = commitRancher
@@ -838,8 +783,6 @@ func init() {
 	m.repairFunc = repairRancher
 
 	cobra.EnableCommandSorting = false
-	m.AddCustomCommand(cmdRancherCreateNodeTemplate)
-	cmdRancherCreateNodeTemplate.Flags().StringVar(&rancherCreateNodeTemplateOpts.openstackConfig, "openstack-config", "", "Config for OpenStack")
 
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 }
