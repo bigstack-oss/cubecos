@@ -14,11 +14,13 @@ GPGKEY_DNF += $(COREDIR)/docker/RPM-GPG-KEY-docker 060A61C51B558A7F742B77AAC52FE
 # vendor's release tag, at the version the package installs, and installed over the package's
 # copies. Every vendor build is still made with a Go older than the October 2026 security release
 # (1.27.2 / 1.26.9), or links an x/net older than its fix; the jail's Go and DOCKER_GO_GET cover
-# both. The packages stay for their units, config and dependencies, and name the version in the
-# SBOM. Return a binary to its vendor's on the condition core/exporters/Makefile gives. The packages
+# both. DOCKER_GO_GET also raises go-jose, which containerd and skopeo link, to its fixed release.
+# The packages stay for their units, config and dependencies, and name the version in the SBOM.
+# Return a binary to its vendor's on the condition core/exporters/Makefile gives. The packages
 # float, so rootfs_install stops the build when one has moved past the version rebuilt here, rather
 # than put an older binary under a newer package: bump the version below to the package's.
-DOCKER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0
+DOCKER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+	github.com/go-jose/go-jose/v4@v4.1.6
 CONTAINERD_VER := 2.4.2
 RUNC_VER := 1.5.2
 COMPOSE_VER := 5.7.0
@@ -101,13 +103,13 @@ $(DOCKER_GO_BIN)/docker-buildx: $(DOCKER_GO_DIR)/buildx-src $(COREDIR)/docker/do
 
 # skopeo, from the Stream rpm. Pure Go: containers_image_openpgp in place of gpgme (and of the
 # sequoia library), with btrfs and devicemapper left out, as skopeo's own static build does. Its
-# grpc, opentelemetry, selinux, fulcio, klauspost/compress and go-jose are raised to their fixed
+# grpc, opentelemetry, selinux, fulcio and klauspost/compress are raised to their fixed
 # releases as well. Stream 9 is on skopeo's 1.22 sustaining branch: its 1.22.2 builds carry Epoch 3,
 # above the 1.23.0 build's Epoch 2, so dnf installs 1.22.2 although 1.23.0 is still in the
 # repository. Move to 1.23 only when the package does.
 SKOPEO_GO_GET := google.golang.org/grpc@v1.84.0 go.opentelemetry.io/otel@v1.47.0 \
 	github.com/opencontainers/selinux@v1.13.1 github.com/sigstore/fulcio@v1.8.8 \
-	github.com/klauspost/compress@v1.18.7 github.com/go-jose/go-jose/v4@v4.1.6
+	github.com/klauspost/compress@v1.18.7
 $(eval $(call docker_go_clone,skopeo,v$(SKOPEO_VER),containers/skopeo))
 $(DOCKER_GO_BIN)/skopeo: $(DOCKER_GO_DIR)/skopeo-src $(COREDIR)/docker/docker.mk
 	$(Q)mkdir -p $(@D)
