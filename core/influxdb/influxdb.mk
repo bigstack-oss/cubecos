@@ -33,7 +33,7 @@ INFLUXDB_VER := 1.13.2
 INFLUXDB_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
 	google.golang.org/grpc@v1.84.0 go.opentelemetry.io/otel@v1.47.0 go.opentelemetry.io/otel/sdk@v1.47.0 \
 	github.com/go-jose/go-jose/v4@v4.1.6 github.com/prometheus/prometheus@v0.311.3 \
-	github.com/klauspost/compress@v1.18.7
+	github.com/klauspost/compress@v1.20.3
 INFLUXDB_GO_DIR := $(ARCS_DIR)/influxdb-go
 INFLUXDB_SRC := $(INFLUXDB_GO_DIR)/influxdb-$(INFLUXDB_VER)-src
 INFLUXDB_BINS := influxd influx influx_inspect
