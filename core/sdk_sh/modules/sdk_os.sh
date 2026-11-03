@@ -1477,6 +1477,9 @@ os_nova_instance_reset_pass()
     local user=${1:-NOUSERNAME}
     shift
     local pass=${*:-NOPASS}
+    local q_user q_pass
+    printf -v q_user '%q' "$user"
+    printf -v q_pass '%q' "$pass"
     local srv_info_json=$($OPENSTACK server show $srv_id -f json)
     local node=$(echo $srv_info_json  | jq -r '."OS-EXT-SRV-ATTR:host"')
     local inst=$(echo $srv_info_json  | jq -r '."OS-EXT-SRV-ATTR:instance_name"')
@@ -1484,12 +1487,12 @@ os_nova_instance_reset_pass()
     if remote_run $node virsh list | grep -q $inst ; then
         if [ $(echo $pass | wc -c) -gt 100 ] ; then
             local inst_sshkey=$(mktemp -u /tmp/inst_sshkey_XXXX.pub)
-            remote_run $node echo "$pass" >$inst_sshkey
-            remote_run $node "virsh set-user-sshkeys --domain $inst --user $user --reset >/dev/null" || echo "Failed to reset sshkey for $user"
-            remote_run $node "virsh set-user-sshkeys --domain $inst --user $user --file $inst_sshkey >/dev/null" || echo "Failed to update sshkey for $user"
+            remote_run $node echo "$q_pass" >$inst_sshkey
+            remote_run $node "virsh set-user-sshkeys --domain $inst --user $q_user --reset >/dev/null" || echo "Failed to reset sshkey for $user"
+            remote_run $node "virsh set-user-sshkeys --domain $inst --user $q_user --file $inst_sshkey >/dev/null" || echo "Failed to update sshkey for $user"
             remote_run $node rm -f $inst_sshkey
         else
-            remote_run $node "virsh set-user-password --domain $inst --user $user $pass >/dev/null" || echo "Failed to reset password for $user"
+            remote_run $node "virsh set-user-password --domain $inst --user $q_user $q_pass >/dev/null" || echo "Failed to reset password for $user"
         fi
     fi
 }
