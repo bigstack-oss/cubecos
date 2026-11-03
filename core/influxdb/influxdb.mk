@@ -18,7 +18,7 @@ GPGKEY_DNF += $(COREDIR)/influxdb/RPM-GPG-KEY-influxdata 24C975CBA61A024EE1B6317
 # 2026 security release (1.27.2 / 1.26.9), and links an x/net, x/text, grpc and klauspost/compress
 # older than their fixes. The jail's Go and INFLUXDB_GO_GET cover both, with influxd's
 # opentelemetry and go-jose raised to their fixed releases as well. So is the prometheus module,
-# for the prompb types its remote read and write endpoints use: 1.13.1 pins a 2020 commit. 0.311.3
+# for the prompb types its remote read and write endpoints use: 1.13.2 pins a 2020 commit. 0.311.3
 # is the first release past both of its fixed lines; prometheus/common moves with it. Return to the
 # rpm's binaries on the condition core/exporters/Makefile gives. The repo floats, so rootfs_install
 # stops the build when the rpm has moved past INFLUXDB_VER, rather than put an older binary under a
@@ -29,7 +29,7 @@ GPGKEY_DNF += $(COREDIR)/influxdb/RPM-GPG-KEY-influxdata 24C975CBA61A024EE1B6317
 # by flux's own Cargo.lock, so the jail carries rust and cargo. The tags, PIE and version ldflags
 # are the release's own; the release links statically against musl, this build dynamically
 # against the image's glibc.
-INFLUXDB_VER := 1.13.1
+INFLUXDB_VER := 1.13.2
 INFLUXDB_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
 	google.golang.org/grpc@v1.84.0 go.opentelemetry.io/otel@v1.47.0 go.opentelemetry.io/otel/sdk@v1.47.0 \
 	github.com/go-jose/go-jose/v4@v4.1.6 github.com/prometheus/prometheus@v0.311.3 \
