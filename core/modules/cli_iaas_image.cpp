@@ -287,7 +287,7 @@ MetadataMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    HexUtilSystemF(0, 0, HEX_SDK " os_volume_image_metadata %s %s %s", vol_id.c_str(), metadata_key.c_str(), metadata_val.c_str());
+    HexUtilSystemF(0, 0, HEX_SDK " os_volume_image_metadata %s %s %s", HexBuildShellArg(vol_id).c_str(), HexBuildShellArg(metadata_key).c_str(), HexBuildShellArg(metadata_val).c_str());
 
     return CLI_SUCCESS;
 }

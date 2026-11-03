@@ -132,7 +132,7 @@ ResetPassMain(int argc, const char** argv)
         CliPrint("Password/SSH key is missing");
         return CLI_INVALID_ARGS;
     }
-    HexSystemF(0, HEX_SDK " os_nova_instance_reset_pass %s %s %s", uuid.c_str(), username.c_str(), pass.c_str());
+    HexSystemF(0, HEX_SDK " os_nova_instance_reset_pass %s %s %s", HexBuildShellArg(uuid).c_str(), HexBuildShellArg(username).c_str(), HexBuildShellArg(pass).c_str());
 
     return CLI_SUCCESS;
 }

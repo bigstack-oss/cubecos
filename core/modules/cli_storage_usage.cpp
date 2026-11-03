@@ -18,7 +18,7 @@ static int StorageUsageMain(int argc, const char** argv)
     }
 
     if (argc == 2) {
-        HexSystemF(0, HEX_SDK " storage_usage_get %s", argv[1]);
+        HexSystemF(0, HEX_SDK " storage_usage_get %s", HexBuildShellArg(argv[1]).c_str());
     } else {
         HexSystemF(0, HEX_SDK " storage_usage_get");
     }

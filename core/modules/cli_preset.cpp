@@ -185,7 +185,8 @@ ShowIfMain(int argc, const char** argv)
         for (auto& ip : iplist) {
             CliPrintf("\nhost: %s", ip.c_str());
             CliPrint("--------------");
-            HexSystemF(0, REMOTE_RUN_FMT HEX_SDK " -v preset_interface_show %s" STDERR_NULL, ip.c_str(), name.c_str());
+            // ssh hands the command to the remote shell, so quote twice.
+            HexSystemF(0, REMOTE_RUN_FMT HEX_SDK " -v preset_interface_show %s" STDERR_NULL, ip.c_str(), HexBuildShellArg(HexBuildShellArg(name)).c_str());
         }
     }
     else {
@@ -219,11 +220,12 @@ SetDatetimeMain(int argc, const char** argv)
         for (auto& ip : iplist) {
             CliPrintf("\nhost: %s %s %s", ip.c_str(), dt[0].c_str(), dt[1].c_str());
             CliPrint("--------------");
-            HexSystemF(0, REMOTE_RUN_FMT HEX_CFG " datetime %s %s" STDERR_NULL, ip.c_str(), dt[0].c_str(), dt[1].c_str());
+            // ssh hands the command to the remote shell, so quote twice.
+            HexSystemF(0, REMOTE_RUN_FMT HEX_CFG " datetime %s %s" STDERR_NULL, ip.c_str(), HexBuildShellArg(HexBuildShellArg(dt[0])).c_str(), HexBuildShellArg(HexBuildShellArg(dt[1])).c_str());
         }
     }
     else {
-        HexSystemF(0, HEX_CFG " date '\"%s\"'", datetime.c_str());
+        HexSystemF(0, HEX_CFG " date %s", HexBuildShellArg("\"" + datetime + "\"").c_str());
     }
 
     return CLI_SUCCESS;

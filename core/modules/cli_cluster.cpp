@@ -966,7 +966,8 @@ ClusterSetRolePasswordMain(int argc, const char** argv)
     if (role != "all")
         opts = "-n " + role;
 
-    HexSystemF(0, "hex_sdk cmd %s -p " HEX_CFG " password %s %s", opts.c_str(), oldPass.c_str(), newPass.c_str());
+    // hex_sdk cmd runs this through the remote shell, so quote twice.
+    HexSystemF(0, "hex_sdk cmd %s -p " HEX_CFG " password %s %s", opts.c_str(), HexBuildShellArg(HexBuildShellArg(oldPass)).c_str(), HexBuildShellArg(HexBuildShellArg(newPass)).c_str());
 
     return CLI_SUCCESS;
 }
