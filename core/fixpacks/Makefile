@@ -17,7 +17,13 @@ ifeq ($(CURRENT_RELEASE),)
 $(error Could not read the release version from $(CUBE_MAIN_MAKEFILE))
 endif
 SUPPORTED_FIRMWARES   ?= $(CURRENT_RELEASE)
-FIXPACK_ID            ?= v3.2.0-001
+# The kernel fixpack also serves the earlier releases. Its scripts (secfix/) handle both ways of
+# installing: per node on 3.2.0+, cluster-wide through git on 3.0.0-3.1.20.
+SECFIX_FIRMWARES      ?= $(CURRENT_RELEASE) 3.1.20 3.1.10 3.1.0 3.0.0
+# secfix: name it by the kernel it carries and the release it is for, e.g. kernel-7.2.11-1-v3.2.0-000
+# for kernel 7.2.11-1.el9.x86_64. KER_VER and KER_REL come from hex/make/kernel_definitions.mk;
+# $(basename) drops the dist tag (1.el9 -> 1). fixpack.info still names the full kernel.
+FIXPACK_ID            ?= kernel-$(KER_VER)-$(basename $(KER_REL))-v$(CURRENT_RELEASE)-000
 
 ifeq ($(COMMITSINCE),)
 COMMITSINCE           := $(FIRST_RELEASE_VERSION)
@@ -38,7 +44,7 @@ DUMMY_FIXPACKS        := $(DUMMY_NOROLLBACK).fixpack $(DUMMY_ROLLBACK).fixpack
 
 BUILD    += secfix
 BUILD    += dummyfix
-PKGCLEAN += *.fixpack *.out *.fixpack.md5 dummy-*
+PKGCLEAN += *.fixpack *.out *.fixpack.md5 dummy-* secfixdraft
 
 export PROJ_GUARDED_BIN
 
@@ -66,8 +72,9 @@ fixpack: $(FIXPACK)
 	$(Q)true
 
 secfixdraft:
+	$(Q)mkdir -p $@ && cp -r $(SRCDIR)/secfix/. $@/     # makesecfixdraft keeps scripts already there
 	$(call RUN_CMD_SILENT,$(SHELL) $(HEX_SCRIPTSDIR)/makesecfixdraft $@,"  GEN     $@")
-	$(Q)sed -i "s/SUPPORTED_FIRMWARES=.*/SUPPORTED_FIRMWARES=\"$(SUPPORTED_FIRMWARES)\"/" $@/fixpack.info
+	$(Q)sed -i "s/SUPPORTED_FIRMWARES=.*/SUPPORTED_FIRMWARES=\"$(SECFIX_FIRMWARES)\"/" $@/fixpack.info
 	$(Q)sed -i "s/FIXPACK_ID=.*/FIXPACK_ID=\"$(FIXPACK_ID)\"/" $@/fixpack.info
 	$(Q)sed -i "s/FIXPACK_NAME=.*/FIXPACK_NAME=\"$(FIXPACK_ID)\"/" $@/fixpack.info
 	$(call RUN_CMD,$(SHELL) $(HEX_SCRIPTSDIR)/makehotfix -C -p 20M $@ $(FIXPACK_ID).fixpack,"  GEN     $@ $(FIXPACK_ID).fixpack")
