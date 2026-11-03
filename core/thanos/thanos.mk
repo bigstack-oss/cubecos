@@ -2,15 +2,15 @@
 # thanos installation
 
 THANOS_VER := 0.42.4
-# Built from the release tag rather than taken from the release tarball: the release is built with
-# a Go older than the October 2026 security release (1.27.2 / 1.26.9), and links an x/net, x/text,
-# x/crypto, grpc and klauspost/compress older than their fixes. The jail's Go and THANOS_GO_GET
-# cover both. Return to the tarball on the condition core/exporters/Makefile gives. The web UI is
-# the React build the repo commits under pkg/ui/static, embedded as the release does, and the tags
-# and version ldflags are the release's own (.promu.yml). The tag is cloned shallow, and the
-# modules come from proxy.golang.org, checked against sum.golang.org.
+# Built from the release tag rather than taken from the release tarball: the release is built with a
+# Go older than the October 2026 security release (1.27.2 / 1.26.9), and links an x/net, x/text,
+# x/crypto, grpc, klauspost/compress and go-jose older than their fixes. The jail's Go and
+# THANOS_GO_GET cover both. Return to the tarball on the condition core/exporters/Makefile gives.
+# The web UI is the React build the repo commits under pkg/ui/static, embedded as the release does,
+# and the tags and version ldflags are the release's own (.promu.yml). The tag is cloned shallow,
+# and the modules come from proxy.golang.org, checked against sum.golang.org.
 THANOS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
-	google.golang.org/grpc@v1.84.0 github.com/klauspost/compress@v1.18.7
+	google.golang.org/grpc@v1.84.0 github.com/klauspost/compress@v1.18.7 github.com/go-jose/go-jose/v4@v4.1.6
 THANOS_GO_DIR := $(ARCS_DIR)/thanos-go
 THANOS_SRC := $(THANOS_GO_DIR)/thanos-$(THANOS_VER)-src
 THANOS_BIN := $(THANOS_GO_DIR)/bin/thanos
