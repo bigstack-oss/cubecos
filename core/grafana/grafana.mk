@@ -2,12 +2,12 @@
 # grafana installation
 
 # ROOTFS_DNF += grafana
-# 12.4 is the last minor of major 12, which is Grafana's LTS equivalent: an ordinary minor is
-# supported for 9 months, the final minor of a major for 15. 12.4 is therefore supported to
-# 2027-05-24 -- the longest window of any current release, a few days past even the newest
-# (13.2, to 2027-05-18). 12.3 went end-of-life on 2026-08-19, so 12.3.2 is both EOL and nine
-# patches behind its own dead line.
-ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-12.4.13-1.x86_64.rpm
+# 13.3, the newest minor, is the first release whose grafana-server links go-jose and
+# klauspost/compress past their fixes (4.1.6 and 1.20.3); 12.4.14 and 13.2.5, the newest patches of
+# the 12.4 and 13.2 lines, still link go-jose 4.1.4. An ordinary minor is supported for 9 months
+# and the final minor of a major for 15, so 13.3, released 2026-10-27, is supported to about
+# 2027-07-27, past 12.4's 2027-05-24.
+ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-13.3.0-1.x86_64.rpm
 # Grafana Labs' rpm signing key, which expires 2027-08-22; a release signed with its successor
 # fails installdnf's check, naming the new key ID
 GPGKEY_DNF += $(COREDIR)/grafana/RPM-GPG-KEY-grafana B53AE77BADB630A683046005963FA27710458545
