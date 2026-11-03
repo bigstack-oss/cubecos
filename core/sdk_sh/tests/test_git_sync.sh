@@ -12,7 +12,7 @@ set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_git.sh"
 
-for fn in _git_client_init git_push ; do
+for fn in _git_identity _git_client_init git_push ; do
     body="$(awk -v f="^${fn}\\\\(\\\\)" '$0~f{p=1} p{print} p&&/^}/{exit}' "$SRC")"
     [ -n "$body" ] || { echo "FAIL: $fn not extracted"; exit 1; }
     eval "$body"
@@ -51,6 +51,8 @@ HOSTNAME=testnode
 # the production code must not hard-code this path, so a test can point it
 # somewhere writable
 CUBE_GITIGNORE=$(mktemp) ; : > "$CUBE_GITIGNORE"
+CUBE_GIT_WORKTREE=$(mktemp -d)
+CUBE_GIT_ROOT_CONFIG=/nonexistent
 
 # 1. client init: adopt history, keep the working tree
 : > "$LOG"
@@ -80,6 +82,6 @@ chk "3 does NOT commit"     "$(saw 'git commit')"  "n"
 chk "3 says so"             "$(saw 'info ')"       "y"
 CLEAN=
 
-rm -rf "$LOG" "$CUBE_GITIGNORE" "$CEPHFS_BACKUP_DIR" 2>/dev/null
+rm -rf "$LOG" "$CUBE_GITIGNORE" "$CEPHFS_BACKUP_DIR" "$CUBE_GIT_WORKTREE" 2>/dev/null
 echo "----" ; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] && { echo "OK: git sync" ; exit 0 ; } || exit 1
