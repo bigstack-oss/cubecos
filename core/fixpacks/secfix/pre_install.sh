@@ -26,6 +26,24 @@ else
         { echo "kernel fixpack: not every node is ready (see above), nothing changed"; exit 1; }
 fi
 
+# Firmware an earlier kernel fixpack left on this node may not be in git: 3.2.0's git_push takes
+# only tracked files, and on older firmware the old template's commit failed when the admin
+# login's HOME hid the git identity. Record it now, in its own commit, so this fixpack's commit
+# holds only what this fixpack changes. The check above made sure nothing else is pending.
+if [ -n "$(git -C / status --porcelain --untracked-files=all -- usr/lib/firmware 2>/dev/null)" ] ; then
+    MSG="Record firmware already on $(hostname), before $FIXPACK_ID"
+    git -C / add -- usr/lib/firmware ||
+        { echo "kernel fixpack: could not stage the firmware already on this node, nothing changed"; exit 1; }
+    if [ "$(printf '%s\n%s\n' 3.2.0 "$VERSION" | sort -V | head -1)" = 3.2.0 ] ; then
+        hex_sdk git_push "$MSG" ||
+            { echo "kernel fixpack: could not record the firmware already on this node, nothing changed"; exit 1; }
+    else
+        # one shared branch: this node commits it; the peers take it with the fixpack's commit
+        ( cd / && git commit -q -m "$MSG" && git push -q ) ||
+            { echo "kernel fixpack: could not record the firmware already on this node, nothing changed"; exit 1; }
+    fi
+fi
+
 rm -rf $BOOT_BACKUP
 mkdir -p $BOOT_BACKUP
 cp -a /boot/Part1 /boot/Part2 $BOOT_BACKUP/
