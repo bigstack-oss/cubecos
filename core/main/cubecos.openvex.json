@@ -2,8 +2,8 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/bigstack-oss/cubecos/blob/develop/core/main/cubecos.openvex.json",
   "author": "Bigstack",
-  "timestamp": "2026-11-03T07:55:26Z",
-  "version": 11,
+  "timestamp": "2026-11-03T10:05:44Z",
+  "version": 12,
   "statements": [
     {
       "vulnerability": {
@@ -3328,6 +3328,19 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598459424."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-116591"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/skopeo"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6600544201."
     }
   ]
 }
