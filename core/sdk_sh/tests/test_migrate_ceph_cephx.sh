@@ -9,7 +9,7 @@
 #
 D="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T=$(mktemp -d); trap 'rm -rf $T' EXIT
-for f in migrate_ceph_cephx_cipher _migrate_cephx_field _migrate_cephx_copies migrate_ceph_cephx_csi_secrets ; do
+for f in migrate_ceph_cephx_cipher _migrate_cephx_field _migrate_cephx_copies _migrate_cephx_replace migrate_ceph_cephx_csi_secrets ; do
     sed -n "/^$f()/,/^}/p" $D/../modules/sdk_migrate.sh
 done > $T/fn.sh
 source $T/fn.sh
@@ -33,6 +33,7 @@ reset(){
     SVC=aes PREF=aes ALLOWED=aes,aes256k KEY_admin=AQold-admin== KEY_k8s=AQold-k8s== TYPE_admin=aes TYPE_k8s=aes
     FINAL_RC=0 MDS_REL=squid ROTATE_RC=0 RSYNC_RC=0 EXEC_RC=0 RR_OK=cc1
     kr admin $KEY_admin $ADMIN_KEYRING; kr k8s $KEY_k8s $K8S_KEYRING; echo $KEY_admin > $CEPHFS_CLIENT_AUTHKEY
+    chmod 0664 $ADMIN_KEYRING $K8S_KEYRING; chmod 0600 $CEPHFS_CLIENT_AUTHKEY   # as a fresh install leaves them
     : > $CALLS
 }
 ciphers(){ local o= c; for c in ${1//,/ }; do o+="{\"name\":\"$c\"},"; done; echo "[${o%,}]"; }
@@ -79,6 +80,8 @@ chk "2 both clients rotated"           "$(n 'auth rotate')" 2
 chk "2 admin keyring has the new key"  "$(ceph-authtool -p $ADMIN_KEYRING)" AQnew-admin==
 chk "2 k8s keyring has the new key"    "$(ceph-authtool -p -n client.k8s $K8S_KEYRING)" AQnew-k8s==
 chk "2 cephfs secret has the new key"  "$(cat $CEPHFS_CLIENT_AUTHKEY)" AQnew-admin==
+chk "2 keyrings keep their mode"       "$(stat -c %a $ADMIN_KEYRING $K8S_KEYRING | xargs)" "664 664"
+chk "2 cephfs secret keeps its mode"   "$(stat -c %a $CEPHFS_CLIENT_AUTHKEY)" 600
 chk "2 three files pushed"             "$(n 'cubectl node rsync')" 3
 chk "2 libvirt secret refreshed"       "$(n 'cubectl node exec')" 1
 chk "2 csi secrets on a control"       "$(n 'rr cc1')" 1
