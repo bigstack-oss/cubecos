@@ -10,7 +10,7 @@ THANOS_VER := 0.42.4
 # and the tags and version ldflags are the release's own (.promu.yml). The tag is cloned shallow,
 # and the modules come from proxy.golang.org, checked against sum.golang.org.
 THANOS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
-	google.golang.org/grpc@v1.84.0 github.com/klauspost/compress@v1.18.7 github.com/go-jose/go-jose/v4@v4.1.6
+	google.golang.org/grpc@v1.84.0 github.com/klauspost/compress@v1.20.3 github.com/go-jose/go-jose/v4@v4.1.6
 THANOS_GO_DIR := $(ARCS_DIR)/thanos-go
 THANOS_SRC := $(THANOS_GO_DIR)/thanos-$(THANOS_VER)-src
 THANOS_BIN := $(THANOS_GO_DIR)/bin/thanos

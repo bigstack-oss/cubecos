@@ -34,7 +34,7 @@ KAPACITOR_SRC_VER := $(firstword $(subst -, ,$(KAPACITOR_VER)))
 KAPACITOR_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
 	google.golang.org/grpc@v1.84.0 github.com/moby/moby/api@v1.56.1 \
 	github.com/influxdata/flux@v0.200.0 github.com/jackc/pgx/v5@v5.11.0 \
-	github.com/klauspost/compress@v1.18.7 github.com/go-jose/go-jose/v4@v4.1.6
+	github.com/klauspost/compress@v1.20.3 github.com/go-jose/go-jose/v4@v4.1.6
 KAPACITOR_GO_DIR := $(ARCS_DIR)/kapacitor-go
 KAPACITOR_SRC := $(KAPACITOR_GO_DIR)/kapacitor-$(KAPACITOR_SRC_VER)-src
 KAPACITOR_CMDS := cmd/kapacitord cmd/kapacitor tick/cmd/tickfmt

@@ -35,11 +35,11 @@ TF_CORE_DIR           := terraform-core
 TF_CORE_BIN           := $(TF_CORE_DIR)/terraform-core
 # Applied in order over the clone; see the recipe below
 TF_CORE_PATCHES       := $(SRCDIR)/tf-core-patches/etcd-client-v3.5.patch $(SRCDIR)/tf-core-patches/snapshotfs-chown.patch
-# The x/ modules at the October 2026 Go security release, as core/gorebuild, grpc at the
-# latest release, which needs no http2.TrailerPrefix from x/net, and go-jose at its fixed release:
-# the raised modules bring it into terraform-core. Raised in all three binaries.
+# The x/ modules at the October 2026 Go security release, as core/gorebuild, grpc at the latest
+# release, which needs no http2.TrailerPrefix from x/net, and go-jose and klauspost/compress at
+# their fixed releases, which the raised modules bring in. Raised in all three binaries.
 TF_GO_GET             := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
-	google.golang.org/grpc@v1.84.0 github.com/go-jose/go-jose/v4@v4.1.6
+	google.golang.org/grpc@v1.84.0 github.com/go-jose/go-jose/v4@v4.1.6 github.com/klauspost/compress@v1.20.3
 
 $(RANCHER_PROV_DIR):
 	$(call RUN_CMD_TIMED,git clone -b $(RANCHER_PROV_VER) $(RANCHER_PROV_REPO) $(RANCHER_PROV_DIR),"  CLONE   rancher-provider")
