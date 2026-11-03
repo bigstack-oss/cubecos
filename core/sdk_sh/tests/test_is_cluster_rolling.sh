@@ -48,5 +48,8 @@ touch $ROLLING_RECOVER_MARKER
 chk "cephfs hung, marker set" "$(hung $T/hung/job.json)" "rolling"
 rm -f $ROLLING_RECOVER_MARKER
 chk "job read blocks" "$(hung $T/fifo.json)" "no"
+touch $ROLLING_RECOVER_MARKER
+chk "job read blocks, marker set" "$(hung $T/fifo.json)" "rolling"
+rm -f $ROLLING_RECOVER_MARKER
 rm -rf $T
 exit $fail

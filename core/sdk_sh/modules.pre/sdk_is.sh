@@ -241,8 +241,12 @@ is_cluster_rolling()
     # in the kernel until killed, and every failing health check asks here.
     local _job=${ROLLING_JOB:-/mnt/cephfs/rolling/job.json}
     if timeout -k 5 5 test -r "$_job" ; then
-        [ "$(timeout -k 5 5 jq -r '.state // ""' "$_job" 2>/dev/null)" = "running" ] && return 0
-        return 1
+        local _state
+        _state=$(timeout -k 5 5 jq -r '.state // ""' "$_job" 2>/dev/null)
+        case $? in
+            124|137) ;;   # the read hung: let the fallbacks decide
+            *) [ "$_state" = "running" ] && return 0 ; return 1 ;;
+        esac
     fi
 
     # Fallbacks, used only when the job is unreadable -- i.e. cephfs is not
