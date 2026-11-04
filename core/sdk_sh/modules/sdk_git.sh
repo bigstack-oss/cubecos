@@ -186,7 +186,17 @@ git_push()
     $GIT diff --cached --quiet
     d=$?
     if [ $d -eq 0 ] ; then
-        log_info "git: nothing to record on $HOSTNAME"
+        # Nothing new to commit, but an earlier call may have committed and failed to push: push
+        # that commit now, or rerunning git_push, as a failed fixpack record tells the operator to,
+        # never records it.
+        # Compare with this node's own branch only: on the master, _git_server_init pushes the
+        # same HEAD to master, which would hide the missing push.
+        if [ "$($GIT rev-parse -q --verify HEAD)" = "$($GIT rev-parse -q --verify refs/remotes/$project/nodes/$HOSTNAME)" ] ; then
+            log_info "git: nothing to record on $HOSTNAME"
+        elif ! $GIT push -q $project +HEAD:refs/heads/nodes/$HOSTNAME ; then
+            Error "git: $HOSTNAME has a commit not pushed to $project nodes/$HOSTNAME"
+            return 1
+        fi
     elif [ $d -ne 1 ] ; then
         Error "git: cannot tell what changed on $HOSTNAME (git diff exit $d)"
         return 1

@@ -112,6 +112,15 @@ chk "6 git_push fails" "$rc" "1"
 chk "6 says committed but not pushed" "$(grep -c 'committed on the node but not pushed' "$ERR")" "1"
 chk "6 the commit is on the node" "$(commits)" "4"
 
+# 6b. Rerunning git_push once the remote is back pushes that commit, with no new commit, even
+#     after the master's _git_server_init pushed the same HEAD to master.
+git -C "$CUBE_GIT_WORKTREE" remote set-url cube "$T/cube.git" ; : > "$ERR"
+git -C "$CUBE_GIT_WORKTREE" push -q cube HEAD:refs/heads/master
+git_push "six again" ; rc=$?
+chk "6b git_push succeeds" "$rc" "0"
+chk "6b no new commit" "$(commits)" "4"
+chk "6b pushed to nodes/testnode" "$(pushed)" "$(git -C "$CUBE_GIT_WORKTREE" rev-parse HEAD)"
+
 # 7. No identity anywhere is caught by the gate, before anything changes.
 git -C "$CUBE_GIT_WORKTREE" config --local --unset user.email
 CUBE_GIT_ROOT_CONFIG=$T/none
