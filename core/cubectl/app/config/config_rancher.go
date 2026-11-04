@@ -23,29 +23,13 @@ const (
 	rancherWorkDir                        = "/root/.rancher/"
 	rancherTokenFile                      = rancherWorkDir + "/token"
 	rancherCliDataFile                    = rancherWorkDir + "/cli2.json"
-	rancherTmpDir                         = "/tmp/rancher/"
-	rancherTmpKubeconfig                  = rancherTmpDir + "/kubeconfig"
 	rancherCliBin                         = "/usr/local/bin/rancher"
 	rancherNamespace                      = "cattle-system"
 	terraformVarFileKeycloakAdminPassword = "/etc/cube/cos/terraform/values/keycloak-admin-password.tfvars"
 )
 
-type RancherAddNodeOpts struct {
-	all          bool
-	etcd         bool
-	controlplane bool
-	worker       bool
-}
-
-type RancherCreateNodeTemplateOpts struct {
-	openstackConfig string
-}
-
 var (
 	rancherToken string
-
-	rancherAddNodeOpts            RancherAddNodeOpts
-	rancherCreateNodeTemplateOpts RancherCreateNodeTemplateOpts
 )
 
 // k3s kubectl create namespace cattle-system
@@ -73,24 +57,6 @@ var (
 // k3s kubectl -n cattle-system rollout status deploy/rancher
 
 // k3s crictl inspecti docker.io/rancher/rancher:v2.4.5
-
-func nodeFilter(hosts []string) []string {
-	var compHosts []string
-	nodeMap, err := util.LoadClusterSettings()
-	if err != nil {
-		return []string{}
-	} else {
-		for _, n := range hosts {
-			if (*nodeMap)[n].Role != "compute" {
-				zap.L().Warn("Skipped the node that doesn't support kubernetes cluster deployment", zap.String("node", n))
-				continue
-			}
-			compHosts = append(compHosts, n)
-		}
-	}
-
-	return compHosts
-}
 
 func rancherGetToken() (string, error) {
 	if rancherToken != "" {
@@ -808,228 +774,6 @@ func repairRancher() error {
 	return nil
 }
 
-var cmdRancherAddNode = &cobra.Command{
-	Use:   "add-node <cluster-name> <node>...",
-	Short: "Add node(s) to kubernetes cluster",
-	Args:  cobra.MinimumNArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		clusterName := args[0]
-		hosts := nodeFilter(args[1:])
-		if len(hosts) == 0 {
-			return fmt.Errorf("No available nodes")
-		}
-
-		// if _, outErr, err := util.ExecShf("sudo %s context switch <<< 1",
-		// 	rancherCliBin,
-		// ); err != nil {
-		// 	return errors.Wrap(err, outErr)
-		// }
-
-		var dockerCmd string
-		if out, outErr, err := util.ExecCmd("sudo", rancherCliBin, "cluster", "add-node", clusterName,
-			"--quiet",
-		); err != nil {
-			return errors.Wrap(err, outErr)
-		} else {
-			dockerCmd = strings.TrimSuffix(out, "\n")
-		}
-
-		if rancherAddNodeOpts.etcd || rancherAddNodeOpts.all {
-			dockerCmd += " --etcd"
-		}
-		if rancherAddNodeOpts.controlplane || rancherAddNodeOpts.all {
-			dockerCmd += " --controlplane"
-		}
-		if rancherAddNodeOpts.worker || rancherAddNodeOpts.all {
-			dockerCmd += " --worker"
-		}
-
-		if _, outErr, err := util.ExecCmd("cubectl", "node", "exec",
-			"--hosts", strings.Join(hosts, ","),
-			dockerCmd,
-		); err != nil {
-			return errors.Wrap(err, outErr)
-		}
-
-		return nil
-	},
-}
-
-var cmdRancherCleanNode = &cobra.Command{
-	Use:   "clean-node <node>...",
-	Short: "Cleanup node(s) in kubernetes cluster",
-	Args:  cobra.MinimumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// ETCD snapshot on compute nodes
-		// /opt/rke/etcd-snapshots/
-
-		hosts := nodeFilter(args)
-		if len(hosts) == 0 {
-			return fmt.Errorf("No available nodes")
-		}
-
-		if _, outErr, err := util.ExecCmd("cubectl", "node", "exec",
-			"--parallel",
-			"--hosts", strings.Join(hosts, ","),
-			rancherDataDir+"/clean-k8s.sh",
-		); err != nil {
-			return errors.Wrap(err, outErr)
-		}
-
-		return nil
-	},
-}
-
-var cmdRancherCreateCephStorageClass = &cobra.Command{
-	Use:   "create-ceph-storageclass",
-	Short: "Create a default ceph storage class for a kubernetes cluster",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if !cubeSettings.IsRole(util.ROLE_CONTROL) {
-			return fmt.Errorf("Can only be executed on control nodes")
-		}
-
-		cluster := args[0]
-
-		var cephStorageClassFmt = `
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ceph-secret-admin
-  namespace: kube-system
-data:
-  key: %s
-type: kubernetes.io/rbd
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ceph-secret-k8s
-  namespace: kube-system
-data:
-  key: %s
-type: kubernetes.io/rbd
-
----
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: ceph-default
-  annotations:
-    storageclass.beta.kubernetes.io/is-default-class: "true"
-provisioner: kubernetes.io/rbd
-parameters:
-  monitors: %s
-  adminId: admin
-  adminSecretName: ceph-secret-admin
-  adminSecretNamespace: kube-system
-  pool: k8s-volumes
-  userId: k8s
-  userSecretName: ceph-secret-k8s
-  userSecretNamespace: kube-system
-  fsType: ext4
-  imageFormat: "2"
-  imageFeatures: "layering"
-`
-
-		os.MkdirAll(rancherTmpDir, 0755)
-		cephKeyringAdmin, _, err := util.ExecSh(`cat /etc/ceph/ceph.client.admin.keyring | grep key|awk '{print $3}' | base64`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		cephKeyringK8s, _, err := util.ExecSh(`cat /etc/ceph/ceph.client.k8s.keyring | grep key|awk '{print $3}' | base64`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		var cephMonitors []string
-		if cubeSettings.IsHA() {
-			cephMonitors = append(cephMonitors, cubeSettings.GetControlGroupIPs()...)
-		} else {
-			cephMonitors = []string{cubeSettings.GetControllerIp()}
-		}
-
-		for i := range cephMonitors {
-			cephMonitors[i] += ":6789"
-		}
-
-		cephStorageClassYaml := fmt.Sprintf(cephStorageClassFmt, cephKeyringAdmin, cephKeyringK8s, strings.Join(cephMonitors, ","))
-		if err := ioutil.WriteFile(rancherTmpDir+"/ceph-storageclass.yaml", []byte(cephStorageClassYaml), 0644); err != nil {
-			return errors.WithStack(err)
-		}
-
-		if out, outErr, err := util.ExecCmd("sudo", rancherCliBin, "clusters", "kubeconfig", cluster); err != nil {
-			return errors.Wrap(err, outErr)
-		} else {
-			if err := ioutil.WriteFile(rancherTmpKubeconfig, []byte(out), 0644); err != nil {
-				return errors.WithStack(err)
-			}
-		}
-
-		if _, outErr, err := util.ExecCmd("kubectl",
-			"--kubeconfig="+rancherTmpKubeconfig,
-			"create", "-f", rancherTmpDir+"/ceph-storageclass.yaml",
-		); err != nil {
-			return errors.Wrap(err, outErr)
-		}
-		zap.L().Info("Ceph storage class created")
-
-		return nil
-	},
-}
-
-var cmdRancherCreateNodeTemplate = &cobra.Command{
-	Use:   "create-nodetemplate",
-	Short: "Create a default node template",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if !cubeSettings.IsRole(util.ROLE_CONTROL) {
-			return fmt.Errorf("Can only be executed on control nodes")
-		}
-
-		templateName := args[0]
-
-		var openstackConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(rancherCreateNodeTemplateOpts.openstackConfig), &openstackConfig); err != nil {
-			return errors.WithStack(err)
-		}
-
-		tmplData := map[string]interface{}{
-			"name":             templateName,
-			"type":             "nodeTemplate",
-			"engineInstallURL": "https://get.docker.com",
-			"engineInsecureRegistry": []string{
-				cubeSettings.GetController() + ":" + strconv.Itoa(dockerRegistryPort),
-				cubeSettings.GetControllerIp() + ":" + strconv.Itoa(dockerRegistryPort),
-			},
-			"engineRegistryMirror": []string{
-				"http://" + cubeSettings.GetControllerIp() + ":" + strconv.Itoa(dockerRegistryPort),
-			},
-			"openstackConfig": openstackConfig,
-		}
-
-		data, err := json.Marshal(tmplData)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		//fmt.Println(string(data))
-		if _, err := rancherReq("POST",
-			"/v3/nodetemplate",
-			string(data),
-		); err != nil {
-			return errors.WithStack(err)
-		}
-
-		zap.L().Info("Node template created", zap.String("name", templateName))
-
-		return nil
-	},
-}
-
 func init() {
 	m := NewModule("rancher")
 	m.commitFunc = commitRancher
@@ -1039,16 +783,6 @@ func init() {
 	m.repairFunc = repairRancher
 
 	cobra.EnableCommandSorting = false
-	m.AddCustomCommand(cmdRancherAddNode)
-	cmdRancherAddNode.Flags().BoolVar(&rancherAddNodeOpts.all, "all", false, "Nodes with all role")
-	cmdRancherAddNode.Flags().BoolVar(&rancherAddNodeOpts.etcd, "etcd", false, "Nodes with etcd role")
-	cmdRancherAddNode.Flags().BoolVar(&rancherAddNodeOpts.controlplane, "controlplane", false, "Nodes with control plane role")
-	cmdRancherAddNode.Flags().BoolVar(&rancherAddNodeOpts.worker, "worker", false, "Nodes with worker role")
-	cmdRancherAddNode.Flags().SortFlags = false
-	m.AddCustomCommand(cmdRancherCleanNode)
-	m.AddCustomCommand(cmdRancherCreateCephStorageClass)
-	m.AddCustomCommand(cmdRancherCreateNodeTemplate)
-	cmdRancherCreateNodeTemplate.Flags().StringVar(&rancherCreateNodeTemplateOpts.openstackConfig, "openstack-config", "", "Config for OpenStack")
 
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 }

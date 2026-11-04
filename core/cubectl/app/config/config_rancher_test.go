@@ -192,30 +192,4 @@ func TestConfigRancher(t *testing.T) {
 			assert.Equal(t, fmt.Sprintf("https://%s:%d", localIP, k3sIngressHttpsPort), strings.TrimSuffix(out, "\n"))
 		}
 	})
-
-	t.Run("CreateTemplate", func(t *testing.T) {
-		t.Parallel()
-
-		// if _, outErr, err := util.ExecCmd("cubectl", "config", "rancher",
-		// 	"create-nodetemplate", "openstack-test",
-		// 	"--openstack-config", `{"domainName": "default"}`,
-		// )
-
-		rancherCreateNodeTemplateOpts.openstackConfig = `{"domainName": "default"}`
-		if err := cmdRancherCreateNodeTemplate.RunE(nil, []string{"openstack-test"}); err != nil {
-			t.Fatal(err)
-		} else {
-			if result, err := rancherReq("GET",
-				"/v3/nodeTemplates?name=openstack-test",
-				``,
-			); err != nil {
-				t.Fatal(err)
-			} else {
-				assert.NotEmpty(t, result["data"])
-
-				openstackConfig := result["data"].([]interface{})[0].(map[string]interface{})["openstackConfig"].(map[string]interface{})
-				assert.Equal(t, "default", openstackConfig["domainName"])
-			}
-		}
-	})
 }
