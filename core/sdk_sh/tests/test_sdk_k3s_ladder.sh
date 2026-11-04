@@ -3,8 +3,8 @@
 # Unit test for the k3s minor-by-minor upgrade in ../modules/sdk_k3s.sh: k3s_upgrade_ladder
 # steps every server up one minor at a time, one server at a time, stops at the first one that
 # does not settle, and commits k3s once all run the image's release; k3s_step swaps one node's
-# binary. Also checks power_roll_advance (../modules/sdk_power.sh) calls it at the end of a
-# roll, before the job is marked done.
+# binary and records it in the node's git. Also checks power_roll_advance
+# (../modules/sdk_power.sh) calls it at the end of a roll, before the job is marked done.
 #
 # Self-contained: extracts just these functions and mocks k3s, etcdctl, hostname, hex_tuning,
 # remote_run, systemctl and cubectl, so it needs no cluster. A node's k3s version lives in
@@ -49,6 +49,8 @@ for v in $LADDER ; do fakebin $K3S_LADDER_DIR/$v/k3s $v ; done
 # --- mocks
 log_info(){ echo "info $*" >> "$LOG" ; }
 log_error(){ echo "error $*" >> "$LOG" ; }
+hex_sdk(){ echo "hex_sdk $*" >> "$LOG" ; return ${GITPUSH_RC:-0} ; }
+git(){ [ "${HASCOMMIT:-y}" = y ] ; }
 mkdir -p $T/bin && cat > $T/bin/hex_tuning <<'EOS'
 v=$(awk -F' = ' -v k="$2" '$1==k{print $2}' "$1")
 eval "T_$(echo $2 | tr . _)=\"\$v\""
@@ -101,6 +103,7 @@ cluster(){   # <ha> <self-is-vip> <node>=<version>...
     [ "$2" = y ] && MYIP=10.0.0.100 || MYIP=10.0.0.1
     shift 2
     NODES="" STUCK="" FAILSTEP=""
+    GITPUSH_RC=0 HASCOMMIT=y
     local nv
     for nv in "$@" ; do NODES="$NODES ${nv%%=*}" ; echo "${nv#*=}" > $T/ver/${nv%%=*} ; done
     fakebin $K3S_BIN "$(cat $T/ver/$SELF)"
@@ -152,6 +155,7 @@ k3s_upgrade_ladder ; rc=$?
 chk "4 rc"                         "$rc" "0"
 chk "4 final"                      "$(vers)" "$FINAL"
 chk "4 one restart per minor"      "$(count '^systemctl restart k3s')" "5"
+chk "4 records each step"          "$(count '^hex_sdk git_push k3s ')" "5"
 chk "4 no remote"                  "$(saw '^remote')" "n"
 chk "4 commits k3s last"           "$(tail -1 $LOG)" "cubectl config commit k3s"
 cluster false n cc1=v1.27.16+k3s1
@@ -199,6 +203,38 @@ chk "9 hook present"               "$([ -n "$ladder" ] && echo y || echo n)" "y"
 chk "9 after rabbitmq_ticktime"    "$([ "${ladder:-0}" -gt "$(at 'rabbitmq_ticktime')" ] && echo y || echo n)" "y"
 chk "9 before state done"          "$([ "${ladder:-999999}" -lt "$done_" ] && echo y || echo n)" "y"
 chk "9 on the VIP holder"          "$(grep -cF "$call" <<< "$pra")" "1"
+
+# 10. k3s_step records the binary in the node's git after restarting k3s
+cluster false n cc1=v1.30.14+k3s2
+k3s_step v1.31.14+k3s1 ; rc=$?
+chk "10 rc"                        "$rc" "0"
+chk "10 git push"                  "$(saw '^hex_sdk git_push k3s v1.31.14+k3s1$')" "y"
+restart=$(grep -n '^systemctl restart k3s$' "$LOG" | cut -d: -f1)
+record=$(grep -n '^hex_sdk git_push k3s v1.31.14+k3s1$' "$LOG" | cut -d: -f1)
+chk "10 records after restart"     "$([ "${record:-0}" -gt "${restart:-0}" ] && echo y || echo n)" "y"
+
+# 11. no git commit yet: the first commit will take in the swapped binary
+cluster false n cc1=v1.30.14+k3s2
+HASCOMMIT=n
+k3s_step v1.31.14+k3s1 ; rc=$?
+chk "11 rc"                        "$rc" "0"
+chk "11 no git push"               "$(saw '^hex_sdk git_push')" "n"
+chk "11 recorded"                  "$(cat $K3S_VERSION_FILE)" "v1.31.14+k3s1"
+
+# 12. a failed git push logs how to record it by hand and does not fail the step
+cluster false n cc1=v1.30.14+k3s2
+GITPUSH_RC=1
+k3s_step v1.31.14+k3s1 ; rc=$?
+chk "12 rc"                        "$rc" "0"
+chk "12 says which"                "$(saw "error k3s_step: k3s v1.31.14+k3s1 not recorded in cc1's git")" "y"
+chk "12 recorded"                  "$(cat $K3S_VERSION_FILE)" "v1.31.14+k3s1"
+
+# 13. a node that never becomes Ready does not record the binary in git
+cluster false n cc1=v1.30.14+k3s2
+STUCK=cc1
+k3s_step v1.31.14+k3s1 ; rc=$?
+chk "13 rc"                        "$rc" "1"
+chk "13 no git push"               "$(saw '^hex_sdk git_push')" "n"
 
 echo "pass=$pass fail=$fail"
 [ $fail -eq 0 ]
