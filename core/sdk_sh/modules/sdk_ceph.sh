@@ -88,7 +88,7 @@ ceph_get_ids_by_dev()
     # local ids=$($CEPH device ls-by-host $HOSTNAME --format json | jq -r ".[] | select(.location[].dev == \"${dev#/dev/}\").daemons[]" | sed "s/osd.//g" | sort -u)
     # raw-list only this device and its partitions; a full scan hangs on FC/nbd paths
     local ids= p
-    if $HEX_SDK storage_is_das "$dev" || { $HEX_SDK storage_is_mpath "$dev" && $HEX_SDK storage_are_mpath_devices_allowed_for_ceph ; } ; then
+    if $HEX_SDK storage_is_das "$dev" ; then
         ids=$(for p in "$dev" $(lsblk -pnlo NAME "$dev" 2>/dev/null | tail -n +2) ; do
                   ceph-volume raw list "$p" --format json 2>/dev/null
               done | jq -s -r "add // {} | .[] | .osd_id" | sort -u | while read -r osdid ; do $CEPH osd ls | grep "^${osdid}$" ; done)
@@ -1043,22 +1043,13 @@ ceph_osd_zap_disk()
 }
 
 # list osd-typed disks (mounted)
-# ceph-volume raw list, constrained to DAS (+ allowed mpath) disks.
+# ceph-volume raw list, constrained to DAS disks.
 #
-# ceph-volume raw list limited to DAS (+ allowed mpath) disks: an unfiltered scan
-# probes every block device and hangs on stray FC/iSCSI SAN LUNs.
+# ceph-volume raw list limited to DAS disks: an unfiltered scan probes every block
+# device and hangs on stray FC/iSCSI SAN LUNs. Raw OSDs are only made on DAS disks.
 ceph_volume_raw_list_das()
 {
-    local devs="" d t
-    while read -r d t ; do
-        [ -n "$d" ] || continue
-        case "$t" in
-            disk)
-                $HEX_SDK storage_is_das "$d" && devs+=" $d" ;;
-            mpath)
-                $HEX_SDK storage_is_mpath "$d" && $HEX_SDK storage_are_mpath_devices_allowed_for_ceph && devs+=" $d" ;;
-        esac
-    done < <(lsblk -dpno NAME,TYPE 2>/dev/null)
+    local devs=$($HEX_SDK storage_list_das_disks) d dev
     local acc=$(mktemp)
     # OSD data lives on a partition and raw list of the whole disk returns {}, so
     # scan each disk's partitions too
@@ -1086,27 +1077,46 @@ ceph_osd_list_disk()
     echo "$all_devs" | tr "\n" " " | sed -e "s/^ //" -e "s/ $//"
 }
 
+# partitions of the DAS disks, one per line: the only place raw OSD meta and data
+# partitions are made (partitionPreparedDisks). A probe of every block device
+# opens FC/iSCSI/mpath LUNs too, and a read there can block for good (cubecos#2165).
+_ceph_das_partitions()
+{
+    local d
+    for d in $($HEX_SDK storage_list_das_disks) ; do
+        lsblk -pnlo NAME,TYPE "$d" 2>/dev/null | awk '$2 == "part" { print $1 }'
+    done
+}
+
+# run a device probe for at most $SRVTO seconds; 124 means it hung, and the
+# probe is logged so a stall names its device (cubecos#2165). A probe asleep in
+# the block layer can outlive even timeout's KILL, so it writes to a file: given
+# the caller's pipe, it would hold the pipe open and the caller would wait on it.
+_ceph_probe()
+{
+    local out=$(mktemp) rc
+    timeout -k 5 $SRVTO "$@" >"$out" 2>/dev/null
+    rc=$?
+    if [ $rc -eq 124 ] || [ $rc -eq 137 ] ; then
+        log_error "$* did not return in ${SRVTO}s"
+        rc=124
+    else
+        cat "$out"
+    fi
+    rm -f "$out"
+    return $rc
+}
+
 # list osd meta partitions (umount)
 ceph_osd_list_meta_partitions()
 {
-    local metaparts=$(blkid | grep -e 'PARTLABEL=\"cube_meta' | sort | cut -d":" -f1)
+    local parts=$(_ceph_das_partitions) out
+    [ -n "$parts" ] || return 0
+    out=$(_ceph_probe blkid $parts)
+    [ $? -ne 124 ] || return 1
+    local metaparts=$(echo "$out" | grep -e 'PARTLABEL=\"cube_meta' | sort | cut -d":" -f1)
 
     echo -n $metaparts
-}
-
-# list osd-typed partitions
-# (i.e.: typecode: 4fbd7e29-9d25-41b8-afd0-062c0ceff05d)
-ceph_osd_list_partitions()
-{
-    local nvme_devs=$(blkid | grep -e 'PARTLABEL=\"cube_meta' | grep -oe '^/dev/nvme[0-9]\+n[0-9]\+p[0-9]\+' | sort | uniq)
-    [ -z "$nvme_devs" ] || nvme_devs=$(readlink -e $nvme_devs)
-    echo -n $nvme_devs
-    if [ -n "$nvme_devs" ] ; then
-        echo -n " "
-    fi
-    local scsi_devs=$(blkid | grep -e 'PARTLABEL=\"cube_meta' | grep -oe '^/dev/sd[a-z]\+[0-9]\+' | sort | uniq)
-    [ -z "$scsi_devs" ] || scsi_devs=$(readlink -e $scsi_devs)
-    echo -n $scsi_devs
 }
 
 # params:
@@ -1328,104 +1338,91 @@ ceph_osd_add_disk_raw()
     Quiet -n ceph_adjust_cache_flush_bytes
 }
 
-ceph_osd_prepare_mpath_lvm()
+# print down/incomplete PGs whose peering waits on any of the given OSDs
+ceph_osd_pgs_waiting_on()
 {
-    local device="$1"
-    if [ -z "$(readlink -e "$device")" ] ; then
-        return 1
-    fi
-
-    local exec_output=""
-    local exec_error=""
-
-    if ! $HEX_SDK storage_is_mpath "$device" ; then
-        log_error "device ${device} is not a mpath device, hence adding this device as an OSD is not supported"
-        return 1
-    fi
-
-    local wwid="$(/usr/bin/basename "$device")"
-    if [ -z "$wwid" ] ; then
-        log_error "WWID of device ${device} not found"
-        return 1
-    fi
-
-    # delete the partition mapping
-    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/kpartx -d "$device" ; then
-        log_error "failed to delete the partition mapping"
-        return 1
-    fi
-    # wipe the device
-    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/wipefs -a "$device" ; then
-        log_error "failed to wipe the file system"
-        return 1
-    fi
-    if ! _hex_function_ret timeout "$SRVTO" /usr/sbin/sgdisk -Z "$device" ; then
-        log_error "failed to zap the partition table"
-        return 1
-    fi
-
-    # reload the partitions
-    if ! $HEX_SDK storage_update_device_maps ; then
-        log_error "failed to reload the device maps"
-        return 1
-    fi
-
-    # create PV
-    if ! _hex_function_ret /usr/sbin/pvcreate "$device" ; then
-        log_error "failed to create PV from ${device}"
-        return 1
-    fi
-    # create VG
-    if ! _hex_function_ret /usr/sbin/vgcreate "$wwid" "$device" ; then
-        log_error "failed to create VG ${wwid} with PV ${device}"
-        return 1
-    fi
-    # create LV
-    if ! _hex_function_ret /usr/sbin/lvcreate -y -l 100%FREE -n "$wwid" "$wwid" ; then
-        log_error "failed to create LV ${wwid} from VG ${wwid}"
-        return 1
-    fi
-
-    return 0
+    local ids=" ${*//osd./} " st pg o
+    for st in down incomplete ; do
+        $CEPH pg ls $st -f json 2>/dev/null | jq -r '.pg_stats[]? | "\(.pgid) \((.blocked_by // []) | join(" "))"'
+    done | sort -u | while read -r pg o ; do
+        o="$o $(timeout 30 $CEPH pg $pg query -f json 2>/dev/null | jq -r '[.recovery_state[]? | (.down_osds_we_would_probe // [])[], ((.peering_blocked_by // [])[] | .osd)] | join(" ")')"
+        for o in $o ; do
+            [[ "$ids" == *" $o "* ]] && { echo $pg ; break ; }
+        done
+    done
 }
 
-ceph_osd_add_mpath_lvm()
+# stop and purge OSDs together, unless a PG then waits on one of them for its latest copy
+# --lost: purge anyway, marking them lost (accepts losing the writes only they hold)
+ceph_osd_force_remove()
 {
-    # prepare free mpath devices and make them lvm OSDs
-    # !!!USE WITH CAUTIONS!!!
-
-    local devs="$*"
-
-    local exec_output=""
-    local exec_error=""
-
-    local wwid=""
-    for dev in $devs ; do
-        wwid="$(/usr/bin/basename "$dev")"
-        if [ -z "$wwid" ] ; then
-            log_error "WWID of device ${dev} not found"
-            continue
-        fi
-
-        if ! ceph_osd_prepare_mpath_lvm "$dev" ; then
-            log_error "failed to prepare ${dev}"
-            continue
-        fi
-
-        # create the OSD
-        if ! _hex_function exec_output exec_error \
-            /usr/sbin/ceph-volume lvm create --bluestore --data "${wwid}/${wwid}" ; then
-            log_error "failed to create OSD on LV ${wwid} from VG ${wwid}, error: ${exec_error}"
-            continue
-        fi
+    local lost=0
+    [ "${1:-}" = "--lost" ] && { lost=1 ; shift ; }
+    local ids="" up="" id
+    for id in ${*//osd./} ; do
+        case "$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == ${id}) | .up")" in
+            1) ids="$ids $id" ; up="$up $id" ;;
+            0) ids="$ids $id" ;;
+        esac
     done
+    [ -n "$ids" ] || return 0
+    if [ -n "$up" ] && ! Quiet $CEPH osd ok-to-stop $up ; then
+        if [ $lost -eq 0 ] ; then
+            log_error "Ceph OSDs${up} are not ok to stop (PGs would go inactive), not removing"
+            return 1
+        fi
+        log_warning "Ceph OSDs${up} are not ok to stop (PGs will go inactive), removing them anyway"
+    fi
 
-    # bring up OSDs
-    _hex_function_ret ceph-volume lvm activate --bluestore --all
-    _hex_function_ret ceph_adjust_cache_flush_bytes
+    Quiet $CEPH osd out $ids
+    for id in $up ; do
+        $CEPH osd down "$id"
+        Quiet -n remote_run "$(ceph_osd_host_of $id)" "systemctl stop ceph-osd@${id}"
+    done
+    # let PGs re-peer without them before deciding
+    local t=120
+    while [ $t -gt 0 ] && [ "$($CEPH pg ls peering -f json 2>/dev/null | jq '.pg_stats | length')" != "0" ] ; do
+        sleep 5 ; t=$((t - 5))
+    done
+    local pgs="$(ceph_osd_pgs_waiting_on $ids | tr '\n' ' ')"
+    if [ -n "$pgs" ] && [ $lost -eq 1 ] ; then
+        log_warning "PGs ${pgs}wait on Ceph OSDs${ids} for their latest copy, marking the OSDs lost"
+        for id in $ids ; do
+            Quiet $CEPH osd lost "$id" --yes-i-really-mean-it
+        done
+    elif [ -n "$pgs" ] ; then
+        log_error "PGs ${pgs}wait on Ceph OSDs${ids} for their latest copy, not purging them"
+        for id in $up ; do
+            Quiet -n remote_run "$(ceph_osd_host_of $id)" "systemctl start ceph-osd@${id}"
+        done
+        Quiet $CEPH osd in $ids
+        return 1
+    fi
 
-    # backup
-    _hex_function_ret /usr/sbin/vgcfgbackup -f /etc/cube/cos/ceph/lvm.vg
+    for id in $ids ; do
+        ceph_osd_purge "$id" || return 1
+    done
+    if [ $lost -eq 1 ] ; then
+        local st pg pgs=""
+        sleep 10
+        pgs="$(for st in down incomplete ; do
+            $CEPH pg ls $st -f json 2>/dev/null | jq -r '.pg_stats[]?.pgid'
+        done | sort -u)"
+        [ -n "$pgs" ] && echo "PGs with no complete copy left (each needs 'ceph osd force-create-pg <pg> --yes-i-really-mean-it' to recreate it empty):"
+        for pg in $pgs ; do
+            echo "  $pg"
+            log_error "PG ${pg} has no complete copy left; 'ceph osd force-create-pg ${pg} --yes-i-really-mean-it' recreates it empty"
+        done
+    fi
+}
+
+ceph_osd_host_of()
+{
+    local host="$(ceph_get_host_by_id $1)"
+    if [ "x$host" = "xnull" -o "x$host" = "x" ] ; then
+        host=$HOSTNAME
+    fi
+    echo $host
 }
 
 ceph_osd_purge()
@@ -1501,7 +1498,8 @@ ceph_osd_safe_remove()
         if echo "$exec_error" | grep -q "no reported stats" ; then
             local osd_up="$($CEPH osd dump -f json 2>/dev/null | jq -r ".osds[] | select(.osd == ${osd_id}) | .up")"
             local osd_pgs="$($CEPH osd df "osd.${osd_id}" -f json 2>/dev/null | jq -r ".nodes[] | select(.id == ${osd_id}) | .pgs")"
-            if [ "x$osd_up" = "x0" ] && [ "x${osd_pgs:-0}" = "x0" ] ; then
+            if [ "x$osd_up" = "x0" ] && [ "x${osd_pgs:-0}" = "x0" ] &&
+               [ -z "$(ceph_osd_pgs_waiting_on "$osd_id")" ] ; then
                 log_info "Ceph OSD ${osd_id} is down with no pgs mapped and no stats, purging it"
                 ceph_osd_purge "$osd_id"
                 return $?
@@ -1562,16 +1560,16 @@ ceph_osd_remove()
 
     $CEPH osd df "osd.${osd_id}"
     timeout 600 ceph tell "osd.${osd_id}" compact >/dev/null 2>&1 || true
+    if [ "x$mode" != "xsafe" ] ; then
+        ceph_osd_force_remove "$osd_id"
+        return $?
+    fi
+
     local crush_weight=$($CEPH osd tree -f json | jq -r ".[][] | select(.name == \"osd.${osd_id}\").crush_weight")
     Quiet $CEPH osd crush reweight "osd.${osd_id}" 0
     Quiet $CEPH osd out $osd_id
-
-    if [ "x$mode" = "xsafe" ] ; then
-        ceph_osd_safe_remove "$osd_id" "$crush_weight" "1" ""
-        return 0
-    fi
-
-    ceph_osd_purge "$osd_id"
+    ceph_osd_safe_remove "$osd_id" "$crush_weight" "1" ""
+    return 0
 }
 
 ceph_osd_is_osd_purged()
@@ -1670,10 +1668,17 @@ ceph_osd_remove_disk()
     local mode=${2:-safe}
     [ -n "$(readlink -e $dev)" ] || Error "no such device $dev"
     ceph_osd_list_disk 2>/dev/null | grep -q $dev || Error "no such OSD disk $dev"
-    [[ "$($CEPH -s -f json | jq -r .health.status)" == "HEALTH_OK" || "$mode" == "force" ]] || Error "ceph health has to be OK to proceed disk removals"
+    [[ "$($CEPH -s -f json | jq -r .health.status)" == "HEALTH_OK" || "$mode" != "safe" ]] || Error "ceph health has to be OK to proceed disk removals"
 
     local osd_ids="$(ceph_osd_get_ids "$dev")"
     local osd_id=""
+    if [[ "$mode" == "force" ]] ; then
+        ceph_osd_force_remove $osd_ids 2>/dev/null || Error "Ceph OSDs $osd_ids not removed, $dev not wiped"
+        osd_ids=""
+    elif [[ "$mode" == "force_lost" ]] ; then
+        ceph_osd_force_remove --lost $osd_ids 2>/dev/null || Error "Ceph OSDs $osd_ids not removed, $dev not wiped"
+        osd_ids=""
+    fi
     for osd_id in $osd_ids ; do
         ceph_osd_remove $osd_id $mode 2>/dev/null
         # For raw osd disk, modify PARTLABEL to exclude disk in next hex_config refresh_ceph_osd
@@ -1724,8 +1729,33 @@ ceph_osd_host_remove()
     Quiet -n $CEPH osd crush rm $host
 }
 
+# Keep LVM to the DAS disks and their partitions, the only devices this node's
+# PVs are on. use_devicesfile is on, but without its devices file
+# (LVM_DEVICES_FILE) LVM reads every block device, so each lvs ceph-volume runs,
+# and the scans below, opened every FC and mpath LUN, where a read can block for
+# good (cubecos#2165). LVM adds the PVs it creates itself; this only ever adds,
+# since a PV missing from the file leaves its OSD down.
+ceph_lvm_devices_sync()
+{
+    local devs="" d pvs pv
+    for d in $($HEX_SDK storage_list_das_disks) ; do
+        devs+=" $(lsblk -pnlo NAME,TYPE "$d" 2>/dev/null | awk '$2 == "disk" || $2 == "part" { print $1 }')"
+    done
+    devs=$(echo $devs)
+    if [ -n "$devs" ] ; then
+        pvs=$(_ceph_probe pvs --noheadings -o pv_name --devices ${devs// /,})
+        [ $? -ne 124 ] || return 1
+        for pv in $pvs ; do
+            _ceph_probe lvmdevices -y --adddev "$pv" >/dev/null
+        done
+    fi
+    # with no PV at all, an empty file still keeps LVM off every other device
+    [ -e $LVM_DEVICES_FILE ] || : > $LVM_DEVICES_FILE
+}
+
 ceph_osd_activate_lvms()
 {
+    ceph_lvm_devices_sync
     _hex_function_ret /usr/sbin/pvscan
     _hex_function_ret /usr/sbin/vgscan
     _hex_function_ret /usr/sbin/vgchange -ay
@@ -3258,8 +3288,9 @@ ceph_osd_create_map()
             while read -r dev id metauuid datauuid ; do
                 [ -n "${id:-}" ] || continue
                 awk -v i="$id" '$2==i{f=1} END{exit !f}' ${osdmap_new}.sorted && continue
-                if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 ; then
-                    log_warning "ceph_osd_create_map: osd $id missing from this scan but $datauuid still resolves to a device; keeping its entry"
+                # a hung probe (2) is no proof the device is gone either (cubecos#2165)
+                if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 || [ $? -eq 2 ] ; then
+                    log_warning "ceph_osd_create_map: osd $id missing from this scan but $datauuid still resolves to a device (or its probe hung); keeping its entry"
                     echo "$dev $id $metauuid $datauuid" >> ${osdmap_new}.sorted
                 else
                     log_warning "ceph_osd_create_map: osd $id removed from $CEPH_OSD_MAP"
@@ -3282,8 +3313,8 @@ ceph_osd_create_map()
         # the link dangles; only remove it when the data device is really gone,
         # not when udev merely lost the symlink (cubecos#1284)
         datauuid=$(basename "$(readlink ${osddir}/block 2>/dev/null)")
-        if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 ; then
-            log_warning "ceph_osd_create_map: ${osddir}/block dangles but $datauuid still resolves to a device; keeping it"
+        if ceph_osd_datapart_resolve "$datauuid" >/dev/null 2>&1 || [ $? -eq 2 ] ; then
+            log_warning "ceph_osd_create_map: ${osddir}/block dangles but $datauuid still resolves to a device (or its probe hung); keeping it"
             continue
         fi
         rm -f ${osddir}/block
@@ -3291,45 +3322,82 @@ ceph_osd_create_map()
     done
 }
 
-# true if data uuid $1 carries a bluestore label (belonging to osd uuid $2 if given)
+# true if data uuid $1 carries a bluestore label (belonging to osd uuid $2 if
+# given); 2 when a probe hung, which is not proof there is no OSD
 ceph_osd_datapart_has_osd()
 {
     local osd_uuid=$2
-    local dev=$(ceph_osd_datapart_resolve "$1") || return 1
+    local dev rc
+    dev=$(ceph_osd_datapart_resolve "$1")
+    rc=$?
+    [ $rc -eq 0 ] || return $rc
     [ -n "$dev" ] || return 1
 
     local label
-    label=$(ceph-bluestore-tool show-label --dev "$dev" 2>/dev/null) || return 1
+    label=$(_ceph_probe ceph-bluestore-tool show-label --dev "$dev")
+    rc=$?
+    [ $rc -ne 124 ] || return 2
+    [ $rc -eq 0 ] || return 1
     [ -n "$osd_uuid" ] || return 0
     echo "$label" | jq -r '.[].osd_uuid' 2>/dev/null | grep -qx "$osd_uuid"
 }
 
 # resolve a dev_osd.map data uuid to its device without going through
-# /dev/disk: a GPT PARTUUID for raw OSDs, an LVM lv_uuid for encrypted/mpath
-# ones. Fails only when the device is genuinely absent, so callers can treat
-# failure as proof the OSD is gone.
+# /dev/disk: a GPT PARTUUID for raw OSDs, an LVM lv_uuid for encrypted
+# ones. Returns 1 only when the device is genuinely absent, so callers can treat
+# that as proof the OSD is gone; 2 when a probe hung and it cannot tell
+# (cubecos#2165).
 ceph_osd_datapart_resolve()
 {
     local uuid=$1
     [ -n "$uuid" ] || return 1
 
-    # blkid reads the GPT off the disk, so it resolves without the udev symlink
-    local dev=$(blkid -o device --match-token PARTUUID=$uuid 2>/dev/null | head -1)
-    [ -n "$dev" ] || dev=$(ceph_osd_datapart_scan "$uuid")
-    [ -n "$dev" ] || dev=$(lvs --noheadings -o lv_path -S lv_uuid=$uuid 2>/dev/null | head -1 | tr -d ' ')
-    [ -n "$dev" ] || return 1
+    # udev's link names the partition without probing any other device, and the
+    # GPT entry on disk confirms it
+    local dev=$(readlink -e /dev/disk/by-partuuid/$uuid 2>/dev/null) found
+    if [ -n "$dev" ] ; then
+        found=$(ceph_osd_partuuid_of $dev)
+        [ $? -ne 2 ] || return 2
+        [ "$found" != "$uuid" ] || { echo -n "$dev" ; return 0 ; }
+    fi
+
+    # otherwise probe the DAS partitions, where raw OSD data lives, and only those
+    local parts=$(_ceph_das_partitions) hung=0
+    dev=
+    if [ -n "$parts" ] ; then
+        # blkid reads the GPT off the disk, so it resolves without the udev symlink
+        dev=$(_ceph_probe blkid -o device --match-token PARTUUID=$uuid $parts)
+        [ $? -ne 124 ] || hung=1
+        dev=${dev%%$'\n'*}
+        if [ -z "$dev" ] ; then
+            dev=$(ceph_osd_datapart_scan "$uuid" "$parts")
+            [ $? -ne 2 ] || hung=1
+        fi
+    fi
+    if [ -z "$dev" ] ; then
+        dev=$(_ceph_probe lvs --noheadings -o lv_path -S lv_uuid=$uuid)
+        [ $? -ne 124 ] || hung=1
+        dev=$(echo "$dev" | head -1 | tr -d ' ')
+    fi
+    if [ -z "$dev" ] ; then
+        [ $hung -eq 0 ] || return 2
+        return 1
+    fi
 
     echo -n "$dev"
 }
 
 # GPT PARTUUID of partition $1, probing only for ceph_bluestore so libblkid
-# cannot return "ambivalent" on raw BlueStore data (cubecos#1284)
+# cannot return "ambivalent" on raw BlueStore data (cubecos#1284); 2 when the
+# probe hung
 ceph_osd_partuuid_of()
 {
     local dev=$1
     [ -n "$dev" ] && [ -e "$dev" ] || return 1
 
-    local uuid=$(blkid -p -n ceph_bluestore -o value -s PART_ENTRY_UUID "$dev" 2>/dev/null)
+    local uuid
+    uuid=$(_ceph_probe blkid -p -n ceph_bluestore -o value -s PART_ENTRY_UUID "$dev")
+    [ $? -ne 124 ] || return 2
     [ -n "$uuid" ] || return 1
 
     echo -n "$uuid"
@@ -3338,19 +3406,25 @@ ceph_osd_partuuid_of()
 # partition carrying GPT PARTUUID $1, among those udev has no PARTUUID for or
 # already names $1 (61-cube-ceph-partuuid.rules fills it in for an ambivalent
 # partition that blkid --match-token still misses, cubecos#2004); the on-disk
-# probe confirms each candidate
+# probe confirms each candidate. Only DAS partitions ($2 when the caller has
+# listed them) are candidates; 2 when a probe hung and none matched.
 ceph_osd_datapart_scan()
 {
     local uuid=$1
-    local dev
+    local parts=" $(echo ${2:-$(_ceph_das_partitions)}) "
+    local dev found hung=0
 
     for dev in $(lsblk -lnpo NAME,TYPE,PARTUUID 2>/dev/null | awk -v u="$uuid" '$2 == "part" && ($3 == "" || $3 == u) { print $1 }') ; do
-        if [ "$(ceph_osd_partuuid_of $dev)" = "$uuid" ] ; then
+        [[ $parts == *" $dev "* ]] || continue
+        found=$(ceph_osd_partuuid_of $dev)
+        [ $? -ne 2 ] || hung=1
+        if [ "$found" = "$uuid" ] ; then
             echo -n "$dev"
             return 0
         fi
     done
 
+    [ $hung -eq 0 ] || return 2
     return 1
 }
 
@@ -3681,7 +3755,13 @@ ceph_mount_cephfs()
     if [ ! -s /etc/ceph/admin.key ] && [ -s /etc/ceph/ceph.client.admin.keyring ] ; then
         ceph-authtool -p /etc/ceph/ceph.client.admin.keyring > /etc/ceph/admin.key 2>/dev/null && chmod 0600 /etc/ceph/admin.key
     fi
-    mountpoint -q $CEPHFS_STORE_DIR && return 0
+    # bounded: on a hung mount mountpoint's stat waits until killed, and a second
+    # mount on top of it cannot help
+    timeout -k 5 $SRVSTO mountpoint -q $CEPHFS_STORE_DIR
+    case $? in
+        0) return 0 ;;
+        124|137) log_error "ceph_mount_cephfs: $CEPHFS_STORE_DIR is mounted but not answering on $(hostname)" ; return 1 ;;
+    esac
     # A cold PPU boot races ahead of the cluster reforming; wait (bounded) for
     # ceph + a serviceable MDS before mounting, then retry and verify.
     local _start=$SECONDS _deadline=$((SECONDS + 300)) i

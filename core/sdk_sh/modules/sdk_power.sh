@@ -944,6 +944,15 @@ power_roll_advance()
         # rabbitmq_ticktime in config_rabbitmq.cpp.
         # Same: only nodes still holding the 60 s compat marker.
         cmd -c "[ ! -e $ROLLING_TICKTIME_MARK ] || $HEX_CFG rabbitmq_ticktime" >/dev/null 2>&1
+        # Enable RabbitMQ's feature flags. Each control node's upgrade commit tries, but only
+        # the last one can find every broker on one version, and it asks while the others are
+        # busy; one slow answer left them off until the next minor refused to start (#2164).
+        # Flags are cluster-wide, so the master's broker does it for all. See
+        # rabbitmq_feature_flags in config_rabbitmq.cpp; it logs its own outcome there.
+        # Capped: a broker that takes the call and never answers would hold the last node's
+        # bring-up, and the watchdog is already disarmed. A run takes under a minute.
+        ( remote_run $master "timeout 120 $HEX_CFG rabbitmq_feature_flags" ) >/dev/null 2>&1 ||
+            log_error "rolling_$(_power_roll_kind): rabbitmq feature flags not all enabled, see the log on $master"
         # Step k3s up to this image's release. Each server's migration boot moved it one minor
         # only, as far as k3s goes while other servers still run the old one; the rest waits
         # for every server to be on the new firmware. Before the job is marked done, for the
@@ -956,6 +965,15 @@ power_roll_advance()
         # reason as ovn_central_switch. See etcd_tls_ladder (sdk_etcd.sh); it logs its own
         # outcome on the master.
         ( remote_run $master "$HEX_SDK etcd_tls_ladder" ) >/dev/null 2>&1
+        # Hand keycloak over from the WildFly statefulset. Each control node's commit defers
+        # it while the control tier runs two firmware versions, and nothing commits keycloak
+        # once the roll ends. Before the job is marked done, for the same reason as
+        # ovn_central_switch. See upgrade_keycloak (config_keycloak.cpp). Only a cluster
+        # still holding the WildFly statefulset pays for a hex_config start, as for
+        # upgrade_mysql. Capped like the feature flags; its own waits (retire, scale-down,
+        # helm retries, rollout) add up to about 13 minutes.
+        ( remote_run $master "! /usr/local/bin/k3s kubectl -n keycloak get sts keycloak >/dev/null 2>&1 || timeout 900 $HEX_CFG upgrade_keycloak" ) >/dev/null 2>&1 ||
+            log_error "rolling_$(_power_roll_kind): keycloak not handed over, see the log on $master"
         _power_roll_set_str state done
         cluster_rolling_marker_clear
         Quiet -n $HEX_SDK ceph_leave_rolling
@@ -1138,8 +1156,17 @@ power_roll_decision()
                 if _power_roll_node_on_target "$stuck" ; then
                     # already on target -- record done, don't re-drain+reboot it.
                     log_info "continue: $stuck already on target firmware -- marking done"
+                    # Its boot found the job paused, so power_roll_advance left it as it was: land
+                    # it here as that would have. Left behind, its kick marker makes the node
+                    # refuse every later roll ("already in progress") and boot as a roll node,
+                    # and its compute stays as the drain left it (#2164).
+                    _power_roll_node_settle "$stuck" "$(_power_roll_master)"
                     _power_roll_set_node_status "$stuck" done
                     _power_roll_set_node_num "$stuck" finished $(date +%s)
+                    Quiet -n $HEX_SDK power_vm_reconcile_error_state "$stuck"
+                    rm -f "${ROLLING_DIR:-/tmp}/.drained.${stuck}"
+                    local ip=$(jq -r --arg h "$stuck" '.nodes[]|select(.hostname==$h)|.ip // empty' $ROLLING_JOB)
+                    timeout 15 ssh -o ConnectTimeout=5 root@${ip:-$stuck} "rm -f $ROLLING_RECOVER_MARKER" </dev/null >/dev/null 2>&1
                 else
                     # unfinished: reset to pending so the resume re-kicks it first.
                     _power_roll_set_node_status "$stuck" pending
@@ -1346,12 +1373,18 @@ power_roll_watchdog()
     local deadline=$(jq -r '.deadline // 0' $ROLLING_JOB)
     local hb=$(jq -r '.heartbeat // 0' $ROLLING_JOB)
     local inflight=$(jq -r '.inflight // ""' $ROLLING_JOB)
-    local phase=""
-    [ -n "$inflight" ] && phase=$(jq -r --arg h "$inflight" '.nodes[]|select(.hostname==$h)|.status // ""' $ROLLING_JOB)
+    local phase="" started=0
+    # the phase is the latest phase_ts entry: .status stays "rebooting" through
+    # the boot, whose "bootstrapping" only the node itself stamps (cubecos#2165)
+    [ -n "$inflight" ] && phase=$(jq -r --arg h "$inflight" '.nodes[]|select(.hostname==$h)|(((.phase_ts // {}) | to_entries | max_by(.value) | .key) // .status // "")' $ROLLING_JOB)
+    [ -n "$inflight" ] && started=$(jq -r --arg h "$inflight" '.nodes[]|select(.hostname==$h)|.started // 0' $ROLLING_JOB)
 
     if [ "$deadline" -gt 0 ] && [ "$now" -gt "$deadline" ] ; then
+        # the budget the kick gave it, scaled by its VMs; ROLLING_NODE_TIMEOUT is only the floor
+        local budget=${ROLLING_NODE_TIMEOUT:-2700}
+        [ "${started:-0}" -gt 0 ] && budget=$(( deadline - started ))
         log_warning "roll_watchdog: $inflight over deadline by $(( now - deadline ))s (phase: ${phase:-unknown})"
-        _power_roll_pause "watchdog: $inflight exceeded its ${ROLLING_NODE_TIMEOUT:-2700}s node deadline (phase: ${phase:-unknown})"
+        _power_roll_pause "watchdog: $inflight exceeded its ${budget}s node deadline (phase: ${phase:-unknown})"
         [ -n "$inflight" ] && Quiet -n $HEX_SDK power_vm_reconcile_error_state "$inflight"
         return 0
     fi

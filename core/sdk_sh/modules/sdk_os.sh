@@ -922,7 +922,24 @@ os_image_import()
                 fi
             fi
             local img_dir=$(dirname $img_raw)
-            virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
+            # virt-v2v's firstboot reboots a Windows guest until every injected driver
+            # installs, and Windows Server rejects smbus.inf: a virtio-win with smbus or an
+            # ISO in it (e.g. an ISO mounted over /usr/share/virtio-win) loops the guest forever (#560)
+            local virtio_win=${VIRTIO_WIN:-/usr/share/virtio-win}
+            local v2v_env=() virtio_win_tmp=
+            if [ -d "$virtio_win" ] && [ -n "$(find -L "$virtio_win" -iname '*smbus*' -o -iname '*.iso' | head -1)" ] ; then
+                virtio_win_tmp=$(mktemp -d /tmp/virtio-win_XXXX)
+                if [ ! -d "$virtio_win_tmp" ] || ! cp -rs "$(readlink -f "$virtio_win")/." $virtio_win_tmp/ ; then
+                    [ -d "$virtio_win_tmp" ] && rm -rf $virtio_win_tmp
+                    cmd rm -f $mf_importing
+                    Error "Failed to prepare $virtio_win without smbus for virt-v2v"
+                fi
+                find $virtio_win_tmp \( -iname '*smbus*' -o -iname '*.iso' \) -prune -exec rm -rf {} +
+                v2v_env=("VIRTIO_WIN=$virtio_win_tmp")
+                echo "[$(date +"%T")] Leaving smbus and ISOs in $virtio_win out of the conversion"
+            fi
+            env "${v2v_env[@]}" virt-v2v -i disk $IMG -o local -of raw -os $img_dir --parallel 4 2>/dev/null
+            [ -n "$virtio_win_tmp" ] && rm -rf $virtio_win_tmp
             if [ -e ${img_dir}/${file%.*}*.xml ] ; then
                 mv -f ${img_dir}/${file%.*}*-* $img_raw
                 if grep -i "os firmware" ${img_dir}/${file%.*}*.xml 2>/dev/null | grep -q -i efi ; then
@@ -1041,8 +1058,8 @@ os_extpack_image_import()
     declare -A PIDS
 
     pushd $dir/$ext_folder >/dev/null
-    for PREFIX in ipa-kernel- ipa-initramfs- amphora- manila- k8s- appfw- rancher-cluster- registry- ; do
-        local img=$(ls -1 ${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz,tar} 2>/dev/null | head -1)
+    for PREFIX in ipa-kernel- ipa-initramfs- amphora- manila- k8s- appfw- rancher-cluster- ; do
+        local img=$(ls -1 ${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz} 2>/dev/null | head -1)
         [ -n "$img" ] || continue
         case $PREFIX in
             amphora-)
@@ -1068,12 +1085,6 @@ os_extpack_image_import()
                 local appfw_dir=/opt/appfw/images/
                 cmd -c "mkdir -p $appfw_dir"
                 ( tar xf $dir/$ext_folder/$img -C $appfw_dir ; cubectl node rsync -r control $appfw_dir )
-                ;;
-            registry-)
-                # registry volume fragment (e.g. the rancher agent): merge into every control node's registry
-                tar xf $dir/$ext_folder/$img -C /opt/docker && \
-                    cubectl node rsync -r control /opt/docker/registry && \
-                    cubectl node exec -r control -p docker restart registry >/dev/null
                 ;;
             *) echo "Unknown builtin image prefix: $PREFIX" ;;
         esac
@@ -1102,7 +1113,7 @@ os_image_import_extpack_list()
         local ext_dir=${ext%.ext}
         echo -n "${ext_dir##*/}: "
         pushd $ext_dir >/dev/null
-        ls *.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz,tar} 2>/dev/null | xargs
+        ls *.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz} 2>/dev/null | xargs
         popd >/dev/null
     done
 }
@@ -3314,16 +3325,43 @@ os_mariadb_version_uniform()
 os_rabbitmq_version_uniform()
 {
     # fail-safe: every control node must be reachable AND matching;
-    # unreachable = unknown, any miss => not uniform
-    local hosts h v vers=
+    # unreachable = unknown, any miss => not uniform.
+    # Ask a silent node three times, 5 s apart, before calling it a miss: the commit
+    # that asks runs during the last control node's upgrade boot, when every control
+    # is busy and is_sshable gives a new ssh connection 2 s. One slow answer there
+    # left a whole roll's feature flags off (#2164).
+    local hosts h i v vers= seen=
     hosts=$(cubectl node list -r control -j 2>/dev/null | jq -r '.[].hostname')
     [ -n "$hosts" ] || return 1
     for h in $hosts ; do
-        v=$(remote_run "$h" "rabbitmqctl version 2>/dev/null" | cut -d. -f1,2)
-        [ -n "$v" ] || return 1
+        for i in 1 2 3 ; do
+            v=$(remote_run "$h" "rabbitmqctl version 2>/dev/null" | cut -d. -f1,2)
+            [ -n "$v" ] && break
+            [ $i -eq 3 ] || sleep 5
+        done
+        if [ -z "$v" ] ; then
+            log_info "rabbitmq version: $h did not answer, so not uniform"
+            return 1
+        fi
         vers="$vers $v"
+        seen="$seen $h=$v"
     done
-    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ]
+    [ "$(printf '%s\n' $vers | sort -u | wc -l)" = "1" ] && return 0
+    log_info "rabbitmq version: not uniform:$seen"
+    return 1
+}
+
+# Print, on one line, the feature flags the local broker reports disabled, leaving out
+# experimental ones (enable_feature_flag all leaves those alone). The next RabbitMQ minor
+# makes most of them required and will not start while one is off (#2164). Fails when
+# the broker does not answer, so an empty line never stands for "could not tell".
+# A flag some cluster node does not know reads "unavailable", so mid-roll ones are not listed.
+# rabbitmqctl's own status decides: jq 1.6, the image's, exits 0 on empty input.
+os_rabbitmq_flags_disabled()
+{
+    local out
+    out=$(env LANG=en_US.utf8 HOSTNAME=${1:-$HOSTNAME} rabbitmqctl -q list_feature_flags name state stability --formatter json 2>/dev/null) || return 1
+    jq -er '[.[] | select(.state == "disabled" and .stability != "experimental") | .name] | join(" ")' <<< "$out"
 }
 
 # Derive the Cyborg device profile name for a GPU model string.

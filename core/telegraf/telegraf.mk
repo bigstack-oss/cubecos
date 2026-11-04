@@ -10,17 +10,19 @@ ROOTFS_DNF_DL_FROM += https://repos.influxdata.com/rhel/9/x86_64/stable/$(TELEGR
 
 # /usr/bin/telegraf is rebuilt here from the same tag and installed over the rpm's. Upstream builds
 # each release with the Go of its day and never rebuilds it. Through 1.30.3 core/telegraf/Makefile
-# rebuilt it for that reason: the 1.30.3 rpm was go1.22.3 and carried 127 advisories, the rebuild
-# 66 (cubecos#647). 1.40.1 shipped the rpm's binary, built with the toolchain of its day, go1.27.1
-# (cubecos#801). 1.40.2 is still go1.27.1, older than the October 2026 security release
-# (1.27.2 / 1.26.9), and links an x/net older than its fix; the jail's Go and TELEGRAF_GO_GET cover
-# both. The rpm stays for the unit, the config and the version the SBOM names, and `rpm -V telegraf`
-# reports the binary as modified. The build flags and version ldflags are upstream's release ones.
+# rebuilt it for that reason: the 1.30.3 rpm was go1.22.3 and carried 127 advisories, the rebuild 66
+# (cubecos#647). 1.40.1 shipped the rpm's binary, built with the toolchain of its day, go1.27.1
+# (cubecos#801). 1.40.2 is still go1.27.1, older than the October 2026 security release (1.27.2 /
+# 1.26.9), and links an x/net older than its fix; the jail's Go and TELEGRAF_GO_GET cover both.
+# go-jose and klauspost/compress are raised to their fixed releases the same way. The rpm stays for
+# the unit, the config and the version the SBOM names, and `rpm -V telegraf` reports the binary as
+# modified. The build flags and version ldflags are upstream's release ones.
 #
 # Return to the rpm's binary on the condition core/exporters/Makefile gives. Judge a bump, or
 # answer an audit, by the binary rather than by the version number: `go version -m` and
 # `govulncheck -mode binary` on the rpm payload's ./usr/bin/telegraf (`rpm2cpio <rpm> | cpio -idm`).
-TELEGRAF_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0
+TELEGRAF_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+	github.com/go-jose/go-jose/v4@v4.1.6 github.com/klauspost/compress@v1.20.3
 TELEGRAF_GO_DIR := $(ARCS_DIR)/telegraf-go
 TELEGRAF_SRC := $(TELEGRAF_GO_DIR)/telegraf-$(TELEGRAF_VER)-src
 TELEGRAF_BIN := $(TELEGRAF_GO_DIR)/bin/telegraf

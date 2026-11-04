@@ -273,6 +273,12 @@ rootfs_install::
 	$(Q)mkdir -p $(ROOTDIR)/etc/systemd/journald.conf.d
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/cube-journald.conf ./etc/systemd/journald.conf.d
 
+# placeholder that the QA dummy fixpacks change (cubecos#2223); /usr/lib is tracked by the
+# rootfs git, so an install and a rollback each leave a git record
+rootfs_install::
+	$(Q)mkdir -p $(ROOTDIR)/usr/lib/cube
+	$(Q)echo base > $(ROOTDIR)/usr/lib/cube/fixpack-dummy
+
 # roll stall watchdog -- installed disabled; the roll arms/disarms it
 rootfs_install::
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/main/hex-roll-watchdog.service ./lib/systemd/system

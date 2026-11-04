@@ -19,11 +19,11 @@ ROOTFS_DNF += prometheus
 
 # prometheus and promtool are rebuilt from the release tag of the version EPEL's rpm installs and
 # installed over the rpm's: EPEL's build is still made with a Go older than the October 2026
-# security release (1.27.2 / 1.26.9), and links an x/net older than its fix. The jail's Go and
-# PROMETHEUS_GO_GET cover both. Return to the rpm's binaries on the condition
-# core/exporters/Makefile gives. EPEL floats, so rootfs_install stops the build when the rpm has
-# moved past PROMETHEUS_VER, rather than put an older binary under a newer package: bump it to the
-# rpm's, with the web UI's sha256 from that release's sha256sums.txt.
+# security release (1.27.2 / 1.26.9), and links an x/net and a klauspost/compress older than their
+# fixes. The jail's Go and PROMETHEUS_GO_GET cover both. Return to the rpm's binaries on the
+# condition core/exporters/Makefile gives. EPEL floats, so rootfs_install stops the build when the
+# rpm has moved past PROMETHEUS_VER, rather than put an older binary under a newer package: bump it
+# to the rpm's, with the web UI's sha256 from that release's sha256sums.txt.
 #
 # The web UI is the release's own prebuilt assets, compressed and embedded by the repo's
 # scripts/compress_assets.sh -- what its assets-compress target runs with SKIP_UI_BUILD -- so no
@@ -31,7 +31,8 @@ ROOTFS_DNF += prometheus
 # would inherit this build's command-line variables. The tree carries a go.work, which -mod=mod is
 # refused under. The build flags and version ldflags are the release's own.
 PROMETHEUS_VER := 3.15.0
-PROMETHEUS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0
+PROMETHEUS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+	github.com/klauspost/compress@v1.20.3
 PROMETHEUS_GO_DIR := $(ARCS_DIR)/prometheus-go
 PROMETHEUS_SRC := $(PROMETHEUS_GO_DIR)/prometheus-$(PROMETHEUS_VER)-src
 PROMETHEUS_UI := prometheus-web-ui-$(PROMETHEUS_VER).tar.gz

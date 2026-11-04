@@ -412,7 +412,7 @@ health_bootstrap_check()
         if ! is_sshable $node || ! ssh root@$node stat $CUBE_DONE >/dev/null 2>&1 ; then
             ERR_CODE=1
             ERR_MSG+="$node services ... [n/a]\n"
-            ERR_LOG="`journalctl | grep hex | grep -i -e error -e fail`\n"
+            ERR_LOG="`journalctl -b | grep hex | grep -i -e error -e fail`\n"
         else
             ERR_MSG+="$node services ... [ready]\n"
         fi
@@ -515,7 +515,7 @@ health_advisor_check()
     elif [ "${#down[@]}" -gt 0 ] ; then
         ERR_CODE=1
         ERR_MSG="agent not running on: ${down[*]}"
-        ERR_LOG="journalctl -u $ADVISOR_AGENT_UNIT_NAME"
+        ERR_LOG="journalctl -n $ERR_LOGSIZE -u $ADVISOR_AGENT_UNIT_NAME"
     elif [ "${#unapplied[@]}" -gt 0 ] ; then
         ERR_CODE=3
         ERR_MSG="console origins reported but not applied from: ${unapplied[*]}"
@@ -1001,6 +1001,13 @@ health_rabbitmq_repair()
 {
     local total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
     local stats=$($HEX_CFG status_rabbitmq 2>/dev/null)
+    # a broker that does not answer says nothing about the others: one that refuses a
+    # disabled feature flag stays down (#2164), and its empty view would take the full
+    # rebuild below and wipe the peers it kept. Take a peer's view.
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        [ -z "$stats" ] || break
+        stats=$(remote_run $node "$HEX_CFG status_rabbitmq" 2>/dev/null)
+    done
     local running=$(echo "$stats" | jq -r '.running_nodes[]?' 2>/dev/null)
     local running_cnt=$(echo "$running" | grep -c .)
     local partition=$(echo "$stats" | jq -r '.partitions[]?' 2>/dev/null | grep -c .)
@@ -1946,9 +1953,11 @@ health_ceph_mds_check()
     fi
     let "online = $active + $standbys + $hotstandbys"
 
+    # mountpoint is bounded on each node: on a hung cephfs mount its stat waits
+    # until killed, and cmd's 600s ssh bound leaves the mux session running it
     if [ "$total" != "$online" ] ; then
         ERR_CODE=1
-    elif [ $(cmd -v "mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
+    elif [ $(cmd -v "timeout -k 5 $SRVSTO mountpoint -- $CEPHFS_STORE_DIR"  | grep "is a mountpoint" | wc -l) -lt $num_nodes ] ; then
         ERR_CODE=2
     elif ! timeout $SRVSTO mount $(shared_ip):/nfs $nfs_dir 2>/dev/null ; then
         timeout $SRVSTO umount -l $nfs_dir/ 2>/dev/null || true
@@ -2041,7 +2050,7 @@ health_ceph_osd_repair()
     declare -p osd_array > /dev/null
     for osd_entry in "${osd_array[@]}" ; do
         local osd=$(echo $osd_entry | head -c -1)
-        local host=$(ceph_get_host_by_id $osd)
+        local host=$($HEX_SDK ceph_get_host_by_id $osd)
 
         # A down OSD whose metadata dir isn't mounted will fail the same way on
         # every restart ("missing 'type' file"), so restarting it is not a
@@ -3771,8 +3780,9 @@ health_kafka_check()
     # checks below find (see _health_datapipe_try_start)
     _health_datapipe_up && rm -f ${_DP_START_MARK:-/run/cube_datapipe_start_failed}
 
-    # check the last line of telegraf log
-    if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf.*metrics" ; then
+    # check the last line of telegraf log, in this boot: the journal keeps earlier boots,
+    # and their last line is no failure of telegraf now (#2198)
+    if journalctl -b -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf.*metrics" ; then
         ERR_CODE=2
         ERR_MSG+="kafka fails to get sys/host metrics\n"
     fi
@@ -3805,13 +3815,13 @@ _health_kafka_auto_repair()
     if [ "$ERR_CODE" == "1" ] ; then
         _health_datapipe_start_stopped
     elif [ "$ERR_CODE" == "2" ] ; then
-        if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-metrics" ; then
+        if journalctl -b -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-metrics"
         fi
-        if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-hc-metrics" ; then
+        if journalctl -b -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-hc-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-hc-metrics"
         fi
-        if journalctl -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-events-metrics" ; then
+        if journalctl -b -u telegraf -n 1 | grep -q "E\!.*Failed.*telegraf-events-metrics" ; then
             $HEX_CFG recreate_kafka_topic "telegraf-events-metrics"
         fi
     elif [ "$ERR_CODE" == "4" ] ; then

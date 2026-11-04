@@ -103,6 +103,13 @@ WriteConfig(const std::string& sharedId, const std::string& adminPass)
     fprintf(fout, "[auth.anonymous]\n");
     fprintf(fout, "enabled = true\n");
     fprintf(fout, "#org_role = Admin\n");
+    fprintf(fout, "\n");
+    // The plugins grafana runs are the ones the image ships. Left at its defaults, grafana
+    // downloads a list of plugins from grafana.com in the background at every start, newer
+    // releases of the datasources the image bundles among them, and runs those instead: code no
+    // scan of the image has seen.
+    fprintf(fout, "[plugins]\n");
+    fprintf(fout, "preinstall_disabled = true\n");
 
     fclose(fout);
 

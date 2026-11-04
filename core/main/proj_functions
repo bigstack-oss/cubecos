@@ -1504,8 +1504,46 @@ node_bootstrap_status()
 fixpack_sync()
 {
     # Per-node: record on this node only; peers install the fixpack themselves.
-    local action=Installed
+    # Returns git_push's status, so the caller can tell the record failed.
+    local action=Installed r=0
     [ "x$1" != "xuninstall" ] || action=Uninstalled
-    hex_sdk git_push "$FIXPACK_ID $FIXPACK_NAME ROLLBACK=$ROLLBACK $FIXPACK_DESCRIPTION $action"
+    hex_sdk git_push "$FIXPACK_ID $FIXPACK_NAME ROLLBACK=$ROLLBACK $FIXPACK_DESCRIPTION $action" || r=$?
     chmod 4755 /usr/sbin/hex_{config,cli,firsttime}
+    return $r
+}
+
+# Gate before a fixpack changes this node; hex_fixpack_install calls it and refuses the install
+# when it fails. An install records its change in this node's git (fixpack_sync). That record is
+# lost, or swept into the next fixpack's commit, unless:
+#   - no other git is running, and no killed one left /.git/index.lock behind;
+#   - a commit identity resolves in this process (an admin login runs hex_cli with HOME=/tmp);
+#   - no tracked file is modified yet, so the commit holds this fixpack's change only.
+# Prints each problem and how to fix it, then returns 1. A node without a git repository (not set
+# up yet) passes: there is no record to keep.
+fixpack_precheck()
+{
+    local r=0 dirty wt=${CUBE_GIT_WORKTREE:-/}
+    git -C $wt rev-parse --git-dir >/dev/null 2>&1 || return 0
+    if [ -e $wt/.git/index.lock ] ; then
+        echo "- /.git/index.lock exists: another git is running, or one was killed."
+        echo "  If 'pgrep -x git' shows none, remove /.git/index.lock and retry."
+        r=1
+    fi
+    ( cd $wt && hex_sdk _git_identity ) >/dev/null 2>&1
+    if ! git -C $wt var GIT_COMMITTER_IDENT >/dev/null 2>&1 ; then
+        echo "- no git commit identity for this node (HOME=$HOME)."
+        echo "  Set it with: git -C / config user.email <hostname>@<management ip>"
+        r=1
+    fi
+    # Content changes only. A node without a role's files (a compute node lacks the control
+    # node's k3s binaries, which the shared base commit has) always shows them as deleted; that
+    # is the node's real state, not a change to refuse.
+    dirty=$(git -C $wt status --porcelain -uno 2>&1 | grep -v -E '^ ?D ')
+    if [ -n "$dirty" ] ; then
+        echo "- tracked files are already modified on this node; this fixpack's record would"
+        echo "  include them. Record them first (hex_sdk git_push '<why>'), or revert them:"
+        echo "$dirty" | head -10 | sed 's/^/    /'
+        r=1
+    fi
+    return $r
 }

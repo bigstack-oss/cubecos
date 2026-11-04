@@ -387,3 +387,6 @@ CONFIG_OBSERVES(pacemaker, cubesys, ParseCube, NotifyCube);
 
 CONFIG_TRIGGER_WITH_SETTINGS(pacemaker, "cluster_map_update", ClusterUpdateMain);
 
+// Keep the cluster key across an upgrade: without it the master writes a new
+// one in Commit() and pacemaker-remote nodes reject it until they upgrade too.
+CONFIG_MIGRATE(pacemaker, AUTH_KEY);

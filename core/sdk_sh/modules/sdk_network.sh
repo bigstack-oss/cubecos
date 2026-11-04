@@ -354,6 +354,28 @@ _set_ipt_service_int()
     iptables -nv -L INPUT 2>/dev/null | grep -q $chain || iptables -A INPUT -j $chain
 }
 
+# The ports above that also listen on IPv6 ([::] or *), where SERVICE-INT does not reach: every
+# interface with a link-local address -- the management NIC, the provider bridge, octavia-hm0,
+# cni0 -- reaches them from its own segment. A port from the list above that starts listening on
+# IPv6 belongs here too. Loopback is accepted as in the IPv4 chain: localhost and the node's own
+# name resolve to ::1 first, so the health checks' curl to localhost:9090 would otherwise wait on
+# ::1 before trying 127.0.0.1. Nodes reach each other over IPv4 only, so nothing else is accepted;
+# and with only loopback accepted the chain can go first in INPUT, ahead of kube-router's accept.
+_set_ip6t_service_int()
+{
+    local chain=SERVICE-INT
+
+    ip6tables -n --list $chain >/dev/null 2>&1 || ip6tables -N $chain
+    ip6tables -F $chain
+    ip6tables -A $chain -i lo -j ACCEPT
+    ip6tables -A $chain -p tcp --dport 2224 -j DROP # pcsd
+    ip6tables -A $chain -p tcp --dport 2181 -j DROP # zookeeper
+    ip6tables -A $chain -p tcp --dport 9090 -j DROP # lachesis's metrics
+    ip6tables -A $chain -p tcp --dport 13306 -j DROP # haproxy's galera check (galera-check.socket)
+
+    ip6tables -C INPUT -j $chain 2>/dev/null || ip6tables -I INPUT 1 -j $chain
+}
+
 _set_ipt_service_out()
 {
     local chain=SERVICE-OUT
@@ -368,6 +390,7 @@ _set_ipt_service_out()
 network_ipt_serviceint()
 {
     _set_ipt_service_int
+    _set_ip6t_service_int
     _set_ipt_service_out
 }
 

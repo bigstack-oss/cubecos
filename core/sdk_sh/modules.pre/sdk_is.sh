@@ -237,15 +237,22 @@ is_cluster_rolling()
     # the cephfs roll job is the authority; ask it first (also skips the
     # ssh-fanout fallbacks below). "paused" does not count as rolling --
     # _power_roll_pause clears the marker so background repair returns.
+    # Both reads are bounded: on a hung cephfs mount any access under it waits
+    # in the kernel until killed, and every failing health check asks here.
     local _job=${ROLLING_JOB:-/mnt/cephfs/rolling/job.json}
-    if [ -r "$_job" ] ; then
-        [ "$(jq -r '.state // ""' "$_job" 2>/dev/null)" = "running" ] && return 0
-        return 1
+    if timeout -k 5 5 test -r "$_job" ; then
+        local _state
+        _state=$(timeout -k 5 5 jq -r '.state // ""' "$_job" 2>/dev/null)
+        case $? in
+            124|137) ;;   # the read hung: let the fallbacks decide
+            *) [ "$_state" = "running" ] && return 0 ; return 1 ;;
+        esac
     fi
 
     # Fallbacks, used only when the job is unreadable -- i.e. cephfs is not
-    # mounted yet, early in boot. They can only add false positives (suppressing
-    # repair when no roll is running), never mask a roll that is.
+    # mounted yet, early in boot, or not answering. They can only add false
+    # positives (suppressing repair when no roll is running), never mask a roll
+    # that is.
     local ret=1
     [ -e ${ROLLING_RECOVER_MARKER:-/store/rolling_recover} ] && ret=0
     if cmd -v "cat /run/cube_bootstrap.log" | grep -q -e 'Rebooting' -e 'rolling upgrade' ; then
@@ -257,12 +264,13 @@ is_cluster_rolling()
 
 # This boot is this node's own reboot in a running rolling *restart* (not an
 # upgrade): the cephfs job is running, of kind restart, with this node in flight.
-# Unreadable job (cephfs down) or a missing field -> false, i.e. the full path.
+# Unreadable job (cephfs down or hung) or a missing field -> false, i.e. the full
+# path.
 is_rolling_restart_boot()
 {
     local _job=${ROLLING_JOB:-/mnt/cephfs/rolling/job.json}
-    [ -r "$_job" ] || return 1
-    jq -e --arg h "${HOSTNAME:-$(hostname)}" \
+    timeout -k 5 5 test -r "$_job" || return 1
+    timeout -k 5 5 jq -e --arg h "${HOSTNAME:-$(hostname)}" \
         '.state == "running" and .kind == "restart" and .inflight == $h' "$_job" >/dev/null 2>&1
 }
 

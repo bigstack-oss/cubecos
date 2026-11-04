@@ -3,7 +3,8 @@
 # Unit test for the restart-roll time cuts in ../modules/sdk_power.sh and
 # sdk_ceph.sh: the kick fails the mgr over before the reboot but leaves the
 # dashboard check in the background; the evacuate counts VMs from one server
-# list; the end-of-roll hex_config actions run only where their marker is.
+# list; the end-of-roll hex_config actions run only where their marker is, and
+# the keycloak handover runs on the master.
 # Stubs ceph, OpenStack, ssh and remote_run. Run: bash test_power_roll_time.sh
 #
 set -u
@@ -80,16 +81,47 @@ remote_run(){ echo "rr $1 $2" >> $CALLS; case "$2" in *"virsh list"*) echo 0 ;; 
 newjob done rebooting; _power_roll_set_str inflight n2; touch $ROLLING_RECOVER_MARKER; : > $CALLS
 power_roll_advance n2 >/dev/null
 chk "3 roll done"             "$(job .state)" done
+chk "3 keycloak on master"    "$(has 'rr m1 ! /usr/local/bin/k3s kubectl -n keycloak get sts keycloak >/dev/null 2>&1 || timeout 900 hexcfg upgrade_keycloak')" y
+kc_cmd=$(grep -F 'upgrade_keycloak' $CALLS | sed 's/^rr m1 //')
 mysql_cmd=$(grep -F 'upgrade_mysql' $CALLS | sed 's/^cmd -c //')
 tick_cmd=$(grep -F 'rabbitmq_ticktime' $CALLS | sed 's/^cmd -c //')
 chk "3 mysql guarded"         "$mysql_cmd" "[ ! -e /var/lib/_mysql ] || hexcfg upgrade_mysql"
 chk "3 ticktime guarded"      "$tick_cmd" "[ ! -e /etc/appliance/state/rabbitmq_ticktime_compat ] || hexcfg rabbitmq_ticktime"
+chk "3 feature flags on master" "$(has 'rr m1 timeout 120 hexcfg rabbitmq_feature_flags')" y
+ff_cmd=$(grep -F 'rabbitmq_feature_flags' $CALLS | sed 's/^rr m1 //')
+chk "3 flags before done"     "$([ "$(line rabbitmq_feature_flags)" -gt "$(line rabbitmq_ticktime)" ] && echo y || echo n)" y
 # the guarded strings, run as cmd runs them remotely: hex_config only with the marker
 hexcfg(){ echo "ran $*" >> $T/ran; }
 run_guarded(){ : > $T/ran; eval "${1//\/var\/lib\/_mysql/$T/_mysql}" ; r=$?; eval "${2//\/etc\/appliance\/state/$T}" ; echo "$r$? $(tr '\n' ';' < $T/ran)"; }
 chk "3 no markers: no hex_config, rc 0" "$(run_guarded "$mysql_cmd" "$tick_cmd")" "00 "
 mkdir $T/_mysql; touch $T/rabbitmq_ticktime_compat
 chk "3 markers: both run"     "$(run_guarded "$mysql_cmd" "$tick_cmd")" "00 ran upgrade_mysql;ran rabbitmq_ticktime;"
+# the keycloak string: hex_config only while the WildFly statefulset is there
+timeout(){ shift; "$@"; }
+/usr/local/bin/k3s(){ return 1; }; : > $T/ran
+chk "3 no legacy: no hex_config, rc 0" "$(eval "$kc_cmd"; echo "$? $(tr '\n' ';' < $T/ran)")" "0 "
+/usr/local/bin/k3s(){ return 0; }; : > $T/ran
+chk "3 legacy: handover runs" "$(eval "$kc_cmd"; echo "$? $(tr '\n' ';' < $T/ran)")" "0 ran upgrade_keycloak;"
+unset -f timeout /usr/local/bin/k3s
+# the flags string, run as the master runs it, against a hex_config that never returns
+mkdir $T/bin; printf '#!/bin/sh\nsleep 30\n' > $T/bin/hexcfg; chmod +x $T/bin/hexcfg
+chk "3 hung flags call ends"  "$(PATH=$T/bin:$PATH; eval "${ff_cmd/120/1}"; echo $?)" 124
+
+# 3b. flags the master could not enable: the roll still completes, and says so
+remote_run(){ echo "rr $1 $2" >> $CALLS; case "$2" in *rabbitmq_feature_flags) return 1 ;; esac; return 0; }
+log_error(){ echo "error $1" >> $CALLS; }
+newjob done rebooting; _power_roll_set_str inflight n2; touch $ROLLING_RECOVER_MARKER; : > $CALLS
+power_roll_advance n2 >/dev/null
+chk "3b roll done"            "$(job .state)" done
+chk "3b logged"               "$(has 'error rolling_restart: rabbitmq feature flags not all enabled, see the log on m1')" y
+
+# 3c. keycloak the master could not hand over: the roll still completes, and says so
+remote_run(){ echo "rr $1 $2" >> $CALLS; case "$2" in *upgrade_keycloak) return 1 ;; esac; return 0; }
+newjob done rebooting; _power_roll_set_str inflight n2; touch $ROLLING_RECOVER_MARKER; : > $CALLS
+power_roll_advance n2 >/dev/null
+chk "3c roll done"            "$(job .state)" done
+chk "3c logged"               "$(has 'error rolling_restart: keycloak not handed over, see the log on m1')" y
+remote_run(){ echo "rr $1 $2" >> $CALLS; case "$2" in *"virsh list"*) echo 0 ;; esac; return 0; }
 
 # 4. evacuate: one server list gives the ACTIVE total and the on-host total
 newjob draining pending

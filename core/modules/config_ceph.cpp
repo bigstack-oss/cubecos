@@ -190,6 +190,9 @@ static const unsigned long PARTITION_TASK_MEM_KB = 256 * 1024;
 // An OSD is budgeted at the memory target it runs with (ceph_osd_memory_targets);
 // ceph's 4 GiB default when that is unknown.
 static const unsigned long OSD_DEFAULT_START_MEM_KB = 4UL * 1024 * 1024;
+// The sdk bounds each of its partition probes by SRVTO (60s); this bounds hex_config's
+// call as a whole, so nothing else in it can stall the bootstrap commit (cubecos#2165).
+static const int OSD_PROBE_TIMEOUT_SEC = 300;
 
 /**
  * MemAvailable from /proc/meminfo in kB, or 0 when it cannot be read.
@@ -392,8 +395,18 @@ updatePartitionLabelLinks()
 static bool
 prepareOsdDirectories()
 {
-    std::string osdDevs = HexUtilPOpen(HEX_SDK " ceph_osd_list_meta_partitions");
-    std::vector<std::string> devs = hex_string_util::split(osdDevs, ' ');
+    const ExecSyncResult lr = ExecBashSync(
+        OSD_PROBE_TIMEOUT_SEC,
+        true,
+        false,
+        {},
+        HEX_SDK " ceph_osd_list_meta_partitions");
+    if (lr.exitCode != 0) {
+        HexLogError("failed to list osd meta partitions%s", lr.isTimedOut ? ": timed out" : "");
+        return false;
+    }
+
+    std::vector<std::string> devs = hex_string_util::split(lr.stdoutOutput, ' ');
     for (auto& d : devs) {
         if (d.length() == 0) {
             continue;
@@ -456,16 +469,21 @@ prepareOsdDirectories()
         std::string typePath = std::string(osddir) + "/type";
         bool isOldOsd = stat(typePath.c_str(), &ts) == 0;
         if (!isOldOsd && dataPartUuid.length() > 0) {
-            const ExecSyncResult lr = ExecBashSync(
-                0,
+            const ExecSyncResult hr = ExecBashSync(
+                OSD_PROBE_TIMEOUT_SEC,
                 false,
                 false,
                 {},
                 HEX_SDK " ceph_osd_datapart_has_osd " + dataPartUuid + " " + uuid);
-            isOldOsd = (lr.exitCode == 0);
-            if (isOldOsd)
+            // only a clean "no" (1) lets mkfs run: a hung probe says nothing about the
+            // label, and mkfs would overwrite a live OSD (cubecos#2165)
+            isOldOsd = (hr.exitCode != 1);
+            if (hr.exitCode == 0)
                 HexLogWarning("osd %lu has no metadata at %s but its data partition %s carries its "
                               "bluestore label; not re-creating it", osdId, osddir, dataPartUuid.c_str());
+            else if (isOldOsd)
+                HexLogError("osd %lu has no metadata at %s and its data partition %s could not be "
+                            "probed; not re-creating it", osdId, osddir, dataPartUuid.c_str());
         }
 
         if (!isOldOsd) {
@@ -495,7 +513,7 @@ activateRawOsds(void)
 }
 
 /**
- * Activate LVM OSDs, including encrypted DAS and mpath devices.
+ * Activate LVM OSDs, i.e. encrypted DAS disks.
  * With noSystemd the OSDs are activated but not started.
  */
 static bool
@@ -2444,6 +2462,9 @@ CONFIG_OBSERVES(ceph, keystone, ParseKeystone, NotifyKeystone);
 CONFIG_MIGRATE(ceph, MigratePrepare);
 CONFIG_MIGRATE(ceph, "/etc/cube/cos/ceph");
 CONFIG_MIGRATE(ceph, "/var/lib/ceph");
+// LVM's devices file (ceph_lvm_devices_sync): without it the new partition's first
+// boot scans every FC and mpath LUN until the ceph commit writes it again
+CONFIG_MIGRATE(ceph, "/etc/lvm/devices/system.devices");
 CONFIG_MIGRATE(ceph, MAKRER_POOL);
 CONFIG_MIGRATE(ceph, MAKRER_CEPHFS);
 CONFIG_MIGRATE(ceph, MAKRER_CLIENT);

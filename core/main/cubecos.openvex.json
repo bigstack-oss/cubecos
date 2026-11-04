@@ -2,8 +2,8 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/bigstack-oss/cubecos/blob/develop/core/main/cubecos.openvex.json",
   "author": "Bigstack",
-  "timestamp": "2026-10-27T03:22:22Z",
-  "version": 8,
+  "timestamp": "2026-11-03T10:05:44Z",
+  "version": 12,
   "statements": [
     {
       "vulnerability": {
@@ -98,124 +98,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262969280."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-10220"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/fence-agents-all"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-amt-ws"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-bladecenter"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-brocade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-mds"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-ucs"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-drac5"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eaton-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-emerson"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eps"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-heuristics-ping"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-hpblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ibmblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ifmib"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-moonshot"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-mp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-ssh"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo2"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-intelmodular"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipdu"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipmilan"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-kdump"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-mpath"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-redfish"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rhevm"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsa"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsb"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-sbd"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-scsi"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-rest"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-soap"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-wti"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-virt"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262969969."
     },
     {
       "vulnerability": {
@@ -446,9 +328,6 @@
           "@id": "pkg:rpm/centos/net-snmp-libs"
         },
         {
-          "@id": "pkg:rpm/centos/net-snmp-utils"
-        },
-        {
           "@id": "pkg:rpm/centos/pcp-conf"
         },
         {
@@ -581,50 +460,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-19445"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/python-unversioned-command"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-devel"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-libs"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262983138."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-19553"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/python-unversioned-command"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-devel"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-libs"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262983138."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-19774"
       },
       "products": [
@@ -655,9 +490,6 @@
         },
         {
           "@id": "pkg:rpm/centos/net-snmp-libs"
-        },
-        {
-          "@id": "pkg:rpm/centos/net-snmp-utils"
         },
         {
           "@id": "pkg:rpm/centos/pcp-conf"
@@ -884,124 +716,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264579645."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-39892"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/fence-agents-all"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-amt-ws"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-bladecenter"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-brocade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-mds"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-ucs"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-drac5"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eaton-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-emerson"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eps"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-heuristics-ping"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-hpblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ibmblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ifmib"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-moonshot"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-mp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-ssh"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo2"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-intelmodular"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipdu"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipmilan"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-kdump"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-mpath"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-redfish"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rhevm"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsa"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsb"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-sbd"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-scsi"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-rest"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-soap"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-wti"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-virt"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262969969."
     },
     {
       "vulnerability": {
@@ -1852,19 +1566,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-88807"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/libXrender"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262987144."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-9323"
       },
       "products": [
@@ -1875,31 +1576,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262978977."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-93599"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/mesa-dri-drivers"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libEGL"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libGL"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libgbm"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6262984587."
     },
     {
       "vulnerability": {
@@ -2422,646 +2098,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-102266"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/fence-agents-all"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-amt-ws"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-bladecenter"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-brocade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-mds"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-ucs"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-drac5"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eaton-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-emerson"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eps"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-heuristics-ping"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-hpblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ibmblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ifmib"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-moonshot"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-mp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-ssh"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo2"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-intelmodular"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipdu"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipmilan"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-kdump"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-mpath"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-redfish"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rhevm"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsa"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsb"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-sbd"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-scsi"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-rest"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-soap"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-wti"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-virt"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264065624."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-102267"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/fence-agents-all"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-amt-ws"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-bladecenter"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-brocade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-mds"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-ucs"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-drac5"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eaton-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-emerson"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eps"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-heuristics-ping"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-hpblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ibmblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ifmib"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-moonshot"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-mp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-ssh"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo2"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-intelmodular"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipdu"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipmilan"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-kdump"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-mpath"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-redfish"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rhevm"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsa"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsb"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-sbd"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-scsi"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-rest"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-soap"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-wti"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-virt"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264065624."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-102271"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/fence-agents-all"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-amt-ws"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-bladecenter"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-brocade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-mds"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-ucs"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-drac5"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eaton-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-emerson"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eps"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-heuristics-ping"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-hpblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ibmblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ifmib"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-moonshot"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-mp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-ssh"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo2"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-intelmodular"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipdu"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipmilan"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-kdump"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-mpath"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-redfish"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rhevm"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsa"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsb"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-sbd"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-scsi"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-rest"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-soap"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-wti"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-virt"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264065624."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-102272"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/fence-agents-all"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-amt-ws"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-bladecenter"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-brocade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-mds"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-ucs"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-drac5"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eaton-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-emerson"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eps"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-heuristics-ping"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-hpblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ibmblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ifmib"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-moonshot"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-mp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-ssh"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo2"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-intelmodular"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipdu"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipmilan"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-kdump"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-mpath"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-redfish"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rhevm"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsa"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsb"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-sbd"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-scsi"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-rest"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-soap"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-wti"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-virt"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264065624."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-102268"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/fence-agents-all"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-amt-ws"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-apc-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-bladecenter"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-brocade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-mds"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-cisco-ucs"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-drac5"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eaton-snmp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-emerson"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-eps"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-heuristics-ping"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-hpblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ibmblade"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ifmib"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-moonshot"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-mp"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo-ssh"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ilo2"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-intelmodular"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipdu"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-ipmilan"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-kdump"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-mpath"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-redfish"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rhevm"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsa"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-rsb"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-sbd"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-scsi"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-rest"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-vmware-soap"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-agents-wti"
-        },
-        {
-          "@id": "pkg:rpm/centos/fence-virt"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6310960663."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-102276"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/mesa-dri-drivers"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libEGL"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libGL"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libgbm"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264061974."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-102278"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/mesa-dri-drivers"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-filesystem"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libEGL"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libGL"
-        },
-        {
-          "@id": "pkg:rpm/centos/mesa-libgbm"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264061974."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-102554"
       },
       "products": [
@@ -3181,19 +2217,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-111943"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/skopeo"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6334333519."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-15176"
       },
       "products": [
@@ -3267,19 +2290,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264060106."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-78667"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/skopeo"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6264055879."
     },
     {
       "vulnerability": {
@@ -3451,31 +2461,10 @@
       },
       "products": [
         {
-          "@id": "pkg:rpm/centos/bind"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-doc"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-utils"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-libs"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-license"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-utils"
-        },
-        {
           "@id": "pkg:rpm/centos/dhcp-client"
         },
         {
           "@id": "pkg:rpm/centos/dhcp-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-bind"
         }
       ],
       "status": "not_affected",
@@ -3488,31 +2477,10 @@
       },
       "products": [
         {
-          "@id": "pkg:rpm/centos/bind"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-doc"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-utils"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-libs"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-license"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-utils"
-        },
-        {
           "@id": "pkg:rpm/centos/dhcp-client"
         },
         {
           "@id": "pkg:rpm/centos/dhcp-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-bind"
         }
       ],
       "status": "not_affected",
@@ -3525,31 +2493,10 @@
       },
       "products": [
         {
-          "@id": "pkg:rpm/centos/bind"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-doc"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-dnssec-utils"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-libs"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-license"
-        },
-        {
-          "@id": "pkg:rpm/centos/bind-utils"
-        },
-        {
           "@id": "pkg:rpm/centos/dhcp-client"
         },
         {
           "@id": "pkg:rpm/centos/dhcp-common"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-bind"
         }
       ],
       "status": "not_affected",
@@ -3700,25 +2647,18 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-59885"
-      },
-      "products": [
-        {
-          "@id": "pkg:rpm/centos/python3-pyasn1"
-        },
-        {
-          "@id": "pkg:rpm/centos/python3-pyasn1-modules"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432932159."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-41316"
       },
       "products": [
+        {
+          "@id": "pkg:rpm/centos/ruby"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-default-gems"
+        },
         {
           "@id": "pkg:rpm/centos/rubygem-bigdecimal"
         },
@@ -3754,6 +2694,15 @@
       },
       "products": [
         {
+          "@id": "pkg:rpm/centos/ruby"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-default-gems"
+        },
+        {
           "@id": "pkg:rpm/centos/rubygem-bigdecimal"
         },
         {
@@ -3788,6 +2737,15 @@
       },
       "products": [
         {
+          "@id": "pkg:rpm/centos/ruby"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-default-gems"
+        },
+        {
           "@id": "pkg:rpm/centos/rubygem-bigdecimal"
         },
         {
@@ -3815,6 +2773,574 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6432933127."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-80212"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/ruby"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-default-gems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bigdecimal"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bundler"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-io-console"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-json"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-psych"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rdoc"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rexml"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492486559."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-2xpw-w6gg-jr37",
+        "aliases": [
+          "CVE-2025-66471"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/urllib3"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492486999."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-38jv-5279-wg99",
+        "aliases": [
+          "CVE-2026-21441"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/urllib3"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492487456."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-gm62-xv2j-4w53",
+        "aliases": [
+          "CVE-2025-66418"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/urllib3"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492487920."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-qccp-gfcp-xxvc",
+        "aliases": [
+          "CVE-2026-44431"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/urllib3"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492488450."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-v845-jxx5-vc9f",
+        "aliases": [
+          "CVE-2023-43804"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/urllib3"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492488921."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-8gq9-2x98-w8hf",
+        "aliases": [
+          "CVE-2022-1941"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/protobuf"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492489432."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-110354"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/haproxy"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492727076."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-93753"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/pcs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492727578."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-8qvm-5x2c-j2w7",
+        "aliases": [
+          "CVE-2025-4565"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/protobuf"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492728194."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-vfmq-68hx-4jfw",
+        "aliases": [
+          "CVE-2026-41066"
+        ]
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/lxml"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492728800."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-110264"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/ruby"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-default-gems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bigdecimal"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bundler"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-io-console"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-json"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-psych"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rdoc"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rexml"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492729370."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-89078"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/ruby"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-default-gems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bigdecimal"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bundler"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-io-console"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-json"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-psych"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rdoc"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rexml"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492729915."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-93577"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/ruby"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-default-gems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bigdecimal"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bundler"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-io-console"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-json"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-psych"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rdoc"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rexml"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492730458."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-97229"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/ruby"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-libs"
+        },
+        {
+          "@id": "pkg:rpm/centos/ruby-default-gems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygems"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bigdecimal"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-bundler"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-io-console"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-json"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-psych"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rdoc"
+        },
+        {
+          "@id": "pkg:rpm/centos/rubygem-rexml"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492731077."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-93479"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/nginx"
+        },
+        {
+          "@id": "pkg:rpm/centos/nginx-core"
+        },
+        {
+          "@id": "pkg:rpm/centos/nginx-filesystem"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492731581."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-6554"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/libpcap"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6492732137."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-19630"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/dhcp-client"
+        },
+        {
+          "@id": "pkg:rpm/centos/dhcp-common"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598456546."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119373"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/sqlite"
+        },
+        {
+          "@id": "pkg:rpm/centos/sqlite-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598456915."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119586"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/sqlite"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598457250."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119586"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/sqlite-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598457250."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-93008"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/dnsmasq"
+        },
+        {
+          "@id": "pkg:rpm/centos/dnsmasq-utils"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598457647."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119187"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/pcs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598458015."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119188"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/pcs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598458318."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-118764"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/pcs"
+        },
+        {
+          "@id": "pkg:rpm/centos/mesa-dri-drivers"
+        },
+        {
+          "@id": "pkg:rpm/centos/mesa-filesystem"
+        },
+        {
+          "@id": "pkg:rpm/centos/mesa-libEGL"
+        },
+        {
+          "@id": "pkg:rpm/centos/mesa-libGL"
+        },
+        {
+          "@id": "pkg:rpm/centos/mesa-libgbm"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598458623."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-103963"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/glib-networking"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598458953."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-120194"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/json-glib"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6598459424."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-116591"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/skopeo"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6600544201."
     }
   ]
 }

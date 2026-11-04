@@ -435,7 +435,7 @@ stevedore===5.4.1
 pywinrm===0.5.0
 botocore===1.36.26
 xmltodict===0.14.2
-pyasn1===0.6.4
+pyasn1===0.6.5
 oslo.rootwrap===7.5.1
 Django===4.2.30
 pexpect===4.9.0
@@ -551,8 +551,8 @@ alembic===1.14.1
 execnet===2.1.1
 sphinxcontrib-programoutput===0.18
 storpool.spopenstack===3.2.0
-dnspython===2.7.0
-oauthlib===3.2.2
+dnspython===2.9.0
+oauthlib===4.0.1
 logutils===0.3.5
 zipp===3.21.0
 greenlet===3.1.1

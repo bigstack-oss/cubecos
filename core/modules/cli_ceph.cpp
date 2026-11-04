@@ -409,56 +409,6 @@ CephAutoScaleMain(int argc, const char** argv)
 }
 
 static int
-CephSetForceUseMpathDevicesMain(int argc, const char** argv)
-{
-    if (argc > 2) {
-        return CLI_INVALID_ARGS;
-    }
-
-    int index;
-    std::string value;
-
-    if (CliMatchCmdHelper(
-            argc,
-            argv,
-            1,
-            "echo 'true\nfalse'",
-            &index,
-            &value,
-            "Set to force to use multipath devices for Ceph: ")
-        != CLI_SUCCESS) {
-        CliPrintf("Unknown option");
-        return CLI_INVALID_ARGS;
-    }
-
-    if (value == "true") {
-        const ExecSyncResult sr = ExecBashSync(
-            0,
-            false,
-            false,
-            {},
-            HEX_SDK " storage_set_force_use_mpath_devices_for_ceph"
-        );
-        if (sr.exitCode != 0) {
-            return CLI_FAILURE;
-        }
-    } else {
-        const ExecSyncResult ur = ExecBashSync(
-            0,
-            false,
-            false,
-            {},
-            HEX_SDK " storage_unset_force_use_mpath_devices_for_ceph"
-        );
-        if (ur.exitCode != 0) {
-            return CLI_FAILURE;
-        }
-    }
-
-    return CLI_SUCCESS;
-}
-
-static int
 CephListAvailDisksMain(int argc, const char** argv)
 {
     if (argc > 1) {
@@ -576,8 +526,6 @@ CephAddAvailDisksMain(int argc, const char** argv)
             }
         }
 
-        // do not automatically handle mpath devices
-
         cnt++;
     }
     printf(DISK_F_FMT);
@@ -692,17 +640,7 @@ CephAddDiskMain(int argc, const char** argv)
             CliPrintf("Added disk(%s) %s.", mode.c_str(), device.c_str());
         }
     } else {
-        // handle mpath devices
-        if (mode == "encrypt") {
-            CliPrint("Encrypted mode on adding multipath devices is not yet supported.");
-            return CLI_SUCCESS;
-        }
-
-        if (HexSystemF(0, HEX_SDK " ceph_osd_add_mpath_lvm %s", device.c_str()) != 0) {
-            CliPrintf("Failed to add disk %s.", device.c_str());
-        } else {
-            CliPrintf("Added disk %s.", device.c_str());
-        }
+        CliPrintf("Disk %s is not a direct-attached disk, cancelled.", device.c_str());
     }
     return CLI_SUCCESS;
 }
@@ -712,13 +650,13 @@ CephRemoveDiskMain(int argc, const char** argv)
 {
     std::string mode = "safe";
     std::string device;
-    if (argc > 3 /* [0]="remove_disk" [1]="<[/dev/sdx]>" [2]="<[safe|force]>" */) {
+    if (argc > 3 /* [0]="remove_disk" [1]="<[/dev/sdx]>" [2]="<[safe|force|force_lost]>" */) {
         return CLI_INVALID_ARGS;
     } else if (argc == 3) {
         device = argv[1];
-        // any user input mode which is not "force" falls back to "safe" mode
+        // any user input mode which is not "force" or "force_lost" falls back to "safe" mode
         mode = argv[2];
-        if (mode != "force")
+        if (mode != "force" && mode != "force_lost")
             mode = "safe";
     } else if (argc == 2) {
         device = argv[1];
@@ -761,13 +699,15 @@ CephRemoveDiskMain(int argc, const char** argv)
         device = allDevs[index - 1];
 
         int idx;
-        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'safe\nforce'", &idx, &mode, "Disk removal mode:") != CLI_SUCCESS)
+        if (CliMatchCmdHelper(argc, argv, 2, "echo -e 'safe\nforce\nforce_lost'", &idx, &mode, "Disk removal mode:") != CLI_SUCCESS)
             return CLI_INVALID_ARGS;
 
         if (mode == "safe")
             CliPrintf("safe mode takes longer by attempting to migrate data on disk(s).");
         else if (mode == "force")
             CliPrintf("force mode immediately destroys disk data so USE IT AT YOUR OWN RISKS.");
+        else if (mode == "force_lost")
+            CliPrintf("force_lost mode removes the disk even when it holds the only up-to-date copy of some data, which is then LOST.");
         else
             return CLI_SUCCESS;
 
@@ -2315,14 +2255,6 @@ CLI_MODE_COMMAND("storage", "set_autoscale", CephAutoScaleMain, NULL,
     "Turn on/off pool autoscaling.",
     "set_pool_autoscale [on|off]");
 
-CLI_MODE_COMMAND(
-    "storage",
-    "set_force_use_mpath_devices",
-    CephSetForceUseMpathDevicesMain,
-    NULL,
-    "Set to allow multipath devices be added to Ceph even if external storage is set under iaas > volume_backend.",
-    "set_force_use_mpath_devices [true|false]");
-
 CLI_MODE_COMMAND("storage", "list_avail", CephListAvailDisksMain, NULL,
     "List all available disks recognized by this node.",
     "list_avail");
@@ -2336,8 +2268,8 @@ CLI_MODE_COMMAND("storage", "add_disk", CephAddDiskMain, NULL,
     "add_disk <[/dev/sdx]> <[raw|encrypt]>");
 
 CLI_MODE_COMMAND("storage", "remove_disk", CephRemoveDiskMain, NULL,
-    "Remove a disk with safe or force mode from this node.",
-    "remove_disk <[/dev/sdx]> <[safe|force]>");
+    "Remove a disk with safe, force or force_lost mode from this node.",
+    "remove_disk <[/dev/sdx]> <[safe|force|force_lost]>");
 
 CLI_MODE_COMMAND("storage", "remove_exist", CephRemoveExistMain, NULL,
     "Remove all existing disks from this node.",

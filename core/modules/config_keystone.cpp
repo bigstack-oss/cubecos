@@ -538,8 +538,12 @@ Commit(bool modified, int dryLevel)
     // check for setup migration
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone");
     HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_service_role");
-    // after SetupPublicAdminUser: on a first install that is what creates _member_
-    HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_member_role");
+    // after SetupPublicAdminUser: on a first install that is what creates _member_.
+    // Control nodes only, decided here rather than by is_control_node in the sdk: that
+    // reads /etc/policies, which on a first install still says role: undef until the
+    // apply commits, so the bridge was never built (#2176).
+    if (IsControl(s_eCubeRole))
+        HexUtilSystemF(0, 0, HEX_SDK " migrate_keystone_member_role");
     // Retired services leave their catalogue entries behind, and the modules that owned
     // them are gone, so the cleanup is driven from the module that owns the catalogue.
     // Both are marker-guarded and a no-op on a cluster that never had the service.

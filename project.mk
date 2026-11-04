@@ -70,6 +70,9 @@ RUBYGEMS_DL_HOST ?= https://rubygems.org
 MAVEN_DL_HOST    ?= https://repo1.maven.org/maven2
 # hex.pm, for the cowboy and cowlib core/rabbitmq/rabbitmq.mk compiles into RabbitMQ's plugins.
 HEX_DL_HOST      ?= https://repo.hex.pm
+# Fedora COPR, for ISC's BIND build core/designate/designate.mk installs. COPR prunes a project's
+# older builds, so unlike the hosts above this one needs a mirror for availability, not speed.
+COPR_DL_HOST     ?= https://download.copr.fedorainfracloud.org
 
 # PyPI index. Empty by default, so pip resolves against pypi.org exactly as before.
 #
@@ -113,7 +116,7 @@ OPENSTACK_HOME_DIR := /opt/openstack-$(OPENSTACK_RELEASE)
 OPS_GITHUB_BRANCH_01 := stable/2025.1
 OPS_GITHUB_BRANCH_02 := unmaintained/2025.1
 PYTHON_VER := 3.12
-PYTHON_PATCH_VER := 3.12.15
+PYTHON_PATCH_VER := 3.12.16
 OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
 OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(OPENSTACK_HOME_DIR)/os-$(OPENSTACK_RELEASE)-pip-upper-constraints.txt
 
