@@ -92,8 +92,8 @@ _k3s_wait_settled()
     return 1
 }
 
-# Run this node's k3s at <version>, one of the releases the image ships, and record it once
-# the node is Ready on it.
+# Run this node's k3s at <version>, one of the releases the image ships, and record it in
+# the node's git once the node is Ready on it.
 k3s_step()
 {
     local want=$1 bin self=$(hostname | tr '[:upper:]' '[:lower:]')
@@ -113,6 +113,15 @@ k3s_step()
         if ! _k3s_wait_settled $self $want ; then
             log_error "k3s_step: $self not Ready on $want within ${K3S_STEP_TIMEOUT}s"
             return 1
+        fi
+    fi
+    # Record the binary in the node's git, or the next fixpack's commit sweeps it in. A node
+    # with no commit yet (a single node's migration boot) is skipped: its first commit takes
+    # it in. A failure does not fail the step: the node already runs $want, and a rerun of
+    # the ladder would not retry it, as the node is no longer behind.
+    if git -C / log -1 >/dev/null 2>&1 ; then
+        if ! $HEX_SDK git_push "k3s $want" >/dev/null ; then
+            log_error "k3s_step: k3s $want not recorded in $self's git; record it with: hex_sdk git_push 'k3s $want'"
         fi
     fi
     echo $want > $K3S_VERSION_FILE
