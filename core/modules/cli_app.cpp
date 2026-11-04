@@ -21,7 +21,7 @@ static const char* HINT_INPUT_OS_IMAGE = "Input os image for the framework(defau
 static int
 appRegisterMain(int argc, const char** argv)
 {
-    if (argc == 1 || argc > 4  /* [1]="app.pigz", [2]="app framework name", [3]="skip_flavor"  */) {
+    if (argc < 3 || argc > 4  /* [1]="app.pigz", [2]="app framework name", [3]="skip_flavor"  */) {
         return CLI_INVALID_ARGS;
     }
     int ret;
@@ -199,7 +199,7 @@ CLI_MODE(CLI_TOP_MODE, "app", "Work with applications.",
 
 CLI_MODE_COMMAND("app", "app_register", appRegisterMain, NULL,
                  "Install app.",
-                 "app_install app.pigz");
+                 "app_register APP_PIGZ FRAMEWORK_NAME [skip_flavor]");
 
 CLI_MODE_COMMAND("app", "framework_check_prerequisites", frameworkCheckPrerequisitesMain, NULL,
                  "Check app-framework prerequisites.",
