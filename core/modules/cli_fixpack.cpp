@@ -147,9 +147,9 @@ InstallOnNode(const std::string& node, const std::string& fixpackpath, const std
     // argv spawn, no shell; hex_config's own output streams to the terminal
     int ret;
     if (node == hostname)
-        ret = HexSpawn(0, HEX_CFG, "fixpack", fixpackpath.c_str(), NULL);
+        ret = HexExitStatus(HexSpawn(0, HEX_CFG, "fixpack", fixpackpath.c_str(), NULL));
     else
-        ret = HexSpawn(0, HEX_SDK, "fixpack_node_install", node.c_str(), fixpackpath.c_str(), NULL);
+        ret = HexExitStatus(HexSpawn(0, HEX_SDK, "fixpack_node_install", node.c_str(), fixpackpath.c_str(), NULL));
 
     if ((ret & CONFIG_EXIT_FAILURE) != 0) {
         HexLogError("Installation of fixpack %s on %s has failed", fixpackname.c_str(), node.c_str());
@@ -366,7 +366,7 @@ RollbackMain(int argc, const char** argv)
             CliPrintf("Invalid node name: %s", node.c_str());
             break;
         }
-        int r = HexSpawn(0, HEX_SDK, "fixpack_node_rollback", node.c_str(), id.c_str(), NULL);
+        int r = HexExitStatus(HexSpawn(0, HEX_SDK, "fixpack_node_rollback", node.c_str(), id.c_str(), NULL));
         ret |= r;
         if ((r & CONFIG_EXIT_FAILURE) != 0) {
             HexLogError("Rollback of fixpack %s on %s has failed", id.c_str(), node.c_str());
