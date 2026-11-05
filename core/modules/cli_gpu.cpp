@@ -269,6 +269,13 @@ GpuEnableNvlinkMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
+    // nvidia-fabricmanager only manages NVSwitch fabrics. On any other node
+    // starting it fails and leaves the unit failed, so say why instead.
+    if (HexSpawn(0, HEX_SDK, "gpu_nvswitch_present", NULL) != 0) {
+        CliPrintf("No NVSwitch-connected NVLink GPU found on this node; nvidia-fabricmanager is not started");
+        return CLI_FAILURE;
+    }
+
     const ExecSyncResult r = ExecBashSync(
         0,
         false,

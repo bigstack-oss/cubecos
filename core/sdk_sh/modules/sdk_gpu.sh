@@ -66,6 +66,28 @@ gpu_service_config()
     fi
 }
 
+# Succeeds when this node has an NVSwitch fabric, the only thing
+# nvidia-fabricmanager manages. Up to NVL5 an NVSwitch is an NVIDIA PCI device
+# of the bridge-other class (an Intel ACPI bridge has that class too). NVL5+
+# manages its switches through a Mellanox device whose VPD carries SW_MNG, read
+# from PCI like fabricmanager's own precheck, so the InfiniBand driver need not
+# be up yet.
+gpu_nvswitch_present()
+{
+    local dev vendor
+    for dev in /sys/bus/pci/devices/*; do
+        vendor=$(cat "$dev/vendor" 2>/dev/null)
+        if [ "$vendor" = "0x10de" ] &&
+           [ "$(cat "$dev/class" 2>/dev/null)" = "0x068000" ]; then
+            return 0
+        fi
+        if [ "$vendor" = "0x15b3" ] && grep -qa SW_MNG "$dev/vpd" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Renders the per-card resource types recorded in the truth file for
 # gpu_device_status. Replaces the pre-#894 pair (gpu_nova_type_show reading
 # nova.conf's mdev-era enabled_vgpu_types, and gpu_supported_type_list emitting
