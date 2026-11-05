@@ -997,37 +997,72 @@ health_rabbitmq_check()
     _health_fail_log
 }
 
-health_rabbitmq_repair()
+# Code 3 is a partition. A node that is merely down (1, 2) may be stopped on
+# purpose and is left to cluster check_repair. Unattended, a broker is only
+# restarted: never reset, and never the wipe-and-reform in health_rabbitmq_repair.
+_health_rabbitmq_auto_repair()
 {
-    local total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
-    local stats=$($HEX_CFG status_rabbitmq 2>/dev/null)
-    # a broker that does not answer says nothing about the others: one that refuses a
-    # disabled feature flag stays down (#2164), and its empty view would take the full
-    # rebuild below and wipe the peers it kept. Take a peer's view.
-    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        [ -z "$stats" ] || break
-        stats=$(remote_run $node "$HEX_CFG status_rabbitmq" 2>/dev/null)
-    done
-    local running=$(echo "$stats" | jq -r '.running_nodes[]?' 2>/dev/null)
-    local running_cnt=$(echo "$running" | grep -c .)
-    local partition=$(echo "$stats" | jq -r '.partitions[]?' 2>/dev/null | grep -c .)
-    local seed=$(echo "$running" | head -1)
+    if [ "$ERR_CODE" == "3" ] ; then
+        _health_rabbitmq_rejoin no-reset
+    fi
+}
 
-    # Healthy core (running majority, no partition): rejoin only missing nodes, preserve state.
-    if [ "$running_cnt" -ge $(( total / 2 + 1 )) ] && [ "$partition" -eq 0 ] ; then
-        for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-            echo "$running" | grep -q "rabbit@$node$" && continue
-            remote_run $node "systemctl restart rabbitmq-server"
-            sleep 8
-            if ! $HEX_CFG status_rabbitmq 2>/dev/null | jq -r '.running_nodes[]?' | grep -q "rabbit@$node$" ; then
-                # stale/split mnesia: reset only this node and rejoin the core
-                remote_run $node "rabbitmqctl stop_app ; rabbitmqctl reset ; rabbitmqctl join_cluster $seed ; rabbitmqctl start_app"
-            fi
-        done
+_health_rabbitmq_majority_view()
+{
+    local need=$(( ${#CUBE_NODE_CONTROL_HOSTNAMES[@]} / 2 + 1 ))
+    local node stats=$($HEX_CFG status_rabbitmq 2>/dev/null)
+    # A broker that does not answer says nothing about the others: one that refuses a
+    # disabled feature flag stays down (#2164). A broker cut off by a partition sees
+    # only its own side (#2261). Take the first view, this node's first, that sees a majority.
+    for node in "" "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        [ -z "$node" ] || stats=$(remote_run $node "$HEX_CFG status_rabbitmq" 2>/dev/null)
+        if [ $(echo "$stats" | jq -r '.running_nodes[]?' 2>/dev/null | grep -c .) -ge $need ] ; then
+            echo "$stats"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# $1 "no-reset": restart the brokers outside the majority, but do not reset one
+_health_rabbitmq_rejoin()
+{
+    local mode=${1:-} stats seen
+    stats=$(_health_rabbitmq_majority_view) || return 1
+    local running=$(echo "$stats" | jq -r '.running_nodes[]?' 2>/dev/null)
+    local seed=$(echo "$running" | head -1)
+    local node partition outside=()
+    for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
+        echo "$running" | grep -qxF "rabbit@$node" || outside+=("$node")
+    done
+    if [ ${#outside[@]} -eq 0 ] ; then
+        partition=$(echo "$stats" | jq '.partitions | length' 2>/dev/null)
+        [ "${partition:-0}" -eq 0 ] || return 1
         return 0
     fi
 
-    # No healthy core (majority down or partitioned) -- full rebuild.
+    # Restarting only brokers outside the majority is the recovery in RabbitMQ's
+    # partitions guide and what autoheal does: their state reloads from the majority,
+    # and the majority's partition record clears once they stop.
+    for node in "${outside[@]}" ; do
+        remote_run $node "systemctl restart rabbitmq-server"
+        [ "$mode" != "no-reset" ] || continue
+        sleep 8
+        # reset only on the seed's word that the node is still out: no answer is not that
+        seen=$(remote_run ${seed#rabbit@} "$HEX_CFG status_rabbitmq" 2>/dev/null | jq -r '.running_nodes[]?' 2>/dev/null)
+        if [ -n "$seen" ] && ! echo "$seen" | grep -qxF "rabbit@$node" ; then
+            # stale/split mnesia: reset only this node and rejoin the core
+            remote_run $node "rabbitmqctl stop_app ; rabbitmqctl reset ; rabbitmqctl join_cluster $seed ; rabbitmqctl start_app"
+        fi
+    done
+    return 0
+}
+
+health_rabbitmq_repair()
+{
+    _health_rabbitmq_rejoin && return 0
+
+    # No broker sees a majority, or one does but reports a partition without missing any node.
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         remote_systemd_stop $node rabbitmq-server
         remote_run $node rm -rf /var/lib/rabbitmq/mnesia/*
