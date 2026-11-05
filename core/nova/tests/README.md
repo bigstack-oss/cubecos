@@ -9,8 +9,8 @@ verbatim onto the rootfs, so a test file placed there would ship to every node.
 Against a node's epoxy venv, where nova is already importable:
 
 ```bash
-scp test_cube_live_resize.py root@<node>:/tmp/
-ssh root@<node> 'cd /tmp && /opt/openstack-epoxy/bin/python -m unittest test_cube_live_resize -v'
+scp test_cube_*.py root@<node>:/tmp/
+ssh root@<node> 'cd /tmp && /opt/openstack-epoxy/bin/python -m unittest test_cube_live_resize test_cube_availability_zone_filter -v'
 ```
 
 Or in a local venv built the way the port was verified:
