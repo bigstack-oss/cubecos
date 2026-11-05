@@ -519,7 +519,8 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         cfg["vnc"]["server_listen"] = myIp;
         cfg["vnc"]["server_proxyclient_address"] = myIp;
 
-        cfg["filter_scheduler"]["host_subset_size"] = "3";
+        // >1 has nova pick at random among the N best-weighed hosts, ignoring RAM weight (#2260)
+        cfg["filter_scheduler"]["host_subset_size"] = "1";
         cfg["filter_scheduler"]["shuffle_best_same_weighed_hosts"] = "true";
         cfg["filter_scheduler"]["ram_weight_multiplier"] = "5.0";
         // AvailabilityZoneFilter is gone as of nova 29.0.0 -- naming a filter nova no
