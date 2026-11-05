@@ -256,6 +256,27 @@ health_link_check()
         fi
     done
 
+    # A bnxt_en NIC's firmware command channel (HWRM) can hang while the data path
+    # keeps forwarding, so the pings above pass and nothing alarms (cubecos#2257).
+    # The driver logs one "Error (timeout: N)" line per request it gives up on.
+    # telegraf runs this check every 10 min on control nodes only (check_service_stats),
+    # hence a 10-minute window and a look at every node's kernel log.
+    local window_min=10 node res count pci iface
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        res=$(timeout $((SRVSTO + 5)) ssh -n root@$node \
+              "logs=\$(journalctl -k -q --no-pager --since=-${window_min}min) && \
+               printf '%s\n' \"\$logs\" | grep -oE 'bnxt_en [[:xdigit:]]{4}:[[:xdigit:]]{2}:[[:xdigit:]]{2}\.[0-7] .+: Error \(timeout: ' | \
+               sed 's/^bnxt_en //; s/: Error (timeout: $//' | sort | uniq -c" 2>/dev/null) || continue
+        while read -r count pci iface ; do
+            [ -n "$count" ] && [ -n "$pci" ] && [ -n "$iface" ] || continue
+            ERR_MSG+="$node $pci $iface: $count firmware command timeouts in the last $window_min min\n"
+            if [ "$ERR_CODE" = "0" ] ; then
+                ERR_CODE=2
+                [ -n "$ERR_LOG" ] || ERR_LOG="journalctl -k -q --no-pager --since=-${window_min}min | grep bnxt_en | tail -n $ERR_LOGSIZE"
+            fi
+        done <<< "$res"
+    done
+
     _health_fail_log
 }
 
