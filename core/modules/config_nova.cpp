@@ -525,12 +525,16 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         // AvailabilityZoneFilter is gone as of nova 29.0.0 -- naming a filter nova no
         // longer registers is fatal, not ignored: HostManager._choose_host_filters
         // raises SchedulerHostFilterNotFound and nova-scheduler exits on start. The
-        // map_az_to_placement_aggregate pre-filter does the same job and is now always
-        // on, which is also why [scheduler] query_placement_for_availability_zone was
+        // map_az_to_placement_aggregate pre-filter replaced it and is now always on,
+        // which is also why [scheduler] query_placement_for_availability_zone was
         // removed rather than defaulted. It matches a nova aggregate carrying an
         // availability_zone to the placement aggregate of the same uuid, so an AZ only
         // filters once `nova-manage placement sync_aggregates` has paired them.
-        cfg["filter_scheduler"]["enabled_filters"] = "ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,AggregateInstanceExtraSpecsFilter,PciPassthroughFilter";
+        // No aggregate carries the default AZ, so the pre-filter leaves a request for
+        // it unrestricted and the VM can land in a named AZ. CubeAvailabilityZoneFilter
+        // (core/nova/epoxy_patch/scheduler/filters/) is the old filter under a name
+        // nova does not own; it treats a host in no AZ as the default AZ.
+        cfg["filter_scheduler"]["enabled_filters"] = "CubeAvailabilityZoneFilter,ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,AggregateInstanceExtraSpecsFilter,PciPassthroughFilter";
 
         // Unset UpgradeLevelNovaCompute or live migrations fail
         // https://bugzilla.redhat.com/show_bug.cgi?id=1849235
