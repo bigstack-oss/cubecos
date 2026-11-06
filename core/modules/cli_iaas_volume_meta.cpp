@@ -18,7 +18,7 @@ CreateMain(int argc, const char** argv)
     if (!CliReadInputStr(argc, argv, 1, "Enter comma-separated volume ID list:", &list))
         return CLI_FAILURE;
 
-    fp = HexPOpenF(HEX_CFG " volume_meta_create %s", list.c_str());
+    fp = HexPOpenF(HEX_CFG " volume_meta_create %s", HexBuildShellArg(list).c_str());
     if (fp != NULL) {
         if (fgets(filename, sizeof(filename), fp) == NULL) {
             HexLogError("Unable to retieve the name of the file created");
