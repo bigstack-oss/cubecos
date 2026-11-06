@@ -265,6 +265,7 @@ eval "ERR_DESC_$SRV[10]='central not all up'"
 eval "ERR_DESC_$SRV[11]='worker not all up'"
 eval "ERR_DESC_$SRV[12]='producer not all up'"
 eval "ERR_DESC_$SRV[13]='mdns not all up'"
+eval "ERR_DESC_$SRV[14]='named refuses rndc'"
 eval for idx in \"\${!ERR_DESC_${SRV}[@]}\" \; do ERR_CODE[${SRV},\$idx]=\"\${ERR_DESC_${SRV}[\$idx]}\" \; done
 
 SRV="masakari"
