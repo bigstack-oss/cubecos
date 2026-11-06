@@ -58,7 +58,9 @@ fake_ceph() {
             echo $(( $(cat "$TMP/tieradd") - 1 )) > "$TMP/tieradd"
             echo "Error ENOTEMPTY: tier pool '$4' is not empty; --force-nonempty to force"
             return 39 ;;
-        'osd pool get '*' size')      echo "size: 3" ;;
+        'osd pool get '*' size')
+            [ "$SIZE_FAIL" = no ] || return 1
+            echo "size: 3" ;;
         'osd pool get '*' pg_num -f json') echo '{"pool":"x","pg_num":32}' ;;
         'osd pool get '*' crush_rule') echo "crush_rule: replicated_rule" ;;
         'osd pool get '*' erasure_code_profile') return 1 ;;
@@ -93,6 +95,7 @@ run() { # $1 = function, $2 = failing tier adds; sets OUT (trace), MSG (stdout+s
     OUT=$(cat "$TRACE")
 }
 
+SIZE_FAIL=no
 pass=0 fail=0
 ck() { [ "$1" = "$2" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: $3 -> got '$1' want '$2'"; }; }
 has() { grep -qF -- "$2" <<< "$1" && echo yes || echo no; }
@@ -158,6 +161,14 @@ PGLS=$(pgls 0)
 run ceph_osd_create_cache 1
 ck "$RC" 0 "create, clean leftovers: rc"
 ck "$(has "$OUT" 'set-overlay cinder-volumes cachepool')" yes "create, clean leftovers: overlay"
+
+# ---- 8. recreate: an unreadable replica size stops before delete ----
+SIZE_FAIL=yes
+PGLS=$(pgls 0)
+run ceph_recreate_cache_pool 0
+ck "$RC" 1 "recreate, empty size: rc"
+ck "$(has "$OUT" 'osd pool delete')" no "recreate, empty size: no delete"
+ck "$(has "$MSG" 'cannot read the replica size of cachepool, not recreating it')" yes "recreate, empty size: says why"
 
 echo "pass=$pass fail=$fail"
 [ $fail -eq 0 ]
