@@ -23,8 +23,10 @@ Listen @BIND_ADDR@5443
 # ==========================================
 <VirtualHost *:5443>
     SSLEngine on
-    SSLCertificateFile /var/www/certs/server.cert
-    SSLCertificateKeyFile /var/www/certs/server.key
+    # the operator's certificate while cubesys.fqdn is set, the appliance's own otherwise:
+    # browsers reach this listener in the federated login
+    SSLCertificateFile @SSL_CERT@
+    SSLCertificateKeyFile @SSL_KEY@
 
     ProxyPreserveHost On
     ProxyRequests Off

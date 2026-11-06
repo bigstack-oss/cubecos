@@ -14,6 +14,7 @@
 #include <hex/string_util.h>
 
 #include <cube/systemd_util.h>
+#include <cluster.hpp>
 
 #include "include/role_cubesys.h"
 
@@ -29,8 +30,6 @@ const static char USER[] = "haproxy";
 const static char GROUP[] = "haproxy";
 const static char RUNDIR[] = "/run/haproxy";
 
-const static char KEYFILE[] = "/var/www/certs/server.pem";
-
 // galera-check.socket (core/mysql) as haproxy agent: "down" unless the node is Synced
 const static char GALERA_CHECK_PORT[] = "13306";
 
@@ -39,6 +38,7 @@ static CubeRole_e s_eCubeRole;
 
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(FQDN);
 
 
 // private tunings
@@ -61,7 +61,7 @@ PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
 
 static bool
 WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
-                 const std::string& ctrlAddrs)
+                 const std::string& ctrlAddrs, const std::string& fqdn)
 {
     FILE *fout = fopen(CONF, "w");
     if (!fout) {
@@ -231,7 +231,8 @@ WriteLocalConfig(bool ha, const std::string& myip, const std::string& sharedId,
 
     // backend ceph_dashboard_backend and cube_cos_api should not use the same cookie name "token"
     fprintf(fout, "frontend cube_cos_https\n");
-    fprintf(fout, "  bind :443 ssl crt %s\n", KEYFILE);
+    // the operator's certificate while cubesys.fqdn is set, the appliance's own otherwise
+    fprintf(fout, "  bind :443 ssl crt %s\n", PublicPemFile(fqdn).c_str());
     fprintf(fout, "  mode http\n");
     fprintf(fout, "  option forwardfor\n");
     fprintf(fout, "  option http-server-close\n");
@@ -642,7 +643,7 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    return modified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID) | s_bCubeModified;
+    return modified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID) | G_MOD(FQDN) | s_bCubeModified;
 }
 
 static bool
@@ -658,7 +659,7 @@ Commit(bool modified, int dryLevel)
     std::string myip = G(MGMT_ADDR);
     std::string sharedId = G(SHARED_ID);
 
-    WriteLocalConfig(s_ha, myip, sharedId, s_ctrlAddrs.newValue());
+    WriteLocalConfig(s_ha, myip, sharedId, s_ctrlAddrs.newValue(), G(FQDN));
     WriteConfig(s_ha, s_ctrlVip.newValue(), s_ctrlHosts.newValue(), s_ctrlAddrs.newValue());
     SystemdCommitService(enabled, NAME);
     CommitHaService(enabled, s_ha, s_ctrlVip.newValue());

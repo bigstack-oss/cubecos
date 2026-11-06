@@ -215,6 +215,33 @@ shared_ip()
     echo -n "$vip"
 }
 
+# The host a browser is sent to: cubesys.fqdn once one is set, shared_ip otherwise -- what
+# hex_config's PUBLIC_HOST resolves to. SAML clients and every URL handed to a browser are built
+# on it, so nothing re-registered from here puts an FQDN switch back on the VIP.
+public_host()
+{
+    source hex_tuning /etc/settings.txt cubesys.fqdn
+    if [ -n "$T_cubesys_fqdn" ] ; then
+        echo -n "$T_cubesys_fqdn"
+    else
+        shared_ip
+    fi
+}
+
+# The certificate directory a browser-facing listener serves from: the operator's while
+# cubesys.fqdn is set and the certificate is in place, the appliance's own otherwise -- as
+# UsePublicCert() decides for hex_config (core/cube_sdk_library/src/cluster.cpp).
+public_cert_dir()
+{
+    source hex_tuning /etc/settings.txt cubesys.fqdn
+    if [ -n "$T_cubesys_fqdn" ] && [ -r /etc/cube/certs/server.cert ] &&
+       [ -r /etc/cube/certs/server.key ] && [ -r /etc/cube/certs/server.pem ] ; then
+        echo -n /etc/cube/certs
+    else
+        echo -n /var/www/certs
+    fi
+}
+
 mgmt_ip()
 {
     source hex_tuning /etc/settings.txt cubesys.management

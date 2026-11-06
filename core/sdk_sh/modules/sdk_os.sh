@@ -36,13 +36,20 @@ EOF
     fi
 }
 
+# os_wsgi_conf_update <bind addr> [<tls cert> <tls key>]
+#
+# The certificate defaults to the appliance's own; config_keystone passes the operator's
+# while cubesys.fqdn is set, for keystone's browser-facing :5443 listener.
 os_wsgi_conf_update()
 {
     local infs=$(ls /etc/httpd/conf.d/*-wsgi.conf.in)
     local addr=$1
+    local cert=${2:-/var/www/certs/server.cert}
+    local key=${3:-/var/www/certs/server.key}
 
     for inf in $infs ; do
-        sed -e "s/@BIND_ADDR@/$addr:/" $inf > /etc/httpd/conf.d/$(basename $inf .in)
+        sed -e "s/@BIND_ADDR@/$addr:/" -e "s#@SSL_CERT@#$cert#" -e "s#@SSL_KEY@#$key#" \
+            $inf > /etc/httpd/conf.d/$(basename $inf .in)
     done
 }
 
@@ -1193,9 +1200,12 @@ os_keystone_idp_config()
     local fed_dir=/etc/httpd/federation
     mkdir -p $fed_dir && rm -f $fed_dir/*
     cd $fed_dir && /usr/libexec/mod_auth_mellon/mellon_create_metadata.sh https://$shared_id:5443/v3/mellon/metadata https://$shared_id:5443/v3/mellon/
-    mv $fed_dir/https_${shared_id}_5443_v3_mellon_metadata.key $fed_dir/v3.key
-    mv $fed_dir/https_${shared_id}_5443_v3_mellon_metadata.cert $fed_dir/v3.cert
-    mv $fed_dir/https_${shared_id}_5443_v3_mellon_metadata.xml $fed_dir/v3.xml
+    # mellon_create_metadata.sh names its files after the entity ID with every character but
+    # [0-9A-Za-z.] turned into "_", so an FQDN's "-" changes as well as the URL's punctuation
+    local base=$(echo "https://$shared_id:5443/v3/mellon/metadata" | sed 's/[^0-9A-Za-z.]/_/g' | sed 's/__*/_/g')
+    mv $fed_dir/$base.key $fed_dir/v3.key
+    mv $fed_dir/$base.cert $fed_dir/v3.cert
+    mv $fed_dir/$base.xml $fed_dir/v3.xml
     cat $fed_dir/v3.xml | xmllint --format - > /etc/keycloak/keystone_sp_metadata.xml
     cp -f /etc/httpd/conf.d/v3_mellon_keycloak_master.conf.def /etc/httpd/conf.d/v3_mellon_keycloak_master.conf
 

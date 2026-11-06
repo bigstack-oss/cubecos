@@ -528,3 +528,9 @@ WEBSSO_INITIAL_CHOICE = "cube_idp_mapped"
 # certificate, "Login failed: An error occurred authenticating". The view is csrf-exempt,
 # so the header is also whatever the page submitting the form chose.
 WEBSSO_USE_HTTP_REFERER = False
+
+# Where the browser is sent for WebSSO: None means OPENSTACK_KEYSTONE_URL, which stays on the
+# shared id for horizon's own calls. With cubesys.fqdn set it is keystone's TLS listener on that
+# name -- Keycloak and the ceph dashboard send HSTS for it, so a browser rewrites
+# http://<fqdn>:5000 to https before sending it, and :5000 has no TLS.
+WEBSSO_KEYSTONE_URL = @WEBSSO_KEYSTONE_URL@
