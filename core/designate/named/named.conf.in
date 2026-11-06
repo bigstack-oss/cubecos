@@ -23,7 +23,9 @@ options {
         dnssec-validation auto;
 
         auth-nxdomain no;    # conform to RFC1035
-        listen-on-v6 { any; };
+        // named binds each address it listens on with a socket per CPU, and "any" would take
+        // in every VM tap's and pod veth's link-local address. Nothing queries named over IPv6.
+        listen-on-v6 { ::1; };
 
         allow-new-zones yes;
         request-ixfr no;
