@@ -1240,7 +1240,7 @@ ceph_osd_rebuild()
         # wipe the datapart; keep the metapart fs uuid so the id still resolves
         dd if=/dev/zero of=$datapart bs=1M count=100 oflag=sync 2>/dev/null
         ceph_bluestore_label_zero $datapart
-        # mkfs this OSD only (refresh_ceph_osd restarts every OSD on the host)
+        # mkfs this OSD only
         local osd_dir=${CEPH_OSD_DIR:-/var/lib/ceph/osd}/ceph-$id
         if ! mkfs.xfs -f -m uuid=$uuid $metapart >/dev/null || ! $CEPH osd new $uuid $id >/dev/null ||
            ! ceph_osd_remount_one $id || ! echo bluestore > $osd_dir/type ||
@@ -3172,7 +3172,7 @@ ceph_osd_get_datapartuuid()
 }
 
 # Remount a single down OSD whose metadata dir is missing or unmounted. Scoped
-# to one OSD: unlike refresh_ceph_osd / ceph_osd_remount it never stops or
+# to one OSD: unlike ceph_osd_remount it never stops or
 # unmounts any other OSD on the host. Non-destructive -- it only mounts and
 # re-links, and refuses to act if the data partition cannot be resolved.
 # params: $1 - osd id
@@ -3257,16 +3257,25 @@ ceph_osd_damaged_list()
 }
 
 # params:
-# $1: --no-start to leave the remounted OSDs stopped, for the caller to start
+# --no-start to leave the remounted OSDs stopped, for the caller to start
+# --stopped-only to leave the running OSDs alone, mounted and running
 ceph_osd_remount()
 {
     local osdpth=/var/lib/ceph/osd
     local start=1
-    [ "${1:-}" != "--no-start" ] || start=0
+    local stopped_only=0
+    local arg
+    for arg in "$@" ; do
+        case "$arg" in
+            --no-start) start=0 ;;
+            --stopped-only) stopped_only=1 ;;
+        esac
+    done
 
     for osd_dir in $(find ${osdpth}/* -type d) ; do
         osd_id=${osd_dir##*-}
         if systemctl is-active ceph-osd@$osd_id -q ; then
+            [ $stopped_only -eq 0 ] || continue
             $CEPH tell osd.$osd_id compact >/dev/null 2>&1 || true
             systemctl stop ceph-osd@$osd_id || true
         fi
@@ -3277,6 +3286,9 @@ ceph_osd_remount()
         dev=$(echo $LINE | cut -d" " -f1)
         osd_id=$(echo $LINE | cut -d" " -f2)
         datapart_partuuid=$(echo $LINE | cut -d" " -f4)
+        if [ $stopped_only -eq 1 ] && systemctl is-active ceph-osd@$osd_id -q ; then
+            continue
+        fi
         lvm_json=$(ceph-volume lvm list $osd_id --format json)
         if echo $lvm_json | jq -r .[][].lv_uuid | grep -q "$datapart_partuuid" ; then
             :
