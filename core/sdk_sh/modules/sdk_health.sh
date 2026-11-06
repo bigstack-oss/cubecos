@@ -3362,10 +3362,28 @@ health_designate_report()
     _health_report ${FUNCNAME[0]}
 }
 
+# Does <node>'s named take rndc from here with designate's key? designate-worker drives each
+# control's named that way, at its management address (pools.yaml). named's control channel
+# is IPv4 only, so the probe uses that address and not the hostname, which can resolve to ::1
+# first. On failure, prints rndc's first line. #2271: a named out of sockets stays running but
+# refuses rndc, and answers SERVFAIL to everything it has to forward.
+_health_named_rndc()
+{
+    local addr=$(echo "$CUBE_NODE_CONTROL_JSON" | jq -r ".[] | select(.hostname == \"$1\") | .ip.management")
+    local out rc
+    out=$(timeout $SRVSTO rndc -k /etc/designate/rndc.key -s ${addr:-$1} status 2>&1)
+    rc=$?
+    [ $rc -eq 0 ] && return 0
+    [ $rc -eq 124 ] && out="no answer in ${SRVSTO}s"
+    echo "${out%%$'\n'*}"
+    return 1
+}
+
 health_designate_check()
 {
     stale_api_check_repair designate-api 9001 designate-api python3
 
+    local res
     local service_stats="$($OPENSTACK dns service list -f value -c hostname -c service_name -c status 2>/dev/null)"
     local api_up=$(echo "$service_stats" | grep api | grep -i up | wc -l )
     local api_down=$(echo "$service_stats" | grep api | grep -i down | wc -l )
@@ -3412,6 +3430,10 @@ health_designate_check()
             elif ! is_remote_running $node named ; then
                 ERR_CODE=8
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u named"
+            elif ! res=$(_health_named_rndc $node) ; then
+                ERR_CODE=14
+                ERR_LOG="journalctl -n $ERR_LOGSIZE -u named"
+                ERR_MSG+="$node named refuses rndc: $res\n"
             fi
         done
     fi
@@ -3433,7 +3455,7 @@ _health_designate_auto_repair()
             remote_systemd_restart $node designate-producer
         elif ! is_remote_running $node designate-mdns ; then
             remote_systemd_restart $node designate-mdns
-        elif ! is_remote_running $node named ; then
+        elif ! is_remote_running $node named || ! _health_named_rndc $node >/dev/null ; then
             local master=$(cubectl node list -r control -j | jq -r .[].hostname | head -n 1)
             remote_run $master timeout $SRVSTO /usr/local/bin/cubectl node rsync -r control /etc/designate/rndc.key
             remote_systemd_restart $node named
