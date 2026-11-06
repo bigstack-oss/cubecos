@@ -173,8 +173,8 @@
     "list": [
       {
         "current": {
-          "text": "192.168.1.220",
-          "value": "192.168.1.220"
+          "text": "",
+          "value": ""
         },
         "hide": 2,
         "label": null,
@@ -182,11 +182,11 @@
         "options": [
           {
             "selected": true,
-            "text": "192.168.1.220",
-            "value": "192.168.1.220"
+            "text": "",
+            "value": ""
           }
         ],
-        "query": "192.168.1.220",
+        "query": "",
         "skipUrlSync": false,
         "type": "textbox"
       },
