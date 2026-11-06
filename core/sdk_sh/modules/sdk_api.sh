@@ -256,6 +256,84 @@ api_storage_tier_delete()
     return 0
 }
 
+# _api_fqdn_answer <request output> <format>
+#
+# Print a cube-cos-api answer to an FQDN request: its data through jq <format> on success,
+# its msg on stderr otherwise. 0 for a 2xx answer.
+_api_fqdn_answer()
+{
+    local r="$1" fmt="$2"
+    local code="${r%%$'\n'*}" body=""
+    [[ "$r" == *$'\n'* ]] && body="${r#*$'\n'}"
+    if [[ "$code" != 2?? ]] ; then
+        echo "Error: $(_api_msg "$code" "$body")" >&2
+        echo "$body" | jq -r '.data.output // empty' >&2 2>/dev/null
+        return 1
+    fi
+
+    echo "$body" | jq -r "$fmt" 2>/dev/null
+    return 0
+}
+
+_API_FQDN_CERT_FMT='"\(.subject)\n    issued by \(.issuer)\n    names     \(.dnsNames | join(", "))\n    valid     \(.notBefore) to \(.notAfter)\n    sha256    \(.fingerprint)"'
+
+# api_fqdn_show
+#
+# The FQDN the web UIs are served on, the installed certificate, and every node's view of
+# both, as cube-cos-api reports them.
+api_fqdn_show()
+{
+    _api_fqdn_answer "$(_api_request GET fqdn "" 120)" '.data |
+        "FQDN:         \(if .fqdn == "" then "(none: the web UIs are served on \(.publicHost))" else .fqdn end)",
+        "Certificate:  \(if (.certificate // {}) == {} then "(none installed)" else (.certificate | '"$_API_FQDN_CERT_FMT"') end)",
+        "Nodes:",
+        (.nodes[] | "    \(.hostname): \(if .error then "unreachable (\(.error))"
+                    else "fqdn \(if .fqdn == "" then "-" else .fqdn end), serving \(if .servedFrom == "/etc/cube/certs" then "the installed certificate" else "the appliance certificate" end)" end)")'
+}
+
+# api_fqdn_cert_install <certificate file> <private key file> <CA file>
+#
+# Install the certificate the web UIs are served with once an FQDN is set: the certificate
+# (optionally followed by its intermediates), its unencrypted private key, and the root CA
+# that issued it (optionally with the intermediates). cube-cos-api checks the set, installs it
+# on every control node and, when an FQDN is already set, serves it straight away. The JSON
+# goes to curl on stdin, so the key never appears on a command line.
+api_fqdn_cert_install()
+{
+    local cert="$1" key="$2" ca="$3" f=""
+    for f in "$cert" "$key" "$ca" ; do
+        if [ ! -r "$f" ] ; then
+            echo "Error: cannot read ${f:-a file}" >&2
+            return 1
+        fi
+    done
+
+    local r=""
+    r="$(jq -n --rawfile c "$cert" --rawfile k "$key" --rawfile a "$ca" \
+            '{certificate: $c, privateKey: $k, caCertificate: $a}' |
+         _api_request PUT fqdn/certificate "@-" 1800)"
+    _api_fqdn_answer "$r" '"Installed: \(.data | '"$_API_FQDN_CERT_FMT"')"'
+}
+
+# api_fqdn_set <fqdn>
+#
+# Serve the web UIs on <fqdn>: cube-cos-api sets it on every node, one at a time, then makes
+# the cluster-wide changes. The installed certificate has to cover <fqdn>.
+api_fqdn_set()
+{
+    local body=""
+    body="$(jq -c -n --arg f "$1" '{fqdn: $f}')"
+    _api_fqdn_answer "$(_api_request PUT fqdn "$body" 3600)" '.msg, (.data.output // empty)'
+}
+
+# api_fqdn_reset
+#
+# Remove the FQDN: the web UIs go back to the control VIP and the appliance's own certificate.
+api_fqdn_reset()
+{
+    _api_fqdn_answer "$(_api_request DELETE fqdn "" 3600)" '.msg, (.data.output // empty)'
+}
+
 # cube-cos-api's own keystone user and EC2 credential, so it stops sharing admin's.
 #
 # This lives with the API rather than under os_ because the credential shape is the

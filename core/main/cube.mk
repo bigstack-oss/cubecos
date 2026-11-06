@@ -212,6 +212,7 @@ hex_cli_MODULES += cli_iaas_identity.o
 hex_cli_MODULES += cli_boot.o
 hex_cli_MODULES += cli_boot_mode.o
 hex_cli_MODULES += cli_cluster.o
+hex_cli_MODULES += cli_fqdn.o
 hex_cli_MODULES += policy_ext_storage.o
 hex_cli_MODULES += policy_notify.o
 hex_cli_MODULES += policy_notify_setting.o
