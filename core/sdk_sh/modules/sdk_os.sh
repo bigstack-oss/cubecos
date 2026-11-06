@@ -36,13 +36,20 @@ EOF
     fi
 }
 
+# os_wsgi_conf_update <bind addr> [<tls cert> <tls key>]
+#
+# The certificate defaults to the appliance's own; config_keystone passes the operator's
+# while cubesys.fqdn is set, for keystone's browser-facing :5443 listener.
 os_wsgi_conf_update()
 {
     local infs=$(ls /etc/httpd/conf.d/*-wsgi.conf.in)
     local addr=$1
+    local cert=${2:-/var/www/certs/server.cert}
+    local key=${3:-/var/www/certs/server.key}
 
     for inf in $infs ; do
-        sed -e "s/@BIND_ADDR@/$addr:/" $inf > /etc/httpd/conf.d/$(basename $inf .in)
+        sed -e "s/@BIND_ADDR@/$addr:/" -e "s#@SSL_CERT@#$cert#" -e "s#@SSL_KEY@#$key#" \
+            $inf > /etc/httpd/conf.d/$(basename $inf .in)
     done
 }
 

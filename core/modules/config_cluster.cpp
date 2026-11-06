@@ -109,5 +109,7 @@ CONFIG_MIGRATE(cluster, "/etc/revision");
 CONFIG_MIGRATE(cluster, "/etc/hosts");
 
 CONFIG_MIGRATE(cluster, "/var/www/certs");
+// the operator's certificate for cubesys.fqdn; nothing can rebuild it if it is lost
+CONFIG_MIGRATE(cluster, "/etc/cube/certs");
 
 //CONFIG_FIRST(cluster);

@@ -64,6 +64,7 @@ CONFIG_GLOBAL_STR_REF(CTRL_IP);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(EXTERNAL);
+CONFIG_GLOBAL_STR_REF(FQDN);
 
 // private tunings
 CONFIG_TUNING_BOOL(KEYSTONE_ENABLED, "keystone.enabled", TUNING_UNPUB, "Set to true to enable keystone.", true);
@@ -445,7 +446,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP);
+    s_bConfigChanged = modified | s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP) | G_MOD(FQDN);
 
     s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
 
@@ -491,7 +492,8 @@ Commit(bool modified, int dryLevel)
         UpdateConfig(sharedId);
         UpdateDbConn(sharedId, dbPass);
         UpdateDebug(s_debug);
-        HexUtilSystemF(0, 0, HEX_SDK " os_wsgi_conf_update %s", myIp.c_str());
+        HexUtilSystemF(0, 0, HEX_SDK " os_wsgi_conf_update %s %s %s", myIp.c_str(),
+                       PublicCertFile(G(FQDN)).c_str(), PublicKeyFile(G(FQDN)).c_str());
 
         WriteConfig(CONF, SB_SEC_WFMT, '=', cfg);
     }

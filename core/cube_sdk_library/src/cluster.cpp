@@ -14,6 +14,29 @@ std::string ClusterCaCertFile()
     return access(CLUSTER_CA_CRT, F_OK) == 0 ? CLUSTER_CA_CRT : CLUSTER_SRV_CRT;
 }
 
+bool UsePublicCert(const std::string& fqdn)
+{
+    return !fqdn.empty() &&
+           access(PUBLIC_SRV_CRT, R_OK) == 0 &&
+           access(PUBLIC_SRV_KEY, R_OK) == 0 &&
+           access(PUBLIC_SRV_PEM, R_OK) == 0;
+}
+
+std::string PublicCertFile(const std::string& fqdn)
+{
+    return UsePublicCert(fqdn) ? PUBLIC_SRV_CRT : CLUSTER_SRV_CRT;
+}
+
+std::string PublicKeyFile(const std::string& fqdn)
+{
+    return UsePublicCert(fqdn) ? PUBLIC_SRV_KEY : CLUSTER_SRV_KEY;
+}
+
+std::string PublicPemFile(const std::string& fqdn)
+{
+    return UsePublicCert(fqdn) ? PUBLIC_SRV_PEM : CLUSTER_SRV_PEM;
+}
+
 int GetControlWorkers(bool isConverged, bool isEdge)
 {
     if (isEdge) {

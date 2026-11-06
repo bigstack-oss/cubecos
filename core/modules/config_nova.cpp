@@ -35,7 +35,6 @@ static LogRotateConf placement_log_conf("placement", "/var/log/placement/*.log",
 #define PLA_CONF    "/etc/placement/placement.conf"
 
 #define SSL_KEYFILE     "/var/lib/nova/certs/server.pem"
-#define SSL_KEYFILE_SRC "/var/www/certs/server.pem"
 #define NOVA_SSH_KEY    "/var/lib/nova/.ssh/id_rsa"
 
 static const char USER[] = "nova";
@@ -121,6 +120,7 @@ CONFIG_GLOBAL_STR_REF(OVERLAY_ADDR);
 CONFIG_GLOBAL_STR_REF(CTRL_IP);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_GLOBAL_STR_REF(EXTERNAL);
+CONFIG_GLOBAL_STR_REF(FQDN);
 
 // private tunings
 CONFIG_TUNING_BOOL(NOVA_ENABLED, "nova.enabled", TUNING_UNPUB, "Set to true to enable nova.", true);
@@ -962,7 +962,7 @@ CommitCheck(bool modified, int dryLevel)
                 s_bNetModified | s_bMqModified |
                 s_bCubeModified | s_bNeutronModified | s_bIronicModified |
                 s_bStorageBackendModified |
-               G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP) | G_MOD(SHARED_ID);
+               G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP) | G_MOD(SHARED_ID) | G_MOD(FQDN);
 
     s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
 
@@ -997,8 +997,13 @@ Commit(bool modified, int dryLevel)
     // this setting is controller only
     std::string mcacheconn = MemcachedServers(s_ha, ctrlIp, s_ctrlAddrs.newValue());
 
-    if (access(SSL_KEYFILE, F_OK) != 0 && access(SSL_KEYFILE_SRC, F_OK) == 0) {
-        HexUtilSystemF(0, 0, "cp -f %s %s", SSL_KEYFILE_SRC, SSL_KEYFILE);
+    // novncproxy serves a copy nova can read, not the file itself, so refresh the copy whenever
+    // it differs from what the browser-facing listeners serve: the operator's certificate while
+    // cubesys.fqdn is set, the appliance's own otherwise.
+    const std::string pemSrc = PublicPemFile(G(FQDN));
+    if (access(pemSrc.c_str(), F_OK) == 0 &&
+        HexUtilSystemF(0, 0, "cmp -s %s %s", pemSrc.c_str(), SSL_KEYFILE) != 0) {
+        HexUtilSystemF(0, 0, "cp -f %s %s", pemSrc.c_str(), SSL_KEYFILE);
         HexUtilSystemF(0, 0, "chown nova:nova %s", SSL_KEYFILE);
         HexUtilSystemF(0, 0, "chmod 600 %s", SSL_KEYFILE);
     }
