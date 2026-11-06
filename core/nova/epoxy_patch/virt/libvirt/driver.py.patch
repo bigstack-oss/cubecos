@@ -1,14 +1,15 @@
 --- virt/libvirt/driver.py
 +++ virt/libvirt/driver.py
-@@ -86,6 +86,7 @@
+@@ -86,6 +86,8 @@
  from nova.console import type as ctype
  from nova import context as nova_context
  from nova import crypto
 +from nova import cube_live_resize as clr
++from nova import cube_rbd_capacity as crc
  from nova.db import constants as db_const
  from nova import exception
  from nova.i18n import _
-@@ -4545,7 +4546,8 @@
+@@ -4545,7 +4547,8 @@
          guest.sync_guest_time()
  
      def resume_state_on_host_boot(self, context, instance, network_info,
@@ -18,7 +19,7 @@
          """resume guest state when a host is booted."""
          # Check if the instance is running already and avoid doing
          # anything if it is.
-@@ -4567,7 +4569,7 @@
+@@ -4567,7 +4570,7 @@
          # Be as absolute as possible about getting it back into
          # a known and running state.
          self._hard_reboot(context, instance, network_info,
@@ -27,7 +28,7 @@
          )
  
      def rescue(self, context, instance, network_info, image_meta,
-@@ -7676,6 +7678,8 @@
+@@ -7676,6 +7679,8 @@
  
          self._guest_add_iommu_device(guest, image_meta, flavor)
  
@@ -36,7 +37,7 @@
          return guest
  
      def _get_ordered_vpmems(self, instance, flavor):
-@@ -7693,6 +7697,177 @@
+@@ -7693,6 +7698,177 @@
              for resource in vpmem_resources]
          return vpmems
  
@@ -214,3 +215,16 @@
      def _guest_add_vpmems(self, guest, vpmems):
          guest.max_memory_size = guest.memory
          guest.max_memory_slots = 0
+@@ -8410,7 +8586,11 @@
+             info = lvm.get_volume_group_info(
+                                CONF.libvirt.images_volume_group)
+         elif CONF.libvirt.images_type == 'rbd':
+-            info = rbd_utils.RBDDriver().get_pool_info()
++            rbd_driver = rbd_utils.RBDDriver()
++            info = rbd_driver.get_pool_info()
++            # cube: count out OSDs too, so failures do not shrink capacity.
++            info['total'] = crc.osd_capacity_bytes(
++                rbd_driver.ceph_args(), info['total'])
+         else:
+             info = libvirt_utils.get_fs_info(CONF.instances_path)
+ 

@@ -10,7 +10,7 @@ Against a node's epoxy venv, where nova is already importable:
 
 ```bash
 scp test_cube_*.py root@<node>:/tmp/
-ssh root@<node> 'cd /tmp && /opt/openstack-epoxy/bin/python -m unittest test_cube_live_resize test_cube_availability_zone_filter -v'
+ssh root@<node> 'cd /tmp && /opt/openstack-epoxy/bin/python -m unittest test_cube_live_resize test_cube_availability_zone_filter test_cube_rbd_capacity -v'
 ```
 
 Or in a local venv built the way the port was verified:
