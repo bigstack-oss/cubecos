@@ -563,7 +563,9 @@ UpdateCfg(std::string domain, std::string region, std::string mcacheconn, std::s
         // cfg["spice"]["server_listen"] = "0.0.0.0";
         // cfg["spice"]["server_proxyclient_address"] = myIp;
 
-        cfg["vnc"]["novncproxy_base_url"] = "https://" + external + ":6080/vnc_auto.html";
+        // the browser opens this console URL, so it follows cubesys.fqdn when one is set
+        const std::string fqdn = G(FQDN);
+        cfg["vnc"]["novncproxy_base_url"] = "https://" + (fqdn.empty() ? external : fqdn) + ":6080/vnc_auto.html";
         // cfg["spice"]["html5proxy_base_url"] = "http://" + external + ":6082/spice_auto.html";
 
         cfg["DEFAULT"]["compute_driver"] = "libvirt.LibvirtDriver";

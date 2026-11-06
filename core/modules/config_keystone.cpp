@@ -341,8 +341,15 @@ UpdateConfig(std::string sharedId)
 
         // Keystone's default less "external", which conflicts with federation.
         cfg["auth"]["methods"] = "password,token,oauth1,mapped,application_credential";
-        cfg["federation"]["trusted_dashboard"] =
+        // the dashboards' callbacks on the shared id, and on cubesys.fqdn too once one is set:
+        // keystone returns the browser only to an origin listed here
+        std::string dashboards =
             "https://" + sharedId + "/horizon/auth/websso/\ntrusted_dashboard = https://" + sharedId + ":9999/api/openstack/skyline/api/v1/websso";
+        const std::string fqdn = G(FQDN);
+        if (!fqdn.empty())
+            dashboards += "\ntrusted_dashboard = https://" + fqdn + "/horizon/auth/websso/"
+                          "\ntrusted_dashboard = https://" + fqdn + ":9999/api/openstack/skyline/api/v1/websso";
+        cfg["federation"]["trusted_dashboard"] = dashboards;
         cfg["federation"]["sso_callback_template"] = "/etc/keystone/sso_callback_template.html";
         cfg["federation"]["remote_id_attribute"] = "MELLON_IDP";
         // applies to every IdP whose own authorization_ttl is unset (cube_idp is created without one)
