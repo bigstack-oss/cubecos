@@ -705,13 +705,21 @@ ceph_create_cachepool()
         local cachepool=${backpool%-pool}-cache
     fi
     local size=$($CEPH osd pool get $backpool size -f json | jq .size)
+    # An empty size drops an argument below and ceph_create_pool falls back to
+    # 3 replicas, more than a one-host cluster has (#883).
+    if ! [[ "$size" =~ ^[1-9][0-9]*$ ]] ; then
+        echo "Error: cannot read the replica size of $backpool, not creating $cachepool" >&2
+        return 1
+    fi
     local osnd=$($CEPH osd df $backpool | grep up | wc -l)
-    local app=$($CEPH osd pool ls detail | grep $backpool | grep -o "application .*" | cut -d" " -f2)
-    if [ $osnd -gt 100 -a $size -gt 2 ] ; then
+    local app=$($CEPH osd pool ls detail | grep "^pool [0-9]* '$backpool' " | grep -o "application .*" | cut -d" " -f2)
+    if [ "$osnd" -gt 100 -a "$size" -gt 2 ] ; then
         ((size --))
     fi
 
-    ceph_create_pool $cachepool $app $size
+    ceph_create_pool "$cachepool" "$app" "$size"
+    # ceph_create_pool cannot set size 1 (mon_allow_pool_size_one is off)
+    Quiet -n ceph_adjust_pool_size "$cachepool" $size
     local pgs=$($CEPH osd pool get $backpool pg_num -f json | jq -r .pg_num)
     Quiet -n $CEPH osd pool set $cachepool pg_num $pgs  --yes-i-really-mean-it
     Quiet -n $CEPH osd pool set $cachepool pgp_num $pgs
@@ -2304,6 +2312,10 @@ ceph_recreate_cache_pool()
         return 1
     fi
     local size=$($CEPH osd pool get $cachepool size | awk '{print $2}' | tr -d '\n')
+    if ! [[ "$size" =~ ^[1-9][0-9]*$ ]] ; then
+        echo "Error: cannot read the replica size of $cachepool, not recreating it"
+        return 1
+    fi
 
     # A cache pool left non-empty by switch-off is the normal case: objects a
     # client still watches flush but cannot be evicted, and those are stale
