@@ -1459,31 +1459,35 @@ ceph_osd_purge()
 
 ceph_osd_safe_remove()
 {
-    # perform the safe remove
-    # first check if it is safe, then purge it
-    # if is not safe, set a timer to purge it 1 minute later
-    # retry at most 30 times (30 minutes)
-    # if it exceeds the limit (30 times), log it and restore the OSD
-    # give up early only when 3 consecutive readings show the same pg count
+    # purge drained OSDs once ceph says they are safe to destroy, else retry
+    # every minute; on give-up restore all of them and purge none
+    # $1: OSD ids, space separated (the OSDs of one disk go together)
+    # $2: their original crush weights, in the same order
+    # $3: attempt number, at most 30 (30 minutes)
+    # $4: last reading "<pgs>:<misplaced+degraded objects>"
+    # $5: readings in a row without recovery progress, give up at 5
+    # $6: disk whose cleanup job to drop on give-up
 
     local limit=30
-    local stall_limit=2
-    local osd_id="${1#"osd."}"
-    local original_crush_weight="${2:-"0"}"
+    local stall_limit=5
+    local osd_ids="$(echo ${1//osd./})"
+    local original_crush_weights="${2:-"0"}"
     local nth_attempt="${3:-"${limit}"}"
-    local last_pg_count="${4:-""}"
+    local last_reading="${4:-""}"
     local stalled="${5:-0}"
+    local dev="${6:-""}"
 
     # clean up old jobs
-    $HEX_SDK util_cron_delete_every_minute_job "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
+    $HEX_SDK util_cron_delete_every_minute_job "$HEX_SDK ceph_osd_safe_remove \"$osd_ids\" "
 
     local exec_output=""
     local exec_error=""
     local why_quitting=""
     local pg_count=""
+    local id=""
     if ! _hex_function exec_output exec_error \
-        $CEPH osd safe-to-destroy "osd.${osd_id}" ; then
-        log_info "Ceph OSD ${osd_id} is not ready to be purged"
+        $CEPH osd safe-to-destroy $(printf 'osd.%s ' $osd_ids) ; then
+        log_info "Ceph OSD ${osd_ids} is not ready to be purged"
 
         if [ -n "$exec_output" ] ; then
             log_info "$exec_output"
@@ -1496,28 +1500,41 @@ ceph_osd_safe_remove()
         # while other pgs are still moving; with nothing mapped to it there is
         # nothing left to move, so purge it instead of waiting on the stall clock
         if echo "$exec_error" | grep -q "no reported stats" ; then
-            local osd_up="$($CEPH osd dump -f json 2>/dev/null | jq -r ".osds[] | select(.osd == ${osd_id}) | .up")"
-            local osd_pgs="$($CEPH osd df "osd.${osd_id}" -f json 2>/dev/null | jq -r ".nodes[] | select(.id == ${osd_id}) | .pgs")"
-            if [ "x$osd_up" = "x0" ] && [ "x${osd_pgs:-0}" = "x0" ] &&
-               [ -z "$(ceph_osd_pgs_waiting_on "$osd_id")" ] ; then
-                log_info "Ceph OSD ${osd_id} is down with no pgs mapped and no stats, purging it"
-                ceph_osd_purge "$osd_id"
-                return $?
+            local all_dead=1 osd_up osd_pgs
+            for id in $osd_ids ; do
+                osd_up="$($CEPH osd dump -f json 2>/dev/null | jq -r ".osds[] | select(.osd == ${id}) | .up")"
+                osd_pgs="$($CEPH osd df "osd.${id}" -f json 2>/dev/null | jq -r ".nodes[] | select(.id == ${id}) | .pgs")"
+                [ "x$osd_up" = "x0" ] && [ "x${osd_pgs:-0}" = "x0" ] || all_dead=0
+            done
+            if [ $all_dead -eq 1 ] && [ -z "$(ceph_osd_pgs_waiting_on $osd_ids)" ] ; then
+                log_info "Ceph OSD ${osd_ids} is down with no pgs mapped and no stats, purging it"
+                for id in $osd_ids ; do
+                    ceph_osd_purge "$id" || return 1
+                done
+                return 0
             fi
         fi
 
+        # progress is recovery moving data: fewer misplaced+degraded objects,
+        # fewer pgs on the OSDs, or recovery bytes flowing
+        local status="$($CEPH -s -f json 2>/dev/null)"
+        local objects="$(echo "$status" | jq -r '(.pgmap.misplaced_objects // 0) + (.pgmap.degraded_objects // 0)' 2>/dev/null)"
+        local rate="$(echo "$status" | jq -r '.pgmap.recovering_bytes_per_sec // 0' 2>/dev/null)"
         ((nth_attempt++))
         pg_count="$(echo "$exec_error" | egrep -o '[0-9]+ pgs' | tail -1)"
-        if [[ "$pg_count" == "$last_pg_count" ]] ; then
+        pg_count="${pg_count%% *}"
+        local reading="${pg_count:-0}:${objects:-0}"
+        if [[ "$last_reading" =~ ^[0-9]+:[0-9]+$ ]] && [ "${rate%.*}" -le 0 ] 2>/dev/null &&
+           [ "${reading%%:*}" -ge "${last_reading%%:*}" ] && [ "${reading##*:}" -ge "${last_reading##*:}" ] ; then
             ((stalled++))
         else
             stalled=0
         fi
-        log_info "Ceph OSD ${osd_id} pg count: ${pg_count} (unchanged ${stalled} times)"
+        log_info "Ceph OSD ${osd_ids} pgs:objects ${reading}, recovering ${rate:-0} B/s (no progress ${stalled} times)"
 
         if [ $nth_attempt -gt $limit ] ; then
             why_quitting="timed out moving data from disk"
-        elif [ "x$($CEPH -s -f json | jq -r .health.status)" = "xHEALTH_ERR" ] ; then
+        elif [ "x$(echo "$status" | jq -r .health.status 2>/dev/null)" = "xHEALTH_ERR" ] ; then
             if [ $nth_attempt -ge 3 ] ; then
                 why_quitting="ceph would be in error state without this disk"
             fi
@@ -1526,29 +1543,47 @@ ceph_osd_safe_remove()
         fi
 
         if [ "x$why_quitting" != "x" ] ; then
-            # restore the OSD
-            systemctl restart "ceph-osd@${osd_id}"
-            Quiet $CEPH osd crush reweight "osd.${osd_id}" "$original_crush_weight"
-            Quiet $CEPH osd in "$osd_id"
-
-            # log it
-            log_info "Ceph OSD ${osd_id} restored as ${why_quitting}"
+            # restore every OSD of the disk and drop its cleanup job
+            local weights=($original_crush_weights) i=0
+            for id in $osd_ids ; do
+                systemctl restart "ceph-osd@${id}"
+                Quiet $CEPH osd crush reweight "osd.${id}" "${weights[$i]:-0}"
+                Quiet $CEPH osd in "$id"
+                log_info "Ceph OSD ${id} restored as ${why_quitting}"
+                ((i++))
+            done
+            if [ -n "$dev" ] ; then
+                $HEX_SDK util_cron_delete_every_minute_job "$HEX_SDK ceph_osd_remove_disk_cleanup \"$dev\" "
+                log_info "removal of disk ${dev} abandoned, none of its OSDs purged"
+            fi
         else
             # retry next minute; never sleep inside the every-minute runner,
             # a blocked runner overlaps the next tick and two readings seconds
             # apart look like a stall
             $HEX_SDK util_cron_add_every_minute_job \
-                "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" \"$original_crush_weight\" \"$nth_attempt\" \"$pg_count\" \"$stalled\"" \
-                "$HEX_SDK ceph_osd_safe_remove \"$osd_id\" "
+                "$HEX_SDK ceph_osd_safe_remove \"$osd_ids\" \"$original_crush_weights\" \"$nth_attempt\" \"$reading\" \"$stalled\" \"$dev\"" \
+                "$HEX_SDK ceph_osd_safe_remove \"$osd_ids\" "
 
             # log it
-            log_info "set to try safe removal of Ceph OSD ${osd_id} with attempt ${nth_attempt}"
+            log_info "set to try safe removal of Ceph OSD ${osd_ids} with attempt ${nth_attempt}"
         fi
 
         return 1
     fi
 
-    ceph_osd_purge "$osd_id"
+    for id in $osd_ids ; do
+        ceph_osd_purge "$id" || return 1
+    done
+}
+
+# crush reweight an OSD to 0 and mark it out; prints its old crush weight
+ceph_osd_drain()
+{
+    local osd_id=${1#osd.}
+
+    $CEPH osd tree -f json | jq -r ".[][] | select(.name == \"osd.${osd_id}\").crush_weight"
+    Quiet $CEPH osd crush reweight "osd.${osd_id}" 0
+    Quiet $CEPH osd out $osd_id
 }
 
 ceph_osd_remove()
@@ -1565,9 +1600,7 @@ ceph_osd_remove()
         return $?
     fi
 
-    local crush_weight=$($CEPH osd tree -f json | jq -r ".[][] | select(.name == \"osd.${osd_id}\").crush_weight")
-    Quiet $CEPH osd crush reweight "osd.${osd_id}" 0
-    Quiet $CEPH osd out $osd_id
+    local crush_weight="$(ceph_osd_drain "$osd_id")"
     ceph_osd_safe_remove "$osd_id" "$crush_weight" "1" ""
     return 0
 }
@@ -1626,6 +1659,11 @@ ceph_osd_remove_disk_cleanup()
     local osd_id=""
     local are_osds_purged="true"
     for osd_id in $osd_ids ; do
+        # an OSD back in means its safe removal gave up and restored the disk
+        if [ "x$($CEPH osd dump -f json 2>/dev/null | jq -r ".osds[] | select(.osd == ${osd_id}) | .in")" = "x1" ] ; then
+            log_info "Ceph OSD ${osd_id} is back in, disk ${dev} is not removed"
+            return 1
+        fi
         if ! ceph_osd_is_osd_purged "$osd_id" ; then
             are_osds_purged="false"
         fi
@@ -1678,17 +1716,23 @@ ceph_osd_remove_disk()
     elif [[ "$mode" == "force_lost" ]] ; then
         ceph_osd_force_remove --lost $osd_ids 2>/dev/null || Error "Ceph OSDs $osd_ids not removed, $dev not wiped"
         osd_ids=""
+    elif [[ "$mode" == "safe" ]] ; then
+        # drain the disk's OSDs together; they are purged or restored together
+        local weights=""
+        for osd_id in $osd_ids ; do
+            $CEPH osd df "osd.${osd_id}"
+            timeout 600 ceph tell "osd.${osd_id}" compact >/dev/null 2>&1 || true
+            weights="$weights $(ceph_osd_drain $osd_id 2>/dev/null)"
+        done
+        [ -z "$osd_ids" ] || ceph_osd_safe_remove "$(echo $osd_ids)" "$(echo $weights)" "1" "" "0" "$dev"
+        ceph_osd_remove_disk_cleanup "$dev" "1"
+        return 0
     fi
     for osd_id in $osd_ids ; do
         ceph_osd_remove $osd_id $mode 2>/dev/null
         # For raw osd disk, modify PARTLABEL to exclude disk in next hex_config refresh_ceph_osd
         # Quiet parted $dev name $i removed
     done
-
-    if [[ "$mode" == "safe" ]] ; then
-        ceph_osd_remove_disk_cleanup "$dev" "1"
-        return 0
-    fi
 
     # perform the cleanup
     Quiet ceph_osd_zap_disk $dev
