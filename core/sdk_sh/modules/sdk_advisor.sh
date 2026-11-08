@@ -1347,14 +1347,26 @@ advisor_upgrade_node()
     echo "Upgraded the Advisor agent: ${installed:-none} -> $current"
 }
 
+# _advisor_node_token <base> <ca> <console>
+#
+# One node token for one peer: the Advisor spends it on redemption.
+_advisor_node_token()
+{
+    local base=$1 ca=$2 console=$3
+
+    curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+        -H 'Content-Type: application/json' -d "{\"console_access\":$console}" \
+        "$base/api/v1/node-tokens" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])'
+}
+
 # advisor_enroll_peers [force]
 #
-# From an enrolled node: fetch a node token over this node's certificate and
-# enrol every node that has no identity yet. Each peer gets its own identity
-# and prints its own fingerprint to verify; console access follows this node.
+# From an enrolled node: enrol every other control node that has no identity
+# yet, each with its own node token. Each peer gets its own identity and
+# prints its own fingerprint to verify; console access follows this node.
 advisor_enroll_peers()
 {
-    local force=${1:-} base ca console=false tok node rc=0 todo=()
+    local force=${1:-} base ca console=false tok node rc=0 todo=() skipped=()
 
     if [ ! -r "$ADVISOR_AGENT_CERT" ] || [ ! -r "$ADVISOR_AGENT_KEY" ] ; then
         echo "Error: this node is not enrolled; paste a token from the Advisor to enrol it first" >&2
@@ -1362,12 +1374,18 @@ advisor_enroll_peers()
     fi
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
         [ "$node" = "$HOSTNAME" ] && continue
+        # advisor_enroll refuses non-control nodes.
+        if ! remote_run "$node" "$HEX_SDK is_control_node" >/dev/null 2>&1 ; then
+            skipped+=("$node")
+            continue
+        fi
         if [ -n "$force" ] || ! remote_run $node stat "$ADVISOR_AGENT_CERT" >/dev/null 2>&1 ; then
             todo+=("$node")
         fi
     done
+    [ "${#skipped[@]}" -gt 0 ] && echo "Not enrolled (not control nodes): ${skipped[*]}"
     if [ "${#todo[@]}" -eq 0 ] ; then
-        echo "Every node of this cluster is already enrolled."
+        echo "Every control node of this cluster is already enrolled."
         return 0
     fi
 
@@ -1378,22 +1396,22 @@ advisor_enroll_peers()
         return 1
     }
     [ -r "$ADVISOR_CONSOLE_CA" ] && console=true
-    tok=$(curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
-            -H 'Content-Type: application/json' -d "{\"console_access\":$console}" \
-            "$base/api/v1/node-tokens" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') || {
-        echo "Error: the Advisor refused to issue a node token to this node (is its identity verified?)" >&2
-        return 1
-    }
 
     echo "Enrolling ${#todo[@]} node(s): ${todo[*]}"
     for node in "${todo[@]}" ; do
         echo "== $node"
+        tok=$(_advisor_node_token "$base" "$ca" "$console") || {
+            echo "Error: the Advisor refused to issue a node token to this node (is its identity verified?)" >&2
+            return 1
+        }
         # The token travels over the cluster's own ssh and lands in a root-only
         # file the peer removes when done; never an argument, never in ps.
         if ! printf '%s\n' "$tok" | remote_run $node "umask 077 && mkdir -p /run/advisor-peer && cat > /run/advisor-peer/token" ; then
             echo "   Error: could not deliver the token to $node" >&2 ; rc=1 ; continue
         fi
-        remote_run $node "$HEX_SDK advisor_enroll_token /run/advisor-peer/token '' $force; rc=\$?; rm -f /run/advisor-peer/token; exit \$rc" 2>&1 | sed 's/^/   /' || rc=1
+        # remote_run drops ssh's stderr, so the peer's errors go to stdout.
+        remote_run $node "$HEX_SDK advisor_enroll_token /run/advisor-peer/token '' $force 2>&1; rc=\$?; rm -f /run/advisor-peer/token; exit \$rc" | sed 's/^/   /'
+        [ "${PIPESTATUS[0]}" -eq 0 ] || rc=1
     done
     [ $rc -eq 0 ] && echo "Verify each new node on the Advisor's enrolment page: its fingerprint is printed above."
     return $rc
