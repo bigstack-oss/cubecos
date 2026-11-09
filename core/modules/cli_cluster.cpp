@@ -1111,7 +1111,7 @@ ClusterRollMain(const char* kind, int argc, const char** argv)
     if (upgrade) {
         CliPrintf("Confirming stages %s on every node, then rolls the cluster:", version.c_str());
         CliPrintf("live-migrate what can move, suspend+restore the highlighted VMs,");
-        CliPrintf("reboot each node into the new firmware (master last).");
+        CliPrintf("reboot each node into the new firmware (master first).");
         CliPrintf("No node is rebooted unless every node staged successfully.");
         CliPrintf("Scope: every node in the cluster.");
     } else {

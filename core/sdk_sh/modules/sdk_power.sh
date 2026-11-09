@@ -777,7 +777,6 @@ power_roll_start()
         # Optional explicit target list (positional args); empty = whole cluster.
         local want="$*"
 
-        # Order: compute -> storage -> control, with the master control node last.
         local master=$(_power_roll_master)
         # order differs by kind: restart = compute->storage->control, master
         # LAST (control plane up longest); upgrade = master FIRST (shortest
