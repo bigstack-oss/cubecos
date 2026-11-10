@@ -68,6 +68,7 @@ Insert content here.
 >- Cluster topology: [e.g. single control-converged node, 3 control + 2 compute HA]
 >- Hardware: [e.g. Dell PowerEdge R630, storage backend NFS/S3/Ceph]
 >- Supporting logs
+>- UI change? Add a `ui:<tier>` label: critical, medium, low, or none ([UI tiers](https://github.com/bigstack-oss/cube-cos-ui/blob/develop/.github/REVIEW_LEVELS.md#2-ui-tier)).
 
 ## QA Verification
 
