@@ -850,7 +850,7 @@ ClusterReadyMain(int argc, const char** argv)
     bool cfgFlatExt = false;
 
     CliPrintf("Storage disk configurations.");
-    HexSpawn(0, HEX_SDK, " ceph_node_group_list", NULL, NULL);
+    HexSpawn(0, HEX_SDK, "ceph_node_group_list", NULL, NULL);
     std::string osdCnt = HexUtilPOpen("timeout 5 ceph osd tree | grep osd | grep up | wc -l | xargs echo -n");
 
     if(osdCnt == "0") {
@@ -980,7 +980,7 @@ ClusterErrcodeDumpMain(int argc, const char** argv)
     if (argc > 1)
         return CLI_INVALID_ARGS;
 
-    HexSpawn(0, HEX_SDK, " health_errcode_dump", NULL, NULL);
+    HexSpawn(0, HEX_SDK, "health_errcode_dump", NULL, NULL);
 
     return CLI_SUCCESS;
 }
