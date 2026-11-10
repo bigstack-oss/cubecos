@@ -29,7 +29,7 @@ GpuCreateDpMain(int argc, const char** argv)
     if (argc == 1) {
         HexSystemF(0, HEX_SDK " os_device_profile_create");
     } else {
-        HexSystemF(0, HEX_SDK " os_device_profile_create %s", argv[1]);
+        HexSystemF(0, HEX_SDK " os_device_profile_create %s", HexBuildShellArg(argv[1]).c_str());
     }
 
     return CLI_SUCCESS;
@@ -41,7 +41,7 @@ GpuDeleteDpMain(int argc, const char** argv)
     if (argc != 2 /* [0]="delete_device_profile", [1]=<name> */)
         return CLI_INVALID_ARGS;
 
-    HexSystemF(0, HEX_SDK " os_device_profile_delete %s", argv[1]);
+    HexSystemF(0, HEX_SDK " os_device_profile_delete %s", HexBuildShellArg(argv[1]).c_str());
 
     return CLI_SUCCESS;
 }

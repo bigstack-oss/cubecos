@@ -110,7 +110,7 @@ static int ServerLaunchMain(int argc, const char** argv)
         }
     }
 
-    HexSystemF(0, HEX_SDK " _diagSrvCreate %s %s %s %d", image.c_str(), extnet.c_str(), backPool.c_str(), numPerCompute);
+    HexSystemF(0, HEX_SDK " _diagSrvCreate %s %s %s %d", HexBuildShellArg(image).c_str(), HexBuildShellArg(extnet).c_str(), HexBuildShellArg(backPool).c_str(), numPerCompute);
 
     return CLI_SUCCESS;
 }
@@ -150,14 +150,14 @@ static int PoolMain(int argc, const char** argv)
         return CLI_UNEXPECTED_ERROR;
     }
     // handle one liner case when backPool does not exist. ex: status nosuchpool
-    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", backPool.c_str());
+    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", HexBuildShellArg(backPool).c_str());
     if (validBackPool.empty()) {
         CliPrintf("Pool %s either does not support cache tiering or does not exist", backPool.c_str());
         return CLI_UNEXPECTED_ERROR;
     }
 
-    HexSystemF(0, "/usr/bin/rados -p %s bench --object-size 4096 %d write --no-cleanup", backPool.c_str(), TotalTime);
-    HexSystemF(0, "/usr/bin/rados -p %s bench %d rand --no-cleanup", backPool.c_str(), TotalTime);
+    HexSystemF(0, "/usr/bin/rados -p %s bench --object-size 4096 %d write --no-cleanup", HexBuildShellArg(backPool).c_str(), TotalTime);
+    HexSystemF(0, "/usr/bin/rados -p %s bench %d rand --no-cleanup", HexBuildShellArg(backPool).c_str(), TotalTime);
     return CLI_SUCCESS;
 }
 
@@ -181,13 +181,13 @@ static int PoolCleanupMain(int argc, const char** argv)
     }
 
     // handle one liner case when backPool does not exist. ex: status nosuchpool
-    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", backPool.c_str());
+    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", HexBuildShellArg(backPool).c_str());
     if (validBackPool.empty()) {
         CliPrintf("Pool %s either does not support cache tiering or does not exist", backPool.c_str());
         return CLI_UNEXPECTED_ERROR;
     }
 
-    HexSystemF(0, "/usr/bin/rados -p %s cleanup 2>/dev/null", backPool.c_str());
+    HexSystemF(0, "/usr/bin/rados -p %s cleanup 2>/dev/null", HexBuildShellArg(backPool).c_str());
 
     return CLI_SUCCESS;
 }
@@ -220,14 +220,14 @@ static int RbdMain(int argc, const char** argv)
         return CLI_UNEXPECTED_ERROR;
     }
     // handle one liner case when backPool does not exist. ex: status nosuchpool
-    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", backPool.c_str());
+    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", HexBuildShellArg(backPool).c_str());
     if (validBackPool.empty()) {
         CliPrintf("Pool %s either does not support cache tiering or does not exist", backPool.c_str());
         return CLI_UNEXPECTED_ERROR;
     }
 
-    HexSystemF(0, HEX_SDK " diagnostics_rbd %s write %d", backPool.c_str(), TotalData);
-    HexSystemF(0, HEX_SDK " diagnostics_rbd %s read %d", backPool.c_str(), TotalData);
+    HexSystemF(0, HEX_SDK " diagnostics_rbd %s write %d", HexBuildShellArg(backPool).c_str(), TotalData);
+    HexSystemF(0, HEX_SDK " diagnostics_rbd %s read %d", HexBuildShellArg(backPool).c_str(), TotalData);
     return CLI_SUCCESS;
 }
 
@@ -250,9 +250,10 @@ static int OsdMain(int argc, const char** argv)
         }
     }
 
-    HexSystemF(0, "ceph osd df osd.%s | head -2", osdId.c_str());
-    HexSystemF(0, "ceph tell osd.%s bench 1073741824 4906", osdId.c_str());
-    HexSystemF(0, "hex_sdk cmd -v hex_sdk diagnostics_osd_hdparm osd.%s  | cut -d'|' -f3", osdId.c_str());
+    HexSystemF(0, "ceph osd df osd.%s | head -2", HexBuildShellArg(osdId).c_str());
+    HexSystemF(0, "ceph tell osd.%s bench 1073741824 4906", HexBuildShellArg(osdId).c_str());
+    // hex_sdk cmd runs this through the remote shell, so quote twice.
+    HexSystemF(0, "hex_sdk cmd -v hex_sdk diagnostics_osd_hdparm %s  | cut -d'|' -f3", HexBuildShellArg(HexBuildShellArg("osd." + osdId)).c_str());
     return CLI_SUCCESS;
 }
 
