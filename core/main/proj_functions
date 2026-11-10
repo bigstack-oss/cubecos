@@ -73,11 +73,17 @@ _hex_exec()
     local gcmd=$(ps -o comm= $gpid 2>/dev/null | xargs)
     local gusr=$(ps -o user= -p $gpid 2>/dev/null | xargs)
 
+    # Values that differ per call are fields: a tag value makes a new series, and InfluxDB
+    # keeps every series in its index until the shard expires.
+    local audit_fields="cmd=\"$cmd\",pid=${pid}i,ppid=${PPID}i"
+    [[ "$gpid" =~ ^[0-9]+$ ]] && audit_fields+=",gpid=${gpid}i"
+
     [ "x$(type -t influx_event)" = "xfunction" ] || source /usr/lib/hex_sdk/modules.pre/sdk_influx.sh
     if echo "$pcmd $gcmd" | grep -q -i ssh ; then
         pip=$(ss -tunpa | grep $PPID | awk '{print $6}')
         if [ "x$pip" != "x" ] ; then
-            pcmd+="($pip)"
+            pcmd+="(${pip%:*})"
+            audit_fields+=",pcmd_peer=\"$pip\""
         elif ps -p $PPID >/dev/null 2>&1 ; then
             pcmd+="(localhost)"
         else
@@ -85,14 +91,15 @@ _hex_exec()
         fi
         gip=$(ss -tunpa | grep $gpid | awk '{print $6}')
         if [ "x$gip" != "x" ] ; then
-            gcmd+="($gip)"
+            gcmd+="(${gip%:*})"
+            audit_fields+=",gcmd_peer=\"$gip\""
         elif ps -p $pgid >/dev/null 2>&1 ; then
             gcmd+="(localhost)"
         else
             gcmd+="(unknown)"
         fi
     fi
-    influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,gpid=$gpid,pusr=$pusr,pcmd=$pcmd,ppid=$PPID,usr=$usr,pid=$pid cmd=\"$cmd\""
+    influx_event "insert audit,node=$HOSTNAME,gusr=$gusr,gcmd=$gcmd,pusr=$pusr,pcmd=$pcmd,usr=$usr $audit_fields"
 
     if echo "$cmd" | grep -q "health_.*_check$" ; then
         local srv=$(echo $cmd | sed -e "s/^health_//" -e "s/_check$//")
