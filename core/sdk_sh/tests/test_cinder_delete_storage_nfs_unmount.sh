@@ -34,7 +34,7 @@ extract() {  # <file> <function> [rename-to]
 }
 
 PROG=test_cinder_delete_storage_nfs_unmount
-for f in cinder_delete_storage cinder_get_storage_nfs_mount_hashes cinder_unmount_nfs_mounts ; do
+for f in cinder_delete_storage cinder_get_storage_nfs_mount_hashes cinder_unmount_nfs_mounts cinder_remove_volume_service ; do
     extract "$SRC" "$f" || { echo "FAIL: $f not extracted"; exit 1; }
 done
 for f in _hex_function _hex_function_ret ; do
