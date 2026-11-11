@@ -132,6 +132,15 @@ cinder_remove_volume_service()
     _hex_function_ret /usr/bin/cinder-manage service remove "cinder-volume" "$host"
 }
 
+# 0 if the cinder-volume service record $1 (<host>@<backend>) is disabled
+cinder_is_volume_service_disabled()
+{
+    local host="${1:-""}"
+    [ -n "$host" ] || return 1
+    $OPENSTACK volume service list --service cinder-volume -f json 2>/dev/null \
+        | jq -e --arg h "$host" 'any(.[]; .Host == $h and .Status == "disabled")' >/dev/null 2>&1
+}
+
 # Wait up to $2 seconds of wall clock (default 60) until every cinder-volume
 # backend in $1 (comma-separated <host>@<backend>) is up and reports a pool,
 # i.e. its driver initialized. Prints the backends that are not; 0 if none.
@@ -2370,6 +2379,17 @@ cinder_put_storage()
         return "$ERROR_JSON_NOT_ARRAY"
     fi
 
+    # a new storage takes over the service record <name>@<name> an earlier
+    # storage of that name left; a disabled one would keep the new backend out
+    # of scheduling, so drop it and let the backend register afresh (#2314)
+    if [ ! -f "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf" ] \
+        && is_control_node \
+        && cinder_is_volume_service_disabled "${name}@${name}" ; then
+        if ! cinder_remove_volume_service "${name}@${name}" ; then
+            log_warning "disabled cinder-volume service ${name}@${name} left by an earlier storage ${name} not removed"
+        fi
+    fi
+
     # set the storage config
     local external_backend_conf=""
     external_backend_conf="$(cinder_marshal_storage_external_backend_conf "$external_backend" "$name" "$driver")"
@@ -3292,9 +3312,12 @@ cinder_delete_storage()
         return 2
     fi
 
+    # its service record is <name>@<name>; a re-create under the same name
+    # reuses a record left behind, and never comes up if it is disabled (#2314)
     if is_control_node ; then
-        _hex_function_ret $OPENSTACK volume service set --disable "$name" "cinder-volume"
-        _hex_function_ret /usr/bin/cinder-manage service remove "cinder-volume" "$name"
+        if ! cinder_remove_volume_service "${name}@${name}" ; then
+            log_warning "cinder-volume service ${name}@${name} of deleted storage ${name} not removed"
+        fi
     fi
 
     # The backend is out of cinder now: unmount its shares on every control
