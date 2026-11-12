@@ -78,6 +78,7 @@ _hex_function_ret() {
 is_control_node() { [ "$CTRL" = yes ]; }
 log_warning() { LOG+="warn:$1;"; }
 cinder_is_volume_type_in_use() { return 1; }
+cinder_is_storage_manila_free() { return 0; }
 cinder_apply_storage_deletion() { LOG+="apply;"; return 0; }
 cinder_get_storage_nfs_mount_hashes() { :; }
 cinder_read_storage_extra_configs_ownership() { echo '{"extraConfigFiles":[]}'; }

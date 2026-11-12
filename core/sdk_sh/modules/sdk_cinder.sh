@@ -1931,6 +1931,48 @@ cinder_is_volume_type_in_use()
     return 1
 }
 
+# Every external storage is also a Manila backend and share type of the same
+# name. Returns 0 when Manila is disabled or has no share of that type and no
+# share server on that backend (<host>@<name>). Otherwise prints why the
+# storage cannot be deleted, naming them, and returns 1; also when either list
+# cannot be read, since a share left on a deleted backend can never be removed.
+cinder_is_storage_manila_free()
+{
+    local name="${1:-""}"
+    if [ -z "$name" ] ; then
+        echo -n "field name should not be blank"
+        return 1
+    fi
+
+    source $HEX_TUN $SETTINGS_TXT manila.enabled
+    if [ "x$T_manila_enabled" == "xfalse" ] ; then
+        return 0
+    fi
+
+    local shares="" servers=""
+    shares="$($OPENSTACK share list --all-projects -f json 2>/dev/null)" && json_is_array "$shares" && \
+    servers="$($OPENSTACK share server list -f json 2>/dev/null)" && json_is_array "$servers" && \
+    shares="$(jq -r --arg n "$name" \
+        '[.[] | select(.["Share Type Name"] == $n) | "\(.ID) (\(.Status))"] | join(", ")' \
+        <<< "$shares")" && \
+    servers="$(jq -r --arg n "$name" \
+        '[.[] | select((.Host // "") | endswith("@" + $n)) | "\(.ID) (\(.Status))"] | join(", ")' \
+        <<< "$servers")"
+    if [ $? -ne 0 ] ; then
+        echo -n "Manila shares or share servers of storage ${name} could not be read"
+        return 1
+    fi
+
+    if [ -n "$shares" ] || [ -n "$servers" ] ; then
+        local used="${shares:+shares ${shares}}"
+        [ -z "$servers" ] || used+="${used:+; }share servers ${servers}"
+        echo -n "storage ${name} is still used by Manila, delete these first: ${used}"
+        return 1
+    fi
+
+    return 0
+}
+
 cinder_set_volume_type_properties()
 {
     local exec_output=""
@@ -3236,6 +3278,16 @@ cinder_delete_storage()
     if cinder_is_volume_type_in_use "$name" ; then
         jq -c -n \
             --arg message "volume type ${name} is still in use" \
+            '{message: $message}' \
+            >&2
+        return 1
+    fi
+
+    # check if Manila still uses it
+    local manila_reason=""
+    if ! manila_reason="$(cinder_is_storage_manila_free "$name")" ; then
+        jq -c -n \
+            --arg message "$manila_reason" \
             '{message: $message}' \
             >&2
         return 1
