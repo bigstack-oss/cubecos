@@ -880,7 +880,7 @@ storage_usage_thresholds()
     local soft=${T_storage_usage_threshold_soft:-75}
     local hard=${T_storage_usage_threshold_hard:-85}
     local oversub=${T_storage_usage_oversubscription_warn:-2.0}
-    local rec backend pool cap used prov pct ratio key prev now code
+    local rec backend pool cap stored prov pct ratio key prev now code
 
     mkdir -p $(dirname $STORAGE_USAGE_STATE) 2>/dev/null
     touch $STORAGE_USAGE_STATE
@@ -891,12 +891,14 @@ storage_usage_thresholds()
         backend=$(echo "$rec" | jq -r '.backend // empty')
         pool=$(echo "$rec" | jq -r '.pool // empty')
         cap=$(echo "$rec" | jq -r '.capacity_bytes // 0')
-        used=$(echo "$rec" | jq -r '.raw_used_bytes // 0')
+        stored=$(echo "$rec" | jq -r '.stored_bytes // 0')
         prov=$(echo "$rec" | jq -r '.provisioned_bytes // 0')
         [ -n "$backend" -a -n "$pool" ] || continue
         [ "$cap" -gt 0 ] 2>/dev/null || continue
 
-        pct=$(( used * 100 / cap ))
+        # Capacity is logical (stored + max_avail), so use stored, not raw,
+        # to match ceph df %USED.
+        pct=$(( stored * 100 / cap ))
         ratio=$(echo "$prov $cap" | awk '{printf "%.2f", $1/$2}')
         key="$backend/$pool"
         prev=$(grep -F "$key=" $STORAGE_USAGE_STATE | cut -d= -f2)
