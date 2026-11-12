@@ -22,7 +22,8 @@ is_remote_running()
     if is_local_node "$1" ; then
         is_running $2
     else
-        ssh root@$1 $HEX_SDK is_running $2 >/dev/null 2>&1
+        # bounded: 124 (timeout) or 255 (ssh) means the probe failed
+        timeout 30 ssh -o ConnectTimeout=10 root@$1 $HEX_SDK is_running $2 >/dev/null 2>&1
     fi
 }
 
