@@ -20,12 +20,12 @@ GPGKEY_DNF += $(COREDIR)/docker/RPM-GPG-KEY-docker 060A61C51B558A7F742B77AAC52FE
 # vendor's on the condition core/exporters/Makefile gives. The packages float, so rootfs_install
 # stops the build when one has moved past the version rebuilt here, rather than put an older binary
 # under a newer package: bump the version below to the package's.
-DOCKER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+DOCKER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	github.com/go-jose/go-jose/v4@v4.1.6 github.com/klauspost/compress@v1.20.3
 CONTAINERD_VER := 2.4.2
 RUNC_VER := 1.5.2
 COMPOSE_VER := 5.7.1
-BUILDX_VER := 0.38.1
+BUILDX_VER := 0.39.0
 SKOPEO_VER := 1.22.2
 DOCKER_GO_DIR := $(ARCS_DIR)/docker-go
 DOCKER_GO_BIN := $(DOCKER_GO_DIR)/bin
