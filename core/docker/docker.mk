@@ -24,7 +24,7 @@ DOCKER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org
 	github.com/go-jose/go-jose/v4@v4.1.6 github.com/klauspost/compress@v1.20.3
 CONTAINERD_VER := 2.4.2
 RUNC_VER := 1.5.2
-COMPOSE_VER := 5.7.0
+COMPOSE_VER := 5.7.1
 BUILDX_VER := 0.38.1
 SKOPEO_VER := 1.22.2
 DOCKER_GO_DIR := $(ARCS_DIR)/docker-go
