@@ -99,7 +99,7 @@ _instance_l3_collect()
 # the cost of two more services, another bus consumer and a second agent on every compute
 # node -- for twelve series that can be read out of libvirt directly.
 #
-# Three consumers, and they are why the shape is what it is:
+# Four consumers, and they are why the shape is what it is:
 #
 #   Watcher    ceilometer_cpu and ceilometer_memory_usage, through its prometheus
 #              datasource, for the workload_balance strategy; ceilometer_cpu_l3_cache
@@ -107,6 +107,9 @@ _instance_l3_collect()
 #   Grafana    the Instance and Top Instances dashboards, both of which were monasca's.
 #   Kapacitor  the two per-project VM alert templates, which are fed the influx line
 #              protocol instance_metrics_publish derives from the same read.
+#   CubeCMP    the auto-scaling group rules (cpu, memory, inbound packets) and the usage
+#              graphs of an instance, which read that same influx half under the names they
+#              used to read out of the monasca database.
 #
 # The names are Watcher's, not ours, and the two it reads are not negotiable. Its prometheus
 # datasource hardcodes instance_cpu_usage -> ceilometer_cpu and instance_ram_usage ->
@@ -406,8 +409,13 @@ function flush(   i, cnt, dev, extra, avail, unused, usable, tags, dtags, pct, r
         if (r != "") printf "vm.net.in_bytes_sec,%s value=%.6f %s\n", dtags, r, NOW
         r = rate("ntx:" uuid ":" dev, st["net." i ".tx.bytes"])
         if (r != "") printf "vm.net.out_bytes_sec,%s value=%.6f %s\n", dtags, r, NOW
+        # The inbound packet rate is for CubeCMP: an auto-scaling group rule on inbound
+        # packets stores the measurement name, so the name has to be the one monasca used.
+        r = rate("nrxp:" uuid ":" dev, st["net." i ".rx.pkts"])
+        if (r != "") printf "vm.net.in_packets_sec,%s value=%.6f %s\n", dtags, r, NOW
         newst["nrx:" uuid ":" dev] = st["net." i ".rx.bytes"]
         newst["ntx:" uuid ":" dev] = st["net." i ".tx.bytes"]
+        newst["nrxp:" uuid ":" dev] = st["net." i ".rx.pkts"]
     }
 }
 BEGIN {
