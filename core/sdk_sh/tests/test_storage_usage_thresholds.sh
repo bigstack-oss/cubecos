@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Unit test for storage_usage_thresholds (../modules/sdk_storage.sh).
+# used_percent is logical stored bytes over logical capacity.
 #
 # The tier is only useful if it fires on a crossing. A 15-minute timer that
 # emits while a pool merely sits above the mark produces ~96 events a day and
@@ -33,8 +34,22 @@ EV=$(mktemp)
 hex_log_event(){ echo "$@" >> $EV; }
 STORAGE_USAGE_HEX_LOG_EVENT=hex_log_event
 
-mkpool(){ echo "{\"backend\":\"CubeStorage\",\"pool\":\"cinder-volumes\",\"capacity_bytes\":1000,\"raw_used_bytes\":$1,\"provisioned_bytes\":$2}"; }
-run(){ mkpool "$1" "$2" | storage_usage_thresholds; }
+mkpool(){ echo "{\"backend\":\"CubeStorage\",\"pool\":\"cinder-volumes\",\"capacity_bytes\":1000,\"stored_bytes\":$1,\"raw_used_bytes\":$(( $1 * ${3:-3} )),\"provisioned_bytes\":$2}"; }
+run(){ mkpool "$@" | storage_usage_thresholds; }
+
+# fullness uses logical bytes regardless of the replication size
+: > $STORAGE_USAGE_STATE; : > $EV; run 250 1000
+chk "size 3 at 25%: no event"  "$(grep -c . $EV)"            "0"
+
+: > $STORAGE_USAGE_STATE; : > $EV; run 880 1000 2
+chk "size 2 at 88%: hard"     "$(grep -c STO00002E $EV)"    "1"
+chk "size 2 used_percent=88"  "$(grep -c 'used_percent=88,' $EV)" "1"
+
+: > $STORAGE_USAGE_STATE; : > $EV; run 880 1000 3
+chk "size 3 at 88%: hard"     "$(grep -c STO00002E $EV)"    "1"
+chk "size 3 used_percent=88"  "$(grep -c 'used_percent=88,' $EV)" "1"
+
+: > $STORAGE_USAGE_STATE
 
 : > $EV; run 700 1000
 chk "below soft: silent"      "$(grep -c . $EV)"            "0"
@@ -68,7 +83,7 @@ chk "oversub does not repeat" "$(grep -c STO00004W $EV)"    "0"
 
 # a pool whose capacity is unknown must not divide by zero or alarm
 : > $STORAGE_USAGE_STATE; : > $EV
-echo '{"backend":"x","pool":"p","capacity_bytes":null,"raw_used_bytes":null,"provisioned_bytes":null}' | storage_usage_thresholds
+echo '{"backend":"x","pool":"p","capacity_bytes":null,"stored_bytes":null,"raw_used_bytes":null,"provisioned_bytes":null}' | storage_usage_thresholds
 chk "null capacity skipped"   "$(grep -c . $EV)"            "0"
 
 # a tuned value must override the built-in default
