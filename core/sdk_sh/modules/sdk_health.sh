@@ -133,6 +133,9 @@ _health_fail_log()
 
     # backoff cadence past maxerr (see _health_repair_due)
     local backoff=${_HEALTH_REPAIR_BACKOFF:-10}
+    # failed rounds in a row before the first repair; the rounds spent waiting
+    # do not use up the maxerr budget
+    local confirm=${_HEALTH_REPAIR_CONFIRM:-1}
 
     local count=0
     if [ -f /tmp/health_${srv}_error.count ] ; then
@@ -165,7 +168,9 @@ _health_fail_log()
             let "count = $count + 1"
             echo "failed count: $count" >> /var/log/health_${srv}_error.log
             echo $count > /tmp/health_${srv}_error.count
-            if _health_repair_due "$count" "$maxerr" "$backoff" ; then
+            if [ "$count" -lt "$confirm" ] ; then
+                echo "auto repair waits for $confirm failed checks in a row" >> /var/log/health_${srv}_error.log
+            elif _health_repair_due "$(( count - confirm + 1 ))" "$maxerr" "$backoff" ; then
                 local auto_repair_func="_health_${srv}_auto_repair"
                 if Quiet type $auto_repair_func 2>/dev/null ; then
                     query="insert health,component=$srv,node=$HOSTNAME,code=$ERR_CODE description=\"fixing\""
@@ -735,18 +740,40 @@ health_hacluster_report()
     _health_report ${FUNCNAME[0]}
 }
 
+# 0: $2 is stopped on $1, 1: it is running, 2: unknown -- the ssh probe failed
+# (124/255) twice. A failed probe is not a stopped service.
+_health_remote_stopped()
+{
+    local i r
+    for i in 1 2 ; do
+        is_remote_running $1 $2
+        r=$?
+        case $r in
+            0) return 1 ;;
+            124|255) [ $i -eq 2 ] || sleep ${_HEALTH_PROBE_RETRY_WAIT:-3} ;;
+            *) return 0 ;;
+        esac
+    done
+    return 2
+}
+
 health_hacluster_check()
 {
+    local r
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
-        if ! is_remote_running $node corosync ; then
+        _health_remote_stopped $node corosync
+        r=$?
+        if [ $r -eq 2 ] ; then
+            ERR_MSG+="cannot reach $node to check corosync\n"
+        elif [ $r -eq 0 ] ; then
             ERR_CODE=1
             ERR_MSG+="corosync on $node is not running\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u corosync"
-        elif ! is_remote_running $node pacemaker ; then
+        elif _health_remote_stopped $node pacemaker ; then
             ERR_CODE=2
             ERR_MSG+="pacemaker on $node is not running\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u pacemaker"
-        elif ! is_remote_running $node pcsd ; then
+        elif _health_remote_stopped $node pcsd ; then
             ERR_CODE=3
             ERR_MSG+="pcsd on $node is not running\n"
             ERR_LOG="journalctl -n $ERR_LOGSIZE -u pcsd"
@@ -791,11 +818,15 @@ health_hacluster_check()
     for node_entry in "${node_array[@]}"; do
         local node=$(echo $node_entry | head -c -1)
         if [ -n "$node" ] ; then
-            if ! is_remote_running $node pcsd ; then
+            _health_remote_stopped $node pcsd
+            r=$?
+            if [ $r -eq 2 ] ; then
+                ERR_MSG+="cannot reach $node to check pcsd\n"
+            elif [ $r -eq 0 ] ; then
                 ERR_CODE=8
                 ERR_MSG+="pcsd on $node is not running\n"
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u pcsd"
-            elif ! is_remote_running $node pacemaker_remote ; then
+            elif _health_remote_stopped $node pacemaker_remote ; then
                 ERR_CODE=9
                 ERR_MSG+="pacemaker_remote on $node is not running\n"
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u pacemaker_remote"
@@ -815,7 +846,8 @@ health_hacluster_check()
         ERR_MSG+="$roffline remote nodes are offline\n"
     fi
 
-    _health_fail_log
+    # the repair restarts this node's Pacemaker: not on a one-round blip
+    _HEALTH_REPAIR_CONFIRM=2 _health_fail_log
 }
 
 _health_hacluster_auto_repair()
@@ -823,6 +855,16 @@ _health_hacluster_auto_repair()
     # Skip auto-repair unless all control nodes are ready (avoid churn while corosync reforms).
     for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
         remote_run $node "$HEX_SDK cube_node_ready" >/dev/null 2>&1 || return 0
+    done
+    # A compute that is still booting is not RemoteOnline yet. Wait for it, but
+    # not for one that is down (ssh 255) or stuck in boot for 30 min.
+    for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
+        timeout 10 ssh -o ConnectTimeout=5 -o BatchMode=yes root@$node \
+            "$CUBE_BOOT_DONE_TEST || [ \$(cut -d. -f1 /proc/uptime) -ge 1800 ]" </dev/null >/dev/null 2>&1
+        if [ $? -eq 1 ] ; then
+            echo "auto repair skipped: $node is still booting" >> /var/log/health_hacluster_error.log
+            return 0
+        fi
     done
     health_hacluster_repair
     if [ $ERR_CODE -eq 6 ] ; then
