@@ -3354,6 +3354,133 @@ cinder_delete_storage()
         '{message: $message}'
 }
 
+# "share <id> <host>" and "server <id> <host> <share network>" lines for what
+# Manila has on storage <name>; fails when either list cannot be read
+_cinder_storage_manila_rows()
+{
+    local name="$1"
+    local shares="" servers=""
+    shares="$($OPENSTACK share list --all-projects -f json 2>/dev/null </dev/null)" && json_is_array "$shares" && \
+    servers="$($OPENSTACK share server list -f json 2>/dev/null </dev/null)" && json_is_array "$servers" && \
+    jq -r --arg n "$name" \
+        '.[] | select(.["Share Type Name"] == $n) | "share \(.ID) \(.Host // "-")"' <<< "$shares" && \
+    jq -r --arg n "$name" \
+        '.[] | select((.Host // "") | endswith("@" + $n)) | "server \(.ID) \(.Host) \(.["Share Network ID"] // "-")"' <<< "$servers"
+}
+
+# move the share instances of share <id> (share) or share server <id> (server)
+# from host <from> to <to>; only that row, and only while it is still at <from>
+_cinder_manila_set_host()
+{
+    local kind="$1" id="$2" from="$3" to="$4"
+    if [[ ! "$id" =~ ^[0-9a-f-]{36}$ || ! "$from" =~ ^[A-Za-z0-9._@#-]+$ || ! "$to" =~ ^[A-Za-z0-9._@#-]+$ ]] ; then
+        return 1
+    fi
+
+    local sql="UPDATE share_servers SET host='${to}' WHERE id='${id}'"
+    [ "$kind" != "share" ] || sql="UPDATE share_instances SET host='${to}' WHERE share_id='${id}'"
+    $MYSQL -u root -D manila -e "${sql} AND host='${from}' AND deleted='False'" </dev/null
+}
+
+# Delete what Manila still has on an external storage that is already deleted:
+# its shares, share servers and share type. Nothing serves <host>@<name> any
+# more, so each is first moved to <host>@generic, which every manila-share node
+# serves with the same driver, and then deleted through Manila. Share networks
+# are only listed: they are not tied to a backend.
+cinder_clean_storage_manila()
+{
+    local name="${1:-""}"
+    if [[ ! "$name" =~ ^[A-Za-z0-9_-]+$ ]] || [ "$name" == "generic" ] || [ "$name" == "CubeStorage" ] || [ "$name" == "tenant_share_type" ] ; then
+        echo "storage name [${name}] cannot be cleaned"
+        return 1
+    fi
+    if [ -f "${CINDER_USER_INPUT_STORAGE_CONF_DIRECTORY}/ext_storage_${name}.conf" ] ; then
+        echo "storage ${name} still exists, delete it with delete_storage"
+        return 1
+    fi
+    if ! is_control_node ; then
+        echo "run this on a control node"
+        return 1
+    fi
+    source $HEX_TUN $SETTINGS_TXT manila.enabled
+    if [ "x$T_manila_enabled" == "xfalse" ] ; then
+        echo "Manila is disabled"
+        return 0
+    fi
+
+    local rows=""
+    if ! rows="$(_cinder_storage_manila_rows "$name")" ; then
+        echo "Manila shares or share servers of storage ${name} could not be read"
+        return 1
+    fi
+
+    local kind="" id="" host="" net="" to="" nets="" servers=""
+    local shares_deleted="" shares_left="" servers_deleted="" servers_left=""
+
+    # shares first: a share server is in use while it has shares
+    while read -r -u 3 kind id host net ; do
+        [ "$kind" == "share" ] || continue
+        if [[ "$host" == *"@${name}#"* ]] ; then
+            if ! _cinder_manila_set_host share "$id" "$host" "${host%%@*}@generic#${host#*#}" ; then
+                echo "share ${id} at ${host} could not be moved to generic"
+                return 1
+            fi
+        elif [ "$host" != "-" ] && { [[ "$host" != *"@generic#"* ]] || [ "${host#*#}" == "GENERIC" ]; } ; then
+            echo "share ${id} is at ${host}, not on storage ${name}"
+            return 1
+        fi
+        $OPENSTACK share delete --force --wait "$id" >/dev/null 2>&1 </dev/null
+        shares_deleted+="${shares_deleted:+ }${id}"
+    done 3<<< "$rows"
+
+    if ! rows="$(_cinder_storage_manila_rows "$name")" ; then
+        echo "Manila shares or share servers of storage ${name} could not be read"
+        return 1
+    fi
+    shares_left="$(awk '$1 == "share" {print $2}' <<< "$rows" | xargs)"
+    if [ -n "$shares_left" ] ; then
+        echo "storage ${name}: shares not deleted: ${shares_left}"
+        return 1
+    fi
+    [ -z "$shares_deleted" ] || echo "storage ${name}: shares deleted: ${shares_deleted}"
+
+    # a server whose delete fails goes back to <name>, so the next run finds it
+    while read -r -u 3 kind id host net ; do
+        [ "$kind" == "server" ] || continue
+        to="${host%@*}@generic"
+        if ! _cinder_manila_set_host server "$id" "$host" "$to" ; then
+            echo "share server ${id} at ${host} could not be moved to generic"
+            return 1
+        fi
+        $OPENSTACK share server delete --wait "$id" >/dev/null 2>&1 </dev/null
+        servers="$($OPENSTACK share server list -f json 2>/dev/null </dev/null)"
+        if json_is_array "$servers" && ! jq -e --arg i "$id" 'any(.[]; .ID == $i)' <<< "$servers" >/dev/null ; then
+            servers_deleted+="${servers_deleted:+ }${id}"
+        else
+            _cinder_manila_set_host server "$id" "$to" "$host"
+            servers_left+="${servers_left:+ }${id}"
+        fi
+        [ "$net" == "-" ] || [[ " $nets " == *" $net "* ]] || nets+="${nets:+ }${net}"
+    done 3<<< "$rows"
+    [ -z "$servers_deleted" ] || echo "storage ${name}: share servers deleted: ${servers_deleted}"
+    [ -z "$nets" ] || echo "share networks its share servers used, delete them if nothing else uses them: ${nets}"
+    if [ -n "$servers_left" ] ; then
+        echo "storage ${name}: share servers not deleted: ${servers_left}"
+        return 1
+    fi
+
+    if $OPENSTACK share type show "$name" >/dev/null 2>&1 </dev/null ; then
+        if ! $OPENSTACK share type delete "$name" >/dev/null 2>&1 </dev/null ; then
+            echo "storage ${name}: share type ${name} not deleted"
+            return 1
+        fi
+        echo "storage ${name}: share type ${name} deleted"
+    fi
+
+    echo "storage ${name}: nothing left on Manila"
+    return 0
+}
+
 cinder_apply_default_storage()
 {
     local exec_output=""
