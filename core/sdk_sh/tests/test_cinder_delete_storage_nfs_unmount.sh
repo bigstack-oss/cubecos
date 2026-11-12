@@ -69,6 +69,7 @@ chk "hash is cinder's (md5 of the share, as on node1)" \
 OPENSTACK=openstack_stub
 openstack_stub() { return 0; }
 cinder_is_volume_type_in_use() { return 1; }
+cinder_is_storage_manila_free() { return 0; }
 cinder_apply_storage_deletion() { LOG+="apply;"; return 0; }
 is_control_node() { return 0; }
 log_warning() { LOG+="warn:$1;"; }
