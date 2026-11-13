@@ -241,21 +241,23 @@ RSYNC_NVR := 3.2.7-1.el9_8
 ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/$(ROCKY_PATH)/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
 PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 rsync-$(RSYNC_NVR).x86_64.rpm
 
-# pcre2, librabbitmq, python3-tornado, sqlite, libevent, gnupg2, protobuf, python3-urllib3,
-# python3-lxml, libreswan and brotli come from Rocky 9 the same way. RHEL fixed a known
-# vulnerability in each in a z-stream build -- el9_8 (el9_8.1 for brotli), or el9_7 for gnupg2 and
-# protobuf -- and Stream's newest builds carry the same version and release without that suffix
-# (pcre2 10.40-7.el9 against 10.40-7.el9_8), which sorts below it. Every installed subpackage moves
-# together, i686 copies included, since they require each other's exact version, the -devel
-# packages the build has until cube-post.mk removes them included. protobuf-compiler is in Rocky's
-# CRB. Entries are <repo>/<first letter>/<rpm>.
+# pcre2, librabbitmq, python3-tornado, sqlite, libevent, gnupg2, protobuf, python3-urllib3 and
+# python3-lxml come from Rocky 9 the same way. RHEL fixed a known vulnerability in each in a
+# z-stream build -- el9_8 (el9_8.1 for librabbitmq, python3-tornado and python3-lxml), or el9_7 for
+# gnupg2 and protobuf -- and Stream's newest builds carry the same version and release without that
+# suffix (pcre2 10.40-7.el9 against 10.40-7.el9_8), which sorts below it. Every installed
+# subpackage moves together, i686 copies included, since they require each other's exact version,
+# the -devel packages the build has until cube-post.mk removes them included. protobuf-compiler is
+# in Rocky's CRB. Entries are <repo>/<first letter>/<rpm>.
 #
 # Stream's own build takes over once its release passes RHEL's: installdnf's duplicate pass keeps
 # the higher of the copies in the download directory, and drops a downloaded copy older than the
-# build the rootfs already has. An entry can come out then. openssl was here until Stream's
-# 3.5.9-1.el9, a rebase onto OpenSSL 3.5.9, which carries the fix RHEL had backported into
-# 3.5.8-2.el9_8, and ruby until Stream's 3.0.7-170.el9, which carries 3.0.7-168.el9_8's fix and
-# two more releases of fixes. Each entry has its PINNED_DNF line below, as rsync has.
+# build the rootfs already has. An entry has to come out then, or its set splits: with Stream's
+# libbrotli 1.0.9-11.el9 already in the rootfs, Rocky's libbrotli was dropped and Rocky's brotli,
+# which needs it at its exact release, kept. openssl was here until Stream's 3.5.9-1.el9, a rebase
+# onto OpenSSL 3.5.9, which carries the fix RHEL had backported into 3.5.8-2.el9_8. ruby, libreswan
+# and brotli were here until Stream's 3.0.7-170.el9, 4.15-11.el9 and 1.0.9-11.el9, each with the fix
+# of the Rocky build it replaced. Each entry has its PINNED_DNF line below, as rsync has.
 ROCKY_ERRATA_RPMS := \
 	BaseOS/p/pcre2-10.40-7.el9_8.x86_64 \
 	BaseOS/p/pcre2-syntax-10.40-7.el9_8.noarch \
@@ -274,11 +276,7 @@ ROCKY_ERRATA_RPMS := \
 	CRB/p/protobuf-compiler-3.14.0-17.el9_7.x86_64 \
 	AppStream/p/python3-protobuf-3.14.0-17.el9_7.noarch \
 	BaseOS/p/python3-urllib3-1.26.5-8.el9_8.noarch \
-	AppStream/p/python3-lxml-4.6.5-3.el9_8.1.x86_64 \
-	AppStream/l/libreswan-4.15-10.el9_8.x86_64 \
-	BaseOS/l/libbrotli-1.0.9-10.el9_8.1.x86_64 \
-	AppStream/b/brotli-1.0.9-10.el9_8.1.x86_64 \
-	AppStream/b/brotli-devel-1.0.9-10.el9_8.1.x86_64
+	AppStream/p/python3-lxml-4.6.5-3.el9_8.1.x86_64
 rocky_rpm_url = $(ROCKY_DL_HOST)/$(ROCKY_PATH)/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
 ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_ERRATA_RPMS),$(call rocky_rpm_url,$(p)))
 PINNED_DNF += dc350245c7781a0ac2ffce92e088a22c3741bf967ce7c551d0420cea9ae085eb pcre2-10.40-7.el9_8.x86_64.rpm
@@ -299,10 +297,6 @@ PINNED_DNF += d5f5a321ef0334332542a8c527eef85a7a2cbe382c8a7a4f131142e0d4cf3ff4 p
 PINNED_DNF += 6390cb4e53898aa27737bd0bb6a100cd8d3526bc77b074a8faa9f31b9bff2477 python3-protobuf-3.14.0-17.el9_7.noarch.rpm
 PINNED_DNF += 25d9b56cfee5643e1057c014cf6e7182647b84656821af837ad99c8f87c20ae0 python3-urllib3-1.26.5-8.el9_8.noarch.rpm
 PINNED_DNF += 30dcacac3537f4f6bfb31d1986c7dbe54e15e255fadc2f08e26d0b1cfffec98c python3-lxml-4.6.5-3.el9_8.1.x86_64.rpm
-PINNED_DNF += 9782b5ad185103c56035eff353065f3e77019567f268ec15073532c874c27726 libreswan-4.15-10.el9_8.x86_64.rpm
-PINNED_DNF += ce72c3ec1513fe852bb654ab141f4014286e09a0ab09c7dd7d79805af1f42200 libbrotli-1.0.9-10.el9_8.1.x86_64.rpm
-PINNED_DNF += a8bf13944227fa8e81cbb1ce311a74414d6cdedd850090372f30189d085bb4b8 brotli-1.0.9-10.el9_8.1.x86_64.rpm
-PINNED_DNF += b51b4abfdc0086162e1c00c5dfb3165fd06687dbc03be2610325913892f4657c brotli-devel-1.0.9-10.el9_8.1.x86_64.rpm
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
