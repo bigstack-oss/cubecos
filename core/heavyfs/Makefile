@@ -242,7 +242,7 @@ ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/$(ROCKY_PATH)/BaseOS/x86_64/os/Packages/r
 PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 rsync-$(RSYNC_NVR).x86_64.rpm
 
 # pcre2, librabbitmq, python3-tornado, sqlite, libevent, gnupg2, protobuf, python3-urllib3,
-# python3-lxml, libreswan, ruby and brotli come from Rocky 9 the same way. RHEL fixed a known
+# python3-lxml, libreswan and brotli come from Rocky 9 the same way. RHEL fixed a known
 # vulnerability in each in a z-stream build -- el9_8 (el9_8.1 for brotli), or el9_7 for gnupg2 and
 # protobuf -- and Stream's newest builds carry the same version and release without that suffix
 # (pcre2 10.40-7.el9 against 10.40-7.el9_8), which sorts below it. Every installed subpackage moves
@@ -254,7 +254,8 @@ PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 r
 # the higher of the copies in the download directory, and drops a downloaded copy older than the
 # build the rootfs already has. An entry can come out then. openssl was here until Stream's
 # 3.5.9-1.el9, a rebase onto OpenSSL 3.5.9, which carries the fix RHEL had backported into
-# 3.5.8-2.el9_8. Each entry has its PINNED_DNF line below, as rsync has.
+# 3.5.8-2.el9_8, and ruby until Stream's 3.0.7-170.el9, which carries 3.0.7-168.el9_8's fix and
+# two more releases of fixes. Each entry has its PINNED_DNF line below, as rsync has.
 ROCKY_ERRATA_RPMS := \
 	BaseOS/p/pcre2-10.40-7.el9_8.x86_64 \
 	BaseOS/p/pcre2-syntax-10.40-7.el9_8.noarch \
@@ -275,20 +276,6 @@ ROCKY_ERRATA_RPMS := \
 	BaseOS/p/python3-urllib3-1.26.5-8.el9_8.noarch \
 	AppStream/p/python3-lxml-4.6.5-3.el9_8.1.x86_64 \
 	AppStream/l/libreswan-4.15-10.el9_8.x86_64 \
-	AppStream/r/ruby-3.0.7-168.el9_8.x86_64 \
-	AppStream/r/ruby-3.0.7-168.el9_8.i686 \
-	AppStream/r/ruby-devel-3.0.7-168.el9_8.x86_64 \
-	AppStream/r/ruby-libs-3.0.7-168.el9_8.x86_64 \
-	AppStream/r/ruby-libs-3.0.7-168.el9_8.i686 \
-	AppStream/r/ruby-default-gems-3.0.7-168.el9_8.noarch \
-	AppStream/r/rubygems-3.2.33-168.el9_8.noarch \
-	AppStream/r/rubygem-bigdecimal-3.0.0-168.el9_8.x86_64 \
-	AppStream/r/rubygem-bundler-2.2.33-168.el9_8.noarch \
-	AppStream/r/rubygem-io-console-0.5.7-168.el9_8.x86_64 \
-	AppStream/r/rubygem-json-2.5.1-168.el9_8.x86_64 \
-	AppStream/r/rubygem-psych-3.3.2-168.el9_8.x86_64 \
-	AppStream/r/rubygem-rdoc-6.3.4.1-168.el9_8.noarch \
-	AppStream/r/rubygem-rexml-3.2.5-168.el9_8.noarch \
 	BaseOS/l/libbrotli-1.0.9-10.el9_8.1.x86_64 \
 	AppStream/b/brotli-1.0.9-10.el9_8.1.x86_64 \
 	AppStream/b/brotli-devel-1.0.9-10.el9_8.1.x86_64
@@ -313,20 +300,6 @@ PINNED_DNF += 6390cb4e53898aa27737bd0bb6a100cd8d3526bc77b074a8faa9f31b9bff2477 p
 PINNED_DNF += 25d9b56cfee5643e1057c014cf6e7182647b84656821af837ad99c8f87c20ae0 python3-urllib3-1.26.5-8.el9_8.noarch.rpm
 PINNED_DNF += 30dcacac3537f4f6bfb31d1986c7dbe54e15e255fadc2f08e26d0b1cfffec98c python3-lxml-4.6.5-3.el9_8.1.x86_64.rpm
 PINNED_DNF += 9782b5ad185103c56035eff353065f3e77019567f268ec15073532c874c27726 libreswan-4.15-10.el9_8.x86_64.rpm
-PINNED_DNF += 5b22820c933fddbee9d2a64fb3122c2dcd7055c5c12c9ace0a4cc1a8a3eab66a ruby-3.0.7-168.el9_8.x86_64.rpm
-PINNED_DNF += 7553b1199368a94ab48ab2dd5ce5767e71e1ce9e711035bc9379e497a7911322 ruby-3.0.7-168.el9_8.i686.rpm
-PINNED_DNF += aab2a81b617f966d53a2f5053afae97abb486c36b73e00f933b860ca4bd133dc ruby-devel-3.0.7-168.el9_8.x86_64.rpm
-PINNED_DNF += 9855eb9987baff924d46ac842791cf45c8880db2d6ae20c4a93956ed5272db53 ruby-libs-3.0.7-168.el9_8.x86_64.rpm
-PINNED_DNF += c37eb7e1734cee80ce5bc46eee43c13010b4b49b370d2dcca1527729fc569bd5 ruby-libs-3.0.7-168.el9_8.i686.rpm
-PINNED_DNF += 6b25417e9360b96812b73e8a589aba626f05961ffad2068668cbb8ad14a76293 ruby-default-gems-3.0.7-168.el9_8.noarch.rpm
-PINNED_DNF += f067f26d8a331653367d074a5bbcf876a0c4d9c4f03074c19a5afa50292025b4 rubygems-3.2.33-168.el9_8.noarch.rpm
-PINNED_DNF += e5e84c2b4df9f7ed09526e93592fcedcdb13cba4d25d653c069076e6b0b4044d rubygem-bigdecimal-3.0.0-168.el9_8.x86_64.rpm
-PINNED_DNF += 03ae44cee6ddccb18da76dccccded08c605093b18919a4fd3e4d6ea5c9d3018e rubygem-bundler-2.2.33-168.el9_8.noarch.rpm
-PINNED_DNF += 41b62e4d96053fbc396d40bbb5184a1f7b09cd3c9601e4310edd671c0687ff0a rubygem-io-console-0.5.7-168.el9_8.x86_64.rpm
-PINNED_DNF += a2aed941d6bf4f12bb2779ed779036368735ca92d6de93d8a11c119b9c6ad7ca rubygem-json-2.5.1-168.el9_8.x86_64.rpm
-PINNED_DNF += 6a79fd9ac0824f84a0c8525374688480b513d45882bb9bb611b3de8222a99f74 rubygem-psych-3.3.2-168.el9_8.x86_64.rpm
-PINNED_DNF += 6592b5fe5e5f18261213c4257c15f7f553e18a797704c126ea5c40d947006f20 rubygem-rdoc-6.3.4.1-168.el9_8.noarch.rpm
-PINNED_DNF += e21ed4007fe4f3ac53a477b23f2d77c8670faa01a5d600a9bb77389fb094b438 rubygem-rexml-3.2.5-168.el9_8.noarch.rpm
 PINNED_DNF += ce72c3ec1513fe852bb654ab141f4014286e09a0ab09c7dd7d79805af1f42200 libbrotli-1.0.9-10.el9_8.1.x86_64.rpm
 PINNED_DNF += a8bf13944227fa8e81cbb1ce311a74414d6cdedd850090372f30189d085bb4b8 brotli-1.0.9-10.el9_8.1.x86_64.rpm
 PINNED_DNF += b51b4abfdc0086162e1c00c5dfb3165fd06687dbc03be2610325913892f4657c brotli-devel-1.0.9-10.el9_8.1.x86_64.rpm
@@ -341,11 +314,11 @@ PYTHON3_SAML_REQUIRE := libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtoo
 
 # The install below names ruby by its full version so that dnf takes the base 3.0 build:
 # ruby-3.1.2-141.module_el9+156+2e0939d1 has no i686 and conflicts with ruby-3.0.4-161.el9.i686.rpm.
-# It is not in LOCKED_DNF. Rocky's 3.0.7-168.el9_8 replaces it (ROCKY_ERRATA_RPMS), and a lock
-# makes installdnf's duplicate pass keep this copy and delete Rocky's, leaving ruby at el9 beside
-# ruby-libs and the gems at el9_8. installdnf matches a lock as a substring of the rpm's name, so
-# a lock on ruby-3.0.7-168.el9_8 would also match ruby-3.0.7-168.el9 and do the same.
-RUBY := ruby-3.0.7-168.el9
+# It names Stream's newest build, the one ruby's dependents resolve to, so ruby and ruby-libs land
+# in the download directory once. installdnf's duplicate pass settles two copies of a package and
+# stops the build at three: 3.0.7-168.el9 here, Rocky's 168.el9_8 and Stream's 170.el9 were three.
+# It is not in LOCKED_DNF, since the duplicate pass keeps a locked copy over a newer one.
+RUBY := ruby-3.0.7-170.el9
 
 # python3-numpy-1:1.23.5-1.el9.x86_64 from @commandline and python3-numpy-1:1.20.1-5.el9.x86_64 from appstream
 # PYTHON3-NUMPY := python3-numpy-1:1.20.1-5.el9
