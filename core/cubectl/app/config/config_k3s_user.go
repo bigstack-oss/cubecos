@@ -163,6 +163,12 @@ func k3sDeleteUser(username string) error {
 		return errors.WithStack(err)
 	}
 
+	kubeCli.SetClusterRoleBindingClient()
+	err = kubeCli.DeleteClusterRoleBindingsIfTheServiceAccountIsIncluded(username, kube.DefaultNamespace, defaultCubeManagedListOpts)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	err = s3Cli.DeleteObject(k3sBucket, s3ObjectKey(username))
 	if err != nil {
 		return errors.WithStack(err)

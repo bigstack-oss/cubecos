@@ -160,6 +160,7 @@ type ClusterRoleClient interface {
 type ClusterRoleBindingClient interface {
 	List(context.Context, metav1.ListOptions) (*rbacv1.ClusterRoleBindingList, error)
 	Create(ctx context.Context, clusterRoleBinding *rbacv1.ClusterRoleBinding, opts metav1.CreateOptions) (*rbacv1.ClusterRoleBinding, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 }
 
 type RoleClient interface {
@@ -596,6 +597,34 @@ func (h *Helper) DeleteRoleBindingsIfTheServiceAccountIsIncluded(username, names
 
 	return nil
 }
+
+func (h *Helper) DeleteClusterRoleBindingsIfTheServiceAccountIsIncluded(username, namespace string, opt metav1.ListOptions) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	list, err := h.ClusterRoleBindingClient.List(ctx, opt)
+	if err != nil {
+		return err
+	}
+
+	for _, binding := range list.Items {
+		for _, subject := range binding.Subjects {
+			if !IsBoundServiceAccount(subject, username, namespace) {
+				continue
+			}
+
+			err := h.ClusterRoleBindingClient.Delete(ctx, binding.Name, metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+
+			break
+		}
+	}
+
+	return nil
+}
+
 func (h *Helper) ListClusterRoleBinding(opt metav1.ListOptions) (*rbacv1.ClusterRoleBindingList, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
