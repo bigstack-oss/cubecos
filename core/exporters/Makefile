@@ -19,14 +19,14 @@ include ../../build.mk
 # cover both halves. blackbox_exporter also links andybalholm/brotli 1.2.5, older than its fix,
 # and EXPORTER_GO_GET raises it too; the others do not link it, and go mod tidy drops it again.
 # Return an exporter to its upstream artifact once `go version -m` on it shows go >= 1.27.2,
-# x/net >= 0.60.0, x/text >= 0.41.0, x/crypto >= 0.56.0 and, where linked, brotli >= 1.2.7.
+# x/net >= 0.62.0, x/text >= 0.41.0, x/crypto >= 0.56.0 and, where linked, brotli >= 1.2.7.
 BLACKBOX_VER := 0.29.0
 IPMI_VER := 1.10.1
 MEMCACHED_VER := 0.17.0
 APACHE_VER := 1.1.1
 NODE_VER := 1.12.1
 
-EXPORTER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+EXPORTER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	github.com/andybalholm/brotli@v1.2.7
 EXPORTER_VERSION_PKG := github.com/prometheus/common/version
 # $(1) version. Run in the clone, so git rev-parse names the tag's commit.
