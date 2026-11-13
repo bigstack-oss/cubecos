@@ -338,11 +338,13 @@ ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/aud
 # filebeat and auditbeat are rebuilt from the same tag and installed over the rpms' binaries:
 # Elastic's 9.5.5 is built with go1.26.8, older than the October 2026 security release
 # (1.27.2 / 1.26.9), and links an x/net older than its fix; the jail's Go and BEATS_GO_GET cover
-# both. These are the OSS beats, not x-pack: config_logstash uses filebeat's filestream input with
-# the kafka output and auditbeat's file_integrity module, all OSS, so none of the Elastic-licensed
-# code is needed. The rpms stay for everything else and name the version in the SBOM. Return to
-# their binaries on the condition core/exporters/Makefile gives.
-BEATS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0
+# both. klauspost/compress, 1.20.0 in the tag's go.mod and older than its fix, is raised to 1.20.3
+# the same way, as in TELEGRAF_GO_GET. These are the OSS beats, not x-pack: config_logstash uses
+# filebeat's filestream input with the kafka output and auditbeat's file_integrity module, all
+# OSS, so none of the Elastic-licensed code is needed. The rpms stay for everything else and name
+# the version in the SBOM. Return to their binaries on the condition core/exporters/Makefile gives.
+BEATS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+	github.com/klauspost/compress@v1.20.3
 BEATS_GO_DIR := $(ARCS_DIR)/beats-go
 BEATS_SRC := $(BEATS_GO_DIR)/beats-$(BEATS_VER)-src
 BEATS_VERSION_PKG := github.com/elastic/beats/v7/libbeat/version
