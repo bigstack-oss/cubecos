@@ -6,6 +6,7 @@
 # confused-deputy in Rancher's impersonation middleware lets any authenticated
 # user with the default `user` role escalate to system:masters on the local
 # cluster.  Affected: >=2.11.0,<2.11.16 -- so the 2.11.2 CubeOS ships is exposed.
+# The default target is 2.11.19, the same line with later patches on top.
 #
 # NOTE: Rancher 2.11.4 and later are published as Prime releases -- the chart
 # lives at charts.rancher.com/server-charts/prime and the image at
@@ -17,23 +18,23 @@
 # credentials.
 #
 # Usage:
-#   PRIME_USER=... PRIME_PASSWORD=... ./rancher_upgrade_v2.11.16.sh
+#   PRIME_USER=... PRIME_PASSWORD=... ./rancher_upgrade_v2.11.19.sh
 #
 #   # community build (no subscription; 2.11.3 is the last one published there)
 #   VERSION=2.11.3 \
 #   CHART_REPO_URL=https://releases.rancher.com/server-charts/stable \
 #   IMAGE_REPO=docker.io/rancher/rancher \
-#     ./rancher_upgrade_v2.11.16.sh
+#     ./rancher_upgrade_v2.11.19.sh
 #
 #   # air-gapped: mirror the images into the on-cluster registry and deploy
 #   # from there.  Seeds rancher + rancher-agent only; the bundled system
 #   # charts (rancher-webhook, fleet, ...) still need core/rancher/images.txt
 #   # refreshed and baked -- see cubecos#1230.
-#   SEED_OFFLINE=1 ./rancher_upgrade_v2.11.16.sh
+#   SEED_OFFLINE=1 ./rancher_upgrade_v2.11.19.sh
 #
 set -euo pipefail
 
-VERSION=${VERSION:-${1:-2.11.16}}
+VERSION=${VERSION:-${1:-2.11.19}}
 CHART_REPO_URL=${CHART_REPO_URL:-https://charts.rancher.com/server-charts/prime}
 # Offline sites have no route to a chart repo, and CubeOS keeps the packaged
 # chart on disk anyway.  Point CHART_FILE at it (or at the one shipped in the

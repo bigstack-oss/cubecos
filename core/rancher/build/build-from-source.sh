@@ -34,7 +34,7 @@
 #                                                      offline registry mirror
 #   <outdir>/rancher-<version>.tgz                  -- the server chart
 #
-# Usage:  ./build-from-source.sh v2.11.16 [outdir]
+# Usage:  ./build-from-source.sh v2.11.19 [outdir]
 #
 set -euo pipefail
 
