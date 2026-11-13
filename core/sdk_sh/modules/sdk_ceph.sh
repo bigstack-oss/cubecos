@@ -2408,7 +2408,10 @@ ceph_mirror_image_enable()
                 Quiet -n $sshcmd root@$peer_vip "rbd remove $BUILTIN_BACKPOOL/${img_name}"
                 if rbd mirror image enable $BUILTIN_BACKPOOL/${img_name} $mode >/dev/null 2>&1 ; then
                     printf "%60s enabled in $mode mode\n" $BUILTIN_BACKPOOL/${img_name}
-                    Quiet -n $HEX_SDK os_volume_meta_sync $peer_vip NEEDNOPASS $img_id
+                    local sync_out
+                    if ! sync_out=$($HEX_SDK os_volume_meta_sync $peer_vip NEEDNOPASS $img_id 2>&1) ; then
+                        printf "%60s volume record not synced to the peer: %s\n" $BUILTIN_BACKPOOL/${img_name} "$sync_out"
+                    fi
                     if [ "$mode" = "snapshot" ] ; then
                         Quiet -n rbd mirror snapshot schedule remove --pool $BUILTIN_BACKPOOL --image $img_name
                         Quiet -n rbd mirror snapshot schedule add --pool $BUILTIN_BACKPOOL --image $img_name $interval

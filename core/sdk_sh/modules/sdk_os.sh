@@ -700,11 +700,23 @@ os_import_volume()
     local proj_id=$(os_get_project_id_by_name $2)
     local host=$3
     local type_id=$($OPENSTACK volume type show $4 | awk '/ id /{print $4}')
-    local service_uuid=$(/usr/bin/mariadb -u root -D cinder -e "select uuid from services where topic = 'cinder-volume'" -E | grep uuid | awk '{print $2}')
+    # the live service that owns $host: every external storage adds a row, and deleted ones stay
+    local service_uuid=$(/usr/bin/mariadb -u root -D cinder -N -B -e "select uuid from services where topic = 'cinder-volume' and host = '${host%%#*}' and deleted = 0")
     local vol_meta_file=$5
     local vol_sql_file=$(MakeTemp)
 
-    cat $vol_meta_file | sed -e "s/%user_id%/${user_id}/g" -e "s/%proj_id%/${proj_id}/g" -e "s/%host%/${host}/g" -e "s/%type_id%/${type_id}/g" -e "s/%service_uuid%/${service_uuid}/g" > $vol_sql_file
+    if [ -z "$user_id" -o -z "$proj_id" -o -z "$type_id" ] ; then
+        echo "os_import_volume: user $1, project $2 or volume type $4 not found" >&2
+        return 1
+    fi
+    if [ $(echo "$service_uuid" | grep -c .) -ne 1 ] ; then
+        echo "os_import_volume: expected one live cinder-volume service on ${host%%#*}, found $(echo "$service_uuid" | grep -c .)" >&2
+        return 1
+    fi
+    if ! sed -e "s/%user_id%/${user_id}/g" -e "s/%proj_id%/${proj_id}/g" -e "s/%host%/${host}/g" -e "s/%type_id%/${type_id}/g" -e "s/%service_uuid%/${service_uuid}/g" $vol_meta_file > $vol_sql_file || [ ! -s $vol_sql_file ] ; then
+        echo "os_import_volume: could not render $vol_meta_file" >&2
+        return 1
+    fi
     mariadb cinder < $vol_sql_file
 }
 
@@ -735,8 +747,9 @@ os_volume_meta_sync()
             echo "faided to copy volume metadata to $host. make sure password is correct"
             return 2
         fi
-        if ! sshpass -p "$pass" ssh root@$host $HEX_SDK os_import_volume $user $proj "cube@ceph#ceph" "CubeStorage" $vol_meta_file 2>/dev/null ; then
-            echo "faided to import volume meta on $host"
+        local out
+        if ! out=$(sshpass -p "$pass" ssh root@$host $HEX_SDK os_import_volume $user $proj "cube@ceph#ceph" "CubeStorage" $vol_meta_file 2>&1) ; then
+            echo "faided to import volume meta on $host: $out"
             return 3
         fi
         sshpass -p "$pass" ssh root@$host rm -f $vol_meta_file 2>/dev/null
