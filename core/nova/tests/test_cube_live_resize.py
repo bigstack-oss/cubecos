@@ -8,6 +8,7 @@
 #   /opt/openstack-epoxy/bin/python -m unittest discover -s . -p 'test_*.py' -v
 
 import unittest
+from unittest import mock
 
 from nova import cube_live_resize as clr
 
@@ -278,3 +279,65 @@ class TestLrValidateCeiling(unittest.TestCase):
         self._check(inst, old, FakeLrFlavor(2, 4, 4096))
         with self.assertRaises(self.error):
             self._check(inst, old, FakeLrFlavor(3, 5, 4096))
+
+
+class TestLrOnlineVcpus(unittest.TestCase):
+    """The agent onlines hot-added vCPUs only once it sees them (#2341)."""
+
+    def setUp(self):
+        super(TestLrOnlineVcpus, self).setUp()
+        from nova.virt.libvirt import driver
+
+        class LibvirtError(Exception):
+            pass
+
+        fake_libvirt = mock.Mock(libvirtError=LibvirtError,
+                                 VIR_DOMAIN_VCPU_GUEST=16)
+        self.error = LibvirtError
+        self.clock = [100.0]
+        fake_time = mock.Mock()
+        fake_time.monotonic.side_effect = lambda: self.clock[0]
+
+        def sleep(secs):
+            self.clock[0] += secs
+        fake_time.sleep.side_effect = sleep
+        self.time = fake_time
+        self.props = {'hw_qemu_guest_agent': True}
+        image_meta = mock.Mock(properties=self.props)
+        for name, new in (('libvirt', fake_libvirt), ('time', fake_time)):
+            p = mock.patch.object(driver, name, new)
+            p.start()
+            self.addCleanup(p.stop)
+        p = mock.patch.object(driver.objects.ImageMeta, 'from_instance',
+                              return_value=image_meta)
+        p.start()
+        self.addCleanup(p.stop)
+        p = mock.patch.object(driver, 'LOG')
+        self.log = p.start()
+        self.addCleanup(p.stop)
+        self.guest = mock.Mock()
+        self.online = driver.LibvirtDriver._lr_online_vcpus
+
+    def test_agent_late_to_see_the_vcpus_is_retried(self):
+        set_vcpus = self.guest._domain.setVcpusFlags
+        set_vcpus.side_effect = [self.error('less cpu than requested'),
+                                 self.error('less cpu than requested'), None]
+        self.online(None, self.guest, FakeInstance(), 2)
+        self.assertEqual(3, set_vcpus.call_count)
+        set_vcpus.assert_called_with(2, 16)
+        self.log.warning.assert_not_called()
+
+    def test_agent_that_never_onlines_warns_once_after_the_deadline(self):
+        set_vcpus = self.guest._domain.setVcpusFlags
+        set_vcpus.side_effect = self.error('less cpu than requested')
+        self.online(None, self.guest, FakeInstance(), 2)
+        self.assertGreater(set_vcpus.call_count, 1)
+        self.assertEqual(1, self.log.warning.call_count)
+        self.assertGreaterEqual(self.clock[0], 110.0)
+        self.assertLessEqual(self.clock[0], 110.5)
+
+    def test_image_without_the_agent_is_not_asked(self):
+        del self.props['hw_qemu_guest_agent']
+        self.online(None, self.guest, FakeInstance(), 2)
+        self.guest._domain.setVcpusFlags.assert_not_called()
+        self.time.sleep.assert_not_called()
