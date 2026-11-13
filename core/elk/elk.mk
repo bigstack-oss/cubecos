@@ -268,12 +268,14 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_PLUGIN_PACK)
 
 # Bundled plugins no pipeline in conf.d uses, removed because they carry vulnerable jars:
 # elastic_integration vendors jackson 2.18 and 3.1, azure_event_hubs jackson 2.21.6, and
-# output-webhdfs snappy-java 1.1.10.5. The removal is local -- logstash-plugin rewrites Gemfile and
-# Gemfile.lock and deletes the gems without resolving anything against rubygems.org -- so it costs
-# seconds and no network. A Logstash bump that stops bundling one fails here, which is the cue to
-# drop it from the list.
+# output-webhdfs snappy-java 1.1.10.5. codec-fluent and codec-msgpack go too: they are the only
+# gems that need the msgpack gem, 1.8.5, which has a known vulnerability, and logstash-plugin
+# deletes msgpack with them as an orphaned dependency. The removal is local -- logstash-plugin
+# rewrites Gemfile and Gemfile.lock and deletes the gems without resolving anything against
+# rubygems.org -- so it costs seconds and no network. A Logstash bump that stops bundling one
+# fails here, which is the cue to drop it from the list.
 LOGSTASH_UNUSED_PLUGINS := logstash-filter-elastic_integration logstash-input-azure_event_hubs \
-	logstash-output-webhdfs
+	logstash-output-webhdfs logstash-codec-fluent logstash-codec-msgpack
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin remove $(LOGSTASH_UNUSED_PLUGINS)
