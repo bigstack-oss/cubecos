@@ -30,13 +30,13 @@ ROOTFS_DNF += prometheus
 # node toolchain is needed. The script is run directly rather than through that make target, which
 # would inherit this build's command-line variables. The tree carries a go.work, which -mod=mod is
 # refused under. The build flags and version ldflags are the release's own.
-PROMETHEUS_VER := 3.15.0
+PROMETHEUS_VER := 3.15.1
 PROMETHEUS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
 	github.com/klauspost/compress@v1.20.3
 PROMETHEUS_GO_DIR := $(ARCS_DIR)/prometheus-go
 PROMETHEUS_SRC := $(PROMETHEUS_GO_DIR)/prometheus-$(PROMETHEUS_VER)-src
 PROMETHEUS_UI := prometheus-web-ui-$(PROMETHEUS_VER).tar.gz
-PROMETHEUS_UI_SHA256 := fa8c918ed05e3f89e232e9b69eccd6ed074602cd9e8a2cab7a92bec9651974ae
+PROMETHEUS_UI_SHA256 := adf30f35abf0d23ffd25616afe75d1966a7ceb18ddad4161fe8ad76e28f2b48f
 PROMETHEUS_VERSION_PKG := github.com/prometheus/common/version
 
 # $(GITHUB_DL_BASE), as for thanos: a GitHub release asset, mirrored for the build network.
