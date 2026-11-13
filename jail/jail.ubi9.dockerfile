@@ -123,14 +123,14 @@ RUN dnf install -y --nobest --allowerasing $HEX_BE $HEX_SDK $HEX_EXTRA $HEX_TEST
 ######## tier3
 FROM tier2_weak_dep_${WEAK_DEP} AS tier3
 # kernel packages
-# The Kmods SIG's 7.2 stable kernel (its kernel-latest line). 7.0 is the first with the aes256k
+# The Kmods SIG's 7.3 stable kernel (its kernel-latest line). 7.0 is the first with the aes256k
 # cipher in libceph, which the ceph kernel clients need once squid's CephX keys move to it; no
 # longterm release carries it yet. The packages come from CBS, the SIG's build system, which keeps
 # every build: the mirrors keep only each line's newest few, so a pinned version vanishes from
 # them within weeks (6.12.69 did). CBS keeps a build's rpms unsigned at the top of its directory
 # and the copies the SIG signed under data/signed/<key ID>; the signed ones are fetched and checked
 # against the Kmods SIG's key, here and again when core/heavyfs installs them into the image.
-ARG KER_VER="7.2.15"
+ARG KER_VER="7.3.4"
 ARG KER_REL="1.el9"
 ARG KER_ARC="x86_64"
 ARG KER_SIGNED="data/signed/7ae06d54"
