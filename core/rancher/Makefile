@@ -3,7 +3,7 @@
 include ../../build.mk
 include $(SRCDIR)/rancher.mk
 
-APP_VERSION := 2.11.16
+APP_VERSION := 2.11.19
 
 # Optional registry holding a prebuilt copy of this version's server and agent images and the
 # server chart, as "<host>/<repo>". EMPTY BY DEFAULT: unset, the images are built from upstream
@@ -17,7 +17,7 @@ APP_VERSION := 2.11.16
 # the jail container is recreated each time and podman's storage goes with it -- for a version
 # that only moves on a deliberate bump. See cubecos#1350.
 RANCHER_CACHE ?=
-CLI_VERSION := 2.11.16
+CLI_VERSION := 2.11.19
 
 CLI_REPO    := https://github.com/rancher/cli.git
 CLI_SRC_DIR := rancher-cli-source

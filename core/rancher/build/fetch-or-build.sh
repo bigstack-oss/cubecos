@@ -13,7 +13,7 @@
 # this repo, and nothing here fails if the cache is unreachable -- it falls back to the source
 # build, which is the behaviour it replaced.
 #
-#   RANCHER_CACHE=<host>/<repo> ./fetch-or-build.sh v2.11.16 [outdir]
+#   RANCHER_CACHE=<host>/<repo> ./fetch-or-build.sh v2.11.19 [outdir]
 #
 # Populate the cache with the cube_publish_artifacts job in triangle; see
 # triangle/artifact_keeper/README.md.
