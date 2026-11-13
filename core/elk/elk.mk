@@ -328,6 +328,38 @@ rootfs_install:: $(ELK_GUAVA_JARS)
 	$(Q)cp -f $(ELK_GUAVA_JARS) $(ROOTDIR)$(LOGSTASH_CORE_JARS)/
 	$(Q)chroot $(ROOTDIR) chown logstash:logstash $(LOGSTASH_CORE_JARS)/guava-33.7.2-jre.jar $(LOGSTASH_CORE_JARS)/failureaccess-1.0.3.jar
 
+# Logstash's Gemfile.lock pins rack 3.2.7, which logstash-core needs (~> 3) and the monitoring API
+# is served through; it has a known vulnerability fixed in 3.2.8, and 9.5.6, the newest release,
+# still pins 3.2.7. 3.2.8 is installed beside it from a .gem pinned by the digest rubygems.org
+# publishes, with the gem command of Logstash's own JRuby, local and without dependencies, so
+# nothing is resolved against rubygems.org. 3.2.7 is deleted, and so is the .gem the install leaves
+# in cache/, which the tarball ships empty; the lock names 3.2.8, which every gem that needs rack
+# accepts. This runs after the plugin installs and removals above, which rewrite the lock. Nothing
+# here is -f: a Logstash bump that no longer pins 3.2.7 fails here, which is the cue to drop it.
+LOGSTASH_BUNDLE := $(LOGSTASH_HOME)/vendor/bundle/jruby/3.4.0
+LOGSTASH_RACK_OLD := 3.2.7
+LOGSTASH_RACK_VER := 3.2.8
+LOGSTASH_RACK_GEM := rack-$(LOGSTASH_RACK_VER).gem
+LOGSTASH_RACK_SHA256 := 1fecc85e463ebc7a2a945fff829ffcd549babeb1556384796fad946c28dc4ec7
+
+$(ARCS_DIR)/$(LOGSTASH_RACK_GEM):
+	$(Q)wget $(LOGSTASH_GEM_DL_URL)/$(LOGSTASH_RACK_GEM) -O $@.part
+	$(Q)echo "$(LOGSTASH_RACK_SHA256)  $@.part" | sha256sum -c -
+	$(Q)mv $@.part $@
+
+rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_RACK_GEM)
+	$(Q)grep -q '^    rack ($(LOGSTASH_RACK_OLD))$$' $(ROOTDIR)$(LOGSTASH_HOME)/Gemfile.lock
+	$(Q)cp -f $< $(ROOTDIR)/tmp/$(LOGSTASH_RACK_GEM)
+	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/ruby -S gem install \
+		--local --ignore-dependencies --no-document --install-dir $(LOGSTASH_BUNDLE) /tmp/$(LOGSTASH_RACK_GEM)
+	$(Q)rm -f $(ROOTDIR)/tmp/$(LOGSTASH_RACK_GEM)
+	$(Q)rm -r $(ROOTDIR)$(LOGSTASH_BUNDLE)/gems/rack-$(LOGSTASH_RACK_OLD) \
+		$(ROOTDIR)$(LOGSTASH_BUNDLE)/specifications/rack-$(LOGSTASH_RACK_OLD).gemspec \
+		$(ROOTDIR)$(LOGSTASH_BUNDLE)/cache/$(LOGSTASH_RACK_GEM)
+	$(Q)sed -i 's/^    rack ($(LOGSTASH_RACK_OLD))$$/    rack ($(LOGSTASH_RACK_VER))/' $(ROOTDIR)$(LOGSTASH_HOME)/Gemfile.lock
+	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_BUNDLE)/gems/rack-$(LOGSTASH_RACK_VER) \
+		$(LOGSTASH_BUNDLE)/specifications/rack-$(LOGSTASH_RACK_VER).gemspec
+
 #
 # Beats (filebeat, auditbeat)
 #
