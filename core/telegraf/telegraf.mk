@@ -21,7 +21,7 @@ ROOTFS_DNF_DL_FROM += https://repos.influxdata.com/rhel/9/x86_64/stable/$(TELEGR
 # Return to the rpm's binary on the condition core/exporters/Makefile gives. Judge a bump, or
 # answer an audit, by the binary rather than by the version number: `go version -m` and
 # `govulncheck -mode binary` on the rpm payload's ./usr/bin/telegraf (`rpm2cpio <rpm> | cpio -idm`).
-TELEGRAF_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+TELEGRAF_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	github.com/go-jose/go-jose/v4@v4.1.6 github.com/klauspost/compress@v1.20.3 \
 	github.com/andybalholm/brotli@v1.2.7
 TELEGRAF_GO_DIR := $(ARCS_DIR)/telegraf-go

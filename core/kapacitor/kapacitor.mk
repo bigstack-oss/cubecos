@@ -31,7 +31,7 @@ LOCKED_DNF += kapacitor-$(KAPACITOR_VER)
 #   links does not compile against the newer common those require.
 # The release links statically against musl, this build dynamically against the image's glibc.
 KAPACITOR_SRC_VER := $(firstword $(subst -, ,$(KAPACITOR_VER)))
-KAPACITOR_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+KAPACITOR_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	google.golang.org/grpc@v1.84.0 github.com/moby/moby/api@v1.56.1 \
 	github.com/influxdata/flux@v0.200.0 github.com/jackc/pgx/v5@v5.11.0 \
 	github.com/klauspost/compress@v1.20.3 github.com/go-jose/go-jose/v4@v4.1.6

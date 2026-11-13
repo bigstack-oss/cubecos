@@ -31,7 +31,7 @@ ROOTFS_DNF += prometheus
 # would inherit this build's command-line variables. The tree carries a go.work, which -mod=mod is
 # refused under. The build flags and version ldflags are the release's own.
 PROMETHEUS_VER := 3.15.1
-PROMETHEUS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+PROMETHEUS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	github.com/klauspost/compress@v1.20.3
 PROMETHEUS_GO_DIR := $(ARCS_DIR)/prometheus-go
 PROMETHEUS_SRC := $(PROMETHEUS_GO_DIR)/prometheus-$(PROMETHEUS_VER)-src
