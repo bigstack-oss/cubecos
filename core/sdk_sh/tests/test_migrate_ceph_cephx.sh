@@ -116,7 +116,8 @@ reset; RR_OK=none
 run; chk "4 no control: retry" "$RC" 1
 chk "4 aes still allowed (csi)"        "$ALLOWED" aes,aes256k
 
-# 5. migrate_ceph_cephx_csi_secrets patches only the keys that differ
+# 5. migrate_ceph_cephx_csi_secrets patches only the rbd keys that differ; the cephfs
+#    secret is left to its chart
 b64(){ printf %s "$1" | base64; }
 KUBECTL=kubectl_stub
 kubectl_stub(){ echo "kubectl $*" >> $CALLS
@@ -132,7 +133,11 @@ reset; kr admin AQnew-admin== $ADMIN_KEYRING; rm -f $T/patch.*
 RBD_KEY=AQnew-admin== FS_KEY=AQold-admin==
 chk "5 csi update passes"              "$(migrate_ceph_cephx_csi_secrets && echo 0 || echo 1)" 0
 chk "5 current secret left alone"      "$(ls $T/patch.ceph-csi-rbd 2>/dev/null)" ""
-chk "5 stale secret patched"           "$(jq -c . $T/patch.ceph-csi-cephfs)" '{"stringData":{"userKey":"AQnew-admin==","adminKey":"AQnew-admin=="}}'
+chk "5 cephfs secret left alone"       "$(ls $T/patch.ceph-csi-cephfs 2>/dev/null)" ""
+reset; kr admin AQnew-admin== $ADMIN_KEYRING; rm -f $T/patch.*
+RBD_KEY=AQold-admin==
+chk "5 stale rbd update passes"        "$(migrate_ceph_cephx_csi_secrets && echo 0 || echo 1)" 0
+chk "5 stale rbd secret patched"       "$(jq -c . $T/patch.ceph-csi-rbd)" '{"stringData":{"userKey":"AQnew-admin=="}}'
 
 echo "PASS=$pass FAIL=$fail"
 [ $fail -eq 0 ]
