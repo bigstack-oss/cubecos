@@ -377,7 +377,7 @@ ROOTFS_DNF_DL_FROM += https://artifacts.elastic.co/downloads/beats/auditbeat/aud
 # filebeat's filestream input with the kafka output and auditbeat's file_integrity module, all
 # OSS, so none of the Elastic-licensed code is needed. The rpms stay for everything else and name
 # the version in the SBOM. Return to their binaries on the condition core/exporters/Makefile gives.
-BEATS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+BEATS_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	github.com/klauspost/compress@v1.20.3
 BEATS_GO_DIR := $(ARCS_DIR)/beats-go
 BEATS_SRC := $(BEATS_GO_DIR)/beats-$(BEATS_VER)-src

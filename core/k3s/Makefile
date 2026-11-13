@@ -60,7 +60,7 @@ $(BIN):
 # the server links: it sits in the data archive the k3s binary embeds, which the SBOM's scan does
 # not open, so no report shows it. cache-key.sh hashes these lines, so a change here builds a new
 # binary instead of restoring the old one from the cache.
-K3S_GO_REPLACE := golang.org/x/net=golang.org/x/net@v0.61.0 golang.org/x/crypto=golang.org/x/crypto@v0.58.0 golang.org/x/sys=golang.org/x/sys@v0.49.0
+K3S_GO_REPLACE := golang.org/x/net=golang.org/x/net@v0.62.0 golang.org/x/crypto=golang.org/x/crypto@v0.58.0 golang.org/x/sys=golang.org/x/sys@v0.49.0
 K3S_GO_GET := golang.org/x/text@v0.43.0 github.com/klauspost/compress@v1.20.3 github.com/go-jose/go-jose/v4@v4.1.6
 
 # k3s refuses to start unless runtime.Version() equals the UpstreamGolang it was linked with,

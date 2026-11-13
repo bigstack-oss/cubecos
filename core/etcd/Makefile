@@ -13,7 +13,7 @@ VERSION := v3.5.34
 # modules of their own, each raised before it is built. The tag is cloned shallow, and the modules
 # come from proxy.golang.org, checked against sum.golang.org. The clone is not named etcd*:
 # etcd.mk installs every etcd* in this directory.
-ETCD_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+ETCD_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	google.golang.org/grpc@v1.84.0
 ETCD_SRC := src-$(VERSION)
 
