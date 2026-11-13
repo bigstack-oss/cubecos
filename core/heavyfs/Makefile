@@ -49,6 +49,10 @@ BLKLST_DNF += ansible ansible-core # CVE-2025-58367 Remove DNF managed package
 # after installdnf drops its rpm, so both stay in until cube-post erases the
 # blocklist (removed_rpms.txt); nothing requires either once they are gone.
 BLKLST_DNF += libproxy-webkitgtk4 webkit2gtk3-jsc
+# mod_http2 comes in only as httpd's weak dependency, and nothing here speaks HTTP/2 through httpd:
+# no configuration in the image sets Protocols h2, so the module it loads serves nothing. It has a
+# known vulnerability, so it goes the same way, and cube-post erases it if dnf pulls it back.
+BLKLST_DNF += mod_http2
 
 ALL = $(HEAVYFS)
 
