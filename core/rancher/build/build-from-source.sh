@@ -60,6 +60,16 @@ else
 fi
 cd "$WORKDIR/rancher"
 
+# The server and agent are compiled from this checkout, so raising modules here
+# is what clears scanner findings on /usr/bin/agent: v2.11.19 pins go-jose
+# v4.1.4, x/net v0.61.0 and klauspost/compress v1.18.7.  go.mod's replace lines
+# for containerd and docker are left alone.  Recheck on every bump: go get
+# downgrades a module the new tag already pins higher.
+GO_RAISE="github.com/go-jose/go-jose/v4@v4.1.6 golang.org/x/net@v0.62.0 github.com/klauspost/compress@v1.20.3"
+step "Raise Go modules: $GO_RAISE"
+go get $GO_RAISE
+go mod tidy
+
 # Every value below is read out of the checkout, the same way upstream's
 # dev-scripts/quick does it -- do not hardcode them, they move per tag.
 step "Derive build args from the checkout"
