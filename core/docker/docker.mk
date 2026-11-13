@@ -19,13 +19,14 @@ GPGKEY_DNF += $(COREDIR)/docker/RPM-GPG-KEY-docker 060A61C51B558A7F742B77AAC52FE
 # their units, config and dependencies, and name the version in the SBOM. Return a binary to its
 # vendor's on the condition core/exporters/Makefile gives. The packages float, so rootfs_install
 # stops the build when one has moved past the version rebuilt here, rather than put an older binary
-# under a newer package: bump the version below to the package's.
-DOCKER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+# under a newer package: bump the version below to the package's. x/net is 0.62.0 here, above the
+# 0.61.0 the other rebuilds take: buildx 0.39.0 requires it, and go get would lower it otherwise.
+DOCKER_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	github.com/go-jose/go-jose/v4@v4.1.6 github.com/klauspost/compress@v1.20.3
 CONTAINERD_VER := 2.4.2
 RUNC_VER := 1.5.2
 COMPOSE_VER := 5.7.1
-BUILDX_VER := 0.38.1
+BUILDX_VER := 0.39.0
 SKOPEO_VER := 1.22.2
 DOCKER_GO_DIR := $(ARCS_DIR)/docker-go
 DOCKER_GO_BIN := $(DOCKER_GO_DIR)/bin
@@ -81,7 +82,7 @@ $(DOCKER_GO_BIN)/docker-compose: $(DOCKER_GO_DIR)/compose-src $(COREDIR)/docker/
 		-o $@ ./cmd,"  BUILD   docker-compose")
 
 # docker-buildx, from docker-buildx-plugin, with the release's flags and version ldflags (its
-# Dockerfile). The tree is vendored, and already takes grpc 1.84.0; go-archive is raised to its fixed
+# Dockerfile). The tree is vendored, and already takes grpc 1.85.0; go-archive is raised to its fixed
 # release as well. The one package buildx links from the github.com/docker/docker module,
 # pkg/namesgenerator (store's random builder names), is carried into buildx's own tree, so the
 # binary no longer links that module, whose matches have no fixed release (its fixes are only in
