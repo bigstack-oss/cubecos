@@ -850,7 +850,7 @@ migrate_ceph_mgr_influx()
 # keys. CubeCOS runs with cephx off (auth * required = none in ceph.conf), so there are no
 # daemon keys to rotate on each host; what is left is the mons' cipher settings and the
 # two client keys with their copies: the admin and k8s keyrings and the cephfs mount
-# secret on every node, libvirt's secret for the admin key, and the ceph-csi secrets.
+# secret on every node, libvirt's secret for the admin key, and the ceph-rbd csi secret.
 #
 # Upstream's precondition is every service daemon on a release that knows aes256k, so
 # this waits for the end of a rolling upgrade: the release pinned by
@@ -915,7 +915,7 @@ _migrate_cephx_field()
 
 # Bring every copy of the two client keys in line with the mons: the keyrings and the
 # cephfs mount secret, pushed to all nodes; libvirt's secret on each node that has one;
-# the ceph-csi secrets, from a control node's k3s. Each step compares first, so a pass
+# the ceph-rbd csi secret, from a control node's k3s. Each step compares first, so a pass
 # after a partial failure redoes only what is still stale.
 _migrate_cephx_copies()
 {
@@ -963,14 +963,15 @@ _migrate_cephx_replace()
     mv -f $1 $2
 }
 
-# On a control node: set the ceph-csi secrets' keys to client.admin's, which is the user
-# both charts are given (cubectl GetAdminSecret). The charts take the key from the admin
-# keyring each time they are applied, so this only catches up the secrets already there.
+# On a control node: set the ceph-rbd csi secret's keys to client.admin's, which is the
+# user the chart is given (cubectl GetAdminSecret). The chart takes the key from the admin
+# keyring each time it is applied, so this only catches up the secret already there.
+# The cephfs chart gets its key from cubectl GenCsiFsSecretString, which says why.
 migrate_ceph_cephx_csi_secrets()
 {
     local k=$(ceph-authtool -p $ADMIN_KEYRING 2>/dev/null) ns_name ns name patch
     [ -n "$k" ] || return 1
-    for ns_name in ceph-csi-rbd/csi-rbd-secret ceph-csi-cephfs/csi-cephfs-secret ; do
+    for ns_name in ceph-csi-rbd/csi-rbd-secret ; do
         ns=${ns_name%/*} ; name=${ns_name#*/}
         $KUBECTL -n $ns get secret $name >/dev/null 2>&1 || continue
         patch=$($KUBECTL -n $ns get secret $name -o json | jq -c --arg k "$k" \

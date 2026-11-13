@@ -110,9 +110,9 @@ func customizeCsiFsValues() (*values.Options, error) {
 		return nil, errors.Wrapf(err, "Failed to generate csi rbd config")
 	}
 
-	secret, err := GenAdminSecretString()
+	secret, err := GenCsiFsSecretString()
 	if err != nil {
-		return nil, errors.Wrapf(err, "Failed to generate admin secret")
+		return nil, errors.Wrapf(err, "Failed to generate cephfs secret")
 	}
 
 	return &values.Options{

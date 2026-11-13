@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"cubectl/util/kube"
 	"cubectl/util/settings"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -189,6 +191,63 @@ func GenCsiConfigString(csiType string) (string, error) {
 	b, err := json.Marshal(csiConfig)
 	if err != nil {
 		return "", errors.Wrapf(err, "Failed to marshal csi config")
+	}
+
+	return string(b), nil
+}
+
+// aes128MountKey re-encodes a CephX key as an AES-128 one: type 1, the same
+// created stamp, the first 16 bytes of its secret. An AES-128 key comes back as is.
+//
+// cephcsi v3.13.1 ships mount.ceph from Ceph 19.2.1, whose secret buffer only
+// fits an AES-128 key (MAX_RAW_SECRET_LEN, raised in 19.2.6), so every cephfs
+// mount with an aes256k key fails with "secret is not valid base64". CubeCOS
+// runs with auth none, so the kernel is handed the key but never checks it.
+// Drop this once the bundled cephcsi carries Ceph 19.2.6 or later.
+func aes128MountKey(key string) (string, error) {
+	const header = 2 + 8 + 2 // type, created, secret length
+	const aes128 = 1
+	raw, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return "", errors.Wrapf(err, "Failed to decode the ceph key")
+	}
+	if len(raw) < header {
+		return "", fmt.Errorf("ceph key is %d bytes, too short", len(raw))
+	}
+	secretLen := int(binary.LittleEndian.Uint16(raw[10:12]))
+	if len(raw) != header+secretLen || secretLen < 16 {
+		return "", fmt.Errorf("ceph key holds a %d-byte secret in %d bytes", secretLen, len(raw))
+	}
+	if binary.LittleEndian.Uint16(raw[0:2]) == aes128 && secretLen == 16 {
+		return key, nil
+	}
+
+	out := make([]byte, header+16)
+	binary.LittleEndian.PutUint16(out[0:2], aes128)
+	copy(out[2:10], raw[2:10])
+	binary.LittleEndian.PutUint16(out[10:12], 16)
+	copy(out[header:], raw[header:header+16])
+	return base64.StdEncoding.EncodeToString(out), nil
+}
+
+// GenCsiFsSecretString is the admin secret for the cephfs chart, with the key in
+// the form its mount.ceph can read (see aes128MountKey).
+func GenCsiFsSecretString() (string, error) {
+	secret, err := GetAdminSecret()
+	if err != nil {
+		return "", errors.Wrapf(err, "Failed to generate admin secret")
+	}
+
+	key, err := aes128MountKey(secret.AdminKey)
+	if err != nil {
+		return "", errors.Wrapf(err, "Failed to convert the admin key for cephfs mounts")
+	}
+	secret.UserKey = key
+	secret.AdminKey = key
+
+	b, err := json.Marshal(secret)
+	if err != nil {
+		return "", errors.Wrapf(err, "Failed to marshal cephfs secret")
 	}
 
 	return string(b), nil
