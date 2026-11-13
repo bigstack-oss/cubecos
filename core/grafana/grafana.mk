@@ -6,8 +6,10 @@
 # klauspost/compress past their fixes (4.1.6 and 1.20.3); 12.4.14 and 13.2.5, the newest patches of
 # the 12.4 and 13.2 lines, still link go-jose 4.1.4. An ordinary minor is supported for 9 months
 # and the final minor of a major for 15, so 13.3, released 2026-10-27, is supported to about
-# 2027-07-27, past 12.4's 2027-05-24.
-ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-13.3.0-1.x86_64.rpm
+# 2027-07-27, past 12.4's 2027-05-24. 13.3.1 is the newest patch: the prometheus plugin it bundles,
+# 13.2.5, links andybalholm/brotli 1.2.7, past its fix, where 13.3.0's 13.2.4 linked 1.2.6, and its
+# grafana-server links golang.org/x/net 0.62.0.
+ROOTFS_DNF_DL_FROM += https://dl.grafana.com/enterprise/release/grafana-enterprise-13.3.1-1.x86_64.rpm
 # Grafana Labs' rpm signing key, which expires 2027-08-22; a release signed with its successor
 # fails installdnf's check, naming the new key ID
 GPGKEY_DNF += $(COREDIR)/grafana/RPM-GPG-KEY-grafana B53AE77BADB630A683046005963FA27710458545
@@ -19,8 +21,9 @@ GPGKEY_DNF += $(COREDIR)/grafana/RPM-GPG-KEY-grafana B53AE77BADB630A683046005963
 # stay, influxdb and prometheus: with the login form and basic auth off, no one can add another,
 # and most of the others link a Go or golang.org/x/net older than its fixes. canvas, a panel with no
 # binary, stays too, since grafana logs an error at every start without it. The influxdb 13.3.0
-# bundles, 13.1.7, is built with go1.26.7 and x/net 0.58.0 as well; 13.1.10, the newest release,
-# replaces it, pinned by the sha256 grafana.com publishes for it. config_grafana keeps grafana from
+# bundled, 13.1.7, is built with go1.26.7 and x/net 0.58.0 as well; 13.1.10, the newest release,
+# replaces it, pinned by the sha256 grafana.com publishes for it. 13.3.1 bundles 13.1.10 itself,
+# file for file the same, so for now the swap changes nothing. config_grafana keeps grafana from
 # fetching newer releases itself.
 GRAFANA_PLUGINS := /var/lib/grafana/plugins-bundled
 GRAFANA_UNUSED_PLUGINS := cloudwatch elasticsearch grafana-postgresql-datasource \
