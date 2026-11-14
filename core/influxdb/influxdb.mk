@@ -30,7 +30,7 @@ GPGKEY_DNF += $(COREDIR)/influxdb/RPM-GPG-KEY-influxdata 24C975CBA61A024EE1B6317
 # are the release's own; the release links statically against musl, this build dynamically
 # against the image's glibc.
 INFLUXDB_VER := 1.13.2
-INFLUXDB_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.61.0 golang.org/x/text@v0.43.0 \
+INFLUXDB_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 \
 	google.golang.org/grpc@v1.84.0 go.opentelemetry.io/otel@v1.47.0 go.opentelemetry.io/otel/sdk@v1.47.0 \
 	github.com/go-jose/go-jose/v4@v4.1.6 github.com/prometheus/prometheus@v0.311.3 \
 	github.com/klauspost/compress@v1.20.3
