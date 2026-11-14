@@ -9,14 +9,31 @@ fi
 pacemaker_remote_add()
 {
     local node=$1
+    local ctrl=0 i out=
 
     if hex_sdk remote_run $node hex_sdk is_control_node ; then
+        ctrl=1
         Quiet -n remote_run $node "timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd"
         Quiet -n remote_run $node "timeout $SRVTO systemctl stop corosync || killall -9 corosync"
     fi
     Quiet -n remote_run $node "systemctl start pcsd"
     Quiet -n timeout $SRVSTO /usr/sbin/pcs host auth $node -u hacluster -p Cube0s!
-    Quiet -n timeout $SRVSTO /usr/sbin/pcs cluster node add-remote $node
+    if [ $ctrl -eq 1 ] ; then
+        Quiet -n timeout $SRVSTO /usr/sbin/pcs cluster node add-remote $node
+    else
+        for i in 1 2 3 ; do
+            pacemaker_remote_exists $node && break
+            # pcs refuses a node whose pacemaker_remote is already running
+            Quiet -n remote_run $node "systemctl stop pacemaker_remote"
+            out=$(timeout $SRVSTO /usr/sbin/pcs cluster node add-remote $node 2>&1) && break
+            sleep 10
+        done
+        if ! pacemaker_remote_exists $node ; then
+            log_error "pacemaker_remote_add: $node not added after $i tries: $(echo $out)"
+            echo "Error: pacemaker_remote_add: $node not added: $(echo $out)" >&2
+            return 1
+        fi
+    fi
     Quiet -n remote_run $node "systemctl enable --now pacemaker_remote"
     Quiet -n pcs resource cleanup $node
     if hex_sdk remote_run $node hex_sdk is_control_node ; then
@@ -38,6 +55,18 @@ pacemaker_remote_add()
             sleep 15
         done
     fi
+}
+
+# 0 if the node has a remote resource in the CIB
+pacemaker_remote_exists()
+{
+    timeout $SRVSTO /usr/sbin/pcs resource config $1 >/dev/null 2>&1
+}
+
+# 0 if the node is listed as RemoteOnline
+pacemaker_remote_online()
+{
+    timeout $SRVSTO /usr/sbin/pcs status 2>/dev/null | grep "RemoteOnline" | grep -q " $1 "
 }
 
 pacemaker_remote_remove()
