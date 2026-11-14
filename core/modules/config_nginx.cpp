@@ -10,6 +10,8 @@
 #include <hex/logrotate.h>
 #include <hex/process.h>
 
+#include <cluster.hpp>
+
 static const char NGINX_NAME[] = "nginx";
 static const char NGINX_CONF_IN[] = "/etc/nginx/nginx.conf.in";
 static const char NGINX_CONF[] = "/etc/nginx/nginx.conf";
@@ -28,6 +30,7 @@ PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(FQDN);
 
 // rotate daily and enable copytruncate
 static LogRotateConf log_conf("cube-cos-ui", "/var/log/cube-cos-ui/*.log", DAILY, 128, 0, true);
@@ -47,9 +50,10 @@ NotifyCube(bool modified)
 }
 
 static bool
-WriteNginxConf(const char* myip, const char* sharedId)
+WriteNginxConf(const char* myip, const char* sharedId, const std::string& fqdn)
 {
-    if (HexSystemF(0, "sed -e \"s/@MGMT_ADDR@/%s/\" -e \"s/@SHARED_ID@/%s/\" %s > %s", myip, sharedId, NGINX_CONF_IN, NGINX_CONF) != 0) {
+    if (HexSystemF(0, "sed -e \"s/@MGMT_ADDR@/%s/\" -e \"s/@SHARED_ID@/%s/\" -e \"s#@SSL_CERT@#%s#\" -e \"s#@SSL_KEY@#%s#\" %s > %s",
+                   myip, sharedId, PublicCertFile(fqdn).c_str(), PublicKeyFile(fqdn).c_str(), NGINX_CONF_IN, NGINX_CONF) != 0) {
         HexLogError("failed to update %s", NGINX_CONF);
         return false;
     }
@@ -65,7 +69,7 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    s_bConfigChanged = modified | s_bCubeModified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
+    s_bConfigChanged = modified | s_bCubeModified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID) | G_MOD(FQDN);
 
     return s_bConfigChanged;
 }
@@ -85,7 +89,7 @@ Commit(bool modified, int dryLevel)
     std::string sharedId = G(SHARED_ID);
 
     if (s_bConfigChanged) {
-        WriteNginxConf(myip.c_str(), sharedId.c_str());
+        WriteNginxConf(myip.c_str(), sharedId.c_str(), G(FQDN));
     }
 
     if (enabled) {

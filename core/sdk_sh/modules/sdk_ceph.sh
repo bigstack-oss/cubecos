@@ -3663,15 +3663,19 @@ ceph_basic_config_gen()
     echo "        auth client required = none" >> $conf
 }
 
+# ceph_dashboard_init <public host>
 ceph_dashboard_init()
 {
     local shareId=$1
     local name=dashboard
+    # browsers reach the dashboard directly on :7443, so it serves what the other
+    # browser-facing listeners do
+    local certs=$(public_cert_dir)
 
     Quiet $CEPH -s || return 0
 
-    Quiet -n $CEPH dashboard set-ssl-certificate -i /var/www/certs/server.cert
-    Quiet -n $CEPH dashboard set-ssl-certificate-key -i /var/www/certs/server.key
+    Quiet -n $CEPH dashboard set-ssl-certificate -i $certs/server.cert
+    Quiet -n $CEPH dashboard set-ssl-certificate-key -i $certs/server.key
     Quiet -n $CEPH dashboard set-iscsi-api-ssl-verification false
     Quiet -n $CEPH dashboard set-rgw-api-ssl-verify false
     Quiet -n $CEPH dashboard set-grafana-api-ssl-verify false
@@ -3711,6 +3715,7 @@ ceph_dashboard_iscsi_gw_rm()
     fi
 }
 
+# ceph_dashboard_idp_config <public host> <port> [tries]
 ceph_dashboard_idp_config()
 {
     local shared_id=$1

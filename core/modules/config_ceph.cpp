@@ -122,6 +122,7 @@ CONFIG_GLOBAL_BOOL_REF(IS_MASTER);
 CONFIG_GLOBAL_STR_REF(CTRL);
 CONFIG_GLOBAL_STR_REF(CTRL_IP);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(PUBLIC_HOST);
 CONFIG_GLOBAL_STR_REF(STORAGE_F_ADDR);
 CONFIG_GLOBAL_STR_REF(STORAGE_F_CIDR);
 CONFIG_GLOBAL_STR_REF(STORAGE_B_CIDR);
@@ -2124,14 +2125,15 @@ CommitIdp(bool modified, int dryLevel)
     if (!IsControl(s_eCubeRole))
         return true;
 
-    std::string sharedId = G(SHARED_ID);
+    // the dashboard's SAML SP lives on the host browsers reach it on
+    std::string publicHost = G(PUBLIC_HOST);
     std::string port = DASHBOARD_PORT;
     struct stat ms;
 
     if (stat(MAKRER_DASHBOARD_IDP, &ms) == 0)
         return true;
 
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_dashboard_idp_config %s %s", sharedId.c_str(), port.c_str());
+    HexUtilSystemF(0, 0, HEX_SDK " ceph_dashboard_idp_config %s %s", publicHost.c_str(), port.c_str());
     HexSystemF(0, "touch " MAKRER_DASHBOARD_IDP);
 
     return true;
@@ -2410,7 +2412,9 @@ ClusterStartMain(int argc, char** argv)
 
     std::string myIp = G(MGMT_ADDR);
     std::string gwApiPass = GetSaltKey(s_saltkey, s_gwApiPass.newValue(), s_seed.newValue());
-    std::string sharedId = G(SHARED_ID);
+    // the dashboard's certificate, grafana URL and SAML SP all follow cubesys.fqdn; a cluster
+    // start must not put them back on the shared id
+    std::string publicHost = G(PUBLIC_HOST);
     std::string port = DASHBOARD_PORT;
 
     SyncConfigMain(1, NULL);
@@ -2423,8 +2427,8 @@ ClusterStartMain(int argc, char** argv)
 
     HexUtilSystemF(0, 0, HEX_SDK " migrate_ceph");
     if (IsControl(s_eCubeRole)) {
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_dashboard_init %s", sharedId.c_str());
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_dashboard_idp_config %s %s", sharedId.c_str(), port.c_str());
+        HexUtilSystemF(0, 0, HEX_SDK " ceph_dashboard_init %s", publicHost.c_str());
+        HexUtilSystemF(0, 0, HEX_SDK " ceph_dashboard_idp_config %s %s", publicHost.c_str(), port.c_str());
         HexUtilSystemF(0, 0, "timeout 10 ceph fs set cephfs max_file_size 4398046511104"); // cephfs file size limit to 4TiB, supporting large image import
     }
     /*

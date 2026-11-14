@@ -603,10 +603,12 @@ func commitRancher() error {
 			return errors.WithStack(err)
 		}
 
+		// privateCA: rancher hands this to its agents to verify the ingress certificate,
+		// the operator's CA once cubesys.fqdn is set
 		if _, outErr, err := util.ExecCmd(k3sBinPath, "kubectl",
 			"create", "secret", "generic", "tls-ca",
 			"-n", rancherNamespace,
-			"--from-file=cacerts.pem="+certFile,
+			"--from-file=cacerts.pem="+browserCa(),
 		); err != nil {
 			zap.S().Warn(errors.Wrap(err, outErr))
 		} else {
@@ -640,8 +642,9 @@ func commitRancher() error {
 			zap.S().Warn(errors.WithStack(err))
 		}
 
-		// Create token and eanble keycloak auth
-		if err := terraformExec("apply", "rancher", []string{"cube_controller=" + cubeSettings.GetControllerIp()}, []string{}); err != nil {
+		// Create token and eanble keycloak auth. Its SAML SP and its keycloak client are
+		// registered on the public host, which browsers reach rancher on.
+		if err := terraformExec("apply", "rancher", []string{"cube_controller=" + cubeSettings.GetPublicHost()}, []string{}); err != nil {
 			zap.S().Warn(errors.WithStack(err))
 		}
 
@@ -649,7 +652,7 @@ func commitRancher() error {
 		if err := terraformExec(
 			"apply",
 			"keycloak_rancher",
-			[]string{"cube_controller=" + cubeSettings.GetControllerIp()},
+			[]string{"cube_controller=" + cubeSettings.GetPublicHost()},
 			[]string{terraformVarFileKeycloakAdminPassword}); err != nil {
 			zap.S().Warn(errors.WithStack(err))
 		}
@@ -695,12 +698,12 @@ func resetRancher() error {
 	if err := terraformExec(
 		"destroy",
 		"keycloak_rancher",
-		[]string{"cube_controller=" + cubeSettings.GetControllerIp()},
+		[]string{"cube_controller=" + cubeSettings.GetPublicHost()},
 		[]string{terraformVarFileKeycloakAdminPassword}); err != nil {
 		zap.S().Warn(errors.WithStack(err))
 	}
 
-	if err := terraformExec("destroy", "rancher", []string{"cube_controller=" + cubeSettings.GetControllerIp()}, []string{}); err != nil {
+	if err := terraformExec("destroy", "rancher", []string{"cube_controller=" + cubeSettings.GetPublicHost()}, []string{}); err != nil {
 		zap.S().Warn(errors.WithStack(err))
 	}
 
