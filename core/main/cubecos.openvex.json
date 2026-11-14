@@ -2,8 +2,8 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/bigstack-oss/cubecos/blob/develop/core/main/cubecos.openvex.json",
   "author": "Bigstack",
-  "timestamp": "2026-11-03T10:05:44Z",
-  "version": 12,
+  "timestamp": "2026-11-14T02:59:41Z",
+  "version": 13,
   "statements": [
     {
       "vulnerability": {
@@ -3341,6 +3341,437 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6600544201."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-107364"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112315"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112316"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112317"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112318"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112319"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112320"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112321"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112322"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-112323"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-118380"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119079"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-71199"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-71200"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/krb5-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985365."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-88815"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/perl-DBI"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870985908."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-108472"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/xfsprogs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870986329."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-121994"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/gdb"
+        },
+        {
+          "@id": "pkg:rpm/centos/gdb-gdbserver"
+        },
+        {
+          "@id": "pkg:rpm/centos/gdb-headless"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870986903."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-121995"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/gdb"
+        },
+        {
+          "@id": "pkg:rpm/centos/gdb-gdbserver"
+        },
+        {
+          "@id": "pkg:rpm/centos/gdb-headless"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870986903."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-121996"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/gdb"
+        },
+        {
+          "@id": "pkg:rpm/centos/gdb-gdbserver"
+        },
+        {
+          "@id": "pkg:rpm/centos/gdb-headless"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870986903."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-121997"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/gdb"
+        },
+        {
+          "@id": "pkg:rpm/centos/gdb-gdbserver"
+        },
+        {
+          "@id": "pkg:rpm/centos/gdb-headless"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870986903."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-105437"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/git"
+        },
+        {
+          "@id": "pkg:rpm/centos/git-core"
+        },
+        {
+          "@id": "pkg:rpm/centos/git-core-doc"
+        },
+        {
+          "@id": "pkg:rpm/centos/perl-Git"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870987491."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-111760"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/git"
+        },
+        {
+          "@id": "pkg:rpm/centos/git-core"
+        },
+        {
+          "@id": "pkg:rpm/centos/git-core-doc"
+        },
+        {
+          "@id": "pkg:rpm/centos/perl-Git"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870987491."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-106583"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/openssh"
+        },
+        {
+          "@id": "pkg:rpm/centos/openssh-clients"
+        },
+        {
+          "@id": "pkg:rpm/centos/openssh-server"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870988003."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-93404"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/rsyslog"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870988477."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119374"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/sqlite"
+        },
+        {
+          "@id": "pkg:rpm/centos/sqlite-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870989008."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-119379"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/sqlite"
+        },
+        {
+          "@id": "pkg:rpm/centos/sqlite-libs"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870989008."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-103653"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/qt5-srpm-macros"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870989485."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-44236"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/librabbitmq"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870989985."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-103262"
+      },
+      "products": [
+        {
+          "@id": "pkg:rpm/centos/python3-tornado"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Assessed in https://github.com/bigstack-oss/cubecos-private/issues/227#issuecomment-6870990387."
     }
   ]
 }
