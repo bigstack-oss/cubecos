@@ -1,0 +1,50 @@
+--- virt/libvirt/migration.py
++++ virt/libvirt/migration.py
+@@ -17,6 +17,7 @@
+ 
+ """
+ from collections import deque
++import copy
+ 
+ from lxml import etree
+ from oslo_log import log as logging
+@@ -490,6 +491,22 @@
+     return xml_doc
+ 
+ 
++def _keep_vif_queues(interface_dev, src_driver):
++    # cube: keep the source's <driver> queues, not the (live-resized) flavor's
++    driver = interface_dev.find('driver')
++    if src_driver is None:
++        if driver is not None:
++            interface_dev.remove(driver)
++        return
++    src_queues = src_driver.get('queues')
++    if driver is None:
++        interface_dev.append(copy.deepcopy(src_driver))
++    elif src_queues is not None:
++        driver.set('queues', src_queues)
++    else:
++        driver.attrib.pop('queues', None)
++
++
+ def _update_vif_xml(xml_doc, migrate_data, get_vif_config):
+     # Loop over each interface element in the original xml and find the
+     # corresponding vif based on mac and then overwrite the xml with the new
+@@ -538,6 +555,8 @@
+         # can't change during live migration.
+         address = interface_dev.find('address')
+         mtu = interface_dev.find('mtu')
++        # cube: vhost queues can't change either (#2357).
++        src_driver = interface_dev.find('driver')
+         # Now clear the interface's current elements and insert everything
+         # from the destination vif config xml.
+         interface_dev.clear()
+@@ -553,6 +572,7 @@
+             interface_dev.insert(index, dest_interface_subelem)
+         # And finally re-insert the hw address.
+         interface_dev.insert(index + 1, address)
++        _keep_vif_queues(interface_dev, src_driver)
+ 
+     return xml_doc
+ 
