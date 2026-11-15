@@ -31,4 +31,4 @@ LACHESIS_RPM_SHA256       ?=
 # no prebuilt rpm: skyline-console is a wheel built into the rootfs; cube-cos-driver ships
 # binaries, not an rpm. RC and non-RC builds both build these from _REF.
 SKYLINE_CONSOLE_REF       ?= release_3.2.0
-CUBE_COS_DRIVER_REF       ?= develop
+CUBE_COS_DRIVER_REF       ?= release_2.0.0
