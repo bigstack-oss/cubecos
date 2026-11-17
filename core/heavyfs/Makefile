@@ -281,7 +281,7 @@ ROCKY_ERRATA_RPMS := \
 	AppStream/p/python3-protobuf-3.14.0-17.el9_7.noarch \
 	BaseOS/p/python3-urllib3-1.26.5-8.el9_8.noarch \
 	AppStream/p/python3-lxml-4.6.5-3.el9_8.1.x86_64
-rocky_rpm_url = $(ROCKY_DL_HOST)/$(ROCKY_PATH)/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
+rocky_rpm_url = $(ROCKY_DL_HOST)/$(or $(2),$(ROCKY_PATH))/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
 ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_ERRATA_RPMS),$(call rocky_rpm_url,$(p)))
 PINNED_DNF += dc350245c7781a0ac2ffce92e088a22c3741bf967ce7c551d0420cea9ae085eb pcre2-10.40-7.el9_8.x86_64.rpm
 PINNED_DNF += aaff0127ff9456106ca5b4139f93881e75c16502499d378021fba649730ee174 pcre2-syntax-10.40-7.el9_8.noarch.rpm
@@ -301,6 +301,19 @@ PINNED_DNF += d5f5a321ef0334332542a8c527eef85a7a2cbe382c8a7a4f131142e0d4cf3ff4 p
 PINNED_DNF += 6390cb4e53898aa27737bd0bb6a100cd8d3526bc77b074a8faa9f31b9bff2477 python3-protobuf-3.14.0-17.el9_7.noarch.rpm
 PINNED_DNF += 25d9b56cfee5643e1057c014cf6e7182647b84656821af837ad99c8f87c20ae0 python3-urllib3-1.26.5-8.el9_8.noarch.rpm
 PINNED_DNF += 30dcacac3537f4f6bfb31d1986c7dbe54e15e255fadc2f08e26d0b1cfffec98c python3-lxml-4.6.5-3.el9_8.1.x86_64.rpm
+
+# expat comes from Rocky 9.9 the same way: RHEL fixed a known vulnerability in it in
+# 2.5.0-9.el9_9.4, which 9.8's tree does not carry, and Stream's newest build is 2.5.0-9.el9.
+# Only these come from 9.9; librabbitmq, python3-tornado and python3-urllib3 above have moved
+# past their pinned builds there, so the list above stays on ROCKY_PATH.
+ROCKY_9_9_ERRATA_RPMS := \
+	BaseOS/e/expat-2.5.0-9.el9_9.4.x86_64 \
+	BaseOS/e/expat-2.5.0-9.el9_9.4.i686 \
+	AppStream/e/expat-devel-2.5.0-9.el9_9.4.x86_64
+ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_9_9_ERRATA_RPMS),$(call rocky_rpm_url,$(p),pub/rocky/9.9))
+PINNED_DNF += ea562007c1d62fe7c87ef1cd843eb9c94541b10066509e3de4395df95d5e2f6d expat-2.5.0-9.el9_9.4.x86_64.rpm
+PINNED_DNF += 6331f5c0686a0b1291b95d062af1fd6036b3bd0c24c24d4c3f51a2b276a86f75 expat-2.5.0-9.el9_9.4.i686.rpm
+PINNED_DNF += 7c07cfe813597051bbee29da35c4b629cfa4d2f21046c6f254138f7be877da0c expat-devel-2.5.0-9.el9_9.4.x86_64.rpm
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
