@@ -2549,9 +2549,19 @@ os_manila_backend_types_init()
         fi
     done
 
-    # prune: delete share types no longer configured, unless shares still
-    # reference them (refuse-if-in-use, mirrors cinder_is_volume_type_in_use)
-    for existing in $($OPENSTACK share type list -f value -c Name | grep -v '^tenant_share_type$') ; do
+    # prune: delete the types created above that are no longer configured,
+    # unless shares still reference them (refuse-if-in-use, mirrors
+    # cinder_is_volume_type_in_use). Only types whose share_backend_name is
+    # their own name are ours (older releases set it the same way); share
+    # types an admin created are left alone
+    local types_json owned_types=""
+    if types_json=$($OPENSTACK share type list -f json) ; then
+        owned_types=$(printf '%s' "$types_json" | jq -r '
+            if type == "array" then .[] |
+                select(((."Required Extra Specs" // {}) + (."Optional Extra Specs" // {})).share_backend_name == .Name) | .Name
+            else error("expected array") end' 2>/dev/null) || owned_types=""
+    fi
+    for existing in $owned_types ; do
         if echo " $configured_types " | grep -q " $existing " ; then
             continue
         fi
