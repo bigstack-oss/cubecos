@@ -3,6 +3,13 @@ FIRST_CTRLHOST=$(cubectl node list | head -n1 | awk -F"," '{print $1}')
 
 # Removing cube.git is a must such that new firmware does not pull check-ins from old one
 rm -rf /var/support/localrpms /var/support/map_* /mnt/cephfs/backup/cube.git /store/ppu
+# Until it is rolled, a 3.1.x node runs its own git code: a fixpack install's git_push pushes its
+# tree to cube.git master and runs `git stash ; git pull` on every node, and a peer with no /.git
+# checks that tree out over its /. The opt-out stops both for the roll; 3.2 ignores the marker.
+# /etc/version is the running slot; sys.product.version was seen naming 3.2.0 on a 3.1.20 node.
+case "$(cat /etc/version 2>/dev/null)" in
+    CUBE_3.1.*) touch /etc/appliance/state/cube_git_optout ;;
+esac
 mkdir -p /store/ppu/libvirt/secrets/
 cubectl node list -j > /store/ppu/cluster-info.json
 cp /etc/libvirt/secrets/* /store/ppu/libvirt/secrets/
