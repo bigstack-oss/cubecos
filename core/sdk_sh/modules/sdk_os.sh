@@ -2427,13 +2427,28 @@ os_manila_image_import()
     local dir=$1
     local file=$2
 
+    # An old image a live share server still boots from cannot be deleted: the
+    # server's disk is an RBD clone of the image's protected snapshot, so glance
+    # refuses. Tag only the images imported here, then rename each old survivor
+    # and take its service tag off: Manila selects by name and cannot boot a new
+    # share server when more than one image shares it. Mark survivors retired so
+    # the next import retries deleting them once no share server uses them. If
+    # nothing new was imported, leave the survivors' names and tags alone.
     local olds=$($OPENSTACK image list -f value --property name=manila-service-image -c ID)
-    if [ -n "$olds" ] ; then
-        $OPENSTACK image delete $olds 2>/dev/null
+    local retired=$($OPENSTACK image list -f value --tag manila-service-image-retired -c ID)
+    if [ -n "$olds$retired" ] ; then
+        $OPENSTACK image delete $olds $retired 2>/dev/null
     fi
     os_image_import $dir $file manila-service-image "--visibility private"
-    local manila_id=$($OPENSTACK image list -f value --property name=manila-service-image -c ID)
-    $OPENSTACK image set --tag manila-service-image $manila_id
+    local id news=$($OPENSTACK image list -f value --property name=manila-service-image -c ID | grep -vxF "$olds")
+    [ -n "$news" ] || return 1
+    for id in $news ; do
+        $OPENSTACK image set --tag manila-service-image $id
+    done
+    for id in $($OPENSTACK image list -f value --property name=manila-service-image -c ID | grep -xF "$olds") ; do
+        $OPENSTACK image set --name manila-service-image-${id:0:8} --tag manila-service-image-retired $id &&
+            $OPENSTACK image unset --tag manila-service-image $id
+    done
 }
 
 os_manila_init()
