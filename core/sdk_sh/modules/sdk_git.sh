@@ -11,6 +11,19 @@ CUBE_GITIGNORE=${CUBE_GITIGNORE:-/.gitignore}
 # Hidden opt-out, like cube_repair_optout: keep this node's uncommitted changes
 # instead of stashing them away, and never publish them to the shared repo.
 CUBE_GIT_OPTOUT=${CUBE_GIT_OPTOUT:-/etc/appliance/state/cube_git_optout}
+CUBE_VERSION_FILE=${CUBE_VERSION_FILE:-/etc/version}
+
+# The shared repo's branch: the firmware this node runs (/etc/version, not the ACTIVE entry of
+# `firmware list`, which points at the new slot before the reboot). Never master: an older peer
+# stashes its / onto cube/master, so a release published there during a rolling update replaced
+# the rootfs of a node not upgraded yet. A node only takes the tree of its own firmware.
+_git_firmware_branch()
+{
+    local b
+    b=$(head -n1 $CUBE_VERSION_FILE 2>/dev/null)
+    [ -n "$b" ] && $GIT check-ref-format --branch "$b" >/dev/null 2>&1 || return 1
+    echo "$b"
+}
 
 git_ignore_file()
 {
@@ -47,7 +60,8 @@ _git_server_init()
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
-    local branch=master
+    local branch
+    branch=$(_git_firmware_branch) || { Error "git: no valid firmware version in $CUBE_VERSION_FILE" ; return 1 ; }
 
     Quiet -n $HEX_SDK ceph_wait_for_status        # need cephfs be ready before git init and push
     cmd "$HEX_SDK -x ceph_mount_cephfs"
@@ -68,7 +82,14 @@ _git_server_init()
                 Quiet -n git add -A
                 Quiet -n git commit -m "$(hex_cli -c firmware list | grep ACTIVE | awk '{print $2}')" -a
             fi
-            Quiet -n git push --set-upstream $project $branch
+            # HEAD, not $branch: a / whose history began under another branch name (sdk_git.sh
+            # replaced without a firmware install) has no local $branch. Such a / keeps its
+            # upstream: git_push's plain `git push` is refused for an upstream of another name.
+            if [ "$($GIT symbolic-ref -q --short HEAD)" = "$branch" ] ; then
+                Quiet -n git push --set-upstream $project HEAD:$branch
+            else
+                Quiet -n git push $project HEAD:$branch
+            fi
             git -P branch -r | grep -q "${project}/${branch}"
         else
             Error "failed to generate $CUBE_GITIGNORE"
@@ -115,7 +136,8 @@ _git_client_init()
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
-    local branch=master
+    local branch
+    branch=$(_git_firmware_branch) || { Error "git: no valid firmware version in $CUBE_VERSION_FILE" ; return 1 ; }
 
     Quiet -n $GIT config --global user.email "${HOSTNAME}@${ipaddr}"
     # Disable git auto-maintenance -- it hangs on the /-worktree repo. #1195
