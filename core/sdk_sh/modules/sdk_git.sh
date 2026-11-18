@@ -10,6 +10,19 @@ fi
 CUBE_GITIGNORE=${CUBE_GITIGNORE:-/.gitignore}
 CUBE_GIT_WORKTREE=${CUBE_GIT_WORKTREE:-/}
 CUBE_GIT_ROOT_CONFIG=${CUBE_GIT_ROOT_CONFIG:-/root/.gitconfig}
+CUBE_VERSION_FILE=${CUBE_VERSION_FILE:-/etc/version}
+
+# The shared repo's branch: the firmware this node runs (/etc/version, not the ACTIVE entry of
+# `firmware list`, which points at the new slot before the reboot). Never master: a 3.1.x peer
+# stashes its / onto cube/master, so a newer release published there during a rolling update
+# replaced the rootfs of a node not upgraded yet. A node only takes the tree of its own firmware.
+_git_firmware_branch()
+{
+    local b
+    b=$(head -n1 $CUBE_VERSION_FILE 2>/dev/null)
+    [ -n "$b" ] && $GIT check-ref-format --branch "$b" >/dev/null 2>&1 || return 1
+    echo "$b"
+}
 
 # The commit identity of this node, kept in the repository's own config (/.git/config). Run it
 # with the worktree as the current directory. It must not live only in ~/.gitconfig: hex_cli is
@@ -68,7 +81,8 @@ _git_server_init()
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
-    local branch=master
+    local branch
+    branch=$(_git_firmware_branch) || { Error "git: no valid firmware version in $CUBE_VERSION_FILE" ; return 1 ; }
 
     Quiet -n $HEX_SDK ceph_wait_for_status        # need cephfs be ready before git init and push
     cmd "$HEX_SDK -x ceph_mount_cephfs"
@@ -90,7 +104,8 @@ _git_server_init()
                 Quiet -n git add -A
                 Quiet -n git commit -m "$(hex_cli -c firmware list | grep ACTIVE | awk '{print $2}')" -a
             fi
-            Quiet -n git push --set-upstream $project $branch
+            # HEAD, not $branch: a / whose history began under another branch name has no local $branch
+            Quiet -n git push --set-upstream $project HEAD:$branch
             git -P branch -r | grep -q "${project}/${branch}"
         else
             Error "failed to generate $CUBE_GITIGNORE"
@@ -115,7 +130,8 @@ _git_client_init()
     local ipaddr=$(cubectl node list -j | jq -r ".[] | select(.hostname == \"$HOSTNAME\") | .ip.management")
     local cube_git_dir=$CEPHFS_BACKUP_DIR/cube.git
     local project=cube
-    local branch=master
+    local branch
+    branch=$(_git_firmware_branch) || { Error "git: no valid firmware version in $CUBE_VERSION_FILE" ; return 1 ; }
 
     Quiet -n $GIT config --global user.email "${HOSTNAME}@${ipaddr}"
     # Disable git auto-maintenance -- it hangs on the /-worktree repo. #1195
@@ -181,6 +197,13 @@ git_push()
         Error "git: .git/index.lock exists on $HOSTNAME: another git is running, or one was killed; nothing recorded"
         return 1
     fi
+    # No history yet: the shared repo is not ready, or has no branch for this node's firmware
+    # (e.g. it runs another build than the master). Say so; "nothing to record" would hide that
+    # the change went unrecorded.
+    if ! $GIT rev-parse -q --verify HEAD >/dev/null ; then
+        Error "git: no history on $HOSTNAME yet: $project is not ready or has no branch $(_git_firmware_branch || echo "<no valid version in $CUBE_VERSION_FILE>"); nothing recorded"
+        return 1
+    fi
     _git_identity || { Error "git: cannot set the commit identity on $HOSTNAME" ; return 1 ; }
     $GIT add -u || { Error "git: add failed on $HOSTNAME" ; return 1 ; }
     $GIT diff --cached --quiet
@@ -190,7 +213,7 @@ git_push()
         # that commit now, or rerunning git_push, as a failed fixpack record tells the operator to,
         # never records it.
         # Compare with this node's own branch only: on the master, _git_server_init pushes the
-        # same HEAD to master, which would hide the missing push.
+        # same HEAD to its firmware branch, which would hide the missing push.
         if [ "$($GIT rev-parse -q --verify HEAD)" = "$($GIT rev-parse -q --verify refs/remotes/$project/nodes/$HOSTNAME)" ] ; then
             log_info "git: nothing to record on $HOSTNAME"
         elif ! $GIT push -q $project +HEAD:refs/heads/nodes/$HOSTNAME ; then
