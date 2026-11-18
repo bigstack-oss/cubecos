@@ -81,7 +81,7 @@ CONFIG_TUNING_STR(MANILA_DBPASS, "manila.db.password", TUNING_UNPUB, "Set manila
 
 // public tunings
 CONFIG_TUNING_BOOL(MANILA_DEBUG, "manila.debug.enabled", TUNING_PUB, "Set to true to enable manila verbose log.", false);
-CONFIG_TUNING_STR(MANILA_VOLUME_TYPE, "manila.volume.type", TUNING_PUB, "Set manila backend volume type.", BUILTIN_VOLUME_TYPE, ValidateRegex, DFT_REGEX_STR);
+CONFIG_TUNING_STR(MANILA_VOLUME_TYPE, "manila.volume.type", TUNING_PUB, "Set the volume type of the manila default backend. Leave unset to use the default storage.", "", ValidateRegex, DFT_REGEX_STR);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(RABBITMQ_OPENSTACK_PASSWD);
@@ -765,7 +765,7 @@ Commit(bool modified, int dryLevel)
         SetGlanceInfo(config, sharedId, s_cubeRegion, s_cubeDomain, adminCliPass);
 
         std::string defaultVolumeType;
-        if (s_volumeType.length() > 0 && s_volumeType.newValue() != BUILTIN_VOLUME_TYPE) {
+        if (s_volumeType.length() > 0) {
             defaultVolumeType = s_volumeType.newValue();
         } else if (s_cinderVolumeTypeDefault.newValue() != "") {
             defaultVolumeType = s_cinderVolumeTypeDefault.newValue();
