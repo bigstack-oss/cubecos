@@ -15,7 +15,7 @@ set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$DIR/../modules/sdk_git.sh"
 
-for fn in _git_client_init git_push ; do
+for fn in _git_firmware_branch _git_client_init git_push ; do
     body="$(awk -v f="^${fn}\\\\(\\\\)" '$0~f{p=1} p{print} p&&/^}/{exit}' "$SRC")"
     [ -n "$body" ] || { echo "FAIL: $fn not extracted"; exit 1; }
     eval "$body"
@@ -57,6 +57,7 @@ HOSTNAME=testnode
 CUBE_GITIGNORE=$(mktemp) ; : > "$CUBE_GITIGNORE"
 OPTOUT=$(mktemp -u)
 CUBE_GIT_OPTOUT=$OPTOUT
+CUBE_VERSION_FILE=$(mktemp) ; echo CUBE_3.1.20_20261014-0841_7462e394 > "$CUBE_VERSION_FILE"
 
 # 1. client init WITHOUT the marker: the existing destructive path is unchanged
 : > "$LOG" ; rm -f "$OPTOUT"
@@ -91,6 +92,6 @@ chk "4 does NOT push"       "$(saw 'git push')"    "n"
 chk "4 no peer stash"       "$(saw 'cmd .*stash')" "n"
 chk "4 warns"               "$(saw 'warn ')"       "y"
 
-rm -rf "$LOG" "$OPTOUT" "$CUBE_GITIGNORE" "$CEPHFS_BACKUP_DIR" 2>/dev/null
+rm -rf "$LOG" "$OPTOUT" "$CUBE_GITIGNORE" "$CEPHFS_BACKUP_DIR" "$CUBE_VERSION_FILE" 2>/dev/null
 echo "----" ; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ] && { echo "OK: git opt-out" ; exit 0 ; } || exit 1
