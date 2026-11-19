@@ -2816,6 +2816,7 @@ ceph_mirror_promote_image()
 {
     local id=${1#volume-}
     local name=volume-${id}
+    local rc=0
     local mode=${2:-normal}
     local status=$(rbd mirror pool status $BUILTIN_BACKPOOL --verbose --format json 2>/dev/null)
     local img_idx=0
@@ -2836,7 +2837,7 @@ ceph_mirror_promote_image()
                 done
 
                 if timeout 3 $sshcmd root@${peer_vip:-emptyIp} "exit 0" 2>/dev/null ; then
-                    Quiet $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_image $id $mode"
+                    Quiet $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_image $id $mode" || rc=1
                 else
                     echo "remote site $peer_vip unreachable"
                 fi
@@ -2850,7 +2851,7 @@ ceph_mirror_promote_image()
             local img_name=$(echo $status | jq -r --arg idx $img_idx '.images[$idx | tonumber].name')
             if [ "$img_name" = "$name" -a "$(rbd info $BUILTIN_BACKPOOL/$img_name --format json | jq -r .mirroring.primary)" = "false" ] ; then
                 if timeout 3 $sshcmd root@${peer_vip:-emptyIp} "exit 0" 2>/dev/null ; then
-                    Quiet $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_image $id $mode"
+                    Quiet $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_image $id $mode" || rc=1
                 else
                     rbdflg="--force"
                 fi
@@ -2863,6 +2864,7 @@ ceph_mirror_promote_image()
             img_idx=$(( img_idx + 1 ))
         done
     fi
+    return $rc
 }
 
 # params:
@@ -2871,6 +2873,7 @@ ceph_mirror_demote_image()
 {
     local id=${1#volume-}
     local name=volume-${id}
+    local rc=0
     local mode=${2:-normal}
     local status=$(rbd mirror pool status $BUILTIN_BACKPOOL --verbose --format json 2>/dev/null)
     local img_idx=0
@@ -2881,13 +2884,22 @@ ceph_mirror_demote_image()
         local img_name=$(echo $status | jq -r --arg idx $img_idx '.images[$idx | tonumber].name')
         if [ "$img_name" = "$name" ] ; then
             local vol=$($OPENSTACK volume show $id -f json)
-            echo $vol | jq -r ".attachments[].server_id" | xargs -i $OPENSTACK server stop {} 2>/dev/null || true
+            local servers stuck server
+            servers=$(echo $vol | jq -r ".attachments[].server_id" | sort -u)
+            stuck=$(_ceph_mirror_server_stop $servers)
+            for server in $stuck ; do
+                echo "VM $server did not stop ($BUILTIN_BACKPOOL/$img_name)"
+                rc=1
+            done
+            if [ -n "$stuck" ] && [ "$mode" != "force" ] ; then
+                echo "$BUILTIN_BACKPOOL/$img_name left primary"
+                break
+            fi
             if [ "$mode" = "force" ] ; then
-                sleep 10
                 Quiet -n rbd mirror image demote $BUILTIN_BACKPOOL/$img_name
                 Quiet -n rbd mirror image resync $BUILTIN_BACKPOOL/$img_name
             else
-                ( sleep 10 ; rbd config image set $BUILTIN_BACKPOOL/$img_name rbd_cache_block_writes_upfront true ; rbd config image set $BUILTIN_BACKPOOL/$img_name rbd_cache_block_writes_upfront false ; rbd mirror image demote $BUILTIN_BACKPOOL/$img_name) >/dev/null 2>&1 &
+                ( rbd config image set $BUILTIN_BACKPOOL/$img_name rbd_cache_block_writes_upfront true ; rbd config image set $BUILTIN_BACKPOOL/$img_name rbd_cache_block_writes_upfront false ; rbd mirror image demote $BUILTIN_BACKPOOL/$img_name) >/dev/null 2>&1 &
                 pids[${img_idx}]=$!
             fi
             break
@@ -2902,12 +2914,14 @@ ceph_mirror_demote_image()
 
     local self_site=$(find /etc/ceph/ -type l -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
     ceph_mirror_daemon_restart $self_site
+    return $rc
 }
 
 # params:
 # $1: normal/force
 ceph_mirror_promote_site()
 {
+    local rc=0
     local mode=${1:-normal}
     local status=$(rbd mirror pool status $BUILTIN_BACKPOOL --verbose --format json 2>/dev/null)
     local img_idx=0
@@ -2930,14 +2944,14 @@ ceph_mirror_promote_site()
             img_idx=$(( img_idx + 1 ))
         done
         if timeout 3 $sshcmd root@${peer_vip:-emptyIp} "exit 0" 2>/dev/null ; then
-            Quiet -n $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_site $mode"
+            Quiet $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_site $mode" || rc=1
         else
             echo "remote site $peer_vip unreachable"
         fi
     else
         local rbdflg=
         if timeout 3 $sshcmd root@${peer_vip:-emptyIp} "exit 0" 2>/dev/null ; then
-            Quiet -n $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_site $mode"
+            Quiet $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_site $mode" || rc=1
         else
             echo "remote site $peer_vip unreachable"
             rbdflg="--force"
@@ -2954,29 +2968,56 @@ ceph_mirror_promote_site()
             img_idx=$(( img_idx + 1 ))
         done
     fi
+    return $rc
 }
 
 # params:
 # $1: normal/force
 ceph_mirror_demote_site()
 {
+    local rc=0
     local mode=${1:-normal}
     local status=$(rbd mirror pool status $BUILTIN_BACKPOOL --verbose --format json 2>/dev/null)
     local img_idx=0
     local img_num=$(echo $status | jq '.images | length')
     img_num=${img_num:-0}
 
+    local image_servers=()
+    local servers=""
+    local stuck server image_stuck
     while [ $img_idx -lt $img_num ] ; do
         local img_name=$(echo $status | jq -r --arg idx $img_idx '.images[$idx | tonumber].name')
         local vol=$($OPENSTACK volume show ${img_name#volume-} -f json)
-        echo $vol | jq -r ".attachments[].server_id" | xargs -i $OPENSTACK server stop {} 2>/dev/null || true
+        image_servers[img_idx]=$(echo $vol | jq -r ".attachments[].server_id")
+        servers="$servers ${image_servers[$img_idx]}"
+        img_idx=$(( img_idx + 1 ))
+    done
+    # a guest still running when its image is demoted gets a read-only disk
+    servers=$(printf '%s\n' $servers | sort -u)
+    stuck=$(_ceph_mirror_server_stop $servers)
+    [ -z "$stuck" ] || rc=1
+    img_idx=0
+
+    while [ $img_idx -lt $img_num ] ; do
+        img_name=$(echo $status | jq -r --arg idx $img_idx '.images[$idx | tonumber].name')
         echo "$mode demote $BUILTIN_BACKPOOL/$img_name pool on peer site"
+        image_stuck=
+        for server in ${image_servers[$img_idx]} ; do
+            if echo "$stuck" | grep -qx "$server" ; then
+                echo "VM $server did not stop ($BUILTIN_BACKPOOL/$img_name)"
+                image_stuck=1
+            fi
+        done
+        if [ -n "$image_stuck" ] && [ "$mode" != "force" ] ; then
+            echo "$BUILTIN_BACKPOOL/$img_name left primary"
+            img_idx=$(( img_idx + 1 ))
+            continue
+        fi
         if [ "$mode" = "force" ] ; then
-            sleep 10
             Quiet -n rbd mirror image demote $BUILTIN_BACKPOOL/$img_name
             Quiet -n rbd mirror image resync $BUILTIN_BACKPOOL/$img_name
         else
-            ( sleep 10 ; rbd config image set $BUILTIN_BACKPOOL/$img_name rbd_cache_block_writes_upfront true ; rbd config image set $BUILTIN_BACKPOOL/$img_name rbd_cache_block_writes_upfront false ; rbd mirror image demote $BUILTIN_BACKPOOL/$img_name) >/dev/null 2>&1 &
+            ( rbd config image set $BUILTIN_BACKPOOL/$img_name rbd_cache_block_writes_upfront true ; rbd config image set $BUILTIN_BACKPOOL/$img_name rbd_cache_block_writes_upfront false ; rbd mirror image demote $BUILTIN_BACKPOOL/$img_name) >/dev/null 2>&1 &
             pids[${img_idx}]=$!
         fi
 
@@ -2990,6 +3031,54 @@ ceph_mirror_demote_site()
 
     local self_site=$(find /etc/ceph/ -type l -name *-site.conf | sed  -e "s;.*/;;" -e "s/.conf//")
     ceph_mirror_daemon_restart $self_site
+    return $rc
+}
+
+# Poll until the servers are SHUTOFF or $1 seconds pass; print the ones that are not.
+_ceph_mirror_server_wait_shutoff()
+{
+    local deadline=$(( SECONDS + $1 ))
+    shift
+    local left="$*"
+    local id still
+    while [ -n "$left" ] ; do
+        still=
+        for id in $left ; do
+            [ "$($OPENSTACK server show "$id" -f value -c status 2>/dev/null)" = "SHUTOFF" ] || still="$still $id"
+        done
+        left=${still# }
+        if [ -z "$left" ] || [ $SECONDS -ge $deadline ] ; then
+            break
+        fi
+        sleep 5
+    done
+    [ -z "$left" ] || printf '%s\n' $left
+}
+
+# Stop the servers and wait for SHUTOFF. A stop that never completes leaves the
+# server ACTIVE in powering-off, where another stop is refused, so reset it to
+# active and stop it again. Print the servers that still did not stop.
+_ceph_mirror_server_stop()
+{
+    local id late
+    local asked=
+    for id in "$@" ; do
+        if [ "$($OPENSTACK server show "$id" -f value -c status 2>/dev/null)" != "SHUTOFF" ] ; then
+            $OPENSTACK server stop "$id" >/dev/null 2>&1
+            asked="$asked $id"
+        fi
+    done
+    late=$(_ceph_mirror_server_wait_shutoff "${CEPH_MIRROR_STOP_WAIT:-120}" $asked)
+    asked=
+    for id in $late ; do
+        case "$($OPENSTACK server show "$id" -f value -c status 2>/dev/null)" in
+            SHUTOFF) continue ;;
+            ACTIVE|ERROR) Quiet -n $OPENSTACK server set --state active "$id" ;;
+        esac
+        $OPENSTACK server stop "$id" >/dev/null 2>&1
+        asked="$asked $id"
+    done
+    _ceph_mirror_server_wait_shutoff "${CEPH_MIRROR_STOP_RETRY_WAIT:-180}" $asked
 }
 
 # return crush class by SCSI disk
