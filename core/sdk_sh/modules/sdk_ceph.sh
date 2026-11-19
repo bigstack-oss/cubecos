@@ -2902,6 +2902,57 @@ ceph_mirror_create_server()
     done
 }
 
+# true once the local copy of snapshot-mode image $1 holds, complete, the
+# demotion snapshot just taken on peer $2; false at deadline $3 (a $SECONDS value).
+# A non-forced promote alone is not enough: Ceph also allows it while the local
+# image still sits on its own older demotion snapshot.
+ceph_mirror_demote_synced_wait()
+{
+    local img_name=$1
+    local peer_vip=$2
+    local deadline=$3
+    local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+    local newest='[.[] | select(.namespace.type == "mirror")] | sort_by(.id) | last'
+
+    # primary-demoted snapshots carry no primary_snap_id
+    local demote_id=
+    demote_id=$(timeout 60 $sshcmd root@${peer_vip:-emptyIp} "rbd snap ls --all --format json $BUILTIN_BACKPOOL/$img_name" 2>/dev/null | jq -r "$newest | select(.namespace.state == \"demoted\" and (.namespace | has(\"primary_snap_id\") | not)) | .id" 2>/dev/null)
+    if [ -z "$demote_id" ] ; then
+        echo "Error: cannot confirm $BUILTIN_BACKPOOL/$img_name is demoted on the peer site, not promoting it" >&2
+        return 1
+    fi
+
+    local snap=
+    while : ; do
+        snap=$(timeout 30 rbd snap ls --all --format json $BUILTIN_BACKPOOL/$img_name 2>/dev/null | jq -c "$newest | .namespace" 2>/dev/null)
+        if echo "$snap" | jq -e --argjson id $demote_id '.state == "demoted" and .complete == true and .primary_snap_id == $id' >/dev/null 2>&1 ; then
+            return 0
+        fi
+        [ $SECONDS -lt $deadline ] || break
+        sleep 5
+    done
+
+    echo "Error: $BUILTIN_BACKPOOL/$img_name has not copied the peer's demotion snapshot $demote_id ($(echo "$snap" | jq -r '"local: \(.state) complete=\(.complete) primary_snap_id=\(.primary_snap_id // "none")"' 2>/dev/null)), not promoting it" >&2
+    return 1
+}
+
+# promote $BUILTIN_BACKPOOL/$1, retrying while the demotion propagates
+# $2: [--force]
+ceph_mirror_image_promote_retry()
+{
+    local img_name=$1
+    local rbdflg=$2
+    local err=
+
+    for i in {1..10} ; do
+        sleep 10
+        err=$(rbd mirror image promote $rbdflg $BUILTIN_BACKPOOL/$img_name 2>&1 >/dev/null) && return 0
+    done
+
+    echo "Error: failed to promote $BUILTIN_BACKPOOL/$img_name: $err" >&2
+    return 1
+}
+
 # params:
 # $1: volume id
 # $2: normal|force
@@ -2942,14 +2993,18 @@ ceph_mirror_promote_image()
         local rbdflg=
         while [ $img_idx -lt $img_num ] ; do
             local img_name=$(echo $status | jq -r --arg idx $img_idx '.images[$idx | tonumber].name')
-            if [ "$img_name" = "$name" -a "$(rbd info $BUILTIN_BACKPOOL/$img_name --format json | jq -r .mirroring.primary)" = "false" ] ; then
+            local img_info=
+            img_info=$(rbd info $BUILTIN_BACKPOOL/$img_name --format json)
+            if [ "$img_name" = "$name" -a "$(echo $img_info | jq -r .mirroring.primary)" = "false" ] ; then
                 ceph_mirror_peer_check "$peer_vip" || return 1
                 Quiet $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_demote_image $id $mode" || rc=1
-                echo "$mode promote $BUILTIN_BACKPOOL/$img_name on local site"
-                for i in {1..10} ; do
-                    sleep 10
-                    Quiet rbd mirror image promote $rbdflg $BUILTIN_BACKPOOL/$img_name 2>/dev/null && break
-                done
+                local deadline=$(( SECONDS + ${CEPH_MIRROR_PROMOTE_SYNC_TIMEOUT:-600} ))
+                if [ "$(echo $img_info | jq -r .mirroring.mode)" = "snapshot" ] && ! ceph_mirror_demote_synced_wait $img_name $peer_vip $deadline ; then
+                    rc=1
+                else
+                    echo "$mode promote $BUILTIN_BACKPOOL/$img_name on local site"
+                    ceph_mirror_image_promote_retry $img_name $rbdflg || rc=1
+                fi
             fi
             img_idx=$(( img_idx + 1 ))
         done
@@ -3042,14 +3097,21 @@ ceph_mirror_promote_site()
         local rbdflg=
         ceph_mirror_peer_check "$peer_vip" || return 1
         Quiet $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_demote_site $mode" || rc=1
+        local deadline=$(( SECONDS + ${CEPH_MIRROR_PROMOTE_SYNC_TIMEOUT:-600} ))
         while [ $img_idx -lt $img_num ] ; do
             local img_name=$(echo $status | jq -r --arg idx $img_idx '.images[$idx | tonumber].name')
-            if [ "$(rbd info $BUILTIN_BACKPOOL/$img_name --format json | jq -r .mirroring.primary)" = "false" ] ; then
-                echo "$mode promote $BUILTIN_BACKPOOL/$img_name on local site"
-                for i in {1..10} ; do
-                    sleep 10
-                    Quiet rbd mirror image promote $rbdflg $BUILTIN_BACKPOOL/$img_name 2>/dev/null && break
-                done
+            local img_info=
+            img_info=$(rbd info $BUILTIN_BACKPOOL/$img_name --format json)
+            if [ "$(echo $img_info | jq -r .mirroring.primary)" = "false" ] ; then
+                if [ "$(echo $img_info | jq -r .mirroring.mode)" = "snapshot" ] && ! ceph_mirror_demote_synced_wait $img_name $peer_vip $deadline ; then
+                    rc=1
+                else
+                    echo "$mode promote $BUILTIN_BACKPOOL/$img_name on local site"
+                    local promote_start=$SECONDS
+                    ceph_mirror_image_promote_retry $img_name $rbdflg || rc=1
+                    # the site-wide sync wait budget is not spent on promoting
+                    deadline=$(( deadline + SECONDS - promote_start ))
+                fi
             fi
             img_idx=$(( img_idx + 1 ))
         done

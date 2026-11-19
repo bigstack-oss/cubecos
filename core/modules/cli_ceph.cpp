@@ -2178,9 +2178,11 @@ CephMirrorPromote(int argc, const char** argv)
             return false;
         }
 
-        HexSpawn(0, HEX_SDK, "ceph_mirror_promote_image", volVal.c_str(), typeVal.c_str(), NULL);
+        if (HexSpawn(0, HEX_SDK, "ceph_mirror_promote_image", volVal.c_str(), typeVal.c_str(), NULL) != 0)
+            return CLI_FAILURE;
     } else if (modeVal == "site") {
-        HexSpawn(0, HEX_SDK, "ceph_mirror_promote_site", typeVal.c_str(), NULL);
+        if (HexSpawn(0, HEX_SDK, "ceph_mirror_promote_site", typeVal.c_str(), NULL) != 0)
+            return CLI_FAILURE;
     }
 
     return CLI_SUCCESS;

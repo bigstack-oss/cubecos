@@ -8,7 +8,7 @@
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 SRC=${SRC:-$(dirname "${BASH_SOURCE[0]}")/../modules/sdk_ceph.sh}
-for fn in _ceph_mirror_server_wait_shutoff _ceph_mirror_server_stop ceph_mirror_demote_image ceph_mirror_demote_site ceph_mirror_peer_check ceph_mirror_promote_site ceph_mirror_promote_image ; do
+for fn in _ceph_mirror_server_wait_shutoff _ceph_mirror_server_stop ceph_mirror_demote_image ceph_mirror_demote_site ceph_mirror_peer_check ceph_mirror_promote_site ceph_mirror_promote_image ceph_mirror_demote_synced_wait ceph_mirror_image_promote_retry ; do
     sed -n "/^$fn()/,/^}/p" "$SRC" >> "$T/fn.sh"
 done
 source "$T/fn.sh"
