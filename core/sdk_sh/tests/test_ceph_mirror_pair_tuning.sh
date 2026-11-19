@@ -28,6 +28,7 @@ chk(){ # description actual expected
 
 for fn in _ceph_mirror_tuning_apply ceph_mirror_tuning_set ceph_mirror_tuning_clear \
     ceph_mirror_image_state_sync ceph_mirror_peer_check ceph_mirror_promote_site ceph_mirror_promote_image \
+    ceph_mirror_demote_synced_wait ceph_mirror_image_promote_retry \
     ceph_mirror_pair ceph_mirror_unpair ceph_basic_config_gen ; do
     sed -n "/^$fn()/,/^}/p" "$SRC" > "$T/fn.sh"
     if [ -s "$T/fn.sh" ] ; then
