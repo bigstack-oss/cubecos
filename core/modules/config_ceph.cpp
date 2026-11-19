@@ -624,9 +624,11 @@ SetupMds(std::string hostname)
  * Set up the local OSDs. With deferStart every OSD is left stopped -- the raw ones
  * remounted without a start, the LVM ones (encrypted included) activated without
  * systemd -- for CommitOsd to start in batches; s_lvmOsdIds then lists the LVM ones.
+ * With keepRunning (and no deferStart) the running OSDs are left alone and the
+ * stopped raw ones remounted without a start, for CommitOsd(restartAll=false).
  */
 static bool
-SetupOsd(std::string hostname, bool deferStart = false)
+SetupOsd(std::string hostname, bool deferStart = false, bool keepRunning = false)
 {
     s_osdIds.clear();
     s_osdNewIds.clear();
@@ -635,6 +637,10 @@ SetupOsd(std::string hostname, bool deferStart = false)
     activateRawOsds();
     activateLvmOsds(deferStart);
     HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_map");
+    if (!deferStart && keepRunning) {
+        HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount --no-start --stopped-only");
+        return true;
+    }
     if (!deferStart) {
         HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_remount");
         return true;
@@ -1269,6 +1275,8 @@ startOsds(const std::vector<size_t>& osds)
 /**
  * Start (or, with ceph disabled, compact and stop) the local OSDs. batched follows
  * SetupOsd(deferStart): the raw and LVM OSDs it left stopped start in batches.
+ * Otherwise restartAll restarts every raw OSD, and without it only the stopped
+ * raw ones start, in batches, so adding a disk leaves the running OSDs alone.
  */
 static bool
 CommitOsd(const char* name, bool restartAll = true, bool batched = false)
@@ -1286,8 +1294,22 @@ CommitOsd(const char* name, bool restartAll = true, bool batched = false)
             std::vector<size_t> osds(s_osdIds.begin(), s_osdIds.end());
             osds.insert(osds.end(), s_lvmOsdIds.begin(), s_lvmOsdIds.end());
             startOsds(osds);
+        } else if (!restartAll) {
+            std::vector<size_t> stopped;
+            for (auto& id : s_osdIds) {
+                const ExecSyncResult ar = ExecBashSync(
+                    0,
+                    false,
+                    false,
+                    {},
+                    "systemctl is-active -q ceph-osd@" + std::to_string(id));
+                if (ar.exitCode != 0) {
+                    stopped.push_back(id);
+                }
+            }
+            startOsds(stopped);
         } else {
-            for (auto& id : (restartAll ? s_osdIds : s_osdNewIds)) {
+            for (auto& id : s_osdIds) {
                 HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_restart %lu", id);
             }
         }
@@ -2229,7 +2251,7 @@ RefreshOsdMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    SetupOsd(s_hostname.newValue());
+    SetupOsd(s_hostname.newValue(), false, true);
     CommitOsd(NAME, false);
 
     return EXIT_SUCCESS;
