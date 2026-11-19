@@ -2347,6 +2347,24 @@ ceph_mirror_peer_vip()
     find $dir/ -type f -name "*-site.conf" | sed -e "s;.*/;;" -e "s/-site[.]conf$//" | grep -oE "([0-9]{1,3}[.]){3}[0-9]{1,3}$"
 }
 
+# A normal promote demotes the peer first. Refuse when it is unknown or unreachable
+# rather than fall back to --force, which leaves both sites primary.
+# $1: peer vip
+ceph_mirror_peer_check()
+{
+    local peer_vip=$1
+    local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+
+    if [ -z "$peer_vip" ] ; then
+        echo "Error: no paired site found (/etc/ceph/*-site.conf missing), not promoting. Pair the sites again, or use a force promote if the peer site is down" >&2
+        return 1
+    fi
+    if ! timeout 3 $sshcmd root@$peer_vip "exit 0" 2>/dev/null ; then
+        echo "Error: remote site $peer_vip unreachable, not promoting: a normal promote has to demote it first. Use a force promote if that site is down" >&2
+        return 1
+    fi
+}
+
 # $1: site name
 # reset-failed so frequent restarts don't hit StartLimitBurst
 ceph_mirror_daemon_restart()
@@ -2529,6 +2547,11 @@ ceph_mirror_image_list()
 ceph_mirror_image_state_sync()
 {
     local enabled=$1
+    # An empty list means no ceph.mirror.rule.N.volume tunings, as with site pair.
+    # storage mirror rule enables images individually without recording rules there;
+    # treating this as "mirror nothing" would disable them on each commit and boot.
+    [ -n "$enabled" ] || return 0
+
     for img_name in $(rbd mirror pool status $BUILTIN_BACKPOOL --verbose --format json | jq -r .images[].name 2>/dev/null) ; do
         local img_id=${img_name/volume-/}
         if ! echo "$enabled" | grep -q $img_id ; then
@@ -2850,11 +2873,8 @@ ceph_mirror_promote_image()
         while [ $img_idx -lt $img_num ] ; do
             local img_name=$(echo $status | jq -r --arg idx $img_idx '.images[$idx | tonumber].name')
             if [ "$img_name" = "$name" -a "$(rbd info $BUILTIN_BACKPOOL/$img_name --format json | jq -r .mirroring.primary)" = "false" ] ; then
-                if timeout 3 $sshcmd root@${peer_vip:-emptyIp} "exit 0" 2>/dev/null ; then
-                    Quiet $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_image $id $mode" || rc=1
-                else
-                    rbdflg="--force"
-                fi
+                ceph_mirror_peer_check "$peer_vip" || return 1
+                Quiet $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_demote_image $id $mode" || rc=1
                 echo "$mode promote $BUILTIN_BACKPOOL/$img_name on local site"
                 for i in {1..10} ; do
                     sleep 10
@@ -2950,12 +2970,8 @@ ceph_mirror_promote_site()
         fi
     else
         local rbdflg=
-        if timeout 3 $sshcmd root@${peer_vip:-emptyIp} "exit 0" 2>/dev/null ; then
-            Quiet $sshcmd root@${peer_vip:-emptyIp} "$HEX_SDK ceph_mirror_demote_site $mode" || rc=1
-        else
-            echo "remote site $peer_vip unreachable"
-            rbdflg="--force"
-        fi
+        ceph_mirror_peer_check "$peer_vip" || return 1
+        Quiet $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_demote_site $mode" || rc=1
         while [ $img_idx -lt $img_num ] ; do
             local img_name=$(echo $status | jq -r --arg idx $img_idx '.images[$idx | tonumber].name')
             if [ "$(rbd info $BUILTIN_BACKPOOL/$img_name --format json | jq -r .mirroring.primary)" = "false" ] ; then
@@ -3740,7 +3756,7 @@ ceph_basic_config_gen()
     if [ -n "$host" -a -n "$pass" ] ; then
         local header=$(sshpass -p "$pass" ssh root@$host $CEPH config generate-minimal-conf &2>/dev/null)
     elif [ -n "$host" -a -z "$pass" ] ; then
-        local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+        local sshcmd="ssh -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
         local header=$($sshcmd root@$host "$CEPH config generate-minimal-conf 2>/dev/null" 2>/dev/null)
     else
         local header=$($CEPH config generate-minimal-conf &2>/dev/null)
@@ -4301,6 +4317,54 @@ ceph_osd_fix_fsid()
     fi
 }
 
+# config_ceph's commit, including every boot, rebuilds /etc/ceph/*-site.conf
+# from these tunings and deletes the site configs otherwise (#439). The peer
+# secret is set but left empty: the peer config is then fetched over the ssh key
+# site pair set up. It cannot be omitted: config_ceph reads peer.N.secret by the
+# same index as peer.N.name and aborts the commit when it is missing.
+_ceph_mirror_tuning_apply()
+{
+    [ $# -eq 0 ] || [ $# -eq 3 ] || return 1
+    local input_dir
+    input_dir=$(MakeTempDir) || return 1
+    [ -n "$input_dir" ] || return 1
+    mkdir -p "$input_dir/tuning" || return 1
+    local policy_file="$input_dir/tuning/tuning1_0.yml"
+    cp -f "$POLICY_DIR/tuning/tuning1_0.yml" "$policy_file" || return 1
+
+    local pattern='^ceph\.mirror\.(enabled|name|peer\.[0-9]+\.(name|ipaddr|secret))$'
+    if [ $# -eq 0 ] ; then
+        local count
+        count=$(yq "[.tunings[] | select(.name | test(\"$pattern\"))] | length" "$policy_file") || return 1
+        [ "$count" != "0" ] || return 0
+    fi
+    yq -i "del(.tunings[] | select(.name | test(\"$pattern\")))" "$policy_file" || return 1
+    if [ $# -eq 3 ] ; then
+        N=$1 P=$2 V=$3 yq -i '.tunings += [
+            {"enabled": true, "name": "ceph.mirror.enabled", "value": "true"},
+            {"enabled": true, "name": "ceph.mirror.name", "value": strenv(N)},
+            {"enabled": true, "name": "ceph.mirror.peer.1.name", "value": strenv(P)},
+            {"enabled": true, "name": "ceph.mirror.peer.1.ipaddr", "value": strenv(V)},
+            {"enabled": true, "name": "ceph.mirror.peer.1.secret", "value": ""}
+        ]' "$policy_file" || return 1
+    fi
+    $HEX_CFG apply "$input_dir"
+}
+
+ceph_mirror_tuning_set()
+{
+    if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ] ; then
+        echo "Usage: $0 ceph_mirror_tuning_set self peer vip" >&2
+        return 1
+    fi
+    _ceph_mirror_tuning_apply "$1" "$2" "$3"
+}
+
+ceph_mirror_tuning_clear()
+{
+    _ceph_mirror_tuning_apply
+}
+
 # $1: vip
 # $2: pass
 ceph_mirror_pair()
@@ -4360,6 +4424,17 @@ ceph_mirror_pair()
     Quiet cubectl node rsync -r control /etc/ceph/${peer_ctlr}-site.conf
     Quiet $sshcmd root@$vip "$HEX_SDK ceph_basic_config_gen /etc/ceph/${self_ctlr}-site.conf $self_vip"
     Quiet $sshcmd root@$vip "cubectl node rsync -r control /etc/ceph/${self_ctlr}-site.conf"
+
+    local rc=0
+    if ! ceph_mirror_tuning_set ${self_ctlr} ${peer_ctlr} $vip ; then
+        echo "Error: failed to record the pairing on local site; it will not survive a reboot" >&2
+        rc=1
+    fi
+    if ! $sshcmd root@$vip "$HEX_SDK ceph_mirror_tuning_set ${peer_ctlr} ${self_ctlr} $self_vip" ; then
+        echo "Error: failed to record the pairing on root@$vip; it will not survive a reboot" >&2
+        rc=1
+    fi
+    return $rc
 }
 
 ceph_mirror_unpair()
@@ -4395,6 +4470,7 @@ ceph_mirror_unpair()
     ceph_mirror_disable >/dev/null 2>&1
 
     if [ "x$peer_vip" = "x" ] ; then
+        ceph_mirror_tuning_clear >/dev/null 2>&1 || echo "Error: failed to clear the pairing tunings on local site" >&2
         echo "already unpaired" && exit 0
     fi
 
@@ -4405,6 +4481,10 @@ ceph_mirror_unpair()
         Quiet -n ceph_mirror_disable
         Quiet -n $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_disable"
     fi
+
+    # after the disables above: clearing runs a commit that deletes /etc/ceph/*-site.conf
+    ceph_mirror_tuning_clear >/dev/null 2>&1 || echo "Error: failed to clear the pairing tunings on local site" >&2
+    $sshcmd root@$peer_vip "$HEX_SDK ceph_mirror_tuning_clear" >/dev/null 2>&1 || echo "Error: failed to clear the pairing tunings on root@$peer_vip" >&2
 
     cmd -c "systemctl stop ceph-rbd-mirror@${self_site}.service"
     Quiet -n $sshcmd root@$peer_vip $HEX_SDK cmd -c "systemctl stop ceph-rbd-mirror@${peer_site}.service"
