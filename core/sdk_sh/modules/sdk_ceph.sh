@@ -4369,6 +4369,29 @@ ceph_mirror_unpair()
     local peer_vip=$(ceph_mirror_peer_vip)
     local sshcmd="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
+    # ceph_mirror_disable deletes the peer's volume for each mirrored image, attached
+    # servers included: run where an image is non-primary, it deletes the live copy
+    if [ -n "$peer_vip" ] ; then
+        local status rc img_name nonprimary=""
+        status=$(timeout 15 rbd mirror pool status $BUILTIN_BACKPOOL --verbose --format json 2>/dev/null)
+        rc=$?
+        # 22: mirroring is not enabled on the pool, so there is nothing to delete
+        if [ $rc -ne 0 ] && [ $rc -ne 22 ] ; then
+            echo "Error: not unpairing: cannot list the mirrored volumes (rbd exit $rc), try again" >&2
+            return 1
+        fi
+        for img_name in $(echo "$status" | jq -r '.images[]?.name' 2>/dev/null) ; do
+            if [ "$(rbd info $BUILTIN_BACKPOOL/$img_name --format json 2>/dev/null | jq -r .mirroring.primary)" != "true" ] ; then
+                nonprimary="$nonprimary $img_name"
+            fi
+        done
+        if [ -n "$nonprimary" ] ; then
+            echo "Error: not unpairing: these volumes are primary on $peer_vip and unpair here would delete them there:$nonprimary" >&2
+            echo "Run site unpair on the site that is primary for every mirrored volume; promote first if neither is" >&2
+            return 1
+        fi
+    fi
+
     ceph_mirror_disable >/dev/null 2>&1
 
     if [ "x$peer_vip" = "x" ] ; then
