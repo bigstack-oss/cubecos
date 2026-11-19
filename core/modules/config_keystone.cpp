@@ -64,6 +64,8 @@ CONFIG_GLOBAL_STR_REF(CTRL_IP);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(EXTERNAL);
+CONFIG_GLOBAL_STR_REF(FQDN);
+CONFIG_GLOBAL_STR_REF(PUBLIC_HOST);
 
 // private tunings
 CONFIG_TUNING_BOOL(KEYSTONE_ENABLED, "keystone.enabled", TUNING_UNPUB, "Set to true to enable keystone.", true);
@@ -228,9 +230,23 @@ SetupInternalAdminUser(std::string name, std::string password, std::string share
     return true;
 }
 
+// Keystone matches the issuer of a federated login against cube_idp's remote ids. Keycloak
+// issues on the public host, so cubesys.fqdn is listed once one is set; the shared id stays
+// listed so logins keep working while Keycloak changes hostname and after a reset to the VIP.
+static std::string
+IdpRemoteIds(const std::string& sharedId, const std::string& fqdn)
+{
+    std::string ids = "--remote-id https://" + sharedId + ":10443/auth/realms/master";
+    if (!fqdn.empty())
+        ids += " --remote-id https://" + fqdn + ":10443/auth/realms/master";
+
+    return ids;
+}
+
 // should run after keystone service is running.
 static bool
-SetupIdp(std::string name, std::string password, std::string sharedId, std::string domain)
+SetupIdp(std::string name, std::string password, std::string sharedId, std::string domain,
+         const std::string& fqdn, const std::string& publicHost)
 {
     if (!IsControl(s_eCubeRole))
         return true;
@@ -241,8 +257,8 @@ SetupIdp(std::string name, std::string password, std::string sharedId, std::stri
         // Configure the administrative account
         std::string env = GetOpenstackEnv(name, password, sharedId, domain);
 
-        HexUtilSystemF(0, 0, "%s %s identity provider create --domain %s --remote-id https://%s:10443/auth/realms/master cube_idp",
-                             env.c_str(), OPENSTACK_CLI, domain.c_str(), sharedId.c_str());
+        HexUtilSystemF(0, 0, "%s %s identity provider create --domain %s %s cube_idp",
+                             env.c_str(), OPENSTACK_CLI, domain.c_str(), IdpRemoteIds(sharedId, fqdn).c_str());
         HexUtilSystemF(0, 0, "%s %s mapping create --rules %s cube_idp_mapping",
                              env.c_str(), OPENSTACK_CLI, IDP_RULES);
         HexUtilSystemF(0, 0, "%s %s group create cube_admins",
@@ -262,7 +278,8 @@ SetupIdp(std::string name, std::string password, std::string sharedId, std::stri
         HexUtilSystemF(0, 0, "%s %s federation protocol create mapped --mapping cube_idp_mapping --identity-provider cube_idp",
                              env.c_str(), OPENSTACK_CLI);
 
-        HexUtilSystemF(0, 0, HEX_SDK " os_keystone_idp_config %s", sharedId.c_str());
+        // mellon's SP and its Keycloak client live on the host browsers reach keystone on
+        HexUtilSystemF(0, 0, HEX_SDK " os_keystone_idp_config %s", publicHost.c_str());
 
         HexUtilSystemF(0, 0, "touch %s", IDP_MARKER);
     }
@@ -270,9 +287,9 @@ SetupIdp(std::string name, std::string password, std::string sharedId, std::stri
     if (stat(IDP_UPDATE, &ms) == 0) {
         std::string env = GetOpenstackEnv(name, password, sharedId, domain);
 
-        HexUtilSystemF(0, 0, "%s %s identity provider set --remote-id https://%s:10443/auth/realms/master cube_idp",
-                             env.c_str(), OPENSTACK_CLI, sharedId.c_str());
-        HexUtilSystemF(0, 0, HEX_SDK " os_keystone_idp_config %s", sharedId.c_str());
+        HexUtilSystemF(0, 0, "%s %s identity provider set %s cube_idp",
+                             env.c_str(), OPENSTACK_CLI, IdpRemoteIds(sharedId, fqdn).c_str());
+        HexUtilSystemF(0, 0, HEX_SDK " os_keystone_idp_config %s", publicHost.c_str());
 
         unlink(IDP_UPDATE);
     }
@@ -340,8 +357,15 @@ UpdateConfig(std::string sharedId)
 
         // Keystone's default less "external", which conflicts with federation.
         cfg["auth"]["methods"] = "password,token,oauth1,mapped,application_credential";
-        cfg["federation"]["trusted_dashboard"] =
+        // the dashboards' callbacks on the shared id, and on cubesys.fqdn too once one is set:
+        // keystone returns the browser only to an origin listed here
+        std::string dashboards =
             "https://" + sharedId + "/horizon/auth/websso/\ntrusted_dashboard = https://" + sharedId + ":9999/api/openstack/skyline/api/v1/websso";
+        const std::string fqdn = G(FQDN);
+        if (!fqdn.empty())
+            dashboards += "\ntrusted_dashboard = https://" + fqdn + "/horizon/auth/websso/"
+                          "\ntrusted_dashboard = https://" + fqdn + ":9999/api/openstack/skyline/api/v1/websso";
+        cfg["federation"]["trusted_dashboard"] = dashboards;
         cfg["federation"]["sso_callback_template"] = "/etc/keystone/sso_callback_template.html";
         cfg["federation"]["remote_id_attribute"] = "MELLON_IDP";
         // applies to every IdP whose own authorization_ttl is unset (cube_idp is created without one)
@@ -445,7 +469,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP);
+    s_bConfigChanged = modified | s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(MGMT_ADDR) | G_MOD(CTRL_IP) | G_MOD(FQDN);
 
     s_bEndpointChanged = s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(EXTERNAL);
 
@@ -491,7 +515,8 @@ Commit(bool modified, int dryLevel)
         UpdateConfig(sharedId);
         UpdateDbConn(sharedId, dbPass);
         UpdateDebug(s_debug);
-        HexUtilSystemF(0, 0, HEX_SDK " os_wsgi_conf_update %s", myIp.c_str());
+        HexUtilSystemF(0, 0, HEX_SDK " os_wsgi_conf_update %s %s %s", myIp.c_str(),
+                       PublicCertFile(G(FQDN)).c_str(), PublicKeyFile(G(FQDN)).c_str());
 
         WriteConfig(CONF, SB_SEC_WFMT, '=', cfg);
     }
@@ -580,7 +605,7 @@ CommitIdp(bool modified, int dryLevel)
 
     std::string sharedId = G(SHARED_ID);
     std::string adminPass = GetSaltKey(false, s_adminPass.newValue(), s_seed.newValue());
-    SetupIdp("admin", adminPass, sharedId, s_cubeDomain.newValue());
+    SetupIdp("admin", adminPass, sharedId, s_cubeDomain.newValue(), G(FQDN), G(PUBLIC_HOST));
 
     return true;
 }

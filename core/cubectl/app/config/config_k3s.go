@@ -670,11 +670,14 @@ func k3sIngressDeploy() error {
 			return errors.WithStack(err)
 		}
 
+		// the default certificate of the ingress keycloak and rancher are reached on: the
+		// operator's while cubesys.fqdn is set
+		ingressCert, ingressKey := browserCert()
 		if _, outErr, err := util.ExecCmd("/usr/local/bin/k3s", "kubectl",
 			"create", "secret",
 			"-n", "ingress-nginx", "tls", "tls-private",
-			"--cert="+certFile,
-			"--key="+keyFile,
+			"--cert="+ingressCert,
+			"--key="+ingressKey,
 		); err != nil {
 			zap.S().Warn(errors.Wrap(err, outErr))
 		} else {

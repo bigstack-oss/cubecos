@@ -46,6 +46,7 @@ static LogRotateConf log_conf("openstack-skyline", "/var/log/skyline/*.log", DAI
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(FQDN);
 
 // private tunings
 CONFIG_TUNING_BOOL(SKYLINE_ENABLED, "skyline.enabled", TUNING_UNPUB, "Set to true to enable skyline.", true);
@@ -117,12 +118,28 @@ SetupService(std::string domain, std::string userPass)
 }
 
 static bool
-WriteSkylineConf(bool debug, const char* domain, const char* sharedId, const char* userpass, const char* dbpass,
-                 const char* secretkey)
+WriteSkylineConf(bool debug, const char* domain, const char* sharedId, const std::string& fqdn, const char* userpass,
+                 const char* dbpass, const char* secretkey)
 {
+    // keystone_url is where skyline sends the browser to log in as well as where it calls
+    // keystone itself. On cubesys.fqdn that has to be keystone's TLS listener: Keycloak and the
+    // ceph dashboard send HSTS for the name, so a browser rewrites http://<fqdn>:5000 to https
+    // before sending it, and :5000 has no TLS. Skyline's own calls then verify the operator's
+    // certificate: against the CA the operator gave, or against the system trust store when
+    // the certificate chains to a public CA (cafile left empty).
+    std::string keystoneUrl = "http://" + std::string(sharedId) + ":5000/v3/";
+    std::string cafile = "";
+    if (!fqdn.empty()) {
+        keystoneUrl = "https://" + fqdn + ":5443/v3/";
+        if (access(PUBLIC_CA_CRT, R_OK) == 0)
+            cafile = PUBLIC_CA_CRT;
+    }
+
     if (HexSystemF(0, "sed -e \"s/@SHARED_ID@/%s/\" -e \"s/@SKYLINE_SERVICE_PASSWORD@/%s/\" -e \"s/@SKYLINE_DB_PASSWORD@/%s/\" "
-                      "-e \"s/@DEBUG@/%s/\" -e \"s/@DOMAIN@/%s/\" -e \"s/@SKYLINE_SECRET_KEY@/%s/\" %s > %s",
-            sharedId, userpass, dbpass, debug ? "true" : "false", domain, secretkey, SKYLINE_CONF_IN, SKYLINE_CONF)
+                      "-e \"s/@DEBUG@/%s/\" -e \"s/@DOMAIN@/%s/\" -e \"s/@SKYLINE_SECRET_KEY@/%s/\" "
+                      "-e \"s#@KEYSTONE_URL@#%s#\" -e \"s#@CAFILE@#%s#\" %s > %s",
+            sharedId, userpass, dbpass, debug ? "true" : "false", domain, secretkey,
+            keystoneUrl.c_str(), cafile.c_str(), SKYLINE_CONF_IN, SKYLINE_CONF)
         != 0) {
         HexLogError("failed to update %s", SKYLINE_CONF);
         return false;
@@ -180,7 +197,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bCubeModified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID);
+    s_bConfigChanged = modified | s_bCubeModified | G_MOD(MGMT_ADDR) | G_MOD(SHARED_ID) | G_MOD(FQDN);
 
     return s_bDbPassChanged | s_bConfigChanged;
 }
@@ -210,7 +227,7 @@ Commit(bool modified, int dryLevel)
         MysqlUtilUpdateDbPass(USER, dbPass.c_str());
 
     if (s_bConfigChanged) {
-        WriteSkylineConf(s_debug, s_cubeDomain.c_str(), sharedId.c_str(), userPass.c_str(), dbPass.c_str(),
+        WriteSkylineConf(s_debug, s_cubeDomain.c_str(), sharedId.c_str(), G(FQDN), userPass.c_str(), dbPass.c_str(),
                          secretKey.c_str());
     }
 

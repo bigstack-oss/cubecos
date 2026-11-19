@@ -1,7 +1,7 @@
 default:
   access_token_expire: 3600
   access_token_renew: 1800
-  cafile: ''
+  cafile: '@CAFILE@'
   cors_allow_origins: []
   database_url: mysql://skyline:@SKYLINE_DB_PASSWORD@@@SHARED_ID@:3306/skyline
   debug: @DEBUG@
@@ -24,7 +24,7 @@ openstack:
   extension_mapping:
     vpnaas: neutron_vpn
   interface_type: public
-  keystone_url: http://@SHARED_ID@:5000/v3/
+  keystone_url: @KEYSTONE_URL@
   nginx_prefix: /api/openstack
   reclaim_instance_interval: 604800
   service_mapping:

@@ -118,6 +118,23 @@ func (s *Settings) GetControllerIp() string {
 	return ip
 }
 
+// GetFqdn is cubesys.fqdn, the name the web UIs are served on; empty when none is set.
+func GetFqdn() string { return s.GetFqdn() }
+func (s *Settings) GetFqdn() string {
+	return s.v.GetString("cubesys.fqdn")
+}
+
+// GetPublicHost is the host a browser is sent to: cubesys.fqdn when set, the controller
+// address otherwise. It is hex_config's PUBLIC_HOST, which every SAML client registers on.
+func GetPublicHost() string { return s.GetPublicHost() }
+func (s *Settings) GetPublicHost() string {
+	if fqdn := s.GetFqdn(); fqdn != "" {
+		return fqdn
+	}
+
+	return s.GetControllerIp()
+}
+
 func GetController() string { return s.GetController() }
 func (s *Settings) GetController() string {
 	var name string

@@ -484,7 +484,7 @@ func distributeCerts() error {
 }
 
 // reapplySamlClients hands the new certificate to both ends of every SAML trust
-// that pins it. The controller value matches the shared id the shell paths
+// that pins it. The controller value matches the public host the shell paths
 // (api_idp_config, ceph_dashboard_idp_config) apply with, so the clients are updated
 // in place rather than created anew.
 //
@@ -496,7 +496,8 @@ func distributeCerts() error {
 // Every step is tried even when another fails, and a failure fails the command: by
 // now the new certificate is live and SSO login is broken until the step goes through.
 func reapplySamlClients() error {
-	ip := cubeSettings.GetControllerIp()
+	// the host the clients are registered on: cubesys.fqdn once one is set
+	ip := cubeSettings.GetPublicHost()
 	controller := "cube_controller=" + ip
 
 	var rerun []string
@@ -583,9 +584,12 @@ func setupCephDashboardSso(ip string) error {
 // given a copy rather than a path. ceph_dashboard_init() is not reusable here: it
 // also creates a radosgw user, wires up SAML2 SSO and runs terraform.
 func reconfigureCephCerts() error {
+	// the dashboard is browser-facing: while cubesys.fqdn is set it keeps the operator's
+	// certificate, which regenerating the appliance's own does not touch
+	dashCert, dashKey := browserCert()
 	for _, args := range [][]string{
-		{"ceph", "dashboard", "set-ssl-certificate", "-i", certFile},
-		{"ceph", "dashboard", "set-ssl-certificate-key", "-i", keyFile},
+		{"ceph", "dashboard", "set-ssl-certificate", "-i", dashCert},
+		{"ceph", "dashboard", "set-ssl-certificate-key", "-i", dashKey},
 		{"ceph", "config-key", "set", "mgr/restful/crt", "-i", certFile},
 		{"ceph", "config-key", "set", "mgr/restful/key", "-i", keyFile},
 	} {

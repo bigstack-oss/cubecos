@@ -64,6 +64,12 @@ CONFIG_TUNING_STR(CUBESYS_STORAGE_ADDRS, "cubesys.storage.addrs", TUNING_UNPUB, 
 CONFIG_TUNING_BOOL(CUBESYS_HA, "cubesys.ha", TUNING_UNPUB, "Set true for indicate a HA setup.", false);
 CONFIG_TUNING_BOOL(CUBESYS_SALTKEY, "cubesys.saltkey", TUNING_UNPUB, "Set true for enabling key scrambling.", false);
 CONFIG_TUNING_STR(CUBESYS_EXTERNAL, "cubesys.external", TUNING_UNPUB, "Set external IP/Domain.", "", ValidateRegex, DFT_REGEX_STR);
+// The name browsers reach the web UIs on. Unpublished, because setting it on a node is only
+// half of a switch: cube-cos-api sets it on every node and then makes the cluster-wide changes
+// (Keycloak's hostname, the SAML clients, the browser-facing certificate) in the same request.
+// A letter-led last label keeps an IP address out; the address case stays cubesys.external's.
+CONFIG_TUNING_STR(CUBESYS_FQDN, "cubesys.fqdn", TUNING_UNPUB, "Set the FQDN the web UIs are served on (empty: the control VIP).", "", ValidateRegex,
+                  "^$|^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$");
 CONFIG_TUNING_INT(CUBESYS_ALERT_LEVEL_SERVICE, "cubesys.alert.level.%s", TUNING_UNPUB, "Set health alert sensible level for service %s. (0: default, 1: highly sensitive)", 0, 0, INT_MAX);
 
 // public tunings
@@ -84,6 +90,7 @@ PARSE_TUNING_STR(s_cubeRegion, CUBESYS_REGION);
 PARSE_TUNING_STR(s_controller, CUBESYS_CONTROLLER);
 PARSE_TUNING_STR(s_controllerIp, CUBESYS_CONTROLLER_IP);
 PARSE_TUNING_STR(s_external, CUBESYS_EXTERNAL);
+PARSE_TUNING_STR(s_fqdn, CUBESYS_FQDN);
 PARSE_TUNING_STR(s_mgmt, CUBESYS_MGMT);
 PARSE_TUNING_STR(s_provider, CUBESYS_PROVIDER);
 PARSE_TUNING_STR(s_overlay, CUBESYS_OVERLAY);

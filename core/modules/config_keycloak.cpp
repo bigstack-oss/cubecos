@@ -2,6 +2,9 @@
 
 #include "config_keycloak.hpp"
 
+#include <fstream>
+#include <sstream>
+
 static const std::string APP = "statefulset.apps/keycloak-keycloakx";
 /**
  * The statefulset the WildFly-based chart used to create. CubeCOS v3.1.0 and older
@@ -37,6 +40,7 @@ static const std::string KEYCLOAK_LOGIN_THEME = "cos-ui";
 // external global variables
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(PUBLIC_HOST);
 
 // using external tunings
 CONFIG_TUNING_SPEC_STR(APPLIANCE_LOGIN_GREETING);
@@ -673,9 +677,10 @@ updateKeycloak()
     /**
      * chart-values.yaml needs the address Keycloak is reached on so it can pin the URL
      * Keycloak advertises -- the SAML entityID, the OIDC issuer and the admin console all
-     * derive from it -- since resolving it from the request loses the ingress port.
+     * derive from it -- since resolving it from the request loses the ingress port. That is
+     * the public host: cubesys.fqdn once one is set, the shared id otherwise.
      */
-    const std::string sharedId = G(SHARED_ID);
+    const std::string publicHost = G(PUBLIC_HOST);
 
     const std::string cmd = std::string()
         + "/usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml "
@@ -684,7 +689,7 @@ updateKeycloak()
         + "-n " + APP_NAMESPACE + " "
         + "--create-namespace "
         + "--set replicas=" + std::to_string(nodeCount) + " "
-        + "--set cubeController=" + sharedId;
+        + "--set cubeController=" + publicHost;
 
     // parallel control-node applies race on the same helm release; retry the
     // transient "another operation in progress" lock
@@ -767,6 +772,62 @@ hasKeycloakSamlMetadataFile()
     }
 
     return true;
+}
+
+/**
+ * The address the deployed chart pins Keycloak's URLs to (its cubeController value), or an
+ * empty string when the release cannot be read.
+ */
+static std::string
+getKeycloakHostname()
+{
+    // stdout captured; pipefail, or a failing helm hands jq nothing and the pipeline still
+    // succeeds, reading as a release with no hostname
+    const ExecSyncResult r = ExecBashSync(0, true, false, {},
+        "set -o pipefail; /usr/local/bin/helm --kubeconfig=/etc/rancher/k3s/k3s.yaml get values " + CHART_RELEASE_NAME
+        + " -n " + APP_NAMESPACE + " -o json 2>/dev/null | /usr/bin/jq -r '.cubeController // empty'");
+    if (r.exitCode != 0) {
+        HexLogWarning("cannot read the keycloak release's hostname (exit %d)", r.exitCode);
+        return "";
+    }
+
+    // a hostname carries no whitespace; jq ends its answer, empty or not, with a newline
+    std::string host = r.stdoutOutput;
+    host.erase(std::remove_if(host.begin(), host.end(), ::isspace), host.end());
+    return host;
+}
+
+/**
+ * Whether Keycloak advertises host. A cubesys.fqdn change has to reach the chart, and an
+ * upgrade or a repair that re-installs it must not put the old address back. An unreadable
+ * release counts as matching: checkKeycloak() is what notices a missing one.
+ */
+static bool
+isKeycloakOnHost(const std::string& host)
+{
+    const std::string deployed = getKeycloakHostname();
+    if (deployed.empty() || deployed == host)
+        return true;
+
+    HexLogInfo("keycloak advertises %s, the public host is %s", deployed.c_str(), host.c_str());
+    return false;
+}
+
+/**
+ * Whether the downloaded IdP metadata names Keycloak on host. Its entityID and every endpoint
+ * in it follow the chart's hostname, and each SAML SP (mellon, cube-cos-api, the ceph
+ * dashboard, rancher) reads them from this file.
+ */
+static bool
+isSamlMetadataForHost(const std::string& host)
+{
+    std::ifstream f(KEYCLOAK_SAML_METADATA_FILE);
+    std::stringstream content;
+    content << f.rdbuf();
+
+    const std::string entityId = "entityID=\"https://" + host + ":" + std::to_string(K3S_INGRESS_HTTPS_PORT)
+        + "/auth/realms/master\"";
+    return content.str().find(entityId) != std::string::npos;
 }
 
 /**
@@ -1090,6 +1151,27 @@ hasDefaultCubeGroups(const std::string& endpointIp)
     return 1;
 }
 
+static bool syncSamlMetadata(const std::string myip);
+
+/**
+ * Fetch the IdP metadata again once Keycloak advertises host, and hand it to the other
+ * controls. Bounded, unlike the gate in Commit(): the file already here still lets this
+ * node's services start, and the FQDN switch in cube-cos-api checks the outcome.
+ */
+static void
+refreshSamlMetadata(const std::string& host)
+{
+    for (int attempt = 0; attempt < 30; attempt++) {
+        if (downloadKeycloakSamlMetadata(G(SHARED_ID)) && isSamlMetadataForHost(host)) {
+            syncSamlMetadata(G(MGMT_ADDR));
+            return;
+        }
+        sleep(10);
+    }
+
+    HexLogError("%s still does not name keycloak on %s", KEYCLOAK_SAML_METADATA_FILE, host.c_str());
+}
+
 static bool
 Commit(bool modified, int dryLevel)
 {
@@ -1144,9 +1226,10 @@ Commit(bool modified, int dryLevel)
         return true;
     }
 
+    const std::string publicHost = G(PUBLIC_HOST);
     bool isKeycloakUpdated = false;
     // a cluster still on the WildFly statefulset passes checkKeycloak() but needs the handover
-    if ((s_bApplianceModified || !checkKeycloak() || hasLegacyKeycloak())
+    if ((s_bApplianceModified || !checkKeycloak() || hasLegacyKeycloak() || !isKeycloakOnHost(publicHost))
         && isUpdateKeycloakPossible(s_ha, s_hostname, s_ctrlHosts)) {
         // scale keycloak to one pod per control host + roll out
         HexLogInfo("update keycloak");
@@ -1166,6 +1249,9 @@ Commit(bool modified, int dryLevel)
             HexLogError("failed to update keycloak (scale race?); continuing to saml metadata gate");
         }
     }
+
+    if (hasKeycloakSamlMetadataFile() && !isSamlMetadataForHost(publicHost) && isKeycloakOnHost(publicHost))
+        refreshSamlMetadata(publicHost);
 
     // always gate on the SAML metadata file (SSO reads it): the commit must not
     // report success without it. Needs only keycloak reachable, not this node's

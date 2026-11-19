@@ -26,11 +26,54 @@ const (
 	certKeyFile   = certsDir + certKeyBase
 	sansConfFile  = "/tmp/openssl-sans.cnf"
 
+	// the operator's certificate for cubesys.fqdn (PUBLIC_CERT_DIR in cluster.hpp)
+	publicCertsDir    = "/etc/cube/certs/"
+	publicCertFile    = publicCertsDir + certBase
+	publicKeyFile     = publicCertsDir + keyBase
+	publicCertKeyFile = publicCertsDir + certKeyBase
+	publicCaFile      = publicCertsDir + "ca.cert"
+
 	terraformWorkDir = "/var/lib/terraform/"
 	// terraform-action.sh pulls it after every apply; not terraform.tfstate, which init would
 	// take for local state
 	terraformStateFile = terraformWorkDir + "terraform.tfstate.etcd"
 )
+
+// usePublicCert reports whether the browser-facing listeners serve the operator's
+// certificate: cubesys.fqdn is set and the certificate is in place. UsePublicCert() in
+// cluster.hpp decides the same for hex_config.
+func usePublicCert() bool {
+	if cubeSettings.GetFqdn() == "" {
+		return false
+	}
+
+	for _, f := range []string{publicCertFile, publicKeyFile, publicCertKeyFile} {
+		if _, err := os.Stat(f); err != nil {
+			return false
+		}
+	}
+
+	return true
+}
+
+// browserCert is the certificate and key a browser-facing listener serves.
+func browserCert() (cert, key string) {
+	if usePublicCert() {
+		return publicCertFile, publicKeyFile
+	}
+
+	return certFile, keyFile
+}
+
+// browserCa is the CA that verifies browserCert(): the one the operator installed with
+// their certificate, or the appliance's own self-signed certificate.
+func browserCa() string {
+	if usePublicCert() {
+		return publicCaFile
+	}
+
+	return certFile
+}
 
 func getIfaceIP(name string) (string, error) {
 	ifaces, err := net.Interfaces()

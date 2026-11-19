@@ -50,6 +50,7 @@ static CubeRole_e s_eCubeRole;
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(FQDN);
 
 // private tunings
 CONFIG_TUNING_STR(HORIZON_DBPASS, "horizon.db.password", TUNING_UNPUB, "Set horizon db password.", DBPASS, ValidateRegex, DFT_REGEX_STR);
@@ -105,12 +106,15 @@ SetupService()
 }
 
 static bool
-WriteDjangoConf(const char* sharedId, const char* cachesrvs, const char* dbpass, const char* timezone,
-                const char* secretkey)
+WriteDjangoConf(const char* sharedId, const std::string& fqdn, const char* cachesrvs, const char* dbpass,
+                const char* timezone, const char* secretkey)
 {
+    const std::string webssoUrl = fqdn.empty() ? "None" : "'https://" + fqdn + ":5443/v3'";
     if (HexSystemF(0, "sed -e \"s/@SHARED_ID@/%s/\" -e \"s/'@CACHE_SERVERS@'/%s/\" -e \"s/@HORIZON_DB_PASSWORD@/%s/\" "
-                      "-e \"s/@DOMAIN@/%s/\" -e \"s/@TIME_ZONE@/%s/\" -e \"s/@HORIZON_SECRET_KEY@/%s/\" %s > %s",
-                      sharedId, cachesrvs, dbpass, "Default", timezone, secretkey, DJANGO_CONF_IN, DJANGO_CONF) != 0) {
+                      "-e \"s/@DOMAIN@/%s/\" -e \"s/@TIME_ZONE@/%s/\" -e \"s/@HORIZON_SECRET_KEY@/%s/\" "
+                      "-e \"s#@WEBSSO_KEYSTONE_URL@#%s#\" %s > %s",
+                      sharedId, cachesrvs, dbpass, "Default", timezone, secretkey, webssoUrl.c_str(),
+                      DJANGO_CONF_IN, DJANGO_CONF) != 0) {
         HexLogError("failed to update %s", DJANGO_CONF);
         return false;
     }
@@ -171,7 +175,7 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bDbPassChanged = s_dbPass.modified() | s_bCubeModified;
 
-    s_bConfigChanged = modified | s_bTimeModified | s_bCubeModified | G_MOD(SHARED_ID);
+    s_bConfigChanged = modified | s_bTimeModified | s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(FQDN);
 
     return s_bDbPassChanged | s_bConfigChanged;
 }
@@ -204,7 +208,7 @@ Commit(bool modified, int dryLevel)
         std::string tz = s_timezone.newValue();
         for (size_t pos = 0; (pos = tz.find('/', pos)) != std::string::npos; pos += 2)
             tz.replace(pos, 1, "\\/");
-        WriteDjangoConf(sharedId.c_str(), cachesrvs.c_str(), dbPass.c_str(), tz.c_str(), secretKey.c_str());
+        WriteDjangoConf(sharedId.c_str(), G(FQDN), cachesrvs.c_str(), dbPass.c_str(), tz.c_str(), secretKey.c_str());
     }
 
     if (!s_bSetup)

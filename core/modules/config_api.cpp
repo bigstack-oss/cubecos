@@ -54,6 +54,7 @@ PARSE_TUNING_STR(s_s3Secret, API_S3_SECRET);
 // we still need to listen to changes on MGMT_ADDR to restart cube-cos-api
 CONFIG_GLOBAL_STR_REF(MGMT_ADDR);
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(PUBLIC_HOST);
 
 // rotate daily and enable copytruncate
 static LogRotateConf log_conf(API_NAME, "/var/log/cube-cos-api/*.log", DAILY, 128, 0, true);
@@ -120,9 +121,9 @@ Commit(bool modified, int dryLevel)
         return true;
     }
 
-    std::string sharedId = G(SHARED_ID);
     if (access(MARKER_API_IDP, F_OK) != 0) {
-        HexUtilSystemF(0, 0, HEX_SDK " api_idp_config %s", sharedId.c_str());
+        // the API's SAML SP is reached by browsers, so it registers on the public host
+        HexUtilSystemF(0, 0, HEX_SDK " api_idp_config %s", G(PUBLIC_HOST).c_str());
         HexSystemF(0, "touch %s", MARKER_API_IDP);
     }
 

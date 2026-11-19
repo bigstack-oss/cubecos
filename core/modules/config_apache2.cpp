@@ -40,6 +40,7 @@ static LogRotateConf log_conf("httpd", "/var/log/httpd/*.log", DAILY, 128, 0, tr
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(FQDN);
 
 // public tunings
 CONFIG_TUNING_BOOL(APACHE_DEBUG_ENABLED, "apache.debug.enabled", TUNING_UNPUB, "Set to true to enable apache debug logs.", false);
@@ -212,7 +213,8 @@ CommitCheck(bool modified, int dryLevel)
 
     s_bSiteConfChanged = modified | s_bNetModified;
 
-    return s_bSiteConfChanged | G_MOD(SHARED_ID);
+    // FQDN: keystone's :5443 vhost changes certificate and horizon its WebSSO URL with it
+    return s_bSiteConfChanged | G_MOD(SHARED_ID) | G_MOD(FQDN);
 }
 
 static bool

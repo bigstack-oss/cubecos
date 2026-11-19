@@ -22,6 +22,17 @@
 #define CLUSTER_SRV_CRT "/var/www/certs/server.cert"
 #define CLUSTER_SRV_KEY "/var/www/certs/server.key"
 #define CLUSTER_CA_CRT  "/var/www/certs/ca.cert"
+#define CLUSTER_SRV_PEM "/var/www/certs/server.pem"
+
+// The certificate the operator installs for cubesys.fqdn. Only the listeners a browser
+// reaches serve it, and only while an FQDN is set: everything else keeps the appliance's own
+// PKI above, whose SAN carries the addresses those clients connect to and which a customer
+// certificate for one name would not.
+#define PUBLIC_CERT_DIR "/etc/cube/certs"
+#define PUBLIC_SRV_CRT  PUBLIC_CERT_DIR "/server.cert"    // leaf, then its intermediates
+#define PUBLIC_SRV_KEY  PUBLIC_CERT_DIR "/server.key"
+#define PUBLIC_SRV_PEM  PUBLIC_CERT_DIR "/server.pem"     // server.cert + server.key
+#define PUBLIC_CA_CRT   PUBLIC_CERT_DIR "/ca.cert"        // only when the operator gave one
 
 #define GetController(isctrl, hostname, controller) (isctrl ? hostname : controller)
 
@@ -38,6 +49,20 @@ int GetControlWorkers(
  * is why it lives here rather than in either config module.
  */
 std::string ClusterCaCertFile();
+
+/**
+ * Whether the browser-facing listeners serve the installed certificate: an FQDN is set and
+ * the certificate is in place. A node that has the FQDN but not (yet) the certificate keeps
+ * serving the appliance's own, so its listeners still start; browsers then warn about the
+ * name, which says what is missing.
+ */
+bool UsePublicCert(const std::string& fqdn);
+
+// What a browser-facing listener serves for fqdn: the installed certificate files while
+// UsePublicCert(fqdn), the appliance's own otherwise.
+std::string PublicCertFile(const std::string& fqdn);
+std::string PublicKeyFile(const std::string& fqdn);
+std::string PublicPemFile(const std::string& fqdn);
 
 std::string
 GetSaltBytesInBase64(

@@ -30,6 +30,7 @@ static CubeRole_e s_eCubeRole;
 static ConfigString s_hostname;
 
 static const char CONFIGURED_FILE[] = "/etc/appliance/state/configured";
+static const char HOSTS[] = "/etc/hosts";
 
 // declare global variables
 CONFIG_GLOBAL_BOOL(IS_MASTER)(false);
@@ -55,6 +56,10 @@ CONFIG_GLOBAL_STR(CTRL)("");
 CONFIG_GLOBAL_STR(CTRL_IP)("0.0.0.0");
 CONFIG_GLOBAL_STR(SHARED_ID)("0.0.0.0");
 CONFIG_GLOBAL_STR(EXTERNAL)("");
+// cubesys.fqdn, empty when unset
+CONFIG_GLOBAL_STR(FQDN)("");
+// the host a browser is sent to: FQDN when set, SHARED_ID otherwise
+CONFIG_GLOBAL_STR(PUBLIC_HOST)("0.0.0.0");
 
 // using external tunings
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
@@ -64,6 +69,7 @@ CONFIG_TUNING_SPEC_STR(CUBESYS_REGION);
 CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROLLER);
 CONFIG_TUNING_SPEC_STR(CUBESYS_CONTROLLER_IP);
 CONFIG_TUNING_SPEC_STR(CUBESYS_EXTERNAL);
+CONFIG_TUNING_SPEC_STR(CUBESYS_FQDN);
 CONFIG_TUNING_SPEC_STR(CUBESYS_MGMT);
 CONFIG_TUNING_SPEC_STR(CUBESYS_PROVIDER);
 CONFIG_TUNING_SPEC_STR(CUBESYS_OVERLAY);
@@ -87,6 +93,7 @@ PARSE_TUNING_X_STR(s_cubeRegion, CUBESYS_REGION, 1);
 PARSE_TUNING_X_STR(s_controller, CUBESYS_CONTROLLER, 1);
 PARSE_TUNING_X_STR(s_controllerIp, CUBESYS_CONTROLLER_IP, 1);
 PARSE_TUNING_X_STR(s_external, CUBESYS_EXTERNAL, 1);
+PARSE_TUNING_X_STR(s_fqdn, CUBESYS_FQDN, 1);
 PARSE_TUNING_X_STR(s_mgmt, CUBESYS_MGMT, 1);
 PARSE_TUNING_X_STR(s_provider, CUBESYS_PROVIDER, 1);
 PARSE_TUNING_X_STR(s_overlay, CUBESYS_OVERLAY, 1);
@@ -236,12 +243,16 @@ ParseOld(void)
     std::string ctrlIp = isCtrl ? mgmtAddr : s_controllerIp.oldValue();
     std::string sharedId = GetSharedId(isCtrl, s_ha.oldValue(), ctrlIp, s_ctrlVip.oldValue());
     std::string external = s_external.oldValue().length() ? s_external.oldValue() : sharedId;
+    std::string fqdn = s_fqdn.oldValue();
+    std::string publicHost = fqdn.length() ? fqdn : sharedId;
 
     G_PARSE_OLD(IS_MASTER, isMaster ? "true" : "false");
     G_PARSE_OLD(CTRL, ctrl.c_str());
     G_PARSE_OLD(CTRL_IP, ctrlIp.c_str());
     G_PARSE_OLD(SHARED_ID, sharedId.c_str());
     G_PARSE_OLD(EXTERNAL, external.c_str());
+    G_PARSE_OLD(FQDN, fqdn.c_str());
+    G_PARSE_OLD(PUBLIC_HOST, publicHost.c_str());
 
     G_PARSE_OLD(MGMT_IF, mgmtIf.c_str());
     G_PARSE_OLD(PROVIDER_IF, providerIf.c_str());
@@ -266,6 +277,8 @@ ParseOld(void)
     HexLogInfo(OLD_KVP_FMT, "ctrl ip", G_OLD(CTRL_IP).c_str());
     HexLogInfo(OLD_KVP_FMT, "shared id", G_OLD(SHARED_ID).c_str());
     HexLogInfo(OLD_KVP_FMT, "external", G_OLD(EXTERNAL).c_str());
+    HexLogInfo(OLD_KVP_FMT, "fqdn", G_OLD(FQDN).c_str());
+    HexLogInfo(OLD_KVP_FMT, "public", G_OLD(PUBLIC_HOST).c_str());
 
 #define OLD_FMT "(old) %10s: %s, %s, %s, %s"
 
@@ -368,12 +381,16 @@ ParseNew(void)
     std::string ctrlIp = isCtrl ? mgmtAddr : s_controllerIp.newValue();
     std::string sharedId = GetSharedId(isCtrl, s_ha.newValue(), ctrlIp, s_ctrlVip.newValue());
     std::string external = s_external.newValue().length() ? s_external.newValue() : sharedId;
+    std::string fqdn = s_fqdn.newValue();
+    std::string publicHost = fqdn.length() ? fqdn : sharedId;
 
     G_PARSE_NEW(IS_MASTER, isMaster ? "true" : "false");
     G_PARSE_NEW(CTRL, ctrl.c_str());
     G_PARSE_NEW(CTRL_IP, ctrlIp.c_str());
     G_PARSE_NEW(SHARED_ID, sharedId.c_str());
     G_PARSE_NEW(EXTERNAL, external.c_str());
+    G_PARSE_NEW(FQDN, fqdn.c_str());
+    G_PARSE_NEW(PUBLIC_HOST, publicHost.c_str());
 
     G_PARSE_NEW(MGMT_IF, mgmtIf.c_str());
     G_PARSE_NEW(PROVIDER_IF, providerIf.c_str());
@@ -398,6 +415,8 @@ ParseNew(void)
     HexLogInfo(NEW_KVP_FMT, "ctrl ip", G_NEW(CTRL_IP).c_str(), G_MOD_STR(CTRL_IP));
     HexLogInfo(NEW_KVP_FMT, "shared id", G_NEW(SHARED_ID).c_str(), G_MOD_STR(SHARED_ID));
     HexLogInfo(NEW_KVP_FMT, "external", G_NEW(EXTERNAL).c_str(), G_MOD_STR(EXTERNAL));
+    HexLogInfo(NEW_KVP_FMT, "fqdn", G_NEW(FQDN).c_str(), G_MOD_STR(FQDN));
+    HexLogInfo(NEW_KVP_FMT, "public", G_NEW(PUBLIC_HOST).c_str(), G_MOD_STR(PUBLIC_HOST));
 
 #define NEW_FMT "(new) %10s: %s(%s), %s(%s), %s(%s), %s(%s)"
 
@@ -476,6 +495,22 @@ Prepare(bool modified, int dryLevel)
     return true;
 }
 
+// Resolve the FQDN to the shared id on the node itself. Everything server-side that has to
+// name the public host -- terraform's Keycloak provider, Skyline's keystone_url, the SAML
+// metadata fetches -- then reaches the VIP whatever the customer's DNS says, which may well
+// be a NAT address the cluster cannot hairpin through.
+static void
+UpdateFqdnHosts(const std::string& fqdn, const std::string& sharedId)
+{
+    HexSystemF(0, "sed -i '/# fqdn-start/,/# fqdn-end/d' %s", HOSTS);
+    if (fqdn.empty())
+        return;
+
+    HexSystemF(0, "echo '# fqdn-start' >> %s", HOSTS);
+    HexSystemF(0, "echo '%s    %s' >> %s", sharedId.c_str(), fqdn.c_str(), HOSTS);
+    HexSystemF(0, "echo '# fqdn-end' >> %s", HOSTS);
+}
+
 static bool
 Commit(bool modified, int dryLevel)
 {
@@ -493,7 +528,13 @@ Commit(bool modified, int dryLevel)
         HexUtilSystemF(0, 0, "/usr/sbin/ip link set %s up", s_provider.c_str());
     }
 
-    return ParseNew();
+    if (!ParseNew())
+        return false;
+
+    if (IsBootstrap() || G_MOD(FQDN) || G_MOD(SHARED_ID))
+        UpdateFqdnHosts(G(FQDN), G(SHARED_ID));
+
+    return true;
 }
 
 static bool
@@ -575,7 +616,7 @@ CONFIG_OBSERVES(cube_scan, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(cube_scan, cubesys, ParseCube, NotifyCube);
 
 CONFIG_REQUIRES(cube_scan, standalone);
-// owns CTRL_IP / SHARED_ID / EXTERNAL / MGMT_ADDR, which other modules read when
+// owns CTRL_IP / SHARED_ID / EXTERNAL / PUBLIC_HOST / MGMT_ADDR, which other modules read when
 // writing their configs -- must commit even for a scoped module range
 CONFIG_PROVIDES_GLOBALS(cube_scan);
 

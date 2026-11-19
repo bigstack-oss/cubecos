@@ -49,6 +49,7 @@ static LogRotateConf log_conf("grafana", "/var/log/grafana/*.log", DAILY, 128, 0
 
 // external global variables
 CONFIG_GLOBAL_STR_REF(SHARED_ID);
+CONFIG_GLOBAL_STR_REF(FQDN);
 
 // private tunings
 CONFIG_TUNING_STR(GRAFANA_ADMIN_PASS, "grafana.admin.password", TUNING_UNPUB,
@@ -66,7 +67,7 @@ PARSE_TUNING_X_STR(s_seed, CUBESYS_SEED, 1);
 PARSE_TUNING_X_BOOL(s_saltkey, CUBESYS_SALTKEY, 1);
 
 static bool
-WriteConfig(const std::string& sharedId, const std::string& adminPass)
+WriteConfig(const std::string& sharedId, const std::string& fqdn, const std::string& adminPass)
 {
     FILE *fout = fopen(CONF, "w");
     if (!fout) {
@@ -78,9 +79,13 @@ WriteConfig(const std::string& sharedId, const std::string& adminPass)
     fchmod(fileno(fout), 0640);
 
     fprintf(fout, "[server]\n");
-    // only haproxy talks to grafana, which serves it as /grafana on the shared id
+    // only haproxy talks to grafana, which serves it as /grafana on the shared id, or over
+    // https on cubesys.fqdn once one is set (Keycloak and the ceph dashboard send HSTS for it)
     fprintf(fout, "http_addr = 127.0.0.1\n");
-    fprintf(fout, "root_url = http://%s/grafana\n", sharedId.c_str());
+    if (fqdn.empty())
+        fprintf(fout, "root_url = http://%s/grafana\n", sharedId.c_str());
+    else
+        fprintf(fout, "root_url = https://%s/grafana\n", fqdn.c_str());
     fprintf(fout, "\n");
     fprintf(fout, "[security]\n");
     fprintf(fout, "allow_embedding = true\n");
@@ -187,7 +192,7 @@ CommitCheck(bool modified, int dryLevel)
         return true;
     }
 
-    return modified | s_bCubeModified | G_MOD(SHARED_ID);
+    return modified | s_bCubeModified | G_MOD(SHARED_ID) | G_MOD(FQDN);
 }
 
 static bool
@@ -211,7 +216,7 @@ Commit(bool modified, int dryLevel)
     struct stat ms;
     bool hasDb = stat(DB, &ms) == 0;
 
-    WriteConfig(sharedId, adminPass);
+    WriteConfig(sharedId, G(FQDN), adminPass);
 
     // with the server stopped, so nothing else has the database open
     if (enabled && hasDb) {
