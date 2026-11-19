@@ -973,27 +973,24 @@ health_hacluster_repair()
                 $HEX_SDK pacemaker_node_start $node
             fi
         done
-        status=$(pcs status 2>/dev/null)
+        # wait for quorum and an idle DC before judging remote nodes
+        for i in $(seq 1 36) ; do
+            crm_mon -1 2>/dev/null | grep -q "partition with quorum" && pacemaker_settled && break
+            sleep 5
+        done
+        local readd=()
         for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
             if ! remote_run $node hex_sdk is_control_node ; then
-                if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
-                    :
-                else
-                    remote_run $node "systemctl restart pcsd"
-                    Quiet -n hex_sdk pacemaker_remote_remove $node
-                    remote_run $node "systemctl stop pacemaker_remote"
-                fi
+                _hacluster_remote_back $node && continue
+                remote_run $node "systemctl restart pcsd"
+                Quiet -n hex_sdk pacemaker_remote_remove $node
+                remote_run $node "systemctl stop pacemaker_remote"
+                readd+=("$node")
             fi
         done
 
-        for node in "${CUBE_NODE_COMPUTE_HOSTNAMES[@]}" ; do
-            if ! remote_run $node hex_sdk is_control_node ; then
-                if echo "$status" | grep "RemoteOnline.*" | grep -q " ${node} " ; then
-                    :
-                else
-                    ! is_sshable $node || Quiet -n hex_sdk pacemaker_remote_add $node
-                fi
-            fi
+        for node in "${readd[@]}" ; do
+            ! is_sshable $node || Quiet -n hex_sdk pacemaker_remote_add $node
         done
         for rsc in vip haproxy cinder-volume ovndb_servers-clone $(cubectl node list -r compute -j | jq -r .[].hostname) ; do
             Quiet -n pcs resource enable $rsc
@@ -1001,6 +998,17 @@ health_hacluster_repair()
         Quiet -n pcs resource cleanup
         Quiet -n pcs resource clear vip
     fi
+}
+
+# 0 if the remote node is online now or within a short grace period
+_hacluster_remote_back()
+{
+    local i
+    for i in 1 2 3 4 5 6 ; do
+        pacemaker_remote_online $1 && return 0
+        sleep 5
+    done
+    return 1
 }
 
 health_rabbitmq_report()
