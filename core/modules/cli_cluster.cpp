@@ -911,7 +911,7 @@ ClusterReadyMain(int argc, const char** argv)
 
     CliPrintf("[6/6] Cluster check and repair started in the background.");
     CliPrintf("      The box is ready to use now; the result will pop up here when it completes.");
-    HexSpawn(0, HEX_SDK, "cmd", "rm -f /tmp/health_*_error.count", ZEROCHAR_PTR);
+    HexSpawn(0, HEX_SDK, "cmd", "rm -f /tmp/health_*_error.count /tmp/health_*_error.since", ZEROCHAR_PTR);
     HexSystemF(0, HEX_SDK " cluster_check_repair_async");
 
     CliPrintf("Done");

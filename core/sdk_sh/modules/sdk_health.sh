@@ -136,6 +136,8 @@ _health_fail_log()
     # failed rounds in a row before the first repair; the rounds spent waiting
     # do not use up the maxerr budget
     local confirm=${_HEALTH_REPAIR_CONFIRM:-1}
+    # minimum NG duration before the first repair
+    local confirm_secs=${_HEALTH_REPAIR_CONFIRM_SECS:-0}
 
     local count=0
     if [ -f /tmp/health_${srv}_error.count ] ; then
@@ -149,7 +151,7 @@ _health_fail_log()
         ERR_CODE=0
     fi
     if [ "$ERR_CODE" == "0" ] ; then
-        rm -f /tmp/health_${srv}_error.count
+        rm -f /tmp/health_${srv}_error.count /tmp/health_${srv}_error.since
     else
         echo "==============================" >> /var/log/health_${srv}_error.log
         echo $(date) >> /var/log/health_${srv}_error.log
@@ -165,11 +167,27 @@ _health_fail_log()
         # service state; repairing fights it
         # Hidden opt-out: skip auto_repair if the agent dropped the marker. See #1225.
         if cube_cluster_ready && ! is_cluster_rolling && [ ! -f /etc/appliance/state/cube_repair_optout ] ; then
+            local new_run=0
+            [ -f /tmp/health_${srv}_error.count ] || new_run=1
             let "count = $count + 1"
+            local now=$(date +%s) since=
+            [ ! -s /tmp/health_${srv}_error.since ] || since=$(cat /tmp/health_${srv}_error.since)
+            if [ "$new_run" -eq 1 ] || [ -z "$since" ] || [ "$since" -gt "$now" ] ; then
+                since=$now
+                echo $since > /tmp/health_${srv}_error.since
+            fi
+            local age=$(( now - since ))
+            # not old enough: hold the count below the confirmation (only at the
+            # step that would reach it, so a count disabled with 99 stays high)
+            if [ "$count" -eq "$confirm" ] && [ "$age" -lt "$confirm_secs" ] ; then
+                count=$(( confirm - 1 ))
+            fi
             echo "failed count: $count" >> /var/log/health_${srv}_error.log
             echo $count > /tmp/health_${srv}_error.count
             if [ "$count" -lt "$confirm" ] ; then
-                echo "auto repair waits for $confirm failed checks in a row" >> /var/log/health_${srv}_error.log
+                local wait_msg="auto repair waits for $confirm failed checks in a row"
+                [ "$confirm_secs" -le 0 ] || wait_msg+=" over ${confirm_secs}s (NG for ${age}s)"
+                echo "$wait_msg" >> /var/log/health_${srv}_error.log
             elif _health_repair_due "$(( count - confirm + 1 ))" "$maxerr" "$backoff" ; then
                 local auto_repair_func="_health_${srv}_auto_repair"
                 if Quiet type $auto_repair_func 2>/dev/null ; then
@@ -846,8 +864,9 @@ health_hacluster_check()
         ERR_MSG+="$roffline remote nodes are offline\n"
     fi
 
-    # the repair restarts this node's Pacemaker: not on a one-round blip
-    _HEALTH_REPAIR_CONFIRM=2 _health_fail_log
+    # the repair restarts this node's Pacemaker: not on a blip. Two callers can
+    # run the check seconds apart, so the NG also has to last 9 min.
+    _HEALTH_REPAIR_CONFIRM=2 _HEALTH_REPAIR_CONFIRM_SECS=540 _health_fail_log
 }
 
 _health_hacluster_auto_repair()

@@ -103,7 +103,7 @@ PostBootRecovery()
     if hex_sdk cube_cluster_ready ; then
         bootstrap_status "Cluster checking and repairing"
         hex_log_event -e BSP00005I "interface=system,host=$HOSTNAME,service=bootstrap"
-        hex_sdk cmd "rm -f /tmp/health_*error.count"
+        hex_sdk cmd "rm -f /tmp/health_*error.count /tmp/health_*_error.since"
         # no blocking 'cluster check' here: cluster_check_repair_async below runs
         # the same checks (auto_repair included) plus the repairs, off the critical path
         # Roll boots: restore VMs this node suspended for its reboot. Only a

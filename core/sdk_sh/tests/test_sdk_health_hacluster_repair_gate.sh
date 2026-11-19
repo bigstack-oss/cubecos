@@ -5,14 +5,17 @@
 # while a compute was still booting, and when an ssh probe failed. masakari then
 # put the healthy control node into maintenance with instance-HA off.
 #
+# It also covers the 540s time gate (two callers can check seconds apart).
+#
 # Self-contained: extracts _health_fail_log, _health_remote_stopped,
 # health_hacluster_check and _health_hacluster_auto_repair, points their files at
 # a temp dir, stubs pcs / cubectl / the probes, and puts a fake ssh on PATH (run
 # through the real timeout) for the boot check. health_hacluster_repair is a stub
 # that only records the call.
 #
-# The last section is a negative control against 02cf633a, before the fix. It is
-# skipped when that git object is not available.
+# Negative controls use 04f1aa91 (before the time gate) and 02cf633a (before the
+# two-NG confirmation).
+# Each is skipped when its git object is not available.
 #
 #   Run: bash test_sdk_health_hacluster_repair_gate.sh   (exit 0 = pass)
 #
@@ -82,7 +85,8 @@ is_remote_running() {
 pass=0 fail=0
 ck() { [ "$1" = "$2" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: $3 -> got '$1' want '$2'"; }; }
 
-reset() { rm -f "$T"/probe.* "$T"/boot.* "$T"/repairs "$T"/tmp/* "$T"/log/* "$T"/etc/* ; unset _OVERRIDE_MAX_ERR; }
+date() { if [ "${1:-}" = "+%s" ]; then echo "$FAKE_NOW"; else command date "$@"; fi; }
+reset() { rm -f "$T"/probe.* "$T"/boot.* "$T"/repairs "$T"/tmp/* "$T"/log/* "$T"/etc/* ; unset _OVERRIDE_MAX_ERR; FAKE_NOW=1000000; }
 probe() { local k=$1 ; shift ; printf '%s\n' "$@" > "$T/probe.$k"; } # probe <node>.<service> <code>...
 repairs() { [ -f "$T/repairs" ] && wc -l < "$T/repairs" | tr -d ' ' || echo 0; }
 round() { ERR_CODE=0 ERR_MSG="" ERR_LOG="" ; health_hacluster_check >/dev/null 2>&1; }
@@ -93,6 +97,7 @@ probe cc3.corosync 1
 round; ck "$ERR_CODE" 1 "stopped corosync is an NG"
 ck "$(repairs)" 0 "first NG: no repair"
 ck "$(grep -c 'waits for 2 failed checks in a row' "$T/log/health_hacluster_error.log")" 1 "first NG: the wait is logged"
+FAKE_NOW=$((FAKE_NOW+600))
 round; ck "$(repairs)" 1 "second NG in a row: repair"
 round; ck "$(repairs)" 2 "third NG in a row: repair (below maxerr)"
 
@@ -136,7 +141,8 @@ ck "$PROBES" 2 "ssh fails twice: two probes, no more"
 reset
 probe cc3.corosync 1
 echo 1 > "$T/boot.p5"
-round; round; ck "$(repairs)" 0 "p5 booting: no repair on the second NG"
+round; FAKE_NOW=$((FAKE_NOW+600)); round
+ck "$(repairs)" 0 "p5 booting: no repair on the second NG"
 ck "$(grep -c 'p5 is still booting' "$T/log/health_hacluster_error.log")" 1 "p5 booting: the skip is logged"
 echo 255 > "$T/boot.p5"
 round; ck "$(repairs)" 1 "p5 down (ssh 255): repair"
@@ -148,6 +154,7 @@ reset
 probe cc3.corosync 1
 export _OVERRIDE_MAX_ERR=1
 round; ck "$(repairs)" 0 "maxerr 1, first NG: no repair"
+FAKE_NOW=$((FAKE_NOW+600))
 round; ck "$(repairs)" 1 "maxerr 1, second NG: repair"
 round; ck "$(repairs)" 1 "maxerr 1, third NG: backoff"
 unset _OVERRIDE_MAX_ERR
@@ -159,7 +166,86 @@ _health_foo_auto_repair() { echo x >> "$T/repairs"; }
 health_foo_check >/dev/null 2>&1
 ck "$(repairs)" 1 "other service: repair on the first NG"
 
-# ---- 8. negative control: before the fix, the first NG and a failed probe repaired ----
+# ---- 8. two NGs seconds apart must wait for the time gate ----
+reset
+probe cc3.corosync 1
+round; FAKE_NOW=$((FAKE_NOW+49)); round
+ck "$(repairs)" 0 "two NGs 49s apart: no repair"
+ck "$(cat "$T/tmp/health_hacluster_error.count")" 1 "waiting for time: count holds at 1"
+ck "$(grep -c 'over 540s (NG for 49s)' "$T/log/health_hacluster_error.log")" 1 "waiting for time: duration is logged"
+FAKE_NOW=$((FAKE_NOW+551)); round
+ck "$(repairs)" 1 "third NG at t0+600: repair"
+
+# ---- 9. a pass clears both files and starts a new NG run ----
+reset
+probe cc3.corosync 1
+round
+rm -f "$T/probe.cc3.corosync"
+round
+ck "$(test -e "$T/tmp/health_hacluster_error.count"; echo $?)" 1 "pass removes count"
+ck "$(test -e "$T/tmp/health_hacluster_error.since"; echo $?)" 1 "pass removes since"
+FAKE_NOW=$((FAKE_NOW+600))
+probe cc3.corosync 1
+round
+ck "$(repairs)" 0 "NG 600s after a pass: no repair on its first round"
+ck "$(cat "$T/tmp/health_hacluster_error.since")" "$FAKE_NOW" "new NG starts a new since"
+
+# ---- 10. a stale since without a count is a new run ----
+reset
+probe cc3.corosync 1
+echo 1 > "$T/tmp/health_hacluster_error.since"
+round
+ck "$(cat "$T/tmp/health_hacluster_error.since")" "$FAKE_NOW" "stale since without count is reset"
+FAKE_NOW=$((FAKE_NOW+49)); round
+ck "$(repairs)" 0 "stale since: two NGs 49s apart still wait"
+
+# ---- 11. missing, empty, and future since files restart the time gate ----
+for since in missing empty future; do
+    reset
+    probe cc3.corosync 1
+    round
+    case $since in
+        missing) rm -f "$T/tmp/health_hacluster_error.since" ;;
+        empty) > "$T/tmp/health_hacluster_error.since" ;;
+        future) echo $((FAKE_NOW+1000)) > "$T/tmp/health_hacluster_error.since" ;;
+    esac
+    FAKE_NOW=$((FAKE_NOW+600)); round
+    ck "$(repairs)" 0 "$since since: wait from now"
+    ck "$(cat "$T/tmp/health_hacluster_error.since")" "$FAKE_NOW" "$since since: reset to now"
+done
+
+# ---- 12. time waiting does not spend the maxerr 1 budget (cluster check_repair) ----
+reset
+probe cc3.corosync 1
+export _OVERRIDE_MAX_ERR=1
+round; FAKE_NOW=$((FAKE_NOW+49)); round
+ck "$(repairs)" 0 "maxerr 1: two NGs 49s apart wait"
+ck "$(cat "$T/tmp/health_hacluster_error.count")" 1 "maxerr 1: waiting holds the budget"
+FAKE_NOW=$((FAKE_NOW+551)); round
+ck "$(repairs)" 1 "maxerr 1: third NG at t0+600 repairs"
+
+# ---- 13. a count set to 99 (health_hacluster_repair during a roll) is not pulled back ----
+reset
+probe cc3.corosync 1
+echo 99 > "$T/tmp/health_hacluster_error.count"
+round; FAKE_NOW=$((FAKE_NOW+600)); round
+ck "$(repairs)" 0 "count 99 without since: no immediate repair"
+ck "$(cat "$T/tmp/health_hacluster_error.count")" 101 "count 99 keeps counting up"
+
+# ---- 14. negative control: before the time gate, two NGs seconds apart repaired ----
+BASE_SRC=$T/base.sh
+BASE_REF=04f1aa91
+if git -C "$DIR" show "$BASE_REF:core/sdk_sh/modules/sdk_health.sh" > "$BASE_SRC" 2>/dev/null; then
+    load "$BASE_SRC" _health_repair_due _health_fail_log _health_remote_stopped health_hacluster_check _health_hacluster_auto_repair
+    reset
+    probe cc3.corosync 1
+    round; FAKE_NOW=$((FAKE_NOW+49)); round
+    ck "$(repairs)" 1 "two NGs 49s apart: unfixed code repairs"
+else
+    echo "SKIP: time gate negative control needs git object $BASE_REF"
+fi
+
+# ---- 15. negative control: before the fix, the first NG and a failed probe repaired ----
 BASE_SRC=$T/base.sh
 BASE_REF=02cf633a
 if git -C "$DIR" show "$BASE_REF:core/sdk_sh/modules/sdk_health.sh" > "$BASE_SRC" 2>/dev/null; then
