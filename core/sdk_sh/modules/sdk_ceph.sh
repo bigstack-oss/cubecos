@@ -1705,36 +1705,87 @@ ceph_osd_remove_disk()
     return 0
 }
 
+# The pools that would be left with fewer failure domains than copies if the OSDs of node $1
+# went away: their PGs would stay undersized for good, and no cleanup after the removal can
+# fix that, only another node or a new pool layout can (cubecos#2423). A pool needs `size`
+# failure domains, which is k+m for an erasure-coded one; a failure domain counts while it
+# holds an OSD that is in and has CRUSH weight, under the root the pool's rule takes, device
+# class shadow roots included. A pool none of the node's OSDs can serve is not affected.
+# Prints one line per short pool and fails when there is any.
+ceph_host_remove_precheck()
+{
+    local host=$1 tree rules pools osds
+    tree=$($CEPH osd crush tree --show-shadow -f json 2>/dev/null) || return 1
+    rules=$($CEPH osd crush rule dump -f json 2>/dev/null) || return 1
+    pools=$($CEPH osd pool ls detail -f json 2>/dev/null) || return 1
+    osds=$($CEPH osd dump -f json 2>/dev/null) || return 1
+    HOST="$host" TREE="$tree" RULES="$rules" POOLS="$pools" OSDS="$osds" python3 -c '
+import json, os, sys
+host = os.environ["HOST"]
+nodes = {n["id"]: n for n in json.loads(os.environ["TREE"])["nodes"]}
+rules = {r["rule_id"]: r for r in json.loads(os.environ["RULES"])}
+live = {o["osd"] for o in json.loads(os.environ["OSDS"])["osds"] if o["in"] == 1}
+def osds(i):
+    n = nodes.get(i)
+    if n is None: return set()
+    if n["type"] == "osd": return {i} if i in live and n.get("crush_weight", 0) > 0 else set()
+    return set().union(*[osds(c) for c in n.get("children", [])])
+def domains(i, fd):
+    n = nodes.get(i)
+    if n is None: return []
+    if n["type"] == fd: return [i]
+    return sum([domains(c, fd) for c in n.get("children", [])], [])
+leaving = set().union(*[osds(i) for i, n in nodes.items()
+                        if n["type"] == "host" and n["name"].split("~")[0] == host])
+short = 0
+for p in json.loads(os.environ["POOLS"]):
+    steps = rules[p["crush_rule"]]["steps"]
+    take = next(s["item"] for s in steps if s["op"] == "take")
+    fd = next((s["type"] for s in steps if s["op"].startswith("chooseleaf")),
+              ([s["type"] for s in steps if s["op"].startswith("choose")] or ["osd"])[-1])
+    sets = [osds(d) for d in domains(take, fd)]
+    before = sum(1 for s in sets if s)
+    after = sum(1 for s in sets if s - leaving)
+    if after < before and after < p["size"]:
+        print("pool %s needs %d %ss, %d would remain without %s" % (p["pool_name"], p["size"], fd, after, host))
+        short = 1
+sys.exit(short)
+'
+}
+
+# Remove the OSDs and the CRUSH bucket of node $1, which has been shut down for good (cluster
+# remove_node). Nothing can run on the node any more, so the OSDs are taken out, their data is
+# recovered from the other copies, and they are purged only once safe-to-destroy says that no
+# PG needs them, waiting at most $2 seconds (default 3600). A timeout leaves them out and
+# fails, and the removal can be run again once the recovery is done.
 ceph_osd_host_remove()
 {
-    local host=$1
+    local host=$1 timeout=${2:-3600}
+    local tree ids id waited=0
 
-    for osd in $($CEPH osd tree -f json | jq -r ".nodes[] | select(.name == \"$host\").children[]") ; do
-        Quiet -n ceph_osd_remove $osd
-    done
+    tree=$($CEPH osd tree -f json) || return 1
+    echo "$tree" | jq -e --arg h "$host" '.nodes[] | select(.type == "host" and .name == $h)' >/dev/null || return 0
+    ids=$($CEPH osd ls-tree $host) || return 1
+    ids=$(echo $ids)
 
-    # wait for all OSDs to be safely purged
-    local osd_ids="$($CEPH osd ls-tree $host | tr '\n' ' ')"
-    osd_ids="${osd_ids%% }"
-    local are_osds_purged=""
-    while true ; do
-        are_osds_purged="true"
-        for osd_id in $osd_ids ; do
-            if ! ceph_osd_is_osd_purged "$osd_id" ; then
-                are_osds_purged="false"
-                break
+    if [ -n "$ids" ] ; then
+        $CEPH osd out $ids || return 1
+        until $CEPH osd safe-to-destroy $ids >/dev/null 2>&1 ; do
+            if [ $waited -ge $timeout ] ; then
+                echo "ceph has not recovered the data of OSDs $ids after ${timeout}s, they stay out: $($CEPH osd safe-to-destroy $ids 2>&1 | tail -1)" >&2
+                return 1
             fi
+            [ $((waited % 300)) -ne 0 ] || echo "waiting for ceph to recover the data of OSDs $ids: $($CEPH pg stat 2>/dev/null)"
+            sleep 30
+            waited=$((waited + 30))
         done
+        for id in $ids ; do
+            $CEPH osd purge $id --yes-i-really-mean-it || return 1
+        done
+    fi
 
-        if [[ "$are_osds_purged" == "true" ]] ; then
-            break;
-        fi
-
-        # wait
-        sleep 30
-    done
-
-    Quiet -n $CEPH osd crush rm $host
+    $CEPH osd crush rm $host || return 1
+    echo "removed $host${ids:+ and OSDs $ids} from ceph"
 }
 
 # Keep LVM to the DAS disks and their partitions, the only devices this node's
