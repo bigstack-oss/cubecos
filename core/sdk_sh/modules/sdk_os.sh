@@ -1984,6 +1984,19 @@ os_octavia_node_init()
     fi
 }
 
+# Delete the health-manager port os_octavia_node_init created for node $1 (cluster
+# remove_node). Only the node itself ever deletes its port, so a removed node's port would
+# keep its lb-mgmt address for good (cubecos#106).
+os_octavia_node_remove()
+{
+    local host=$1 ids id
+    ids=$($OPENSTACK port list --name octavia-hmgr-port-$host -f value -c ID) || return 1
+    for id in $ids ; do
+        $OPENSTACK port delete $id || return 1
+        echo "deleted the octavia health-manager port $id of $host"
+    done
+}
+
 # Lightweight octavia-hm0 recovery: bring the health-manager interface back up
 # (ovs port + link + ip + route) from the EXISTING neutron port only. Unlike
 # reinit_octavia it does NOT recreate the port or run ReconfigMain/service
