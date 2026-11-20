@@ -352,6 +352,62 @@ migrate_cinder_ext_storage_fujitsu_password()
     touch $STATE_DIR/cinder_ext_storage_fujitsu_password_migrated
 }
 
+# A Dell SC volume moved to another backend and back before the driver fix of #2422 kept
+# the provider_id of the array volume its first move deleted, so every attach fails with
+# "Unable to map volume" and deleting it leaves the array volume that holds its data
+# behind. Nothing heals such a row on its own: the SC driver has no update_provider_info.
+#
+# Its two moves left two deleted "migration src for <id>" rows. The first move's sits on
+# this backend with the same stale provider_id. The move back's sits on the backend the
+# volume came from and holds the instanceId of the array volume that now carries the data,
+# which update_migrated_volume renamed to the volume's id. A volume with more than one
+# candidate there is left alone. A stale volume cannot have moved since: a move reads the
+# source through the same failing lookup.
+migrate_cinder_dell_sc_provider_id()
+{
+    local marker=$STATE_DIR/cinder_dell_sc_provider_id_migrated
+    local f backend join where rows id old new
+
+    [ -f $marker ] && return 0
+    if ! is_control_node || [ "$($HEX_SDK cube_master_control)" != "$HOSTNAME" ] ; then
+        touch $marker
+        return 0
+    fi
+
+    for f in /etc/cinder/backends/ext_storage_*.conf ; do
+        [ -f "$f" ] || continue
+        grep -qE "^volume_driver[[:space:]]*=.*storagecenter_(fc|iscsi)\." "$f" || continue
+        backend=$(sed -n 's/^\[\(.*\)\][[:space:]]*$/\1/p' "$f" | head -1)
+        [ -n "$backend" ] || continue
+
+        join="volumes v
+              JOIN volumes m ON m.deleted = 1 AND m.display_description = CONCAT('migration src for ', v.id)
+                            AND m.host = v.host AND m.provider_id = v.provider_id
+              JOIN (SELECT display_description, MIN(provider_id) AS provider_id FROM volumes
+                     WHERE deleted = 1 AND display_description LIKE 'migration src for %'
+                       AND provider_id IS NOT NULL
+                       AND SUBSTRING_INDEX(SUBSTRING_INDEX(host, '#', 1), '@', -1) <> '$backend'
+                     GROUP BY display_description HAVING COUNT(DISTINCT provider_id) = 1) n
+                ON n.display_description = m.display_description AND n.provider_id <> v.provider_id"
+        where="v.deleted = 0 AND SUBSTRING_INDEX(SUBSTRING_INDEX(v.host, '#', 1), '@', -1) = '$backend'"
+
+        if ! rows=$($MYSQL -u root -N -D cinder -e "SELECT v.id, v.provider_id, n.provider_id FROM $join WHERE $where") ; then
+            log_warning "migrate_cinder_dell_sc_provider_id: cannot read the volumes of $backend; retried on the next commit"
+            return 0
+        fi
+        [ -n "$rows" ] || continue
+        if ! $MYSQL -u root -D cinder -e "UPDATE $join SET v.provider_id = n.provider_id WHERE $where" ; then
+            log_warning "migrate_cinder_dell_sc_provider_id: cannot repair the volumes of $backend; retried on the next commit"
+            return 0
+        fi
+        while read -r id old new ; do
+            log_info "migrate_cinder_dell_sc_provider_id: $backend volume $id provider_id $old -> $new"
+        done <<< "$rows"
+    done
+
+    touch $marker
+}
+
 migrate_glance_db()
 {
     if [ -f $STATE_DIR/glance_db_migrated ] ; then
