@@ -275,14 +275,19 @@ os_get_router_id_by_domain_project_router()
     $OPENSTACK router list --project-domain $domain --project $tenant -f value -c ID -c Name | grep $router | awk '{print $1}' | tr -d '\n'
 }
 
+# Delete the neutron agents of host $1, only those of binary $2 when it is given. Without $2
+# every agent of the host goes, which is what a node removal needs: a list of binary names
+# goes stale, as networking-ovn-metadata-agent did when it became neutron-ovn-metadata-agent.
 os_neutron_agent_remove()
 {
     local host=$1
-    local binary=$2
-    local agent_id=$($OPENSTACK network agent list -f value -c ID -c Host -c Binary | grep "$host.*$binary" | awk '{print $1}')
-    if [ -n "$agent_id" ] ; then
-        $OPENSTACK network agent delete $agent_id
-    fi
+    local binary=${2:-}
+    local ids id
+    ids=$($OPENSTACK network agent list --host $host ${binary:+--binary $binary} -f value -c ID) || return 1
+    for id in $ids ; do
+        $OPENSTACK network agent delete $id || return 1
+        echo "deleted neutron agent $id of $host"
+    done
 }
 
 os_neutron_worker_scale()
@@ -1394,11 +1399,36 @@ os_nova_service_remove()
     if [ -n "$srv_ironic_id" ] ; then
         /usr/bin/mariadb -u root -D nova -e "delete from services where id = '$srv_ironic_id'"
     fi
-    local srv_id=$($OPENSTACK compute service list -f value -c ID -c Host -c Binary | grep "$binary.*$host" | awk '{print $1}')
+    local srv_id
+    srv_id=$($OPENSTACK compute service list --host $host --service $binary -f value -c ID) || return 1
     if [ -n "$srv_id" ] ; then
-        $OPENSTACK compute service set --disable $host $binary
-        $OPENSTACK compute service delete $srv_id
+        $OPENSTACK compute service set --disable $host $binary || return 1
+        $OPENSTACK compute service delete $srv_id || return 1
+        echo "deleted $binary service $srv_id of $host"
     fi
+}
+
+# Release what node $1's resource provider still holds for instances that live elsewhere now,
+# so its nova-compute service can be deleted (cluster remove_node). Nova keeps an evacuated
+# instance's source allocation under the instance's own uuid and releases it only when the
+# source compute starts again, which a removed node never does. Deleting that consumer would
+# also drop the instance's allocation on its new host, so only this provider's part goes.
+os_nova_allocations_release()
+{
+    local host=$1 rp allocations consumers c where
+    rp=$($OPENSTACK resource provider list --name $host -f value -c uuid) || return 1
+    [ -n "$rp" ] || return 0
+    allocations=$($OPENSTACK --os-placement-api-version 1.28 resource provider show $rp --allocations -f json) || return 1
+    consumers=$(echo "$allocations" | jq -r '(.allocations // {}) | keys[]') || return 1
+    for c in $consumers ; do
+        where=$($OPENSTACK server show $c -f value -c OS-EXT-SRV-ATTR:host 2>/dev/null)
+        if [ "$where" = "$host" ] ; then
+            echo "instance $c is still on $host" >&2
+            return 1
+        fi
+        $OPENSTACK --os-placement-api-version 1.28 resource provider allocation unset --provider $rp $c >/dev/null || return 1
+        echo "released the allocation of $c on $host${where:+, an instance now on $where}"
+    done
 }
 
 os_nova_cell_update()
@@ -3355,6 +3385,19 @@ os_segment_host_maintenance()   # $1=host  $2=True|False (default True)
     for u in $($OPENSTACK segment list -f value -c uuid) ; do
         $OPENSTACK segment host list $u -f value -c name 2>/dev/null | grep -qx "$host" && \
             $OPENSTACK segment host update $u $host --on_maintenance $flag
+    done
+}
+
+# Take host $1 out of every masakari failover segment that lists it (cluster remove_node).
+os_segment_host_remove()
+{
+    local host=$1 segments u hosts
+    segments=$($OPENSTACK segment list -f value -c uuid) || return 1
+    for u in $segments ; do
+        hosts=$($OPENSTACK segment host list $u -f value -c name) || return 1
+        echo "$hosts" | grep -qx "$host" || continue
+        $OPENSTACK segment host delete $u $host || return 1
+        echo "removed $host from masakari segment $u"
     done
 }
 
