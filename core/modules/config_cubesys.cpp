@@ -457,12 +457,34 @@ MigrateMain(const char * prevVersion, const char * prevRootDir)
     return true;
 }
 
+// etcd-watch (cubectl tuning watch) fires this on every node when a node's cluster.node.<host>
+// key is put or deleted: a node joined, left, or changed its address. SERVICE-INT accepts the
+// nodes in `cubectl node list` ahead of its drops, so rebuild it now; otherwise every member
+// drops a joined node's traffic to rabbitmq, mongodb, OVN, zookeeper and kafka until its own
+// next cluster start.
+static int
+ClusterMapUpdateMain(int argc, char **argv)
+{
+    if (argc != 5)  /* argv[1]: add/remove, argv[2]: hostname, argv[3]: mgmtip, argv[4]: role */
+        return EXIT_FAILURE;
+
+    HexLogInfo("%s %s host %s@%s: rebuilding SERVICE-INT", argv[1], argv[4], argv[2], argv[3]);
+    if (HexUtilSystemF(0, 0, HEX_SDK " network_ipt_serviceint") != 0) {
+        HexLogError("failed to rebuild SERVICE-INT");
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
+
 CONFIG_COMMAND(sdk_run, SdkRunMain, SdkRunUsage);
 CONFIG_COMMAND(sdk_health, SdkHealthMain, SdkHealthUsage);
 
 CONFIG_MODULE(cubesys, Init, Parse, 0, 0, Commit);
 
 CONFIG_FIRST(cubesys);
+
+CONFIG_TRIGGER(cubesys, "cluster_map_update", ClusterMapUpdateMain);
 
 CONFIG_SUPPORT_COMMAND(HEX_SDK " support_log_archive $HEX_SUPPORT_DIR");
 CONFIG_SUPPORT_COMMAND(HEX_SDK " cube_stats");

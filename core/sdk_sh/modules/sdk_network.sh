@@ -338,8 +338,8 @@ _set_ipt_service_int()
     iptables -A $chain -p tcp --match multiport --dports 953,5354 -j DROP # drop named's rndc and designate-mdns (zone transfers of every zone), except for internal nodes -- only the controls use them
 
     # etcd (12379 client, 12380 peer) also accepts the management subnet: a joining
-    # node dials both before it is in `cubectl node list`, and a member rebuilds this
-    # chain only at its own cluster start
+    # node dials both to put itself in `cubectl node list`, and only then do the
+    # members rebuild this chain (cluster_map_update)
     source hex_tuning $SETTINGS_TXT cubesys.management
     local mgmt_if=${T_cubesys_management:-}
     if [ -n "$mgmt_if" ] ; then
@@ -387,11 +387,15 @@ _set_ipt_service_out()
     iptables -nv -L OUTPUT 2>/dev/null | grep -q $chain || iptables -A OUTPUT -j $chain
 }
 
+# Run at cluster start, and on every node by cubesys's cluster_map_update trigger when a node joins
+# or leaves. health_k3s restores /run/iptables, which cluster start writes, when the live rules
+# drift, so a later rebuild refreshes it too.
 network_ipt_serviceint()
 {
     _set_ipt_service_int
     _set_ip6t_service_int
     _set_ipt_service_out
+    [ ! -e /run/iptables ] || { iptables-save > /run/iptables.new && mv -f /run/iptables.new /run/iptables ; }
 }
 
 network_ipt_restore()
