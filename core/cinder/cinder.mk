@@ -229,6 +229,19 @@ rootfs_install::
 #   good. enable_deferred_deletion does not help: that fast path never reads it, and a
 #   .deleted image is not in the trash its purge task empties. Drop the file once a
 #   release carries the fix.
+# volume/drivers/dell_emc/sc/storagecenter_common.py.patch: update_migrated_volume no
+#   longer returns provider_id. The manager writes each key a driver returns there to
+#   the volume and the volume's old value to the temporary one, and
+#   finish_volume_migration then swaps provider_id between them once more, so the SC
+#   instanceId the driver returned ended on the temporary row and the volume kept its
+#   old provider_id. A volume moved from Dell SC to CubeStorage already carries a stale
+#   one -- the temporary volume is created with the source's provider_id and RBD sets
+#   none -- so after the move back it pointed at the array volume the first move had
+#   deleted. find_volume trusts a provider_id from this array and never falls back to
+#   the name, so every attach failed with "Unable to map volume", and deleting the
+#   volume left its real array volume behind (cubecos#2422). Left out, the swap gives
+#   the volume the new array volume's provider_id. Still missing upstream (master),
+#   where the driver has been unsupported since 2024.1.
 rootfs_install::
 	$(Q)set -e; for p in $$(find $(CINDER_PATCHDIR) -name '*.py.patch' 2>/dev/null | sort); do \
 		rel=$${p#$(CINDER_PATCHDIR)/}; tgt=$(CINDER_SRCDIR)/$${rel%.patch}; \
