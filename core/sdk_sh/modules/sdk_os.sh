@@ -2409,14 +2409,19 @@ os_manila_share_remove()
     $OPENSTACK share delete --force --wait $share_id
 }
 
+# Delete host $1's $2 service rows, one per share backend (<host>@<backend>). Manila has no
+# API to delete a service, so the rows go through the database.
 os_manila_service_remove()
 {
     local host=$1
     local binary=$2
-    local srv_id=$(manila service-list | grep "$binary.*$host" | awk '{print $2}')
-    if [ -n "$srv_id" ] ; then
-        /usr/bin/mariadb -u root -D manila -e "delete from services where id = '$srv_id'"
-    fi
+    local services ids id
+    services=$($OPENSTACK share service list --binary $binary -f value -c ID -c Host) || return 1
+    ids=$(echo "$services" | awk -v h="$host" '$2 == h || index($2, h "@") == 1 { print $1 }')
+    for id in $ids ; do
+        /usr/bin/mariadb -u root -D manila -e "delete from services where id = '$id'" || return 1
+        echo "deleted $binary service $id of $host"
+    done
 }
 
 # params:
