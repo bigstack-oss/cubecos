@@ -388,14 +388,18 @@ _set_ipt_service_out()
 }
 
 # Run at cluster start, and on every node by cubesys's cluster_map_update trigger when a node joins
-# or leaves. health_k3s restores /run/iptables, which cluster start writes, when the live rules
-# drift, so a later rebuild refreshes it too.
+# or leaves. One rebuild at a time: two interleaved flush-and-append passes leave accepts behind the
+# drops. health_k3s restores /run/iptables, which cluster start writes, when the live rules drift,
+# so a later rebuild refreshes it too.
 network_ipt_serviceint()
 {
-    _set_ipt_service_int
-    _set_ip6t_service_int
-    _set_ipt_service_out
-    [ ! -e /run/iptables ] || { iptables-save > /run/iptables.new && mv -f /run/iptables.new /run/iptables ; }
+    (
+        flock -x -w 60 200 || exit 1
+        _set_ipt_service_int
+        _set_ip6t_service_int
+        _set_ipt_service_out
+        [ ! -e /run/iptables ] || { iptables-save > /run/iptables.new && mv -f /run/iptables.new /run/iptables ; }
+    ) 200>/run/network_ipt_serviceint.lock
 }
 
 network_ipt_restore()
