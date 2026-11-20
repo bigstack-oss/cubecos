@@ -1,0 +1,20 @@
+--- volume/drivers/dell_emc/sc/storagecenter_common.py
++++ volume/drivers/dell_emc/sc/storagecenter_common.py
+@@ -792,7 +792,16 @@
+                                                              new_volume,
+                                                              scvolume)
+                     model_update['_name_id'] = None
+-                    model_update['provider_id'] = scvolume['instanceId']
++                    # No provider_id here. The manager writes each key of
++                    # this update to volume and volume's old value to
++                    # new_volume, and finish_volume_migration then swaps
++                    # provider_id between the two once more, so a
++                    # provider_id returned here ends on new_volume, which is
++                    # deleted, and volume keeps its old one. After a move to
++                    # another backend and back, that is the array volume
++                    # the first move deleted, and every attach fails with
++                    # "Unable to map volume". Left out, that swap gives
++                    # volume new_volume's provider_id, scvolume's instanceId.
+ 
+                     return model_update
+         # The world was horrible to us so we should error and leave.
