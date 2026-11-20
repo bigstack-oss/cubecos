@@ -833,7 +833,9 @@ ClusterRemoveNodeMain(int argc, const char** argv)
     if (!CliReadConfirmation())
         return CLI_SUCCESS;
 
-    HexUtilSystemF(0, 0, HEX_SDK " cube_node_remove %s", hostname.c_str());
+    // cube_node_remove prints each step and why the node stays, if it does
+    if (HexExitStatus(HexSpawn(0, HEX_SDK, "cube_node_remove", hostname.c_str(), ZEROCHAR_PTR)) != 0)
+        return CLI_FAILURE;
 
     return CLI_SUCCESS;
 }

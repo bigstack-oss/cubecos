@@ -578,27 +578,113 @@ cube_remote_cluster_check()
     return 0
 }
 
+# Run one step of cube_node_remove and report it; $1 names the step. sdk steps run as their
+# own hex_sdk process, so an Error in one ends that step only.
+_cube_node_remove_step()
+{
+    local what=$1
+    shift
+    if "$@" ; then
+        echo "  ok      $what"
+    else
+        echo "  FAILED  $what"
+        return 1
+    fi
+}
+
+# a compute node's pacemaker remote resource, and the node's entry in pacemaker
+_cube_node_remove_pacemaker()
+{
+    local host=$1
+    if pcs resource config $host >/dev/null 2>&1 ; then
+        pcs resource delete $host || return 1
+    fi
+    if cibadmin -Q -o nodes 2>/dev/null | grep -q "uname=\"$host\"" ; then
+        crm_node --force --remove $host || return 1
+    fi
+}
+
+# Whether node $1 has role $2 by role bit, as `cubectl node list -r` matches it: control-converged
+# has the control, compute and storage bits. Prints true or false, and fails when the node list
+# cannot be read.
+_cube_node_role_test()
+{
+    local is
+    is=$(cubectl node list -r $2 -j | jq -r --arg h "$1" 'any(.[]; .hostname == $h)')
+    [ "$is" = true -o "$is" = false ] || return 1
+    echo $is
+}
+
+# Remove node $1, which has been shut down for good (cluster > remove_node); $2 bounds the wait
+# for ceph to recover the node's data, in seconds (default 3600). A node with the control role --
+# control, control-converged, edge-core, moderator -- is never removed here.
+# Nothing is changed unless the node is off, no instance is left on it and ceph can do without
+# it. Each step then reports its result, and the node stays in `cubectl node list` until every
+# step has succeeded: once it leaves the list nothing names it any more, so a failed step could
+# never be retried (cubecos#2423). A step that is done is a no-op, so running the removal again
+# finishes it.
 cube_node_remove()
 {
     local host=$1
-    local role=$(cubectl node list | grep "$host," | awk -F',' '{print $3}' | tr -d '\n')
+    local ceph_wait=${2:-3600}
+    local role is_control is_compute servers precheck failed=""
+    role=$(cubectl node list -j | jq -r --arg h "$host" '.[] | select(.hostname == $h) | .role')
 
-    # remove a compute node
-    if [ "$role" == "compute" ] ; then
-        Quiet -n $HEX_SDK os_nova_service_remove $host "nova-compute"
-        Quiet -n $HEX_SDK os_manila_service_remove $host "manila-share"
-        Quiet -n $HEX_SDK os_neutron_agent_remove $host "ovn-controller"
-        Quiet -n $HEX_SDK os_neutron_agent_remove $host "networking-ovn-metadata-agent"
-        Quiet -n $HEX_SDK os_neutron_agent_remove $host "neutron-ovn-vpn-agent"
-        pcs resource delete $host >/dev/null 2>&1
+    if [ -z "$role" ] ; then
+        echo "Error: $host is not a node of this cluster" >&2
+        return 1
+    fi
+    is_control=$(_cube_node_role_test $host control) && is_compute=$(_cube_node_role_test $host compute) || {
+        echo "Error: cannot read the roles of $host" >&2
+        return 1
+    }
+    if [ "$is_control" == "true" ] ; then
+        echo "Error: $host is a $role node; a node with the control role cannot be removed" >&2
+        return 1
+    fi
+    if is_sshable $host ; then
+        echo "Error: $host still answers; shut it down first, or it registers again what its removal deletes" >&2
+        return 1
+    fi
+    if [ "$is_compute" == "true" ] ; then
+        servers=$($OPENSTACK server list --all-projects --host $host -f value -c ID -c Name) || {
+            echo "Error: cannot list the instances on $host" >&2
+            return 1
+        }
+        if [ -n "$servers" ] ; then
+            echo "Error: migrate or evacuate the instances still on $host first:" >&2
+            echo "$servers" >&2
+            return 1
+        fi
+    fi
+    if ! precheck=$($HEX_SDK ceph_host_remove_precheck $host 2>&1) ; then
+        if [ -n "$precheck" ] ; then
+            echo "Error: without $host these ceph pools would have fewer failure domains than copies; add a node or change the pools first:" >&2
+            echo "$precheck" >&2
+        else
+            echo "Error: cannot read ceph to check what the removal of $host leaves to its pools" >&2
+        fi
+        return 1
     fi
 
-    if [ -n "$host" ] ; then
-        Quiet -n $HEX_SDK ceph_osd_host_remove $host >/dev/null 2>&1
-        crm_node --force --remove $host >/dev/null 2>&1
+    echo "Removing $host ($role)"
+    if [ "$is_compute" == "true" ] ; then
+        _cube_node_remove_step "masakari segments" $HEX_SDK os_segment_host_remove $host || failed=1
+        _cube_node_remove_step "placement allocations" $HEX_SDK os_nova_allocations_release $host || failed=1
+        _cube_node_remove_step "nova-compute service" $HEX_SDK os_nova_service_remove $host nova-compute || failed=1
+        _cube_node_remove_step "neutron agents" $HEX_SDK os_neutron_agent_remove $host || failed=1
+        _cube_node_remove_step "manila-share services" $HEX_SDK os_manila_service_remove $host manila-share || failed=1
+        _cube_node_remove_step "octavia health-manager port" $HEX_SDK os_octavia_node_remove $host || failed=1
     fi
+    _cube_node_remove_step "ceph OSDs and host" $HEX_SDK ceph_osd_host_remove $host $ceph_wait || failed=1
+    _cube_node_remove_step "pacemaker" _cube_node_remove_pacemaker $host || failed=1
 
-    cubectl node remove $host
+    if [ -n "$failed" ] ; then
+        echo "Error: $host stays in the cluster until every step succeeds; fix the failed steps and run remove_node again" >&2
+        return 1
+    fi
+    cubectl node remove $host || return 1
+    echo "$host removed from the cluster"
 }
 
 cube_cluster_setting_clear()
@@ -1129,9 +1215,12 @@ check_host_stats()
     echo "]"
 }
 
+# the nodes cluster > remove_node offers: every node without the control role (see cube_node_remove)
 cube_data_node_list()
 {
-    cubectl node list | grep "compute\|storage" | awk -F',' '{print $1}'
+    local nodes controls
+    nodes=$(cubectl node list -j) && controls=$(cubectl node list -r control -j) || return 1
+    echo "$nodes" | jq -r '.[].hostname' | grep -vxF -f <(echo "$controls" | jq -r '.[].hostname')
 }
 
 cube_cluster_ppu()
