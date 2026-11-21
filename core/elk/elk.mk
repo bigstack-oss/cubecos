@@ -27,6 +27,30 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) mkdir -p /etc/systemd/system/$(OSEARCH).service.d
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/opensearch/opensearch-start-timeout.conf ./etc/systemd/system/$(OSEARCH).service.d/
 
+# OpenSearch 3.9.0 bundles Temurin 25.0.4.1+1 as jdk/, Adoptium's tarball less lib/src.zip, and
+# 3.10.0, the newest release, bundles 25.0.5+8. The JIT compiler in both has a known vulnerability
+# fixed in 25.0.5.1. jdk/ is replaced with Temurin 25.0.5.1+2, whose tarball holds the same files,
+# again less src.zip. It is pinned and fetched the way Logstash's JDK is below, and was checked
+# against Adoptium's signing key before its digest was taken. This runs before the plugin
+# removals, which run on this JDK. Nothing here is -f: an OpenSearch bump that bundles another JDK
+# fails on the grep, which is the cue to drop this once that JDK is 25.0.5.1 or newer.
+OSEARCH_JDK := /usr/share/$(OSEARCH)/jdk
+OSEARCH_JDK_BUNDLED := 25.0.4.1+1-LTS
+OSEARCH_JDK_VER := 25.0.5.1+2
+OSEARCH_JDK_TGZ := OpenJDK25U-jdk_x64_linux_hotspot_$(subst +,_,$(OSEARCH_JDK_VER)).tar.gz
+OSEARCH_JDK_SHA256 := 760f91b22c3efc9bd1b64ff950598231be82928cc807e30691a0e7a2995a62c0
+
+$(ARCS_DIR)/$(OSEARCH_JDK_TGZ):
+	$(Q)wget $(GITHUB_DL_BASE)/adoptium/temurin25-binaries/releases/download/jdk-$(OSEARCH_JDK_VER)/$(OSEARCH_JDK_TGZ) -O $@.part
+	$(Q)echo "$(OSEARCH_JDK_SHA256)  $@.part" | sha256sum -c -
+	$(Q)mv $@.part $@
+
+rootfs_install:: $(ARCS_DIR)/$(OSEARCH_JDK_TGZ)
+	$(Q)grep -q '^JAVA_RUNTIME_VERSION="$(OSEARCH_JDK_BUNDLED)"$$' $(ROOTDIR)$(OSEARCH_JDK)/release
+	$(Q)rm -r $(ROOTDIR)$(OSEARCH_JDK)
+	$(Q)mkdir $(ROOTDIR)$(OSEARCH_JDK)
+	$(Q)tar xzf $< -C $(ROOTDIR)$(OSEARCH_JDK) --strip-components 1 --no-same-owner --exclude '*/lib/src.zip'
+
 # Bundled plugins that carry vulnerable jars and that nothing here uses. No code in this tree,
 # cube-cos-api, cube-cos-ui or lachesis calls a _plugins API, and on live nodes their system
 # indices hold only what the plugins write for themselves at startup -- no monitor, detector,
