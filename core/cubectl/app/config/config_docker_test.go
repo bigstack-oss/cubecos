@@ -156,21 +156,3 @@ func TestConfigDockerBadConfig(t *testing.T) {
 	}
 	assert.Equal(t, `{"bip": `, string(data))
 }
-
-func TestConfigDockerCheckImage(t *testing.T) {
-	ns := cubeTesting.ContainerNS(t.Name())
-	if testClean(t, func() {
-		ns.CleanupContainers()
-	}) {
-		return
-	}
-
-	if _, err := runDockerRegistryContainer(ns); err != nil {
-		t.Fatal(err)
-	}
-
-	// Current dir: /root/workspace/cube/core/cubectl/app/config
-	if err := dockerCheckImage("../../../k3s/images.txt"); err != nil {
-		t.Fatal(err)
-	}
-}

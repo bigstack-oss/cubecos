@@ -1,19 +1,14 @@
 package config
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path"
-	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
 	"cubectl/util"
@@ -27,64 +22,6 @@ const (
 	dockerRegistryVolume  = dockerDataDir + "/registry"
 	dockerRegistryPort    = 5080
 )
-
-func dockerCheckImage(imgsFile string) error {
-	file, err := os.Open(imgsFile)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer file.Close()
-
-	errCount := 0
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if scanner.Text() == "" {
-			continue
-		}
-
-		re := regexp.MustCompile(`^[a-zA-Z0-9\\-]+\.[a-zA-Z0-9\-\.]+/`)
-		imageWithoutRepo := re.ReplaceAllString(scanner.Text(), "")
-
-		pathTag := strings.SplitN(imageWithoutRepo, ":", 2)
-		path := pathTag[0]
-		var tag string
-		if len(pathTag) > 1 {
-			tag = pathTag[1]
-		} else {
-			tag = "latest"
-		}
-
-		req, err := http.NewRequest("GET", "http://localhost:"+strconv.Itoa(dockerRegistryPort)+"/v2/"+path+"/manifests/"+tag, nil)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		ok := true
-		if resp, err := http.DefaultClient.Do(req); err != nil {
-			return errors.WithStack(err)
-		} else {
-			defer resp.Body.Close()
-
-			if resp.StatusCode != 200 {
-				ok = false
-				errCount++
-			}
-		}
-
-		fmt.Print(scanner.Text(), " ")
-		if ok {
-			fmt.Println("<Y>")
-		} else {
-			fmt.Println("<N>")
-		}
-	}
-
-	if errCount > 0 {
-		return fmt.Errorf("%d images are not imported", errCount)
-	}
-
-	return nil
-}
 
 // dockerEnsureConf lists the registry in file's insecure-registries and keeps every other key
 // as it is: a site may carry its own, such as a bip and default-address-pools moving docker off
@@ -230,65 +167,10 @@ func repairDocker() error {
 	return nil
 }
 
-var cmdDockerImportRegistry = &cobra.Command{
-	Use:   "import-registry <registry tarbal>",
-	Short: "Import registry volume to private registry",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		importArchive := args[0]
-
-		if _, err := os.Stat(dockerRegistryVolume + ".org"); os.IsNotExist(err) {
-			if err := os.Rename(dockerRegistryVolume, dockerRegistryVolume+".org"); err != nil {
-				return errors.WithStack(err)
-			}
-		} else {
-			os.RemoveAll(dockerRegistryVolume)
-		}
-
-		zap.L().Info("Extracting " + importArchive)
-		if _, outErr, err := util.ExecCmd("tar", "-C", dockerDataDir, "-xvf", importArchive); err != nil {
-			return errors.Wrap(err, outErr)
-		}
-		zap.L().Info("Registry volume extracted")
-
-		zap.L().Info("Syncing registry volume to every control nodes")
-		if _, outErr, err := util.ExecCmd("cubectl", "node", "rsync", dockerRegistryVolume, "--role", "control"); err != nil {
-			return errors.Wrap(err, outErr)
-		}
-		zap.L().Info("Registry volume synced")
-
-		if _, outErr, err := util.ExecCmd("cubectl", "node", "exec",
-			"--role", "control", "--parallel",
-			"docker", "restart", "registry",
-		); err != nil {
-			return errors.Wrap(err, outErr)
-		}
-		zap.L().Info("Docker registry restarted")
-
-		return nil
-	},
-}
-
-var cmdDockerCheckImage = &cobra.Command{
-	Use:   "check-image <images file>",
-	Short: "Check docker images on private registry",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := dockerCheckImage(args[0]); err != nil {
-			return errors.WithStack(err)
-		}
-		zap.L().Info("All images imported")
-
-		return nil
-	},
-}
-
 func init() {
 	m := NewModule("docker")
 	m.commitFunc = commitDocker
 	m.resetFunc = resetDocker
 	m.statusFunc = statusDocker
 	m.repairFunc = repairDocker
-	m.AddCustomCommand(cmdDockerImportRegistry)
-	m.AddCustomCommand(cmdDockerCheckImage)
 }

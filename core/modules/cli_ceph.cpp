@@ -933,7 +933,7 @@ CephMaintenanceMain(int argc, const char** argv)
 static int CephCreateNodeGroup(int argc, const char** argv)
 {
     if (argc < 3) {
-        HexSpawn(0, HEX_SDK, " ceph_node_group_list", NULL, NULL);
+        HexSpawn(0, HEX_SDK, "ceph_node_group_list", NULL, NULL);
         return CLI_INVALID_ARGS;
     }
 
@@ -957,7 +957,7 @@ static int CephCreateNodeGroup(int argc, const char** argv)
 static int CephRemoveNodeGroup(int argc, const char** argv)
 {
     if (argc < 2) {
-        HexSpawn(0, HEX_SDK, " ceph_node_group_list", NULL, NULL);
+        HexSpawn(0, HEX_SDK, "ceph_node_group_list", NULL, NULL);
         return CLI_INVALID_ARGS;
     }
 
@@ -993,7 +993,7 @@ static int CephNodeGroupList(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    HexSpawn(0, HEX_SDK, " ceph_node_group_list", NULL, NULL);
+    HexSpawn(0, HEX_SDK, "ceph_node_group_list", NULL, NULL);
 
     return CLI_SUCCESS;
 }
