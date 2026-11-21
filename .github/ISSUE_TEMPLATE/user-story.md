@@ -14,6 +14,8 @@ assignees: ''
 
 As a **[type of user]**, I want **[some goal]** so that **[some reason]**.
 
+> UI change? Add a `ui:<tier>` label: critical, medium, low, or none ([UI tiers](https://github.com/bigstack-oss/cube-cos-ui/blob/develop/.github/REVIEW_LEVELS.md#2-ui-tier)).
+
 ## Acceptance Criteria
 
 > A detailed list of conditions that must be met for the story to be accepted. These statements must focus on functional behavior and constraints rather than specific code-level implementation.
