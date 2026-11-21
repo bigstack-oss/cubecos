@@ -278,37 +278,66 @@ LOGSTASH_UNUSED_PLUGINS := logstash-filter-elastic_integration logstash-input-az
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin remove $(LOGSTASH_UNUSED_PLUGINS)
 
-# Logstash's Gemfile.lock pins rack 3.2.7, which logstash-core needs (~> 3) and the monitoring API
-# is served through; it has a known vulnerability fixed in 3.2.8, and 9.5.6, the newest release,
-# still pins 3.2.7. 3.2.8 is installed beside it from a .gem pinned by the digest rubygems.org
+# Logstash's Gemfile.lock pins gems with known vulnerabilities, and 9.5.6, the newest release,
+# still pins them:
+# - rack 3.2.7, which logstash-core needs (~> 3) and the monitoring API is served through. 3.2.8
+#   fixes it, and every gem that needs rack accepts 3.2.8.
+# - mustache 0.99.8, fixed in 1.1.3. pleaserun requires exactly 0.99.8 up to 0.0.34, and 0.0.35
+#   takes ~> 1.1, >= 1.1.3, so pleaserun moves to 0.0.35 with it and its line for mustache in the
+#   lock moves too. Only bin/system-install loads pleaserun, to write a service unit, and
+#   logstash.service is installed from here instead. output-email, the only other gem that needs
+#   mustache, takes >= 0.99.8.
+# Each new version is installed beside the old one from a .gem pinned by the digest rubygems.org
 # publishes, with the gem command of Logstash's own JRuby, local and without dependencies, so
-# nothing is resolved against rubygems.org. 3.2.7 is deleted, and so is the .gem the install leaves
-# in cache/, which the tarball ships empty; the lock names 3.2.8, which every gem that needs rack
-# accepts. This runs after the plugin installs and removals above, which rewrite the lock. Nothing
-# here is -f: a Logstash bump that no longer pins 3.2.7 fails here, which is the cue to drop it.
+# nothing is resolved against rubygems.org. --env-shebang writes the executables' wrappers as the
+# tarball ships them. The old version is deleted, and so is the .gem the install leaves in cache/,
+# which the tarball ships empty; the lock names the new one. This runs after the plugin installs
+# and removals above, which rewrite the lock. Nothing here is -f: a Logstash bump that no longer
+# pins an old version fails here, which is the cue to drop it.
+# Fields: gem, version pinned, version installed, sha256 of its .gem.
 LOGSTASH_BUNDLE := $(LOGSTASH_HOME)/vendor/bundle/jruby/3.4.0
-LOGSTASH_RACK_OLD := 3.2.7
-LOGSTASH_RACK_VER := 3.2.8
-LOGSTASH_RACK_GEM := rack-$(LOGSTASH_RACK_VER).gem
-LOGSTASH_RACK_SHA256 := 1fecc85e463ebc7a2a945fff829ffcd549babeb1556384796fad946c28dc4ec7
+LOGSTASH_LOCK := $(LOGSTASH_HOME)/Gemfile.lock
+LOGSTASH_GEM_REFRESH := \
+	rack:3.2.7:3.2.8:1fecc85e463ebc7a2a945fff829ffcd549babeb1556384796fad946c28dc4ec7 \
+	mustache:0.99.8:1.1.3:75bdfeaa17e4af168fae2c262867b2992087aef39d8580965cb90d37a7d093c2 \
+	pleaserun:0.0.34:0.0.35:8bd5ab4281cf8a094e709ef64d26da6f488a7dc45508958c9c20097dcbe21781
+# pleaserun's line for mustache in the lock, before and after.
+LOGSTASH_LOCK_DEP_OLD := mustache (= 0.99.8)
+LOGSTASH_LOCK_DEP_NEW := mustache (~> 1.1, >= 1.1.3)
+logstash_gem_field = $(word $(1),$(subst :, ,$(2)))
+# $(1) one LOGSTASH_GEM_REFRESH entry: <gem>-<version> before and after.
+logstash_gem_old = $(call logstash_gem_field,1,$(1))-$(call logstash_gem_field,2,$(1))
+logstash_gem_new = $(call logstash_gem_field,1,$(1))-$(call logstash_gem_field,3,$(1))
+# $(1) one entry: the lock's line for the gem as grep and sed match it, and the sed that moves it.
+logstash_lock_line = ^    $(call logstash_gem_field,1,$(1)) ($(call logstash_gem_field,2,$(1)))$$
+logstash_lock_sed = -e 's/$(call logstash_lock_line,$(1))/    $(call logstash_gem_field,1,$(1)) ($(call logstash_gem_field,3,$(1)))/'
+LOGSTASH_GEMS := $(foreach e,$(LOGSTASH_GEM_REFRESH),$(ARCS_DIR)/$(call logstash_gem_new,$(e)).gem)
 
-$(ARCS_DIR)/$(LOGSTASH_RACK_GEM):
-	$(Q)wget $(LOGSTASH_GEM_DL_URL)/$(LOGSTASH_RACK_GEM) -O $@.part
-	$(Q)echo "$(LOGSTASH_RACK_SHA256)  $@.part" | sha256sum -c -
-	$(Q)mv $@.part $@
+# $(1) <gem>-<version>, $(2) the sha256 of its .gem
+define logstash_gem
+$(ARCS_DIR)/$(1).gem:
+	$$(Q)wget $$(LOGSTASH_GEM_DL_URL)/$(1).gem -O $$@.part
+	$$(Q)echo "$(2)  $$@.part" | sha256sum -c -
+	$$(Q)mv $$@.part $$@
+endef
+$(foreach e,$(LOGSTASH_GEM_REFRESH),$(eval $(call logstash_gem,$(call logstash_gem_new,$(e)),$(call logstash_gem_field,4,$(e)))))
 
-rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_RACK_GEM)
-	$(Q)grep -q '^    rack ($(LOGSTASH_RACK_OLD))$$' $(ROOTDIR)$(LOGSTASH_HOME)/Gemfile.lock
-	$(Q)cp -f $< $(ROOTDIR)/tmp/$(LOGSTASH_RACK_GEM)
+rootfs_install:: $(LOGSTASH_GEMS)
+	$(Q)$(foreach e,$(LOGSTASH_GEM_REFRESH),grep -q '$(call logstash_lock_line,$(e))' $(ROOTDIR)$(LOGSTASH_LOCK) && ) \
+		grep -q '^      $(LOGSTASH_LOCK_DEP_OLD)$$' $(ROOTDIR)$(LOGSTASH_LOCK)
+	$(Q)cp -f $^ $(ROOTDIR)/tmp/
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/ruby -S gem install \
-		--local --ignore-dependencies --no-document --install-dir $(LOGSTASH_BUNDLE) /tmp/$(LOGSTASH_RACK_GEM)
-	$(Q)rm -f $(ROOTDIR)/tmp/$(LOGSTASH_RACK_GEM)
-	$(Q)rm -r $(ROOTDIR)$(LOGSTASH_BUNDLE)/gems/rack-$(LOGSTASH_RACK_OLD) \
-		$(ROOTDIR)$(LOGSTASH_BUNDLE)/specifications/rack-$(LOGSTASH_RACK_OLD).gemspec \
-		$(ROOTDIR)$(LOGSTASH_BUNDLE)/cache/$(LOGSTASH_RACK_GEM)
-	$(Q)sed -i 's/^    rack ($(LOGSTASH_RACK_OLD))$$/    rack ($(LOGSTASH_RACK_VER))/' $(ROOTDIR)$(LOGSTASH_HOME)/Gemfile.lock
-	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_BUNDLE)/gems/rack-$(LOGSTASH_RACK_VER) \
-		$(LOGSTASH_BUNDLE)/specifications/rack-$(LOGSTASH_RACK_VER).gemspec
+		--local --ignore-dependencies --no-document --env-shebang --install-dir $(LOGSTASH_BUNDLE) \
+		$(addprefix /tmp/,$(notdir $^))
+	$(Q)rm -f $(addprefix $(ROOTDIR)/tmp/,$(notdir $^))
+	$(Q)rm -r $(foreach e,$(LOGSTASH_GEM_REFRESH),$(ROOTDIR)$(LOGSTASH_BUNDLE)/gems/$(call logstash_gem_old,$(e)) \
+		$(ROOTDIR)$(LOGSTASH_BUNDLE)/specifications/$(call logstash_gem_old,$(e)).gemspec \
+		$(ROOTDIR)$(LOGSTASH_BUNDLE)/cache/$(call logstash_gem_new,$(e)).gem)
+	$(Q)sed -i $(foreach e,$(LOGSTASH_GEM_REFRESH),$(call logstash_lock_sed,$(e))) \
+		-e 's/^      $(LOGSTASH_LOCK_DEP_OLD)$$/      $(LOGSTASH_LOCK_DEP_NEW)/' $(ROOTDIR)$(LOGSTASH_LOCK)
+	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_BUNDLE)/bin \
+		$(foreach e,$(LOGSTASH_GEM_REFRESH),$(LOGSTASH_BUNDLE)/gems/$(call logstash_gem_new,$(e)) \
+		$(LOGSTASH_BUNDLE)/specifications/$(call logstash_gem_new,$(e)).gemspec)
 
 #
 # Beats (filebeat, auditbeat)
