@@ -7,9 +7,11 @@
 #     that are in but the removed node's own whether they are in or not (the monitors mark a
 #     down node's OSDs out after 20 s), and leaves alone a pool the node's OSDs cannot serve
 #     (cubecos#2423)
-#   ceph_osd_host_remove: purges the node's OSDs only once safe-to-destroy passes, never waits
-#     forever, purges nothing on a timeout, removes the host bucket, and reads a ceph it
-#     cannot reach as a failure rather than as "nothing to remove" (cubecos#679)
+#   ceph_osd_host_remove: purges the node's OSDs once safe-to-destroy passes, or once they are
+#     down with no PG mapped and none waiting on them, which is what safe-to-destroy cannot
+#     judge for a long-down OSD while any PG of the cluster is unclean; never waits forever,
+#     purges nothing on a timeout, removes the host bucket, and reads a ceph it cannot reach as
+#     a failure rather than as "nothing to remove" (cubecos#679)
 #
 # Self-contained: extracts the functions and answers their ceph calls from fixtures, so it
 # needs no node.
@@ -22,7 +24,7 @@ SRC="${SDK_CEPH_SH:-$DIR/../modules/sdk_ceph.sh}"
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 
-for f in ceph_host_remove_precheck ceph_osd_host_remove ; do
+for f in ceph_host_remove_precheck _ceph_osds_down_and_empty ceph_osd_host_remove ; do
     body="$(awk "/^$f\(\)/{p=1} p{print} p&&/^}/{exit}" "$SRC")"
     [ -n "$body" ] || { echo "FAIL: $f not extracted"; exit 1; }
     eval "$body"
@@ -121,9 +123,13 @@ osd_stub() {
         "osd ls-tree "*) echo "$IDS" | tr ' ' '\n' ;;
         "osd safe-to-destroy "*) SAFE_CALLS=$((SAFE_CALLS + 1)); echo "$SAFE_CALLS" > "$T/safe"; [ "$SAFE_CALLS" -gt "$SAFE_AFTER" ] ;;
         "pg stat") echo "100 pgs: 100 active+clean" ;;
+        "osd dump -f json") echo "{\"osds\":[$(for i in $IDS; do printf '{"osd":%s,"up":%s},' $i $UP; done | sed 's/,$//')]}" ;;
+        "osd df osd."*" -f json") echo "{\"nodes\":[{\"id\":${3#osd.},\"pgs\":$([[ " $BUSY " == *" ${3#osd.} "* ]] && echo 3 || echo 0)}]}" ;;
         *) echo "ceph $*" >> "$T/calls" ;;
     esac
 }
+ceph_osd_pgs_waiting_on() { [[ " $WAITING " == *" $1 "* ]] && echo 7.1f ; }
+UP=1 BUSY="" WAITING=""
 remove() {   # host bucket ids safe_after timeout tree_ok
     BUCKET=$2 IDS=$3 SAFE_AFTER=$4 TREE_OK=${6:-y} SAFE_CALLS=0
     : > "$T/calls"
@@ -144,6 +150,23 @@ remove n1 n1 "" 0 60 n
 chk "a ceph that cannot be read is a failure, not an empty host" "$rc $(calls)" "1 "
 remove n1 n1 "" 0 60
 chk "a host bucket without OSDs is removed" "$rc $(calls)" "0 ceph osd crush rm n1;"
+
+# a long-down OSD reports no stats, and safe-to-destroy cannot judge it while any PG of the
+# cluster is unclean; what ceph_osd_safe_remove purges on "no reported stats" is purged here too
+UP=0
+remove n1 n1 "24 25" 1000 60
+chk "safe-to-destroy cannot judge, OSDs down with no PG and none waiting: purged at once" "$rc $(calls)" \
+    "0 ceph osd out 24 25;ceph osd purge 24 --yes-i-really-mean-it;ceph osd purge 25 --yes-i-really-mean-it;ceph osd crush rm n1;"
+chk "  without waiting" "$(cat "$T/safe")" "1"
+BUSY=25
+remove n1 n1 "24 25" 1000 60
+chk "  but an OSD that still has PGs mapped: waits, then fails, nothing purged" "$rc $(calls)" "1 ceph osd out 24 25;"
+BUSY="" WAITING=24
+remove n1 n1 "24 25" 1000 60
+chk "  and an OSD a PG waits on for its latest copy: waits, then fails, nothing purged" "$rc $(calls)" "1 ceph osd out 24 25;"
+UP=1 WAITING=""
+remove n1 n1 "24 25" 1000 60
+chk "  and an OSD that is up: waits, then fails, nothing purged" "$rc $(calls)" "1 ceph osd out 24 25;"
 
 echo "test_ceph_node_remove: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -1757,11 +1757,26 @@ sys.exit(short)
 '
 }
 
+# True when every OSD of $@ is down, has no PG mapped and no PG waits on it for its latest copy:
+# what ceph_osd_safe_remove purges on "no reported stats". A long-down OSD reports none, and
+# safe-to-destroy cannot judge it while any PG of the cluster is not active+clean, even one in an
+# unrelated pool.
+_ceph_osds_down_and_empty()
+{
+    local id up pgs
+    for id in "$@" ; do
+        up=$($CEPH osd dump -f json | jq -r ".osds[] | select(.osd == $id) | .up")
+        pgs=$($CEPH osd df osd.$id -f json | jq -r ".nodes[] | select(.id == $id) | .pgs")
+        [ "x$up" = x0 ] && [ "x${pgs:-0}" = x0 ] && [ -z "$(ceph_osd_pgs_waiting_on $id)" ] || return 1
+    done
+}
+
 # Remove the OSDs and the CRUSH bucket of node $1, which has been shut down for good (cluster
 # remove_node). Nothing can run on the node any more, so the OSDs are taken out, their data is
 # recovered from the other copies, and they are purged only once safe-to-destroy says that no
-# PG needs them, waiting at most $2 seconds (default 3600). A timeout leaves them out and
-# fails, and the removal can be run again once the recovery is done.
+# PG needs them, or once they are down with no PG mapped and none waiting on them, waiting at
+# most $2 seconds (default 3600). A timeout leaves them out and fails, and the removal can be
+# run again once the recovery is done.
 ceph_osd_host_remove()
 {
     local host=$1 timeout=${2:-3600}
@@ -1774,7 +1789,7 @@ ceph_osd_host_remove()
 
     if [ -n "$ids" ] ; then
         $CEPH osd out $ids || return 1
-        until $CEPH osd safe-to-destroy $ids >/dev/null 2>&1 ; do
+        until $CEPH osd safe-to-destroy $ids >/dev/null 2>&1 || _ceph_osds_down_and_empty $ids ; do
             if [ $waited -ge $timeout ] ; then
                 echo "ceph has not recovered the data of OSDs $ids after ${timeout}s, they stay out: $($CEPH osd safe-to-destroy $ids 2>&1 | tail -1)" >&2
                 return 1
