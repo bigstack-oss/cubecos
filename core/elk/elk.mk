@@ -64,9 +64,7 @@ endef
 elk_jar_rule = $(eval $(call elk_jar,$(call elk_jar_field,1,$(1)),$(call elk_jar_field,2,$(1)),$(call elk_jar_field,3,$(1)),$(call elk_jar_field,4,$(1))))
 
 # Guava has a known vulnerability fixed in 33.7.2, and failureaccess 1.0.3 is what 33.7.2 requires.
-# logstash-core, logstash-integration-kafka and OpenSearch's transport-grpc module each bundle an
-# older pair, and none has a release that bundles 33.7.2 yet, so all three take this pair below.
-# Their download rules are defined here, once.
+# OpenSearch's transport-grpc module bundles an older pair and takes this one below.
 ELK_GUAVA := com.google.guava:guava:33.7.2-jre:b530942257fb935f8b2cfaa5f8eb5bd59c555fd8e8d01b8ce98912e077ea606c
 ELK_FAILUREACCESS := com.google.guava:failureaccess:1.0.3:cbfc3906b19b8f55dd7cfd6dfe0aa4532e834250d7f080bd8d211a3e246b59cb
 ELK_GUAVA_JARS := $(call elk_jar_path,$(ELK_GUAVA)) $(call elk_jar_path,$(ELK_FAILUREACCESS))
@@ -156,7 +154,7 @@ rootfs_install:: $(ARCS_DIR)/$(OSEARCH_BOARDS_NODE_TXZ)
 # Logstash
 #
 
-LOGSTASH_VER := 9.5.5
+LOGSTASH_VER := 9.5.6
 LOGSTASH_CONF_DIR := /etc/logstash
 LOGSTASH_CONF_D_DIR := $(LOGSTASH_CONF_DIR)/conf.d
 LOGSTASH_CONF_EVENTDB_DIR := $(LOGSTASH_CONF_DIR)/eventdb
@@ -266,67 +264,19 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_PLUGIN_PACK)
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin install file:///tmp/$(LOGSTASH_PLUGIN_PACK)
 	$(Q)rm -f $(ROOTDIR)/tmp/$(LOGSTASH_PLUGIN_PACK)
 
-# Bundled plugins no pipeline in conf.d uses, removed because they carry vulnerable jars:
-# elastic_integration vendors jackson 2.18 and 3.1, azure_event_hubs jackson 2.21.6, and
-# output-webhdfs snappy-java 1.1.10.5. codec-fluent and codec-msgpack go too: they are the only
-# gems that need the msgpack gem, 1.8.5, which has a known vulnerability, and logstash-plugin
-# deletes msgpack with them as an orphaned dependency. The removal is local -- logstash-plugin
-# rewrites Gemfile and Gemfile.lock and deletes the gems without resolving anything against
-# rubygems.org -- so it costs seconds and no network. A Logstash bump that stops bundling one
-# fails here, which is the cue to drop it from the list.
+# Bundled plugins no pipeline in conf.d uses. elastic_integration, azure_event_hubs and
+# output-webhdfs vendor jar trees of their own, which have lagged behind on known vulnerabilities
+# (9.5.5's carried jackson 2.18, 3.1 and 2.21.6 and snappy-java 1.1.10.5). codec-fluent and
+# codec-msgpack go too: they are the only gems that need the msgpack gem, 1.8.6, which has a known
+# vulnerability, and logstash-plugin deletes msgpack with them as an orphaned dependency. The
+# removal is local -- logstash-plugin rewrites Gemfile and Gemfile.lock and deletes the gems without
+# resolving anything against rubygems.org -- so it costs seconds and no network. A Logstash bump
+# that stops bundling one fails here, which is the cue to drop it from the list.
 LOGSTASH_UNUSED_PLUGINS := logstash-filter-elastic_integration logstash-input-azure_event_hubs \
 	logstash-output-webhdfs logstash-codec-fluent logstash-codec-msgpack
 
 rootfs_install::
 	$(Q)chroot $(ROOTDIR) /usr/bin/env $(LOGSTASH_PLUGIN_ENV) $(LOGSTASH_HOME)/bin/logstash-plugin remove $(LOGSTASH_UNUSED_PLUGINS)
-
-# logstash-integration-kafka, which the conf.d pipelines read Kafka with, vendors Jackson 2.21.6, and
-# jackson-core 2.21.6 has a known vulnerability fixed in 2.21.7; 12.1.10, its newest release, still
-# vendors 2.21.6. logstash-core loads 2.21.7 already, so jar-dependencies skips the gem's own
-# jackson-core and jackson-databind, but it does load the gem's jackson-dataformat-csv and
-# jackson-datatype-jdk8 2.21.6. All four move to 2.21.7 and the gem's jar list names 2.21.7, so the
-# plugin runs on the one Jackson line logstash-core loads. The gem's lz4-java 1.10.1 and
-# snappy-java 1.1.10.7, which the Kafka client compresses with, have known vulnerabilities fixed in
-# 1.11.4 and 1.1.10.9 and move the same way (snappy-java to 1.1.10.12, its newest release), and
-# so do its Guava 32.0.1 and failureaccess 1.0.1, which only its Avro schema-registry client needs:
-# they take the pair defined above, whose download rules are not defined again here.
-# The last field is the version replaced. Nothing here is -f: a Logstash bump that changes the
-# gem's version, or what it vendors, fails here.
-LOGSTASH_KAFKA_GEM := $(LOGSTASH_HOME)/vendor/bundle/jruby/3.4.0/gems/logstash-integration-kafka-12.1.9-java
-LOGSTASH_KAFKA_JAR_REFRESH := \
-	com.fasterxml.jackson.core:jackson-core:2.21.7:8c5623b98f32d5f7e1287ff61ed50e08ab7b11381e991fff89327faabba42261:2.21.6 \
-	com.fasterxml.jackson.core:jackson-databind:2.21.7:1290c2795e93e8a6861a6c4d9ff0d844d32f5ea178362cb2721edf5561e828b1:2.21.6 \
-	com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.7:588050148497158cabdc05c0ae3a7e123194a486b8c62745778fc6239f9b085e:2.21.6 \
-	com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.21.7:b8f62f98363ed9aa259b3a479a64fcbe7e081158a8bec6733972e900d12f4e47:2.21.6 \
-	at.yawk.lz4:lz4-java:1.11.4:58c8e0b813960d2a248e050c353baea73139b48a2ffc55382d42c69707e17325:1.10.1 \
-	org.xerial.snappy:snappy-java:1.1.10.12:1c03ce77b3f2e926c25a952612e372404d80bc88c6c8052bede964804fabd732:1.1.10.7 \
-	$(ELK_GUAVA):32.0.1-jre \
-	$(ELK_FAILUREACCESS):1.0.1
-LOGSTASH_KAFKA_JARS_RB = $(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/lib/logstash-integration-kafka_jars.rb
-# $(1) one LOGSTASH_KAFKA_JAR_REFRESH entry: swap the jar in the gem's vendor/jar-dependencies tree
-# and the version its jar list requires.
-logstash_kafka_jar = d=$(ROOTDIR)$(LOGSTASH_KAFKA_GEM)/vendor/jar-dependencies/$(subst .,/,$(call elk_jar_field,1,$(1)))/$(call elk_jar_field,2,$(1)) && \
-	rm $$d/$(call elk_jar_field,5,$(1))/$(call elk_jar_field,2,$(1))-$(call elk_jar_field,5,$(1)).jar && \
-	rmdir $$d/$(call elk_jar_field,5,$(1)) && mkdir $$d/$(call elk_jar_field,3,$(1)) && \
-	cp $(call elk_jar_path,$(1)) $$d/$(call elk_jar_field,3,$(1))/ && \
-	grep -q "'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,5,$(1))'" $(LOGSTASH_KAFKA_JARS_RB) && \
-	sed -i "s/'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,5,$(1))'/'$(call elk_jar_field,2,$(1))', '$(call elk_jar_field,3,$(1))'/" $(LOGSTASH_KAFKA_JARS_RB)
-
-$(foreach e,$(filter-out $(ELK_GUAVA):% $(ELK_FAILUREACCESS):%,$(LOGSTASH_KAFKA_JAR_REFRESH)),$(call elk_jar_rule,$(e)))
-
-rootfs_install:: $(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call elk_jar_path,$(e)))
-	$(Q)$(foreach e,$(LOGSTASH_KAFKA_JAR_REFRESH),$(call logstash_kafka_jar,$(e)) && ) true
-	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_KAFKA_GEM)
-
-# logstash-core bundles Guava 33.1.0 and failureaccess 1.0.2 in lib/jars, which bin/logstash.lib.sh
-# puts on the class path by glob, so no list names them; 9.5.5 is the newest release and main still
-# pins 33.1.0. They take the pair defined above. Nothing here is -f, as above.
-LOGSTASH_CORE_JARS := $(LOGSTASH_HOME)/logstash-core/lib/jars
-
-rootfs_install:: $(ELK_GUAVA_JARS)
-	$(Q)rm $(ROOTDIR)$(LOGSTASH_CORE_JARS)/guava-33.1.0-jre.jar $(ROOTDIR)$(LOGSTASH_CORE_JARS)/failureaccess-1.0.2.jar
-	$(Q)cp -f $(ELK_GUAVA_JARS) $(ROOTDIR)$(LOGSTASH_CORE_JARS)/
-	$(Q)chroot $(ROOTDIR) chown logstash:logstash $(LOGSTASH_CORE_JARS)/guava-33.7.2-jre.jar $(LOGSTASH_CORE_JARS)/failureaccess-1.0.3.jar
 
 # Logstash's Gemfile.lock pins rack 3.2.7, which logstash-core needs (~> 3) and the monitoring API
 # is served through; it has a known vulnerability fixed in 3.2.8, and 9.5.6, the newest release,
