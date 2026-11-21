@@ -133,19 +133,40 @@ $(LADDER_DIR):
 	$(Q)mv $@.tmp $@
 
 # The helm that ships in the image. The jail's own helm only runs the build: jail.ubi9.dockerfile
-# installs whatever release get-helm-3 found the day the jail image was built. The digest is from
-# helm's own helm-<ver>-linux-amd64.tar.gz.sha256sum; bump it with the version.
+# installs whatever release get-helm-3 found the day the jail image was built.
+#
+# Built from the release tag rather than taken from the release tarball: v3.22.1, the newest 3.x
+# release, links an x/net older than its fix. The jail's Go and HELM_GO_GET cover it, with x/crypto
+# and x/text at the releases the other rebuilds take. Return to the tarball on the condition
+# core/exporters/Makefile gives. The flags and ldflags are those of helm's own Makefile for a tagged
+# release, with go build called directly so that this tree's make variables stay out of it; the
+# Kubernetes version the lint rules and chartutil default to comes from client-go's version, as
+# there. The tag is cloned shallow, and the modules come from proxy.golang.org, checked against
+# sum.golang.org. The clone is not named helm*.
 HELM_VERSION := v3.22.1
-HELM_SHA256 := 896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea
-HELM_TGZ := helm-$(HELM_VERSION)-linux-amd64.tar.gz
+HELM_GO_GET := golang.org/x/crypto@v0.58.0 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0
+HELM_SRC := src-helm-$(HELM_VERSION)
+HELM_PKG := helm.sh/helm/v3
 
-helm:
-	$(call RUN_CMD_TIMED,rm -rf $@.tmp && mkdir $@.tmp && \
-		wget -q -P $@.tmp https://get.helm.sh/$(HELM_TGZ) && \
-		echo "$(HELM_SHA256)  $@.tmp/$(HELM_TGZ)" | sha256sum -c - && \
-		tar -C $@.tmp -xzf $@.tmp/$(HELM_TGZ) linux-amd64/helm && \
-		$@.tmp/linux-amd64/helm version --template '{{.Version}}' | grep -qx $(HELM_VERSION) && \
-		mv $@.tmp/linux-amd64/helm $@ && rm -rf $@.tmp,"  PULL    helm $(HELM_VERSION)")
+$(HELM_SRC):
+	$(call RUN_CMD_TIMED, rm -rf $@.part && \
+		git clone -q --depth 1 -b $(HELM_VERSION) https://github.com/helm/helm.git $@.part && \
+		mv $@.part $@,"  CLONE   helm-$(HELM_VERSION)")
+
+helm: $(HELM_SRC) $(SRCDIR)/Makefile
+	$(call RUN_CMD_TIMED, cd $(HELM_SRC) && go get $(HELM_GO_GET) && go mod tidy && \
+		k8s=$$(go list -f '{{.Version}}' -m k8s.io/client-go) && k8s=$${k8s#v} && \
+		k8s_major=$$(( $${k8s%%.*} + 1 )) && k8s_minor=$$(echo $$k8s | cut -d. -f2) && \
+		CGO_ENABLED=0 go build -trimpath -ldflags "-w -s \
+			-X $(HELM_PKG)/internal/version.version=$(HELM_VERSION) \
+			-X $(HELM_PKG)/internal/version.gitCommit=$$(git rev-parse HEAD) \
+			-X $(HELM_PKG)/pkg/lint/rules.k8sVersionMajor=$$k8s_major \
+			-X $(HELM_PKG)/pkg/lint/rules.k8sVersionMinor=$$k8s_minor \
+			-X $(HELM_PKG)/pkg/chartutil.k8sVersionMajor=$$k8s_major \
+			-X $(HELM_PKG)/pkg/chartutil.k8sVersionMinor=$$k8s_minor" \
+			-o $(CURDIR)/$@.tmp ./cmd/helm && \
+		$(CURDIR)/$@.tmp version --template '{{.Version}}' | grep -qx $(HELM_VERSION) && \
+		mv $(CURDIR)/$@.tmp $(CURDIR)/$@,"  BUILD   helm $(HELM_VERSION)")
 
 $(INSTALL_SCRIPT):
 	$(call RUN_CMD_TIMED,wget https://raw.githubusercontent.com/k3s-io/k3s/$(VERSION)/install.sh,"  PULL    $(INSTALL_SCRIPT)")
@@ -219,7 +240,7 @@ clean:: testclean
 
 
 BUILD += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm build-image
-BUILDCLEAN += .dapper and $(K3S_SRC_DIR) $(K3S_SRC_DIR)-*
+BUILDCLEAN += .dapper and $(K3S_SRC_DIR) $(K3S_SRC_DIR)-* $(HELM_SRC)
 DISTCLEAN += $(BIN) $(INSTALL_SCRIPT) $(LADDER_DIR) helm
 
 SUBDIRS += ingress-nginx
