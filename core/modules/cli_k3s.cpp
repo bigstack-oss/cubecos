@@ -153,7 +153,7 @@ k3sNamespaceCreateMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    int result = HexSystemF(0, "cubectl config k3s namespace-create %s --cpu %s --memory %s --ephemeral-storage %s", ns.c_str(), cpuQuota.c_str(), memoryQuota.c_str(), storageQuota.c_str());
+    int result = HexSystemF(0, "cubectl config k3s namespace-create %s --cpu %s --memory %s --ephemeral-storage %s", HexBuildShellArg(ns).c_str(), HexBuildShellArg(cpuQuota).c_str(), HexBuildShellArg(memoryQuota).c_str(), HexBuildShellArg(storageQuota).c_str());
     if (result != 0) {
         return CLI_FAILURE;
     }
@@ -194,7 +194,7 @@ k3sNamespaceUpdateMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    int result = HexSystemF(0, "cubectl config k3s namespace-update %s --cpu %s --memory %s --ephemeral-storage %s", ns.c_str(), cpuQuota.c_str(), memoryQuota.c_str(), storageQuota.c_str());
+    int result = HexSystemF(0, "cubectl config k3s namespace-update %s --cpu %s --memory %s --ephemeral-storage %s", HexBuildShellArg(ns).c_str(), HexBuildShellArg(cpuQuota).c_str(), HexBuildShellArg(memoryQuota).c_str(), HexBuildShellArg(storageQuota).c_str());
     if (result != 0) {
         return CLI_FAILURE;
     }
@@ -271,7 +271,7 @@ k3sUserCreateMain(int argc, const char** argv)
     }
 
     namespaces = cliSelectNamespacesToUser();
-    int result = HexSystemF(0, "cubectl config k3s user-create %s --namespaces \"%s\"", username.c_str(), namespaces.c_str());
+    int result = HexSystemF(0, "cubectl config k3s user-create %s --namespaces %s", HexBuildShellArg(username).c_str(), HexBuildShellArg(namespaces).c_str());
     if (result != 0) {
         CliPrintf("Failed to create k3s user(%s)", username.c_str());
         return CLI_FAILURE;
@@ -335,7 +335,7 @@ k3sAdminExec(int argc, const char** argv)
     }
 
     std::string k3sCmd = joinArgv(argc, argv);
-    if (HexSystemF(0, "cubectl config k3s admin-exec '%s'", k3sCmd.c_str()) != 0) {
+    if (HexSystemF(0, "cubectl config k3s admin-exec %s", HexBuildShellArg(k3sCmd).c_str()) != 0) {
         return CLI_FAILURE;
     };
 

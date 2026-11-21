@@ -39,7 +39,8 @@ static int CephListOsdMain(int argc, const char** argv)
     std::string osdId;
     if (argc == 2) {
         osdId = argv[1];
-        HexSystemF(0, "hex_sdk cmd -v \"hex_sdk -v ceph_osd_list %s\" | cut -d'|' -f3", osdId.c_str());
+        // hex_sdk cmd runs this through the remote shell, so quote twice.
+        HexSystemF(0, "hex_sdk cmd -v %s | cut -d'|' -f3", HexBuildShellArg("hex_sdk -v ceph_osd_list " + HexBuildShellArg(osdId)).c_str());
     } else {
         printf(LIST_OSD_FMT, "OSD", "STATE", "HOST", "DEV", "SERIAL", "POWER_ON", "USE", "REMARK");
         HexSystemF(0, "hex_sdk cmd -v hex_sdk ceph_osd_list | cut -d'|' -f3 | sort -k3");
@@ -68,27 +69,27 @@ static int CephShowCache(int argc, const char** argv)
     }
 
     // handle one liner case when backPool does not exist. ex: status nosuchpool
-    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", backPool.c_str());
+    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", HexBuildShellArg(backPool).c_str());
     if (validBackPool.empty()) {
         CliPrintf("Pool %s either does not support cache tiering or does not exist", backPool.c_str());
         return CLI_UNEXPECTED_ERROR;
     }
 
-    std::string cachePool = HexUtilPOpen(HEX_SDK " ceph_get_cache_by_backpool %s", backPool.c_str());
+    std::string cachePool = HexUtilPOpen(HEX_SDK " ceph_get_cache_by_backpool %s", HexBuildShellArg(backPool).c_str());
     if (cachePool.empty()) {
         CliPrintf("Failed to find cache associated with backpool: %s", backPool.c_str());
     } else {
         CliPrintf("%s/%s", backPool.c_str(), cachePool.c_str());
 
-        std::string onOffMsgs = HexUtilPOpen(HEX_SDK " ceph_osd_test_cache %s", backPool.c_str());
+        std::string onOffMsgs = HexUtilPOpen(HEX_SDK " ceph_osd_test_cache %s", HexBuildShellArg(backPool).c_str());
         CliPrintf("Status: %s", onOffMsgs.c_str());
 
-        std::string profile = HexUtilPOpen(HEX_SDK " ceph_osd_cache_profile_get %s", backPool.c_str());
+        std::string profile = HexUtilPOpen(HEX_SDK " ceph_osd_cache_profile_get %s", HexBuildShellArg(backPool).c_str());
         CliPrintf("Profile: %s", profile.c_str());
         // when cache is off, return directly
         if (onOffMsgs == "off")
             return CLI_SUCCESS;
-        std::string statMsgs = HexUtilPOpen("timeout 10 ceph df | grep %s | awk {'print $7 $8\"\t\"$10 $11'}", cachePool.c_str());
+        std::string statMsgs = HexUtilPOpen("timeout 10 ceph df | grep %s | awk {'print $7 $8\"\t\"$10 $11'}", HexBuildShellArg(cachePool).c_str());
         size_t len = statMsgs.size();
         if (len > 0 && statMsgs[len - 1] == '\n')
             statMsgs[len - 1] = '\0';
@@ -125,21 +126,21 @@ static int CephSwitchCache(int argc, const char** argv)
     }
 
     // handle one liner case when backPool does not exist. ex: switch nosuchpool on
-    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", backPool.c_str());
+    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", HexBuildShellArg(backPool).c_str());
     if (validBackPool.empty()) {
         CliPrintf("Pool %s either does not support cache tiering or does not exist", backPool.c_str());
         return CLI_UNEXPECTED_ERROR;
     }
 
-    std::string cachePool = HexUtilPOpen(HEX_SDK " ceph_get_cache_by_backpool %s", backPool.c_str());
+    std::string cachePool = HexUtilPOpen(HEX_SDK " ceph_get_cache_by_backpool %s", HexBuildShellArg(backPool).c_str());
     if (cachePool.empty()) {
         CliPrintf("Create a new cachepool for backpool: %s", backPool.c_str());
         if (!CliReadConfirmation())
             return CLI_SUCCESS;
 
-        cachePool = HexUtilPOpen(HEX_SDK " ceph_create_cachepool %s", backPool.c_str());
+        cachePool = HexUtilPOpen(HEX_SDK " ceph_create_cachepool %s", HexBuildShellArg(backPool).c_str());
     }
-    std::string onOffMsgs = HexUtilPOpen(HEX_SDK " ceph_osd_test_cache %s", backPool.c_str());
+    std::string onOffMsgs = HexUtilPOpen(HEX_SDK " ceph_osd_test_cache %s", HexBuildShellArg(backPool).c_str());
     if (input.empty()) {
         CliPrintf("Current %s/%s status: %s", backPool.c_str(), cachePool.c_str(), onOffMsgs.c_str());
         CliReadLine("Turn cache (on/off): ", input);
@@ -149,11 +150,11 @@ static int CephSwitchCache(int argc, const char** argv)
     if (onOffMsgs == input) {
         CliPrintf("No operation performed because cache is already %s.", input.c_str());
     } else if (input == "on") {
-        if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_cache %s", backPool.c_str()))) {
+        if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_create_cache %s", HexBuildShellArg(backPool).c_str()))) {
             CliPrintf("Failed to switch on cache for backpool: %s", backPool.c_str());
         }
     } else if (input == "off") {
-        if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_disable_cache %s", backPool.c_str()))) {
+        if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_disable_cache %s", HexBuildShellArg(backPool).c_str()))) {
             CliPrintf("Failed to switch off cache for backpool: %s", backPool.c_str());
         }
     } else {
@@ -187,13 +188,13 @@ static int CephCacheProfileSet(int argc, const char** argv)
     }
 
     // handle one liner case when backPool does not exist. ex: set_profile nosuchpool high-burst
-    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", backPool.c_str());
+    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", HexBuildShellArg(backPool).c_str());
     if (validBackPool.empty()) {
         CliPrintf("Pool %s either does not support cache tiering or does not exist", backPool.c_str());
         return CLI_UNEXPECTED_ERROR;
     }
 
-    std::string cachePool = HexUtilPOpen(HEX_SDK " ceph_get_cache_by_backpool %s", backPool.c_str());
+    std::string cachePool = HexUtilPOpen(HEX_SDK " ceph_get_cache_by_backpool %s", HexBuildShellArg(backPool).c_str());
     if (cachePool.empty()) {
         CliPrintf("Failed to find cache associated with backpool: %s", backPool.c_str());
     } else if (profile.empty()) {
@@ -338,17 +339,17 @@ static int CephCacheFlush(int argc, const char** argv)
     }
 
     // handle one liner case when backPool does not exist. ex: flush nosuchpool
-    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", backPool.c_str());
+    std::string validBackPool = HexUtilPOpen(HEX_SDK " ceph_get_pool_in_cacheable_backpool %s", HexBuildShellArg(backPool).c_str());
     if (validBackPool.empty()) {
         CliPrintf("Pool %s either does not support cache tiering or does not exist", backPool.c_str());
         return CLI_UNEXPECTED_ERROR;
     }
 
-    std::string cachePool = HexUtilPOpen(HEX_SDK " ceph_get_cache_by_backpool %s", backPool.c_str());
+    std::string cachePool = HexUtilPOpen(HEX_SDK " ceph_get_cache_by_backpool %s", HexBuildShellArg(backPool).c_str());
     if (cachePool.empty()) {
         CliPrintf("Failed to find cache associated with backpool: %s.", backPool.c_str());
     } else {
-        std::string onOffMsgs = HexUtilPOpen(HEX_SDK " ceph_osd_test_cache %s", backPool.c_str());
+        std::string onOffMsgs = HexUtilPOpen(HEX_SDK " ceph_osd_test_cache %s", HexBuildShellArg(backPool).c_str());
         if (onOffMsgs == "off") {
             CliPrintf("Cache tiering of %s/%s is off.", backPool.c_str(), cachePool.c_str());
         } else {
@@ -516,10 +517,10 @@ CephAddAvailDisksMain(int argc, const char** argv)
             false,
             false,
             {},
-            HEX_SDK " storage_is_das '" + d + "'");
+            HEX_SDK " storage_is_das " + HexBuildShellArg(d));
         if (ir.exitCode == 0) {
             // handle direct-attached storage
-            if (HexSystemF(0, HEX_SDK " ceph_osd_add_disk_%s %s", mode.c_str(), d.c_str()) != 0) {
+            if (HexSystemF(0, HEX_SDK " %s %s", HexBuildShellArg("ceph_osd_add_disk_" + mode).c_str(), HexBuildShellArg(d).c_str()) != 0) {
                 CliPrintf("Failed to add disk(%s) %s.", mode.c_str(), d.c_str());
             } else {
                 CliPrintf("Added disk(%s) %s.", mode.c_str(), d.c_str());
@@ -631,10 +632,10 @@ CephAddDiskMain(int argc, const char** argv)
         false,
         false,
         {},
-        HEX_SDK " storage_is_das '" + device + "'");
+        HEX_SDK " storage_is_das " + HexBuildShellArg(device));
     if (ir.exitCode == 0) {
         // handle direct-attached storage
-        if (HexSystemF(0, HEX_SDK " ceph_osd_add_disk_%s %s", mode.c_str(), device.c_str()) != 0) {
+        if (HexSystemF(0, HEX_SDK " %s %s", HexBuildShellArg("ceph_osd_add_disk_" + mode).c_str(), HexBuildShellArg(device).c_str()) != 0) {
             CliPrintf("Failed to add disk(%s) %s.", mode.c_str(), device.c_str());
         } else {
             CliPrintf("Added disk(%s) %s.", mode.c_str(), device.c_str());
@@ -716,7 +717,7 @@ CephRemoveDiskMain(int argc, const char** argv)
     }
 
     // 3. remove this disk
-    if (HexSystemF(0, HEX_SDK " ceph_osd_remove_disk %s %s", device.c_str(), mode.c_str()) != 0)
+    if (HexSystemF(0, HEX_SDK " ceph_osd_remove_disk %s %s", HexBuildShellArg(device).c_str(), HexBuildShellArg(mode).c_str()) != 0)
         CliPrintf("Failed to remove disk %s with %s mode.", device.c_str(), mode.c_str());
     else
         CliPrintf("Job to remove disk %s is scheduled.", device.c_str());
@@ -782,7 +783,7 @@ CephRemoveExistMain(int argc, const char** argv)
         if (d.length() == 0)
             continue;
 
-        if (HexSystemF(0, HEX_SDK " ceph_osd_remove_disk %s %s", d.c_str(), mode.c_str()) != 0) {
+        if (HexSystemF(0, HEX_SDK " ceph_osd_remove_disk %s %s", HexBuildShellArg(d).c_str(), HexBuildShellArg(mode).c_str()) != 0) {
             CliPrintf("Failed to remove disk %s with %s mode for storage cannot become healthy without it.", d.c_str(), mode.c_str());
             break;
         } else {
@@ -940,13 +941,13 @@ static int CephCreateNodeGroup(int argc, const char** argv)
     std::string group = argv[1];
     std::string nodes;
     for (int i = 1; i < argc; i++) {
-        nodes.append(argv[i]);
+        nodes.append(HexBuildShellArg(argv[i]));
         if (i < (argc - 1))
             nodes.append(" ");
     }
 
     int ret = 0;
-    if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_create_node_group %s %s", group.c_str(), nodes.c_str()))) {
+    if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_create_node_group %s %s", HexBuildShellArg(group).c_str(), nodes.c_str()))) {
         HexLogError("Failed to add a ceph group (%s), containing nodes (%s)", group.c_str(), nodes.c_str());
         CliPrintf("\n--\nFailed to add node group.");
     }
@@ -973,11 +974,11 @@ static int CephRemoveNodeGroup(int argc, const char** argv)
         if (CliReadConfirmation()) {
             int ret = 0;
             // Disable cache before removing group
-            if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_disable_cache %s", backPool.c_str()))) {
+            if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_osd_disable_cache %s", HexBuildShellArg(backPool).c_str()))) {
                 HexLogError("Failed to disable %s cache(err=%d)", backPool.c_str(), ret);
             }
 
-            if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_remove_node_group %s", group.c_str()))) {
+            if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_remove_node_group %s", HexBuildShellArg(group).c_str()))) {
                 HexLogError("Failed to add a ceph group (%s)", group.c_str());
                 CliPrintf("\n--\nFailed to remove node group.");
             }
@@ -1007,7 +1008,7 @@ static int CephCreateSsdPool(int argc, const char** argv)
     std::string group = (argc == 2) ? argv[1] : "default";
 
     int ret = 0;
-    if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_create_group_ssdpool %s", group.c_str()))) {
+    if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_create_group_ssdpool %s", HexBuildShellArg(group).c_str()))) {
         HexLogError("Failed to add SSD pool (%s)", group.c_str());
         CliPrintf("\n--\nFailed to add SSD pool.");
     }
@@ -1028,7 +1029,7 @@ static int CephRemoveSsdPool(int argc, const char** argv)
     if (CliReadConfirmation()) {
         int ret = 0;
         // Disable cache before removing group
-        if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_remove_group_ssdpool %s", group.c_str()))) {
+        if ((ret = HexUtilSystemF(0, 0, HEX_SDK " ceph_remove_group_ssdpool %s", HexBuildShellArg(group).c_str()))) {
             HexLogError("Failed to remove ssdpool in %s group (err=%d)", group.c_str(), ret);
             CliPrintf("\n--\nFailed to remove group ssdpool.");
         }
