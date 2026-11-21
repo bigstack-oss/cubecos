@@ -215,6 +215,32 @@ rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_TGZ)
 	$(Q)$(INSTALL_DATA) $(ROOTDIR) $(COREDIR)/elk/logstash/logstash.service ./etc/systemd/system
 	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_CONF_DIR) $(LOGSTASH_CONF_EVENTDB_DIR) $(LOGSTASH_LOG_DIR) $(LOGSTASH_LIB_DIR) $(LOGSTASH_HOME)
 
+# Logstash 9.5.6 bundles Temurin 21.0.13+9 as jdk/, byte for byte Adoptium's own tarball, and the
+# JIT compiler in 21.0.13 has a known vulnerability fixed in 21.0.13.1, which no Logstash release
+# bundles yet. jdk/ is replaced with Temurin 21.0.13.1+2, whose tarball holds the same files. It is
+# pinned by the digest Adoptium publishes and was checked against Adoptium's signing key before
+# that digest was taken; $(GITHUB_DL_BASE), as for thanos: a GitHub release asset, mirrored for the
+# build network. This runs before the plugin installs below, so the class data archive JRuby writes
+# on its first run (vendor/jruby/lib/jruby-java<version>.jsa) is made for the JDK that ships.
+# Nothing here is -f: a Logstash bump that bundles another JDK fails on the grep, which is the cue
+# to drop this once that JDK is 21.0.13.1 or newer.
+LOGSTASH_JDK_BUNDLED := 21.0.13+9-LTS
+LOGSTASH_JDK_VER := 21.0.13.1+2
+LOGSTASH_JDK_TGZ := OpenJDK21U-jdk_x64_linux_hotspot_$(subst +,_,$(LOGSTASH_JDK_VER)).tar.gz
+LOGSTASH_JDK_SHA256 := bb8a93f9ae6e7a693b2b721e85dbeff26ae1a77447985a8d7afcdd9c7cf6222e
+
+$(ARCS_DIR)/$(LOGSTASH_JDK_TGZ):
+	$(Q)wget $(GITHUB_DL_BASE)/adoptium/temurin21-binaries/releases/download/jdk-$(LOGSTASH_JDK_VER)/$(LOGSTASH_JDK_TGZ) -O $@.part
+	$(Q)echo "$(LOGSTASH_JDK_SHA256)  $@.part" | sha256sum -c -
+	$(Q)mv $@.part $@
+
+rootfs_install:: $(ARCS_DIR)/$(LOGSTASH_JDK_TGZ)
+	$(Q)grep -q '^JAVA_RUNTIME_VERSION="$(LOGSTASH_JDK_BUNDLED)"$$' $(ROOTDIR)$(LOGSTASH_JDK)/release
+	$(Q)rm -r $(ROOTDIR)$(LOGSTASH_JDK)
+	$(Q)mkdir $(ROOTDIR)$(LOGSTASH_JDK)
+	$(Q)tar xzf $< -C $(ROOTDIR)$(LOGSTASH_JDK) --strip-components 1 --no-same-owner
+	$(Q)chroot $(ROOTDIR) chown -R logstash:logstash $(LOGSTASH_JDK)
+
 # install logstash plugins, such as output-syslog for N-Reporter
 #
 # From a pack assembled here out of pinned .gem files, not by name. By name, logstash-plugin
