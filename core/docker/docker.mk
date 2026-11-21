@@ -3,7 +3,11 @@
 
 DOCKER_DIR := /opt/docker
 
-ROOTFS_DNF += containerd.io docker-ce docker-ce-cli docker-ce-rootless-extras skopeo
+ROOTFS_DNF += containerd.io docker-ce docker-ce-cli skopeo
+# docker-ce-rootless-extras carries rootless mode's scripts and rootlesskit, which links an x/net
+# older than its fix. dockerd runs as root here and nothing sets up rootless mode, so it goes.
+# docker-ce recommends it, so it goes through the blocklist, as podman does in ceph.mk.
+BLKLST_DNF += docker-ce-rootless-extras
 
 DOCKER_REPO = $(shell chroot $(ROOTDIR) dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo ; echo "docker")
 # The key docker-ce.repo names, kept here and pinned rather than fetched from its gpgkey= URL
