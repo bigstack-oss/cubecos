@@ -2486,6 +2486,16 @@ ceph_mirror_image_enable()
             if [ "$enabled" != "enabled" ] ; then
                 local parent_pool=$(echo $img_info | jq -r '.parent.pool')
                 local parent_img=$(echo $img_info | jq -r '.parent.image')
+                # snapshot mirroring does not copy a clone's copy-up: the peer reads zeros where the
+                # primary still reads the parent (https://tracker.ceph.com/issues/61891)
+                if [ "$mode" = "snapshot" ] && [ "$parent_img" != "null" ] ; then
+                    local flatten_out
+                    if ! flatten_out=$(rbd --no-progress flatten $BUILTIN_BACKPOOL/${img_name} 2>&1) ; then
+                        printf "%60s failed to flatten, not enabled: %s\n" $BUILTIN_BACKPOOL/${img_name} "$flatten_out"
+                        continue
+                    fi
+                    printf "%60s flattened\n" $BUILTIN_BACKPOOL/${img_name}
+                fi
                 if [ "$parent_img" != "null" ] ; then
                     local p_info=$(rbd info $parent_pool/$parent_img --format json 2>/dev/null)
                     local p_enabled=$(echo $p_info | jq -r '.mirroring.state')
