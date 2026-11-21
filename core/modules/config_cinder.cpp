@@ -1195,12 +1195,15 @@ Commit(bool modified, int dryLevel)
         SetupService(s_cubeDomain, cinderPass);
     }
 
+    // Repair the Dell SC volumes a move away and back left with a deleted array volume's
+    // provider_id (#2422). Before migrate_cinder_db, whose `cinder-manage db purge 90`
+    // deletes the old deleted migration rows the repair matches on; the repair reads only
+    // columns the pre-upgrade schema already has. Bounded so a wedged database cannot hold
+    // up the commit.
+    HexUtilSystemF(0, 120, HEX_SDK " migrate_cinder_dell_sc_provider_id");
+
     // migrate db
     HexUtilSystemF(0, 0, HEX_SDK " migrate_cinder_db");
-    // Repair the Dell SC volumes a move away and back left with a deleted array volume's
-    // provider_id (#2422), once the schema is current. Bounded so a wedged database
-    // cannot hold up the commit.
-    HexUtilSystemF(0, 120, HEX_SDK " migrate_cinder_dell_sc_provider_id");
 
     if (s_bEndpointChanged) {
         SetServiceEndpoints(sharedId, external, s_cubeRegion);
