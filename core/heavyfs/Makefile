@@ -283,7 +283,7 @@ ROCKY_ERRATA_RPMS := \
 	AppStream/p/python3-protobuf-3.14.0-17.el9_7.noarch \
 	BaseOS/p/python3-urllib3-1.26.5-8.el9_8.noarch \
 	AppStream/p/python3-lxml-4.6.5-3.el9_8.1.x86_64
-rocky_rpm_url = $(ROCKY_DL_HOST)/$(ROCKY_PATH)/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
+rocky_rpm_url = $(ROCKY_DL_HOST)/$(or $(2),$(ROCKY_PATH))/$(word 1,$(subst /, ,$(1)))/x86_64/os/Packages/$(word 2,$(subst /, ,$(1)))/$(word 3,$(subst /, ,$(1))).rpm
 ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_ERRATA_RPMS),$(call rocky_rpm_url,$(p)))
 PINNED_DNF += dc350245c7781a0ac2ffce92e088a22c3741bf967ce7c551d0420cea9ae085eb pcre2-10.40-7.el9_8.x86_64.rpm
 PINNED_DNF += aaff0127ff9456106ca5b4139f93881e75c16502499d378021fba649730ee174 pcre2-syntax-10.40-7.el9_8.noarch.rpm
@@ -303,6 +303,19 @@ PINNED_DNF += d5f5a321ef0334332542a8c527eef85a7a2cbe382c8a7a4f131142e0d4cf3ff4 p
 PINNED_DNF += 6390cb4e53898aa27737bd0bb6a100cd8d3526bc77b074a8faa9f31b9bff2477 python3-protobuf-3.14.0-17.el9_7.noarch.rpm
 PINNED_DNF += 25d9b56cfee5643e1057c014cf6e7182647b84656821af837ad99c8f87c20ae0 python3-urllib3-1.26.5-8.el9_8.noarch.rpm
 PINNED_DNF += 30dcacac3537f4f6bfb31d1986c7dbe54e15e255fadc2f08e26d0b1cfffec98c python3-lxml-4.6.5-3.el9_8.1.x86_64.rpm
+
+# java-25-openjdk comes from Rocky 9.9 the same way: RHEL fixed known vulnerabilities in it in
+# 25.0.5.1.2-1.1.el9, which 9.8's tree does not carry, and Stream's newest build is
+# 25.0.4.1.1-2.1.el9. crypto-adapter, the only other java-25 package installed, needs headless at
+# its exact release, so the two move together. rocky_rpm_url's second argument takes these from
+# 9.9's tree; the list above stays on ROCKY_PATH, since librabbitmq, python3-tornado and
+# python3-urllib3 are no longer in 9.9's tree at their pinned builds.
+ROCKY_9_9_ERRATA_RPMS := \
+	AppStream/j/java-25-openjdk-headless-25.0.5.1.2-1.1.el9.x86_64 \
+	AppStream/j/java-25-openjdk-crypto-adapter-25.0.5.1.2-1.1.el9.x86_64
+ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_9_9_ERRATA_RPMS),$(call rocky_rpm_url,$(p),pub/rocky/9.9))
+PINNED_DNF += 31aaeeeeb9247dae1da4476c4ef6660d5c0c014b520535d6e015e52482f1dfd4 java-25-openjdk-headless-25.0.5.1.2-1.1.el9.x86_64.rpm
+PINNED_DNF += 698d50e47a46c002a4b5373ac8ce6fbc1bf041432d7eb8c809037361f9424294 java-25-openjdk-crypto-adapter-25.0.5.1.2-1.1.el9.x86_64.rpm
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
