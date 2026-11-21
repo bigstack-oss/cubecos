@@ -20,29 +20,38 @@ GPGKEY_DNF += $(COREDIR)/grafana/RPM-GPG-KEY-grafana B53AE77BADB630A683046005963
 # the image carries the plugins once. Of the datasources, only the two the provisioned ones use
 # stay, influxdb and prometheus: with the login form and basic auth off, no one can add another,
 # and most of the others link a Go or golang.org/x/net older than its fixes. canvas, a panel with no
-# binary, stays too, since grafana logs an error at every start without it. The influxdb 13.3.0
-# bundled, 13.1.7, is built with go1.26.7 and x/net 0.58.0 as well; 13.1.10, the newest release,
-# replaces it, pinned by the sha256 grafana.com publishes for it. 13.3.1 bundles 13.1.10 itself,
-# file for file the same, so for now the swap changes nothing. config_grafana keeps grafana from
-# fetching newer releases itself.
+# binary, stays too, since grafana logs an error at every start without it. The two that stay are
+# replaced by their newest releases, pinned by the sha256 grafana.com publishes for each: 13.3.1
+# bundles influxdb 13.1.10, which links klauspost/compress 1.19.2 and x/net 0.60.0, and prometheus
+# 13.2.5, which links x/net 0.61.0, all older than their fixes, while influxdb 13.2.0 and
+# prometheus 13.2.7 link compress 1.20.4 and x/net 0.63.0. Both take Grafana 12.3 or newer.
+# config_grafana keeps grafana from fetching newer releases itself.
+# Fields: plugin, version, sha256 of its linux-amd64 zip.
 GRAFANA_PLUGINS := /var/lib/grafana/plugins-bundled
 GRAFANA_UNUSED_PLUGINS := cloudwatch elasticsearch grafana-postgresql-datasource \
 	grafana-pyroscope-datasource jaeger loki mssql mysql opentsdb stackdriver tempo zipkin
-GRAFANA_INFLUXDB_VER := 13.1.10
-GRAFANA_INFLUXDB_SHA256 := 01f73b902e3d5d2e061a214f60492dc4fe8b29a35648353e07eb55372a081769
-GRAFANA_INFLUXDB_ZIP := $(ARCS_DIR)/grafana-influxdb-$(GRAFANA_INFLUXDB_VER).linux-amd64.zip
+GRAFANA_PLUGIN_REFRESH := \
+	influxdb:13.2.0:aabcddc0b1fe476215c576e49359cb8d98e621fa80864cd9bdce0e9ce4361c86 \
+	prometheus:13.2.7:0a7c1dd9d94905724eec811ad2d9852de231c65c08f813989e779994ac2efd28
+grafana_plugin_field = $(word $(1),$(subst :, ,$(2)))
+grafana_plugin_zip = $(ARCS_DIR)/grafana-$(call grafana_plugin_field,1,$(1))-$(call grafana_plugin_field,2,$(1)).linux-amd64.zip
+GRAFANA_PLUGIN_ZIPS := $(foreach e,$(GRAFANA_PLUGIN_REFRESH),$(call grafana_plugin_zip,$(e)))
 
-# .part then rename, as for elk.mk's jars
-$(GRAFANA_INFLUXDB_ZIP):
-	$(Q)mkdir -p $(@D)
-	$(Q)wget 'https://grafana.com/api/plugins/influxdb/versions/$(GRAFANA_INFLUXDB_VER)/download?os=linux&arch=amd64' -O $@.part
-	$(Q)echo "$(GRAFANA_INFLUXDB_SHA256)  $@.part" | sha256sum -c -
-	$(Q)mv $@.part $@
+# $(1) one GRAFANA_PLUGIN_REFRESH entry. .part then rename, as for elk.mk's jars.
+define grafana_plugin
+$(call grafana_plugin_zip,$(1)):
+	$$(Q)mkdir -p $$(@D)
+	$$(Q)wget 'https://grafana.com/api/plugins/$(call grafana_plugin_field,1,$(1))/versions/$(call grafana_plugin_field,2,$(1))/download?os=linux&arch=amd64' -O $$@.part
+	$$(Q)echo "$(call grafana_plugin_field,3,$(1))  $$@.part" | sha256sum -c -
+	$$(Q)mv $$@.part $$@
+endef
+$(foreach e,$(GRAFANA_PLUGIN_REFRESH),$(eval $(call grafana_plugin,$(e))))
 
-rootfs_install:: $(GRAFANA_INFLUXDB_ZIP)
+rootfs_install:: $(GRAFANA_PLUGIN_ZIPS)
 	$(Q)rm -rf $(ROOTDIR)$(GRAFANA_PLUGINS)
 	$(Q)mv $(ROOTDIR)/usr/share/grafana/data/plugins-bundled $(ROOTDIR)$(GRAFANA_PLUGINS)
-	$(Q)cd $(ROOTDIR)$(GRAFANA_PLUGINS) && rm -rf influxdb $(GRAFANA_UNUSED_PLUGINS) && unzip -q $<
+	$(Q)cd $(ROOTDIR)$(GRAFANA_PLUGINS) && rm -rf $(foreach e,$(GRAFANA_PLUGIN_REFRESH),$(call grafana_plugin_field,1,$(e))) \
+		$(GRAFANA_UNUSED_PLUGINS) && $(foreach z,$^,unzip -q $(z) && ) true
 	$(Q)chroot $(ROOTDIR) chown -R grafana:grafana $(GRAFANA_PLUGINS)
 
 # No grafana-cli plugin installs. Both plugins this used to fetch are gone:

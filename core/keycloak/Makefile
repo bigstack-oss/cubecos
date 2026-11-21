@@ -8,14 +8,14 @@ include ../../build.mk
 # still ships appVersion 17.0.1-legacy -- so moving to Quarkus means changing chart, not
 # just bumping a version.
 #
-# 7.3.x is the keycloakx line that tracks the 26.7 server we ship (7.3.0 -> 26.7.2, 7.3.1
-# -> 26.7.3, 7.3.2 -> 26.7.4); 7.2.x stops at 26.6.4, and nothing tracks 26.8 yet. appVersion
-# only supplies the default image tag, which chart-values.yaml overrides with the bundled
-# cube-cos-login image, so what it actually buys is templates written against the server we
-# ship: 7.x is the line that serves health from the management port, emits proxy-headers
-# instead of the removed proxy option, and defaults the cache stack to jdbc-ping.
+# 7.4.x is the keycloakx line that tracks the 26.8 server we ship (7.4.0 -> 26.8.1); 7.3.x
+# stops at 26.7.4. With chart-values.yaml, 7.4.0 renders the same manifests as 7.3.2 did.
+# appVersion only supplies the default image tag, which chart-values.yaml overrides with the
+# bundled cube-cos-login image, so what it actually buys is templates written against the
+# server we ship: 7.x is the line that serves health from the management port, emits
+# proxy-headers instead of the removed proxy option, and defaults the cache stack to jdbc-ping.
 CHART_NAME := keycloakx
-CHART_VERSION := 7.3.2
+CHART_VERSION := 7.4.0
 CHART := $(CHART_NAME)-$(CHART_VERSION).tgz
 
 $(CHART):
