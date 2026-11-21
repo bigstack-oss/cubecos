@@ -2,8 +2,8 @@
 #
 # Unit test for migrate_cinder_dell_sc_provider_id in ../modules/sdk_migrate.sh: a
 # one-time migration that repairs the provider_id of the Dell SC volumes a move away and
-# back left pointing at a deleted array volume (#2422). Only the master control works;
-# only backends whose volume_driver is the SC FC or iSCSI driver are read; a backend with
+# back left pointing at a deleted array volume (#2422). Every control works, the master
+# or not, and other nodes only set the marker; only backends whose volume_driver is the SC FC or iSCSI driver are read; a backend with
 # nothing to repair is read and not written; a failed read or write leaves the marker
 # unset so the next commit retries. The SQL itself is not exercised: it needs a cinder
 # database. Fakes the DB and the backend files; needs no cluster.
@@ -64,7 +64,8 @@ READ=ok; WRITE=fail
 check "the write fails: not marked" \
     "$(run backend dell-fc $SC_FC)" "marker=n sql=S:dell-fc U:dell-fc info=0 warn=1"
 WRITE=ok; MASTER=c2
-check "not the master: marked, no SQL" "$(run backend dell-fc $SC_FC)" "marker=y sql=info=0 warn=0"
+check "a control other than the master: read, repaired, marked" \
+    "$(run backend dell-fc $SC_FC)" "marker=y sql=S:dell-fc U:dell-fc info=1 warn=0"
 MASTER=c1; CONTROL=0
 check "not a control: marked, no SQL" "$(run backend dell-fc $SC_FC)" "marker=y sql=info=0 warn=0"
 CONTROL=1; rm -rf $T/sql; touch $T/state/cinder_dell_sc_provider_id_migrated

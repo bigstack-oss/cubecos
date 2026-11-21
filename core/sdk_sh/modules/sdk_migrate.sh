@@ -363,13 +363,17 @@ migrate_cinder_ext_storage_fujitsu_password()
 # which update_migrated_volume renamed to the volume's id. A volume with more than one
 # candidate there is left alone. A stale volume cannot have moved since: a move reads the
 # source through the same failing lookup.
+#
+# Every control runs it, not only the master: each control's migrate_cinder_db purges the
+# shared database, and a roll commits the VIP owner first, which need not be the master
+# control. The first control to commit repairs before its own purge; the rest find nothing.
 migrate_cinder_dell_sc_provider_id()
 {
     local marker=$STATE_DIR/cinder_dell_sc_provider_id_migrated
     local f backend join where rows id old new
 
     [ -f $marker ] && return 0
-    if ! is_control_node || [ "$($HEX_SDK cube_master_control)" != "$HOSTNAME" ] ; then
+    if ! is_control_node ; then
         touch $marker
         return 0
     fi
