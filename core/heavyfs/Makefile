@@ -304,18 +304,28 @@ PINNED_DNF += 6390cb4e53898aa27737bd0bb6a100cd8d3526bc77b074a8faa9f31b9bff2477 p
 PINNED_DNF += 25d9b56cfee5643e1057c014cf6e7182647b84656821af837ad99c8f87c20ae0 python3-urllib3-1.26.5-8.el9_8.noarch.rpm
 PINNED_DNF += 30dcacac3537f4f6bfb31d1986c7dbe54e15e255fadc2f08e26d0b1cfffec98c python3-lxml-4.6.5-3.el9_8.1.x86_64.rpm
 
-# java-25-openjdk comes from Rocky 9.9 the same way: RHEL fixed known vulnerabilities in it in
-# 25.0.5.1.2-1.1.el9, which 9.8's tree does not carry, and Stream's newest build is
-# 25.0.4.1.1-2.1.el9. crypto-adapter, the only other java-25 package installed, needs headless at
-# its exact release, so the two move together. rocky_rpm_url's second argument takes these from
-# 9.9's tree; the list above stays on ROCKY_PATH, since librabbitmq, python3-tornado and
-# python3-urllib3 are no longer in 9.9's tree at their pinned builds.
+# java-25-openjdk and nginx come from Rocky 9.9 the same way. RHEL fixed known vulnerabilities in
+# java-25-openjdk in 25.0.5.1.2-1.1.el9, which 9.8's tree does not carry, and Stream's newest build
+# is 25.0.4.1.1-2.1.el9. crypto-adapter, the only other java-25 package installed, needs headless
+# at its exact release, so the two move together. RHEL fixed known vulnerabilities in nginx in
+# 1.20.1-32.el9_9.2, and Stream's newest build is 1.20.1-32.el9; nginx, nginx-core and
+# nginx-filesystem, the three nginx packages installed, move together. Rocky's rebuild only
+# replaces the default static pages. Each comes out once Stream ships a build with all of the
+# Rocky build's fixes. rocky_rpm_url's second argument takes these from 9.9's tree; the list above
+# stays on ROCKY_PATH, since librabbitmq, python3-tornado and python3-urllib3 are no longer in
+# 9.9's tree at their pinned builds.
 ROCKY_9_9_ERRATA_RPMS := \
 	AppStream/j/java-25-openjdk-headless-25.0.5.1.2-1.1.el9.x86_64 \
-	AppStream/j/java-25-openjdk-crypto-adapter-25.0.5.1.2-1.1.el9.x86_64
+	AppStream/j/java-25-openjdk-crypto-adapter-25.0.5.1.2-1.1.el9.x86_64 \
+	AppStream/n/nginx-1.20.1-32.el9_9.2.rocky.0.1.x86_64 \
+	AppStream/n/nginx-core-1.20.1-32.el9_9.2.rocky.0.1.x86_64 \
+	AppStream/n/nginx-filesystem-1.20.1-32.el9_9.2.rocky.0.1.noarch
 ROOTFS_DNF_DL_FROM += $(foreach p,$(ROCKY_9_9_ERRATA_RPMS),$(call rocky_rpm_url,$(p),pub/rocky/9.9))
 PINNED_DNF += 31aaeeeeb9247dae1da4476c4ef6660d5c0c014b520535d6e015e52482f1dfd4 java-25-openjdk-headless-25.0.5.1.2-1.1.el9.x86_64.rpm
 PINNED_DNF += 698d50e47a46c002a4b5373ac8ce6fbc1bf041432d7eb8c809037361f9424294 java-25-openjdk-crypto-adapter-25.0.5.1.2-1.1.el9.x86_64.rpm
+PINNED_DNF += 6d2d4e4bdcb406ceeed18070fcd94e57b638e5a5336fd5ee064d4167f955b738 nginx-1.20.1-32.el9_9.2.rocky.0.1.x86_64.rpm
+PINNED_DNF += 76e26807fd312c6a30e7408f6d19307e97906eb9498d371058003fef66bd2677 nginx-core-1.20.1-32.el9_9.2.rocky.0.1.x86_64.rpm
+PINNED_DNF += 19739a88708e6fd7d1be0fd0418ed909705e9a8af728dc08989037d977efaa59 nginx-filesystem-1.20.1-32.el9_9.2.rocky.0.1.noarch.rpm
 
 $(call PROJ_INSTALL_DNF_NOARCH,,$(LOCKED_DNF))
 
