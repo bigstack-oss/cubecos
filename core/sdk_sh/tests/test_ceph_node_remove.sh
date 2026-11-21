@@ -4,7 +4,9 @@
 #   ceph_host_remove_precheck: names each pool that would keep fewer failure domains than
 #     copies without the node (k+m for an erasure-coded pool), reads the root and the failure
 #     domain from the pool's CRUSH rule, device class shadow roots included, counts only OSDs
-#     that are in, and leaves alone a pool the node's OSDs cannot serve (cubecos#2423)
+#     that are in but the removed node's own whether they are in or not (the monitors mark a
+#     down node's OSDs out after 20 s), and leaves alone a pool the node's OSDs cannot serve
+#     (cubecos#2423)
 #   ceph_osd_host_remove: purges the node's OSDs only once safe-to-destroy passes, never waits
 #     forever, purges nothing on a timeout, removes the host bucket, and reads a ceph it
 #     cannot reach as a failure rather than as "nothing to remove" (cubecos#679)
@@ -88,8 +90,15 @@ precheck h5
 chk "erasure-coded k=3 m=2 on 5 hosts, one removed (cubecos#2423): refused, that pool only" "$rc [$OUT_LINES]" \
     "1 [pool default.rgw.buckets.data needs 5 hosts, 4 would remain without h5]"
 
+OUT="8 9" fixture "h1:2,0 h2:2,0 h3:2,0 h4:2,0 h5:2,0"
+precheck h5
+chk "the removed node's OSDs already out, as the monitors mark a down node's after 20 s: still refused" "$rc [$OUT_LINES]" \
+    "1 [pool default.rgw.buckets.data needs 5 hosts, 4 would remain without h5]"
+
 OUT="6 7" fixture "h1:2,0 h2:2,0 h3:2,0 h4:2,0"
 POOLS='[{"pool_name":"rbd","size":3,"crush_rule":0}]'
+precheck h4
+chk "4 hosts, size 3, the removed node's OSDs already out: allowed" "$rc [$OUT_LINES]" "0 []"
 precheck h1
 chk "a host whose OSDs are all out is not a failure domain" "$rc [$OUT_LINES]" "1 [pool rbd needs 3 hosts, 2 would remain without h1]"
 

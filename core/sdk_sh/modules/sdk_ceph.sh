@@ -1710,8 +1710,9 @@ ceph_osd_remove_disk()
 # fix that, only another node or a new pool layout can (cubecos#2423). A pool needs `size`
 # failure domains, which is k+m for an erasure-coded one; a failure domain counts while it
 # holds an OSD that is in and has CRUSH weight, under the root the pool's rule takes, device
-# class shadow roots included. A pool none of the node's OSDs can serve is not affected.
-# Prints one line per short pool and fails when there is any.
+# class shadow roots included. The node's own OSDs count whether they are in or not: it is down
+# by now, and the monitors mark a down OSD out after 20 s. A pool none of the node's OSDs can
+# serve is not affected. Prints one line per short pool and fails when there is any.
 ceph_host_remove_precheck()
 {
     local host=$1 tree rules pools osds
@@ -1735,8 +1736,11 @@ def domains(i, fd):
     if n is None: return []
     if n["type"] == fd: return [i]
     return sum([domains(c, fd) for c in n.get("children", [])], [])
-leaving = set().union(*[osds(i) for i, n in nodes.items()
-                        if n["type"] == "host" and n["name"].split("~")[0] == host])
+# the node is down, so the monitors have marked its OSDs out after 20 s; count them as they were
+leaving = {c for i, n in nodes.items()
+           if n["type"] == "host" and n["name"].split("~")[0] == host
+           for c in n.get("children", []) if c in nodes and nodes[c]["type"] == "osd"}
+live |= leaving
 short = 0
 for p in json.loads(os.environ["POOLS"]):
     steps = rules[p["crush_rule"]]["steps"]
