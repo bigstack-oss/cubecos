@@ -895,6 +895,23 @@ _health_hacluster_auto_repair()
     fi
 }
 
+# 0 when the control side of "pcs status" ($1) has nothing wrong: every control
+# node online and, with HA, cinder-volume started and ovndb_servers not failed
+_health_hacluster_controls_ok()
+{
+    local status=$1
+    local total=${#CUBE_NODE_CONTROL_HOSTNAMES[@]}
+    local online=$(echo "$status" | grep -i " online" | cut -d "[" -f2 | cut -d "]" -f1 | awk '{print NF}')
+
+    [ "$total" = "$online" ] || return 1
+    ! echo "$status" | grep -iq " offline" || return 1
+    if echo "$status" | grep -q "IPaddr2" ; then
+        echo "$status" | grep -q "cinder-volume.*Started" || return 1
+        ! echo "$status" | grep -q "ovndb_servers.*FAILED" || return 1
+    fi
+    return 0
+}
+
 health_hacluster_repair()
 {
     local status=$(pcs status 2>/dev/null)
@@ -984,9 +1001,15 @@ health_hacluster_repair()
             $HEX_SDK pacemaker_node_start
         fi
     else
+        # Restart this node's Pacemaker only when the control side is what is
+        # wrong: the restart takes a healthy node out of the cluster, and masakari
+        # reads that as a failed host. A compute that is not RemoteOnline is
+        # re-added below without it.
+        local ctrl_ok=0
+        _health_hacluster_controls_ok "$status" && ctrl_ok=1
         for node in "${CUBE_NODE_CONTROL_HOSTNAMES[@]}" ; do
             if [ "x$HOSTNAME" = "x$node" ] ; then
-                $HEX_SDK pacemaker_node_stop $node
+                [ $ctrl_ok -eq 1 ] || $HEX_SDK pacemaker_node_stop $node
                 $HEX_SDK pacemaker_node_start $node
             else
                 $HEX_SDK pacemaker_node_start $node

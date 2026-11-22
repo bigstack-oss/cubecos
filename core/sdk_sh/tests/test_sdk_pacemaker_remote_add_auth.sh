@@ -1,12 +1,15 @@
 #!/bin/bash
 #
 # Unit test for #2325: after a rolling upgrade a compute did not come back into
-# Pacemaker.
+# Pacemaker, and the hacluster repair then restarted Pacemaker on a healthy
+# control node.
 #
 #   A. pacemaker_remote_add (../modules.pre/sdk_pacemaker.sh): pcs refuses
 #      "cluster node add-remote" unless every remote node already in the CIB is in
 #      the local pcs known-hosts. The function authenticated only the new node,
 #      dropped the error and started pacemaker_remote anyway.
+#   B. health_hacluster_repair (../modules/sdk_health.sh): with every control node
+#      online it re-adds the compute and leaves this node's Pacemaker alone.
 #
 # Self-contained: extracts the functions and stubs pcs / cibadmin / remote_run.
 # The pcs stub keeps a known-hosts list and a list of remote resources and fails
@@ -20,6 +23,7 @@
 set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PCMK="$DIR/../modules.pre/sdk_pacemaker.sh"
+HEALTH="$DIR/../modules/sdk_health.sh"
 OLD=04f1aa91
 
 T=$(mktemp -d)
@@ -126,6 +130,75 @@ if old_file modules.pre/sdk_pacemaker.sh ; then
     load "$PCMK" pacemaker_remote_add
 else
     echo "SKIP: A6 negative control needs git object $OLD"
+fi
+
+# ================= B. health_hacluster_repair =================
+CUBE_NODE_CONTROL_HOSTNAMES=(cc1 cc2 cc3)
+CUBE_NODE_COMPUTE_HOSTNAMES=(cc1 cc2 cc3 p4 p5)
+CTRL_ALL="cc1 cc2 cc3"
+cmd() { :; }
+cubectl() { :; }
+jq() { :; }
+is_cluster_rolling() { return 1; }
+is_sshable() { return 0; }
+remote_run() {
+    echo "remote_run $*" >> "$T/calls"
+    case "$*" in *"hex_sdk is_control_node") in_list "$1" "$CTRL_ALL" ; return ;; esac
+    return 0
+}
+touch "$T/state/configured"
+status() { # status <control line> <remote line> [extra line]
+    printf '  * Online: [ %s ]\n%s  * RemoteOnline: [ %s ]\n%s\n' "$1" "${4:+  * OFFLINE: [ $4 ]$'\n'}" "$2" "${3:-}" > "$T/status"
+}
+HA=' * vip (ocf:heartbeat:IPaddr2): Started cc1
+ * cinder-volume (systemd:openstack-cinder-volume): Started cc2'
+load "$HEALTH" _health_hacluster_controls_ok health_hacluster_repair
+
+# ---- B1. controls online, p4 not RemoteOnline: re-add p4, no Pacemaker restart ----
+reset; status "cc1 cc2 cc3" "p5" "$HA"
+health_hacluster_repair >/dev/null 2>&1
+ck "$(has 'hex_sdk pacemaker_node_stop')" 0 "B1 this node's Pacemaker is not stopped"
+ck "$(has 'hex_sdk pacemaker_node_start cc1')" 1 "B1 services are still made sure to run"
+ck "$(has 'hex_sdk pacemaker_remote_remove p4')" 1 "B1 p4 is removed"
+ck "$(has 'hex_sdk pacemaker_remote_add p4')" 1 "B1 p4 is re-added"
+ck "$(has 'pacemaker_remote_remove p5')" 0 "B1 p5 is left alone"
+
+# ---- B2. a control node is offline: restart as before ----
+reset; status "cc1 cc2" "p4 p5" "$HA" "cc3"
+health_hacluster_repair >/dev/null 2>&1
+ck "$(has 'hex_sdk pacemaker_node_stop cc1')" 1 "B2 control offline: Pacemaker is restarted"
+
+# ---- B3. HA and cinder-volume is not started: restart as before ----
+reset; status "cc1 cc2 cc3" "p4 p5" ' * vip (ocf:heartbeat:IPaddr2): Started cc1
+ * cinder-volume (systemd:openstack-cinder-volume): Stopped'
+health_hacluster_repair >/dev/null 2>&1
+ck "$(has 'hex_sdk pacemaker_node_stop cc1')" 1 "B3 cinder-volume stopped: Pacemaker is restarted"
+
+# ---- B4. ovndb_servers failed: restart as before ----
+reset; status "cc1 cc2 cc3" "p4 p5" "$HA
+ * ovndb_servers (ocf:ovn:ovndb-servers): FAILED cc2"
+health_hacluster_repair >/dev/null 2>&1
+ck "$(has 'hex_sdk pacemaker_node_stop cc1')" 1 "B4 ovndb_servers failed: Pacemaker is restarted"
+
+# ---- B5. pcs status gives nothing: restart as before ----
+reset
+health_hacluster_repair >/dev/null 2>&1
+ck "$(has 'hex_sdk pacemaker_node_stop cc1')" 1 "B5 no pcs status: Pacemaker is restarted"
+
+# ---- B6. nothing wrong: no restart, no remote node touched ----
+reset; status "cc1 cc2 cc3" "p4 p5" "$HA"
+health_hacluster_repair >/dev/null 2>&1
+ck "$(has 'hex_sdk pacemaker_node_stop')" 0 "B6 healthy: Pacemaker is not stopped"
+ck "$(has 'pacemaker_remote_remove')" 0 "B6 healthy: no remote node removed"
+
+# ---- B7. negative control: the old repair restarts Pacemaker for a missing compute ----
+if old_file modules/sdk_health.sh ; then
+    load "$T/old.sh" health_hacluster_repair
+    reset; status "cc1 cc2 cc3" "p5" "$HA"
+    health_hacluster_repair >/dev/null 2>&1
+    ck "$(has 'hex_sdk pacemaker_node_stop cc1')" 1 "B7 old code: Pacemaker restarted for a missing compute"
+else
+    echo "SKIP: B7 negative control needs git object $OLD"
 fi
 
 echo "pass=$pass fail=$fail"
