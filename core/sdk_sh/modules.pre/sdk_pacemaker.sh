@@ -6,17 +6,36 @@ if [ -z "$PROG" ] ; then
     exit 1
 fi
 
+# remote nodes that have a resource in the CIB
+pacemaker_remote_nodes()
+{
+    cibadmin -Q --xpath "//primitive[@provider='pacemaker'][@type='remote']" 2>/dev/null | grep -o '<primitive id="[^"]*"' | cut -d'"' -f2
+}
+
 pacemaker_remote_add()
 {
     local node=$1
+    local other out ctrl=0
 
     if hex_sdk remote_run $node hex_sdk is_control_node ; then
+        ctrl=1
         Quiet -n remote_run $node "timeout $SRVTO systemctl stop pacemaker || killall -9 pacemakerd"
         Quiet -n remote_run $node "timeout $SRVTO systemctl stop corosync || killall -9 corosync"
     fi
     Quiet -n remote_run $node "systemctl start pcsd"
     Quiet -n timeout $SRVSTO /usr/sbin/pcs host auth $node -u hacluster -p Cube0s!
-    Quiet -n timeout $SRVSTO /usr/sbin/pcs cluster node add-remote $node
+    # add-remote fails unless every remote node already in the CIB is in this
+    # node's pcs known-hosts, which is empty after an upgrade
+    for other in $(pacemaker_remote_nodes) ; do
+        [ "x$other" = "x$node" ] || Quiet -n timeout $SRVSTO /usr/sbin/pcs host auth $other -u hacluster -p Cube0s!
+    done
+    out=$(timeout $SRVSTO /usr/sbin/pcs cluster node add-remote $node 2>&1)
+    if [ $ctrl -eq 0 ] && ! pacemaker_remote_nodes | grep -qx "$node" ; then
+        # no resource: a running pacemaker_remote would only block the next add
+        log_error "pacemaker_remote_add: $node not added: $(echo $out)"
+        echo "Error: pacemaker_remote_add: $node not added: $(echo $out)" >&2
+        return 1
+    fi
     Quiet -n remote_run $node "systemctl enable --now pacemaker_remote"
     Quiet -n pcs resource cleanup $node
     if hex_sdk remote_run $node hex_sdk is_control_node ; then
