@@ -50,6 +50,7 @@ static CubeRole_e s_eCubeRole;
 
 static bool s_bNetModified = false;
 static bool s_bCubeModified = false;
+static bool s_bTimeModified = false;
 
 // rotate daily and enable copytruncate
 static LogRotateConf lg_log_conf("logstash", "/var/log/logstash/*.log", DAILY, 128, 0, true);
@@ -63,10 +64,12 @@ CONFIG_GLOBAL_STR_REF(SHARED_ID);
 CONFIG_TUNING_SPEC(NET_HOSTNAME);
 CONFIG_TUNING_SPEC_STR(CUBESYS_ROLE);
 CONFIG_TUNING_SPEC_BOOL(CUBESYS_HA);
+CONFIG_TUNING_SPEC_STR(TIME_TZ);
 
 // parse tunings
 PARSE_TUNING_X_STR(s_cubeRole, CUBESYS_ROLE, 1);
 PARSE_TUNING_X_BOOL(s_ha, CUBESYS_HA, 1);
+PARSE_TUNING_X_STR(s_timezone, TIME_TZ, 2);
 
 static bool
 WriteConfigs(const std::string &kafkaHosts)
@@ -358,6 +361,19 @@ NotifyCube(bool modified)
 }
 
 static bool
+ParseTime(const char *name, const char *value, bool isNew)
+{
+    ParseTune(name, value, isNew, 2);
+    return true;
+}
+
+static void
+NotifyTime(bool modified)
+{
+    s_bTimeModified = s_timezone.modified();
+}
+
+static bool
 CommitCheck(bool modified, int dryLevel)
 {
     if (IsBootstrap()) {
@@ -373,8 +389,16 @@ Commit(bool modified, int dryLevel)
     // todo: remove this if support dry run
     HEX_DRYRUN_BARRIER(dryLevel, true);
 
-    if (IsUndef(s_eCubeRole) || !CommitCheck(modified, dryLevel))
+    if (IsUndef(s_eCubeRole))
         return true;
+
+    if (!CommitCheck(modified, dryLevel)) {
+        // The date filter reads the zone-less syslog timestamps in the zone the JVM started
+        // with, and the time module restarts rsyslog on a timezone change; restart both.
+        if (s_bTimeModified && IsControl(s_eCubeRole) && !IsModerator(s_eCubeRole))
+            HexUtilSystemF(FWD, 0, "systemctl try-restart %s", LG_NAME);
+        return true;
+    }
 
     std::string sharedId = G(SHARED_ID);
     std::string kafkaHosts = KafkaServers(false, sharedId, "");
@@ -419,10 +443,13 @@ CONFIG_REQUIRES(logstash, opensearch);
 // order logstash after its output sinks (influxdb/kapacitor)
 CONFIG_REQUIRES(logstash, influxdb);
 CONFIG_REQUIRES(logstash, kapacitor);
+// restart the JVM after /etc/localtime is relinked
+CONFIG_REQUIRES(logstash, time);
 
 // extra tunings
 CONFIG_OBSERVES(logstash, net, ParseNet, NotifyNet);
 CONFIG_OBSERVES(logstash, cubesys, ParseCube, NotifyCube);
+CONFIG_OBSERVES(logstash, time, ParseTime, NotifyTime);
 
 CONFIG_TRIGGER_WITH_SETTINGS(logstash, "cluster_start", ClusterStartMain);
 
